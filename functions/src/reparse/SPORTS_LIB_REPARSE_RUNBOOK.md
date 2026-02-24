@@ -31,7 +31,6 @@ Malformed processing metadata policy:
 ### UID override mode (safe testing)
 When `SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.uidAllowlist` is set, scheduler switches to per-user event scans:
 - query: `users/{uid}/events`
-- still applies normal entitlement checks unless `includeFreeUsers=true`
 
 ### Missing processing docs
 Missing `metaData/processing` docs are not visible to the global processing query. Use the backfill script to create them before full rollout.
@@ -111,7 +110,7 @@ TTL:
 Common outcomes:
 - `status=completed`
 - `status=skipped, reason=NO_ORIGINAL_FILES`
-- `status=failed, reason=REPARSE_FAILED|USER_NO_PAID_ACCESS`
+- `status=failed, reason=REPARSE_FAILED`
 
 ### Processing metadata doc
 - Path: `users/{uid}/events/{eventId}/metaData/processing`
@@ -161,14 +160,8 @@ If fallback bucket is used successfully:
 - source metadata bucket fields are rewritten to resolved bucket in same write path
 
 ## Access / Entitlement Behavior
-Default (`includeFreeUsers=false`):
-- only paid/grace users are processed (`basic|pro|active_grace`)
-
-Include-free mode (`includeFreeUsers=true`):
-- entitlement checks are skipped
-- all candidate users/events are eligible
-
-Applies to scheduler, worker, and local script.
+Reparse candidate eligibility no longer depends on entitlement checks.
+All users with candidate events are eligible in scheduler, worker, and local script paths.
 
 ## Runtime Controls (Code Constants)
 File:
@@ -182,7 +175,6 @@ Fields:
 - `scanLimit`
 - `enqueueLimit`
 - `uidAllowlist`
-- `includeFreeUsers`
 
 ## Required Firestore Index
 Global processing-query discovery requires:

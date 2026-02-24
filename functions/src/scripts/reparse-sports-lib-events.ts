@@ -4,7 +4,6 @@ import {
     SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS,
     SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
     extractSourceFiles,
-    hasPaidOrGraceAccess,
     parseUIDAllowlist,
     parseUidAndEventIdFromEventPath,
     reparseEventFromOriginalFiles,
@@ -21,7 +20,6 @@ interface ScriptOptions {
     uids?: string[];
     limit: number;
     startAfter?: string;
-    includeFreeUsers: boolean;
 }
 
 export interface ScriptSummary {
@@ -76,7 +74,6 @@ export function parseScriptOptions(argv: string[]): ScriptOptions {
     const effectiveUIDAllowlist = uid ? null : (cliUIDAllowlist || constantUIDAllowlist);
     const limit = parseIntArg(readArgValue(argv, '--limit'), SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.scanLimit);
     const startAfter = readArgValue(argv, '--start-after');
-    const includeFreeUsers = SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.includeFreeUsers;
 
     return {
         execute,
@@ -84,7 +81,6 @@ export function parseScriptOptions(argv: string[]): ScriptOptions {
         uids: effectiveUIDAllowlist ? Array.from(effectiveUIDAllowlist) : undefined,
         limit,
         startAfter,
-        includeFreeUsers,
     };
 }
 
@@ -195,25 +191,11 @@ export async function runSportsLibReparseScript(argv: string[]): Promise<ScriptS
         admin.initializeApp();
     }
 
-    const accessCache = new Map<string, Promise<boolean>>();
     const processEventCandidate = async (
         uid: string,
         eventId: string,
         eventData: Record<string, unknown>,
     ): Promise<void> => {
-        if (!options.includeFreeUsers) {
-            let hasAccessPromise = accessCache.get(uid);
-            if (!hasAccessPromise) {
-                hasAccessPromise = hasPaidOrGraceAccess(uid);
-                accessCache.set(uid, hasAccessPromise);
-            }
-            const hasAccess = await hasAccessPromise;
-            if (!hasAccess) {
-                summary.skippedNoAccess++;
-                return;
-            }
-        }
-
         const sourceFiles = extractSourceFiles(eventData);
         if (sourceFiles.length === 0) {
             summary.skippedNoSourceFiles++;

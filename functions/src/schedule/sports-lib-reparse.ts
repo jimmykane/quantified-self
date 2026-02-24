@@ -11,7 +11,6 @@ import {
     SportsLibReparseJob,
     buildSportsLibReparseJobId,
     extractSourceFiles,
-    hasPaidOrGraceAccess,
     parseUidAndEventIdFromEventPath,
     resolveTargetSportsLibVersion,
     resolveTargetSportsLibVersionCode,
@@ -28,7 +27,6 @@ function getCurrentSettings(): {
     scanLimit: number;
     enqueueLimit: number;
     uidAllowlist: Set<string> | null;
-    includeFreeUsers: boolean;
 } {
     const constantUIDAllowlist = SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.uidAllowlist
         && SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.uidAllowlist.length > 0
@@ -39,7 +37,6 @@ function getCurrentSettings(): {
         scanLimit: SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.scanLimit,
         enqueueLimit: SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.enqueueLimit,
         uidAllowlist: constantUIDAllowlist,
-        includeFreeUsers: SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.includeFreeUsers,
     };
 }
 
@@ -100,7 +97,6 @@ export const scheduleSportsLibReparseScan = onSchedule({
         targetSportsLibVersion,
     }, { merge: true });
 
-    const eligibilityCache = new Map<string, Promise<boolean>>();
     let scannedCount = 0;
     let enqueuedCount = 0;
     let lastProcessingDocPath: string | null = null;
@@ -140,18 +136,6 @@ export const scheduleSportsLibReparseScan = onSchedule({
         const statusSnapshot = await eventRef.collection('metaData').doc(SPORTS_LIB_REPARSE_STATUS_DOC_ID).get();
         if (shouldSkipBecauseNoOriginalFilesForTarget(statusSnapshot.data() as Record<string, unknown> | undefined, targetSportsLibVersion)) {
             return;
-        }
-
-        if (!settings.includeFreeUsers) {
-            let accessPromise = eligibilityCache.get(uid);
-            if (!accessPromise) {
-                accessPromise = hasPaidOrGraceAccess(uid);
-                eligibilityCache.set(uid, accessPromise);
-            }
-            const hasAccess = await accessPromise;
-            if (!hasAccess) {
-                return;
-            }
         }
 
         const sourceFiles = extractSourceFiles(eventData);

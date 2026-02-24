@@ -5,7 +5,6 @@ vi.mock('firebase-functions/v2/tasks', () => ({
 }));
 
 const hoisted = vi.hoisted(() => {
-    const hasPaidOrGraceAccess = vi.fn();
     const reparseEventFromOriginalFiles = vi.fn();
     const writeReparseStatus = vi.fn();
     const resolveTargetSportsLibVersion = vi.fn(() => '9.0.99');
@@ -13,7 +12,6 @@ const hoisted = vi.hoisted(() => {
         enabled: false,
         scanLimit: 200,
         enqueueLimit: 100,
-        includeFreeUsers: false,
         uidAllowlist: null as string[] | null,
     };
 
@@ -26,7 +24,6 @@ const hoisted = vi.hoisted(() => {
     const deleteField = vi.fn(() => 'DELETE_FIELD');
 
     return {
-        hasPaidOrGraceAccess,
         reparseEventFromOriginalFiles,
         writeReparseStatus,
         resolveTargetSportsLibVersion,
@@ -43,7 +40,6 @@ vi.mock('../reparse/sports-lib-reparse.service', () => ({
     SPORTS_LIB_REPARSE_JOBS_COLLECTION: 'sportsLibReparseJobs',
     SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS: hoisted.runtimeDefaults,
     SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES: 'NO_ORIGINAL_FILES',
-    hasPaidOrGraceAccess: hoisted.hasPaidOrGraceAccess,
     reparseEventFromOriginalFiles: hoisted.reparseEventFromOriginalFiles,
     writeReparseStatus: hoisted.writeReparseStatus,
     resolveTargetSportsLibVersion: hoisted.resolveTargetSportsLibVersion,
@@ -70,9 +66,7 @@ describe('processSportsLibReparseTask', () => {
         hoisted.runtimeDefaults.enabled = false;
         hoisted.runtimeDefaults.scanLimit = 200;
         hoisted.runtimeDefaults.enqueueLimit = 100;
-        hoisted.runtimeDefaults.includeFreeUsers = false;
         hoisted.runtimeDefaults.uidAllowlist = null;
-        hoisted.hasPaidOrGraceAccess.mockResolvedValue(true);
         hoisted.reparseEventFromOriginalFiles.mockResolvedValue({
             status: 'completed',
             sourceFilesCount: 1,
@@ -132,7 +126,6 @@ describe('processSportsLibReparseTask', () => {
 
         await (processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } });
 
-        expect(hoisted.hasPaidOrGraceAccess).toHaveBeenCalledWith('u1');
         expect(hoisted.reparseEventFromOriginalFiles).toHaveBeenCalledWith('u1', 'e1', {
             mode: 'reimport',
             targetSportsLibVersion: '9.0.99',
@@ -222,7 +215,7 @@ describe('processSportsLibReparseTask', () => {
         }), { merge: true });
     });
 
-    it('should fail with access denied when include-free-users flag is disabled', async () => {
+    it('should process users without entitlement gating', async () => {
         hoisted.jobGet.mockResolvedValue({
             exists: true,
             data: () => ({
@@ -233,34 +226,9 @@ describe('processSportsLibReparseTask', () => {
                 targetSportsLibVersion: '9.0.99',
             }),
         });
-        hoisted.hasPaidOrGraceAccess.mockResolvedValue(false);
-
-        await expect((processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } })).rejects.toThrow('USER_NO_PAID_ACCESS');
-        expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
-        expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
-            status: 'failed',
-            reason: 'USER_NO_PAID_ACCESS',
-            lastError: 'USER_NO_PAID_ACCESS',
-        }));
-    });
-
-    it('should include free users when include-free-users flag is enabled', async () => {
-        hoisted.runtimeDefaults.includeFreeUsers = true;
-        hoisted.jobGet.mockResolvedValue({
-            exists: true,
-            data: () => ({
-                uid: 'u1',
-                eventId: 'e1',
-                status: 'pending',
-                attemptCount: 0,
-                targetSportsLibVersion: '9.0.99',
-            }),
-        });
-        hoisted.hasPaidOrGraceAccess.mockResolvedValue(false);
 
         await (processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } });
 
-        expect(hoisted.hasPaidOrGraceAccess).not.toHaveBeenCalled();
         expect(hoisted.reparseEventFromOriginalFiles).toHaveBeenCalledWith('u1', 'e1', {
             mode: 'reimport',
             targetSportsLibVersion: '9.0.99',

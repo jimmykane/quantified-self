@@ -3,10 +3,8 @@ import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import {
     SPORTS_LIB_REPARSE_JOBS_COLLECTION,
-    SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS,
     SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
     SportsLibReparseJob,
-    hasPaidOrGraceAccess,
     reparseEventFromOriginalFiles,
     resolveTargetSportsLibVersion,
     writeReparseStatus,
@@ -17,8 +15,6 @@ import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
 interface SportsLibReparseTaskPayload {
     jobId: string;
 }
-
-const ACCESS_DENIED_ERROR = 'USER_NO_PAID_ACCESS';
 
 function getJobRef(jobId: string): admin.firestore.DocumentReference {
     return admin.firestore().collection(SPORTS_LIB_REPARSE_JOBS_COLLECTION).doc(jobId);
@@ -39,7 +35,6 @@ export const processSportsLibReparseTask = onTaskDispatched({
 }, async (request) => {
     const payload = request.data as SportsLibReparseTaskPayload;
     const jobId = payload?.jobId;
-    const includeFreeUsers = SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.includeFreeUsers;
 
     if (!jobId) {
         throw new Error('Missing jobId in sports-lib reparse task payload.');
@@ -67,13 +62,6 @@ export const processSportsLibReparseTask = onTaskDispatched({
     }, { merge: true });
 
     try {
-        if (!includeFreeUsers) {
-            const hasAccess = await hasPaidOrGraceAccess(job.uid);
-            if (!hasAccess) {
-                throw new Error(ACCESS_DENIED_ERROR);
-            }
-        }
-
         const reparseResult = await reparseEventFromOriginalFiles(job.uid, job.eventId, {
             mode: 'reimport',
             targetSportsLibVersion,
@@ -106,7 +94,7 @@ export const processSportsLibReparseTask = onTaskDispatched({
         const errorMessage = getErrorMessage(error);
         await writeReparseStatus(job.uid, job.eventId, {
             status: 'failed',
-            reason: errorMessage === ACCESS_DENIED_ERROR ? ACCESS_DENIED_ERROR : 'REPARSE_FAILED',
+            reason: 'REPARSE_FAILED',
             targetSportsLibVersion,
             checkedAt: admin.firestore.FieldValue.serverTimestamp(),
             lastError: errorMessage,

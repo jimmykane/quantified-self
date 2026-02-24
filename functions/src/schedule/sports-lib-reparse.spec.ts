@@ -10,7 +10,6 @@ vi.mock('firebase-functions/v2/scheduler', () => ({
 
 const hoisted = vi.hoisted(() => {
     const shouldEventBeReparsed = vi.fn();
-    const hasPaidOrGraceAccess = vi.fn();
     const extractSourceFiles = vi.fn();
     const buildSportsLibReparseJobId = vi.fn();
     const writeReparseStatus = vi.fn();
@@ -28,7 +27,6 @@ const hoisted = vi.hoisted(() => {
         enabled: false,
         scanLimit: 200,
         enqueueLimit: 100,
-        includeFreeUsers: false,
         uidAllowlist: null as string[] | null,
     };
 
@@ -183,7 +181,6 @@ const hoisted = vi.hoisted(() => {
 
     return {
         shouldEventBeReparsed,
-        hasPaidOrGraceAccess,
         extractSourceFiles,
         buildSportsLibReparseJobId,
         writeReparseStatus,
@@ -220,7 +217,6 @@ vi.mock('../reparse/sports-lib-reparse.service', () => ({
     SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES: 'NO_ORIGINAL_FILES',
     SPORTS_LIB_REPARSE_STATUS_DOC_ID: 'reparseStatus',
     shouldEventBeReparsed: hoisted.shouldEventBeReparsed,
-    hasPaidOrGraceAccess: hoisted.hasPaidOrGraceAccess,
     extractSourceFiles: hoisted.extractSourceFiles,
     buildSportsLibReparseJobId: hoisted.buildSportsLibReparseJobId,
     writeReparseStatus: hoisted.writeReparseStatus,
@@ -340,7 +336,6 @@ describe('scheduleSportsLibReparseScan', () => {
         hoisted.runtimeDefaults.scanLimit = 200;
         hoisted.runtimeDefaults.enqueueLimit = 100;
         hoisted.runtimeDefaults.uidAllowlist = null;
-        hoisted.runtimeDefaults.includeFreeUsers = false;
 
         hoisted.resolveTargetSportsLibVersion.mockReturnValue(TARGET_SPORTS_LIB_VERSION);
         hoisted.resolveTargetSportsLibVersionCode.mockReturnValue(TARGET_SPORTS_LIB_VERSION_CODE);
@@ -353,7 +348,6 @@ describe('scheduleSportsLibReparseScan', () => {
         hoisted.checkpointGet.mockResolvedValue({ data: () => ({ cursorProcessingDocPath: null, cursorProcessingVersionCode: null }) });
         hoisted.buildSportsLibReparseJobId.mockReturnValue('job-1');
         hoisted.shouldEventBeReparsed.mockResolvedValue(true);
-        hoisted.hasPaidOrGraceAccess.mockResolvedValue(true);
         hoisted.extractSourceFiles.mockReturnValue([{ path: 'users/u1/events/e1/original.fit' }]);
         hoisted.enqueueSportsLibReparseTask.mockResolvedValue(true);
     });
@@ -376,7 +370,6 @@ describe('scheduleSportsLibReparseScan', () => {
         expect(hoisted.collectionGroup).toHaveBeenCalledWith('processing');
         expect(hoisted.shouldEventBeReparsed).not.toHaveBeenCalled();
         expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledWith('job-1');
-        expect(hoisted.hasPaidOrGraceAccess).toHaveBeenCalledWith('u1');
     });
 
     it('should apply tuple cursor startAfter in global mode', async () => {
@@ -440,8 +433,6 @@ describe('scheduleSportsLibReparseScan', () => {
 
         expect(hoisted.collectionGroup).not.toHaveBeenCalled();
         expect(hoisted.shouldEventBeReparsed).toHaveBeenCalledTimes(1);
-        expect(hoisted.hasPaidOrGraceAccess).toHaveBeenCalledWith('u1');
-        expect(hoisted.hasPaidOrGraceAccess).not.toHaveBeenCalledWith('u2');
     });
 
     it('should skip override candidate when shouldEventBeReparsed returns false', async () => {
@@ -478,16 +469,6 @@ describe('scheduleSportsLibReparseScan', () => {
             ref: { path: 'bad/path', collection: vi.fn(() => ({ doc: vi.fn(() => ({ get: vi.fn() })) })) },
             data: () => ({ originalFile: { path: 'x.fit' } }),
         }]);
-
-        await (scheduleSportsLibReparseScan as any)({});
-
-        expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
-    });
-
-    it('should skip override candidate when user has no paid access', async () => {
-        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
-        hoisted.hasPaidOrGraceAccess.mockResolvedValueOnce(false);
-        hoisted.userEventsByUID.set('u1', [createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
 
         await (scheduleSportsLibReparseScan as any)({});
 
@@ -664,9 +645,7 @@ describe('scheduleSportsLibReparseScan', () => {
         expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
     });
 
-    it('should include free users when include-free-users flag is enabled', async () => {
-        hoisted.runtimeDefaults.includeFreeUsers = true;
-        hoisted.hasPaidOrGraceAccess.mockResolvedValue(false);
+    it('should enqueue candidates without entitlement filtering', async () => {
         const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
         hoisted.processingDocs.push(createProcessingDoc(eventRef, {
             sportsLibVersion: '9.0.0',
@@ -675,7 +654,6 @@ describe('scheduleSportsLibReparseScan', () => {
 
         await (scheduleSportsLibReparseScan as any)({});
 
-        expect(hoisted.hasPaidOrGraceAccess).not.toHaveBeenCalled();
         expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledWith('job-1');
     });
 
