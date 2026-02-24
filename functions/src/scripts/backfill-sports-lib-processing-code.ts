@@ -12,6 +12,7 @@ const MISSING_PROCESSING_VERSION_CODE = 0;
 const PROGRESS_LOG_EVERY = 25;
 const DEFAULT_CONCURRENCY = 5;
 const MAX_CONCURRENCY = 50;
+const BACKFILL_RESUME_CHECKPOINT_PATH = 'temp_collection/temp_doc_sportsLibProcessingBackfill';
 
 interface BackfillOptions {
     execute: boolean;
@@ -20,6 +21,7 @@ interface BackfillOptions {
     limit: number;
     startAfter?: string;
     concurrency: number;
+    resume: boolean;
 }
 
 export interface BackfillSummary {
@@ -30,6 +32,23 @@ export interface BackfillSummary {
     unchanged: number;
     skippedInvalid: number;
     failed: number;
+}
+
+interface BackfillResumeCheckpoint {
+    scopeKey?: string;
+    lastEventPath?: string;
+    updatedAt?: unknown;
+}
+
+function resolveScopedStartAfterValue(startAfter: string | undefined, options: BackfillOptions): string | undefined {
+    if (!startAfter || !options.uid) {
+        return startAfter;
+    }
+    const parsed = parseUidAndEventIdFromEventPath(startAfter);
+    if (parsed && parsed.uid === options.uid) {
+        return parsed.eventId;
+    }
+    return startAfter;
 }
 
 function shouldLogProgress(scanned: number, total: number): boolean {
@@ -81,6 +100,7 @@ export function parseBackfillOptions(argv: string[]): BackfillOptions {
     const limit = parseIntArg(readArgValue(argv, '--limit'), SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.scanLimit);
     const startAfter = readArgValue(argv, '--start-after');
     const concurrency = parseConcurrencyArg(readArgValue(argv, '--concurrency'));
+    const resume = argv.includes('--resume');
 
     return {
         execute,
@@ -89,6 +109,7 @@ export function parseBackfillOptions(argv: string[]): BackfillOptions {
         limit,
         startAfter,
         concurrency,
+        resume,
     };
 }
 
@@ -152,13 +173,40 @@ export async function runBackfillSportsLibProcessingCode(argv: string[]): Promis
         admin.initializeApp();
     }
 
-    const eventDocs = await getEventsToInspect(options);
+    const db = admin.firestore();
+    const checkpointRef = db.doc(BACKFILL_RESUME_CHECKPOINT_PATH);
+    const scopeKey = options.uid
+        ? `uid:${options.uid}`
+        : options.uids && options.uids.length > 0
+            ? `uids:${options.uids.slice().sort().join(',')}`
+            : 'global';
+
+    let effectiveStartAfter = options.startAfter;
+    if (!effectiveStartAfter && options.resume) {
+        const checkpointSnapshot = await checkpointRef.get();
+        const checkpointData = checkpointSnapshot.data() as BackfillResumeCheckpoint | undefined;
+        if (checkpointData?.scopeKey === scopeKey && typeof checkpointData.lastEventPath === 'string' && checkpointData.lastEventPath.length > 0) {
+            effectiveStartAfter = checkpointData.lastEventPath;
+            logger.info('[sports-lib-processing-backfill] Resuming from checkpoint.', {
+                checkpointPath: BACKFILL_RESUME_CHECKPOINT_PATH,
+                scopeKey,
+                startAfter: effectiveStartAfter,
+            });
+        }
+    }
+
+    const eventDocs = await getEventsToInspect({
+        ...options,
+        startAfter: resolveScopedStartAfterValue(effectiveStartAfter, options),
+    });
     const totalEvents = eventDocs.length;
     logger.info('[sports-lib-processing-backfill] Starting backfill run.', {
         dryRun: !options.execute,
         totalEvents,
         progressLogEvery: PROGRESS_LOG_EVERY,
         concurrency: options.concurrency,
+        resume: options.resume,
+        startAfter: effectiveStartAfter,
     });
     const processEventDoc = async (eventDoc: admin.firestore.QueryDocumentSnapshot): Promise<void> => {
         summary.scanned++;
@@ -287,6 +335,20 @@ export async function runBackfillSportsLibProcessingCode(argv: string[]): Promis
             }
         });
         await Promise.all(workers);
+    }
+
+    if (options.resume) {
+        const lastEventPath = eventDocs.length > 0 ? eventDocs[eventDocs.length - 1].ref.path : null;
+        await checkpointRef.set({
+            scopeKey,
+            lastEventPath,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+        logger.info('[sports-lib-processing-backfill] Updated resume checkpoint.', {
+            checkpointPath: BACKFILL_RESUME_CHECKPOINT_PATH,
+            scopeKey,
+            lastEventPath,
+        });
     }
 
     logger.info('[sports-lib-processing-backfill] Summary', summary);
