@@ -489,6 +489,59 @@ describe('scheduleSportsLibReparseScan', () => {
         expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledWith('job-1');
     });
 
+    it('should skip defensively when returned processing doc has version code at-or-above target', async () => {
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        const processingDoc = createProcessingDoc(eventRef, {
+            sportsLibVersion: TARGET_SPORTS_LIB_VERSION,
+            sportsLibVersionCode: TARGET_SPORTS_LIB_VERSION_CODE,
+        });
+
+        hoisted.collectionGroup.mockImplementationOnce((path: string) => {
+            if (path !== 'processing') {
+                throw new Error(`Unexpected collectionGroup path: ${path}`);
+            }
+            const q: any = {
+                where: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockReturnThis(),
+                startAfter: vi.fn().mockReturnThis(),
+                get: vi.fn(async () => ({
+                    empty: false,
+                    size: 1,
+                    docs: [processingDoc],
+                })),
+            };
+            return q;
+        });
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
+        const finalCheckpointPayload = hoisted.checkpointSet.mock.calls[hoisted.checkpointSet.mock.calls.length - 1][0];
+        expect(finalCheckpointPayload.lastScanCount).toBe(1);
+        expect(finalCheckpointPayload.lastEnqueuedCount).toBe(0);
+    });
+
+    it('should skip stale processing docs whose parent event no longer exists', async () => {
+        const staleEventRef = createEventRef('u1', 'deleted', { originalFile: { path: 'x.fit' } });
+        staleEventRef.get = vi.fn(async () => ({ exists: false, data: () => ({}) }));
+        hoisted.processingDocs.push(createProcessingDoc(staleEventRef, {
+            sportsLibVersion: '9.0.0',
+            sportsLibVersionCode: 9_000_000,
+        }));
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[sports-lib-reparse] Skipping stale processing metadata because parent event is missing.',
+            expect.objectContaining({
+                processingDocPath: `${staleEventRef.path}/metaData/processing`,
+                eventPath: staleEventRef.path,
+            }),
+        );
+    });
+
     it('should mark job as failed when task enqueue fails', async () => {
         const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
         hoisted.processingDocs.push(createProcessingDoc(eventRef, {
