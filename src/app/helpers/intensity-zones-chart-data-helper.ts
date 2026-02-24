@@ -13,8 +13,10 @@ export interface IntensityZonesEChartsData {
   series: IntensityZonesEChartsSeries[];
 }
 
-function getZoneStatsValueMap(statsClassInstances: StatsClassInterface[]): Record<string, number> {
-  return ActivityUtilities.getIntensityZonesStatsAggregated(statsClassInstances).reduce((map: Record<string, number>, stat) => {
+function getZoneStatsValueMap(statsClassInstances?: StatsClassInterface[] | null): Record<string, number> {
+  const safeStatsClassInstances = Array.isArray(statsClassInstances) ? statsClassInstances : [];
+
+  return ActivityUtilities.getIntensityZonesStatsAggregated(safeStatsClassInstances).reduce((map: Record<string, number>, stat) => {
     const value = stat.getValue();
     map[stat.getType()] = typeof value === 'number' ? value : 0;
     return map;
@@ -27,7 +29,7 @@ function getZoneStatsValueMap(statsClassInstances: StatsClassInterface[]): Recor
  * @param shortLabels - If true, uses short zone labels (Z1, Z2...) instead of full labels (Zone 1, Zone 2...)
  */
 export function convertIntensityZonesStatsToChartData(
-  statsClassInstances: StatsClassInterface[],
+  statsClassInstances?: StatsClassInterface[] | null,
   shortLabels: boolean = false
 ): any[] {
   const statsTypeMap = getZoneStatsValueMap(statsClassInstances);
@@ -54,7 +56,7 @@ export function convertIntensityZonesStatsToChartData(
  * Keeps zone and series ordering stable based on `DynamicDataLoader.zoneStatsTypeMap`.
  */
 export function convertIntensityZonesStatsToEchartsData(
-  statsClassInstances: StatsClassInterface[],
+  statsClassInstances?: StatsClassInterface[] | null,
   shortLabels: boolean = false
 ): IntensityZonesEChartsData {
   const statsTypeMap = getZoneStatsValueMap(statsClassInstances);
@@ -69,16 +71,13 @@ export function convertIntensityZonesStatsToEchartsData(
   }));
 
   const activeSeries = byType.filter(typeEntry => typeEntry.values.some(value => value > 0));
-  const activeZoneIndexes = activeSeries.reduce((indexes: Set<number>, typeEntry) => {
-    typeEntry.values.forEach((value, index) => {
-      if (value > 0) {
-        indexes.add(index);
-      }
-    });
-    return indexes;
-  }, new Set<number>());
+  const maxConfiguredZoneCount = DynamicDataLoader.zoneStatsTypeMap.reduce((max, statsToTypeMapEntry) => {
+    return Math.max(max, statsToTypeMapEntry.stats.length);
+  }, 0);
+  const orderedZoneIndexes = activeSeries.length > 0
+    ? Array.from({ length: maxConfiguredZoneCount }, (_, i) => i)
+    : [];
 
-  const orderedZoneIndexes = [...activeZoneIndexes].sort((left, right) => left - right);
   const zones = orderedZoneIndexes.map(index => zoneLabel(index + 1));
 
   const series: IntensityZonesEChartsSeries[] = activeSeries.map(typeEntry => {
@@ -101,11 +100,30 @@ export function convertIntensityZonesStatsToEchartsData(
 
 /**
  * Determines whether an intensity-zones chart is meaningful enough to render.
- * Hides charts with no active series or where all active data collapses to a single zone.
+ * Hides charts only when there is no intensity-zone data at all.
  */
-export function shouldRenderIntensityZonesChart(statsClassInstances: StatsClassInterface[]): boolean {
-  const data = convertIntensityZonesStatsToEchartsData(statsClassInstances);
-  return data.series.length > 0 && data.zones.length > 1;
+export function shouldRenderIntensityZonesChart(statsClassInstances?: StatsClassInterface[] | null): boolean {
+  const statsTypeMap = getZoneStatsValueMap(statsClassInstances);
+
+  let hasActiveSeries = false;
+  const activeZoneIndexes = DynamicDataLoader.zoneStatsTypeMap.reduce((indexes: Set<number>, statsToTypeMapEntry) => {
+    const seriesHasData = statsToTypeMapEntry.stats.some((statType, zoneIndex) => {
+      const value = statsTypeMap[statType];
+      if (typeof value === 'number' && value > 0) {
+        indexes.add(zoneIndex);
+        return true;
+      }
+      return false;
+    });
+
+    if (seriesHasData) {
+      hasActiveSeries = true;
+    }
+
+    return indexes;
+  }, new Set<number>());
+
+  return hasActiveSeries && activeZoneIndexes.size > 0;
 }
 
 /**

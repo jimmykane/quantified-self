@@ -15,7 +15,6 @@ import { EventCardStatsTableComponent } from '../components/event/stats-table/ev
 import { EventCardStatsGridComponent } from '../components/event/stats-grid/event.card.stats-grid.component';
 import { EventCardChartComponent } from '../components/event/chart/event.card.chart.component';
 import { ActivityToggleComponent } from '../components/event/activity-toggle/activity-toggle.component';
-import { EventIntensityZonesComponent } from '../components/event/intensity-zones/event.intensity-zones.component';
 import { EventPowerCurveComponent } from '../components/event/power-curve/event.power-curve.component';
 import { EventDurabilityCurveComponent } from '../components/event/durability-curve/event.durability-curve.component';
 import { EventCadencePowerComponent } from '../components/event/cadence-power/event.cadence-power.component';
@@ -57,7 +56,6 @@ import { DeviceNameEditDialogComponent } from '../components/event/activities-to
         HeaderStatsComponent,
         ActivitiesTogglesComponent,
         ActivityToggleComponent,
-        EventIntensityZonesComponent,
         EventPowerCurveComponent,
         EventDurabilityCurveComponent,
         EventCadencePowerComponent,

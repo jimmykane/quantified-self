@@ -37,7 +37,6 @@ import { LoadingAbstractDirective } from '../loading/loading-abstract.directive'
 import equal from 'fast-deep-equal';
 import { DataAscent } from '@sports-alliance/sports-lib';
 import * as weeknumber from 'weeknumber'
-import { convertIntensityZonesStatsToChartData } from '../../helpers/intensity-zones-chart-data-helper';
 import { AppEventUtilities } from '../../utils/app.event.utilities';
 import { DataDescent } from '@sports-alliance/sports-lib';
 import { MapStyleName } from '../../services/map/map-style.types';
@@ -230,7 +229,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
               chartsAndData.push({
                 ...chartTile, ...{
                   timeInterval: TimeIntervals.Auto, // Defaults to Auto
-                  data: this.getIntensityZonesChartData(events)
+                  data: events ?? []
                 }
               });
               break;
@@ -415,14 +414,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
     const map = this.convertToCategories(valueByCategory)
     return this.getChartDataCache[`${dataType}:${valueType}:${categoryType}:${timeInterval}`] = map;
-  }
-
-  private getIntensityZonesChartData(events: EventInterface[]) {
-    if (this.getChartDataCache[ChartTypes.IntensityZones]) {
-      return this.getChartDataCache[ChartTypes.IntensityZones];
-    }
-    this.getChartDataCache[ChartTypes.IntensityZones] = convertIntensityZonesStatsToChartData(events)
-    return this.getChartDataCache[ChartTypes.IntensityZones];
   }
 
   /**

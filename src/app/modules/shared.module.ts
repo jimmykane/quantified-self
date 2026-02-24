@@ -30,6 +30,7 @@ import { SummaryPrimaryInfoComponent } from '../components/shared/summary-primar
 import { HeroMetricsComponent } from '../components/shared/hero-metrics/hero-metrics.component';
 import { MapActivityPopupComponent } from '../components/shared/map-activity-popup/map-activity-popup.component';
 import { MapLayersActionsComponent } from '../components/map/map-layers-actions/map-layers-actions.component';
+import { EventIntensityZonesComponent } from '../components/event/intensity-zones/event.intensity-zones.component';
 
 @NgModule({
     imports: [
@@ -64,6 +65,7 @@ import { MapLayersActionsComponent } from '../components/map/map-layers-actions/
         HeroMetricsComponent,
         MapActivityPopupComponent,
         MapLayersActionsComponent,
+        EventIntensityZonesComponent,
     ],
     providers: [],
     exports: [
@@ -96,6 +98,7 @@ import { MapLayersActionsComponent } from '../components/map/map-layers-actions/
         HeroMetricsComponent,
         MapActivityPopupComponent,
         MapLayersActionsComponent,
+        EventIntensityZonesComponent,
     ]
 })
 
