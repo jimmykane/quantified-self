@@ -57,9 +57,29 @@ const ACTIVITY_TYPE_ICON_OVERRIDES: Readonly<Record<string, string>> = {
     standalone: false
 })
 export class ActivityTypeIconComponent {
-    @Input() activityType!: string;
+    @Input() activityType!: unknown;
     @Input() size?: string;
     @Input() vAlign?: string;
+
+    get activityTooltip(): string {
+        const value = this.activityType;
+        if (value === null || value === undefined) {
+            return '';
+        }
+
+        if (Array.isArray(value)) {
+            return value.map((entry) => String(entry ?? '')).filter(Boolean).join(', ');
+        }
+
+        if (typeof value === 'object') {
+            const withType = value as { type?: unknown };
+            if (withType.type !== undefined && withType.type !== null) {
+                return String(withType.type).trim();
+            }
+        }
+
+        return String(value).trim();
+    }
 
     private normalizeActivityTypeKey(activity: string): string {
         return activity
@@ -70,12 +90,39 @@ export class ActivityTypeIconComponent {
             .replace(/\s/g, '');
     }
 
+    private resolvePrimaryActivityType(): string {
+        const value = this.activityType;
+        if (value === null || value === undefined) {
+            return '';
+        }
+
+        if (Array.isArray(value)) {
+            return String(value[0] ?? '').trim();
+        }
+
+        if (typeof value === 'number') {
+            return ActivityTypes[value] || '';
+        }
+
+        if (typeof value === 'string') {
+            return value.split(',')[0].trim();
+        }
+
+        if (typeof value === 'object') {
+            const withType = value as { type?: unknown };
+            if (withType.type !== undefined && withType.type !== null) {
+                return String(withType.type).trim();
+            }
+        }
+
+        return String(value).trim();
+    }
+
     getIcon(): string {
-        if (!this.activityType) {
+        const activity = this.resolvePrimaryActivityType();
+        if (!activity) {
             return 'category';
         }
-        const activities = this.activityType.split(',').map(a => a.trim());
-        const activity = activities[0];
 
         const normalizedActivityType = this.normalizeActivityTypeKey(activity);
         const overrideIcon = ACTIVITY_TYPE_ICON_OVERRIDES[normalizedActivityType];

@@ -30,6 +30,14 @@ const hoisted = vi.hoisted(() => {
     const userEventsByUID = new Map<string, any[]>();
     const globalEventDocs: any[] = [];
     const adminApps: any[] = [];
+    const resumeCheckpointPath = 'temp_collection/temp_doc_sportsLibProcessingBackfill';
+    let resumeCheckpointData: Record<string, unknown> | undefined;
+    const resumeCheckpointSet = vi.fn(async (payload: Record<string, unknown>) => {
+        resumeCheckpointData = {
+            ...(resumeCheckpointData || {}),
+            ...payload,
+        };
+    });
 
     const collection = vi.fn((path: string) => {
         const match = path.match(/^users\/([^/]+)\/events$/);
@@ -92,7 +100,21 @@ const hoisted = vi.hoisted(() => {
         return q;
     });
 
-    const firestoreDoc = vi.fn((path: string) => ({ path }));
+    const firestoreDoc = vi.fn((path: string) => ({
+        path,
+        get: vi.fn(async () => {
+            if (path === resumeCheckpointPath) {
+                return {
+                    data: () => resumeCheckpointData,
+                };
+            }
+            return {
+                exists: true,
+                data: () => ({}),
+            };
+        }),
+        set: path === resumeCheckpointPath ? resumeCheckpointSet : vi.fn(async () => undefined),
+    }));
     const initializeApp = vi.fn();
     const loggerInfo = vi.fn();
     const loggerWarn = vi.fn();
@@ -117,6 +139,12 @@ const hoisted = vi.hoisted(() => {
         loggerWarn,
         loggerError,
         serverTimestamp,
+        resumeCheckpointPath,
+        getResumeCheckpointData: () => resumeCheckpointData,
+        setResumeCheckpointData: (value: Record<string, unknown> | undefined) => {
+            resumeCheckpointData = value;
+        },
+        resumeCheckpointSet,
     };
 });
 
@@ -206,12 +234,15 @@ describe('backfill-sports-lib-processing-code script', () => {
         hoisted.resetGlobalQueryState();
         hoisted.runtimeDefaults.scanLimit = 200;
         hoisted.runtimeDefaults.uidAllowlist = null;
+        hoisted.setResumeCheckpointData(undefined);
     });
 
     it('parseBackfillOptions should default to dry-run', () => {
         const options = parseBackfillOptions([]);
         expect(options.execute).toBe(false);
         expect(options.limit).toBe(200);
+        expect(options.concurrency).toBe(5);
+        expect(options.resume).toBe(false);
     });
 
     it('parseBackfillOptions should apply precedence --uid > --uids > constant allowlist', () => {
@@ -226,6 +257,16 @@ describe('backfill-sports-lib-processing-code script', () => {
 
         const withConstant = parseBackfillOptions([]);
         expect(withConstant.uids).toEqual(['constant1', 'constant2']);
+    });
+
+    it('parseBackfillOptions should parse and clamp concurrency', () => {
+        expect(parseBackfillOptions(['--concurrency', '7']).concurrency).toBe(7);
+        expect(parseBackfillOptions(['--concurrency=0']).concurrency).toBe(5);
+        expect(parseBackfillOptions(['--concurrency=999']).concurrency).toBe(50);
+    });
+
+    it('parseBackfillOptions should parse --resume flag', () => {
+        expect(parseBackfillOptions(['--resume']).resume).toBe(true);
     });
 
     it('should create missing processing metadata with sentinel version in execute mode', async () => {
@@ -311,15 +352,45 @@ describe('backfill-sports-lib-processing-code script', () => {
             (call: any[]) => call[0] === '[sports-lib-processing-backfill] Progress',
         );
         expect(progressCalls).toHaveLength(2);
-        expect(progressCalls[0]?.[1]).toEqual(expect.objectContaining({
-            scanned: 1,
-            total: 2,
-            percentComplete: 50,
-        }));
-        expect(progressCalls[1]?.[1]).toEqual(expect.objectContaining({
-            scanned: 2,
-            total: 2,
-            percentComplete: 100,
-        }));
+        const progressPayloads = progressCalls.map((call: any[]) => call[1]);
+        expect(progressPayloads).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                scanned: 2,
+                total: 2,
+                percentComplete: 100,
+            }),
+        ]));
+    });
+
+    it('should resume from checkpoint and update checkpoint when --resume is enabled', async () => {
+        hoisted.setResumeCheckpointData({
+            scopeKey: 'uid:u1',
+            lastEventPath: 'users/u1/events/e1',
+        });
+        const docOne = makeEventDoc('u1', 'e1', {
+            exists: true,
+            data: { sportsLibVersion: '9.0.0', sportsLibVersionCode: 9_000_000 },
+        });
+        const docTwo = makeEventDoc('u1', 'e2', {
+            exists: true,
+            data: { sportsLibVersion: '9.0.0', sportsLibVersionCode: 9_000_000 },
+        });
+        hoisted.userEventsByUID.set('u1', [docOne, docTwo]);
+
+        const summary = await runBackfillSportsLibProcessingCode(['--uid', 'u1', '--resume']);
+        expect(summary.scanned).toBe(1);
+        expect(hoisted.resumeCheckpointSet).toHaveBeenCalledWith(expect.objectContaining({
+            scopeKey: 'uid:u1',
+            lastEventPath: 'users/u1/events/e2',
+            updatedAt: 'SERVER_TIMESTAMP',
+        }), { merge: true });
+        expect(hoisted.loggerInfo).toHaveBeenCalledWith(
+            '[sports-lib-processing-backfill] Resuming from checkpoint.',
+            expect.objectContaining({
+                checkpointPath: hoisted.resumeCheckpointPath,
+                scopeKey: 'uid:u1',
+                startAfter: 'users/u1/events/e1',
+            }),
+        );
     });
 });

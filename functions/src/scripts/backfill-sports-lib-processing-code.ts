@@ -10,6 +10,9 @@ import {
 const MISSING_PROCESSING_VERSION = '0.0.0';
 const MISSING_PROCESSING_VERSION_CODE = 0;
 const PROGRESS_LOG_EVERY = 25;
+const DEFAULT_CONCURRENCY = 5;
+const MAX_CONCURRENCY = 50;
+const BACKFILL_RESUME_CHECKPOINT_PATH = 'temp_collection/temp_doc_sportsLibProcessingBackfill';
 
 interface BackfillOptions {
     execute: boolean;
@@ -17,6 +20,8 @@ interface BackfillOptions {
     uids?: string[];
     limit: number;
     startAfter?: string;
+    concurrency: number;
+    resume: boolean;
 }
 
 export interface BackfillSummary {
@@ -27,6 +32,23 @@ export interface BackfillSummary {
     unchanged: number;
     skippedInvalid: number;
     failed: number;
+}
+
+interface BackfillResumeCheckpoint {
+    scopeKey?: string;
+    lastEventPath?: string;
+    updatedAt?: unknown;
+}
+
+function resolveScopedStartAfterValue(startAfter: string | undefined, options: BackfillOptions): string | undefined {
+    if (!startAfter || !options.uid) {
+        return startAfter;
+    }
+    const parsed = parseUidAndEventIdFromEventPath(startAfter);
+    if (parsed && parsed.uid === options.uid) {
+        return parsed.eventId;
+    }
+    return startAfter;
 }
 
 function shouldLogProgress(scanned: number, total: number): boolean {
@@ -61,6 +83,11 @@ function parseIntArg(value: string | undefined, fallback: number): number {
     return parsed;
 }
 
+function parseConcurrencyArg(value: string | undefined): number {
+    const parsed = parseIntArg(value, DEFAULT_CONCURRENCY);
+    return Math.min(Math.max(parsed, 1), MAX_CONCURRENCY);
+}
+
 export function parseBackfillOptions(argv: string[]): BackfillOptions {
     const execute = argv.includes('--execute');
     const uid = readArgValue(argv, '--uid');
@@ -72,6 +99,8 @@ export function parseBackfillOptions(argv: string[]): BackfillOptions {
     const effectiveUIDAllowlist = uid ? null : (cliUIDAllowlist || constantUIDAllowlist);
     const limit = parseIntArg(readArgValue(argv, '--limit'), SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.scanLimit);
     const startAfter = readArgValue(argv, '--start-after');
+    const concurrency = parseConcurrencyArg(readArgValue(argv, '--concurrency'));
+    const resume = argv.includes('--resume');
 
     return {
         execute,
@@ -79,6 +108,8 @@ export function parseBackfillOptions(argv: string[]): BackfillOptions {
         uids: effectiveUIDAllowlist ? Array.from(effectiveUIDAllowlist) : undefined,
         limit,
         startAfter,
+        concurrency,
+        resume,
     };
 }
 
@@ -142,18 +173,46 @@ export async function runBackfillSportsLibProcessingCode(argv: string[]): Promis
         admin.initializeApp();
     }
 
-    const eventDocs = await getEventsToInspect(options);
+    const db = admin.firestore();
+    const checkpointRef = db.doc(BACKFILL_RESUME_CHECKPOINT_PATH);
+    const scopeKey = options.uid
+        ? `uid:${options.uid}`
+        : options.uids && options.uids.length > 0
+            ? `uids:${options.uids.slice().sort().join(',')}`
+            : 'global';
+
+    let effectiveStartAfter = options.startAfter;
+    if (!effectiveStartAfter && options.resume) {
+        const checkpointSnapshot = await checkpointRef.get();
+        const checkpointData = checkpointSnapshot.data() as BackfillResumeCheckpoint | undefined;
+        if (checkpointData?.scopeKey === scopeKey && typeof checkpointData.lastEventPath === 'string' && checkpointData.lastEventPath.length > 0) {
+            effectiveStartAfter = checkpointData.lastEventPath;
+            logger.info('[sports-lib-processing-backfill] Resuming from checkpoint.', {
+                checkpointPath: BACKFILL_RESUME_CHECKPOINT_PATH,
+                scopeKey,
+                startAfter: effectiveStartAfter,
+            });
+        }
+    }
+
+    const eventDocs = await getEventsToInspect({
+        ...options,
+        startAfter: resolveScopedStartAfterValue(effectiveStartAfter, options),
+    });
     const totalEvents = eventDocs.length;
     logger.info('[sports-lib-processing-backfill] Starting backfill run.', {
         dryRun: !options.execute,
         totalEvents,
         progressLogEvery: PROGRESS_LOG_EVERY,
+        concurrency: options.concurrency,
+        resume: options.resume,
+        startAfter: effectiveStartAfter,
     });
-    for (const eventDoc of eventDocs) {
+    const processEventDoc = async (eventDoc: admin.firestore.QueryDocumentSnapshot): Promise<void> => {
         summary.scanned++;
         const parsed = parseUidAndEventIdFromEventPath(eventDoc.ref.path);
         if (!parsed) {
-            continue;
+            return;
         }
         const { uid, eventId } = parsed;
         const eventPath = eventDoc.ref.path;
@@ -178,7 +237,7 @@ export async function runBackfillSportsLibProcessingCode(argv: string[]): Promis
                     processingDocPath,
                     dryRun: !options.execute,
                 });
-                continue;
+                return;
             }
 
             const processingData = processingSnapshot.data() as Record<string, unknown>;
@@ -190,7 +249,7 @@ export async function runBackfillSportsLibProcessingCode(argv: string[]): Promis
                     processingDocPath,
                     sportsLibVersion: rawVersion,
                 });
-                continue;
+                return;
             }
 
             let computedCode: number;
@@ -204,7 +263,7 @@ export async function runBackfillSportsLibProcessingCode(argv: string[]): Promis
                     sportsLibVersion: rawVersion,
                     error: `${error}`,
                 });
-                continue;
+                return;
             }
 
             const rawCode = processingData.sportsLibVersionCode;
@@ -219,7 +278,7 @@ export async function runBackfillSportsLibProcessingCode(argv: string[]): Promis
                     sportsLibVersion: rawVersion,
                     sportsLibVersionCode: normalizedRawCode,
                 });
-                continue;
+                return;
             }
 
             summary.patched++;
@@ -261,6 +320,35 @@ export async function runBackfillSportsLibProcessingCode(argv: string[]): Promis
                 });
             }
         }
+    };
+
+    if (eventDocs.length > 0) {
+        let nextIndex = 0;
+        const workerCount = Math.min(options.concurrency, eventDocs.length);
+        const workers = Array.from({ length: workerCount }, async () => {
+            while (true) {
+                const currentIndex = nextIndex++;
+                if (currentIndex >= eventDocs.length) {
+                    return;
+                }
+                await processEventDoc(eventDocs[currentIndex]);
+            }
+        });
+        await Promise.all(workers);
+    }
+
+    if (options.resume) {
+        const lastEventPath = eventDocs.length > 0 ? eventDocs[eventDocs.length - 1].ref.path : null;
+        await checkpointRef.set({
+            scopeKey,
+            lastEventPath,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+        logger.info('[sports-lib-processing-backfill] Updated resume checkpoint.', {
+            checkpointPath: BACKFILL_RESUME_CHECKPOINT_PATH,
+            scopeKey,
+            lastEventPath,
+        });
     }
 
     logger.info('[sports-lib-processing-backfill] Summary', summary);
