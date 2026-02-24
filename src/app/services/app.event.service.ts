@@ -184,6 +184,19 @@ export class AppEventService implements OnDestroy {
     );
   }
 
+  private stripServerOwnedEventFileMetadata(
+    payload: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const sanitizedPayload = { ...payload };
+    delete sanitizedPayload.originalFile;
+    delete sanitizedPayload.originalFiles;
+    return sanitizedPayload;
+  }
+
+  private isTopLevelEventDocumentPath(path: string[]): boolean {
+    return path.length === 4 && path[0] === 'users' && path[2] === 'events';
+  }
+
   private buildEventFromSnapshot(eventSnapshot: any, eventID: string): AppEventInterface | null {
     if (!eventSnapshot) return null;
     const { sanitizedJson } = EventJSONSanitizer.sanitize(eventSnapshot);
@@ -682,7 +695,10 @@ export class AppEventService implements OnDestroy {
 
     const adapter: FirestoreAdapter = {
       setDoc: (path: string[], data: any) => {
-        return runInInjectionContext(this.injector, () => setDoc(doc(this.firestore, ...path as [string, ...string[]]), data));
+        const firestorePayload = this.isTopLevelEventDocumentPath(path)
+          ? this.stripServerOwnedEventFileMetadata(data as Record<string, unknown>)
+          : data;
+        return runInInjectionContext(this.injector, () => setDoc(doc(this.firestore, ...path as [string, ...string[]]), firestorePayload));
       },
       createBlob: (data: Uint8Array) => {
         return Bytes.fromUint8Array(data);
@@ -705,7 +721,9 @@ export class AppEventService implements OnDestroy {
   }
 
   public async setEvent(user: User, event: EventInterface) {
-    const eventData = buildEventWriteData(event);
+    const eventData = this.stripServerOwnedEventFileMetadata(
+      buildEventWriteData(event)
+    );
     return runInInjectionContext(this.injector, () => setDoc(doc(this.firestore, 'users', user.uid, 'events', event.getID()), eventData, { merge: true }));
   }
 
@@ -720,13 +738,14 @@ export class AppEventService implements OnDestroy {
    */
   public async writeActivityAndEventData(user: User, event: EventInterface, activity: ActivityInterface): Promise<void> {
     const { activityData, eventData } = buildActivityEditWritePayload(user.uid, event, activity);
+    const clientSafeEventData = this.stripServerOwnedEventFileMetadata(eventData);
     return runInInjectionContext(this.injector, async () => {
       const batch = writeBatch(this.firestore);
       const activityRef = doc(this.firestore, 'users', user.uid, 'activities', activity.getID());
       const eventRef = doc(this.firestore, 'users', user.uid, 'events', event.getID());
 
       batch.set(activityRef, activityData, { merge: true });
-      batch.set(eventRef, eventData, { merge: true });
+      batch.set(eventRef, clientSafeEventData, { merge: true });
       await batch.commit();
     });
   }
@@ -736,7 +755,9 @@ export class AppEventService implements OnDestroy {
     // Mandatory shared write policy: sanitize ad-hoc event patch payloads before updateDoc.
     let sanitizedProperties = propertiesToUpdate;
     if (propertiesToUpdate && typeof propertiesToUpdate === 'object' && !Array.isArray(propertiesToUpdate)) {
-      sanitizedProperties = sanitizeEventFirestoreWritePayload(propertiesToUpdate as Record<string, unknown>);
+      sanitizedProperties = this.stripServerOwnedEventFileMetadata(
+        sanitizeEventFirestoreWritePayload(propertiesToUpdate as Record<string, unknown>)
+      );
     }
 
     return runInInjectionContext(

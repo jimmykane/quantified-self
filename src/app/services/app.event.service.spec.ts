@@ -641,7 +641,7 @@ describe('AppEventService', () => {
         expect(writtenPayload.eventStartDate).toEqual(event.startDate);
     });
 
-    it('should preserve original file metadata and merge on setEvent', async () => {
+    it('should strip original file metadata and merge on setEvent', async () => {
         const user = { uid: 'user1' } as any;
         const event = {
             getID: () => 'event1',
@@ -659,11 +659,12 @@ describe('AppEventService', () => {
             expect.anything(),
             expect.objectContaining({
                 name: 'My Event',
-                originalFiles: event.originalFiles,
-                originalFile: event.originalFile,
             }),
             { merge: true }
         );
+        const eventPayload = (setDoc as Mock).mock.calls[0][1];
+        expect(eventPayload.originalFiles).toBeUndefined();
+        expect(eventPayload.originalFile).toBeUndefined();
     });
 
     it('should sanitize updateEventProperties payload by stripping streams and top-level activities', async () => {
@@ -687,6 +688,26 @@ describe('AppEventService', () => {
         expect(writtenPayload.name).toBe('Updated event name');
         expect(writtenPayload.activities).toBeUndefined();
         expect(hasStreamsKey(writtenPayload)).toBe(false);
+    });
+
+    it('should strip server-owned original file metadata in updateEventProperties', async () => {
+        const user = { uid: 'user1' } as any;
+        const payload = {
+            name: 'Updated event name',
+            originalFile: { path: 'users/u1/events/e1/original.fit' },
+            originalFiles: [{ path: 'users/u1/events/e1/original.fit' }],
+        };
+
+        (doc as Mock).mockReturnValue({});
+        (updateDoc as Mock).mockResolvedValue(undefined);
+
+        await service.updateEventProperties(user, 'event1', payload);
+
+        expect(updateDoc).toHaveBeenCalledTimes(1);
+        const writtenPayload = (updateDoc as Mock).mock.calls[0][1];
+        expect(writtenPayload.name).toBe('Updated event name');
+        expect(writtenPayload.originalFile).toBeUndefined();
+        expect(writtenPayload.originalFiles).toBeUndefined();
     });
 
     it('should keep primitive update payloads unchanged in updateEventProperties', async () => {
@@ -753,10 +774,12 @@ describe('AppEventService', () => {
             expect.anything(),
             expect.objectContaining({
                 name: 'My Event',
-                originalFile: event.originalFile,
             }),
             { merge: true }
         );
+        const secondPayload = mocks.batchSet.mock.calls[1][1];
+        expect(secondPayload.originalFile).toBeUndefined();
+        expect(secondPayload.originalFiles).toBeUndefined();
         expect(mocks.batchCommit).toHaveBeenCalledTimes(1);
     });
 
