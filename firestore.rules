@@ -71,8 +71,7 @@ service cloud.firestore {
           // TEMPORARILY DISABLED FOR TESTING - Re-enable when ready to enforce paywall
           // allow read, write: if request.auth.uid == userID && isSubscribed();
           allow read: if request.auth.uid == userID;
-          allow create: if request.auth.uid == userID
-            && !request.resource.data.keys().hasAny(['originalFile', 'originalFiles']);
+          allow create: if false;
           allow update: if request.auth.uid == userID
             && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['originalFile', 'originalFiles']);
           allow delete: if request.auth.uid == userID;
@@ -101,11 +100,10 @@ service cloud.firestore {
 
             allow read: if resource.data.privacy == 'public';
             allow read: if request.auth.uid == userID;
-            allow create: if request.auth.uid == userID
-              && isOwnEventRef(request.resource.data);
+            allow create: if false;
             allow delete: if false;
             allow update: if request.auth.uid == userID
-              && !('eventID' in request.resource.data.diff(resource.data).affectedKeys())
+              && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['eventID', 'userID', 'eventStartDate'])
               && isOwnEventRef(request.resource.data);
           }
 

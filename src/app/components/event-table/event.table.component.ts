@@ -547,7 +547,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   async saveEventDescription(description: string, event: EventInterface) {
     event.description = description;
-    await this.eventService.writeAllEventData(this.user, event);
+    await this.eventService.updateEventProperties(this.user, event.getID(), {
+      description: event.description,
+    });
     this.snackBar.open('Event saved', undefined, {
       duration: 2000,
     });
@@ -555,7 +557,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   async saveEventName(name: string, event: EventInterface) {
     event.name = name;
-    await this.eventService.writeAllEventData(this.user, event);
+    await this.eventService.updateEventProperties(this.user, event.getID(), {
+      name: event.name,
+    });
     this.snackBar.open('Event saved', undefined, {
       duration: 2000,
     });

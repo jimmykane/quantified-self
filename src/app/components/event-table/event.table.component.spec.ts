@@ -107,7 +107,8 @@ describe('EventTableComponent', () => {
     beforeEach(async () => {
         mockEventService = {
             deleteAllEventData: vi.fn().mockReturnValue(Promise.resolve(true)),
-            downloadFile: vi.fn().mockReturnValue(Promise.resolve(new ArrayBuffer(8)))
+            downloadFile: vi.fn().mockReturnValue(Promise.resolve(new ArrayBuffer(8))),
+            updateEventProperties: vi.fn().mockResolvedValue(undefined),
         };
         mockEventMergeService = {
             mergeEvents: vi.fn().mockResolvedValue({ eventId: 'merged-event' }),
@@ -266,6 +267,32 @@ describe('EventTableComponent', () => {
     it('should initialize data source with events', () => {
         component.ngAfterViewInit();
         expect(component.data.data.length).toBe(3);
+    });
+
+    it('should patch-save event description via updateEventProperties', async () => {
+        const event = new MockEvent('event-description') as any;
+
+        await component.saveEventDescription('Updated Description', event);
+
+        expect(mockEventService.updateEventProperties).toHaveBeenCalledWith(
+            mockUser,
+            'event-description',
+            { description: 'Updated Description' }
+        );
+        expect(mockSnackBar.open).toHaveBeenCalledWith('Event saved', undefined, { duration: 2000 });
+    });
+
+    it('should patch-save event name via updateEventProperties', async () => {
+        const event = new MockEvent('event-name') as any;
+
+        await component.saveEventName('Updated Name', event);
+
+        expect(mockEventService.updateEventProperties).toHaveBeenCalledWith(
+            mockUser,
+            'event-name',
+            { name: 'Updated Name' }
+        );
+        expect(mockSnackBar.open).toHaveBeenCalledWith('Event saved', undefined, { duration: 2000 });
     });
 
     it('should process rows with multisport fallback color and skip null events', () => {

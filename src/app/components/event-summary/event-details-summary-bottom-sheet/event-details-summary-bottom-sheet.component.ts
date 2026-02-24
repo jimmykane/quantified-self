@@ -65,14 +65,20 @@ export class EventDetailsSummaryBottomSheetComponent implements OnInit {
     async saveEventFeeling() {
         if (!isNumber(this.feeling)) return;
         this.event.addStat(new DataFeeling(this.feeling));
-        await this.eventService.writeAllEventData(this.user, this.event);
+        const eventJSON = this.event.toJSON() as Record<string, unknown>;
+        await this.eventService.updateEventProperties(this.user, this.event.getID()!, {
+            stats: eventJSON.stats,
+        });
         this.snackBar.open('Feeling saved', undefined, { duration: 2000 });
     }
 
     async saveEventRPE() {
         if (!isNumber(this.rpe)) return;
         this.event.addStat(new DataRPE(this.rpe));
-        await this.eventService.writeAllEventData(this.user, this.event);
+        const eventJSON = this.event.toJSON() as Record<string, unknown>;
+        await this.eventService.updateEventProperties(this.user, this.event.getID()!, {
+            stats: eventJSON.stats,
+        });
         this.snackBar.open('RPE saved', undefined, { duration: 2000 });
     }
 }

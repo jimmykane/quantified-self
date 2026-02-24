@@ -129,13 +129,31 @@ export class ActivitiesTogglesComponent {
       this.snackBar.open('Could not update device name', undefined, { duration: 3500 });
       return;
     }
+    const eventID = event.getID();
+    const activityID = activity.getID();
+    if (!eventID || !activityID) {
+      this.snackBar.open('Could not update device name', undefined, { duration: 3500 });
+      return;
+    }
 
     const previousName = creator.name;
     creator.name = newName;
 
     try {
       event.addStat(new DataDeviceNames(event.getActivities().map((eventActivity) => eventActivity.creator?.name || '')));
-      await this.eventService.writeActivityAndEventData(user, event, activity);
+      const eventJSON = event.toJSON() as Record<string, unknown>;
+      const eventPatch = eventJSON.stats === undefined ? {} : { stats: eventJSON.stats };
+      const activityPatch = {
+        creator: { ...creator, name: newName },
+      };
+
+      await this.eventService.updateActivityAndEventProperties(
+        user,
+        eventID,
+        activityID,
+        activityPatch,
+        eventPatch,
+      );
       this.snackBar.open('Device name updated', undefined, { duration: 2500 });
     } catch {
       creator.name = previousName;

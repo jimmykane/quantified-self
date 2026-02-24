@@ -264,9 +264,9 @@ describe('Firestore Security Rules', () => {
         });
 
         describe('Events (users/{uid}/events/{eventId})', () => {
-            it('should allow owner creating event without original file metadata', async () => {
+            it('should deny owner creating event without original file metadata', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
-                await assertSucceeds(db.collection(`users/${userId}/events`).doc(eventId).set({
+                await assertFails(db.collection(`users/${userId}/events`).doc(eventId).set({
                     name: 'Morning Run',
                     privacy: 'private'
                 }));
@@ -391,14 +391,14 @@ describe('Firestore Security Rules', () => {
             await assertSucceeds(db.collection(`users/${userId}/activities`).doc(activityId).get());
         });
 
-        it('should allow user to write their own activity', async () => {
+        it('should deny owner creating their own activity doc from client', async () => {
             const db = testEnv.authenticatedContext(userId).firestore();
             await testEnv.withSecurityRulesDisabled(async (context) => {
                 await context.firestore().collection(`users/${userId}/events`).doc('original_event').set({
                     type: 'Run'
                 });
             });
-            await assertSucceeds(db.collection(`users/${userId}/activities`).doc(activityId).set({
+            await assertFails(db.collection(`users/${userId}/activities`).doc(activityId).set({
                 type: 'Running',
                 distance: 5000,
                 eventID: 'original_event'
@@ -499,6 +499,44 @@ describe('Firestore Security Rules', () => {
 
             await assertFails(db.collection(`users/${userId}/activities`).doc(activityId).update({
                 eventID: 'hacked_event'
+            }));
+        });
+
+        it('should deny user from updating userID of their activity', async () => {
+            const db = testEnv.authenticatedContext(userId).firestore();
+
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().collection(`users/${userId}/events`).doc('original_event').set({
+                    type: 'Running'
+                });
+                await context.firestore().collection(`users/${userId}/activities`).doc(activityId).set({
+                    type: 'Running',
+                    eventID: 'original_event',
+                    userID: userId,
+                });
+            });
+
+            await assertFails(db.collection(`users/${userId}/activities`).doc(activityId).update({
+                userID: 'another-user'
+            }));
+        });
+
+        it('should deny user from updating eventStartDate of their activity', async () => {
+            const db = testEnv.authenticatedContext(userId).firestore();
+
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().collection(`users/${userId}/events`).doc('original_event').set({
+                    type: 'Running'
+                });
+                await context.firestore().collection(`users/${userId}/activities`).doc(activityId).set({
+                    type: 'Running',
+                    eventID: 'original_event',
+                    eventStartDate: new Date('2026-02-24T00:00:00.000Z'),
+                });
+            });
+
+            await assertFails(db.collection(`users/${userId}/activities`).doc(activityId).update({
+                eventStartDate: new Date('2026-02-25T00:00:00.000Z')
             }));
         });
 

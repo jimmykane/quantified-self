@@ -35,6 +35,7 @@ const mocks = vi.hoisted(() => {
         getCountFromServer: vi.fn(),
         getBytes: vi.fn(),
         batchSet: vi.fn(),
+        batchUpdate: vi.fn(),
         batchCommit: vi.fn(),
         eventWriterInstances: [] as Array<{ storageAdapter: unknown, bucketName: unknown }>,
     };
@@ -75,6 +76,7 @@ vi.mock('@angular/fire/firestore', async (importOriginal) => {
         updateDoc: vi.fn(),
         writeBatch: vi.fn(() => ({
             set: mocks.batchSet,
+            update: mocks.batchUpdate,
             commit: mocks.batchCommit,
         })),
         getCountFromServer: mocks.getCountFromServer,
@@ -731,6 +733,80 @@ describe('AppEventService', () => {
 
         expect(updateDoc).toHaveBeenCalledTimes(1);
         expect((updateDoc as Mock).mock.calls[0][1]).toEqual(patch);
+    });
+
+    it('should sanitize updateActivityProperties payload by stripping streams and immutable identity fields', async () => {
+        const user = { uid: 'user1' } as any;
+        const payload = {
+            creator: { name: 'Renamed Device' },
+            eventID: 'event-hijack',
+            userID: 'other-user',
+            eventStartDate: new Date('2026-01-01T00:00:00.000Z'),
+            details: {
+                streams: [{ type: 'Power', values: [100, 200] }],
+            },
+        };
+
+        (doc as Mock).mockReturnValue({});
+        (updateDoc as Mock).mockResolvedValue(undefined);
+
+        await service.updateActivityProperties(user, 'activity1', payload);
+
+        expect(updateDoc).toHaveBeenCalledTimes(1);
+        const writtenPayload = (updateDoc as Mock).mock.calls[0][1];
+        expect(writtenPayload.creator).toEqual({ name: 'Renamed Device' });
+        expect(writtenPayload.eventID).toBeUndefined();
+        expect(writtenPayload.userID).toBeUndefined();
+        expect(writtenPayload.eventStartDate).toBeUndefined();
+        expect(hasStreamsKey(writtenPayload)).toBe(false);
+    });
+
+    it('should atomically patch activity and event using batch.update with sanitized payloads', async () => {
+        const user = { uid: 'user1' } as any;
+        const activityPatch = {
+            creator: { name: 'Device B' },
+            eventID: 'hijack',
+            userID: 'other-user',
+            eventStartDate: new Date('2026-01-01T00:00:00.000Z'),
+            nested: {
+                streams: [{ type: 'Pace', values: [1, 2, 3] }],
+            },
+        };
+        const eventPatch = {
+            stats: { heartRateAvg: 140 },
+            activities: [{ id: 'activity-1' }],
+            originalFile: { path: 'users/u1/events/e1/original.fit' },
+            originalFiles: [{ path: 'users/u1/events/e1/original.fit' }],
+        };
+
+        (doc as Mock).mockReturnValue({});
+        mocks.batchCommit.mockResolvedValue(undefined);
+
+        await service.updateActivityAndEventProperties(
+            user,
+            'event1',
+            'activity1',
+            activityPatch,
+            eventPatch,
+        );
+
+        expect(writeBatch).toHaveBeenCalledTimes(1);
+        expect(mocks.batchUpdate).toHaveBeenCalledTimes(2);
+
+        const writtenActivityPatch = mocks.batchUpdate.mock.calls[0][1];
+        expect(writtenActivityPatch.creator).toEqual({ name: 'Device B' });
+        expect(writtenActivityPatch.eventID).toBeUndefined();
+        expect(writtenActivityPatch.userID).toBeUndefined();
+        expect(writtenActivityPatch.eventStartDate).toBeUndefined();
+        expect(hasStreamsKey(writtenActivityPatch)).toBe(false);
+
+        const writtenEventPatch = mocks.batchUpdate.mock.calls[1][1];
+        expect(writtenEventPatch.stats).toEqual({ heartRateAvg: 140 });
+        expect(writtenEventPatch.activities).toBeUndefined();
+        expect(writtenEventPatch.originalFile).toBeUndefined();
+        expect(writtenEventPatch.originalFiles).toBeUndefined();
+        expect(hasStreamsKey(writtenEventPatch)).toBe(false);
+        expect(mocks.batchCommit).toHaveBeenCalledTimes(1);
     });
 
     it('should atomically write activity and event in writeActivityAndEventData', async () => {

@@ -19,7 +19,7 @@ import {
 import { EventExporterGPX } from '@sports-alliance/sports-lib';
 
 import { EventWriter, FirestoreAdapter } from '../../../functions/src/shared/event-writer';
-import { sanitizeEventFirestoreWritePayload } from '../../../functions/src/shared/firestore-write-sanitizer';
+import { sanitizeActivityFirestoreWritePayload, sanitizeEventFirestoreWritePayload } from '../../../functions/src/shared/firestore-write-sanitizer';
 import { generateActivityID, generateEventID } from '../../../functions/src/shared/id-generator';
 import { createParsingOptions } from '../../../functions/src/shared/parsing-options';
 import { Bytes, serverTimestamp } from 'firebase/firestore';
@@ -195,6 +195,20 @@ export class AppEventService implements OnDestroy {
     const sanitizedPayload = { ...payload };
     delete sanitizedPayload.originalFile;
     delete sanitizedPayload.originalFiles;
+    return sanitizedPayload;
+  }
+
+  /**
+   * Activity identity fields are backend-owned denormalization fields.
+   * Frontend update payloads must never modify these values.
+   */
+  private stripImmutableActivityIdentityFields(
+    payload: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const sanitizedPayload = { ...payload };
+    delete sanitizedPayload.eventID;
+    delete sanitizedPayload.userID;
+    delete sanitizedPayload.eventStartDate;
     return sanitizedPayload;
   }
 
@@ -675,6 +689,12 @@ export class AppEventService implements OnDestroy {
     );
   }
 
+  /**
+   * @deprecated Use patch-oriented update methods for UI edits:
+   * - updateEventProperties(...)
+   * - updateActivityProperties(...)
+   * - updateActivityAndEventProperties(...)
+   */
   public async writeAllEventData(user: User, event: AppEventInterface) {
     // 0. Ensure deterministic IDs to prevent duplicates
     // Frontend uploads use thresholdMs=0 for exact timestamps (no bucketing)
@@ -744,8 +764,8 @@ export class AppEventService implements OnDestroy {
   }
 
   /**
-   * Atomic activity+event write for edit flows.
-   * This prevents partial success when updating both entities.
+   * @deprecated Atomic merge-write helper for legacy edit flows.
+   * Use updateActivityAndEventProperties(...) for patch-only edit flows.
    */
   public async writeActivityAndEventData(user: User, event: EventInterface, activity: ActivityInterface): Promise<void> {
     const { activityData, eventData } = buildActivityEditWritePayload(user.uid, event, activity);
@@ -757,6 +777,68 @@ export class AppEventService implements OnDestroy {
 
       batch.set(activityRef, activityData, { merge: true });
       batch.set(eventRef, clientSafeEventData, { merge: true });
+      await batch.commit();
+    });
+  }
+
+  public async updateActivityProperties(user: User, activityID: string, propertiesToUpdate: any) {
+    let sanitizedProperties = propertiesToUpdate;
+    if (propertiesToUpdate && typeof propertiesToUpdate === 'object' && !Array.isArray(propertiesToUpdate)) {
+      sanitizedProperties = this.stripImmutableActivityIdentityFields(
+        sanitizeActivityFirestoreWritePayload(propertiesToUpdate as Record<string, unknown>)
+      );
+    }
+
+    return runInInjectionContext(
+      this.injector,
+      () => updateDoc(doc(this.firestore, 'users', user.uid, 'activities', activityID), sanitizedProperties)
+    );
+  }
+
+  /**
+   * Atomic patch update for activity + parent event edit flows.
+   * Both patch payloads are sanitized at the write boundary.
+   */
+  public async updateActivityAndEventProperties(
+    user: User,
+    eventID: string,
+    activityID: string,
+    activityPatch: any,
+    eventPatch: any,
+  ): Promise<void> {
+    let sanitizedActivityPatch = activityPatch;
+    if (activityPatch && typeof activityPatch === 'object' && !Array.isArray(activityPatch)) {
+      sanitizedActivityPatch = this.stripImmutableActivityIdentityFields(
+        sanitizeActivityFirestoreWritePayload(activityPatch as Record<string, unknown>)
+      );
+    }
+
+    let sanitizedEventPatch = eventPatch;
+    if (eventPatch && typeof eventPatch === 'object' && !Array.isArray(eventPatch)) {
+      sanitizedEventPatch = this.stripServerOwnedEventFileMetadata(
+        sanitizeEventFirestoreWritePayload(eventPatch as Record<string, unknown>)
+      );
+    }
+
+    return runInInjectionContext(this.injector, async () => {
+      const activityPatchIsObject = !!sanitizedActivityPatch && typeof sanitizedActivityPatch === 'object' && !Array.isArray(sanitizedActivityPatch);
+      const eventPatchIsObject = !!sanitizedEventPatch && typeof sanitizedEventPatch === 'object' && !Array.isArray(sanitizedEventPatch);
+      const hasActivityPatch = activityPatchIsObject && Object.keys(sanitizedActivityPatch as Record<string, unknown>).length > 0;
+      const hasEventPatch = eventPatchIsObject && Object.keys(sanitizedEventPatch as Record<string, unknown>).length > 0;
+
+      if (!hasActivityPatch && !hasEventPatch) {
+        return;
+      }
+
+      const batch = writeBatch(this.firestore);
+      if (hasActivityPatch) {
+        const activityRef = doc(this.firestore, 'users', user.uid, 'activities', activityID);
+        batch.update(activityRef, sanitizedActivityPatch);
+      }
+      if (hasEventPatch) {
+        const eventRef = doc(this.firestore, 'users', user.uid, 'events', eventID);
+        batch.update(eventRef, sanitizedEventPatch);
+      }
       await batch.commit();
     });
   }
