@@ -65,7 +65,7 @@ export class EventDetailsSummaryBottomSheetComponent implements OnInit {
     async saveEventFeeling() {
         if (!isNumber(this.feeling)) return;
         this.event.addStat(new DataFeeling(this.feeling));
-        const eventJSON = this.event.toJSON() as Record<string, unknown>;
+        const eventJSON = this.event.toJSON();
         await this.eventService.updateEventProperties(this.user, this.event.getID()!, {
             stats: eventJSON.stats,
         });
@@ -75,7 +75,7 @@ export class EventDetailsSummaryBottomSheetComponent implements OnInit {
     async saveEventRPE() {
         if (!isNumber(this.rpe)) return;
         this.event.addStat(new DataRPE(this.rpe));
-        const eventJSON = this.event.toJSON() as Record<string, unknown>;
+        const eventJSON = this.event.toJSON();
         await this.eventService.updateEventProperties(this.user, this.event.getID()!, {
             stats: eventJSON.stats,
         });

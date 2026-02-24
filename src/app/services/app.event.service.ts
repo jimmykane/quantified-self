@@ -18,11 +18,8 @@ import {
 } from '@sports-alliance/sports-lib';
 import { EventExporterGPX } from '@sports-alliance/sports-lib';
 
-import { EventWriter, FirestoreAdapter } from '../../../functions/src/shared/event-writer';
 import { sanitizeActivityFirestoreWritePayload, sanitizeEventFirestoreWritePayload } from '../../../functions/src/shared/firestore-write-sanitizer';
-import { generateActivityID, generateEventID } from '../../../functions/src/shared/id-generator';
 import { createParsingOptions } from '../../../functions/src/shared/parsing-options';
-import { Bytes, serverTimestamp } from 'firebase/firestore';
 import { EventImporterSuuntoJSON } from '@sports-alliance/sports-lib';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { EventImporterTCX } from '@sports-alliance/sports-lib';
@@ -34,16 +31,13 @@ import { EventUtilities } from '@sports-alliance/sports-lib';
 import { EventJSONSanitizer } from '../utils/event-json-sanitizer';
 import type { EventJSONSanitizerIssue } from '../utils/event-json-sanitizer';
 
-import { AppUserService } from './app.user.service';
-import { USAGE_LIMITS } from '../../../functions/src/shared/limits';
 import { AppEventInterface } from '../../../functions/src/shared/app-event.interface'; // Import Shared Interface
 import { AppEventUtilities } from '../utils/app.event.utilities';
 import { LoggerService } from './logger.service';
 import { AppFileService } from './app.file.service';
 import { AppCacheService } from './app.cache.service';
 import { BenchmarkEventAdapter } from './benchmark-event.adapter';
-import { SPORTS_LIB_VERSION } from '../constants/sports-lib-version.browser';
-import { buildActivityEditWritePayload, buildActivityWriteData, buildEventWriteData } from '../utils/activity-edit.persistence';
+import { buildActivityWriteData, buildEventWriteData } from '../utils/activity-edit.persistence';
 import { AppOriginalFileHydrationService, DownloadFileOptions } from './app.original-file-hydration.service';
 
 export interface GetEventsOnceOptions {
@@ -68,30 +62,6 @@ export interface GetEventsOnceResult {
  * use `attach_streams_only`.
  */
 export type StreamHydrationMode = 'attach_streams_only' | 'replace_activities';
-
-const SPORTS_LIB_VERSION_CODE_FACTOR_MINOR = 1000;
-const SPORTS_LIB_VERSION_CODE_FACTOR_MAJOR = 1000000;
-
-function resolveSportsLibVersionCode(version: string): number {
-  const match = version.trim().match(/^v?(\d+)\.(\d+)\.(\d+)/);
-  if (!match) {
-    return 0;
-  }
-
-  const major = Number.parseInt(match[1], 10);
-  const minor = Number.parseInt(match[2], 10);
-  const patch = Number.parseInt(match[3], 10);
-  if (!Number.isFinite(major) || !Number.isFinite(minor) || !Number.isFinite(patch)) {
-    return 0;
-  }
-  if (major > 999 || minor > 999 || patch > 999) {
-    return 0;
-  }
-
-  return (major * SPORTS_LIB_VERSION_CODE_FACTOR_MAJOR)
-    + (minor * SPORTS_LIB_VERSION_CODE_FACTOR_MINOR)
-    + patch;
-}
 
 
 @Injectable({
@@ -210,15 +180,6 @@ export class AppEventService implements OnDestroy {
     delete sanitizedPayload.userID;
     delete sanitizedPayload.eventStartDate;
     return sanitizedPayload;
-  }
-
-  /**
-   * Shared EventWriter writes both activity docs and the parent event doc through
-   * one adapter callback. We only strip server-owned file metadata for top-level
-   * event docs (`users/{uid}/events/{eventId}`), not for activity writes.
-   */
-  private isTopLevelEventDocumentPath(path: string[]): boolean {
-    return path.length === 4 && path[0] === 'users' && path[2] === 'events';
   }
 
   private buildEventFromSnapshot(eventSnapshot: any, eventID: string): AppEventInterface | null {
@@ -689,68 +650,6 @@ export class AppEventService implements OnDestroy {
     );
   }
 
-  /**
-   * @deprecated Use patch-oriented update methods for UI edits:
-   * - updateEventProperties(...)
-   * - updateActivityProperties(...)
-   * - updateActivityAndEventProperties(...)
-   */
-  public async writeAllEventData(user: User, event: AppEventInterface) {
-    // 0. Ensure deterministic IDs to prevent duplicates
-    // Frontend uploads use thresholdMs=0 for exact timestamps (no bucketing)
-    // Backend sync services use default 100ms bucketing for cross-device deduplication
-    if (!event.getID()) {
-      event.setID(await generateEventID(user.uid, event.startDate, 0));
-    }
-    const eventID = event.getID();
-    const activities = event.getActivities();
-    for (let i = 0; i < activities.length; i++) {
-      if (!activities[i].getID()) {
-        activities[i].setID(await generateActivityID(eventID, i));
-      }
-    }
-
-    // 1. Check Pro Status & Grace Period
-    const userService = this.injector.get(AppUserService);
-    if (!AppUserUtilities.hasProAccess(user)) {
-      // 2. Check Limits
-      const role = await userService.getSubscriptionRole() || 'free';
-      const limit = USAGE_LIMITS[role] || USAGE_LIMITS['free'];
-      const currentCount = await this.getEventCount(user);
-
-      if (currentCount >= limit) {
-        throw new Error(`Upload limit reached for ${role} tier. You have ${currentCount} events. Limit is ${limit}. Please upgrade to upload more.`);
-      }
-    }
-
-    const adapter: FirestoreAdapter = {
-      setDoc: (path: string[], data: any) => {
-        // Frontend must not persist server-owned file metadata on event docs.
-        const firestorePayload = this.isTopLevelEventDocumentPath(path)
-          ? this.stripServerOwnedEventFileMetadata(data as Record<string, unknown>)
-          : data;
-        return runInInjectionContext(this.injector, () => setDoc(doc(this.firestore, ...path as [string, ...string[]]), firestorePayload));
-      },
-      createBlob: (data: Uint8Array) => {
-        return Bytes.fromUint8Array(data);
-      },
-      generateID: () => {
-        return runInInjectionContext(this.injector, () => doc(collection(this.firestore, 'users'))).id;
-      }
-    };
-
-    const writer = new EventWriter(adapter);
-    await writer.writeAllEventData(user.uid, event);
-
-    const processingDoc = runInInjectionContext(this.injector, () => doc(this.firestore, 'users', user.uid, 'events', eventID as string, 'metaData', 'processing'));
-    const processingPayload = {
-      sportsLibVersion: SPORTS_LIB_VERSION,
-      sportsLibVersionCode: resolveSportsLibVersionCode(SPORTS_LIB_VERSION),
-      processedAt: serverTimestamp(),
-    };
-    await runInInjectionContext(this.injector, () => setDoc(processingDoc, processingPayload));
-  }
-
   public async setEvent(user: User, event: EventInterface) {
     const eventData = this.stripServerOwnedEventFileMetadata(
       buildEventWriteData(event)
@@ -761,24 +660,6 @@ export class AppEventService implements OnDestroy {
   public async setActivity(user: User, event: EventInterface, activity: ActivityInterface) {
     const data = buildActivityWriteData(user.uid, event, activity);
     return runInInjectionContext(this.injector, () => setDoc(doc(this.firestore, 'users', user.uid, 'activities', activity.getID()), data));
-  }
-
-  /**
-   * @deprecated Atomic merge-write helper for legacy edit flows.
-   * Use updateActivityAndEventProperties(...) for patch-only edit flows.
-   */
-  public async writeActivityAndEventData(user: User, event: EventInterface, activity: ActivityInterface): Promise<void> {
-    const { activityData, eventData } = buildActivityEditWritePayload(user.uid, event, activity);
-    const clientSafeEventData = this.stripServerOwnedEventFileMetadata(eventData);
-    return runInInjectionContext(this.injector, async () => {
-      const batch = writeBatch(this.firestore);
-      const activityRef = doc(this.firestore, 'users', user.uid, 'activities', activity.getID());
-      const eventRef = doc(this.firestore, 'users', user.uid, 'events', event.getID());
-
-      batch.set(activityRef, activityData, { merge: true });
-      batch.set(eventRef, clientSafeEventData, { merge: true });
-      await batch.commit();
-    });
   }
 
   public async updateActivityProperties(user: User, activityID: string, propertiesToUpdate: any) {

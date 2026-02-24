@@ -141,7 +141,7 @@ export class ActivitiesTogglesComponent {
 
     try {
       event.addStat(new DataDeviceNames(event.getActivities().map((eventActivity) => eventActivity.creator?.name || '')));
-      const eventJSON = event.toJSON() as Record<string, unknown>;
+      const eventJSON = event.toJSON();
       const eventPatch = eventJSON.stats === undefined ? {} : { stats: eventJSON.stats };
       const activityPatch = {
         creator: { ...creator, name: newName },
