@@ -47,4 +47,22 @@ describe('ActivityTypeIconComponent', () => {
     component.activityType = 'Kettlebell';
     expect(component.getIcon()).toBe('weight');
   });
+
+  it('falls back safely for numeric activity type values', () => {
+    const component = new ActivityTypeIconComponent();
+    component.activityType = 4;
+    expect(component.getIcon()).toBe('category');
+  });
+
+  it('handles array activity type values', () => {
+    const component = new ActivityTypeIconComponent();
+    component.activityType = ['VirtualRide', 'Run'];
+    expect(component.getIcon()).toBe('computer');
+  });
+
+  it('handles object activity type values', () => {
+    const component = new ActivityTypeIconComponent();
+    component.activityType = { type: 'Open Water Swimming' };
+    expect(component.getIcon()).toBe('waves');
+  });
 });
