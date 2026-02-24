@@ -156,7 +156,9 @@ export async function runBackfillSportsLibProcessingCode(argv: string[]): Promis
             continue;
         }
         const { uid, eventId } = parsed;
+        const eventPath = eventDoc.ref.path;
         const processingRef = eventDoc.ref.collection('metaData').doc('processing');
+        const processingDocPath = processingRef.path;
 
         try {
             const processingSnapshot = await processingRef.get();
@@ -169,6 +171,13 @@ export async function runBackfillSportsLibProcessingCode(argv: string[]): Promis
                         processedAt: admin.firestore.FieldValue.serverTimestamp(),
                     }, { merge: true });
                 }
+                logger.info('[sports-lib-processing-backfill] Created missing processing metadata.', {
+                    uid,
+                    eventId,
+                    eventPath,
+                    processingDocPath,
+                    dryRun: !options.execute,
+                });
                 continue;
             }
 
@@ -177,7 +186,8 @@ export async function runBackfillSportsLibProcessingCode(argv: string[]): Promis
             if (typeof rawVersion !== 'string') {
                 summary.skippedInvalid++;
                 logger.warn('[sports-lib-processing-backfill] Invalid processing metadata. Missing or non-string sportsLibVersion.', {
-                    processingDocPath: processingRef.path,
+                    eventPath,
+                    processingDocPath,
                     sportsLibVersion: rawVersion,
                 });
                 continue;
@@ -189,7 +199,8 @@ export async function runBackfillSportsLibProcessingCode(argv: string[]): Promis
             } catch (error) {
                 summary.skippedInvalid++;
                 logger.warn('[sports-lib-processing-backfill] Invalid processing metadata. Could not parse sportsLibVersion.', {
-                    processingDocPath: processingRef.path,
+                    eventPath,
+                    processingDocPath,
                     sportsLibVersion: rawVersion,
                     error: `${error}`,
                 });
@@ -200,6 +211,14 @@ export async function runBackfillSportsLibProcessingCode(argv: string[]): Promis
             const normalizedRawCode = typeof rawCode === 'number' && Number.isFinite(rawCode) ? rawCode : null;
             if (normalizedRawCode === computedCode) {
                 summary.unchanged++;
+                logger.info('[sports-lib-processing-backfill] Processing metadata already up to date.', {
+                    uid,
+                    eventId,
+                    eventPath,
+                    processingDocPath,
+                    sportsLibVersion: rawVersion,
+                    sportsLibVersionCode: normalizedRawCode,
+                });
                 continue;
             }
 
@@ -209,12 +228,23 @@ export async function runBackfillSportsLibProcessingCode(argv: string[]): Promis
                     sportsLibVersionCode: computedCode,
                 }, { merge: true });
             }
+            logger.info('[sports-lib-processing-backfill] Patched processing metadata version code.', {
+                uid,
+                eventId,
+                eventPath,
+                processingDocPath,
+                sportsLibVersion: rawVersion,
+                previousSportsLibVersionCode: normalizedRawCode,
+                newSportsLibVersionCode: computedCode,
+                dryRun: !options.execute,
+            });
         } catch (error) {
             summary.failed++;
             logger.error('[sports-lib-processing-backfill] Failed to backfill processing metadata for event.', {
                 uid,
                 eventId,
-                eventPath: eventDoc.ref.path,
+                eventPath,
+                processingDocPath,
                 error: `${error}`,
             });
         } finally {
