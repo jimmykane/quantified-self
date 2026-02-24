@@ -288,4 +288,38 @@ describe('backfill-sports-lib-processing-code script', () => {
         expect(summary.created).toBe(1);
         expect(eventDoc.processingSet).not.toHaveBeenCalled();
     });
+
+    it('should log progress while processing events', async () => {
+        const docOne = makeEventDoc('u1', 'e1', {
+            exists: true,
+            data: { sportsLibVersion: '9.0.0', sportsLibVersionCode: 9_000_000 },
+        });
+        const docTwo = makeEventDoc('u1', 'e2', {
+            exists: true,
+            data: { sportsLibVersion: '9.1.4', sportsLibVersionCode: 9_001_004 },
+        });
+        hoisted.userEventsByUID.set('u1', [docOne, docTwo]);
+
+        await runBackfillSportsLibProcessingCode(['--uid', 'u1']);
+
+        expect(hoisted.loggerInfo).toHaveBeenCalledWith(
+            '[sports-lib-processing-backfill] Starting backfill run.',
+            expect.objectContaining({ totalEvents: 2, progressLogEvery: 25 }),
+        );
+
+        const progressCalls = hoisted.loggerInfo.mock.calls.filter(
+            (call: any[]) => call[0] === '[sports-lib-processing-backfill] Progress',
+        );
+        expect(progressCalls).toHaveLength(2);
+        expect(progressCalls[0]?.[1]).toEqual(expect.objectContaining({
+            scanned: 1,
+            total: 2,
+            percentComplete: 50,
+        }));
+        expect(progressCalls[1]?.[1]).toEqual(expect.objectContaining({
+            scanned: 2,
+            total: 2,
+            percentComplete: 100,
+        }));
+    });
 });

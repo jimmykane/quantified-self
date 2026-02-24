@@ -2,7 +2,7 @@ import { inject, Injectable, Injector, OnDestroy, runInInjectionContext } from '
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { EventImporterJSON } from '@sports-alliance/sports-lib';
 import { combineLatest, from, Observable, of, throwError, zip } from 'rxjs';
-import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, onSnapshot, doc, docData, getDoc, getDocs, getDocsFromCache, setDoc, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, Query, QuerySnapshot, DocumentData, getCountFromServer } from '@angular/fire/firestore';
+import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, onSnapshot, doc, docData, getDoc, getDocs, getDocsFromCache, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, Query, QuerySnapshot, DocumentData, getCountFromServer } from '@angular/fire/firestore';
 import { catchError, map, switchMap, take, distinctUntilChanged, tap } from 'rxjs/operators';
 import { EventJSONInterface } from '@sports-alliance/sports-lib';
 import { ActivityJSONInterface } from '@sports-alliance/sports-lib';
@@ -18,11 +18,8 @@ import {
 } from '@sports-alliance/sports-lib';
 import { EventExporterGPX } from '@sports-alliance/sports-lib';
 
-import { EventWriter, FirestoreAdapter } from '../../../functions/src/shared/event-writer';
-import { sanitizeEventFirestoreWritePayload } from '../../../functions/src/shared/firestore-write-sanitizer';
-import { generateActivityID, generateEventID } from '../../../functions/src/shared/id-generator';
+import { sanitizeActivityFirestoreWritePayload, sanitizeEventFirestoreWritePayload } from '../../../functions/src/shared/firestore-write-sanitizer';
 import { createParsingOptions } from '../../../functions/src/shared/parsing-options';
-import { Bytes, serverTimestamp } from 'firebase/firestore';
 import { EventImporterSuuntoJSON } from '@sports-alliance/sports-lib';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { EventImporterTCX } from '@sports-alliance/sports-lib';
@@ -34,16 +31,12 @@ import { EventUtilities } from '@sports-alliance/sports-lib';
 import { EventJSONSanitizer } from '../utils/event-json-sanitizer';
 import type { EventJSONSanitizerIssue } from '../utils/event-json-sanitizer';
 
-import { AppUserService } from './app.user.service';
-import { USAGE_LIMITS } from '../../../functions/src/shared/limits';
 import { AppEventInterface } from '../../../functions/src/shared/app-event.interface'; // Import Shared Interface
 import { AppEventUtilities } from '../utils/app.event.utilities';
 import { LoggerService } from './logger.service';
 import { AppFileService } from './app.file.service';
 import { AppCacheService } from './app.cache.service';
 import { BenchmarkEventAdapter } from './benchmark-event.adapter';
-import { SPORTS_LIB_VERSION } from '../constants/sports-lib-version.browser';
-import { buildActivityEditWritePayload, buildActivityWriteData, buildEventWriteData } from '../utils/activity-edit.persistence';
 import { AppOriginalFileHydrationService, DownloadFileOptions } from './app.original-file-hydration.service';
 
 export interface GetEventsOnceOptions {
@@ -68,30 +61,6 @@ export interface GetEventsOnceResult {
  * use `attach_streams_only`.
  */
 export type StreamHydrationMode = 'attach_streams_only' | 'replace_activities';
-
-const SPORTS_LIB_VERSION_CODE_FACTOR_MINOR = 1000;
-const SPORTS_LIB_VERSION_CODE_FACTOR_MAJOR = 1000000;
-
-function resolveSportsLibVersionCode(version: string): number {
-  const match = version.trim().match(/^v?(\d+)\.(\d+)\.(\d+)/);
-  if (!match) {
-    return 0;
-  }
-
-  const major = Number.parseInt(match[1], 10);
-  const minor = Number.parseInt(match[2], 10);
-  const patch = Number.parseInt(match[3], 10);
-  if (!Number.isFinite(major) || !Number.isFinite(minor) || !Number.isFinite(patch)) {
-    return 0;
-  }
-  if (major > 999 || minor > 999 || patch > 999) {
-    return 0;
-  }
-
-  return (major * SPORTS_LIB_VERSION_CODE_FACTOR_MAJOR)
-    + (minor * SPORTS_LIB_VERSION_CODE_FACTOR_MINOR)
-    + patch;
-}
 
 
 @Injectable({
@@ -182,6 +151,34 @@ export class AppEventService implements OnDestroy {
     return (activities || []).map((activity: any, index: number) =>
       typeof activity?.getID === 'function' ? activity.getID() : `idx-${index}-no-id`,
     );
+  }
+
+  /**
+   * Firestore rules treat original source file location fields as server-owned.
+   * Frontend write paths must never send these keys, even if the in-memory event
+   * instance has them hydrated for download/reparse UX.
+   */
+  private stripServerOwnedEventFileMetadata(
+    payload: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const sanitizedPayload = { ...payload };
+    delete sanitizedPayload.originalFile;
+    delete sanitizedPayload.originalFiles;
+    return sanitizedPayload;
+  }
+
+  /**
+   * Activity identity fields are backend-owned denormalization fields.
+   * Frontend update payloads must never modify these values.
+   */
+  private stripImmutableActivityIdentityFields(
+    payload: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const sanitizedPayload = { ...payload };
+    delete sanitizedPayload.eventID;
+    delete sanitizedPayload.userID;
+    delete sanitizedPayload.eventStartDate;
+    return sanitizedPayload;
   }
 
   private buildEventFromSnapshot(eventSnapshot: any, eventID: string): AppEventInterface | null {
@@ -652,81 +649,64 @@ export class AppEventService implements OnDestroy {
     );
   }
 
-  public async writeAllEventData(user: User, event: AppEventInterface) {
-    // 0. Ensure deterministic IDs to prevent duplicates
-    // Frontend uploads use thresholdMs=0 for exact timestamps (no bucketing)
-    // Backend sync services use default 100ms bucketing for cross-device deduplication
-    if (!event.getID()) {
-      event.setID(await generateEventID(user.uid, event.startDate, 0));
-    }
-    const eventID = event.getID();
-    const activities = event.getActivities();
-    for (let i = 0; i < activities.length; i++) {
-      if (!activities[i].getID()) {
-        activities[i].setID(await generateActivityID(eventID, i));
-      }
+  public async updateActivityProperties(user: User, activityID: string, propertiesToUpdate: any) {
+    let sanitizedProperties = propertiesToUpdate;
+    if (propertiesToUpdate && typeof propertiesToUpdate === 'object' && !Array.isArray(propertiesToUpdate)) {
+      sanitizedProperties = this.stripImmutableActivityIdentityFields(
+        sanitizeActivityFirestoreWritePayload(propertiesToUpdate as Record<string, unknown>)
+      );
     }
 
-    // 1. Check Pro Status & Grace Period
-    const userService = this.injector.get(AppUserService);
-    if (!AppUserUtilities.hasProAccess(user)) {
-      // 2. Check Limits
-      const role = await userService.getSubscriptionRole() || 'free';
-      const limit = USAGE_LIMITS[role] || USAGE_LIMITS['free'];
-      const currentCount = await this.getEventCount(user);
-
-      if (currentCount >= limit) {
-        throw new Error(`Upload limit reached for ${role} tier. You have ${currentCount} events. Limit is ${limit}. Please upgrade to upload more.`);
-      }
-    }
-
-    const adapter: FirestoreAdapter = {
-      setDoc: (path: string[], data: any) => {
-        return runInInjectionContext(this.injector, () => setDoc(doc(this.firestore, ...path as [string, ...string[]]), data));
-      },
-      createBlob: (data: Uint8Array) => {
-        return Bytes.fromUint8Array(data);
-      },
-      generateID: () => {
-        return runInInjectionContext(this.injector, () => doc(collection(this.firestore, 'users'))).id;
-      }
-    };
-
-    const writer = new EventWriter(adapter);
-    await writer.writeAllEventData(user.uid, event);
-
-    const processingDoc = runInInjectionContext(this.injector, () => doc(this.firestore, 'users', user.uid, 'events', eventID as string, 'metaData', 'processing'));
-    const processingPayload = {
-      sportsLibVersion: SPORTS_LIB_VERSION,
-      sportsLibVersionCode: resolveSportsLibVersionCode(SPORTS_LIB_VERSION),
-      processedAt: serverTimestamp(),
-    };
-    await runInInjectionContext(this.injector, () => setDoc(processingDoc, processingPayload));
-  }
-
-  public async setEvent(user: User, event: EventInterface) {
-    const eventData = buildEventWriteData(event);
-    return runInInjectionContext(this.injector, () => setDoc(doc(this.firestore, 'users', user.uid, 'events', event.getID()), eventData, { merge: true }));
-  }
-
-  public async setActivity(user: User, event: EventInterface, activity: ActivityInterface) {
-    const data = buildActivityWriteData(user.uid, event, activity);
-    return runInInjectionContext(this.injector, () => setDoc(doc(this.firestore, 'users', user.uid, 'activities', activity.getID()), data));
+    return runInInjectionContext(
+      this.injector,
+      () => updateDoc(doc(this.firestore, 'users', user.uid, 'activities', activityID), sanitizedProperties)
+    );
   }
 
   /**
-   * Atomic activity+event write for edit flows.
-   * This prevents partial success when updating both entities.
+   * Atomic patch update for activity + parent event edit flows.
+   * Both patch payloads are sanitized at the write boundary.
    */
-  public async writeActivityAndEventData(user: User, event: EventInterface, activity: ActivityInterface): Promise<void> {
-    const { activityData, eventData } = buildActivityEditWritePayload(user.uid, event, activity);
-    return runInInjectionContext(this.injector, async () => {
-      const batch = writeBatch(this.firestore);
-      const activityRef = doc(this.firestore, 'users', user.uid, 'activities', activity.getID());
-      const eventRef = doc(this.firestore, 'users', user.uid, 'events', event.getID());
+  public async updateActivityAndEventProperties(
+    user: User,
+    eventID: string,
+    activityID: string,
+    activityPatch: any,
+    eventPatch: any,
+  ): Promise<void> {
+    let sanitizedActivityPatch = activityPatch;
+    if (activityPatch && typeof activityPatch === 'object' && !Array.isArray(activityPatch)) {
+      sanitizedActivityPatch = this.stripImmutableActivityIdentityFields(
+        sanitizeActivityFirestoreWritePayload(activityPatch as Record<string, unknown>)
+      );
+    }
 
-      batch.set(activityRef, activityData, { merge: true });
-      batch.set(eventRef, eventData, { merge: true });
+    let sanitizedEventPatch = eventPatch;
+    if (eventPatch && typeof eventPatch === 'object' && !Array.isArray(eventPatch)) {
+      sanitizedEventPatch = this.stripServerOwnedEventFileMetadata(
+        sanitizeEventFirestoreWritePayload(eventPatch as Record<string, unknown>)
+      );
+    }
+
+    return runInInjectionContext(this.injector, async () => {
+      const activityPatchIsObject = !!sanitizedActivityPatch && typeof sanitizedActivityPatch === 'object' && !Array.isArray(sanitizedActivityPatch);
+      const eventPatchIsObject = !!sanitizedEventPatch && typeof sanitizedEventPatch === 'object' && !Array.isArray(sanitizedEventPatch);
+      const hasActivityPatch = activityPatchIsObject && Object.keys(sanitizedActivityPatch as Record<string, unknown>).length > 0;
+      const hasEventPatch = eventPatchIsObject && Object.keys(sanitizedEventPatch as Record<string, unknown>).length > 0;
+
+      if (!hasActivityPatch && !hasEventPatch) {
+        return;
+      }
+
+      const batch = writeBatch(this.firestore);
+      if (hasActivityPatch) {
+        const activityRef = doc(this.firestore, 'users', user.uid, 'activities', activityID);
+        batch.update(activityRef, sanitizedActivityPatch);
+      }
+      if (hasEventPatch) {
+        const eventRef = doc(this.firestore, 'users', user.uid, 'events', eventID);
+        batch.update(eventRef, sanitizedEventPatch);
+      }
       await batch.commit();
     });
   }
@@ -736,7 +716,9 @@ export class AppEventService implements OnDestroy {
     // Mandatory shared write policy: sanitize ad-hoc event patch payloads before updateDoc.
     let sanitizedProperties = propertiesToUpdate;
     if (propertiesToUpdate && typeof propertiesToUpdate === 'object' && !Array.isArray(propertiesToUpdate)) {
-      sanitizedProperties = sanitizeEventFirestoreWritePayload(propertiesToUpdate as Record<string, unknown>);
+      sanitizedProperties = this.stripServerOwnedEventFileMetadata(
+        sanitizeEventFirestoreWritePayload(propertiesToUpdate as Record<string, unknown>)
+      );
     }
 
     return runInInjectionContext(

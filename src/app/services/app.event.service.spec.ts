@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { AppEventService } from './app.event.service';
-import { Firestore, doc, docData, collection, collectionData, deleteDoc, setDoc, updateDoc, writeBatch, query, where, getDocs } from '@angular/fire/firestore';
+import { Firestore, doc, docData, collection, collectionData, deleteDoc, updateDoc, writeBatch, query, where, getDocs } from '@angular/fire/firestore';
 import { Storage } from '@angular/fire/storage';
 import { Auth } from '@angular/fire/auth';
 import { AppAnalyticsService } from './app.analytics.service';
@@ -28,15 +28,13 @@ if (!globalThis.crypto || !globalThis.crypto.subtle) {
 // Hoist mocks
 const mocks = vi.hoisted(() => {
     return {
-        writeAllEventData: vi.fn(),
         getEventFromJSON: vi.fn(),
         getActivityFromJSON: vi.fn(),
         sanitize: vi.fn(),
         getCountFromServer: vi.fn(),
         getBytes: vi.fn(),
-        batchSet: vi.fn(),
+        batchUpdate: vi.fn(),
         batchCommit: vi.fn(),
-        eventWriterInstances: [] as Array<{ storageAdapter: unknown, bucketName: unknown }>,
     };
 });
 
@@ -71,10 +69,9 @@ vi.mock('@angular/fire/firestore', async (importOriginal) => {
         where: vi.fn(),
         getDocs: vi.fn(),
         deleteDoc: vi.fn(),
-        setDoc: vi.fn(),
         updateDoc: vi.fn(),
         writeBatch: vi.fn(() => ({
-            set: mocks.batchSet,
+            update: mocks.batchUpdate,
             commit: mocks.batchCommit,
         })),
         getCountFromServer: mocks.getCountFromServer,
@@ -114,21 +111,6 @@ vi.mock('../utils/event-json-sanitizer', () => ({
     }
 }));
 
-// Mock EventWriter as a class
-vi.mock('../../../functions/src/shared/event-writer', () => {
-    return {
-        EventWriter: class {
-            constructor(_adapter: unknown, storageAdapter?: unknown, bucketName?: unknown) {
-                mocks.eventWriterInstances.push({ storageAdapter, bucketName });
-            }
-            writeAllEventData = mocks.writeAllEventData;
-        },
-        FirestoreAdapter: {},
-        StorageAdapter: {},
-        OriginalFile: {}
-    };
-});
-
 describe('AppEventService', () => {
     let service: AppEventService;
     const mockFirestore = {};
@@ -153,7 +135,6 @@ describe('AppEventService', () => {
     };
 
     beforeEach(() => {
-        mocks.eventWriterInstances.length = 0;
         TestBed.configureTestingModule({
             providers: [
                 AppEventService,
@@ -195,7 +176,6 @@ describe('AppEventService', () => {
         });
         mocks.getCountFromServer.mockResolvedValue({ data: () => ({ count: 0 }) });
         mocks.batchCommit.mockResolvedValue(undefined);
-        mocks.writeAllEventData.mockResolvedValue(true);
 
         // Polyfills
         // @ts-expect-error - JSDOM does not provide CompressionStream
@@ -221,22 +201,6 @@ describe('AppEventService', () => {
 
     it('should be created', () => {
         expect(service).toBeTruthy();
-    });
-
-    it('should call EventWriter without a storage adapter for frontend writes', async () => {
-        const mockEvent = {
-            getID: () => '1',
-            startDate: new Date(),
-            getActivities: () => [],
-            setID: vi.fn()
-        } as any;
-
-        await service.writeAllEventData({ uid: 'user1' } as any, mockEvent);
-
-        const writerInstance = mocks.eventWriterInstances.at(-1);
-        expect(writerInstance).toBeTruthy();
-        expect(writerInstance!.storageAdapter).toBeUndefined();
-        expect(writerInstance!.bucketName).toBeUndefined();
     });
 
     it('should get event and activities correctly', async () => {
@@ -615,57 +579,6 @@ describe('AppEventService', () => {
         expect(result).toBe(true);
     });
 
-    it('should strip streams before writing activity in setActivity', async () => {
-        const user = { uid: 'user1' } as any;
-        const event = { getID: () => 'event1', startDate: new Date('2026-01-01T00:00:00.000Z') } as any;
-        const activity = {
-            getID: () => 'activity1',
-            toJSON: () => ({
-                stats: {},
-                streams: [
-                    { type: 'Pace', values: [1, 2, 3] }
-                ]
-            })
-        } as any;
-
-        (doc as Mock).mockReturnValue({});
-        (setDoc as Mock).mockResolvedValue(undefined);
-
-        await service.setActivity(user, event, activity);
-
-        expect(setDoc).toHaveBeenCalledTimes(1);
-        const writtenPayload = (setDoc as Mock).mock.calls[0][1];
-        expect(writtenPayload).not.toHaveProperty('streams');
-        expect(writtenPayload.eventID).toBe('event1');
-        expect(writtenPayload.userID).toBe('user1');
-        expect(writtenPayload.eventStartDate).toEqual(event.startDate);
-    });
-
-    it('should preserve original file metadata and merge on setEvent', async () => {
-        const user = { uid: 'user1' } as any;
-        const event = {
-            getID: () => 'event1',
-            toJSON: () => ({ name: 'My Event' }),
-            originalFiles: [{ path: 'users/user1/events/event1/original.fit', startDate: new Date('2026-01-01T00:00:00.000Z') }],
-            originalFile: { path: 'users/user1/events/event1/original.fit', startDate: new Date('2026-01-01T00:00:00.000Z') },
-        } as any;
-
-        (doc as Mock).mockReturnValue({});
-        (setDoc as Mock).mockResolvedValue(undefined);
-
-        await service.setEvent(user, event);
-
-        expect(setDoc).toHaveBeenCalledWith(
-            expect.anything(),
-            expect.objectContaining({
-                name: 'My Event',
-                originalFiles: event.originalFiles,
-                originalFile: event.originalFile,
-            }),
-            { merge: true }
-        );
-    });
-
     it('should sanitize updateEventProperties payload by stripping streams and top-level activities', async () => {
         const user = { uid: 'user1' } as any;
         const payload = {
@@ -687,6 +600,26 @@ describe('AppEventService', () => {
         expect(writtenPayload.name).toBe('Updated event name');
         expect(writtenPayload.activities).toBeUndefined();
         expect(hasStreamsKey(writtenPayload)).toBe(false);
+    });
+
+    it('should strip server-owned original file metadata in updateEventProperties', async () => {
+        const user = { uid: 'user1' } as any;
+        const payload = {
+            name: 'Updated event name',
+            originalFile: { path: 'users/u1/events/e1/original.fit' },
+            originalFiles: [{ path: 'users/u1/events/e1/original.fit' }],
+        };
+
+        (doc as Mock).mockReturnValue({});
+        (updateDoc as Mock).mockResolvedValue(undefined);
+
+        await service.updateEventProperties(user, 'event1', payload);
+
+        expect(updateDoc).toHaveBeenCalledTimes(1);
+        const writtenPayload = (updateDoc as Mock).mock.calls[0][1];
+        expect(writtenPayload.name).toBe('Updated event name');
+        expect(writtenPayload.originalFile).toBeUndefined();
+        expect(writtenPayload.originalFiles).toBeUndefined();
     });
 
     it('should keep primitive update payloads unchanged in updateEventProperties', async () => {
@@ -712,73 +645,78 @@ describe('AppEventService', () => {
         expect((updateDoc as Mock).mock.calls[0][1]).toEqual(patch);
     });
 
-    it('should atomically write activity and event in writeActivityAndEventData', async () => {
+    it('should sanitize updateActivityProperties payload by stripping streams and immutable identity fields', async () => {
         const user = { uid: 'user1' } as any;
-        const event = {
-            getID: () => 'event1',
-            startDate: new Date('2026-01-01T00:00:00.000Z'),
-            toJSON: () => ({ name: 'My Event' }),
-            originalFile: { path: 'users/user1/events/event1/original.fit', startDate: new Date('2026-01-01T00:00:00.000Z') },
-        } as any;
-        const activity = {
-            getID: () => 'activity1',
-            toJSON: () => ({
-                creator: { name: 'Device A' },
-                streams: [{ type: 'Pace', values: [1, 2, 3] }]
-            }),
-        } as any;
+        const payload = {
+            creator: { name: 'Renamed Device' },
+            eventID: 'event-hijack',
+            userID: 'other-user',
+            eventStartDate: new Date('2026-01-01T00:00:00.000Z'),
+            details: {
+                streams: [{ type: 'Power', values: [100, 200] }],
+            },
+        };
 
         (doc as Mock).mockReturnValue({});
+        (updateDoc as Mock).mockResolvedValue(undefined);
 
-        await service.writeActivityAndEventData(user, event, activity);
+        await service.updateActivityProperties(user, 'activity1', payload);
 
-        expect(writeBatch).toHaveBeenCalledTimes(1);
-        expect(mocks.batchSet).toHaveBeenCalledTimes(2);
-        expect(mocks.batchSet).toHaveBeenNthCalledWith(
-            1,
-            expect.anything(),
-            expect.objectContaining({
-                creator: { name: 'Device A' },
-                userID: 'user1',
-                eventID: 'event1',
-                eventStartDate: event.startDate,
-            }),
-            { merge: true }
-        );
-        const firstPayload = mocks.batchSet.mock.calls[0][1];
-        expect(firstPayload.streams).toBeUndefined();
-
-        expect(mocks.batchSet).toHaveBeenNthCalledWith(
-            2,
-            expect.anything(),
-            expect.objectContaining({
-                name: 'My Event',
-                originalFile: event.originalFile,
-            }),
-            { merge: true }
-        );
-        expect(mocks.batchCommit).toHaveBeenCalledTimes(1);
+        expect(updateDoc).toHaveBeenCalledTimes(1);
+        const writtenPayload = (updateDoc as Mock).mock.calls[0][1];
+        expect(writtenPayload.creator).toEqual({ name: 'Renamed Device' });
+        expect(writtenPayload.eventID).toBeUndefined();
+        expect(writtenPayload.userID).toBeUndefined();
+        expect(writtenPayload.eventStartDate).toBeUndefined();
+        expect(hasStreamsKey(writtenPayload)).toBe(false);
     });
 
-    it('should call EventWriter in writeAllEventData', async () => {
-        const mockEvent = {
-            getID: () => '1',
-            startDate: new Date(),
-            getActivities: () => [],
-            setID: vi.fn()
-        } as any;
+    it('should atomically patch activity and event using batch.update with sanitized payloads', async () => {
         const user = { uid: 'user1' } as any;
+        const activityPatch = {
+            creator: { name: 'Device B' },
+            eventID: 'hijack',
+            userID: 'other-user',
+            eventStartDate: new Date('2026-01-01T00:00:00.000Z'),
+            nested: {
+                streams: [{ type: 'Pace', values: [1, 2, 3] }],
+            },
+        };
+        const eventPatch = {
+            stats: { heartRateAvg: 140 },
+            activities: [{ id: 'activity-1' }],
+            originalFile: { path: 'users/u1/events/e1/original.fit' },
+            originalFiles: [{ path: 'users/u1/events/e1/original.fit' }],
+        };
+
         (doc as Mock).mockReturnValue({});
+        mocks.batchCommit.mockResolvedValue(undefined);
 
-        await service.writeAllEventData(user, mockEvent);
+        await service.updateActivityAndEventProperties(
+            user,
+            'event1',
+            'activity1',
+            activityPatch,
+            eventPatch,
+        );
 
-        expect(mocks.writeAllEventData).toHaveBeenCalled();
-        expect(doc).toHaveBeenCalledWith(expect.anything(), 'users', 'user1', 'events', '1', 'metaData', 'processing');
-        expect(setDoc).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-            sportsLibVersion: expect.any(String),
-            sportsLibVersionCode: expect.any(Number),
-            processedAt: expect.anything(),
-        }));
+        expect(writeBatch).toHaveBeenCalledTimes(1);
+        expect(mocks.batchUpdate).toHaveBeenCalledTimes(2);
+
+        const writtenActivityPatch = mocks.batchUpdate.mock.calls[0][1];
+        expect(writtenActivityPatch.creator).toEqual({ name: 'Device B' });
+        expect(writtenActivityPatch.eventID).toBeUndefined();
+        expect(writtenActivityPatch.userID).toBeUndefined();
+        expect(writtenActivityPatch.eventStartDate).toBeUndefined();
+        expect(hasStreamsKey(writtenActivityPatch)).toBe(false);
+
+        const writtenEventPatch = mocks.batchUpdate.mock.calls[1][1];
+        expect(writtenEventPatch.stats).toEqual({ heartRateAvg: 140 });
+        expect(writtenEventPatch.activities).toBeUndefined();
+        expect(writtenEventPatch.originalFile).toBeUndefined();
+        expect(writtenEventPatch.originalFiles).toBeUndefined();
+        expect(hasStreamsKey(writtenEventPatch)).toBe(false);
+        expect(mocks.batchCommit).toHaveBeenCalledTimes(1);
     });
 
     it('should return event count from Firestore aggregate query', async () => {
@@ -861,107 +799,6 @@ describe('AppEventService', () => {
         expect(importedEvent.addActivities).toHaveBeenCalledWith([{ id: 'activity-1' }]);
         expect(result).toEqual([importedEvent]);
     });
-
-    describe('ID generation with zero bucketing', () => {
-        it('should call generateEventID with thresholdMs=0 for frontend uploads', async () => {
-            // Mock generateEventID to track calls
-            const generateEventIDSpy = vi.spyOn(await import('../../../functions/src/shared/id-generator'), 'generateEventID');
-            generateEventIDSpy.mockResolvedValue('mock-event-id');
-
-            const mockEvent = {
-                getID: () => null, // No ID yet - should trigger generation
-                startDate: new Date('2025-12-28T12:00:00.000Z'),
-                getActivities: () => [],
-                setID: vi.fn()
-            } as any;
-            const user = { uid: 'user1' } as any;
-
-            await service.writeAllEventData(user, mockEvent);
-
-            expect(generateEventIDSpy).toHaveBeenCalledWith('user1', mockEvent.startDate, 0);
-            expect(mockEvent.setID).toHaveBeenCalledWith('mock-event-id');
-
-            generateEventIDSpy.mockRestore();
-        });
-
-        it('should generate unique IDs for events with same startDate (no bucketing)', async () => {
-            const { generateEventID } = await import('../../../functions/src/shared/id-generator');
-
-            // Same timestamp, different milliseconds shouldn't matter with threshold=0
-            const date1 = new Date('2025-12-28T12:00:00.000Z');
-            const date2 = new Date('2025-12-28T12:00:00.001Z'); // 1ms later
-
-            const id1 = await generateEventID('user1', date1, 0);
-            const id2 = await generateEventID('user1', date2, 0);
-
-            expect(id1).not.toBe(id2);
-        });
-
-        it('should skip ID generation if event already has ID', async () => {
-            const generateEventIDSpy = vi.spyOn(await import('../../../functions/src/shared/id-generator'), 'generateEventID');
-            const mockEvent = {
-                getID: () => 'existing-id', // Already has ID
-                startDate: new Date(),
-                getActivities: () => [],
-                setID: vi.fn()
-            } as any;
-            const user = { uid: 'user1' } as any;
-
-            await service.writeAllEventData(user, mockEvent);
-
-            expect(generateEventIDSpy).not.toHaveBeenCalled();
-            expect(mockEvent.setID).not.toHaveBeenCalled();
-
-            generateEventIDSpy.mockRestore();
-        });
-    });
-
-    describe('Upload Limit Enforcement', () => {
-        it('should bypass limit check if grace period is active', async () => {
-            const mockEvent = {
-                getID: () => '1',
-                startDate: new Date(),
-                getActivities: () => [],
-                setID: vi.fn(),
-                toJSON: () => ({})
-            } as any;
-            const user = { uid: 'user1', gracePeriodUntil: Date.now() + 100000 } as any;
-
-            // Mock userService to return non-pro
-            mockUser.isPro.mockResolvedValue(false);
-            mockUser.getSubscriptionRole.mockResolvedValue('free');
-
-            // Mock count to be over limit
-            mocks.getCountFromServer.mockResolvedValue({ data: () => ({ count: 15 }) });
-
-            await service.writeAllEventData(user, mockEvent);
-
-            expect(mocks.writeAllEventData).toHaveBeenCalled();
-            // Should NOT have thrown an error
-        });
-
-        it('should throw error if NOT pro, NOT in grace period, and OVER limit', async () => {
-            const mockEvent = {
-                getID: () => '1',
-                startDate: new Date(),
-                getActivities: () => [],
-                setID: vi.fn(),
-                toJSON: () => ({})
-            } as any;
-            const user = { uid: 'user1' } as any;
-
-            // Mock userService to return non-pro
-            mockUser.isPro.mockResolvedValue(false);
-            mockUser.getSubscriptionRole.mockResolvedValue('free');
-
-            // Mock count to be over limit
-            mocks.getCountFromServer.mockResolvedValue({ data: () => ({ count: 15 }) });
-
-            await expect(service.writeAllEventData(user, mockEvent)).rejects.toThrow(/Upload limit reached/);
-        });
-    });
-
-    // ... existing tests ...
 
     describe('downloadFile', () => {
         const testPath = 'test/path/file.json';

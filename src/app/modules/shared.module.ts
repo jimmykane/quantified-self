@@ -8,7 +8,6 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { PrivacyIconComponent } from '../components/privacy-icon/privacy-icon.component';
 import { EventActionsComponent } from '../components/event-actions/event.actions.component';
 import { EventFormComponent } from '../components/event-form/event.form.component';
-import { ActivityFormComponent } from '../components/activity-form/activity.form.component';
 import { ConfirmationDialogComponent } from '../components/confirmation-dialog/confirmation-dialog.component';
 import { DataTypeIconComponent } from '../components/data-type-icon/data-type-icon.component';
 
@@ -45,7 +44,6 @@ import { EventIntensityZonesComponent } from '../components/event/intensity-zone
         PrivacyIconComponent,
         EventActionsComponent,
         EventFormComponent,
-        ActivityFormComponent,
         ConfirmationDialogComponent,
         DataTypeIconComponent,
         EventSearchComponent,
@@ -78,7 +76,6 @@ import { EventIntensityZonesComponent } from '../components/event/intensity-zone
         PrivacyIconComponent,
         EventActionsComponent,
         EventFormComponent,
-        ActivityFormComponent,
         ConfirmationDialogComponent,
         DataTypeIconComponent,
         ReactiveFormsModule,
