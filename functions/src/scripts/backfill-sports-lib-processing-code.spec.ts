@@ -212,6 +212,7 @@ describe('backfill-sports-lib-processing-code script', () => {
         const options = parseBackfillOptions([]);
         expect(options.execute).toBe(false);
         expect(options.limit).toBe(200);
+        expect(options.concurrency).toBe(5);
     });
 
     it('parseBackfillOptions should apply precedence --uid > --uids > constant allowlist', () => {
@@ -226,6 +227,12 @@ describe('backfill-sports-lib-processing-code script', () => {
 
         const withConstant = parseBackfillOptions([]);
         expect(withConstant.uids).toEqual(['constant1', 'constant2']);
+    });
+
+    it('parseBackfillOptions should parse and clamp concurrency', () => {
+        expect(parseBackfillOptions(['--concurrency', '7']).concurrency).toBe(7);
+        expect(parseBackfillOptions(['--concurrency=0']).concurrency).toBe(5);
+        expect(parseBackfillOptions(['--concurrency=999']).concurrency).toBe(50);
     });
 
     it('should create missing processing metadata with sentinel version in execute mode', async () => {
@@ -311,15 +318,13 @@ describe('backfill-sports-lib-processing-code script', () => {
             (call: any[]) => call[0] === '[sports-lib-processing-backfill] Progress',
         );
         expect(progressCalls).toHaveLength(2);
-        expect(progressCalls[0]?.[1]).toEqual(expect.objectContaining({
-            scanned: 1,
-            total: 2,
-            percentComplete: 50,
-        }));
-        expect(progressCalls[1]?.[1]).toEqual(expect.objectContaining({
-            scanned: 2,
-            total: 2,
-            percentComplete: 100,
-        }));
+        const progressPayloads = progressCalls.map((call: any[]) => call[1]);
+        expect(progressPayloads).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                scanned: 2,
+                total: 2,
+                percentComplete: 100,
+            }),
+        ]));
     });
 });

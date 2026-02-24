@@ -10,6 +10,8 @@ import {
 const MISSING_PROCESSING_VERSION = '0.0.0';
 const MISSING_PROCESSING_VERSION_CODE = 0;
 const PROGRESS_LOG_EVERY = 25;
+const DEFAULT_CONCURRENCY = 5;
+const MAX_CONCURRENCY = 50;
 
 interface BackfillOptions {
     execute: boolean;
@@ -17,6 +19,7 @@ interface BackfillOptions {
     uids?: string[];
     limit: number;
     startAfter?: string;
+    concurrency: number;
 }
 
 export interface BackfillSummary {
@@ -61,6 +64,11 @@ function parseIntArg(value: string | undefined, fallback: number): number {
     return parsed;
 }
 
+function parseConcurrencyArg(value: string | undefined): number {
+    const parsed = parseIntArg(value, DEFAULT_CONCURRENCY);
+    return Math.min(Math.max(parsed, 1), MAX_CONCURRENCY);
+}
+
 export function parseBackfillOptions(argv: string[]): BackfillOptions {
     const execute = argv.includes('--execute');
     const uid = readArgValue(argv, '--uid');
@@ -72,6 +80,7 @@ export function parseBackfillOptions(argv: string[]): BackfillOptions {
     const effectiveUIDAllowlist = uid ? null : (cliUIDAllowlist || constantUIDAllowlist);
     const limit = parseIntArg(readArgValue(argv, '--limit'), SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.scanLimit);
     const startAfter = readArgValue(argv, '--start-after');
+    const concurrency = parseConcurrencyArg(readArgValue(argv, '--concurrency'));
 
     return {
         execute,
@@ -79,6 +88,7 @@ export function parseBackfillOptions(argv: string[]): BackfillOptions {
         uids: effectiveUIDAllowlist ? Array.from(effectiveUIDAllowlist) : undefined,
         limit,
         startAfter,
+        concurrency,
     };
 }
 
@@ -148,12 +158,13 @@ export async function runBackfillSportsLibProcessingCode(argv: string[]): Promis
         dryRun: !options.execute,
         totalEvents,
         progressLogEvery: PROGRESS_LOG_EVERY,
+        concurrency: options.concurrency,
     });
-    for (const eventDoc of eventDocs) {
+    const processEventDoc = async (eventDoc: admin.firestore.QueryDocumentSnapshot): Promise<void> => {
         summary.scanned++;
         const parsed = parseUidAndEventIdFromEventPath(eventDoc.ref.path);
         if (!parsed) {
-            continue;
+            return;
         }
         const { uid, eventId } = parsed;
         const eventPath = eventDoc.ref.path;
@@ -178,7 +189,7 @@ export async function runBackfillSportsLibProcessingCode(argv: string[]): Promis
                     processingDocPath,
                     dryRun: !options.execute,
                 });
-                continue;
+                return;
             }
 
             const processingData = processingSnapshot.data() as Record<string, unknown>;
@@ -190,7 +201,7 @@ export async function runBackfillSportsLibProcessingCode(argv: string[]): Promis
                     processingDocPath,
                     sportsLibVersion: rawVersion,
                 });
-                continue;
+                return;
             }
 
             let computedCode: number;
@@ -204,7 +215,7 @@ export async function runBackfillSportsLibProcessingCode(argv: string[]): Promis
                     sportsLibVersion: rawVersion,
                     error: `${error}`,
                 });
-                continue;
+                return;
             }
 
             const rawCode = processingData.sportsLibVersionCode;
@@ -219,7 +230,7 @@ export async function runBackfillSportsLibProcessingCode(argv: string[]): Promis
                     sportsLibVersion: rawVersion,
                     sportsLibVersionCode: normalizedRawCode,
                 });
-                continue;
+                return;
             }
 
             summary.patched++;
@@ -261,6 +272,21 @@ export async function runBackfillSportsLibProcessingCode(argv: string[]): Promis
                 });
             }
         }
+    };
+
+    if (eventDocs.length > 0) {
+        let nextIndex = 0;
+        const workerCount = Math.min(options.concurrency, eventDocs.length);
+        const workers = Array.from({ length: workerCount }, async () => {
+            while (true) {
+                const currentIndex = nextIndex++;
+                if (currentIndex >= eventDocs.length) {
+                    return;
+                }
+                await processEventDoc(eventDocs[currentIndex]);
+            }
+        });
+        await Promise.all(workers);
     }
 
     logger.info('[sports-lib-processing-backfill] Summary', summary);
