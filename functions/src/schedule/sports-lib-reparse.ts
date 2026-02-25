@@ -22,6 +22,8 @@ import { enqueueSportsLibReparseTask } from '../shared/cloud-tasks';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
 
+const SPORTS_LIB_REPARSE_SCAN_CONCURRENCY = 25;
+
 function getCurrentSettings(): {
     enabled: boolean;
     scanLimit: number;
@@ -80,6 +82,7 @@ function isProcessingMetadataDocPath(path: string): boolean {
 export const scheduleSportsLibReparseScan = onSchedule({
     region: FUNCTIONS_MANIFEST.scheduleSportsLibReparseScan.region,
     schedule: 'every 10 minutes',
+    timeoutSeconds: 300,
 }, async (_event) => {
     const settings = getCurrentSettings();
     if (!settings.enabled) {
@@ -103,14 +106,28 @@ export const scheduleSportsLibReparseScan = onSchedule({
 
     let scannedCount = 0;
     let enqueuedCount = 0;
+    let enqueueReservationCount = 0;
     let lastProcessingDocPath: string | null = null;
     let lastProcessingVersionCode: number | null = null;
     const hasReachedEnqueueLimit = (): boolean => enqueuedCount >= settings.enqueueLimit;
+    const hasAvailableEnqueueSlot = (): boolean => (enqueuedCount + enqueueReservationCount) < settings.enqueueLimit;
+    const tryReserveEnqueueSlot = (): boolean => {
+        if (!hasAvailableEnqueueSlot()) {
+            return false;
+        }
+        enqueueReservationCount++;
+        return true;
+    };
+    const releaseEnqueueSlot = (): void => {
+        if (enqueueReservationCount > 0) {
+            enqueueReservationCount--;
+        }
+    };
 
     const processEventData = async (
         eventRef: admin.firestore.DocumentReference,
         eventData: Record<string, unknown>,
-        options?: { skipCandidateCheck?: boolean },
+        options?: { skipCandidateCheck?: boolean; reservedEnqueueSlot?: boolean },
     ): Promise<void> => {
         const parsed = parseUidAndEventIdFromEventPath(eventRef.path);
         if (!parsed) {
@@ -118,83 +135,91 @@ export const scheduleSportsLibReparseScan = onSchedule({
         }
         const { uid, eventId } = parsed;
 
-        if (enqueuedCount >= settings.enqueueLimit) {
+        let slotReserved = options?.reservedEnqueueSlot === true;
+        if (!slotReserved) {
+            slotReserved = tryReserveEnqueueSlot();
+        }
+        if (!slotReserved) {
             return;
         }
 
-        if (!options?.skipCandidateCheck) {
-            try {
-                const needsReparse = await shouldEventBeReparsed(eventRef, targetSportsLibVersion);
-                if (!needsReparse) {
+        try {
+            if (!options?.skipCandidateCheck) {
+                try {
+                    const needsReparse = await shouldEventBeReparsed(eventRef, targetSportsLibVersion);
+                    if (!needsReparse) {
+                        return;
+                    }
+                } catch (error) {
+                    logger.warn('[sports-lib-reparse] Invalid processing metadata; skipping event candidate.', {
+                        eventPath: eventRef.path,
+                        error: toErrorMessage(error),
+                    });
                     return;
                 }
-            } catch (error) {
-                logger.warn('[sports-lib-reparse] Invalid processing metadata; skipping event candidate.', {
-                    eventPath: eventRef.path,
-                    error: toErrorMessage(error),
+            }
+
+            const statusSnapshot = await eventRef.collection('metaData').doc(SPORTS_LIB_REPARSE_STATUS_DOC_ID).get();
+            if (shouldSkipBecauseNoOriginalFilesForTarget(statusSnapshot.data() as Record<string, unknown> | undefined, targetSportsLibVersion)) {
+                return;
+            }
+
+            const sourceFiles = extractSourceFiles(eventData);
+            if (sourceFiles.length === 0) {
+                await writeReparseStatus(uid, eventId, {
+                    status: 'skipped',
+                    reason: SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
+                    targetSportsLibVersion,
+                    checkedAt: admin.firestore.FieldValue.serverTimestamp(),
                 });
                 return;
             }
-        }
 
-        const statusSnapshot = await eventRef.collection('metaData').doc(SPORTS_LIB_REPARSE_STATUS_DOC_ID).get();
-        if (shouldSkipBecauseNoOriginalFilesForTarget(statusSnapshot.data() as Record<string, unknown> | undefined, targetSportsLibVersion)) {
-            return;
-        }
+            const jobId = buildSportsLibReparseJobId(uid, eventId, targetSportsLibVersion);
+            const jobRef = db.collection(SPORTS_LIB_REPARSE_JOBS_COLLECTION).doc(jobId);
+            const existingJob = await jobRef.get();
+            const existingStatus = toSafeString(existingJob.data()?.status);
 
-        const sourceFiles = extractSourceFiles(eventData);
-        if (sourceFiles.length === 0) {
-            await writeReparseStatus(uid, eventId, {
-                status: 'skipped',
-                reason: SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
-                targetSportsLibVersion,
-                checkedAt: admin.firestore.FieldValue.serverTimestamp(),
-            });
-            return;
-        }
-
-        const jobId = buildSportsLibReparseJobId(uid, eventId, targetSportsLibVersion);
-        const jobRef = db.collection(SPORTS_LIB_REPARSE_JOBS_COLLECTION).doc(jobId);
-        const existingJob = await jobRef.get();
-        const existingStatus = toSafeString(existingJob.data()?.status);
-
-        if (existingJob.exists && (existingStatus === 'pending' || existingStatus === 'processing' || existingStatus === 'completed')) {
-            return;
-        }
-
-        const basePayload: SportsLibReparseJob = {
-            uid,
-            eventId,
-            eventPath: eventRef.path,
-            targetSportsLibVersion,
-            status: 'pending',
-            attemptCount: existingJob.data()?.attemptCount || 0,
-            createdAt: existingJob.exists ? existingJob.data()?.createdAt : admin.firestore.FieldValue.serverTimestamp(),
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            enqueuedAt: admin.firestore.FieldValue.serverTimestamp(),
-            expireAt: getExpireAtTimestamp(TTL_CONFIG.SPORTS_LIB_REPARSE_JOBS_IN_DAYS),
-        };
-
-        await jobRef.set({
-            ...basePayload,
-            lastError: admin.firestore.FieldValue.delete(),
-            processedAt: admin.firestore.FieldValue.delete(),
-        }, { merge: true });
-
-        try {
-            const taskCreated = await enqueueSportsLibReparseTask(jobId);
-            if (taskCreated) {
-                enqueuedCount++;
+            if (existingJob.exists && (existingStatus === 'pending' || existingStatus === 'processing' || existingStatus === 'completed')) {
+                return;
             }
-        } catch (error) {
-            const errorMessage = toErrorMessage(error);
-            await jobRef.set({
-                status: 'failed',
+
+            const basePayload: SportsLibReparseJob = {
+                uid,
+                eventId,
+                eventPath: eventRef.path,
+                targetSportsLibVersion,
+                status: 'pending',
+                attemptCount: existingJob.data()?.attemptCount || 0,
+                createdAt: existingJob.exists ? existingJob.data()?.createdAt : admin.firestore.FieldValue.serverTimestamp(),
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-                lastError: errorMessage,
-                enqueuedAt: admin.firestore.FieldValue.delete(),
+                enqueuedAt: admin.firestore.FieldValue.serverTimestamp(),
+                expireAt: getExpireAtTimestamp(TTL_CONFIG.SPORTS_LIB_REPARSE_JOBS_IN_DAYS),
+            };
+
+            await jobRef.set({
+                ...basePayload,
+                lastError: admin.firestore.FieldValue.delete(),
+                processedAt: admin.firestore.FieldValue.delete(),
             }, { merge: true });
-            throw error;
+
+            try {
+                const taskCreated = await enqueueSportsLibReparseTask(jobId);
+                if (taskCreated) {
+                    enqueuedCount++;
+                }
+            } catch (error) {
+                const errorMessage = toErrorMessage(error);
+                await jobRef.set({
+                    status: 'failed',
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    lastError: errorMessage,
+                    enqueuedAt: admin.firestore.FieldValue.delete(),
+                }, { merge: true });
+                throw error;
+            }
+        } finally {
+            releaseEnqueueSlot();
         }
     };
 
@@ -295,9 +320,16 @@ export const scheduleSportsLibReparseScan = onSchedule({
     }
 
     let stoppedByEnqueueLimit = false;
+    const inFlightProcessing = new Set<Promise<void>>();
     for (const processingDoc of processingSnapshot.docs) {
-        if (hasReachedEnqueueLimit()) {
-            stoppedByEnqueueLimit = true;
+        while (inFlightProcessing.size >= SPORTS_LIB_REPARSE_SCAN_CONCURRENCY || !hasAvailableEnqueueSlot()) {
+            if (inFlightProcessing.size === 0) {
+                stoppedByEnqueueLimit = hasReachedEnqueueLimit();
+                break;
+            }
+            await Promise.race(inFlightProcessing);
+        }
+        if (stoppedByEnqueueLimit) {
             break;
         }
         scannedCount++;
@@ -362,15 +394,46 @@ export const scheduleSportsLibReparseScan = onSchedule({
             continue;
         }
 
-        const eventSnapshot = await eventRef.get();
-        if (!eventSnapshot.exists) {
-            logger.warn('[sports-lib-reparse] Skipping stale processing metadata because parent event is missing.', {
-                processingDocPath: processingDoc.ref.path,
-                eventPath: eventRef.path,
-            });
+        if (!tryReserveEnqueueSlot()) {
+            stoppedByEnqueueLimit = hasReachedEnqueueLimit();
+            if (stoppedByEnqueueLimit) {
+                break;
+            }
             continue;
         }
-        await processEventData(eventRef, eventSnapshot.data() as Record<string, unknown>, { skipCandidateCheck: true });
+
+        const processPromise = (async (): Promise<void> => {
+            let reservationTransferred = false;
+            try {
+                const eventSnapshot = await eventRef.get();
+                if (!eventSnapshot.exists) {
+                    logger.warn('[sports-lib-reparse] Skipping stale processing metadata because parent event is missing.', {
+                        processingDocPath: processingDoc.ref.path,
+                        eventPath: eventRef.path,
+                    });
+                    return;
+                }
+                reservationTransferred = true;
+                await processEventData(eventRef, eventSnapshot.data() as Record<string, unknown>, {
+                    skipCandidateCheck: true,
+                    reservedEnqueueSlot: true,
+                });
+            } finally {
+                if (!reservationTransferred) {
+                    releaseEnqueueSlot();
+                }
+            }
+        })();
+        inFlightProcessing.add(processPromise);
+        processPromise.then(() => {
+            inFlightProcessing.delete(processPromise);
+        }, () => {
+            inFlightProcessing.delete(processPromise);
+        });
+    }
+
+    if (inFlightProcessing.size > 0) {
+        await Promise.all(inFlightProcessing);
     }
 
     const passCompleted = !stoppedByEnqueueLimit && processingSnapshot.size < settings.scanLimit;
