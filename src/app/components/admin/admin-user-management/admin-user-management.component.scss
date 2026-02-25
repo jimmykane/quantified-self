@@ -240,6 +240,18 @@ td.mat-cell {
     font-size: 0.95rem;
 }
 
+.mono-cell {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    font-size: 0.8rem;
+    white-space: nowrap;
+    word-break: normal;
+}
+
+.mat-column-uid {
+    width: 1%;
+    white-space: nowrap;
+}
+
 .loading-shade {
     position: absolute;
     top: 0;

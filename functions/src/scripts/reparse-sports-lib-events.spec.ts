@@ -6,7 +6,6 @@ const TARGET_SPORTS_LIB_VERSION_CODE = 9_001_004;
 
 const hoisted = vi.hoisted(() => {
     const shouldEventBeReparsed = vi.fn();
-    const hasPaidOrGraceAccess = vi.fn();
     const extractSourceFiles = vi.fn();
     const reparseEventFromOriginalFiles = vi.fn();
     const resolveTargetSportsLibVersion = vi.fn();
@@ -29,7 +28,6 @@ const hoisted = vi.hoisted(() => {
         enabled: false,
         scanLimit: 200,
         enqueueLimit: 100,
-        includeFreeUsers: false,
         uidAllowlist: null as string[] | null,
     };
 
@@ -164,7 +162,6 @@ const hoisted = vi.hoisted(() => {
 
     return {
         shouldEventBeReparsed,
-        hasPaidOrGraceAccess,
         extractSourceFiles,
         reparseEventFromOriginalFiles,
         resolveTargetSportsLibVersion,
@@ -195,7 +192,6 @@ vi.mock('../reparse/sports-lib-reparse.service', () => ({
     SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS: hoisted.runtimeDefaults,
     SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES: 'NO_ORIGINAL_FILES',
     shouldEventBeReparsed: hoisted.shouldEventBeReparsed,
-    hasPaidOrGraceAccess: hoisted.hasPaidOrGraceAccess,
     extractSourceFiles: hoisted.extractSourceFiles,
     reparseEventFromOriginalFiles: hoisted.reparseEventFromOriginalFiles,
     resolveTargetSportsLibVersion: hoisted.resolveTargetSportsLibVersion,
@@ -282,7 +278,6 @@ describe('reparse-sports-lib-events script', () => {
         hoisted.runtimeDefaults.enabled = false;
         hoisted.runtimeDefaults.scanLimit = 200;
         hoisted.runtimeDefaults.enqueueLimit = 100;
-        hoisted.runtimeDefaults.includeFreeUsers = false;
         hoisted.runtimeDefaults.uidAllowlist = null;
         hoisted.resolveTargetSportsLibVersion.mockReturnValue(TARGET_SPORTS_LIB_VERSION);
         hoisted.resolveTargetSportsLibVersionCode.mockReturnValue(TARGET_SPORTS_LIB_VERSION_CODE);
@@ -294,7 +289,6 @@ describe('reparse-sports-lib-events script', () => {
         });
 
         hoisted.shouldEventBeReparsed.mockResolvedValue(true);
-        hoisted.hasPaidOrGraceAccess.mockResolvedValue(true);
         hoisted.extractSourceFiles.mockReturnValue([{ path: 'users/u1/events/e1/original.fit' }]);
         hoisted.reparseEventFromOriginalFiles.mockResolvedValue({
             status: 'completed',
@@ -308,7 +302,6 @@ describe('reparse-sports-lib-events script', () => {
         const options = parseScriptOptions([]);
         expect(options.execute).toBe(false);
         expect(options.limit).toBe(200);
-        expect(options.includeFreeUsers).toBe(false);
     });
 
     it('parseScriptOptions should parse --key=value style args', () => {
@@ -653,8 +646,7 @@ describe('reparse-sports-lib-events script', () => {
         }));
     });
 
-    it('should count skippedNoAccess when include-free-users is disabled', async () => {
-        hoisted.hasPaidOrGraceAccess.mockResolvedValue(false);
+    it('should keep skippedNoAccess at zero', async () => {
         const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
         hoisted.processingDocs.push(createProcessingDoc(eventRef, {
             sportsLibVersion: '9.0.0',
@@ -662,8 +654,8 @@ describe('reparse-sports-lib-events script', () => {
         }));
 
         const summary = await runSportsLibReparseScript(['--execute']);
-        expect(summary.skippedNoAccess).toBe(1);
-        expect(summary.candidates).toBe(0);
+        expect(summary.skippedNoAccess).toBe(0);
+        expect(summary.candidates).toBe(1);
     });
 
     it('should handle execute path when reparse returns skipped because no original files', async () => {
@@ -715,9 +707,7 @@ describe('reparse-sports-lib-events script', () => {
         );
     });
 
-    it('should include free users when include-free-users flag is enabled', async () => {
-        hoisted.runtimeDefaults.includeFreeUsers = true;
-        hoisted.hasPaidOrGraceAccess.mockResolvedValue(false);
+    it('should process candidates without entitlement filtering', async () => {
         const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
         hoisted.processingDocs.push(createProcessingDoc(eventRef, {
             sportsLibVersion: '9.0.0',
@@ -726,7 +716,6 @@ describe('reparse-sports-lib-events script', () => {
 
         const summary = await runSportsLibReparseScript(['--execute']);
         expect(summary.completed).toBe(1);
-        expect(hoisted.hasPaidOrGraceAccess).not.toHaveBeenCalled();
         expect(hoisted.reparseEventFromOriginalFiles).toHaveBeenCalledWith('u1', 'e1', {
             mode: 'reimport',
             targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,

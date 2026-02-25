@@ -209,6 +209,10 @@ describe('AdminUserManagementComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it('should include uid in displayed columns', () => {
+        expect(component.displayedColumns).toContain('uid');
+    });
+
     it('should use resolved users on init', () => {
         expect(adminServiceSpy.getUsers).not.toHaveBeenCalled();
         expect(component.users).toEqual(mockUsers);

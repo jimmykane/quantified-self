@@ -180,11 +180,20 @@ export class AppComponent implements OnInit, OnDestroy {
       const explicitOnboardingComplete = (user as any).onboardingCompleted === true;
       this.onboardingCompleted = termsAccepted && (hasPaidAccess || hasSubscribedOnce || explicitOnboardingComplete);
 
-      // If user HAS pro access now, they definitely "subscribed once".
-      // Mark it persistently if not already marked.
+      const onboardingPatch: Record<string, boolean> = {};
+
+      // If user has paid access now, persist the historical marker for future downgrades.
       if (hasPaidAccess && !hasSubscribedOnce) {
-        // Fire and forget update to persist this fact for future (e.g. if they cancel)
-        this.userService.updateUserProperties(user, { hasSubscribedOnce: true }).catch(err => this.logger.error('Failed to persist hasSubscribedOnce', err));
+        onboardingPatch.hasSubscribedOnce = true;
+      }
+
+      // Auto-heal users that are paid and legally accepted but missing explicit onboarding flag.
+      if (hasPaidAccess && termsAccepted && !explicitOnboardingComplete) {
+        onboardingPatch.onboardingCompleted = true;
+      }
+
+      if (Object.keys(onboardingPatch).length > 0) {
+        this.userService.updateUserProperties(user, onboardingPatch).catch(err => this.logger.error('Failed to persist onboarding state', err));
       }
     } else {
       // Not logged in - show chrome (login/landing page)

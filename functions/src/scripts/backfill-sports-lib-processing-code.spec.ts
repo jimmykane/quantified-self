@@ -23,7 +23,6 @@ const hoisted = vi.hoisted(() => {
         enabled: false,
         scanLimit: 200,
         enqueueLimit: 100,
-        includeFreeUsers: false,
         uidAllowlist: null as string[] | null,
     };
 

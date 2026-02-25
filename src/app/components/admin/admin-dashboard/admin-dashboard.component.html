@@ -4,6 +4,10 @@
         <p class="premium-subtitle">Manage system health and navigate to admin tools</p>
     </div>
 
+    <!-- Financial Overview Section -->
+    <app-admin-financials [stats]="financialStats" [loading]="isLoadingFinancials">
+    </app-admin-financials>
+
     <!-- System Maintenance Navigation -->
     <div class="dashboard-section">
         <div class="section-title">
@@ -45,10 +49,6 @@
             </button>
         </div>
     </div>
-
-    <!-- Financial Overview Section -->
-    <app-admin-financials [stats]="financialStats" [loading]="isLoadingFinancials">
-    </app-admin-financials>
 
     <!-- Queue Status & Health Section -->
     <app-admin-queue-stats [stats]="queueStats" [loading]="isLoadingStats">

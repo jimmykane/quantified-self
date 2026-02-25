@@ -193,10 +193,25 @@ export const importActivityToSuuntoApp = onCall({
       }
     } catch (e: unknown) {
       // Final catch after retries failed
-      logger.error(`Failed to handle activity upload for token ${tokenQueryDocumentSnapshot.id}`, e);
-      // We throw a standardized error if everything fails, or we could handle partial failures if we looped multiple tokens (but here we just iterate).
-      // Since standard HttpsError is required for onCall:
-      throw new HttpsError('internal', (e as Error).message);
+      const isHttpsError = e instanceof HttpsError;
+      const code = isHttpsError ? e.code : 'internal';
+      const statusCode = typeof (e as any)?.statusCode === 'number' ? (e as any).statusCode : undefined;
+      const message = e instanceof Error ? e.message : String(e);
+
+      logger.error('Failed to handle activity upload for token', {
+        tokenId: tokenQueryDocumentSnapshot.id,
+        userID,
+        isHttpsError,
+        code,
+        statusCode,
+        message,
+      });
+
+      if (isHttpsError) {
+        throw e;
+      }
+
+      throw new HttpsError('internal', message);
     }
   }
   return { status: 'success' };

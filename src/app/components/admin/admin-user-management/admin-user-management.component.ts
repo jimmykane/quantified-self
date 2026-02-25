@@ -96,7 +96,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     sortDirection: 'asc' | 'desc' = 'desc';
 
     displayedColumns: string[] = [
-        'photoURL', 'email', 'providerIds', 'displayName', 'role', 'subscription',
+        'photoURL', 'email', 'uid', 'providerIds', 'displayName', 'role', 'subscription',
         'services', 'created', 'lastLogin', 'onboarding', 'status', 'actions'
     ];
 

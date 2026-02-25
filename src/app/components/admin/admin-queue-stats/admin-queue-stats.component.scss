@@ -175,6 +175,7 @@
     position: relative;
     padding: 0 1.5rem 1.75rem;
     box-sizing: border-box;
+    touch-action: pan-y;
 
     @include bp.xsmall {
         padding: 0 1rem 1rem;
@@ -184,6 +185,7 @@
     .echart-surface {
         width: 100%;
         height: 280px;
+        touch-action: pan-y;
     }
 
     .chart-empty-overlay {
