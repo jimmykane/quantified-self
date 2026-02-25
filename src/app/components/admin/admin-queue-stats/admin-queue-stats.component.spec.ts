@@ -195,6 +195,7 @@ describe('AdminQueueStatsComponent', () => {
             const host: HTMLElement = fixture.nativeElement;
             expect(host.textContent).toContain('Cloud Tasks (Workout)');
             expect(host.textContent).toContain('Cloud Tasks (Reparse)');
+            expect(host.textContent).not.toContain('Cloud Tasks (All Queues)');
             expect(host.textContent).toContain('42');
             expect(host.textContent).toContain('8');
         });
@@ -212,11 +213,19 @@ describe('AdminQueueStatsComponent', () => {
             };
 
             fixture.detectChanges();
-            const queueValues = Array.from(
-                fixture.nativeElement.querySelectorAll('.app-stat-card.status-info .app-stat-value')
-            ).map((node: Element) => node.textContent?.trim() || '');
+            const host: HTMLElement = fixture.nativeElement;
+            expect(host.textContent).not.toContain('Cloud Tasks (All Queues)');
 
-            expect(queueValues).toEqual(expect.arrayContaining(['7', '0', '0']));
+            const cards = Array.from(host.querySelectorAll('.app-stat-card')) as HTMLElement[];
+            const readCardValue = (label: string): string | undefined => {
+                const card = cards.find((node) =>
+                    node.querySelector('.app-stat-header span')?.textContent?.trim() === label
+                );
+                return card?.querySelector('.app-stat-value')?.textContent?.trim();
+            };
+
+            expect(readCardValue('Cloud Tasks (Workout)')).toBe('0');
+            expect(readCardValue('Cloud Tasks (Reparse)')).toBe('0');
         });
     });
 

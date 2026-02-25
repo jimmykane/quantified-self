@@ -25,18 +25,6 @@
                 <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">waiting in Firestore</span>
             </div>
             <div class="glass-card app-stat-card status-info"
-                matTooltip="Tasks currently in flight or scheduled across all Google Cloud Tasks queues.">
-                <div class="app-stat-header">
-                    <mat-icon>flight_takeoff</mat-icon>
-                    <span>Cloud Tasks (All Queues)</span>
-                </div>
-                <div class="app-stat-value" *ngIf="!loading">{{ stats?.cloudTasks?.pending ?? 0 }}</div>
-                <div class="app-spinner-mini" *ngIf="loading">
-                    <mat-spinner diameter="24"></mat-spinner>
-                </div>
-                <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">aggregate</span>
-            </div>
-            <div class="glass-card app-stat-card status-info"
                 matTooltip="Tasks currently in flight or scheduled in the workout ingestion Cloud Tasks queue.">
                 <div class="app-stat-header">
                     <mat-icon>fitness_center</mat-icon>
