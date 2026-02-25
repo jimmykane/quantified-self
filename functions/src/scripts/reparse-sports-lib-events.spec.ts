@@ -82,7 +82,7 @@ const hoisted = vi.hoisted(() => {
     });
 
     const collectionGroup = vi.fn((path: string) => {
-        if (path !== 'processing') {
+        if (path !== 'metaData') {
             throw new Error(`Unexpected collectionGroup path: ${path}`);
         }
 
@@ -442,7 +442,7 @@ describe('reparse-sports-lib-events script', () => {
         const summary = await runSportsLibReparseScript(['--execute']);
         expect(summary.scanned).toBe(1);
         expect(summary.completed).toBe(1);
-        expect(hoisted.collectionGroup).toHaveBeenCalledWith('processing');
+        expect(hoisted.collectionGroup).toHaveBeenCalledWith('metaData');
         expect(hoisted.shouldEventBeReparsed).not.toHaveBeenCalled();
     });
 
@@ -577,6 +577,29 @@ describe('reparse-sports-lib-events script', () => {
         expect(hoisted.loggerWarn).toHaveBeenCalledWith(
             '[sports-lib-reparse-script] Could not resolve parent event from processing metadata path.',
             expect.objectContaining({ processingDocPath: 'users/u1/events/e1/metaData/processing' }),
+        );
+    });
+
+    it('global mode should skip non-processing metadata docs', async () => {
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        hoisted.processingDocs.push({
+            ref: {
+                path: `${eventRef.path}/metaData/custom`,
+                parent: { parent: eventRef },
+            },
+            data: () => ({
+                sportsLibVersion: '9.0.0',
+                sportsLibVersionCode: 9_000_000,
+            }),
+        });
+
+        const summary = await runSportsLibReparseScript(['--execute']);
+        expect(summary.scanned).toBe(1);
+        expect(summary.completed).toBe(0);
+        expect(summary.candidates).toBe(0);
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[sports-lib-reparse-script] Skipping non-processing metadata doc from candidate query.',
+            expect.objectContaining({ processingDocPath: `${eventRef.path}/metaData/custom` }),
         );
     });
 

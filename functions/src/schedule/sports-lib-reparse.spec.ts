@@ -59,7 +59,7 @@ const hoisted = vi.hoisted(() => {
     };
 
     const collectionGroup = vi.fn((path: string) => {
-        if (path !== 'processing') {
+        if (path !== 'metaData') {
             throw new Error(`Unexpected collectionGroup path: ${path}`);
         }
         const q = {
@@ -358,7 +358,7 @@ describe('scheduleSportsLibReparseScan', () => {
         expect(hoisted.collectionGroup).not.toHaveBeenCalled();
     });
 
-    it('should enqueue candidate jobs from processing collectionGroup in global mode', async () => {
+    it('should enqueue candidate jobs from processing metadata collectionGroup in global mode', async () => {
         const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
         hoisted.processingDocs.push(createProcessingDoc(eventRef, {
             sportsLibVersion: '9.0.0',
@@ -367,7 +367,7 @@ describe('scheduleSportsLibReparseScan', () => {
 
         await (scheduleSportsLibReparseScan as any)({});
 
-        expect(hoisted.collectionGroup).toHaveBeenCalledWith('processing');
+        expect(hoisted.collectionGroup).toHaveBeenCalledWith('metaData');
         expect(hoisted.shouldEventBeReparsed).not.toHaveBeenCalled();
         expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledWith('job-1');
     });
@@ -665,7 +665,7 @@ describe('scheduleSportsLibReparseScan', () => {
         });
 
         hoisted.collectionGroup.mockImplementationOnce((path: string) => {
-            if (path !== 'processing') {
+            if (path !== 'metaData') {
                 throw new Error(`Unexpected collectionGroup path: ${path}`);
             }
             const q: any = {
@@ -688,6 +688,32 @@ describe('scheduleSportsLibReparseScan', () => {
         const finalCheckpointPayload = hoisted.checkpointSet.mock.calls[hoisted.checkpointSet.mock.calls.length - 1][0];
         expect(finalCheckpointPayload.lastScanCount).toBe(1);
         expect(finalCheckpointPayload.lastEnqueuedCount).toBe(0);
+    });
+
+    it('should skip non-processing metadata docs from global candidate query', async () => {
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        hoisted.processingDocs.push({
+            ref: {
+                path: `${eventRef.path}/metaData/customMetadataDoc`,
+                parent: {
+                    parent: eventRef,
+                },
+            },
+            data: () => ({
+                sportsLibVersion: '9.0.0',
+                sportsLibVersionCode: 9_000_000,
+            }),
+        });
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[sports-lib-reparse] Skipping non-processing metadata doc from candidate query.',
+            expect.objectContaining({
+                processingDocPath: `${eventRef.path}/metaData/customMetadataDoc`,
+            }),
+        );
     });
 
     it('should skip global processing docs when semver conversion throws', async () => {

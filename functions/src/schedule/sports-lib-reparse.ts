@@ -73,6 +73,10 @@ function getProcessingVersionCode(value: unknown): number | null {
     return value;
 }
 
+function isProcessingMetadataDocPath(path: string): boolean {
+    return path.endsWith('/metaData/processing');
+}
+
 export const scheduleSportsLibReparseScan = onSchedule({
     region: FUNCTIONS_MANIFEST.scheduleSportsLibReparseScan.region,
     schedule: 'every 10 minutes',
@@ -265,7 +269,7 @@ export const scheduleSportsLibReparseScan = onSchedule({
         return;
     }
 
-    let query = db.collectionGroup('processing')
+    let query = db.collectionGroup('metaData')
         .where('sportsLibVersionCode', '<', targetSportsLibVersionCode)
         .orderBy('sportsLibVersionCode', 'asc')
         .orderBy(admin.firestore.FieldPath.documentId())
@@ -306,6 +310,13 @@ export const scheduleSportsLibReparseScan = onSchedule({
         if (processingVersionCode !== null) {
             lastProcessingDocPath = processingDoc.ref.path;
             lastProcessingVersionCode = processingVersionCode;
+        }
+
+        if (!isProcessingMetadataDocPath(processingDoc.ref.path)) {
+            logger.warn('[sports-lib-reparse] Skipping non-processing metadata doc from candidate query.', {
+                processingDocPath: processingDoc.ref.path,
+            });
+            continue;
         }
 
         if (!processingVersion || processingVersionCode === null) {
