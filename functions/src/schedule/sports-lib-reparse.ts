@@ -23,6 +23,7 @@ import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
 
 const SPORTS_LIB_REPARSE_SCAN_CONCURRENCY = 25;
+const SPORTS_LIB_REPARSE_ENQUEUE_SPREAD_SECONDS = 10 * 60;
 
 function getCurrentSettings(): {
     enabled: boolean;
@@ -79,6 +80,18 @@ function isProcessingMetadataDocPath(path: string): boolean {
     return path.endsWith('/metaData/processing');
 }
 
+function calculateEnqueueDelaySeconds(
+    enqueueSequence: number,
+    enqueueLimit: number,
+): number {
+    if (enqueueSequence <= 0 || enqueueLimit <= 1) {
+        return 1;
+    }
+    const denominator = Math.max(enqueueLimit - 1, 1);
+    const scaled = Math.floor((enqueueSequence * SPORTS_LIB_REPARSE_ENQUEUE_SPREAD_SECONDS) / denominator);
+    return Math.max(1, Math.min(SPORTS_LIB_REPARSE_ENQUEUE_SPREAD_SECONDS, scaled));
+}
+
 export const scheduleSportsLibReparseScan = onSchedule({
     region: FUNCTIONS_MANIFEST.scheduleSportsLibReparseScan.region,
     schedule: 'every 10 minutes',
@@ -106,6 +119,7 @@ export const scheduleSportsLibReparseScan = onSchedule({
 
     let scannedCount = 0;
     let enqueuedCount = 0;
+    let enqueueAttemptSequence = 0;
     let enqueueReservationCount = 0;
     let lastProcessingDocPath: string | null = null;
     let lastProcessingVersionCode: number | null = null;
@@ -204,7 +218,14 @@ export const scheduleSportsLibReparseScan = onSchedule({
             }, { merge: true });
 
             try {
-                const taskCreated = await enqueueSportsLibReparseTask(jobId);
+                const enqueueDelaySeconds = calculateEnqueueDelaySeconds(
+                    enqueueAttemptSequence,
+                    settings.enqueueLimit,
+                );
+                enqueueAttemptSequence++;
+                const taskCreated = enqueueDelaySeconds > 1
+                    ? await enqueueSportsLibReparseTask(jobId, enqueueDelaySeconds)
+                    : await enqueueSportsLibReparseTask(jobId);
                 if (taskCreated) {
                     enqueuedCount++;
                 }

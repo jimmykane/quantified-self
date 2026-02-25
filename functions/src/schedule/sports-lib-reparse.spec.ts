@@ -372,6 +372,27 @@ describe('scheduleSportsLibReparseScan', () => {
         expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledWith('job-1');
     });
 
+    it('should spread enqueue schedule delays across multiple sequential override enqueues', async () => {
+        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
+        hoisted.runtimeDefaults.enqueueLimit = 100;
+        hoisted.buildSportsLibReparseJobId
+            .mockReturnValueOnce('job-e1')
+            .mockReturnValueOnce('job-e2');
+        hoisted.userEventsByUID.set('u1', [
+            createEventDoc('u1', 'e1', { originalFile: { path: 'first.fit' } }),
+            createEventDoc('u1', 'e2', { originalFile: { path: 'second.fit' } }),
+        ]);
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        const firstCallArgs = hoisted.enqueueSportsLibReparseTask.mock.calls[0];
+        const secondCallArgs = hoisted.enqueueSportsLibReparseTask.mock.calls[1];
+        expect(firstCallArgs).toEqual(['job-e1']);
+        expect(secondCallArgs[0]).toBe('job-e2');
+        expect(typeof secondCallArgs[1]).toBe('number');
+        expect(secondCallArgs[1]).toBeGreaterThan(1);
+    });
+
     it('should apply tuple cursor startAfter in global mode', async () => {
         hoisted.runtimeDefaults.scanLimit = 1;
         const eventRefOne = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
