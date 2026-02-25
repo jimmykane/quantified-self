@@ -1,29 +1,43 @@
 import {
+  AfterViewInit,
   ChangeDetectionStrategy,
-  ChangeDetectorRef,
   Component,
+  ElementRef,
+  Input,
   NgZone,
   OnChanges,
   OnDestroy,
+  SimpleChanges,
+  ViewChild
 } from '@angular/core';
-
-import { AmChartsService } from '../../../services/am-charts.service';
-
-// Type-only imports
-import type * as am4core from '@amcharts/amcharts4/core';
-import type * as am4charts from '@amcharts/amcharts4/charts';
-import type * as am4plugins_sliceGrouper from '@amcharts/amcharts4/plugins/sliceGrouper';
-
+import type { EChartsType } from 'echarts/core';
 import {
+  ActivityTypes,
   ChartDataCategoryTypes,
-  ChartDataValueTypes
+  ChartDataValueTypes,
+  ChartThemes,
+  TimeIntervals
 } from '@sports-alliance/sports-lib';
-import { DashboardChartAbstractDirective } from '../dashboard-chart-abstract-component.directive';
+import { AppColors } from '../../../services/color/app.colors';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
-import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
 import { normalizeUnitDerivedTypeLabel } from '../../../helpers/stat-label.helper';
+import {
+  DashboardPieChartData,
+  DashboardPieSlice,
+  buildDashboardPieChartData,
+  getDashboardPieSliceDisplayLabel
+} from '../../../helpers/dashboard-pie-chart-data.helper';
+import { EChartsHostController } from '../../../helpers/echarts-host-controller';
+import { isDarkChartThemeActive } from '../../../helpers/echarts-theme.helper';
+import {
+  getDashboardAggregateData,
+  getDashboardChartSortComparator,
+  getDashboardDataInstanceOrNull
+} from '../../../helpers/dashboard-chart-data.helper';
 
+type ChartOption = Parameters<EChartsType['setOption']>[0];
 
 @Component({
   selector: 'app-pie-chart',
@@ -32,115 +46,272 @@ import { normalizeUnitDerivedTypeLabel } from '../../../helpers/stat-label.helpe
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: false
 })
-export class ChartsPieComponent extends DashboardChartAbstractDirective implements OnChanges, OnDestroy {
+export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
+  @Input() data: any;
+  @Input() chartDataType?: string;
+  @Input() chartDataValueType?: ChartDataValueTypes;
+  @Input() chartDataCategoryType?: ChartDataCategoryTypes;
+  @Input() chartDataTimeInterval?: TimeIntervals;
+  @Input() chartTheme: ChartThemes = ChartThemes.Material;
+  @Input() useAnimations = false;
+  @Input() isLoading = false;
 
+  @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
+  private readonly chartHost: EChartsHostController;
+  private readonly dateTypePalette: string[] = [
+    AppColors.Blue,
+    AppColors.Green,
+    AppColors.Orange,
+    AppColors.Purple,
+    AppColors.LightBlue,
+    AppColors.Yellow,
+    AppColors.Pink,
+    AppColors.Red,
+    AppColors.DeepBlue,
+    AppColors.LightGreen
+  ];
 
-  constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, private eventColorService: AppEventColorService, protected amChartsService: AmChartsService, protected logger: LoggerService) {
-    super(zone, changeDetector, amChartsService, logger);
+  constructor(
+    private zone: NgZone,
+    private eChartsLoader: EChartsLoaderService,
+    private eventColorService: AppEventColorService,
+    private logger: LoggerService
+  ) {
+    this.chartHost = new EChartsHostController({
+      eChartsLoader: this.eChartsLoader,
+      zone: this.zone,
+      logger: this.logger,
+      logPrefix: '[ChartsPieComponent]'
+    });
   }
 
-  protected async createChart(): Promise<am4charts.PieChart> {
-    const { core, charts } = await this.amChartsService.load();
-    const sliceGrouper = await import('@amcharts/amcharts4/plugins/sliceGrouper');
+  async ngAfterViewInit(): Promise<void> {
+    await this.chartHost.init(this.chartDiv?.nativeElement);
+    this.refreshChart();
+  }
 
-    const chart = await super.createChart(charts.PieChart) as am4charts.PieChart;
-    chart.fontSize = '0.8em'
-    // chart.hiddenState.properties.opacity = 0;
-    chart.padding(0, 5, 0, 5);
-    chart.radius = core.percent(55);
-    chart.innerRadius = core.percent(45);
+  ngOnChanges(changes: SimpleChanges): void {
+    if (!this.chartHost.getChart()) {
+      return;
+    }
 
-    const pieSeries = chart.series.push(new charts.PieSeries());
-    pieSeries.dataFields.value = this.chartDataValueType;
-    pieSeries.dataFields.category = this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? 'type' : 'time';
-    // pieSeries.interpolationDuration = 500;f
-    // pieSeries.rangeChangeDuration = 500;
-    // pieSeries.sequencedInterpolation = true;
+    if (
+      changes.data ||
+      changes.chartTheme ||
+      changes.useAnimations ||
+      changes.chartDataType ||
+      changes.chartDataValueType ||
+      changes.chartDataCategoryType ||
+      changes.chartDataTimeInterval
+    ) {
+      this.refreshChart();
+    }
+  }
 
-    // pieSeries.slices.template.propertyFields.isActive = 'pulled';
-    pieSeries.slices.template.strokeWidth = 0.4;
-    pieSeries.slices.template.strokeOpacity = 1;
-    pieSeries.slices.template.stroke = core.color('#175e84');
-    // pieSeries.slices.template.filters.push(ChartHelper.getShadowFilter());
+  ngOnDestroy(): void {
+    this.chartHost.dispose();
+  }
 
-    pieSeries.slices.template.adapter.add('tooltipText', (text, target, key) => {
-      if (!target.dataItem || !target.dataItem.values || !target.dataItem.dataContext) {
-        return '';
-      }
-      const data = this.getDataInstanceOrNull(target.dataItem.dataContext[this.chartDataValueType]);
-      if (!data) {
-        return '';
-      }
-      return `{category${this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? `` : `.formatDate("${this.getChartDateFormat(this.chartDataTimeInterval)}")`}}\n${target.dataItem.values.value.percent.toFixed(1)}%\n[bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]\n${target.dataItem.dataContext['count'] ? `${target.dataItem.dataContext['count']} Activities` : ``}`
+  private refreshChart(): void {
+    if (!this.chartHost.getChart()) {
+      return;
+    }
+
+    const sortedData = Array.isArray(this.data)
+      ? [...this.data].sort(getDashboardChartSortComparator(this.chartDataCategoryType, this.chartDataValueType))
+      : [];
+
+    const pieData = buildDashboardPieChartData({
+      data: sortedData,
+      chartDataValueType: this.chartDataValueType,
+      chartDataCategoryType: this.chartDataCategoryType,
+      thresholdPercent: 7
     });
 
-    pieSeries.slices.template.adapter.add('fill', (fill, target, key) => {
-      if (this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType) {
-        return core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(ActivityTypes[target.dataItem.dataContext['type']]))
-      }
-      return this.getFillColor(chart, target.dataItem.index);
-    });
+    const aggregate = getDashboardAggregateData(
+      sortedData,
+      this.chartDataValueType,
+      this.chartDataType,
+      this.logger
+    );
+    const option = this.buildChartOption(pieData, aggregate);
+    this.chartHost.setOption(option, { notMerge: true, lazyUpdate: true });
+    this.chartHost.scheduleResize();
+  }
 
-    pieSeries.labels.template.adapter.add('text', (text, target, key) => {
-      if (!target.dataItem || !target.dataItem.values || !target.dataItem.dataContext) {
-        return '';
+  private buildChartOption(
+    pieData: DashboardPieChartData,
+    aggregateData: ReturnType<typeof getDashboardAggregateData>
+  ): ChartOption {
+    const darkTheme = isDarkChartThemeActive(this.chartTheme);
+    const textColor = darkTheme ? '#f5f5f5' : '#1f1f1f';
+    const tooltipBackgroundColor = darkTheme ? '#303030' : '#ffffff';
+    const tooltipBorderColor = darkTheme ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)';
+    const chartWidth = this.chartDiv?.nativeElement?.clientWidth || 0;
+    const isCompactLayout = chartWidth > 0 && chartWidth < 680;
+
+    const seriesData = pieData.slices.map((slice, index) => ({
+      name: getDashboardPieSliceDisplayLabel(
+        slice,
+        this.chartDataCategoryType,
+        this.chartDataTimeInterval
+      ),
+      value: slice.value,
+      count: slice.count,
+      percent: slice.percent,
+      itemStyle: {
+        color: this.getSliceColor(slice, index),
+        borderColor: darkTheme ? 'rgba(0,0,0,0.45)' : '#ffffff',
+        borderWidth: 1.2
       }
-      try {
-        const data = this.getDataInstanceOrNull(target.dataItem.dataContext[this.chartDataValueType]);
-        if (!data) {
-          return '';
+    }));
+
+    if (!seriesData.length) {
+      return {
+        animation: this.useAnimations === true,
+        legend: { show: false },
+        series: [],
+      };
+    }
+
+    const centerLabel = aggregateData
+      ? normalizeUnitDerivedTypeLabel(aggregateData.getType(), aggregateData.getDisplayType())
+      : (this.chartDataValueType || 'Value');
+    const centerValue = aggregateData
+      ? `${aggregateData.getDisplayValue()}${aggregateData.getDisplayUnit()}`
+      : '--';
+    const centerSubLabel = this.chartDataValueType || 'Value';
+
+    return {
+      animation: this.useAnimations === true,
+      textStyle: {
+        color: textColor,
+        fontFamily: "'Barlow Condensed', sans-serif"
+      },
+      tooltip: {
+        trigger: 'item',
+        backgroundColor: tooltipBackgroundColor,
+        borderColor: tooltipBorderColor,
+        borderWidth: 1,
+        textStyle: {
+          color: textColor,
+          fontFamily: "'Barlow Condensed', sans-serif",
+          fontSize: isCompactLayout ? 12 : 13
+        },
+        formatter: (params: { data?: any }) => {
+          const entry = params?.data;
+          if (!entry) {
+            return '';
+          }
+          const valueDataInstance = getDashboardDataInstanceOrNull(this.chartDataType, entry.value, this.logger);
+          const valueText = valueDataInstance
+            ? `${valueDataInstance.getDisplayValue()}${valueDataInstance.getDisplayUnit()}`
+            : Number(entry.value || 0).toLocaleString();
+          const percent = Number(entry.percent || 0).toFixed(1);
+          const activitiesCountLabel = entry.count > 0 ? `<br/>${entry.count} Activities` : '';
+
+          return `${entry.name}<br/>${percent}%<br/><strong>${valueText}</strong>${activitiesCountLabel}`;
         }
-        return `[font-size: 1.1em]${this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? target.dataItem.dataContext.type.slice(0, 40) : `{category.formatDate("${this.getChartDateFormat(this.chartDataTimeInterval)}")}`}[/]\n[bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`
-        // return `[bold font-size: 1.2em]{value.percent.formatNumber('#.')}%[/] [font-size: 1.1em]${this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? target.dataItem.dataContext.type.slice(0, 40) : `{category.formatDate('${this.getChartDateFormat(this.chartDataDateRange)}')}` || 'other'}[/]\n[bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`
-      } catch (e) {
-        this.logger.error(e);
-      }
-    });
+      },
+      legend: {
+        show: seriesData.length > 1,
+        orient: isCompactLayout ? 'horizontal' : 'vertical',
+        left: isCompactLayout ? 'center' : undefined,
+        right: isCompactLayout ? undefined : 6,
+        top: isCompactLayout ? 'bottom' : 'middle',
+        textStyle: {
+          color: textColor,
+          fontFamily: "'Barlow Condensed', sans-serif",
+          fontSize: isCompactLayout ? 12 : 13
+        },
+        itemGap: isCompactLayout ? 10 : 8
+      },
+      series: [
+        {
+          type: 'pie',
+          radius: isCompactLayout ? ['42%', '64%'] : ['52%', '72%'],
+          center: isCompactLayout ? ['50%', '38%'] : ['36%', '50%'],
+          avoidLabelOverlap: true,
+          minAngle: 1.5,
+          label: {
+            show: !isCompactLayout,
+            color: textColor,
+            fontFamily: "'Barlow Condensed', sans-serif",
+            formatter: '{b}\n{d}%'
+          },
+          labelLine: {
+            show: !isCompactLayout
+          },
+          data: seriesData
+        }
+      ],
+      graphic: [
+        {
+          type: 'group',
+          left: isCompactLayout ? '50%' : '36%',
+          top: isCompactLayout ? '38%' : 'center',
+          bounding: 'raw',
+          children: [
+            {
+              type: 'text',
+              style: {
+                text: centerLabel,
+                fontSize: isCompactLayout ? 12 : 13,
+                fontWeight: 500,
+                fill: textColor,
+                opacity: 0.86,
+                textAlign: 'center',
+                fontFamily: "'Barlow Condensed', sans-serif",
+              },
+              left: 'center',
+              top: isCompactLayout ? -22 : -24
+            },
+            {
+              type: 'text',
+              style: {
+                text: centerValue,
+                fontSize: isCompactLayout ? 22 : 26,
+                fontWeight: 700,
+                fill: textColor,
+                textAlign: 'center',
+                fontFamily: "'Barlow Condensed', sans-serif",
+              },
+              left: 'center',
+              top: isCompactLayout ? -2 : -4
+            },
+            {
+              type: 'text',
+              style: {
+                text: centerSubLabel,
+                fontSize: isCompactLayout ? 11 : 12,
+                fontWeight: 500,
+                fill: textColor,
+                opacity: 0.7,
+                textAlign: 'center',
+                fontFamily: "'Barlow Condensed', sans-serif",
+              },
+              left: 'center',
+              top: isCompactLayout ? 20 : 24
+            }
+          ]
+        }
+      ]
+    };
+  }
 
-    pieSeries.labels.template.wrap = true
-    pieSeries.labels.template.maxWidth = 70
-
-    const label = pieSeries.createChild(core.Label);
-    label.horizontalCenter = 'middle';
-    label.verticalCenter = 'middle';
-    // label.fontSize = 12;
-    if (this.chartDataValueType === ChartDataValueTypes.Total) {
-      label.text = `{values.value.sum.formatNumber('#')}`;
-    }
-    if (this.chartDataValueType === ChartDataValueTypes.Maximum) {
-      label.text = `{values.value.high.formatNumber('#')}`;
-    }
-    if (this.chartDataValueType === ChartDataValueTypes.Minimum) {
-      label.text = `{values.value.low.formatNumber('#')}`;
-    }
-    if (this.chartDataValueType === ChartDataValueTypes.Average) {
-      label.text = `{values.value.average.formatNumber('#')}`;
-    }
-    label.adapter.add('textOutput', (text, target, key) => {
-      const data = this.getDataInstanceOrNull(text);
-      if (!data) {
-        return `[font-size: 1.2em]${this.chartDataValueType || 'Value'}[/]
-              [font-size: 1.3em]--[/]`;
-      }
-      const normalizedLabel = normalizeUnitDerivedTypeLabel(data.getType(), data.getDisplayType());
-      return `[font-size: 1.2em]${normalizedLabel}[/]
-              [font-size: 1.3em]${data.getDisplayValue()}${data.getDisplayUnit()}[/]
-              [font-size: 0.9em]${this.chartDataValueType}[/]`
-    });
-
-    // chart.exporting.menu = this.getExportingMenu();
-
+  private getSliceColor(slice: DashboardPieSlice, index: number): string {
     if (this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType) {
-      const grouper = pieSeries.plugins.push(new sliceGrouper.SliceGrouper());
-      grouper.threshold = 7;
-      grouper.groupName = 'Other';
-      grouper.clickBehavior = 'zoom';
-      grouper.zoomOutButton.align = 'left';
-      grouper.zoomOutButton.width = 35;
-      grouper.zoomOutButton.valign = 'top';
+      if (slice.isOther) {
+        return AppColors.DarkGray;
+      }
+
+      const activityType = (ActivityTypes as any)[slice.label];
+      if (activityType !== undefined) {
+        return this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activityType);
+      }
     }
 
-    return chart;
+    return this.dateTypePalette[index % this.dateTypePalette.length];
   }
 }

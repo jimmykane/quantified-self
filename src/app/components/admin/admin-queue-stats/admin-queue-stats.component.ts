@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, Input, OnChanges, OnDestroy, OnInit, SimpleChanges, ViewChild } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, Input, NgZone, OnChanges, OnDestroy, OnInit, SimpleChanges, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -11,8 +11,8 @@ import { AppThemeService } from '../../../services/app.theme.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
-import type { EChartsType } from 'echarts/core';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
+import { EChartsHostController } from '../../../helpers/echarts-host-controller';
 
 export type AdminQueueStatsView = 'all' | 'workout' | 'reparse';
 
@@ -42,12 +42,7 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
         this._retryChartRef = ref;
 
         if (!ref) {
-            if (this.resizeObserver) {
-                this.resizeObserver.disconnect();
-                this.resizeObserver = null;
-            }
-            this.eChartsLoader.dispose(this.chart);
-            this.chart = null;
+            this.chartHost.dispose();
             return;
         }
 
@@ -56,12 +51,11 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
         }
     }
 
-    private chart: EChartsType | null = null;
+    private chartHost: EChartsHostController;
     private chartInitialization: Promise<void> | null = null;
     private viewInitialized = false;
     private _retryChartRef: ElementRef<HTMLDivElement> | undefined;
     private isDark = false;
-    private resizeObserver: ResizeObserver | null = null;
 
     // Theme constants
     private readonly CHART_TEXT_DARK = 'rgba(255, 255, 255, 0.8)';
@@ -73,8 +67,15 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
 
     constructor(
         private appThemeService: AppThemeService,
-        private eChartsLoader: EChartsLoaderService
-    ) { }
+        private eChartsLoader: EChartsLoaderService,
+        private zone: NgZone
+    ) {
+        this.chartHost = new EChartsHostController({
+            eChartsLoader: this.eChartsLoader,
+            zone: this.zone,
+            logPrefix: '[AdminQueueStatsComponent]'
+        });
+    }
 
     ngOnInit(): void {
         this.appThemeService.getAppTheme().pipe(takeUntil(this.destroy$)).subscribe(theme => {
@@ -97,12 +98,7 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
     ngOnDestroy(): void {
         this.destroy$.next();
         this.destroy$.complete();
-        if (this.resizeObserver) {
-            this.resizeObserver.disconnect();
-            this.resizeObserver = null;
-        }
-        this.eChartsLoader.dispose(this.chart);
-        this.chart = null;
+        this.chartHost.dispose();
     }
 
     private async tryInitializeChartAndRender(): Promise<void> {
@@ -111,15 +107,14 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
     }
 
     private async initializeChart(): Promise<void> {
-        if (this.chart || this.chartInitialization || !this._retryChartRef?.nativeElement) {
+        if (this.chartHost.getChart() || this.chartInitialization || !this._retryChartRef?.nativeElement) {
             return;
         }
 
         const container = this._retryChartRef.nativeElement;
         this.chartInitialization = (async () => {
             try {
-                this.chart = await this.eChartsLoader.init(container);
-                this.setupResizeObserver(container);
+                await this.chartHost.init(container);
             } catch (error) {
                 console.error('[AdminQueueStatsComponent] Failed to initialize ECharts', error);
             } finally {
@@ -130,28 +125,8 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
         await this.chartInitialization;
     }
 
-    private setupResizeObserver(container: HTMLElement): void {
-        if (typeof ResizeObserver === 'undefined') {
-            return;
-        }
-
-        this.resizeObserver = new ResizeObserver(() => {
-            this.scheduleResize();
-        });
-        this.resizeObserver.observe(container);
-    }
-
-    private scheduleResize(): void {
-        if (!this.chart) return;
-        if (typeof requestAnimationFrame === 'undefined') {
-            this.eChartsLoader.resize(this.chart);
-            return;
-        }
-        requestAnimationFrame(() => this.eChartsLoader.resize(this.chart!));
-    }
-
     private updateChartData(): void {
-        if (!this.chart || !this._retryChartRef?.nativeElement) {
+        if (!this.chartHost.getChart() || !this._retryChartRef?.nativeElement) {
             return;
         }
 
@@ -225,12 +200,12 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
             ]
         };
 
-        this.eChartsLoader.setOption(this.chart, option, { notMerge: true, lazyUpdate: true });
-        this.scheduleResize();
+        this.chartHost.setOption(option, { notMerge: true, lazyUpdate: true });
+        this.chartHost.scheduleResize();
     }
 
     private updateChartTheme(): void {
-        if (!this.chart) {
+        if (!this.chartHost.getChart()) {
             return;
         }
         this.updateChartData();

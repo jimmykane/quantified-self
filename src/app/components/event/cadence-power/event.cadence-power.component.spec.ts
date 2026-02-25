@@ -35,6 +35,11 @@ describe('EventCadencePowerComponent', () => {
 
   const getLastOption = (): Record<string, any> => mockLoader.setOption.mock.calls.at(-1)?.[1] as Record<string, any>;
 
+  const waitForChartStabilization = async (): Promise<void> => {
+    await fixture.whenStable();
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
+  };
+
   beforeEach(async () => {
     breakpointSubject = new Subject<{ matches: boolean }>();
 
@@ -115,7 +120,7 @@ describe('EventCadencePowerComponent', () => {
 
   it('should render cadence-power scatter with visual map', async () => {
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
 
@@ -127,7 +132,7 @@ describe('EventCadencePowerComponent', () => {
 
   it('should use standardized cadence x-axis bounds and interval', async () => {
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
 
@@ -138,7 +143,7 @@ describe('EventCadencePowerComponent', () => {
 
   it('should hide legend for single activity and show for multiple activities', async () => {
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
     expect(getLastOption().legend.show).toBe(false);
 
     mockService.buildCadencePowerSeries.mockReturnValue([
@@ -163,7 +168,7 @@ describe('EventCadencePowerComponent', () => {
 
   it('should produce different point colors by density', async () => {
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
     const colorFormatter = option.series[0].itemStyle.color as (params: { value?: unknown[] }) => string;
@@ -175,7 +180,7 @@ describe('EventCadencePowerComponent', () => {
     component.chartTheme = ChartThemes.Dark;
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     expect(getLastOption().tooltip.backgroundColor).toBe('#222222');
   });
@@ -184,7 +189,7 @@ describe('EventCadencePowerComponent', () => {
     mockService.buildCadencePowerSeries.mockReturnValue([]);
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
 

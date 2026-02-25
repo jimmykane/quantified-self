@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, LOCALE_ID, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, LOCALE_ID, NgZone, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
@@ -25,6 +25,7 @@ import { AdminResolverData } from '../../../resolvers/admin.resolver';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import type { EChartsType } from 'echarts/core';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
+import { EChartsHostController } from '../../../helpers/echarts-host-controller';
 import dayjs from 'dayjs';
 import localizedFormat from 'dayjs/plugin/localizedFormat';
 
@@ -77,6 +78,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     private snackBar = inject(MatSnackBar);
     private logger = inject(LoggerService);
     private eChartsLoader = inject(EChartsLoaderService);
+    private zone = inject(NgZone);
     private locale = inject(LOCALE_ID);
 
     // Data state
@@ -103,9 +105,13 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     private searchSubject = new Subject<string>();
     private destroy$ = new Subject<void>();
 
-    private chart: EChartsType | null = null;
+    private chartHost = new EChartsHostController({
+        eChartsLoader: this.eChartsLoader,
+        zone: this.zone,
+        logger: this.logger,
+        logPrefix: '[AdminUserManagementComponent]'
+    });
     private isDark = false;
-    private resizeObserver: ResizeObserver | null = null;
     private providerData: Record<string, number> | null = null;
     private readonly dayjsLocale = this.normalizeDayjsLocale(this.locale);
 
@@ -161,12 +167,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     ngOnDestroy(): void {
         this.destroy$.next();
         this.destroy$.complete();
-        if (this.resizeObserver) {
-            this.resizeObserver.disconnect();
-            this.resizeObserver = null;
-        }
-        this.eChartsLoader.dispose(this.chart);
-        this.chart = null;
+        this.chartHost.dispose();
     }
 
     fetchUsers(): void {
@@ -360,39 +361,17 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
         if (!this.authChartRef?.nativeElement) {
             return;
         }
-        try {
-            this.chart = await this.eChartsLoader.init(this.authChartRef.nativeElement);
-            this.setupResizeObserver();
-        } catch (error) {
-            this.logger.error('[AdminUserManagementComponent] Failed to initialize ECharts', error);
-        }
-    }
-
-    private setupResizeObserver(): void {
-        if (typeof ResizeObserver === 'undefined' || !this.authChartRef?.nativeElement) {
-            return;
-        }
-        this.resizeObserver = new ResizeObserver(() => this.scheduleResize());
-        this.resizeObserver.observe(this.authChartRef.nativeElement);
-    }
-
-    private scheduleResize(): void {
-        if (!this.chart) return;
-        if (typeof requestAnimationFrame === 'undefined') {
-            this.eChartsLoader.resize(this.chart);
-            return;
-        }
-        requestAnimationFrame(() => this.eChartsLoader.resize(this.chart!));
+        await this.chartHost.init(this.authChartRef.nativeElement);
     }
 
     private renderAuthChart(): void {
-        if (!this.chart || !this.providerData || Object.keys(this.providerData).length === 0) {
+        if (!this.chartHost.getChart() || !this.providerData || Object.keys(this.providerData).length === 0) {
             return;
         }
 
         const option = this.buildAuthChartOption(this.providerData);
-        this.eChartsLoader.setOption(this.chart, option, { notMerge: true, lazyUpdate: true });
-        this.scheduleResize();
+        this.chartHost.setOption(option, { notMerge: true, lazyUpdate: true });
+        this.chartHost.scheduleResize();
     }
 
     private buildAuthChartOption(providers: Record<string, number>): ChartOption {
@@ -514,7 +493,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     }
 
     private updateChartTheme(): void {
-        if (!this.chart) {
+        if (!this.chartHost.getChart()) {
             return;
         }
         this.renderAuthChart();

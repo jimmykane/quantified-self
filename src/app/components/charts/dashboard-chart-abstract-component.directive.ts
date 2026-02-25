@@ -1,16 +1,20 @@
 import { ChartAbstractDirective } from './chart-abstract.directive';
 import { AfterViewInit, ChangeDetectorRef, Directive, Input, NgZone, OnChanges } from '@angular/core';
 
-import { SummariesChartDataInterface } from '../summaries/summaries.component';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes, TimeIntervals
 } from '@sports-alliance/sports-lib';
-import { DynamicDataLoader } from '@sports-alliance/sports-lib';
-import { DataInterface } from '@sports-alliance/sports-lib';
 
 import { AmChartsService } from '../../services/am-charts.service';
 import { LoggerService } from '../../services/logger.service';
+import {
+  getDashboardAggregateData,
+  getDashboardAxisDateFormat,
+  getDashboardChartDateFormat,
+  getDashboardChartSortComparator,
+  getDashboardDataInstanceOrNull
+} from '../../helpers/dashboard-chart-data.helper';
 
 // Type-only imports
 import type * as am4core from '@amcharts/amcharts4/core';
@@ -108,89 +112,22 @@ export abstract class DashboardChartAbstractDirective extends ChartAbstractDirec
   }
 
   protected getChartDateFormat(timeInterval: TimeIntervals) {
-    switch (timeInterval) {
-      case TimeIntervals.Yearly:
-        return 'yyyy';
-      case TimeIntervals.Monthly:
-        return 'MMM yyyy';
-      case TimeIntervals.Weekly:
-        return `'Week' ww dd MMM yyyy`;
-      case TimeIntervals.Daily:
-        return 'dd MMM yyyy';
-      case TimeIntervals.Hourly:
-        return 'HH:mm dd MMM yyyy';
-      default:
-        throw new Error(`Not implemented`)
-    }
+    return getDashboardChartDateFormat(timeInterval);
   }
 
   protected getAxisDateFormat(timeInterval: TimeIntervals) {
-    switch (timeInterval) {
-      case TimeIntervals.Yearly:
-        return 'yyyy';
-      case TimeIntervals.Monthly:
-        return 'MMM';
-      case TimeIntervals.Weekly:
-        return 'ww';
-      case TimeIntervals.Daily:
-        return 'dd';
-      case TimeIntervals.Hourly:
-        return 'HH:mm';
-      default:
-        throw new Error(`Not implemented`)
-    }
+    return getDashboardAxisDateFormat(timeInterval);
   }
 
-  protected getDataInstanceOrNull(value: unknown): DataInterface | null {
-    if (!this.chartDataType) {
-      return null;
-    }
-    if (value === null || value === undefined || value === '') {
-      return null;
-    }
-    const numericValue = typeof value === 'number' ? value : Number(value);
-    if (!Number.isFinite(numericValue)) {
-      return null;
-    }
-    try {
-      return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, numericValue) || null;
-    } catch (error) {
-      this.logger.warn('[DashboardChartAbstractDirective] Failed to create chart data instance', {
-        chartDataType: this.chartDataType,
-        numericValue,
-        error
-      });
-      return null;
-    }
+  protected getDataInstanceOrNull(value: unknown) {
+    return getDashboardDataInstanceOrNull(this.chartDataType, value, this.logger);
   }
 
-  protected getAggregateData(data: any[], chartDataValueType: ChartDataValueTypes): DataInterface | null {
-    if (!Array.isArray(data) || !data.length || !chartDataValueType) {
-      return null;
-    }
-    const numericValues = data
-      .map(dataItem => Number(dataItem?.[chartDataValueType]))
-      .filter(value => Number.isFinite(value));
-
-    if (!numericValues.length) {
-      return null;
-    }
-
-    switch (chartDataValueType) {
-      case ChartDataValueTypes.Average:
-        return this.getDataInstanceOrNull(numericValues.reduce((sum, value) => sum + value, 0) / numericValues.length);
-      case ChartDataValueTypes.Maximum:
-        return this.getDataInstanceOrNull(Math.max(...numericValues));
-      case ChartDataValueTypes.Minimum:
-        return this.getDataInstanceOrNull(Math.min(...numericValues));
-      case ChartDataValueTypes.Total:
-        return this.getDataInstanceOrNull(numericValues.reduce((sum, value) => sum + value, 0));
-      default:
-        return null;
-    }
+  protected getAggregateData(data: any[], chartDataValueType: ChartDataValueTypes) {
+    return getDashboardAggregateData(data, chartDataValueType, this.chartDataType, this.logger);
   }
 
   protected sortData(chartDataCategoryType: ChartDataCategoryTypes) {
-    return (itemA: SummariesChartDataInterface, itemB: SummariesChartDataInterface) => chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? itemA[this.chartDataValueType] - itemB[this.chartDataValueType] : -(itemB.time - itemA.time);
+    return getDashboardChartSortComparator(chartDataCategoryType, this.chartDataValueType);
   }
 }

@@ -30,6 +30,8 @@ import {
   convertIntensityZonesStatsToEchartsData,
   IntensityZonesEChartsData,
 } from '../../../helpers/intensity-zones-chart-data-helper';
+import { EChartsHostController } from '../../../helpers/echarts-host-controller';
+import { isDarkChartThemeActive } from '../../../helpers/echarts-theme.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 
@@ -49,11 +51,9 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
-  private chart: EChartsType | null = null;
+  private chartHost: EChartsHostController;
   private isMobile = false;
   private breakpointSubscription: Subscription;
-  private resizeObserver: ResizeObserver | null = null;
-  private resizeFrameId: number | null = null;
 
   constructor(
     private breakpointObserver: BreakpointObserver,
@@ -62,24 +62,31 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     private logger: LoggerService,
     private zone: NgZone
   ) {
+    this.chartHost = new EChartsHostController({
+      eChartsLoader: this.eChartsLoader,
+      zone: this.zone,
+      logger: this.logger,
+      logPrefix: '[EventIntensityZonesComponent]'
+    });
+
     this.breakpointSubscription = this.breakpointObserver
       .observe([AppBreakpoints.XSmall])
       .subscribe(result => {
         const wasMobile = this.isMobile;
         this.isMobile = result.matches;
-        if (this.chart && wasMobile !== this.isMobile) {
+        if (this.chartHost.getChart() && wasMobile !== this.isMobile) {
           this.refreshChart();
         }
       });
   }
 
   async ngAfterViewInit(): Promise<void> {
-    await this.initializeChart();
+    await this.chartHost.init(this.chartDiv?.nativeElement);
     this.refreshChart();
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (!this.chart) {
+    if (!this.chartHost.getChart()) {
       return;
     }
     if (changes.activities || changes.chartTheme || changes.useAnimations || changes.orientation) {
@@ -91,54 +98,19 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     if (this.breakpointSubscription) {
       this.breakpointSubscription.unsubscribe();
     }
-    if (this.resizeObserver) {
-      this.resizeObserver.disconnect();
-      this.resizeObserver = null;
-    }
-    if (this.resizeFrameId !== null && typeof cancelAnimationFrame !== 'undefined') {
-      cancelAnimationFrame(this.resizeFrameId);
-      this.resizeFrameId = null;
-    }
-    this.eChartsLoader.dispose(this.chart);
-    this.chart = null;
-  }
-
-  private async initializeChart(): Promise<void> {
-    if (!this.chartDiv?.nativeElement) {
-      return;
-    }
-
-    try {
-      this.chart = await this.eChartsLoader.init(this.chartDiv.nativeElement);
-      this.setupResizeObserver();
-    } catch (error) {
-      this.logger.error('[EventIntensityZonesComponent] Failed to initialize ECharts', error);
-    }
-  }
-
-  private setupResizeObserver(): void {
-    if (typeof ResizeObserver === 'undefined' || !this.chartDiv?.nativeElement) {
-      return;
-    }
-
-    this.zone.runOutsideAngular(() => {
-      this.resizeObserver = new ResizeObserver(() => {
-        this.scheduleResize();
-      });
-      this.resizeObserver.observe(this.chartDiv.nativeElement);
-    });
+    this.chartHost.dispose();
   }
 
   private refreshChart(): void {
-    if (!this.chart) {
+    if (!this.chartHost.getChart()) {
       return;
     }
 
     const statsClassInstances = Array.isArray(this.activities) ? this.activities : [];
     const data = convertIntensityZonesStatsToEchartsData(statsClassInstances, this.isMobile);
     const option = this.buildChartOption(data);
-    this.eChartsLoader.setOption(this.chart, option, { notMerge: true, lazyUpdate: true });
-    this.scheduleResize();
+    this.chartHost.setOption(option, { notMerge: true, lazyUpdate: true });
+    this.chartHost.scheduleResize();
   }
 
   private buildChartOption(data: IntensityZonesEChartsData): ChartOption {
@@ -385,29 +357,6 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     }>);
   }
 
-  private scheduleResize(): void {
-    if (!this.chart) {
-      return;
-    }
-
-    if (typeof requestAnimationFrame === 'undefined') {
-      this.eChartsLoader.resize(this.chart);
-      return;
-    }
-
-    if (this.resizeFrameId !== null) {
-      return;
-    }
-
-    this.resizeFrameId = requestAnimationFrame(() => {
-      this.resizeFrameId = null;
-      if (!this.chart) {
-        return;
-      }
-      this.eChartsLoader.resize(this.chart);
-    });
-  }
-
   private formatPercentage(value: number): number {
     if (!Number.isFinite(value)) {
       return 0;
@@ -460,13 +409,6 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
   }
 
   private isDarkThemeActive(): boolean {
-    const chartTheme = `${this.chartTheme}`.toLowerCase();
-    if (chartTheme === 'dark' || chartTheme === 'amchartsdark') {
-      return true;
-    }
-    if (typeof document === 'undefined') {
-      return false;
-    }
-    return document.body.classList.contains('dark-theme');
+    return isDarkChartThemeActive(this.chartTheme);
   }
 }

@@ -36,6 +36,11 @@ describe('EventDurabilityCurveComponent', () => {
 
   const getLastOption = (): Record<string, any> => mockLoader.setOption.mock.calls.at(-1)?.[1] as Record<string, any>;
 
+  const waitForChartStabilization = async (): Promise<void> => {
+    await fixture.whenStable();
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
+  };
+
   beforeEach(async () => {
     breakpointSubject = new Subject<{ matches: boolean }>();
 
@@ -130,7 +135,7 @@ describe('EventDurabilityCurveComponent', () => {
 
   it('should render durability lines and best-effort markers', async () => {
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
 
@@ -147,7 +152,7 @@ describe('EventDurabilityCurveComponent', () => {
     mockService.buildBestEffortMarkers.mockReturnValue([]);
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
     expect(option.legend.show).toBe(false);
@@ -176,7 +181,7 @@ describe('EventDurabilityCurveComponent', () => {
     ]);
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
     const lineSeries = option.series.filter((entry: { type?: string }) => entry.type === 'line');
@@ -224,7 +229,7 @@ describe('EventDurabilityCurveComponent', () => {
     ]);
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
     const lineColor = option.series.find((entry: { type?: string }) => entry.type === 'line')?.lineStyle?.color;
@@ -241,7 +246,7 @@ describe('EventDurabilityCurveComponent', () => {
     component.chartTheme = ChartThemes.Dark;
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
     expect(option.tooltip.backgroundColor).toBe('#222222');
@@ -252,7 +257,7 @@ describe('EventDurabilityCurveComponent', () => {
     mockService.buildBestEffortMarkers.mockReturnValue([]);
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
     expect(option.series).toEqual([]);
@@ -262,7 +267,7 @@ describe('EventDurabilityCurveComponent', () => {
 
   it('should refresh on mobile breakpoint changes', async () => {
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const baseline = mockLoader.setOption.mock.calls.length;
     breakpointSubject.next({ matches: true });

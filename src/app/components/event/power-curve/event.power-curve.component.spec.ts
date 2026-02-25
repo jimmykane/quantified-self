@@ -53,6 +53,11 @@ describe('EventPowerCurveComponent', () => {
     return mockLoader.setOption.mock.calls.at(-1)?.[1] as Record<string, any>;
   };
 
+  const waitForChartStabilization = async (): Promise<void> => {
+    await fixture.whenStable();
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
+  };
+
   beforeEach(async () => {
     breakpointSubject = new Subject<{ matches: boolean }>();
     resizeObserverRecords = [];
@@ -159,7 +164,7 @@ describe('EventPowerCurveComponent', () => {
 
   it('should initialize ECharts and render a power-only chart', async () => {
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
 
@@ -189,7 +194,7 @@ describe('EventPowerCurveComponent', () => {
     ]);
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
     const markPointData = option.series[0]?.markPoint?.data ?? [];
@@ -231,7 +236,7 @@ describe('EventPowerCurveComponent', () => {
     ]);
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     Object.defineProperty(component.chartDiv.nativeElement, 'clientWidth', {
       value: 320,
@@ -251,7 +256,7 @@ describe('EventPowerCurveComponent', () => {
 
   it('should hide legend for single activity and show for multi-activity', async () => {
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
     expect(getLastOption().legend.show).toBe(false);
 
     mockPerformanceCurveDataService.buildPowerCurveSeries.mockReturnValue([
@@ -278,7 +283,7 @@ describe('EventPowerCurveComponent', () => {
     component.chartTheme = ChartThemes.Dark;
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
 
@@ -290,7 +295,7 @@ describe('EventPowerCurveComponent', () => {
     mockPerformanceCurveDataService.buildPowerCurveSeries.mockReturnValue([]);
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
 
@@ -301,7 +306,7 @@ describe('EventPowerCurveComponent', () => {
 
   it('should observe container resize and trigger chart resize', async () => {
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     expect(resizeObserverRecords).toHaveLength(1);
     const baselineResizeCalls = mockLoader.resize.mock.calls.length;
@@ -315,7 +320,7 @@ describe('EventPowerCurveComponent', () => {
     mockLoader.init.mockRejectedValueOnce(new Error('init failed'));
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     expect(mockLogger.error).toHaveBeenCalledWith(
       '[EventPowerCurveComponent] Failed to initialize ECharts',

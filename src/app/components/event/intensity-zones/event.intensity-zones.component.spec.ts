@@ -55,6 +55,11 @@ describe('EventIntensityZonesComponent', () => {
     return mockLoader.setOption.mock.calls.at(-1)?.[1] as Record<string, any>;
   };
 
+  const waitForChartStabilization = async (): Promise<void> => {
+    await fixture.whenStable();
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
+  };
+
   beforeEach(async () => {
     breakpointSubject = new Subject<{ matches: boolean }>();
     resizeObserverRecords = [];
@@ -154,7 +159,7 @@ describe('EventIntensityZonesComponent', () => {
 
   it('should initialize ECharts and render options once view is ready', async () => {
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
 
@@ -182,7 +187,7 @@ describe('EventIntensityZonesComponent', () => {
     component.activities = undefined as unknown as any;
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     expect(mockedConvert).toHaveBeenCalledWith([], false);
   });
@@ -197,7 +202,7 @@ describe('EventIntensityZonesComponent', () => {
 
   it('should refresh chart for activities, theme, and animation input changes', async () => {
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     component.ngOnChanges({
       activities: new SimpleChange([], [{}], false),
@@ -210,7 +215,7 @@ describe('EventIntensityZonesComponent', () => {
 
   it('should not refresh chart for unrelated input changes', async () => {
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const callCountBefore = mockLoader.setOption.mock.calls.length;
 
@@ -223,7 +228,7 @@ describe('EventIntensityZonesComponent', () => {
 
   it('should switch to short labels when xsmall breakpoint matches', async () => {
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     breakpointSubject.next({ matches: true });
 
@@ -238,7 +243,7 @@ describe('EventIntensityZonesComponent', () => {
     component.chartTheme = ChartThemes.Dark;
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
     expect(option.tooltip?.backgroundColor).toBe('#303030');
@@ -254,7 +259,7 @@ describe('EventIntensityZonesComponent', () => {
     component.showHeader = false;
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
     expect(option.xAxis.type).toBe('category');
@@ -268,7 +273,7 @@ describe('EventIntensityZonesComponent', () => {
     document.body.classList.add('dark-theme');
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
     expect(option.tooltip?.backgroundColor).toBe('#303030');
@@ -292,7 +297,7 @@ describe('EventIntensityZonesComponent', () => {
     });
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
 
@@ -320,7 +325,7 @@ describe('EventIntensityZonesComponent', () => {
     });
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
     const formatter = option.series[0].label.formatter as (params: { dataIndex: number }) => string;
@@ -342,7 +347,7 @@ describe('EventIntensityZonesComponent', () => {
     });
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
     const formatter = option.tooltip.formatter as (params: { dataIndex: number; seriesIndex: number; marker: string }) => string;
@@ -367,7 +372,7 @@ describe('EventIntensityZonesComponent', () => {
     });
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
     expect(option.series[0].name).toBe('HR');
@@ -388,7 +393,7 @@ describe('EventIntensityZonesComponent', () => {
     });
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
     const labelFormatter = option.series[0].label.formatter as (params: { dataIndex: number }) => string;
@@ -413,7 +418,7 @@ describe('EventIntensityZonesComponent', () => {
     });
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
 
@@ -423,7 +428,7 @@ describe('EventIntensityZonesComponent', () => {
 
   it('should observe container resize and call chart resize', async () => {
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     expect(resizeObserverRecords).toHaveLength(1);
     const baselineResizeCalls = mockLoader.resize.mock.calls.length;
@@ -449,7 +454,7 @@ describe('EventIntensityZonesComponent', () => {
     }) as typeof requestAnimationFrame;
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const baselineResizeCalls = mockLoader.resize.mock.calls.length;
     const observer = resizeObserverRecords[0];
@@ -470,7 +475,7 @@ describe('EventIntensityZonesComponent', () => {
     delete (globalThis as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver;
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     expect(resizeObserverRecords).toHaveLength(0);
     expect(mockLoader.setOption).toHaveBeenCalledTimes(1);
@@ -480,7 +485,7 @@ describe('EventIntensityZonesComponent', () => {
     mockLoader.init.mockRejectedValueOnce(new Error('init failed'));
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     expect(mockLogger.error).toHaveBeenCalledWith(
       '[EventIntensityZonesComponent] Failed to initialize ECharts',
@@ -491,7 +496,7 @@ describe('EventIntensityZonesComponent', () => {
 
   it('should disconnect observers and dispose chart on destroy', async () => {
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const observer = resizeObserverRecords[0];
     const renderCallCount = mockLoader.setOption.mock.calls.length;
