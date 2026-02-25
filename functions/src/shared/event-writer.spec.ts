@@ -395,6 +395,86 @@ describe('EventWriter', () => {
             );
         });
 
+        it('should not append undefined field paths when Firestore error is DEADLINE_EXCEEDED', async () => {
+            const deadlineExceededError = new Error(
+                '4 DEADLINE_EXCEEDED: Deadline exceeded after 65.218s'
+            );
+            const conditionalFailingAdapter: FirestoreAdapter = {
+                setDoc: vi.fn().mockImplementation(async (path: string[]) => {
+                    if (path[2] === 'events') {
+                        throw deadlineExceededError;
+                    }
+                    return undefined;
+                }),
+                createBlob: vi.fn((data) => data),
+                generateID: vi.fn().mockReturnValue('generated-id'),
+            };
+            const writerWithLogger = new EventWriter(conditionalFailingAdapter, undefined, undefined, mockLogger);
+
+            eventMock.toJSON.mockReturnValue({
+                id: 'event-1',
+                activities: [],
+                events: {
+                    6: {
+                        'Jump Event': {
+                            jumpData: {
+                                height: undefined,
+                            },
+                        },
+                    },
+                },
+            });
+
+            let errorMessage = '';
+            try {
+                await writerWithLogger.writeAllEventData('user-1', eventMock);
+            } catch (error) {
+                errorMessage = (error as Error).message;
+            }
+
+            expect(errorMessage).toContain('Could not write event data: Firestore write failed for users/user-1/events/event-1: 4 DEADLINE_EXCEEDED: Deadline exceeded after 65.218s.');
+            expect(errorMessage).not.toContain('Undefined field paths:');
+        });
+
+        it('should not append undefined field paths for unrelated errors that mention undefined', async () => {
+            const unrelatedUndefinedError = new Error('Invalid argument: undefined is not allowed by downstream service');
+            const conditionalFailingAdapter: FirestoreAdapter = {
+                setDoc: vi.fn().mockImplementation(async (path: string[]) => {
+                    if (path[2] === 'events') {
+                        throw unrelatedUndefinedError;
+                    }
+                    return undefined;
+                }),
+                createBlob: vi.fn((data) => data),
+                generateID: vi.fn().mockReturnValue('generated-id'),
+            };
+            const writerWithLogger = new EventWriter(conditionalFailingAdapter, undefined, undefined, mockLogger);
+
+            eventMock.toJSON.mockReturnValue({
+                id: 'event-1',
+                activities: [],
+                events: {
+                    6: {
+                        'Jump Event': {
+                            jumpData: {
+                                height: undefined,
+                            },
+                        },
+                    },
+                },
+            });
+
+            let errorMessage = '';
+            try {
+                await writerWithLogger.writeAllEventData('user-1', eventMock);
+            } catch (error) {
+                errorMessage = (error as Error).message;
+            }
+
+            expect(errorMessage).toContain('Could not write event data: Firestore write failed for users/user-1/events/event-1: Invalid argument: undefined is not allowed by downstream service.');
+            expect(errorMessage).not.toContain('Undefined field paths:');
+        });
+
         it('should use default console logger when no logger is provided', async () => {
             // Spy on console methods
             const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => { });
