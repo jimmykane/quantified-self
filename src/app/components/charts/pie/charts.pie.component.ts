@@ -166,6 +166,8 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
         borderWidth: 1.2
       }
     }));
+    const showLegend = seriesData.length > 1;
+    const pieCenterY = isCompactLayout ? (showLegend ? '44%' : '50%') : '50%';
 
     if (!seriesData.length) {
       return {
@@ -215,7 +217,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
         }
       },
       legend: {
-        show: seriesData.length > 1,
+        show: showLegend,
         orient: isCompactLayout ? 'horizontal' : 'vertical',
         left: isCompactLayout ? 'center' : undefined,
         right: isCompactLayout ? undefined : 6,
@@ -231,7 +233,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
         {
           type: 'pie',
           radius: isCompactLayout ? ['42%', '64%'] : ['52%', '72%'],
-          center: isCompactLayout ? ['50%', '38%'] : ['36%', '50%'],
+          center: ['50%', pieCenterY],
           avoidLabelOverlap: true,
           minAngle: 1.5,
           label: {
@@ -249,8 +251,8 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
       graphic: [
         {
           type: 'group',
-          left: isCompactLayout ? '50%' : '36%',
-          top: isCompactLayout ? '38%' : 'center',
+          left: '50%',
+          top: pieCenterY,
           bounding: 'raw',
           children: [
             {
