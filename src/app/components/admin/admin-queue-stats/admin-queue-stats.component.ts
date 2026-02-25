@@ -14,6 +14,8 @@ import { takeUntil } from 'rxjs/operators';
 import type { EChartsType } from 'echarts/core';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 
+export type AdminQueueStatsView = 'all' | 'workout' | 'reparse';
+
 @Component({
     selector: 'app-admin-queue-stats',
     templateUrl: './admin-queue-stats.component.html',
@@ -31,6 +33,7 @@ import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, AfterViewInit {
     @Input() stats: QueueStats | null = null;
     @Input() loading = false;
+    @Input() queueView: AdminQueueStatsView = 'all';
     hasRetryData = false;
     readonly reparseFailureColumns = ['uid', 'eventId', 'attemptCount', 'updatedAt', 'lastError'];
 
@@ -255,6 +258,14 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
 
     getReparseFailureRows(): ReparseFailurePreview[] {
         return this.stats?.reparse?.recentFailures || [];
+    }
+
+    get showWorkoutSection(): boolean {
+        return this.queueView !== 'reparse';
+    }
+
+    get showReparseSection(): boolean {
+        return this.queueView !== 'workout';
     }
 
     formatTimestamp(value: unknown): string {

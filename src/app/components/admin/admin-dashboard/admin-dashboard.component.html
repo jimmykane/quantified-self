@@ -50,7 +50,23 @@
         </div>
     </div>
 
-    <!-- Queue Status & Health Section -->
-    <app-admin-queue-stats [stats]="queueStats" [loading]="isLoadingStats">
-    </app-admin-queue-stats>
+    <!-- Queue Status & Health Navigation -->
+    <div class="dashboard-section">
+        <div class="section-title">
+            <h2>
+                <mat-icon>dns</mat-icon>
+                Queue Monitoring
+            </h2>
+            <div class="queue-actions">
+                <button mat-stroked-button color="primary" routerLink="/admin/queues/workout">
+                    <mat-icon>fitness_center</mat-icon>
+                    Workout Queue
+                </button>
+                <button mat-stroked-button color="primary" routerLink="/admin/queues/reparse">
+                    <mat-icon>autorenew</mat-icon>
+                    Reparse Queue
+                </button>
+            </div>
+        </div>
+    </div>
 </div>

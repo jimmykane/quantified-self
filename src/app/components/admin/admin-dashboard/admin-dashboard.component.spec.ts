@@ -1,131 +1,41 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ActivatedRoute } from '@angular/router';
+import { of } from 'rxjs';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
 import { AdminDashboardComponent } from './admin-dashboard.component';
 import { AdminService } from '../../../services/admin.service';
 import { LoggerService } from '../../../services/logger.service';
-import { of } from 'rxjs';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { NoopAnimationsModule } from '@angular/platform-browser/animations';
-import { NO_ERRORS_SCHEMA } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
-import { Firestore } from '@angular/fire/firestore';
-import { Storage } from '@angular/fire/storage';
-import { Auth } from '@angular/fire/auth';
-import { FirebaseApp } from '@angular/fire/app';
-import { AppThemeService } from '../../../services/app.theme.service';
-import { AppThemes } from '@sports-alliance/sports-lib';
-import { BehaviorSubject } from 'rxjs';
-import { EChartsLoaderService } from '../../../services/echarts-loader.service';
-
-// Mock canvas for charts
-// Mock canvas for charts
-Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
-    value: vi.fn().mockImplementation(() => ({
-        fillRect: vi.fn(),
-        clearRect: vi.fn(),
-        getImageData: vi.fn().mockReturnValue({ data: [] }),
-        putImageData: vi.fn(),
-        createImageData: vi.fn().mockReturnValue([]),
-        setTransform: vi.fn(),
-        save: vi.fn(),
-        restore: vi.fn(),
-        beginPath: vi.fn(),
-        moveTo: vi.fn(),
-        lineTo: vi.fn(),
-        clip: vi.fn(),
-        fill: vi.fn(),
-        stroke: vi.fn(),
-        rect: vi.fn(),
-        arc: vi.fn(),
-        quadraticCurveTo: vi.fn(),
-        closePath: vi.fn(),
-        translate: vi.fn(),
-        rotate: vi.fn(),
-        scale: vi.fn(),
-        fillText: vi.fn(),
-        strokeText: vi.fn(),
-        measureText: vi.fn().mockReturnValue({ width: 0 }),
-        drawImage: vi.fn(),
-        canvas: { width: 0, height: 0, style: {} }
-    })),
-    configurable: true,
-    writable: true
-});
-
-// Mock ResizeObserver
-global.ResizeObserver = class ResizeObserver {
-    observe() { }
-    unobserve() { }
-    disconnect() { }
-};
-
-// Mock requestAnimationFrame for ECharts resize scheduling
-if (!(global as any).requestAnimationFrame) {
-    (global as any).requestAnimationFrame = (cb: FrameRequestCallback) => setTimeout(cb, 0);
-}
 
 describe('AdminDashboardComponent', () => {
     let component: AdminDashboardComponent;
     let fixture: ComponentFixture<AdminDashboardComponent>;
-    let adminServiceSpy: any;
-    let mockLogger: any;
-    let mockEchartsService: any;
-
-    const mockQueueStats = {
-        pending: 10,
-        succeeded: 20,
-        stuck: 5,
-        providers: [],
-        cloudTasks: { pending: 42 },
-        advanced: { throughput: 0, maxLagMs: 0, retryHistogram: { '0-3': 0, '4-7': 0, '8-9': 0 }, topErrors: [] }
-    };
+    let adminServiceSpy: { getFinancialStats: ReturnType<typeof vi.fn> };
 
     const mockFinancialStats = {
         revenue: { total: 1000, currency: 'USD', invoiceCount: 10 },
-        cost: { reportUrl: 'http://test.com' }
+        cost: {
+            billingAccountId: null,
+            projectId: 'quantified-self-io',
+            reportUrl: 'https://example.com/report',
+            currency: 'USD',
+            total: 2500,
+            budget: null
+        }
     };
 
     beforeEach(async () => {
         adminServiceSpy = {
-        getQueueStats: vi.fn().mockReturnValue(of(mockQueueStats)),
-        getFinancialStats: vi.fn().mockReturnValue(of(mockFinancialStats)),
-    };
-
-    const chartMock = {
-        setOption: vi.fn(),
-        resize: vi.fn(),
-        dispose: vi.fn(),
-        isDisposed: vi.fn().mockReturnValue(false)
-    };
-
-    mockEchartsService = {
-        init: vi.fn().mockResolvedValue(chartMock),
-        setOption: vi.fn(),
-        resize: vi.fn(),
-        dispose: vi.fn()
-    };
-
-    mockLogger = {
-        error: vi.fn(),
-        log: vi.fn()
-    };
+            getFinancialStats: vi.fn().mockReturnValue(of(mockFinancialStats))
+        };
 
         await TestBed.configureTestingModule({
-            imports: [
-                AdminDashboardComponent,
-                NoopAnimationsModule
-            ],
+            imports: [AdminDashboardComponent],
             providers: [
                 { provide: AdminService, useValue: adminServiceSpy },
-                { provide: LoggerService, useValue: mockLogger },
-                { provide: ActivatedRoute, useValue: { snapshot: { data: {} } } },
-                { provide: Firestore, useValue: {} },
-                { provide: Storage, useValue: {} },
-                { provide: Auth, useValue: {} },
-                { provide: FirebaseApp, useValue: {} },
-                { provide: AppThemeService, useValue: { getAppTheme: () => new BehaviorSubject<AppThemes>(AppThemes.Dark).asObservable() } },
-                { provide: EChartsLoaderService, useValue: mockEchartsService }
-            ],
-            schemas: [NO_ERRORS_SCHEMA]
+                { provide: LoggerService, useValue: { error: vi.fn(), log: vi.fn() } },
+                { provide: ActivatedRoute, useValue: { snapshot: { data: {} } } }
+            ]
         }).compileComponents();
 
         fixture = TestBed.createComponent(AdminDashboardComponent);
@@ -137,43 +47,24 @@ describe('AdminDashboardComponent', () => {
         expect(component).toBeTruthy();
     });
 
-    it('should load queue stats on init', () => {
-        expect(adminServiceSpy.getQueueStats).toHaveBeenCalled();
-        expect(component.queueStats).toEqual(mockQueueStats);
-        expect(component.isLoadingStats).toBe(false);
-    });
-
     it('should load financial stats on init', () => {
         expect(adminServiceSpy.getFinancialStats).toHaveBeenCalled();
         expect(component.financialStats).toEqual(mockFinancialStats);
         expect(component.isLoadingFinancials).toBe(false);
     });
 
-    it('should render financials section before queue stats section', () => {
+    it('should render dedicated queue route buttons', () => {
         const host: HTMLElement = fixture.nativeElement;
-        const financials = host.querySelector('app-admin-financials');
-        const queueStats = host.querySelector('app-admin-queue-stats');
+        const buttons = Array.from(host.querySelectorAll('button')).map((button) => button.textContent || '');
 
-        expect(financials).toBeTruthy();
-        expect(queueStats).toBeTruthy();
-        expect(financials!.compareDocumentPosition(queueStats!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+        expect(buttons.join(' ')).toContain('Workout Queue');
+        expect(buttons.join(' ')).toContain('Reparse Queue');
     });
 
-    describe('Queue Stats', () => {
-        it('should call fetchQueueStats and update state', () => {
-            vi.clearAllMocks();
-            component.fetchQueueStats();
-            expect(adminServiceSpy.getQueueStats).toHaveBeenCalledWith(true);
-            expect(component.queueStats).toEqual(mockQueueStats);
-        });
-    });
-
-    describe('Financial Stats', () => {
-        it('should call fetchFinancialStats and update state', () => {
-            vi.clearAllMocks();
-            component.fetchFinancialStats();
-            expect(adminServiceSpy.getFinancialStats).toHaveBeenCalled();
-            expect(component.financialStats).toEqual(mockFinancialStats);
-        });
+    it('should call fetchFinancialStats and update state', () => {
+        vi.clearAllMocks();
+        component.fetchFinancialStats();
+        expect(adminServiceSpy.getFinancialStats).toHaveBeenCalled();
+        expect(component.financialStats).toEqual(mockFinancialStats);
     });
 });

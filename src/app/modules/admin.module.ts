@@ -4,6 +4,7 @@ import { AdminDashboardComponent } from '../components/admin/admin-dashboard/adm
 import { AdminMaintenanceComponent } from '../components/admin/admin-maintenance/admin-maintenance.component';
 import { AdminUserManagementComponent } from '../components/admin/admin-user-management/admin-user-management.component';
 import { AdminChangelogComponent } from '../components/admin/admin-changelog/admin-changelog.component';
+import { AdminQueueMonitorComponent } from '../components/admin/admin-queue-monitor/admin-queue-monitor.component';
 import { RouterModule, Routes } from '@angular/router';
 import { adminGuard } from '../authentication/admin.guard';
 import { adminResolver } from '../resolvers/admin.resolver';
@@ -31,6 +32,22 @@ const routes: Routes = [
         path: 'changelog',
         component: AdminChangelogComponent,
         canActivate: [adminGuard]
+    },
+    {
+        path: 'queues/workout',
+        component: AdminQueueMonitorComponent,
+        canActivate: [adminGuard],
+        data: {
+            queueView: 'workout'
+        }
+    },
+    {
+        path: 'queues/reparse',
+        component: AdminQueueMonitorComponent,
+        canActivate: [adminGuard],
+        data: {
+            queueView: 'reparse'
+        }
     }
 ];
 
@@ -41,7 +58,8 @@ const routes: Routes = [
         AdminDashboardComponent,
         AdminMaintenanceComponent,
         AdminUserManagementComponent,
-        AdminChangelogComponent
+        AdminChangelogComponent,
+        AdminQueueMonitorComponent
     ]
 })
 export class AdminModule { }
