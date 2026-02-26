@@ -11,6 +11,8 @@ const echartsCoreMock = vi.hoisted(() => ({
 
 const echartsModulesMock = vi.hoisted(() => ({
   barChart: { chart: 'bar' },
+  pictorialBarChart: { chart: 'pictorialBar' },
+  customChart: { chart: 'custom' },
   pieChart: { chart: 'pie' },
   lineChart: { chart: 'line' },
   scatterChart: { chart: 'scatter' },
@@ -31,6 +33,8 @@ vi.mock('echarts/core', () => ({
 
 vi.mock('echarts/charts', () => ({
   BarChart: echartsModulesMock.barChart,
+  PictorialBarChart: echartsModulesMock.pictorialBarChart,
+  CustomChart: echartsModulesMock.customChart,
   PieChart: echartsModulesMock.pieChart,
   LineChart: echartsModulesMock.lineChart,
   ScatterChart: echartsModulesMock.scatterChart,
@@ -78,6 +82,8 @@ describe('EChartsLoaderService', () => {
     expect(echartsCoreMock.use).toHaveBeenCalledTimes(1);
     expect(echartsCoreMock.use).toHaveBeenCalledWith([
       echartsModulesMock.barChart,
+      echartsModulesMock.pictorialBarChart,
+      echartsModulesMock.customChart,
       echartsModulesMock.pieChart,
       echartsModulesMock.lineChart,
       echartsModulesMock.scatterChart,

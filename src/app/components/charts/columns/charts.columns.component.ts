@@ -33,6 +33,12 @@ import {
   buildDashboardDateRegressionLine,
   DashboardCartesianPoint
 } from '../../../helpers/dashboard-echarts-cartesian.helper';
+import {
+  buildDashboardDateActivitySegmentation,
+  DashboardDateActivityBucket,
+  DashboardDateActivitySegmentationResult,
+  DashboardDateActivitySeriesEntry
+} from '../../../helpers/dashboard-date-activity-segmentation.helper';
 import { normalizeUnitDerivedTypeLabel } from '../../../helpers/stat-label.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
@@ -116,6 +122,8 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     this.chartHost.dispose();
   }
 
+  private readonly stackedActivitySeriesKey = 'date-activity-stack';
+
   private refreshChart(): void {
     if (!this.chartHost.getChart()) {
       return;
@@ -154,7 +162,16 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     const chartWidth = this.chartDiv?.nativeElement?.clientWidth || 0;
     const isCompactLayout = chartWidth > 0 && chartWidth < 680;
     const axisFontSize = isCompactLayout ? 11 : 12;
-    const showValueLabels = points.length > 0 && points.length <= 200;
+    const isDateCategory = this.chartDataCategoryType === ChartDataCategoryTypes.DateType;
+    const dateActivitySegmentation = isDateCategory
+      ? buildDashboardDateActivitySegmentation({
+        rawData: this.data,
+        points,
+        chartDataValueType: this.chartDataValueType
+      })
+      : null;
+    const useDateActivitySegmentation = isDateCategory && !!dateActivitySegmentation;
+    const showValueLabels = points.length > 0 && points.length <= 200 && !useDateActivitySegmentation;
 
     if (!points.length) {
       return {
@@ -183,13 +200,22 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
       }
     }));
 
-    const barSeries = this.buildBarSeries(
-      seriesData,
-      showValueLabels,
-      textColor,
-      isCompactLayout,
-      points
-    );
+    const dateActivityColorMap = useDateActivitySegmentation
+      ? this.buildDateActivityColorMap(dateActivitySegmentation)
+      : null;
+    const dataSeries = useDateActivitySegmentation
+      ? this.buildDateActivitySeries(
+        dateActivitySegmentation,
+        dateActivityColorMap as Map<string, string>,
+        isCompactLayout
+      )
+      : [this.buildBarSeries(
+        seriesData,
+        showValueLabels,
+        textColor,
+        isCompactLayout,
+        points
+      )];
     const shouldRenderTrend = this.vertical
       && this.chartDataCategoryType === ChartDataCategoryTypes.DateType;
     const trendSeries = shouldRenderTrend
@@ -260,7 +286,8 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
         containLabel: true
       },
       tooltip: {
-        trigger: 'item',
+        trigger: useDateActivitySegmentation ? 'axis' : 'item',
+        axisPointer: useDateActivitySegmentation ? { type: 'shadow' } : undefined,
         backgroundColor: tooltipBackgroundColor,
         borderColor: tooltipBorderColor,
         borderWidth: 1,
@@ -269,12 +296,18 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
           fontFamily: "'Barlow Condensed', sans-serif",
           fontSize: isCompactLayout ? 12 : 13
         },
-        formatter: (params: { dataIndex: number }) => this.formatTooltip(points, params.dataIndex)
+        formatter: useDateActivitySegmentation
+          ? (params: any) => this.formatDateActivityTooltip(
+            dateActivitySegmentation!.buckets,
+            params,
+            dateActivityColorMap as Map<string, string>
+          )
+          : (params: { dataIndex: number }) => this.formatTooltip(points, params.dataIndex)
       },
       legend: { show: false },
       xAxis: this.vertical ? categoryAxis : valueAxis,
       yAxis: this.vertical ? valueAxis : categoryAxis,
-      series: trendSeries ? [barSeries, trendSeries] : [barSeries],
+      series: trendSeries ? [...dataSeries, trendSeries] : dataSeries,
       graphic: [
         {
           type: 'group',
@@ -323,6 +356,138 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
           ]
         }
       ]
+    };
+  }
+
+  private buildDateActivityColorMap(
+    segmentation: DashboardDateActivitySegmentationResult
+  ): Map<string, string> {
+    const colorMap = new Map<string, string>();
+    segmentation.series.forEach((seriesEntry, index) => {
+      colorMap.set(seriesEntry.key, this.getActivitySeriesColor(seriesEntry, index));
+    });
+    return colorMap;
+  }
+
+  private getActivitySeriesColor(seriesEntry: DashboardDateActivitySeriesEntry, index: number): string {
+    if (seriesEntry.activityType) {
+      return this.eventColorService.getColorForActivityTypeByActivityTypeGroup(seriesEntry.activityType);
+    }
+    return this.dateTypePalette[index % this.dateTypePalette.length];
+  }
+
+  private buildDateActivitySeries(
+    segmentation: DashboardDateActivitySegmentationResult,
+    colorMap: Map<string, string>,
+    isCompactLayout: boolean
+  ): Record<string, unknown>[] {
+    if (this.type === 'pyramids' && this.vertical) {
+      return this.buildSegmentedPyramidSeries(segmentation, colorMap);
+    }
+    return this.buildSegmentedStackedBarSeries(segmentation, colorMap, isCompactLayout);
+  }
+
+  private buildSegmentedStackedBarSeries(
+    segmentation: DashboardDateActivitySegmentationResult,
+    colorMap: Map<string, string>,
+    isCompactLayout: boolean
+  ): Record<string, unknown>[] {
+    return segmentation.series.map((seriesEntry) => ({
+      type: 'bar',
+      name: seriesEntry.label,
+      stack: this.stackedActivitySeriesKey,
+      animation: this.useAnimations === true,
+      data: segmentation.buckets.map((bucket) => (
+        bucket.segments.find((segment) => segment.activityKey === seriesEntry.key)?.value ?? 0
+      )),
+      barMaxWidth: this.vertical ? (isCompactLayout ? 28 : 36) : (isCompactLayout ? 20 : 24),
+      itemStyle: {
+        color: colorMap.get(seriesEntry.key) || this.dateTypePalette[0]
+      },
+      label: {
+        show: false
+      },
+      emphasis: {
+        focus: 'series'
+      }
+    }));
+  }
+
+  private buildSegmentedPyramidSeries(
+    segmentation: DashboardDateActivitySegmentationResult,
+    colorMap: Map<string, string>
+  ): Record<string, unknown>[] {
+    const cumulativeBounds = segmentation.buckets.map((bucket) => {
+      const boundsByKey = new Map<string, { start: number; end: number }>();
+      let cursor = 0;
+      segmentation.series.forEach((seriesEntry) => {
+        const segmentValue = bucket.segments.find((segment) => segment.activityKey === seriesEntry.key)?.value ?? 0;
+        boundsByKey.set(seriesEntry.key, {
+          start: cursor,
+          end: cursor + segmentValue
+        });
+        cursor += segmentValue;
+      });
+      return boundsByKey;
+    });
+
+    return segmentation.series.map((seriesEntry, seriesIndex) => ({
+      type: 'custom',
+      name: seriesEntry.label,
+      z: 10 + seriesIndex,
+      encode: { x: 0, y: 1, tooltip: [1] },
+      animation: this.useAnimations === true,
+      itemStyle: {
+        color: colorMap.get(seriesEntry.key) || this.dateTypePalette[0]
+      },
+      data: segmentation.buckets.map((bucket, bucketIndex) => {
+        const bounds = cumulativeBounds[bucketIndex].get(seriesEntry.key) || { start: 0, end: 0 };
+        return [bucketIndex, bucket.total, bounds.start, bounds.end];
+      }),
+      renderItem: (params: any, api: any) => this.renderSegmentedPyramidItem(params, api),
+      tooltip: { show: false }
+    }));
+  }
+
+  private renderSegmentedPyramidItem(params: any, api: any): Record<string, unknown> | null {
+    const categoryIndex = Number(api.value(0));
+    const total = Number(api.value(1));
+    const start = Number(api.value(2));
+    const end = Number(api.value(3));
+
+    if (!Number.isFinite(categoryIndex) || !Number.isFinite(total) || total <= 0) {
+      return null;
+    }
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+      return null;
+    }
+
+    const baseCoord = api.coord([categoryIndex, 0]);
+    const startCoord = api.coord([categoryIndex, start]);
+    const endCoord = api.coord([categoryIndex, end]);
+    const centerX = baseCoord[0];
+    const bandWidth = Math.max(8, Math.min(56, api.size([1, 0])[0] || 0));
+    const baseHalfWidth = bandWidth * 0.48;
+
+    const startRatio = Math.max(0, Math.min(1, start / total));
+    const endRatio = Math.max(0, Math.min(1, end / total));
+    const startHalfWidth = baseHalfWidth * (1 - startRatio);
+    const endHalfWidth = baseHalfWidth * (1 - endRatio);
+
+    return {
+      type: 'polygon',
+      shape: {
+        points: [
+          [centerX - startHalfWidth, startCoord[1]],
+          [centerX + startHalfWidth, startCoord[1]],
+          [centerX + endHalfWidth, endCoord[1]],
+          [centerX - endHalfWidth, endCoord[1]]
+        ]
+      },
+      style: api.style(),
+      emphasis: {
+        style: api.styleEmphasis ? api.styleEmphasis() : api.style()
+      }
     };
   }
 
@@ -430,5 +595,39 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     const valueTypeLabel = this.chartDataValueType || 'Value';
     const activityCountLabel = point.count > 0 ? `<br/>${point.count} Activities` : '';
     return `${point.label}<br/>${valueTypeLabel}: <strong>${valueText}</strong>${activityCountLabel}`;
+  }
+
+  private formatDateActivityTooltip(
+    buckets: DashboardDateActivityBucket[],
+    params: any,
+    colorMap: Map<string, string>
+  ): string {
+    const paramArray = Array.isArray(params) ? params : [params];
+    const firstWithDataIndex = paramArray.find((entry) => Number.isFinite(entry?.dataIndex));
+    const dataIndex = Number(firstWithDataIndex?.dataIndex);
+    if (!Number.isFinite(dataIndex)) {
+      return '';
+    }
+
+    const bucket = buckets[dataIndex];
+    if (!bucket) {
+      return '';
+    }
+
+    const totalText = this.formatValue(bucket.total);
+    const valueTypeLabel = this.chartDataValueType || 'Value';
+    const activityCountLabel = bucket.count > 0 ? `<br/>${bucket.count} Activities` : '';
+    const lines = bucket.segments
+      .filter((segment) => Number.isFinite(segment.value) && segment.value !== 0)
+      .map((segment, index) => {
+        const color = colorMap.get(segment.activityKey) || this.dateTypePalette[index % this.dateTypePalette.length];
+        const marker = `<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${color};margin-right:6px;"></span>`;
+        const valueText = this.formatValue(segment.value);
+        const countText = segment.count > 0 ? `, ${segment.count} Activities` : '';
+        return `${marker}${segment.label}: <strong>${valueText}</strong> (${segment.percent.toFixed(1)}%)${countText}`;
+      });
+
+    const breakdownText = lines.length ? `<br/>${lines.join('<br/>')}` : '';
+    return `${bucket.label}<br/>${valueTypeLabel}: <strong>${totalText}</strong>${activityCountLabel}${breakdownText}`;
   }
 }

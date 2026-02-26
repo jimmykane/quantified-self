@@ -202,7 +202,7 @@ describe('ChartsColumnsComponent', () => {
 
     const option = getLastOption();
     expect(option.xAxis.data).toHaveLength(3);
-    expect(option.series[0].data.map((entry: { value: number }) => entry.value)).toEqual([10, 0, 30]);
+    expect(option.series[0].data).toEqual([10, 0, 30]);
   });
 
   it('should pad a single daily point with adjacent zero buckets and skip trend line', async () => {
@@ -217,11 +217,170 @@ describe('ChartsColumnsComponent', () => {
 
     const option = getLastOption();
     expect(option.xAxis.data).toHaveLength(3);
-    expect(option.series[0].data.map((entry: { value: number }) => entry.value)).toEqual([0, 10, 0]);
+    expect(option.series[0].data).toEqual([0, 10, 0]);
     const trendSeries = option.series.find((seriesEntry: { type?: string; name?: string }) => (
       seriesEntry.type === 'line' && seriesEntry.name === 'Trend'
     ));
     expect(trendSeries).toBeUndefined();
+  });
+
+  it('should build stacked date activity series with proportional splits and no labels', async () => {
+    const activityTypeAliases = Object.keys(ActivityTypes).filter((key) => (
+      Number.isNaN(Number(key))
+      && typeof (ActivityTypes as any)[key] === 'string'
+      && `${(ActivityTypes as any)[key]}`.toLowerCase() !== 'unknown sport'
+    ));
+    const primaryAlias = activityTypeAliases[0];
+    const secondaryAlias = activityTypeAliases[1] || activityTypeAliases[0];
+    component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.chartDataTimeInterval = TimeIntervals.Daily;
+    component.data = [
+      {
+        time: Date.UTC(2024, 0, 1),
+        [ChartDataValueTypes.Total]: 100,
+        count: 2,
+        [primaryAlias]: 80,
+        [`${primaryAlias}-Count`]: 1,
+        [secondaryAlias]: 20,
+        [`${secondaryAlias}-Count`]: 1,
+      },
+      {
+        time: Date.UTC(2024, 0, 2),
+        [ChartDataValueTypes.Total]: 50,
+        count: 1,
+        [primaryAlias]: 10,
+        [secondaryAlias]: 40,
+      },
+    ];
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const option = getLastOption();
+    const dataSeries = option.series.filter((seriesEntry: { name?: string }) => seriesEntry.name !== 'Trend');
+    expect(dataSeries.length).toBeGreaterThanOrEqual(2);
+    expect(dataSeries.every((seriesEntry: { type?: string; stack?: string; label?: { show?: boolean } }) => (
+      seriesEntry.type === 'bar'
+      && seriesEntry.stack === 'date-activity-stack'
+      && seriesEntry.label?.show === false
+    ))).toBe(true);
+    expect(option.tooltip.trigger).toBe('axis');
+  });
+
+  it('should render segmented custom pyramids for date category', async () => {
+    const activityTypeAliases = Object.keys(ActivityTypes).filter((key) => (
+      Number.isNaN(Number(key))
+      && typeof (ActivityTypes as any)[key] === 'string'
+      && `${(ActivityTypes as any)[key]}`.toLowerCase() !== 'unknown sport'
+    ));
+    const primaryAlias = activityTypeAliases[0];
+    const secondaryAlias = activityTypeAliases[1] || activityTypeAliases[0];
+    component.type = 'pyramids';
+    component.vertical = true;
+    component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.chartDataTimeInterval = TimeIntervals.Daily;
+    component.data = [
+      {
+        time: Date.UTC(2024, 0, 1),
+        [ChartDataValueTypes.Total]: 100,
+        count: 2,
+        [primaryAlias]: 80,
+        [secondaryAlias]: 20,
+      },
+      {
+        time: Date.UTC(2024, 0, 2),
+        [ChartDataValueTypes.Total]: 50,
+        count: 1,
+        [primaryAlias]: 10,
+        [secondaryAlias]: 40,
+      },
+    ];
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const option = getLastOption();
+    const dataSeries = option.series.filter((seriesEntry: { name?: string }) => seriesEntry.name !== 'Trend');
+    expect(dataSeries.length).toBeGreaterThanOrEqual(2);
+    expect(dataSeries.every((seriesEntry: { type?: string; renderItem?: unknown }) => (
+      seriesEntry.type === 'custom' && typeof seriesEntry.renderItem === 'function'
+    ))).toBe(true);
+  });
+
+  it('should render stacked date series in horizontal mode', async () => {
+    const activityTypeAliases = Object.keys(ActivityTypes).filter((key) => (
+      Number.isNaN(Number(key))
+      && typeof (ActivityTypes as any)[key] === 'string'
+      && `${(ActivityTypes as any)[key]}`.toLowerCase() !== 'unknown sport'
+    ));
+    const primaryAlias = activityTypeAliases[0];
+    const secondaryAlias = activityTypeAliases[1] || activityTypeAliases[0];
+    component.vertical = false;
+    component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.chartDataTimeInterval = TimeIntervals.Daily;
+    component.data = [
+      {
+        time: Date.UTC(2024, 0, 1),
+        [ChartDataValueTypes.Total]: 100,
+        count: 2,
+        [primaryAlias]: 80,
+        [secondaryAlias]: 20,
+      },
+      {
+        time: Date.UTC(2024, 0, 2),
+        [ChartDataValueTypes.Total]: 50,
+        count: 1,
+        [primaryAlias]: 10,
+        [secondaryAlias]: 40,
+      },
+    ];
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const option = getLastOption();
+    expect(option.xAxis.type).toBe('value');
+    expect(option.yAxis.type).toBe('category');
+    const trendSeries = option.series.find((seriesEntry: { name?: string }) => seriesEntry.name === 'Trend');
+    expect(trendSeries).toBeUndefined();
+    const dataSeries = option.series.filter((seriesEntry: { name?: string }) => seriesEntry.name !== 'Trend');
+    expect(dataSeries.every((seriesEntry: { type?: string; stack?: string }) => (
+      seriesEntry.type === 'bar' && seriesEntry.stack === 'date-activity-stack'
+    ))).toBe(true);
+  });
+
+  it('should format segmented date tooltip with per-activity percentages', async () => {
+    const activityTypeAliases = Object.keys(ActivityTypes).filter((key) => (
+      Number.isNaN(Number(key))
+      && typeof (ActivityTypes as any)[key] === 'string'
+      && `${(ActivityTypes as any)[key]}`.toLowerCase() !== 'unknown sport'
+    ));
+    const primaryAlias = activityTypeAliases[0];
+    const secondaryAlias = activityTypeAliases[1] || activityTypeAliases[0];
+    component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.chartDataTimeInterval = TimeIntervals.Daily;
+    component.data = [
+      {
+        time: Date.UTC(2024, 0, 1),
+        [ChartDataValueTypes.Total]: 100,
+        count: 2,
+        [primaryAlias]: 80,
+        [`${primaryAlias}-Count`]: 1,
+        [secondaryAlias]: 20,
+        [`${secondaryAlias}-Count`]: 1,
+      }
+    ];
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const option = getLastOption();
+    const formatter = option.tooltip.formatter as (params: Array<{ dataIndex: number }>) => string;
+    const tooltipText = formatter([{ dataIndex: 1 }]);
+
+    expect(tooltipText).toContain('100');
+    expect(tooltipText).toContain('%');
+    expect(tooltipText).toContain(primaryAlias);
   });
 
   it('should not include a trend line for non-date categories', async () => {

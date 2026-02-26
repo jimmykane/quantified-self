@@ -40,6 +40,7 @@ export class EChartsLoaderService {
         core.use([
             charts.BarChart,
             charts.PictorialBarChart,
+            charts.CustomChart,
             charts.PieChart,
             charts.LineChart,
             charts.ScatterChart,
