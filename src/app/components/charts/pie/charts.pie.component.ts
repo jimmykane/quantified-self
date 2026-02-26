@@ -29,7 +29,7 @@ import {
   getDashboardPieSliceDisplayLabel
 } from '../../../helpers/dashboard-pie-chart-data.helper';
 import { EChartsHostController } from '../../../helpers/echarts-host-controller';
-import { isDarkChartThemeActive } from '../../../helpers/echarts-theme.helper';
+import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
 import {
   getDashboardAggregateData,
   getDashboardChartSortComparator,
@@ -142,12 +142,13 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
     pieData: DashboardPieChartData,
     aggregateData: ReturnType<typeof getDashboardAggregateData>
   ): ChartOption {
-    const darkTheme = isDarkChartThemeActive(this.chartTheme);
-    const textColor = darkTheme ? '#f5f5f5' : '#1f1f1f';
-    const tooltipBackgroundColor = darkTheme ? '#303030' : '#ffffff';
-    const tooltipBorderColor = darkTheme ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)';
     const chartWidth = this.chartDiv?.nativeElement?.clientWidth || 0;
-    const isCompactLayout = chartWidth > 0 && chartWidth < 680;
+    const chartStyle = buildDashboardEChartsStyleTokens(this.chartTheme, chartWidth);
+    const darkTheme = chartStyle.darkTheme;
+    const textColor = chartStyle.textColor;
+    const tooltipBackgroundColor = chartStyle.tooltipBackgroundColor;
+    const tooltipBorderColor = chartStyle.tooltipBorderColor;
+    const isCompactLayout = chartStyle.isCompactLayout;
 
     const seriesData = pieData.slices.map((slice, index) => ({
       name: getDashboardPieSliceDisplayLabel(

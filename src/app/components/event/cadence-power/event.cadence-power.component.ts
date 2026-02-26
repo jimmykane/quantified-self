@@ -30,7 +30,11 @@ import {
   PerformanceCurveDataService,
 } from '../../../services/performance-curve-data.service';
 import { EChartsHostController } from '../../../helpers/echarts-host-controller';
-import { isDarkChartThemeActive } from '../../../helpers/echarts-theme.helper';
+import {
+  buildEventEChartsVisualTokens,
+  calculateEventEChartsAxisRange,
+  toFiniteEventEChartsNumber
+} from '../../../helpers/event-echarts-common.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 
@@ -118,13 +122,12 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
   }
 
   private buildChartOption(cadencePowerSeries: PerformanceCurveCadencePowerSeries[]): ChartOption {
-    const darkTheme = this.isDarkThemeActive();
-    const textColor = darkTheme ? '#f5f5f5' : '#1f1f1f';
-    const axisColor = darkTheme ? 'rgba(255,255,255,0.24)' : 'rgba(0,0,0,0.24)';
-    const axisLabelFontSize = this.isMobile ? 11 : 12;
-    const tooltipExtraCssText = this.isMobile
-      ? 'max-width: min(80vw, 280px); white-space: normal; overflow-wrap: anywhere; word-break: break-word;'
-      : '';
+    const chartStyle = buildEventEChartsVisualTokens(this.chartTheme, this.isMobile);
+    const darkTheme = chartStyle.darkTheme;
+    const textColor = chartStyle.textColor;
+    const axisColor = chartStyle.axisColor;
+    const axisLabelFontSize = chartStyle.axisLabelFontSize;
+    const tooltipExtraCssText = chartStyle.tooltipExtraCssText;
 
     if (cadencePowerSeries.length === 0) {
       return {
@@ -141,7 +144,7 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
     const cadenceValues = cadencePoints.map((point) => point.cadence);
     const powerValues = cadencePoints.map((point) => point.power);
     const cadenceAxisConfig = this.buildCadenceAxisConfig(cadenceValues);
-    const [powerMin, powerMax] = this.calculateAxisRange(powerValues, {
+    const [powerMin, powerMax] = calculateEventEChartsAxisRange(powerValues, {
       minFloor: 0,
       fallbackMin: 100,
       fallbackMax: 350,
@@ -163,14 +166,14 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
           density: point.density,
         })),
         symbolSize: (value: unknown) => {
-          const density = this.toFiniteNumber(Array.isArray(value) ? value[2] : null) ?? 0.2;
+          const density = toFiniteEventEChartsNumber(Array.isArray(value) ? value[2] : null) ?? 0.2;
           return this.isMobile
             ? 3 + density * 2.5
             : 4 + density * 3.5;
         },
         itemStyle: {
           color: (params: { value?: unknown[] }) => {
-            const density = this.toFiniteNumber(Array.isArray(params?.value) ? params.value[2] : null) ?? 0.2;
+            const density = toFiniteEventEChartsNumber(Array.isArray(params?.value) ? params.value[2] : null) ?? 0.2;
             return this.getCadencePointColor(baseColor, density, darkTheme);
           },
           borderColor: darkTheme ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.45)',
@@ -260,11 +263,11 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
         appendToBody: !this.isMobile,
         confine: this.isMobile,
         extraCssText: tooltipExtraCssText,
-        backgroundColor: darkTheme ? '#222222' : '#ffffff',
-        borderColor: darkTheme ? '#555555' : '#d6d6d6',
+        backgroundColor: chartStyle.tooltipBackgroundColor,
+        borderColor: chartStyle.tooltipBorderColor,
         borderWidth: 1,
         textStyle: {
-          color: darkTheme ? '#ffffff' : '#2a2a2a',
+          color: chartStyle.tooltipTextColor,
           fontFamily: "'Barlow Condensed', sans-serif",
         },
         formatter: (params: unknown) => this.formatTooltip(params, !singleActivity),
@@ -294,9 +297,9 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
       value?: unknown;
     };
 
-    const cadence = this.toFiniteNumber(entry?.data?.cadence) ?? this.extractTupleValue(entry?.value, 0);
-    const power = this.toFiniteNumber(entry?.data?.power) ?? this.extractTupleValue(entry?.value, 1);
-    const duration = this.toFiniteNumber(entry?.data?.duration);
+    const cadence = toFiniteEventEChartsNumber(entry?.data?.cadence) ?? this.extractTupleValue(entry?.value, 0);
+    const power = toFiniteEventEChartsNumber(entry?.data?.power) ?? this.extractTupleValue(entry?.value, 1);
+    const duration = toFiniteEventEChartsNumber(entry?.data?.duration);
 
     if (cadence === null || power === null) {
       return '';
@@ -322,7 +325,7 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
       return null;
     }
 
-    return this.toFiniteNumber(value[index]);
+    return toFiniteEventEChartsNumber(value[index]);
   }
 
   private getCadencePointColor(baseColor: string, density: number, darkTheme: boolean): string {
@@ -379,35 +382,6 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
     };
   }
 
-  private calculateAxisRange(values: number[], options: {
-    minFloor?: number;
-    fallbackMin: number;
-    fallbackMax: number;
-  }): [number, number] {
-    const validValues = values.filter((value) => Number.isFinite(value));
-    if (!validValues.length) {
-      return [options.fallbackMin, options.fallbackMax];
-    }
-
-    const minRaw = Math.min(...validValues);
-    const maxRaw = Math.max(...validValues);
-    const range = Math.max(1, maxRaw - minRaw);
-    const padding = Math.max(0.05, range * 0.12);
-
-    let min = minRaw - padding;
-    let max = maxRaw + padding;
-
-    if (Number.isFinite(options.minFloor)) {
-      min = Math.max(options.minFloor as number, min);
-    }
-
-    if (max <= min) {
-      max = min + 1;
-    }
-
-    return [min, max];
-  }
-
   private buildCadenceAxisConfig(values: number[]): { min: number; max: number; interval: number } {
     const validValues = values.filter((value) => Number.isFinite(value));
     if (!validValues.length) {
@@ -457,19 +431,6 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
     return best;
   }
 
-  private toFiniteNumber(value: unknown): number | null {
-    if (typeof value === 'number' && Number.isFinite(value)) {
-      return value;
-    }
-
-    if (typeof value === 'string' && value.trim().length > 0) {
-      const numeric = Number(value);
-      return Number.isFinite(numeric) ? numeric : null;
-    }
-
-    return null;
-  }
-
   private formatCadenceLabel(cadence: number, includeUnit = false): string {
     if (!Number.isFinite(cadence)) {
       return '';
@@ -504,7 +465,4 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
       : value;
   }
 
-  private isDarkThemeActive(): boolean {
-    return isDarkChartThemeActive(this.chartTheme);
-  }
 }
