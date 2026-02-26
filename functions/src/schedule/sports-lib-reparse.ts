@@ -114,6 +114,9 @@ export const scheduleSportsLibReparseScan = onSchedule({
 
     await checkpointRef.set({
         lastPassStartedAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastScanAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastScanCount: 0,
+        lastEnqueuedCount: 0,
         targetSportsLibVersion,
     }, { merge: true });
 
