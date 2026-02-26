@@ -202,6 +202,7 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
       type: 'category',
       data: categories,
       boundaryGap: false,
+      inverse: !this.vertical,
       axisLine: {
         lineStyle: { color: axisColor }
       },

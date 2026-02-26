@@ -210,6 +210,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     const categoryAxis = {
       type: 'category',
       data: categories,
+      inverse: !this.vertical,
       axisLine: {
         lineStyle: { color: axisColor }
       },

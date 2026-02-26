@@ -154,6 +154,7 @@ describe('ChartsColumnsComponent', () => {
     const option = getLastOption();
     expect(option.xAxis.type).toBe('value');
     expect(option.yAxis.type).toBe('category');
+    expect(option.yAxis.inverse).toBe(true);
   });
 
   it('should render pictorial bars for pyramids in vertical mode', async () => {

@@ -173,6 +173,7 @@ describe('ChartsXYComponent', () => {
     const option = getLastOption();
     expect(option.xAxis.type).toBe('value');
     expect(option.yAxis.type).toBe('category');
+    expect(option.yAxis.inverse).toBe(true);
     expect(option.yAxis.boundaryGap).toBe(false);
     expect(Array.isArray(option.series[0].data[0].value)).toBe(false);
   });
