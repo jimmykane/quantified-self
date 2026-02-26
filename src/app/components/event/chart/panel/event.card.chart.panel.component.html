@@ -1,10 +1,12 @@
-<section class="event-chart-panel">
+<section class="event-chart-panel" [class.event-chart-panel--zoom-only]="!panel && showZoomBar">
+  @if (panel) {
   <header class="event-chart-panel__header">
     <h3>{{ panel?.displayName }}</h3>
     @if (panel?.unit) {
     <span>({{ panel?.unit }})</span>
     }
   </header>
+  }
 
-  <div #chartDiv class="event-chart-panel__chart"></div>
+  <div #chartDiv class="event-chart-panel__chart" [class.event-chart-panel__chart--zoom-only]="!panel && showZoomBar"></div>
 </section>

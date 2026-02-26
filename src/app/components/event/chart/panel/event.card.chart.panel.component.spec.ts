@@ -112,6 +112,19 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.dataZoom?.[1]?.show).toBe(false);
   });
 
+  it('renders zoom-bar-only mode when panel is null and showZoomBar is true', async () => {
+    component.panel = null;
+    component.showZoomBar = true;
+    fixture.detectChanges();
+    await component.ngAfterViewInit();
+
+    const option = eChartsLoaderMock.setOption.mock.calls.at(-1)?.[1] as any;
+    expect(option?.tooltip?.show).toBe(false);
+    expect(option?.xAxis?.show).toBe(false);
+    expect(option?.dataZoom?.[0]?.type).toBe('slider');
+    expect(option?.dataZoom?.[0]?.show).toBe(true);
+  });
+
   it('starts pointer sync only after chart click', async () => {
     const emitSpy = vi.spyOn(component.cursorPositionChange, 'emit');
 
@@ -144,6 +157,15 @@ describe('EventCardChartPanelComponent', () => {
     expect(formatter(12.3)).toBe('12.3');
 
     getDataInstanceSpy.mockRestore();
+  });
+
+  it('uses strokeWidth input for line series width', async () => {
+    component.strokeWidth = 3.25;
+    fixture.detectChanges();
+    await component.ngAfterViewInit();
+
+    const option = eChartsLoaderMock.setOption.mock.calls.at(-1)?.[1] as any;
+    expect(option?.series?.[0]?.lineStyle?.width).toBe(3.25);
   });
 
   it('disconnects zoom group on destroy', async () => {

@@ -18,7 +18,6 @@ export class AppIconService {
         { name: 'suunto', path: 'assets/logos/suunto.svg' },
         { name: 'garmin', path: 'assets/logos/garmin.svg' },
         { name: 'coros', path: 'assets/logos/coros.svg' },
-        { name: 'amcharts', path: 'assets/logos/amcharts.svg' },
         { name: 'firebase', path: 'assets/logos/firebase.svg' },
         { name: 'google_logo_light', path: 'assets/logos/google_logo_light.svg' },
         { name: 'facebook_logo', path: 'assets/logos/facebook_logo.svg' },

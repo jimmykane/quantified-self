@@ -36,4 +36,13 @@ describe('event-echarts-xaxis.helper', () => {
     expect(formatEventXAxisValue(90, XAxisTypes.Duration)).toBe('01:30');
     expect(formatEventXAxisValue(Number.NaN, XAxisTypes.Distance)).toBe('');
   });
+
+  it('formats time axis with optional date visibility', () => {
+    const timestamp = new Date('2024-01-02T03:04:05.000Z').getTime();
+    const withDate = formatEventXAxisValue(timestamp, XAxisTypes.Time, { includeDateForTime: true });
+    const timeOnly = formatEventXAxisValue(timestamp, XAxisTypes.Time, { includeDateForTime: false });
+
+    expect(withDate.length).toBeGreaterThan(timeOnly.length);
+    expect(timeOnly).toContain(':');
+  });
 });

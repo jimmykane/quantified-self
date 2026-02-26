@@ -5,6 +5,10 @@ export interface EventChartRange {
   end: number;
 }
 
+export interface EventXAxisFormatOptions {
+  includeDateForTime?: boolean;
+}
+
 export function resolveEventChartXAxisType(event: EventInterface | null | undefined, configuredType: XAxisTypes): XAxisTypes {
   if (event?.isMultiSport && event.isMultiSport()) {
     return XAxisTypes.Time;
@@ -12,7 +16,7 @@ export function resolveEventChartXAxisType(event: EventInterface | null | undefi
   return configuredType;
 }
 
-export function formatEventXAxisValue(value: number, axisType: XAxisTypes): string {
+export function formatEventXAxisValue(value: number, axisType: XAxisTypes, options?: EventXAxisFormatOptions): string {
   if (!Number.isFinite(value)) {
     return '';
   }
@@ -23,12 +27,20 @@ export function formatEventXAxisValue(value: number, axisType: XAxisTypes): stri
       if (!Number.isFinite(date.getTime())) {
         return '';
       }
-      return date.toLocaleString('en-GB', {
+      const includeDate = options?.includeDateForTime !== false;
+      if (includeDate) {
+        return date.toLocaleString('en-GB', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          day: '2-digit',
+          month: 'short'
+        });
+      }
+      return date.toLocaleTimeString('en-GB', {
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
-        day: '2-digit',
-        month: 'short'
       });
     }
     case XAxisTypes.Duration:

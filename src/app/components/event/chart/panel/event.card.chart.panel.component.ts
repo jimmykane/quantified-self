@@ -29,8 +29,15 @@ import {
 } from '../../../../helpers/event-echarts-xaxis.helper';
 import { buildEventPanelYAxisConfig } from '../../../../helpers/event-echarts-yaxis.helper';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib';
+import type { EventChartPoint } from '../../../../helpers/event-echarts-data.helper';
+import { AppUserUtilities } from '../../../../utils/app.user.utilities';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
+type PanelSeriesModel = EventChartPanelModel['series'][number];
+
+const PROGRESSIVE_THRESHOLD = 6000;
+const PROGRESSIVE_STEP = 900;
+const DATA_ZOOM_THROTTLE_MS = 60;
 
 @Component({
   selector: 'app-event-card-chart-panel',
@@ -47,11 +54,13 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @Input() showZoomBar = false;
   @Input() zoomGroupId: string | null = null;
   @Input() xDomain: EventChartRange | null = null;
+  @Input() showDateOnTimeAxis = true;
   @Input() showLaps = true;
   @Input() lapTypes: LapTypes[] = [];
   @Input() lapMarkers: EventChartLapMarker[] = [];
   @Input() extraMaxForPower = 0;
   @Input() extraMaxForPace = -0.25;
+  @Input() strokeWidth = AppUserUtilities.getDefaultChartStrokeWidth();
 
   @Output() cursorPositionChange = new EventEmitter<number>();
 
@@ -62,6 +71,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private connectedZoomGroupId: string | null = null;
   private wheelPassThroughListener: ((event: Event) => void) | null = null;
   private pointerSyncEnabled = false;
+  private seriesByID = new Map<string, PanelSeriesModel>();
+  private seriesDataCache = new WeakMap<EventChartPoint[], Array<[number, number]>>();
 
   constructor(
     private eChartsLoader: EChartsLoaderService,
@@ -100,6 +111,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       || changes.lapMarkers
       || changes.extraMaxForPower
       || changes.extraMaxForPace
+      || changes.strokeWidth
     ) {
       this.refreshChart();
     }
@@ -119,7 +131,15 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     this.syncNativeZoomGroup();
 
-    if (!this.panel || !this.panel.series.length) {
+    if (!this.panel) {
+      this.seriesByID.clear();
+      if (this.showZoomBar) {
+        this.chartHost.setOption(this.buildZoomBarOnlyOption(), { notMerge: true, lazyUpdate: true });
+        this.chartHost.scheduleResize();
+        this.cdr.markForCheck();
+        return;
+      }
+
       this.chartHost.setOption({
         animation: this.useAnimations === true,
         xAxis: [],
@@ -129,6 +149,18 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return;
     }
 
+    if (!this.panel.series.length) {
+      this.seriesByID.clear();
+      this.chartHost.setOption({
+        animation: this.useAnimations === true,
+        xAxis: [],
+        yAxis: [],
+        series: []
+      }, { notMerge: true, lazyUpdate: true });
+      return;
+    }
+
+    this.seriesByID = new Map(this.panel.series.map((series) => [series.id, series]));
     this.chartHost.setOption(this.buildOption(), { notMerge: true, lazyUpdate: true });
     this.chartHost.scheduleResize();
     this.cdr.markForCheck();
@@ -149,6 +181,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       extraMaxForPower: this.extraMaxForPower,
       extraMaxForPace: this.extraMaxForPace,
     });
+    const resolvedStrokeWidth = Number(this.strokeWidth);
+    const seriesStrokeWidth = Number.isFinite(resolvedStrokeWidth) && resolvedStrokeWidth > 0
+      ? resolvedStrokeWidth
+      : AppUserUtilities.getDefaultChartStrokeWidth();
 
     const seriesOptions: any[] = panel.series.map((series) => ({
       id: series.id,
@@ -157,18 +193,21 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       smooth: false,
       showSymbol: false,
       symbolSize: 5,
+      progressive: series.points.length >= PROGRESSIVE_THRESHOLD ? PROGRESSIVE_STEP : 0,
+      progressiveThreshold: PROGRESSIVE_THRESHOLD,
+      progressiveChunkMode: 'mod',
       animation: this.useAnimations === true,
       lineStyle: {
-        width: 2,
+        width: seriesStrokeWidth,
         color: series.color,
       },
       itemStyle: {
         color: series.color,
       },
       emphasis: {
-        focus: 'series',
+        disabled: true,
       },
-      data: series.points.map((point) => [point.x, point.y])
+      data: this.getSeriesLineData(series.points)
     }));
 
     if (this.showLaps && this.lapMarkers.length > 0 && seriesOptions[0]) {
@@ -206,6 +245,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     return {
       animation: this.useAnimations === true,
+      animationThreshold: PROGRESSIVE_THRESHOLD,
       backgroundColor: 'transparent',
       textStyle: {
         color: textColor,
@@ -215,13 +255,17 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         left: 0,
         right: 0,
         top: 8,
-        bottom: this.showZoomBar ? 40 : 16,
+        bottom: 16,
         containLabel: true,
       },
       tooltip: {
         trigger: 'axis',
         triggerOn: this.pointerSyncEnabled ? 'mousemove|click' : 'none',
-        axisPointer: { type: 'line' },
+        axisPointer: {
+          type: 'line',
+          animation: false
+        },
+        transitionDuration: 0,
         backgroundColor: tooltipBackgroundColor,
         borderColor: tooltipBorderColor,
         borderWidth: 1,
@@ -244,7 +288,11 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         },
         axisLabel: {
           color: textColor,
-          formatter: (value: number) => formatEventXAxisValue(Number(value), this.xAxisType)
+          formatter: (value: number) => formatEventXAxisValue(
+            Number(value),
+            this.xAxisType,
+            { includeDateForTime: this.showDateOnTimeAxis }
+          )
         }
       },
       yAxis: {
@@ -269,6 +317,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           type: 'inside',
           xAxisIndex: 0,
           filterMode: 'none',
+          throttle: DATA_ZOOM_THROTTLE_MS,
           zoomOnMouseWheel: false,
           moveOnMouseMove: true,
           moveOnMouseWheel: false,
@@ -279,9 +328,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           xAxisIndex: 0,
           show: this.showZoomBar,
           height: 16,
-          bottom: 8,
+          top: 8,
           filterMode: 'none',
           showDataShadow: false,
+          throttle: DATA_ZOOM_THROTTLE_MS,
         }
       ],
       series: seriesOptions
@@ -297,7 +347,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   private bindChartEvents(): void {
     const chart = this.chartHost.getChart();
-    if (!chart || this.eventsBound) {
+    if (!chart || this.eventsBound || !this.panel) {
       return;
     }
 
@@ -323,7 +373,88 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return;
     }
     this.pointerSyncEnabled = true;
-    this.refreshChart();
+    this.chartHost.setOption({
+      tooltip: {
+        triggerOn: 'mousemove|click',
+      },
+    }, { notMerge: false, lazyUpdate: true });
+  }
+
+  private buildZoomBarOnlyOption(): ChartOption {
+    const darkTheme = isDarkChartThemeActive(this.chartTheme);
+    const axisColor = darkTheme ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.28)';
+    const sliderTrackColor = darkTheme ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+    const sliderSelectionColor = darkTheme ? 'rgba(144,202,249,0.28)' : 'rgba(25,118,210,0.20)';
+    const sliderHandleColor = darkTheme ? 'rgba(255,255,255,0.72)' : 'rgba(0,0,0,0.45)';
+    const domain = this.getActiveDomain();
+
+    return {
+      animation: false,
+      backgroundColor: 'transparent',
+      grid: {
+        left: 0,
+        right: 0,
+        top: 0,
+        bottom: 0,
+        containLabel: false
+      },
+      tooltip: { show: false },
+      xAxis: {
+        type: this.xAxisType === XAxisTypes.Time ? 'time' : 'value',
+        min: domain.start,
+        max: domain.end,
+        show: false
+      },
+      yAxis: {
+        type: 'value',
+        min: 0,
+        max: 1,
+        show: false
+      },
+      dataZoom: [
+        {
+          type: 'slider',
+          xAxisIndex: 0,
+          show: true,
+          left: 12,
+          right: 12,
+          top: 10,
+          height: 20,
+          filterMode: 'none',
+          showDataShadow: false,
+          showDetail: false,
+          handleSize: 18,
+          borderColor: axisColor,
+          backgroundColor: sliderTrackColor,
+          fillerColor: sliderSelectionColor,
+          handleStyle: {
+            color: sliderHandleColor,
+            borderColor: axisColor,
+            borderWidth: 1
+          },
+          moveHandleStyle: {
+            color: sliderSelectionColor
+          },
+          emphasis: {
+            moveHandleStyle: {
+              color: sliderSelectionColor
+            }
+          },
+        }
+      ],
+      series: [
+        {
+          type: 'line',
+          silent: true,
+          symbol: 'none',
+          lineStyle: { opacity: 0 },
+          data: [
+            [domain.start, 0],
+            [domain.end, 0]
+          ]
+        }
+      ]
+    } as ChartOption;
   }
 
   private formatTooltip(params: any): string {
@@ -332,18 +463,24 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     const xValue = Number(params[0]?.value?.[0]);
-    const header = formatEventXAxisValue(xValue, this.xAxisType);
-
-    const seriesLines = params.map((point: any) => {
-      const seriesModel = this.panel?.series.find((series) => series.id === point.seriesId);
+    const header = formatEventXAxisValue(
+      xValue,
+      this.xAxisType,
+      { includeDateForTime: this.showDateOnTimeAxis }
+    );
+    const tooltipLines: string[] = [];
+    for (let index = 0; index < params.length; index += 1) {
+      const point = params[index];
+      const seriesModel = this.seriesByID.get(point.seriesId);
       const streamType = seriesModel?.streamType || this.panel?.dataType;
       const yValue = Number(Array.isArray(point.value) ? point.value[1] : point.value);
       const formatted = this.formatDataValue(streamType || '', yValue);
+      tooltipLines.push(
+        `<div><span style="display:inline-block;margin-right:6px;border-radius:50%;width:8px;height:8px;background:${point.color};"></span>${point.seriesName}: ${formatted}</div>`
+      );
+    }
 
-      return `<div><span style="display:inline-block;margin-right:6px;border-radius:50%;width:8px;height:8px;background:${point.color};"></span>${point.seriesName}: ${formatted}</div>`;
-    });
-
-    return `<div style="font-weight:600;margin-bottom:4px;">${header}</div>${seriesLines.join('')}`;
+    return `<div style="font-weight:600;margin-bottom:4px;">${header}</div>${tooltipLines.join('')}`;
   }
 
   private formatDataValue(streamType: string, value: number, includeUnit = true): string {
@@ -435,5 +572,22 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       start: 0,
       end: 1,
     };
+  }
+
+  private getSeriesLineData(points: EventChartPoint[]): Array<[number, number]> {
+    const pointsRef = points as EventChartPoint[];
+    const cachedData = this.seriesDataCache.get(pointsRef);
+    if (cachedData) {
+      return cachedData;
+    }
+
+    const data = new Array<[number, number]>(points.length);
+    for (let index = 0; index < points.length; index += 1) {
+      const point = points[index];
+      data[index] = [point.x, point.y];
+    }
+
+    this.seriesDataCache.set(pointsRef, data);
+    return data;
   }
 }

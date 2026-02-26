@@ -6,6 +6,8 @@ app-event-card-chart-actions {
 .event-chart-content {
   position: relative;
   min-height: 60vh;
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .event-chart-shell {
@@ -18,25 +20,36 @@ app-event-card-chart-actions {
 }
 
 .event-chart-shell__legend {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
+  display: grid;
+  gap: 8px;
+  padding: 0px 0px;
 }
 
 .event-chart-shell__legend-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
   width: 100%;
+}
+
+.event-chart-shell__legend-item {
+  min-height: 32px;
+  border-radius: 999px;
+  color: var(--mat-sys-on-surface);
 }
 
 .event-chart-shell__swatch {
   display: inline-block;
-  width: 10px;
-  height: 10px;
+  width: 9px;
+  height: 9px;
   border-radius: 999px;
+  margin-right: 8px;
+  flex: 0 0 auto;
 }
 
 .event-chart-shell__label {
-  opacity: 0.9;
+  white-space: nowrap;
 }
 
 .event-chart-shell__panels {

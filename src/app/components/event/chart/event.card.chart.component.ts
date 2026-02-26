@@ -54,6 +54,8 @@ interface EventDataTypeLegendItem {
   visible: boolean;
 }
 
+const LEGEND_MUTED_DOT_COLOR = 'var(--mat-sys-outline)';
+
 @Component({
   selector: 'app-event-card-chart',
   templateUrl: './event.card.chart.component.html',
@@ -79,6 +81,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   public lapMarkers: EventChartLapMarker[] = [];
   public xDomain: EventChartRange | null = null;
   public renderedXAxisType: XAxisTypes = XAxisTypes.Duration;
+  public showDateOnTimeAxis = false;
   public zoomSyncGroupId: string | null = null;
 
   public get showAllData() { return this.userSettingsQuery.chartSettings()?.showAllData ?? false; }
@@ -132,6 +135,10 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
 
   public get extraMaxForPace() {
     return this.userSettingsQuery.chartSettings()?.extraMaxForPace ?? AppUserUtilities.getDefaultExtraMaxForPace();
+  }
+
+  public get strokeWidth() {
+    return this.userSettingsQuery.chartSettings()?.strokeWidth ?? AppUserUtilities.getDefaultChartStrokeWidth();
   }
 
   public get useAnimations() {
@@ -227,6 +234,10 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     this.persistVisibleDataTypes();
   }
 
+  public resolveLegendDotColor(item: EventDataTypeLegendItem): string {
+    return item.visible ? item.color : LEGEND_MUTED_DOT_COLOR;
+  }
+
   private queueRebuild(source: string): void {
     if (this.pendingRebuild) {
       return;
@@ -274,6 +285,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
 
       const globalDomain = this.resolveGlobalDomain(this.allChartPanels);
       this.xDomain = globalDomain;
+      this.showDateOnTimeAxis = this.resolveShowDateOnTimeAxis(globalDomain, effectiveXAxisType);
 
       if (source === 'ngOnChanges' && this.chartPanels.length === 0) {
         this.logger.info('[EventCardChart] No panels to render for current selection');
@@ -285,6 +297,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       this.dataTypeLegendItems = [];
       this.lapMarkers = [];
       this.xDomain = null;
+      this.showDateOnTimeAxis = false;
       this.renderedXAxisType = resolveEventChartXAxisType(this.event, this.xAxisType);
       this.zoomSyncGroupId = this.resolveZoomSyncGroupID(this.event);
     } finally {
@@ -308,6 +321,22 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       start: min,
       end: max,
     };
+  }
+
+  private resolveShowDateOnTimeAxis(domain: EventChartRange | null, axisType: XAxisTypes): boolean {
+    if (axisType !== XAxisTypes.Time || !domain) {
+      return false;
+    }
+
+    const startDate = new Date(domain.start);
+    const endDate = new Date(domain.end);
+    if (!Number.isFinite(startDate.getTime()) || !Number.isFinite(endDate.getTime())) {
+      return false;
+    }
+
+    return startDate.getFullYear() !== endDate.getFullYear()
+      || startDate.getMonth() !== endDate.getMonth()
+      || startDate.getDate() !== endDate.getDate();
   }
 
   private syncVisibleDataTypes(panels: EventChartPanelModel[]): void {

@@ -27,7 +27,6 @@
     "firebase": "^12.8.0"
   },
   "dependencies": {
-    "@amcharts/amcharts4": "^4.10.40",
     "@angular/animations": "20.3.15",
     "@angular/cdk": "^20.2.14",
     "@angular/common": "20.3.15",

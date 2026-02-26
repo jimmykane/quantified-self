@@ -2,7 +2,6 @@ import { TestBed } from '@angular/core/testing';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { ActivityTypeGroups, ActivityTypes } from '@sports-alliance/sports-lib';
 import { AppEventColorService } from './app.event.color.service';
-import { AmChartsService } from '../am-charts.service';
 import { LoggerService } from '../logger.service';
 import { AppColors } from './app.colors';
 import { AppDeviceColors } from './app.device.colors';
@@ -10,13 +9,9 @@ import { AppActivityTypeGroupColors } from './app.activity-type-group.colors';
 
 describe('AppEventColorService', () => {
   let service: AppEventColorService;
-  let mockAmChartsService: { getCachedCore: ReturnType<typeof vi.fn> };
   let mockLoggerService: { warn: ReturnType<typeof vi.fn>, log: ReturnType<typeof vi.fn>, error: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
-    mockAmChartsService = {
-      getCachedCore: vi.fn(),
-    };
     mockLoggerService = {
       warn: vi.fn(),
       log: vi.fn(),
@@ -26,7 +21,6 @@ describe('AppEventColorService', () => {
     TestBed.configureTestingModule({
       providers: [
         AppEventColorService,
-        { provide: AmChartsService, useValue: mockAmChartsService },
         { provide: LoggerService, useValue: mockLoggerService },
       ],
     });
@@ -132,24 +126,9 @@ describe('AppEventColorService', () => {
   });
 
   describe('getColorForZone', () => {
-    it('should return null if amCharts core is not loaded', () => {
-      mockAmChartsService.getCachedCore.mockReturnValue(null);
-
-      expect(service.getColorForZone('Zone 1')).toBeNull();
-      expect(mockLoggerService.warn).toHaveBeenCalled();
-    });
-
-    it('should return amCore color object when loaded', () => {
-      const mockColorObj = { hex: '#123456' };
-      const mockCore = {
-        color: vi.fn().mockReturnValue(mockColorObj),
-      };
-      mockAmChartsService.getCachedCore.mockReturnValue(mockCore);
-
+    it('should return zone color hex', () => {
       const result = service.getColorForZone('Zone 5');
-
-      expect(mockCore.color).toHaveBeenCalledWith(AppColors.LightestRed);
-      expect(result).toBe(mockColorObj);
+      expect(result).toBe(AppColors.LightestRed);
     });
   });
 
