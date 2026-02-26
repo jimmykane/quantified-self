@@ -4,7 +4,6 @@ import {
   Component,
   ElementRef,
   Input,
-  NgZone,
   OnChanges,
   OnDestroy,
   SimpleChanges,
@@ -74,14 +73,12 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
   ];
 
   constructor(
-    private zone: NgZone,
     private eChartsLoader: EChartsLoaderService,
     private eventColorService: AppEventColorService,
     private logger: LoggerService
   ) {
     this.chartHost = new EChartsHostController({
       eChartsLoader: this.eChartsLoader,
-      zone: this.zone,
       logger: this.logger,
       logPrefix: '[ChartsPieComponent]'
     });

@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, Input, NgZone, OnChanges, OnDestroy, OnInit, SimpleChanges, ViewChild } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, Input, OnChanges, OnDestroy, OnInit, SimpleChanges, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -67,12 +67,10 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
 
     constructor(
         private appThemeService: AppThemeService,
-        private eChartsLoader: EChartsLoaderService,
-        private zone: NgZone
+        private eChartsLoader: EChartsLoaderService
     ) {
         this.chartHost = new EChartsHostController({
             eChartsLoader: this.eChartsLoader,
-            zone: this.zone,
             logPrefix: '[AdminQueueStatsComponent]'
         });
     }

@@ -4,7 +4,6 @@ import {
   Component,
   ElementRef,
   Input,
-  NgZone,
   OnChanges,
   OnDestroy,
   SimpleChanges,
@@ -59,12 +58,10 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     private breakpointObserver: BreakpointObserver,
     private eChartsLoader: EChartsLoaderService,
     private eventColorService: AppEventColorService,
-    private logger: LoggerService,
-    private zone: NgZone
+    private logger: LoggerService
   ) {
     this.chartHost = new EChartsHostController({
       eChartsLoader: this.eChartsLoader,
-      zone: this.zone,
       logger: this.logger,
       logPrefix: '[EventIntensityZonesComponent]'
     });

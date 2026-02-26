@@ -4,7 +4,6 @@ import {
   Component,
   ElementRef,
   Input,
-  NgZone,
   OnChanges,
   OnDestroy,
   SimpleChanges,
@@ -67,12 +66,10 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
     private eChartsLoader: EChartsLoaderService,
     private eventColorService: AppEventColorService,
     private logger: LoggerService,
-    private performanceCurveDataService: PerformanceCurveDataService,
-    private zone: NgZone
+    private performanceCurveDataService: PerformanceCurveDataService
   ) {
     this.chartHost = new EChartsHostController({
       eChartsLoader: this.eChartsLoader,
-      zone: this.zone,
       logger: this.logger,
       logPrefix: '[EventDurabilityCurveComponent]'
     });

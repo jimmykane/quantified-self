@@ -1,0 +1,83 @@
+import { DataPace, DataPower } from '@sports-alliance/sports-lib';
+import { describe, expect, it } from 'vitest';
+import {
+  buildEventPanelYAxisConfig,
+} from './event-echarts-yaxis.helper';
+
+function buildPanel(streamType: string, values: number[]) {
+  return {
+    dataType: streamType,
+    displayName: streamType,
+    unit: '',
+    colorGroupKey: streamType,
+    minX: 0,
+    maxX: Math.max(1, values.length - 1),
+    series: [
+      {
+        id: `a1::${streamType}`,
+        activityID: 'a1',
+        activityName: 'Activity',
+        color: '#000000',
+        streamType,
+        displayName: streamType,
+        unit: '',
+        points: values.map((value, index) => ({
+          x: index,
+          y: value,
+          time: index,
+        })),
+      }
+    ]
+  } as any;
+}
+
+describe('event-echarts-yaxis.helper', () => {
+  it('builds padded y-range for non-pace panels', () => {
+    const config = buildEventPanelYAxisConfig({
+      panel: buildPanel(DataPower.type, [100, 200]),
+      visibleRange: null,
+      extraMaxForPower: 0.2,
+      extraMaxForPace: -0.25,
+    });
+
+    expect(config.inverse).toBe(false);
+    expect(config.min).toBeLessThanOrEqual(100);
+    expect(config.max).toBeGreaterThan(200);
+  });
+
+  it('handles single-point ranges safely', () => {
+    const config = buildEventPanelYAxisConfig({
+      panel: buildPanel('speed', [42]),
+      visibleRange: null,
+      extraMaxForPower: 0,
+      extraMaxForPace: -0.25,
+    });
+
+    expect(config.min).toBeLessThan(42);
+    expect(config.max).toBeGreaterThan(42);
+  });
+
+  it('returns inverted config for pace streams', () => {
+    const config = buildEventPanelYAxisConfig({
+      panel: buildPanel(DataPace.type, [300, 305, 310, 315]),
+      visibleRange: null,
+      extraMaxForPower: 0,
+      extraMaxForPace: -0.25,
+    });
+
+    expect(config.inverse).toBe(true);
+    expect(config.min).toBeDefined();
+    expect(config.max).toBeDefined();
+  });
+
+  it('uses visible range when computing scale', () => {
+    const config = buildEventPanelYAxisConfig({
+      panel: buildPanel('speed', [10, 20, 200]),
+      visibleRange: { start: 0, end: 1 },
+      extraMaxForPower: 0,
+      extraMaxForPace: -0.25,
+    });
+
+    expect((config.max as number)).toBeLessThan(200);
+  });
+});

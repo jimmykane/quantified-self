@@ -336,7 +336,7 @@ export class AppUserUtilities {
         settings.chartSettings.lapTypes = settings.chartSettings.lapTypes || AppUserUtilities.getDefaultChartLapTypes();
         settings.chartSettings.showLaps = settings.chartSettings.showLaps !== false;
         settings.chartSettings.showGrid = settings.chartSettings.showGrid !== false;
-        settings.chartSettings.stackYAxes = settings.chartSettings.stackYAxes !== false;
+        settings.chartSettings.stackYAxes = false;
         settings.chartSettings.disableGrouping = settings.chartSettings.disableGrouping === true;
         settings.chartSettings.hideAllSeriesOnInit = settings.chartSettings.hideAllSeriesOnInit === true;
         settings.chartSettings.gainAndLossThreshold = settings.chartSettings.gainAndLossThreshold || AppUserUtilities.getDefaultGainAndLossThreshold();

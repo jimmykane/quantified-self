@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, LOCALE_ID, NgZone, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, LOCALE_ID, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
@@ -78,7 +78,6 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     private snackBar = inject(MatSnackBar);
     private logger = inject(LoggerService);
     private eChartsLoader = inject(EChartsLoaderService);
-    private zone = inject(NgZone);
     private locale = inject(LOCALE_ID);
 
     // Data state
@@ -107,7 +106,6 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
 
     private chartHost = new EChartsHostController({
         eChartsLoader: this.eChartsLoader,
-        zone: this.zone,
         logger: this.logger,
         logPrefix: '[AdminUserManagementComponent]'
     });

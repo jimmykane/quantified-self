@@ -51,6 +51,8 @@ export class EChartsLoaderService {
           components.TitleComponent,
           components.AxisPointerComponent,
           components.VisualMapComponent,
+          components.DataZoomComponent,
+          components.BrushComponent,
           renderers.CanvasRenderer
         ]);
 
@@ -80,6 +82,26 @@ export class EChartsLoaderService {
   public resize(chart: EChartsType): void {
     this.zone.runOutsideAngular(() => {
       chart.resize();
+    });
+  }
+
+  public async connectGroup(groupId: string): Promise<void> {
+    if (!groupId) {
+      return;
+    }
+    const echarts = await this.load();
+    this.zone.runOutsideAngular(() => {
+      echarts.connect(groupId);
+    });
+  }
+
+  public async disconnectGroup(groupId: string): Promise<void> {
+    if (!groupId) {
+      return;
+    }
+    const echarts = await this.load();
+    this.zone.runOutsideAngular(() => {
+      echarts.disconnect(groupId);
     });
   }
 

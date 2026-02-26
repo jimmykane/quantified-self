@@ -199,7 +199,6 @@ export class UserSettingsComponent implements OnChanges {
       chartLapTypes: new UntypedFormControl(this.user.settings.chartSettings.lapTypes, []),
       showChartLaps: new UntypedFormControl(this.user.settings.chartSettings.showLaps, []),
       showChartGrid: new UntypedFormControl(this.user.settings.chartSettings.showGrid, []),
-      stackYAxes: new UntypedFormControl(this.user.settings.chartSettings.stackYAxes, []),
       xAxisType: new UntypedFormControl(this.user.settings.chartSettings.xAxisType, [
         Validators.required,
       ]),
@@ -309,7 +308,7 @@ export class UserSettingsComponent implements OnChanges {
         lapTypes: this.userSettingsFormGroup.get('chartLapTypes').value,
         showLaps: this.userSettingsFormGroup.get('showChartLaps').value,
         showGrid: this.userSettingsFormGroup.get('showChartGrid').value,
-        stackYAxes: this.userSettingsFormGroup.get('stackYAxes').value,
+        stackYAxes: false,
         disableGrouping: this.userSettingsFormGroup.get('chartDisableGrouping').value,
         hideAllSeriesOnInit: this.userSettingsFormGroup.get('chartHideAllSeriesOnInit').value,
         gainAndLossThreshold: this.userSettingsFormGroup.get('chartGainAndLossThreshold').value,

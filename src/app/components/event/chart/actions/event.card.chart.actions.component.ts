@@ -19,21 +19,14 @@ export class EventCardChartActionsComponent implements OnChanges {
   @Input() xAxisType: XAxisTypes;
   @Input() showAllData: boolean;
   @Input() showLaps: boolean;
-  @Input() stackYAxes: boolean;
   @Output() showAllDataChange: EventEmitter<boolean> = new EventEmitter<boolean>();
   @Output() showLapsChange: EventEmitter<boolean> = new EventEmitter<boolean>();
-  @Output() stackYAxesChange: EventEmitter<boolean> = new EventEmitter<boolean>();
   @Output() xAxisTypeChange: EventEmitter<XAxisTypes> = new EventEmitter<XAxisTypes>();
 
   public xAxisTypes = XAxisTypes;
   private analyticsService = inject(AppAnalyticsService);
 
   constructor() {
-  }
-
-  async onStackYAxesToggle(checked: boolean) {
-    this.stackYAxes = checked;
-    await this.somethingChanged('stackYAxes');
   }
 
   async onShowLapsToggle(checked: boolean) {
@@ -58,14 +51,11 @@ export class EventCardChartActionsComponent implements OnChanges {
       this.showAllDataChange.emit(this.showAllData);
     } else if (prop === 'showLaps') {
       this.showLapsChange.emit(this.showLaps);
-    } else if (prop === 'stackYAxes') {
-      this.stackYAxesChange.emit(this.stackYAxes);
     } else {
       // Fallback for safety if called without prop
       this.xAxisTypeChange.emit(this.xAxisType);
       this.showAllDataChange.emit(this.showAllData);
       this.showLapsChange.emit(this.showLaps);
-      this.stackYAxesChange.emit(this.stackYAxes);
     }
 
     this.analyticsService.logEvent('event_chart_settings_change', { property: prop });

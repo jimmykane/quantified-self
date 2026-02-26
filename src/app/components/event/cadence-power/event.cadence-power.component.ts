@@ -4,7 +4,6 @@ import {
   Component,
   ElementRef,
   Input,
-  NgZone,
   OnChanges,
   OnDestroy,
   SimpleChanges,
@@ -61,12 +60,10 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
     private eChartsLoader: EChartsLoaderService,
     private eventColorService: AppEventColorService,
     private logger: LoggerService,
-    private performanceCurveDataService: PerformanceCurveDataService,
-    private zone: NgZone
+    private performanceCurveDataService: PerformanceCurveDataService
   ) {
     this.chartHost = new EChartsHostController({
       eChartsLoader: this.eChartsLoader,
-      zone: this.zone,
       logger: this.logger,
       logPrefix: '[EventCadencePowerComponent]'
     });
@@ -113,22 +110,6 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
     const cadencePowerSeries = this.performanceCurveDataService.buildCadencePowerSeries(this.activities, {
       isMerge: this.isMerge,
       maxPointsPerSeries: this.isMobile ? 420 : 1500,
-    });
-
-    const cadenceValues = cadencePowerSeries
-      .flatMap((seriesEntry) => seriesEntry.points)
-      .map((point) => point.cadence)
-      .filter((value) => Number.isFinite(value))
-      .sort((left, right) => left - right);
-    const uniqueCadenceValues = [...new Set(cadenceValues.map((value) => Math.round(value)))];
-
-    this.logger.log('[EventCadencePowerComponent] x-axis cadence debug', {
-      seriesCount: cadencePowerSeries.length,
-      pointCount: cadenceValues.length,
-      minCadence: cadenceValues.length ? cadenceValues[0] : null,
-      maxCadence: cadenceValues.length ? cadenceValues[cadenceValues.length - 1] : null,
-      uniqueCadenceCount: uniqueCadenceValues.length,
-      uniqueCadenceValuesSample: uniqueCadenceValues.slice(0, 60),
     });
 
     const option = this.buildChartOption(cadencePowerSeries);

@@ -1,4 +1,3 @@
-import { NgZone } from '@angular/core';
 import type { EChartsType } from 'echarts/core';
 import { EChartsLoaderService } from '../services/echarts-loader.service';
 
@@ -7,7 +6,6 @@ type ChartSetOptionSettings = Parameters<EChartsType['setOption']>[1];
 
 export interface EChartsHostControllerConfig {
   eChartsLoader: EChartsLoaderService;
-  zone: NgZone;
   logger?: {
     error?: (...args: unknown[]) => void;
   };
@@ -116,15 +114,13 @@ export class EChartsHostController {
       return;
     }
 
-    this.config.zone.runOutsideAngular(() => {
-      if (this.resizeObserver) {
-        this.resizeObserver.disconnect();
-      }
-      this.resizeObserver = new ResizeObserver(() => {
-        this.scheduleResize();
-      });
-      this.resizeObserver.observe(container);
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+    }
+    this.resizeObserver = new ResizeObserver(() => {
+      this.scheduleResize();
     });
+    this.resizeObserver.observe(container);
 
     this.observedContainer = container;
   }

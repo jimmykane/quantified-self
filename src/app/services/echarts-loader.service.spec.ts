@@ -7,6 +7,8 @@ import { EChartsLoaderService } from './echarts-loader.service';
 const echartsCoreMock = vi.hoisted(() => ({
   use: vi.fn(),
   init: vi.fn(),
+  connect: vi.fn(),
+  disconnect: vi.fn(),
 }));
 
 const echartsModulesMock = vi.hoisted(() => ({
@@ -23,12 +25,16 @@ const echartsModulesMock = vi.hoisted(() => ({
   titleComponent: { component: 'title' },
   axisPointerComponent: { component: 'axisPointer' },
   visualMapComponent: { component: 'visualMap' },
+  dataZoomComponent: { component: 'dataZoom' },
+  brushComponent: { component: 'brush' },
   canvasRenderer: { renderer: 'canvas' },
 }));
 
 vi.mock('echarts/core', () => ({
   use: echartsCoreMock.use,
   init: echartsCoreMock.init,
+  connect: echartsCoreMock.connect,
+  disconnect: echartsCoreMock.disconnect,
 }));
 
 vi.mock('echarts/charts', () => ({
@@ -48,6 +54,8 @@ vi.mock('echarts/components', () => ({
   TitleComponent: echartsModulesMock.titleComponent,
   AxisPointerComponent: echartsModulesMock.axisPointerComponent,
   VisualMapComponent: echartsModulesMock.visualMapComponent,
+  DataZoomComponent: echartsModulesMock.dataZoomComponent,
+  BrushComponent: echartsModulesMock.brushComponent,
 }));
 
 vi.mock('echarts/renderers', () => ({
@@ -94,6 +102,8 @@ describe('EChartsLoaderService', () => {
       echartsModulesMock.titleComponent,
       echartsModulesMock.axisPointerComponent,
       echartsModulesMock.visualMapComponent,
+      echartsModulesMock.dataZoomComponent,
+      echartsModulesMock.brushComponent,
       echartsModulesMock.canvasRenderer,
     ]);
   });
@@ -159,6 +169,17 @@ describe('EChartsLoaderService', () => {
 
     expect(runOutsideAngularSpy).toHaveBeenCalled();
     expect(chart.resize).toHaveBeenCalledTimes(1);
+  });
+
+  it('should connect and disconnect ECharts groups in runOutsideAngular', async () => {
+    const runOutsideAngularSpy = vi.spyOn(zone, 'runOutsideAngular');
+
+    await service.connectGroup('event-zoom-group');
+    await service.disconnectGroup('event-zoom-group');
+
+    expect(runOutsideAngularSpy).toHaveBeenCalled();
+    expect(echartsCoreMock.connect).toHaveBeenCalledWith('event-zoom-group');
+    expect(echartsCoreMock.disconnect).toHaveBeenCalledWith('event-zoom-group');
   });
 
   it('should dispose active charts and skip already-disposed charts', () => {

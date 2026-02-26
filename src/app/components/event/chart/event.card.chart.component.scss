@@ -1,7 +1,60 @@
-/* Ensure the component inside expands to fill the flex space */
 app-event-card-chart-actions {
-    display: block;
-    width: 100%;
+  display: block;
+  width: 100%;
 }
 
-/* chart-progress-bar removed, handled by app-loading-overlay */
+.event-chart-content {
+  position: relative;
+  min-height: 60vh;
+}
+
+.event-chart-shell {
+  display: grid;
+  gap: 12px;
+}
+
+.event-chart-shell--loading {
+  opacity: 0.6;
+}
+
+.event-chart-shell__toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.event-chart-shell__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.event-chart-shell__legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.event-chart-shell__legend-list {
+  width: 100%;
+}
+
+.event-chart-shell__swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+}
+
+.event-chart-shell__label {
+  opacity: 0.9;
+}
+
+.event-chart-shell__panels {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
+}

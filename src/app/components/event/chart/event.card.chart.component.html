@@ -1,14 +1,59 @@
 <app-event-section-header icon="show_chart">
   <app-event-card-chart-actions [(xAxisType)]="xAxisType" [(showAllData)]="showAllData" [(showLaps)]="showLaps"
-    [(stackYAxes)]="stackYAxes" [event]="event" [user]="user">
+    [event]="event" [user]="user">
   </app-event-card-chart-actions>
 </app-event-section-header>
-<mat-card-content style="position: relative; min-height: 90vh;">
-  <app-loading-overlay [isLoading]="isLoading" [showSkeleton]="true" height="auto">
-    <!-- @todo should be different per orientation etc -->
-    <div #chartDiv [style.opacity]="isLoading ? 0 : 1"
-      style="min-width: 280px; width: 100%; min-height: 90vh; height: 90vh"></div>
-    <div #legendDiv style="min-width: 280px; width: 100%; min-height: auto;"></div>
-  </app-loading-overlay>
 
+<mat-card-content class="event-chart-content">
+  <app-loading-overlay [isLoading]="isLoading" [showSkeleton]="true" height="auto">
+    <section class="event-chart-shell" [class.event-chart-shell--loading]="isLoading">
+      <header class="event-chart-shell__toolbar">
+        <mat-button-toggle-group [value]="interactionMode" (change)="onInteractionModeChange($event.value)" exclusive>
+          <mat-button-toggle value="zoom">Zooming</mat-button-toggle>
+          <mat-button-toggle value="select">Selecting</mat-button-toggle>
+        </mat-button-toggle-group>
+
+        <div class="event-chart-shell__actions">
+          <button mat-stroked-button type="button" (click)="onResetZoom()" [disabled]="!chartPanels.length">
+            Reset Zoom
+          </button>
+          <button mat-stroked-button type="button" (click)="onClearSelection()" [disabled]="!selectionRange">
+            Clear Selection
+          </button>
+        </div>
+      </header>
+
+      @if (dataTypeLegendItems.length > 0) {
+      <section class="event-chart-shell__legend" aria-label="Data type visibility">
+        <mat-chip-listbox [multiple]="true" [hideSingleSelectionIndicator]="true" class="event-chart-shell__legend-list">
+          @for (item of dataTypeLegendItems; track item.dataType) {
+          <mat-chip-option [selected]="item.visible"
+            (selectionChange)="onDataTypeLegendSelectionChange(item.dataType, $event.selected)">
+            <span class="event-chart-shell__swatch" [style.background]="item.color"></span>
+            <span class="event-chart-shell__label">{{ item.label }}</span>
+          </mat-chip-option>
+          }
+        </mat-chip-listbox>
+        @if (chartPanels.length === 0) {
+        <button mat-stroked-button type="button" (click)="onShowAllDataTypes()">
+          Show all data types
+        </button>
+        }
+      </section>
+      }
+
+      <section class="event-chart-shell__panels">
+        @for (panel of chartPanels; track panel.dataType; let isLast = $last) {
+        <app-event-card-chart-panel [panel]="panel" [xAxisType]="renderedXAxisType" [chartTheme]="chartTheme"
+          [useAnimations]="useAnimations" [interactionMode]="interactionMode" [showZoomBar]="isLast"
+          [zoomGroupId]="zoomSyncGroupId" [zoomResetVersion]="zoomResetVersion" [xDomain]="xDomain"
+          [selectionRange]="selectionRange" [showLaps]="showLaps" [lapTypes]="lapTypes" [lapMarkers]="lapMarkers"
+          [gainAndLossThreshold]="gainAndLossThreshold" [extraMaxForPower]="extraMaxForPower"
+          [extraMaxForPace]="extraMaxForPace" (selectionRangeChange)="onPanelSelectionRangeChange($event)"
+          (cursorPositionChange)="onPanelCursorPositionChange($event)">
+        </app-event-card-chart-panel>
+        }
+      </section>
+    </section>
+  </app-loading-overlay>
 </mat-card-content>
