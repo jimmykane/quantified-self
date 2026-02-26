@@ -143,4 +143,17 @@ describe('EventCardChartPanelComponent', () => {
 
     expect(eChartsLoaderMock.disconnectGroup).toHaveBeenCalledWith('event-zoom-group');
   });
+
+  it('stops wheel event propagation on chart container to preserve page scrolling', async () => {
+    fixture.detectChanges();
+    await component.ngAfterViewInit();
+
+    const hostElement = fixture.nativeElement as HTMLElement;
+    const bubbleWheelSpy = vi.fn();
+    hostElement.addEventListener('wheel', bubbleWheelSpy);
+
+    component.chartDiv.nativeElement.dispatchEvent(new Event('wheel', { bubbles: true, cancelable: true }));
+
+    expect(bubbleWheelSpy).not.toHaveBeenCalled();
+  });
 });

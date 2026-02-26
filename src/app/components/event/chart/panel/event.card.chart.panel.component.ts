@@ -71,6 +71,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private eventsBound = false;
   private connectedZoomGroupId: string | null = null;
   private lastAppliedZoomResetVersion = -1;
+  private wheelPassThroughListener: ((event: Event) => void) | null = null;
 
   constructor(
     private eChartsLoader: EChartsLoaderService,
@@ -89,6 +90,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   async ngAfterViewInit(): Promise<void> {
     await this.chartHost.init(this.chartDiv?.nativeElement);
+    this.bindWheelPassThrough();
     this.syncNativeZoomGroup();
     this.bindChartEvents();
     this.refreshChart();
@@ -124,6 +126,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   ngOnDestroy(): void {
+    this.unbindWheelPassThrough();
     this.disconnectNativeZoomGroup();
     this.chartHost.dispose();
   }
@@ -289,6 +292,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           zoomOnMouseWheel: false,
           moveOnMouseMove: true,
           moveOnMouseWheel: false,
+          preventDefaultMouseMove: false,
         },
         {
           type: 'slider',
@@ -481,6 +485,28 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
     void this.eChartsLoader.disconnectGroup(this.connectedZoomGroupId);
     this.connectedZoomGroupId = null;
+  }
+
+  private bindWheelPassThrough(): void {
+    const container = this.chartDiv?.nativeElement;
+    if (!container || this.wheelPassThroughListener) {
+      return;
+    }
+
+    // Keep page scrolling natural when wheel is over the chart area.
+    this.wheelPassThroughListener = (event: Event) => {
+      event.stopPropagation();
+    };
+    container.addEventListener('wheel', this.wheelPassThroughListener, { capture: true, passive: true });
+  }
+
+  private unbindWheelPassThrough(): void {
+    const container = this.chartDiv?.nativeElement;
+    if (!container || !this.wheelPassThroughListener) {
+      return;
+    }
+    container.removeEventListener('wheel', this.wheelPassThroughListener, { capture: true });
+    this.wheelPassThroughListener = null;
   }
 
   private getActiveDomain(): EventChartRange {
