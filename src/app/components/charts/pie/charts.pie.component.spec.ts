@@ -131,7 +131,7 @@ describe('ChartsPieComponent', () => {
     expect(option.series[0].data).toHaveLength(2);
   });
 
-  it('should group activity-type slices under 7% into Other', async () => {
+  it('should keep activity-type slices ungrouped', async () => {
     component.data = [
       { type: 'Running', [ChartDataValueTypes.Total]: 90, count: 5 },
       { type: 'Cycling', [ChartDataValueTypes.Total]: 5, count: 1 },
@@ -146,8 +146,10 @@ describe('ChartsPieComponent', () => {
     const names = option.series[0].data.map((entry: { name: string }) => entry.name);
 
     expect(names).toContain('Running');
-    expect(names).toContain('Other');
-    expect(option.series[0].data).toHaveLength(2);
+    expect(names).toContain('Cycling');
+    expect(names).toContain('Swimming');
+    expect(names).not.toContain('Other');
+    expect(option.series[0].data).toHaveLength(3);
   });
 
   it('should render center sub label as "per activity type" for activity categories', async () => {

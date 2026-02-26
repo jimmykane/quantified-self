@@ -127,7 +127,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
       data: sortedData,
       chartDataValueType: this.chartDataValueType,
       chartDataCategoryType: this.chartDataCategoryType,
-      thresholdPercent: 7
+      thresholdPercent: 0
     });
 
     const aggregate = getDashboardAggregateData(
