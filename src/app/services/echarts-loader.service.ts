@@ -38,10 +38,11 @@ export class EChartsLoaderService {
         ]);
 
         core.use([
-          charts.BarChart,
-          charts.PieChart,
-          charts.LineChart,
-          charts.ScatterChart,
+            charts.BarChart,
+            charts.PictorialBarChart,
+            charts.PieChart,
+            charts.LineChart,
+            charts.ScatterChart,
           components.GraphicComponent,
           components.GridComponent,
           components.TooltipComponent,
