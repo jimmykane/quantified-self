@@ -164,6 +164,29 @@ describe('ChartsXYComponent', () => {
     expect(trendSeries.lineStyle.type).toBe('dashed');
   });
 
+  it('should render summary meta as "per activity type" for activity categories', async () => {
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const option = getLastOption();
+    expect(option.graphic[0].children[2].style.text).toBe('Total per activity type');
+  });
+
+  it('should render summary meta as "per month" for monthly date categories', async () => {
+    component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.chartDataTimeInterval = TimeIntervals.Monthly;
+    component.data = [
+      { time: Date.UTC(2024, 0, 1), [ChartDataValueTypes.Total]: 10, count: 1 },
+      { time: Date.UTC(2024, 1, 1), [ChartDataValueTypes.Total]: 20, count: 1 },
+    ];
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const option = getLastOption();
+    expect(option.graphic[0].children[2].style.text).toBe('Total per month');
+  });
+
   it('should render horizontal axes when vertical is false', async () => {
     component.vertical = false;
 

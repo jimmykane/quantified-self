@@ -150,6 +150,20 @@ describe('ChartsPieComponent', () => {
     expect(option.series[0].data).toHaveLength(2);
   });
 
+  it('should render center sub label as "per activity type" for activity categories', async () => {
+    component.data = [
+      { type: 'Running', [ChartDataValueTypes.Total]: 60, count: 2 },
+      { type: 'Cycling', [ChartDataValueTypes.Total]: 40, count: 1 },
+    ];
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    const option = mockLoader.setOption.mock.calls.at(-1)?.[1] as Record<string, any>;
+    expect(option.graphic[0].children[2].style.text).toBe('Total per activity type');
+  });
+
   it('should not group date-type slices', async () => {
     component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
     component.chartDataTimeInterval = TimeIntervals.Daily;
@@ -168,6 +182,22 @@ describe('ChartsPieComponent', () => {
 
     expect(option.series[0].data).toHaveLength(3);
     expect(names).not.toContain('Other');
+  });
+
+  it('should render center sub label as "per month" for monthly date categories', async () => {
+    component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.chartDataTimeInterval = TimeIntervals.Monthly;
+    component.data = [
+      { type: Date.UTC(2024, 0, 1), time: Date.UTC(2024, 0, 1), [ChartDataValueTypes.Total]: 90, count: 5 },
+      { type: Date.UTC(2024, 1, 1), time: Date.UTC(2024, 1, 1), [ChartDataValueTypes.Total]: 10, count: 1 },
+    ];
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    const option = mockLoader.setOption.mock.calls.at(-1)?.[1] as Record<string, any>;
+    expect(option.graphic[0].children[2].style.text).toBe('Total per month');
   });
 
   it('should use dark tooltip styles for dark chart theme', async () => {

@@ -48,6 +48,19 @@ describe('ActivityTypeIconComponent', () => {
     expect(component.getIcon()).toBe('weight');
   });
 
+  it('uses mountain-biking group icon for MTB variants', () => {
+    const component = new ActivityTypeIconComponent();
+
+    component.activityType = 'Mountain Biking';
+    expect(component.getIcon()).toBe('terrain');
+
+    component.activityType = 'cycling_mountain_enduro';
+    expect(component.getIcon()).toBe('terrain');
+
+    component.activityType = 'Downhill Cycling';
+    expect(component.getIcon()).toBe('terrain');
+  });
+
   it('falls back safely for numeric activity type values', () => {
     const component = new ActivityTypeIconComponent();
     component.activityType = 4;

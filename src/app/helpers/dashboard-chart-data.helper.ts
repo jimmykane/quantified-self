@@ -171,3 +171,38 @@ export function getDashboardChartSortComparator(
     return -(Number(itemB?.time || 0) - Number(itemA?.time || 0));
   };
 }
+
+function getDashboardTimeIntervalScopeLabel(timeInterval: TimeIntervals): string {
+  switch (timeInterval) {
+    case TimeIntervals.Yearly:
+      return 'year';
+    case TimeIntervals.Monthly:
+      return 'month';
+    case TimeIntervals.Weekly:
+      return 'week';
+    case TimeIntervals.Daily:
+      return 'day';
+    case TimeIntervals.Hourly:
+      return 'hour';
+    default:
+      return 'period';
+  }
+}
+
+export function getDashboardSummaryMetaLabel(
+  chartDataCategoryType: ChartDataCategoryTypes | undefined,
+  chartDataValueType: ChartDataValueTypes | undefined,
+  chartDataTimeInterval: TimeIntervals | undefined
+): string {
+  const valueLabel = chartDataValueType || 'Value';
+
+  if (chartDataCategoryType === ChartDataCategoryTypes.ActivityType) {
+    return `${valueLabel} per activity type`;
+  }
+
+  if (chartDataCategoryType === ChartDataCategoryTypes.DateType) {
+    return `${valueLabel} per ${getDashboardTimeIntervalScopeLabel(chartDataTimeInterval || TimeIntervals.Daily)}`;
+  }
+
+  return valueLabel;
+}

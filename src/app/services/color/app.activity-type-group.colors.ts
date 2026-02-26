@@ -5,6 +5,7 @@ export const AppActivityTypeGroupColors: { [key in ActivityTypeGroups]: string }
   [ActivityTypeGroups.TrailRunning]: '#c7ef0c',
   // [ActivityTypeGroups.TrailRunning]: '#aeea00',
   [ActivityTypeGroups.Cycling]: '#FF7C3B',
+  [ActivityTypeGroups.MountainBiking]: '#6A8F3A',
   [ActivityTypeGroups.Swimming]: '#40C4FF',
   [ActivityTypeGroups.Performance]: '#AFE443',
   [ActivityTypeGroups.IndoorSports]: '#FF467E',

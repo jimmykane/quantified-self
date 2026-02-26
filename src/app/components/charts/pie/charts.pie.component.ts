@@ -34,7 +34,8 @@ import { isDarkChartThemeActive } from '../../../helpers/echarts-theme.helper';
 import {
   getDashboardAggregateData,
   getDashboardChartSortComparator,
-  getDashboardDataInstanceOrNull
+  getDashboardDataInstanceOrNull,
+  getDashboardSummaryMetaLabel
 } from '../../../helpers/dashboard-chart-data.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
@@ -183,7 +184,11 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
     const centerValue = aggregateData
       ? `${aggregateData.getDisplayValue()}${aggregateData.getDisplayUnit()}`
       : '--';
-    const centerSubLabel = this.chartDataValueType || 'Value';
+    const centerSubLabel = getDashboardSummaryMetaLabel(
+      this.chartDataCategoryType,
+      this.chartDataValueType,
+      this.chartDataTimeInterval
+    );
 
     return {
       animation: this.useAnimations === true,

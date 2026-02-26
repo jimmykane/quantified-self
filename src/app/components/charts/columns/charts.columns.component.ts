@@ -26,7 +26,8 @@ import { EChartsHostController } from '../../../helpers/echarts-host-controller'
 import { isDarkChartThemeActive } from '../../../helpers/echarts-theme.helper';
 import {
   getDashboardAggregateData,
-  getDashboardDataInstanceOrNull
+  getDashboardDataInstanceOrNull,
+  getDashboardSummaryMetaLabel
 } from '../../../helpers/dashboard-chart-data.helper';
 import {
   buildDashboardCartesianPoints,
@@ -235,10 +236,11 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     const summaryValue = aggregate
       ? `${aggregate.getDisplayValue()}${aggregate.getDisplayUnit()}`
       : '--';
-    const intervalLabel = this.chartDataCategoryType === ChartDataCategoryTypes.DateType
-      ? ` @ ${TimeIntervals[this.chartDataTimeInterval || TimeIntervals.Daily]}`
-      : '';
-    const summaryMeta = `${this.chartDataValueType || 'Value'}${intervalLabel}`;
+    const summaryMeta = getDashboardSummaryMetaLabel(
+      this.chartDataCategoryType,
+      this.chartDataValueType,
+      this.chartDataTimeInterval
+    );
 
     const categoryAxis = {
       type: 'category',

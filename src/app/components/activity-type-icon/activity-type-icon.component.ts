@@ -130,7 +130,7 @@ export class ActivityTypeIconComponent {
             return overrideIcon;
         }
 
-        const activityTypeEnum = ActivityTypes[activity as keyof typeof ActivityTypes] || (Object.values(ActivityTypes).includes(activity as ActivityTypes) ? activity as ActivityTypes : ActivityTypes.Other);
+        const activityTypeEnum = ActivityTypesHelper.resolveActivityType(activity) || ActivityTypes.Other;
         const group = ActivityTypesHelper.getActivityGroupForActivityType(activityTypeEnum);
         return AppActivityTypeGroupIcons[group] || 'category';
     }
