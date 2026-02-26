@@ -1,5 +1,6 @@
 import {
   AfterViewInit,
+  ChangeDetectorRef,
   ChangeDetectionStrategy,
   Component,
   ElementRef,
@@ -13,6 +14,7 @@ import {
 } from '@angular/core';
 import { ChartThemes, LapTypes, XAxisTypes } from '@sports-alliance/sports-lib';
 import type { EChartsType } from 'echarts/core';
+import { Subscription } from 'rxjs';
 import { EChartsLoaderService } from '../../../../services/echarts-loader.service';
 import { LoggerService } from '../../../../services/logger.service';
 import { EChartsHostController } from '../../../../helpers/echarts-host-controller';
@@ -32,6 +34,7 @@ import {
   EventPanelRangeStat
 } from '../../../../helpers/event-echarts-range-stats.helper';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib';
+import { EventChartSelectionSyncService } from '../event-chart-selection-sync.service';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 
@@ -52,7 +55,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @Input() zoomGroupId: string | null = null;
   @Input() zoomResetVersion = 0;
   @Input() xDomain: EventChartRange | null = null;
-  @Input() selectionRange: EventChartRange | null = null;
   @Input() showLaps = true;
   @Input() lapTypes: LapTypes[] = [];
   @Input() lapMarkers: EventChartLapMarker[] = [];
@@ -60,7 +62,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @Input() extraMaxForPower = 0;
   @Input() extraMaxForPace = -0.25;
 
-  @Output() selectionRangeChange = new EventEmitter<EventChartRange | null>();
   @Output() cursorPositionChange = new EventEmitter<number>();
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
@@ -73,10 +74,14 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private lastAppliedZoomResetVersion = -1;
   private wheelPassThroughListener: ((event: Event) => void) | null = null;
   private pointerSyncEnabled = false;
+  private selectionSyncSubscription?: Subscription;
+  private selectionSyncQueued = false;
 
   constructor(
     private eChartsLoader: EChartsLoaderService,
-    private logger: LoggerService
+    private logger: LoggerService,
+    private selectionSyncService: EventChartSelectionSyncService,
+    private cdr: ChangeDetectorRef,
   ) {
     this.chartHost = new EChartsHostController({
       eChartsLoader: this.eChartsLoader,
@@ -86,7 +91,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   get hasSelection(): boolean {
-    return !!this.selectionRange;
+    return !!this.getCurrentSelectionRange();
   }
 
   async ngAfterViewInit(): Promise<void> {
@@ -94,6 +99,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.bindWheelPassThrough();
     this.syncNativeZoomGroup();
     this.bindChartEvents();
+    this.selectionSyncSubscription = this.selectionSyncService.selectionRangeChanges()
+      .subscribe(() => this.queueSelectionSync());
     this.refreshChart();
   }
 
@@ -116,7 +123,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       || changes.zoomGroupId
       || changes.zoomResetVersion
       || changes.xDomain
-      || changes.selectionRange
       || changes.showLaps
       || changes.lapMarkers
       || changes.extraMaxForPower
@@ -127,6 +133,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   ngOnDestroy(): void {
+    this.selectionSyncSubscription?.unsubscribe();
     this.unbindWheelPassThrough();
     this.disconnectNativeZoomGroup();
     this.chartHost.dispose();
@@ -155,6 +162,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.applyExternalInteractions();
     this.updateRangeStats();
     this.chartHost.scheduleResize();
+    this.cdr.markForCheck();
   }
 
   private buildOption(): ChartOption {
@@ -293,7 +301,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           xAxisIndex: 0,
           filterMode: 'none',
           zoomOnMouseWheel: false,
-          moveOnMouseMove: true,
+          moveOnMouseMove: this.interactionMode === 'zoom',
           moveOnMouseWheel: false,
           preventDefaultMouseMove: false,
         },
@@ -313,8 +321,9 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           brushType: 'lineX',
           brushMode: 'single',
           transformable: false,
-          throttleType: 'debounce',
-          throttleDelay: 80,
+          removeOnClick: true,
+          throttleType: 'fixRate',
+          throttleDelay: 16,
         }
         : undefined,
       series: seriesOptions
@@ -334,24 +343,25 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return;
     }
 
-    chart.on('brushSelected', (params: any) => {
+    const handleBrushEvent = (params: any) => {
       if (this.interactionMode !== 'select' || !this.panel) {
         return;
       }
 
-      const coordRange = params?.batch?.[0]?.areas?.[0]?.coordRange;
-      if (!Array.isArray(coordRange) || coordRange.length !== 2) {
-        this.selectionRangeChange.emit(null);
+      const coordRange = this.extractBrushCoordRange(params);
+      const domain = this.getActiveDomain();
+      const range = coordRange
+        ? clampEventRange({ start: Number(coordRange[0]), end: Number(coordRange[1]) }, domain.start, domain.end)
+        : null;
+
+      const currentRange = this.selectionSyncService.selectionRange();
+      if (this.areRangesEqual(range, currentRange)) {
         return;
       }
+      this.selectionSyncService.setSelection(range);
+    };
 
-      const domain = this.getActiveDomain();
-      const range = clampEventRange({ start: Number(coordRange[0]), end: Number(coordRange[1]) }, domain.start, domain.end);
-
-      if (!this.areRangesEqual(range, this.selectionRange)) {
-        this.selectionRangeChange.emit(range);
-      }
-    });
+    chart.on('brushSelected', handleBrushEvent);
 
     chart.on('updateAxisPointer', (params: any) => {
       if (!this.pointerSyncEnabled) {
@@ -385,28 +395,52 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     this.applyZoomResetIfRequested(chart);
+    this.applyBrushCursorMode(chart);
 
-    if (this.interactionMode === 'select' && this.selectionRange) {
-      const domain = this.getActiveDomain();
-      const selectionRange = clampEventRange(this.selectionRange, domain.start, domain.end);
-      if (selectionRange) {
-        chart.dispatchAction({
-          type: 'brush',
-          silent: true,
-          areas: [{
-            brushType: 'lineX',
-            xAxisIndex: 0,
-            coordRange: [selectionRange.start, selectionRange.end],
-          }],
-        });
-      }
+    const selectionRange = this.interactionMode === 'select'
+      ? this.getCurrentSelectionRange()
+      : null;
+
+    if (selectionRange) {
+      chart.dispatchAction({
+        type: 'brush',
+        escapeConnect: true,
+        areas: [{
+          brushType: 'lineX',
+          xAxisIndex: 0,
+          coordRange: [selectionRange.start, selectionRange.end],
+        }],
+      }, { silent: true });
     } else {
       chart.dispatchAction({
         type: 'brush',
-        silent: true,
+        escapeConnect: true,
         areas: [],
-      });
+      }, { silent: true });
     }
+  }
+
+  private applyBrushCursorMode(chart: EChartsType): void {
+    if (this.interactionMode === 'select') {
+      chart.dispatchAction({
+        type: 'takeGlobalCursor',
+        key: 'brush',
+        brushOption: {
+          brushType: 'lineX',
+          brushMode: 'single',
+          xAxisIndex: 0,
+        },
+      });
+      return;
+    }
+
+    chart.dispatchAction({
+      type: 'takeGlobalCursor',
+      key: 'brush',
+      brushOption: {
+        brushType: false,
+      },
+    });
   }
 
   private applyZoomResetIfRequested(chart: EChartsType): void {
@@ -421,10 +455,9 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const domain = this.getActiveDomain();
     chart.dispatchAction({
       type: 'dataZoom',
-      silent: true,
       startValue: domain.start,
       endValue: domain.end,
-    });
+    }, { silent: true });
     this.lastAppliedZoomResetVersion = this.zoomResetVersion;
   }
 
@@ -436,7 +469,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     this.rangeStats = computeEventPanelRangeStats({
       panel: this.panel,
-      range: this.selectionRange,
+      range: this.getCurrentSelectionRange(),
       xAxisType: this.xAxisType,
       gainAndLossThreshold: this.gainAndLossThreshold,
     });
@@ -555,8 +588,63 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   private areRangesEqual(left: EventChartRange | null, right: EventChartRange | null): boolean {
     if (!left || !right) {
-      return false;
+      return !left && !right;
     }
     return Math.abs(left.start - right.start) < 0.0001 && Math.abs(left.end - right.end) < 0.0001;
+  }
+
+  private getCurrentSelectionRange(): EventChartRange | null {
+    const selectionRange = this.selectionSyncService.selectionRange();
+    if (!selectionRange) {
+      return null;
+    }
+    const domain = this.getActiveDomain();
+    return clampEventRange(selectionRange, domain.start, domain.end);
+  }
+
+  private syncSelectionFromService(): void {
+    const chart = this.chartHost.getChart();
+    if (!chart || !this.panel) {
+      return;
+    }
+    this.applyExternalInteractions();
+    this.updateRangeStats();
+    this.cdr.markForCheck();
+  }
+
+  private queueSelectionSync(): void {
+    if (this.selectionSyncQueued) {
+      return;
+    }
+    this.selectionSyncQueued = true;
+
+    queueMicrotask(() => {
+      this.selectionSyncQueued = false;
+      this.syncSelectionFromService();
+    });
+  }
+
+  private extractBrushCoordRange(params: any): [number, number] | null {
+    const areaCollections = [
+      params?.batch?.[0]?.areas,
+      params?.areas,
+    ];
+
+    for (const areas of areaCollections) {
+      if (!Array.isArray(areas) || areas.length === 0) {
+        continue;
+      }
+      const coordRange = areas[0]?.coordRange;
+      if (!Array.isArray(coordRange) || coordRange.length !== 2) {
+        continue;
+      }
+      const start = Number(coordRange[0]);
+      const end = Number(coordRange[1]);
+      if (Number.isFinite(start) && Number.isFinite(end)) {
+        return [start, end];
+      }
+    }
+
+    return null;
   }
 }
