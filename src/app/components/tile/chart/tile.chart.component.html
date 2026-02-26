@@ -27,12 +27,6 @@
     [chartDataCategoryType]="dataCategoryType" [chartDataTimeInterval]="dataTimeInterval">
   </app-columns-chart>
   }
-  @if (chartType === chartTypes.Spiral) {
-  <app-timeline-chart [isLoading]="isLoading" [data]="data" [chartTheme]="chartTheme" [chartDataType]="dataType"
-    [chartDataValueType]="dataValueType" [chartDataCategoryType]="dataCategoryType"
-    [chartDataTimeInterval]="dataTimeInterval">
-  </app-timeline-chart>
-  }
 
   @if (chartType === chartTypes.IntensityZones) {
   <app-loading-overlay [isLoading]="isLoading" [hasError]="data?.length === 0" [errorMessage]="'No data yet'"

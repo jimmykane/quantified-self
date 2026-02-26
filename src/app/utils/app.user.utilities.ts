@@ -358,6 +358,14 @@ export class AppUserUtilities {
         settings.dashboardSettings.includeMergedEvents = settings.dashboardSettings.includeMergedEvents !== false;
         settings.dashboardSettings.tiles = settings.dashboardSettings.tiles || AppUserUtilities.getDefaultUserDashboardTiles();
         settings.dashboardSettings.tiles = settings.dashboardSettings.tiles.map((tile: TileSettingsInterface) => {
+            if (tile.type === TileTypes.Chart) {
+                const chartTile = tile as TileChartSettingsInterface;
+                if (chartTile.chartType === ChartTypes.Spiral) {
+                    chartTile.chartType = ChartTypes.LinesVertical;
+                }
+                return chartTile;
+            }
+
             if (tile.type !== TileTypes.Map) {
                 return tile;
             }

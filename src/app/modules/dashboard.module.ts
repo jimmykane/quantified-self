@@ -17,7 +17,6 @@ import { TileMapActionsComponent } from '../components/tile/actions/map/tile.map
 import { TileActionsHeaderComponent } from '../components/tile/actions/header/tile.actions.header.component';
 import { TileActionsFooterComponent } from '../components/tile/actions/footer/tile.actions.footer.component';
 
-import { ChartsTimelineComponent } from '../components/charts/timeline/charts.timeline.component';
 import { ChartsXYComponent } from '../components/charts/xy/charts.xy.component';
 import { ChartsColumnsComponent } from '../components/charts/columns/charts.columns.component';
 import { EventTableActionsComponent } from '../components/event-table/actions/event.table.actions.component';
@@ -45,7 +44,6 @@ import { ChartsPieComponent } from '../components/charts/pie/charts.pie.componen
         EventsMapComponent,
         TileChartComponent,
         TileMapComponent,
-        ChartsTimelineComponent,
         ChartsPieComponent,
         ChartsXYComponent,
         ChartsColumnsComponent,

@@ -1,6 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import { AppUserUtilities } from './app.user.utilities';
-import { User, ActivityTypes, DateRanges, AppThemes, ChartThemes } from '@sports-alliance/sports-lib';
+import {
+    User,
+    ActivityTypes,
+    DateRanges,
+    AppThemes,
+    ChartThemes,
+    ChartDataCategoryTypes,
+    ChartDataValueTypes,
+    ChartTypes,
+    TileTypes,
+    TimeIntervals
+} from '@sports-alliance/sports-lib';
 import { AppUserInterface } from '../models/app-user.interface';
 
 describe('AppUserUtilities', () => {
@@ -184,6 +195,31 @@ describe('AppUserUtilities', () => {
 
             const settings = AppUserUtilities.fillMissingAppSettings(user);
             expect((settings.myTracksSettings as any)?.showJumpHeatmap).toBe(false);
+        });
+
+        it('should migrate legacy Spiral dashboard tiles to LinesVertical', () => {
+            const user = {
+                settings: {
+                    dashboardSettings: {
+                        tiles: [
+                            {
+                                type: TileTypes.Chart,
+                                chartType: ChartTypes.Spiral,
+                                dataType: 'distance',
+                                dataValueType: ChartDataValueTypes.Total,
+                                dataCategoryType: ChartDataCategoryTypes.DateType,
+                                dataTimeInterval: TimeIntervals.Daily,
+                                name: 'Legacy Spiral',
+                                order: 0,
+                                size: { columns: 1, rows: 1 }
+                            }
+                        ]
+                    }
+                }
+            } as unknown as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+            expect((settings.dashboardSettings?.tiles?.[0] as any)?.chartType).toBe(ChartTypes.LinesVertical);
         });
     });
 });
