@@ -35,20 +35,20 @@ function getNextIntervalTime(time: number, interval: TimeIntervals): number {
   const next = new Date(time);
   switch (interval) {
     case TimeIntervals.Yearly:
-      next.setFullYear(next.getFullYear() + 1);
+      next.setUTCFullYear(next.getUTCFullYear() + 1);
       break;
     case TimeIntervals.Monthly:
-      next.setMonth(next.getMonth() + 1);
+      next.setUTCMonth(next.getUTCMonth() + 1);
       break;
     case TimeIntervals.Weekly:
-      next.setDate(next.getDate() + 7);
+      next.setUTCDate(next.getUTCDate() + 7);
       break;
     case TimeIntervals.Hourly:
-      next.setHours(next.getHours() + 1);
+      next.setUTCHours(next.getUTCHours() + 1);
       break;
     case TimeIntervals.Daily:
     default:
-      next.setDate(next.getDate() + 1);
+      next.setUTCDate(next.getUTCDate() + 1);
       break;
   }
   return next.getTime();
@@ -58,20 +58,20 @@ function getPreviousIntervalTime(time: number, interval: TimeIntervals): number 
   const previous = new Date(time);
   switch (interval) {
     case TimeIntervals.Yearly:
-      previous.setFullYear(previous.getFullYear() - 1);
+      previous.setUTCFullYear(previous.getUTCFullYear() - 1);
       break;
     case TimeIntervals.Monthly:
-      previous.setMonth(previous.getMonth() - 1);
+      previous.setUTCMonth(previous.getUTCMonth() - 1);
       break;
     case TimeIntervals.Weekly:
-      previous.setDate(previous.getDate() - 7);
+      previous.setUTCDate(previous.getUTCDate() - 7);
       break;
     case TimeIntervals.Hourly:
-      previous.setHours(previous.getHours() - 1);
+      previous.setUTCHours(previous.getUTCHours() - 1);
       break;
     case TimeIntervals.Daily:
     default:
-      previous.setDate(previous.getDate() - 1);
+      previous.setUTCDate(previous.getUTCDate() - 1);
       break;
   }
   return previous.getTime();

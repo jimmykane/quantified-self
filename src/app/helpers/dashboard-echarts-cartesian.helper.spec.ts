@@ -78,6 +78,37 @@ describe('dashboard-echarts-cartesian.helper', () => {
     expect(points[2].time).toBe(dayThree);
   });
 
+  it('should advance daily buckets in UTC across DST boundaries', () => {
+    const previousTimeZone = process.env.TZ;
+    process.env.TZ = 'Europe/Berlin';
+
+    try {
+      const dayOne = Date.UTC(2024, 2, 31);
+      const dayTwo = Date.UTC(2024, 3, 1);
+
+      const points = buildDashboardCartesianPoints({
+        data: [
+          { time: dayOne, [ChartDataValueTypes.Total]: 10, count: 1 },
+          { time: dayTwo, [ChartDataValueTypes.Total]: 20, count: 1 },
+        ],
+        chartDataValueType: ChartDataValueTypes.Total,
+        chartDataCategoryType: ChartDataCategoryTypes.DateType,
+        chartDataTimeInterval: TimeIntervals.Daily,
+      });
+
+      expect(points).toHaveLength(2);
+      expect(points[0].time).toBe(dayOne);
+      expect(points[1].time).toBe(dayTwo);
+      expect(points.map(point => point.value)).toEqual([10, 20]);
+    } finally {
+      if (previousTimeZone === undefined) {
+        delete process.env.TZ;
+      } else {
+        process.env.TZ = previousTimeZone;
+      }
+    }
+  });
+
   it('should pad a single daily date point with adjacent zero buckets', () => {
     const day = Date.UTC(2024, 0, 2);
     const points = buildDashboardCartesianPoints({
