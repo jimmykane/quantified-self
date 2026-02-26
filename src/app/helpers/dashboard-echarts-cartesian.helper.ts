@@ -309,12 +309,35 @@ export function buildLinearRegressionPoints(points: DashboardRegressionPoint[]):
 }
 
 export function buildDashboardDateRegressionLine(points: DashboardCartesianPoint[]): DashboardRegressionPoint[] {
-  return buildLinearRegressionPoints(
-    points
-      .filter((point) => point.time !== null && point.count > 0)
-      .map((point) => ({
-        x: point.time as number,
-        y: point.value
-      }))
-  );
+  const modelSourcePoints = points
+    .filter((point) => point.time !== null && point.count > 0)
+    .map((point) => ({
+      x: point.time as number,
+      y: point.value
+    }));
+
+  if (modelSourcePoints.length < 2) {
+    return [];
+  }
+
+  const totalPoints = modelSourcePoints.length;
+  const sumX = modelSourcePoints.reduce((sum, point) => sum + point.x, 0);
+  const sumY = modelSourcePoints.reduce((sum, point) => sum + point.y, 0);
+  const sumXY = modelSourcePoints.reduce((sum, point) => sum + point.x * point.y, 0);
+  const sumXX = modelSourcePoints.reduce((sum, point) => sum + point.x * point.x, 0);
+  const denominator = totalPoints * sumXX - sumX * sumX;
+
+  if (Math.abs(denominator) < 1e-9) {
+    return [];
+  }
+
+  const slope = (totalPoints * sumXY - sumX * sumY) / denominator;
+  const intercept = (sumY - slope * sumX) / totalPoints;
+
+  return points
+    .filter((point) => point.time !== null)
+    .map((point) => ({
+      x: point.time as number,
+      y: slope * (point.time as number) + intercept
+    }));
 }

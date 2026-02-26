@@ -15,7 +15,7 @@
   || chartType === chartTypes.LinesVertical) {
   <app-xy-chart [isLoading]="isLoading" [data]="data" [chartTheme]="chartTheme" [chartDataType]="dataType"
     [chartDataValueType]="dataValueType" [chartDataCategoryType]="dataCategoryType"
-    [chartDataTimeInterval]="dataTimeInterval">
+    [chartDataTimeInterval]="dataTimeInterval" [vertical]="chartType !== chartTypes.LinesHorizontal">
   </app-xy-chart>
   }
   @if (chartType === chartTypes.ColumnsHorizontal

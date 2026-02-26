@@ -141,8 +141,9 @@ describe('dashboard-echarts-cartesian.helper', () => {
       { index: 2, label: 'C', value: 30, count: 1, time: null, activityType: null, rawItem: {} },
     ]);
 
-    expect(regression).toHaveLength(2);
+    expect(regression).toHaveLength(3);
     expect(regression[0].x).toBe(1000);
-    expect(regression[1].x).toBe(2000);
+    expect(regression[1].x).toBe(1500);
+    expect(regression[2].x).toBe(2000);
   });
 });
