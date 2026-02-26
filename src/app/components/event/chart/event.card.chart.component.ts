@@ -1,4 +1,5 @@
 import {
+  ChangeDetectorRef,
   ChangeDetectionStrategy,
   Component,
   EventEmitter,
@@ -172,6 +173,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   private eventColorService = inject(AppEventColorService);
   private logger = inject(LoggerService);
   private injector = inject(Injector);
+  private cdr = inject(ChangeDetectorRef);
 
   private themeSignal = toSignal(this.themeService.getChartTheme(), { initialValue: ChartThemes.Material });
   private cursorPositionSubject = new Subject<number>();
@@ -354,6 +356,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       this.zoomSyncGroupId = this.resolveZoomSyncGroupID(this.event);
     } finally {
       this.loaded();
+      this.cdr.markForCheck();
     }
   }
 
@@ -537,10 +540,12 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   private loading(): void {
     this.isLoading = true;
     this.loadingStatus.emit(true);
+    this.cdr.markForCheck();
   }
 
   private loaded(): void {
     this.isLoading = false;
     this.loadingStatus.emit(false);
+    this.cdr.markForCheck();
   }
 }

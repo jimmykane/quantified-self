@@ -72,6 +72,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private connectedZoomGroupId: string | null = null;
   private lastAppliedZoomResetVersion = -1;
   private wheelPassThroughListener: ((event: Event) => void) | null = null;
+  private pointerSyncEnabled = false;
 
   constructor(
     private eChartsLoader: EChartsLoaderService,
@@ -228,19 +229,21 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     return {
       animation: this.useAnimations === true,
+      backgroundColor: 'transparent',
       textStyle: {
         color: textColor,
         fontFamily: "'Barlow Condensed', sans-serif"
       },
       grid: {
-        left: 12,
-        right: 16,
+        left: 0,
+        right: 0,
         top: 8,
         bottom: this.interactionMode === 'zoom' && this.showZoomBar ? 40 : 16,
         containLabel: true,
       },
       tooltip: {
         trigger: 'axis',
+        triggerOn: this.pointerSyncEnabled ? 'mousemove|click' : 'none',
         axisPointer: { type: 'line' },
         backgroundColor: tooltipBackgroundColor,
         borderColor: tooltipBorderColor,
@@ -281,7 +284,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         },
         axisLabel: {
           color: textColor,
-          formatter: (value: number) => this.formatDataValue(panel.dataType, value)
+          formatter: (value: number) => this.formatDataValue(panel.dataType, value, false)
         }
       },
       dataZoom: [
@@ -351,13 +354,28 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     });
 
     chart.on('updateAxisPointer', (params: any) => {
+      if (!this.pointerSyncEnabled) {
+        return;
+      }
       const value = Number(params?.axesInfo?.[0]?.value);
       if (Number.isFinite(value)) {
         this.cursorPositionChange.emit(value);
       }
     });
 
+    chart.on('click', () => this.activatePointerSync());
+    const zr = (chart as any).getZr?.();
+    zr?.on?.('click', () => this.activatePointerSync());
+
     this.eventsBound = true;
+  }
+
+  private activatePointerSync(): void {
+    if (this.pointerSyncEnabled) {
+      return;
+    }
+    this.pointerSyncEnabled = true;
+    this.refreshChart();
   }
 
   private applyExternalInteractions(): void {
@@ -444,14 +462,16 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     return `<div style="font-weight:600;margin-bottom:4px;">${header}</div>${seriesLines.join('')}`;
   }
 
-  private formatDataValue(streamType: string, value: number): string {
+  private formatDataValue(streamType: string, value: number, includeUnit = true): string {
     if (!Number.isFinite(value)) {
       return '--';
     }
 
     try {
       const dataInstance = DynamicDataLoader.getDataInstanceFromDataType(streamType, value);
-      return `${dataInstance.getDisplayValue()}${dataInstance.getDisplayUnit()}`;
+      return includeUnit
+        ? `${dataInstance.getDisplayValue()}${dataInstance.getDisplayUnit()}`
+        : `${dataInstance.getDisplayValue()}`;
     } catch {
       return `${value.toFixed(2)}`;
     }

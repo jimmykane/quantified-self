@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { XAxisTypes } from '@sports-alliance/sports-lib';
+import { DynamicDataLoader, XAxisTypes } from '@sports-alliance/sports-lib';
 import { EventCardChartPanelComponent } from './event.card.chart.panel.component';
 import { EChartsLoaderService } from '../../../../services/echarts-loader.service';
 import { LoggerService } from '../../../../services/logger.service';
@@ -10,6 +10,13 @@ describe('EventCardChartPanelComponent', () => {
   let component: EventCardChartPanelComponent;
   type ChartEventHandler = (params?: unknown) => void;
   let handlers: Record<string, ChartEventHandler>;
+  let zrHandlers: Record<string, ChartEventHandler>;
+
+  const zr = {
+    on: vi.fn((name: string, callback: ChartEventHandler) => {
+      zrHandlers[name] = callback;
+    }),
+  } as any;
 
   const chart = {
     on: vi.fn((name: string, callback: ChartEventHandler) => {
@@ -20,6 +27,7 @@ describe('EventCardChartPanelComponent', () => {
     resize: vi.fn(),
     dispose: vi.fn(),
     isDisposed: vi.fn().mockReturnValue(false),
+    getZr: vi.fn(() => zr),
   } as any;
 
   const eChartsLoaderMock = {
@@ -33,6 +41,7 @@ describe('EventCardChartPanelComponent', () => {
 
   beforeEach(async () => {
     handlers = {};
+    zrHandlers = {};
     vi.clearAllMocks();
 
     await TestBed.configureTestingModule({
@@ -82,10 +91,13 @@ describe('EventCardChartPanelComponent', () => {
     expect(eChartsLoaderMock.connectGroup).toHaveBeenCalledWith('event-zoom-group');
     expect(eChartsLoaderMock.setOption).toHaveBeenCalled();
     expect(chart.on).toHaveBeenCalledWith('brushSelected', expect.any(Function));
+    expect(chart.on).toHaveBeenCalledWith('click', expect.any(Function));
+    expect(zr.on).toHaveBeenCalledWith('click', expect.any(Function));
 
     const option = eChartsLoaderMock.setOption.mock.calls.at(-1)?.[1] as any;
     expect(option?.xAxis?.min).toBe(0);
     expect(option?.xAxis?.max).toBe(120);
+    expect(option?.tooltip?.triggerOn).toBe('none');
     expect(option?.dataZoom?.[0]?.zoomOnMouseWheel).toBe(false);
     expect(option?.dataZoom?.[0]?.moveOnMouseWheel).toBe(false);
     expect(option?.dataZoom?.[1]?.show).toBe(true);
@@ -123,7 +135,7 @@ describe('EventCardChartPanelComponent', () => {
     });
   });
 
-  it('emits cursor x values for map sync', async () => {
+  it('starts pointer sync only after chart click', async () => {
     const emitSpy = vi.spyOn(component.cursorPositionChange, 'emit');
 
     fixture.detectChanges();
@@ -131,8 +143,30 @@ describe('EventCardChartPanelComponent', () => {
     await new Promise(resolve => setTimeout(resolve, 0));
 
     handlers.updateAxisPointer({ axesInfo: [{ value: 33 }] });
+    expect(emitSpy).not.toHaveBeenCalled();
 
+    zrHandlers.click({});
+    const reRenderedOption = eChartsLoaderMock.setOption.mock.calls.at(-1)?.[1] as any;
+    expect(reRenderedOption?.tooltip?.triggerOn).toBe('mousemove|click');
+
+    handlers.updateAxisPointer({ axesInfo: [{ value: 33 }] });
     expect(emitSpy).toHaveBeenCalledWith(33);
+  });
+
+  it('formats y-axis labels without units', async () => {
+    fixture.detectChanges();
+    await component.ngAfterViewInit();
+
+    const option = eChartsLoaderMock.setOption.mock.calls.at(-1)?.[1] as any;
+    const formatter = option?.yAxis?.axisLabel?.formatter as ((value: number) => string);
+    const getDataInstanceSpy = vi.spyOn(DynamicDataLoader, 'getDataInstanceFromDataType').mockReturnValue({
+      getDisplayValue: () => '12.3',
+      getDisplayUnit: () => 'km/h',
+    } as any);
+
+    expect(formatter(12.3)).toBe('12.3');
+
+    getDataInstanceSpy.mockRestore();
   });
 
   it('disconnects zoom group on destroy', async () => {

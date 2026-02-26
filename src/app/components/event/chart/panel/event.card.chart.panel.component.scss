@@ -5,8 +5,8 @@
 .event-chart-panel {
   border: 1px solid var(--mat-sys-outline-variant);
   border-radius: 12px;
-  padding: 10px;
-  background: color-mix(in srgb, var(--mat-sys-surface) 94%, transparent);
+  padding: 10px 0;
+  background: transparent;
 }
 
 .event-chart-panel__header {

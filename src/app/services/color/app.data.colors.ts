@@ -1,9 +1,10 @@
-import {AppColors} from './app.colors';
+import { AppColors } from './app.colors';
 
 export enum AppDataColors {
   'Altitude' = AppColors.Green,
   'Altitude_0' = AppColors.Green,
   'Altitude_1' = AppColors.LightGreen,
+  'Cadence' = AppColors.DeepBlue,
   'Power' = AppColors.Orange,
   'Power_0' = AppColors.Orange,
   'Power_1' = AppColors.Blue,

@@ -2,6 +2,7 @@ import {
   DataAbsolutePressure,
   DataAirPower,
   DataAltitude,
+  DataCadence,
   DataDistance,
   DataEHPE,
   DataEVPE,
@@ -123,6 +124,10 @@ const DISTANCE_GROUP = new Set<string>([
   DataStrydDistance.type,
 ]);
 
+const CADENCE_GROUP = new Set<string>([
+  DataCadence.type,
+]);
+
 const FALLBACK_COLORS: string[] = [
   AppColors.Blue,
   AppColors.Orange,
@@ -166,6 +171,9 @@ export function resolveEventColorGroupKey(streamType: string): string {
   if (DISTANCE_GROUP.has(streamType)) {
     return 'Distance';
   }
+  if (CADENCE_GROUP.has(streamType)) {
+    return DataCadence.type;
+  }
   return streamType;
 }
 
@@ -185,61 +193,38 @@ export function resolveEventSeriesColor(groupKey: string, seriesIndex: number, s
   if (normalizedCount <= 1) {
     return baseColor;
   }
-
-  const spread = (normalizedIndex / Math.max(1, normalizedCount - 1)) - 0.5;
-  return tintHexColor(baseColor, spread * 0.34);
+  if (normalizedIndex === 0) {
+    return baseColor;
+  }
+  return resolveFallbackVariantColor(groupKey, normalizedIndex, baseColor);
 }
 
 function resolveFallbackColor(groupKey: string): string {
-  const key = `${groupKey || 'unknown'}`;
-  let hash = 0;
-  for (let index = 0; index < key.length; index += 1) {
-    hash = ((hash << 5) - hash) + key.charCodeAt(index);
-    hash |= 0;
-  }
+  const hash = hashString(`${groupKey || 'unknown'}`);
   const colorIndex = Math.abs(hash) % FALLBACK_COLORS.length;
   return FALLBACK_COLORS[colorIndex];
 }
 
-function tintHexColor(color: string, factor: number): string {
-  const rgb = parseHexColor(color);
-  if (!rgb) {
-    return color;
+function resolveFallbackVariantColor(groupKey: string, seriesIndex: number, baseColor: string): string {
+  const initialIndex = Math.abs(hashString(`${groupKey || 'unknown'}:${seriesIndex}`)) % FALLBACK_COLORS.length;
+  for (let offset = 0; offset < FALLBACK_COLORS.length; offset += 1) {
+    const candidate = FALLBACK_COLORS[(initialIndex + offset) % FALLBACK_COLORS.length];
+    if (!isSameColor(candidate, baseColor)) {
+      return candidate;
+    }
   }
-
-  const boundedFactor = Math.max(-1, Math.min(1, factor));
-  const target = boundedFactor >= 0 ? 255 : 0;
-  const amount = Math.abs(boundedFactor);
-
-  const tinted = rgb.map((channel) => Math.round(channel + ((target - channel) * amount)));
-  return toHexColor(tinted[0], tinted[1], tinted[2]);
+  return baseColor;
 }
 
-function parseHexColor(color: string): [number, number, number] | null {
-  const normalized = `${color || ''}`.trim();
-  if (!normalized.startsWith('#')) {
-    return null;
-  }
-
-  const hex = normalized.slice(1);
-  const expanded = hex.length === 3
-    ? `${hex[0]}${hex[0]}${hex[1]}${hex[1]}${hex[2]}${hex[2]}`
-    : hex;
-
-  if (!/^[0-9a-fA-F]{6}$/.test(expanded)) {
-    return null;
-  }
-
-  return [
-    Number.parseInt(expanded.slice(0, 2), 16),
-    Number.parseInt(expanded.slice(2, 4), 16),
-    Number.parseInt(expanded.slice(4, 6), 16),
-  ];
+function isSameColor(left: string, right: string): boolean {
+  return `${left || ''}`.trim().toLowerCase() === `${right || ''}`.trim().toLowerCase();
 }
 
-function toHexColor(red: number, green: number, blue: number): string {
-  const channels = [red, green, blue]
-    .map((channel) => Math.max(0, Math.min(255, Math.round(channel))))
-    .map((channel) => channel.toString(16).padStart(2, '0'));
-  return `#${channels.join('')}`;
+function hashString(value: string): number {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = ((hash << 5) - hash) + value.charCodeAt(index);
+    hash |= 0;
+  }
+  return hash;
 }

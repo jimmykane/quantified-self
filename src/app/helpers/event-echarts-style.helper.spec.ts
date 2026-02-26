@@ -1,4 +1,5 @@
 import {
+  DataCadence,
   DataGradeAdjustedPace,
   DataPowerRight,
 } from '@sports-alliance/sports-lib';
@@ -13,19 +14,23 @@ describe('event-echarts-style.helper', () => {
   it('maps stream types to legacy color groups', () => {
     expect(resolveEventColorGroupKey(DataPowerRight.type)).toBe('Power');
     expect(resolveEventColorGroupKey(DataGradeAdjustedPace.type)).toBe('Pace');
+    expect(resolveEventColorGroupKey(DataCadence.type)).toBe(DataCadence.type);
     expect(resolveEventColorGroupKey('Unknown Data Type')).toBe('Unknown Data Type');
   });
 
   it('uses explicit AppDataColors variants when available', () => {
     expect(resolveEventSeriesColor('Power', 0, 3)).toBe((AppDataColors as any).Power_0);
     expect(resolveEventSeriesColor('Power', 1, 3)).toBe((AppDataColors as any).Power_1);
+    expect(resolveEventSeriesColor(DataCadence.type, 0, 1)).toBe((AppDataColors as any).Cadence);
   });
 
-  it('builds deterministic shaded variants when explicit variants are missing', () => {
-    const colorA = resolveEventSeriesColor('Speed', 5, 7);
-    const colorB = resolveEventSeriesColor('Speed', 5, 7);
+  it('builds deterministic distinct palette variants when explicit variants are missing', () => {
+    const base = resolveEventSeriesColor('Speed', 0, 3);
+    const colorA = resolveEventSeriesColor('Speed', 1, 3);
+    const colorB = resolveEventSeriesColor('Speed', 1, 3);
 
     expect(colorA).toBe(colorB);
+    expect(colorA).not.toBe(base);
     expect(colorA).toMatch(/^#[0-9a-f]{6}$/i);
   });
 
