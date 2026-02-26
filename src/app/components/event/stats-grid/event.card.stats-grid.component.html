@@ -1,6 +1,6 @@
 @if (metricTabs.length > 0) {
 <mat-tab-group #summaryTabGroup class="summary-metric-tabs" [selectedIndex]="selectedTabIndex" [disablePagination]="true"
-    [dynamicHeight]="false" [preserveContent]="true" [animationDuration]="'0ms'"
+    [dynamicHeight]="false" [preserveContent]="true" [animationDuration]="tabAnimationDuration"
     (selectedIndexChange)="onSelectedTabIndexChange($event)">
     @for (tab of metricTabs; track tab.id) {
     <mat-tab [aria-label]="tab.label">
