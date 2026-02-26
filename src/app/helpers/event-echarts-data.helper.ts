@@ -355,7 +355,17 @@ function toNumericArray(data: unknown): number[] {
     return [];
   }
 
-  return data.map((value) => Number(value));
+  return data.map((value) => {
+    if (typeof value === 'number') {
+      return value;
+    }
+
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return Number(value);
+    }
+
+    return Number.NaN;
+  });
 }
 
 function resolveLapAxisValue(activity: ActivityInterface, lapEndTimeMs: number | undefined, xAxisType: XAxisTypes): number {
