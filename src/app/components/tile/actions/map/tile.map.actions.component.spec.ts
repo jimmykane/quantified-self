@@ -123,4 +123,14 @@ describe('TileMapActionsComponent', () => {
         expect(userMock.settings.dashboardSettings.tiles[0].mapType).toBeUndefined();
         expect(userMock.updateUserProperties).toHaveBeenCalled();
     });
+
+    it('should emit savingChange while persisting map settings', async () => {
+        const emittedStates: boolean[] = [];
+        component.savingChange.subscribe(isSaving => emittedStates.push(isSaving));
+
+        await component.switchClusterMarkers({ checked: true } as any);
+
+        expect(emittedStates).toEqual([true, false]);
+        expect(userMock.updateUserProperties).toHaveBeenCalled();
+    });
 });

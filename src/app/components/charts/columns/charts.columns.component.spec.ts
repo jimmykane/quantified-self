@@ -224,7 +224,7 @@ describe('ChartsColumnsComponent', () => {
     expect(trendSeries).toBeUndefined();
   });
 
-  it('should build stacked date activity series with proportional splits and no labels', async () => {
+  it('should build stacked date activity series with proportional splits and end-value labels', async () => {
     const activityTypeAliases = Object.keys(ActivityTypes).filter((key) => (
       Number.isNaN(Number(key))
       && typeof (ActivityTypes as any)[key] === 'string'
@@ -257,13 +257,20 @@ describe('ChartsColumnsComponent', () => {
     await waitForChartStabilization();
 
     const option = getLastOption();
-    const dataSeries = option.series.filter((seriesEntry: { name?: string }) => seriesEntry.name !== 'Trend');
-    expect(dataSeries.length).toBeGreaterThanOrEqual(2);
-    expect(dataSeries.every((seriesEntry: { type?: string; stack?: string; label?: { show?: boolean } }) => (
+    const stackedSeries = option.series.filter((seriesEntry: { stack?: string }) => (
+      seriesEntry.stack === 'date-activity-stack'
+    ));
+    expect(stackedSeries.length).toBeGreaterThanOrEqual(2);
+    expect(stackedSeries.every((seriesEntry: { type?: string; stack?: string; label?: { show?: boolean } }) => (
       seriesEntry.type === 'bar'
       && seriesEntry.stack === 'date-activity-stack'
       && seriesEntry.label?.show === false
     ))).toBe(true);
+    const totalLabelSeries = option.series.find((seriesEntry: { name?: string }) => (
+      seriesEntry.name === '__date_activity_totals__'
+    ));
+    expect(totalLabelSeries).toBeDefined();
+    expect(totalLabelSeries.type).toBe('custom');
     expect(option.tooltip.trigger).toBe('axis');
   });
 
@@ -300,11 +307,18 @@ describe('ChartsColumnsComponent', () => {
     await waitForChartStabilization();
 
     const option = getLastOption();
-    const dataSeries = option.series.filter((seriesEntry: { name?: string }) => seriesEntry.name !== 'Trend');
-    expect(dataSeries.length).toBeGreaterThanOrEqual(2);
-    expect(dataSeries.every((seriesEntry: { type?: string; renderItem?: unknown }) => (
+    const segmentSeries = option.series.filter((seriesEntry: { name?: string }) => (
+      seriesEntry.name !== 'Trend' && seriesEntry.name !== '__date_activity_totals__'
+    ));
+    expect(segmentSeries.length).toBeGreaterThanOrEqual(2);
+    expect(segmentSeries.every((seriesEntry: { type?: string; renderItem?: unknown }) => (
       seriesEntry.type === 'custom' && typeof seriesEntry.renderItem === 'function'
     ))).toBe(true);
+    const totalLabelSeries = option.series.find((seriesEntry: { name?: string }) => (
+      seriesEntry.name === '__date_activity_totals__'
+    ));
+    expect(totalLabelSeries).toBeDefined();
+    expect(totalLabelSeries.type).toBe('custom');
   });
 
   it('should render stacked date series in horizontal mode', async () => {
@@ -343,10 +357,17 @@ describe('ChartsColumnsComponent', () => {
     expect(option.yAxis.type).toBe('category');
     const trendSeries = option.series.find((seriesEntry: { name?: string }) => seriesEntry.name === 'Trend');
     expect(trendSeries).toBeUndefined();
-    const dataSeries = option.series.filter((seriesEntry: { name?: string }) => seriesEntry.name !== 'Trend');
-    expect(dataSeries.every((seriesEntry: { type?: string; stack?: string }) => (
+    const stackedSeries = option.series.filter((seriesEntry: { stack?: string }) => (
+      seriesEntry.stack === 'date-activity-stack'
+    ));
+    expect(stackedSeries.every((seriesEntry: { type?: string; stack?: string }) => (
       seriesEntry.type === 'bar' && seriesEntry.stack === 'date-activity-stack'
     ))).toBe(true);
+    const totalLabelSeries = option.series.find((seriesEntry: { name?: string }) => (
+      seriesEntry.name === '__date_activity_totals__'
+    ));
+    expect(totalLabelSeries).toBeDefined();
+    expect(totalLabelSeries.type).toBe('custom');
   });
 
   it('should format segmented date tooltip with per-activity percentages', async () => {

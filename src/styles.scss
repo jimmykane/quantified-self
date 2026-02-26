@@ -938,6 +938,27 @@ tr.mat-row:focus,
   max-width: min(320px, calc(100vw - 24px)) !important;
 }
 
+/* Apply QS scrollbar skin to all Material select panels globally. */
+.mat-mdc-select-panel {
+  @include qs-scrollbar-skin;
+}
+
+.dark-theme .mat-mdc-select-panel {
+  scrollbar-color: color-mix(in srgb, var(--mat-sys-on-surface) 44%, transparent) transparent;
+
+  &::-webkit-scrollbar-thumb {
+    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 40%, transparent);
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 56%, transparent);
+  }
+
+  &::-webkit-scrollbar-thumb:active {
+    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 66%, transparent);
+  }
+}
+
 .mat-mdc-select-panel.qs-config-submenu-compact {
   min-width: 104px !important;
   width: 104px !important;

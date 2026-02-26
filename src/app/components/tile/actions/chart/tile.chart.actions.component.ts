@@ -146,31 +146,31 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
     if (event.value === ChartTypes.Pie) {
       chart.dataValueType = ChartDataValueTypes.Total;
     }
-    return this.userService.updateUserProperties(this.user, { settings: this.user.settings });
+    return this.persistUserSettings();
   }
 
   async changeChartDataType(event) {
     this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeChartDataType' });
     (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).dataType = event.value;
-    return this.userService.updateUserProperties(this.user, { settings: this.user.settings });
+    return this.persistUserSettings();
   }
 
   async changeChartDataValueType(event) {
     this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeChartDataValueType' });
     (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).dataValueType = event.value;
-    return this.userService.updateUserProperties(this.user, { settings: this.user.settings });
+    return this.persistUserSettings();
   }
 
   async changeChartDataCategoryType(event) {
     this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeChartDataCategoryType' });
     (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).dataCategoryType = event.value;
-    return this.userService.updateUserProperties(this.user, { settings: this.user.settings });
+    return this.persistUserSettings();
   }
 
   async changeChartTimeInterval(event) {
     this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeChartTimeInterval' });
     (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).dataTimeInterval = event.value;
-    return this.userService.updateUserProperties(this.user, { settings: this.user.settings });
+    return this.persistUserSettings();
   }
 
   ngOnInit(): void {

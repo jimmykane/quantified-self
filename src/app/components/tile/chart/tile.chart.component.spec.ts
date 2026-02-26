@@ -1,4 +1,4 @@
-import { Component, Input, NO_ERRORS_SCHEMA } from '@angular/core';
+import { Component, EventEmitter, Input, NO_ERRORS_SCHEMA, Output } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import {
@@ -29,6 +29,24 @@ class MockColumnsChartComponent {
 }
 
 @Component({
+  selector: 'app-tile-chart-actions',
+  template: '',
+  standalone: false
+})
+class MockTileChartActionsComponent {
+  @Input() user: any;
+  @Input() chartType?: ChartTypes;
+  @Input() order?: number;
+  @Input() size: any;
+  @Input() type: any;
+  @Input() chartDataType?: string;
+  @Input() chartDataCategoryType?: ChartDataCategoryTypes;
+  @Input() chartTimeInterval?: TimeIntervals;
+  @Input() chartDataValueType?: ChartDataValueTypes;
+  @Output() savingChange = new EventEmitter<boolean>();
+}
+
+@Component({
   selector: 'app-xy-chart',
   template: '',
   standalone: false
@@ -50,7 +68,7 @@ describe('TileChartComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [TileChartComponent, MockColumnsChartComponent, MockXYChartComponent],
+      declarations: [TileChartComponent, MockColumnsChartComponent, MockTileChartActionsComponent, MockXYChartComponent],
       schemas: [NO_ERRORS_SCHEMA]
     }).compileComponents();
 
@@ -73,6 +91,11 @@ describe('TileChartComponent', () => {
   const getXYComponent = (): MockXYChartComponent => {
     const xyDebugElement = fixture.debugElement.query(By.directive(MockXYChartComponent));
     return xyDebugElement.componentInstance as MockXYChartComponent;
+  };
+
+  const getActionsComponent = (): MockTileChartActionsComponent => {
+    const actionsDebugElement = fixture.debugElement.query(By.directive(MockTileChartActionsComponent));
+    return actionsDebugElement.componentInstance as MockTileChartActionsComponent;
   };
 
   it('should set vertical=false for LinesHorizontal', () => {
@@ -121,5 +144,35 @@ describe('TileChartComponent', () => {
     const columns = getColumnsComponent();
     expect(columns.type).toBe('pyramids');
     expect(columns.vertical).toBe(true);
+  });
+
+  it('should pass loading=true to line charts while tile action save is in progress', () => {
+    component.chartType = ChartTypes.LinesVertical;
+    component.showActions = true;
+    component.isLoading = false;
+
+    fixture.detectChanges();
+
+    const actions = getActionsComponent();
+    actions.savingChange.emit(true);
+    fixture.detectChanges();
+
+    const xy = getXYComponent();
+    expect(xy.isLoading).toBe(true);
+  });
+
+  it('should pass loading=true to columns while tile action save is in progress', () => {
+    component.chartType = ChartTypes.ColumnsVertical;
+    component.showActions = true;
+    component.isLoading = false;
+
+    fixture.detectChanges();
+
+    const actions = getActionsComponent();
+    actions.savingChange.emit(true);
+    fixture.detectChanges();
+
+    const columns = getColumnsComponent();
+    expect(columns.isLoading).toBe(true);
   });
 });

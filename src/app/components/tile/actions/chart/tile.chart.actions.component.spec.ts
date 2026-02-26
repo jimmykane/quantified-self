@@ -97,6 +97,16 @@ describe('TileChartActionsComponent', () => {
         expect(userMock.updateUserProperties).toHaveBeenCalled();
     });
 
+    it('should emit savingChange while persisting chart settings', async () => {
+        const emittedStates: boolean[] = [];
+        component.savingChange.subscribe(isSaving => emittedStates.push(isSaving));
+
+        await component.changeChartDataType({ value: 'Duration' } as any);
+
+        expect(emittedStates).toEqual([true, false]);
+        expect(userMock.updateUserProperties).toHaveBeenCalled();
+    });
+
     it('should exclude deprecated chart types from chart type options', () => {
         expect(component.chartTypeOptions.some(option => /^bri.*dev/i.test(option))).toBe(false);
         expect(component.chartTypeOptions.some(option => /^spiral$/i.test(option))).toBe(false);

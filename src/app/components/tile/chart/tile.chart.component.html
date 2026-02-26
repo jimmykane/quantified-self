@@ -2,18 +2,19 @@
   @if (showActions) {
   <app-tile-chart-actions class="actions" [user]="user" [chartType]="chartType" [order]="order" [size]="size"
     [type]="type" [chartDataType]="dataType" [chartDataCategoryType]="dataCategoryType"
-    [chartTimeInterval]="dataTimeInterval" [chartDataValueType]="dataValueType">
+    [chartTimeInterval]="dataTimeInterval" [chartDataValueType]="dataValueType"
+    (savingChange)="onTileActionSaving($event)">
   </app-tile-chart-actions>
   }
   @if (chartType === chartTypes.Pie) {
-  <app-pie-chart [isLoading]="isLoading" [data]="data" [chartTheme]="chartTheme" [chartDataType]="dataType"
+  <app-pie-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [chartTheme]="chartTheme" [chartDataType]="dataType"
     [chartDataValueType]="dataValueType" [chartDataCategoryType]="dataCategoryType"
     [chartDataTimeInterval]="dataTimeInterval">
   </app-pie-chart>
   }
   @if (chartType === chartTypes.LinesHorizontal
   || chartType === chartTypes.LinesVertical) {
-  <app-xy-chart [isLoading]="isLoading" [data]="data" [chartTheme]="chartTheme" [chartDataType]="dataType"
+  <app-xy-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [chartTheme]="chartTheme" [chartDataType]="dataType"
     [chartDataValueType]="dataValueType" [chartDataCategoryType]="dataCategoryType"
     [chartDataTimeInterval]="dataTimeInterval" [vertical]="chartType !== chartTypes.LinesHorizontal">
   </app-xy-chart>
@@ -21,7 +22,7 @@
   @if (chartType === chartTypes.ColumnsHorizontal
   || chartType === chartTypes.ColumnsVertical
   || chartType === chartTypes.PyramidsVertical) {
-  <app-columns-chart [isLoading]="isLoading" [data]="data" [chartTheme]="chartTheme" [type]="(chartType === chartTypes.ColumnsVertical || chartType === chartTypes.ColumnsHorizontal)
+  <app-columns-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [chartTheme]="chartTheme" [type]="(chartType === chartTypes.ColumnsVertical || chartType === chartTypes.ColumnsHorizontal)
       ? 'columns'
       : 'pyramids'" [vertical]="chartType !== chartTypes.ColumnsHorizontal" [chartDataType]="dataType" [chartDataValueType]="dataValueType"
     [chartDataCategoryType]="dataCategoryType" [chartDataTimeInterval]="dataTimeInterval">
@@ -29,7 +30,7 @@
   }
 
   @if (chartType === chartTypes.IntensityZones) {
-  <app-loading-overlay [isLoading]="isLoading" [hasError]="data?.length === 0" [errorMessage]="'No data yet'"
+  <app-loading-overlay [isLoading]="isLoading || isTileActionSaving" [hasError]="data?.length === 0" [errorMessage]="'No data yet'"
     [errorHint]="'Needs activities with heart rate or power data'" [errorIcon]="'favorite'" [showSkeleton]="false"
     height="100%" [style.height.%]="100">
     <app-event-intensity-zones [activities]="data" [chartTheme]="chartTheme" [orientation]="'vertical'"

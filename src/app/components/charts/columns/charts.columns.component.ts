@@ -123,6 +123,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
   }
 
   private readonly stackedActivitySeriesKey = 'date-activity-stack';
+  private readonly stackedTotalLabelSeriesName = '__date_activity_totals__';
 
   private refreshChart(): void {
     if (!this.chartHost.getChart()) {
@@ -203,7 +204,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     const dateActivityColorMap = useDateActivitySegmentation
       ? this.buildDateActivityColorMap(dateActivitySegmentation)
       : null;
-    const dataSeries = useDateActivitySegmentation
+    const segmentedDataSeries = useDateActivitySegmentation
       ? this.buildDateActivitySeries(
         dateActivitySegmentation,
         dateActivityColorMap as Map<string, string>,
@@ -216,6 +217,12 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
         isCompactLayout,
         points
       )];
+    const totalLabelSeries = useDateActivitySegmentation
+      ? this.buildDateActivityTotalLabelSeries(dateActivitySegmentation!, textColor, isCompactLayout)
+      : null;
+    const dataSeries = totalLabelSeries
+      ? [...segmentedDataSeries, totalLabelSeries]
+      : segmentedDataSeries;
     const shouldRenderTrend = this.vertical
       && this.chartDataCategoryType === ChartDataCategoryTypes.DateType;
     const trendSeries = shouldRenderTrend
@@ -385,6 +392,57 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
       return this.buildSegmentedPyramidSeries(segmentation, colorMap);
     }
     return this.buildSegmentedStackedBarSeries(segmentation, colorMap, isCompactLayout);
+  }
+
+  private buildDateActivityTotalLabelSeries(
+    segmentation: DashboardDateActivitySegmentationResult,
+    textColor: string,
+    isCompactLayout: boolean
+  ): Record<string, unknown> {
+    return {
+      type: 'custom',
+      name: this.stackedTotalLabelSeriesName,
+      z: 200,
+      silent: true,
+      animation: this.useAnimations === true,
+      data: segmentation.buckets.map((bucket) => [bucket.index, bucket.total]),
+      renderItem: (params: any, api: any) => this.renderDateActivityTotalLabel(params, api, textColor, isCompactLayout),
+      tooltip: { show: false }
+    };
+  }
+
+  private renderDateActivityTotalLabel(
+    params: any,
+    api: any,
+    textColor: string,
+    isCompactLayout: boolean
+  ): Record<string, unknown> | null {
+    const categoryIndex = Number(api.value(0));
+    const total = Number(api.value(1));
+    if (!Number.isFinite(categoryIndex) || !Number.isFinite(total) || total === 0) {
+      return null;
+    }
+
+    const coord = this.vertical
+      ? api.coord([categoryIndex, total])
+      : api.coord([total, categoryIndex]);
+    const offsetX = this.vertical ? 0 : 8;
+    const offsetY = this.vertical ? -8 : 0;
+
+    return {
+      type: 'text',
+      x: coord[0] + offsetX,
+      y: coord[1] + offsetY,
+      style: {
+        text: this.formatValue(total),
+        fill: textColor,
+        fontFamily: "'Barlow Condensed', sans-serif",
+        fontSize: isCompactLayout ? 11 : 12,
+        fontWeight: 700,
+        textAlign: this.vertical ? 'center' : 'left',
+        textVerticalAlign: this.vertical ? 'bottom' : 'middle'
+      }
+    };
   }
 
   private buildSegmentedStackedBarSeries(

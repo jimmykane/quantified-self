@@ -26,5 +26,10 @@ export class TileChartComponent extends TileAbstractDirective {
   @Input() data: any;
 
   public chartTypes = ChartTypes;
+  public isTileActionSaving = false;
+
+  onTileActionSaving(isSaving: boolean): void {
+    this.isTileActionSaving = isSaving === true;
+  }
 
 }
