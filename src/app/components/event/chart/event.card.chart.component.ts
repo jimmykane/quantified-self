@@ -19,7 +19,6 @@ import { throttleTime } from 'rxjs/operators';
 import { Subject, Subscription, asyncScheduler } from 'rxjs';
 import {
   ActivityInterface,
-  ChartCursorBehaviours,
   ChartThemes,
   DataDistance,
   DataStrydDistance,
@@ -44,11 +43,9 @@ import {
 } from '../../../helpers/event-echarts-data.helper';
 import { resolveEventSeriesColor } from '../../../helpers/event-echarts-style.helper';
 import {
-  clampEventRange,
   EventChartRange,
   resolveEventChartXAxisType,
 } from '../../../helpers/event-echarts-xaxis.helper';
-import { EventChartSelectionSyncService } from './event-chart-selection-sync.service';
 
 interface EventDataTypeLegendItem {
   dataType: string;
@@ -62,7 +59,6 @@ interface EventDataTypeLegendItem {
   templateUrl: './event.card.chart.component.html',
   styleUrls: ['./event.card.chart.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  providers: [EventChartSelectionSyncService],
   standalone: false
 })
 export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
@@ -82,14 +78,8 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   public dataTypeLegendItems: EventDataTypeLegendItem[] = [];
   public lapMarkers: EventChartLapMarker[] = [];
   public xDomain: EventChartRange | null = null;
-  public zoomResetVersion = 0;
-  public interactionMode: 'zoom' | 'select' = 'zoom';
   public renderedXAxisType: XAxisTypes = XAxisTypes.Duration;
   public zoomSyncGroupId: string | null = null;
-
-  public get selectionRange(): EventChartRange | null {
-    return this.selectionSyncService.selectionRange();
-  }
 
   public get showAllData() { return this.userSettingsQuery.chartSettings()?.showAllData ?? false; }
   public set showAllData(value: boolean) {
@@ -116,16 +106,6 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       : AppUserUtilities.getDefaultChartLapTypes();
   }
 
-  public get chartCursorBehaviour() {
-    return this.userSettingsQuery.chartSettings()?.chartCursorBehaviour ?? AppUserUtilities.getDefaultChartCursorBehaviour();
-  }
-  public set chartCursorBehaviour(value: ChartCursorBehaviours) {
-    if (value !== this.chartCursorBehaviour) {
-      void this.userSettingsQuery.updateChartSettings({ chartCursorBehaviour: value })
-        .catch((error) => this.logger.error('[EventCardChart] Failed to persist chartCursorBehaviour', error));
-    }
-  }
-
   public get xAxisType() { return this.xAxisTypeOverride ?? this.userSettingsQuery.chartSettings()?.xAxisType ?? XAxisTypes.Duration; }
   public set xAxisType(value: XAxisTypes) {
     if (value === this.xAxisType) {
@@ -144,10 +124,6 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
         this.xAxisTypeOverride = null;
         this.queueRebuild('xAxisType-revert');
       });
-  }
-
-  public get gainAndLossThreshold() {
-    return this.userSettingsQuery.chartSettings()?.gainAndLossThreshold ?? AppUserUtilities.getDefaultGainAndLossThreshold();
   }
 
   public get extraMaxForPower() {
@@ -177,14 +153,12 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   private chartSettingsLocalStorageService = inject(AppChartSettingsLocalStorageService);
   private eventColorService = inject(AppEventColorService);
   private logger = inject(LoggerService);
-  private selectionSyncService = inject(EventChartSelectionSyncService);
   private injector = inject(Injector);
   private cdr = inject(ChangeDetectorRef);
 
   private themeSignal = toSignal(this.themeService.getChartTheme(), { initialValue: ChartThemes.Material });
   private cursorPositionSubject = new Subject<number>();
   private cursorPositionSubscription?: Subscription;
-  private selectionRangeSubscription?: Subscription;
   private xAxisTypeOverride: XAxisTypes | null = null;
   private pendingRebuild = false;
   private visibleDataTypeIDs = new Set<string>();
@@ -198,16 +172,12 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
         this.userSettingsQuery.unitSettings();
 
         this.chartTheme = theme ?? ChartThemes.Material;
-        this.interactionMode = this.chartCursorBehaviour === ChartCursorBehaviours.SelectX ? 'select' : 'zoom';
         this.queueRebuild('settings-effect');
       }, { injector: this.injector });
     });
   }
 
   ngOnInit(): void {
-    this.selectionRangeSubscription = this.selectionSyncService.selectionRangeChanges()
-      .subscribe(() => this.cdr.markForCheck());
-
     this.cursorPositionSubscription = this.cursorPositionSubject.pipe(
       throttleTime(250, asyncScheduler, { leading: true, trailing: true })
     ).subscribe((axisValue) => {
@@ -230,28 +200,6 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
 
   ngOnDestroy(): void {
     this.cursorPositionSubscription?.unsubscribe();
-    this.selectionRangeSubscription?.unsubscribe();
-  }
-
-  public onInteractionModeChange(mode: 'zoom' | 'select'): void {
-    if (mode === this.interactionMode) {
-      return;
-    }
-
-    this.interactionMode = mode;
-    this.chartCursorBehaviour = mode === 'select' ? ChartCursorBehaviours.SelectX : ChartCursorBehaviours.ZoomX;
-
-    if (mode === 'zoom') {
-      this.selectionSyncService.clearSelection();
-    }
-  }
-
-  public onResetZoom(): void {
-    this.zoomResetVersion += 1;
-  }
-
-  public onClearSelection(): void {
-    this.selectionSyncService.clearSelection();
   }
 
   public onPanelCursorPositionChange(axisValue: number): void {
@@ -326,15 +274,6 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
 
       const globalDomain = this.resolveGlobalDomain(this.allChartPanels);
       this.xDomain = globalDomain;
-      const currentSelection = this.selectionRange;
-      if (!globalDomain) {
-        this.selectionSyncService.clearSelection();
-      } else {
-        const clampedSelection = currentSelection
-          ? clampEventRange(currentSelection, globalDomain.start, globalDomain.end)
-          : null;
-        this.selectionSyncService.setSelection(clampedSelection);
-      }
 
       if (source === 'ngOnChanges' && this.chartPanels.length === 0) {
         this.logger.info('[EventCardChart] No panels to render for current selection');
@@ -346,7 +285,6 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       this.dataTypeLegendItems = [];
       this.lapMarkers = [];
       this.xDomain = null;
-      this.selectionSyncService.clearSelection();
       this.renderedXAxisType = resolveEventChartXAxisType(this.event, this.xAxisType);
       this.zoomSyncGroupId = this.resolveZoomSyncGroupID(this.event);
     } finally {

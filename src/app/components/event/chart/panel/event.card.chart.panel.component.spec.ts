@@ -4,12 +4,10 @@ import { DynamicDataLoader, XAxisTypes } from '@sports-alliance/sports-lib';
 import { EventCardChartPanelComponent } from './event.card.chart.panel.component';
 import { EChartsLoaderService } from '../../../../services/echarts-loader.service';
 import { LoggerService } from '../../../../services/logger.service';
-import { EventChartSelectionSyncService } from '../event-chart-selection-sync.service';
 
 describe('EventCardChartPanelComponent', () => {
   let fixture: ComponentFixture<EventCardChartPanelComponent>;
   let component: EventCardChartPanelComponent;
-  let selectionSyncService: EventChartSelectionSyncService;
   type ChartEventHandler = (params?: unknown) => void;
   let handlers: Record<string, ChartEventHandler>;
   let zrHandlers: Record<string, ChartEventHandler>;
@@ -51,11 +49,9 @@ describe('EventCardChartPanelComponent', () => {
       providers: [
         { provide: EChartsLoaderService, useValue: eChartsLoaderMock },
         { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), log: vi.fn() } },
-        EventChartSelectionSyncService,
       ],
     }).compileComponents();
 
-    selectionSyncService = TestBed.inject(EventChartSelectionSyncService);
     fixture = TestBed.createComponent(EventCardChartPanelComponent);
     component = fixture.componentInstance;
     component.panel = {
@@ -84,7 +80,6 @@ describe('EventCardChartPanelComponent', () => {
     component.xAxisType = XAxisTypes.Duration;
     component.xDomain = { start: 0, end: 120 };
     component.zoomGroupId = 'event-zoom-group';
-    selectionSyncService.clearSelection();
   });
 
   it('initializes chart host and renders panel option', async () => {
@@ -95,7 +90,6 @@ describe('EventCardChartPanelComponent', () => {
     expect(eChartsLoaderMock.init).toHaveBeenCalledTimes(1);
     expect(eChartsLoaderMock.connectGroup).toHaveBeenCalledWith('event-zoom-group');
     expect(eChartsLoaderMock.setOption).toHaveBeenCalled();
-    expect(chart.on).toHaveBeenCalledWith('brushSelected', expect.any(Function));
     expect(chart.on).toHaveBeenCalledWith('click', expect.any(Function));
     expect(zr.on).toHaveBeenCalledWith('click', expect.any(Function));
 
@@ -104,6 +98,7 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.xAxis?.max).toBe(120);
     expect(option?.tooltip?.triggerOn).toBe('none');
     expect(option?.dataZoom?.[0]?.zoomOnMouseWheel).toBe(false);
+    expect(option?.dataZoom?.[0]?.moveOnMouseMove).toBe(true);
     expect(option?.dataZoom?.[0]?.moveOnMouseWheel).toBe(false);
     expect(option?.dataZoom?.[1]?.show).toBe(true);
   });
@@ -115,87 +110,6 @@ describe('EventCardChartPanelComponent', () => {
 
     const option = eChartsLoaderMock.setOption.mock.calls.at(-1)?.[1] as any;
     expect(option?.dataZoom?.[1]?.show).toBe(false);
-  });
-
-  it('activates official brush cursor mode in select interaction and disables drag-panning', async () => {
-    component.interactionMode = 'select';
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
-
-    const option = eChartsLoaderMock.setOption.mock.calls.at(-1)?.[1] as any;
-    expect(option?.dataZoom?.[0]?.moveOnMouseMove).toBe(false);
-    expect(option?.brush?.throttleType).toBe('fixRate');
-    expect(option?.brush?.throttleDelay).toBe(16);
-    expect(chart.dispatchAction).toHaveBeenCalledWith({
-      type: 'takeGlobalCursor',
-      key: 'brush',
-      brushOption: {
-        brushType: 'lineX',
-        brushMode: 'single',
-        xAxisIndex: 0,
-      },
-    });
-  });
-
-  it('resets zoom to full domain when reset token changes', async () => {
-    component.showZoomBar = true;
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
-
-    component.zoomResetVersion = 1;
-    component.ngOnChanges({
-      zoomResetVersion: {
-        previousValue: 0,
-        currentValue: 1,
-        firstChange: false,
-        isFirstChange: () => false,
-      }
-    } as any);
-
-    expect(chart.dispatchAction).toHaveBeenCalledWith(
-      {
-        type: 'dataZoom',
-        startValue: 0,
-        endValue: 120,
-      },
-      { silent: true },
-    );
-  });
-
-  it('applies shared selection service range with silent brush updates', async () => {
-    component.interactionMode = 'select';
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
-
-    chart.dispatchAction.mockClear();
-    selectionSyncService.setSelection({ start: 12, end: 24 });
-    await new Promise(resolve => setTimeout(resolve, 0));
-
-    expect(chart.dispatchAction).toHaveBeenCalledWith(
-      {
-        type: 'brush',
-        escapeConnect: true,
-        areas: [{
-          brushType: 'lineX',
-          xAxisIndex: 0,
-          coordRange: [12, 24],
-        }],
-      },
-      { silent: true },
-    );
-  });
-
-  it('clears shared selection when clicking outside the brushed area', async () => {
-    component.interactionMode = 'select';
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
-
-    selectionSyncService.setSelection({ start: 12, end: 24 });
-    expect(selectionSyncService.selectionRange()).toEqual({ start: 12, end: 24 });
-
-    handlers.brushSelected({ batch: [{ areas: [] }] });
-
-    expect(selectionSyncService.selectionRange()).toBeNull();
   });
 
   it('starts pointer sync only after chart click', async () => {

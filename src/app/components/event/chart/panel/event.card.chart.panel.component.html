@@ -7,29 +7,4 @@
   </header>
 
   <div #chartDiv class="event-chart-panel__chart"></div>
-
-  @if (hasSelection && rangeStats.length > 0) {
-  <section class="event-chart-panel__stats">
-    @for (stat of rangeStats; track stat.activityID) {
-    <div class="event-chart-panel__stat-row">
-      <span class="event-chart-panel__swatch" [style.background]="stat.color"></span>
-      <span class="event-chart-panel__activity">{{ stat.activityName }}</span>
-      <span class="event-chart-panel__values">
-        Min {{ stat.min.value }}{{ stat.min.unit }}
-        Avg {{ stat.avg.value }}{{ stat.avg.unit }}
-        Max {{ stat.max.value }}{{ stat.max.unit }}
-        @if (stat.gain) {
-        Gain {{ stat.gain.value }}{{ stat.gain.unit }}
-        }
-        @if (stat.loss) {
-        Loss {{ stat.loss.value }}{{ stat.loss.unit }}
-        }
-        @if (stat.slope) {
-        Slope {{ stat.slope }}
-        }
-      </span>
-    </div>
-    }
-  </section>
-  }
 </section>

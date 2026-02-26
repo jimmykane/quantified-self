@@ -3,7 +3,6 @@ import { CUSTOM_ELEMENTS_SCHEMA, signal } from '@angular/core';
 import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  ChartCursorBehaviours,
   ChartThemes,
   DataDistance,
   DataStrydDistance,
@@ -27,7 +26,6 @@ describe('EventCardChartComponent', () => {
     showAllData: false,
     showLaps: true,
     lapTypes: [],
-    chartCursorBehaviour: ChartCursorBehaviours.ZoomX,
     xAxisType: XAxisTypes.Duration,
     gainAndLossThreshold: 1,
     useAnimations: false,

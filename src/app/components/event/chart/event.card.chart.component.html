@@ -7,22 +7,6 @@
 <mat-card-content class="event-chart-content">
   <app-loading-overlay [isLoading]="isLoading" [showSkeleton]="true" height="auto">
     <section class="event-chart-shell" [class.event-chart-shell--loading]="isLoading">
-      <header class="event-chart-shell__toolbar">
-        <mat-button-toggle-group [value]="interactionMode" (change)="onInteractionModeChange($event.value)" exclusive>
-          <mat-button-toggle value="zoom">Zooming</mat-button-toggle>
-          <mat-button-toggle value="select">Selecting</mat-button-toggle>
-        </mat-button-toggle-group>
-
-        <div class="event-chart-shell__actions">
-          <button mat-stroked-button type="button" (click)="onResetZoom()" [disabled]="!chartPanels.length">
-            Reset Zoom
-          </button>
-          <button mat-stroked-button type="button" (click)="onClearSelection()" [disabled]="!selectionRange">
-            Clear Selection
-          </button>
-        </div>
-      </header>
-
       @if (dataTypeLegendItems.length > 0) {
       <section class="event-chart-shell__legend" aria-label="Data type visibility">
         <mat-chip-listbox [multiple]="true" [hideSingleSelectionIndicator]="true" class="event-chart-shell__legend-list">
@@ -45,10 +29,9 @@
       <section class="event-chart-shell__panels">
         @for (panel of chartPanels; track panel.dataType; let isLast = $last) {
         <app-event-card-chart-panel [panel]="panel" [xAxisType]="renderedXAxisType" [chartTheme]="chartTheme"
-          [useAnimations]="useAnimations" [interactionMode]="interactionMode" [showZoomBar]="isLast"
-          [zoomGroupId]="zoomSyncGroupId" [zoomResetVersion]="zoomResetVersion" [xDomain]="xDomain"
+          [useAnimations]="useAnimations" [showZoomBar]="isLast" [zoomGroupId]="zoomSyncGroupId" [xDomain]="xDomain"
           [showLaps]="showLaps" [lapTypes]="lapTypes" [lapMarkers]="lapMarkers"
-          [gainAndLossThreshold]="gainAndLossThreshold" [extraMaxForPower]="extraMaxForPower"
+          [extraMaxForPower]="extraMaxForPower"
           [extraMaxForPace]="extraMaxForPace" (cursorPositionChange)="onPanelCursorPositionChange($event)">
         </app-event-card-chart-panel>
         }
