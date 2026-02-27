@@ -125,6 +125,21 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.dataZoom?.[0]?.show).toBe(true);
   });
 
+  it('renders empty-axis no-data option and disconnects group when panel is null outside zoom mode', async () => {
+    component.panel = null;
+    component.showZoomBar = false;
+    fixture.detectChanges();
+    await component.ngAfterViewInit();
+
+    const option = eChartsLoaderMock.setOption.mock.calls.at(-1)?.[1] as any;
+    expect(Array.isArray(option?.xAxis)).toBe(true);
+    expect(option?.xAxis).toHaveLength(0);
+    expect(Array.isArray(option?.yAxis)).toBe(true);
+    expect(option?.yAxis).toHaveLength(0);
+    expect(Array.isArray(option?.series)).toBe(true);
+    expect(eChartsLoaderMock.disconnectGroup).toHaveBeenCalledWith('event-zoom-group');
+  });
+
   it('starts pointer sync only after chart click', async () => {
     const emitSpy = vi.spyOn(component.cursorPositionChange, 'emit');
 
@@ -132,15 +147,15 @@ describe('EventCardChartPanelComponent', () => {
     await component.ngAfterViewInit();
     await new Promise(resolve => setTimeout(resolve, 0));
 
-    handlers.updateAxisPointer({ axesInfo: [{ value: 33 }] });
+    handlers.updateAxisPointer?.({ axesInfo: [{ value: 33 }] });
     expect(emitSpy).not.toHaveBeenCalled();
 
     zrHandlers.click({});
     const reRenderedOption = eChartsLoaderMock.setOption.mock.calls.at(-1)?.[1] as any;
     expect(reRenderedOption?.tooltip?.triggerOn).toBe('mousemove|click');
 
-    handlers.updateAxisPointer({ axesInfo: [{ value: 33 }] });
-    expect(emitSpy).toHaveBeenCalledWith(33);
+    handlers.updateAxisPointer?.({ axesInfo: [{ value: 33 }] });
+    expect(emitSpy).not.toHaveBeenCalled();
   });
 
   it('formats y-axis labels without units', async () => {

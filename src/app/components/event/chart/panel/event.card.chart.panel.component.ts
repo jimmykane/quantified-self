@@ -41,6 +41,8 @@ type PanelSeriesModel = EventChartPanelModel['series'][number];
 const PROGRESSIVE_THRESHOLD = 6000;
 const PROGRESSIVE_STEP = 900;
 const DATA_ZOOM_THROTTLE_MS = 60;
+// Temporary perf toggle: disable axis-pointer -> map cursor emission path.
+const TEMP_DISABLE_AXIS_POINTER_CURSOR_EMIT = true;
 
 @Component({
   selector: 'app-event-card-chart-panel',
@@ -132,17 +134,17 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return;
     }
 
-    this.syncNativeZoomGroup();
-
     if (!this.panel) {
       this.seriesByID.clear();
       if (this.showZoomBar) {
+        this.syncNativeZoomGroup();
         this.chartHost.setOption(this.buildZoomBarOnlyOption(), { notMerge: true, lazyUpdate: true });
         this.chartHost.scheduleResize();
         this.cdr.markForCheck();
         return;
       }
 
+      this.disconnectNativeZoomGroup();
       this.chartHost.setOption({
         animation: this.useAnimations === true,
         xAxis: [],
@@ -154,6 +156,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     if (!this.panel.series.length) {
       this.seriesByID.clear();
+      this.disconnectNativeZoomGroup();
       this.chartHost.setOption({
         animation: this.useAnimations === true,
         xAxis: [],
@@ -163,6 +166,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return;
     }
 
+    this.syncNativeZoomGroup();
     this.seriesByID = new Map(this.panel.series.map((series) => [series.id, series]));
     this.chartHost.setOption(this.buildOption(), ECHARTS_INTERACTIVE_CARTESIAN_MERGE_UPDATE_SETTINGS);
     this.chartHost.scheduleResize();
@@ -354,15 +358,17 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return;
     }
 
-    chart.on('updateAxisPointer', (params: any) => {
-      if (!this.pointerSyncEnabled) {
-        return;
-      }
-      const value = Number(params?.axesInfo?.[0]?.value);
-      if (Number.isFinite(value)) {
-        this.cursorPositionChange.emit(value);
-      }
-    });
+    if (!TEMP_DISABLE_AXIS_POINTER_CURSOR_EMIT) {
+      chart.on('updateAxisPointer', (params: any) => {
+        if (!this.pointerSyncEnabled) {
+          return;
+        }
+        const value = Number(params?.axesInfo?.[0]?.value);
+        if (Number.isFinite(value)) {
+          this.cursorPositionChange.emit(value);
+        }
+      });
+    }
 
     chart.on('click', () => this.activatePointerSync());
     const zr = (chart as any).getZr?.();

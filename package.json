@@ -20,7 +20,7 @@
     "test-coverage": "vitest run --coverage",
     "lint": "ng lint",
     "sentry:upload-sourcemaps": "sentry-cli sourcemaps upload --org dimitrios-kanellopoulos --project quantified-self --release $(node -p 'require(\"./package.json\").version') dist/browser --url-prefix '~/'",
-    "e2e": "ng e2e"
+    "e2e": "ng e2e" 
   },
   "private": true,
   "overrides": {

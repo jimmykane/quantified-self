@@ -20,4 +20,6 @@ export enum AppDataColors {
   'Speed' = AppColors.Blue,
   'Speed_0' = AppColors.Blue,
   'Grade Adjusted Speed' = AppColors.DeepBlue,
+  'Temperature' = AppColors.StrongOrange,
+  'Temperature_0' = AppColors.Orange,
 }
