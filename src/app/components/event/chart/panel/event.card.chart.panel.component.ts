@@ -78,7 +78,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private connectedZoomGroupId: string | null = null;
   private wheelPassThroughListener: ((event: Event) => void) | null = null;
   private viewportObserver: IntersectionObserver | null = null;
+  private viewportVisible = true;
   private tooltipVisibleForViewport = true;
+  private zoomBarVisibleForViewport = true;
+  private zoomSyncVisibleForViewport = true;
   private seriesByID = new Map<string, PanelSeriesModel>();
   private seriesDataCache = new WeakMap<EventChartPoint[], Array<[number, number]>>();
   private formattedValueCache = new Map<string, string>();
@@ -101,7 +104,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.syncNativeZoomGroup();
     this.bindChartEvents();
     this.refreshChart();
-    this.syncTooltipViewportObserver();
+    this.syncViewportObserver();
   }
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -124,12 +127,12 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       || changes.strokeWidth
     ) {
       this.refreshChart();
-      this.syncTooltipViewportObserver();
+      this.syncViewportObserver();
     }
   }
 
   ngOnDestroy(): void {
-    this.teardownTooltipViewportObserver();
+    this.teardownViewportObserver();
     this.unbindWheelPassThrough();
     this.disconnectNativeZoomGroup();
     this.chartHost.dispose();
@@ -378,29 +381,38 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.eventsBound = true;
   }
 
-  private syncTooltipViewportObserver(): void {
+  private syncViewportObserver(): void {
     const chart = this.chartHost.getChart();
     const container = this.chartDiv?.nativeElement;
     if (!chart || !container) {
       return;
     }
 
-    if (!this.shouldObserveViewportTooltipVisibility()) {
-      this.teardownTooltipViewportObserver();
+    if (!this.shouldObserveViewportVisibility()) {
+      this.teardownViewportObserver();
+      this.viewportVisible = true;
       this.tooltipVisibleForViewport = true;
+      this.zoomBarVisibleForViewport = true;
+      this.zoomSyncVisibleForViewport = true;
+      this.syncNativeZoomGroup();
       return;
     }
 
     if (typeof IntersectionObserver === 'undefined') {
+      this.viewportVisible = true;
       this.applyTooltipVisibilityForViewport(true);
+      this.applyZoomBarVisibilityForViewport(true);
+      this.applyZoomSyncVisibilityForViewport(true);
+      this.applyViewportAnimationMode(true);
       return;
     }
 
     if (!this.viewportObserver) {
+      const observerRoot = this.resolveViewportObserverRoot(container);
       this.viewportObserver = new IntersectionObserver(
-        (entries) => this.handleTooltipViewportEntries(entries),
+        (entries) => this.handleViewportEntries(entries),
         {
-          root: null,
+          root: observerRoot,
           threshold: [TOOLTIP_VIEWPORT_THRESHOLD],
         }
       );
@@ -408,11 +420,15 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
   }
 
-  private shouldObserveViewportTooltipVisibility(): boolean {
-    return !!this.panel && this.showZoomBar === false;
+  private shouldObserveViewportVisibility(): boolean {
+    if (this.showZoomBar) {
+      return true;
+    }
+
+    return !!this.panel;
   }
 
-  private teardownTooltipViewportObserver(): void {
+  private teardownViewportObserver(): void {
     if (!this.viewportObserver) {
       return;
     }
@@ -421,14 +437,52 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.viewportObserver = null;
   }
 
-  private handleTooltipViewportEntries(entries: IntersectionObserverEntry[]): void {
+  private handleViewportEntries(entries: IntersectionObserverEntry[]): void {
     if (!entries.length) {
       return;
     }
 
     const primaryEntry = entries[0];
     const isVisible = primaryEntry.isIntersecting && primaryEntry.intersectionRatio >= TOOLTIP_VIEWPORT_THRESHOLD;
+    if (this.viewportVisible === isVisible) {
+      return;
+    }
+
+    this.viewportVisible = isVisible;
+    this.applyViewportAnimationMode(isVisible);
+    if (this.showZoomBar) {
+      this.applyZoomBarVisibilityForViewport(isVisible);
+      return;
+    }
+
+    this.applyZoomSyncVisibilityForViewport(isVisible);
     this.applyTooltipVisibilityForViewport(isVisible);
+  }
+
+  private resolveViewportObserverRoot(container: HTMLElement): Element | Document | null {
+    let current: HTMLElement | null = container.parentElement;
+    while (current) {
+      try {
+        const computedStyle = getComputedStyle(current);
+        const overflowY = `${computedStyle.overflowY || ''}`.toLowerCase();
+        const overflow = `${computedStyle.overflow || ''}`.toLowerCase();
+        if (
+          overflowY === 'auto'
+          || overflowY === 'scroll'
+          || overflowY === 'overlay'
+          || overflow === 'auto'
+          || overflow === 'scroll'
+          || overflow === 'overlay'
+        ) {
+          return current;
+        }
+      } catch {
+        // Ignore style lookup failures and keep walking up.
+      }
+      current = current.parentElement;
+    }
+
+    return null;
   }
 
   private applyTooltipVisibilityForViewport(isVisible: boolean): void {
@@ -443,7 +497,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     if (!isVisible) {
-      this.zoneSafeHideTip(chart);
+      this.safeHideTip(chart);
     }
 
     this.chartHost.setOption({
@@ -457,12 +511,59 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     });
   }
 
-  private zoneSafeHideTip(chart: EChartsType): void {
+  private applyZoomSyncVisibilityForViewport(isVisible: boolean): void {
+    if (this.zoomSyncVisibleForViewport === isVisible) {
+      return;
+    }
+
+    this.zoomSyncVisibleForViewport = isVisible;
+    this.syncNativeZoomGroup();
+  }
+
+  private applyZoomBarVisibilityForViewport(isVisible: boolean): void {
+    if (this.zoomBarVisibleForViewport === isVisible) {
+      return;
+    }
+
+    this.zoomBarVisibleForViewport = isVisible;
+    const chart = this.chartHost.getChart();
+    if (!chart) {
+      return;
+    }
+
+    this.chartHost.setOption({
+      dataZoom: [
+        { show: isVisible }
+      ],
+    }, {
+      notMerge: false,
+      lazyUpdate: true,
+      silent: true,
+    });
+  }
+
+  private safeHideTip(chart: EChartsType): void {
     try {
       chart.dispatchAction({ type: 'hideTip' });
     } catch (error) {
       this.logger.warn('[EventCardChartPanelComponent] Failed to hide tooltip for offscreen panel', error);
     }
+  }
+
+  private applyViewportAnimationMode(isVisible: boolean): void {
+    const chart = this.chartHost.getChart();
+    if (!chart) {
+      return;
+    }
+
+    this.chartHost.setOption({
+      animation: isVisible ? (this.useAnimations === true) : false,
+      animationDurationUpdate: isVisible ? undefined : 0,
+    }, {
+      notMerge: false,
+      lazyUpdate: true,
+      silent: true,
+    });
   }
 
   private buildZoomBarOnlyOption(): ChartOption {
@@ -500,7 +601,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         {
           type: 'slider',
           xAxisIndex: 0,
-          show: true,
+          show: this.zoomBarVisibleForViewport,
           left: 12,
           right: 12,
           top: 10,
@@ -606,7 +707,11 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return;
     }
 
-    const nextGroupId = `${this.zoomGroupId || ''}`.trim() || null;
+    const requestedGroupId = `${this.zoomGroupId || ''}`.trim() || null;
+    const hasRenderableSeries = Array.isArray(this.panel?.series) && this.panel.series.length > 0;
+    const hasRenderableChart = this.showZoomBar || hasRenderableSeries;
+    const shouldJoinZoomGroup = hasRenderableChart && (this.showZoomBar || this.zoomSyncVisibleForViewport);
+    const nextGroupId = shouldJoinZoomGroup ? requestedGroupId : null;
     if (this.connectedZoomGroupId === nextGroupId) {
       return;
     }
@@ -623,6 +728,11 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   private disconnectNativeZoomGroup(): void {
+    const chart = this.chartHost.getChart();
+    if (chart?.group) {
+      chart.group = undefined;
+    }
+
     if (!this.connectedZoomGroupId) {
       return;
     }

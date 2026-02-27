@@ -111,7 +111,8 @@ describe('EventCardChartPanelComponent', () => {
     expect(eChartsLoaderMock.connectGroup).toHaveBeenCalledWith('event-zoom-group');
     expect(eChartsLoaderMock.setOption).toHaveBeenCalled();
     expect(chart.on).not.toHaveBeenCalledWith('click', expect.any(Function));
-    expect(intersectionObserverObserveSpies).toHaveLength(0);
+    expect(intersectionObserverObserveSpies).toHaveLength(1);
+    expect(intersectionObserverObserveSpies[0]).toHaveBeenCalledTimes(1);
 
     const option = eChartsLoaderMock.setOption.mock.calls.at(-1)?.[1] as any;
     expect(option?.xAxis?.min).toBe(0);
@@ -145,7 +146,7 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.dataZoom?.[0]?.show).toBe(true);
   });
 
-  it('renders empty-axis no-data option and disconnects group when panel is null outside zoom mode', async () => {
+  it('renders empty-axis no-data option without joining a zoom group when panel is null outside zoom mode', async () => {
     component.panel = null;
     component.showZoomBar = false;
     fixture.detectChanges();
@@ -157,7 +158,8 @@ describe('EventCardChartPanelComponent', () => {
     expect(Array.isArray(option?.yAxis)).toBe(true);
     expect(option?.yAxis).toHaveLength(0);
     expect(Array.isArray(option?.series)).toBe(true);
-    expect(eChartsLoaderMock.disconnectGroup).toHaveBeenCalledWith('event-zoom-group');
+    expect(eChartsLoaderMock.connectGroup).not.toHaveBeenCalled();
+    expect(eChartsLoaderMock.disconnectGroup).not.toHaveBeenCalled();
   });
 
   it('enables tooltip hover without requiring a click first', async () => {
@@ -178,6 +180,7 @@ describe('EventCardChartPanelComponent', () => {
     ], {} as IntersectionObserver);
 
     expect(chart.dispatchAction).toHaveBeenCalledWith({ type: 'hideTip' });
+    expect(eChartsLoaderMock.disconnectGroup).toHaveBeenCalledWith('event-zoom-group');
     expect(eChartsLoaderMock.setOption).toHaveBeenCalledWith(
       chart,
       { tooltip: { show: false } },
@@ -197,6 +200,8 @@ describe('EventCardChartPanelComponent', () => {
       { isIntersecting: true, intersectionRatio: 1 } as IntersectionObserverEntry
     ], {} as IntersectionObserver);
 
+    expect(eChartsLoaderMock.connectGroup).toHaveBeenCalledTimes(2);
+    expect(eChartsLoaderMock.connectGroup).toHaveBeenNthCalledWith(2, 'event-zoom-group');
     expect(eChartsLoaderMock.setOption).toHaveBeenCalledWith(
       chart,
       { tooltip: { show: true } },
@@ -242,13 +247,30 @@ describe('EventCardChartPanelComponent', () => {
     expect(intersectionObserverDisconnectSpies[0]).toHaveBeenCalledTimes(1);
   });
 
-  it('does not register viewport observer in zoom-bar-only mode', async () => {
+  it('hides and restores zoom-bar slider based on viewport visibility', async () => {
     component.panel = null;
     component.showZoomBar = true;
     fixture.detectChanges();
     await component.ngAfterViewInit();
 
-    expect(intersectionObserverObserveSpies).toHaveLength(0);
+    expect(intersectionObserverCallbacks).toHaveLength(1);
+    intersectionObserverCallbacks[0]([
+      { isIntersecting: false, intersectionRatio: 0 } as IntersectionObserverEntry
+    ], {} as IntersectionObserver);
+    expect(eChartsLoaderMock.setOption).toHaveBeenCalledWith(
+      chart,
+      { dataZoom: [{ show: false }] },
+      expect.objectContaining({ lazyUpdate: true, silent: true })
+    );
+
+    intersectionObserverCallbacks[0]([
+      { isIntersecting: true, intersectionRatio: 1 } as IntersectionObserverEntry
+    ], {} as IntersectionObserver);
+    expect(eChartsLoaderMock.setOption).toHaveBeenCalledWith(
+      chart,
+      { dataZoom: [{ show: true }] },
+      expect.objectContaining({ lazyUpdate: true, silent: true })
+    );
   });
 
   it('stops wheel event propagation on chart container to preserve page scrolling', async () => {
