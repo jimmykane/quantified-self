@@ -3,6 +3,24 @@ import { EChartsLoaderService } from '../services/echarts-loader.service';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type ChartSetOptionSettings = Parameters<EChartsType['setOption']>[1];
+type ChartMainType = 'series' | 'xAxis' | 'yAxis' | 'dataZoom';
+
+function buildMergeUpdateSettings(replaceMerge: readonly ChartMainType[]): ChartSetOptionSettings {
+  return {
+    notMerge: false,
+    lazyUpdate: true,
+    replaceMerge: [...replaceMerge]
+  };
+}
+
+export const ECHARTS_SERIES_MERGE_UPDATE_SETTINGS = buildMergeUpdateSettings(['series']);
+export const ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS = buildMergeUpdateSettings(['series', 'xAxis', 'yAxis']);
+export const ECHARTS_INTERACTIVE_CARTESIAN_MERGE_UPDATE_SETTINGS = buildMergeUpdateSettings([
+  'series',
+  'xAxis',
+  'yAxis',
+  'dataZoom'
+]);
 
 export interface EChartsHostControllerConfig {
   eChartsLoader: EChartsLoaderService;

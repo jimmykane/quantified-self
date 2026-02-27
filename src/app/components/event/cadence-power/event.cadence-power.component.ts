@@ -29,7 +29,10 @@ import {
   PerformanceCurveCadencePowerSeries,
   PerformanceCurveDataService,
 } from '../../../services/performance-curve-data.service';
-import { EChartsHostController } from '../../../helpers/echarts-host-controller';
+import {
+  ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS,
+  EChartsHostController
+} from '../../../helpers/echarts-host-controller';
 import {
   buildEventEChartsVisualTokens,
   calculateEventEChartsAxisRange,
@@ -117,7 +120,7 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
     });
 
     const option = this.buildChartOption(cadencePowerSeries);
-    this.chartHost.setOption(option, { notMerge: true, lazyUpdate: true });
+    this.chartHost.setOption(option, ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS);
     this.chartHost.scheduleResize();
   }
 

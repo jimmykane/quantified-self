@@ -29,7 +29,10 @@ import {
   PowerCurveChartPoint,
   PowerCurveChartSeries,
 } from '../../../services/performance-curve-data.service';
-import { EChartsHostController } from '../../../helpers/echarts-host-controller';
+import {
+  ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS,
+  EChartsHostController
+} from '../../../helpers/echarts-host-controller';
 import {
   buildEventEChartsVisualTokens,
   calculateEventEChartsAxisRange,
@@ -121,7 +124,7 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
     });
 
     const option = this.buildChartOption(powerSeries);
-    this.chartHost.setOption(option, { notMerge: true, lazyUpdate: true });
+    this.chartHost.setOption(option, ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS);
     this.chartHost.scheduleResize();
   }
 

@@ -25,7 +25,10 @@ import { AdminResolverData } from '../../../resolvers/admin.resolver';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import type { EChartsType } from 'echarts/core';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
-import { EChartsHostController } from '../../../helpers/echarts-host-controller';
+import {
+    ECHARTS_SERIES_MERGE_UPDATE_SETTINGS,
+    EChartsHostController
+} from '../../../helpers/echarts-host-controller';
 import dayjs from 'dayjs';
 import localizedFormat from 'dayjs/plugin/localizedFormat';
 
@@ -368,7 +371,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
         }
 
         const option = this.buildAuthChartOption(this.providerData);
-        this.chartHost.setOption(option, { notMerge: true, lazyUpdate: true });
+        this.chartHost.setOption(option, ECHARTS_SERIES_MERGE_UPDATE_SETTINGS);
         this.chartHost.scheduleResize();
     }
 

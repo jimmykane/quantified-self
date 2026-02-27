@@ -29,7 +29,10 @@ import {
   convertIntensityZonesStatsToEchartsData,
   IntensityZonesEChartsData,
 } from '../../../helpers/intensity-zones-chart-data-helper';
-import { EChartsHostController } from '../../../helpers/echarts-host-controller';
+import {
+  ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS,
+  EChartsHostController
+} from '../../../helpers/echarts-host-controller';
 import { buildEventEChartsVisualTokens } from '../../../helpers/event-echarts-common.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
@@ -106,7 +109,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     const statsClassInstances = Array.isArray(this.activities) ? this.activities : [];
     const data = convertIntensityZonesStatsToEchartsData(statsClassInstances, this.isMobile);
     const option = this.buildChartOption(data);
-    this.chartHost.setOption(option, { notMerge: true, lazyUpdate: true });
+    this.chartHost.setOption(option, ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS);
     this.chartHost.scheduleResize();
   }
 

@@ -12,7 +12,10 @@ import { AppThemes } from '@sports-alliance/sports-lib';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
-import { EChartsHostController } from '../../../helpers/echarts-host-controller';
+import {
+    ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS,
+    EChartsHostController
+} from '../../../helpers/echarts-host-controller';
 
 export type AdminQueueStatsView = 'all' | 'workout' | 'reparse';
 
@@ -198,7 +201,7 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
             ]
         };
 
-        this.chartHost.setOption(option, { notMerge: true, lazyUpdate: true });
+        this.chartHost.setOption(option, ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS);
         this.chartHost.scheduleResize();
     }
 

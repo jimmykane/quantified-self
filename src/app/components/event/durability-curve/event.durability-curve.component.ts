@@ -30,7 +30,10 @@ import {
   PerformanceCurveDataService,
   PerformanceCurveDurabilitySeries,
 } from '../../../services/performance-curve-data.service';
-import { EChartsHostController } from '../../../helpers/echarts-host-controller';
+import {
+  ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS,
+  EChartsHostController
+} from '../../../helpers/echarts-host-controller';
 import {
   buildEventEChartsVisualTokens,
   calculateEventEChartsAxisRange,
@@ -134,7 +137,7 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
     });
 
     const option = this.buildChartOption(durabilitySeries, bestEffortMarkers);
-    this.chartHost.setOption(option, { notMerge: true, lazyUpdate: true });
+    this.chartHost.setOption(option, ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS);
     this.chartHost.scheduleResize();
   }
 

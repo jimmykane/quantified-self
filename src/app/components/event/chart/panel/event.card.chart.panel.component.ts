@@ -16,7 +16,10 @@ import { ChartThemes, LapTypes, XAxisTypes } from '@sports-alliance/sports-lib';
 import type { EChartsType } from 'echarts/core';
 import { EChartsLoaderService } from '../../../../services/echarts-loader.service';
 import { LoggerService } from '../../../../services/logger.service';
-import { EChartsHostController } from '../../../../helpers/echarts-host-controller';
+import {
+  ECHARTS_INTERACTIVE_CARTESIAN_MERGE_UPDATE_SETTINGS,
+  EChartsHostController
+} from '../../../../helpers/echarts-host-controller';
 import { isDarkChartThemeActive } from '../../../../helpers/echarts-theme.helper';
 import {
   EventChartLapMarker,
@@ -161,7 +164,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     this.seriesByID = new Map(this.panel.series.map((series) => [series.id, series]));
-    this.chartHost.setOption(this.buildOption(), { notMerge: true, lazyUpdate: true });
+    this.chartHost.setOption(this.buildOption(), ECHARTS_INTERACTIVE_CARTESIAN_MERGE_UPDATE_SETTINGS);
     this.chartHost.scheduleResize();
     this.cdr.markForCheck();
   }

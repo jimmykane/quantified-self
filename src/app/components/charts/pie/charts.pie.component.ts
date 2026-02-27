@@ -28,7 +28,10 @@ import {
   buildDashboardPieChartData,
   getDashboardPieSliceDisplayLabel
 } from '../../../helpers/dashboard-pie-chart-data.helper';
-import { EChartsHostController } from '../../../helpers/echarts-host-controller';
+import {
+  ECHARTS_SERIES_MERGE_UPDATE_SETTINGS,
+  EChartsHostController
+} from '../../../helpers/echarts-host-controller';
 import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
 import {
   getDashboardAggregateData,
@@ -134,7 +137,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
       this.logger
     );
     const option = this.buildChartOption(pieData, aggregate);
-    this.chartHost.setOption(option, { notMerge: true, lazyUpdate: true });
+    this.chartHost.setOption(option, ECHARTS_SERIES_MERGE_UPDATE_SETTINGS);
     this.chartHost.scheduleResize();
   }
 
