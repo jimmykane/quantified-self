@@ -307,6 +307,7 @@ describe('ChartsXYComponent', () => {
     const colorResolver = option.series[0].data[0].itemStyle.color as string;
     expect(colorResolver).toBe('#16B4EA');
     expect(mockColorService.getColorForActivityTypeByActivityTypeGroup).toHaveBeenCalledWith(normalizedActivityType);
+    expect(mockColorService.getColorForActivityTypeByActivityTypeGroup).toHaveBeenCalledTimes(1);
   });
 
   it('should apply dark styles when chart theme is dark', async () => {

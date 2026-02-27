@@ -167,18 +167,12 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
           cadence: point.cadence,
           power: point.power,
           density: point.density,
-        })),
-        symbolSize: (value: unknown) => {
-          const density = toFiniteEventEChartsNumber(Array.isArray(value) ? value[2] : null) ?? 0.2;
-          return this.isMobile
-            ? 3 + density * 2.5
-            : 4 + density * 3.5;
-        },
-        itemStyle: {
-          color: (params: { value?: unknown[] }) => {
-            const density = toFiniteEventEChartsNumber(Array.isArray(params?.value) ? params.value[2] : null) ?? 0.2;
-            return this.getCadencePointColor(baseColor, density, darkTheme);
+          symbolSize: this.resolveCadencePointSymbolSize(point.density),
+          itemStyle: {
+            color: this.getCadencePointColor(baseColor, point.density, darkTheme),
           },
+        })),
+        itemStyle: {
           borderColor: darkTheme ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.45)',
           borderWidth: 0.8,
         },
@@ -329,6 +323,13 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
     }
 
     return toFiniteEventEChartsNumber(value[index]);
+  }
+
+  private resolveCadencePointSymbolSize(density: number): number {
+    const resolvedDensity = Number.isFinite(density) ? density : 0.2;
+    return this.isMobile
+      ? 3 + resolvedDensity * 2.5
+      : 4 + resolvedDensity * 3.5;
   }
 
   private getCadencePointColor(baseColor: string, density: number, darkTheme: boolean): string {

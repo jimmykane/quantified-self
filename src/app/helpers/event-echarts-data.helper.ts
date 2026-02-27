@@ -74,6 +74,25 @@ const NEVER_RENDER_STREAM_TYPES = new Set<string>([
   XAxisTypes.Time,
   XAxisTypes.Duration,
 ]);
+const ALL_KNOWN_UNIT_VARIANTS = new Set<string>(
+  Object.values((DynamicDataLoader as unknown as { dataTypeUnitGroups?: Record<string, Record<string, unknown>> })
+    .dataTypeUnitGroups ?? {})
+    .flatMap((group) => Object.keys(group || {}))
+);
+
+interface ActivityNumericCache {
+  startTimeMs: number;
+  streamValuesByType: Map<string, number[]>;
+  timeValues: number[] | null;
+  distanceValues: number[] | null;
+  absoluteTimeValues: number[] | null;
+}
+
+interface LapDistanceLookup {
+  absoluteTimes: number[];
+  distanceValues: number[];
+  isMonotonic: boolean;
+}
 
 export function buildEventChartPanels(input: BuildEventChartPanelsInput): EventChartPanelModel[] {
   const selectedActivities = Array.isArray(input.selectedActivities) ? input.selectedActivities : [];
@@ -84,6 +103,7 @@ export function buildEventChartPanels(input: BuildEventChartPanelsInput): EventC
   const panelsMap = new Map<string, EventChartPanelModel>();
 
   selectedActivities.forEach((activity) => {
+    const activityCache = createActivityNumericCache(activity);
     const streams = activity.getAllStreams() || [];
     if (!streams.length) {
       return;
@@ -98,7 +118,7 @@ export function buildEventChartPanels(input: BuildEventChartPanelsInput): EventC
     });
 
     allowedStreams.forEach((stream) => {
-      const points = toSeriesPoints(activity, stream, input.xAxisType);
+      const points = toSeriesPoints(activity, stream, input.xAxisType, activityCache);
       if (!points.length) {
         return;
       }
@@ -180,6 +200,10 @@ export function buildEventLapMarkers(input: {
   const markers: EventChartLapMarker[] = [];
 
   input.selectedActivities.forEach((activity) => {
+    const activityCache = createActivityNumericCache(activity);
+    const lapDistanceLookup = input.xAxisType === XAxisTypes.Distance
+      ? createLapDistanceLookup(activity, activityCache)
+      : null;
     const laps = activity.getLaps() || [];
     if (!laps.length) {
       return;
@@ -194,7 +218,7 @@ export function buildEventLapMarkers(input: {
         return;
       }
 
-      const xValue = resolveLapAxisValue(activity, lap.endDate?.getTime(), input.xAxisType);
+      const xValue = resolveLapAxisValue(activity, lap.endDate?.getTime(), input.xAxisType, lapDistanceLookup);
       if (!Number.isFinite(xValue)) {
         return;
       }
@@ -224,6 +248,7 @@ function getFilteredStreams(input: {
     : DynamicDataLoader
       .getUnitBasedDataTypesFromDataTypes(input.dataTypesToUse, input.userUnitSettings, { includeDerivedTypes: true })
       .concat(input.dataTypesToUse);
+  const allowedDataTypeSet = allowedDataTypes ? new Set(allowedDataTypes) : null;
 
   const shouldRemoveSpeed = DynamicDataLoader
     .getUnitBasedDataTypesFromDataType(DataSpeed.type, input.userUnitSettings)
@@ -240,9 +265,7 @@ function getFilteredStreams(input: {
     input.userUnitSettings,
     { includeDerivedTypes }
   );
-
-  const allKnownUnitVariants = Object.values(DynamicDataLoader.dataTypeUnitGroups)
-    .flatMap((group: any) => Object.keys(group));
+  const whitelistedUnitTypeSet = new Set(whitelistedUnitTypes);
 
   const mergedStreams = ActivityUtilities
     .createUnitStreamsFromStreams(
@@ -261,11 +284,11 @@ function getFilteredStreams(input: {
         return false;
       }
 
-      if (allowedDataTypes !== null && !allowedDataTypes.includes(stream.type)) {
+      if (allowedDataTypeSet !== null && !allowedDataTypeSet.has(stream.type)) {
         return false;
       }
 
-      if (allKnownUnitVariants.includes(stream.type) && !whitelistedUnitTypes.includes(stream.type)) {
+      if (ALL_KNOWN_UNIT_VARIANTS.has(stream.type) && !whitelistedUnitTypeSet.has(stream.type)) {
         return false;
       }
 
@@ -296,54 +319,60 @@ function dedupeByType(streams: StreamInterface[]): StreamInterface[] {
   return [...streamsByType.values()];
 }
 
-function toSeriesPoints(activity: ActivityInterface, stream: StreamInterface, xAxisType: XAxisTypes): EventChartPoint[] {
-  const streamValues = toNumericArray(stream.getData());
+function toSeriesPoints(
+  activity: ActivityInterface,
+  stream: StreamInterface,
+  xAxisType: XAxisTypes,
+  activityCache: ActivityNumericCache
+): EventChartPoint[] {
+  const streamValues = getStreamNumericValues(stream, activityCache);
   if (!streamValues.length) {
     return [];
   }
 
   if (xAxisType === XAxisTypes.Distance) {
-    const distanceStream = activity.getStream(DataDistance.type) || activity.getStream(DataStrydDistance.type);
-    const distanceValues = toNumericArray(distanceStream?.getData());
-    const timeValues = toNumericArray(activity.getStream(XAxisTypes.Time)?.getData());
-    const length = Math.min(streamValues.length, distanceValues.length, timeValues.length);
+    const distanceValues = getActivityDistanceValues(activity, activityCache);
+    const absoluteTimes = getActivityAbsoluteTimes(activity, activityCache);
+    const length = Math.min(streamValues.length, distanceValues.length, absoluteTimes.length);
 
     const points: EventChartPoint[] = [];
     for (let index = 0; index < length; index += 1) {
       const y = streamValues[index];
       const x = distanceValues[index];
-      const seconds = timeValues[index];
-      if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(seconds)) {
+      const time = absoluteTimes[index];
+      if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(time)) {
         continue;
       }
       points.push({
         x,
         y,
-        time: activity.startDate.getTime() + seconds * 1000
+        time
       });
     }
     return points;
   }
 
-  const timeValues = toNumericArray(activity.getStream(XAxisTypes.Time)?.getData());
-  const length = Math.min(streamValues.length, timeValues.length);
+  const timeValues = getActivityTimeValues(activity, activityCache);
+  const absoluteTimes = getActivityAbsoluteTimes(activity, activityCache);
+  const length = Math.min(streamValues.length, timeValues.length, absoluteTimes.length);
   const points: EventChartPoint[] = [];
 
   for (let index = 0; index < length; index += 1) {
     const y = streamValues[index];
     const seconds = timeValues[index];
+    const time = absoluteTimes[index];
     if (!Number.isFinite(y) || !Number.isFinite(seconds)) {
       continue;
     }
 
     const x = xAxisType === XAxisTypes.Time
-      ? activity.startDate.getTime() + seconds * 1000
+      ? time
       : seconds;
 
     points.push({
       x,
       y,
-      time: activity.startDate.getTime() + seconds * 1000
+      time
     });
   }
 
@@ -368,7 +397,12 @@ function toNumericArray(data: unknown): number[] {
   });
 }
 
-function resolveLapAxisValue(activity: ActivityInterface, lapEndTimeMs: number | undefined, xAxisType: XAxisTypes): number {
+function resolveLapAxisValue(
+  activity: ActivityInterface,
+  lapEndTimeMs: number | undefined,
+  xAxisType: XAxisTypes,
+  lapDistanceLookup: LapDistanceLookup | null = null
+): number {
   if (!Number.isFinite(lapEndTimeMs)) {
     return Number.NaN;
   }
@@ -381,27 +415,191 @@ function resolveLapAxisValue(activity: ActivityInterface, lapEndTimeMs: number |
     return ((lapEndTimeMs as number) - activity.startDate.getTime()) / 1000;
   }
 
-  const distanceStream = activity.getStream(DataDistance.type) || activity.getStream(DataStrydDistance.type);
-  const timeStream = activity.getStream(XAxisTypes.Time);
-  const distanceValues = toNumericArray(distanceStream?.getData());
-  const timeValues = toNumericArray(timeStream?.getData());
-  const length = Math.min(distanceValues.length, timeValues.length);
-  if (!length) {
+  const lookup = lapDistanceLookup ?? createLapDistanceLookup(activity);
+  if (!lookup || !lookup.absoluteTimes.length) {
     return Number.NaN;
+  }
+
+  const closestIndex = lookup.isMonotonic
+    ? findClosestMonotonicIndex(lookup.absoluteTimes, lapEndTimeMs as number)
+    : findClosestLinearIndex(lookup.absoluteTimes, lapEndTimeMs as number);
+
+  return lookup.distanceValues[closestIndex];
+}
+
+function createActivityNumericCache(activity: ActivityInterface): ActivityNumericCache {
+  return {
+    startTimeMs: activity.startDate.getTime(),
+    streamValuesByType: new Map<string, number[]>(),
+    timeValues: null,
+    distanceValues: null,
+    absoluteTimeValues: null,
+  };
+}
+
+function getStreamNumericValues(stream: StreamInterface, cache: ActivityNumericCache): number[] {
+  const streamType = `${stream?.type || ''}`;
+  const cached = cache.streamValuesByType.get(streamType);
+  if (cached) {
+    return cached;
+  }
+
+  const values = toNumericArray(stream?.getData?.());
+  cache.streamValuesByType.set(streamType, values);
+  return values;
+}
+
+function getActivityStreamNumericValues(
+  activity: ActivityInterface,
+  streamType: string,
+  cache: ActivityNumericCache
+): number[] {
+  const cached = cache.streamValuesByType.get(streamType);
+  if (cached) {
+    return cached;
+  }
+
+  const values = toNumericArray(activity.getStream(streamType)?.getData?.());
+  cache.streamValuesByType.set(streamType, values);
+  return values;
+}
+
+function getActivityTimeValues(activity: ActivityInterface, cache: ActivityNumericCache): number[] {
+  if (cache.timeValues) {
+    return cache.timeValues;
+  }
+
+  cache.timeValues = getActivityStreamNumericValues(activity, XAxisTypes.Time, cache);
+  return cache.timeValues;
+}
+
+function getActivityDistanceValues(activity: ActivityInterface, cache: ActivityNumericCache): number[] {
+  if (cache.distanceValues) {
+    return cache.distanceValues;
+  }
+
+  const primaryDistance = getActivityStreamNumericValues(activity, DataDistance.type, cache);
+  cache.distanceValues = primaryDistance.length > 0
+    ? primaryDistance
+    : getActivityStreamNumericValues(activity, DataStrydDistance.type, cache);
+  return cache.distanceValues;
+}
+
+function getActivityAbsoluteTimes(activity: ActivityInterface, cache: ActivityNumericCache): number[] {
+  if (cache.absoluteTimeValues) {
+    return cache.absoluteTimeValues;
+  }
+
+  const startTimeMs = Number.isFinite(cache.startTimeMs) ? cache.startTimeMs : activity.startDate.getTime();
+  const timeValues = getActivityTimeValues(activity, cache);
+  const absoluteTimes = new Array<number>(timeValues.length);
+  for (let index = 0; index < timeValues.length; index += 1) {
+    const seconds = timeValues[index];
+    absoluteTimes[index] = Number.isFinite(seconds)
+      ? startTimeMs + (seconds * 1000)
+      : Number.NaN;
+  }
+
+  cache.absoluteTimeValues = absoluteTimes;
+  return cache.absoluteTimeValues;
+}
+
+function createLapDistanceLookup(
+  activity: ActivityInterface,
+  activityCache: ActivityNumericCache = createActivityNumericCache(activity)
+): LapDistanceLookup | null {
+  const absoluteTimes = getActivityAbsoluteTimes(activity, activityCache);
+  const distanceValues = getActivityDistanceValues(activity, activityCache);
+  const length = Math.min(absoluteTimes.length, distanceValues.length);
+  if (!length) {
+    return null;
+  }
+
+  const filteredTimes: number[] = [];
+  const filteredDistances: number[] = [];
+  for (let index = 0; index < length; index += 1) {
+    const time = absoluteTimes[index];
+    const distance = distanceValues[index];
+    if (!Number.isFinite(time) || !Number.isFinite(distance)) {
+      continue;
+    }
+
+    filteredTimes.push(time);
+    filteredDistances.push(distance);
+  }
+
+  if (!filteredTimes.length) {
+    return null;
+  }
+
+  return {
+    absoluteTimes: filteredTimes,
+    distanceValues: filteredDistances,
+    isMonotonic: isMonotonicAscending(filteredTimes),
+  };
+}
+
+function isMonotonicAscending(values: number[]): boolean {
+  for (let index = 1; index < values.length; index += 1) {
+    if (values[index] < values[index - 1]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function findClosestMonotonicIndex(values: number[], target: number): number {
+  if (values.length <= 1) {
+    return 0;
+  }
+
+  if (target <= values[0]) {
+    return 0;
+  }
+
+  const lastIndex = values.length - 1;
+  if (target >= values[lastIndex]) {
+    return lastIndex;
+  }
+
+  let low = 0;
+  let high = lastIndex;
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const current = values[mid];
+    if (current === target) {
+      return mid;
+    }
+    if (current < target) {
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  const upper = Math.min(lastIndex, low);
+  const lower = Math.max(0, upper - 1);
+  return Math.abs(values[upper] - target) < Math.abs(values[lower] - target)
+    ? upper
+    : lower;
+}
+
+function findClosestLinearIndex(values: number[], target: number): number {
+  if (!values.length) {
+    return 0;
   }
 
   let closestIndex = 0;
   let smallestDelta = Number.POSITIVE_INFINITY;
-  for (let index = 0; index < length; index += 1) {
-    const absoluteTime = activity.startDate.getTime() + timeValues[index] * 1000;
-    const delta = Math.abs((lapEndTimeMs as number) - absoluteTime);
+  for (let index = 0; index < values.length; index += 1) {
+    const delta = Math.abs(target - values[index]);
     if (delta < smallestDelta) {
       smallestDelta = delta;
       closestIndex = index;
     }
   }
 
-  return distanceValues[closestIndex];
+  return closestIndex;
 }
 
 function enrichPanelDomain(panel: EventChartPanelModel): EventChartPanelModel {

@@ -268,4 +268,56 @@ describe('EventCardChartComponent', () => {
     expect(component.chartPanels.map((panel) => panel.dataType)).toEqual(['power']);
     expect(mockChartSettingsStorage.setDataTypeIDsToShow).toHaveBeenCalledWith(component.event, ['power']);
   });
+
+  it('skips panel rebuild when non-material settings change', async () => {
+    const buildPanelsSpy = vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
+      {
+        dataType: 'power',
+        displayName: 'Power',
+        unit: 'W',
+        colorGroupKey: 'Power',
+        minX: 0,
+        maxX: 100,
+        series: [],
+      },
+    ] as any);
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(buildPanelsSpy).toHaveBeenCalledTimes(1);
+
+    chartSettingsSignal.set({
+      ...chartSettingsSignal(),
+      useAnimations: !chartSettingsSignal().useAnimations,
+    } as any);
+    await fixture.whenStable();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(buildPanelsSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('persists visible datatype ids only when the selection actually changes', async () => {
+    vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
+      {
+        dataType: 'power',
+        displayName: 'Power',
+        unit: 'W',
+        colorGroupKey: 'Power',
+        minX: 0,
+        maxX: 100,
+        series: [],
+      },
+    ] as any);
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const baselineWrites = mockChartSettingsStorage.setDataTypeIDsToShow.mock.calls.length;
+    component.onDataTypeLegendSelectionChange('power', true);
+
+    expect(mockChartSettingsStorage.setDataTypeIDsToShow.mock.calls.length).toBe(baselineWrites);
+  });
 });

@@ -41,6 +41,7 @@ type PanelSeriesModel = EventChartPanelModel['series'][number];
 const PROGRESSIVE_THRESHOLD = 6000;
 const PROGRESSIVE_STEP = 900;
 const DATA_ZOOM_THROTTLE_MS = 60;
+const FORMATTED_VALUE_CACHE_LIMIT = 600;
 // Temporary perf toggle: disable axis-pointer -> map cursor emission path.
 const TEMP_DISABLE_AXIS_POINTER_CURSOR_EMIT = true;
 
@@ -78,6 +79,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private pointerSyncEnabled = false;
   private seriesByID = new Map<string, PanelSeriesModel>();
   private seriesDataCache = new WeakMap<EventChartPoint[], Array<[number, number]>>();
+  private formattedValueCache = new Map<string, string>();
 
   constructor(
     private eChartsLoader: EChartsLoaderService,
@@ -497,14 +499,31 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return '--';
     }
 
+    const cacheKey = `${streamType}|${includeUnit ? 1 : 0}|${value}`;
+    const cachedValue = this.formattedValueCache.get(cacheKey);
+    if (cachedValue !== undefined) {
+      return cachedValue;
+    }
+
+    let formattedValue: string;
     try {
       const dataInstance = DynamicDataLoader.getDataInstanceFromDataType(streamType, value);
-      return includeUnit
+      formattedValue = includeUnit
         ? `${dataInstance.getDisplayValue()}${dataInstance.getDisplayUnit()}`
         : `${dataInstance.getDisplayValue()}`;
     } catch {
-      return `${value.toFixed(2)}`;
+      formattedValue = `${value.toFixed(2)}`;
     }
+
+    this.formattedValueCache.set(cacheKey, formattedValue);
+    if (this.formattedValueCache.size > FORMATTED_VALUE_CACHE_LIMIT) {
+      const oldestKey = this.formattedValueCache.keys().next().value as string | undefined;
+      if (oldestKey) {
+        this.formattedValueCache.delete(oldestKey);
+      }
+    }
+
+    return formattedValue;
   }
 
   private syncNativeZoomGroup(): void {

@@ -170,6 +170,8 @@ describe('EventCardChartPanelComponent', () => {
     } as any);
 
     expect(formatter(12.3)).toBe('12.3');
+    expect(formatter(12.3)).toBe('12.3');
+    expect(getDataInstanceSpy).toHaveBeenCalledTimes(1);
 
     getDataInstanceSpy.mockRestore();
   });

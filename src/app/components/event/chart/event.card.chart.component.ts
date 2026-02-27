@@ -170,6 +170,9 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   private pendingRebuild = false;
   private visibleDataTypeIDs = new Set<string>();
   private visibilityEventID: string | null = null;
+  private lastPanelRebuildKey: string | null = null;
+  private lastLapMarkersKey: string | null = null;
+  private lastPersistedVisibleDataTypeKey: string | null = null;
 
   constructor() {
     runInInjectionContext(this.injector, () => {
@@ -251,37 +254,55 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private rebuildPanels(source: string): void {
+    const allActivities = this.event?.getActivities?.() || this.selectedActivities || [];
+    const selectedActivities = this.selectedActivities || [];
+    const effectiveXAxisType = resolveEventChartXAxisType(this.event, this.xAxisType);
+    const zoomSyncGroupId = this.resolveZoomSyncGroupID(this.event);
+    const panelRebuildKey = this.buildPanelRebuildKey(selectedActivities, allActivities, effectiveXAxisType);
+    const lapMarkersKey = this.buildLapMarkersRebuildKey(selectedActivities, allActivities, effectiveXAxisType);
+    const shouldRebuildPanels = this.lastPanelRebuildKey !== panelRebuildKey;
+    const shouldRebuildLaps = this.lastLapMarkersKey !== lapMarkersKey;
+
+    this.renderedXAxisType = effectiveXAxisType;
+    this.zoomSyncGroupId = zoomSyncGroupId;
+
+    if (!shouldRebuildPanels && !shouldRebuildLaps) {
+      this.cdr.markForCheck();
+      return;
+    }
+
     this.loading();
 
     try {
-      const allActivities = this.event?.getActivities?.() || this.selectedActivities || [];
-      const selectedActivities = this.selectedActivities || [];
-      const effectiveXAxisType = resolveEventChartXAxisType(this.event, this.xAxisType);
-      this.renderedXAxisType = effectiveXAxisType;
-      this.zoomSyncGroupId = this.resolveZoomSyncGroupID(this.event);
-
-      this.allChartPanels = buildEventChartPanels({
-        selectedActivities,
-        allActivities,
-        xAxisType: effectiveXAxisType,
-        showAllData: this.showAllData,
-        dataTypesToUse: this.dataTypesToUse,
-        userUnitSettings: this.userUnitSettings,
-        eventColorService: this.eventColorService,
-      });
-
-      this.syncVisibleDataTypes(this.allChartPanels);
-      this.applyDataTypeVisibility();
-      this.persistVisibleDataTypes();
-      this.lapMarkers = this.showLaps
-        ? buildEventLapMarkers({
+      if (shouldRebuildPanels) {
+        this.allChartPanels = buildEventChartPanels({
           selectedActivities,
           allActivities,
           xAxisType: effectiveXAxisType,
-          lapTypes: this.lapTypes,
+          showAllData: this.showAllData,
+          dataTypesToUse: this.dataTypesToUse,
+          userUnitSettings: this.userUnitSettings,
           eventColorService: this.eventColorService,
-        })
-        : [];
+        });
+        this.lastPanelRebuildKey = panelRebuildKey;
+
+        this.syncVisibleDataTypes(this.allChartPanels);
+        this.applyDataTypeVisibility();
+        this.persistVisibleDataTypes();
+      }
+
+      if (shouldRebuildLaps) {
+        this.lapMarkers = this.showLaps
+          ? buildEventLapMarkers({
+            selectedActivities,
+            allActivities,
+            xAxisType: effectiveXAxisType,
+            lapTypes: this.lapTypes,
+            eventColorService: this.eventColorService,
+          })
+          : [];
+        this.lastLapMarkersKey = lapMarkersKey;
+      }
 
       const globalDomain = this.resolveGlobalDomain(this.allChartPanels);
       this.xDomain = globalDomain;
@@ -300,6 +321,9 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       this.showDateOnTimeAxis = false;
       this.renderedXAxisType = resolveEventChartXAxisType(this.event, this.xAxisType);
       this.zoomSyncGroupId = this.resolveZoomSyncGroupID(this.event);
+      this.lastPanelRebuildKey = null;
+      this.lastLapMarkersKey = null;
+      this.lastPersistedVisibleDataTypeKey = null;
     } finally {
       this.loaded();
       this.cdr.markForCheck();
@@ -344,6 +368,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     if (this.visibilityEventID !== eventID) {
       this.visibilityEventID = eventID;
       this.visibleDataTypeIDs.clear();
+      this.lastPersistedVisibleDataTypeKey = null;
     }
 
     const availableDataTypeIDs = new Set(panels.map((panel) => panel.dataType));
@@ -398,13 +423,103 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private persistVisibleDataTypes(): void {
-    if (!this.event?.getID?.()) {
+    const eventID = this.event?.getID?.();
+    if (!eventID) {
       return;
     }
+    const sortedDataTypeIDs = [...this.visibleDataTypeIDs].sort((left, right) => left.localeCompare(right));
+    const persistenceKey = `${eventID}|${sortedDataTypeIDs.join(',')}`;
+    if (this.lastPersistedVisibleDataTypeKey === persistenceKey) {
+      return;
+    }
+
     this.chartSettingsLocalStorageService.setDataTypeIDsToShow(
       this.event,
-      [...this.visibleDataTypeIDs],
+      sortedDataTypeIDs,
     );
+    this.lastPersistedVisibleDataTypeKey = persistenceKey;
+  }
+
+  private buildPanelRebuildKey(
+    selectedActivities: ActivityInterface[],
+    allActivities: ActivityInterface[],
+    xAxisType: XAxisTypes
+  ): string {
+    const eventID = this.event?.getID?.() || '';
+    const selectedActivityKey = this.buildActivitiesKey(selectedActivities);
+    const allActivitiesKey = this.buildActivitiesKey(allActivities);
+    const dataTypesKey = [...(this.dataTypesToUse || [])].sort((left, right) => left.localeCompare(right)).join(',');
+    const unitSettingsKey = this.buildUnitSettingsKey(this.userUnitSettings);
+
+    return [
+      eventID,
+      `${xAxisType}`,
+      this.showAllData ? '1' : '0',
+      selectedActivityKey,
+      allActivitiesKey,
+      dataTypesKey,
+      unitSettingsKey,
+    ].join('|');
+  }
+
+  private buildLapMarkersRebuildKey(
+    selectedActivities: ActivityInterface[],
+    allActivities: ActivityInterface[],
+    xAxisType: XAxisTypes
+  ): string {
+    const eventID = this.event?.getID?.() || '';
+    if (!this.showLaps) {
+      return `${eventID}|hidden`;
+    }
+
+    const selectedActivityKey = this.buildActivitiesKey(selectedActivities);
+    const allActivitiesKey = this.buildActivitiesKey(allActivities);
+    const lapTypesKey = [...this.lapTypes]
+      .map((lapType) => `${lapType}`)
+      .sort((left, right) => left.localeCompare(right))
+      .join(',');
+
+    return [
+      eventID,
+      `${xAxisType}`,
+      selectedActivityKey,
+      allActivitiesKey,
+      lapTypesKey,
+    ].join('|');
+  }
+
+  private buildActivitiesKey(activities: ActivityInterface[]): string {
+    return (activities || [])
+      .map((activity) => `${activity?.getID?.() || ''}`)
+      .join(',');
+  }
+
+  private buildUnitSettingsKey(unitSettings: unknown): string {
+    if (!unitSettings || typeof unitSettings !== 'object') {
+      return '';
+    }
+
+    const normalizedEntries = Object.entries(unitSettings as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, value]) => [key, this.normalizeRebuildKeyValue(value)]);
+
+    return JSON.stringify(normalizedEntries);
+  }
+
+  private normalizeRebuildKeyValue(value: unknown): string {
+    if (Array.isArray(value)) {
+      return value.map((entry) => this.normalizeRebuildKeyValue(entry)).join(',');
+    }
+
+    if (value && typeof value === 'object') {
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return '[object]';
+      }
+    }
+
+    return `${value ?? ''}`;
   }
 
   private resolveZoomSyncGroupID(event: EventInterface | null | undefined): string | null {

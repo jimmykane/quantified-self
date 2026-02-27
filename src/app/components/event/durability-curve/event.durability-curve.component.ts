@@ -120,17 +120,12 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
       return;
     }
 
-    const durabilitySeries = this.performanceCurveDataService.buildDurabilitySeries(this.activities, {
-      isMerge: this.isMerge,
-      rollingWindowSeconds: DEFAULT_ROLLING_WINDOW_SECONDS,
-      maxPointsPerSeries: this.isMobile ? 220 : 640,
-    });
-    // Keep the rendered line downsampled for performance, but compute effort markers from
-    // full-resolution durability so long windows (e.g. 2h) are not lost by downsampling.
-    const markerSourceSeries = this.performanceCurveDataService.buildDurabilitySeries(this.activities, {
-      isMerge: this.isMerge,
-      rollingWindowSeconds: DEFAULT_ROLLING_WINDOW_SECONDS,
-    });
+    const { renderSeries: durabilitySeries, markerSourceSeries } = this.performanceCurveDataService
+      .buildDurabilitySeriesWithMarkerSource(this.activities, {
+        isMerge: this.isMerge,
+        rollingWindowSeconds: DEFAULT_ROLLING_WINDOW_SECONDS,
+        maxPointsPerSeries: this.isMobile ? 220 : 640,
+      });
     const bestEffortMarkers = this.performanceCurveDataService.buildBestEffortMarkers(markerSourceSeries, {
       windowDurations: BEST_EFFORT_WINDOWS,
       maxMarkersPerWindow: this.isMobile ? 3 : 6,

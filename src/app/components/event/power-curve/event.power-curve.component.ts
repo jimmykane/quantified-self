@@ -147,6 +147,7 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
     }
 
     const singleActivity = powerSeries.length <= 1;
+    const maxSymbolPoints = this.isMobile ? 140 : 240;
     const powerPoints = powerSeries.flatMap((seriesEntry) => seriesEntry.points);
     const xDurations = [...new Set(powerPoints.map((point) => point.duration))]
       .sort((left, right) => left - right);
@@ -179,7 +180,7 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
             wattsPerKg: point.wattsPerKg,
           };
         }),
-        showSymbol: true,
+        showSymbol: seriesEntry.points.length <= maxSymbolPoints,
         symbol: 'circle',
         symbolSize: this.isMobile ? 4.5 : 5.5,
         smooth: powerSeries.length > 1 ? 0.16 : 0.24,

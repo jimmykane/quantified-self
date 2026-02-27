@@ -176,6 +176,38 @@ describe('EventPowerCurveComponent', () => {
     expect(option.legend.show).toBe(false);
   });
 
+  it('disables point symbols for dense series and keeps them for sparse series', async () => {
+    const densePoints = Array.from({ length: 260 }, (_, index) => ({
+      duration: index + 1,
+      power: 500 - index,
+    }));
+    mockPerformanceCurveDataService.buildPowerCurveSeries.mockReturnValue([
+      {
+        activity: { getID: () => 'a1' } as any,
+        activityId: 'a1',
+        label: 'Ride',
+        points: densePoints,
+      },
+    ]);
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    expect(getLastOption().series[0].showSymbol).toBe(false);
+
+    mockPerformanceCurveDataService.buildPowerCurveSeries.mockReturnValue([
+      {
+        activity: { getID: () => 'a1' } as any,
+        activityId: 'a1',
+        label: 'Ride',
+        points: densePoints.slice(0, 120),
+      },
+    ]);
+
+    component.ngOnChanges({ activities: new SimpleChange([], [{}], false) });
+    expect(getLastOption().series[0].showSymbol).toBe(true);
+  });
+
   it('should add aligned 2h marker points for long durations', async () => {
     mockPerformanceCurveDataService.buildPowerCurveSeries.mockReturnValue([
       {

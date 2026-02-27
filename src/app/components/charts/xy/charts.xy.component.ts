@@ -175,13 +175,16 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
     }
 
     const categories = points.map(point => point.label);
-    const lineData = points.map((point) => ({
-      value: point.value,
-      itemStyle: {
-        color: this.getPointColor(point, point.index),
-        borderColor: this.getPointColor(point, point.index)
-      }
-    }));
+    const lineData = points.map((point) => {
+      const pointColor = this.getPointColor(point, point.index);
+      return {
+        value: point.value,
+        itemStyle: {
+          color: pointColor,
+          borderColor: pointColor
+        }
+      };
+    });
 
     const shouldRenderTrend = this.vertical
       && this.chartDataCategoryType === ChartDataCategoryTypes.DateType;
