@@ -117,7 +117,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     }
     if (this.user && simpleChanges.user) {
       this.selectedColumns = this.user.settings?.dashboardSettings?.tableSettings?.selectedColumns || AppUserUtilities.getDefaultSelectedTableColumns();
-      this.paginator?._changePageSize(this.user.settings?.dashboardSettings?.tableSettings?.eventsPerPage || 10);
+      const nextPageSize = this.user.settings?.dashboardSettings?.tableSettings?.eventsPerPage || 10;
+      if (this.paginator && this.paginator.pageSize !== nextPageSize) {
+        this.paginator._changePageSize(nextPageSize);
+      }
       this.updateDisplayedColumns();
     }
     if (simpleChanges.showActions) {
@@ -158,9 +161,13 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       return (statRowElement as any)[`sort.${header}`];
     };
     this.sortSubscription = this.sort.sortChange.subscribe(async (sort) => {
-      if (this.user.settings.dashboardSettings.tableSettings.active !== sort.active || this.user.settings.dashboardSettings.tableSettings.direction !== sort.direction) {
-        this.user.settings.dashboardSettings.tableSettings.active = sort.active;
-        this.user.settings.dashboardSettings.tableSettings.direction = sort.direction as OrderByDirection;
+      const tableSettings = this.user?.settings?.dashboardSettings?.tableSettings;
+      if (!tableSettings) {
+        return;
+      }
+      if (tableSettings.active !== sort.active || tableSettings.direction !== sort.direction) {
+        tableSettings.active = sort.active;
+        tableSettings.direction = sort.direction as OrderByDirection;
         await this.userService.updateUserProperties(this.user, { settings: this.user.settings })
       }
     });
@@ -569,6 +576,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   async pageChanges(pageEvent: PageEvent) {
     // @important This is nasty because it's called if anything almost changes
     if (this.user.settings?.dashboardSettings?.tableSettings) {
+      if (this.user.settings.dashboardSettings.tableSettings.eventsPerPage === pageEvent.pageSize) {
+        return;
+      }
       this.user.settings.dashboardSettings.tableSettings.eventsPerPage = pageEvent.pageSize;
       return this.userService.updateUserProperties(this.user, { settings: this.user.settings })
     }
