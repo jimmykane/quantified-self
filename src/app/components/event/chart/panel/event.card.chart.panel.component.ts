@@ -42,6 +42,7 @@ const PROGRESSIVE_THRESHOLD = 6000;
 const PROGRESSIVE_STEP = 900;
 const DATA_ZOOM_THROTTLE_MS = 60;
 const FORMATTED_VALUE_CACHE_LIMIT = 600;
+const TOOLTIP_VIEWPORT_THRESHOLD = 0.1;
 // Temporary perf toggle: disable axis-pointer -> map cursor emission path.
 const TEMP_DISABLE_AXIS_POINTER_CURSOR_EMIT = true;
 
@@ -76,7 +77,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private eventsBound = false;
   private connectedZoomGroupId: string | null = null;
   private wheelPassThroughListener: ((event: Event) => void) | null = null;
-  private pointerSyncEnabled = false;
+  private viewportObserver: IntersectionObserver | null = null;
+  private tooltipVisibleForViewport = true;
   private seriesByID = new Map<string, PanelSeriesModel>();
   private seriesDataCache = new WeakMap<EventChartPoint[], Array<[number, number]>>();
   private formattedValueCache = new Map<string, string>();
@@ -99,6 +101,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.syncNativeZoomGroup();
     this.bindChartEvents();
     this.refreshChart();
+    this.syncTooltipViewportObserver();
   }
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -121,10 +124,12 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       || changes.strokeWidth
     ) {
       this.refreshChart();
+      this.syncTooltipViewportObserver();
     }
   }
 
   ngOnDestroy(): void {
+    this.teardownTooltipViewportObserver();
     this.unbindWheelPassThrough();
     this.disconnectNativeZoomGroup();
     this.chartHost.dispose();
@@ -269,7 +274,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       },
       tooltip: {
         trigger: 'axis',
-        triggerOn: this.pointerSyncEnabled ? 'mousemove|click' : 'none',
+        show: this.tooltipVisibleForViewport,
+        triggerOn: 'mousemove|click',
         axisPointer: {
           type: 'line',
           animation: false
@@ -362,9 +368,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     if (!TEMP_DISABLE_AXIS_POINTER_CURSOR_EMIT) {
       chart.on('updateAxisPointer', (params: any) => {
-        if (!this.pointerSyncEnabled) {
-          return;
-        }
         const value = Number(params?.axesInfo?.[0]?.value);
         if (Number.isFinite(value)) {
           this.cursorPositionChange.emit(value);
@@ -372,23 +375,94 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       });
     }
 
-    chart.on('click', () => this.activatePointerSync());
-    const zr = (chart as any).getZr?.();
-    zr?.on?.('click', () => this.activatePointerSync());
-
     this.eventsBound = true;
   }
 
-  private activatePointerSync(): void {
-    if (this.pointerSyncEnabled) {
+  private syncTooltipViewportObserver(): void {
+    const chart = this.chartHost.getChart();
+    const container = this.chartDiv?.nativeElement;
+    if (!chart || !container) {
       return;
     }
-    this.pointerSyncEnabled = true;
+
+    if (!this.shouldObserveViewportTooltipVisibility()) {
+      this.teardownTooltipViewportObserver();
+      this.tooltipVisibleForViewport = true;
+      return;
+    }
+
+    if (typeof IntersectionObserver === 'undefined') {
+      this.applyTooltipVisibilityForViewport(true);
+      return;
+    }
+
+    if (!this.viewportObserver) {
+      this.viewportObserver = new IntersectionObserver(
+        (entries) => this.handleTooltipViewportEntries(entries),
+        {
+          root: null,
+          threshold: [TOOLTIP_VIEWPORT_THRESHOLD],
+        }
+      );
+      this.viewportObserver.observe(container);
+    }
+  }
+
+  private shouldObserveViewportTooltipVisibility(): boolean {
+    return !!this.panel && this.showZoomBar === false;
+  }
+
+  private teardownTooltipViewportObserver(): void {
+    if (!this.viewportObserver) {
+      return;
+    }
+
+    this.viewportObserver.disconnect();
+    this.viewportObserver = null;
+  }
+
+  private handleTooltipViewportEntries(entries: IntersectionObserverEntry[]): void {
+    if (!entries.length) {
+      return;
+    }
+
+    const primaryEntry = entries[0];
+    const isVisible = primaryEntry.isIntersecting && primaryEntry.intersectionRatio >= TOOLTIP_VIEWPORT_THRESHOLD;
+    this.applyTooltipVisibilityForViewport(isVisible);
+  }
+
+  private applyTooltipVisibilityForViewport(isVisible: boolean): void {
+    if (this.tooltipVisibleForViewport === isVisible) {
+      return;
+    }
+
+    this.tooltipVisibleForViewport = isVisible;
+    const chart = this.chartHost.getChart();
+    if (!chart) {
+      return;
+    }
+
+    if (!isVisible) {
+      this.zoneSafeHideTip(chart);
+    }
+
     this.chartHost.setOption({
       tooltip: {
-        triggerOn: 'mousemove|click',
+        show: isVisible,
       },
-    }, { notMerge: false, lazyUpdate: true });
+    }, {
+      notMerge: false,
+      lazyUpdate: true,
+      silent: true,
+    });
+  }
+
+  private zoneSafeHideTip(chart: EChartsType): void {
+    try {
+      chart.dispatchAction({ type: 'hideTip' });
+    } catch (error) {
+      this.logger.warn('[EventCardChartPanelComponent] Failed to hide tooltip for offscreen panel', error);
+    }
   }
 
   private buildZoomBarOnlyOption(): ChartOption {

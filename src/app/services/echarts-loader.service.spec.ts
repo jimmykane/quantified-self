@@ -220,6 +220,19 @@ describe('EChartsLoaderService', () => {
     expect(echartsCoreMock.disconnect).toHaveBeenCalledWith('event-zoom-group');
   });
 
+  it('should keep group connected until last disconnect call', async () => {
+    await service.connectGroup('event-zoom-group');
+    await service.connectGroup('event-zoom-group');
+    expect(echartsCoreMock.connect).toHaveBeenCalledTimes(1);
+
+    await service.disconnectGroup('event-zoom-group');
+    expect(echartsCoreMock.disconnect).not.toHaveBeenCalled();
+
+    await service.disconnectGroup('event-zoom-group');
+    expect(echartsCoreMock.disconnect).toHaveBeenCalledTimes(1);
+    expect(echartsCoreMock.disconnect).toHaveBeenCalledWith('event-zoom-group');
+  });
+
   it('should dispose active charts and skip already-disposed charts', () => {
     const runOutsideAngularSpy = vi.spyOn(zone, 'runOutsideAngular');
 

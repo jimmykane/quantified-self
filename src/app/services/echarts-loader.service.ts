@@ -56,6 +56,7 @@ export class EChartsLoaderService {
   private loader: Promise<EChartsCoreModule> | null = null;
   private cachedCore: EChartsCoreModule | null = null;
   private themesRegistered = false;
+  private groupRefCounts = new Map<string, number>();
 
   constructor(private zone: NgZone, @Inject(PLATFORM_ID) private platformId: object) { }
 
@@ -135,22 +136,48 @@ export class EChartsLoaderService {
   }
 
   public async connectGroup(groupId: string): Promise<void> {
-    if (!groupId) {
+    const normalizedGroupID = `${groupId || ''}`.trim();
+    if (!normalizedGroupID) {
       return;
     }
-    const echarts = await this.load();
-    this.zone.runOutsideAngular(() => {
-      echarts.connect(groupId);
-    });
+
+    const currentRefCount = this.groupRefCounts.get(normalizedGroupID) ?? 0;
+    this.groupRefCounts.set(normalizedGroupID, currentRefCount + 1);
+    if (currentRefCount > 0) {
+      return;
+    }
+
+    try {
+      const echarts = await this.load();
+      this.zone.runOutsideAngular(() => {
+        echarts.connect(normalizedGroupID);
+      });
+    } catch (error) {
+      this.groupRefCounts.delete(normalizedGroupID);
+      throw error;
+    }
   }
 
   public async disconnectGroup(groupId: string): Promise<void> {
-    if (!groupId) {
+    const normalizedGroupID = `${groupId || ''}`.trim();
+    if (!normalizedGroupID) {
       return;
     }
+
+    const currentRefCount = this.groupRefCounts.get(normalizedGroupID);
+    if (!currentRefCount) {
+      return;
+    }
+
+    if (currentRefCount > 1) {
+      this.groupRefCounts.set(normalizedGroupID, currentRefCount - 1);
+      return;
+    }
+
+    this.groupRefCounts.delete(normalizedGroupID);
     const echarts = await this.load();
     this.zone.runOutsideAngular(() => {
-      echarts.disconnect(groupId);
+      echarts.disconnect(normalizedGroupID);
     });
   }
 

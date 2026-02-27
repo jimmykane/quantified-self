@@ -8,26 +8,18 @@ import { LoggerService } from '../../../../services/logger.service';
 describe('EventCardChartPanelComponent', () => {
   let fixture: ComponentFixture<EventCardChartPanelComponent>;
   let component: EventCardChartPanelComponent;
-  type ChartEventHandler = (params?: unknown) => void;
-  let handlers: Record<string, ChartEventHandler>;
-  let zrHandlers: Record<string, ChartEventHandler>;
-
-  const zr = {
-    on: vi.fn((name: string, callback: ChartEventHandler) => {
-      zrHandlers[name] = callback;
-    }),
-  } as any;
+  let intersectionObserverCallbacks: IntersectionObserverCallback[] = [];
+  let intersectionObserverObserveSpies: Array<ReturnType<typeof vi.fn>> = [];
+  let intersectionObserverDisconnectSpies: Array<ReturnType<typeof vi.fn>> = [];
+  let originalIntersectionObserver: typeof IntersectionObserver | undefined;
 
   const chart = {
-    on: vi.fn((name: string, callback: ChartEventHandler) => {
-      handlers[name] = callback;
-    }),
+    on: vi.fn(),
     dispatchAction: vi.fn(),
     setOption: vi.fn(),
     resize: vi.fn(),
     dispose: vi.fn(),
     isDisposed: vi.fn().mockReturnValue(false),
-    getZr: vi.fn(() => zr),
   } as any;
 
   const eChartsLoaderMock = {
@@ -40,9 +32,29 @@ describe('EventCardChartPanelComponent', () => {
   };
 
   beforeEach(async () => {
-    handlers = {};
-    zrHandlers = {};
     vi.clearAllMocks();
+    intersectionObserverCallbacks = [];
+    intersectionObserverObserveSpies = [];
+    intersectionObserverDisconnectSpies = [];
+    originalIntersectionObserver = globalThis.IntersectionObserver;
+
+    class IntersectionObserverMock {
+      observe = vi.fn();
+      disconnect = vi.fn();
+      unobserve = vi.fn();
+      takeRecords = vi.fn().mockReturnValue([]);
+      root = null;
+      rootMargin = '';
+      thresholds = [0.1];
+
+      constructor(callback: IntersectionObserverCallback) {
+        intersectionObserverCallbacks.push(callback);
+        intersectionObserverObserveSpies.push(this.observe);
+        intersectionObserverDisconnectSpies.push(this.disconnect);
+      }
+    }
+
+    globalThis.IntersectionObserver = IntersectionObserverMock as unknown as typeof IntersectionObserver;
 
     await TestBed.configureTestingModule({
       declarations: [EventCardChartPanelComponent],
@@ -82,6 +94,14 @@ describe('EventCardChartPanelComponent', () => {
     component.zoomGroupId = 'event-zoom-group';
   });
 
+  afterEach(() => {
+    if (originalIntersectionObserver) {
+      globalThis.IntersectionObserver = originalIntersectionObserver;
+    } else {
+      delete (globalThis as { IntersectionObserver?: typeof IntersectionObserver }).IntersectionObserver;
+    }
+  });
+
   it('initializes chart host and renders panel option', async () => {
     component.showZoomBar = true;
     fixture.detectChanges();
@@ -90,13 +110,13 @@ describe('EventCardChartPanelComponent', () => {
     expect(eChartsLoaderMock.init).toHaveBeenCalledTimes(1);
     expect(eChartsLoaderMock.connectGroup).toHaveBeenCalledWith('event-zoom-group');
     expect(eChartsLoaderMock.setOption).toHaveBeenCalled();
-    expect(chart.on).toHaveBeenCalledWith('click', expect.any(Function));
-    expect(zr.on).toHaveBeenCalledWith('click', expect.any(Function));
+    expect(chart.on).not.toHaveBeenCalledWith('click', expect.any(Function));
+    expect(intersectionObserverObserveSpies).toHaveLength(0);
 
     const option = eChartsLoaderMock.setOption.mock.calls.at(-1)?.[1] as any;
     expect(option?.xAxis?.min).toBe(0);
     expect(option?.xAxis?.max).toBe(120);
-    expect(option?.tooltip?.triggerOn).toBe('none');
+    expect(option?.tooltip?.triggerOn).toBe('mousemove|click');
     expect(option?.dataZoom?.[0]?.zoomOnMouseWheel).toBe(false);
     expect(option?.dataZoom?.[0]?.moveOnMouseMove).toBe(true);
     expect(option?.dataZoom?.[0]?.moveOnMouseWheel).toBe(false);
@@ -140,22 +160,48 @@ describe('EventCardChartPanelComponent', () => {
     expect(eChartsLoaderMock.disconnectGroup).toHaveBeenCalledWith('event-zoom-group');
   });
 
-  it('starts pointer sync only after chart click', async () => {
-    const emitSpy = vi.spyOn(component.cursorPositionChange, 'emit');
-
+  it('enables tooltip hover without requiring a click first', async () => {
     fixture.detectChanges();
     await component.ngAfterViewInit();
-    await new Promise(resolve => setTimeout(resolve, 0));
 
-    handlers.updateAxisPointer?.({ axesInfo: [{ value: 33 }] });
-    expect(emitSpy).not.toHaveBeenCalled();
+    const option = eChartsLoaderMock.setOption.mock.calls.at(-1)?.[1] as any;
+    expect(option?.tooltip?.triggerOn).toBe('mousemove|click');
+  });
 
-    zrHandlers.click({});
-    const reRenderedOption = eChartsLoaderMock.setOption.mock.calls.at(-1)?.[1] as any;
-    expect(reRenderedOption?.tooltip?.triggerOn).toBe('mousemove|click');
+  it('hides tooltip when chart panel leaves viewport', async () => {
+    fixture.detectChanges();
+    await component.ngAfterViewInit();
 
-    handlers.updateAxisPointer?.({ axesInfo: [{ value: 33 }] });
-    expect(emitSpy).not.toHaveBeenCalled();
+    expect(intersectionObserverCallbacks).toHaveLength(1);
+    intersectionObserverCallbacks[0]([
+      { isIntersecting: false, intersectionRatio: 0 } as IntersectionObserverEntry
+    ], {} as IntersectionObserver);
+
+    expect(chart.dispatchAction).toHaveBeenCalledWith({ type: 'hideTip' });
+    expect(eChartsLoaderMock.setOption).toHaveBeenCalledWith(
+      chart,
+      { tooltip: { show: false } },
+      expect.objectContaining({ lazyUpdate: true, silent: true })
+    );
+  });
+
+  it('restores tooltip when chart panel re-enters viewport', async () => {
+    fixture.detectChanges();
+    await component.ngAfterViewInit();
+
+    expect(intersectionObserverCallbacks).toHaveLength(1);
+    intersectionObserverCallbacks[0]([
+      { isIntersecting: false, intersectionRatio: 0 } as IntersectionObserverEntry
+    ], {} as IntersectionObserver);
+    intersectionObserverCallbacks[0]([
+      { isIntersecting: true, intersectionRatio: 1 } as IntersectionObserverEntry
+    ], {} as IntersectionObserver);
+
+    expect(eChartsLoaderMock.setOption).toHaveBeenCalledWith(
+      chart,
+      { tooltip: { show: true } },
+      expect.objectContaining({ lazyUpdate: true, silent: true })
+    );
   });
 
   it('formats y-axis labels without units', async () => {
@@ -192,6 +238,17 @@ describe('EventCardChartPanelComponent', () => {
     component.ngOnDestroy();
 
     expect(eChartsLoaderMock.disconnectGroup).toHaveBeenCalledWith('event-zoom-group');
+    expect(intersectionObserverDisconnectSpies).toHaveLength(1);
+    expect(intersectionObserverDisconnectSpies[0]).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not register viewport observer in zoom-bar-only mode', async () => {
+    component.panel = null;
+    component.showZoomBar = true;
+    fixture.detectChanges();
+    await component.ngAfterViewInit();
+
+    expect(intersectionObserverObserveSpies).toHaveLength(0);
   });
 
   it('stops wheel event propagation on chart container to preserve page scrolling', async () => {
