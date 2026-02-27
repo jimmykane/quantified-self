@@ -26,7 +26,7 @@ import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 // Protect against gzip zip-bombs: input is capped at 10MB, but decompressed output
 // could otherwise expand to hundreds of MB/GB and OOM the function instance.
-const MAX_DECOMPRESSED_UPLOAD_BYTES = 50 * 1024 * 1024;
+const MAX_DECOMPRESSED_UPLOAD_BYTES = 150 * 1024 * 1024;
 const SUPPORTED_BASE_EXTENSIONS = new Set(['fit', 'gpx', 'tcx', 'json', 'sml']);
 
 class HttpStatusError extends Error {
@@ -268,7 +268,7 @@ export const uploadActivity = onRequest({
   region: FUNCTIONS_MANIFEST.uploadActivity.region,
   memory: '512MiB',
   concurrency: 1,
-  timeoutSeconds: 300,
+  timeoutSeconds: 540,
   maxInstances: 20,
   cors: ALLOWED_CORS_ORIGINS,
 }, async (request, response) => {
