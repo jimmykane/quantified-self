@@ -1,6 +1,8 @@
 import {
   DataAirPower,
   DataCadence,
+  DataEffortPace,
+  DataEffortPaceMinutesPerMile,
   DataGradeAdjustedPace,
   DataGradeAdjustedPaceMinutesPerMile,
   DataGradeAdjustedSpeed,
@@ -36,6 +38,8 @@ const HEART_RATE_GROUP = new Set<string>([
 const PRIMARY_PACE_GROUP = new Set<string>([
   DataPace.type,
   DataPaceMinutesPerMile.type,
+  DataEffortPace.type,
+  DataEffortPaceMinutesPerMile.type,
 ]);
 
 const GRADE_ADJUSTED_PACE_GROUP = new Set<string>([

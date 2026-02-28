@@ -1,4 +1,4 @@
-import { DataPace, DataPower } from '@sports-alliance/sports-lib';
+import { DataEffortPace, DataPace, DataPower } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import {
   buildEventPanelYAxisConfig,
@@ -60,6 +60,21 @@ describe('event-echarts-yaxis.helper', () => {
   it('returns inverted config for pace streams', () => {
     const config = buildEventPanelYAxisConfig({
       panel: buildPanel(DataPace.type, [300, 305, 310, 315]),
+      visibleRange: null,
+      extraMaxForPower: 0,
+      extraMaxForPace: -0.25,
+    });
+
+    expect(config.inverse).toBe(true);
+    expect(config.min).toBeDefined();
+    expect(config.max).toBeDefined();
+    expect(config.min).toBe(300);
+    expect(config.max).toBe(315);
+  });
+
+  it('treats effort pace streams like pace for y-axis scaling', () => {
+    const config = buildEventPanelYAxisConfig({
+      panel: buildPanel(DataEffortPace.type, [280, 290, 300, 310]),
       visibleRange: null,
       extraMaxForPower: 0,
       extraMaxForPace: -0.25,

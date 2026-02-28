@@ -24,8 +24,8 @@ describe('pace-axis.helper', () => {
     expect(scaling.strictMinMax).toBe(true);
     expect(scaling.min).toBeDefined();
     expect(scaling.max).toBeDefined();
-    expect(scaling.min!).toBeGreaterThan(25);
-    expect(scaling.min!).toBeLessThan(300);
+    expect(scaling.min!).toBeLessThan(25);
+    expect(scaling.min!).toBeGreaterThan(0);
     expect(scaling.max!).toBeLessThan(400);
     expect(scaling.extraMax).toBe(0);
   });

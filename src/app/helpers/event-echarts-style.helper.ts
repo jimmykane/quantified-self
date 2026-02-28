@@ -5,6 +5,14 @@ import {
   DataCadence,
   DataDistance,
   DataEHPE,
+  DataEffortPace,
+  DataEffortPaceAvg,
+  DataEffortPaceAvgMinutesPerMile,
+  DataEffortPaceMax,
+  DataEffortPaceMaxMinutesPerMile,
+  DataEffortPaceMin,
+  DataEffortPaceMinMinutesPerMile,
+  DataEffortPaceMinutesPerMile,
   DataEVPE,
   DataGPSAltitude,
   DataGradeAdjustedPace,
@@ -68,6 +76,14 @@ const PRESSURE_GROUP = new Set<string>([
 const PACE_GROUP = new Set<string>([
   DataPace.type,
   DataPaceMinutesPerMile.type,
+  DataEffortPace.type,
+  DataEffortPaceMinutesPerMile.type,
+  DataEffortPaceAvg.type,
+  DataEffortPaceAvgMinutesPerMile.type,
+  DataEffortPaceMin.type,
+  DataEffortPaceMinMinutesPerMile.type,
+  DataEffortPaceMax.type,
+  DataEffortPaceMaxMinutesPerMile.type,
   DataGradeAdjustedPace.type,
   DataGradeAdjustedPaceMinutesPerMile.type,
 ]);
@@ -175,6 +191,10 @@ export function resolveEventColorGroupKey(streamType: string): string {
     return DataCadence.type;
   }
   return streamType;
+}
+
+export function isEventPaceStreamType(streamType: string): boolean {
+  return PACE_GROUP.has(streamType) || SWIM_PACE_GROUP.has(streamType);
 }
 
 export function resolveEventSeriesColor(groupKey: string, seriesIndex: number, seriesCount: number): string {

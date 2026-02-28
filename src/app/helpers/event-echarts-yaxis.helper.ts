@@ -1,31 +1,15 @@
 import {
   DataAirPower,
-  DataGradeAdjustedPace,
-  DataGradeAdjustedPaceMinutesPerMile,
-  DataPace,
-  DataPaceMinutesPerMile,
   DataPower,
   DataPowerLeft,
   DataPowerRight,
-  DataSwimPace,
-  DataSwimPaceMaxMinutesPer100Yard,
-  DataSwimPaceMinutesPer100Yard,
 } from '@sports-alliance/sports-lib';
 import { EventChartPanelModel } from './event-echarts-data.helper';
+import { isEventPaceStreamType } from './event-echarts-style.helper';
 import { EventChartRange, normalizeEventRange } from './event-echarts-xaxis.helper';
 import { computePaceAxisScaling } from './pace-axis.helper';
 
 const DEFAULT_NON_POWER_EXTRA_MAX = 0.1;
-
-const PACE_STREAM_TYPES = new Set<string>([
-  DataPace.type,
-  DataPaceMinutesPerMile.type,
-  DataGradeAdjustedPace.type,
-  DataGradeAdjustedPaceMinutesPerMile.type,
-  DataSwimPace.type,
-  DataSwimPaceMinutesPer100Yard.type,
-  DataSwimPaceMaxMinutesPer100Yard.type,
-]);
 
 const POWER_STREAM_TYPES = new Set<string>([
   DataPower.type,
@@ -49,7 +33,7 @@ export interface BuildEventPanelYAxisConfigInput {
 
 export function buildEventPanelYAxisConfig(input: BuildEventPanelYAxisConfigInput): EventPanelYAxisConfig {
   const streamTypes = input.panel.series.map((series) => series.streamType || '');
-  const hasPaceStream = streamTypes.some((streamType) => PACE_STREAM_TYPES.has(streamType));
+  const hasPaceStream = streamTypes.some((streamType) => isEventPaceStreamType(streamType));
   const values = getVisibleValues(input.panel, input.visibleRange);
 
   if (hasPaceStream) {
