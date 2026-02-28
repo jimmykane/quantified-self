@@ -80,4 +80,18 @@ describe('event-echarts-yaxis.helper', () => {
 
     expect((config.max as number)).toBeLessThan(200);
   });
+
+  it('handles very large series without spreading values into Math.min/Math.max', () => {
+    const values = Array.from({ length: 200000 }, (_, index) => index % 500);
+    const config = buildEventPanelYAxisConfig({
+      panel: buildPanel('speed', values),
+      visibleRange: null,
+      extraMaxForPower: 0,
+      extraMaxForPace: -0.25,
+    });
+
+    expect(config.inverse).toBe(false);
+    expect(config.min).toBeLessThanOrEqual(0);
+    expect(config.max).toBeGreaterThan(499);
+  });
 });

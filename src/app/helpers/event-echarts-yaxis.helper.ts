@@ -94,8 +94,12 @@ function buildPaceAxis(values: number[], extraMaxForPace: number): EventPanelYAx
     };
   }
 
-  const min = Math.min(...positiveValues);
-  const max = Math.max(...positiveValues);
+  const extrema = getValueExtrema(positiveValues);
+  if (!extrema) {
+    return { inverse: true };
+  }
+
+  const { min, max } = extrema;
   if (max <= min) {
     return buildSingleValueRange(min, true);
   }
@@ -112,8 +116,12 @@ function buildDefaultAxis(values: number[], isPower: boolean, extraMaxForPower: 
     return { inverse: false };
   }
 
-  const min = Math.min(...values);
-  const max = Math.max(...values);
+  const extrema = getValueExtrema(values);
+  if (!extrema) {
+    return { inverse: false };
+  }
+
+  const { min, max } = extrema;
   if (max <= min) {
     return buildSingleValueRange(min, false);
   }
@@ -150,4 +158,28 @@ function sanitizeExtraMax(value: number, fallback: number): number {
     return fallback;
   }
   return Math.max(0, Math.min(0.75, value));
+}
+
+function getValueExtrema(values: number[]): { min: number; max: number } | null {
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+
+  for (let index = 0; index < values.length; index += 1) {
+    const value = values[index];
+    if (!Number.isFinite(value)) {
+      continue;
+    }
+    if (value < min) {
+      min = value;
+    }
+    if (value > max) {
+      max = value;
+    }
+  }
+
+  if (!Number.isFinite(min) || !Number.isFinite(max)) {
+    return null;
+  }
+
+  return { min, max };
 }
