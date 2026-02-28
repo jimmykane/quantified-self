@@ -44,6 +44,8 @@ const PROGRESSIVE_STEP = 900;
 const DATA_ZOOM_THROTTLE_MS = 60;
 const FORMATTED_VALUE_CACHE_LIMIT = 600;
 const TOOLTIP_VIEWPORT_THRESHOLD = 0.1;
+const LAP_TOOLTIP_OFFSET_X = 12;
+const LAP_TOOLTIP_OFFSET_Y = 12;
 // Temporary perf toggle: disable axis-pointer -> map cursor emission path.
 const TEMP_DISABLE_AXIS_POINTER_CURSOR_EMIT = true;
 
@@ -86,6 +88,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private seriesByID = new Map<string, PanelSeriesModel>();
   private seriesDataCache = new WeakMap<EventChartPoint[], Array<[number, number]>>();
   private formattedValueCache = new Map<string, string>();
+  private activeLapTooltipKey: string | null = null;
 
   constructor(
     private eChartsLoader: EChartsLoaderService,
@@ -237,8 +240,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           show: false,
         },
         tooltip: {
-          trigger: 'item',
-          formatter: (params: any) => this.formatLapMarkerTooltip(params),
+          show: false,
         },
         lineStyle: {
           type: 'dashed',
@@ -386,6 +388,19 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         }
       });
     }
+
+    chart.on('mousemove', (params: any) => {
+      if (params?.componentType === 'markLine') {
+        this.showLocalLapTooltip(params);
+        return;
+      }
+
+      this.hideLocalLapTooltip();
+    });
+
+    chart.on('globalout', () => {
+      this.hideLocalLapTooltip();
+    });
 
     this.eventsBound = true;
   }
@@ -697,6 +712,61 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     return lines.join('');
+  }
+
+  private showLocalLapTooltip(params: any): void {
+    const chart = this.chartHost.getChart();
+    const marker = params?.data as EventChartLapMarker | undefined;
+    const offsetX = Number(params?.event?.offsetX);
+    const offsetY = Number(params?.event?.offsetY);
+    if (!chart || !marker || !Number.isFinite(offsetX) || !Number.isFinite(offsetY)) {
+      return;
+    }
+
+    const tooltipKey = `${marker.lapNumber}|${marker.xValue}`;
+    this.activeLapTooltipKey = tooltipKey;
+
+    const darkTheme = isDarkChartThemeActive(this.chartTheme);
+    const textColor = darkTheme ? '#f5f5f5' : '#1f1f1f';
+    const tooltipBackgroundColor = darkTheme ? '#303030' : '#ffffff';
+    const tooltipBorderColor = darkTheme ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.12)';
+    const tooltipHtml = this.formatLapMarkerTooltip({ data: marker, name: marker.label });
+
+    chart.dispatchAction({
+      type: 'showTip',
+      x: offsetX + LAP_TOOLTIP_OFFSET_X,
+      y: offsetY + LAP_TOOLTIP_OFFSET_Y,
+      escapeConnect: true,
+      tooltip: {
+        trigger: 'item',
+        backgroundColor: tooltipBackgroundColor,
+        borderColor: tooltipBorderColor,
+        borderWidth: 1,
+        textStyle: {
+          color: textColor,
+          fontFamily: "'Barlow Condensed', sans-serif",
+          fontSize: 12,
+        },
+        formatter: () => tooltipHtml,
+      } as any,
+    } as any);
+  }
+
+  private hideLocalLapTooltip(): void {
+    if (!this.activeLapTooltipKey) {
+      return;
+    }
+
+    const chart = this.chartHost.getChart();
+    this.activeLapTooltipKey = null;
+    if (!chart) {
+      return;
+    }
+
+    chart.dispatchAction({
+      type: 'hideTip',
+      escapeConnect: true,
+    } as any);
   }
 
   private formatDataValue(streamType: string, value: number, includeUnit = true): string {

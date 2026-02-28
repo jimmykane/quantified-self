@@ -270,7 +270,7 @@ describe('EventCardChartPanelComponent', () => {
     ]);
     expect(option?.series?.[0]?.markLine?.label).toEqual({ show: false });
     expect(option?.series?.[0]?.markLine?.silent).toBe(false);
-    expect(option?.series?.[0]?.markLine?.tooltip?.trigger).toBe('item');
+    expect(option?.series?.[0]?.markLine?.tooltip).toEqual({ show: false });
   });
 
   it('formats lap marker tooltip content from markLine data', async () => {
@@ -317,6 +317,93 @@ describe('EventCardChartPanelComponent', () => {
     expect(tooltipHtml).toContain('Ascent: 10m');
     expect(tooltipHtml).toContain('Descent: 4m');
     expect(tooltipHtml).toContain('Avg Cadence: 172spm');
+  });
+
+  it('shows lap tooltip locally without propagating to connected charts', async () => {
+    component.showZoomBar = false;
+    component.showLaps = true;
+    component.lapMarkers = [
+      {
+        xValue: 5,
+        label: 'Lap 1',
+        color: '#00ff00',
+        lapType: 'Autolap',
+        lapNumber: 1,
+        activityID: 'a1',
+        activityName: 'Garmin',
+        tooltipTitle: 'Lap 1',
+        tooltipDetails: [
+          { label: 'Duration', value: '00:05' }
+        ]
+      }
+    ];
+    fixture.detectChanges();
+    await component.ngAfterViewInit();
+
+    const mousemoveHandler = chart.on.mock.calls.find(([eventName]) => eventName === 'mousemove')?.[1] as ((params: any) => void);
+    expect(mousemoveHandler).toBeTypeOf('function');
+
+    mousemoveHandler({
+      componentType: 'markLine',
+      data: component.lapMarkers[0],
+      event: {
+        offsetX: 40,
+        offsetY: 24,
+      }
+    });
+
+    expect(chart.dispatchAction).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'showTip',
+      x: 52,
+      y: 36,
+      escapeConnect: true,
+    }));
+  });
+
+  it('hides local lap tooltip with escapeConnect when leaving the marker', async () => {
+    component.showZoomBar = false;
+    component.showLaps = true;
+    component.lapMarkers = [
+      {
+        xValue: 5,
+        label: 'Lap 1',
+        color: '#00ff00',
+        lapType: 'Autolap',
+        lapNumber: 1,
+        activityID: 'a1',
+        activityName: 'Garmin',
+        tooltipTitle: 'Lap 1',
+        tooltipDetails: [
+          { label: 'Duration', value: '00:05' }
+        ]
+      }
+    ];
+    fixture.detectChanges();
+    await component.ngAfterViewInit();
+
+    const mousemoveHandler = chart.on.mock.calls.find(([eventName]) => eventName === 'mousemove')?.[1] as ((params: any) => void);
+    mousemoveHandler({
+      componentType: 'markLine',
+      data: component.lapMarkers[0],
+      event: {
+        offsetX: 40,
+        offsetY: 24,
+      }
+    });
+    chart.dispatchAction.mockClear();
+
+    mousemoveHandler({
+      componentType: 'series',
+      event: {
+        offsetX: 45,
+        offsetY: 28,
+      }
+    });
+
+    expect(chart.dispatchAction).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'hideTip',
+      escapeConnect: true,
+    }));
   });
 
   it('disconnects zoom group on destroy', async () => {
