@@ -4,6 +4,9 @@ const PACE_OUTLIER_UPPER_QUANTILE = 0.98;
 const PACE_OUTLIER_TRIGGER_RATIO = 1.25;
 const PACE_FAST_END_PADDING_RATIO = 0.02;
 const PACE_FAST_END_MIN_PADDING = 0.5;
+const PACE_SLOW_END_COVER_RATIO = 0.5;
+const PACE_SLOW_END_PADDING_RATIO = 0.04;
+const PACE_SLOW_END_MIN_PADDING = 0.5;
 
 export interface PaceAxisScalingResult {
   min: number | undefined;
@@ -42,7 +45,15 @@ export function computePaceAxisScaling(values: number[], extraMaxForPace: number
 
   const extraMaxRatio = Number.isFinite(extraMaxForPace) ? Math.max(0, Math.min(0.5, extraMaxForPace)) : 0;
   const paddedMin = Math.max(0, rawMin - Math.max(clippedSpan * PACE_FAST_END_PADDING_RATIO, PACE_FAST_END_MIN_PADDING));
-  const paddedMax = clippedMax + (clippedSpan * extraMaxRatio);
+  const slowTailSpan = Math.max(0, rawMax - clippedMax);
+  const slowTailCover = Math.min(
+    slowTailSpan,
+    Math.max(clippedSpan * PACE_SLOW_END_COVER_RATIO, PACE_SLOW_END_MIN_PADDING)
+  );
+  const paddedMax = clippedMax
+    + slowTailCover
+    + Math.max(clippedSpan * PACE_SLOW_END_PADDING_RATIO, PACE_SLOW_END_MIN_PADDING)
+    + (clippedSpan * extraMaxRatio);
   if (paddedMax <= paddedMin) {
     return resetAutoRange();
   }
