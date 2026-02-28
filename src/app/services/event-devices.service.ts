@@ -179,16 +179,16 @@ export class EventDevicesService {
     }
 
     public formatType(type: unknown): string {
-        type = this.normalizeText(type);
+        const normalizedType = this.normalizeText(type);
 
-        return type
+        return normalizedType
             .replace(/_/g, ' ')
             .replace(/\b\w/g, c => c.toUpperCase());
     }
 
     private capitalize(str: unknown): string {
-        str = this.normalizeText(str);
-        return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+        const normalizedStr = this.normalizeText(str);
+        return normalizedStr.charAt(0).toUpperCase() + normalizedStr.slice(1).toLowerCase();
     }
 
     private categorizeDevice(type: unknown, manufacturer: unknown, sourceType: unknown): 'main' | 'power' | 'hr' | 'shifting' | 'other' {
