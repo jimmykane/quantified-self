@@ -16,6 +16,14 @@ describe('EventCardChartPanelComponent', () => {
   const chart = {
     on: vi.fn(),
     dispatchAction: vi.fn(),
+    getOption: vi.fn().mockReturnValue({
+      dataZoom: [
+        {
+          startValue: 0,
+          endValue: 120,
+        }
+      ]
+    }),
     setOption: vi.fn(),
     resize: vi.fn(),
     dispose: vi.fn(),
@@ -102,6 +110,10 @@ describe('EventCardChartPanelComponent', () => {
     }
   });
 
+  function getRenderedOption(): any {
+    return eChartsLoaderMock.setOption.mock.calls.find(([, option]) => option?.series)?.[1] as any;
+  }
+
   it('initializes chart host and renders panel option', async () => {
     component.showZoomBar = true;
     fixture.detectChanges();
@@ -114,9 +126,10 @@ describe('EventCardChartPanelComponent', () => {
     expect(intersectionObserverObserveSpies).toHaveLength(1);
     expect(intersectionObserverObserveSpies[0]).toHaveBeenCalledTimes(1);
 
-    const option = eChartsLoaderMock.setOption.mock.calls.at(-1)?.[1] as any;
+    const option = getRenderedOption();
     expect(option?.xAxis?.min).toBe(0);
     expect(option?.xAxis?.max).toBe(120);
+    expect(option?.xAxis?.interval).toBe(15);
     expect(option?.tooltip?.triggerOn).toBe('mousemove|click');
     expect(option?.dataZoom?.[0]?.zoomOnMouseWheel).toBe(false);
     expect(option?.dataZoom?.[0]?.filterMode).toBe('filter');
@@ -126,12 +139,50 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.dataZoom?.[1]?.filterMode).toBe('filter');
   });
 
+  it('recomputes canonical x-axis interval from the zoomed visible range', async () => {
+    component.xDomain = { start: 0, end: 3600 };
+    chart.getOption.mockReturnValue({
+      dataZoom: [
+        {
+          startValue: 0,
+          endValue: 300,
+        }
+      ]
+    });
+
+    fixture.detectChanges();
+    await component.ngAfterViewInit();
+
+    const dataZoomHandler = chart.on.mock.calls.find(([eventName]) => eventName === 'datazoom')?.[1] as (() => void);
+    expect(dataZoomHandler).toBeTypeOf('function');
+
+    eChartsLoaderMock.setOption.mockClear();
+    dataZoomHandler();
+
+    expect(eChartsLoaderMock.setOption).toHaveBeenCalledWith(
+      chart,
+      {
+        xAxis: {
+          interval: 60,
+          minInterval: 60,
+          maxInterval: 60,
+          splitNumber: 6,
+        }
+      },
+      {
+        notMerge: false,
+        lazyUpdate: true,
+        silent: true,
+      }
+    );
+  });
+
   it('hides slider zoom bar when showZoomBar is false', async () => {
     component.showZoomBar = false;
     fixture.detectChanges();
     await component.ngAfterViewInit();
 
-    const option = eChartsLoaderMock.setOption.mock.calls.at(-1)?.[1] as any;
+    const option = getRenderedOption();
     expect(option?.dataZoom?.[1]?.show).toBe(false);
   });
 
@@ -169,7 +220,7 @@ describe('EventCardChartPanelComponent', () => {
     fixture.detectChanges();
     await component.ngAfterViewInit();
 
-    const option = eChartsLoaderMock.setOption.mock.calls.at(-1)?.[1] as any;
+    const option = getRenderedOption();
     expect(option?.tooltip?.triggerOn).toBe('mousemove|click');
   });
 
@@ -216,7 +267,7 @@ describe('EventCardChartPanelComponent', () => {
     fixture.detectChanges();
     await component.ngAfterViewInit();
 
-    const option = eChartsLoaderMock.setOption.mock.calls.at(-1)?.[1] as any;
+    const option = getRenderedOption();
     const formatter = option?.yAxis?.axisLabel?.formatter as ((value: number) => string);
     const getDataInstanceSpy = vi.spyOn(DynamicDataLoader, 'getDataInstanceFromDataType').mockReturnValue({
       getDisplayValue: () => '12.3',
@@ -235,7 +286,7 @@ describe('EventCardChartPanelComponent', () => {
     fixture.detectChanges();
     await component.ngAfterViewInit();
 
-    const option = eChartsLoaderMock.setOption.mock.calls.at(-1)?.[1] as any;
+    const option = getRenderedOption();
     expect(option?.series?.[0]?.lineStyle?.width).toBe(3.25);
   });
 
@@ -261,7 +312,7 @@ describe('EventCardChartPanelComponent', () => {
     fixture.detectChanges();
     await component.ngAfterViewInit();
 
-    const option = eChartsLoaderMock.setOption.mock.calls.at(-1)?.[1] as any;
+    const option = getRenderedOption();
     expect(option?.series?.[0]?.markLine?.data).toEqual([
       expect.objectContaining({
         xAxis: 5,
@@ -302,10 +353,9 @@ describe('EventCardChartPanelComponent', () => {
     fixture.detectChanges();
     await component.ngAfterViewInit();
 
-    const option = eChartsLoaderMock.setOption.mock.calls.at(-1)?.[1] as any;
-    const formatter = option?.series?.[0]?.markLine?.tooltip?.formatter as ((params: any) => string);
-    const tooltipHtml = formatter?.({
-      data: option?.series?.[0]?.markLine?.data?.[0]
+    const tooltipHtml = (component as any).formatLapMarkerTooltip({
+      data: component.lapMarkers[0],
+      name: 'Lap 1',
     });
 
     expect(tooltipHtml).toContain('Lap 1');

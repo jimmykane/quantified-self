@@ -27,6 +27,7 @@ import {
   normalizeEventLapType
 } from '../../../../helpers/event-echarts-data.helper';
 import {
+  buildEventCanonicalXAxisScaleOptions,
   EventChartRange,
   clampEventRange,
   formatEventXAxisValue
@@ -183,6 +184,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.syncNativeZoomGroup();
     this.seriesByID = new Map(this.panel.series.map((series) => [series.id, series]));
     this.chartHost.setOption(this.buildOption(), ECHARTS_INTERACTIVE_CARTESIAN_MERGE_UPDATE_SETTINGS);
+    this.applyCanonicalXAxisScale();
     this.chartHost.scheduleResize();
     this.cdr.markForCheck();
   }
@@ -305,6 +307,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         formatter: (params: any) => this.formatTooltip(params)
       },
       xAxis: {
+        ...(buildEventCanonicalXAxisScaleOptions(this.xAxisType, domain) || {}),
         type: this.xAxisType === XAxisTypes.Time ? 'time' : 'value',
         min: domain.start,
         max: domain.end,
@@ -400,6 +403,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     chart.on('globalout', () => {
       this.hideLocalLapTooltip();
+    });
+
+    chart.on('datazoom', () => {
+      this.applyCanonicalXAxisScale();
     });
 
     this.eventsBound = true;
@@ -769,6 +776,26 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     } as any);
   }
 
+  private applyCanonicalXAxisScale(): void {
+    const chart = this.chartHost.getChart();
+    if (!chart) {
+      return;
+    }
+
+    const scaleOptions = buildEventCanonicalXAxisScaleOptions(this.xAxisType, this.getVisibleXAxisRange());
+    if (!scaleOptions) {
+      return;
+    }
+
+    this.chartHost.setOption({
+      xAxis: scaleOptions,
+    }, {
+      notMerge: false,
+      lazyUpdate: true,
+      silent: true,
+    });
+  }
+
   private formatDataValue(streamType: string, value: number, includeUnit = true): string {
     if (!Number.isFinite(value)) {
       return '--';
@@ -884,6 +911,31 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       start: 0,
       end: 1,
     };
+  }
+
+  private getVisibleXAxisRange(): EventChartRange {
+    const domain = this.getActiveDomain();
+    const chart = this.chartHost.getChart();
+    const chartOption = chart?.getOption?.();
+    const dataZoomOption = Array.isArray(chartOption?.dataZoom) ? chartOption.dataZoom[0] : null;
+
+    const startValue = Number(dataZoomOption?.startValue);
+    const endValue = Number(dataZoomOption?.endValue);
+    if (Number.isFinite(startValue) && Number.isFinite(endValue)) {
+      return clampEventRange({ start: startValue, end: endValue }, domain.start, domain.end) || domain;
+    }
+
+    const startPercent = Number(dataZoomOption?.start);
+    const endPercent = Number(dataZoomOption?.end);
+    if (Number.isFinite(startPercent) && Number.isFinite(endPercent)) {
+      const domainSpan = domain.end - domain.start;
+      return clampEventRange({
+        start: domain.start + (domainSpan * startPercent) / 100,
+        end: domain.start + (domainSpan * endPercent) / 100,
+      }, domain.start, domain.end) || domain;
+    }
+
+    return domain;
   }
 
   private getSeriesLineData(points: EventChartPoint[]): Array<[number, number]> {

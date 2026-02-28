@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { XAxisTypes } from '@sports-alliance/sports-lib';
 import {
+  buildEventCanonicalXAxisScaleOptions,
   clampEventRange,
   formatDurationSeconds,
   formatEventXAxisValue,
+  getCanonicalEventXAxisInterval,
   normalizeEventRange,
   resolveEventChartXAxisType
 } from './event-echarts-xaxis.helper';
@@ -44,5 +46,26 @@ describe('event-echarts-xaxis.helper', () => {
 
     expect(withDate.length).toBeGreaterThan(timeOnly.length);
     expect(timeOnly).toContain(':');
+  });
+
+  it('picks canonical duration and time intervals from the visible range', () => {
+    expect(getCanonicalEventXAxisInterval(XAxisTypes.Duration, { start: 0, end: 120 })).toBe(15);
+    expect(getCanonicalEventXAxisInterval(
+      XAxisTypes.Time,
+      {
+        start: Date.UTC(2024, 0, 1, 10, 0, 0),
+        end: Date.UTC(2024, 0, 1, 12, 0, 0),
+      }
+    )).toBe(15 * 60 * 1000);
+  });
+
+  it('builds fixed canonical scale options only for duration and time axes', () => {
+    expect(buildEventCanonicalXAxisScaleOptions(XAxisTypes.Distance, { start: 0, end: 1000 })).toBeNull();
+    expect(buildEventCanonicalXAxisScaleOptions(XAxisTypes.Duration, { start: 0, end: 120 })).toEqual({
+      interval: 15,
+      minInterval: 15,
+      maxInterval: 15,
+      splitNumber: 6,
+    });
   });
 });
