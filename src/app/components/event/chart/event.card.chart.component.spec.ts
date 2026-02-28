@@ -320,4 +320,45 @@ describe('EventCardChartComponent', () => {
 
     expect(mockChartSettingsStorage.setDataTypeIDsToShow.mock.calls.length).toBe(baselineWrites);
   });
+
+  it('does not rebuild panels when datatype input order changes but enabled set stays the same', async () => {
+    let preferredDataTypes = ['power', 'speed'];
+    mockUserService.getUserChartDataTypesToUse.mockImplementation(() => [...preferredDataTypes]);
+
+    const buildPanelsSpy = vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockImplementation((input: any) => {
+      return (input.dataTypesToUse || []).map((dataType: string, index: number) => ({
+        dataType,
+        displayName: dataType,
+        unit: '',
+        colorGroupKey: dataType,
+        minX: 0,
+        maxX: index + 1,
+        series: [
+          {
+            id: `${dataType}-series`,
+            activityID: 'a1',
+            activityName: 'Activity',
+            color: '#ff0000',
+            streamType: dataType,
+            displayName: dataType,
+            unit: '',
+            points: [{ x: 0, y: 1, time: 0 }],
+          }
+        ],
+      })) as any;
+    });
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(buildPanelsSpy).toHaveBeenCalledTimes(1);
+    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual(['power', 'speed']);
+
+    preferredDataTypes = ['speed', 'power'];
+    (component as any).rebuildPanels('order-change');
+
+    expect(buildPanelsSpy).toHaveBeenCalledTimes(1);
+    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual(['power', 'speed']);
+  });
 });

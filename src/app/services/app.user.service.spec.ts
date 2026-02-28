@@ -10,6 +10,7 @@ import { AppUserInterface } from '../models/app-user.interface';
 import { AppUserUtilities } from '../utils/app.user.utilities';
 import { of, firstValueFrom, take, from, filter } from 'rxjs';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { DataPower, DataSpeed, DynamicDataLoader } from '@sports-alliance/sports-lib';
 
 vi.mock('@angular/fire/auth', async (importOriginal) => {
     const actual: any = await importOriginal();
@@ -88,6 +89,32 @@ describe('AppUserService', () => {
     it('should be created', () => {
         service = TestBed.inject(AppUserService);
         expect(service).toBeTruthy();
+    });
+
+    it('returns enabled chart data types in canonical catalog order', () => {
+        service = TestBed.inject(AppUserService);
+        const user = {
+            settings: {
+                chartSettings: {
+                    dataTypeSettings: {
+                        [DataSpeed.type]: { enabled: true },
+                        [DataPower.type]: { enabled: true },
+                        customType: { enabled: true },
+                    }
+                }
+            }
+        } as any;
+
+        const canonicalChartDataTypes = [
+            ...DynamicDataLoader.basicDataTypes,
+            ...DynamicDataLoader.advancedDataTypes.filter((dataType) => !DynamicDataLoader.basicDataTypes.includes(dataType)),
+        ];
+        const enabledDataTypes = [DataSpeed.type, DataPower.type, 'customType'];
+        const expectedOrderedDataTypes = canonicalChartDataTypes
+            .filter((dataType) => enabledDataTypes.includes(dataType))
+            .concat(['customType'].filter((dataType) => !canonicalChartDataTypes.includes(dataType)));
+
+        expect(service.getUserChartDataTypesToUse(user)).toEqual(expectedOrderedDataTypes);
     });
 
     describe('role checks', () => {

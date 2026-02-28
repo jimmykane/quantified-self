@@ -4,6 +4,7 @@ import {
   DataDistance,
   DataDuration,
   DataPower,
+  DataSpeed,
   DynamicDataLoader,
   XAxisTypes
 } from '@sports-alliance/sports-lib';
@@ -281,6 +282,63 @@ describe('event-echarts-data.helper', () => {
     expect(panels).toHaveLength(1);
     expect(panels[0].series[0].points.map((point) => point.x)).toEqual([0, 1, 2, 5]);
     expect(panels[0].series[0].points.map((point) => point.y)).toEqual([100, 101, 102, 105]);
+  });
+
+  it('orders panels by canonical datatype order regardless of input order', () => {
+    vi.spyOn(ActivityUtilities, 'createUnitStreamsFromStreams').mockReturnValue([] as any);
+    vi.spyOn(DynamicDataLoader, 'getUnitBasedDataTypesFromDataTypes').mockImplementation((types: any) => types as any);
+    vi.spyOn(DynamicDataLoader, 'getUnitBasedDataTypesFromDataType').mockImplementation((type: any) => [type] as any);
+    vi.spyOn(DynamicDataLoader, 'getNonUnitBasedDataTypes').mockReturnValue([DataDistance.type]);
+    vi.spyOn(DynamicDataLoader, 'getDataClassFromDataType').mockImplementation((type: string) => {
+      if (type === DataDistance.type) {
+        return { displayType: 'Distance', type: 'Distance', unit: 'km' } as any;
+      }
+      if (type === DataPower.type) {
+        return { displayType: 'Power', type: 'Power', unit: 'W' } as any;
+      }
+      return { displayType: 'Speed', type: 'Speed', unit: 'km/h' } as any;
+    });
+
+    const powerStream = {
+      type: DataPower.type,
+      getData: () => [100, 101, 102],
+    } as any;
+    const speedStream = {
+      type: DataSpeed.type,
+      getData: () => [10, 11, 12],
+    } as any;
+    const timeStream = {
+      type: XAxisTypes.Time,
+      getData: () => [0, 1, 2],
+    } as any;
+
+    const activity = {
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      creator: { name: 'Garmin' },
+      type: 'Running',
+      getID: () => 'a-order',
+      getAllStreams: () => [powerStream, speedStream],
+      getStream: (type: string) => (type === XAxisTypes.Time ? timeStream : null),
+    } as any;
+
+    const panels = buildEventChartPanels({
+      selectedActivities: [activity],
+      allActivities: [activity],
+      xAxisType: XAxisTypes.Duration,
+      showAllData: false,
+      dataTypesToUse: [DataSpeed.type, DataPower.type],
+      userUnitSettings: {} as any,
+      eventColorService: {
+        getActivityColor: () => '#ff0000'
+      } as any,
+    });
+
+    const canonicalSelectedOrder = [
+      ...DynamicDataLoader.basicDataTypes,
+      ...DynamicDataLoader.advancedDataTypes.filter((dataType) => !DynamicDataLoader.basicDataTypes.includes(dataType)),
+    ].filter((dataType) => [DataSpeed.type, DataPower.type].includes(dataType));
+
+    expect(panels.map((panel) => panel.dataType)).toEqual(canonicalSelectedOrder);
   });
 
   it('maps lap markers in distance mode to nearest distance points', () => {

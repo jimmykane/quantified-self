@@ -614,12 +614,22 @@ export class AppUserService implements OnDestroy {
     if (!user.settings?.chartSettings?.dataTypeSettings) {
       return [];
     }
-    return Object.keys(user.settings.chartSettings.dataTypeSettings).reduce<string[]>((dataTypesToUse, dataTypeSettingsKey) => {
-      if (user.settings.chartSettings.dataTypeSettings[dataTypeSettingsKey].enabled === true) {
-        dataTypesToUse.push(dataTypeSettingsKey);
-      }
-      return dataTypesToUse;
-    }, [])
+
+    const enabledDataTypeSet = new Set(
+      Object.keys(user.settings.chartSettings.dataTypeSettings).filter((dataTypeSettingKey) => {
+        return user.settings.chartSettings.dataTypeSettings[dataTypeSettingKey].enabled === true;
+      })
+    );
+    const canonicalDataTypes = [
+      ...DynamicDataLoader.basicDataTypes,
+      ...DynamicDataLoader.advancedDataTypes.filter((dataType) => !DynamicDataLoader.basicDataTypes.includes(dataType)),
+    ];
+    const orderedDataTypes = canonicalDataTypes.filter((dataType) => enabledDataTypeSet.has(dataType));
+    const extraEnabledDataTypes = [...enabledDataTypeSet]
+      .filter((dataType) => !orderedDataTypes.includes(dataType))
+      .sort((left, right) => left.localeCompare(right));
+
+    return orderedDataTypes.concat(extraEnabledDataTypes);
   }
 
   ngOnDestroy() {

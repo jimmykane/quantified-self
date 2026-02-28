@@ -101,6 +101,7 @@ export function buildEventChartPanels(input: BuildEventChartPanelsInput): EventC
   }
 
   const panelsMap = new Map<string, EventChartPanelModel>();
+  const preferredDataTypeOrder = buildPreferredDataTypeOrder(input.dataTypesToUse, input.userUnitSettings);
 
   selectedActivities.forEach((activity) => {
     const activityCache = createActivityNumericCache(activity);
@@ -168,7 +169,7 @@ export function buildEventChartPanels(input: BuildEventChartPanelsInput): EventC
         series: recoloredSeries,
       });
     })
-    .sort((left, right) => left.displayName.localeCompare(right.displayName));
+    .sort((left, right) => comparePanelsByPreference(left, right, preferredDataTypeOrder));
 
   return panels;
 }
@@ -317,6 +318,66 @@ function dedupeByType(streams: StreamInterface[]): StreamInterface[] {
     }
   });
   return [...streamsByType.values()];
+}
+
+function buildPreferredDataTypeOrder(
+  dataTypesToUse: string[],
+  userUnitSettings: UserUnitSettingsInterface
+): Map<string, number> {
+  const order = new Map<string, number>();
+  const canonicalDataTypes = [
+    ...DynamicDataLoader.basicDataTypes,
+    ...DynamicDataLoader.advancedDataTypes.filter((dataType) => !DynamicDataLoader.basicDataTypes.includes(dataType)),
+  ];
+  const selectedDataTypeSet = new Set(dataTypesToUse || []);
+  const canonicalSelectedDataTypes = canonicalDataTypes
+    .filter((dataType) => selectedDataTypeSet.has(dataType))
+    .concat(
+      [...selectedDataTypeSet]
+        .filter((dataType) => !canonicalDataTypes.includes(dataType))
+        .sort((left, right) => left.localeCompare(right))
+    );
+  let index = 0;
+
+  canonicalSelectedDataTypes.forEach((dataType) => {
+    const resolvedTypes = DynamicDataLoader
+      .getUnitBasedDataTypesFromDataTypes([dataType], userUnitSettings, { includeDerivedTypes: true })
+      .concat(dataType);
+
+    resolvedTypes.forEach((resolvedType) => {
+      if (!resolvedType || order.has(resolvedType)) {
+        return;
+      }
+
+      order.set(resolvedType, index);
+      index += 1;
+    });
+  });
+
+  return order;
+}
+
+function comparePanelsByPreference(
+  left: EventChartPanelModel,
+  right: EventChartPanelModel,
+  preferredDataTypeOrder: Map<string, number>
+): number {
+  const leftIndex = preferredDataTypeOrder.get(left.dataType);
+  const rightIndex = preferredDataTypeOrder.get(right.dataType);
+
+  if (leftIndex !== undefined || rightIndex !== undefined) {
+    if (leftIndex === undefined) {
+      return 1;
+    }
+    if (rightIndex === undefined) {
+      return -1;
+    }
+    if (leftIndex !== rightIndex) {
+      return leftIndex - rightIndex;
+    }
+  }
+
+  return left.displayName.localeCompare(right.displayName);
 }
 
 function toSeriesPoints(
