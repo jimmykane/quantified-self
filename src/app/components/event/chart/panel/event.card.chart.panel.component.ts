@@ -23,7 +23,8 @@ import {
 import { isDarkChartThemeActive } from '../../../../helpers/echarts-theme.helper';
 import {
   EventChartLapMarker,
-  EventChartPanelModel
+  EventChartPanelModel,
+  normalizeEventLapType
 } from '../../../../helpers/event-echarts-data.helper';
 import {
   EventChartRange,
@@ -232,16 +233,13 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         symbol: 'none',
         silent: true,
         animation: false,
+        label: {
+          show: false,
+        },
         lineStyle: {
           type: 'dashed',
           width: 1,
           color: darkTheme ? 'rgba(255,255,255,0.26)' : 'rgba(0,0,0,0.30)',
-        },
-        label: {
-          show: true,
-          color: textColor,
-          fontSize: 10,
-          formatter: (params: any) => `${params?.data?.name || ''}`,
         },
         data: this.lapMarkers
           .filter((marker) => this.shouldDisplayLapMarker(marker))
@@ -360,7 +358,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     if (!this.lapTypes || this.lapTypes.length === 0) {
       return true;
     }
-    return this.lapTypes.map((lapType) => `${lapType}`).includes(marker.lapType);
+    const allowedLapTypes = new Set(this.lapTypes.map((lapType) => normalizeEventLapType(lapType)));
+    return allowedLapTypes.has(normalizeEventLapType(marker.lapType));
   }
 
   private bindChartEvents(): void {

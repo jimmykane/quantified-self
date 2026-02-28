@@ -69,6 +69,20 @@ export interface BuildEventChartPanelsInput {
   eventColorService: AppEventColorService;
 }
 
+const LAP_TYPE_ALIASES = LapTypes as unknown as Record<string, string>;
+const NORMALIZED_LAP_TYPE_ALIASES = new Map<string, string>([
+  ['auto', LapTypes.AutoLap],
+  ['autolap', LapTypes.AutoLap],
+  ['auto lap', LapTypes.AutoLap],
+  ['manual', LapTypes.Manual],
+  ['distance', LapTypes.Distance],
+  ['time', LapTypes.Time],
+  ['location', LapTypes.Location],
+  ['interval', LapTypes.Interval],
+  ['heart rate', LapTypes.HeartRate],
+  ['heartrate', LapTypes.HeartRate],
+]);
+
 const EMPTY_PANEL_DOMAIN = { minX: 0, maxX: 1 };
 const NEVER_RENDER_STREAM_TYPES = new Set<string>([
   DataDuration.type,
@@ -198,7 +212,7 @@ export function buildEventLapMarkers(input: {
   lapTypes: LapTypes[];
   eventColorService: AppEventColorService;
 }): EventChartLapMarker[] {
-  const lapTypeSet = new Set((input.lapTypes || []).map((lapType) => `${lapType}`));
+  const lapTypeSet = new Set((input.lapTypes || []).map((lapType) => normalizeEventLapType(lapType)));
   const markers: EventChartLapMarker[] = [];
 
   input.selectedActivities.forEach((activity) => {
@@ -216,7 +230,8 @@ export function buildEventLapMarkers(input: {
         return;
       }
 
-      if (lapTypeSet.size > 0 && !lapTypeSet.has(`${lap.type}`)) {
+      const normalizedLapType = normalizeEventLapType(lap.type);
+      if (lapTypeSet.size > 0 && !lapTypeSet.has(normalizedLapType)) {
         return;
       }
 
@@ -229,12 +244,24 @@ export function buildEventLapMarkers(input: {
         xValue,
         label: `Lap ${index + 1}`,
         color: input.eventColorService.getActivityColor(input.allActivities, activity),
-        lapType: `${lap.type}`,
+        lapType: normalizedLapType,
       });
     });
   });
 
   return markers.sort((left, right) => left.xValue - right.xValue);
+}
+
+export function normalizeEventLapType(lapType: unknown): string {
+  const rawValue = `${lapType ?? ''}`.trim();
+  if (!rawValue) {
+    return '';
+  }
+
+  const normalizedLookupKey = rawValue.toLowerCase();
+  return NORMALIZED_LAP_TYPE_ALIASES.get(normalizedLookupKey)
+    || LAP_TYPE_ALIASES[rawValue]
+    || rawValue;
 }
 
 function getFilteredStreams(input: {

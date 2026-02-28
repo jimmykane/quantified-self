@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { DynamicDataLoader, XAxisTypes } from '@sports-alliance/sports-lib';
+import { DynamicDataLoader, LapTypes, XAxisTypes } from '@sports-alliance/sports-lib';
 import { EventCardChartPanelComponent } from './event.card.chart.panel.component';
 import { EChartsLoaderService } from '../../../../services/echarts-loader.service';
 import { LoggerService } from '../../../../services/logger.service';
@@ -237,6 +237,26 @@ describe('EventCardChartPanelComponent', () => {
 
     const option = eChartsLoaderMock.setOption.mock.calls.at(-1)?.[1] as any;
     expect(option?.series?.[0]?.lineStyle?.width).toBe(3.25);
+  });
+
+  it('renders lap markers when configured lap types use enum aliases', async () => {
+    component.showZoomBar = false;
+    component.showLaps = true;
+    component.lapTypes = [LapTypes.AutoLap];
+    component.lapMarkers = [
+      { xValue: 5, label: 'Lap 1', color: '#00ff00', lapType: 'auto' }
+    ];
+    fixture.detectChanges();
+    await component.ngAfterViewInit();
+
+    const option = eChartsLoaderMock.setOption.mock.calls.at(-1)?.[1] as any;
+    expect(option?.series?.[0]?.markLine?.data).toEqual([
+      expect.objectContaining({
+        xAxis: 5,
+        name: 'Lap 1',
+      })
+    ]);
+    expect(option?.series?.[0]?.markLine?.label).toEqual({ show: false });
   });
 
   it('disconnects zoom group on destroy', async () => {

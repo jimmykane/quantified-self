@@ -16,7 +16,8 @@ import {
 import {
   buildEventChartPanels,
   buildEventLapMarkers,
-  buildEventLegendItems
+  buildEventLegendItems,
+  normalizeEventLapType
 } from './event-echarts-data.helper';
 import { AppDataColors } from '../services/color/app.data.colors';
 
@@ -453,5 +454,48 @@ describe('event-echarts-data.helper', () => {
 
     expect(markers).toHaveLength(2);
     expect(markers.map((marker) => marker.xValue)).toEqual([100, 400]);
+  });
+
+  it('normalizes lap type aliases so chart lap filtering keeps auto laps visible', () => {
+    expect(normalizeEventLapType('auto')).toBe('Autolap');
+    expect(normalizeEventLapType('Autolap')).toBe('Autolap');
+
+    const distanceStream = {
+      getData: () => [0, 100, 250, 400],
+    } as any;
+    const timeStream = {
+      getData: () => [0, 10, 20, 30],
+    } as any;
+
+    const activity = {
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      getID: () => 'a1',
+      getLaps: () => [
+        { endDate: new Date('2024-01-01T00:00:12.000Z'), type: 'auto' },
+        { endDate: new Date('2024-01-01T00:00:29.000Z'), type: 'auto' },
+      ],
+      getStream: (type: string) => {
+        if (type === DataDistance.type) {
+          return distanceStream;
+        }
+        if (type === XAxisTypes.Time) {
+          return timeStream;
+        }
+        return null;
+      },
+    } as any;
+
+    const markers = buildEventLapMarkers({
+      selectedActivities: [activity],
+      allActivities: [activity],
+      xAxisType: XAxisTypes.Distance,
+      lapTypes: ['Autolap'] as any,
+      eventColorService: {
+        getActivityColor: () => '#ff0000'
+      } as any,
+    });
+
+    expect(markers).toHaveLength(1);
+    expect(markers[0].lapType).toBe('Autolap');
   });
 });
