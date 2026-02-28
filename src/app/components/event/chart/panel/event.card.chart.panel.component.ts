@@ -231,10 +231,14 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     if (this.showLaps && this.lapMarkers.length > 0 && seriesOptions[0]) {
       seriesOptions[0].markLine = {
         symbol: 'none',
-        silent: true,
+        silent: false,
         animation: false,
         label: {
           show: false,
+        },
+        tooltip: {
+          trigger: 'item',
+          formatter: (params: any) => this.formatLapMarkerTooltip(params),
         },
         lineStyle: {
           type: 'dashed',
@@ -245,7 +249,13 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           .filter((marker) => this.shouldDisplayLapMarker(marker))
           .map((marker) => ({
             xAxis: marker.xValue,
+            xValue: marker.xValue,
             name: marker.label,
+            value: marker.xValue,
+            lapNumber: marker.lapNumber,
+            lapType: marker.lapType,
+            tooltipTitle: marker.tooltipTitle,
+            tooltipDetails: marker.tooltipDetails,
             lineStyle: {
               color: marker.color,
               type: 'dashed',
@@ -666,6 +676,27 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     return `<div style="font-weight:600;margin-bottom:4px;">${header}</div>${tooltipLines.join('')}`;
+  }
+
+  private formatLapMarkerTooltip(params: any): string {
+    const marker = params?.data as EventChartLapMarker | undefined;
+    if (!marker && !params) {
+      return '';
+    }
+
+    const lapTitle = `${marker?.tooltipTitle || params?.name || marker?.label || `Lap ${marker?.lapNumber || ''}`}`.trim();
+    const lines = [`<div style="font-weight:600;margin-bottom:4px;">${lapTitle}</div>`];
+    const detailRows = Array.isArray(marker?.tooltipDetails) ? marker.tooltipDetails : [];
+
+    for (let index = 0; index < detailRows.length; index += 1) {
+      const row = detailRows[index];
+      if (!row?.label || !row?.value) {
+        continue;
+      }
+      lines.push(`<div>${row.label}: ${row.value}</div>`);
+    }
+
+    return lines.join('');
   }
 
   private formatDataValue(streamType: string, value: number, includeUnit = true): string {

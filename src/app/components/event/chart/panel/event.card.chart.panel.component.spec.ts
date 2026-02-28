@@ -244,7 +244,19 @@ describe('EventCardChartPanelComponent', () => {
     component.showLaps = true;
     component.lapTypes = [LapTypes.AutoLap];
     component.lapMarkers = [
-      { xValue: 5, label: 'Lap 1', color: '#00ff00', lapType: 'auto' }
+      {
+        xValue: 5,
+        label: 'Lap 1',
+        color: '#00ff00',
+        lapType: 'auto',
+        lapNumber: 1,
+        activityID: 'a1',
+        activityName: 'Garmin',
+        tooltipTitle: 'Lap 1',
+        tooltipDetails: [
+          { label: 'Duration', value: '00:05' }
+        ]
+      }
     ];
     fixture.detectChanges();
     await component.ngAfterViewInit();
@@ -257,6 +269,54 @@ describe('EventCardChartPanelComponent', () => {
       })
     ]);
     expect(option?.series?.[0]?.markLine?.label).toEqual({ show: false });
+    expect(option?.series?.[0]?.markLine?.silent).toBe(false);
+    expect(option?.series?.[0]?.markLine?.tooltip?.trigger).toBe('item');
+  });
+
+  it('formats lap marker tooltip content from markLine data', async () => {
+    component.showZoomBar = false;
+    component.showLaps = true;
+    component.lapTypes = [LapTypes.AutoLap];
+    component.lapMarkers = [
+      {
+        xValue: 5,
+        label: 'Lap 1',
+        color: '#00ff00',
+        lapType: 'Autolap',
+        lapNumber: 1,
+        activityID: 'a1',
+        activityName: 'Garmin',
+        tooltipTitle: 'Lap 1',
+        tooltipDetails: [
+          { label: 'Duration', value: '00:05' },
+          { label: 'Distance', value: '1.00km' },
+          { label: 'Avg Pace', value: '05:00min/km' },
+          { label: 'Avg Heart Rate', value: '150bpm' },
+          { label: 'Avg Power', value: '250W' },
+          { label: 'Ascent', value: '10m' },
+          { label: 'Descent', value: '4m' },
+          { label: 'Avg Cadence', value: '172spm' }
+        ]
+      }
+    ];
+    fixture.detectChanges();
+    await component.ngAfterViewInit();
+
+    const option = eChartsLoaderMock.setOption.mock.calls.at(-1)?.[1] as any;
+    const formatter = option?.series?.[0]?.markLine?.tooltip?.formatter as ((params: any) => string);
+    const tooltipHtml = formatter?.({
+      data: option?.series?.[0]?.markLine?.data?.[0]
+    });
+
+    expect(tooltipHtml).toContain('Lap 1');
+    expect(tooltipHtml).toContain('Duration: 00:05');
+    expect(tooltipHtml).toContain('Distance: 1.00km');
+    expect(tooltipHtml).toContain('Avg Pace: 05:00min/km');
+    expect(tooltipHtml).toContain('Avg Heart Rate: 150bpm');
+    expect(tooltipHtml).toContain('Avg Power: 250W');
+    expect(tooltipHtml).toContain('Ascent: 10m');
+    expect(tooltipHtml).toContain('Descent: 4m');
+    expect(tooltipHtml).toContain('Avg Cadence: 172spm');
   });
 
   it('disconnects zoom group on destroy', async () => {

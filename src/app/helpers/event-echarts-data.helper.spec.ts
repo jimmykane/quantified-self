@@ -416,6 +416,25 @@ describe('event-echarts-data.helper', () => {
   });
 
   it('maps lap markers in distance mode to nearest distance points', () => {
+    const createLapData = (
+      type: string,
+      rawValue: number,
+      displayValue: string,
+      displayUnit = ''
+    ) => ({
+      getType: () => type,
+      getValue: () => rawValue,
+      getDisplayValue: () => displayValue,
+      getDisplayUnit: () => displayUnit,
+    });
+    const createDurationData = (seconds: number, compactValue: string) => ({
+      getType: () => DataDuration.type,
+      getValue: () => seconds,
+      getDisplayValue: (_showDays = false, _showSeconds = true, _showMilliseconds = false, useColonFormat = false) => (
+        useColonFormat ? compactValue : compactValue
+      ),
+      getDisplayUnit: () => '',
+    });
     const distanceStream = {
       getData: () => [0, 100, 250, 400],
     } as any;
@@ -425,11 +444,47 @@ describe('event-echarts-data.helper', () => {
 
     const activity = {
       startDate: new Date('2024-01-01T00:00:00.000Z'),
+      creator: { name: 'Garmin' },
       getID: () => 'a1',
       getLaps: () => [
-        { endDate: new Date('2024-01-01T00:00:12.000Z'), type: 'auto' },
-        { endDate: new Date('2024-01-01T00:00:29.000Z'), type: 'auto' },
-        { endDate: new Date('2024-01-01T00:00:35.000Z'), type: 'auto' },
+        {
+          endDate: new Date('2024-01-01T00:00:12.000Z'),
+          type: 'auto',
+          getDuration: () => createDurationData(12, '00:12'),
+          getDistance: () => createLapData(DataDistance.type, 1000, '1.00', 'km'),
+          getStat: (type: string) => {
+            switch (type) {
+              case 'Average Pace':
+                return createLapData(type, 300, '05:00', 'min/km');
+              case 'Average Heart Rate':
+                return createLapData(type, 150, '150', 'bpm');
+              case 'Average Power':
+                return createLapData(type, 250, '250', 'W');
+              case 'Ascent':
+                return createLapData(type, 10, '10', 'm');
+              case 'Descent':
+                return createLapData(type, 4, '4', 'm');
+              case 'Average Cadence':
+                return createLapData(type, 172, '172', 'spm');
+              default:
+                return undefined;
+            }
+          },
+        },
+        {
+          endDate: new Date('2024-01-01T00:00:29.000Z'),
+          type: 'auto',
+          getDuration: () => createDurationData(17, '00:17'),
+          getDistance: () => createLapData(DataDistance.type, 1300, '1.30', 'km'),
+          getStat: () => undefined,
+        },
+        {
+          endDate: new Date('2024-01-01T00:00:35.000Z'),
+          type: 'auto',
+          getDuration: () => createDurationData(6, '00:06'),
+          getDistance: () => createLapData(DataDistance.type, 300, '0.30', 'km'),
+          getStat: () => undefined,
+        },
       ],
       getStream: (type: string) => {
         if (type === DataDistance.type) {
@@ -454,6 +509,23 @@ describe('event-echarts-data.helper', () => {
 
     expect(markers).toHaveLength(2);
     expect(markers.map((marker) => marker.xValue)).toEqual([100, 400]);
+    expect(markers[0]).toEqual(expect.objectContaining({
+      lapNumber: 1,
+      activityID: 'a1',
+      activityName: 'Garmin',
+      lapType: 'Autolap',
+      tooltipTitle: 'Lap 1',
+      tooltipDetails: [
+        { label: 'Duration', value: '00:12' },
+        { label: 'Distance', value: '1.00km' },
+        { label: 'Avg Pace', value: '05:00min/km' },
+        { label: 'Avg Heart Rate', value: '150bpm' },
+        { label: 'Avg Power', value: '250W' },
+        { label: 'Ascent', value: '10m' },
+        { label: 'Descent', value: '4m' },
+        { label: 'Avg Cadence', value: '172spm' },
+      ],
+    }));
   });
 
   it('normalizes lap type aliases so chart lap filtering keeps auto laps visible', () => {
@@ -469,10 +541,33 @@ describe('event-echarts-data.helper', () => {
 
     const activity = {
       startDate: new Date('2024-01-01T00:00:00.000Z'),
+      creator: { name: 'Garmin' },
       getID: () => 'a1',
       getLaps: () => [
-        { endDate: new Date('2024-01-01T00:00:12.000Z'), type: 'auto' },
-        { endDate: new Date('2024-01-01T00:00:29.000Z'), type: 'auto' },
+        {
+          endDate: new Date('2024-01-01T00:00:12.000Z'),
+          type: 'auto',
+          getDuration: () => ({
+            getType: () => DataDuration.type,
+            getValue: () => 12,
+            getDisplayValue: () => '00:12',
+            getDisplayUnit: () => '',
+          }),
+          getDistance: () => undefined,
+          getStat: () => undefined,
+        },
+        {
+          endDate: new Date('2024-01-01T00:00:29.000Z'),
+          type: 'auto',
+          getDuration: () => ({
+            getType: () => DataDuration.type,
+            getValue: () => 17,
+            getDisplayValue: () => '00:17',
+            getDisplayUnit: () => '',
+          }),
+          getDistance: () => undefined,
+          getStat: () => undefined,
+        },
       ],
       getStream: (type: string) => {
         if (type === DataDistance.type) {
@@ -497,5 +592,6 @@ describe('event-echarts-data.helper', () => {
 
     expect(markers).toHaveLength(1);
     expect(markers[0].lapType).toBe('Autolap');
+    expect(markers[0].activityName).toBe('Garmin');
   });
 });

@@ -1,15 +1,24 @@
 import {
   ActivityInterface,
   ActivityUtilities,
+  DataAscent,
+  DataCadenceAvg,
   DataDistance,
   DataDuration,
+  DataHeartRateAvg,
+  DataInterface,
   DataGradeAdjustedSpeed,
   DataLatitudeDegrees,
   DataLongitudeDegrees,
+  DataPaceAvg,
+  DataPowerAvg,
+  DataSpeedAvg,
+  DataDescent,
   DataSpeed,
   DataStrydDistance,
   DynamicDataLoader,
   LapTypes,
+  LapInterface,
   StreamInterface,
   UserUnitSettingsInterface,
   XAxisTypes
@@ -57,6 +66,14 @@ export interface EventChartLapMarker {
   label: string;
   color: string;
   lapType: string;
+  lapNumber: number;
+  activityID: string;
+  activityName: string;
+  tooltipTitle: string;
+  tooltipDetails: Array<{
+    label: string;
+    value: string;
+  }>;
 }
 
 export interface BuildEventChartPanelsInput {
@@ -245,6 +262,11 @@ export function buildEventLapMarkers(input: {
         label: `Lap ${index + 1}`,
         color: input.eventColorService.getActivityColor(input.allActivities, activity),
         lapType: normalizedLapType,
+        lapNumber: index + 1,
+        activityID: activity.getID() || '',
+        activityName: activity.creator?.name || 'Activity',
+        tooltipTitle: `Lap ${index + 1}`,
+        tooltipDetails: buildLapTooltipDetails(lap),
       });
     });
   });
@@ -525,6 +547,77 @@ function createActivityNumericCache(activity: ActivityInterface): ActivityNumeri
     distanceValues: null,
     absoluteTimeValues: null,
   };
+}
+
+function buildLapTooltipDetails(lap: LapInterface): Array<{ label: string; value: string }> {
+  const details: Array<{ label: string; value: string }> = [];
+
+  const duration = lap.getDuration?.();
+  const durationValue = formatLapDataValue(duration, { compactDuration: true });
+  if (durationValue) {
+    details.push({ label: 'Duration', value: durationValue });
+  }
+
+  const distanceValue = formatLapDataValue(lap.getDistance?.());
+  if (distanceValue) {
+    details.push({ label: 'Distance', value: distanceValue });
+  }
+
+  const averagePaceOrSpeed = lap.getStat(DataPaceAvg.type) || lap.getStat(DataSpeedAvg.type);
+  const averagePaceOrSpeedLabel = averagePaceOrSpeed && averagePaceOrSpeed.getType() === DataPaceAvg.type
+    ? 'Avg Pace'
+    : 'Avg Speed';
+  const averagePaceOrSpeedValue = formatLapDataValue(averagePaceOrSpeed);
+  if (averagePaceOrSpeedValue) {
+    details.push({ label: averagePaceOrSpeedLabel, value: averagePaceOrSpeedValue });
+  }
+
+  appendLapDetail(details, 'Avg Heart Rate', lap.getStat(DataHeartRateAvg.type));
+  appendLapDetail(details, 'Avg Power', lap.getStat(DataPowerAvg.type));
+  appendLapDetail(details, 'Ascent', lap.getStat(DataAscent.type));
+  appendLapDetail(details, 'Descent', lap.getStat(DataDescent.type));
+  appendLapDetail(details, 'Avg Cadence', lap.getStat(DataCadenceAvg.type));
+
+  return details;
+}
+
+function appendLapDetail(
+  details: Array<{ label: string; value: string }>,
+  label: string,
+  data: DataInterface | void
+): void {
+  const value = formatLapDataValue(data);
+  if (!value) {
+    return;
+  }
+
+  details.push({ label, value });
+}
+
+function formatLapDataValue(
+  data: DataInterface | void,
+  options?: { compactDuration?: boolean }
+): string {
+  if (!data) {
+    return '';
+  }
+
+  const rawValue = data.getValue?.();
+  if (typeof rawValue === 'number' && !Number.isFinite(rawValue)) {
+    return '';
+  }
+
+  if (data.getType?.() === DataDuration.type) {
+    const duration = data as DataDuration;
+    return `${duration.getDisplayValue(false, true, false, options?.compactDuration === true)}`.trim();
+  }
+
+  const displayValue = `${data.getDisplayValue?.() ?? ''}`.trim();
+  if (!displayValue) {
+    return '';
+  }
+
+  return `${displayValue}${data.getDisplayUnit?.() ?? ''}`.trim();
 }
 
 function getStreamNumericValues(stream: StreamInterface, cache: ActivityNumericCache): number[] {
