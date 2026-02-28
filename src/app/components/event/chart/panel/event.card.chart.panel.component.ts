@@ -334,7 +334,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         {
           type: 'inside',
           xAxisIndex: 0,
-          filterMode: 'none',
+          filterMode: 'filter',
           throttle: DATA_ZOOM_THROTTLE_MS,
           zoomOnMouseWheel: false,
           moveOnMouseMove: true,
@@ -347,7 +347,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           show: this.showZoomBar,
           height: 16,
           top: 8,
-          filterMode: 'none',
+          filterMode: 'filter',
           showDataShadow: false,
           throttle: DATA_ZOOM_THROTTLE_MS,
         }
@@ -606,7 +606,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           right: 12,
           top: 10,
           height: 20,
-          filterMode: 'none',
+          filterMode: 'filter',
           showDataShadow: false,
           showDetail: false,
           handleSize: 18,

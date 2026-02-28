@@ -119,9 +119,11 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.xAxis?.max).toBe(120);
     expect(option?.tooltip?.triggerOn).toBe('mousemove|click');
     expect(option?.dataZoom?.[0]?.zoomOnMouseWheel).toBe(false);
+    expect(option?.dataZoom?.[0]?.filterMode).toBe('filter');
     expect(option?.dataZoom?.[0]?.moveOnMouseMove).toBe(true);
     expect(option?.dataZoom?.[0]?.moveOnMouseWheel).toBe(false);
     expect(option?.dataZoom?.[1]?.show).toBe(true);
+    expect(option?.dataZoom?.[1]?.filterMode).toBe('filter');
   });
 
   it('hides slider zoom bar when showZoomBar is false', async () => {
@@ -144,6 +146,7 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.xAxis?.show).toBe(false);
     expect(option?.dataZoom?.[0]?.type).toBe('slider');
     expect(option?.dataZoom?.[0]?.show).toBe(true);
+    expect(option?.dataZoom?.[0]?.filterMode).toBe('filter');
   });
 
   it('renders empty-axis no-data option without joining a zoom group when panel is null outside zoom mode', async () => {
