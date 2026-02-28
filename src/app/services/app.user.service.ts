@@ -70,6 +70,7 @@ import { UserSummariesSettingsInterface } from '@sports-alliance/sports-lib';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { AppWindowService } from './app.window.service';
 import { LoggerService } from './logger.service';
+import { applyEventChartCanonicalOrderOverride } from '../helpers/event-chart-order.helper';
 import { UserMyTracksSettingsInterface } from '@sports-alliance/sports-lib';
 import { DataDescription } from '@sports-alliance/sports-lib';
 import { DataActivityTypes } from '@sports-alliance/sports-lib';
@@ -624,7 +625,9 @@ export class AppUserService implements OnDestroy {
       ...DynamicDataLoader.basicDataTypes,
       ...DynamicDataLoader.advancedDataTypes.filter((dataType) => !DynamicDataLoader.basicDataTypes.includes(dataType)),
     ];
-    const orderedDataTypes = canonicalDataTypes.filter((dataType) => enabledDataTypeSet.has(dataType));
+    const orderedDataTypes = applyEventChartCanonicalOrderOverride(
+      canonicalDataTypes.filter((dataType) => enabledDataTypeSet.has(dataType))
+    );
     const extraEnabledDataTypes = [...enabledDataTypeSet]
       .filter((dataType) => !orderedDataTypes.includes(dataType))
       .sort((left, right) => left.localeCompare(right));

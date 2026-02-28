@@ -15,6 +15,7 @@ import {
   XAxisTypes
 } from '@sports-alliance/sports-lib';
 import { AppEventColorService } from '../services/color/app.event.color.service';
+import { applyEventChartCanonicalOrderOverride } from './event-chart-order.helper';
 import { resolveEventColorGroupKey, resolveEventSeriesColor } from './event-echarts-style.helper';
 import { normalizeUnitDerivedTypeLabel } from './stat-label.helper';
 
@@ -337,9 +338,10 @@ function buildPreferredDataTypeOrder(
         .filter((dataType) => !canonicalDataTypes.includes(dataType))
         .sort((left, right) => left.localeCompare(right))
     );
+  const orderedSelectedDataTypes = applyEventChartCanonicalOrderOverride(canonicalSelectedDataTypes);
   let index = 0;
 
-  canonicalSelectedDataTypes.forEach((dataType) => {
+  orderedSelectedDataTypes.forEach((dataType) => {
     const resolvedTypes = DynamicDataLoader
       .getUnitBasedDataTypesFromDataTypes([dataType], userUnitSettings, { includeDerivedTypes: true })
       .concat(dataType);

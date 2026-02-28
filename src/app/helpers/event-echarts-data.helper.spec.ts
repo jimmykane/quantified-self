@@ -1,8 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ActivityUtilities,
+  DataAltitude,
+  DataCadence,
   DataDistance,
   DataDuration,
+  DataGradeAdjustedSpeed,
+  DataHeartRate,
+  DataPace,
   DataPower,
   DataSpeed,
   DynamicDataLoader,
@@ -67,6 +72,76 @@ describe('event-echarts-data.helper', () => {
     expect(panels[0].series[0].points).toHaveLength(5);
     expect(panels[0].series[0].points.map((point) => point.x)).toEqual([0, 1, 2, 3, 4]);
     expect(panels[0].series[0].color).toBe((AppDataColors as any).Power);
+  });
+
+  it('orders event panels with the canonical priority override', () => {
+    vi.spyOn(ActivityUtilities, 'createUnitStreamsFromStreams').mockReturnValue([] as any);
+    vi.spyOn(DynamicDataLoader, 'getUnitBasedDataTypesFromDataTypes').mockImplementation((types: any) => types as any);
+    vi.spyOn(DynamicDataLoader, 'getUnitBasedDataTypesFromDataType').mockImplementation((type: any) => [type] as any);
+    vi.spyOn(DynamicDataLoader, 'getNonUnitBasedDataTypes').mockReturnValue([DataDistance.type]);
+    vi.spyOn(DynamicDataLoader, 'getDataClassFromDataType').mockImplementation((type: string) => ({
+      displayType: type,
+      type,
+      unit: type === DataHeartRate.type ? 'bpm' : 'u'
+    } as any));
+
+    const streamsByType = new Map<string, any>([
+      [DataAltitude.type, { type: DataAltitude.type, getData: () => [10, 11, 12] }],
+      [DataCadence.type, { type: DataCadence.type, getData: () => [80, 82, 84] }],
+      [DataGradeAdjustedSpeed.type, { type: DataGradeAdjustedSpeed.type, getData: () => [9.5, 9.7, 9.9] }],
+      [DataHeartRate.type, { type: DataHeartRate.type, getData: () => [130, 132, 134] }],
+      [DataPace.type, { type: DataPace.type, getData: () => [300, 301, 302] }],
+      [DataPower.type, { type: DataPower.type, getData: () => [200, 210, 220] }],
+      [DataSpeed.type, { type: DataSpeed.type, getData: () => [10, 10.2, 10.4] }],
+      [XAxisTypes.Time, { type: XAxisTypes.Time, getData: () => [0, 1, 2] }],
+    ]);
+
+    const activity = {
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      creator: { name: 'Garmin' },
+      type: 'Running',
+      getID: () => 'a-order',
+      getAllStreams: () => [
+        streamsByType.get(DataAltitude.type),
+        streamsByType.get(DataCadence.type),
+        streamsByType.get(DataGradeAdjustedSpeed.type),
+        streamsByType.get(DataHeartRate.type),
+        streamsByType.get(DataPace.type),
+        streamsByType.get(DataPower.type),
+        streamsByType.get(DataSpeed.type),
+      ],
+      getStream: (type: string) => streamsByType.get(type) ?? null,
+    } as any;
+
+    const panels = buildEventChartPanels({
+      selectedActivities: [activity],
+      allActivities: [activity],
+      xAxisType: XAxisTypes.Duration,
+      showAllData: false,
+      dataTypesToUse: [
+        DataAltitude.type,
+        DataCadence.type,
+        DataGradeAdjustedSpeed.type,
+        DataHeartRate.type,
+        DataPace.type,
+        DataPower.type,
+        DataSpeed.type,
+      ],
+      userUnitSettings: {} as any,
+      eventColorService: {
+        getActivityColor: () => '#ff0000'
+      } as any,
+    });
+
+    expect(panels.map((panel) => panel.dataType)).toEqual([
+      DataHeartRate.type,
+      DataPace.type,
+      DataSpeed.type,
+      DataGradeAdjustedSpeed.type,
+      DataPower.type,
+      DataCadence.type,
+      DataAltitude.type,
+    ]);
   });
 
   it('keeps showAllData semantics and includes streams when enabled', () => {
@@ -284,7 +359,7 @@ describe('event-echarts-data.helper', () => {
     expect(panels[0].series[0].points.map((point) => point.y)).toEqual([100, 101, 102, 105]);
   });
 
-  it('orders panels by canonical datatype order regardless of input order', () => {
+  it('orders panels by canonical datatype order with event priority overrides', () => {
     vi.spyOn(ActivityUtilities, 'createUnitStreamsFromStreams').mockReturnValue([] as any);
     vi.spyOn(DynamicDataLoader, 'getUnitBasedDataTypesFromDataTypes').mockImplementation((types: any) => types as any);
     vi.spyOn(DynamicDataLoader, 'getUnitBasedDataTypesFromDataType').mockImplementation((type: any) => [type] as any);
@@ -333,12 +408,10 @@ describe('event-echarts-data.helper', () => {
       } as any,
     });
 
-    const canonicalSelectedOrder = [
-      ...DynamicDataLoader.basicDataTypes,
-      ...DynamicDataLoader.advancedDataTypes.filter((dataType) => !DynamicDataLoader.basicDataTypes.includes(dataType)),
-    ].filter((dataType) => [DataSpeed.type, DataPower.type].includes(dataType));
-
-    expect(panels.map((panel) => panel.dataType)).toEqual(canonicalSelectedOrder);
+    expect(panels.map((panel) => panel.dataType)).toEqual([
+      DataSpeed.type,
+      DataPower.type,
+    ]);
   });
 
   it('maps lap markers in distance mode to nearest distance points', () => {
