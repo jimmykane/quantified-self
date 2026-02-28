@@ -3,7 +3,7 @@ import { Observable, of } from 'rxjs';
 import { map, shareReplay, switchMap, take } from 'rxjs/operators';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { Auth, authState, user, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, sendPasswordResetEmail, GoogleAuthProvider, GithubAuthProvider, FacebookAuthProvider, TwitterAuthProvider, OAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, fetchSignInMethodsForEmail, linkWithCredential, AuthCredential, linkWithPopup, AuthProvider, signInWithCustomToken } from '@angular/fire/auth';
-import { Firestore, doc, onSnapshot, terminate, clearIndexedDbPersistence } from '@angular/fire/firestore';
+import { Firestore, clearIndexedDbPersistence, terminate } from '@angular/fire/firestore';
 import { Privacy, User } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../services/app.user.service';
 import { LocalStorageService } from '../services/storage/app.local.storage.service';
@@ -196,12 +196,10 @@ export class AppAuthService {
 
   async signOut(): Promise<void> {
     await runInInjectionContext(this.injector, () => signOut(this.auth));
-    await terminate(this.firestore);
+    await runInInjectionContext(this.injector, () => terminate(this.firestore));
     this.localStorageService.clearAllStorage();
-    await clearIndexedDbPersistence(this.firestore);
-    // Reload the page to reinitialize the app with a fresh Firestore instance
-    // This is necessary because terminate() makes the current instance unusable
-    window.location.href = '/login';
+    await runInInjectionContext(this.injector, () => clearIndexedDbPersistence(this.firestore));
+    this.redirectToLogin();
   }
 
   async fetchSignInMethods(email: string) {
@@ -237,5 +235,9 @@ export class AppAuthService {
     this.snackBar.open(`Could not login due to error ${error.message} `, undefined, {
       duration: 2000
     });
+  }
+
+  private redirectToLogin(): void {
+    window.location.href = '/login';
   }
 }
