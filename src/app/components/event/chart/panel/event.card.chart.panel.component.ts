@@ -72,6 +72,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @Input() extraMaxForPower = 0;
   @Input() extraMaxForPace = -0.25;
   @Input() strokeWidth = AppUserUtilities.getDefaultChartStrokeWidth();
+  @Input() showActivityNamesInTooltip = false;
 
   @Output() cursorPositionChange = new EventEmitter<number>();
 
@@ -692,8 +693,9 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       const streamType = seriesModel?.streamType || this.panel?.dataType;
       const yValue = Number(Array.isArray(point.value) ? point.value[1] : point.value);
       const formatted = this.formatDataValue(streamType || '', yValue);
+      const label = this.showActivityNamesInTooltip ? `${point.seriesName}: ` : '';
       tooltipLines.push(
-        `<div><span style="display:inline-block;margin-right:6px;border-radius:50%;width:8px;height:8px;background:${point.color};"></span>${point.seriesName}: ${formatted}</div>`
+        `<div><span style="display:inline-block;margin-right:6px;border-radius:50%;width:8px;height:8px;background:${point.color};"></span>${label}${formatted}</div>`
       );
     }
 

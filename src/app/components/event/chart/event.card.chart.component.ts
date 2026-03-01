@@ -146,6 +146,19 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     return this.userSettingsQuery.chartSettings()?.useAnimations === true;
   }
 
+  public get showActivityNamesInTooltip(): boolean {
+    const event = this.event as (EventInterface & {
+      benchmarkResults?: unknown;
+      benchmarkResult?: unknown;
+      benchmarkDevices?: unknown[];
+    }) | null | undefined;
+
+    return event?.isMerge === true
+      || !!event?.benchmarkResults
+      || !!event?.benchmarkResult
+      || (Array.isArray(event?.benchmarkDevices) && event.benchmarkDevices.length > 0);
+  }
+
   public get userUnitSettings() {
     return this.userSettingsQuery.unitSettings();
   }

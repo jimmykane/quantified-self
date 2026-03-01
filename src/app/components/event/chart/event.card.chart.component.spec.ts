@@ -122,6 +122,37 @@ describe('EventCardChartComponent', () => {
     expect(component.xDomain).toEqual({ start: 0, end: 1 });
   });
 
+  it('shows activity names in tooltips for merge events', () => {
+    component.event = {
+      isMerge: true,
+      getActivities: () => [],
+      getID: () => 'event-1',
+    } as any;
+
+    expect(component.showActivityNamesInTooltip).toBe(true);
+  });
+
+  it('shows activity names in tooltips for benchmark events', () => {
+    component.event = {
+      isMerge: false,
+      benchmarkResults: { test: {} },
+      getActivities: () => [],
+      getID: () => 'event-1',
+    } as any;
+
+    expect(component.showActivityNamesInTooltip).toBe(true);
+  });
+
+  it('hides activity names in tooltips for normal events', () => {
+    component.event = {
+      isMerge: false,
+      getActivities: () => [],
+      getID: () => 'event-1',
+    } as any;
+
+    expect(component.showActivityNamesInTooltip).toBe(false);
+  });
+
   it('should persist showAllData changes', async () => {
     fixture.detectChanges();
 
