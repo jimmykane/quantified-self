@@ -505,8 +505,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
         const bounds = cumulativeBounds[bucketIndex].get(seriesEntry.key) || { start: 0, end: 0 };
         return [bucketIndex, bucket.total, bounds.start, bounds.end];
       }),
-      renderItem: (params: any, api: any) => this.renderSegmentedPyramidItem(params, api),
-      tooltip: { show: false }
+      renderItem: (params: any, api: any) => this.renderSegmentedPyramidItem(params, api)
     }));
   }
 

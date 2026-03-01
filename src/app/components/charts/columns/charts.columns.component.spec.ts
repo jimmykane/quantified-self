@@ -337,6 +337,9 @@ describe('ChartsColumnsComponent', () => {
     expect(segmentSeries.every((seriesEntry: { type?: string; renderItem?: unknown }) => (
       seriesEntry.type === 'custom' && typeof seriesEntry.renderItem === 'function'
     ))).toBe(true);
+    expect(segmentSeries.every((seriesEntry: { tooltip?: { show?: boolean } }) => (
+      seriesEntry.tooltip?.show !== false
+    ))).toBe(true);
     const totalLabelSeries = option.series.find((seriesEntry: { name?: string }) => (
       seriesEntry.name === '__date_activity_totals__'
     ));
