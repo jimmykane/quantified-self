@@ -47,8 +47,6 @@ const FORMATTED_VALUE_CACHE_LIMIT = 600;
 const TOOLTIP_VIEWPORT_THRESHOLD = 0.1;
 const LAP_TOOLTIP_OFFSET_X = 12;
 const LAP_TOOLTIP_OFFSET_Y = 12;
-const ZOOM_BAR_SLIDER_HEIGHT = 24;
-const ZOOM_BAR_HANDLE_SIZE = 24;
 // Temporary perf toggle: disable axis-pointer -> map cursor emission path.
 const TEMP_DISABLE_AXIS_POINTER_CURSOR_EMIT = true;
 
@@ -75,7 +73,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @Input() extraMaxForPace = -0.25;
   @Input() strokeWidth = AppUserUtilities.getDefaultChartStrokeWidth();
   @Input() showActivityNamesInTooltip = false;
-  @Input() zoomBarOverviewData: Array<[number, number]> = [];
 
   @Output() cursorPositionChange = new EventEmitter<number>();
 
@@ -605,17 +602,9 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const darkTheme = isDarkChartThemeActive(this.chartTheme);
     const axisColor = darkTheme ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.28)';
     const sliderTrackColor = darkTheme ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
-    const sliderSelectionColor = darkTheme ? 'rgba(144,202,249,0.30)' : 'rgba(25,118,210,0.22)';
+    const sliderSelectionColor = darkTheme ? 'rgba(144,202,249,0.28)' : 'rgba(25,118,210,0.20)';
     const sliderHandleColor = darkTheme ? 'rgba(255,255,255,0.72)' : 'rgba(0,0,0,0.45)';
-    const overviewLineColor = darkTheme ? 'rgba(144,202,249,0.78)' : 'rgba(25,118,210,0.70)';
-    const overviewFillColor = darkTheme ? 'rgba(144,202,249,0.18)' : 'rgba(25,118,210,0.12)';
     const domain = this.getActiveDomain();
-    const overviewData = this.zoomBarOverviewData.length > 0
-      ? this.zoomBarOverviewData
-      : [
-        [domain.start, 0],
-        [domain.end, 0],
-      ];
 
     return {
       animation: false,
@@ -623,8 +612,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       grid: {
         left: 0,
         right: 0,
-        top: 2,
-        bottom: 2,
+        top: 0,
+        bottom: 0,
         containLabel: false
       },
       tooltip: { show: false },
@@ -647,48 +636,19 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           show: this.zoomBarVisibleForViewport,
           left: 12,
           right: 12,
-          top: 8,
-          height: ZOOM_BAR_SLIDER_HEIGHT,
+          top: 10,
+          height: 20,
           filterMode: 'filter',
-          showDataShadow: true,
-          showDetail: true,
-          labelFormatter: (value: number) => formatEventXAxisValue(
-            Number(value),
-            this.xAxisType,
-            { includeDateForTime: this.showDateOnTimeAxis }
-          ),
-          handleSize: ZOOM_BAR_HANDLE_SIZE,
+          showDataShadow: false,
+          showDetail: false,
+          handleSize: 18,
           borderColor: axisColor,
           backgroundColor: sliderTrackColor,
           fillerColor: sliderSelectionColor,
-          dataBackground: {
-            lineStyle: {
-              color: overviewLineColor,
-              width: 1,
-            },
-            areaStyle: {
-              color: overviewFillColor,
-            }
-          },
-          selectedDataBackground: {
-            lineStyle: {
-              color: overviewLineColor,
-              width: 1.2,
-            },
-            areaStyle: {
-              color: overviewFillColor,
-            }
-          },
-          textStyle: {
-            color: darkTheme ? '#f5f5f5' : '#1f1f1f',
-            fontFamily: "'Barlow Condensed', sans-serif",
-          },
           handleStyle: {
             color: sliderHandleColor,
             borderColor: axisColor,
-            borderWidth: 1,
-            shadowBlur: 4,
-            shadowColor: darkTheme ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.18)',
+            borderWidth: 1
           },
           moveHandleStyle: {
             color: sliderSelectionColor
@@ -705,17 +665,11 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           type: 'line',
           silent: true,
           symbol: 'none',
-          animation: false,
-          lineStyle: {
-            color: overviewLineColor,
-            width: 1,
-            opacity: 0,
-          },
-          areaStyle: {
-            color: overviewFillColor,
-            opacity: 0,
-          },
-          data: overviewData
+          lineStyle: { opacity: 0 },
+          data: [
+            [domain.start, 0],
+            [domain.end, 0]
+          ]
         }
       ]
     } as ChartOption;

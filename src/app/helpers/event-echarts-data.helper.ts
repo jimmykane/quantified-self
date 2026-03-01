@@ -26,7 +26,6 @@ import {
 import { AppEventColorService } from '../services/color/app.event.color.service';
 import { applyEventChartCanonicalOrderOverride } from './event-chart-order.helper';
 import { resolveEventColorGroupKey, resolveEventSeriesColor } from './event-echarts-style.helper';
-import { EventChartRange, normalizeEventRange } from './event-echarts-xaxis.helper';
 import { normalizeUnitDerivedTypeLabel } from './stat-label.helper';
 
 export interface EventChartPoint {
@@ -102,8 +101,6 @@ const NORMALIZED_LAP_TYPE_ALIASES = new Map<string, string>([
 ]);
 
 const EMPTY_PANEL_DOMAIN = { minX: 0, maxX: 1 };
-const EVENT_ZOOM_OVERVIEW_BUCKET_COUNT = 96;
-const EVENT_ZOOM_OVERVIEW_MAX_SAMPLES_PER_SERIES = 720;
 const NEVER_RENDER_STREAM_TYPES = new Set<string>([
   DataDuration.type,
   XAxisTypes.Time,
@@ -223,72 +220,6 @@ export function buildEventLegendItems(
     label: activity.creator?.name || activity.getID() || 'Activity',
     color: eventColorService.getActivityColor(colorScope, activity),
   }));
-}
-
-export function buildEventZoomOverviewData(
-  panels: EventChartPanelModel[],
-  domain: EventChartRange | null | undefined,
-  bucketCount = EVENT_ZOOM_OVERVIEW_BUCKET_COUNT
-): Array<[number, number]> {
-  const normalizedDomain = normalizeEventRange(domain);
-  const safeBucketCount = Number.isFinite(bucketCount) ? Math.max(2, Math.round(bucketCount)) : EVENT_ZOOM_OVERVIEW_BUCKET_COUNT;
-
-  if (!normalizedDomain) {
-    return [];
-  }
-
-  const span = normalizedDomain.end - normalizedDomain.start;
-  if (!Number.isFinite(span) || span <= 0) {
-    return [
-      [normalizedDomain.start, 0],
-      [normalizedDomain.end, 0],
-    ];
-  }
-
-  const buckets = new Array<number>(safeBucketCount).fill(0);
-  let maxBucketValue = 0;
-
-  for (let panelIndex = 0; panelIndex < panels.length; panelIndex += 1) {
-    const panel = panels[panelIndex];
-    for (let seriesIndex = 0; seriesIndex < panel.series.length; seriesIndex += 1) {
-      const points = panel.series[seriesIndex]?.points || [];
-      if (!points.length) {
-        continue;
-      }
-
-      const stride = Math.max(1, Math.ceil(points.length / EVENT_ZOOM_OVERVIEW_MAX_SAMPLES_PER_SERIES));
-      for (let pointIndex = 0; pointIndex < points.length; pointIndex += stride) {
-        const point = points[pointIndex];
-        const xValue = Number(point?.x);
-        if (!Number.isFinite(xValue) || xValue < normalizedDomain.start || xValue > normalizedDomain.end) {
-          continue;
-        }
-
-        const ratio = span === 0 ? 0 : (xValue - normalizedDomain.start) / span;
-        const bucketIndex = Math.min(
-          safeBucketCount - 1,
-          Math.max(0, Math.floor(ratio * (safeBucketCount - 1)))
-        );
-        buckets[bucketIndex] += 1;
-        if (buckets[bucketIndex] > maxBucketValue) {
-          maxBucketValue = buckets[bucketIndex];
-        }
-      }
-    }
-  }
-
-  if (maxBucketValue <= 0) {
-    return [
-      [normalizedDomain.start, 0],
-      [normalizedDomain.end, 0],
-    ];
-  }
-
-  return buckets.map((count, index) => {
-    const xValue = normalizedDomain.start + ((span * index) / (safeBucketCount - 1));
-    const normalizedCount = Math.sqrt(count / maxBucketValue);
-    return [xValue, normalizedCount] as [number, number];
-  });
 }
 
 export function buildEventLapMarkers(input: {

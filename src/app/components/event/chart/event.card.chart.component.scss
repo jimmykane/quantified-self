@@ -54,6 +54,6 @@ app-event-card-chart-actions {
 
 .event-chart-shell__panels {
   display: grid;
-  // gap: 12px;
+  gap: 12px;
   grid-template-columns: minmax(0, 1fr);
 }
