@@ -42,6 +42,14 @@ export class EventCardChartActionsComponent implements OnChanges {
     return this.seriesMenuItems.length > 0 && this.seriesMenuItems.every((item) => !item.visible);
   }
 
+  public get visibleSeriesCount(): number {
+    return this.seriesMenuItems.filter((item) => item.visible).length;
+  }
+
+  public get totalSeriesCount(): number {
+    return this.seriesMenuItems.length;
+  }
+
   constructor() {
   }
 
