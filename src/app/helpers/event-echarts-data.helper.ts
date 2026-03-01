@@ -209,6 +209,14 @@ export function buildEventChartPanels(input: BuildEventChartPanelsInput): EventC
   return panels;
 }
 
+export function hasEventChartableData(
+  activities: ActivityInterface[],
+  xAxisType: XAxisTypes
+): boolean {
+  const safeActivities = Array.isArray(activities) ? activities : [];
+  return safeActivities.some((activity) => canActivityRenderEventChart(activity, xAxisType));
+}
+
 export function buildEventLegendItems(
   activities: ActivityInterface[],
   eventColorService: AppEventColorService,
@@ -437,6 +445,60 @@ function dedupeByType(streams: StreamInterface[]): StreamInterface[] {
     }
   });
   return [...streamsByType.values()];
+}
+
+function canActivityRenderEventChart(activity: ActivityInterface, xAxisType: XAxisTypes): boolean {
+  const streams = activity?.getAllStreams?.() || [];
+  if (!streams.length) {
+    return false;
+  }
+
+  if (!hasFiniteStreamData(activity?.getStream?.(XAxisTypes.Time) || streams.find((stream) => stream?.type === XAxisTypes.Time))) {
+    return false;
+  }
+
+  if (
+    xAxisType === XAxisTypes.Distance
+    && !hasFiniteStreamData(
+      activity?.getStream?.(DataDistance.type)
+      || activity?.getStream?.(DataStrydDistance.type)
+      || streams.find((stream) => stream?.type === DataDistance.type || stream?.type === DataStrydDistance.type)
+    )
+  ) {
+    return false;
+  }
+
+  return streams.some((stream) => isEventChartableRawStream(stream) && hasFiniteStreamData(stream));
+}
+
+function isEventChartableRawStream(stream: StreamInterface | undefined | null): boolean {
+  const streamType = `${stream?.type || ''}`;
+  if (!streamType || NEVER_RENDER_STREAM_TYPES.has(streamType)) {
+    return false;
+  }
+
+  switch (streamType) {
+    case DataLatitudeDegrees.type:
+    case DataLongitudeDegrees.type:
+      return false;
+    default:
+      return true;
+  }
+}
+
+function hasFiniteStreamData(stream: StreamInterface | undefined | null): boolean {
+  if (!stream?.getData) {
+    return false;
+  }
+
+  const values = toNumericArray(stream.getData());
+  for (let index = 0; index < values.length; index += 1) {
+    if (Number.isFinite(values[index])) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function buildPreferredDataTypeOrder(

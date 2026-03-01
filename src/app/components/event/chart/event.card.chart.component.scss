@@ -19,41 +19,8 @@ app-event-card-chart-actions {
   opacity: 0.6;
 }
 
-.event-chart-shell__legend {
-  display: grid;
-  gap: 8px;
-  padding: 0px 0px;
-}
-
-.event-chart-shell__legend-list {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-  width: 100%;
-}
-
-.event-chart-shell__legend-item {
-  min-height: 32px;
-  border-radius: 999px;
-  color: var(--mat-sys-on-surface);
-}
-
-.event-chart-shell__swatch {
-  display: inline-block;
-  width: 9px;
-  height: 9px;
-  border-radius: 999px;
-  margin-right: 8px;
-  flex: 0 0 auto;
-}
-
-.event-chart-shell__label {
-  white-space: nowrap;
-}
-
 .event-chart-shell__panels {
   display: grid;
-  // gap: 12px;
+  gap: 12px;
   grid-template-columns: minmax(0, 1fr);
 }

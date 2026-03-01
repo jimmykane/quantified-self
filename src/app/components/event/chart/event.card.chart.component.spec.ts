@@ -62,7 +62,7 @@ describe('EventCardChartComponent', () => {
   };
 
   const mockBreakpointObserver = {
-    observe: vi.fn().mockReturnValue(of({ matches: false })),
+    observe: vi.fn().mockReturnValue(of({ matches: false, breakpoints: {} })),
   };
 
   beforeEach(async () => {
@@ -72,7 +72,7 @@ describe('EventCardChartComponent', () => {
     mockChartSettingsStorage.getDataTypeIDsToShow.mockReturnValue([]);
     mockChartSettingsStorage.setDataTypeIDsToShow.mockReset();
     mockBreakpointObserver.observe.mockReset();
-    mockBreakpointObserver.observe.mockReturnValue(of({ matches: false }));
+    mockBreakpointObserver.observe.mockReturnValue(of({ matches: false, breakpoints: {} }));
 
     vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([]);
     vi.spyOn(eventDataHelper, 'buildEventLapMarkers').mockReturnValue([]);
@@ -164,8 +164,7 @@ describe('EventCardChartComponent', () => {
     expect(component.showActivityNamesInTooltip).toBe(false);
   });
 
-  it('uses the mobile legend menu summary on xsmall breakpoints', async () => {
-    mockBreakpointObserver.observe.mockReturnValueOnce(of({ matches: true }));
+  it('exposes the series menu summary from current legend visibility', async () => {
     vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
       {
         dataType: 'pace',
@@ -188,22 +187,19 @@ describe('EventCardChartComponent', () => {
     ] as any);
     mockChartSettingsStorage.getDataTypeIDsToShow.mockReturnValue(['pace']);
 
-    const mobileFixture = TestBed.createComponent(EventCardChartComponent);
-    const mobileComponent = mobileFixture.componentInstance;
-    mobileComponent.user = { uid: 'u1' } as any;
-    mobileComponent.targetUserID = 'u1';
-    mobileComponent.event = {
+    component.user = { uid: 'u1' } as any;
+    component.targetUserID = 'u1';
+    component.event = {
       isMultiSport: () => false,
       getActivities: () => [],
       getID: () => 'event-1',
     } as any;
-    mobileComponent.selectedActivities = [];
+    component.selectedActivities = [];
 
-    mobileFixture.detectChanges();
-    await mobileFixture.whenStable();
+    fixture.detectChanges();
+    await fixture.whenStable();
 
-    expect(mobileComponent.isMobileLegendMode()).toBe(true);
-    expect(mobileComponent.mobileLegendSummary).toBe('Series 1/2');
+    expect(component.seriesMenuSummary).toBe('Series 1/2');
   });
 
   it('should persist showAllData changes', async () => {

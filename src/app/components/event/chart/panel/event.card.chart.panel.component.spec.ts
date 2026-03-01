@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { SimpleChange } from '@angular/core';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { DynamicDataLoader, LapTypes, XAxisTypes } from '@sports-alliance/sports-lib';
 import { EventCardChartPanelComponent } from './event.card.chart.panel.component';
@@ -209,6 +210,34 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.dataZoom?.[0]?.handleSize).toBe(24);
     expect(option?.series?.[0]?.data).toEqual(component.zoomBarOverviewData);
     expect(option?.dataZoom?.[0]?.labelFormatter(65)).toBe('01:05');
+  });
+
+  it('refreshes zoom-bar-only mode when overview data changes', async () => {
+    component.panel = null;
+    component.showZoomBar = true;
+    component.zoomBarOverviewData = [
+      [0, 0.1],
+      [120, 0.4],
+    ];
+    fixture.detectChanges();
+    await component.ngAfterViewInit();
+
+    eChartsLoaderMock.setOption.mockClear();
+    component.zoomBarOverviewData = [
+      [0, 0.2],
+      [120, 0.9],
+    ];
+
+    component.ngOnChanges({
+      zoomBarOverviewData: new SimpleChange(
+        [[0, 0.1], [120, 0.4]],
+        component.zoomBarOverviewData,
+        false
+      ),
+    });
+
+    const option = eChartsLoaderMock.setOption.mock.calls.at(-1)?.[1] as any;
+    expect(option?.series?.[0]?.data).toEqual(component.zoomBarOverviewData);
   });
 
   it('renders empty-axis no-data option without joining a zoom group when panel is null outside zoom mode', async () => {

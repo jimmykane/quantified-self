@@ -17,9 +17,11 @@ import { MapStyleService } from '../../../services/map-style.service';
 describe('EventCardMapComponent', () => {
   let component: EventCardMapComponent;
   let fixture: ComponentFixture<EventCardMapComponent>;
+  let mockMap: any;
   let mockMapboxLoader: any;
   let mockMapStyleService: any;
   let mockSettingsQuery: any;
+  let mockActivityCursorService: { cursors: Subject<any[]> };
 
   const makeStat = (value: string, unit = '') => ({
     getDisplayValue: () => value,
@@ -27,7 +29,7 @@ describe('EventCardMapComponent', () => {
   });
 
   beforeEach(async () => {
-    const mockMap = {
+    mockMap = {
       addControl: vi.fn(),
       on: vi.fn(),
       off: vi.fn(),
@@ -77,6 +79,10 @@ describe('EventCardMapComponent', () => {
       updateMapSettings: vi.fn()
     };
 
+    mockActivityCursorService = {
+      cursors: new Subject<any[]>(),
+    };
+
     await TestBed.configureTestingModule({
       declarations: [EventCardMapComponent],
       providers: [
@@ -98,7 +104,7 @@ describe('EventCardMapComponent', () => {
           }
         },
         { provide: AppUserService, useValue: { updateUserProperties: vi.fn() } },
-        { provide: AppActivityCursorService, useValue: { cursors: new Subject() } },
+        { provide: AppActivityCursorService, useValue: mockActivityCursorService },
         {
           provide: AppThemeService,
           useValue: {
@@ -165,6 +171,39 @@ describe('EventCardMapComponent', () => {
     component.onShow3DChange(true);
     expect(mockSettingsQuery.updateMapSettings).toHaveBeenCalledWith({ is3D: true });
     expect(toggleSpy).toHaveBeenCalledWith(true, true);
+  });
+
+  it('should ignore non-chart cursor updates and sync chart-driven cursors to the map', async () => {
+    component.activitiesMapData = [{
+      activity: { getID: () => 'activity-1' },
+      positions: [
+        { time: 1_000, latitudeDegrees: 40.1, longitudeDegrees: 22.1 },
+        { time: 2_000, latitudeDegrees: 40.2, longitudeDegrees: 22.2 },
+      ],
+      strokeColor: '#ff0000',
+      laps: [],
+      jumps: [],
+    }] as any;
+
+    await component.ngAfterViewInit();
+
+    mockActivityCursorService.cursors.next([{ activityID: 'activity-1', time: 2_000, byMap: true }]);
+
+    expect(component.activitiesCursors.size).toBe(0);
+    expect(mockMap.panTo).not.toHaveBeenCalled();
+
+    mockActivityCursorService.cursors.next([{ activityID: 'activity-1', time: 1_900, byChart: true }]);
+    await new Promise((resolve) => setTimeout(resolve, 1_050));
+
+    expect(component.activitiesCursors.get('activity-1')).toEqual({
+      latitudeDegrees: 40.2,
+      longitudeDegrees: 22.2,
+    });
+    expect(mockMap.panTo).toHaveBeenCalledWith([22.2, 40.2], {
+      animate: true,
+      duration: 250,
+      essential: true,
+    });
   });
 
   it('should use safe fallback stroke color when activity color is missing', () => {

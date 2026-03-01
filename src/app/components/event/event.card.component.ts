@@ -43,6 +43,8 @@ import { AppEventService } from '../../services/app.event.service';
 import { shouldRenderIntensityZonesChart } from '../../helpers/intensity-zones-chart-data-helper';
 import { PerformanceCurveDataService } from '../../services/performance-curve-data.service';
 import { reconcileEventDetailsLiveUpdate } from '../../utils/event-live-reconcile';
+import { hasEventChartableData } from '../../helpers/event-echarts-data.helper';
+import { resolveEventChartXAxisType } from '../../helpers/event-echarts-xaxis.helper';
 @Component({
   selector: 'app-event-card',
   templateUrl: './event.card.component.html',
@@ -117,6 +119,26 @@ export class EventCardComponent implements OnInit {
   public hasPositionsFlag = computed(() =>
     this.event()?.getActivities().some(a => a.hasPositionData()) ?? false
   );
+
+  public hasChartDataFlag = computed(() => {
+    const event = this.event();
+    const user = this.currentUser();
+    const selectedActivities = this.selectedActivitiesDebounced();
+
+    if (!event || !user || selectedActivities.length === 0) {
+      return false;
+    }
+
+    const chartSettings = this.userSettingsQuery.chartSettings();
+    const userUnitSettings = this.userUnitSettings();
+    const dataTypesToUse = this.userService.getUserChartDataTypesToUse(user);
+    const xAxisType = resolveEventChartXAxisType(
+      event,
+      chartSettings?.xAxisType ?? XAxisTypes.Duration
+    );
+
+    return hasEventChartableData(selectedActivities, xAxisType);
+  });
 
   // Computed ownership check
   public isOwner = computed(() => {

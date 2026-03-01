@@ -134,6 +134,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       || changes.extraMaxForPower
       || changes.extraMaxForPace
       || changes.strokeWidth
+      || changes.zoomBarOverviewData
     ) {
       this.refreshChart();
       this.syncViewportObserver();

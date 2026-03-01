@@ -26,12 +26,11 @@ import {
   DataLongitudeDegrees,
   DynamicDataLoader,
   EventInterface,
-  GeoLibAdapter,
   LapInterface,
   LapTypes,
   User
 } from '@sports-alliance/sports-lib';
-import { Subject, Subscription, asyncScheduler } from 'rxjs';
+import { Subscription, asyncScheduler } from 'rxjs';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { AppUserUtilities } from '../../../utils/app.user.utilities';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
@@ -144,8 +143,6 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   public apiLoaded = signal(false);
 
   private activitiesCursorSubscription: Subscription = new Subscription();
-  private lineMouseMoveSubject: Subject<{ latitudeDegrees: number; longitudeDegrees: number; activityMapData: MapData }> = new Subject();
-  private lineMouseMoveSubscription: Subscription = new Subscription();
 
   private processSequence = 0;
   private previousState: any = {};
@@ -310,10 +307,6 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
 
       this.pushCursorMarkersToMap();
       this.changeDetectorRef.detectChanges();
-    }));
-
-    this.lineMouseMoveSubscription.add(this.lineMouseMoveSubject.subscribe(value => {
-      this.lineMouseMove(value.latitudeDegrees, value.longitudeDegrees, value.activityMapData);
     }));
   }
 
@@ -484,9 +477,6 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       this.logPerformance('initializeMap:loadMapbox', loadMapboxStartedAt);
 
       this.mapManager.setMap(map, mapboxgl);
-      this.mapManager.setTrackClickHandler((activityId, latitudeDegrees, longitudeDegrees) => {
-        this.zone.run(() => this.onTrackLineClick(activityId, latitudeDegrees, longitudeDegrees));
-      });
       this.mapManager.setJumpClickHandler((jump, latitudeDegrees, longitudeDegrees) => {
         this.zone.run(() => this.openJumpMarkerInfoWindow(jump, latitudeDegrees, longitudeDegrees));
       });
@@ -771,50 +761,6 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       hasAppliedInitialBounds: this.hasAppliedInitialBounds,
       activitiesMapDataLength: this.activitiesMapData.length,
     });
-  }
-
-  private onTrackLineClick(activityId: string, latitudeDegrees: number, longitudeDegrees: number): void {
-    const activityMapData = this.activitiesMapData.find(data => (data.activity.getID() || '') === activityId);
-    if (!activityMapData) {
-      return;
-    }
-
-    this.lineMouseMoveSubject.next({
-      latitudeDegrees,
-      longitudeDegrees,
-      activityMapData,
-    });
-  }
-
-  private lineMouseMove(latitudeDegrees: number, longitudeDegrees: number, activityMapData: MapData) {
-    const activityId = activityMapData.activity.getID() || '';
-
-    this.activitiesCursors.set(activityId, {
-      latitudeDegrees,
-      longitudeDegrees,
-    });
-
-    const nearest = <{ latitude: number, longitude: number, time: number }>(new GeoLibAdapter()).findNearest({
-      latitude: latitudeDegrees,
-      longitude: longitudeDegrees
-    }, activityMapData.positions.map(a => ({
-      latitude: a.latitudeDegrees,
-      longitude: a.longitudeDegrees,
-      time: a.time
-    })));
-
-    if (!nearest) {
-      return;
-    }
-
-    this.activityCursorService.setCursor({
-      activityID: activityId,
-      time: nearest.time,
-      byMap: true,
-    });
-
-    this.pushCursorMarkersToMap();
-    this.changeDetectorRef.markForCheck();
   }
 
   private pushCursorMarkersToMap() {
@@ -1102,9 +1048,6 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   private unSubscribeFromAll() {
     if (this.activitiesCursorSubscription) {
       this.activitiesCursorSubscription.unsubscribe();
-    }
-    if (this.lineMouseMoveSubscription) {
-      this.lineMouseMoveSubscription.unsubscribe();
     }
   }
 
