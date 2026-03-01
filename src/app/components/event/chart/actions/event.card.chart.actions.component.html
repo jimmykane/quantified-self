@@ -1,4 +1,11 @@
 <section class="container">
+  @if (showSeriesMenu) {
+  <button mat-stroked-button class="options-trigger" [matMenuTriggerFor]="seriesMenu" aria-label="Series visibility">
+    <mat-icon>stacked_line_chart</mat-icon>
+    {{ seriesMenuSummary }}
+  </button>
+  }
+
   <span [matTooltip]="user ? 'Chart options' : 'Sign in to use this'">
     <button mat-stroked-button class="options-trigger" [matMenuTriggerFor]="optionsMenu" [disabled]="!user"
       aria-label="Chart options">
@@ -7,6 +14,26 @@
     </button>
   </span>
 </section>
+
+<mat-menu #seriesMenu="matMenu" xPosition="before">
+  <div class="series-menu" (click)="$event.stopPropagation()">
+    @for (item of seriesMenuItems; track item.dataType) {
+    <button type="button" class="series-menu__item" [attr.aria-pressed]="item.visible"
+      (click)="$event.stopPropagation(); onSeriesVisibilityToggle(item.dataType, !item.visible)">
+      <span class="series-menu__swatch" [style.background]="item.color"></span>
+      <span class="series-menu__label">{{ item.label }}</span>
+    </button>
+    }
+
+    @if (shouldShowAllSeriesAction) {
+    <div class="series-menu__actions">
+      <button mat-stroked-button type="button" (click)="$event.stopPropagation(); onShowAllSeries()">
+        Show all data types
+      </button>
+    </div>
+    }
+  </div>
+</mat-menu>
 
 <mat-menu #optionsMenu="matMenu" xPosition="before" class="qs-menu-panel qs-menu-panel-form qs-config-menu chart-options-menu">
   <section mat-menu-item>

@@ -89,4 +89,20 @@ describe('EventCardChartActionsComponent', () => {
     expect(emitSpy).toHaveBeenCalledWith(true);
     expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('event_chart_settings_change', { property: 'showLaps' });
   });
+
+  it('should emit series visibility toggle requests', () => {
+    const emitSpy = vi.spyOn(component.seriesVisibilityToggle, 'emit');
+
+    component.onSeriesVisibilityToggle('pace', false);
+
+    expect(emitSpy).toHaveBeenCalledWith({ dataType: 'pace', visible: false });
+  });
+
+  it('should emit show all series requests', () => {
+    const emitSpy = vi.spyOn(component.showAllSeries, 'emit');
+
+    component.onShowAllSeries();
+
+    expect(emitSpy).toHaveBeenCalledTimes(1);
+  });
 });

@@ -4,6 +4,13 @@ import { User } from '@sports-alliance/sports-lib';
 import { AppAnalyticsService } from '../../../../services/app.analytics.service';
 import { EventInterface } from '@sports-alliance/sports-lib';
 
+interface ChartSeriesMenuItem {
+  dataType: string;
+  label: string;
+  color: string;
+  visible: boolean;
+}
+
 @Component({
   selector: 'app-event-card-chart-actions',
   templateUrl: './event.card.chart.actions.component.html',
@@ -19,12 +26,21 @@ export class EventCardChartActionsComponent implements OnChanges {
   @Input() xAxisType: XAxisTypes;
   @Input() showAllData: boolean;
   @Input() showLaps: boolean;
+  @Input() showSeriesMenu = false;
+  @Input() seriesMenuSummary = '';
+  @Input() seriesMenuItems: ChartSeriesMenuItem[] = [];
   @Output() showAllDataChange: EventEmitter<boolean> = new EventEmitter<boolean>();
   @Output() showLapsChange: EventEmitter<boolean> = new EventEmitter<boolean>();
   @Output() xAxisTypeChange: EventEmitter<XAxisTypes> = new EventEmitter<XAxisTypes>();
+  @Output() seriesVisibilityToggle = new EventEmitter<{ dataType: string; visible: boolean }>();
+  @Output() showAllSeries = new EventEmitter<void>();
 
   public xAxisTypes = XAxisTypes;
   private analyticsService = inject(AppAnalyticsService);
+
+  public get shouldShowAllSeriesAction(): boolean {
+    return this.seriesMenuItems.length > 0 && this.seriesMenuItems.every((item) => !item.visible);
+  }
 
   constructor() {
   }
@@ -59,6 +75,14 @@ export class EventCardChartActionsComponent implements OnChanges {
     }
 
     this.analyticsService.logEvent('event_chart_settings_change', { property: prop });
+  }
+
+  onSeriesVisibilityToggle(dataType: string, visible: boolean): void {
+    this.seriesVisibilityToggle.emit({ dataType, visible });
+  }
+
+  onShowAllSeries(): void {
+    this.showAllSeries.emit();
   }
 
   formatLabel(value: number | null) {

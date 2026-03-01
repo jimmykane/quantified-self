@@ -1,13 +1,18 @@
 <app-event-section-header icon="show_chart">
   <app-event-card-chart-actions [(xAxisType)]="xAxisType" [(showAllData)]="showAllData" [(showLaps)]="showLaps"
-    [event]="event" [user]="user">
+    [event]="event" [user]="user"
+    [showSeriesMenu]="isMobileLegendMode() && dataTypeLegendItems.length > 0"
+    [seriesMenuSummary]="mobileLegendSummary"
+    [seriesMenuItems]="dataTypeLegendItems"
+    (seriesVisibilityToggle)="onDataTypeLegendSelectionChange($event.dataType, $event.visible)"
+    (showAllSeries)="onShowAllDataTypes()">
   </app-event-card-chart-actions>
 </app-event-section-header>
 
 <mat-card-content class="event-chart-content">
   <app-loading-overlay [isLoading]="isLoading" [showSkeleton]="true" height="auto">
     <section class="event-chart-shell" [class.event-chart-shell--loading]="isLoading">
-      @if (dataTypeLegendItems.length > 0) {
+      @if (dataTypeLegendItems.length > 0 && !isMobileLegendMode()) {
       <section class="event-chart-shell__legend" aria-label="Data type visibility">
         <div class="event-chart-shell__legend-list" role="group" aria-label="Data type visibility">
           @for (item of dataTypeLegendItems; track item.dataType) {

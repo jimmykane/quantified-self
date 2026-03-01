@@ -1,5 +1,7 @@
+import { BreakpointObserver } from '@angular/cdk/layout';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { CUSTOM_ELEMENTS_SCHEMA, signal } from '@angular/core';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -17,6 +19,7 @@ import { AppEventColorService } from '../../../services/color/app.event.color.se
 import { LoggerService } from '../../../services/logger.service';
 import { AppChartSettingsLocalStorageService } from '../../../services/storage/app.chart.settings.local.storage.service';
 import * as eventDataHelper from '../../../helpers/event-echarts-data.helper';
+import { MaterialModule } from '../../../modules/material.module';
 
 describe('EventCardChartComponent', () => {
   let fixture: ComponentFixture<EventCardChartComponent>;
@@ -58,19 +61,27 @@ describe('EventCardChartComponent', () => {
     setDataTypeIDsToShow: vi.fn(),
   };
 
+  const mockBreakpointObserver = {
+    observe: vi.fn().mockReturnValue(of({ matches: false })),
+  };
+
   beforeEach(async () => {
     mockThemeService.getChartTheme.mockReturnValue(of(ChartThemes.Material));
     mockUserSettingsQuery.updateChartSettings.mockResolvedValue(undefined);
     mockActivityCursorService.setCursor.mockReset();
     mockChartSettingsStorage.getDataTypeIDsToShow.mockReturnValue([]);
     mockChartSettingsStorage.setDataTypeIDsToShow.mockReset();
+    mockBreakpointObserver.observe.mockReset();
+    mockBreakpointObserver.observe.mockReturnValue(of({ matches: false }));
 
     vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([]);
     vi.spyOn(eventDataHelper, 'buildEventLapMarkers').mockReturnValue([]);
 
     await TestBed.configureTestingModule({
+      imports: [MaterialModule, NoopAnimationsModule],
       declarations: [EventCardChartComponent],
       providers: [
+        { provide: BreakpointObserver, useValue: mockBreakpointObserver },
         { provide: AppUserSettingsQueryService, useValue: mockUserSettingsQuery },
         { provide: AppThemeService, useValue: mockThemeService },
         { provide: AppUserService, useValue: mockUserService },
@@ -151,6 +162,48 @@ describe('EventCardChartComponent', () => {
     } as any;
 
     expect(component.showActivityNamesInTooltip).toBe(false);
+  });
+
+  it('uses the mobile legend menu summary on xsmall breakpoints', async () => {
+    mockBreakpointObserver.observe.mockReturnValueOnce(of({ matches: true }));
+    vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
+      {
+        dataType: 'pace',
+        displayName: 'Pace',
+        unit: 'min/km',
+        colorGroupKey: 'Pace',
+        minX: 0,
+        maxX: 100,
+        series: [],
+      },
+      {
+        dataType: 'speed',
+        displayName: 'Speed',
+        unit: 'km/h',
+        colorGroupKey: 'Speed',
+        minX: 0,
+        maxX: 100,
+        series: [],
+      },
+    ] as any);
+    mockChartSettingsStorage.getDataTypeIDsToShow.mockReturnValue(['pace']);
+
+    const mobileFixture = TestBed.createComponent(EventCardChartComponent);
+    const mobileComponent = mobileFixture.componentInstance;
+    mobileComponent.user = { uid: 'u1' } as any;
+    mobileComponent.targetUserID = 'u1';
+    mobileComponent.event = {
+      isMultiSport: () => false,
+      getActivities: () => [],
+      getID: () => 'event-1',
+    } as any;
+    mobileComponent.selectedActivities = [];
+
+    mobileFixture.detectChanges();
+    await mobileFixture.whenStable();
+
+    expect(mobileComponent.isMobileLegendMode()).toBe(true);
+    expect(mobileComponent.mobileLegendSummary).toBe('Series 1/2');
   });
 
   it('should persist showAllData changes', async () => {

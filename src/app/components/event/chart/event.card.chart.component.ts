@@ -1,3 +1,4 @@
+import { BreakpointObserver } from '@angular/cdk/layout';
 import {
   ChangeDetectorRef,
   ChangeDetectionStrategy,
@@ -15,6 +16,7 @@ import {
   runInInjectionContext,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { map } from 'rxjs/operators';
 import { throttleTime } from 'rxjs/operators';
 import { Subject, Subscription, asyncScheduler } from 'rxjs';
 import {
@@ -36,6 +38,7 @@ import { AppActivityCursorService } from '../../../services/activity-cursor/app-
 import { AppChartSettingsLocalStorageService } from '../../../services/storage/app.chart.settings.local.storage.service';
 import { LoggerService } from '../../../services/logger.service';
 import { AppUserUtilities } from '../../../utils/app.user.utilities';
+import { AppBreakpoints } from '../../../constants/breakpoints';
 import {
   buildEventChartPanels,
   buildEventLapMarkers,
@@ -163,10 +166,19 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     return this.userSettingsQuery.unitSettings();
   }
 
+  public get visibleDataTypeCount(): number {
+    return this.dataTypeLegendItems.filter((item) => item.visible).length;
+  }
+
+  public get mobileLegendSummary(): string {
+    return `Series ${this.visibleDataTypeCount}/${this.dataTypeLegendItems.length}`;
+  }
+
   public get dataTypesToUse(): string[] {
     return this.user ? this.userService.getUserChartDataTypesToUse(this.user) : [];
   }
 
+  private breakpointObserver = inject(BreakpointObserver);
   private userSettingsQuery = inject(AppUserSettingsQueryService);
   private themeService = inject(AppThemeService);
   private userService = inject(AppUserService);
@@ -178,6 +190,10 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   private cdr = inject(ChangeDetectorRef);
 
   private themeSignal = toSignal(this.themeService.getChartTheme(), { initialValue: ChartThemes.Material });
+  public isMobileLegendMode = toSignal(
+    this.breakpointObserver.observe([AppBreakpoints.XSmall]).pipe(map((result) => result.matches)),
+    { initialValue: false }
+  );
   private cursorPositionSubject = new Subject<number>();
   private cursorPositionSubscription?: Subscription;
   private xAxisTypeOverride: XAxisTypes | null = null;
@@ -423,7 +439,9 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     this.dataTypeLegendItems = this.allChartPanels.map((panel) => ({
       dataType: panel.dataType,
       label: panel.displayName,
-      color: resolveEventSeriesColor(panel.colorGroupKey, 0, 1),
+      color: visibleDataTypeIDs.has(panel.dataType)
+        ? resolveEventSeriesColor(panel.colorGroupKey, 0, 1)
+        : LEGEND_MUTED_DOT_COLOR,
       visible: visibleDataTypeIDs.has(panel.dataType),
     }));
   }

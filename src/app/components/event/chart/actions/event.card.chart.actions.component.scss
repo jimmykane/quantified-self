@@ -10,6 +10,7 @@ section.container {
   display: flex;
   justify-content: flex-end;
   align-items: center;
+  gap: 8px;
   width: 100%;
 }
 
@@ -19,6 +20,54 @@ section.container {
 
 .options-trigger mat-icon {
   margin-right: 4px;
+}
+
+.series-menu {
+  display: grid;
+  gap: 4px;
+  inline-size: max-content;
+  min-inline-size: 0;
+  max-inline-size: min(72vw, 240px);
+  padding: 8px;
+}
+
+.series-menu__item {
+  border: 0;
+  background: transparent;
+  color: var(--mat-sys-on-surface);
+  min-height: 40px;
+  inline-size: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px;
+  border-radius: 12px;
+  text-align: left;
+  font: inherit;
+}
+
+.series-menu__item:hover {
+  background: rgba(127, 127, 127, 0.08);
+}
+
+.series-menu__swatch {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+.series-menu__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.series-menu__actions {
+  padding-top: 4px;
 }
 
 .chart-option-toggle {
