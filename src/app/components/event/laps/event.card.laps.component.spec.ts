@@ -10,6 +10,7 @@ import {
 import { vi } from 'vitest';
 import { EventCardLapsComponent } from './event.card.laps.component';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
+import { LoggerService } from '../../../services/logger.service';
 
 function createActivity(laps: LapInterface[]): ActivityInterface {
     return {
@@ -22,13 +23,16 @@ function createActivity(laps: LapInterface[]): ActivityInterface {
 describe('EventCardLapsComponent', () => {
     let component: EventCardLapsComponent;
     let fixture: ComponentFixture<EventCardLapsComponent>;
+    const logger = { log: vi.fn() };
 
     beforeEach(async () => {
+        logger.log.mockReset();
         await TestBed.configureTestingModule({
             declarations: [EventCardLapsComponent],
             providers: [
                 { provide: AppEventColorService, useValue: {} },
                 { provide: ChangeDetectorRef, useValue: { markForCheck: vi.fn(), detectChanges: vi.fn() } },
+                { provide: LoggerService, useValue: logger },
             ],
             schemas: [NO_ERRORS_SCHEMA],
         }).compileComponents();
@@ -62,5 +66,10 @@ describe('EventCardLapsComponent', () => {
 
         expect(component.availableLapTypes).toEqual([]);
         expect(component.getDataSource(activity, LapTypes.session_end)).toBeUndefined();
+        expect(logger.log).toHaveBeenCalledWith('[EventCardLapsComponent] resolved lap types', {
+            activityLapTypes: [{ activityID: 'activity-1', lapTypes: [LapTypes.session_end] }],
+            filteredLapTypes: [LapTypes.session_end],
+            availableLapTypes: [],
+        });
     });
 });

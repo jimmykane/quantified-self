@@ -24,10 +24,13 @@ import {
   XAxisTypes
 } from '@sports-alliance/sports-lib';
 import { AppEventColorService } from '../services/color/app.event.color.service';
+import { buildAllowedEventLapTypeSet, normalizeEventLapType } from './event-lap-type.helper';
 import { applyEventChartCanonicalOrderOverride } from './event-chart-order.helper';
 import { resolveEventColorGroupKey, resolveEventSeriesColor } from './event-echarts-style.helper';
 import { EventChartRange, normalizeEventRange } from './event-echarts-xaxis.helper';
 import { normalizeUnitDerivedTypeLabel } from './stat-label.helper';
+
+export { normalizeEventLapType } from './event-lap-type.helper';
 
 export interface EventChartPoint {
   x: number;
@@ -86,20 +89,6 @@ export interface BuildEventChartPanelsInput {
   userUnitSettings: UserUnitSettingsInterface;
   eventColorService: AppEventColorService;
 }
-
-const LAP_TYPE_ALIASES = LapTypes as unknown as Record<string, string>;
-const NORMALIZED_LAP_TYPE_ALIASES = new Map<string, string>([
-  ['auto', LapTypes.AutoLap],
-  ['autolap', LapTypes.AutoLap],
-  ['auto lap', LapTypes.AutoLap],
-  ['manual', LapTypes.Manual],
-  ['distance', LapTypes.Distance],
-  ['time', LapTypes.Time],
-  ['location', LapTypes.Location],
-  ['interval', LapTypes.Interval],
-  ['heart rate', LapTypes.HeartRate],
-  ['heartrate', LapTypes.HeartRate],
-]);
 
 const EMPTY_PANEL_DOMAIN = { minX: 0, maxX: 1 };
 const EVENT_ZOOM_OVERVIEW_BUCKET_COUNT = 96;
@@ -306,7 +295,7 @@ export function buildEventLapMarkers(input: {
   lapTypes: LapTypes[];
   eventColorService: AppEventColorService;
 }): EventChartLapMarker[] {
-  const lapTypeSet = new Set((input.lapTypes || []).map((lapType) => normalizeEventLapType(lapType)));
+  const lapTypeSet = buildAllowedEventLapTypeSet(input.lapTypes || []);
   const markers: EventChartLapMarker[] = [];
 
   input.selectedActivities.forEach((activity) => {
@@ -349,18 +338,6 @@ export function buildEventLapMarkers(input: {
   });
 
   return markers.sort((left, right) => left.xValue - right.xValue);
-}
-
-export function normalizeEventLapType(lapType: unknown): string {
-  const rawValue = `${lapType ?? ''}`.trim();
-  if (!rawValue) {
-    return '';
-  }
-
-  const normalizedLookupKey = rawValue.toLowerCase();
-  return NORMALIZED_LAP_TYPE_ALIASES.get(normalizedLookupKey)
-    || LAP_TYPE_ALIASES[rawValue]
-    || rawValue;
 }
 
 function getFilteredStreams(input: {

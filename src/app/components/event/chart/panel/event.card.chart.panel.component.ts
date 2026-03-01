@@ -24,8 +24,8 @@ import { isDarkChartThemeActive } from '../../../../helpers/echarts-theme.helper
 import {
   EventChartLapMarker,
   EventChartPanelModel,
-  normalizeEventLapType
 } from '../../../../helpers/event-echarts-data.helper';
+import { buildAllowedEventLapTypeSet, normalizeEventLapType } from '../../../../helpers/event-lap-type.helper';
 import {
   buildEventCanonicalXAxisScaleOptions,
   EventChartRange,
@@ -384,7 +384,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     if (!this.lapTypes || this.lapTypes.length === 0) {
       return true;
     }
-    const allowedLapTypes = new Set(this.lapTypes.map((lapType) => normalizeEventLapType(lapType)));
+    const allowedLapTypes = buildAllowedEventLapTypeSet(this.lapTypes);
     return allowedLapTypes.has(normalizeEventLapType(marker.lapType));
   }
 

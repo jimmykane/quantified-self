@@ -8,7 +8,7 @@ import { LoggerService } from '../../../services/logger.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppActivityCursorService } from '../../../services/activity-cursor/app-activity-cursor.service';
 import { AppThemeService } from '../../../services/app.theme.service';
-import { AppThemes, DynamicDataLoader } from '@sports-alliance/sports-lib';
+import { AppThemes, DynamicDataLoader, LapTypes } from '@sports-alliance/sports-lib';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import { MarkerFactoryService } from '../../../services/map/marker-factory.service';
 import { MapboxLoaderService } from '../../../services/mapbox-loader.service';
@@ -313,5 +313,40 @@ describe('EventCardMapComponent', () => {
 
     expect(options.title).toContain('Speed: 15.4 km/h');
     conversionSpy.mockRestore();
+  });
+
+  it('should normalize configured lap types the same way as chart filtering', () => {
+    component.selectedActivities = [{
+      startDate: new Date('2025-01-01T10:00:00Z'),
+      hasPositionData: () => true,
+      getSquashedPositionData: (start?: Date, end?: Date) => {
+        if (start && end) {
+          return [{ latitudeDegrees: 40.2, longitudeDegrees: 22.2 }];
+        }
+        return [
+          { latitudeDegrees: 40.1, longitudeDegrees: 22.1 },
+          { latitudeDegrees: 40.2, longitudeDegrees: 22.2 },
+        ];
+      },
+      generateTimeStream: () => ({
+        getData: () => [0, 60],
+      }),
+      getLaps: () => [
+        {
+          type: 'auto',
+          startDate: new Date('2025-01-01T10:00:00Z'),
+          endDate: new Date('2025-01-01T10:01:00Z'),
+        },
+      ],
+      getAllEvents: () => [],
+    }] as any;
+    component.lapTypes = [LapTypes.AutoLap];
+    component.showLaps = true;
+    (component as any).processSequence = 1;
+
+    (component as any).mapActivities(1, false);
+
+    expect(component.activitiesMapData).toHaveLength(1);
+    expect(component.activitiesMapData[0].laps).toHaveLength(1);
   });
 });

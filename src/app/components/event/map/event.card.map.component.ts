@@ -51,6 +51,7 @@ import {
   EventCursorRenderData,
   EventTrackRenderData,
 } from './event-card-map.manager';
+import { buildAllowedEventLapTypeSet, normalizeEventLapType } from '../../../helpers/event-lap-type.helper';
 
 interface MapViewSettingsState {
   showLaps: boolean;
@@ -590,6 +591,8 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     let totalLaps = 0;
     let totalJumps = 0;
 
+    const allowedLapTypes = buildAllowedEventLapTypeSet(this.lapTypes);
+
     this.selectedActivities.forEach((activity) => {
       activitiesProcessed++;
       if (!activity.hasPositionData()) return;
@@ -613,7 +616,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       const laps = activity.getLaps().reduce<any[]>((lapsArray, lap) => {
         const lapPositionData = activity.getSquashedPositionData(lap.startDate, lap.endDate);
         if (!lapPositionData.length || !this.showLaps) return lapsArray;
-        if (this.lapTypes.indexOf(lap.type) === -1) return lapsArray;
+        if (allowedLapTypes.size > 0 && !allowedLapTypes.has(normalizeEventLapType(lap.type))) return lapsArray;
         lapsArray.push({
           lap,
           lapPosition: {
