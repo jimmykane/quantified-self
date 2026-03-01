@@ -42,6 +42,7 @@ import { AppBreakpoints } from '../../../constants/breakpoints';
 import {
   buildEventChartPanels,
   buildEventLapMarkers,
+  buildEventZoomOverviewData,
   EventChartLapMarker,
   EventChartPanelModel,
 } from '../../../helpers/event-echarts-data.helper';
@@ -84,6 +85,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   public dataTypeLegendItems: EventDataTypeLegendItem[] = [];
   public lapMarkers: EventChartLapMarker[] = [];
   public xDomain: EventChartRange | null = null;
+  public zoomBarOverviewData: Array<[number, number]> = [];
   public renderedXAxisType: XAxisTypes = XAxisTypes.Duration;
   public showDateOnTimeAxis = false;
   public zoomSyncGroupId: string | null = null;
@@ -337,6 +339,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
 
       const globalDomain = this.resolveGlobalDomain(this.allChartPanels);
       this.xDomain = globalDomain;
+      this.updateZoomBarOverviewData(globalDomain);
       this.showDateOnTimeAxis = this.resolveShowDateOnTimeAxis(globalDomain, effectiveXAxisType);
 
       if (source === 'ngOnChanges' && this.chartPanels.length === 0) {
@@ -349,6 +352,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       this.dataTypeLegendItems = [];
       this.lapMarkers = [];
       this.xDomain = null;
+      this.zoomBarOverviewData = [];
       this.showDateOnTimeAxis = false;
       this.renderedXAxisType = resolveEventChartXAxisType(this.event, this.xAxisType);
       this.zoomSyncGroupId = this.resolveZoomSyncGroupID(this.event);
@@ -444,6 +448,11 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
         : LEGEND_MUTED_DOT_COLOR,
       visible: visibleDataTypeIDs.has(panel.dataType),
     }));
+    this.updateZoomBarOverviewData();
+  }
+
+  private updateZoomBarOverviewData(domain: EventChartRange | null = this.xDomain ?? this.resolveGlobalDomain(this.allChartPanels)): void {
+    this.zoomBarOverviewData = buildEventZoomOverviewData(this.chartPanels, domain);
   }
 
   private getPersistedVisibleDataTypeIDs(): string[] {
