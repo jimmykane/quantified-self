@@ -189,6 +189,11 @@ describe('EventCardChartPanelComponent', () => {
   it('renders zoom-bar-only mode when panel is null and showZoomBar is true', async () => {
     component.panel = null;
     component.showZoomBar = true;
+    component.zoomBarOverviewData = [
+      [0, 0.25],
+      [60, 0.8],
+      [120, 0.35],
+    ];
     fixture.detectChanges();
     await component.ngAfterViewInit();
 
@@ -198,6 +203,12 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.dataZoom?.[0]?.type).toBe('slider');
     expect(option?.dataZoom?.[0]?.show).toBe(true);
     expect(option?.dataZoom?.[0]?.filterMode).toBe('filter');
+    expect(option?.dataZoom?.[0]?.showDataShadow).toBe(true);
+    expect(option?.dataZoom?.[0]?.showDetail).toBe(true);
+    expect(option?.dataZoom?.[0]?.height).toBe(24);
+    expect(option?.dataZoom?.[0]?.handleSize).toBe(24);
+    expect(option?.series?.[0]?.data).toEqual(component.zoomBarOverviewData);
+    expect(option?.dataZoom?.[0]?.labelFormatter(65)).toBe('01:05');
   });
 
   it('renders empty-axis no-data option without joining a zoom group when panel is null outside zoom mode', async () => {

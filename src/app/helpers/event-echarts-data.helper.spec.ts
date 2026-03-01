@@ -17,6 +17,7 @@ import {
   buildEventChartPanels,
   buildEventLapMarkers,
   buildEventLegendItems,
+  buildEventZoomOverviewData,
   normalizeEventLapType
 } from './event-echarts-data.helper';
 import { AppDataColors } from '../services/color/app.data.colors';
@@ -209,6 +210,40 @@ describe('event-echarts-data.helper', () => {
       { activityID: 'a', label: 'Garmin', color: '#111111' },
       { activityID: 'b', label: 'Coros', color: '#222222' },
     ]);
+  });
+
+  it('builds normalized lightweight zoom overview data from visible panels', () => {
+    const overview = buildEventZoomOverviewData([
+      {
+        dataType: DataPower.type,
+        displayName: 'Power',
+        unit: 'W',
+        colorGroupKey: 'Power',
+        minX: 0,
+        maxX: 100,
+        series: [
+          {
+            id: 'a1::power',
+            activityID: 'a1',
+            activityName: 'Garmin',
+            color: '#ff0000',
+            streamType: DataPower.type,
+            displayName: 'Power',
+            unit: 'W',
+            points: [
+              { x: 0, y: 100, time: 0 },
+              { x: 50, y: 200, time: 50 },
+              { x: 100, y: 150, time: 100 },
+            ],
+          }
+        ]
+      }
+    ] as any, { start: 0, end: 100 }, 5);
+
+    expect(overview).toHaveLength(5);
+    expect(overview[0][0]).toBe(0);
+    expect(overview[4][0]).toBe(100);
+    expect(Math.max(...overview.map((point) => point[1]))).toBeGreaterThan(0);
   });
 
   it('applies deterministic multi-activity color variants per datatype panel', () => {
