@@ -393,6 +393,7 @@ export class AppUserUtilities {
         settings.mapSettings.mapStyle = settings.mapSettings.mapStyle || 'default';
         settings.mapSettings.is3D = settings.mapSettings.is3D === true;
         settings.mapSettings.strokeWidth = settings.mapSettings.strokeWidth || AppUserUtilities.getDefaultMapStrokeWidth();
+        delete (settings.mapSettings as any).showPoints;
         // MyTracks
         settings.myTracksSettings = settings.myTracksSettings || <UserMyTracksSettingsInterface>{};
         settings.myTracksSettings.dateRange = isNumber(settings.myTracksSettings.dateRange)

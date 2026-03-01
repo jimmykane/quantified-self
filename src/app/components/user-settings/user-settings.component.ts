@@ -228,7 +228,6 @@ export class UserSettingsComponent implements OnChanges {
       mapStrokeWidth: new UntypedFormControl(this.user.settings.mapSettings.strokeWidth, []),
       showMapLaps: new UntypedFormControl(this.user.settings.mapSettings.showLaps, []),
       showMapArrows: new UntypedFormControl(this.user.settings.mapSettings.showArrows, []),
-      showMapPoints: new UntypedFormControl(this.user.settings.mapSettings.showPoints ?? true, []),
       mapLapTypes: new UntypedFormControl(this.user.settings.mapSettings.lapTypes, []),
       eventsPerPage: new UntypedFormControl(this.user.settings.dashboardSettings.tableSettings.eventsPerPage, [
         Validators.required,
@@ -328,7 +327,6 @@ export class UserSettingsComponent implements OnChanges {
             showLaps: this.userSettingsFormGroup.get('showMapLaps').value,
 
             showArrows: this.userSettingsFormGroup.get('showMapArrows').value,
-            showPoints: this.userSettingsFormGroup.get('showMapPoints').value,
             lapTypes: this.userSettingsFormGroup.get('mapLapTypes').value,
             mapType: this.userSettingsFormGroup.get('mapType').value,
             strokeWidth: this.userSettingsFormGroup.get('mapStrokeWidth').value

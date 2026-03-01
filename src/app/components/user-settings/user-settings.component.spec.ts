@@ -305,6 +305,17 @@ describe('UserSettingsComponent', () => {
         expect(payload.brandText).toBe('Grace Brand');
     });
 
+    it('should not include legacy showPoints in saved map settings', async () => {
+        const userService = TestBed.inject(AppUserService);
+        const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
+
+        component.ngOnChanges();
+        await component.onSubmit(new Event('submit'));
+
+        const payload = updateUserPropertiesSpy.mock.calls[0][1];
+        expect(payload.settings.mapSettings.showPoints).toBeUndefined();
+    });
+
     it('should reject brandText values longer than 30 chars after trim', async () => {
         const userService = TestBed.inject(AppUserService);
         const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);

@@ -198,6 +198,19 @@ describe('AppUserUtilities', () => {
             expect((settings.myTracksSettings as any)?.showJumpHeatmap).toBe(false);
         });
 
+        it('should remove legacy mapSettings.showPoints', () => {
+            const user = {
+                settings: {
+                    mapSettings: {
+                        showPoints: true
+                    }
+                }
+            } as any;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+            expect((settings.mapSettings as any)?.showPoints).toBeUndefined();
+        });
+
         it('should migrate legacy Spiral dashboard tiles to LinesVertical', () => {
             const user = {
                 settings: {
