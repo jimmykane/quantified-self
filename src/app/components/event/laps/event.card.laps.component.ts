@@ -2,12 +2,20 @@ import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges
 import { MatTableDataSource } from '@angular/material/table';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
-import { DataTableAbstractDirective } from '../../data-table/data-table-abstract.directive';
+import { DataTableAbstractDirective, StatRowElement } from '../../data-table/data-table-abstract.directive';
 import { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { LapTypes } from '@sports-alliance/sports-lib';
 import { DataHeartRateMax } from '@sports-alliance/sports-lib';
 import { isNumber } from '@sports-alliance/sports-lib';
+
+const FILTERED_LAP_TYPES: readonly LapTypes[] = [LapTypes.session_end];
+
+interface LapTableRow extends StatRowElement {
+  '#': number;
+  Type: LapTypes;
+  'Maximum Heart Rate': string;
+}
 
 @Component({
   selector: 'app-event-card-laps',
@@ -25,7 +33,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
 
   public availableLapTypes: LapTypes[] = []
 
-  public dataSourcesMap = new Map<string, MatTableDataSource<any>>();
+  public dataSourcesMap = new Map<string, MatTableDataSource<LapTableRow>>();
   public columnsMap = new Map<string, string[]>();
 
   constructor(public eventColorService: AppEventColorService, protected changeDetectorRef: ChangeDetectorRef) {
@@ -41,9 +49,17 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     this.availableLapTypes = [];
     if (this.selectedActivities) {
       this.selectedActivities.forEach(activity => {
-        this.availableLapTypes = [...new Set(this.availableLapTypes.concat(activity.getLaps().map(lap => lap.type)))];
+        this.availableLapTypes = [...new Set(this.availableLapTypes.concat(
+          activity.getLaps()
+            .map(lap => lap.type)
+            .filter(lapType => this.shouldShowLapType(lapType))
+        ))];
       });
     }
+  }
+
+  private shouldShowLapType(lapType: LapTypes): boolean {
+    return !FILTERED_LAP_TYPES.includes(lapType);
   }
 
   private updateData() {
@@ -72,29 +88,33 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     return `${activity.getID()}-${lapType}`;
   }
 
-  private generateLapData(activity: ActivityInterface, lapType: LapTypes) {
-    return activity.getLaps().filter(lap => lap.type === lapType).reduce((lapDataArray, lap, index) => {
+  private generateLapData(activity: ActivityInterface, lapType: LapTypes): LapTableRow[] {
+    return activity.getLaps().filter(lap => lap.type === lapType).reduce<LapTableRow[]>((lapDataArray, lap, index) => {
       const statRowElement = this.getStatsRowElement(lap.getStatsAsArray(), [activity.type], this.unitSettings);
-      statRowElement['#'] = index + 1;
-      statRowElement['Type'] = lap.type;
       const maxHR = lap.getStat(DataHeartRateMax.type);
-      statRowElement['Duration'] = lap.getDuration().getDisplayValue(false, true, true);
+      const row: LapTableRow = {
+        ...statRowElement,
+        '#': index + 1,
+        Type: lap.type,
+        Duration: lap.getDuration().getDisplayValue(false, true, true),
+        'Maximum Heart Rate': maxHR ? `${maxHR.getDisplayValue()} ${maxHR.getDisplayUnit()}` : '',
+      };
 
-      statRowElement['Maximum Heart Rate'] = maxHR ? `${maxHR.getDisplayValue()} ${maxHR.getDisplayUnit()}` : '';
-      lapDataArray.push(statRowElement);
+      lapDataArray.push(row);
       return lapDataArray;
     }, []);
   }
 
-  private calculateColumns(dataSource: MatTableDataSource<any>): string[] {
+  private calculateColumns(dataSource: MatTableDataSource<LapTableRow>): string[] {
     return this.getColumnsToDisplay().filter(column => {
       return dataSource.data.find(row => {
-        return isNumber(row[column]) || row[column]; // isNumber allow 0's to be accepted
+        const cellValue = row[column as keyof LapTableRow];
+        return isNumber(cellValue) || Boolean(cellValue); // isNumber allow 0's to be accepted
       });
     });
   }
 
-  getDataSource(activity: ActivityInterface, lapType: LapTypes): MatTableDataSource<any> | undefined {
+  getDataSource(activity: ActivityInterface, lapType: LapTypes): MatTableDataSource<LapTableRow> | undefined {
     return this.dataSourcesMap.get(this.getKey(activity, lapType));
   }
 
