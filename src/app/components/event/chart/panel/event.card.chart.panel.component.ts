@@ -238,41 +238,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       data: this.getSeriesLineData(series.points)
     }));
 
-    if (this.showLaps && this.lapMarkers.length > 0 && seriesOptions[0]) {
-      seriesOptions[0].markLine = {
-        symbol: 'none',
-        silent: false,
-        animation: false,
-        label: {
-          show: false,
-        },
-        tooltip: {
-          show: false,
-        },
-        lineStyle: {
-          type: 'dashed',
-          width: 1,
-          color: darkTheme ? 'rgba(255,255,255,0.26)' : 'rgba(0,0,0,0.30)',
-        },
-        data: this.lapMarkers
-          .filter((marker) => this.shouldDisplayLapMarker(marker))
-          .map((marker) => ({
-            xAxis: marker.xValue,
-            xValue: marker.xValue,
-            name: marker.label,
-            value: marker.xValue,
-            lapNumber: marker.lapNumber,
-            lapType: marker.lapType,
-            tooltipTitle: marker.tooltipTitle,
-            tooltipDetails: marker.tooltipDetails,
-            lineStyle: {
-              color: marker.color,
-              type: 'dashed',
-              width: 1,
-              opacity: 0.45,
-            },
-          }))
-      };
+    if (seriesOptions[0]) {
+      seriesOptions[0].markLine = this.buildLapMarkLine(darkTheme);
     }
 
     const hasPaceSeries = panel.series.some((series) => /pace/i.test(series.streamType));
@@ -372,6 +339,45 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       ],
       series: seriesOptions
     } as ChartOption;
+  }
+
+  private buildLapMarkLine(darkTheme: boolean): Record<string, unknown> {
+    return {
+      symbol: 'none',
+      silent: false,
+      animation: false,
+      label: {
+        show: false,
+      },
+      tooltip: {
+        show: false,
+      },
+      lineStyle: {
+        type: 'dashed',
+        width: 1,
+        color: darkTheme ? 'rgba(255,255,255,0.26)' : 'rgba(0,0,0,0.30)',
+      },
+      data: this.showLaps
+        ? this.lapMarkers
+          .filter((marker) => this.shouldDisplayLapMarker(marker))
+          .map((marker) => ({
+            xAxis: marker.xValue,
+            xValue: marker.xValue,
+            name: marker.label,
+            value: marker.xValue,
+            lapNumber: marker.lapNumber,
+            lapType: marker.lapType,
+            tooltipTitle: marker.tooltipTitle,
+            tooltipDetails: marker.tooltipDetails,
+            lineStyle: {
+              color: marker.color,
+              type: 'dashed',
+              width: 1,
+              opacity: 0.45,
+            },
+          }))
+        : []
+    };
   }
 
   private shouldDisplayLapMarker(marker: EventChartLapMarker): boolean {

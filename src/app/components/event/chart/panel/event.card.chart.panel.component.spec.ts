@@ -364,6 +364,38 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.series?.[0]?.markLine?.tooltip).toEqual({ show: false });
   });
 
+  it('clears lap markers when showLaps is toggled off', async () => {
+    component.showZoomBar = false;
+    component.showLaps = true;
+    component.lapMarkers = [
+      {
+        xValue: 5,
+        label: 'Lap 1',
+        color: '#00ff00',
+        lapType: LapTypes.Manual,
+        lapNumber: 1,
+        activityID: 'a1',
+        activityName: 'Garmin',
+        tooltipTitle: 'Lap 1',
+        tooltipDetails: [],
+      }
+    ];
+    fixture.detectChanges();
+    await component.ngAfterViewInit();
+
+    let option = getRenderedOption();
+    expect(option?.series?.[0]?.markLine?.data).toHaveLength(1);
+
+    eChartsLoaderMock.setOption.mockClear();
+    component.showLaps = false;
+    component.ngOnChanges({
+      showLaps: new SimpleChange(true, false, false),
+    });
+
+    option = eChartsLoaderMock.setOption.mock.calls.findLast(([, candidate]) => candidate?.series)?.[1] as any;
+    expect(option?.series?.[0]?.markLine?.data).toEqual([]);
+  });
+
   it('formats lap marker tooltip content from markLine data', async () => {
     component.showZoomBar = false;
     component.showLaps = true;
