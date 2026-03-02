@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { CommonModule } from '@angular/common';
+import { MatBadgeModule } from '@angular/material/badge';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
@@ -28,6 +29,7 @@ describe('EventCardChartActionsComponent', () => {
       imports: [
         CommonModule,
         BrowserAnimationsModule,
+        MatBadgeModule,
         MatButtonModule,
         MatDividerModule,
         MatIconModule,
@@ -124,5 +126,15 @@ describe('EventCardChartActionsComponent', () => {
     component.onShowAllSeries();
 
     expect(emitSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('should expose a visible/total badge label for the series trigger', () => {
+    component.seriesMenuItems = [
+      { dataType: 'speed', label: 'Speed', color: '#111111', visible: true },
+      { dataType: 'power', label: 'Power', color: '#222222', visible: false },
+      { dataType: 'heart-rate', label: 'Heart Rate', color: '#333333', visible: true },
+    ];
+
+    expect(component.seriesBadgeLabel).toBe('2/3');
   });
 });

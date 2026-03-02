@@ -639,6 +639,7 @@ mat-table {
 
   &::-webkit-scrollbar-track {
     background: transparent;
+    border-radius: 999px;
   }
 
   &::-webkit-scrollbar-thumb {
@@ -654,6 +655,15 @@ mat-table {
 
   &::-webkit-scrollbar-thumb:active {
     background-color: color-mix(in srgb, var(--mat-sys-on-surface) 56%, transparent);
+  }
+
+  &::-webkit-scrollbar-track-piece {
+    border-radius: 999px;
+  }
+
+  &::-webkit-scrollbar-corner {
+    background: transparent;
+    border-radius: 999px;
   }
 }
 
@@ -873,9 +883,11 @@ tr.mat-row:focus,
 /* Base menu panel style applied globally via MAT_MENU_DEFAULT_OPTIONS */
 .mat-mdc-menu-panel.qs-menu-panel {
   @extend .qs-glass-card-panel;
+  @include qs-scrollbar-skin;
   background: var(--mat-sys-surface) !important;
   min-width: 180px !important;
   max-width: min(360px, calc(100vw - 24px)) !important;
+  overflow: hidden !important;
 }
 
 /* Form-heavy menu panels */
@@ -887,6 +899,9 @@ tr.mat-row:focus,
 
 .mat-mdc-menu-panel.qs-menu-panel .mat-mdc-menu-content {
   @extend .qs-scrollbar;
+  overflow: auto;
+  max-height: inherit;
+  border-radius: inherit;
   padding: 6px 0;
 }
 
@@ -896,6 +911,18 @@ tr.mat-row:focus,
 
 .qs-action-menu-trigger .mat-icon {
   margin-right: 4px;
+}
+
+.qs-action-menu-icon-button {
+  color: var(--mat-sys-on-surface);
+  width: 40px;
+  height: 40px;
+  padding: 8px;
+  border-radius: 10px !important;
+}
+
+.qs-action-menu-icon-button .mat-icon {
+  margin: 0;
 }
 
 /* Section/Item Layout for menus used for settings */

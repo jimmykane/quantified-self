@@ -132,6 +132,7 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.xAxis?.min).toBe(0);
     expect(option?.xAxis?.max).toBe(120);
     expect(option?.xAxis?.interval).toBe(15);
+    expect(option?.yAxis?.interval).toBe(5);
     expect(option?.tooltip?.triggerOn).toBe('mousemove|click');
     expect(option?.brush?.brushMode).toBe('single');
     expect(option?.dataZoom?.[0]?.zoomOnMouseWheel).toBe(false);
@@ -143,7 +144,7 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.dataZoom?.[1]?.filterMode).toBe('filter');
   });
 
-  it('recomputes canonical x-axis interval from the zoomed visible range', async () => {
+  it('recomputes canonical x-axis interval and visible-range y-axis scale from the zoomed visible range', async () => {
     component.xDomain = { start: 0, end: 3600 };
     chart.getOption.mockReturnValue({
       dataZoom: [
@@ -163,7 +164,8 @@ describe('EventCardChartPanelComponent', () => {
     eChartsLoaderMock.setOption.mockClear();
     dataZoomHandler();
 
-    expect(eChartsLoaderMock.setOption).toHaveBeenCalledWith(
+    expect(eChartsLoaderMock.setOption).toHaveBeenNthCalledWith(
+      1,
       chart,
       {
         xAxis: {
@@ -171,6 +173,23 @@ describe('EventCardChartPanelComponent', () => {
           minInterval: 60,
           maxInterval: 60,
           splitNumber: 6,
+        }
+      },
+      {
+        notMerge: false,
+        lazyUpdate: true,
+        silent: true,
+      }
+    );
+    expect(eChartsLoaderMock.setOption).toHaveBeenNthCalledWith(
+      2,
+      chart,
+      {
+        yAxis: {
+          inverse: false,
+          interval: 5,
+          min: 95,
+          max: 125,
         }
       },
       {

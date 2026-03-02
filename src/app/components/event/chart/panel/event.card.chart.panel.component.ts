@@ -287,9 +287,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const tooltipBackgroundColor = darkTheme ? '#303030' : '#ffffff';
     const tooltipBorderColor = darkTheme ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.12)';
     const domain = this.getActiveDomain();
+    const visibleRange = this.getVisibleXAxisRange();
     const yAxisConfig = buildEventPanelYAxisConfig({
       panel,
-      visibleRange: null,
+      visibleRange,
       extraMaxForPower: this.extraMaxForPower,
       extraMaxForPace: this.extraMaxForPace,
     });
@@ -388,6 +389,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         inverse: yAxisConfig.inverse || hasPaceSeries,
         min: yAxisConfig.min,
         max: yAxisConfig.max,
+        interval: yAxisConfig.interval,
         axisLine: {
           lineStyle: { color: axisColor }
         },
@@ -549,6 +551,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     chart.on('datazoom', () => {
       if (this.panel) {
         this.applyCanonicalXAxisScale();
+        this.applyCanonicalYAxisScale();
       }
       if (this.showZoomBar && !this.applyingSharedZoomRange) {
         this.emitVisibleZoomRange();
@@ -812,7 +815,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           xAxisIndex: 0,
           show: this.zoomBarVisibleForViewport,
           left: 12,
-          right: 12,
+          right: 44,
           top: 8,
           height: ZOOM_BAR_SLIDER_HEIGHT,
           filterMode: 'filter',
@@ -1004,6 +1007,32 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     this.chartHost.setOption({
       xAxis: scaleOptions,
+    }, {
+      notMerge: false,
+      lazyUpdate: true,
+      silent: true,
+    });
+  }
+
+  private applyCanonicalYAxisScale(): void {
+    if (!this.panel) {
+      return;
+    }
+
+    const yAxisConfig = buildEventPanelYAxisConfig({
+      panel: this.panel,
+      visibleRange: this.getVisibleXAxisRange(),
+      extraMaxForPower: this.extraMaxForPower,
+      extraMaxForPace: this.extraMaxForPace,
+    });
+
+    this.chartHost.setOption({
+      yAxis: {
+        inverse: yAxisConfig.inverse,
+        min: yAxisConfig.min,
+        max: yAxisConfig.max,
+        interval: yAxisConfig.interval,
+      },
     }, {
       notMerge: false,
       lazyUpdate: true,

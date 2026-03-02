@@ -1,7 +1,7 @@
 <section class="container">
   <span [matTooltip]="user ? cursorBehaviourTooltip : 'Sign in to use this'">
     <button mat-icon-button type="button"
-      class="event-chart-actions__mode-button"
+      class="qs-action-menu-icon-button event-chart-actions__mode-button"
       [disabled]="!user"
       aria-label="Toggle chart interaction mode"
       (click)="onCursorBehaviourToggle()">
@@ -10,24 +10,34 @@
   </span>
 
   @if (showSeriesMenu) {
-  <button mat-stroked-button class="qs-action-menu-trigger qs-glass-card-panel glass-card" [matMenuTriggerFor]="seriesMenu"
-    aria-label="Series visibility">
-    <mat-icon>stacked_line_chart</mat-icon>
-    <span>Series</span>
-    <span class="series-menu__summary-count">{{ visibleSeriesCount }}/{{ totalSeriesCount }}</span>
-  </button>
+  <span [matTooltip]="seriesMenuSummary || 'Series visibility'">
+    <button mat-icon-button type="button"
+      class="qs-action-menu-icon-button event-chart-actions__icon-button"
+      [matMenuTriggerFor]="seriesMenu"
+      aria-label="Series visibility">
+      <mat-icon
+        [matBadge]="seriesBadgeLabel"
+        [matBadgeHidden]="!totalSeriesCount"
+        matBadgeSize="small"
+        matBadgeColor="primary"
+        matBadgePosition="above after"
+        matBadgeOverlap="true"
+        aria-hidden="false">stacked_line_chart</mat-icon>
+    </button>
+  </span>
   }
 
   <span [matTooltip]="user ? 'Chart options' : 'Sign in to use this'">
-    <button mat-stroked-button class="qs-action-menu-trigger qs-glass-card-panel glass-card" [matMenuTriggerFor]="optionsMenu" [disabled]="!user"
+    <button mat-icon-button type="button"
+      class="qs-action-menu-icon-button event-chart-actions__icon-button"
+      [matMenuTriggerFor]="optionsMenu" [disabled]="!user"
       aria-label="Chart options">
       <mat-icon>tune</mat-icon>
-      Options
     </button>
   </span>
 </section>
 
-<mat-menu #seriesMenu="matMenu" xPosition="before">
+<mat-menu #seriesMenu="matMenu" xPosition="before" class="qs-menu-panel">
   <div class="series-menu" (click)="$event.stopPropagation()">
     @for (item of seriesMenuItems; track item.dataType) {
     <button type="button" class="series-menu__item" [attr.aria-pressed]="item.visible"

@@ -1,4 +1,4 @@
-import { DataEffortPace, DataPace, DataPower } from '@sports-alliance/sports-lib';
+import { DataCadence, DataEffortPace, DataPace, DataPower } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import {
   buildEventPanelYAxisConfig,
@@ -43,6 +43,7 @@ describe('event-echarts-yaxis.helper', () => {
     expect(config.inverse).toBe(false);
     expect(config.min).toBeLessThanOrEqual(100);
     expect(config.max).toBeGreaterThan(200);
+    expect(config.interval).toBeDefined();
   });
 
   it('handles single-point ranges safely', () => {
@@ -108,5 +109,19 @@ describe('event-echarts-yaxis.helper', () => {
     expect(config.inverse).toBe(false);
     expect(config.min).toBeLessThanOrEqual(0);
     expect(config.max).toBeGreaterThan(499);
+  });
+
+  it('snaps non-pace axes to a logical interval instead of keeping an odd raw max label', () => {
+    const config = buildEventPanelYAxisConfig({
+      panel: buildPanel(DataCadence.type, [30, 60, 90, 117]),
+      visibleRange: null,
+      extraMaxForPower: 0,
+      extraMaxForPace: -0.25,
+    });
+
+    expect(config.inverse).toBe(false);
+    expect(config.interval).toBe(15);
+    expect(config.max).toBe(120);
+    expect(config.max).not.toBe(140);
   });
 });

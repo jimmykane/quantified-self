@@ -53,6 +53,13 @@ export class EventCardChartActionsComponent implements OnChanges {
     return this.seriesMenuItems.length;
   }
 
+  public get seriesBadgeLabel(): string {
+    if (!this.totalSeriesCount) {
+      return '';
+    }
+    return `${this.visibleSeriesCount}/${this.totalSeriesCount}`;
+  }
+
   public get xAxisOptions(): MenuRadioListOption<XAxisTypes>[] {
     return Object.entries(this.xAxisTypes).map(([label, value]) => ({
       label,

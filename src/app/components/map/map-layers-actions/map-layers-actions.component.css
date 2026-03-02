@@ -3,10 +3,6 @@ section.map-actions {
   justify-content: flex-end;
 }
 
-section.map-actions > span > button[mat-stroked-button] {
-  border-radius: 10px !important;
-}
-
 .map-layer-toggle {
   width: 100%;
 }

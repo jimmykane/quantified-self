@@ -14,24 +14,6 @@ section.container {
   width: 100%;
 }
 
-section.container > button[mat-stroked-button],
-section.container > span > button[mat-stroked-button] {
-  border-radius: 10px !important;
-}
-
-.series-menu__summary-count {
-  font-family: 'Barlow Condensed', sans-serif;
-  padding-left: 4px;
-}
-
-.event-chart-actions__mode-button {
-  color: var(--mat-sys-on-surface);
-  width: 40px;
-  height: 40px;
-  padding: 8px;
-  border-radius: 10px !important;
-}
-
 .series-menu {
   display: grid;
   gap: 4px;
@@ -82,15 +64,6 @@ section.container > span > button[mat-stroked-button] {
 
 .chart-option-toggle {
   width: 100%;
-}
-
-section[mat-menu-item] {
-  height: auto;
-  min-height: unset;
-}
-
-section[mat-menu-item]:hover {
-  background: transparent;
 }
 
 @include xsmall {
