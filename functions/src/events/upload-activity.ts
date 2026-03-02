@@ -158,10 +158,14 @@ async function verifyFirebaseUserIDFromAuthorizationHeader(
   }
 
   try {
-    const decodedToken = await admin.auth().verifyIdToken(token);
+    const decodedToken = await admin.auth().verifyIdToken(token, true);
     return decodedToken.uid;
   } catch (error) {
     logger.warn('[uploadActivity] Firebase ID token verification failed', error);
+    const authErrorCode = (error as { code?: string } | undefined)?.code;
+    if (authErrorCode === 'auth/id-token-revoked' || authErrorCode === 'auth/user-disabled') {
+      throw new HttpStatusError(401, 'Session expired. Please sign in again.');
+    }
     throw new HttpStatusError(401, 'Unauthenticated request.');
   }
 }

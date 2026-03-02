@@ -284,6 +284,21 @@ describe('uploadActivity', () => {
     expect(response.json).toHaveBeenCalledWith({ error: 'Unauthenticated request.' });
   });
 
+  it('should reject revoked firebase auth tokens with a reauth message', async () => {
+    hoisted.mockVerifyIdToken.mockRejectedValueOnce({ code: 'auth/id-token-revoked' });
+    const response = makeResponse();
+    await uploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+      },
+    }) as any, response as any);
+
+    expect(hoisted.mockVerifyIdToken).toHaveBeenCalledWith('token', true);
+    expect(response.status).toHaveBeenCalledWith(401);
+    expect(response.json).toHaveBeenCalledWith({ error: 'Session expired. Please sign in again.' });
+  });
+
   it('should use the verified auth uid for all downstream writes', async () => {
     hoisted.mockVerifyIdToken.mockResolvedValueOnce({ uid: 'verified-user' });
     const response = makeResponse();
@@ -300,7 +315,7 @@ describe('uploadActivity', () => {
       rawBody,
     }) as any, response as any);
 
-    expect(hoisted.mockVerifyIdToken).toHaveBeenCalledWith('token');
+    expect(hoisted.mockVerifyIdToken).toHaveBeenCalledWith('token', true);
     expect(hoisted.mockEventsCountGet).toHaveBeenCalledTimes(1);
     expect(hoisted.mockGenerateEventID).not.toHaveBeenCalled();
     expect(hoisted.mockGenerateActivityID).toHaveBeenCalledWith(expectedEventID, 0);
