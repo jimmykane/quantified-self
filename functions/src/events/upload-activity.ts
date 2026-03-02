@@ -9,6 +9,7 @@ import {
   EventImporterTCX,
   EventInterface,
 } from '@sports-alliance/sports-lib';
+import { createHash } from 'node:crypto';
 import { basename } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import * as xmldom from 'xmldom';
@@ -16,7 +17,7 @@ import * as xmldom from 'xmldom';
 import { ALLOWED_CORS_ORIGINS, ENFORCE_APP_CHECK, hasBasicAccess, hasProAccess } from '../utils';
 import { createParsingOptions } from '../shared/parsing-options';
 import { EventWriter, FirestoreAdapter, StorageAdapter, OriginalFile } from '../shared/event-writer';
-import { generateActivityID, generateEventID } from '../shared/id-generator';
+import { generateActivityID } from '../shared/id-generator';
 import { ProcessingMetaData } from '../shared/processing-metadata.interface';
 import { SPORTS_LIB_VERSION } from '../shared/sports-lib-version.node';
 import { sportsLibVersionToCode } from '../reparse/sports-lib-reparse.service';
@@ -205,13 +206,12 @@ async function getEventCountForUser(userID: string): Promise<number> {
 async function parseUploadedEvent(payload: Buffer, resolvedExtension: string): Promise<EventInterface> {
   const parsingOptions = createParsingOptions();
   const baseExtension = getBaseExtension(resolvedExtension);
-  const payloadForParsing = maybeDecompressPayloadForParsing(payload, resolvedExtension);
 
   if (baseExtension === 'fit') {
-    return EventImporterFIT.getFromArrayBuffer(toArrayBuffer(payloadForParsing), parsingOptions);
+    return EventImporterFIT.getFromArrayBuffer(toArrayBuffer(payload), parsingOptions);
   }
 
-  const text = decodeText(payloadForParsing);
+  const text = decodeText(payload);
   if (baseExtension === 'gpx') {
     return EventImporterGPX.getFromString(text, xmldom.DOMParser, parsingOptions);
   }
@@ -231,6 +231,16 @@ async function parseUploadedEvent(payload: Buffer, resolvedExtension: string): P
   }
 
   throw new HttpStatusError(400, `Unsupported file extension: ${baseExtension}.`);
+}
+
+function generateUploadEventID(payload: Buffer, resolvedExtension: string): string {
+  const baseExtension = getBaseExtension(resolvedExtension);
+
+  return createHash('sha256')
+    .update(baseExtension)
+    .update(':')
+    .update(payload)
+    .digest('hex');
 }
 
 function getFirestoreAdapter(): FirestoreAdapter {
@@ -301,9 +311,11 @@ export const uploadActivity = onRequest({
       throw new HttpStatusError(429, `Upload limit reached for your tier. You have ${currentCount} events. Limit is ${uploadLimit}.`);
     }
 
-    let event;
+    let event: EventInterface;
+    let payloadForParsing: Buffer;
     try {
-      event = await parseUploadedEvent(rawBody, resolvedExtension);
+      payloadForParsing = maybeDecompressPayloadForParsing(rawBody, resolvedExtension);
+      event = await parseUploadedEvent(payloadForParsing, resolvedExtension);
     } catch (error) {
       if (error instanceof HttpStatusError) {
         throw error;
@@ -312,7 +324,7 @@ export const uploadActivity = onRequest({
       throw new HttpStatusError(400, 'Could not parse uploaded payload.');
     }
 
-    const eventID = await generateEventID(userID, event.startDate, 0);
+    const eventID = generateUploadEventID(payloadForParsing, resolvedExtension);
     event.setID(eventID);
 
     const resolvedEventName = resolveEventNameFromHeader(originalFilename);

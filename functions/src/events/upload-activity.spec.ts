@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 
 const hoisted = vi.hoisted(() => {
   const capturedOnRequestOptions = { value: undefined as unknown };
+  const capturedFirestoreAdapter = { value: undefined as unknown };
+  const capturedStorageAdapter = { value: undefined as unknown };
   const mockOnRequest = vi.fn((options: unknown, handler: unknown) => {
     capturedOnRequestOptions.value = options;
     return handler;
@@ -28,6 +31,8 @@ const hoisted = vi.hoisted(() => {
 
   return {
     capturedOnRequestOptions,
+    capturedFirestoreAdapter,
+    capturedStorageAdapter,
     mockOnRequest,
     mockVerifyIdToken,
     mockVerifyAppCheckToken,
@@ -116,9 +121,13 @@ vi.mock('../utils', () => ({
 }));
 
 vi.mock('../shared/event-writer', () => ({
-  EventWriter: vi.fn(() => ({
+  EventWriter: vi.fn((firestoreAdapter: unknown, storageAdapter: unknown) => {
+    hoisted.capturedFirestoreAdapter.value = firestoreAdapter;
+    hoisted.capturedStorageAdapter.value = storageAdapter;
+    return {
     writeAllEventData: (...args: unknown[]) => hoisted.mockWriteAllEventData(...args),
-  })),
+    };
+  }),
 }));
 
 vi.mock('../shared/id-generator', () => ({
@@ -190,9 +199,19 @@ function arrayBufferToBuffer(data: ArrayBuffer): Buffer {
   return Buffer.from(new Uint8Array(data));
 }
 
+function expectedUploadEventID(payload: Buffer, baseExtension: string): string {
+  return createHash('sha256')
+    .update(baseExtension)
+    .update(':')
+    .update(payload)
+    .digest('hex');
+}
+
 describe('uploadActivity', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    hoisted.capturedFirestoreAdapter.value = undefined;
+    hoisted.capturedStorageAdapter.value = undefined;
 
     hoisted.mockVerifyIdToken.mockResolvedValue({ uid: 'user-1' });
     hoisted.mockVerifyAppCheckToken.mockResolvedValue({ appId: 'app-id' });
@@ -310,6 +329,76 @@ describe('uploadActivity', () => {
     }) as any, response as any);
 
     expect(response.status).toHaveBeenCalledWith(400);
+  });
+
+  it('should reject requests when no extension can be resolved', async () => {
+    const response = makeResponse();
+    await uploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+        'X-File-Extension': undefined,
+      },
+    }) as any, response as any);
+
+    expect(response.status).toHaveBeenCalledWith(400);
+    expect(response.json).toHaveBeenCalledWith({ error: 'File extension is required.' });
+  });
+
+  it('should reject filenames without a supported extension when header is missing', async () => {
+    const response = makeResponse();
+    await uploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+        'X-File-Extension': undefined,
+        'X-Original-Filename': 'run',
+      },
+    }) as any, response as any);
+
+    expect(response.status).toHaveBeenCalledWith(400);
+    expect(response.json).toHaveBeenCalledWith({ error: 'File extension is required.' });
+  });
+
+  it('should reject unsupported extensions inferred from the filename', async () => {
+    const response = makeResponse();
+    await uploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+        'X-File-Extension': undefined,
+        'X-Original-Filename': 'run.pdf',
+      },
+    }) as any, response as any);
+
+    expect(response.status).toHaveBeenCalledWith(400);
+    expect(response.json).toHaveBeenCalledWith({ error: 'Unsupported file extension: pdf. Supported: fit, gpx, tcx, json, sml.' });
+  });
+
+  it('should accept lowercase request headers for app check, filename, and extension', async () => {
+    const response = makeResponse();
+    const request = {
+      method: 'POST',
+      rawBody: Buffer.from([0x01, 0x02, 0x03]),
+      header: (name: string) => ({
+        authorization: 'Bearer token',
+        'x-firebase-appcheck': 'app-check',
+        'x-file-extension': 'fit',
+        'x-original-filename': 'lowercase.fit',
+      } as Record<string, string | undefined>)[name],
+    };
+
+    await uploadActivity(request as any, response as any);
+
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(hoisted.mockWriteAllEventData).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({ name: 'lowercase' }),
+      expect.objectContaining({
+        extension: 'fit',
+        originalFilename: 'lowercase.fit',
+      }),
+    );
   });
 
   it('should infer extension from filename when extension header is missing', async () => {
@@ -456,6 +545,9 @@ describe('uploadActivity', () => {
 
   it('should persist parsed FIT and return response', async () => {
     const response = makeResponse();
+    const rawBody = Buffer.from([1, 2, 3, 4]);
+    const expectedEventID = expectedUploadEventID(rawBody, 'fit');
+
     await uploadActivity(makeRequest({
       headers: {
         Authorization: 'Bearer token',
@@ -463,15 +555,11 @@ describe('uploadActivity', () => {
         'X-Original-Filename': 'run.fit',
         'X-File-Extension': 'fit',
       },
-      rawBody: Buffer.from([1, 2, 3, 4]),
+      rawBody,
     }) as any, response as any);
 
-    expect(hoisted.mockGenerateEventID).toHaveBeenCalledWith(
-      'user-1',
-      new Date('2026-01-10T10:00:00.000Z'),
-      0,
-    );
-    expect(hoisted.mockGenerateActivityID).toHaveBeenCalledWith('event-1', 0);
+    expect(hoisted.mockGenerateEventID).not.toHaveBeenCalled();
+    expect(hoisted.mockGenerateActivityID).toHaveBeenCalledWith(expectedEventID, 0);
     expect(hoisted.mockWriteAllEventData).toHaveBeenCalledWith(
       'user-1',
       expect.anything(),
@@ -482,11 +570,73 @@ describe('uploadActivity', () => {
     );
     expect(response.status).toHaveBeenCalledWith(200);
     expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
-      eventId: 'event-1',
+      eventId: expectedEventID,
       activitiesCount: 1,
       uploadLimit: 10,
       uploadCountAfterWrite: 1,
     }));
+  });
+
+  it('should preserve an existing event name when filename stem is empty', async () => {
+    const response = makeResponse();
+    const event = makeParsedEvent();
+    event.name = 'keep-me';
+    hoisted.mockFITImporter.getFromArrayBuffer.mockResolvedValueOnce(event);
+
+    await uploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+        'X-Original-Filename': '   .fit',
+        'X-File-Extension': 'fit',
+      },
+    }) as any, response as any);
+
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(event.name).toBe('keep-me');
+  });
+
+  it('should preserve an existing event name when the filename is only whitespace', async () => {
+    const response = makeResponse();
+    const event = makeParsedEvent();
+    event.name = 'keep-me';
+    hoisted.mockFITImporter.getFromArrayBuffer.mockResolvedValueOnce(event);
+
+    await uploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+        'X-Original-Filename': '   ',
+        'X-File-Extension': 'fit',
+      },
+    }) as any, response as any);
+
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(event.name).toBe('keep-me');
+  });
+
+  it('should not regenerate activity ids when the parser already provided them', async () => {
+    const response = makeResponse();
+    const activity = { getID: vi.fn(() => 'existing-activity-id'), setID: vi.fn() };
+    const event = {
+      startDate: new Date('2026-01-10T10:00:00.000Z'),
+      name: '',
+      setID: vi.fn(),
+      getActivities: vi.fn(() => [activity]),
+    };
+    hoisted.mockFITImporter.getFromArrayBuffer.mockResolvedValueOnce(event);
+
+    await uploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+        'X-File-Extension': 'fit',
+      },
+    }) as any, response as any);
+
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(hoisted.mockGenerateActivityID).not.toHaveBeenCalled();
+    expect(activity.setID).not.toHaveBeenCalled();
   });
 
   it('should parse gzip GPX payload and persist compressed extension', async () => {
@@ -565,6 +715,7 @@ describe('uploadActivity', () => {
     const response = makeResponse();
     const fitBytes = Buffer.from([0x0e, 0x10, 0x01, 0x02, 0x03]);
     const gzippedFit = gzipSync(fitBytes);
+    const expectedEventID = expectedUploadEventID(fitBytes, 'fit');
 
     await uploadActivity(makeRequest({
       headers: {
@@ -587,6 +738,9 @@ describe('uploadActivity', () => {
         originalFilename: 'run.fit',
       }),
     );
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      eventId: expectedEventID,
+    }));
   });
 
   it('should return 400 when fit payload has gzip magic but is not valid gzip data', async () => {
@@ -645,5 +799,42 @@ describe('uploadActivity', () => {
     expect(hoisted.mockSuuntoJSONImporter.getFromJSONString).toHaveBeenCalledTimes(1);
     expect(hoisted.mockSuuntoSMLImporter.getFromJSONString).toHaveBeenCalledTimes(1);
     expect(response.status).toHaveBeenCalledWith(200);
+  });
+
+  it('should expose working adapters to EventWriter', async () => {
+    const response = makeResponse();
+
+    await uploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+        'X-File-Extension': 'fit',
+      },
+    }) as any, response as any);
+
+    expect(response.status).toHaveBeenCalledWith(200);
+
+    const firestoreAdapter = hoisted.capturedFirestoreAdapter.value as {
+      setDoc(path: string[], data: unknown): Promise<void>;
+      createBlob(data: Uint8Array): unknown;
+      generateID(): string;
+    };
+    const storageAdapter = hoisted.capturedStorageAdapter.value as {
+      uploadFile(path: string, data: unknown): Promise<void>;
+      getBucketName(): string;
+    };
+
+    expect(firestoreAdapter).toBeTruthy();
+    expect(storageAdapter).toBeTruthy();
+
+    await firestoreAdapter.setDoc(['users', 'user-1', 'events', 'adapter-test'], { ok: true });
+    expect(hoisted.mockDocSet).toHaveBeenCalledWith({ ok: true });
+
+    expect(firestoreAdapter.createBlob(Uint8Array.from([7, 8, 9]))).toEqual(Buffer.from([7, 8, 9]));
+    expect(firestoreAdapter.generateID()).toBe('tmp-generated-id');
+
+    await storageAdapter.uploadFile('users/user-1/events/adapter-test/original.fit', Buffer.from([0xaa]));
+    expect(hoisted.mockStorageSave).toHaveBeenCalledWith(Buffer.from([0xaa]));
+    expect(storageAdapter.getBucketName()).toBe('test-bucket');
   });
 });
