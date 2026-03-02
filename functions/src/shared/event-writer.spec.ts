@@ -240,6 +240,35 @@ describe('EventWriter', () => {
         expect(activityData.id).toBe('activity-1');
     });
 
+    it('should overwrite conflicting activity ownership fields with the trusted write context', async () => {
+        activityMock.toJSON.mockReturnValue({
+            id: 'activity-1',
+            userID: 'spoofed-user',
+            eventID: 'spoofed-event',
+            eventStartDate: new Date('2020-01-01T00:00:00.000Z'),
+            streams: [{ type: 'Power', values: [100, 200] }],
+        });
+
+        await writer.writeAllEventData('user-1', eventMock);
+        const setDocFn = adapter.setDoc as any;
+
+        const activityCall = setDocFn.mock.calls.find((call: any) =>
+            call[0][0] === 'users' && call[0][1] === 'user-1' && call[0][2] === 'activities'
+        );
+
+        expect(activityCall).toBeTruthy();
+        expect(activityCall[1]).toEqual(expect.objectContaining({
+            id: 'activity-1',
+            userID: 'user-1',
+            eventID: 'event-1',
+            eventStartDate: eventMock.startDate,
+        }));
+        expect(activityCall[1]).not.toEqual(expect.objectContaining({
+            userID: 'spoofed-user',
+            eventID: 'spoofed-event',
+        }));
+    });
+
     it('should strip activities from event document', async () => {
         // Ensure the mock returns activities initially so we can verify they are removed
         eventMock.toJSON.mockReturnValue({

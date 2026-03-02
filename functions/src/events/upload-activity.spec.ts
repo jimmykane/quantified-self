@@ -284,6 +284,39 @@ describe('uploadActivity', () => {
     expect(response.json).toHaveBeenCalledWith({ error: 'Unauthenticated request.' });
   });
 
+  it('should use the verified auth uid for all downstream writes', async () => {
+    hoisted.mockVerifyIdToken.mockResolvedValueOnce({ uid: 'verified-user' });
+    const response = makeResponse();
+    const rawBody = Buffer.from([1, 2, 3, 4]);
+    const expectedEventID = expectedUploadEventID(rawBody, 'fit');
+
+    await uploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+        'X-Original-Filename': 'run.fit',
+        'X-User-Id': 'spoofed-user',
+      },
+      rawBody,
+    }) as any, response as any);
+
+    expect(hoisted.mockVerifyIdToken).toHaveBeenCalledWith('token');
+    expect(hoisted.mockEventsCountGet).toHaveBeenCalledTimes(1);
+    expect(hoisted.mockGenerateEventID).not.toHaveBeenCalled();
+    expect(hoisted.mockGenerateActivityID).toHaveBeenCalledWith(expectedEventID, 0);
+    expect(hoisted.mockWriteAllEventData).toHaveBeenCalledWith(
+      'verified-user',
+      expect.anything(),
+      expect.objectContaining({
+        originalFilename: 'run.fit',
+      }),
+    );
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      eventId: expectedEventID,
+    }));
+  });
+
   it('should reject missing app check header', async () => {
     const response = makeResponse();
     await uploadActivity(makeRequest({
