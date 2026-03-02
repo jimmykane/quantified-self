@@ -83,6 +83,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @Input() extraMaxForPower = 0;
   @Input() extraMaxForPace = -0.25;
   @Input() strokeWidth = AppUserUtilities.getDefaultChartStrokeWidth();
+  @Input() waterMark = '';
   @Input() showActivityNamesInTooltip = false;
   @Input() zoomBarOverviewData: Array<[number, number]> = [];
   @Input() sharedZoomRange: EventChartRange | null = null;
@@ -194,6 +195,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       || changes.extraMaxForPower
       || changes.extraMaxForPace
       || changes.strokeWidth
+      || changes.waterMark
       || changes.zoomBarOverviewData
     ) {
       this.refreshChart();
@@ -398,6 +400,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           formatter: (value: number) => this.formatDataValue(panel.dataType, value, false)
         }
       },
+      graphic: this.buildWatermarkGraphic(darkTheme),
       dataZoom: [
         {
           type: 'inside',
@@ -423,6 +426,30 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       ],
       series: seriesOptions
     } as ChartOption;
+  }
+
+  private buildWatermarkGraphic(darkTheme: boolean): Record<string, unknown>[] {
+    const waterMarkText = `${this.waterMark || ''}`.trim();
+    if (!waterMarkText || this.showZoomBar) {
+      return [];
+    }
+
+    return [
+      {
+        type: 'text',
+        right: 8,
+        top: 10,
+        silent: true,
+        z: 0,
+        style: {
+          text: waterMarkText,
+          fill: darkTheme ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.16)',
+          font: '600 16px "Barlow Condensed", sans-serif',
+          textAlign: 'right',
+          textVerticalAlign: 'top',
+        },
+      }
+    ];
   }
 
   private buildLapMarkLine(darkTheme: boolean): Record<string, unknown> {

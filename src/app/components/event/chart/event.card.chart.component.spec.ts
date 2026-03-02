@@ -474,4 +474,18 @@ describe('EventCardChartComponent', () => {
 
     expect(component.zoomRange).toEqual({ start: 0, end: 40 });
   });
+
+  it('exposes branded watermark text when provided', () => {
+    component.waterMark = 'Dimitrios';
+
+    expect(component.hasWaterMark).toBe(true);
+    expect(component.waterMarkText).toBe('Dimitrios');
+  });
+
+  it('treats blank watermark text as absent', () => {
+    component.waterMark = '   ';
+
+    expect(component.hasWaterMark).toBe(false);
+    expect(component.waterMarkText).toBe('');
+  });
 });

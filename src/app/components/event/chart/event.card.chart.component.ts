@@ -209,6 +209,14 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     return `Series ${this.visibleDataTypeCount}/${this.dataTypeLegendItems.length}`;
   }
 
+  public get hasWaterMark(): boolean {
+    return this.waterMarkText.length > 0;
+  }
+
+  public get waterMarkText(): string {
+    return `${this.waterMark || ''}`.trim();
+  }
+
   public get dataTypesToUse(): string[] {
     return this.user ? this.userService.getUserChartDataTypesToUse(this.user) : [];
   }

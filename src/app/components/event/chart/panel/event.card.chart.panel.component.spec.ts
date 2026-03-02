@@ -548,6 +548,36 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.series?.[0]?.lineStyle?.width).toBe(3.25);
   });
 
+  it('renders a per-panel watermark graphic in the lower-right plot area', async () => {
+    component.waterMark = 'Dimitrios';
+    fixture.detectChanges();
+    await component.ngAfterViewInit();
+
+    const option = getRenderedOption();
+    expect(option?.graphic).toEqual([
+      expect.objectContaining({
+        type: 'text',
+        right: 8,
+        top: 10,
+        style: expect.objectContaining({
+          text: 'Dimitrios',
+          font: '600 16px "Barlow Condensed", sans-serif',
+        }),
+      })
+    ]);
+  });
+
+  it('does not render a watermark on the zoom bar', async () => {
+    component.panel = null;
+    component.showZoomBar = true;
+    component.waterMark = 'Dimitrios';
+    fixture.detectChanges();
+    await component.ngAfterViewInit();
+
+    const option = eChartsLoaderMock.setOption.mock.calls.at(-1)?.[1] as any;
+    expect(option?.graphic).toBeUndefined();
+  });
+
   it('renders lap markers when configured lap types use enum aliases', async () => {
     component.showZoomBar = false;
     component.showLaps = true;
