@@ -1073,4 +1073,23 @@ describe('EventCardStatsGridComponent', () => {
         expect((component as any).resizeObserver).toBeNull();
         expect((component as any).measureRafId).toBeNull();
     });
+
+    it('should disable tab animation during prewarm and restore it after', () => {
+        component.summaryTabGroupRef = new ElementRef(createTabGroupElement([120, 180]));
+        component.metricTabs = [
+            { id: 'overall', label: 'Overall', metricTypes: [] },
+            { id: 'performance', label: 'Performance', metricTypes: [] },
+        ] as any;
+        component.selectedTabIndex = 0;
+
+        const prewarmSpy = vi.spyOn(component as any, 'prewarmAllTabsSynchronously').mockImplementation(() => {
+            expect(component.tabAnimationDuration).toBe('0ms');
+        });
+
+        expect(component.tabAnimationDuration).toBe('300ms');
+        (component as any).scheduleInitialTabsPrewarm();
+
+        expect(prewarmSpy).toHaveBeenCalledTimes(1);
+        expect(component.tabAnimationDuration).toBe('300ms');
+    });
 });

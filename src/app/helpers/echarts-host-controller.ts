@@ -1,13 +1,29 @@
-import { NgZone } from '@angular/core';
 import type { EChartsType } from 'echarts/core';
 import { EChartsLoaderService } from '../services/echarts-loader.service';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type ChartSetOptionSettings = Parameters<EChartsType['setOption']>[1];
+type ChartMainType = 'series' | 'xAxis' | 'yAxis' | 'dataZoom';
+
+function buildMergeUpdateSettings(replaceMerge: readonly ChartMainType[]): ChartSetOptionSettings {
+  return {
+    notMerge: false,
+    lazyUpdate: true,
+    replaceMerge: [...replaceMerge]
+  };
+}
+
+export const ECHARTS_SERIES_MERGE_UPDATE_SETTINGS = buildMergeUpdateSettings(['series']);
+export const ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS = buildMergeUpdateSettings(['series', 'xAxis', 'yAxis']);
+export const ECHARTS_INTERACTIVE_CARTESIAN_MERGE_UPDATE_SETTINGS = buildMergeUpdateSettings([
+  'series',
+  'xAxis',
+  'yAxis',
+  'dataZoom'
+]);
 
 export interface EChartsHostControllerConfig {
   eChartsLoader: EChartsLoaderService;
-  zone: NgZone;
   logger?: {
     error?: (...args: unknown[]) => void;
   };
@@ -116,15 +132,13 @@ export class EChartsHostController {
       return;
     }
 
-    this.config.zone.runOutsideAngular(() => {
-      if (this.resizeObserver) {
-        this.resizeObserver.disconnect();
-      }
-      this.resizeObserver = new ResizeObserver(() => {
-        this.scheduleResize();
-      });
-      this.resizeObserver.observe(container);
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+    }
+    this.resizeObserver = new ResizeObserver(() => {
+      this.scheduleResize();
     });
+    this.resizeObserver.observe(container);
 
     this.observedContainer = container;
   }

@@ -103,7 +103,14 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         });
       }
     }
-    this.dataSubscription = merge(this.authService.user$, this.manualSearchTrigger$).pipe(switchMap((user: AppUserInterface | null) => {
+    this.dataSubscription = merge(this.authService.user$, this.manualSearchTrigger$).pipe(
+      map((user: AppUserInterface | null) => ({
+        user,
+        eventsListenerKey: this.getEventsListenerKey(user),
+      })),
+      distinctUntilChanged((previous, current) => previous.eventsListenerKey === current.eventsListenerKey),
+      map(({ user }) => user),
+      switchMap((user: AppUserInterface | null) => {
       const userEmissionStart = performance.now();
 
       if (this.shouldSearch || !this.isInitialized) {
@@ -239,7 +246,8 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
           map((events) => {
             return { events: events, user: user }
           }))
-    })).subscribe((eventsAndUser) => {
+    })
+    ).subscribe((eventsAndUser) => {
 
       this.shouldSearch = false;
       this.events = eventsAndUser.events || [];
@@ -359,5 +367,27 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       return startDate;
     }
     return null;
+  }
+
+  private getEventsListenerKey(user: AppUserInterface | null): string {
+    if (!user) {
+      return 'anonymous';
+    }
+
+    const dashboardSettings = user.settings?.dashboardSettings;
+    const activityTypes = Array.isArray(dashboardSettings?.activityTypes)
+      ? [...dashboardSettings.activityTypes].sort((left, right) => `${left}`.localeCompare(`${right}`))
+      : [];
+
+    return JSON.stringify({
+      queryUserID: this.targetUser?.uid || user.uid,
+      dateRange: dashboardSettings?.dateRange ?? null,
+      startDate: dashboardSettings?.startDate ?? null,
+      endDate: dashboardSettings?.endDate ?? null,
+      includeMergedEvents: dashboardSettings?.includeMergedEvents !== false,
+      activityTypes,
+      startOfTheWeek: user.settings?.unitSettings?.startOfTheWeek ?? null,
+      searchTerm: this.searchTerm || null,
+    });
   }
 }

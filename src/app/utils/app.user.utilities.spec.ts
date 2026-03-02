@@ -165,6 +165,7 @@ describe('AppUserUtilities', () => {
             const settings = AppUserUtilities.fillMissingAppSettings(user);
             expect(settings.appSettings?.theme).toBe(AppThemes.Normal);
             expect(settings.chartSettings?.theme).toBe(ChartThemes.Material);
+            expect(settings.chartSettings?.stackYAxes).toBe(false);
             expect(settings.dashboardSettings?.dateRange).toBe(DateRanges.all);
             expect(settings.dashboardSettings?.includeMergedEvents).toBe(true);
             expect(settings.unitSettings?.startOfTheWeek).toBe(1); // Monday
@@ -195,6 +196,19 @@ describe('AppUserUtilities', () => {
 
             const settings = AppUserUtilities.fillMissingAppSettings(user);
             expect((settings.myTracksSettings as any)?.showJumpHeatmap).toBe(false);
+        });
+
+        it('should remove legacy mapSettings.showPoints', () => {
+            const user = {
+                settings: {
+                    mapSettings: {
+                        showPoints: true
+                    }
+                }
+            } as any;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+            expect((settings.mapSettings as any)?.showPoints).toBeUndefined();
         });
 
         it('should migrate legacy Spiral dashboard tiles to LinesVertical', () => {

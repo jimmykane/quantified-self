@@ -8,7 +8,7 @@ import { LoggerService } from '../../../services/logger.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppActivityCursorService } from '../../../services/activity-cursor/app-activity-cursor.service';
 import { AppThemeService } from '../../../services/app.theme.service';
-import { AppThemes, DynamicDataLoader } from '@sports-alliance/sports-lib';
+import { AppThemes, DynamicDataLoader, LapTypes } from '@sports-alliance/sports-lib';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import { MarkerFactoryService } from '../../../services/map/marker-factory.service';
 import { MapboxLoaderService } from '../../../services/mapbox-loader.service';
@@ -17,9 +17,11 @@ import { MapStyleService } from '../../../services/map-style.service';
 describe('EventCardMapComponent', () => {
   let component: EventCardMapComponent;
   let fixture: ComponentFixture<EventCardMapComponent>;
+  let mockMap: any;
   let mockMapboxLoader: any;
   let mockMapStyleService: any;
   let mockSettingsQuery: any;
+  let mockActivityCursorService: { cursors: Subject<any[]> };
 
   const makeStat = (value: string, unit = '') => ({
     getDisplayValue: () => value,
@@ -27,7 +29,7 @@ describe('EventCardMapComponent', () => {
   });
 
   beforeEach(async () => {
-    const mockMap = {
+    mockMap = {
       addControl: vi.fn(),
       on: vi.fn(),
       off: vi.fn(),
@@ -77,6 +79,10 @@ describe('EventCardMapComponent', () => {
       updateMapSettings: vi.fn()
     };
 
+    mockActivityCursorService = {
+      cursors: new Subject<any[]>(),
+    };
+
     await TestBed.configureTestingModule({
       declarations: [EventCardMapComponent],
       providers: [
@@ -98,7 +104,7 @@ describe('EventCardMapComponent', () => {
           }
         },
         { provide: AppUserService, useValue: { updateUserProperties: vi.fn() } },
-        { provide: AppActivityCursorService, useValue: { cursors: new Subject() } },
+        { provide: AppActivityCursorService, useValue: mockActivityCursorService },
         {
           provide: AppThemeService,
           useValue: {
@@ -165,6 +171,39 @@ describe('EventCardMapComponent', () => {
     component.onShow3DChange(true);
     expect(mockSettingsQuery.updateMapSettings).toHaveBeenCalledWith({ is3D: true });
     expect(toggleSpy).toHaveBeenCalledWith(true, true);
+  });
+
+  it('should ignore non-chart cursor updates and sync chart-driven cursors to the map', async () => {
+    component.activitiesMapData = [{
+      activity: { getID: () => 'activity-1' },
+      positions: [
+        { time: 1_000, latitudeDegrees: 40.1, longitudeDegrees: 22.1 },
+        { time: 2_000, latitudeDegrees: 40.2, longitudeDegrees: 22.2 },
+      ],
+      strokeColor: '#ff0000',
+      laps: [],
+      jumps: [],
+    }] as any;
+
+    await component.ngAfterViewInit();
+
+    mockActivityCursorService.cursors.next([{ activityID: 'activity-1', time: 2_000, byMap: true }]);
+
+    expect(component.activitiesCursors.size).toBe(0);
+    expect(mockMap.panTo).not.toHaveBeenCalled();
+
+    mockActivityCursorService.cursors.next([{ activityID: 'activity-1', time: 1_900, byChart: true }]);
+    await new Promise((resolve) => setTimeout(resolve, 1_050));
+
+    expect(component.activitiesCursors.get('activity-1')).toEqual({
+      latitudeDegrees: 40.2,
+      longitudeDegrees: 22.2,
+    });
+    expect(mockMap.panTo).toHaveBeenCalledWith([22.2, 40.2], {
+      animate: true,
+      duration: 250,
+      essential: true,
+    });
   });
 
   it('should use safe fallback stroke color when activity color is missing', () => {
@@ -274,5 +313,122 @@ describe('EventCardMapComponent', () => {
 
     expect(options.title).toContain('Speed: 15.4 km/h');
     conversionSpy.mockRestore();
+  });
+
+  it('should normalize configured lap types the same way as chart filtering', () => {
+    component.selectedActivities = [{
+      startDate: new Date('2025-01-01T10:00:00Z'),
+      hasPositionData: () => true,
+      getSquashedPositionData: (start?: Date, end?: Date) => {
+        if (start && end) {
+          return [{ latitudeDegrees: 40.2, longitudeDegrees: 22.2 }];
+        }
+        return [
+          { latitudeDegrees: 40.1, longitudeDegrees: 22.1 },
+          { latitudeDegrees: 40.2, longitudeDegrees: 22.2 },
+        ];
+      },
+      generateTimeStream: () => ({
+        getData: () => [0, 60],
+      }),
+      getLaps: () => [
+        {
+          type: 'auto',
+          startDate: new Date('2025-01-01T10:00:00Z'),
+          endDate: new Date('2025-01-01T10:01:00Z'),
+        },
+      ],
+      getAllEvents: () => [],
+    }] as any;
+    component.lapTypes = [LapTypes.AutoLap];
+    component.showLaps = true;
+    (component as any).processSequence = 1;
+
+    (component as any).mapActivities(1, false);
+
+    expect(component.activitiesMapData).toHaveLength(1);
+    expect(component.activitiesMapData[0].laps).toHaveLength(1);
+  });
+
+  it('should filter session end laps from the map even when configured', () => {
+    component.selectedActivities = [{
+      startDate: new Date('2025-01-01T10:00:00Z'),
+      hasPositionData: () => true,
+      getSquashedPositionData: (start?: Date, end?: Date) => {
+        if (start && end) {
+          return [{ latitudeDegrees: 40.2, longitudeDegrees: 22.2 }];
+        }
+        return [
+          { latitudeDegrees: 40.1, longitudeDegrees: 22.1 },
+          { latitudeDegrees: 40.2, longitudeDegrees: 22.2 },
+        ];
+      },
+      generateTimeStream: () => ({
+        getData: () => [0, 60],
+      }),
+      getLaps: () => [
+        {
+          type: LapTypes.session_end,
+          startDate: new Date('2025-01-01T10:00:00Z'),
+          endDate: new Date('2025-01-01T10:01:00Z'),
+        },
+      ],
+      getAllEvents: () => [],
+    }] as any;
+    component.lapTypes = [LapTypes.session_end];
+    component.showLaps = true;
+    (component as any).processSequence = 1;
+
+    (component as any).mapActivities(1, false);
+
+    expect(component.activitiesMapData).toHaveLength(1);
+    expect(component.activitiesMapData[0].laps).toEqual([]);
+  });
+
+  it('should place map laps using lap end index when lap dates collapse to activity start', () => {
+    component.selectedActivities = [{
+      startDate: new Date('2025-01-01T10:00:00Z'),
+      hasPositionData: () => true,
+      getPositionData: () => [
+        { latitudeDegrees: 40.1, longitudeDegrees: 22.1 },
+        null,
+        { latitudeDegrees: 40.3, longitudeDegrees: 22.3 },
+        { latitudeDegrees: 40.4, longitudeDegrees: 22.4 },
+      ],
+      getSquashedPositionData: (start?: Date, end?: Date) => {
+        if (start && end) {
+          return [{ latitudeDegrees: 40.1, longitudeDegrees: 22.1 }];
+        }
+        return [
+          { latitudeDegrees: 40.1, longitudeDegrees: 22.1 },
+          { latitudeDegrees: 40.3, longitudeDegrees: 22.3 },
+          { latitudeDegrees: 40.4, longitudeDegrees: 22.4 },
+        ];
+      },
+      generateTimeStream: () => ({
+        getData: () => [0, 30, 60, 90],
+      }),
+      getLaps: () => [
+        {
+          type: LapTypes.Manual,
+          startDate: new Date('2025-01-01T10:00:00Z'),
+          endDate: new Date('2025-01-01T10:00:00Z'),
+          getEndIndex: () => 2,
+        },
+      ],
+      getAllEvents: () => [],
+    }] as any;
+    component.lapTypes = [LapTypes.Manual];
+    component.showLaps = true;
+    (component as any).processSequence = 1;
+
+    (component as any).mapActivities(1, false);
+
+    expect(component.activitiesMapData).toHaveLength(1);
+    expect(component.activitiesMapData[0].laps).toEqual([
+      expect.objectContaining({
+        lapPosition: { latitudeDegrees: 40.3, longitudeDegrees: 22.3 },
+      }),
+    ]);
   });
 });

@@ -219,6 +219,27 @@ describe('PerformanceCurveDataService', () => {
     expect(result[0].points.every((point) => point.efficiency > 0)).toBe(true);
   });
 
+  it('should build durability render and marker source series in one pass', () => {
+    const activity = createActivity({
+      id: 'a1',
+      type: 'Run',
+      creatorName: 'Watch A',
+      streams: {
+        [DataPower.type]: [200, 210, 220, 230, 240, 250, 260, 270],
+        [DataHeartRate.type]: [130, 132, 135, 136, 138, 140, 142, 143],
+      },
+    });
+
+    const options = { isMerge: false, rollingWindowSeconds: 120, maxPointsPerSeries: 3 };
+    const combined = service.buildDurabilitySeriesWithMarkerSource([activity], options);
+    const renderOnly = service.buildDurabilitySeries([activity], options);
+
+    expect(combined.markerSourceSeries).toHaveLength(1);
+    expect(combined.renderSeries).toHaveLength(1);
+    expect(combined.markerSourceSeries[0].points.length).toBeGreaterThanOrEqual(combined.renderSeries[0].points.length);
+    expect(combined.renderSeries).toEqual(renderOnly);
+  });
+
   it('should downsample cadence-power points and keep density between 0 and 1', () => {
     const activity = createActivity({
       id: 'a1',

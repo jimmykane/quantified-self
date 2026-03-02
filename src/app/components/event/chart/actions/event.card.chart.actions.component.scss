@@ -10,24 +10,78 @@ section.container {
   display: flex;
   justify-content: flex-end;
   align-items: center;
+  gap: 8px;
   width: 100%;
 }
 
-.options-trigger {
-  min-width: 0;
+section.container > button[mat-stroked-button],
+section.container > span > button[mat-stroked-button] {
+  border-radius: 10px !important;
 }
 
-.options-trigger mat-icon {
-  margin-right: 4px;
+.series-menu__summary-count {
+  font-family: 'Barlow Condensed', sans-serif;
+  padding-left: 4px;
+}
+
+.event-chart-actions__mode-button {
+  color: var(--mat-sys-on-surface);
+  width: 40px;
+  height: 40px;
+  padding: 8px;
+  border-radius: 10px !important;
+}
+
+.series-menu {
+  display: grid;
+  gap: 4px;
+  inline-size: max-content;
+  min-inline-size: 0;
+  max-inline-size: min(72vw, 240px);
+  padding: 8px;
+}
+
+.series-menu__item {
+  border: 0;
+  background: transparent;
+  color: var(--mat-sys-on-surface);
+  min-height: 40px;
+  inline-size: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px;
+  border-radius: 12px;
+  text-align: left;
+  font: inherit;
+}
+
+.series-menu__item:hover {
+  background: rgba(127, 127, 127, 0.08);
+}
+
+.series-menu__swatch {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+.series-menu__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.series-menu__actions {
+  padding-top: 4px;
 }
 
 .chart-option-toggle {
   width: 100%;
-}
-
-.x-axis-field {
-  width: 100%;
-  min-width: 220px;
 }
 
 section[mat-menu-item] {
@@ -42,9 +96,5 @@ section[mat-menu-item]:hover {
 @include xsmall {
   section.container {
     justify-content: flex-end;
-  }
-
-  .x-axis-field {
-    min-width: 180px;
   }
 }

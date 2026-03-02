@@ -1,7 +1,26 @@
-/* Ensure the component inside expands to fill the flex space */
 app-event-card-chart-actions {
-    display: block;
-    width: 100%;
+  display: block;
+  width: 100%;
 }
 
-/* chart-progress-bar removed, handled by app-loading-overlay */
+.event-chart-content {
+  position: relative;
+  min-height: 60vh;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.event-chart-shell {
+  display: grid;
+  gap: 12px;
+}
+
+.event-chart-shell--loading {
+  opacity: 0.6;
+}
+
+.event-chart-shell__panels {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
+}

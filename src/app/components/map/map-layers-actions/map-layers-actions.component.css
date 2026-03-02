@@ -3,12 +3,8 @@ section.map-actions {
   justify-content: flex-end;
 }
 
-.layers-trigger {
-  min-width: 0;
-}
-
-.layers-trigger mat-icon {
-  margin-right: 4px;
+section.map-actions > span > button[mat-stroked-button] {
+  border-radius: 10px !important;
 }
 
 .map-layer-toggle {

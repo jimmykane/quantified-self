@@ -4,7 +4,6 @@ import {
   Component,
   ElementRef,
   Input,
-  NgZone,
   OnChanges,
   OnDestroy,
   SimpleChanges,
@@ -31,8 +30,15 @@ import {
   PerformanceCurveDataService,
   PerformanceCurveDurabilitySeries,
 } from '../../../services/performance-curve-data.service';
-import { EChartsHostController } from '../../../helpers/echarts-host-controller';
-import { isDarkChartThemeActive } from '../../../helpers/echarts-theme.helper';
+import {
+  ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS,
+  EChartsHostController
+} from '../../../helpers/echarts-host-controller';
+import {
+  buildEventEChartsVisualTokens,
+  calculateEventEChartsAxisRange,
+  toFiniteEventEChartsNumber
+} from '../../../helpers/event-echarts-common.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 
@@ -67,12 +73,10 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
     private eChartsLoader: EChartsLoaderService,
     private eventColorService: AppEventColorService,
     private logger: LoggerService,
-    private performanceCurveDataService: PerformanceCurveDataService,
-    private zone: NgZone
+    private performanceCurveDataService: PerformanceCurveDataService
   ) {
     this.chartHost = new EChartsHostController({
       eChartsLoader: this.eChartsLoader,
-      zone: this.zone,
       logger: this.logger,
       logPrefix: '[EventDurabilityCurveComponent]'
     });
@@ -116,24 +120,19 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
       return;
     }
 
-    const durabilitySeries = this.performanceCurveDataService.buildDurabilitySeries(this.activities, {
-      isMerge: this.isMerge,
-      rollingWindowSeconds: DEFAULT_ROLLING_WINDOW_SECONDS,
-      maxPointsPerSeries: this.isMobile ? 220 : 640,
-    });
-    // Keep the rendered line downsampled for performance, but compute effort markers from
-    // full-resolution durability so long windows (e.g. 2h) are not lost by downsampling.
-    const markerSourceSeries = this.performanceCurveDataService.buildDurabilitySeries(this.activities, {
-      isMerge: this.isMerge,
-      rollingWindowSeconds: DEFAULT_ROLLING_WINDOW_SECONDS,
-    });
+    const { renderSeries: durabilitySeries, markerSourceSeries } = this.performanceCurveDataService
+      .buildDurabilitySeriesWithMarkerSource(this.activities, {
+        isMerge: this.isMerge,
+        rollingWindowSeconds: DEFAULT_ROLLING_WINDOW_SECONDS,
+        maxPointsPerSeries: this.isMobile ? 220 : 640,
+      });
     const bestEffortMarkers = this.performanceCurveDataService.buildBestEffortMarkers(markerSourceSeries, {
       windowDurations: BEST_EFFORT_WINDOWS,
       maxMarkersPerWindow: this.isMobile ? 3 : 6,
     });
 
     const option = this.buildChartOption(durabilitySeries, bestEffortMarkers);
-    this.chartHost.setOption(option, { notMerge: true, lazyUpdate: true });
+    this.chartHost.setOption(option, ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS);
     this.chartHost.scheduleResize();
   }
 
@@ -141,13 +140,12 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
     durabilitySeries: PerformanceCurveDurabilitySeries[],
     bestEffortMarkers: PerformanceCurveBestEffortMarker[]
   ): ChartOption {
-    const darkTheme = this.isDarkThemeActive();
-    const textColor = darkTheme ? '#f5f5f5' : '#1f1f1f';
-    const axisColor = darkTheme ? 'rgba(255,255,255,0.24)' : 'rgba(0,0,0,0.24)';
-    const axisLabelFontSize = this.isMobile ? 11 : 12;
-    const tooltipExtraCssText = this.isMobile
-      ? 'max-width: min(80vw, 280px); white-space: normal; overflow-wrap: anywhere; word-break: break-word;'
-      : '';
+    const chartStyle = buildEventEChartsVisualTokens(this.chartTheme, this.isMobile);
+    const darkTheme = chartStyle.darkTheme;
+    const textColor = chartStyle.textColor;
+    const axisColor = chartStyle.axisColor;
+    const axisLabelFontSize = chartStyle.axisLabelFontSize;
+    const tooltipExtraCssText = chartStyle.tooltipExtraCssText;
 
     if (durabilitySeries.length === 0) {
       return {
@@ -172,7 +170,7 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
     const efficiencyValues = durabilityPoints.map((point) => point.efficiency);
     const maxDuration = durations.length > 0 ? Math.max(...durations) : 1;
     const durationAxis = this.buildDurationAxisConfig(maxDuration);
-    const [efficiencyMin, efficiencyMax] = this.calculateAxisRange(efficiencyValues, {
+    const [efficiencyMin, efficiencyMax] = calculateEventEChartsAxisRange(efficiencyValues, {
       fallbackMin: 1,
       fallbackMax: 2.5,
     });
@@ -341,11 +339,11 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
         appendToBody: !this.isMobile,
         confine: this.isMobile,
         extraCssText: tooltipExtraCssText,
-        backgroundColor: darkTheme ? '#222222' : '#ffffff',
-        borderColor: darkTheme ? '#555555' : '#d6d6d6',
+        backgroundColor: chartStyle.tooltipBackgroundColor,
+        borderColor: chartStyle.tooltipBorderColor,
         borderWidth: 1,
         textStyle: {
-          color: darkTheme ? '#ffffff' : '#2a2a2a',
+          color: chartStyle.tooltipTextColor,
           fontFamily: "'Barlow Condensed', sans-serif",
         },
         formatter: (params: unknown) => this.formatTooltip(params, activityLabels.size > 1),
@@ -374,10 +372,10 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
     const data = entry.data ?? {};
 
     if (paneType === 'durability') {
-      const duration = this.toFiniteNumber(data.duration) ?? this.extractTupleValue(entry.value, 0) ?? 0;
-      const efficiency = this.toFiniteNumber(data.efficiency) ?? this.extractTupleValue(entry.value, 1);
-      const power = this.toFiniteNumber(data.power);
-      const heartRate = this.toFiniteNumber(data.heartRate);
+      const duration = toFiniteEventEChartsNumber(data.duration) ?? this.extractTupleValue(entry.value, 0) ?? 0;
+      const efficiency = toFiniteEventEChartsNumber(data.efficiency) ?? this.extractTupleValue(entry.value, 1);
+      const power = toFiniteEventEChartsNumber(data.power);
+      const heartRate = toFiniteEventEChartsNumber(data.heartRate);
 
       if (efficiency === null) {
         return '';
@@ -399,9 +397,9 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
     if (paneType === 'effort') {
       const windowLabel = `${data.windowLabel ?? entry.seriesName ?? ''}`;
       const activityLabel = `${data.activityLabel ?? ''}`;
-      const power = this.toFiniteNumber(data.markerPower);
-      const startDuration = this.toFiniteNumber(data.startDuration);
-      const endDuration = this.toFiniteNumber(data.endDuration);
+      const power = toFiniteEventEChartsNumber(data.markerPower);
+      const startDuration = toFiniteEventEChartsNumber(data.startDuration);
+      const endDuration = toFiniteEventEChartsNumber(data.endDuration);
 
       if (!windowLabel || power === null) {
         return '';
@@ -432,7 +430,7 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
       return null;
     }
 
-    return this.toFiniteNumber(value[index]);
+    return toFiniteEventEChartsNumber(value[index]);
   }
 
   private resolveUniqueColor(
@@ -459,27 +457,6 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
     const fallback = palette[seriesIndex % palette.length];
     usedColors.add(fallback.toLowerCase());
     return fallback;
-  }
-
-  private calculateAxisRange(values: number[], options: { fallbackMin: number; fallbackMax: number }): [number, number] {
-    const validValues = values.filter((value) => Number.isFinite(value));
-    if (!validValues.length) {
-      return [options.fallbackMin, options.fallbackMax];
-    }
-
-    const minRaw = Math.min(...validValues);
-    const maxRaw = Math.max(...validValues);
-    const range = Math.max(1, maxRaw - minRaw);
-    const padding = Math.max(0.05, range * 0.12);
-
-    const min = minRaw - padding;
-    let max = maxRaw + padding;
-
-    if (max <= min) {
-      max = min + 1;
-    }
-
-    return [min, max];
   }
 
   private buildDurationAxisConfig(maxDuration: number): { max: number; interval: number } {
@@ -513,7 +490,6 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
       return { min: 1, max: 2.5, interval: 0.25 };
     }
 
-    const range = maxValue - minValue;
     const targetTicks = this.isMobile ? 5 : 7;
     let bestInterval = EFFICIENCY_TICK_CANDIDATES[0];
     let bestScore = Number.POSITIVE_INFINITY;
@@ -536,19 +512,6 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
       max: Math.max(snappedMin + bestInterval, snappedMax),
       interval: bestInterval,
     };
-  }
-
-  private toFiniteNumber(value: unknown): number | null {
-    if (typeof value === 'number' && Number.isFinite(value)) {
-      return value;
-    }
-
-    if (typeof value === 'string' && value.trim().length > 0) {
-      const numeric = Number(value);
-      return Number.isFinite(numeric) ? numeric : null;
-    }
-
-    return null;
   }
 
   private formatDurationLabel(seconds: number): string {
@@ -601,7 +564,4 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
       : value;
   }
 
-  private isDarkThemeActive(): boolean {
-    return isDarkChartThemeActive(this.chartTheme);
-  }
 }

@@ -1,4 +1,3 @@
-import { NgZone } from '@angular/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EChartsHostController } from './echarts-host-controller';
 
@@ -74,7 +73,6 @@ describe('EChartsHostController', () => {
     const loader = buildLoaderMock();
     const controller = new EChartsHostController({
       eChartsLoader: loader as any,
-      zone: new NgZone({ enableLongStackTrace: false }),
     });
     const container = document.createElement('div');
 
@@ -90,7 +88,6 @@ describe('EChartsHostController', () => {
     const loader = buildLoaderMock();
     const controller = new EChartsHostController({
       eChartsLoader: loader as any,
-      zone: new NgZone({ enableLongStackTrace: false }),
     });
 
     const didSet = controller.setOption({} as any, { notMerge: true });
@@ -103,7 +100,6 @@ describe('EChartsHostController', () => {
     const loader = buildLoaderMock();
     const controller = new EChartsHostController({
       eChartsLoader: loader as any,
-      zone: new NgZone({ enableLongStackTrace: false }),
     });
     const container = document.createElement('div');
 
@@ -120,7 +116,6 @@ describe('EChartsHostController', () => {
     const loader = buildLoaderMock();
     const controller = new EChartsHostController({
       eChartsLoader: loader as any,
-      zone: new NgZone({ enableLongStackTrace: false }),
     });
     const container = document.createElement('div');
 
@@ -138,7 +133,6 @@ describe('EChartsHostController', () => {
     const loader = buildLoaderMock();
     const controller = new EChartsHostController({
       eChartsLoader: loader as any,
-      zone: new NgZone({ enableLongStackTrace: false }),
     });
     const container = document.createElement('div');
 
@@ -155,7 +149,6 @@ describe('EChartsHostController', () => {
     loader.init.mockRejectedValue(new Error('boom'));
     const controller = new EChartsHostController({
       eChartsLoader: loader as any,
-      zone: new NgZone({ enableLongStackTrace: false }),
       logger,
       logPrefix: '[TestChart]'
     });

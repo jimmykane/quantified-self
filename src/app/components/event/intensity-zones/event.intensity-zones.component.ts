@@ -4,7 +4,6 @@ import {
   Component,
   ElementRef,
   Input,
-  NgZone,
   OnChanges,
   OnDestroy,
   SimpleChanges,
@@ -30,8 +29,11 @@ import {
   convertIntensityZonesStatsToEchartsData,
   IntensityZonesEChartsData,
 } from '../../../helpers/intensity-zones-chart-data-helper';
-import { EChartsHostController } from '../../../helpers/echarts-host-controller';
-import { isDarkChartThemeActive } from '../../../helpers/echarts-theme.helper';
+import {
+  ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS,
+  EChartsHostController
+} from '../../../helpers/echarts-host-controller';
+import { buildEventEChartsVisualTokens } from '../../../helpers/event-echarts-common.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 
@@ -59,12 +61,10 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     private breakpointObserver: BreakpointObserver,
     private eChartsLoader: EChartsLoaderService,
     private eventColorService: AppEventColorService,
-    private logger: LoggerService,
-    private zone: NgZone
+    private logger: LoggerService
   ) {
     this.chartHost = new EChartsHostController({
       eChartsLoader: this.eChartsLoader,
-      zone: this.zone,
       logger: this.logger,
       logPrefix: '[EventIntensityZonesComponent]'
     });
@@ -109,18 +109,24 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     const statsClassInstances = Array.isArray(this.activities) ? this.activities : [];
     const data = convertIntensityZonesStatsToEchartsData(statsClassInstances, this.isMobile);
     const option = this.buildChartOption(data);
-    this.chartHost.setOption(option, { notMerge: true, lazyUpdate: true });
+    this.chartHost.setOption(option, ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS);
     this.chartHost.scheduleResize();
   }
 
   private buildChartOption(data: IntensityZonesEChartsData): ChartOption {
-    const darkTheme = this.isDarkThemeActive();
-    const textColor = darkTheme ? '#ffffff' : '#2a2a2a';
+    const chartStyle = buildEventEChartsVisualTokens(this.chartTheme, this.isMobile, {
+      textColorDark: '#ffffff',
+      textColorLight: '#2a2a2a',
+      tooltipBackgroundColorDark: '#303030',
+      tooltipBorderColorDark: '#6b6b6b',
+      tooltipTextColorDark: '#ffffff',
+      tooltipTextColorLight: '#2a2a2a',
+    });
+    const darkTheme = chartStyle.darkTheme;
+    const textColor = chartStyle.textColor;
     const gridLineColor = darkTheme ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)';
     const zoneBackgroundOpacity = darkTheme ? 0.18 : 0.12;
-    const tooltipExtraCssText = this.isMobile
-      ? 'max-width: min(80vw, 280px); white-space: normal; overflow-wrap: anywhere; word-break: break-word;'
-      : '';
+    const tooltipExtraCssText = chartStyle.tooltipExtraCssText;
     const rightInset = 0;
     const zoneAxisRichStyles = this.createZoneAxisRichStyles(data.zones);
     const zoneBulletRichStyles = this.createZoneBulletRichStyles(data.zones);
@@ -248,10 +254,10 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
         appendToBody: !this.isMobile,
         confine: this.isMobile,
         extraCssText: tooltipExtraCssText,
-        backgroundColor: darkTheme ? '#303030' : '#ffffff',
-        borderColor: darkTheme ? '#6b6b6b' : '#d6d6d6',
+        backgroundColor: chartStyle.tooltipBackgroundColor,
+        borderColor: chartStyle.tooltipBorderColor,
         textStyle: {
-          color: darkTheme ? '#ffffff' : '#2a2a2a',
+          color: chartStyle.tooltipTextColor,
           fontFamily: "'Barlow Condensed', sans-serif",
         },
         formatter: (params: { dataIndex: number; seriesIndex: number; marker: string }) => {
@@ -408,7 +414,4 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     return colorMap[type] ?? AppColors.Blue;
   }
 
-  private isDarkThemeActive(): boolean {
-    return isDarkChartThemeActive(this.chartTheme);
-  }
 }

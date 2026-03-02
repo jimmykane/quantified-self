@@ -4,9 +4,7 @@ import { ActivityInterface } from '@sports-alliance/sports-lib';
 import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
 import { AppActivityTypeGroupColors } from './app.activity-type-group.colors';
 import { AppActivityTypeGroupGradients } from './app.activity-type-group.gradients';
-import type * as am4core from '@amcharts/amcharts4/core';
 import { AppColors } from './app.colors';
-import { AmChartsService } from '../am-charts.service';
 import { LoggerService } from '../logger.service';
 
 @Injectable({
@@ -16,7 +14,7 @@ export class AppEventColorService {
 
   private colorCache = new WeakMap<ActivityInterface[], Map<ActivityInterface, string>>();
 
-  constructor(private amChartsService: AmChartsService, private logger: LoggerService) { }
+  constructor(private logger: LoggerService) { }
 
   public getDifferenceColor(percent: number): string {
     if (percent <= 2) {
@@ -157,14 +155,7 @@ export class AppEventColorService {
     }
   }
 
-  getColorForZone(zone: string): am4core.Color | null {
-    // Get the cached core module from the service (it will be loaded when charts are initialized)
-    const core = this.amChartsService.getCachedCore();
-    if (!core) {
-      this.logger.warn('amCharts core not loaded yet');
-      return null;
-    }
-
-    return core.color(this.getColorForZoneHex(zone));
+  getColorForZone(zone: string): string {
+    return this.getColorForZoneHex(zone);
   }
 }

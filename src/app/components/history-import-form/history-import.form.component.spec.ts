@@ -30,14 +30,19 @@ vi.mock('../../services/app.user.service');
 vi.mock('../../services/app.analytics.service');
 vi.mock('../../services/logger.service');
 
-vi.mock('@sports-alliance/sports-lib', () => ({
-    ServiceNames: {
-        COROSAPI: 'COROSAPI',
-        SuuntoApp: 'SuuntoApp',
-        GarminAPI: 'GarminAPI'
-    },
-    UserServiceMetaInterface: {}
-}));
+vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@sports-alliance/sports-lib')>();
+
+    return {
+        ...actual,
+        ServiceNames: {
+            ...actual.ServiceNames,
+            COROSAPI: 'COROSAPI',
+            SuuntoApp: 'SuuntoApp',
+            GarminAPI: 'GarminAPI'
+        }
+    };
+});
 
 describe('HistoryImportFormComponent', () => {
     let component: HistoryImportFormComponent;

@@ -26,7 +26,7 @@ describe('EventDurabilityCurveComponent', () => {
   };
 
   let mockService: {
-    buildDurabilitySeries: ReturnType<typeof vi.fn>;
+    buildDurabilitySeriesWithMarkerSource: ReturnType<typeof vi.fn>;
     buildBestEffortMarkers: ReturnType<typeof vi.fn>;
   };
 
@@ -68,17 +68,30 @@ describe('EventDurabilityCurveComponent', () => {
     };
 
     mockService = {
-      buildDurabilitySeries: vi.fn().mockReturnValue([
-        {
-          activity: { getID: () => 'a1' } as any,
-          activityId: 'a1',
-          label: 'Ride',
-          points: [
-            { duration: 10, efficiency: 2.2, power: 280, heartRate: 127, rawPower: 282, rawHeartRate: 128 },
-            { duration: 20, efficiency: 2.1, power: 275, heartRate: 131, rawPower: 276, rawHeartRate: 132 },
-          ],
-        },
-      ]),
+      buildDurabilitySeriesWithMarkerSource: vi.fn().mockReturnValue({
+        renderSeries: [
+          {
+            activity: { getID: () => 'a1' } as any,
+            activityId: 'a1',
+            label: 'Ride',
+            points: [
+              { duration: 10, efficiency: 2.2, power: 280, heartRate: 127, rawPower: 282, rawHeartRate: 128 },
+              { duration: 20, efficiency: 2.1, power: 275, heartRate: 131, rawPower: 276, rawHeartRate: 132 },
+            ],
+          },
+        ],
+        markerSourceSeries: [
+          {
+            activity: { getID: () => 'a1' } as any,
+            activityId: 'a1',
+            label: 'Ride',
+            points: [
+              { duration: 10, efficiency: 2.2, power: 280, heartRate: 127, rawPower: 282, rawHeartRate: 128 },
+              { duration: 20, efficiency: 2.1, power: 275, heartRate: 131, rawPower: 276, rawHeartRate: 132 },
+            ],
+          },
+        ],
+      }),
       buildBestEffortMarkers: vi.fn().mockReturnValue([
         {
           activity: { getID: () => 'a1' } as any,
@@ -139,7 +152,7 @@ describe('EventDurabilityCurveComponent', () => {
 
     const option = getLastOption();
 
-    expect(mockService.buildDurabilitySeries).toHaveBeenCalled();
+    expect(mockService.buildDurabilitySeriesWithMarkerSource).toHaveBeenCalled();
     expect(mockService.buildBestEffortMarkers).toHaveBeenCalled();
     expect(option.series.length).toBeGreaterThanOrEqual(2);
     expect(option.xAxis.type).toBe('value');
@@ -159,26 +172,48 @@ describe('EventDurabilityCurveComponent', () => {
   });
 
   it('should assign different colors when activity color service returns duplicates', async () => {
-    mockService.buildDurabilitySeries.mockReturnValue([
-      {
-        activity: { getID: () => 'a1' } as any,
-        activityId: 'a1',
-        label: 'Ride',
-        points: [
-          { duration: 10, efficiency: 2.2, power: 280, heartRate: 127, rawPower: 282, rawHeartRate: 128 },
-          { duration: 20, efficiency: 2.1, power: 275, heartRate: 131, rawPower: 276, rawHeartRate: 132 },
-        ],
-      },
-      {
-        activity: { getID: () => 'a2' } as any,
-        activityId: 'a2',
-        label: 'Run',
-        points: [
-          { duration: 10, efficiency: 2.0, power: 250, heartRate: 126, rawPower: 252, rawHeartRate: 127 },
-          { duration: 20, efficiency: 1.9, power: 245, heartRate: 129, rawPower: 246, rawHeartRate: 130 },
-        ],
-      },
-    ]);
+    mockService.buildDurabilitySeriesWithMarkerSource.mockReturnValue({
+      renderSeries: [
+        {
+          activity: { getID: () => 'a1' } as any,
+          activityId: 'a1',
+          label: 'Ride',
+          points: [
+            { duration: 10, efficiency: 2.2, power: 280, heartRate: 127, rawPower: 282, rawHeartRate: 128 },
+            { duration: 20, efficiency: 2.1, power: 275, heartRate: 131, rawPower: 276, rawHeartRate: 132 },
+          ],
+        },
+        {
+          activity: { getID: () => 'a2' } as any,
+          activityId: 'a2',
+          label: 'Run',
+          points: [
+            { duration: 10, efficiency: 2.0, power: 250, heartRate: 126, rawPower: 252, rawHeartRate: 127 },
+            { duration: 20, efficiency: 1.9, power: 245, heartRate: 129, rawPower: 246, rawHeartRate: 130 },
+          ],
+        },
+      ],
+      markerSourceSeries: [
+        {
+          activity: { getID: () => 'a1' } as any,
+          activityId: 'a1',
+          label: 'Ride',
+          points: [
+            { duration: 10, efficiency: 2.2, power: 280, heartRate: 127, rawPower: 282, rawHeartRate: 128 },
+            { duration: 20, efficiency: 2.1, power: 275, heartRate: 131, rawPower: 276, rawHeartRate: 132 },
+          ],
+        },
+        {
+          activity: { getID: () => 'a2' } as any,
+          activityId: 'a2',
+          label: 'Run',
+          points: [
+            { duration: 10, efficiency: 2.0, power: 250, heartRate: 126, rawPower: 252, rawHeartRate: 127 },
+            { duration: 20, efficiency: 1.9, power: 245, heartRate: 129, rawPower: 246, rawHeartRate: 130 },
+          ],
+        },
+      ],
+    });
 
     fixture.detectChanges();
     await waitForChartStabilization();
@@ -190,17 +225,30 @@ describe('EventDurabilityCurveComponent', () => {
   });
 
   it('should avoid marker colors colliding with line colors in legend entries', async () => {
-    mockService.buildDurabilitySeries.mockReturnValue([
-      {
-        activity: { getID: () => 'a1' } as any,
-        activityId: 'a1',
-        label: 'Ride',
-        points: [
-          { duration: 10, efficiency: 2.2, power: 280, heartRate: 127, rawPower: 282, rawHeartRate: 128 },
-          { duration: 20, efficiency: 2.1, power: 275, heartRate: 131, rawPower: 276, rawHeartRate: 132 },
-        ],
-      },
-    ]);
+    mockService.buildDurabilitySeriesWithMarkerSource.mockReturnValue({
+      renderSeries: [
+        {
+          activity: { getID: () => 'a1' } as any,
+          activityId: 'a1',
+          label: 'Ride',
+          points: [
+            { duration: 10, efficiency: 2.2, power: 280, heartRate: 127, rawPower: 282, rawHeartRate: 128 },
+            { duration: 20, efficiency: 2.1, power: 275, heartRate: 131, rawPower: 276, rawHeartRate: 132 },
+          ],
+        },
+      ],
+      markerSourceSeries: [
+        {
+          activity: { getID: () => 'a1' } as any,
+          activityId: 'a1',
+          label: 'Ride',
+          points: [
+            { duration: 10, efficiency: 2.2, power: 280, heartRate: 127, rawPower: 282, rawHeartRate: 128 },
+            { duration: 20, efficiency: 2.1, power: 275, heartRate: 131, rawPower: 276, rawHeartRate: 132 },
+          ],
+        },
+      ],
+    });
     mockService.buildBestEffortMarkers.mockReturnValue([
       {
         activity: { getID: () => 'a1' } as any,
@@ -253,7 +301,10 @@ describe('EventDurabilityCurveComponent', () => {
   });
 
   it('should return empty option when there is no durability data', async () => {
-    mockService.buildDurabilitySeries.mockReturnValue([]);
+    mockService.buildDurabilitySeriesWithMarkerSource.mockReturnValue({
+      renderSeries: [],
+      markerSourceSeries: [],
+    });
     mockService.buildBestEffortMarkers.mockReturnValue([]);
 
     fixture.detectChanges();

@@ -23,6 +23,12 @@ These are baseline rules that apply across the repository unless a deeper `AGENT
 - Prefer `inject()` for new code.
 - Constructor injection is acceptable in existing code paths.
 
+## Zone and External APIs
+- Avoid Zone.js-driven behavior fixes (`NgZone.run`, manual change-detection nudges) as a first-line solution.
+- Prefer official framework/library APIs for coordination (for example ECharts `connect`, `dispatchAction`, `takeGlobalCursor`, native event contracts).
+- If Angular boundary handling is unavoidable, keep it isolated at integration edges and document why the official API path was insufficient.
+- Do not introduce new Zone.js coupling in chart synchronization flows when an ECharts-native mechanism exists.
+
 ## Firebase
 - Use modular SDK imports (`@angular/fire/*`, `firebase/*`).
 - Avoid compat APIs unless required by existing integration.

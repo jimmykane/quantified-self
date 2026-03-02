@@ -1,0 +1,42 @@
+<section class="event-chart-panel" [class.event-chart-panel--zoom-only]="!panel && showZoomBar">
+  @if (panel) {
+  <header class="event-chart-panel__header">
+    <h3>{{ panel?.displayName }}</h3>
+    @if (panel?.unit) {
+    <span>({{ panel?.unit }})</span>
+    }
+  </header>
+  }
+
+  <div #chartDiv class="event-chart-panel__chart" [class.event-chart-panel__chart--zoom-only]="!panel && showZoomBar"></div>
+
+  @if (hasSelection && rangeStats.length > 0) {
+  <section class="event-chart-panel__stats">
+    <header class="event-chart-panel__stats-header">
+      <span class="event-chart-panel__stats-range">{{ selectedRangeLabel }}</span>
+    </header>
+
+    <div class="event-chart-panel__stats-grid">
+      @for (stat of rangeStats; track stat.activityID) {
+      <article class="event-chart-panel__stats-card" [class.event-chart-panel__stats-card--anonymous]="!showActivityNamesInTooltip">
+        @if (showActivityNamesInTooltip) {
+        <header class="event-chart-panel__stats-card-header">
+          <span class="event-chart-panel__swatch" [style.background]="stat.color"></span>
+          <span class="event-chart-panel__activity">{{ stat.activityName }}</span>
+        </header>
+        }
+
+        <div class="event-chart-panel__stats-values">
+          @for (entry of getRangeStatEntries(stat); track entry.label) {
+          <div class="event-chart-panel__stats-chip">
+            <span class="event-chart-panel__stats-chip-label">{{ entry.label }}</span>
+            <span class="event-chart-panel__stats-chip-value">{{ entry.value }}</span>
+          </div>
+          }
+        </div>
+      </article>
+      }
+    </div>
+  </section>
+  }
+</section>

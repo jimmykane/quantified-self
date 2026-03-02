@@ -2,7 +2,7 @@ import { ChartThemes } from '@sports-alliance/sports-lib';
 
 export function isDarkChartThemeActive(chartTheme: ChartThemes | string | null | undefined): boolean {
   const normalizedTheme = `${chartTheme || ''}`.trim().toLowerCase();
-  if (normalizedTheme === 'dark' || normalizedTheme === 'amchartsdark') {
+  if (normalizedTheme === 'dark' || normalizedTheme.endsWith('dark')) {
     return true;
   }
 

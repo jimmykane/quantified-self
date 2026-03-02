@@ -67,6 +67,11 @@ export interface PerformanceCurveDurabilitySeries {
   points: PerformanceCurveDurabilityPoint[];
 }
 
+export interface BuildDurabilitySeriesResult {
+  renderSeries: PerformanceCurveDurabilitySeries[];
+  markerSourceSeries: PerformanceCurveDurabilitySeries[];
+}
+
 export interface PerformanceCurveCadencePowerPoint {
   duration: number;
   cadence: number;
@@ -177,20 +182,33 @@ export class PerformanceCurveDataService {
     activities: ActivityInterface[],
     options: BuildPerformanceCurveSeriesOptions = {}
   ): PerformanceCurveDurabilitySeries[] {
+    return this.buildDurabilitySeriesWithMarkerSource(activities, options).renderSeries;
+  }
+
+  public buildDurabilitySeriesWithMarkerSource(
+    activities: ActivityInterface[],
+    options: BuildPerformanceCurveSeriesOptions = {}
+  ): BuildDurabilitySeriesResult {
     if (!Array.isArray(activities) || activities.length === 0) {
-      return [];
+      return {
+        renderSeries: [],
+        markerSourceSeries: [],
+      };
     }
 
     const rollingWindowSeconds = options.rollingWindowSeconds ?? DEFAULT_ROLLING_WINDOW_SECONDS;
     const activityDescriptors = this.buildActivityLabels(activities, options.isMerge === true);
 
-    return activityDescriptors.map((descriptor) => {
+    const renderSeries: PerformanceCurveDurabilitySeries[] = [];
+    const markerSourceSeries: PerformanceCurveDurabilitySeries[] = [];
+
+    activityDescriptors.forEach((descriptor) => {
       const powerData = this.getStreamData(descriptor.activity, DataPower.type);
       const heartRateData = this.getStreamData(descriptor.activity, DataHeartRate.type);
       const length = Math.min(powerData.length, heartRateData.length);
 
       if (length < 3) {
-        return null;
+        return;
       }
 
       const rawSamples: Array<{ duration: number; power: number; heartRate: number }> = [];
@@ -210,7 +228,7 @@ export class PerformanceCurveDataService {
       }
 
       if (rawSamples.length < 3) {
-        return null;
+        return;
       }
 
       const sampleInterval = this.getMedianDurationStep(rawSamples.map((sample) => sample.duration));
@@ -240,18 +258,35 @@ export class PerformanceCurveDataService {
         };
       }).filter((point) => Number.isFinite(point.efficiency) && point.efficiency > 0);
 
-      const downsampledPoints = this.downsamplePoints(points, options.maxPointsPerSeries);
-      if (downsampledPoints.length < 2) {
-        return null;
+      if (points.length < 2) {
+        return;
       }
 
-      return {
+      const markerSeriesEntry: PerformanceCurveDurabilitySeries = {
+        activity: descriptor.activity,
+        activityId: descriptor.activityId,
+        label: descriptor.label,
+        points,
+      };
+      markerSourceSeries.push(markerSeriesEntry);
+
+      const downsampledPoints = this.downsamplePoints(points, options.maxPointsPerSeries);
+      if (downsampledPoints.length < 2) {
+        return;
+      }
+
+      renderSeries.push({
         activity: descriptor.activity,
         activityId: descriptor.activityId,
         label: descriptor.label,
         points: downsampledPoints,
-      };
-    }).filter((series): series is PerformanceCurveDurabilitySeries => !!series);
+      });
+    });
+
+    return {
+      renderSeries,
+      markerSourceSeries,
+    };
   }
 
   public buildCadencePowerSeries(

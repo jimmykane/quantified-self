@@ -41,6 +41,7 @@ const SUMMARY_TAB_ICONS: Record<EventSummaryMetricGroupId, string> = {
 };
 const SUMMARY_TAB_HEIGHT_WOBBLE_TOLERANCE_PX = 2;
 const STATS_GRID_PERF_LOGS_ENABLED = false;
+const SUMMARY_TAB_SWITCH_ANIMATION_DURATION_MS = 300;
 type TabBodyHeightSyncMode = 'allow_shrink' | 'only_grow';
 
 @Component({
@@ -64,6 +65,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   public stats: DataInterface[] = [];
   public metricTabs: SummaryMetricTab[] = [];
   public selectedTabIndex = 0;
+  public tabAnimationDuration = `${SUMMARY_TAB_SWITCH_ANIMATION_DURATION_MS}ms`;
   public showDiff = false;
   public diffByType = new Map<string, { display: string; percent: number; color: string }>();
   private resizeObserver: ResizeObserver | null = null;
@@ -373,6 +375,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
       return;
     }
 
+    this.setTabAnimationEnabled(false);
     this.didPrewarmTabs = true;
     this.isPrewarmingTabs = true;
     this.prewarmAllTabsSynchronously();
@@ -383,7 +386,17 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
     this.selectedTabIndex = 0;
     this.cdr.detectChanges();
     this.isPrewarmingTabs = false;
+    this.setTabAnimationEnabled(true);
     this.scheduleTabBodyHeightSync('allow_shrink', true);
+  }
+
+  private setTabAnimationEnabled(enabled: boolean) {
+    const nextDuration = enabled ? `${SUMMARY_TAB_SWITCH_ANIMATION_DURATION_MS}ms` : '0ms';
+    if (this.tabAnimationDuration === nextDuration) {
+      return;
+    }
+    this.tabAnimationDuration = nextDuration;
+    this.cdr.markForCheck();
   }
 
   private prewarmAllTabsSynchronously() {

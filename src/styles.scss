@@ -144,20 +144,6 @@ body.app-hydrated mat-icon {
 
   background-color: mat.m2-get-color-from-palette($dark-bg, background);
   color: mat.m2-get-color-from-palette($dark-fg, text);
-
-  // Force SVG text to be light in dark mode for amCharts
-  text,
-  tspan,
-  .amcharts-Label {
-    fill: mat.m2-get-color-from-palette($dark-fg, text) !important;
-  }
-
-  // Ensure tooltips have dark background
-  .amcharts-Tooltip-bg {
-    fill: mat.m2-get-color-from-palette($dark-bg, background) !important;
-    stroke: mat.m2-get-color-from-palette($dark-fg, text) !important;
-    fill-opacity: 0.9 !important;
-  }
 }
 
 // ... existing code ...
@@ -902,6 +888,14 @@ tr.mat-row:focus,
 .mat-mdc-menu-panel.qs-menu-panel .mat-mdc-menu-content {
   @extend .qs-scrollbar;
   padding: 6px 0;
+}
+
+.qs-action-menu-trigger {
+  min-width: 0 !important;
+}
+
+.qs-action-menu-trigger .mat-icon {
+  margin-right: 4px;
 }
 
 /* Section/Item Layout for menus used for settings */

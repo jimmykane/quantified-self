@@ -35,4 +35,20 @@ export class AppChartSettingsLocalStorageService extends LocalStorageService {
     }
     this.setSeriesIDsToShow(event, seriesToShow);
   }
+
+  public getDataTypeIDsToShow(event: EventInterface): string[] {
+    return this.getSeriesIDsToShow(event);
+  }
+
+  public setDataTypeIDsToShow(event: EventInterface, dataTypeIDs: string[]) {
+    this.setSeriesIDsToShow(event, dataTypeIDs);
+  }
+
+  public showDataTypeID(event: EventInterface, dataTypeID: string) {
+    this.showSeriesID(event, dataTypeID);
+  }
+
+  public hideDataTypeID(event: EventInterface, dataTypeID: string) {
+    this.hideSeriesID(event, dataTypeID);
+  }
 }

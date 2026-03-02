@@ -4,7 +4,6 @@ import {
   Component,
   ElementRef,
   Input,
-  NgZone,
   OnChanges,
   OnDestroy,
   SimpleChanges,
@@ -30,8 +29,15 @@ import {
   PowerCurveChartPoint,
   PowerCurveChartSeries,
 } from '../../../services/performance-curve-data.service';
-import { EChartsHostController } from '../../../helpers/echarts-host-controller';
-import { isDarkChartThemeActive } from '../../../helpers/echarts-theme.helper';
+import {
+  ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS,
+  EChartsHostController
+} from '../../../helpers/echarts-host-controller';
+import {
+  buildEventEChartsVisualTokens,
+  calculateEventEChartsAxisRange,
+  toFiniteEventEChartsNumber
+} from '../../../helpers/event-echarts-common.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 
@@ -66,12 +72,10 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
     private eChartsLoader: EChartsLoaderService,
     private eventColorService: AppEventColorService,
     private logger: LoggerService,
-    private performanceCurveDataService: PerformanceCurveDataService,
-    private zone: NgZone
+    private performanceCurveDataService: PerformanceCurveDataService
   ) {
     this.chartHost = new EChartsHostController({
       eChartsLoader: this.eChartsLoader,
-      zone: this.zone,
       logger: this.logger,
       logPrefix: '[EventPowerCurveComponent]'
     });
@@ -120,18 +124,17 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
     });
 
     const option = this.buildChartOption(powerSeries);
-    this.chartHost.setOption(option, { notMerge: true, lazyUpdate: true });
+    this.chartHost.setOption(option, ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS);
     this.chartHost.scheduleResize();
   }
 
   private buildChartOption(powerSeries: PowerCurveChartSeries[]): ChartOption {
-    const darkTheme = this.isDarkThemeActive();
-    const textColor = darkTheme ? '#f5f5f5' : '#1f1f1f';
-    const axisColor = darkTheme ? 'rgba(255,255,255,0.24)' : 'rgba(0,0,0,0.24)';
-    const axisLabelFontSize = this.isMobile ? 11 : 12;
-    const tooltipExtraCssText = this.isMobile
-      ? 'max-width: min(80vw, 280px); white-space: normal; overflow-wrap: anywhere; word-break: break-word;'
-      : '';
+    const chartStyle = buildEventEChartsVisualTokens(this.chartTheme, this.isMobile);
+    const darkTheme = chartStyle.darkTheme;
+    const textColor = chartStyle.textColor;
+    const axisColor = chartStyle.axisColor;
+    const axisLabelFontSize = chartStyle.axisLabelFontSize;
+    const tooltipExtraCssText = chartStyle.tooltipExtraCssText;
 
     if (powerSeries.length === 0) {
       return {
@@ -144,12 +147,13 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
     }
 
     const singleActivity = powerSeries.length <= 1;
+    const maxSymbolPoints = this.isMobile ? 140 : 240;
     const powerPoints = powerSeries.flatMap((seriesEntry) => seriesEntry.points);
     const xDurations = [...new Set(powerPoints.map((point) => point.duration))]
       .sort((left, right) => left - right);
     const visibleDurationLabels = this.buildVisibleDurationLabelSet(xDurations);
     const powerValues = powerPoints.map((point) => point.power);
-    const [powerMin, powerMax] = this.calculateAxisRange(powerValues, {
+    const [powerMin, powerMax] = calculateEventEChartsAxisRange(powerValues, {
       minFloor: 0,
       fallbackMin: 0,
       fallbackMax: 120,
@@ -176,7 +180,7 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
             wattsPerKg: point.wattsPerKg,
           };
         }),
-        showSymbol: true,
+        showSymbol: seriesEntry.points.length <= maxSymbolPoints,
         symbol: 'circle',
         symbolSize: this.isMobile ? 4.5 : 5.5,
         smooth: powerSeries.length > 1 ? 0.16 : 0.24,
@@ -258,7 +262,7 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
           fontSize: axisLabelFontSize,
           color: textColor,
           formatter: (value: string | number) => {
-            const duration = this.toFiniteNumber(value) ?? 0;
+            const duration = toFiniteEventEChartsNumber(value) ?? 0;
             if (this.isMobile && !visibleDurationLabels.has(duration)) {
               return '';
             }
@@ -310,11 +314,11 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
         appendToBody: !this.isMobile,
         confine: this.isMobile,
         extraCssText: tooltipExtraCssText,
-        backgroundColor: darkTheme ? '#222222' : '#ffffff',
-        borderColor: darkTheme ? '#555555' : '#d6d6d6',
+        backgroundColor: chartStyle.tooltipBackgroundColor,
+        borderColor: chartStyle.tooltipBorderColor,
         borderWidth: 1,
         textStyle: {
-          color: darkTheme ? '#ffffff' : '#2a2a2a',
+          color: chartStyle.tooltipTextColor,
           fontFamily: "'Barlow Condensed', sans-serif",
         },
         formatter: (params: unknown) => this.formatTooltip(params, !singleActivity),
@@ -416,61 +420,19 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
       value?: unknown;
     };
 
-    const duration = this.toFiniteNumber(entry?.data?.duration) ?? this.toFiniteNumber(entry?.value) ?? 0;
-    const power = this.toFiniteNumber(entry?.data?.value) ?? this.toFiniteNumber(entry?.value);
+    const duration = toFiniteEventEChartsNumber(entry?.data?.duration) ?? toFiniteEventEChartsNumber(entry?.value) ?? 0;
+    const power = toFiniteEventEChartsNumber(entry?.data?.value) ?? toFiniteEventEChartsNumber(entry?.value);
     if (power === null) {
       return '';
     }
 
-    const wattsPerKg = this.toFiniteNumber(entry?.data?.wattsPerKg);
+    const wattsPerKg = toFiniteEventEChartsNumber(entry?.data?.wattsPerKg);
     const activityPrefix = hasMultipleActivities ? `${entry.seriesName}: ` : '';
     const wattsPerKgLabel = wattsPerKg && wattsPerKg > 0
       ? ` (${wattsPerKg.toFixed(2)} W/kg)`
       : '';
 
     return `<b>${this.formatDurationLabel(duration)}</b><br/>${activityPrefix}Power: <b>${this.formatPowerLabel(power, true)}</b>${wattsPerKgLabel}`;
-  }
-
-  private calculateAxisRange(values: number[], options: {
-    minFloor?: number;
-    fallbackMin: number;
-    fallbackMax: number;
-  }): [number, number] {
-    const validValues = values.filter((value) => Number.isFinite(value));
-    if (!validValues.length) {
-      return [options.fallbackMin, options.fallbackMax];
-    }
-
-    const minRaw = Math.min(...validValues);
-    const maxRaw = Math.max(...validValues);
-    const range = Math.max(1, maxRaw - minRaw);
-    const padding = Math.max(0.05, range * 0.12);
-
-    let min = minRaw - padding;
-    let max = maxRaw + padding;
-
-    if (Number.isFinite(options.minFloor)) {
-      min = Math.max(options.minFloor as number, min);
-    }
-
-    if (max <= min) {
-      max = min + 1;
-    }
-
-    return [min, max];
-  }
-
-  private toFiniteNumber(value: unknown): number | null {
-    if (typeof value === 'number' && Number.isFinite(value)) {
-      return value;
-    }
-
-    if (typeof value === 'string' && value.trim().length > 0) {
-      const numeric = Number(value);
-      return Number.isFinite(numeric) ? numeric : null;
-    }
-
-    return null;
   }
 
   private formatDurationLabel(seconds: number): string {
@@ -622,7 +584,4 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
     return nearestIndex;
   }
 
-  private isDarkThemeActive(): boolean {
-    return isDarkChartThemeActive(this.chartTheme);
-  }
 }

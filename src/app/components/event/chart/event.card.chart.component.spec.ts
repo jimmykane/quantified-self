@@ -1,632 +1,477 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { BreakpointObserver } from '@angular/cdk/layout';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { CUSTOM_ELEMENTS_SCHEMA, signal } from '@angular/core';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { of } from 'rxjs';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  ChartCursorBehaviours,
+  ChartThemes,
+  DataDistance,
+  DataStrydDistance,
+  XAxisTypes,
+} from '@sports-alliance/sports-lib';
 import { EventCardChartComponent } from './event.card.chart.component';
-import { TestBed, ComponentFixture } from '@angular/core/testing';
-import { AppEventColorService } from '../../../services/color/app.event.color.service';
-import { AmChartsService } from '../../../services/am-charts.service';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { AppUserService } from '../../../services/app.user.service';
-import { AppEventService } from '../../../services/app.event.service';
-import { AppDataColors } from '../../../services/color/app.data.colors';
-import { AppWindowService } from '../../../services/app.window.service';
-import { AppChartSettingsLocalStorageService } from '../../../services/storage/app.chart.settings.local.storage.service';
 import { AppActivityCursorService } from '../../../services/activity-cursor/app-activity-cursor.service';
+import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { LoggerService } from '../../../services/logger.service';
-import { MatSnackBar } from '@angular/material/snack-bar';
-import { ChangeDetectorRef, CUSTOM_ELEMENTS_SCHEMA, NgZone, signal } from '@angular/core';
-import { of } from 'rxjs';
-import { ActivityTypes, DataAltitude, DataPace, DataPowerAvg, DataSpeedAvgKilometersPerHour, LapTypes, XAxisTypes } from '@sports-alliance/sports-lib';
-import { AppUserUtilities } from '../../../utils/app.user.utilities';
+import { AppChartSettingsLocalStorageService } from '../../../services/storage/app.chart.settings.local.storage.service';
+import * as eventDataHelper from '../../../helpers/event-echarts-data.helper';
+import { MaterialModule } from '../../../modules/material.module';
 
 describe('EventCardChartComponent', () => {
-    let component: EventCardChartComponent;
-    let fixture: ComponentFixture<EventCardChartComponent>;
-    let mockUserSettingsQuery: any;
-    let mockThemeService: any;
-    let mockAmChartsService: any;
-    let mockEventColorService: any;
-    let mockUserService: any;
-    let mockEventService: any;
-    let mockDataColors: any;
-    let mockWindowService: any;
-    let mockChartSettingsStorage: any;
-    let mockActivityCursorService: any;
-    let mockSnackBar: any;
+  let fixture: ComponentFixture<EventCardChartComponent>;
+  let component: EventCardChartComponent;
 
-    beforeEach(async () => {
-        mockUserSettingsQuery = {
-            chartSettings: signal({
-                showAllData: false,
-                showLaps: true,
-                showGrid: true,
-                disableGrouping: false,
-                hideAllSeriesOnInit: false,
-                gainAndLossThreshold: 5,
-            }),
-            unitSettings: signal({}),
-            updateChartSettings: vi.fn()
-        };
-        mockThemeService = {
-            getChartTheme: vi.fn().mockReturnValue(of('light')),
-            getAppTheme: vi.fn().mockReturnValue(of('light'))
-        };
-        mockAmChartsService = {
-            createChart: vi.fn(),
-            getChartTheme: vi.fn().mockReturnValue({}),
-            load: vi.fn().mockResolvedValue({ core: {}, charts: {} })
-        };
-        mockEventColorService = {
-            getActivityColor: vi.fn().mockReturnValue('#ff0000')
-        };
-        mockUserService = {
-            getUser: vi.fn().mockReturnValue(of({})),
-            getUserChartDataTypesToUse: vi.fn().mockReturnValue([])
-        };
-        mockEventService = {
-            getEvents: vi.fn().mockReturnValue(of([]))
-        };
-        mockDataColors = {
-            getDataColor: vi.fn().mockReturnValue('#000000')
-        };
-        mockWindowService = {
-            nativeWindow: {
-                innerWidth: 1000
-            }
-        };
-        mockChartSettingsStorage = {
-            getSettings: vi.fn().mockReturnValue({})
-        };
-        mockActivityCursorService = {
-            cursor$: of(null)
-        };
-        mockSnackBar = { open: vi.fn() };
+  const chartSettingsSignal = signal({
+    showAllData: false,
+    showLaps: true,
+    lapTypes: [],
+    xAxisType: XAxisTypes.Duration,
+    chartCursorBehaviour: ChartCursorBehaviours.ZoomX,
+    gainAndLossThreshold: 1,
+    useAnimations: false,
+  } as any);
 
-        await TestBed.configureTestingModule({
-            declarations: [EventCardChartComponent],
-            providers: [
-                { provide: AppUserSettingsQueryService, useValue: mockUserSettingsQuery },
-                { provide: AppThemeService, useValue: mockThemeService },
-                { provide: AmChartsService, useValue: mockAmChartsService },
-                { provide: AppEventColorService, useValue: mockEventColorService },
-                { provide: AppUserService, useValue: mockUserService },
-                { provide: AppEventService, useValue: mockEventService },
-                { provide: AppDataColors, useValue: mockDataColors },
-                { provide: AppWindowService, useValue: mockWindowService },
-                { provide: AppChartSettingsLocalStorageService, useValue: mockChartSettingsStorage },
-                { provide: AppActivityCursorService, useValue: mockActivityCursorService },
-                { provide: MatSnackBar, useValue: mockSnackBar },
-                { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn(), log: vi.fn(), info: vi.fn() } },
-            ],
-            schemas: [CUSTOM_ELEMENTS_SCHEMA]
-        }).compileComponents();
+  const mockUserSettingsQuery = {
+    chartSettings: chartSettingsSignal,
+    unitSettings: signal({}),
+    updateChartSettings: vi.fn().mockResolvedValue(undefined),
+  };
 
-        fixture = TestBed.createComponent(EventCardChartComponent);
-        component = fixture.componentInstance;
+  const mockThemeService = {
+    getChartTheme: vi.fn().mockReturnValue(of(ChartThemes.Material)),
+  };
 
-        // Mock the core and charts objects
-        (component as any).core = {
-            Container: function () {
-                return {
-                    createChild: vi.fn().mockReturnValue({}),
-                    id: '',
-                    background: {
-                        fillOpacity: 0,
-                        fill: {},
-                        stroke: {},
-                        strokeOpacity: 0,
-                        strokeWidth: 0
-                    },
-                    padding: vi.fn(),
-                    filters: { push: vi.fn() }
-                };
-            },
-            Color: vi.fn().mockReturnValue({}),
-            color: vi.fn().mockReturnValue({}),
-            InterfaceColorSet: function () { this.getFor = vi.fn(); },
-            Label: function () { return { align: '', text: '' }; },
-            DropShadowFilter: function () { return { dy: 0, dx: 0, opacity: 0, blur: 0 }; },
-            options: {}
-        };
-        (component as any).charts = {
-            Legend: function () { },
-        };
+  const mockUserService = {
+    getUserChartDataTypesToUse: vi.fn().mockReturnValue(['power']),
+  };
 
-        // Mock the event object
-        component.event = {
-            getActivityTypesAsArray: () => [ActivityTypes.Running],
-            getActivities: () => [],
-        } as any;
+  const mockActivityCursorService = {
+    setCursor: vi.fn(),
+  };
+
+  const mockEventColorService = {
+    getActivityColor: vi.fn().mockReturnValue('#ff0000'),
+  };
+
+  const mockChartSettingsStorage = {
+    getDataTypeIDsToShow: vi.fn().mockReturnValue([]),
+    setDataTypeIDsToShow: vi.fn(),
+  };
+
+  const mockBreakpointObserver = {
+    observe: vi.fn().mockReturnValue(of({ matches: false, breakpoints: {} })),
+  };
+
+  beforeEach(async () => {
+    mockThemeService.getChartTheme.mockReturnValue(of(ChartThemes.Material));
+    mockUserSettingsQuery.updateChartSettings.mockResolvedValue(undefined);
+    mockActivityCursorService.setCursor.mockReset();
+    mockChartSettingsStorage.getDataTypeIDsToShow.mockReturnValue([]);
+    mockChartSettingsStorage.setDataTypeIDsToShow.mockReset();
+    mockBreakpointObserver.observe.mockReset();
+    mockBreakpointObserver.observe.mockReturnValue(of({ matches: false, breakpoints: {} }));
+
+    vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([]);
+    vi.spyOn(eventDataHelper, 'buildEventLapMarkers').mockReturnValue([]);
+
+    await TestBed.configureTestingModule({
+      imports: [MaterialModule, NoopAnimationsModule],
+      declarations: [EventCardChartComponent],
+      providers: [
+        { provide: BreakpointObserver, useValue: mockBreakpointObserver },
+        { provide: AppUserSettingsQueryService, useValue: mockUserSettingsQuery },
+        { provide: AppThemeService, useValue: mockThemeService },
+        { provide: AppUserService, useValue: mockUserService },
+        { provide: AppActivityCursorService, useValue: mockActivityCursorService },
+        { provide: AppEventColorService, useValue: mockEventColorService },
+        { provide: AppChartSettingsLocalStorageService, useValue: mockChartSettingsStorage },
+        { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), log: vi.fn() } },
+      ],
+      schemas: [CUSTOM_ELEMENTS_SCHEMA],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(EventCardChartComponent);
+    component = fixture.componentInstance;
+
+    component.user = { uid: 'u1' } as any;
+    component.targetUserID = 'u1';
+    component.event = {
+      isMultiSport: () => false,
+      getActivities: () => [],
+      getID: () => 'event-1',
+    } as any;
+    component.selectedActivities = [];
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should create and rebuild chart panels', async () => {
+    const buildPanelsSpy = vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
+      {
+        dataType: 'power',
+        displayName: 'Power',
+        unit: 'W',
+        colorGroupKey: 'Power',
+        minX: 0,
+        maxX: 1,
+        series: [],
+      },
+    ] as any);
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component).toBeTruthy();
+    expect(buildPanelsSpy).toHaveBeenCalled();
+    expect(component.chartPanels).toHaveLength(1);
+    expect(component.dataTypeLegendItems).toHaveLength(1);
+    expect(component.xDomain).toEqual({ start: 0, end: 1 });
+  });
+
+  it('shows activity names in tooltips for merge events', () => {
+    component.event = {
+      isMerge: true,
+      getActivities: () => [],
+      getID: () => 'event-1',
+    } as any;
+
+    expect(component.showActivityNamesInTooltip).toBe(true);
+  });
+
+  it('shows activity names in tooltips for benchmark events', () => {
+    component.event = {
+      isMerge: false,
+      benchmarkResults: { test: {} },
+      getActivities: () => [],
+      getID: () => 'event-1',
+    } as any;
+
+    expect(component.showActivityNamesInTooltip).toBe(true);
+  });
+
+  it('hides activity names in tooltips for normal events', () => {
+    component.event = {
+      isMerge: false,
+      getActivities: () => [],
+      getID: () => 'event-1',
+    } as any;
+
+    expect(component.showActivityNamesInTooltip).toBe(false);
+  });
+
+  it('exposes the series menu summary from current legend visibility', async () => {
+    vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
+      {
+        dataType: 'pace',
+        displayName: 'Pace',
+        unit: 'min/km',
+        colorGroupKey: 'Pace',
+        minX: 0,
+        maxX: 100,
+        series: [],
+      },
+      {
+        dataType: 'speed',
+        displayName: 'Speed',
+        unit: 'km/h',
+        colorGroupKey: 'Speed',
+        minX: 0,
+        maxX: 100,
+        series: [],
+      },
+    ] as any);
+    mockChartSettingsStorage.getDataTypeIDsToShow.mockReturnValue(['pace']);
+
+    component.user = { uid: 'u1' } as any;
+    component.targetUserID = 'u1';
+    component.event = {
+      isMultiSport: () => false,
+      getActivities: () => [],
+      getID: () => 'event-1',
+    } as any;
+    component.selectedActivities = [];
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.seriesMenuSummary).toBe('Series 1/2');
+  });
+
+  it('should persist showAllData changes', async () => {
+    fixture.detectChanges();
+
+    component.showAllData = true;
+
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith({ showAllData: true });
+  });
+
+  it('should persist xAxisType changes', async () => {
+    fixture.detectChanges();
+
+    component.xAxisType = XAxisTypes.Distance;
+
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith({ xAxisType: XAxisTypes.Distance });
+  });
+
+  it('should persist cursorBehaviour changes and clear selection when returning to zoom mode', async () => {
+    fixture.detectChanges();
+    component.selectedRange = { start: 10, end: 20 };
+
+    component.cursorBehaviour = ChartCursorBehaviours.SelectX;
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith({ chartCursorBehaviour: ChartCursorBehaviours.SelectX });
+
+    vi.clearAllMocks();
+    component.selectedRange = { start: 10, end: 20 };
+    component.cursorBehaviour = ChartCursorBehaviours.ZoomX;
+
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith({ chartCursorBehaviour: ChartCursorBehaviours.ZoomX });
+    expect(component.selectedRange).toBeNull();
+  });
+
+  it('pushes cursor updates to map service for distance mode', async () => {
+    chartSettingsSignal.set({
+      ...chartSettingsSignal(),
+      xAxisType: XAxisTypes.Distance,
     });
 
-    it('should create', () => {
-        expect(component).toBeTruthy();
+    const distanceStream = { getData: () => [0, 100, 200] };
+    const timeStream = { getData: () => [0, 10, 20] };
+    const activity = {
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      getID: () => 'a1',
+      getStream: (type: string) => {
+        if (type === DataDistance.type || type === DataStrydDistance.type) {
+          return distanceStream;
+        }
+        if (type === XAxisTypes.Time) {
+          return timeStream;
+        }
+        return null;
+      },
+    } as any;
+
+    component.selectedActivities = [activity];
+    component.event = {
+      isMultiSport: () => false,
+      getActivities: () => [activity],
+    } as any;
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    component.onPanelCursorPositionChange(120);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    expect(mockActivityCursorService.setCursor).toHaveBeenCalledWith({
+      activityID: 'a1',
+      time: activity.startDate.getTime() + 10 * 1000,
+      byChart: true,
+    });
+  });
+
+  it('restores persisted datatype visibility when ids are valid', async () => {
+    mockChartSettingsStorage.getDataTypeIDsToShow.mockReturnValue(['speed']);
+    vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
+      {
+        dataType: 'power',
+        displayName: 'Power',
+        unit: 'W',
+        colorGroupKey: 'Power',
+        minX: 0,
+        maxX: 100,
+        series: [],
+      },
+      {
+        dataType: 'speed',
+        displayName: 'Speed',
+        unit: 'km/h',
+        colorGroupKey: 'Speed',
+        minX: 0,
+        maxX: 100,
+        series: [],
+      },
+    ] as any);
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual(['speed']);
+    expect(mockChartSettingsStorage.setDataTypeIDsToShow).toHaveBeenCalledWith(component.event, ['speed']);
+  });
+
+  it('falls back to showing all panels when persisted ids are stale', async () => {
+    mockChartSettingsStorage.getDataTypeIDsToShow.mockReturnValue(['legacy-id']);
+    vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
+      {
+        dataType: 'power',
+        displayName: 'Power',
+        unit: 'W',
+        colorGroupKey: 'Power',
+        minX: 0,
+        maxX: 100,
+        series: [],
+      },
+      {
+        dataType: 'speed',
+        displayName: 'Speed',
+        unit: 'km/h',
+        colorGroupKey: 'Speed',
+        minX: 0,
+        maxX: 100,
+        series: [],
+      },
+    ] as any);
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual(['power', 'speed']);
+  });
+
+  it('updates visible panels and persists when datatype selection changes', async () => {
+    vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
+      {
+        dataType: 'power',
+        displayName: 'Power',
+        unit: 'W',
+        colorGroupKey: 'Power',
+        minX: 0,
+        maxX: 100,
+        series: [],
+      },
+      {
+        dataType: 'speed',
+        displayName: 'Speed',
+        unit: 'km/h',
+        colorGroupKey: 'Speed',
+        minX: 0,
+        maxX: 100,
+        series: [],
+      },
+    ] as any);
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    component.onDataTypeLegendSelectionChange('speed', false);
+
+    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual(['power']);
+    expect(mockChartSettingsStorage.setDataTypeIDsToShow).toHaveBeenCalledWith(component.event, ['power']);
+  });
+
+  it('skips panel rebuild when non-material settings change', async () => {
+    const buildPanelsSpy = vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
+      {
+        dataType: 'power',
+        displayName: 'Power',
+        unit: 'W',
+        colorGroupKey: 'Power',
+        minX: 0,
+        maxX: 100,
+        series: [],
+      },
+    ] as any);
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(buildPanelsSpy).toHaveBeenCalledTimes(1);
+
+    chartSettingsSignal.set({
+      ...chartSettingsSignal(),
+      useAnimations: !chartSettingsSignal().useAnimations,
+    } as any);
+    await fixture.whenStable();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(buildPanelsSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('persists visible datatype ids only when the selection actually changes', async () => {
+    vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
+      {
+        dataType: 'power',
+        displayName: 'Power',
+        unit: 'W',
+        colorGroupKey: 'Power',
+        minX: 0,
+        maxX: 100,
+        series: [],
+      },
+    ] as any);
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const baselineWrites = mockChartSettingsStorage.setDataTypeIDsToShow.mock.calls.length;
+    component.onDataTypeLegendSelectionChange('power', true);
+
+    expect(mockChartSettingsStorage.setDataTypeIDsToShow.mock.calls.length).toBe(baselineWrites);
+  });
+
+  it('does not rebuild panels when datatype input order changes but enabled set stays the same', async () => {
+    let preferredDataTypes = ['power', 'speed'];
+    mockUserService.getUserChartDataTypesToUse.mockImplementation(() => [...preferredDataTypes]);
+
+    const buildPanelsSpy = vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockImplementation((input: any) => {
+      return (input.dataTypesToUse || []).map((dataType: string, index: number) => ({
+        dataType,
+        displayName: dataType,
+        unit: '',
+        colorGroupKey: dataType,
+        minX: 0,
+        maxX: index + 1,
+        series: [
+          {
+            id: `${dataType}-series`,
+            activityID: 'a1',
+            activityName: 'Activity',
+            color: '#ff0000',
+            streamType: dataType,
+            displayName: dataType,
+            unit: '',
+            points: [{ x: 0, y: 1, time: 0 }],
+          }
+        ],
+      })) as any;
     });
 
-    it('should fallback to default chart lap types when settings lapTypes is empty', () => {
-        mockUserSettingsQuery.chartSettings.set({
-            ...mockUserSettingsQuery.chartSettings(),
-            lapTypes: []
-        });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
-        expect(component.lapTypes).toEqual(AppUserUtilities.getDefaultChartLapTypes());
-    });
+    expect(buildPanelsSpy).toHaveBeenCalledTimes(1);
+    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual(['power', 'speed']);
 
-    describe('createLabel', () => {
-        it('should include gain and loss for Running', () => {
-            component.event = {
-                getActivityTypesAsArray: () => [ActivityTypes.Running],
-                getActivities: () => []
-            } as any;
+    preferredDataTypes = ['speed', 'power'];
+    (component as any).rebuildPanels('order-change');
 
-            const series = {
-                dummyData: {
-                    stream: { type: DataAltitude.type },
-                    activity: { creator: { name: 'Test' } }
-                }
-            } as any;
+    expect(buildPanelsSpy).toHaveBeenCalledTimes(1);
+    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual(['power', 'speed']);
+  });
 
-            // Mock container and createChild
-            const mockContainer = {
-                createChild: vi.fn().mockReturnValue({
-                    createChild: vi.fn().mockReturnValue({}),
-                    id: '',
-                    background: {
-                        fillOpacity: 0,
-                        fill: {},
-                        stroke: {},
-                        strokeOpacity: 0,
-                        strokeWidth: 0
-                    },
-                    padding: vi.fn(),
-                    filters: { push: vi.fn() }
-                })
-            };
+  it('normalizes full-domain zoom updates to null', () => {
+    component.xDomain = { start: 0, end: 100 };
 
-            const labelDataMock: any = {
-                name: 'Test Label',
-                average: { value: 10, unit: 'u' },
-                max: { value: 20, unit: 'u' },
-                min: { value: 5, unit: 'u' },
-                minToMaxDiff: { value: 15, unit: 'u' },
-                gain: { value: 10, unit: 'u' },
-                loss: { value: 10, unit: 'u' },
-                slopePercentage: { value: 5 }
-            };
+    component.onZoomRangeChange({ start: 0, end: 100 });
 
-            const label = (component as any).createLabel(mockContainer, series, labelDataMock);
+    expect(component.zoomRange).toBeNull();
+  });
 
-            expect(label).toBeDefined();
-        });
-    });
+  it('stores clamped shared zoom range updates', () => {
+    component.xDomain = { start: 0, end: 100 };
 
-    describe('createOrUpdateChartSeries labels', () => {
-        it('should normalize unit-derived speed label in tooltip, legend, and dummyData displayName', () => {
-            const activity = {
-                creator: { name: 'Garmin' },
-                getID: () => 'a1'
-            } as any;
-            const stream = { type: DataSpeedAvgKilometersPerHour.type } as any;
+    component.onZoomRangeChange({ start: -10, end: 40 });
 
-            component.event = {
-                getActivities: () => [activity, { creator: { name: 'Coros' }, getID: () => 'a2' }],
-                isMultiSport: () => false,
-                getActivityTypesAsArray: () => [ActivityTypes.Cycling],
-            } as any;
-
-            (component as any).chart = {
-                isDisposed: () => false,
-                series: {
-                    values: [],
-                    push: vi.fn((series: any) => series),
-                },
-                yAxes: {
-                    getIndex: vi.fn().mockReturnValue({}),
-                    push: vi.fn().mockReturnValue({}),
-                },
-            };
-            (component as any).charts = {
-                LineSeries: function () {
-                    return {
-                        adapter: { add: vi.fn() },
-                        events: { on: vi.fn() },
-                        dataFields: {},
-                        legendSettings: {},
-                    };
-                },
-            };
-
-            vi.spyOn(component as any, 'attachSeriesEventListeners').mockImplementation(() => { });
-            vi.spyOn(component as any, 'convertStreamDataToSeriesData').mockReturnValue([]);
-            vi.spyOn(component as any, 'getYAxisForSeries').mockReturnValue({});
-
-            const series = (component as any).createOrUpdateChartSeries(activity, stream);
-
-            expect(series).toBeTruthy();
-            expect(series.dummyData.displayName).toBe('Average Speed');
-            expect(series.tooltipText).toContain('Average Speed');
-            expect(series.legendSettings.labelText).toContain('Average Speed');
-        });
-
-        it('should keep non-unit-derived power labels unchanged', () => {
-            const activity = {
-                creator: { name: 'Garmin' },
-                getID: () => 'a1'
-            } as any;
-            const stream = { type: DataPowerAvg.type } as any;
-
-            component.event = {
-                getActivities: () => [activity, { creator: { name: 'Coros' }, getID: () => 'a2' }],
-                isMultiSport: () => false,
-                getActivityTypesAsArray: () => [ActivityTypes.Cycling],
-            } as any;
-
-            (component as any).chart = {
-                isDisposed: () => false,
-                series: {
-                    values: [],
-                    push: vi.fn((series: any) => series),
-                },
-                yAxes: {
-                    getIndex: vi.fn().mockReturnValue({}),
-                    push: vi.fn().mockReturnValue({}),
-                },
-            };
-            (component as any).charts = {
-                LineSeries: function () {
-                    return {
-                        adapter: { add: vi.fn() },
-                        events: { on: vi.fn() },
-                        dataFields: {},
-                        legendSettings: {},
-                    };
-                },
-            };
-
-            vi.spyOn(component as any, 'attachSeriesEventListeners').mockImplementation(() => { });
-            vi.spyOn(component as any, 'convertStreamDataToSeriesData').mockReturnValue([]);
-            vi.spyOn(component as any, 'getYAxisForSeries').mockReturnValue({});
-
-            const series = (component as any).createOrUpdateChartSeries(activity, stream);
-
-            expect(series).toBeTruthy();
-            expect(series.dummyData.displayName).toBe('Average Power');
-            expect(series.tooltipText).toContain('Average Power');
-            expect(series.legendSettings.labelText).toContain('Average Power');
-        });
-    });
-
-    describe('pace axis outlier scaling', () => {
-        it('should refresh pace axis bounds when updating an existing pace series', () => {
-            const existingSeries: any = {
-                id: 's1',
-                dummyData: { stream: { type: DataPace.type } },
-                yAxis: {},
-                data: []
-            };
-            const activity = { getID: () => 'a1', creator: { name: 'Runner' } } as any;
-            const stream = { type: DataPace.type } as any;
-
-            component.event = {
-                getActivities: () => [activity],
-                isMultiSport: () => false,
-                getActivityTypesAsArray: () => [ActivityTypes.Running],
-            } as any;
-
-            (component as any).chart = {
-                isDisposed: () => false,
-                series: {
-                    values: [existingSeries],
-                    push: vi.fn((series: any) => series),
-                },
-            };
-
-            vi.spyOn(component as any, 'convertStreamDataToSeriesData').mockReturnValue([{ value: 300 }]);
-            vi.spyOn(component as any, 'getSeriesIDFromActivityAndStream').mockReturnValue('s1');
-            const refreshSpy = vi.spyOn(component as any, 'refreshPaceAxisRangeForSeries').mockImplementation(() => { });
-
-            (component as any).createOrUpdateChartSeries(activity, stream);
-
-            expect(refreshSpy).toHaveBeenCalledWith(existingSeries);
-        });
-    });
-
-    describe('addLapGuides', () => {
-        it('should normalize lap types from source data when rendering guides', () => {
-            const createdRanges: any[] = [];
-            const xAxis = {
-                axisRanges: {
-                    template: { grid: { disabled: true } },
-                    create: vi.fn(() => {
-                        const range = {
-                            value: 0,
-                            grid: {
-                                disabled: false,
-                                stroke: null,
-                                strokeWidth: 0,
-                                strokeOpacity: 0,
-                                strokeDasharray: '',
-                                above: false,
-                                zIndex: 0,
-                                tooltipText: '',
-                                tooltipPosition: ''
-                            },
-                            label: {
-                                text: '',
-                                tooltipText: '',
-                                inside: false,
-                                paddingTop: 0,
-                                paddingBottom: 0,
-                                zIndex: 0,
-                                fontSize: '',
-                                background: {
-                                    fillOpacity: 0,
-                                    stroke: null,
-                                    strokeWidth: 0,
-                                    width: 0
-                                },
-                                fill: null,
-                                horizontalCenter: '',
-                                valign: '',
-                                textAlign: '',
-                                dy: 0
-                            }
-                        };
-                        createdRanges.push(range);
-                        return range;
-                    })
-                }
-            };
-            const chart = {
-                xAxes: {
-                    getIndex: vi.fn(() => xAxis)
-                }
-            } as any;
-
-            const activity = {
-                creator: { name: 'Runner' },
-                getID: () => 'activity-1',
-                startDate: new Date('2026-01-01T00:00:00.000Z'),
-                getLaps: () => [
-                    { type: 'manual', endDate: new Date('2026-01-01T00:01:00.000Z') },
-                    { type: 'session_end', endDate: new Date('2026-01-01T00:02:00.000Z') }
-                ]
-            } as any;
-
-            (component as any).addLapGuides(chart, [activity], XAxisTypes.Duration, [LapTypes.Manual]);
-
-            expect(createdRanges).toHaveLength(1);
-            expect(createdRanges[0].label.text).toBe('1');
-            expect(createdRanges[0].date.getTime()).toBe(60_000);
-        });
-
-        it('should assign each lap guide its own label text', () => {
-            const createdRanges: any[] = [];
-            const xAxis = {
-                axisRanges: {
-                    template: { grid: { disabled: true } },
-                    create: vi.fn(() => {
-                        const range = {
-                            value: 0,
-                            grid: {
-                                disabled: false,
-                                stroke: null,
-                                strokeWidth: 0,
-                                strokeOpacity: 0,
-                                strokeDasharray: '',
-                                above: false,
-                                zIndex: 0,
-                                tooltipText: '',
-                                tooltipPosition: ''
-                            },
-                            label: {
-                                text: '',
-                                tooltipText: '',
-                                inside: false,
-                                paddingTop: 0,
-                                paddingBottom: 0,
-                                zIndex: 0,
-                                fontSize: '',
-                                background: {
-                                    fillOpacity: 0,
-                                    stroke: null,
-                                    strokeWidth: 0,
-                                    width: 0
-                                },
-                                fill: null,
-                                horizontalCenter: '',
-                                valign: '',
-                                textAlign: '',
-                                dy: 0
-                            }
-                        };
-                        createdRanges.push(range);
-                        return range;
-                    })
-                }
-            };
-
-            const chart = {
-                xAxes: {
-                    getIndex: vi.fn(() => xAxis)
-                }
-            } as any;
-
-            const activity = {
-                creator: { name: 'Runner' },
-                getID: () => 'activity-1',
-                startDate: new Date('2026-01-01T00:00:00.000Z'),
-                getLaps: () => [
-                    { type: LapTypes.Manual, endDate: new Date('2026-01-01T00:01:00.000Z') },
-                    { type: LapTypes.Manual, endDate: new Date('2026-01-01T00:02:00.000Z') },
-                    { type: LapTypes.Start, endDate: new Date('2026-01-01T00:03:00.000Z') }
-                ]
-            } as any;
-
-            (component as any).addLapGuides(chart, [activity], XAxisTypes.Duration, [LapTypes.Manual]);
-
-            expect(createdRanges).toHaveLength(2);
-            expect(createdRanges[0].label.text).toBe('1');
-            expect(createdRanges[1].label.text).toBe('2');
-            expect(createdRanges[0].date.getTime()).toBe(60_000);
-            expect(createdRanges[1].date.getTime()).toBe(120_000);
-        });
-
-        it('should place time-axis guides at absolute lap end time', () => {
-            const createdRanges: any[] = [];
-            const xAxis = {
-                axisRanges: {
-                    template: { grid: { disabled: true } },
-                    create: vi.fn(() => {
-                        const range = {
-                            date: null,
-                            grid: {
-                                disabled: false,
-                                stroke: null,
-                                strokeWidth: 0,
-                                strokeOpacity: 0,
-                                strokeDasharray: '',
-                                above: false,
-                                zIndex: 0,
-                                tooltipText: '',
-                                tooltipPosition: ''
-                            },
-                            label: {
-                                text: '',
-                                tooltipText: '',
-                                inside: false,
-                                paddingTop: 0,
-                                paddingBottom: 0,
-                                zIndex: 0,
-                                fontSize: '',
-                                background: {
-                                    fillOpacity: 0,
-                                    stroke: null,
-                                    strokeWidth: 0,
-                                    width: 0
-                                },
-                                fill: null,
-                                horizontalCenter: '',
-                                valign: '',
-                                textAlign: '',
-                                dy: 0
-                            }
-                        };
-                        createdRanges.push(range);
-                        return range;
-                    })
-                }
-            };
-
-            const chart = {
-                xAxes: {
-                    getIndex: vi.fn(() => xAxis)
-                }
-            } as any;
-
-            const lapEnd = new Date('2026-01-01T00:01:00.000Z');
-            const activity = {
-                creator: { name: 'Runner' },
-                getID: () => 'activity-1',
-                startDate: new Date('2026-01-01T00:00:00.000Z'),
-                getLaps: () => [
-                    { type: LapTypes.Manual, endDate: lapEnd },
-                    { type: LapTypes.Start, endDate: new Date('2026-01-01T00:03:00.000Z') }
-                ]
-            } as any;
-
-            (component as any).addLapGuides(chart, [activity], XAxisTypes.Time, [LapTypes.Manual]);
-
-            expect(createdRanges).toHaveLength(1);
-            expect(createdRanges[0].date.getTime()).toBe(lapEnd.getTime());
-        });
-
-        it('should fallback to cumulative lap duration when indoor lap timestamps collapse to start time', () => {
-            const createdRanges: any[] = [];
-            const xAxis = {
-                axisRanges: {
-                    template: { grid: { disabled: true } },
-                    create: vi.fn(() => {
-                        const range = {
-                            date: null,
-                            value: 0,
-                            grid: {
-                                disabled: false,
-                                stroke: null,
-                                strokeWidth: 0,
-                                strokeOpacity: 0,
-                                strokeDasharray: '',
-                                above: false,
-                                zIndex: 0,
-                                tooltipText: '',
-                                tooltipPosition: ''
-                            },
-                            label: {
-                                text: '',
-                                tooltipText: '',
-                                inside: false,
-                                paddingTop: 0,
-                                paddingBottom: 0,
-                                zIndex: 0,
-                                fontSize: '',
-                                background: {
-                                    fillOpacity: 0,
-                                    stroke: null,
-                                    strokeWidth: 0,
-                                    width: 0
-                                },
-                                fill: null,
-                                horizontalCenter: '',
-                                valign: '',
-                                textAlign: '',
-                                dy: 0
-                            }
-                        };
-                        createdRanges.push(range);
-                        return range;
-                    })
-                }
-            };
-
-            const chart = {
-                xAxes: {
-                    getIndex: vi.fn(() => xAxis)
-                }
-            } as any;
-
-            const start = new Date('2026-01-01T00:00:00.000Z');
-            const activity = {
-                creator: { name: 'Trainer Ride' },
-                type: 'Indoor Cycling',
-                isTrainer: () => true,
-                getID: () => 'activity-indoor',
-                startDate: start,
-                getLaps: () => [
-                    {
-                        type: LapTypes.Manual,
-                        startDate: start,
-                        endDate: start,
-                        getDuration: () => ({ getValue: () => 60 })
-                    },
-                    {
-                        type: LapTypes.Manual,
-                        startDate: start,
-                        endDate: start,
-                        getDuration: () => ({ getValue: () => 75 })
-                    },
-                    {
-                        type: LapTypes.Start,
-                        startDate: start,
-                        endDate: start,
-                        getDuration: () => ({ getValue: () => 10 })
-                    }
-                ]
-            } as any;
-
-            (component as any).addLapGuides(chart, [activity], XAxisTypes.Duration, [LapTypes.Manual]);
-
-            expect(createdRanges).toHaveLength(2);
-            expect(createdRanges[0].date.getTime()).toBe(60_000);
-            expect(createdRanges[1].date.getTime()).toBe(135_000);
-        });
-    });
+    expect(component.zoomRange).toEqual({ start: 0, end: 40 });
+  });
 });

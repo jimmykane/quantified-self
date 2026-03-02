@@ -199,7 +199,6 @@ export class UserSettingsComponent implements OnChanges {
       chartLapTypes: new UntypedFormControl(this.user.settings.chartSettings.lapTypes, []),
       showChartLaps: new UntypedFormControl(this.user.settings.chartSettings.showLaps, []),
       showChartGrid: new UntypedFormControl(this.user.settings.chartSettings.showGrid, []),
-      stackYAxes: new UntypedFormControl(this.user.settings.chartSettings.stackYAxes, []),
       xAxisType: new UntypedFormControl(this.user.settings.chartSettings.xAxisType, [
         Validators.required,
       ]),
@@ -229,7 +228,6 @@ export class UserSettingsComponent implements OnChanges {
       mapStrokeWidth: new UntypedFormControl(this.user.settings.mapSettings.strokeWidth, []),
       showMapLaps: new UntypedFormControl(this.user.settings.mapSettings.showLaps, []),
       showMapArrows: new UntypedFormControl(this.user.settings.mapSettings.showArrows, []),
-      showMapPoints: new UntypedFormControl(this.user.settings.mapSettings.showPoints ?? true, []),
       mapLapTypes: new UntypedFormControl(this.user.settings.mapSettings.lapTypes, []),
       eventsPerPage: new UntypedFormControl(this.user.settings.dashboardSettings.tableSettings.eventsPerPage, [
         Validators.required,
@@ -309,7 +307,7 @@ export class UserSettingsComponent implements OnChanges {
         lapTypes: this.userSettingsFormGroup.get('chartLapTypes').value,
         showLaps: this.userSettingsFormGroup.get('showChartLaps').value,
         showGrid: this.userSettingsFormGroup.get('showChartGrid').value,
-        stackYAxes: this.userSettingsFormGroup.get('stackYAxes').value,
+        stackYAxes: false,
         disableGrouping: this.userSettingsFormGroup.get('chartDisableGrouping').value,
         hideAllSeriesOnInit: this.userSettingsFormGroup.get('chartHideAllSeriesOnInit').value,
         gainAndLossThreshold: this.userSettingsFormGroup.get('chartGainAndLossThreshold').value,
@@ -329,7 +327,6 @@ export class UserSettingsComponent implements OnChanges {
             showLaps: this.userSettingsFormGroup.get('showMapLaps').value,
 
             showArrows: this.userSettingsFormGroup.get('showMapArrows').value,
-            showPoints: this.userSettingsFormGroup.get('showMapPoints').value,
             lapTypes: this.userSettingsFormGroup.get('mapLapTypes').value,
             mapType: this.userSettingsFormGroup.get('mapType').value,
             strokeWidth: this.userSettingsFormGroup.get('mapStrokeWidth').value

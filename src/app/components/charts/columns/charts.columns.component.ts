@@ -4,7 +4,6 @@ import {
   Component,
   ElementRef,
   Input,
-  NgZone,
   OnChanges,
   OnDestroy,
   SimpleChanges,
@@ -22,8 +21,11 @@ import { AppColors } from '../../../services/color/app.colors';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
-import { EChartsHostController } from '../../../helpers/echarts-host-controller';
-import { isDarkChartThemeActive } from '../../../helpers/echarts-theme.helper';
+import {
+  ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS,
+  EChartsHostController
+} from '../../../helpers/echarts-host-controller';
+import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
 import {
   getDashboardAggregateData,
   getDashboardDataInstanceOrNull,
@@ -81,14 +83,12 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
   ];
 
   constructor(
-    private zone: NgZone,
     private eChartsLoader: EChartsLoaderService,
     private eventColorService: AppEventColorService,
     private logger: LoggerService
   ) {
     this.chartHost = new EChartsHostController({
       eChartsLoader: this.eChartsLoader,
-      zone: this.zone,
       logger: this.logger,
       logPrefix: '[ChartsColumnsComponent]'
     });
@@ -147,7 +147,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
       this.logger
     );
     const option = this.buildChartOption(points, aggregate);
-    this.chartHost.setOption(option, { notMerge: true, lazyUpdate: true });
+    this.chartHost.setOption(option, ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS);
     this.chartHost.scheduleResize();
   }
 
@@ -155,15 +155,16 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     points: DashboardCartesianPoint[],
     aggregate: ReturnType<typeof getDashboardAggregateData>
   ): ChartOption {
-    const darkTheme = isDarkChartThemeActive(this.chartTheme);
-    const textColor = darkTheme ? '#f5f5f5' : '#1f1f1f';
-    const axisColor = darkTheme ? 'rgba(255,255,255,0.24)' : 'rgba(0,0,0,0.24)';
-    const gridColor = darkTheme ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)';
-    const tooltipBackgroundColor = darkTheme ? '#303030' : '#ffffff';
-    const tooltipBorderColor = darkTheme ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.12)';
     const chartWidth = this.chartDiv?.nativeElement?.clientWidth || 0;
-    const isCompactLayout = chartWidth > 0 && chartWidth < 680;
-    const axisFontSize = isCompactLayout ? 11 : 12;
+    const chartStyle = buildDashboardEChartsStyleTokens(this.chartTheme, chartWidth);
+    const darkTheme = chartStyle.darkTheme;
+    const textColor = chartStyle.textColor;
+    const axisColor = chartStyle.axisColor;
+    const gridColor = chartStyle.gridColor;
+    const tooltipBackgroundColor = chartStyle.tooltipBackgroundColor;
+    const tooltipBorderColor = chartStyle.tooltipBorderColor;
+    const isCompactLayout = chartStyle.isCompactLayout;
+    const axisFontSize = chartStyle.axisFontSize;
     const isDateCategory = this.chartDataCategoryType === ChartDataCategoryTypes.DateType;
     const dateActivitySegmentation = isDateCategory
       ? buildDashboardDateActivitySegmentation({
@@ -504,8 +505,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
         const bounds = cumulativeBounds[bucketIndex].get(seriesEntry.key) || { start: 0, end: 0 };
         return [bucketIndex, bucket.total, bounds.start, bounds.end];
       }),
-      renderItem: (params: any, api: any) => this.renderSegmentedPyramidItem(params, api),
-      tooltip: { show: false }
+      renderItem: (params: any, api: any) => this.renderSegmentedPyramidItem(params, api)
     }));
   }
 

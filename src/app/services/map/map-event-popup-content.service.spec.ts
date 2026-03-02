@@ -90,7 +90,7 @@ describe('MapEventPopupContentService', () => {
     expect(content.metrics[2]).toEqual({ value: '--', label: '' });
   });
 
-  it('uses event effort display fallback when stat instances do not expose getType', () => {
+  it('uses pace-first event effort fallback when stat instances do not expose getType', () => {
     const event = {
       startDate: new Date('2025-01-01T10:00:00Z'),
       getActivityTypesAsArray: () => [ActivityTypes.Hiking],
@@ -109,7 +109,7 @@ describe('MapEventPopupContentService', () => {
     } as unknown as EventInterface;
 
     const content = service.buildFromEvent(event);
-    expect(content.metrics[2]).toEqual({ value: '1.07', label: 'm/s' });
+    expect(content.metrics[2]).toEqual({ value: '15:31', label: 'min/km' });
   });
 
   it('returns default placeholder content when event is missing', () => {

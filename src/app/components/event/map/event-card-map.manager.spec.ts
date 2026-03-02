@@ -115,9 +115,7 @@ describe('EventCardMapManager', () => {
     expect(markerFactory.createLapMarker).toHaveBeenCalledWith('#ff0000', 0);
   });
 
-  it('propagates line click events to callback', () => {
-    const onTrackClick = vi.fn();
-    manager.setTrackClickHandler(onTrackClick);
+  it('does not register line click handlers for track layers', () => {
     manager.renderActivities([
       {
         activityId: 'a1',
@@ -134,11 +132,7 @@ describe('EventCardMapManager', () => {
       strokeWidth: 3,
     });
 
-    const clickHandlers = handlers.click || [];
-    expect(clickHandlers.length).toBeGreaterThan(0);
-    clickHandlers[0].handler({ lngLat: { lat: 41.25, lng: 23.25 } });
-
-    expect(onTrackClick).toHaveBeenCalledWith('a1', 41.25, 23.25);
+    expect(handlers.click ?? []).toHaveLength(0);
   });
 
   it('propagates jump marker click events to callback', () => {

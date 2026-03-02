@@ -40,6 +40,14 @@ describe('LoggerService', () => {
         expect(Sentry.captureException).not.toHaveBeenCalled();
     });
 
+    it('should MUTE "The client has already been terminated" errors', () => {
+        const terminatedError = new Error('FirebaseError: The client has already been terminated.');
+        service.error('Some context', terminatedError);
+
+        expect(console.error).not.toHaveBeenCalled();
+        expect(Sentry.captureException).not.toHaveBeenCalled();
+    });
+
     it('should NOT mute errors that just happen to contain similar words', () => {
         service.error('Firestore is up', new Error('Not shutting down'));
 
@@ -47,5 +55,4 @@ describe('LoggerService', () => {
         expect(Sentry.captureException).toHaveBeenCalled();
     });
 });
-
 

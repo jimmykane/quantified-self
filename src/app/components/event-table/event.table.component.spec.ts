@@ -264,6 +264,28 @@ describe('EventTableComponent', () => {
         expect(updateDisplayedColumnsSpy).toHaveBeenCalled();
     });
 
+    it('should not change paginator page size when already in sync', () => {
+        const updateDisplayedColumnsSpy = vi.spyOn(component as any, 'updateDisplayedColumns');
+        component.user.settings.dashboardSettings.tableSettings.selectedColumns = ['Name', 'Start Date'];
+        component.user.settings.dashboardSettings.tableSettings.eventsPerPage = 25;
+        (component.paginator as any).pageSize = 25;
+
+        component.ngOnChanges({
+            user: new SimpleChange(null, component.user, false),
+        } as any);
+
+        expect(component.paginator._changePageSize).not.toHaveBeenCalled();
+        expect(updateDisplayedColumnsSpy).toHaveBeenCalled();
+    });
+
+    it('should not persist page size when page event does not change size', async () => {
+        component.user.settings.dashboardSettings.tableSettings.eventsPerPage = 25;
+
+        await component.pageChanges({ pageSize: 25 } as any);
+
+        expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+    });
+
     it('should initialize data source with events', () => {
         component.ngAfterViewInit();
         expect(component.data.data.length).toBe(3);

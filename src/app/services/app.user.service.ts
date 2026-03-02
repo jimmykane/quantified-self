@@ -70,6 +70,7 @@ import { UserSummariesSettingsInterface } from '@sports-alliance/sports-lib';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { AppWindowService } from './app.window.service';
 import { LoggerService } from './logger.service';
+import { applyEventChartCanonicalOrderOverride } from '../helpers/event-chart-order.helper';
 import { UserMyTracksSettingsInterface } from '@sports-alliance/sports-lib';
 import { DataDescription } from '@sports-alliance/sports-lib';
 import { DataActivityTypes } from '@sports-alliance/sports-lib';
@@ -614,12 +615,24 @@ export class AppUserService implements OnDestroy {
     if (!user.settings?.chartSettings?.dataTypeSettings) {
       return [];
     }
-    return Object.keys(user.settings.chartSettings.dataTypeSettings).reduce<string[]>((dataTypesToUse, dataTypeSettingsKey) => {
-      if (user.settings.chartSettings.dataTypeSettings[dataTypeSettingsKey].enabled === true) {
-        dataTypesToUse.push(dataTypeSettingsKey);
-      }
-      return dataTypesToUse;
-    }, [])
+
+    const enabledDataTypeSet = new Set(
+      Object.keys(user.settings.chartSettings.dataTypeSettings).filter((dataTypeSettingKey) => {
+        return user.settings.chartSettings.dataTypeSettings[dataTypeSettingKey].enabled === true;
+      })
+    );
+    const canonicalDataTypes = [
+      ...DynamicDataLoader.basicDataTypes,
+      ...DynamicDataLoader.advancedDataTypes.filter((dataType) => !DynamicDataLoader.basicDataTypes.includes(dataType)),
+    ];
+    const orderedDataTypes = applyEventChartCanonicalOrderOverride(
+      canonicalDataTypes.filter((dataType) => enabledDataTypeSet.has(dataType))
+    );
+    const extraEnabledDataTypes = [...enabledDataTypeSet]
+      .filter((dataType) => !orderedDataTypes.includes(dataType))
+      .sort((left, right) => left.localeCompare(right));
+
+    return orderedDataTypes.concat(extraEnabledDataTypes);
   }
 
   ngOnDestroy() {

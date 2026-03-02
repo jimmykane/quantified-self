@@ -11,6 +11,7 @@ export class LoggerService {
 
     static readonly IGNORED_ERRORS = [
         'Firestore shutting down',
+        'The client has already been terminated.',
     ];
 
     constructor() { }
@@ -59,5 +60,4 @@ export class LoggerService {
         Sentry.setTag(key, value);
     }
 }
-
 

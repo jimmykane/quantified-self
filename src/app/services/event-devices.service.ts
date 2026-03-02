@@ -46,21 +46,28 @@ export class EventDevicesService {
 
     private extractRawDevices(activity: ActivityInterface): any[] {
         return activity.creator.devices.map(device => {
+            const type = this.normalizeText(device.type === 'Unknown' ? '' : device.type);
+            const name = this.normalizeText(device.name);
+            const manufacturer = this.normalizeText(device.manufacturer);
+            const batteryStatus = this.normalizeNullableText(device.batteryStatus);
+            const antNetwork = this.normalizeNullableText(device.antNetwork);
+            const sourceType = this.normalizeNullableText(device.sourceType);
+
             return {
-                type: device.type === 'Unknown' ? '' : (device.type ?? ''),
-                name: device.name ?? '',
-                batteryStatus: device.batteryStatus ?? null,
+                type,
+                name,
+                batteryStatus,
                 batteryLevel: device.batteryLevel ?? null,
                 batteryVoltage: device.batteryVoltage ?? null,
-                manufacturer: device.manufacturer ?? '',
+                manufacturer,
                 serialNumber: device.serialNumber ?? null,
                 productId: device.product ?? null,
                 softwareInfo: device.swInfo ?? null,
                 hardwareInfo: device.hwInfo ?? null,
                 antDeviceNumber: device.antDeviceNumber ?? null,
                 antTransmissionType: device.antTransmissionType ?? null,
-                antNetwork: device.antNetwork ?? null,
-                sourceType: device.sourceType ?? null,
+                antNetwork,
+                sourceType,
                 cumulativeOperatingTime: device.cumOperatingTime ?? null,
             };
         });
@@ -94,9 +101,9 @@ export class EventDevicesService {
     private hasUsefulInfo(device: any): boolean {
         // Filter out entries that are just noise
         const hasValidSerial = device.serialNumber && device.serialNumber !== INVALID_SERIAL;
-        const hasManufacturer = !!device.manufacturer;
+        const hasManufacturer = !!this.normalizeText(device.manufacturer);
         const hasBattery = device.batteryLevel != null || device.batteryVoltage != null;
-        const hasType = !!device.type;
+        const hasType = !!this.normalizeText(device.type);
 
         return hasValidSerial || hasManufacturer || hasBattery || hasType;
     }
@@ -109,16 +116,17 @@ export class EventDevicesService {
 
         // Priority 2: Fallback to composite key for devices without unique serials
         const parts = [
-            device.type || 'unknown',
-            device.manufacturer || 'unknown',
+            this.normalizeText(device.type) || 'unknown',
+            this.normalizeText(device.manufacturer) || 'unknown',
             device.productId || 'unknown'
         ];
         return parts.join('-').toLowerCase();
     }
 
     private createDeviceGroup(device: any, signature: string): DeviceGroup {
-        const type = device.type || '';
-        const manufacturer = device.manufacturer || '';
+        const type = this.normalizeText(device.type);
+        const manufacturer = this.normalizeText(device.manufacturer);
+        const sourceType = this.normalizeNullableText(device.sourceType);
 
         return {
             signature,
@@ -129,34 +137,37 @@ export class EventDevicesService {
             productId: device.productId,
             softwareInfo: device.softwareInfo,
             hardwareInfo: device.hardwareInfo,
-            batteryStatus: device.batteryStatus,
+            batteryStatus: this.normalizeNullableText(device.batteryStatus),
             batteryLevel: device.batteryLevel,
             batteryVoltage: device.batteryVoltage,
-            antNetwork: device.antNetwork,
-            sourceType: device.sourceType,
+            antNetwork: this.normalizeNullableText(device.antNetwork),
+            sourceType,
             cumulativeOperatingTime: device.cumulativeOperatingTime,
             occurrences: 1,
-            category: this.categorizeDevice(type, manufacturer, device.sourceType),
+            category: this.categorizeDevice(type, manufacturer, sourceType),
         };
     }
 
     private generateDisplayName(device: any): string {
-        if (device.name) {
-            return device.name;
+        const name = this.normalizeText(device.name);
+        if (name) {
+            return name;
         }
 
         const parts: string[] = [];
+        const manufacturer = this.normalizeText(device.manufacturer);
+        const type = this.normalizeText(device.type);
 
-        if (device.manufacturer) {
-            parts.push(this.capitalize(device.manufacturer));
+        if (manufacturer) {
+            parts.push(this.capitalize(manufacturer));
         }
 
-        if (device.type) {
-            parts.push(this.formatType(device.type));
+        if (type) {
+            parts.push(this.formatType(type));
         }
 
         // If we have a type but no manufacturer, and we have a product ID, append it for specificity
-        if (!device.manufacturer && device.productId && device.type) {
+        if (!manufacturer && device.productId && type) {
             // Optional: parts.push(`(#${device.productId})`); 
         }
 
@@ -168,30 +179,22 @@ export class EventDevicesService {
     }
 
     public formatType(type: unknown): string {
-        if (type == null) {
-            return '';
-        }
+        const normalizedType = this.normalizeText(type);
 
-        if (typeof type !== 'string') {
-            if (typeof type === 'number' || typeof type === 'boolean') {
-                return String(type);
-            }
-            return '';
-        }
-
-        return type
+        return normalizedType
             .replace(/_/g, ' ')
             .replace(/\b\w/g, c => c.toUpperCase());
     }
 
-    private capitalize(str: string): string {
-        return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+    private capitalize(str: unknown): string {
+        const normalizedStr = this.normalizeText(str);
+        return normalizedStr.charAt(0).toUpperCase() + normalizedStr.slice(1).toLowerCase();
     }
 
-    private categorizeDevice(type: string, manufacturer: string, sourceType: string): 'main' | 'power' | 'hr' | 'shifting' | 'other' {
-        const typeLower = (type || '').toLowerCase();
-        const mfgLower = (manufacturer || '').toLowerCase();
-        const srcLower = (sourceType || '').toLowerCase();
+    private categorizeDevice(type: unknown, manufacturer: unknown, sourceType: unknown): 'main' | 'power' | 'hr' | 'shifting' | 'other' {
+        const typeLower = this.normalizeText(type).toLowerCase();
+        const mfgLower = this.normalizeText(manufacturer).toLowerCase();
+        const srcLower = this.normalizeText(sourceType).toLowerCase();
 
         // Main device: local source (usually the watch/computer)
         // Relaxed check: don't strictly require manufacturer, as some files might miss it
@@ -222,16 +225,24 @@ export class EventDevicesService {
         // Merge Identity Fields using score-based resolution for Type
         const newScore = this.getTypeScore(newDevice.type);
         const oldScore = this.getTypeScore(existing.type);
+        const normalizedType = this.normalizeText(newDevice.type);
+        const normalizedManufacturer = this.normalizeText(newDevice.manufacturer);
+        const normalizedBatteryStatus = this.normalizeNullableText(newDevice.batteryStatus);
+        const normalizedAntNetwork = this.normalizeNullableText(newDevice.antNetwork);
+        const normalizedSourceType = this.normalizeNullableText(newDevice.sourceType);
 
         if (newScore > oldScore) {
-            existing.type = newDevice.type;
+            existing.type = normalizedType;
         }
 
-        if ((!existing.manufacturer || existing.manufacturer === 'unknown') && newDevice.manufacturer) {
-            existing.manufacturer = newDevice.manufacturer;
+        if ((!existing.manufacturer || existing.manufacturer === 'unknown') && normalizedManufacturer) {
+            existing.manufacturer = normalizedManufacturer;
         }
         if (!existing.productId && newDevice.productId) {
             existing.productId = newDevice.productId;
+        }
+        if (!existing.sourceType && normalizedSourceType) {
+            existing.sourceType = normalizedSourceType;
         }
 
         // 2. Merge Technical / Battery Data (Prefer non-null)
@@ -241,8 +252,8 @@ export class EventDevicesService {
         if (!existing.batteryVoltage && newDevice.batteryVoltage != null) {
             existing.batteryVoltage = newDevice.batteryVoltage;
         }
-        if (!existing.batteryStatus && newDevice.batteryStatus) {
-            existing.batteryStatus = newDevice.batteryStatus;
+        if (!existing.batteryStatus && normalizedBatteryStatus) {
+            existing.batteryStatus = normalizedBatteryStatus;
         }
         if (!existing.softwareInfo && newDevice.softwareInfo != null) {
             existing.softwareInfo = newDevice.softwareInfo;
@@ -253,8 +264,8 @@ export class EventDevicesService {
         if (!existing.cumulativeOperatingTime && newDevice.cumulativeOperatingTime != null) {
             existing.cumulativeOperatingTime = newDevice.cumulativeOperatingTime;
         }
-        if (!existing.antNetwork && newDevice.antNetwork) {
-            existing.antNetwork = newDevice.antNetwork;
+        if (!existing.antNetwork && normalizedAntNetwork) {
+            existing.antNetwork = normalizedAntNetwork;
         }
 
         // 3. Re-calculate derived properties based on merged data
@@ -267,10 +278,11 @@ export class EventDevicesService {
         return groups.sort((a, b) => priority[a.category] - priority[b.category]);
     }
 
-    private getTypeScore(type: string | null): number {
-        if (!type || type === 'unknown' || type === 'Unknown') return 0;
+    private getTypeScore(type: unknown): number {
+        const normalizedType = this.normalizeText(type);
+        if (!normalizedType || normalizedType === 'unknown' || normalizedType === 'Unknown') return 0;
 
-        const t = type.toLowerCase();
+        const t = normalizedType.toLowerCase();
 
         // Transport protocols (low priority)
         if (t === 'antfs' || t === 'antplus' || t === 'bluetooth' || t === 'ble' || t === 'bluetooth_low_energy') {
@@ -279,6 +291,23 @@ export class EventDevicesService {
 
         // Specific sensors (high priority)
         return 10;
+    }
+
+    private normalizeText(value: unknown): string {
+        if (typeof value === 'string') {
+            return value;
+        }
+
+        if (typeof value === 'number' || typeof value === 'boolean') {
+            return String(value);
+        }
+
+        return '';
+    }
+
+    private normalizeNullableText(value: unknown): string | null {
+        const normalizedValue = this.normalizeText(value);
+        return normalizedValue || null;
     }
 
     /**

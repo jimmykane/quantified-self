@@ -167,13 +167,28 @@ describe('EventCadencePowerComponent', () => {
   });
 
   it('should produce different point colors by density', async () => {
+    mockService.buildCadencePowerSeries.mockReturnValue([
+      {
+        activity: { getID: () => 'a1' } as any,
+        activityId: 'a1',
+        label: 'Ride',
+        points: [
+          { duration: 60, cadence: 92, power: 340, density: 0.2 },
+          { duration: 61, cadence: 93, power: 338, density: 0.9 },
+        ],
+      },
+    ]);
+
     fixture.detectChanges();
     await waitForChartStabilization();
 
     const option = getLastOption();
-    const colorFormatter = option.series[0].itemStyle.color as (params: { value?: unknown[] }) => string;
+    const pointA = option.series[0].data[0];
+    const pointB = option.series[0].data[1];
 
-    expect(colorFormatter({ value: [90, 300, 0.2] })).not.toBe(colorFormatter({ value: [90, 300, 0.9] }));
+    expect(pointA.itemStyle.color).not.toBe(pointB.itemStyle.color);
+    expect(pointA.symbolSize).toBeLessThan(pointB.symbolSize);
+    expect(option.series[0].symbolSize).toBeUndefined();
   });
 
   it('should apply dark theme tooltip style', async () => {

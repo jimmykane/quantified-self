@@ -216,9 +216,9 @@ describe('uploadActivity', () => {
 
   it('should register with memory and concurrency limits to avoid upload OOM', () => {
     expect(hoisted.capturedOnRequestOptions.value).toEqual(expect.objectContaining({
-      memory: '512MiB',
+      memory: '1GiB',
       concurrency: 1,
-      timeoutSeconds: 300,
+      timeoutSeconds: 540,
     }));
   });
 
@@ -613,7 +613,7 @@ describe('uploadActivity', () => {
 
   it('should return 400 when gzip payload expands beyond decompression safety limit', async () => {
     const response = makeResponse();
-    const compressedBomb = gzipSync(Buffer.alloc((50 * 1024 * 1024) + 1, 0x00));
+    const compressedBomb = gzipSync(Buffer.alloc((150 * 1024 * 1024) + 1, 0x00));
 
     await uploadActivity(makeRequest({
       headers: {
