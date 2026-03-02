@@ -14,6 +14,11 @@ section.container {
   width: 100%;
 }
 
+section.container > button[mat-stroked-button],
+section.container > span > button[mat-stroked-button] {
+  border-radius: 10px !important;
+}
+
 .series-menu__summary-count {
   font-family: 'Barlow Condensed', sans-serif;
   padding-left: 4px;
@@ -21,6 +26,10 @@ section.container {
 
 .event-chart-actions__mode-button {
   color: var(--mat-sys-on-surface);
+  width: 40px;
+  height: 40px;
+  padding: 8px;
+  border-radius: 10px !important;
 }
 
 .series-menu {
