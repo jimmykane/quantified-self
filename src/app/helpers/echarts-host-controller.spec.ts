@@ -12,6 +12,9 @@ describe('EChartsHostController', () => {
   let originalResizeObserver: typeof ResizeObserver | undefined;
   let originalRequestAnimationFrame: typeof requestAnimationFrame | undefined;
   let originalCancelAnimationFrame: typeof cancelAnimationFrame | undefined;
+  let originalVisualViewport: VisualViewport | undefined;
+  let windowEventListeners: Map<string, EventListener>;
+  let visualViewportEventListeners: Map<string, EventListener>;
 
   const chartMock = {
     isDisposed: vi.fn().mockReturnValue(false),
@@ -26,9 +29,12 @@ describe('EChartsHostController', () => {
 
   beforeEach(() => {
     resizeObserverRecords = [];
+    windowEventListeners = new Map();
+    visualViewportEventListeners = new Map();
     originalResizeObserver = globalThis.ResizeObserver;
     originalRequestAnimationFrame = globalThis.requestAnimationFrame;
     originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
+    originalVisualViewport = window.visualViewport;
 
     class ResizeObserverMock {
       public observe = vi.fn();
@@ -49,6 +55,30 @@ describe('EChartsHostController', () => {
       return 1;
     }) as unknown as typeof requestAnimationFrame;
     globalThis.cancelAnimationFrame = vi.fn();
+
+    vi.spyOn(window, 'addEventListener').mockImplementation(((type: string, listener: EventListenerOrEventListenerObject) => {
+      if (typeof listener === 'function') {
+        windowEventListeners.set(type, listener);
+      }
+    }) as typeof window.addEventListener);
+
+    vi.spyOn(window, 'removeEventListener').mockImplementation(((type: string) => {
+      windowEventListeners.delete(type);
+    }) as typeof window.removeEventListener);
+
+    Object.defineProperty(window, 'visualViewport', {
+      configurable: true,
+      value: {
+        addEventListener: vi.fn((type: string, listener: EventListenerOrEventListenerObject) => {
+          if (typeof listener === 'function') {
+            visualViewportEventListeners.set(type, listener);
+          }
+        }),
+        removeEventListener: vi.fn((type: string) => {
+          visualViewportEventListeners.delete(type);
+        }),
+      },
+    });
   });
 
   afterEach(() => {
@@ -67,6 +97,11 @@ describe('EChartsHostController', () => {
     } else {
       delete (globalThis as { cancelAnimationFrame?: typeof cancelAnimationFrame }).cancelAnimationFrame;
     }
+
+    Object.defineProperty(window, 'visualViewport', {
+      configurable: true,
+      value: originalVisualViewport,
+    });
   });
 
   it('should initialize once and attach a resize observer', async () => {
@@ -82,6 +117,9 @@ describe('EChartsHostController', () => {
     expect(loader.init).toHaveBeenCalledTimes(1);
     expect(resizeObserverRecords).toHaveLength(1);
     expect(resizeObserverRecords[0].observe).toHaveBeenCalledWith(container);
+    expect(windowEventListeners.has('resize')).toBe(true);
+    expect(windowEventListeners.has('orientationchange')).toBe(true);
+    expect(visualViewportEventListeners.has('resize')).toBe(true);
   });
 
   it('should no-op setOption before chart initialization', () => {
@@ -129,6 +167,30 @@ describe('EChartsHostController', () => {
     expect(loader.resize).toHaveBeenCalledTimes(1);
   });
 
+  it('should resize from viewport fallback listeners using raf throttling', async () => {
+    const loader = buildLoaderMock();
+    const controller = new EChartsHostController({
+      eChartsLoader: loader as any,
+    });
+    const container = document.createElement('div');
+
+    await controller.init(container);
+
+    const resizeListener = windowEventListeners.get('resize');
+    const orientationListener = windowEventListeners.get('orientationchange');
+    const visualViewportResizeListener = visualViewportEventListeners.get('resize');
+
+    expect(resizeListener).toBeTypeOf('function');
+    expect(orientationListener).toBeTypeOf('function');
+    expect(visualViewportResizeListener).toBeTypeOf('function');
+
+    resizeListener?.(new Event('resize'));
+    orientationListener?.(new Event('orientationchange'));
+    visualViewportResizeListener?.(new Event('resize'));
+
+    expect(loader.resize).toHaveBeenCalledTimes(1);
+  });
+
   it('should dispose chart and disconnect observers', async () => {
     const loader = buildLoaderMock();
     const controller = new EChartsHostController({
@@ -141,6 +203,9 @@ describe('EChartsHostController', () => {
 
     expect(resizeObserverRecords[0].disconnect).toHaveBeenCalledTimes(1);
     expect(loader.dispose).toHaveBeenCalledWith(chartMock);
+    expect(windowEventListeners.has('resize')).toBe(false);
+    expect(windowEventListeners.has('orientationchange')).toBe(false);
+    expect(visualViewportEventListeners.has('resize')).toBe(false);
   });
 
   it('should log initialization failures and return null', async () => {

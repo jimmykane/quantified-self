@@ -36,6 +36,10 @@ export class EChartsHostController {
   private resizeFrameId: number | null = null;
   private initPromise: Promise<EChartsType | null> | null = null;
   private observedContainer: HTMLElement | null = null;
+  private viewportListenersBound = false;
+  private readonly handleViewportResize = () => {
+    this.scheduleResize();
+  };
 
   constructor(private readonly config: EChartsHostControllerConfig) { }
 
@@ -59,6 +63,7 @@ export class EChartsHostController {
       try {
         this.chart = await this.config.eChartsLoader.init(container, theme);
         this.observeContainer(container);
+        this.observeViewport();
         return this.chart;
       } catch (error) {
         this.chart = null;
@@ -117,6 +122,7 @@ export class EChartsHostController {
     }
 
     this.observedContainer = null;
+    this.teardownViewportListeners();
 
     if (this.resizeFrameId !== null && typeof cancelAnimationFrame !== 'undefined') {
       cancelAnimationFrame(this.resizeFrameId);
@@ -141,5 +147,27 @@ export class EChartsHostController {
     this.resizeObserver.observe(container);
 
     this.observedContainer = container;
+  }
+
+  private observeViewport(): void {
+    if (this.viewportListenersBound || typeof window === 'undefined') {
+      return;
+    }
+
+    window.addEventListener('resize', this.handleViewportResize, { passive: true });
+    window.addEventListener('orientationchange', this.handleViewportResize, { passive: true });
+    window.visualViewport?.addEventListener('resize', this.handleViewportResize, { passive: true });
+    this.viewportListenersBound = true;
+  }
+
+  private teardownViewportListeners(): void {
+    if (!this.viewportListenersBound || typeof window === 'undefined') {
+      return;
+    }
+
+    window.removeEventListener('resize', this.handleViewportResize);
+    window.removeEventListener('orientationchange', this.handleViewportResize);
+    window.visualViewport?.removeEventListener('resize', this.handleViewportResize);
+    this.viewportListenersBound = false;
   }
 }
