@@ -458,4 +458,20 @@ describe('EventCardChartComponent', () => {
     expect(buildPanelsSpy).toHaveBeenCalledTimes(1);
     expect(component.chartPanels.map((panel) => panel.dataType)).toEqual(['power', 'speed']);
   });
+
+  it('normalizes full-domain zoom updates to null', () => {
+    component.xDomain = { start: 0, end: 100 };
+
+    component.onZoomRangeChange({ start: 0, end: 100 });
+
+    expect(component.zoomRange).toBeNull();
+  });
+
+  it('stores clamped shared zoom range updates', () => {
+    component.xDomain = { start: 0, end: 100 };
+
+    component.onZoomRangeChange({ start: -10, end: 40 });
+
+    expect(component.zoomRange).toEqual({ start: 0, end: 40 });
+  });
 });

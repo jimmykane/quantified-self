@@ -85,9 +85,11 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @Input() strokeWidth = AppUserUtilities.getDefaultChartStrokeWidth();
   @Input() showActivityNamesInTooltip = false;
   @Input() zoomBarOverviewData: Array<[number, number]> = [];
+  @Input() sharedZoomRange: EventChartRange | null = null;
 
   @Output() cursorPositionChange = new EventEmitter<number>();
   @Output() selectedRangeChange = new EventEmitter<EventChartRange | null>();
+  @Output() zoomRangeChange = new EventEmitter<EventChartRange | null>();
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
@@ -107,6 +109,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private formattedValueCache = new Map<string, string>();
   private activeLapTooltipKey: string | null = null;
   private applyingSharedSelectionRange = false;
+  private applyingSharedZoomRange = false;
 
   constructor(
     private eChartsLoader: EChartsLoaderService,
@@ -209,6 +212,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       this.updateRangeStats();
       this.cdr.markForCheck();
     }
+
+    if (changes.sharedZoomRange && !changes.sharedZoomRange.firstChange && this.showZoomBar) {
+      this.applyStoredZoomRange();
+    }
   }
 
   ngOnDestroy(): void {
@@ -228,8 +235,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       this.seriesByID.clear();
       this.rangeStats = [];
       if (this.showZoomBar) {
-        this.syncNativeZoomGroup();
         this.chartHost.setOption(this.buildZoomBarOnlyOption(), { notMerge: true, lazyUpdate: true });
+        this.syncNativeZoomGroup();
         this.chartHost.scheduleResize();
         this.cdr.markForCheck();
         return;
@@ -258,13 +265,13 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return;
     }
 
-    this.syncNativeZoomGroup();
     this.seriesByID = new Map(this.panel.series.map((series) => [series.id, series]));
     this.chartHost.setOption(this.buildOption(), ECHARTS_INTERACTIVE_CARTESIAN_MERGE_UPDATE_SETTINGS);
     this.applyCanonicalXAxisScale();
     this.syncInteractionMode();
     this.applySharedSelectionRange();
     this.updateRangeStats();
+    this.syncNativeZoomGroup();
     this.chartHost.scheduleResize();
     this.cdr.markForCheck();
   }
@@ -484,11 +491,11 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   private bindChartEvents(): void {
     const chart = this.chartHost.getChart();
-    if (!chart || this.eventsBound || !this.panel) {
+    if (!chart || this.eventsBound || (!this.panel && !this.showZoomBar)) {
       return;
     }
 
-    if (!TEMP_DISABLE_AXIS_POINTER_CURSOR_EMIT) {
+    if (this.panel && !TEMP_DISABLE_AXIS_POINTER_CURSOR_EMIT) {
       chart.on('updateAxisPointer', (params: any) => {
         const value = Number(params?.axesInfo?.[0]?.value);
         if (Number.isFinite(value)) {
@@ -497,29 +504,38 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       });
     }
 
-    chart.on('mousemove', (params: any) => {
-      if (params?.componentType === 'markLine') {
-        this.showLocalLapTooltip(params);
-        return;
-      }
+    if (this.panel) {
+      chart.on('mousemove', (params: any) => {
+        if (params?.componentType === 'markLine') {
+          this.showLocalLapTooltip(params);
+          return;
+        }
 
-      this.hideLocalLapTooltip();
-    });
+        this.hideLocalLapTooltip();
+      });
 
-    chart.on('globalout', () => {
-      this.hideLocalLapTooltip();
-    });
+      chart.on('globalout', () => {
+        this.hideLocalLapTooltip();
+      });
+    }
 
     chart.on('datazoom', () => {
-      this.applyCanonicalXAxisScale();
+      if (this.panel) {
+        this.applyCanonicalXAxisScale();
+      }
+      if (this.showZoomBar && !this.applyingSharedZoomRange) {
+        this.emitVisibleZoomRange();
+      }
     });
 
-    chart.on('brush', (params: any) => {
-      this.handleBrushEvent(params);
-    });
-    chart.on('brushEnd', (params: any) => {
-      this.handleBrushEnd(params);
-    });
+    if (this.panel) {
+      chart.on('brush', (params: any) => {
+        this.handleBrushEvent(params);
+      });
+      chart.on('brushEnd', (params: any) => {
+        this.handleBrushEnd(params);
+      });
+    }
 
     this.eventsBound = true;
   }
@@ -591,6 +607,14 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return;
     }
 
+    this.logZoomDebug('viewport-change', {
+      intersectionRatio: primaryEntry.intersectionRatio,
+      isIntersecting: primaryEntry.isIntersecting,
+      nextVisible: isVisible,
+      previousVisible: this.viewportVisible,
+      zoomSyncVisibleForViewport: this.zoomSyncVisibleForViewport,
+    });
+
     this.viewportVisible = isVisible;
     this.applyViewportAnimationMode(isVisible);
     if (this.showZoomBar) {
@@ -600,6 +624,9 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     this.applyZoomSyncVisibilityForViewport(isVisible);
     this.applyTooltipVisibilityForViewport(isVisible);
+    if (isVisible) {
+      this.applyStoredZoomRange();
+    }
   }
 
   private resolveViewportObserverRoot(container: HTMLElement): Element | Document | null {
@@ -659,6 +686,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return;
     }
 
+    this.logZoomDebug('zoom-sync-visibility', {
+      nextVisible: isVisible,
+      previousVisible: this.zoomSyncVisibleForViewport,
+    });
     this.zoomSyncVisibleForViewport = isVisible;
     this.syncNativeZoomGroup();
   }
@@ -1038,6 +1069,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return;
     }
 
+    this.zoomRangeChange.emit(this.normalizeZoomRange(nextRange));
     chart.dispatchAction({
       type: 'dataZoom',
       startValue: nextRange.start,
@@ -1187,7 +1219,19 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return;
     }
 
+    this.logZoomDebug('sync-native-zoom-group', {
+      requestedGroupId,
+      previousGroupId: this.connectedZoomGroupId,
+      nextGroupId,
+      hasRenderableChart,
+      showZoomBar: this.showZoomBar,
+      zoomSyncVisibleForViewport: this.zoomSyncVisibleForViewport,
+      viewportVisible: this.viewportVisible,
+    });
     const previousGroupId = this.connectedZoomGroupId;
+    if (!previousGroupId && nextGroupId) {
+      this.applyStoredZoomRange();
+    }
     chart.group = nextGroupId || undefined;
     this.connectedZoomGroupId = nextGroupId;
     if (previousGroupId && previousGroupId !== nextGroupId) {
@@ -1196,6 +1240,17 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     if (nextGroupId) {
       void this.eChartsLoader.connectGroup(nextGroupId);
     }
+  }
+
+  private logZoomDebug(source: string, extra?: Record<string, unknown>): void {
+    this.logger.info('[EventCardChartPanelComponent] Zoom debug', {
+      source,
+      showZoomBar: this.showZoomBar,
+      panelDataType: this.panel?.displayName || this.panel?.dataType || null,
+      panelSeriesCount: this.panel?.series?.length ?? 0,
+      zoomGroupId: this.zoomGroupId,
+      ...extra,
+    });
   }
 
   private disconnectNativeZoomGroup(): void {
@@ -1280,6 +1335,52 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     return domain;
+  }
+
+  private emitVisibleZoomRange(): void {
+    this.zoomRangeChange.emit(this.normalizeZoomRange(this.getVisibleXAxisRange()));
+  }
+
+  private normalizeZoomRange(range: EventChartRange | null): EventChartRange | null {
+    const domain = this.getActiveDomain();
+    const clampedRange = range ? clampEventRange(range, domain.start, domain.end) : null;
+    if (!clampedRange) {
+      return null;
+    }
+
+    return clampedRange.start === domain.start && clampedRange.end === domain.end
+      ? null
+      : clampedRange;
+  }
+
+  private applyStoredZoomRange(): void {
+    const chart = this.chartHost.getChart();
+    if (!chart || (!this.showZoomBar && !this.zoomSyncVisibleForViewport)) {
+      return;
+    }
+
+    const normalizedRange = this.normalizeZoomRange(this.sharedZoomRange);
+    const currentRange = this.normalizeZoomRange(this.getVisibleXAxisRange());
+    if (
+      currentRange?.start === normalizedRange?.start
+      && currentRange?.end === normalizedRange?.end
+    ) {
+      return;
+    }
+
+    const domain = this.getActiveDomain();
+    const targetRange = normalizedRange ?? domain;
+
+    this.applyingSharedZoomRange = true;
+    try {
+      chart.dispatchAction({
+        type: 'dataZoom',
+        startValue: targetRange.start,
+        endValue: targetRange.end,
+      } as any);
+    } finally {
+      this.applyingSharedZoomRange = false;
+    }
   }
 
   private getSeriesLineData(points: EventChartPoint[]): Array<[number, number]> {

@@ -17,7 +17,8 @@
       <app-event-card-chart-panel class="event-chart-shell__zoom-bar" [xAxisType]="renderedXAxisType"
         [chartTheme]="chartTheme" [useAnimations]="false" [showZoomBar]="true" [zoomGroupId]="zoomSyncGroupId"
         [xDomain]="xDomain" [showDateOnTimeAxis]="showDateOnTimeAxis" [showLaps]="false" [lapMarkers]="[]"
-        [strokeWidth]="strokeWidth" [zoomBarOverviewData]="zoomBarOverviewData">
+        [strokeWidth]="strokeWidth" [zoomBarOverviewData]="zoomBarOverviewData" [sharedZoomRange]="zoomRange"
+        (zoomRangeChange)="onZoomRangeChange($event)">
       </app-event-card-chart-panel>
       }
 
@@ -31,7 +32,9 @@
           [gainAndLossThreshold]="gainAndLossThreshold"
           [extraMaxForPower]="extraMaxForPower"
           [extraMaxForPace]="extraMaxForPace" [strokeWidth]="strokeWidth"
+          [sharedZoomRange]="zoomRange"
           [showActivityNamesInTooltip]="showActivityNamesInTooltip"
+          (zoomRangeChange)="onZoomRangeChange($event)"
           (selectedRangeChange)="onSelectedRangeChange($event)"
           (cursorPositionChange)="onPanelCursorPositionChange($event)">
         </app-event-card-chart-panel>

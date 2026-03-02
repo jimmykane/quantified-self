@@ -88,6 +88,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   public renderedXAxisType: XAxisTypes = XAxisTypes.Duration;
   public showDateOnTimeAxis = false;
   public zoomSyncGroupId: string | null = null;
+  public zoomRange: EventChartRange | null = null;
   public selectedRange: EventChartRange | null = null;
 
   public get showAllData() { return this.userSettingsQuery.chartSettings()?.showAllData ?? false; }
@@ -318,6 +319,20 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     this.cdr.markForCheck();
   }
 
+  public onZoomRangeChange(range: EventChartRange | null): void {
+    const nextRange = this.normalizeZoomRange(range, this.xDomain);
+    const currentRange = this.zoomRange;
+    if (
+      currentRange?.start === nextRange?.start
+      && currentRange?.end === nextRange?.end
+    ) {
+      return;
+    }
+
+    this.zoomRange = nextRange;
+    this.cdr.markForCheck();
+  }
+
   private queueRebuild(source: string): void {
     if (this.pendingRebuild) {
       return;
@@ -340,6 +355,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     const shouldRebuildPanels = this.lastPanelRebuildKey !== panelRebuildKey;
     const shouldRebuildLaps = this.lastLapMarkersKey !== lapMarkersKey;
 
+    const previousZoomSyncGroupId = this.zoomSyncGroupId;
     this.renderedXAxisType = effectiveXAxisType;
     this.zoomSyncGroupId = zoomSyncGroupId;
 
@@ -384,6 +400,9 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
 
       const globalDomain = this.resolveGlobalDomain(this.allChartPanels);
       this.xDomain = globalDomain;
+      this.zoomRange = previousZoomSyncGroupId !== this.zoomSyncGroupId
+        ? null
+        : this.normalizeZoomRange(this.zoomRange, globalDomain);
       this.updateZoomBarOverviewData(globalDomain);
       this.showDateOnTimeAxis = this.resolveShowDateOnTimeAxis(globalDomain, effectiveXAxisType);
 
@@ -397,6 +416,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       this.dataTypeLegendItems = [];
       this.lapMarkers = [];
       this.xDomain = null;
+      this.zoomRange = null;
       this.zoomBarOverviewData = [];
       this.showDateOnTimeAxis = false;
       this.renderedXAxisType = resolveEventChartXAxisType(this.event, this.xAxisType);
@@ -441,6 +461,21 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     return startDate.getFullYear() !== endDate.getFullYear()
       || startDate.getMonth() !== endDate.getMonth()
       || startDate.getDate() !== endDate.getDate();
+  }
+
+  private normalizeZoomRange(range: EventChartRange | null, domain: EventChartRange | null): EventChartRange | null {
+    if (!domain) {
+      return null;
+    }
+
+    const clampedRange = range ? clampEventRange(range, domain.start, domain.end) : null;
+    if (!clampedRange) {
+      return null;
+    }
+
+    return clampedRange.start === domain.start && clampedRange.end === domain.end
+      ? null
+      : clampedRange;
   }
 
   private syncVisibleDataTypes(panels: EventChartPanelModel[]): void {

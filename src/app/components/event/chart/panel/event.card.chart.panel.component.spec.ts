@@ -208,6 +208,7 @@ describe('EventCardChartPanelComponent', () => {
 
   it('uses brush drag to trigger native dataZoom updates in zoom mode', async () => {
     component.cursorBehaviour = ChartCursorBehaviours.ZoomX;
+    const emitSpy = vi.spyOn(component.zoomRangeChange, 'emit');
     fixture.detectChanges();
     await component.ngAfterViewInit();
 
@@ -238,6 +239,7 @@ describe('EventCardChartPanelComponent', () => {
         endValue: 75,
       })
     );
+    expect(emitSpy).toHaveBeenCalledWith({ start: 15, end: 75 });
   });
 
   it('emits normalized selected range from brush events in selection mode', async () => {
@@ -337,6 +339,30 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.series?.[0]?.data).toEqual(component.zoomBarOverviewData);
   });
 
+  it('emits canonical zoom range from the zoom bar on datazoom', async () => {
+    component.panel = null;
+    component.showZoomBar = true;
+    const emitSpy = vi.spyOn(component.zoomRangeChange, 'emit');
+    chart.getOption.mockReturnValue({
+      dataZoom: [
+        {
+          startValue: 15,
+          endValue: 75,
+        }
+      ]
+    });
+
+    fixture.detectChanges();
+    await component.ngAfterViewInit();
+
+    const dataZoomHandler = chart.on.mock.calls.find(([eventName]) => eventName === 'datazoom')?.[1] as (() => void);
+    expect(dataZoomHandler).toBeTypeOf('function');
+
+    dataZoomHandler();
+
+    expect(emitSpy).toHaveBeenCalledWith({ start: 15, end: 75 });
+  });
+
   it('renders empty-axis no-data option without joining a zoom group when panel is null outside zoom mode', async () => {
     component.panel = null;
     component.showZoomBar = false;
@@ -351,6 +377,34 @@ describe('EventCardChartPanelComponent', () => {
     expect(Array.isArray(option?.series)).toBe(true);
     expect(eChartsLoaderMock.connectGroup).not.toHaveBeenCalled();
     expect(eChartsLoaderMock.disconnectGroup).not.toHaveBeenCalled();
+  });
+
+  it('replays stored zoom range once when a hidden panel becomes visible again', async () => {
+    fixture.detectChanges();
+    await component.ngAfterViewInit();
+
+    chart.dispatchAction.mockClear();
+    chart.group = undefined;
+    (component as any).connectedZoomGroupId = null;
+    (component as any).viewportVisible = false;
+    (component as any).zoomSyncVisibleForViewport = false;
+    component.sharedZoomRange = { start: 20, end: 60 };
+
+    const viewportCallback = intersectionObserverCallbacks[0];
+    expect(viewportCallback).toBeTypeOf('function');
+
+    viewportCallback([
+      { isIntersecting: true, intersectionRatio: 1 } as IntersectionObserverEntry
+    ], {} as IntersectionObserver);
+
+    expect(chart.dispatchAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'dataZoom',
+        startValue: 20,
+        endValue: 60,
+      })
+    );
+    expect(eChartsLoaderMock.connectGroup).toHaveBeenLastCalledWith('event-zoom-group');
   });
 
   it('enables tooltip hover without requiring a click first', async () => {
