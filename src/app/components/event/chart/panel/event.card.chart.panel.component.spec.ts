@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { SimpleChange } from '@angular/core';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { DynamicDataLoader, LapTypes, XAxisTypes } from '@sports-alliance/sports-lib';
+import { ChartCursorBehaviours, DynamicDataLoader, LapTypes, XAxisTypes } from '@sports-alliance/sports-lib';
 import { EventCardChartPanelComponent } from './event.card.chart.panel.component';
 import { EChartsLoaderService } from '../../../../services/echarts-loader.service';
 import { LoggerService } from '../../../../services/logger.service';
@@ -101,6 +101,7 @@ describe('EventCardChartPanelComponent', () => {
     component.xAxisType = XAxisTypes.Duration;
     component.xDomain = { start: 0, end: 120 };
     component.zoomGroupId = 'event-zoom-group';
+    component.cursorBehaviour = ChartCursorBehaviours.ZoomX;
   });
 
   afterEach(() => {
@@ -132,7 +133,9 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.xAxis?.max).toBe(120);
     expect(option?.xAxis?.interval).toBe(15);
     expect(option?.tooltip?.triggerOn).toBe('mousemove|click');
+    expect(option?.brush?.brushMode).toBe('single');
     expect(option?.dataZoom?.[0]?.zoomOnMouseWheel).toBe(false);
+    expect(option?.dataZoom?.[0]?.disabled).toBe(false);
     expect(option?.dataZoom?.[0]?.filterMode).toBe('filter');
     expect(option?.dataZoom?.[0]?.moveOnMouseMove).toBe(true);
     expect(option?.dataZoom?.[0]?.moveOnMouseWheel).toBe(false);
@@ -185,6 +188,100 @@ describe('EventCardChartPanelComponent', () => {
 
     const option = getRenderedOption();
     expect(option?.dataZoom?.[1]?.show).toBe(false);
+  });
+
+  it('switches to selection mode with native brush and disables inside zoom', async () => {
+    component.cursorBehaviour = ChartCursorBehaviours.SelectX;
+    fixture.detectChanges();
+    await component.ngAfterViewInit();
+
+    const option = getRenderedOption();
+    expect(option?.dataZoom?.[0]?.disabled).toBe(true);
+    expect(chart.dispatchAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'takeGlobalCursor',
+        key: 'brush',
+        brushOption: expect.objectContaining({ brushType: 'lineX' }),
+      })
+    );
+  });
+
+  it('uses brush drag to trigger native dataZoom updates in zoom mode', async () => {
+    component.cursorBehaviour = ChartCursorBehaviours.ZoomX;
+    fixture.detectChanges();
+    await component.ngAfterViewInit();
+
+    chart.dispatchAction.mockClear();
+    const brushEndHandler = chart.on.mock.calls.find(([eventName]) => eventName === 'brushEnd')?.[1] as ((params: any) => void);
+    expect(brushEndHandler).toBeTypeOf('function');
+
+    brushEndHandler({
+      areas: [
+        {
+          coordRange: [15, 75],
+        }
+      ]
+    });
+
+    expect(chart.dispatchAction).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        type: 'brush',
+        areas: [],
+      })
+    );
+    expect(chart.dispatchAction).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        type: 'dataZoom',
+        startValue: 15,
+        endValue: 75,
+      })
+    );
+  });
+
+  it('emits normalized selected range from brush events in selection mode', async () => {
+    component.cursorBehaviour = ChartCursorBehaviours.SelectX;
+    const emitSpy = vi.spyOn(component.selectedRangeChange, 'emit');
+    fixture.detectChanges();
+    await component.ngAfterViewInit();
+
+    const brushHandler = chart.on.mock.calls.find(([eventName]) => eventName === 'brush')?.[1] as ((params: any) => void);
+    expect(brushHandler).toBeTypeOf('function');
+
+    brushHandler({
+      areas: [
+        {
+          coordRange: [20, 60],
+        }
+      ]
+    });
+
+    expect(emitSpy).toHaveBeenCalledWith({ start: 20, end: 60 });
+  });
+
+  it('applies incoming shared selection range with official brush action', async () => {
+    component.cursorBehaviour = ChartCursorBehaviours.SelectX;
+    fixture.detectChanges();
+    await component.ngAfterViewInit();
+
+    chart.dispatchAction.mockClear();
+    component.selectedRange = { start: 25, end: 55 };
+    component.ngOnChanges({
+      selectedRange: new SimpleChange(null, component.selectedRange, false),
+    });
+
+    expect(chart.dispatchAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'brush',
+        areas: [
+          expect.objectContaining({
+            brushType: 'lineX',
+            coordRange: [25, 55],
+          })
+        ],
+      })
+    );
   });
 
   it('renders zoom-bar-only mode when panel is null and showZoomBar is true', async () => {
@@ -317,6 +414,50 @@ describe('EventCardChartPanelComponent', () => {
     expect(formatter(12.3)).toBe('12.3');
     expect(formatter(12.3)).toBe('12.3');
     expect(getDataInstanceSpy).toHaveBeenCalledTimes(1);
+
+    getDataInstanceSpy.mockRestore();
+  });
+
+  it('computes range stats for the current selected range', async () => {
+    const getDataInstanceSpy = vi.spyOn(DynamicDataLoader, 'getDataInstanceFromDataType').mockImplementation((_type: string, value: number) => ({
+      getDisplayValue: () => value.toFixed(0),
+      getDisplayUnit: () => 'u',
+    } as any));
+
+    fixture.detectChanges();
+    await component.ngAfterViewInit();
+
+    component.selectedRange = { start: 0, end: 10 };
+    component.ngOnChanges({
+      selectedRange: new SimpleChange(null, component.selectedRange, false),
+    });
+
+    expect(component.rangeStats).toHaveLength(1);
+    expect(component.rangeStats[0].min.value).toBe('100');
+    expect(component.rangeStats[0].avg.value).toBe('110');
+    expect(component.rangeStats[0].max.value).toBe('120');
+
+    getDataInstanceSpy.mockRestore();
+  });
+
+  it('hides activity names in selection stats when tooltip activity names are disabled', async () => {
+    const getDataInstanceSpy = vi.spyOn(DynamicDataLoader, 'getDataInstanceFromDataType').mockImplementation((_type: string, value: number) => ({
+      getDisplayValue: () => value.toFixed(0),
+      getDisplayUnit: () => 'u',
+    } as any));
+
+    component.showActivityNamesInTooltip = false;
+    fixture.detectChanges();
+    await component.ngAfterViewInit();
+
+    component.selectedRange = { start: 0, end: 10 };
+    component.ngOnChanges({
+      selectedRange: new SimpleChange(null, component.selectedRange, false),
+    });
+    fixture.detectChanges();
+
+    expect(component.rangeStats).toHaveLength(1);
+    expect(fixture.nativeElement.querySelector('.event-chart-panel__activity')).toBeNull();
 
     getDataInstanceSpy.mockRestore();
   });

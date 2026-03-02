@@ -4,16 +4,16 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { CommonModule } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
-import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { EventInterface, User, XAxisTypes } from '@sports-alliance/sports-lib';
+import { ChartCursorBehaviours, EventInterface, User, XAxisTypes } from '@sports-alliance/sports-lib';
 import { vi } from 'vitest';
 import { EventCardChartActionsComponent } from './event.card.chart.actions.component';
 import { AppAnalyticsService } from '../../../../services/app.analytics.service';
+import { MenuRadioListComponent } from '../../../shared/menu-radio-list/menu-radio-list.component';
+import { MatDividerModule } from '@angular/material/divider';
 
 describe('EventCardChartActionsComponent', () => {
   let component: EventCardChartActionsComponent;
@@ -25,18 +25,17 @@ describe('EventCardChartActionsComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [EventCardChartActionsComponent],
       imports: [
         CommonModule,
         BrowserAnimationsModule,
         MatButtonModule,
-        MatFormFieldModule,
+        MatDividerModule,
         MatIconModule,
         MatMenuModule,
-        MatSelectModule,
         MatSlideToggleModule,
         MatTooltipModule,
       ],
+      declarations: [EventCardChartActionsComponent, MenuRadioListComponent],
       providers: [
         { provide: AppAnalyticsService, useValue: analyticsServiceMock },
       ],
@@ -47,6 +46,7 @@ describe('EventCardChartActionsComponent', () => {
     component.user = { uid: 'test-user' } as User;
     component.event = { isMultiSport: () => false } as EventInterface;
     component.xAxisType = XAxisTypes.Duration;
+    component.cursorBehaviour = ChartCursorBehaviours.ZoomX;
     component.showAllData = false;
     component.showLaps = false;
     fixture.detectChanges();
@@ -70,6 +70,26 @@ describe('EventCardChartActionsComponent', () => {
 
     expect(xAxisTypeEmitSpy).toHaveBeenCalledWith(XAxisTypes.Distance);
     expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('event_chart_settings_change', { property: 'xAxisType' });
+  });
+
+  it('should emit cursorBehaviour changes and log analytics', async () => {
+    const emitSpy = vi.spyOn(component.cursorBehaviourChange, 'emit');
+
+    await component.onCursorBehaviourChange(ChartCursorBehaviours.SelectX);
+
+    expect(emitSpy).toHaveBeenCalledWith(ChartCursorBehaviours.SelectX);
+    expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('event_chart_settings_change', { property: 'cursorBehaviour' });
+  });
+
+  it('should toggle cursorBehaviour between zoom and select', async () => {
+    const emitSpy = vi.spyOn(component.cursorBehaviourChange, 'emit');
+
+    component.cursorBehaviour = ChartCursorBehaviours.ZoomX;
+    await component.onCursorBehaviourToggle();
+    expect(emitSpy).toHaveBeenLastCalledWith(ChartCursorBehaviours.SelectX);
+
+    await component.onCursorBehaviourToggle();
+    expect(emitSpy).toHaveBeenLastCalledWith(ChartCursorBehaviours.ZoomX);
   });
 
   it('should emit showAllData changes and log analytics', async () => {

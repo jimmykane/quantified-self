@@ -10,6 +10,7 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { MapLayersActionsComponent } from './map-layers-actions.component';
 import { MapStyleService } from '../../../services/map-style.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
+import { MenuRadioListComponent } from '../../shared/menu-radio-list/menu-radio-list.component';
 
 describe('MapLayersActionsComponent', () => {
   let component: MapLayersActionsComponent;
@@ -39,7 +40,7 @@ describe('MapLayersActionsComponent', () => {
         MatDividerModule,
         BrowserAnimationsModule,
       ],
-      declarations: [MapLayersActionsComponent],
+      declarations: [MapLayersActionsComponent, MenuRadioListComponent],
       providers: [
         { provide: MapStyleService, useValue: mapStyleServiceMock },
         { provide: AppAnalyticsService, useValue: analyticsServiceMock },

@@ -12,7 +12,7 @@ import {
   SimpleChanges,
   ViewChild
 } from '@angular/core';
-import { ChartThemes, LapTypes, XAxisTypes } from '@sports-alliance/sports-lib';
+import { ChartCursorBehaviours, ChartThemes, LapTypes, XAxisTypes } from '@sports-alliance/sports-lib';
 import type { EChartsType } from 'echarts/core';
 import { EChartsLoaderService } from '../../../../services/echarts-loader.service';
 import { LoggerService } from '../../../../services/logger.service';
@@ -30,9 +30,14 @@ import {
   buildEventCanonicalXAxisScaleOptions,
   EventChartRange,
   clampEventRange,
-  formatEventXAxisValue
+  formatEventXAxisValue,
+  normalizeEventRange,
 } from '../../../../helpers/event-echarts-xaxis.helper';
 import { buildEventPanelYAxisConfig } from '../../../../helpers/event-echarts-yaxis.helper';
+import {
+  computeEventPanelRangeStats,
+  EventPanelRangeStat,
+} from '../../../../helpers/event-echarts-range-stats.helper';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import type { EventChartPoint } from '../../../../helpers/event-echarts-data.helper';
 import { AppUserUtilities } from '../../../../utils/app.user.utilities';
@@ -49,6 +54,7 @@ const LAP_TOOLTIP_OFFSET_X = 12;
 const LAP_TOOLTIP_OFFSET_Y = 12;
 const ZOOM_BAR_SLIDER_HEIGHT = 24;
 const ZOOM_BAR_HANDLE_SIZE = 24;
+const SELECTION_BRUSH_SOURCE = 'event-chart-selection-sync';
 // Temporary perf toggle: disable axis-pointer -> map cursor emission path.
 const TEMP_DISABLE_AXIS_POINTER_CURSOR_EMIT = true;
 
@@ -67,10 +73,13 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @Input() showZoomBar = false;
   @Input() zoomGroupId: string | null = null;
   @Input() xDomain: EventChartRange | null = null;
+  @Input() cursorBehaviour: ChartCursorBehaviours = ChartCursorBehaviours.ZoomX;
+  @Input() selectedRange: EventChartRange | null = null;
   @Input() showDateOnTimeAxis = true;
   @Input() showLaps = true;
   @Input() lapTypes: LapTypes[] = [];
   @Input() lapMarkers: EventChartLapMarker[] = [];
+  @Input() gainAndLossThreshold = AppUserUtilities.getDefaultGainAndLossThreshold();
   @Input() extraMaxForPower = 0;
   @Input() extraMaxForPace = -0.25;
   @Input() strokeWidth = AppUserUtilities.getDefaultChartStrokeWidth();
@@ -78,8 +87,11 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @Input() zoomBarOverviewData: Array<[number, number]> = [];
 
   @Output() cursorPositionChange = new EventEmitter<number>();
+  @Output() selectedRangeChange = new EventEmitter<EventChartRange | null>();
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
+
+  public rangeStats: EventPanelRangeStat[] = [];
 
   private readonly chartHost: EChartsHostController;
   private eventsBound = false;
@@ -94,6 +106,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private seriesDataCache = new WeakMap<EventChartPoint[], Array<[number, number]>>();
   private formattedValueCache = new Map<string, string>();
   private activeLapTooltipKey: string | null = null;
+  private applyingSharedSelectionRange = false;
 
   constructor(
     private eChartsLoader: EChartsLoaderService,
@@ -105,6 +118,50 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       logger: this.logger,
       logPrefix: '[EventCardChartPanelComponent]'
     });
+  }
+
+  public get hasSelection(): boolean {
+    return !!normalizeEventRange(this.selectedRange);
+  }
+
+  public get selectedRangeLabel(): string {
+    const normalizedRange = normalizeEventRange(this.selectedRange);
+    if (!normalizedRange) {
+      return '';
+    }
+
+    const startLabel = formatEventXAxisValue(
+      normalizedRange.start,
+      this.xAxisType,
+      { includeDateForTime: this.showDateOnTimeAxis }
+    );
+    const endLabel = formatEventXAxisValue(
+      normalizedRange.end,
+      this.xAxisType,
+      { includeDateForTime: this.showDateOnTimeAxis }
+    );
+
+    return `${startLabel} - ${endLabel}`;
+  }
+
+  public getRangeStatEntries(stat: EventPanelRangeStat): Array<{ label: string; value: string }> {
+    const entries = [
+      { label: 'Min', value: `${stat.min.value}${stat.min.unit}` },
+      { label: 'Avg', value: `${stat.avg.value}${stat.avg.unit}` },
+      { label: 'Max', value: `${stat.max.value}${stat.max.unit}` },
+    ];
+
+    if (stat.gain) {
+      entries.push({ label: 'Gain', value: `${stat.gain.value}${stat.gain.unit}` });
+    }
+    if (stat.loss) {
+      entries.push({ label: 'Loss', value: `${stat.loss.value}${stat.loss.unit}` });
+    }
+    if (stat.slope) {
+      entries.push({ label: 'Slope', value: stat.slope });
+    }
+
+    return entries;
   }
 
   async ngAfterViewInit(): Promise<void> {
@@ -139,6 +196,19 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       this.refreshChart();
       this.syncViewportObserver();
     }
+
+    if (changes.cursorBehaviour && !changes.cursorBehaviour.firstChange) {
+      this.syncInteractionMode();
+    }
+
+    if (
+      (changes.selectedRange && !changes.selectedRange.firstChange)
+      || (changes.xDomain && !changes.xDomain.firstChange)
+    ) {
+      this.applySharedSelectionRange();
+      this.updateRangeStats();
+      this.cdr.markForCheck();
+    }
   }
 
   ngOnDestroy(): void {
@@ -156,6 +226,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     if (!this.panel) {
       this.seriesByID.clear();
+      this.rangeStats = [];
       if (this.showZoomBar) {
         this.syncNativeZoomGroup();
         this.chartHost.setOption(this.buildZoomBarOnlyOption(), { notMerge: true, lazyUpdate: true });
@@ -176,6 +247,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     if (!this.panel.series.length) {
       this.seriesByID.clear();
+      this.rangeStats = [];
       this.disconnectNativeZoomGroup();
       this.chartHost.setOption({
         animation: this.useAnimations === true,
@@ -190,6 +262,9 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.seriesByID = new Map(this.panel.series.map((series) => [series.id, series]));
     this.chartHost.setOption(this.buildOption(), ECHARTS_INTERACTIVE_CARTESIAN_MERGE_UPDATE_SETTINGS);
     this.applyCanonicalXAxisScale();
+    this.syncInteractionMode();
+    this.applySharedSelectionRange();
+    this.updateRangeStats();
     this.chartHost.scheduleResize();
     this.cdr.markForCheck();
   }
@@ -278,6 +353,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         },
         formatter: (params: any) => this.formatTooltip(params)
       },
+      brush: this.buildBrushOption(darkTheme),
       xAxis: {
         ...(buildEventCanonicalXAxisScaleOptions(this.xAxisType, domain) || {}),
         type: this.xAxisType === XAxisTypes.Time ? 'time' : 'value',
@@ -319,6 +395,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         {
           type: 'inside',
           xAxisIndex: 0,
+          disabled: this.cursorBehaviour === ChartCursorBehaviours.SelectX,
           filterMode: 'filter',
           throttle: DATA_ZOOM_THROTTLE_MS,
           zoomOnMouseWheel: false,
@@ -383,6 +460,24 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     };
   }
 
+  private buildBrushOption(darkTheme: boolean): Record<string, unknown> {
+    return {
+      toolbox: [],
+      brushLink: 'none',
+      xAxisIndex: 0,
+      brushMode: 'single',
+      transformable: false,
+      removeOnClick: true,
+      throttleType: 'fixRate',
+      throttleDelay: DATA_ZOOM_THROTTLE_MS,
+      brushStyle: {
+        color: darkTheme ? 'rgba(144,202,249,0.16)' : 'rgba(25,118,210,0.14)',
+        borderColor: darkTheme ? 'rgba(144,202,249,0.72)' : 'rgba(25,118,210,0.68)',
+        borderWidth: 1,
+      }
+    };
+  }
+
   private shouldDisplayLapMarker(marker: EventChartLapMarker): boolean {
     return isEventLapTypeAllowed(marker.lapType, this.lapTypes);
   }
@@ -417,6 +512,13 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     chart.on('datazoom', () => {
       this.applyCanonicalXAxisScale();
+    });
+
+    chart.on('brush', (params: any) => {
+      this.handleBrushEvent(params);
+    });
+    chart.on('brushEnd', (params: any) => {
+      this.handleBrushEnd(params);
     });
 
     this.eventsBound = true;
@@ -848,6 +950,194 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       lazyUpdate: true,
       silent: true,
     });
+  }
+
+  private syncInteractionMode(): void {
+    if (this.showZoomBar) {
+      return;
+    }
+
+    const chart = this.chartHost.getChart();
+    if (!chart) {
+      return;
+    }
+
+    const selectModeActive = this.cursorBehaviour === ChartCursorBehaviours.SelectX;
+
+    this.chartHost.setOption({
+      dataZoom: [
+        {
+          disabled: selectModeActive,
+        }
+      ],
+    }, {
+      notMerge: false,
+      lazyUpdate: true,
+      silent: true,
+    });
+
+    chart.dispatchAction({
+      type: 'takeGlobalCursor',
+      key: 'brush',
+      brushOption: selectModeActive
+        ? {
+          brushType: 'lineX',
+          brushMode: 'single',
+          removeOnClick: true,
+        }
+        : {
+          brushType: 'lineX',
+          brushMode: 'single',
+          removeOnClick: true,
+        },
+    } as any);
+
+    if (!selectModeActive) {
+      this.applySharedSelectionRange();
+    }
+  }
+
+  private handleBrushEvent(params: any): void {
+    if (this.showZoomBar || this.cursorBehaviour !== ChartCursorBehaviours.SelectX) {
+      return;
+    }
+
+    if (this.applyingSharedSelectionRange || params?.$from === SELECTION_BRUSH_SOURCE) {
+      return;
+    }
+
+    const nextRange = this.extractBrushRange(params);
+    const currentRange = normalizeEventRange(this.selectedRange);
+    if (
+      currentRange?.start === nextRange?.start
+      && currentRange?.end === nextRange?.end
+    ) {
+      return;
+    }
+
+    this.selectedRangeChange.emit(nextRange);
+  }
+
+  private handleBrushEnd(params: any): void {
+    if (this.showZoomBar || this.cursorBehaviour !== ChartCursorBehaviours.ZoomX) {
+      return;
+    }
+
+    if (params?.$from === SELECTION_BRUSH_SOURCE) {
+      return;
+    }
+
+    const nextRange = this.extractBrushRange(params);
+    this.clearSelectionOverlay();
+    if (!nextRange) {
+      return;
+    }
+
+    const chart = this.chartHost.getChart();
+    if (!chart) {
+      return;
+    }
+
+    chart.dispatchAction({
+      type: 'dataZoom',
+      startValue: nextRange.start,
+      endValue: nextRange.end,
+    } as any);
+  }
+
+  private applySharedSelectionRange(): void {
+    if (this.showZoomBar || this.cursorBehaviour !== ChartCursorBehaviours.SelectX) {
+      this.clearSelectionOverlay();
+      return;
+    }
+
+    const chart = this.chartHost.getChart();
+    const domain = this.getActiveDomain();
+    if (!chart) {
+      return;
+    }
+
+    const nextRange = this.selectedRange
+      ? clampEventRange(this.selectedRange, domain.start, domain.end)
+      : null;
+
+    this.applyingSharedSelectionRange = true;
+    try {
+      chart.dispatchAction({
+        type: 'brush',
+        areas: nextRange ? [this.buildBrushArea(nextRange)] : [],
+        $from: SELECTION_BRUSH_SOURCE,
+      } as any);
+    } finally {
+      this.applyingSharedSelectionRange = false;
+    }
+  }
+
+  private updateRangeStats(): void {
+    if (!this.panel || !this.panel.series.length) {
+      this.rangeStats = [];
+      return;
+    }
+
+    this.rangeStats = computeEventPanelRangeStats({
+      panel: this.panel,
+      range: this.selectedRange,
+      xAxisType: this.xAxisType,
+      gainAndLossThreshold: this.gainAndLossThreshold,
+    });
+  }
+
+  private clearSelectionOverlay(): void {
+    const chart = this.chartHost.getChart();
+    if (!chart) {
+      return;
+    }
+
+    this.applyingSharedSelectionRange = true;
+    try {
+      chart.dispatchAction({
+        type: 'brush',
+        areas: [],
+        $from: SELECTION_BRUSH_SOURCE,
+      } as any);
+    } finally {
+      this.applyingSharedSelectionRange = false;
+    }
+  }
+
+  private buildBrushArea(range: EventChartRange): Record<string, unknown> {
+    return {
+      brushType: 'lineX',
+      xAxisIndex: 0,
+      coordRange: [range.start, range.end],
+    };
+  }
+
+  private extractBrushRange(params: any): EventChartRange | null {
+    const rawAreas = Array.isArray(params?.areas) ? params.areas : [];
+    const firstArea = rawAreas[0];
+    if (!firstArea) {
+      return null;
+    }
+
+    const coordRange = Array.isArray(firstArea.coordRange)
+      ? firstArea.coordRange
+      : Array.isArray(firstArea.coordRanges?.[0])
+        ? firstArea.coordRanges[0]
+        : null;
+    if (!coordRange || coordRange.length < 2) {
+      return null;
+    }
+
+    const domain = this.getActiveDomain();
+    return clampEventRange(
+      {
+        start: Number(coordRange[0]),
+        end: Number(coordRange[1]),
+      },
+      domain.start,
+      domain.end
+    );
   }
 
   private formatDataValue(streamType: string, value: number, includeUnit = true): string {

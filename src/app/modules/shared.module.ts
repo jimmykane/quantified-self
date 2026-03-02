@@ -30,6 +30,7 @@ import { HeroMetricsComponent } from '../components/shared/hero-metrics/hero-met
 import { MapActivityPopupComponent } from '../components/shared/map-activity-popup/map-activity-popup.component';
 import { MapLayersActionsComponent } from '../components/map/map-layers-actions/map-layers-actions.component';
 import { EventIntensityZonesComponent } from '../components/event/intensity-zones/event.intensity-zones.component';
+import { MenuRadioListComponent } from '../components/shared/menu-radio-list/menu-radio-list.component';
 
 @NgModule({
     imports: [
@@ -64,6 +65,7 @@ import { EventIntensityZonesComponent } from '../components/event/intensity-zone
         MapActivityPopupComponent,
         MapLayersActionsComponent,
         EventIntensityZonesComponent,
+        MenuRadioListComponent,
     ],
     providers: [],
     exports: [
@@ -96,6 +98,7 @@ import { EventIntensityZonesComponent } from '../components/event/intensity-zone
         MapActivityPopupComponent,
         MapLayersActionsComponent,
         EventIntensityZonesComponent,
+        MenuRadioListComponent,
     ]
 })
 

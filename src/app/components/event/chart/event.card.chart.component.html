@@ -1,5 +1,6 @@
 <app-event-section-header icon="show_chart">
   <app-event-card-chart-actions [(xAxisType)]="xAxisType" [(showAllData)]="showAllData" [(showLaps)]="showLaps"
+    [(cursorBehaviour)]="cursorBehaviour"
     [event]="event" [user]="user"
     [showSeriesMenu]="dataTypeLegendItems.length > 0"
     [seriesMenuSummary]="seriesMenuSummary"
@@ -24,11 +25,14 @@
         @for (panel of chartPanels; track panel.dataType) {
         <app-event-card-chart-panel [panel]="panel" [xAxisType]="renderedXAxisType" [chartTheme]="chartTheme"
           [useAnimations]="useAnimations" [showZoomBar]="false" [zoomGroupId]="zoomSyncGroupId" [xDomain]="xDomain"
+          [cursorBehaviour]="cursorBehaviour" [selectedRange]="selectedRange"
           [showDateOnTimeAxis]="showDateOnTimeAxis"
           [showLaps]="showLaps" [lapTypes]="lapTypes" [lapMarkers]="lapMarkers"
+          [gainAndLossThreshold]="gainAndLossThreshold"
           [extraMaxForPower]="extraMaxForPower"
           [extraMaxForPace]="extraMaxForPace" [strokeWidth]="strokeWidth"
           [showActivityNamesInTooltip]="showActivityNamesInTooltip"
+          (selectedRangeChange)="onSelectedRangeChange($event)"
           (cursorPositionChange)="onPanelCursorPositionChange($event)">
         </app-event-card-chart-panel>
         }

@@ -1,0 +1,21 @@
+:host {
+  display: block;
+}
+
+.qs-menu-radio-list {
+  display: block;
+}
+
+.qs-menu-radio-list__label {
+  padding: 6px 16px 4px;
+  font-size: 0.72rem;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--mat-sys-on-surface) 72%, transparent);
+}
+
+.qs-menu-radio-list__item .mat-icon {
+  margin-right: 8px;
+}

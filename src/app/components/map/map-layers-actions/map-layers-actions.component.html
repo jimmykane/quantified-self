@@ -1,6 +1,6 @@
 <section class="map-actions">
   <span [matTooltip]="user ? 'Map layers' : 'Sign in to use this'">
-    <button mat-stroked-button class="layers-trigger qs-glass-card-panel glass-card" [matMenuTriggerFor]="layersMenu" [disabled]="!user || disabled"
+    <button mat-stroked-button class="qs-action-menu-trigger qs-glass-card-panel glass-card" [matMenuTriggerFor]="layersMenu" [disabled]="!user || disabled"
       aria-label="Map layers">
       <mat-icon>layers</mat-icon>
       Layers
@@ -9,12 +9,9 @@
 </section>
 
 <mat-menu #layersMenu="matMenu" xPosition="before" class="qs-menu-panel">
-  @for (style of mapStyleOptions; track style.value) {
-  <button mat-menu-item [disabled]="!user || disabled" (click)="onMapStyleSelect(style.value)">
-    <mat-icon>{{ mapStyle === style.value ? 'radio_button_checked' : 'radio_button_unchecked' }}</mat-icon>
-    <span>{{ style.label }}</span>
-  </button>
-  }
+  <app-menu-radio-list [value]="mapStyle" [options]="mapStyleOptions" [disabled]="!user || disabled"
+    (valueChange)="onMapStyleSelect($event)">
+  </app-menu-radio-list>
   @if (enableLapsToggle || enableArrowsToggle || enable3DToggle || enableJumpHeatmapToggle) {
   <mat-divider></mat-divider>
   }

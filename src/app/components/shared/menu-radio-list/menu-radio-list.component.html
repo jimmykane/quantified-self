@@ -1,0 +1,13 @@
+<div class="qs-menu-radio-list" (click)="$event.stopPropagation()">
+  @if (label) {
+  <div class="qs-menu-radio-list__label">{{ label }}</div>
+  }
+
+  @for (option of options; track option.value) {
+  <button mat-menu-item type="button" class="qs-menu-radio-list__item" [disabled]="disabled || option.disabled"
+    (click)="$event.stopPropagation(); onSelect(option.value)">
+    <mat-icon>{{ value === option.value ? 'radio_button_checked' : 'radio_button_unchecked' }}</mat-icon>
+    <span>{{ option.label }}</span>
+  </button>
+  }
+</div>

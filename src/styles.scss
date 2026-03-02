@@ -890,6 +890,14 @@ tr.mat-row:focus,
   padding: 6px 0;
 }
 
+.qs-action-menu-trigger {
+  min-width: 0 !important;
+}
+
+.qs-action-menu-trigger .mat-icon {
+  margin-right: 4px;
+}
+
 /* Section/Item Layout for menus used for settings */
 .qs-menu-panel-form,
 .qs-config-menu {

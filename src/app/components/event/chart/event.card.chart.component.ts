@@ -19,6 +19,7 @@ import { throttleTime } from 'rxjs/operators';
 import { Subject, Subscription, asyncScheduler } from 'rxjs';
 import {
   ActivityInterface,
+  ChartCursorBehaviours,
   ChartThemes,
   DataDistance,
   DataStrydDistance,
@@ -45,6 +46,7 @@ import {
 } from '../../../helpers/event-echarts-data.helper';
 import { resolveEventSeriesColor } from '../../../helpers/event-echarts-style.helper';
 import {
+  clampEventRange,
   EventChartRange,
   resolveEventChartXAxisType,
 } from '../../../helpers/event-echarts-xaxis.helper';
@@ -86,6 +88,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   public renderedXAxisType: XAxisTypes = XAxisTypes.Duration;
   public showDateOnTimeAxis = false;
   public zoomSyncGroupId: string | null = null;
+  public selectedRange: EventChartRange | null = null;
 
   public get showAllData() { return this.userSettingsQuery.chartSettings()?.showAllData ?? false; }
   public set showAllData(value: boolean) {
@@ -132,8 +135,40 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       });
   }
 
+  public get cursorBehaviour() {
+    return this.cursorBehaviourOverride
+      ?? this.userSettingsQuery.chartSettings()?.chartCursorBehaviour
+      ?? AppUserUtilities.getDefaultChartCursorBehaviour();
+  }
+  public set cursorBehaviour(value: ChartCursorBehaviours) {
+    if (value === this.cursorBehaviour) {
+      return;
+    }
+
+    this.cursorBehaviourOverride = value;
+    if (value === ChartCursorBehaviours.ZoomX) {
+      this.selectedRange = null;
+    }
+    this.cdr.markForCheck();
+
+    void this.userSettingsQuery.updateChartSettings({ chartCursorBehaviour: value })
+      .then(() => {
+        this.cursorBehaviourOverride = null;
+        this.cdr.markForCheck();
+      })
+      .catch((error) => {
+        this.logger.error('[EventCardChart] Failed to persist chartCursorBehaviour setting', error);
+        this.cursorBehaviourOverride = null;
+        this.cdr.markForCheck();
+      });
+  }
+
   public get extraMaxForPower() {
     return this.userSettingsQuery.chartSettings()?.extraMaxForPower ?? AppUserUtilities.getDefaultExtraMaxForPower();
+  }
+
+  public get gainAndLossThreshold() {
+    return this.userSettingsQuery.chartSettings()?.gainAndLossThreshold ?? AppUserUtilities.getDefaultGainAndLossThreshold();
   }
 
   public get extraMaxForPace() {
@@ -191,6 +226,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   private cursorPositionSubject = new Subject<number>();
   private cursorPositionSubscription?: Subscription;
   private xAxisTypeOverride: XAxisTypes | null = null;
+  private cursorBehaviourOverride: ChartCursorBehaviours | null = null;
   private pendingRebuild = false;
   private visibleDataTypeIDs = new Set<string>();
   private visibilityEventID: string | null = null;
@@ -259,6 +295,27 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     this.visibleDataTypeIDs = new Set(this.allChartPanels.map((panel) => panel.dataType));
     this.applyDataTypeVisibility();
     this.persistVisibleDataTypes();
+  }
+
+  public onSelectedRangeChange(range: EventChartRange | null): void {
+    const domain = this.xDomain;
+    if (!domain) {
+      this.selectedRange = null;
+      this.cdr.markForCheck();
+      return;
+    }
+
+    const nextRange = range ? clampEventRange(range, domain.start, domain.end) : null;
+    const currentRange = this.selectedRange;
+    if (
+      currentRange?.start === nextRange?.start
+      && currentRange?.end === nextRange?.end
+    ) {
+      return;
+    }
+
+    this.selectedRange = nextRange;
+    this.cdr.markForCheck();
   }
 
   private queueRebuild(source: string): void {

@@ -5,6 +5,7 @@ import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  ChartCursorBehaviours,
   ChartThemes,
   DataDistance,
   DataStrydDistance,
@@ -30,6 +31,7 @@ describe('EventCardChartComponent', () => {
     showLaps: true,
     lapTypes: [],
     xAxisType: XAxisTypes.Duration,
+    chartCursorBehaviour: ChartCursorBehaviours.ZoomX,
     gainAndLossThreshold: 1,
     useAnimations: false,
   } as any);
@@ -216,6 +218,21 @@ describe('EventCardChartComponent', () => {
     component.xAxisType = XAxisTypes.Distance;
 
     expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith({ xAxisType: XAxisTypes.Distance });
+  });
+
+  it('should persist cursorBehaviour changes and clear selection when returning to zoom mode', async () => {
+    fixture.detectChanges();
+    component.selectedRange = { start: 10, end: 20 };
+
+    component.cursorBehaviour = ChartCursorBehaviours.SelectX;
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith({ chartCursorBehaviour: ChartCursorBehaviours.SelectX });
+
+    vi.clearAllMocks();
+    component.selectedRange = { start: 10, end: 20 };
+    component.cursorBehaviour = ChartCursorBehaviours.ZoomX;
+
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith({ chartCursorBehaviour: ChartCursorBehaviours.ZoomX });
+    expect(component.selectedRange).toBeNull();
   });
 
   it('pushes cursor updates to map service for distance mode', async () => {

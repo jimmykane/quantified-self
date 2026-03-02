@@ -14,17 +14,15 @@ section.container {
   width: 100%;
 }
 
-.options-trigger {
-  min-width: 0;
-}
-
-.options-trigger mat-icon {
-  margin-right: 4px;
-}
-
 .series-menu__summary-count {
   font-family: 'Barlow Condensed', sans-serif;
   padding-left: 4px;
+}
+
+.qs-action-menu-trigger--icon {
+  min-width: 0;
+  width: 40px;
+  padding-inline: 0;
 }
 
 .series-menu {
@@ -79,11 +77,6 @@ section.container {
   width: 100%;
 }
 
-.x-axis-field {
-  width: 100%;
-  min-width: 220px;
-}
-
 section[mat-menu-item] {
   height: auto;
   min-height: unset;
@@ -96,9 +89,5 @@ section[mat-menu-item]:hover {
 @include xsmall {
   section.container {
     justify-content: flex-end;
-  }
-
-  .x-axis-field {
-    min-width: 180px;
   }
 }
