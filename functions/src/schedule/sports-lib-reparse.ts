@@ -148,6 +148,9 @@ export const scheduleSportsLibReparseScan = onSchedule({
     ): Promise<void> => {
         const parsed = parseUidAndEventIdFromEventPath(eventRef.path);
         if (!parsed) {
+            if (options?.reservedEnqueueSlot === true) {
+                releaseEnqueueSlot();
+            }
             return;
         }
         const { uid, eventId } = parsed;

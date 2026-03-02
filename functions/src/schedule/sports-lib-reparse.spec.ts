@@ -908,4 +908,74 @@ describe('scheduleSportsLibReparseScan', () => {
         expect(finalCheckpointPayload.lastPassCompletedAt).toBeUndefined();
         expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
     });
+
+    it('should release reserved enqueue slot when global candidate parent event path is invalid', async () => {
+        hoisted.runtimeDefaults.scanLimit = 2;
+        hoisted.runtimeDefaults.enqueueLimit = 1;
+        hoisted.buildSportsLibReparseJobId.mockImplementation((_uid: string, eventId: string) => `job-${eventId}`);
+
+        const invalidEventRef = {
+            path: 'invalid/root',
+            get: vi.fn(async () => ({
+                exists: true,
+                data: () => ({ originalFile: { path: 'invalid.fit' } }),
+            })),
+        };
+        const validEventRef = createEventRef('u1', 'e1', { originalFile: { path: 'valid.fit' } });
+
+        hoisted.processingDocs.push(
+            createProcessingDoc(invalidEventRef, {
+                sportsLibVersion: '9.0.0',
+                sportsLibVersionCode: 9_000_000,
+            }),
+            createProcessingDoc(validEventRef, {
+                sportsLibVersion: '9.0.0',
+                sportsLibVersionCode: 9_000_000,
+            }),
+        );
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledWith('job-e1');
+        const finalCheckpointPayload = hoisted.checkpointSet.mock.calls[hoisted.checkpointSet.mock.calls.length - 1][0];
+        expect(finalCheckpointPayload.lastEnqueuedCount).toBe(1);
+    });
+
+    it('should reuse released reservation for subsequent valid global candidates after invalid path', async () => {
+        hoisted.runtimeDefaults.scanLimit = 3;
+        hoisted.runtimeDefaults.enqueueLimit = 2;
+        hoisted.buildSportsLibReparseJobId.mockImplementation((_uid: string, eventId: string) => `job-${eventId}`);
+
+        const invalidEventRef = {
+            path: 'invalid/root',
+            get: vi.fn(async () => ({
+                exists: true,
+                data: () => ({ originalFile: { path: 'invalid.fit' } }),
+            })),
+        };
+        const validEventRefOne = createEventRef('u1', 'e1', { originalFile: { path: 'valid-1.fit' } });
+        const validEventRefTwo = createEventRef('u1', 'e2', { originalFile: { path: 'valid-2.fit' } });
+
+        hoisted.processingDocs.push(
+            createProcessingDoc(invalidEventRef, {
+                sportsLibVersion: '9.0.0',
+                sportsLibVersionCode: 9_000_000,
+            }),
+            createProcessingDoc(validEventRefOne, {
+                sportsLibVersion: '9.0.0',
+                sportsLibVersionCode: 9_000_000,
+            }),
+            createProcessingDoc(validEventRefTwo, {
+                sportsLibVersion: '9.0.0',
+                sportsLibVersionCode: 9_000_000,
+            }),
+        );
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenNthCalledWith(1, 'job-e1');
+        expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenNthCalledWith(2, 'job-e2', expect.any(Number));
+        const finalCheckpointPayload = hoisted.checkpointSet.mock.calls[hoisted.checkpointSet.mock.calls.length - 1][0];
+        expect(finalCheckpointPayload.lastEnqueuedCount).toBe(2);
+    });
 });
