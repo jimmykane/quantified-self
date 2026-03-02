@@ -67,7 +67,7 @@ export class UserSettingsComponent implements OnChanges {
   public readonly tabsStickyHeader = true;
   public readonly tabsTopOffset = '0px';
   public readonly tabsLazyContent = false;
-  public readonly brandTextMaxLength = 30;
+  public readonly brandTextMaxLength = 60;
 
   public xAxisTypes = XAxisTypes;
 

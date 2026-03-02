@@ -316,13 +316,13 @@ describe('UserSettingsComponent', () => {
         expect(payload.settings.mapSettings.showPoints).toBeUndefined();
     });
 
-    it('should reject brandText values longer than 30 chars after trim', async () => {
+    it('should reject brandText values longer than 60 chars after trim', async () => {
         const userService = TestBed.inject(AppUserService);
         const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
 
         (component.user as any).stripeRole = 'basic';
         component.ngOnChanges();
-        component.userSettingsFormGroup.get('brandText').setValue('A'.repeat(31));
+        component.userSettingsFormGroup.get('brandText').setValue('A'.repeat(61));
 
         expect(component.userSettingsFormGroup.get('brandText').hasError('maxTrimmedLength')).toBe(true);
         expect(component.userSettingsFormGroup.valid).toBe(false);
