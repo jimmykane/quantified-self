@@ -45,6 +45,7 @@ import { PerformanceCurveDataService } from '../../services/performance-curve-da
 import { reconcileEventDetailsLiveUpdate } from '../../utils/event-live-reconcile';
 import { hasEventChartableData } from '../../helpers/event-echarts-data.helper';
 import { resolveEventChartXAxisType } from '../../helpers/event-echarts-xaxis.helper';
+import { hasVisibleEventLaps } from '../../helpers/event-lap-type.helper';
 @Component({
   selector: 'app-event-card',
   templateUrl: './event.card.component.html',
@@ -81,7 +82,7 @@ export class EventCardComponent implements OnInit {
 
   // Computed signals for template - replaces method calls
   public hasLapsFlag = computed(() =>
-    this.event()?.getActivities().some(a => a.getLaps().length > 0) ?? false
+    hasVisibleEventLaps(this.event()?.getActivities() ?? [])
   );
 
   public hasIntensityZonesFlag = computed(() =>

@@ -8,19 +8,12 @@ import { AppEventColorService } from '../../../services/color/app.event.color.se
 import { LapTypes } from '@sports-alliance/sports-lib';
 import { DataHeartRateMax } from '@sports-alliance/sports-lib';
 import { isNumber } from '@sports-alliance/sports-lib';
-import { LoggerService } from '../../../services/logger.service';
-
-const FILTERED_LAP_TYPES: readonly LapTypes[] = [LapTypes.session_end];
+import { isEventLapTypeAllowed } from '../../../helpers/event-lap-type.helper';
 
 interface LapTableRow extends StatRowElement {
   '#': number;
   Type: LapTypes;
   'Maximum Heart Rate': string;
-}
-
-interface ActivityLapTypesLogEntry {
-  activityID: string;
-  lapTypes: LapTypes[];
 }
 
 @Component({
@@ -42,11 +35,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   public dataSourcesMap = new Map<string, MatTableDataSource<LapTableRow>>();
   public columnsMap = new Map<string, string[]>();
 
-  constructor(
-    public eventColorService: AppEventColorService,
-    protected changeDetectorRef: ChangeDetectorRef,
-    private readonly logger: LoggerService,
-  ) {
+  constructor(public eventColorService: AppEventColorService, protected changeDetectorRef: ChangeDetectorRef) {
     super(changeDetectorRef);
   }
 
@@ -57,30 +46,18 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
 
   private updateAvailableLapTypes() {
     this.availableLapTypes = [];
-    const activityLapTypes: ActivityLapTypesLogEntry[] = [];
     if (this.selectedActivities) {
       this.selectedActivities.forEach(activity => {
-        const lapTypes = activity.getLaps().map(lap => lap.type);
-        activityLapTypes.push({
-          activityID: activity.getID() || '',
-          lapTypes,
-        });
         this.availableLapTypes = [...new Set(this.availableLapTypes.concat(
-          lapTypes
+          activity.getLaps().map(lap => lap.type)
             .filter(lapType => this.shouldShowLapType(lapType))
         ))];
       });
     }
-
-    this.logger.log('[EventCardLapsComponent] resolved lap types', {
-      activityLapTypes,
-      filteredLapTypes: FILTERED_LAP_TYPES,
-      availableLapTypes: this.availableLapTypes,
-    });
   }
 
   private shouldShowLapType(lapType: LapTypes): boolean {
-    return !FILTERED_LAP_TYPES.includes(lapType);
+    return isEventLapTypeAllowed(lapType, []);
   }
 
   private updateData() {

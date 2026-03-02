@@ -24,6 +24,7 @@ import {
   DataJumpEvent,
   DataLatitudeDegrees,
   DataLongitudeDegrees,
+  DataPositionInterface,
   DynamicDataLoader,
   EventInterface,
   LapInterface,
@@ -51,7 +52,7 @@ import {
   EventCursorRenderData,
   EventTrackRenderData,
 } from './event-card-map.manager';
-import { buildAllowedEventLapTypeSet, normalizeEventLapType } from '../../../helpers/event-lap-type.helper';
+import { isEventLapTypeAllowed } from '../../../helpers/event-lap-type.helper';
 
 interface MapViewSettingsState {
   showLaps: boolean;
@@ -591,14 +592,13 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     let totalLaps = 0;
     let totalJumps = 0;
 
-    const allowedLapTypes = buildAllowedEventLapTypeSet(this.lapTypes);
-
     this.selectedActivities.forEach((activity) => {
       activitiesProcessed++;
       if (!activity.hasPositionData()) return;
       activitiesWithPositions++;
 
       const positionData = activity.getSquashedPositionData();
+      const indexedPositionData = activity.getPositionData?.() || [];
       const positions = activity.generateTimeStream([DataLatitudeDegrees.type, DataLongitudeDegrees.type])
         .getData(true)
         .reduce<PositionWithTime[]>((positionWithTimeArray, time, index) => {
@@ -613,15 +613,30 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
           return positionWithTimeArray;
         }, []);
 
-      const laps = activity.getLaps().reduce<any[]>((lapsArray, lap) => {
+      const lapCandidates = activity.getLaps().map((lap, lapIndex) => {
         const lapPositionData = activity.getSquashedPositionData(lap.startDate, lap.endDate);
-        if (!lapPositionData.length || !this.showLaps) return lapsArray;
-        if (allowedLapTypes.size > 0 && !allowedLapTypes.has(normalizeEventLapType(lap.type))) return lapsArray;
-        lapsArray.push({
+        const indexedLapPosition = this.resolveLapPositionByIndex(indexedPositionData, lap, activity);
+        return {
+          lapIndex,
           lap,
+          lapPositionData,
+          indexedLapPosition,
+          allowed: isEventLapTypeAllowed(lap.type, this.lapTypes),
+        };
+      });
+
+      const laps = lapCandidates.reduce<MapData['laps']>((lapsArray, candidate) => {
+        if (!candidate.lapPositionData.length || !this.showLaps) return lapsArray;
+        if (!candidate.allowed) return lapsArray;
+        lapsArray.push({
+          lap: candidate.lap,
           lapPosition: {
-            latitudeDegrees: lapPositionData[lapPositionData.length - 1]?.latitudeDegrees || 0,
-            longitudeDegrees: lapPositionData[lapPositionData.length - 1]?.longitudeDegrees || 0
+            latitudeDegrees: candidate.indexedLapPosition?.latitudeDegrees
+              || candidate.lapPositionData[candidate.lapPositionData.length - 1]?.latitudeDegrees
+              || 0,
+            longitudeDegrees: candidate.indexedLapPosition?.longitudeDegrees
+              || candidate.lapPositionData[candidate.lapPositionData.length - 1]?.longitudeDegrees
+              || 0
           }
         });
         return lapsArray;
@@ -1091,6 +1106,38 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     });
     this.mapActivities(++this.processSequence, deferred.shouldFitBounds);
     return true;
+  }
+
+  private resolveLapPositionByIndex(
+    positionData: Array<DataPositionInterface | null>,
+    lap: LapInterface,
+    activity: ActivityInterface
+  ): DataPositionInterface | null {
+    if (typeof lap.getEndIndex !== 'function' || !positionData.length) {
+      return null;
+    }
+
+    const endIndex = lap.getEndIndex(activity);
+    if (!Number.isFinite(endIndex)) {
+      return null;
+    }
+
+    const clampedIndex = Math.min(positionData.length - 1, Math.max(0, Math.trunc(endIndex)));
+    for (let index = clampedIndex; index >= 0; index -= 1) {
+      const position = positionData[index];
+      if (position?.latitudeDegrees !== undefined && position?.longitudeDegrees !== undefined) {
+        return position;
+      }
+    }
+
+    for (let index = clampedIndex + 1; index < positionData.length; index += 1) {
+      const position = positionData[index];
+      if (position?.latitudeDegrees !== undefined && position?.longitudeDegrees !== undefined) {
+        return position;
+      }
+    }
+
+    return null;
   }
 }
 

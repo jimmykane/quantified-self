@@ -10,7 +10,6 @@ import {
 import { vi } from 'vitest';
 import { EventCardLapsComponent } from './event.card.laps.component';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
-import { LoggerService } from '../../../services/logger.service';
 
 function createActivity(laps: LapInterface[]): ActivityInterface {
     return {
@@ -20,19 +19,27 @@ function createActivity(laps: LapInterface[]): ActivityInterface {
     } as ActivityInterface;
 }
 
+function createRenderableLap(type: LapTypes): LapInterface {
+    return {
+        type,
+        getStatsAsArray: () => [],
+        getStat: () => undefined,
+        getDuration: () => ({
+            getDisplayValue: () => '00:10',
+        }),
+    } as unknown as LapInterface;
+}
+
 describe('EventCardLapsComponent', () => {
     let component: EventCardLapsComponent;
     let fixture: ComponentFixture<EventCardLapsComponent>;
-    const logger = { log: vi.fn() };
 
     beforeEach(async () => {
-        logger.log.mockReset();
         await TestBed.configureTestingModule({
             declarations: [EventCardLapsComponent],
             providers: [
                 { provide: AppEventColorService, useValue: {} },
                 { provide: ChangeDetectorRef, useValue: { markForCheck: vi.fn(), detectChanges: vi.fn() } },
-                { provide: LoggerService, useValue: logger },
             ],
             schemas: [NO_ERRORS_SCHEMA],
         }).compileComponents();
@@ -49,11 +56,15 @@ describe('EventCardLapsComponent', () => {
         expect(component).toBeTruthy();
     });
 
-    it('should render shared section header', () => {
-        const header = fixture.nativeElement.querySelector('app-event-section-header');
-        expect(header).toBeTruthy();
-        expect(header.getAttribute('icon')).toBe('linear_scale');
-        expect(header.getAttribute('title')).toBe('Laps');
+    it('should resolve renderable lap types when visible laps exist', () => {
+        const activity = createActivity([
+            createRenderableLap(LapTypes.Manual),
+        ]);
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+
+        expect(component.availableLapTypes).toEqual([LapTypes.Manual]);
+        expect(component.getDataSource(activity, LapTypes.Manual)).toBeTruthy();
     });
 
     it('should exclude session end laps from the rendered lap tables', () => {
@@ -66,10 +77,7 @@ describe('EventCardLapsComponent', () => {
 
         expect(component.availableLapTypes).toEqual([]);
         expect(component.getDataSource(activity, LapTypes.session_end)).toBeUndefined();
-        expect(logger.log).toHaveBeenCalledWith('[EventCardLapsComponent] resolved lap types', {
-            activityLapTypes: [{ activityID: 'activity-1', lapTypes: [LapTypes.session_end] }],
-            filteredLapTypes: [LapTypes.session_end],
-            availableLapTypes: [],
-        });
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('app-event-section-header')).toBeNull();
     });
 });

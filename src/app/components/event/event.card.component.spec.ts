@@ -9,7 +9,7 @@ import { AppActivitySelectionService } from '../../services/activity-selection-s
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppThemeService } from '../../services/app.theme.service';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
-import { EventInterface, User, ActivityInterface, ChartThemes, AppThemes, XAxisTypes, DataSpeed } from '@sports-alliance/sports-lib';
+import { EventInterface, User, ActivityInterface, ChartThemes, AppThemes, XAxisTypes, DataSpeed, LapTypes } from '@sports-alliance/sports-lib';
 import { LoggerService } from '../../services/logger.service';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { shouldRenderIntensityZonesChart } from '../../helpers/intensity-zones-chart-data-helper';
@@ -379,6 +379,24 @@ describe('EventCardComponent', () => {
 
         it('should compute hasLapsFlag as true when laps exist', () => {
             expect(component.hasLapsFlag()).toBe(true);
+        });
+
+        it('should compute hasLapsFlag as false when only session end laps exist', () => {
+            const sessionEndOnlyActivity = {
+                ...activityWithData,
+                getLaps: () => [{ type: LapTypes.session_end }],
+            } as unknown as ActivityInterface;
+            const sessionEndOnlyEvent = {
+                ...eventWithData,
+                getActivities: () => [sessionEndOnlyActivity],
+            } as unknown as EventInterface;
+
+            routeData$.next({ event: sessionEndOnlyEvent });
+            fixture = TestBed.createComponent(EventCardComponent);
+            component = fixture.componentInstance;
+            fixture.detectChanges();
+
+            expect(component.hasLapsFlag()).toBe(false);
         });
 
         it('should compute hasIntensityZonesFlag as true when zones exist', () => {

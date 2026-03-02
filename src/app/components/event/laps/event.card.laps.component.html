@@ -1,3 +1,4 @@
+@if (availableLapTypes.length > 0) {
 <app-event-section-header icon="linear_scale" title="Laps"></app-event-section-header>
 <mat-tab-group [dynamicHeight]="true" [preserveContent]="true">
   @for (availableLapType of availableLapTypes; track availableLapType) {
@@ -36,3 +37,4 @@
   </mat-tab>
   }
 </mat-tab-group>
+}

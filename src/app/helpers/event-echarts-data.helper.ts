@@ -24,7 +24,7 @@ import {
   XAxisTypes
 } from '@sports-alliance/sports-lib';
 import { AppEventColorService } from '../services/color/app.event.color.service';
-import { buildAllowedEventLapTypeSet, normalizeEventLapType } from './event-lap-type.helper';
+import { isEventLapTypeAllowed, normalizeEventLapType } from './event-lap-type.helper';
 import { applyEventChartCanonicalOrderOverride } from './event-chart-order.helper';
 import { resolveEventColorGroupKey, resolveEventSeriesColor } from './event-echarts-style.helper';
 import { EventChartRange, normalizeEventRange } from './event-echarts-xaxis.helper';
@@ -295,7 +295,6 @@ export function buildEventLapMarkers(input: {
   lapTypes: LapTypes[];
   eventColorService: AppEventColorService;
 }): EventChartLapMarker[] {
-  const lapTypeSet = buildAllowedEventLapTypeSet(input.lapTypes || []);
   const markers: EventChartLapMarker[] = [];
 
   input.selectedActivities.forEach((activity) => {
@@ -314,11 +313,11 @@ export function buildEventLapMarkers(input: {
       }
 
       const normalizedLapType = normalizeEventLapType(lap.type);
-      if (lapTypeSet.size > 0 && !lapTypeSet.has(normalizedLapType)) {
+      if (!isEventLapTypeAllowed(normalizedLapType, input.lapTypes || [])) {
         return;
       }
 
-      const xValue = resolveLapAxisValue(activity, lap.endDate?.getTime(), input.xAxisType, lapDistanceLookup);
+      const xValue = resolveLapAxisValue(activity, lap, input.xAxisType, activityCache, lapDistanceLookup);
       if (!Number.isFinite(xValue)) {
         return;
       }
@@ -619,10 +618,20 @@ function toNumericArray(data: unknown): number[] {
 
 function resolveLapAxisValue(
   activity: ActivityInterface,
-  lapEndTimeMs: number | undefined,
+  lap: LapInterface,
   xAxisType: XAxisTypes,
+  activityCache: ActivityNumericCache,
   lapDistanceLookup: LapDistanceLookup | null = null
 ): number {
+  const lapEndIndex = resolveLapEndIndex(activity, lap);
+  if (lapEndIndex !== null) {
+    const indexedAxisValue = resolveLapAxisValueFromIndex(activity, lapEndIndex, xAxisType, activityCache);
+    if (Number.isFinite(indexedAxisValue)) {
+      return indexedAxisValue;
+    }
+  }
+
+  const lapEndTimeMs = lap.endDate?.getTime();
   if (!Number.isFinite(lapEndTimeMs)) {
     return Number.NaN;
   }
@@ -645,6 +654,62 @@ function resolveLapAxisValue(
     : findClosestLinearIndex(lookup.absoluteTimes, lapEndTimeMs as number);
 
   return lookup.distanceValues[closestIndex];
+}
+
+function resolveLapEndIndex(activity: ActivityInterface, lap: LapInterface): number | null {
+  if (typeof lap.getEndIndex !== 'function') {
+    return null;
+  }
+
+  const index = lap.getEndIndex(activity);
+  if (!Number.isFinite(index)) {
+    return null;
+  }
+
+  return Math.max(0, Math.trunc(index));
+}
+
+function resolveLapAxisValueFromIndex(
+  activity: ActivityInterface,
+  lapEndIndex: number,
+  xAxisType: XAxisTypes,
+  activityCache: ActivityNumericCache
+): number {
+  if (xAxisType === XAxisTypes.Time) {
+    return getFiniteValueNearIndex(getActivityAbsoluteTimes(activity, activityCache), lapEndIndex);
+  }
+
+  if (xAxisType === XAxisTypes.Duration) {
+    return getFiniteValueNearIndex(getActivityTimeValues(activity, activityCache), lapEndIndex);
+  }
+
+  return getFiniteValueNearIndex(getActivityDistanceValues(activity, activityCache), lapEndIndex);
+}
+
+function getFiniteValueNearIndex(values: number[], index: number): number {
+  if (!Array.isArray(values) || values.length === 0 || !Number.isFinite(index)) {
+    return Number.NaN;
+  }
+
+  const clampedIndex = Math.min(values.length - 1, Math.max(0, Math.trunc(index)));
+  const directValue = values[clampedIndex];
+  if (Number.isFinite(directValue)) {
+    return directValue;
+  }
+
+  for (let offset = 1; offset < values.length; offset += 1) {
+    const backwardIndex = clampedIndex - offset;
+    if (backwardIndex >= 0 && Number.isFinite(values[backwardIndex])) {
+      return values[backwardIndex];
+    }
+
+    const forwardIndex = clampedIndex + offset;
+    if (forwardIndex < values.length && Number.isFinite(values[forwardIndex])) {
+      return values[forwardIndex];
+    }
+  }
+
+  return Number.NaN;
 }
 
 function createActivityNumericCache(activity: ActivityInterface): ActivityNumericCache {

@@ -11,6 +11,7 @@ import {
   DataPower,
   DataSpeed,
   DynamicDataLoader,
+  LapTypes,
   XAxisTypes
 } from '@sports-alliance/sports-lib';
 import {
@@ -628,5 +629,115 @@ describe('event-echarts-data.helper', () => {
     expect(markers).toHaveLength(1);
     expect(markers[0].lapType).toBe('Autolap');
     expect(markers[0].activityName).toBe('Garmin');
+  });
+
+  it('filters session end laps from chart markers even when configured', () => {
+    const timeStream = {
+      getData: () => [0, 12],
+    } as any;
+
+    const activity = {
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      creator: { name: 'Garmin' },
+      getID: () => 'a1',
+      getLaps: () => [
+        {
+          endDate: new Date('2024-01-01T00:00:12.000Z'),
+          type: LapTypes.session_end,
+          getDuration: () => ({
+            getType: () => DataDuration.type,
+            getValue: () => 12,
+            getDisplayValue: () => '00:12',
+            getDisplayUnit: () => '',
+          }),
+          getDistance: () => undefined,
+          getStat: () => undefined,
+        },
+      ],
+      getStream: (type: string) => {
+        if (type === XAxisTypes.Time) {
+          return timeStream;
+        }
+        return null;
+      },
+    } as any;
+
+    const markers = buildEventLapMarkers({
+      selectedActivities: [activity],
+      allActivities: [activity],
+      xAxisType: XAxisTypes.Time,
+      lapTypes: [LapTypes.session_end] as any,
+      eventColorService: {
+        getActivityColor: () => '#ff0000'
+      } as any,
+    });
+
+    expect(markers).toEqual([]);
+  });
+
+  it('places chart lap markers using lap end index when lap dates collapse to activity start', () => {
+    const distanceStream = {
+      getData: () => [0, 100, 250, 400],
+    } as any;
+    const timeStream = {
+      getData: () => [0, 10, 20, 30],
+    } as any;
+
+    const activity = {
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      creator: { name: 'Garmin' },
+      getID: () => 'a1',
+      getLaps: () => [
+        {
+          endDate: new Date('2024-01-01T00:00:00.000Z'),
+          type: LapTypes.Manual,
+          getEndIndex: () => 2,
+          getDuration: () => ({
+            getType: () => DataDuration.type,
+            getValue: () => 20,
+            getDisplayValue: () => '00:20',
+            getDisplayUnit: () => '',
+          }),
+          getDistance: () => undefined,
+          getStat: () => undefined,
+        },
+        {
+          endDate: new Date('2024-01-01T00:00:00.000Z'),
+          type: LapTypes.Manual,
+          getEndIndex: () => 3,
+          getDuration: () => ({
+            getType: () => DataDuration.type,
+            getValue: () => 10,
+            getDisplayValue: () => '00:10',
+            getDisplayUnit: () => '',
+          }),
+          getDistance: () => undefined,
+          getStat: () => undefined,
+        },
+      ],
+      getStream: (type: string) => {
+        if (type === DataDistance.type) {
+          return distanceStream;
+        }
+        if (type === XAxisTypes.Time) {
+          return timeStream;
+        }
+        return null;
+      },
+    } as any;
+
+    const markers = buildEventLapMarkers({
+      selectedActivities: [activity],
+      allActivities: [activity],
+      xAxisType: XAxisTypes.Distance,
+      lapTypes: [LapTypes.Manual] as any,
+      eventColorService: {
+        getActivityColor: () => '#ff0000'
+      } as any,
+    });
+
+    expect(markers).toHaveLength(1);
+    expect(markers[0].lapType).toBe(LapTypes.Manual);
+    expect(markers[0].xValue).toBe(250);
   });
 });

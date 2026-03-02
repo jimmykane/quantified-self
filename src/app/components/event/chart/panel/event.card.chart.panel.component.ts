@@ -25,7 +25,7 @@ import {
   EventChartLapMarker,
   EventChartPanelModel,
 } from '../../../../helpers/event-echarts-data.helper';
-import { buildAllowedEventLapTypeSet, normalizeEventLapType } from '../../../../helpers/event-lap-type.helper';
+import { isEventLapTypeAllowed } from '../../../../helpers/event-lap-type.helper';
 import {
   buildEventCanonicalXAxisScaleOptions,
   EventChartRange,
@@ -342,6 +342,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   private buildLapMarkLine(darkTheme: boolean): Record<string, unknown> {
+    const visibleLapMarkers = this.showLaps
+      ? this.lapMarkers.filter((marker) => this.shouldDisplayLapMarker(marker))
+      : [];
+
     return {
       symbol: 'none',
       silent: false,
@@ -358,8 +362,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         color: darkTheme ? 'rgba(255,255,255,0.26)' : 'rgba(0,0,0,0.30)',
       },
       data: this.showLaps
-        ? this.lapMarkers
-          .filter((marker) => this.shouldDisplayLapMarker(marker))
+        ? visibleLapMarkers
           .map((marker) => ({
             xAxis: marker.xValue,
             xValue: marker.xValue,
@@ -381,11 +384,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   private shouldDisplayLapMarker(marker: EventChartLapMarker): boolean {
-    if (!this.lapTypes || this.lapTypes.length === 0) {
-      return true;
-    }
-    const allowedLapTypes = buildAllowedEventLapTypeSet(this.lapTypes);
-    return allowedLapTypes.has(normalizeEventLapType(marker.lapType));
+    return isEventLapTypeAllowed(marker.lapType, this.lapTypes);
   }
 
   private bindChartEvents(): void {

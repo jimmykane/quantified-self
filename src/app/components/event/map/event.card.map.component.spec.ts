@@ -349,4 +349,86 @@ describe('EventCardMapComponent', () => {
     expect(component.activitiesMapData).toHaveLength(1);
     expect(component.activitiesMapData[0].laps).toHaveLength(1);
   });
+
+  it('should filter session end laps from the map even when configured', () => {
+    component.selectedActivities = [{
+      startDate: new Date('2025-01-01T10:00:00Z'),
+      hasPositionData: () => true,
+      getSquashedPositionData: (start?: Date, end?: Date) => {
+        if (start && end) {
+          return [{ latitudeDegrees: 40.2, longitudeDegrees: 22.2 }];
+        }
+        return [
+          { latitudeDegrees: 40.1, longitudeDegrees: 22.1 },
+          { latitudeDegrees: 40.2, longitudeDegrees: 22.2 },
+        ];
+      },
+      generateTimeStream: () => ({
+        getData: () => [0, 60],
+      }),
+      getLaps: () => [
+        {
+          type: LapTypes.session_end,
+          startDate: new Date('2025-01-01T10:00:00Z'),
+          endDate: new Date('2025-01-01T10:01:00Z'),
+        },
+      ],
+      getAllEvents: () => [],
+    }] as any;
+    component.lapTypes = [LapTypes.session_end];
+    component.showLaps = true;
+    (component as any).processSequence = 1;
+
+    (component as any).mapActivities(1, false);
+
+    expect(component.activitiesMapData).toHaveLength(1);
+    expect(component.activitiesMapData[0].laps).toEqual([]);
+  });
+
+  it('should place map laps using lap end index when lap dates collapse to activity start', () => {
+    component.selectedActivities = [{
+      startDate: new Date('2025-01-01T10:00:00Z'),
+      hasPositionData: () => true,
+      getPositionData: () => [
+        { latitudeDegrees: 40.1, longitudeDegrees: 22.1 },
+        null,
+        { latitudeDegrees: 40.3, longitudeDegrees: 22.3 },
+        { latitudeDegrees: 40.4, longitudeDegrees: 22.4 },
+      ],
+      getSquashedPositionData: (start?: Date, end?: Date) => {
+        if (start && end) {
+          return [{ latitudeDegrees: 40.1, longitudeDegrees: 22.1 }];
+        }
+        return [
+          { latitudeDegrees: 40.1, longitudeDegrees: 22.1 },
+          { latitudeDegrees: 40.3, longitudeDegrees: 22.3 },
+          { latitudeDegrees: 40.4, longitudeDegrees: 22.4 },
+        ];
+      },
+      generateTimeStream: () => ({
+        getData: () => [0, 30, 60, 90],
+      }),
+      getLaps: () => [
+        {
+          type: LapTypes.Manual,
+          startDate: new Date('2025-01-01T10:00:00Z'),
+          endDate: new Date('2025-01-01T10:00:00Z'),
+          getEndIndex: () => 2,
+        },
+      ],
+      getAllEvents: () => [],
+    }] as any;
+    component.lapTypes = [LapTypes.Manual];
+    component.showLaps = true;
+    (component as any).processSequence = 1;
+
+    (component as any).mapActivities(1, false);
+
+    expect(component.activitiesMapData).toHaveLength(1);
+    expect(component.activitiesMapData[0].laps).toEqual([
+      expect.objectContaining({
+        lapPosition: { latitudeDegrees: 40.3, longitudeDegrees: 22.3 },
+      }),
+    ]);
+  });
 });

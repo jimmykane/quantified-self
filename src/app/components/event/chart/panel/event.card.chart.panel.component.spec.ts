@@ -364,6 +364,30 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.series?.[0]?.markLine?.tooltip).toEqual({ show: false });
   });
 
+  it('filters session end lap markers from the chart even when configured', async () => {
+    component.showZoomBar = false;
+    component.showLaps = true;
+    component.lapTypes = [LapTypes.session_end];
+    component.lapMarkers = [
+      {
+        xValue: 5,
+        label: 'Lap 1',
+        color: '#00ff00',
+        lapType: LapTypes.session_end,
+        lapNumber: 1,
+        activityID: 'a1',
+        activityName: 'Garmin',
+        tooltipTitle: 'Lap 1',
+        tooltipDetails: []
+      }
+    ];
+    fixture.detectChanges();
+    await component.ngAfterViewInit();
+
+    const option = getRenderedOption();
+    expect(option?.series?.[0]?.markLine?.data).toEqual([]);
+  });
+
   it('clears lap markers when showLaps is toggled off', async () => {
     component.showZoomBar = false;
     component.showLaps = true;
