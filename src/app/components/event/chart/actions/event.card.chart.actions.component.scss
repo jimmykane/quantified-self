@@ -19,10 +19,8 @@ section.container {
   padding-left: 4px;
 }
 
-.qs-action-menu-trigger--icon {
-  min-width: 0;
-  width: 40px;
-  padding-inline: 0;
+.event-chart-actions__mode-button {
+  color: var(--mat-sys-on-surface);
 }
 
 .series-menu {

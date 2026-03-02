@@ -289,6 +289,23 @@ describe('EventCardChartPanelComponent', () => {
   it('renders zoom-bar-only mode when panel is null and showZoomBar is true', async () => {
     component.panel = null;
     component.showZoomBar = true;
+    component.showLaps = true;
+    component.lapTypes = [LapTypes.AutoLap];
+    component.lapMarkers = [
+      {
+        xValue: 60,
+        label: 'Lap 1',
+        color: '#00ff00',
+        lapType: 'auto',
+        lapNumber: 1,
+        activityID: 'a1',
+        activityName: 'Garmin',
+        tooltipTitle: 'Lap 1',
+        tooltipDetails: [
+          { label: 'Duration', value: '01:00' }
+        ]
+      }
+    ];
     component.zoomBarOverviewData = [
       [0, 0.25],
       [60, 0.8],
@@ -308,6 +325,12 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.dataZoom?.[0]?.height).toBe(24);
     expect(option?.dataZoom?.[0]?.handleSize).toBe(24);
     expect(option?.series?.[0]?.data).toEqual(component.zoomBarOverviewData);
+    expect(option?.series?.[0]?.markLine?.data).toEqual([
+      expect.objectContaining({
+        xAxis: 60,
+        name: 'Lap 1',
+      })
+    ]);
     expect(option?.dataZoom?.[0]?.labelFormatter(65)).toBe('01:05');
   });
 

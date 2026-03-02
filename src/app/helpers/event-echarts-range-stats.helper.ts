@@ -113,9 +113,17 @@ function formatDataTypeValue(streamType: string, value: unknown): { value: strin
 
   try {
     const dataInstance = DynamicDataLoader.getDataInstanceFromDataType(streamType, numericValue);
+    const displayValue = sanitizeDisplayValue(dataInstance.getDisplayValue?.());
+    if (!displayValue) {
+      return {
+        value: `${numericValue.toFixed(2)}`,
+        unit: `${dataInstance.getDisplayUnit?.() ?? ''}`,
+      };
+    }
+
     return {
-      value: `${dataInstance.getDisplayValue() ?? ''}`,
-      unit: `${dataInstance.getDisplayUnit() ?? ''}`,
+      value: displayValue,
+      unit: `${dataInstance.getDisplayUnit?.() ?? ''}`,
     };
   } catch {
     return {
@@ -123,4 +131,15 @@ function formatDataTypeValue(streamType: string, value: unknown): { value: strin
       unit: '',
     };
   }
+}
+
+function sanitizeDisplayValue(value: unknown): string {
+  const displayValue = `${value ?? ''}`.trim();
+  if (!displayValue) {
+    return '';
+  }
+
+  return /nan|infinity/i.test(displayValue)
+    ? ''
+    : displayValue;
 }

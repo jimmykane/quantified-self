@@ -1,4 +1,14 @@
 <section class="container">
+  <span [matTooltip]="user ? cursorBehaviourTooltip : 'Sign in to use this'">
+    <button mat-icon-button type="button"
+      class="event-chart-actions__mode-button"
+      [disabled]="!user"
+      aria-label="Toggle chart interaction mode"
+      (click)="onCursorBehaviourToggle()">
+      <mat-icon>{{ cursorBehaviourIcon }}</mat-icon>
+    </button>
+  </span>
+
   @if (showSeriesMenu) {
   <button mat-stroked-button class="qs-action-menu-trigger qs-glass-card-panel glass-card" [matMenuTriggerFor]="seriesMenu"
     aria-label="Series visibility">
@@ -7,16 +17,6 @@
     <span class="series-menu__summary-count">{{ visibleSeriesCount }}/{{ totalSeriesCount }}</span>
   </button>
   }
-
-  <span [matTooltip]="user ? cursorBehaviourTooltip : 'Sign in to use this'">
-    <button mat-stroked-button type="button"
-      class="qs-action-menu-trigger qs-action-menu-trigger--icon qs-glass-card-panel glass-card"
-      [disabled]="!user"
-      aria-label="Toggle chart interaction mode"
-      (click)="onCursorBehaviourToggle()">
-      <mat-icon>{{ cursorBehaviourIcon }}</mat-icon>
-    </button>
-  </span>
 
   <span [matTooltip]="user ? 'Chart options' : 'Sign in to use this'">
     <button mat-stroked-button class="qs-action-menu-trigger qs-glass-card-panel glass-card" [matMenuTriggerFor]="optionsMenu" [disabled]="!user"

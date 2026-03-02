@@ -854,7 +854,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
             color: overviewFillColor,
             opacity: 0,
           },
-          data: overviewData
+          data: overviewData,
+          markLine: this.buildLapMarkLine(darkTheme),
         }
       ]
     } as ChartOption;
