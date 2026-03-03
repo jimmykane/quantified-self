@@ -123,6 +123,20 @@ describe('EChartsHostController', () => {
     expect(visualViewportEventListeners.size).toBe(0);
   });
 
+  it('should reinitialize the chart when the requested theme changes', async () => {
+    const loader = buildLoaderMock();
+    const controller = new EChartsHostController({
+      eChartsLoader: loader as any,
+    });
+    const container = document.createElement('div');
+
+    await controller.init(container, 'light');
+    await controller.init(container, 'dark');
+
+    expect(loader.init).toHaveBeenCalledTimes(2);
+    expect(loader.dispose).toHaveBeenCalledWith(chartMock);
+  });
+
   it('should forward init options to the loader during initialization', async () => {
     const loader = buildLoaderMock();
     const controller = new EChartsHostController({

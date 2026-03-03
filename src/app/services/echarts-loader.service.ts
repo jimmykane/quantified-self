@@ -5,51 +5,10 @@ import type { EChartsType } from 'echarts/core';
 type EChartsCoreModule = typeof import('echarts/core');
 type EChartsOption = Parameters<EChartsType['setOption']>[0];
 type EChartsSetOptionSettings = Parameters<EChartsType['setOption']>[1];
-type EChartsThemeDefinition = Record<string, unknown>;
 type EChartsResizeOptions = NonNullable<Parameters<EChartsType['resize']>[0]>;
 type EChartsInitOptions = Parameters<EChartsCoreModule['init']>[2];
 
-export const ECHARTS_GLOBAL_FONT_FAMILY = "'Barlow Condensed', sans-serif";
-const ECHARTS_LIGHT_THEME_NAME = 'quantified-self-light';
-const ECHARTS_DARK_THEME_NAME = 'quantified-self-dark';
-
-function buildEChartsFontTheme(darkMode: boolean): EChartsThemeDefinition {
-  const textStyle = { fontFamily: ECHARTS_GLOBAL_FONT_FAMILY };
-
-  return {
-    darkMode,
-    textStyle,
-    title: {
-      textStyle,
-      subtextStyle: textStyle
-    },
-    legend: {
-      textStyle
-    },
-    tooltip: {
-      textStyle
-    },
-    axisPointer: {
-      label: textStyle
-    },
-    categoryAxis: {
-      axisLabel: textStyle,
-      nameTextStyle: textStyle
-    },
-    valueAxis: {
-      axisLabel: textStyle,
-      nameTextStyle: textStyle
-    },
-    timeAxis: {
-      axisLabel: textStyle,
-      nameTextStyle: textStyle
-    },
-    logAxis: {
-      axisLabel: textStyle,
-      nameTextStyle: textStyle
-    }
-  };
-}
+export { ECHARTS_GLOBAL_FONT_FAMILY } from '../helpers/echarts-theme.helper';
 
 @Injectable({
   providedIn: 'root'
@@ -57,7 +16,6 @@ function buildEChartsFontTheme(darkMode: boolean): EChartsThemeDefinition {
 export class EChartsLoaderService {
   private loader: Promise<EChartsCoreModule> | null = null;
   private cachedCore: EChartsCoreModule | null = null;
-  private themesRegistered = false;
   private groupRefCounts = new Map<string, number>();
   private viewportResizeSubscribers = new Set<() => void>();
   private viewportListenersBound = false;
@@ -127,7 +85,6 @@ export class EChartsLoaderService {
           renderers.CanvasRenderer
         ]);
 
-        this.registerThemes(core);
         this.cachedCore = core;
         return core;
       })().catch((error) => {
@@ -244,26 +201,16 @@ export class EChartsLoaderService {
     };
   }
 
-  private registerThemes(core: EChartsCoreModule): void {
-    if (this.themesRegistered) {
-      return;
-    }
-
-    core.registerTheme(ECHARTS_LIGHT_THEME_NAME, buildEChartsFontTheme(false));
-    core.registerTheme(ECHARTS_DARK_THEME_NAME, buildEChartsFontTheme(true));
-    this.themesRegistered = true;
-  }
-
-  private resolveThemeName(theme?: string): string {
+  private resolveThemeName(theme?: string): string | undefined {
     const normalizedTheme = `${theme || ''}`.trim().toLowerCase();
     if (!normalizedTheme || normalizedTheme === 'light' || normalizedTheme.endsWith('light')) {
-      return ECHARTS_LIGHT_THEME_NAME;
+      return undefined;
     }
     if (normalizedTheme === 'dark' || normalizedTheme.endsWith('dark')) {
-      return ECHARTS_DARK_THEME_NAME;
+      return 'dark';
     }
 
-    return theme || ECHARTS_LIGHT_THEME_NAME;
+    return theme || undefined;
   }
 
   private notifyViewportResizeSubscribers(): void {

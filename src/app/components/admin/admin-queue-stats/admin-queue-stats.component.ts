@@ -16,6 +16,7 @@ import {
     ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS,
     EChartsHostController
 } from '../../../helpers/echarts-host-controller';
+import { buildOfficialEChartsThemeTokens, ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
 
 export type AdminQueueStatsView = 'all' | 'workout' | 'reparse';
 
@@ -60,12 +61,6 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
     private _retryChartRef: ElementRef<HTMLDivElement> | undefined;
     private isDark = false;
 
-    // Theme constants
-    private readonly CHART_TEXT_DARK = 'rgba(255, 255, 255, 0.8)';
-    private readonly CHART_TEXT_LIGHT = 'rgba(0, 0, 0, 0.8)';
-    private readonly CHART_GRID_DARK = 'rgba(255, 255, 255, 0.1)';
-    private readonly CHART_GRID_LIGHT = 'rgba(0, 0, 0, 0.1)';
-
     private destroy$ = new Subject<void>();
 
     constructor(
@@ -81,7 +76,7 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
     ngOnInit(): void {
         this.appThemeService.getAppTheme().pipe(takeUntil(this.destroy$)).subscribe(theme => {
             this.isDark = theme === AppThemes.Dark;
-            this.updateChartTheme();
+            void this.updateChartTheme();
         });
     }
 
@@ -115,7 +110,7 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
         const container = this._retryChartRef.nativeElement;
         this.chartInitialization = (async () => {
             try {
-                await this.chartHost.init(container);
+                await this.chartHost.init(container, resolveEChartsThemeName(this.isDark));
             } catch (error) {
                 console.error('[AdminQueueStatsComponent] Failed to initialize ECharts', error);
             } finally {
@@ -142,13 +137,15 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
         const maxValue = Math.max(...values);
         this.hasRetryData = maxValue > 0;
 
-        const textColor = this.isDark ? this.CHART_TEXT_DARK : this.CHART_TEXT_LIGHT;
-        const gridColor = this.isDark ? this.CHART_GRID_DARK : this.CHART_GRID_LIGHT;
+        const themeTokens = buildOfficialEChartsThemeTokens(this.isDark);
+        const textColor = themeTokens.textSecondary;
+        const gridColor = themeTokens.splitLineColor;
 
         const option = {
             tooltip: {
                 trigger: 'axis',
                 axisPointer: { type: 'shadow' },
+                textStyle: { fontFamily: ECHARTS_GLOBAL_FONT_FAMILY },
                 formatter: (params: any) => {
                     const item = Array.isArray(params) ? params[0] : params;
                     return `${item?.axisValueLabel || item?.name}: ${item?.value ?? 0}`;
@@ -193,6 +190,7 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
                         show: true,
                         position: 'top',
                         color: textColor,
+                        fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
                         fontWeight: 600,
                         fontSize: 12,
                         distance: 6
@@ -205,10 +203,11 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
         this.chartHost.scheduleResize();
     }
 
-    private updateChartTheme(): void {
-        if (!this.chartHost.getChart()) {
+    private async updateChartTheme(): Promise<void> {
+        if (!this._retryChartRef?.nativeElement) {
             return;
         }
+        await this.chartHost.init(this._retryChartRef.nativeElement, resolveEChartsThemeName(this.isDark));
         this.updateChartData();
     }
 

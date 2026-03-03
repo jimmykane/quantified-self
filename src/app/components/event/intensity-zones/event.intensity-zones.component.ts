@@ -33,6 +33,7 @@ import {
   EChartsHostController
 } from '../../../helpers/echarts-host-controller';
 import { buildEventEChartsVisualTokens } from '../../../helpers/event-echarts-common.helper';
+import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 
@@ -76,23 +77,22 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
       .subscribe(result => {
         const wasMobile = this.isMobile;
         this.isMobile = result.matches;
-        if (this.chartHost.getChart() && wasMobile !== this.isMobile) {
-          this.refreshChart();
+        if (this.chartDiv?.nativeElement && wasMobile !== this.isMobile) {
+          void this.refreshChart();
         }
       });
   }
 
   async ngAfterViewInit(): Promise<void> {
-    await this.chartHost.init(this.chartDiv?.nativeElement);
-    this.refreshChart();
+    await this.refreshChart();
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (!this.chartHost.getChart()) {
+    if (!this.chartDiv?.nativeElement) {
       return;
     }
     if (changes.activities || changes.darkTheme || changes.useAnimations || changes.orientation) {
-      this.refreshChart();
+      void this.refreshChart();
     }
   }
 
@@ -103,8 +103,12 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     this.chartHost.dispose();
   }
 
-  private refreshChart(): void {
-    if (!this.chartHost.getChart()) {
+  private async refreshChart(): Promise<void> {
+    const chart = await this.chartHost.init(
+      this.chartDiv?.nativeElement,
+      resolveEChartsThemeName(this.darkTheme)
+    );
+    if (!chart) {
       return;
     }
 
@@ -116,17 +120,10 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
   }
 
   private buildChartOption(data: IntensityZonesEChartsData): ChartOption {
-    const chartStyle = buildEventEChartsVisualTokens(this.darkTheme, this.isMobile, {
-      textColorDark: '#ffffff',
-      textColorLight: '#2a2a2a',
-      tooltipBackgroundColorDark: '#303030',
-      tooltipBorderColorDark: '#6b6b6b',
-      tooltipTextColorDark: '#ffffff',
-      tooltipTextColorLight: '#2a2a2a',
-    });
+    const chartStyle = buildEventEChartsVisualTokens(this.darkTheme, this.isMobile);
     const darkTheme = chartStyle.darkTheme;
     const textColor = chartStyle.textColor;
-    const gridLineColor = darkTheme ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)';
+    const gridLineColor = chartStyle.gridColor;
     const zoneBackgroundOpacity = darkTheme ? 0.18 : 0.12;
     const tooltipExtraCssText = chartStyle.tooltipExtraCssText;
     const rightInset = 0;
@@ -214,7 +211,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
         interval: 0,
         margin: isHorizontal ? 8 : 2,
         color: textColor,
-        fontFamily: "'Barlow Condensed', sans-serif",
+        fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
         formatter: (value: string) => {
           const zoneIndex = data.zones.indexOf(value);
           if (zoneIndex === -1) {
@@ -230,7 +227,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
       animation: this.useAnimations === true,
       textStyle: {
         color: textColor,
-        fontFamily: "'Barlow Condensed', sans-serif"
+        fontFamily: ECHARTS_GLOBAL_FONT_FAMILY
       },
       grid: {
         left: 0,
@@ -247,7 +244,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
         orient: 'horizontal',
         textStyle: {
           color: textColor,
-          fontFamily: "'Barlow Condensed', sans-serif",
+          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
         }
       },
       tooltip: {
@@ -260,7 +257,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
         borderColor: chartStyle.tooltipBorderColor,
         textStyle: {
           color: chartStyle.tooltipTextColor,
-          fontFamily: "'Barlow Condensed', sans-serif",
+          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
         },
         formatter: (params: { dataIndex: number; seriesIndex: number; marker: string }) => {
           const dataIndex = params.dataIndex;

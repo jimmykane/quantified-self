@@ -25,6 +25,7 @@ import {
   EChartsHostController
 } from '../../../helpers/echarts-host-controller';
 import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
+import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
 import {
   getDashboardAggregateData,
   getDashboardDataInstanceOrNull,
@@ -94,12 +95,11 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
   }
 
   async ngAfterViewInit(): Promise<void> {
-    await this.chartHost.init(this.chartDiv?.nativeElement);
-    this.refreshChart();
+    await this.refreshChart();
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (!this.chartHost.getChart()) {
+    if (!this.chartDiv?.nativeElement) {
       return;
     }
 
@@ -114,7 +114,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
       changes.vertical ||
       changes.type
     ) {
-      this.refreshChart();
+      void this.refreshChart();
     }
   }
 
@@ -125,8 +125,12 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
   private readonly stackedActivitySeriesKey = 'date-activity-stack';
   private readonly stackedTotalLabelSeriesName = '__date_activity_totals__';
 
-  private refreshChart(): void {
-    if (!this.chartHost.getChart()) {
+  private async refreshChart(): Promise<void> {
+    const chart = await this.chartHost.init(
+      this.chartDiv?.nativeElement,
+      resolveEChartsThemeName(this.darkTheme)
+    );
+    if (!chart) {
       return;
     }
 
@@ -156,7 +160,6 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
   ): ChartOption {
     const chartWidth = this.chartDiv?.nativeElement?.clientWidth || 0;
     const chartStyle = buildDashboardEChartsStyleTokens(this.darkTheme, chartWidth);
-    const darkTheme = chartStyle.darkTheme;
     const textColor = chartStyle.textColor;
     const axisColor = chartStyle.axisColor;
     const gridColor = chartStyle.gridColor;
@@ -227,7 +230,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     const shouldRenderTrend = this.vertical
       && this.chartDataCategoryType === ChartDataCategoryTypes.DateType;
     const trendSeries = shouldRenderTrend
-      ? this.buildTrendSeries(points, darkTheme)
+      ? this.buildTrendSeries(points, chartStyle.trendLineColor)
       : null;
 
     const summaryLabel = aggregate
@@ -285,7 +288,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
       animation: this.useAnimations === true,
       textStyle: {
         color: textColor,
-        fontFamily: "'Barlow Condensed', sans-serif"
+        fontFamily: ECHARTS_GLOBAL_FONT_FAMILY
       },
       grid: {
         left: this.vertical ? 4 : 6,
@@ -301,8 +304,8 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
         borderColor: tooltipBorderColor,
         borderWidth: 1,
         textStyle: {
-          color: textColor,
-          fontFamily: "'Barlow Condensed', sans-serif",
+          color: chartStyle.tooltipTextColor,
+          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
           fontSize: isCompactLayout ? 12 : 13
         },
         formatter: useDateActivitySegmentation && dateActivitySegmentation && dateActivityColorMap
@@ -565,7 +568,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
         show: showValueLabels,
         position: this.vertical ? 'top' : 'right',
         color: textColor,
-        fontFamily: "'Barlow Condensed', sans-serif",
+        fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
         fontSize: isCompactLayout ? 11 : 12,
         formatter: (params: { dataIndex: number }) => {
           const point = points[params.dataIndex];
@@ -602,7 +605,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     };
   }
 
-  private buildTrendSeries(points: DashboardCartesianPoint[], darkTheme: boolean): Record<string, unknown> | null {
+  private buildTrendSeries(points: DashboardCartesianPoint[], trendLineColor: string): Record<string, unknown> | null {
     const regressionLine = buildDashboardDateRegressionLine(points);
     if (regressionLine.length < 2) {
       return null;
@@ -618,7 +621,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
       lineStyle: {
         width: 1.5,
         type: 'dashed',
-        color: darkTheme ? '#9a9a9a' : '#6b6b6b'
+        color: trendLineColor
       },
       tooltip: {
         show: false

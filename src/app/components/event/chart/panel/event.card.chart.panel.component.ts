@@ -14,6 +14,7 @@ import {
 } from '@angular/core';
 import { ChartCursorBehaviours, LapTypes, XAxisTypes } from '@sports-alliance/sports-lib';
 import type { ECElementEvent, EChartsType } from 'echarts/core';
+import { AppBreakpoints } from '../../../../constants/breakpoints';
 import { EChartsLoaderService } from '../../../../services/echarts-loader.service';
 import { LoggerService } from '../../../../services/logger.service';
 import {
@@ -38,6 +39,8 @@ import {
   computeEventPanelRangeStats,
   EventPanelRangeStat,
 } from '../../../../helpers/event-echarts-range-stats.helper';
+import { buildEventEChartsVisualTokens } from '../../../../helpers/event-echarts-common.helper';
+import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../../helpers/echarts-theme.helper';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import type { EventChartPoint } from '../../../../helpers/event-echarts-data.helper';
 import { AppUserUtilities } from '../../../../utils/app.user.utilities';
@@ -105,6 +108,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @Input() extraMaxForPower = 0;
   @Input() extraMaxForPace = -0.25;
   @Input() strokeWidth = AppUserUtilities.getDefaultChartStrokeWidth();
+  @Input() fillOpacity = AppUserUtilities.getDefaultChartFillOpacity();
   @Input() waterMark = '';
   @Input() showActivityNamesInTooltip = false;
   @Input() zoomBarOverviewData: Array<[number, number]> = [];
@@ -134,6 +138,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private applyingSharedSelectionRange = false;
   private applyingSharedZoomRange = false;
   private chartRefreshSequence: Promise<void> = Promise.resolve();
+
+  private get isMobile(): boolean {
+    return typeof window !== 'undefined' && window.matchMedia(AppBreakpoints.XSmall).matches;
+  }
 
   constructor(
     private eChartsLoader: EChartsLoaderService,
@@ -223,7 +231,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   async ngAfterViewInit(): Promise<void> {
-    await this.chartHost.init(this.chartDiv?.nativeElement);
+    await this.chartHost.init(this.chartDiv?.nativeElement, resolveEChartsThemeName(this.darkTheme));
     this.bindWheelPassThrough();
     this.syncNativeZoomGroup();
     this.bindChartEvents();
@@ -248,6 +256,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       || changes.extraMaxForPower
       || changes.extraMaxForPace
       || changes.strokeWidth
+      || changes.fillOpacity
       || changes.waterMark
       || changes.zoomBarOverviewData
     ) {
@@ -281,7 +290,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   private queueChartRefresh(source: string): void {
     this.chartRefreshSequence = this.chartRefreshSequence
-      .then(() => {
+      .then(async () => {
+        await this.chartHost.init(this.chartDiv?.nativeElement, resolveEChartsThemeName(this.darkTheme));
         this.refreshChart();
         this.syncViewportObserver();
       })
@@ -346,12 +356,14 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   private buildOption(): ChartOption {
     const panel = this.panel as EventChartPanelModel;
-    const darkTheme = this.darkTheme;
-    const textColor = darkTheme ? '#f5f5f5' : '#1f1f1f';
-    const axisColor = darkTheme ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.28)';
-    const gridColor = darkTheme ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)';
-    const tooltipBackgroundColor = darkTheme ? '#303030' : '#ffffff';
-    const tooltipBorderColor = darkTheme ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.12)';
+    const chartStyle = buildEventEChartsVisualTokens(this.darkTheme, this.isMobile);
+    const textColor = chartStyle.textColor;
+    const axisLabelColor = textColor;
+    const axisColor = this.darkTheme ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.28)';
+    const gridColor = chartStyle.gridColor;
+    const axisLabelFontSize = chartStyle.axisLabelFontSize;
+    const tooltipBackgroundColor = chartStyle.tooltipBackgroundColor;
+    const tooltipBorderColor = chartStyle.tooltipBorderColor;
     const domain = this.getActiveDomain();
     const visibleRange = this.getVisibleXAxisRange();
     const yAxisConfig = buildEventPanelYAxisConfig({
@@ -364,6 +376,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const seriesStrokeWidth = Number.isFinite(resolvedStrokeWidth) && resolvedStrokeWidth > 0
       ? resolvedStrokeWidth
       : AppUserUtilities.getDefaultChartStrokeWidth();
+    const resolvedFillOpacity = Number(this.fillOpacity);
+    const seriesFillOpacity = Number.isFinite(resolvedFillOpacity)
+      ? Math.min(1, Math.max(0, resolvedFillOpacity))
+      : AppUserUtilities.getDefaultChartFillOpacity();
 
     const seriesOptions: ChartLineSeriesOption[] = panel.series.map((series) => ({
       id: series.id,
@@ -383,6 +399,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       itemStyle: {
         color: series.color,
       },
+      areaStyle: {
+        color: series.color,
+        opacity: seriesFillOpacity,
+      },
       emphasis: {
         disabled: true,
       },
@@ -390,7 +410,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }));
 
     if (seriesOptions[0]) {
-      seriesOptions[0].markLine = this.buildLapMarkLine(darkTheme);
+      seriesOptions[0].markLine = this.buildLapMarkLine(chartStyle);
     }
 
     return {
@@ -399,7 +419,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       backgroundColor: 'transparent',
       textStyle: {
         color: textColor,
-        fontFamily: "'Barlow Condensed', sans-serif"
+        fontFamily: ECHARTS_GLOBAL_FONT_FAMILY
       },
       grid: {
         left: 0,
@@ -421,13 +441,13 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         borderColor: tooltipBorderColor,
         borderWidth: 1,
         textStyle: {
-          color: textColor,
-          fontFamily: "'Barlow Condensed', sans-serif",
+          color: chartStyle.tooltipTextColor,
+          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
           fontSize: 12,
         },
         formatter: (params: TooltipFormatterParams | TooltipFormatterParams[]) => this.formatTooltip(params)
       },
-      brush: this.buildBrushOption(darkTheme),
+      brush: this.buildBrushOption(chartStyle),
       xAxis: {
         ...(buildEventCanonicalXAxisScaleOptions(this.xAxisType, domain) || {}),
         type: this.xAxisType === XAxisTypes.Time ? 'time' : 'value',
@@ -436,11 +456,17 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         axisLine: {
           lineStyle: { color: axisColor }
         },
+        axisTick: {
+          show: false,
+        },
         splitLine: {
           show: false,
         },
         axisLabel: {
-          color: textColor,
+          color: axisLabelColor,
+          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+          fontSize: axisLabelFontSize,
+          margin: this.isMobile ? 10 : 12,
           formatter: (value: number) => formatEventXAxisValue(
             Number(value),
             this.xAxisType,
@@ -457,16 +483,25 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         axisLine: {
           lineStyle: { color: axisColor }
         },
+        axisTick: {
+          show: false,
+        },
         splitLine: {
           show: true,
-          lineStyle: { color: gridColor }
+          lineStyle: {
+            color: gridColor,
+            width: 1,
+          }
         },
         axisLabel: {
-          color: textColor,
+          color: axisLabelColor,
+          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+          fontSize: axisLabelFontSize,
+          margin: this.isMobile ? 8 : 10,
           formatter: (value: number) => this.formatDataValue(panel.dataType, value, false)
         }
       },
-      graphic: this.buildWatermarkGraphic(darkTheme),
+      graphic: this.buildWatermarkGraphic(chartStyle),
       dataZoom: [
         {
           type: 'inside',
@@ -494,7 +529,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     } as ChartOption;
   }
 
-  private buildWatermarkGraphic(darkTheme: boolean): Record<string, unknown>[] {
+  private buildWatermarkGraphic(chartStyle: ReturnType<typeof buildEventEChartsVisualTokens>): Record<string, unknown>[] {
     const waterMarkText = `${this.waterMark || ''}`.trim();
     if (!waterMarkText || this.showZoomBar) {
       return [];
@@ -509,7 +544,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         z: 0,
         style: {
           text: waterMarkText,
-          fill: darkTheme ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.16)',
+          fill: chartStyle.watermarkColor,
           font: '600 16px "Barlow Condensed", sans-serif',
           textAlign: 'right',
           textVerticalAlign: 'top',
@@ -518,7 +553,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     ];
   }
 
-  private buildLapMarkLine(darkTheme: boolean): Record<string, unknown> {
+  private buildLapMarkLine(chartStyle: ReturnType<typeof buildEventEChartsVisualTokens>): Record<string, unknown> {
     const visibleLapMarkers = this.showLaps
       ? this.lapMarkers.filter((marker) => this.shouldDisplayLapMarker(marker))
       : [];
@@ -536,7 +571,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       lineStyle: {
         type: 'dashed',
         width: 1,
-        color: darkTheme ? 'rgba(255,255,255,0.26)' : 'rgba(0,0,0,0.30)',
+        color: chartStyle.lapLineColor,
       },
       data: this.showLaps
         ? visibleLapMarkers
@@ -560,7 +595,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     };
   }
 
-  private buildBrushOption(darkTheme: boolean): Record<string, unknown> {
+  private buildBrushOption(chartStyle: ReturnType<typeof buildEventEChartsVisualTokens>): Record<string, unknown> {
     return {
       toolbox: [],
       brushLink: 'none',
@@ -571,8 +606,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       throttleType: 'fixRate',
       throttleDelay: DATA_ZOOM_THROTTLE_MS,
       brushStyle: {
-        color: darkTheme ? 'rgba(144,202,249,0.16)' : 'rgba(25,118,210,0.14)',
-        borderColor: darkTheme ? 'rgba(144,202,249,0.72)' : 'rgba(25,118,210,0.68)',
+        color: chartStyle.brushFillColor,
+        borderColor: chartStyle.brushBorderColor,
         borderWidth: 1,
       }
     };
@@ -701,14 +736,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return;
     }
 
-    this.logZoomDebug('viewport-change', {
-      intersectionRatio: primaryEntry.intersectionRatio,
-      isIntersecting: primaryEntry.isIntersecting,
-      nextVisible: isVisible,
-      previousVisible: this.viewportVisible,
-      zoomSyncVisibleForViewport: this.zoomSyncVisibleForViewport,
-    });
-
     this.viewportVisible = isVisible;
     this.applyViewportAnimationMode(isVisible);
     if (this.showZoomBar) {
@@ -780,10 +807,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return;
     }
 
-    this.logZoomDebug('zoom-sync-visibility', {
-      nextVisible: isVisible,
-      previousVisible: this.zoomSyncVisibleForViewport,
-    });
     this.zoomSyncVisibleForViewport = isVisible;
     this.syncNativeZoomGroup();
   }
@@ -835,13 +858,13 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   private buildZoomBarOnlyOption(): ChartOption {
-    const darkTheme = this.darkTheme;
-    const axisColor = darkTheme ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.28)';
-    const sliderTrackColor = darkTheme ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
-    const sliderSelectionColor = darkTheme ? 'rgba(144,202,249,0.30)' : 'rgba(25,118,210,0.22)';
-    const sliderHandleColor = darkTheme ? 'rgba(255,255,255,0.72)' : 'rgba(0,0,0,0.45)';
-    const overviewLineColor = darkTheme ? 'rgba(144,202,249,0.78)' : 'rgba(25,118,210,0.70)';
-    const overviewFillColor = darkTheme ? 'rgba(144,202,249,0.18)' : 'rgba(25,118,210,0.12)';
+    const chartStyle = buildEventEChartsVisualTokens(this.darkTheme, this.isMobile);
+    const axisColor = chartStyle.axisColor;
+    const sliderTrackColor = chartStyle.dataZoomTrackColor;
+    const sliderSelectionColor = chartStyle.dataZoomSelectionColor;
+    const sliderHandleColor = chartStyle.dataZoomHandleColor;
+    const overviewLineColor = chartStyle.dataZoomOverviewLineColor;
+    const overviewFillColor = chartStyle.dataZoomOverviewFillColor;
     const domain = this.getActiveDomain();
     const overviewData = this.zoomBarOverviewData.length > 0
       ? this.zoomBarOverviewData
@@ -913,15 +936,15 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
             }
           },
           textStyle: {
-            color: darkTheme ? '#f5f5f5' : '#1f1f1f',
-            fontFamily: "'Barlow Condensed', sans-serif",
+            color: chartStyle.textColor,
+            fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
           },
           handleStyle: {
             color: sliderHandleColor,
             borderColor: axisColor,
             borderWidth: 1,
             shadowBlur: 4,
-            shadowColor: darkTheme ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.18)',
+            shadowColor: chartStyle.emphasisShadowColor,
           },
           moveHandleStyle: {
             color: sliderSelectionColor
@@ -949,7 +972,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
             opacity: 0,
           },
           data: overviewData,
-          markLine: this.buildLapMarkLine(darkTheme),
+          markLine: this.buildLapMarkLine(chartStyle),
         } satisfies ChartLineSeriesOption
       ]
     } as ChartOption;
@@ -1027,10 +1050,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const tooltipKey = `${marker.lapNumber}|${marker.xValue}`;
     this.activeLapTooltipKey = tooltipKey;
 
-    const darkTheme = this.darkTheme;
-    const textColor = darkTheme ? '#f5f5f5' : '#1f1f1f';
-    const tooltipBackgroundColor = darkTheme ? '#303030' : '#ffffff';
-    const tooltipBorderColor = darkTheme ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.12)';
+    const chartStyle = buildEventEChartsVisualTokens(this.darkTheme, this.isMobile);
     const tooltipHtml = this.formatLapMarkerTooltip({ data: marker, name: marker.label });
 
     const showTipAction: ChartAction = {
@@ -1040,12 +1060,12 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       escapeConnect: true,
       tooltip: {
         trigger: 'item',
-        backgroundColor: tooltipBackgroundColor,
-        borderColor: tooltipBorderColor,
+        backgroundColor: chartStyle.tooltipBackgroundColor,
+        borderColor: chartStyle.tooltipBorderColor,
         borderWidth: 1,
         textStyle: {
-          color: textColor,
-          fontFamily: "'Barlow Condensed', sans-serif",
+          color: chartStyle.tooltipTextColor,
+          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
           fontSize: 12,
         },
         formatter: () => tooltipHtml,
@@ -1364,15 +1384,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return;
     }
 
-    this.logZoomDebug('sync-native-zoom-group', {
-      requestedGroupId,
-      previousGroupId: this.connectedZoomGroupId,
-      nextGroupId,
-      hasRenderableChart,
-      showZoomBar: this.showZoomBar,
-      zoomSyncVisibleForViewport: this.zoomSyncVisibleForViewport,
-      viewportVisible: this.viewportVisible,
-    });
     const previousGroupId = this.connectedZoomGroupId;
     if (!previousGroupId && nextGroupId) {
       this.applyStoredZoomRange();
@@ -1385,17 +1396,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     if (nextGroupId) {
       void this.eChartsLoader.connectGroup(nextGroupId);
     }
-  }
-
-  private logZoomDebug(source: string, extra?: Record<string, unknown>): void {
-    this.logger.info('[EventCardChartPanelComponent] Zoom debug', {
-      source,
-      showZoomBar: this.showZoomBar,
-      panelDataType: this.panel?.displayName || this.panel?.dataType || null,
-      panelSeriesCount: this.panel?.series?.length ?? 0,
-      zoomGroupId: this.zoomGroupId,
-      ...extra,
-    });
   }
 
   private disconnectNativeZoomGroup(): void {

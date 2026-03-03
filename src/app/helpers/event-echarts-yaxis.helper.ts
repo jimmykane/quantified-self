@@ -68,7 +68,7 @@ export function buildEventPanelYAxisConfig(input: BuildEventPanelYAxisConfigInpu
   if (hasHeartRateStream) {
     return buildStepBasedAxis(values, {
       baseStep: 5,
-      candidateIntervals: [5, 10, 15, 20, 25],
+      candidateIntervals: [10, 15, 20, 25],
       targetTickCount: 6,
       minFloor: 0,
     });

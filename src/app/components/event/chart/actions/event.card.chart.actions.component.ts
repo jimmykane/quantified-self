@@ -28,12 +28,14 @@ export class EventCardChartActionsComponent implements OnChanges {
   @Input() showAllData: boolean;
   @Input() showLaps: boolean;
   @Input() cursorBehaviour: ChartCursorBehaviours = ChartCursorBehaviours.ZoomX;
+  @Input() fillOpacity = 0;
   @Input() showSeriesMenu = false;
   @Input() seriesMenuSummary = '';
   @Input() seriesMenuItems: ChartSeriesMenuItem[] = [];
   @Output() showAllDataChange: EventEmitter<boolean> = new EventEmitter<boolean>();
   @Output() showLapsChange: EventEmitter<boolean> = new EventEmitter<boolean>();
   @Output() xAxisTypeChange: EventEmitter<XAxisTypes> = new EventEmitter<XAxisTypes>();
+  @Output() fillOpacityChange = new EventEmitter<number>();
   @Output() cursorBehaviourChange = new EventEmitter<ChartCursorBehaviours>();
   @Output() seriesVisibilityToggle = new EventEmitter<{ dataType: string; visible: boolean }>();
   @Output() showAllSeries = new EventEmitter<void>();
@@ -108,9 +110,17 @@ export class EventCardChartActionsComponent implements OnChanges {
     );
   }
 
+  async onFillOpacityChange(value: number | null) {
+    const normalizedValue = Math.min(1, Math.max(0, Number(value ?? 0)));
+    this.fillOpacity = Number.isFinite(normalizedValue) ? normalizedValue : 0;
+    await this.somethingChanged('fillOpacity');
+  }
+
   async somethingChanged(prop?: string) {
     if (prop === 'xAxisType') {
       this.xAxisTypeChange.emit(this.xAxisType);
+    } else if (prop === 'fillOpacity') {
+      this.fillOpacityChange.emit(this.fillOpacity);
     } else if (prop === 'cursorBehaviour') {
       this.cursorBehaviourChange.emit(this.cursorBehaviour);
     } else if (prop === 'showAllData') {
@@ -120,6 +130,7 @@ export class EventCardChartActionsComponent implements OnChanges {
     } else {
       // Fallback for safety if called without prop
       this.xAxisTypeChange.emit(this.xAxisType);
+      this.fillOpacityChange.emit(this.fillOpacity);
       this.cursorBehaviourChange.emit(this.cursorBehaviour);
       this.showAllDataChange.emit(this.showAllData);
       this.showLapsChange.emit(this.showLaps);
@@ -136,11 +147,8 @@ export class EventCardChartActionsComponent implements OnChanges {
     this.showAllSeries.emit();
   }
 
-  formatLabel(value: number | null) {
-    if (!value) {
-      return '';
-    }
-    return `${((value - 0.5) * 100 / 20).toFixed(0)}%`
+  get fillOpacityPercentLabel(): string {
+    return `${Math.round(this.fillOpacity * 100)}%`;
   }
 
   ngOnChanges(simpleChanges) {

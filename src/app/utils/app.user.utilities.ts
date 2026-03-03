@@ -265,7 +265,15 @@ export class AppUserUtilities {
     }
 
     static getDefaultChartFillOpacity(): number {
-        return 0.35;
+        return 0;
+    }
+
+    static getResolvedChartFillOpacity(chartSettings?: { fillOpacity?: number; fillOpacityVersion?: number } | null): number {
+        if (chartSettings?.fillOpacityVersion === 1 && isNumber(chartSettings.fillOpacity)) {
+            return Math.min(1, Math.max(0, Number(chartSettings.fillOpacity)));
+        }
+
+        return AppUserUtilities.getDefaultChartFillOpacity();
     }
 
     static getDefaultTableSettings(): TableSettings {

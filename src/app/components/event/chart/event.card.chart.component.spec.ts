@@ -31,6 +31,7 @@ describe('EventCardChartComponent', () => {
     xAxisType: XAxisTypes.Duration,
     chartCursorBehaviour: ChartCursorBehaviours.ZoomX,
     gainAndLossThreshold: 1,
+    fillOpacity: 0.4,
     useAnimations: false,
   } as any);
 
@@ -102,6 +103,7 @@ describe('EventCardChartComponent', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -226,6 +228,33 @@ describe('EventCardChartComponent', () => {
 
     expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith({ chartCursorBehaviour: ChartCursorBehaviours.ZoomX });
     expect(component.selectedRange).toBeNull();
+  });
+
+  it('debounces fill opacity persistence while exposing the local override immediately', async () => {
+    vi.useFakeTimers();
+    fixture.detectChanges();
+
+    component.fillOpacity = 0.55;
+
+    expect(component.fillOpacity).toBe(0.55);
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalledWith({ fillOpacity: 0.55 });
+
+    vi.advanceTimersByTime(180);
+    await Promise.resolve();
+
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith({ fillOpacity: 0.55, fillOpacityVersion: 1 });
+  });
+
+  it('ignores legacy saved fill opacity until the new version marker exists', async () => {
+    chartSettingsSignal.set({
+      ...chartSettingsSignal(),
+      fillOpacity: 0.6,
+      fillOpacityVersion: undefined,
+    });
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.fillOpacity).toBe(0);
   });
 
   it('pushes cursor updates to map service for distance mode', async () => {

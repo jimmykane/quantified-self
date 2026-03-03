@@ -48,7 +48,8 @@
         </div>
         } @else if (hasChartDataFlag()) {
         <app-event-card-chart [selectedActivities]="selectedActivitiesDebounced()" [targetUserID]="targetUserID()"
-          [user]="activeUser" [waterMark]="activeUser.brandText ?? null" [event]="activeEvent">
+          [user]="activeUser" [waterMark]="activeUser.brandText ?? null" [event]="activeEvent"
+          [darkTheme]="darkTheme()">
         </app-event-card-chart>
         }
         }

@@ -65,6 +65,18 @@
 
   <mat-divider></mat-divider>
 
+  <section class="chart-options-menu__slider-section" (click)="$event.stopPropagation()">
+    <div class="chart-options-menu__slider-header">
+      <span>Fill Opacity</span>
+      <span>{{ fillOpacityPercentLabel }}</span>
+    </div>
+    <mat-slider [max]="1" [min]="0" [step]="0.05" discrete>
+      <input matSliderThumb [value]="fillOpacity" [disabled]="!user" (valueChange)="onFillOpacityChange($event)">
+    </mat-slider>
+  </section>
+
+  <mat-divider></mat-divider>
+
   <section mat-menu-item>
     <mat-slide-toggle class="chart-option-toggle" [checked]="showLaps" [disabled]="!user"
       (click)="$event.stopPropagation()" (change)="onShowLapsToggle($event.checked)">

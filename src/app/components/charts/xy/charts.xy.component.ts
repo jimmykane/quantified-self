@@ -25,6 +25,7 @@ import {
   EChartsHostController
 } from '../../../helpers/echarts-host-controller';
 import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
+import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
 import {
   getDashboardAggregateData,
   getDashboardDataInstanceOrNull,
@@ -86,12 +87,11 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
   }
 
   async ngAfterViewInit(): Promise<void> {
-    await this.chartHost.init(this.chartDiv?.nativeElement);
-    this.refreshChart();
+    await this.refreshChart();
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (!this.chartHost.getChart()) {
+    if (!this.chartDiv?.nativeElement) {
       return;
     }
 
@@ -105,7 +105,7 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
       changes.chartDataTimeInterval ||
       changes.vertical
     ) {
-      this.refreshChart();
+      void this.refreshChart();
     }
   }
 
@@ -113,8 +113,12 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
     this.chartHost.dispose();
   }
 
-  private refreshChart(): void {
-    if (!this.chartHost.getChart()) {
+  private async refreshChart(): Promise<void> {
+    const chart = await this.chartHost.init(
+      this.chartDiv?.nativeElement,
+      resolveEChartsThemeName(this.darkTheme)
+    );
+    if (!chart) {
       return;
     }
 
@@ -144,7 +148,6 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
   ): ChartOption {
     const chartWidth = this.chartDiv?.nativeElement?.clientWidth || 0;
     const chartStyle = buildDashboardEChartsStyleTokens(this.darkTheme, chartWidth);
-    const darkTheme = chartStyle.darkTheme;
     const textColor = chartStyle.textColor;
     const axisColor = chartStyle.axisColor;
     const gridColor = chartStyle.gridColor;
@@ -188,7 +191,7 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
     const shouldRenderTrend = this.vertical
       && this.chartDataCategoryType === ChartDataCategoryTypes.DateType;
     const trendSeries = shouldRenderTrend
-      ? this.buildTrendSeries(points, darkTheme)
+      ? this.buildTrendSeries(points, chartStyle.trendLineColor)
       : null;
 
     const summaryLabel = aggregate
@@ -247,7 +250,7 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
       animation: this.useAnimations === true,
       textStyle: {
         color: textColor,
-        fontFamily: "'Barlow Condensed', sans-serif"
+        fontFamily: ECHARTS_GLOBAL_FONT_FAMILY
       },
       grid: {
         left: 4,
@@ -262,8 +265,8 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
         borderColor: tooltipBorderColor,
         borderWidth: 1,
         textStyle: {
-          color: textColor,
-          fontFamily: "'Barlow Condensed', sans-serif",
+          color: chartStyle.tooltipTextColor,
+          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
           fontSize: isCompactLayout ? 12 : 13
         },
         formatter: (params: { dataIndex: number }) => this.formatTooltip(points, params.dataIndex)
@@ -282,13 +285,13 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
           clip: false,
           lineStyle: {
             width: 2.2,
-            color: darkTheme ? '#b0b0b0' : '#6b6b6b'
+            color: chartStyle.trendLineColor
           },
           label: {
             show: showValueLabels,
             position: this.vertical ? 'top' : 'right',
             color: textColor,
-            fontFamily: "'Barlow Condensed', sans-serif",
+            fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
             fontSize: isCompactLayout ? 11 : 12,
             formatter: (params: { dataIndex: number }) => {
               const point = points[params.dataIndex];
@@ -320,7 +323,7 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
                 fontWeight: 500,
                 fill: textColor,
                 opacity: 0.85,
-                fontFamily: "'Barlow Condensed', sans-serif"
+                fontFamily: ECHARTS_GLOBAL_FONT_FAMILY
               },
               left: 0,
               top: 0
@@ -332,7 +335,7 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
                 fontSize: isCompactLayout ? 20 : 22,
                 fontWeight: 700,
                 fill: textColor,
-                fontFamily: "'Barlow Condensed', sans-serif"
+                fontFamily: ECHARTS_GLOBAL_FONT_FAMILY
               },
               left: 0,
               top: 14
@@ -345,7 +348,7 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
                 fontWeight: 500,
                 fill: textColor,
                 opacity: 0.72,
-                fontFamily: "'Barlow Condensed', sans-serif"
+                fontFamily: ECHARTS_GLOBAL_FONT_FAMILY
               },
               left: 0,
               top: isCompactLayout ? 38 : 40
@@ -356,7 +359,7 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
     };
   }
 
-  private buildTrendSeries(points: DashboardCartesianPoint[], darkTheme: boolean): Record<string, unknown> | null {
+  private buildTrendSeries(points: DashboardCartesianPoint[], trendLineColor: string): Record<string, unknown> | null {
     const regressionLine = buildDashboardDateRegressionLine(points);
     if (regressionLine.length < 2) {
       return null;
@@ -372,7 +375,7 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
       lineStyle: {
         width: 1.5,
         type: 'dashed',
-        color: darkTheme ? '#9a9a9a' : '#6b6b6b'
+        color: trendLineColor
       },
       tooltip: {
         show: false

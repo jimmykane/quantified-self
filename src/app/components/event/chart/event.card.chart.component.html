@@ -1,6 +1,6 @@
 <app-event-section-header icon="show_chart">
   <app-event-card-chart-actions [(xAxisType)]="xAxisType" [(showAllData)]="showAllData" [(showLaps)]="showLaps"
-    [(cursorBehaviour)]="cursorBehaviour"
+    [(cursorBehaviour)]="cursorBehaviour" [(fillOpacity)]="fillOpacity"
     [event]="event" [user]="user"
     [showSeriesMenu]="dataTypeLegendItems.length > 0"
     [seriesMenuSummary]="seriesMenuSummary"
@@ -32,7 +32,7 @@
           [showLaps]="showLaps" [lapTypes]="lapTypes" [lapMarkers]="lapMarkers"
           [gainAndLossThreshold]="gainAndLossThreshold"
           [extraMaxForPower]="extraMaxForPower"
-          [extraMaxForPace]="extraMaxForPace" [strokeWidth]="strokeWidth"
+          [extraMaxForPace]="extraMaxForPace" [strokeWidth]="strokeWidth" [fillOpacity]="fillOpacity"
           [waterMark]="waterMarkText"
           [sharedZoomRange]="zoomRange"
           [showActivityNamesInTooltip]="showActivityNamesInTooltip"

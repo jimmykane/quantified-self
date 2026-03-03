@@ -1,25 +1,29 @@
-export interface EventEChartsVisualTokenOverrides {
-  textColorDark?: string;
-  textColorLight?: string;
-  axisColorDark?: string;
-  axisColorLight?: string;
-  tooltipBackgroundColorDark?: string;
-  tooltipBackgroundColorLight?: string;
-  tooltipBorderColorDark?: string;
-  tooltipBorderColorLight?: string;
-  tooltipTextColorDark?: string;
-  tooltipTextColorLight?: string;
-}
+import { buildOfficialEChartsThemeTokens } from './echarts-theme.helper';
 
 export interface EventEChartsVisualTokens {
   darkTheme: boolean;
   textColor: string;
+  secondaryTextColor: string;
+  tertiaryTextColor: string;
   axisColor: string;
+  gridColor: string;
   axisLabelFontSize: number;
   tooltipExtraCssText: string;
   tooltipBackgroundColor: string;
   tooltipBorderColor: string;
   tooltipTextColor: string;
+  subtleBorderColor: string;
+  emphasisShadowColor: string;
+  dataZoomTrackColor: string;
+  dataZoomSelectionColor: string;
+  dataZoomHandleColor: string;
+  dataZoomOverviewLineColor: string;
+  dataZoomOverviewFillColor: string;
+  brushFillColor: string;
+  brushBorderColor: string;
+  watermarkColor: string;
+  lapLineColor: string;
+  trendLineColor: string;
 }
 
 export interface EventEChartsAxisRangeOptions {
@@ -34,28 +38,34 @@ const MOBILE_TOOLTIP_EXTRA_CSS_TEXT = 'max-width: min(80vw, 280px); white-space:
 
 export function buildEventEChartsVisualTokens(
   darkTheme: boolean,
-  isMobile: boolean,
-  overrides: EventEChartsVisualTokenOverrides = {}
+  isMobile: boolean
 ): EventEChartsVisualTokens {
+  const themeTokens = buildOfficialEChartsThemeTokens(darkTheme);
+
   return {
     darkTheme,
-    textColor: darkTheme
-      ? (overrides.textColorDark || '#f5f5f5')
-      : (overrides.textColorLight || '#1f1f1f'),
-    axisColor: darkTheme
-      ? (overrides.axisColorDark || 'rgba(255,255,255,0.24)')
-      : (overrides.axisColorLight || 'rgba(0,0,0,0.24)'),
+    textColor: themeTokens.textPrimary,
+    secondaryTextColor: themeTokens.textSecondary,
+    tertiaryTextColor: themeTokens.textTertiary,
+    axisColor: themeTokens.axisLineColor,
+    gridColor: themeTokens.splitLineColor,
     axisLabelFontSize: isMobile ? 11 : 12,
     tooltipExtraCssText: isMobile ? MOBILE_TOOLTIP_EXTRA_CSS_TEXT : '',
-    tooltipBackgroundColor: darkTheme
-      ? (overrides.tooltipBackgroundColorDark || '#222222')
-      : (overrides.tooltipBackgroundColorLight || '#ffffff'),
-    tooltipBorderColor: darkTheme
-      ? (overrides.tooltipBorderColorDark || '#555555')
-      : (overrides.tooltipBorderColorLight || '#d6d6d6'),
-    tooltipTextColor: darkTheme
-      ? (overrides.tooltipTextColorDark || '#ffffff')
-      : (overrides.tooltipTextColorLight || '#2a2a2a')
+    tooltipBackgroundColor: themeTokens.tooltipBackgroundColor,
+    tooltipBorderColor: themeTokens.tooltipBorderColor,
+    tooltipTextColor: themeTokens.tooltipTextColor,
+    subtleBorderColor: themeTokens.subtleBorderColor,
+    emphasisShadowColor: themeTokens.emphasisShadowColor,
+    dataZoomTrackColor: themeTokens.dataZoomTrackColor,
+    dataZoomSelectionColor: themeTokens.dataZoomSelectionColor,
+    dataZoomHandleColor: themeTokens.dataZoomHandleColor,
+    dataZoomOverviewLineColor: themeTokens.dataZoomOverviewLineColor,
+    dataZoomOverviewFillColor: themeTokens.dataZoomOverviewFillColor,
+    brushFillColor: themeTokens.brushFillColor,
+    brushBorderColor: themeTokens.brushBorderColor,
+    watermarkColor: themeTokens.watermarkColor,
+    lapLineColor: themeTokens.lapLineColor,
+    trendLineColor: themeTokens.trendLineColor,
   };
 }
 

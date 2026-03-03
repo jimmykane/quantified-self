@@ -22,6 +22,7 @@ import { environment } from '../../../environments/environment';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { POLICY_CONTENT } from '../../shared/policies.content';
+import { getUsageLimitForRole } from '../../../../functions/src/shared/limits';
 
 interface SubscriptionSummary {
     status: StripeSubscription['status'];
@@ -159,6 +160,18 @@ export class PricingComponent implements OnInit, OnDestroy {
         }
 
         return !this.currentRole || this.currentRole === 'free';
+    }
+
+    getActivityLimitLabel(role: string | null | undefined): string {
+        const resolvedRole = role ?? 'free';
+
+        try {
+            const limit = getUsageLimitForRole(resolvedRole);
+            return limit === null ? 'Unlimited activities' : `Up to ${limit} activities`;
+        } catch (error) {
+            this.logger.error(`Unsupported pricing role '${resolvedRole}' in pricing UI`, error);
+            return 'Activity limits unavailable';
+        }
     }
 
     async subscribe(price: any) {

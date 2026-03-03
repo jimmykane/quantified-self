@@ -1,7 +1,7 @@
 import { Component, Input, OnChanges, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AppWindowService } from '../../services/app.window.service';
-import { AppUserInterface } from '../../models/app-user.interface';
+import { AppChartSettingsInterface, AppUserInterface } from '../../models/app-user.interface';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppUserService } from '../../services/app.user.service';
 import { AppUserUtilities } from '../../utils/app.user.utilities';
@@ -14,7 +14,6 @@ import { LoggerService } from '../../services/logger.service';
 import { Privacy, UserSettingsInterface } from '@sports-alliance/sports-lib';
 import {
   ChartCursorBehaviours,
-  UserChartSettingsInterface,
   XAxisTypes,
 } from '@sports-alliance/sports-lib';
 import { AppThemes, UserAppSettingsInterface } from '@sports-alliance/sports-lib';
@@ -194,7 +193,7 @@ export class UserSettingsComponent implements OnChanges {
       chartExtraMaxForPace: new UntypedFormControl(this.user.settings.chartSettings.extraMaxForPace, [
         Validators.required,
       ]),
-      chartFillOpacity: new UntypedFormControl(this.user.settings.chartSettings.fillOpacity, [
+      chartFillOpacity: new UntypedFormControl(AppUserUtilities.getResolvedChartFillOpacity(this.user.settings.chartSettings as AppChartSettingsInterface), [
         Validators.required,
       ]),
       chartLapTypes: new UntypedFormControl(this.user.settings.chartSettings.lapTypes, []),
@@ -293,7 +292,7 @@ export class UserSettingsComponent implements OnChanges {
         dataTypeSettings[dataType] = { enabled: selectedTypesSet.has(dataType) };
       }
 
-      const userChartSettings: UserChartSettingsInterface = {
+      const userChartSettings: AppChartSettingsInterface = {
         dataTypeSettings: dataTypeSettings,
         useAnimations: this.userSettingsFormGroup.get('useAnimations').value,
         xAxisType: this.userSettingsFormGroup.get('xAxisType').value,
@@ -304,6 +303,7 @@ export class UserSettingsComponent implements OnChanges {
         extraMaxForPower: this.userSettingsFormGroup.get('chartExtraMaxForPower').value,
         extraMaxForPace: this.userSettingsFormGroup.get('chartExtraMaxForPace').value,
         fillOpacity: this.userSettingsFormGroup.get('chartFillOpacity').value,
+        fillOpacityVersion: 1,
         lapTypes: this.userSettingsFormGroup.get('chartLapTypes').value,
         showLaps: this.userSettingsFormGroup.get('showChartLaps').value,
         showGrid: this.userSettingsFormGroup.get('showChartGrid').value,
@@ -321,7 +321,7 @@ export class UserSettingsComponent implements OnChanges {
         acceptedTrackingPolicy: this.userSettingsFormGroup.get('acceptedTrackingPolicy').value,
         acceptedMarketingPolicy: this.userSettingsFormGroup.get('acceptedMarketingPolicy').value,
         settings: <UserSettingsInterface>{
-          chartSettings: userChartSettings,
+          chartSettings: userChartSettings as unknown as UserSettingsInterface['chartSettings'],
           appSettings: <UserAppSettingsInterface>{ theme: this.userSettingsFormGroup.get('appTheme').value },
           mapSettings: <UserMapSettingsInterface>{
             showLaps: this.userSettingsFormGroup.get('showMapLaps').value,

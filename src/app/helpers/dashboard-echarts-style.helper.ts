@@ -1,10 +1,16 @@
+import { buildOfficialEChartsThemeTokens } from './echarts-theme.helper';
+
 export interface DashboardEChartsStyleTokens {
   darkTheme: boolean;
   textColor: string;
+  secondaryTextColor: string;
   axisColor: string;
   gridColor: string;
   tooltipBackgroundColor: string;
   tooltipBorderColor: string;
+  tooltipTextColor: string;
+  subtleBorderColor: string;
+  trendLineColor: string;
   isCompactLayout: boolean;
   axisFontSize: number;
 }
@@ -17,14 +23,19 @@ export function buildDashboardEChartsStyleTokens(
   compactWidth: number = DEFAULT_COMPACT_WIDTH
 ): DashboardEChartsStyleTokens {
   const isCompactLayout = chartWidth > 0 && chartWidth < compactWidth;
+  const themeTokens = buildOfficialEChartsThemeTokens(darkTheme);
 
   return {
     darkTheme,
-    textColor: darkTheme ? '#f5f5f5' : '#1f1f1f',
-    axisColor: darkTheme ? 'rgba(255,255,255,0.24)' : 'rgba(0,0,0,0.24)',
-    gridColor: darkTheme ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
-    tooltipBackgroundColor: darkTheme ? '#303030' : '#ffffff',
-    tooltipBorderColor: darkTheme ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.12)',
+    textColor: themeTokens.textPrimary,
+    secondaryTextColor: themeTokens.textSecondary,
+    axisColor: themeTokens.axisLineColor,
+    gridColor: themeTokens.splitLineColor,
+    tooltipBackgroundColor: themeTokens.tooltipBackgroundColor,
+    tooltipBorderColor: themeTokens.tooltipBorderColor,
+    tooltipTextColor: themeTokens.tooltipTextColor,
+    subtleBorderColor: themeTokens.subtleBorderColor,
+    trendLineColor: themeTokens.trendLineColor,
     isCompactLayout,
     axisFontSize: isCompactLayout ? 11 : 12
   };

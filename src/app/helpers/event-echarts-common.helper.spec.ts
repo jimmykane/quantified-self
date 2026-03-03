@@ -11,22 +11,18 @@ describe('event-echarts-common.helper', () => {
 
     expect(tokens.darkTheme).toBe(true);
     expect(tokens.axisLabelFontSize).toBe(11);
-    expect(tokens.textColor).toBe('#f5f5f5');
-    expect(tokens.axisColor).toBe('rgba(255,255,255,0.24)');
+    expect(tokens.textColor).toBe('rgba(223,223,225,1)');
+    expect(tokens.axisColor).toBe('#B9B8CE');
     expect(tokens.tooltipExtraCssText.length).toBeGreaterThan(0);
-    expect(tokens.tooltipBackgroundColor).toBe('#222222');
+    expect(tokens.tooltipBackgroundColor).toBe('rgba(58,62,68,1)');
   });
 
-  it('should honor visual token overrides', () => {
-    const tokens = buildEventEChartsVisualTokens(false, false, {
-      textColorLight: '#101010',
-      tooltipBackgroundColorLight: '#efefef'
-    });
-
+  it('should build light visual tokens from official theme colors', () => {
+    const tokens = buildEventEChartsVisualTokens(false, false);
     expect(tokens.darkTheme).toBe(false);
     expect(tokens.axisLabelFontSize).toBe(12);
-    expect(tokens.textColor).toBe('#101010');
-    expect(tokens.tooltipBackgroundColor).toBe('#efefef');
+    expect(tokens.textColor).toBe('#3c3c41');
+    expect(tokens.tooltipBackgroundColor).toBe('#ffffff');
   });
 
   it('should compute padded axis ranges with min floor', () => {

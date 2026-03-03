@@ -39,6 +39,7 @@ export class EChartsHostController {
   private initPromise: Promise<EChartsType | null> | null = null;
   private observedContainer: HTMLElement | null = null;
   private unsubscribeViewportResize: (() => void) | null = null;
+  private currentTheme: string | undefined;
 
   constructor(private readonly config: EChartsHostControllerConfig) { }
 
@@ -47,11 +48,14 @@ export class EChartsHostController {
       return null;
     }
 
+    const requestedTheme = theme || undefined;
+
     if (this.chart && !this.chart.isDisposed()) {
-      if (this.observedContainer !== container) {
-        this.observeContainer(container);
+      if (this.observedContainer === container && this.currentTheme === requestedTheme) {
+        return this.chart;
       }
-      return this.chart;
+
+      this.dispose();
     }
 
     if (this.initPromise) {
@@ -60,12 +64,14 @@ export class EChartsHostController {
 
     this.initPromise = (async () => {
       try {
-        this.chart = await this.config.eChartsLoader.init(container, theme, this.config.initOptions);
+        this.chart = await this.config.eChartsLoader.init(container, requestedTheme, this.config.initOptions);
+        this.currentTheme = requestedTheme;
         this.observeContainer(container);
         this.subscribeToViewportResize();
         return this.chart;
       } catch (error) {
         this.chart = null;
+        this.currentTheme = undefined;
         this.config.logger?.error?.(
           `${this.config.logPrefix || '[EChartsHostController]'} Failed to initialize ECharts`,
           error
@@ -131,6 +137,7 @@ export class EChartsHostController {
 
     this.config.eChartsLoader.dispose(this.chart);
     this.chart = null;
+    this.currentTheme = undefined;
   }
 
   private observeContainer(container: HTMLElement): void {

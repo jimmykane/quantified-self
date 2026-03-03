@@ -16,6 +16,15 @@ import { AppUserInterface } from '../models/app-user.interface';
 describe('AppUserUtilities', () => {
     const mockUser = { uid: 'u1', settings: {} } as any;
 
+    it('should default chart fill opacity to zero', () => {
+        expect(AppUserUtilities.getDefaultChartFillOpacity()).toBe(0);
+    });
+
+    it('should ignore legacy chart fill opacity until the new version marker is set', () => {
+        expect(AppUserUtilities.getResolvedChartFillOpacity({ fillOpacity: 0.6 })).toBe(0);
+        expect(AppUserUtilities.getResolvedChartFillOpacity({ fillOpacity: 0.6, fillOpacityVersion: 1 })).toBe(0.6);
+    });
+
     describe('isGracePeriodActive', () => {
         it('should return false for null user', () => {
             expect(AppUserUtilities.isGracePeriodActive(null)).toBe(false);

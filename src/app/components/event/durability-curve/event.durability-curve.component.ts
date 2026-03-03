@@ -38,6 +38,7 @@ import {
   calculateEventEChartsAxisRange,
   toFiniteEventEChartsNumber
 } from '../../../helpers/event-echarts-common.helper';
+import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 
@@ -89,24 +90,23 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
         const wasMobile = this.isMobile;
         this.isMobile = result.matches;
 
-        if (this.chartHost.getChart() && wasMobile !== this.isMobile) {
-          this.refreshChart();
+        if (this.chartDiv?.nativeElement && wasMobile !== this.isMobile) {
+          void this.refreshChart();
         }
       });
   }
 
   async ngAfterViewInit(): Promise<void> {
-    await this.chartHost.init(this.chartDiv?.nativeElement);
-    this.refreshChart();
+    await this.refreshChart();
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (!this.chartHost.getChart()) {
+    if (!this.chartDiv?.nativeElement) {
       return;
     }
 
     if (changes.activities || changes.darkTheme || changes.useAnimations || changes.isMerge) {
-      this.refreshChart();
+      void this.refreshChart();
     }
   }
 
@@ -117,8 +117,12 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
     this.chartHost.dispose();
   }
 
-  private refreshChart(): void {
-    if (!this.chartHost.getChart()) {
+  private async refreshChart(): Promise<void> {
+    const chart = await this.chartHost.init(
+      this.chartDiv?.nativeElement,
+      resolveEChartsThemeName(this.darkTheme)
+    );
+    if (!chart) {
       return;
     }
 
@@ -143,7 +147,6 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
     bestEffortMarkers: PerformanceCurveBestEffortMarker[]
   ): ChartOption {
     const chartStyle = buildEventEChartsVisualTokens(this.darkTheme, this.isMobile);
-    const darkTheme = chartStyle.darkTheme;
     const textColor = chartStyle.textColor;
     const axisColor = chartStyle.axisColor;
     const axisLabelFontSize = chartStyle.axisLabelFontSize;
@@ -233,7 +236,7 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
         symbolSize: this.isMobile ? 6 : 8,
         itemStyle: {
           color: markerColor,
-          borderColor: darkTheme ? '#000000' : '#ffffff',
+          borderColor: chartStyle.subtleBorderColor,
           borderWidth: 1,
         },
         data: markerEntries.map((marker) => ({
@@ -254,7 +257,7 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
       animation: this.useAnimations === true,
       textStyle: {
         color: textColor,
-        fontFamily: "'Barlow Condensed', sans-serif",
+        fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
       },
       legend: {
         show: showLegend,
@@ -267,7 +270,7 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
         left: 'center',
         textStyle: {
           color: textColor,
-          fontFamily: "'Barlow Condensed', sans-serif",
+          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
           fontSize: this.isMobile ? 12 : 13,
         },
       },
@@ -305,7 +308,7 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
         nameGap: this.isMobile ? 36 : 42,
         nameTextStyle: {
           color: textColor,
-          fontFamily: "'Barlow Condensed', sans-serif",
+          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
         },
         axisLine: {
           lineStyle: { color: axisColor },
@@ -332,9 +335,9 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
               show: true,
               size: 22,
               margin: 8,
-              color: darkTheme ? '#90caf9' : '#1976d2',
+              color: chartStyle.dataZoomHandleColor,
               shadowBlur: 3,
-              shadowColor: darkTheme ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.2)',
+              shadowColor: chartStyle.emphasisShadowColor,
             },
           }
           : undefined,
@@ -346,7 +349,7 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
         borderWidth: 1,
         textStyle: {
           color: chartStyle.tooltipTextColor,
-          fontFamily: "'Barlow Condensed', sans-serif",
+          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
         },
         formatter: (params: unknown) => this.formatTooltip(params, activityLabels.size > 1),
       },

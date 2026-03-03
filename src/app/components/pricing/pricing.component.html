@@ -116,19 +116,19 @@
         <div class="features-list">
           @if (product.metadata['role'] === 'free') {
           <ul>
-            <li><mat-icon style="color: grey">check</mat-icon> Up to 10 activities</li>
+            <li><mat-icon style="color: grey">check</mat-icon> {{ getActivityLimitLabel(product.metadata['role']) }}</li>
             <li><mat-icon style="color: grey">check</mat-icon> Manual uploads</li>
             <li><mat-icon style="color: grey">check</mat-icon> Core analysis tools</li>
           </ul>
           } @else if (product.metadata['role'] === 'basic') {
           <ul>
-            <li><mat-icon color="accent">check</mat-icon> Up to 100 activities</li>
+            <li><mat-icon color="accent">check</mat-icon> {{ getActivityLimitLabel(product.metadata['role']) }}</li>
             <li><mat-icon color="accent">check</mat-icon> Manual uploads</li>
             <li><mat-icon color="primary">favorite</mat-icon> Supports independent, privacy-first development</li>
           </ul>
           } @else if (product.metadata['role'] === 'pro') {
           <ul>
-            <li><mat-icon color="primary">check_circle</mat-icon> Unlimited activities</li>
+            <li><mat-icon color="primary">check_circle</mat-icon> {{ getActivityLimitLabel(product.metadata['role']) }}</li>
             <li><mat-icon color="primary">check_circle</mat-icon> Auto-sync from your watch</li>
             <li><mat-icon color="warn">favorite</mat-icon> Helps fund faster feature releases</li>
           </ul>

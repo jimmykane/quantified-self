@@ -6,6 +6,7 @@ import {
   EventEmitter,
   Input,
   OnChanges,
+  OnDestroy,
   OnInit,
   Output,
   SimpleChanges,
@@ -65,7 +66,7 @@ const LEGEND_MUTED_DOT_COLOR = 'var(--mat-sys-outline)';
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: false
 })
-export class EventCardChartComponent implements OnInit, OnChanges {
+export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   @Input() event!: EventInterface;
   @Input() targetUserID!: string;
   @Input() user!: User;
@@ -174,6 +175,24 @@ export class EventCardChartComponent implements OnInit, OnChanges {
     return this.userSettingsQuery.chartSettings()?.extraMaxForPace ?? AppUserUtilities.getDefaultExtraMaxForPace();
   }
 
+  public get fillOpacity() {
+    return this.fillOpacityOverride
+      ?? AppUserUtilities.getResolvedChartFillOpacity(this.userSettingsQuery.chartSettings());
+  }
+  public set fillOpacity(value: number) {
+    const normalizedValue = Math.min(1, Math.max(0, Number(value)));
+    const nextValue = Number.isFinite(normalizedValue)
+      ? normalizedValue
+      : AppUserUtilities.getDefaultChartFillOpacity();
+    if (Math.abs(nextValue - this.fillOpacity) < 0.0001) {
+      return;
+    }
+
+    this.fillOpacityOverride = nextValue;
+    this.cdr.markForCheck();
+    this.scheduleFillOpacityPersist(nextValue);
+  }
+
   public get strokeWidth() {
     return this.userSettingsQuery.chartSettings()?.strokeWidth ?? AppUserUtilities.getDefaultChartStrokeWidth();
   }
@@ -232,6 +251,8 @@ export class EventCardChartComponent implements OnInit, OnChanges {
   private cursorPositionSubject = new Subject<number>();
   private xAxisTypeOverride: XAxisTypes | null = null;
   private cursorBehaviourOverride: ChartCursorBehaviours | null = null;
+  private fillOpacityOverride: number | null = null;
+  private fillOpacityPersistTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingRebuild = false;
   private visibleDataTypeIDs = new Set<string>();
   private visibilityEventID: string | null = null;
@@ -242,8 +263,15 @@ export class EventCardChartComponent implements OnInit, OnChanges {
   constructor() {
     runInInjectionContext(this.injector, () => {
       effect(() => {
-        this.userSettingsQuery.chartSettings();
+        const chartSettings = this.userSettingsQuery.chartSettings();
         this.userSettingsQuery.unitSettings();
+        if (
+          this.fillOpacityOverride !== null
+          && Math.abs(AppUserUtilities.getResolvedChartFillOpacity(chartSettings) - this.fillOpacityOverride) < 0.0001
+        ) {
+          this.fillOpacityOverride = null;
+          this.cdr.markForCheck();
+        }
         this.queueRebuild('settings-effect');
       }, { injector: this.injector });
     });
@@ -269,6 +297,13 @@ export class EventCardChartComponent implements OnInit, OnChanges {
       || simpleChanges.darkTheme
     ) {
       this.queueRebuild('ngOnChanges');
+    }
+  }
+
+  ngOnDestroy(): void {
+    if (this.fillOpacityPersistTimer !== null) {
+      clearTimeout(this.fillOpacityPersistTimer);
+      this.fillOpacityPersistTimer = null;
     }
   }
 
@@ -330,6 +365,18 @@ export class EventCardChartComponent implements OnInit, OnChanges {
 
     this.zoomRange = nextRange;
     this.cdr.markForCheck();
+  }
+
+  private scheduleFillOpacityPersist(value: number): void {
+    if (this.fillOpacityPersistTimer !== null) {
+      clearTimeout(this.fillOpacityPersistTimer);
+    }
+
+    this.fillOpacityPersistTimer = setTimeout(() => {
+      this.fillOpacityPersistTimer = null;
+      void this.userSettingsQuery.updateChartSettings({ fillOpacity: value, fillOpacityVersion: 1 })
+        .catch((error) => this.logger.error('[EventCardChart] Failed to persist fillOpacity', error));
+    }, 180);
   }
 
   private queueRebuild(source: string): void {

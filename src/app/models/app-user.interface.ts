@@ -1,5 +1,7 @@
 import {
     User,
+    ChartThemes,
+    UserChartSettingsInterface,
     UserMyTracksSettingsInterface,
     UserSettingsInterface,
     ActivityTypes,
@@ -25,6 +27,11 @@ export interface AppMyTracksSettings extends UserMyTracksSettingsInterface {
 
 export interface AppDashboardSettingsInterface extends UserDashboardSettingsInterface {
     includeMergedEvents?: boolean;
+}
+
+export interface AppChartSettingsInterface extends Omit<UserChartSettingsInterface, 'theme'> {
+    theme?: ChartThemes;
+    fillOpacityVersion?: number;
 }
 
 export interface AppAppSettingsInterface extends UserAppSettingsInterface {

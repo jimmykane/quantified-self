@@ -66,6 +66,25 @@ section.container {
   width: 100%;
 }
 
+.chart-options-menu__slider-section {
+  display: grid;
+  gap: 8px;
+  min-width: 220px;
+  padding: 12px 16px;
+}
+
+.chart-options-menu__slider-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.chart-options-menu__slider-header span:last-child {
+  color: var(--mat-sys-primary);
+  font-family: 'Barlow Condensed', sans-serif;
+}
+
 ::ng-deep .event-chart-actions__series-icon .mat-badge-content {
   min-width: 24px;
   width: auto;

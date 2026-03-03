@@ -33,6 +33,7 @@ import {
   EChartsHostController
 } from '../../../helpers/echarts-host-controller';
 import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
+import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
 import {
   getDashboardAggregateData,
   getDashboardChartSortComparator,
@@ -88,12 +89,11 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
   }
 
   async ngAfterViewInit(): Promise<void> {
-    await this.chartHost.init(this.chartDiv?.nativeElement);
-    this.refreshChart();
+    await this.refreshChart();
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (!this.chartHost.getChart()) {
+    if (!this.chartDiv?.nativeElement) {
       return;
     }
 
@@ -106,7 +106,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
       changes.chartDataCategoryType ||
       changes.chartDataTimeInterval
     ) {
-      this.refreshChart();
+      void this.refreshChart();
     }
   }
 
@@ -114,8 +114,12 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
     this.chartHost.dispose();
   }
 
-  private refreshChart(): void {
-    if (!this.chartHost.getChart()) {
+  private async refreshChart(): Promise<void> {
+    const chart = await this.chartHost.init(
+      this.chartDiv?.nativeElement,
+      resolveEChartsThemeName(this.darkTheme)
+    );
+    if (!chart) {
       return;
     }
 
@@ -164,7 +168,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
       percent: slice.percent,
       itemStyle: {
         color: this.getSliceColor(slice, index),
-        borderColor: darkTheme ? 'rgba(0,0,0,0.45)' : '#ffffff',
+        borderColor: chartStyle.subtleBorderColor,
         borderWidth: 1.2
       }
     }));
@@ -203,8 +207,8 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
         borderColor: tooltipBorderColor,
         borderWidth: 1,
         textStyle: {
-          color: textColor,
-          fontFamily: "'Barlow Condensed', sans-serif",
+          color: chartStyle.tooltipTextColor,
+          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
           fontSize: isCompactLayout ? 12 : 13
         },
         formatter: (params: { data?: any }) => {
@@ -229,8 +233,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
         right: isCompactLayout ? undefined : 6,
         top: isCompactLayout ? 'bottom' : 'middle',
         textStyle: {
-          color: textColor,
-          fontFamily: "'Barlow Condensed', sans-serif",
+          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
           fontSize: isCompactLayout ? 12 : 13
         },
         itemGap: isCompactLayout ? 10 : 8
@@ -245,7 +248,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
           label: {
             show: !isCompactLayout,
             color: textColor,
-            fontFamily: "'Barlow Condensed', sans-serif",
+            fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
             formatter: '{b}\n{d}%'
           },
           labelLine: {
@@ -270,7 +273,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
                 fill: textColor,
                 opacity: 0.86,
                 textAlign: 'center',
-                fontFamily: "'Barlow Condensed', sans-serif",
+                fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
               },
               left: 'center',
               top: isCompactLayout ? -22 : -24
@@ -283,7 +286,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
                 fontWeight: 700,
                 fill: textColor,
                 textAlign: 'center',
-                fontFamily: "'Barlow Condensed', sans-serif",
+                fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
               },
               left: 'center',
               top: isCompactLayout ? -2 : -4
@@ -297,7 +300,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
                 fill: textColor,
                 opacity: 0.7,
                 textAlign: 'center',
-                fontFamily: "'Barlow Condensed', sans-serif",
+                fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
               },
               left: 'center',
               top: isCompactLayout ? 20 : 24

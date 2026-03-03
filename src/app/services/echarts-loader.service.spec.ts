@@ -2,14 +2,13 @@ import { TestBed } from '@angular/core/testing';
 import { NgZone, PLATFORM_ID } from '@angular/core';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
-import { EChartsLoaderService, ECHARTS_GLOBAL_FONT_FAMILY } from './echarts-loader.service';
+import { EChartsLoaderService } from './echarts-loader.service';
 
 const echartsCoreMock = vi.hoisted(() => ({
   use: vi.fn(),
   init: vi.fn(),
   connect: vi.fn(),
   disconnect: vi.fn(),
-  registerTheme: vi.fn(),
 }));
 
 const echartsModulesMock = vi.hoisted(() => ({
@@ -37,7 +36,6 @@ vi.mock('echarts/core', () => ({
   init: echartsCoreMock.init,
   connect: echartsCoreMock.connect,
   disconnect: echartsCoreMock.disconnect,
-  registerTheme: echartsCoreMock.registerTheme,
 }));
 
 vi.mock('echarts/charts', () => ({
@@ -162,24 +160,6 @@ describe('EChartsLoaderService', () => {
 
     expect(firstLoad).toBe(secondLoad);
     expect(echartsCoreMock.use).toHaveBeenCalledTimes(1);
-    expect(echartsCoreMock.registerTheme).toHaveBeenCalledTimes(2);
-    expect(echartsCoreMock.registerTheme).toHaveBeenNthCalledWith(
-      1,
-      'quantified-self-light',
-      expect.objectContaining({
-        textStyle: expect.objectContaining({ fontFamily: ECHARTS_GLOBAL_FONT_FAMILY }),
-        legend: expect.objectContaining({
-          textStyle: expect.objectContaining({ fontFamily: ECHARTS_GLOBAL_FONT_FAMILY }),
-        }),
-      }),
-    );
-    expect(echartsCoreMock.registerTheme).toHaveBeenNthCalledWith(
-      2,
-      'quantified-self-dark',
-      expect.objectContaining({
-        textStyle: expect.objectContaining({ fontFamily: ECHARTS_GLOBAL_FONT_FAMILY }),
-      }),
-    );
     expect(echartsCoreMock.use).toHaveBeenCalledWith([
       echartsModulesMock.barChart,
       echartsModulesMock.pictorialBarChart,
@@ -211,7 +191,6 @@ describe('EChartsLoaderService', () => {
     expect(coreA).toBe(coreB);
     expect(coreB).toBe(coreC);
     expect(echartsCoreMock.use).toHaveBeenCalledTimes(1);
-    expect(echartsCoreMock.registerTheme).toHaveBeenCalledTimes(2);
   });
 
   it('should recover from a failed initial load and allow retry', async () => {
@@ -237,7 +216,7 @@ describe('EChartsLoaderService', () => {
     const initialized = await service.init(container, 'dark');
 
     expect(runOutsideAngularSpy).toHaveBeenCalled();
-    expect(echartsCoreMock.init).toHaveBeenCalledWith(container, 'quantified-self-dark', {
+    expect(echartsCoreMock.init).toHaveBeenCalledWith(container, 'dark', {
       renderer: 'canvas',
       useDirtyRect: false,
     });
@@ -251,7 +230,7 @@ describe('EChartsLoaderService', () => {
 
     const initialized = await service.init(container);
 
-    expect(echartsCoreMock.init).toHaveBeenCalledWith(container, 'quantified-self-light', {
+    expect(echartsCoreMock.init).toHaveBeenCalledWith(container, undefined, {
       renderer: 'canvas',
       useDirtyRect: false,
     });
@@ -265,7 +244,7 @@ describe('EChartsLoaderService', () => {
 
     const initialized = await service.init(container, 'dark', { useDirtyRect: true });
 
-    expect(echartsCoreMock.init).toHaveBeenCalledWith(container, 'quantified-self-dark', {
+    expect(echartsCoreMock.init).toHaveBeenCalledWith(container, 'dark', {
       renderer: 'canvas',
       useDirtyRect: true,
     });

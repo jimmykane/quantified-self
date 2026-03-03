@@ -247,6 +247,20 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.dataZoom?.[1]?.show).toBe(false);
   });
 
+  it('applies series fill opacity to rendered event line series', async () => {
+    component.fillOpacity = 0.4;
+    fixture.detectChanges();
+    await component.ngAfterViewInit();
+
+    const option = getRenderedOption();
+    expect(option?.series?.[0]?.areaStyle).toEqual(
+      expect.objectContaining({
+        color: '#ff0000',
+        opacity: 0.4,
+      })
+    );
+  });
+
   it('switches to selection mode with native brush and disables inside zoom', async () => {
     component.cursorBehaviour = ChartCursorBehaviours.SelectX;
     fixture.detectChanges();

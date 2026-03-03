@@ -15,7 +15,6 @@ import {
 import {
   ChartCursorBehaviours,
   DataTypeSettings,
-  UserChartSettingsInterface,
   XAxisTypes
 } from '@sports-alliance/sports-lib';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib';

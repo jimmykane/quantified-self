@@ -7,6 +7,7 @@ import { MatBadgeModule } from '@angular/material/badge';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
+import { MatSliderModule } from '@angular/material/slider';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ChartCursorBehaviours, EventInterface, User, XAxisTypes } from '@sports-alliance/sports-lib';
@@ -34,6 +35,7 @@ describe('EventCardChartActionsComponent', () => {
         MatDividerModule,
         MatIconModule,
         MatMenuModule,
+        MatSliderModule,
         MatSlideToggleModule,
         MatTooltipModule,
       ],
@@ -110,6 +112,15 @@ describe('EventCardChartActionsComponent', () => {
 
     expect(emitSpy).toHaveBeenCalledWith(true);
     expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('event_chart_settings_change', { property: 'showLaps' });
+  });
+
+  it('should emit fillOpacity changes and log analytics', async () => {
+    const emitSpy = vi.spyOn(component.fillOpacityChange, 'emit');
+
+    await component.onFillOpacityChange(0.45);
+
+    expect(emitSpy).toHaveBeenCalledWith(0.45);
+    expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('event_chart_settings_change', { property: 'fillOpacity' });
   });
 
   it('should emit series visibility toggle requests', () => {
