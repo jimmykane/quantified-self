@@ -4,7 +4,7 @@
   @if (serviceName === serviceNames.SuuntoApp || serviceName === serviceNames.COROSAPI) {
   @if (pendingImportResult()) {
   <app-status-info type="success" title="Import Queued">
-    {{ pendingImportResult()!.successCount }} activities queued.
+    {{ pendingImportResult()?.successCount ?? 0 }} activities queued.
     {{ estimatedCompletionVerbal }}
     <div style="font-size: 0.9em; opacity: 0.8; margin-top: 4px;">(~{{ processingCapacityPerDay | number }} / day
       capacity)</div>

@@ -40,10 +40,10 @@ export class UserComponent implements OnInit, OnDestroy {
         void this.router.navigate(['login'])
           .then(showSignedOutMessage)
           .catch(showSignedOutMessage);
+        return;
       }
-      // First get our current user
-      this.user = user!;
-    })
+      this.user = user;
+    });
   }
 
 

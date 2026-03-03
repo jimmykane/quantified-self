@@ -542,7 +542,10 @@ export class BenchmarkReportComponent implements OnChanges {
         this.diffChips = displayList
             .filter(stat => diffMap.has(stat.type))
             .map((stat) => {
-                const diff = diffMap.get(stat.type)!;
+                const diff = diffMap.get(stat.type);
+                if (!diff) {
+                    return null;
+                }
                 return {
                     label: stat.label,
                     hasDiff: true,
@@ -552,6 +555,7 @@ export class BenchmarkReportComponent implements OnChanges {
                     absPercent: Math.abs(diff.percent ?? 0),
                 };
             })
+            .filter((chip): chip is BenchmarkDiffChip => chip !== null)
             .sort((left, right) => {
                 const leftValue = Number.isFinite(left.percent) ? left.percent : 0;
                 const rightValue = Number.isFinite(right.percent) ? right.percent : 0;

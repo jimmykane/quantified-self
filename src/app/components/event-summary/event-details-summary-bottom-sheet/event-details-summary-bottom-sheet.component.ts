@@ -48,35 +48,49 @@ export class EventDetailsSummaryBottomSheetComponent implements OnInit {
     }
 
     async saveEventName() {
+        const eventID = this.event.getID();
+        if (!eventID) {
+            return;
+        }
         // Optimistic update already happened via ngModel
-        await this.eventService.updateEventProperties(this.user, this.event.getID()!, {
+        await this.eventService.updateEventProperties(this.user, eventID, {
             name: this.event.name,
         });
         this.snackBar.open('Event name saved', undefined, { duration: 2000 });
     }
 
     async saveEventDescription() {
-        await this.eventService.updateEventProperties(this.user, this.event.getID()!, {
+        const eventID = this.event.getID();
+        if (!eventID) {
+            return;
+        }
+        await this.eventService.updateEventProperties(this.user, eventID, {
             description: this.event.description,
         });
         this.snackBar.open('Description saved', undefined, { duration: 2000 });
     }
 
     async saveEventFeeling() {
-        if (!isNumber(this.feeling)) return;
+        const eventID = this.event.getID();
+        if (!eventID || !isNumber(this.feeling)) {
+            return;
+        }
         this.event.addStat(new DataFeeling(this.feeling));
         const eventJSON = this.event.toJSON();
-        await this.eventService.updateEventProperties(this.user, this.event.getID()!, {
+        await this.eventService.updateEventProperties(this.user, eventID, {
             stats: eventJSON.stats,
         });
         this.snackBar.open('Feeling saved', undefined, { duration: 2000 });
     }
 
     async saveEventRPE() {
-        if (!isNumber(this.rpe)) return;
+        const eventID = this.event.getID();
+        if (!eventID || !isNumber(this.rpe)) {
+            return;
+        }
         this.event.addStat(new DataRPE(this.rpe));
         const eventJSON = this.event.toJSON();
-        await this.eventService.updateEventProperties(this.user, this.event.getID()!, {
+        await this.eventService.updateEventProperties(this.user, eventID, {
             stats: eventJSON.stats,
         });
         this.snackBar.open('RPE saved', undefined, { duration: 2000 });

@@ -130,6 +130,13 @@ export class AppUserService implements OnDestroy {
     const gracePeriodUntil = (claims['gracePeriodUntil'] as number) || null;
     const isAdmin = claims['admin'] === true;
 
+    const creationDate = firebaseUser.metadata?.creationTime
+      ? new Date(firebaseUser.metadata.creationTime)
+      : new Date();
+    const lastSignInDate = firebaseUser.metadata?.lastSignInTime
+      ? new Date(firebaseUser.metadata.lastSignInTime)
+      : creationDate;
+
     // Use current DB user or create a synthetic one for new accounts/loading states
     const identity: AppUserInterface = dbUser ? { ...dbUser } : {
       uid: firebaseUser.uid,
@@ -144,8 +151,8 @@ export class AppUserService implements OnDestroy {
       acceptedDiagnosticsPolicy: true,
       privacy: Privacy.Private,
       isAnonymous: false,
-      creationDate: new Date(firebaseUser.metadata.creationTime!),
-      lastSignInDate: new Date(firebaseUser.metadata.lastSignInTime!)
+      creationDate,
+      lastSignInDate
     } as any;
 
     // Prioritize Claims for role and grace period, but fallback to DB data if claims are missing

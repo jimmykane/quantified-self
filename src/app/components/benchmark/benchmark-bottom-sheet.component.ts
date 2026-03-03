@@ -192,8 +192,13 @@ export class BenchmarkBottomSheetComponent {
     const displayUrl = this.getDisplayUrl(appUrl);
     const filename = `benchmark-${this.shareTimestamp.getTime()}.png`;
     const customBrandText = (this.data.brandText || '').trim();
+    const shareFrameElement = this.shareFrame?.nativeElement;
 
-    const dataUrl = await this.shareService.shareBenchmarkAsImage(this.shareFrame!.nativeElement, {
+    if (!shareFrameElement) {
+      return null;
+    }
+
+    const dataUrl = await this.shareService.shareBenchmarkAsImage(shareFrameElement, {
       scale: isMobile ? 1.5 : 2,
       width: 1080,
       embedFonts: true,

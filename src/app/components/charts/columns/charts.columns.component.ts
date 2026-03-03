@@ -219,8 +219,8 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
         isCompactLayout,
         points
       )];
-    const totalLabelSeries = useDateActivitySegmentation
-      ? this.buildDateActivityTotalLabelSeries(dateActivitySegmentation!, textColor, isCompactLayout)
+    const totalLabelSeries = useDateActivitySegmentation && dateActivitySegmentation
+      ? this.buildDateActivityTotalLabelSeries(dateActivitySegmentation, textColor, isCompactLayout)
       : null;
     const dataSeries = totalLabelSeries
       ? [...segmentedDataSeries, totalLabelSeries]
@@ -306,11 +306,11 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
           fontFamily: "'Barlow Condensed', sans-serif",
           fontSize: isCompactLayout ? 12 : 13
         },
-        formatter: useDateActivitySegmentation
+        formatter: useDateActivitySegmentation && dateActivitySegmentation && dateActivityColorMap
           ? (params: any) => this.formatDateActivityTooltip(
-            dateActivitySegmentation!.buckets,
+            dateActivitySegmentation.buckets,
             params,
-            dateActivityColorMap as Map<string, string>
+            dateActivityColorMap
           )
           : (params: { dataIndex: number }) => this.formatTooltip(points, params.dataIndex)
       },

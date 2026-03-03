@@ -30,13 +30,14 @@ export class ServiceSourceIconComponent implements OnChanges, OnDestroy {
     private checkServiceSource() {
         this.metadataKeysSubscription?.unsubscribe();
 
-        if (!this.user || !this.event || !this.event.getID()) {
+        const eventID = this.event?.getID?.();
+        if (!this.user || !this.event || !eventID) {
             this.serviceName = null;
             this.serviceLogo = null;
             this.cd.markForCheck();
             return;
         }
-        this.metadataKeysSubscription = this.eventService.getEventMetaDataKeys(this.user, this.event.getID()!)
+        this.metadataKeysSubscription = this.eventService.getEventMetaDataKeys(this.user, eventID)
             .pipe(take(1))
             .subscribe(keys => {
                 if (keys?.includes(ServiceNames.COROSAPI)) {

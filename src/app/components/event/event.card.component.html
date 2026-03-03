@@ -2,9 +2,9 @@
 
 
 
-  @if (event()) {
+  @if (event(); as activeEvent) {
   <!-- Standard Event Dashboard -->
-  <app-event-summary [event]="event()!" [user]='currentUser()' [isOwner]="isOwner()"
+  <app-event-summary [event]="activeEvent" [user]='currentUser()' [isOwner]="isOwner()"
     [selectedActivities]="selectedActivitiesInstant()" [unitSettings]="userUnitSettings()"
     [statsToShow]="basicStatsTypes">
 
@@ -13,7 +13,7 @@
     <div after-stats class="performance-charts-summary-wrapper">
       <mat-divider></mat-divider>
       <app-event-performance-charts [activities]="selectedActivitiesInstant()" [useAnimations]="useChartAnimations()"
-        [chartTheme]="chartTheme()" [isMerge]="event()!.isMerge" [hasIntensity]="hasIntensityZonesFlag()"
+        [chartTheme]="chartTheme()" [isMerge]="activeEvent.isMerge" [hasIntensity]="hasIntensityZonesFlag()"
         [hasPowerCurve]="hasPowerCurveFlag()" [hasDurability]="hasDurabilityFlag()"
         [hasCadencePower]="hasCadencePowerFlag()">
       </app-event-performance-charts>
@@ -23,12 +23,13 @@
     <!-- Secondary Details Section -->
     <div summary-bottom class="secondary-details-container">
       <div class="responsive-grid">
+        @if (currentUser(); as activeUser) {
 
         <!-- Map Section -->
-        @if (event() && targetUserID() && hasPositionsFlag()) {
+        @if (targetUserID() && hasPositionsFlag()) {
         @if (selectedActivitiesDebounced().length > 0) {
         <app-event-card-map [selectedActivities]="selectedActivitiesDebounced()" [targetUserID]="targetUserID()"
-          [user]="currentUser()!" [event]="event()!">
+          [user]="activeUser" [event]="activeEvent">
         </app-event-card-map>
         } @else {
         <div class="empty-selection-message">
@@ -39,7 +40,7 @@
         }
 
         <!-- Chart Section -->
-        @if (event() && targetUserID() && currentUser()) {
+        @if (targetUserID()) {
         @if (selectedActivitiesDebounced().length === 0) {
         <div class="empty-selection-message">
           <mat-icon ripple>show_chart</mat-icon>
@@ -47,8 +48,9 @@
         </div>
         } @else if (hasChartDataFlag()) {
         <app-event-card-chart [selectedActivities]="selectedActivitiesDebounced()" [targetUserID]="targetUserID()"
-          [user]="currentUser()!" [waterMark]="currentUser() ? currentUser()!.brandText : null" [event]="event()!">
+          [user]="activeUser" [waterMark]="activeUser.brandText ?? null" [event]="activeEvent">
         </app-event-card-chart>
+        }
         }
         }
 
@@ -56,7 +58,7 @@
         @if (hasLapsFlag()) {
         <mat-divider></mat-divider>
         <app-event-card-laps [selectedActivities]="selectedActivitiesInstant()" [unitSettings]="userUnitSettings()"
-          [event]="event()!">
+          [event]="activeEvent">
         </app-event-card-laps>
         }
 

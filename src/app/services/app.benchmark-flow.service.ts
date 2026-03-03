@@ -130,7 +130,12 @@ export class AppBenchmarkFlowService {
     try {
       this.analyticsService.logEvent('benchmark_generate_start');
       const benchmarkResult = await this.benchmarkService.generateBenchmark(config.ref, config.test, config.options);
-      const key = getBenchmarkPairKey(config.ref.getID()!, config.test.getID()!);
+      const referenceID = config.ref.getID();
+      const testID = config.test.getID();
+      if (!referenceID || !testID) {
+        throw new Error('Benchmark activities are missing IDs');
+      }
+      const key = getBenchmarkPairKey(referenceID, testID);
 
       const persistEvent = config.persistEvent ?? config.event;
       if (!persistEvent.benchmarkResults) persistEvent.benchmarkResults = {};
@@ -152,8 +157,9 @@ export class AppBenchmarkFlowService {
         config.event.benchmarkLatestAt = benchmarkLatestAt;
       }
 
-      if (config.user && persistEvent.getID()) {
-        await this.eventService.updateEventProperties(config.user, persistEvent.getID()!, {
+      const persistEventID = persistEvent.getID();
+      if (config.user && persistEventID) {
+        await this.eventService.updateEventProperties(config.user, persistEventID, {
           benchmarkResults: persistEvent.benchmarkResults,
           hasBenchmark: true,
           benchmarkDevices,
@@ -178,12 +184,13 @@ export class AppBenchmarkFlowService {
       return config.event;
     }
 
-    if (!config.user || !config.event.getID?.()) {
+    const eventID = config.event.getID?.();
+    if (!config.user || !eventID) {
       return config.event;
     }
 
     try {
-      const fullEvent = await firstValueFrom(this.eventService.getEventActivitiesAndAllStreams(config.user, config.event.getID()!));
+      const fullEvent = await firstValueFrom(this.eventService.getEventActivitiesAndAllStreams(config.user, eventID));
       return fullEvent || config.event;
     } catch (error) {
       this.logger.error('Failed to load activities for benchmark selection', error);

@@ -51,7 +51,10 @@ export class AppEventColorService {
       this.colorCache.set(activities, eventColorCache);
     }
     if (eventColorCache.has(activity)) {
-      return eventColorCache.get(activity)!;
+      const cachedColor = eventColorCache.get(activity);
+      if (cachedColor !== undefined) {
+        return cachedColor;
+      }
     }
 
     // Get the index of the requested activity among all activities

@@ -199,7 +199,11 @@ export class MyTracksTripDetectionService {
         if (!clusterMap.has(label)) {
           clusterMap.set(label, []);
         }
-        clusterMap.get(label)!.push(entries[index]);
+        const clusterEntries = clusterMap.get(label);
+        if (!clusterEntries) {
+          return;
+        }
+        clusterEntries.push(entries[index]);
         return;
       }
 
@@ -286,7 +290,10 @@ export class MyTracksTripDetectionService {
     const queued = new Set(seedNeighbors);
 
     while (queue.length > 0) {
-      const currentIndex = queue.shift()!;
+      const currentIndex = queue.shift();
+      if (currentIndex === undefined) {
+        continue;
+      }
       queued.delete(currentIndex);
 
       if (!visited[currentIndex]) {
@@ -587,7 +594,11 @@ export class MyTracksTripDetectionService {
       if (!groupedByDestination.has(visitWindow.destinationId)) {
         groupedByDestination.set(visitWindow.destinationId, []);
       }
-      groupedByDestination.get(visitWindow.destinationId)!.push(visitWindow);
+      const windowsForDestination = groupedByDestination.get(visitWindow.destinationId);
+      if (!windowsForDestination) {
+        return;
+      }
+      windowsForDestination.push(visitWindow);
     });
 
     const detectedTrips: DetectedTrip[] = [];

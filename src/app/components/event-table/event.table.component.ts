@@ -505,7 +505,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         const blob = new Blob([file.data]);
         // Extract extension from fileName (e.g., "2024-01-15.fit" -> "fit")
         const parts = file.fileName.split('.');
-        const extension = parts.length > 1 ? parts.pop()! : 'fit';
+        const extension = parts.length > 1 ? (parts.pop() || 'fit') : 'fit';
         const baseNameWithoutExt = parts.join('.');
         this.fileService.downloadFile(blob, baseNameWithoutExt, extension);
         this.processingService.completeJob(jobId, 'Downloaded 1 file');
