@@ -43,6 +43,7 @@ import type { EventChartPoint } from '../../../../helpers/event-echarts-data.hel
 import { AppUserUtilities } from '../../../../utils/app.user.utilities';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
+type ChartAction = Parameters<EChartsType['dispatchAction']>[0];
 type PanelSeriesModel = EventChartPanelModel['series'][number];
 
 const PROGRESSIVE_THRESHOLD = 6000;
@@ -955,7 +956,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const tooltipBorderColor = darkTheme ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.12)';
     const tooltipHtml = this.formatLapMarkerTooltip({ data: marker, name: marker.label });
 
-    chart.dispatchAction({
+    const showTipAction: ChartAction = {
       type: 'showTip',
       x: offsetX + LAP_TOOLTIP_OFFSET_X,
       y: offsetY + LAP_TOOLTIP_OFFSET_Y,
@@ -971,8 +972,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           fontSize: 12,
         },
         formatter: () => tooltipHtml,
-      } as any,
-    } as any);
+      },
+    };
+
+    chart.dispatchAction(showTipAction);
   }
 
   private hideLocalLapTooltip(): void {
@@ -986,10 +989,12 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return;
     }
 
-    chart.dispatchAction({
+    const hideTipAction: ChartAction = {
       type: 'hideTip',
       escapeConnect: true,
-    } as any);
+    };
+
+    chart.dispatchAction(hideTipAction);
   }
 
   private applyCanonicalXAxisScale(): void {
@@ -1062,7 +1067,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       silent: true,
     });
 
-    chart.dispatchAction({
+    const takeGlobalCursorAction: ChartAction = {
       type: 'takeGlobalCursor',
       key: 'brush',
       brushOption: selectModeActive
@@ -1076,7 +1081,9 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           brushMode: 'single',
           removeOnClick: true,
         },
-    } as any);
+    };
+
+    chart.dispatchAction(takeGlobalCursorAction);
 
     if (!selectModeActive) {
       this.applySharedSelectionRange();
@@ -1125,11 +1132,13 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     this.zoomRangeChange.emit(this.normalizeZoomRange(nextRange));
-    chart.dispatchAction({
+    const dataZoomAction: ChartAction = {
       type: 'dataZoom',
       startValue: nextRange.start,
       endValue: nextRange.end,
-    } as any);
+    };
+
+    chart.dispatchAction(dataZoomAction);
   }
 
   private applySharedSelectionRange(): void {
@@ -1150,11 +1159,13 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     this.applyingSharedSelectionRange = true;
     try {
-      chart.dispatchAction({
+      const brushAction: ChartAction = {
         type: 'brush',
         areas: nextRange ? [this.buildBrushArea(nextRange)] : [],
         $from: SELECTION_BRUSH_SOURCE,
-      } as any);
+      };
+
+      chart.dispatchAction(brushAction);
     } finally {
       this.applyingSharedSelectionRange = false;
     }
@@ -1182,11 +1193,13 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     this.applyingSharedSelectionRange = true;
     try {
-      chart.dispatchAction({
+      const clearBrushAction: ChartAction = {
         type: 'brush',
         areas: [],
         $from: SELECTION_BRUSH_SOURCE,
-      } as any);
+      };
+
+      chart.dispatchAction(clearBrushAction);
     } finally {
       this.applyingSharedSelectionRange = false;
     }
@@ -1428,11 +1441,13 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     this.applyingSharedZoomRange = true;
     try {
-      chart.dispatchAction({
+      const syncZoomAction: ChartAction = {
         type: 'dataZoom',
         startValue: targetRange.start,
         endValue: targetRange.end,
-      } as any);
+      };
+
+      chart.dispatchAction(syncZoomAction);
     } finally {
       this.applyingSharedZoomRange = false;
     }

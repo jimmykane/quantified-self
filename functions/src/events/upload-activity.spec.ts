@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
+import type { Response } from 'express';
+import type { Request } from 'firebase-functions/v2/https';
 
 const hoisted = vi.hoisted(() => {
   const capturedOnRequestOptions = { value: undefined as unknown };
@@ -158,11 +160,18 @@ vi.mock('../../../src/shared/functions-manifest', () => ({
 
 import { uploadActivity } from './upload-activity';
 
+type UploadRequestDouble = Pick<Request, 'method' | 'rawBody' | 'header'>;
+type UploadResponseDouble = Pick<Response, 'status' | 'json'>;
+type MockUploadResponse = UploadResponseDouble & {
+  status: ReturnType<typeof vi.fn>;
+  json: ReturnType<typeof vi.fn>;
+};
+
 function makeRequest(overrides?: {
   method?: string;
   headers?: Record<string, string | undefined>;
   rawBody?: Buffer;
-}) {
+}): UploadRequestDouble {
   const mergedHeaders: Record<string, string | undefined> = {
     'X-File-Extension': 'fit',
     ...(overrides?.headers || {}),
@@ -179,10 +188,21 @@ function makeRequest(overrides?: {
   };
 }
 
-function makeResponse() {
+function makeResponse(): MockUploadResponse {
   const json = vi.fn();
-  const status = vi.fn(() => ({ json }));
-  return { status, json };
+  const response = {
+    json,
+    status: vi.fn(),
+  } as MockUploadResponse;
+  response.status.mockImplementation(() => response);
+  return response;
+}
+
+async function invokeUploadActivity(
+  request: UploadRequestDouble,
+  response: UploadResponseDouble,
+): Promise<void> {
+  await uploadActivity(request as Request, response as Response);
 }
 
 function makeParsedEvent() {
@@ -243,28 +263,28 @@ describe('uploadActivity', () => {
 
   it('should reject non-POST methods', async () => {
     const response = makeResponse();
-    await uploadActivity(makeRequest({ method: 'GET' }) as any, response as any);
+    await invokeUploadActivity(makeRequest({ method: 'GET' }), response);
 
     expect(response.status).toHaveBeenCalledWith(405);
   });
 
   it('should reject missing auth header', async () => {
     const response = makeResponse();
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: { 'X-Firebase-AppCheck': 'app-check' },
-    }) as any, response as any);
+    }), response);
 
     expect(response.status).toHaveBeenCalledWith(401);
   });
 
   it('should reject empty bearer token', async () => {
     const response = makeResponse();
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: {
         Authorization: 'Bearer   ',
         'X-Firebase-AppCheck': 'app-check',
       },
-    }) as any, response as any);
+    }), response);
 
     expect(response.status).toHaveBeenCalledWith(401);
     expect(response.json).toHaveBeenCalledWith({ error: 'Missing Firebase ID token.' });
@@ -273,12 +293,12 @@ describe('uploadActivity', () => {
   it('should reject invalid firebase auth tokens', async () => {
     hoisted.mockVerifyIdToken.mockRejectedValueOnce(new Error('invalid token'));
     const response = makeResponse();
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: {
         Authorization: 'Bearer token',
         'X-Firebase-AppCheck': 'app-check',
       },
-    }) as any, response as any);
+    }), response);
 
     expect(response.status).toHaveBeenCalledWith(401);
     expect(response.json).toHaveBeenCalledWith({ error: 'Unauthenticated request.' });
@@ -287,12 +307,12 @@ describe('uploadActivity', () => {
   it('should reject revoked firebase auth tokens with a reauth message', async () => {
     hoisted.mockVerifyIdToken.mockRejectedValueOnce({ code: 'auth/id-token-revoked' });
     const response = makeResponse();
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: {
         Authorization: 'Bearer token',
         'X-Firebase-AppCheck': 'app-check',
       },
-    }) as any, response as any);
+    }), response);
 
     expect(hoisted.mockVerifyIdToken).toHaveBeenCalledWith('token', true);
     expect(response.status).toHaveBeenCalledWith(401);
@@ -305,7 +325,7 @@ describe('uploadActivity', () => {
     const rawBody = Buffer.from([1, 2, 3, 4]);
     const expectedEventID = expectedUploadEventID(rawBody, 'fit');
 
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: {
         Authorization: 'Bearer token',
         'X-Firebase-AppCheck': 'app-check',
@@ -313,7 +333,7 @@ describe('uploadActivity', () => {
         'X-User-Id': 'spoofed-user',
       },
       rawBody,
-    }) as any, response as any);
+    }), response);
 
     expect(hoisted.mockVerifyIdToken).toHaveBeenCalledWith('token', true);
     expect(hoisted.mockEventsCountGet).toHaveBeenCalledTimes(1);
@@ -334,9 +354,9 @@ describe('uploadActivity', () => {
 
   it('should reject missing app check header', async () => {
     const response = makeResponse();
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: { Authorization: 'Bearer token' },
-    }) as any, response as any);
+    }), response);
 
     expect(response.status).toHaveBeenCalledWith(401);
   });
@@ -344,12 +364,12 @@ describe('uploadActivity', () => {
   it('should reject invalid app check token', async () => {
     hoisted.mockVerifyAppCheckToken.mockRejectedValueOnce(new Error('invalid app check'));
     const response = makeResponse();
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: {
         Authorization: 'Bearer token',
         'X-Firebase-AppCheck': 'app-check',
       },
-    }) as any, response as any);
+    }), response);
 
     expect(response.status).toHaveBeenCalledWith(401);
     expect(response.json).toHaveBeenCalledWith({ error: 'Invalid App Check token.' });
@@ -358,9 +378,9 @@ describe('uploadActivity', () => {
   it('should allow missing app check header when enforcement is disabled', async () => {
     hoisted.mockEnforceAppCheckFlag.value = false;
     const response = makeResponse();
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: { Authorization: 'Bearer token' },
-    }) as any, response as any);
+    }), response);
 
     expect(response.status).toHaveBeenCalledWith(200);
     expect(hoisted.mockVerifyAppCheckToken).not.toHaveBeenCalled();
@@ -368,26 +388,26 @@ describe('uploadActivity', () => {
 
   it('should reject unsupported extension', async () => {
     const response = makeResponse();
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: {
         Authorization: 'Bearer token',
         'X-Firebase-AppCheck': 'app-check',
         'X-File-Extension': 'pdf',
       },
-    }) as any, response as any);
+    }), response);
 
     expect(response.status).toHaveBeenCalledWith(400);
   });
 
   it('should reject requests when no extension can be resolved', async () => {
     const response = makeResponse();
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: {
         Authorization: 'Bearer token',
         'X-Firebase-AppCheck': 'app-check',
         'X-File-Extension': undefined,
       },
-    }) as any, response as any);
+    }), response);
 
     expect(response.status).toHaveBeenCalledWith(400);
     expect(response.json).toHaveBeenCalledWith({ error: 'File extension is required.' });
@@ -395,14 +415,14 @@ describe('uploadActivity', () => {
 
   it('should reject filenames without a supported extension when header is missing', async () => {
     const response = makeResponse();
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: {
         Authorization: 'Bearer token',
         'X-Firebase-AppCheck': 'app-check',
         'X-File-Extension': undefined,
         'X-Original-Filename': 'run',
       },
-    }) as any, response as any);
+    }), response);
 
     expect(response.status).toHaveBeenCalledWith(400);
     expect(response.json).toHaveBeenCalledWith({ error: 'File extension is required.' });
@@ -410,14 +430,14 @@ describe('uploadActivity', () => {
 
   it('should reject unsupported extensions inferred from the filename', async () => {
     const response = makeResponse();
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: {
         Authorization: 'Bearer token',
         'X-Firebase-AppCheck': 'app-check',
         'X-File-Extension': undefined,
         'X-Original-Filename': 'run.pdf',
       },
-    }) as any, response as any);
+    }), response);
 
     expect(response.status).toHaveBeenCalledWith(400);
     expect(response.json).toHaveBeenCalledWith({ error: 'Unsupported file extension: pdf. Supported: fit, gpx, tcx, json, sml.' });
@@ -425,7 +445,7 @@ describe('uploadActivity', () => {
 
   it('should accept lowercase request headers for app check, filename, and extension', async () => {
     const response = makeResponse();
-    const request = {
+    const request: UploadRequestDouble = {
       method: 'POST',
       rawBody: Buffer.from([0x01, 0x02, 0x03]),
       header: (name: string) => ({
@@ -436,7 +456,7 @@ describe('uploadActivity', () => {
       } as Record<string, string | undefined>)[name],
     };
 
-    await uploadActivity(request as any, response as any);
+    await invokeUploadActivity(request, response);
 
     expect(response.status).toHaveBeenCalledWith(200);
     expect(hoisted.mockWriteAllEventData).toHaveBeenCalledWith(
@@ -451,14 +471,14 @@ describe('uploadActivity', () => {
 
   it('should infer extension from filename when extension header is missing', async () => {
     const response = makeResponse();
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: {
         Authorization: 'Bearer token',
         'X-Firebase-AppCheck': 'app-check',
         'X-File-Extension': undefined,
         'X-Original-Filename': 'run.fit',
       },
-    }) as any, response as any);
+    }), response);
 
     expect(response.status).toHaveBeenCalledWith(200);
     expect(hoisted.mockFITImporter.getFromArrayBuffer).toHaveBeenCalledTimes(1);
@@ -469,7 +489,7 @@ describe('uploadActivity', () => {
     const fitBytes = Buffer.from([0x0e, 0x10, 0x01, 0x02, 0x03]);
     const gzippedFit = gzipSync(fitBytes);
 
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: {
         Authorization: 'Bearer token',
         'X-Firebase-AppCheck': 'app-check',
@@ -477,7 +497,7 @@ describe('uploadActivity', () => {
         'X-Original-Filename': 'run.fit.gz',
       },
       rawBody: gzippedFit,
-    }) as any, response as any);
+    }), response);
 
     expect(response.status).toHaveBeenCalledWith(200);
     expect(hoisted.mockFITImporter.getFromArrayBuffer).toHaveBeenCalledTimes(1);
@@ -495,14 +515,14 @@ describe('uploadActivity', () => {
     const response = makeResponse();
     const payload = gzipSync(Buffer.from('<gpx><trk/></gpx>'));
 
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: {
         Authorization: 'Bearer token',
         'X-Firebase-AppCheck': 'app-check',
         'X-File-Extension': '.GPX.GZ',
       },
       rawBody: payload,
-    }) as any, response as any);
+    }), response);
 
     expect(hoisted.mockGPXImporter.getFromString).toHaveBeenCalledTimes(1);
     expect(response.status).toHaveBeenCalledWith(200);
@@ -510,20 +530,20 @@ describe('uploadActivity', () => {
 
   it('should reject empty payload', async () => {
     const response = makeResponse();
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
       rawBody: Buffer.alloc(0),
-    }) as any, response as any);
+    }), response);
 
     expect(response.status).toHaveBeenCalledWith(400);
   });
 
   it('should reject payloads larger than 10MB', async () => {
     const response = makeResponse();
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
       rawBody: Buffer.alloc((10 * 1024 * 1024) + 1),
-    }) as any, response as any);
+    }), response);
 
     expect(response.status).toHaveBeenCalledWith(400);
   });
@@ -531,9 +551,9 @@ describe('uploadActivity', () => {
   it('should enforce free upload limits', async () => {
     hoisted.mockEventsCountGet.mockResolvedValueOnce({ data: () => ({ count: 10 }) });
     const response = makeResponse();
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
-    }) as any, response as any);
+    }), response);
 
     expect(response.status).toHaveBeenCalledWith(429);
     expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
@@ -544,9 +564,9 @@ describe('uploadActivity', () => {
     hoisted.mockEventsCountGet.mockResolvedValueOnce({ data: () => ({ count: 99 }) });
 
     const response = makeResponse();
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
-    }) as any, response as any);
+    }), response);
 
     expect(response.status).toHaveBeenCalledWith(200);
     expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
@@ -560,9 +580,9 @@ describe('uploadActivity', () => {
     hoisted.mockEventsCountGet.mockResolvedValueOnce({ data: () => ({ count: 250 }) });
 
     const response = makeResponse();
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
-    }) as any, response as any);
+    }), response);
 
     expect(response.status).toHaveBeenCalledWith(200);
     expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
@@ -574,9 +594,9 @@ describe('uploadActivity', () => {
   it('should map FIT parser failures to 400', async () => {
     hoisted.mockFITImporter.getFromArrayBuffer.mockRejectedValueOnce(new Error('bad fit'));
     const response = makeResponse();
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
-    }) as any, response as any);
+    }), response);
 
     expect(response.status).toHaveBeenCalledWith(400);
   });
@@ -584,9 +604,9 @@ describe('uploadActivity', () => {
   it('should return 500 on persistence failures', async () => {
     hoisted.mockWriteAllEventData.mockRejectedValueOnce(new Error('write failed'));
     const response = makeResponse();
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
-    }) as any, response as any);
+    }), response);
 
     expect(response.status).toHaveBeenCalledWith(500);
   });
@@ -596,7 +616,7 @@ describe('uploadActivity', () => {
     const rawBody = Buffer.from([1, 2, 3, 4]);
     const expectedEventID = expectedUploadEventID(rawBody, 'fit');
 
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: {
         Authorization: 'Bearer token',
         'X-Firebase-AppCheck': 'app-check',
@@ -604,7 +624,7 @@ describe('uploadActivity', () => {
         'X-File-Extension': 'fit',
       },
       rawBody,
-    }) as any, response as any);
+    }), response);
 
     expect(hoisted.mockGenerateEventID).not.toHaveBeenCalled();
     expect(hoisted.mockGenerateActivityID).toHaveBeenCalledWith(expectedEventID, 0);
@@ -631,14 +651,14 @@ describe('uploadActivity', () => {
     event.name = 'keep-me';
     hoisted.mockFITImporter.getFromArrayBuffer.mockResolvedValueOnce(event);
 
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: {
         Authorization: 'Bearer token',
         'X-Firebase-AppCheck': 'app-check',
         'X-Original-Filename': '   .fit',
         'X-File-Extension': 'fit',
       },
-    }) as any, response as any);
+    }), response);
 
     expect(response.status).toHaveBeenCalledWith(200);
     expect(event.name).toBe('keep-me');
@@ -650,14 +670,14 @@ describe('uploadActivity', () => {
     event.name = 'keep-me';
     hoisted.mockFITImporter.getFromArrayBuffer.mockResolvedValueOnce(event);
 
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: {
         Authorization: 'Bearer token',
         'X-Firebase-AppCheck': 'app-check',
         'X-Original-Filename': '   ',
         'X-File-Extension': 'fit',
       },
-    }) as any, response as any);
+    }), response);
 
     expect(response.status).toHaveBeenCalledWith(200);
     expect(event.name).toBe('keep-me');
@@ -674,13 +694,13 @@ describe('uploadActivity', () => {
     };
     hoisted.mockFITImporter.getFromArrayBuffer.mockResolvedValueOnce(event);
 
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: {
         Authorization: 'Bearer token',
         'X-Firebase-AppCheck': 'app-check',
         'X-File-Extension': 'fit',
       },
-    }) as any, response as any);
+    }), response);
 
     expect(response.status).toHaveBeenCalledWith(200);
     expect(hoisted.mockGenerateActivityID).not.toHaveBeenCalled();
@@ -691,7 +711,7 @@ describe('uploadActivity', () => {
     const response = makeResponse();
     const payload = gzipSync(Buffer.from('<gpx><trk/></gpx>'));
 
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: {
         Authorization: 'Bearer token',
         'X-Firebase-AppCheck': 'app-check',
@@ -699,7 +719,7 @@ describe('uploadActivity', () => {
         'X-Original-Filename': 'morning.gpx',
       },
       rawBody: payload,
-    }) as any, response as any);
+    }), response);
 
     expect(hoisted.mockGPXImporter.getFromString).toHaveBeenCalledTimes(1);
     expect(hoisted.mockWriteAllEventData).toHaveBeenCalledWith(
@@ -715,14 +735,14 @@ describe('uploadActivity', () => {
 
   it('should parse TCX payloads through TCX importer', async () => {
     const response = makeResponse();
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: {
         Authorization: 'Bearer token',
         'X-Firebase-AppCheck': 'app-check',
         'X-File-Extension': 'tcx',
       },
       rawBody: Buffer.from('<TrainingCenterDatabase></TrainingCenterDatabase>'),
-    }) as any, response as any);
+    }), response);
 
     expect(hoisted.mockTCXImporter.getFromXML).toHaveBeenCalledTimes(1);
     expect(response.status).toHaveBeenCalledWith(200);
@@ -730,14 +750,14 @@ describe('uploadActivity', () => {
 
   it('should parse Suunto JSON payloads without fallback when primary parser succeeds', async () => {
     const response = makeResponse();
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: {
         Authorization: 'Bearer token',
         'X-Firebase-AppCheck': 'app-check',
         'X-File-Extension': 'json',
       },
       rawBody: Buffer.from('{"activity":"ok"}'),
-    }) as any, response as any);
+    }), response);
 
     expect(hoisted.mockSuuntoJSONImporter.getFromJSONString).toHaveBeenCalledTimes(1);
     expect(hoisted.mockSuuntoSMLImporter.getFromJSONString).not.toHaveBeenCalled();
@@ -746,14 +766,14 @@ describe('uploadActivity', () => {
 
   it('should parse SML payloads through SML importer', async () => {
     const response = makeResponse();
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: {
         Authorization: 'Bearer token',
         'X-Firebase-AppCheck': 'app-check',
         'X-File-Extension': 'sml',
       },
       rawBody: Buffer.from('<sml><entry/></sml>'),
-    }) as any, response as any);
+    }), response);
 
     expect(hoisted.mockSuuntoSMLImporter.getFromXML).toHaveBeenCalledTimes(1);
     expect(response.status).toHaveBeenCalledWith(200);
@@ -765,7 +785,7 @@ describe('uploadActivity', () => {
     const gzippedFit = gzipSync(fitBytes);
     const expectedEventID = expectedUploadEventID(fitBytes, 'fit');
 
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: {
         Authorization: 'Bearer token',
         'X-Firebase-AppCheck': 'app-check',
@@ -773,7 +793,7 @@ describe('uploadActivity', () => {
         'X-Original-Filename': 'run.fit',
       },
       rawBody: gzippedFit,
-    }) as any, response as any);
+    }), response);
 
     expect(hoisted.mockFITImporter.getFromArrayBuffer).toHaveBeenCalledTimes(1);
     const parsedPayload = hoisted.mockFITImporter.getFromArrayBuffer.mock.calls[0][0] as ArrayBuffer;
@@ -799,14 +819,14 @@ describe('uploadActivity', () => {
       0xff, 0xff, 0x00, 0x01, // invalid/truncated payload
     ]);
 
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: {
         Authorization: 'Bearer token',
         'X-Firebase-AppCheck': 'app-check',
         'X-File-Extension': 'fit',
       },
       rawBody: invalidGzipLikeFit,
-    }) as any, response as any);
+    }), response);
 
     expect(response.status).toHaveBeenCalledWith(400);
     expect(response.json).toHaveBeenCalledWith({ error: 'Could not decompress uploaded payload.' });
@@ -817,14 +837,14 @@ describe('uploadActivity', () => {
     const response = makeResponse();
     const compressedBomb = gzipSync(Buffer.alloc((150 * 1024 * 1024) + 1, 0x00));
 
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: {
         Authorization: 'Bearer token',
         'X-Firebase-AppCheck': 'app-check',
         'X-File-Extension': 'fit',
       },
       rawBody: compressedBomb,
-    }) as any, response as any);
+    }), response);
 
     expect(response.status).toHaveBeenCalledWith(400);
     expect(response.json).toHaveBeenCalledWith({ error: 'Could not decompress uploaded payload.' });
@@ -835,14 +855,14 @@ describe('uploadActivity', () => {
     hoisted.mockSuuntoJSONImporter.getFromJSONString.mockRejectedValueOnce(new Error('bad json'));
 
     const response = makeResponse();
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: {
         Authorization: 'Bearer token',
         'X-Firebase-AppCheck': 'app-check',
         'X-File-Extension': 'json',
       },
       rawBody: Buffer.from('{"foo":"bar"}'),
-    }) as any, response as any);
+    }), response);
 
     expect(hoisted.mockSuuntoJSONImporter.getFromJSONString).toHaveBeenCalledTimes(1);
     expect(hoisted.mockSuuntoSMLImporter.getFromJSONString).toHaveBeenCalledTimes(1);
@@ -852,13 +872,13 @@ describe('uploadActivity', () => {
   it('should expose working adapters to EventWriter', async () => {
     const response = makeResponse();
 
-    await uploadActivity(makeRequest({
+    await invokeUploadActivity(makeRequest({
       headers: {
         Authorization: 'Bearer token',
         'X-Firebase-AppCheck': 'app-check',
         'X-File-Extension': 'fit',
       },
-    }) as any, response as any);
+    }), response);
 
     expect(response.status).toHaveBeenCalledWith(200);
 

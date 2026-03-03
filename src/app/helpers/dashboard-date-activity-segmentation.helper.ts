@@ -1,4 +1,4 @@
-import { ActivityTypes, ChartDataValueTypes } from '@sports-alliance/sports-lib';
+import { ActivityTypes, ActivityTypesHelper, ChartDataValueTypes } from '@sports-alliance/sports-lib';
 import { DashboardCartesianPoint } from './dashboard-echarts-cartesian.helper';
 
 const UNKNOWN_ACTIVITY_KEY = '__unknown_activity__';
@@ -70,9 +70,11 @@ function parseDateValue(item: any): number | null {
     if (numeric !== null) {
       return numeric;
     }
-    const date = new Date(candidate as any);
-    if (Number.isFinite(date.getTime())) {
-      return date.getTime();
+    if (candidate instanceof Date || typeof candidate === 'string' || typeof candidate === 'number') {
+      const date = new Date(candidate);
+      if (Number.isFinite(date.getTime())) {
+        return date.getTime();
+      }
     }
   }
   return null;
@@ -85,10 +87,10 @@ function resolveActivityTypeAndLabel(rawType: unknown): { activityType: Activity
       return { activityType: null, label: UNKNOWN_ACTIVITY_LABEL };
     }
 
-    const enumValueFromAlias = (ActivityTypes as any)[trimmedType];
-    if (typeof enumValueFromAlias === 'string') {
+    const enumValueFromAlias = ActivityTypesHelper.resolveActivityType(trimmedType);
+    if (enumValueFromAlias) {
       return {
-        activityType: enumValueFromAlias as ActivityTypes,
+        activityType: enumValueFromAlias,
         label: enumValueFromAlias
       };
     }
@@ -308,4 +310,3 @@ export function buildDashboardDateActivitySegmentation(
 
   return { buckets, series };
 }
-

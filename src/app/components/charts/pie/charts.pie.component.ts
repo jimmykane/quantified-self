@@ -12,6 +12,7 @@ import {
 import type { EChartsType } from 'echarts/core';
 import {
   ActivityTypes,
+  ActivityTypesHelper,
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   ChartThemes,
@@ -314,7 +315,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
         return AppColors.DarkGray;
       }
 
-      const activityType = (ActivityTypes as any)[slice.label];
+      const activityType = ActivityTypesHelper.resolveActivityType(slice.label);
       if (activityType !== undefined) {
         return this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activityType);
       }

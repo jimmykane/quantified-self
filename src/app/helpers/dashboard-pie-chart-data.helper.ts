@@ -36,9 +36,11 @@ function parseDateValue(item: any): number | null {
       return asNumber;
     }
 
-    const asDate = new Date(candidate as any);
-    if (Number.isFinite(asDate.getTime())) {
-      return asDate.getTime();
+    if (candidate instanceof Date || typeof candidate === 'string' || typeof candidate === 'number') {
+      const asDate = new Date(candidate);
+      if (Number.isFinite(asDate.getTime())) {
+        return asDate.getTime();
+      }
     }
   }
 

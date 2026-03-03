@@ -1,5 +1,6 @@
 import {
   ActivityTypes,
+  ActivityTypesHelper,
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   TimeIntervals
@@ -92,9 +93,11 @@ function resolveDateValue(item: any): number | null {
     if (asNumber !== null) {
       return asNumber;
     }
-    const asDate = new Date(candidate as any);
-    if (Number.isFinite(asDate.getTime())) {
-      return asDate.getTime();
+    if (candidate instanceof Date || typeof candidate === 'string' || typeof candidate === 'number') {
+      const asDate = new Date(candidate);
+      if (Number.isFinite(asDate.getTime())) {
+        return asDate.getTime();
+      }
     }
   }
   return null;
@@ -107,10 +110,10 @@ function resolveActivityTypeAndLabel(rawType: unknown): { activityType: Activity
       return { activityType: null, label: 'Unknown' };
     }
 
-    const enumValueFromAlias = (ActivityTypes as any)[trimmedType];
-    if (typeof enumValueFromAlias === 'string') {
+    const enumValueFromAlias = ActivityTypesHelper.resolveActivityType(trimmedType);
+    if (enumValueFromAlias) {
       return {
-        activityType: enumValueFromAlias as ActivityTypes,
+        activityType: enumValueFromAlias,
         label: enumValueFromAlias
       };
     }
@@ -129,10 +132,10 @@ function resolveActivityTypeAndLabel(rawType: unknown): { activityType: Activity
   }
 
   if (typeof rawType === 'number') {
-    const normalizedType = (ActivityTypes as any)[`${rawType}`];
-    if (typeof normalizedType === 'string') {
+    const normalizedType = ActivityTypesHelper.resolveActivityType(rawType);
+    if (normalizedType) {
       return {
-        activityType: normalizedType as ActivityTypes,
+        activityType: normalizedType,
         label: normalizedType
       };
     }
