@@ -811,6 +811,7 @@ describe('EventCardChartPanelComponent', () => {
     fixture.detectChanges();
     await component.ngAfterViewInit();
 
+    const formatSpy = vi.spyOn(component as any, 'formatDataValue');
     const tooltipHtml = (component as any).formatTooltip([
       {
         seriesId: 'a1::power',
@@ -828,7 +829,8 @@ describe('EventCardChartPanelComponent', () => {
 
     expect(tooltipHtml).toContain('120');
     expect(tooltipHtml).not.toContain('null');
-    expect(tooltipHtml).toContain('Garmin:');
+    expect(formatSpy).toHaveBeenCalledTimes(1);
+    expect(formatSpy).toHaveBeenCalledWith('power', 120);
   });
 
   it('shows lap tooltip locally without propagating to connected charts', async () => {
