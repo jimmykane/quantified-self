@@ -158,13 +158,13 @@ export class AppUserService implements OnDestroy {
     // Prioritize Claims for role and grace period, but fallback to DB data if claims are missing
     identity.uid = firebaseUser.uid;
     if (stripeRole) {
-      (identity as any).stripeRole = stripeRole;
+      identity.stripeRole = stripeRole;
     }
     if (gracePeriodUntil) {
-      (identity as any).gracePeriodUntil = gracePeriodUntil;
+      identity.gracePeriodUntil = gracePeriodUntil;
     }
     if (isAdmin) {
-      (identity as any).admin = true;
+      identity.admin = true;
     }
 
     // Check for force-refresh (if DB was updated more recently than token issuance)
@@ -180,10 +180,10 @@ export class AppUserService implements OnDestroy {
           const freshStripeRole = freshToken.claims['stripeRole'] as StripeRole;
           const freshGracePeriodUntil = freshToken.claims['gracePeriodUntil'] as number;
           if (freshStripeRole) {
-            (identity as any).stripeRole = freshStripeRole;
+            identity.stripeRole = freshStripeRole;
           }
           if (freshGracePeriodUntil) {
-            (identity as any).gracePeriodUntil = freshGracePeriodUntil;
+            identity.gracePeriodUntil = freshGracePeriodUntil;
           }
         } catch (e) {
           this.logger.error('[AppUserService] Token refresh failed', e);
@@ -198,8 +198,8 @@ export class AppUserService implements OnDestroy {
     { initialValue: null, injector: this.injector }
   );
 
-  public readonly stripeRoleSignal = computed(() => (this.user() as any)?.stripeRole as StripeRole || null);
-  public readonly isAdminSignal = computed(() => (this.user() as any)?.admin === true);
+  public readonly stripeRoleSignal = computed(() => this.user()?.stripeRole || null);
+  public readonly isAdminSignal = computed(() => this.user()?.admin === true);
   public readonly isProSignal = computed(() => AppUserUtilities.hasProAccess(this.user(), this.isAdminSignal()));
   public readonly isBasicSignal = computed(() => AppUserUtilities.isBasicUser(this.user()));
 
@@ -210,7 +210,7 @@ export class AppUserService implements OnDestroy {
   public readonly gracePeriodUntil = computed(() => {
     const user = this.user();
     if (!user) return null;
-    const gracePeriodUntil = (user as any).gracePeriodUntil;
+    const gracePeriodUntil = user.gracePeriodUntil;
     if (!gracePeriodUntil) return null;
     // Handle Firestore Timestamp
     if (typeof gracePeriodUntil.toDate === 'function') {
@@ -226,12 +226,12 @@ export class AppUserService implements OnDestroy {
 
   public async getSubscriptionRole(): Promise<StripeRole | null> {
     const user = await firstValueFrom(this.user$.pipe(take(1)));
-    return (user as any)?.stripeRole as StripeRole || null;
+    return user?.stripeRole || null;
   }
 
   public async isPro(): Promise<boolean> {
     const user = await firstValueFrom(this.user$.pipe(take(1)));
-    const isAdmin = (user as any)?.admin === true;
+    const isAdmin = user?.admin === true;
     return AppUserUtilities.hasProAccess(user, isAdmin);
   }
 
@@ -241,7 +241,7 @@ export class AppUserService implements OnDestroy {
 
   public async hasPaidAccess(): Promise<boolean> {
     const user = await firstValueFrom(this.user$.pipe(take(1)));
-    const isAdmin = (user as any)?.admin === true;
+    const isAdmin = user?.admin === true;
     return AppUserUtilities.hasPaidAccessUser(user, isAdmin);
   }
 
@@ -609,7 +609,7 @@ export class AppUserService implements OnDestroy {
 
   public async isAdmin(): Promise<boolean> {
     const user = await firstValueFrom(this.user$.pipe(take(1)));
-    return (user as any)?.admin === true;
+    return user?.admin === true;
   }
 
 

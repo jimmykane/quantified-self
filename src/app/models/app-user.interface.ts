@@ -7,6 +7,7 @@ import {
     UserDashboardSettingsInterface,
     UserMapSettingsInterface
 } from '@sports-alliance/sports-lib';
+import { StripeRole } from './stripe-role.model';
 
 export type AppMapStyleName = 'default' | 'satellite' | 'outdoors';
 
@@ -41,5 +42,7 @@ export interface AppUserInterface extends User {
     acceptedMarketingPolicy?: boolean;
     claimsUpdatedAt?: { seconds: number, nanoseconds: number } | Date;
     settings?: AppUserSettingsInterface;
-    gracePeriodUntil?: { seconds: number, nanoseconds: number } | Date | number;
+    stripeRole?: StripeRole | null;
+    gracePeriodUntil?: { seconds: number, nanoseconds: number } | { toDate: () => Date; toMillis?: () => number } | Date | number | null;
+    admin?: boolean;
 }
