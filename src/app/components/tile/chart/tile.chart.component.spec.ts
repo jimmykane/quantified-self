@@ -4,7 +4,6 @@ import { By } from '@angular/platform-browser';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
-  ChartThemes,
   ChartTypes,
   TimeIntervals
 } from '@sports-alliance/sports-lib';
@@ -19,7 +18,7 @@ import { TileChartComponent } from './tile.chart.component';
 class MockColumnsChartComponent {
   @Input() isLoading = false;
   @Input() data: any;
-  @Input() chartTheme: ChartThemes = ChartThemes.Material;
+  @Input() darkTheme = false;
   @Input() type: 'columns' | 'pyramids' = 'columns';
   @Input() vertical = true;
   @Input() chartDataType?: string;
@@ -54,7 +53,7 @@ class MockTileChartActionsComponent {
 class MockXYChartComponent {
   @Input() isLoading = false;
   @Input() data: any;
-  @Input() chartTheme: ChartThemes = ChartThemes.Material;
+  @Input() darkTheme = false;
   @Input() chartDataType?: string;
   @Input() chartDataValueType?: ChartDataValueTypes;
   @Input() chartDataCategoryType?: ChartDataCategoryTypes;
@@ -74,7 +73,7 @@ describe('TileChartComponent', () => {
 
     fixture = TestBed.createComponent(TileChartComponent);
     component = fixture.componentInstance;
-    component.chartTheme = ChartThemes.Material;
+    component.darkTheme = false;
     component.dataValueType = ChartDataValueTypes.Total;
     component.dataCategoryType = ChartDataCategoryTypes.ActivityType;
     component.dataTimeInterval = TimeIntervals.Daily;

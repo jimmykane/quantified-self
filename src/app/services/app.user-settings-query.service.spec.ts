@@ -5,7 +5,7 @@ import { AppAuthService } from '../authentication/app.auth.service';
 import { AppUserService } from './app.user.service';
 import { LoggerService } from './logger.service';
 import { BehaviorSubject } from 'rxjs';
-import { User, ChartThemes, AppThemes, MapTypes } from '@sports-alliance/sports-lib';
+import { User, AppThemes, MapTypes } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 describe('AppUserSettingsQueryService', () => {
@@ -18,7 +18,7 @@ describe('AppUserSettingsQueryService', () => {
         email: 'test@example.com',
         settings: {
             chartSettings: {
-                theme: ChartThemes.Dark,
+                strokeWidth: 2,
                 showGrid: true,
             },
             mapSettings: {
@@ -66,7 +66,7 @@ describe('AppUserSettingsQueryService', () => {
             TestBed.flushEffects();
 
             const firstEmission = service.chartSettings();
-            expect(firstEmission.theme).toBe(ChartThemes.Dark);
+            expect(firstEmission.strokeWidth).toBe(2);
             expect(firstEmission.showGrid).toBe(true);
 
             // Emit SAME user object reference
@@ -93,13 +93,13 @@ describe('AppUserSettingsQueryService', () => {
             // Emit NEW user object with DIFFERENT chart settings
             const user3 = createMockUser();
             if (!user3.settings) user3.settings = {};
-            user3.settings.chartSettings = { theme: ChartThemes.Material, showGrid: false } as any;
+            user3.settings.chartSettings = { strokeWidth: 4, showGrid: false } as any;
 
             mockUserSubject.next(user3);
             TestBed.flushEffects();
 
             const thirdEmission = service.chartSettings();
-            expect(thirdEmission.theme).toBe(ChartThemes.Material);
+            expect(thirdEmission.strokeWidth).toBe(4);
             expect(thirdEmission.showGrid).toBe(false);
             expect(thirdEmission).not.toEqual(firstEmission);
         });
@@ -123,7 +123,7 @@ describe('AppUserSettingsQueryService', () => {
 
             // Change unrelated setting
             const user2 = createMockUser();
-            user2.settings.chartSettings = { theme: ChartThemes.Material } as any; // Change chart, keep map same
+            user2.settings.chartSettings = { strokeWidth: 3 } as any; // Change chart, keep map same
             mockUserSubject.next(user2);
             TestBed.flushEffects();
 

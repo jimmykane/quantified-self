@@ -4,7 +4,6 @@ import {
   ChartDataValueTypes,
   ChartTypes, TimeIntervals
 } from '@sports-alliance/sports-lib';
-import { ChartThemes } from '@sports-alliance/sports-lib';
 import { TileAbstractDirective } from '../tile-abstract.directive';
 
 @Component({
@@ -20,7 +19,7 @@ export class TileChartComponent extends TileAbstractDirective {
   @Input() dataType: string;
   @Input() dataValueType: ChartDataValueTypes;
   @Input() dataCategoryType: ChartDataCategoryTypes;
-  @Input() chartTheme: ChartThemes;
+  @Input() darkTheme = false;
   @Input() showActions: boolean;
   @Input() dataTimeInterval: TimeIntervals;
   @Input() data: any;

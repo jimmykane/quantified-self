@@ -4,7 +4,6 @@ import {
   ActivityTypes,
   ChartDataCategoryTypes,
   ChartDataValueTypes,
-  ChartThemes,
   DataDistance,
   TimeIntervals
 } from '@sports-alliance/sports-lib';
@@ -97,7 +96,7 @@ describe('ChartsXYComponent', () => {
 
     fixture = TestBed.createComponent(ChartsXYComponent);
     component = fixture.componentInstance;
-    component.chartTheme = ChartThemes.Material;
+    component.darkTheme = false;
     component.useAnimations = false;
     component.chartDataType = DataDistance.type;
     component.chartDataValueType = ChartDataValueTypes.Total;
@@ -313,7 +312,7 @@ describe('ChartsXYComponent', () => {
   });
 
   it('should apply dark styles when chart theme is dark', async () => {
-    component.chartTheme = ChartThemes.Dark;
+    component.darkTheme = true;
 
     fixture.detectChanges();
     await waitForChartStabilization();

@@ -2,7 +2,6 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { Subject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ChartThemes } from '@sports-alliance/sports-lib';
 
 import { EventCadencePowerComponent } from './event.cadence-power.component';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
@@ -101,7 +100,7 @@ describe('EventCadencePowerComponent', () => {
     fixture = TestBed.createComponent(EventCadencePowerComponent);
     component = fixture.componentInstance;
     component.activities = [{ getID: () => 'a1' } as any];
-    component.chartTheme = ChartThemes.Material;
+    component.darkTheme = false;
   });
 
   afterEach(() => {
@@ -194,7 +193,7 @@ describe('EventCadencePowerComponent', () => {
   });
 
   it('should apply dark theme tooltip style', async () => {
-    component.chartTheme = ChartThemes.Dark;
+    component.darkTheme = true;
 
     fixture.detectChanges();
     await waitForChartStabilization();

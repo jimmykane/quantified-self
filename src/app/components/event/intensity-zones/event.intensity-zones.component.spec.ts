@@ -3,7 +3,6 @@ import { SimpleChange } from '@angular/core';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { Subject } from 'rxjs';
 import { vi, describe, it, beforeEach, afterEach, expect } from 'vitest';
-import { ChartThemes } from '@sports-alliance/sports-lib';
 
 import { EventIntensityZonesComponent } from './event.intensity-zones.component';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
@@ -142,7 +141,7 @@ describe('EventIntensityZonesComponent', () => {
     fixture = TestBed.createComponent(EventIntensityZonesComponent);
     component = fixture.componentInstance;
     component.activities = [];
-    component.chartTheme = ChartThemes.Material;
+    component.darkTheme = false;
     component.useAnimations = false;
   });
 
@@ -215,7 +214,7 @@ describe('EventIntensityZonesComponent', () => {
 
     component.ngOnChanges({
       activities: new SimpleChange([], [{}], false),
-      chartTheme: new SimpleChange(ChartThemes.Material, ChartThemes.Dark, false),
+      darkTheme: new SimpleChange(false, true, false),
       useAnimations: new SimpleChange(false, true, false),
     });
 
@@ -248,8 +247,8 @@ describe('EventIntensityZonesComponent', () => {
     expect(option.grid.bottom).toBe(0);
   });
 
-  it('should apply dark theme styles when chartTheme is dark', async () => {
-    component.chartTheme = ChartThemes.Dark;
+  it('should apply dark theme styles when darkTheme is enabled', async () => {
+    component.darkTheme = true;
 
     fixture.detectChanges();
     await waitForChartStabilization();
@@ -278,15 +277,14 @@ describe('EventIntensityZonesComponent', () => {
     expect(option.xAxis.axisLabel.interval).toBe(0);
   });
 
-  it('should apply dark theme styles from body class even with light chartTheme', async () => {
-    document.body.classList.add('dark-theme');
+  it('should keep light theme styles when darkTheme is disabled', async () => {
 
     fixture.detectChanges();
     await waitForChartStabilization();
 
     const option = getLastOption();
-    expect(option.tooltip?.backgroundColor).toBe('#303030');
-    expect(option.yAxis?.axisLabel?.color).toBe('#ffffff');
+    expect(option.tooltip?.backgroundColor).toBe('#ffffff');
+    expect(option.yAxis?.axisLabel?.color).toBe('#2a2a2a');
   });
 
   it('should include zone rich styles from color service', async () => {

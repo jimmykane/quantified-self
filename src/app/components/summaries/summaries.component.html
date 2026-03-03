@@ -7,7 +7,7 @@
       <!--      [rowspan]="(tile.size.rows >= tiles.length/numberOfCols) ? tiles.length/numberOfCols : tile.size.rows">-->
       @if (tile.type === tileTypes.Chart) {
       <app-tile-chart class="glass-card" [user]="user" [type]="tile.type" [chartType]="getChartTile(tile).chartType"
-        [isLoading]="isLoading" [data]="getChartTile(tile).data" [showActions]="showActions" [chartTheme]="chartTheme"
+        [isLoading]="isLoading" [data]="getChartTile(tile).data" [showActions]="showActions" [darkTheme]="darkTheme"
         [dataType]="getChartTile(tile).dataType" [dataValueType]="getChartTile(tile).dataValueType"
         [dataCategoryType]="getChartTile(tile).dataCategoryType" [dataTimeInterval]="getChartTile(tile).timeInterval"
         [size]="tile.size" [order]="tile.order"></app-tile-chart>

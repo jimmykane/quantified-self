@@ -4,7 +4,7 @@ import { AppUserService } from './app.user.service';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { BehaviorSubject, firstValueFrom } from 'rxjs';
-import { AppThemes, ChartThemes } from '@sports-alliance/sports-lib';
+import { AppThemes } from '@sports-alliance/sports-lib';
 
 describe('AppThemeService', () => {
     let service: AppThemeService;
@@ -205,7 +205,6 @@ describe('AppThemeService', () => {
             const mockUser = {
                 settings: {
                     appSettings: { theme: AppThemes.Dark },
-                    chartSettings: { theme: ChartThemes.Dark },
                     mapSettings: {}
                 }
             };

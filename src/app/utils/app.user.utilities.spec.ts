@@ -5,7 +5,6 @@ import {
     ActivityTypes,
     DateRanges,
     AppThemes,
-    ChartThemes,
     ChartDataCategoryTypes,
     ChartDataValueTypes,
     ChartTypes,
@@ -164,7 +163,6 @@ describe('AppUserUtilities', () => {
             const user = { settings: {} } as User;
             const settings = AppUserUtilities.fillMissingAppSettings(user);
             expect(settings.appSettings?.theme).toBe(AppThemes.Normal);
-            expect(settings.chartSettings?.theme).toBe(ChartThemes.Material);
             expect(settings.chartSettings?.stackYAxes).toBe(false);
             expect(settings.dashboardSettings?.dateRange).toBe(DateRanges.all);
             expect(settings.dashboardSettings?.includeMergedEvents).toBe(true);

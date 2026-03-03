@@ -12,7 +12,7 @@ import {
   SimpleChanges,
   ViewChild
 } from '@angular/core';
-import { ChartCursorBehaviours, ChartThemes, LapTypes, XAxisTypes } from '@sports-alliance/sports-lib';
+import { ChartCursorBehaviours, LapTypes, XAxisTypes } from '@sports-alliance/sports-lib';
 import type { ECElementEvent, EChartsType } from 'echarts/core';
 import { EChartsLoaderService } from '../../../../services/echarts-loader.service';
 import { LoggerService } from '../../../../services/logger.service';
@@ -20,7 +20,6 @@ import {
   ECHARTS_INTERACTIVE_CARTESIAN_MERGE_UPDATE_SETTINGS,
   EChartsHostController
 } from '../../../../helpers/echarts-host-controller';
-import { isDarkChartThemeActive } from '../../../../helpers/echarts-theme.helper';
 import {
   EventChartLapMarker,
   EventChartPanelModel,
@@ -91,7 +90,7 @@ const TEMP_DISABLE_AXIS_POINTER_CURSOR_EMIT = true;
 export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() panel: EventChartPanelModel | null = null;
   @Input() xAxisType: XAxisTypes = XAxisTypes.Duration;
-  @Input() chartTheme: ChartThemes | string = ChartThemes.Material;
+  @Input() darkTheme = false;
   @Input() useAnimations = false;
   @Input() showZoomBar = false;
   @Input() zoomGroupId: string | null = null;
@@ -239,7 +238,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     if (
       changes.panel
       || changes.xAxisType
-      || changes.chartTheme
+      || changes.darkTheme
       || changes.useAnimations
       || changes.showZoomBar
       || changes.zoomGroupId
@@ -347,7 +346,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   private buildOption(): ChartOption {
     const panel = this.panel as EventChartPanelModel;
-    const darkTheme = isDarkChartThemeActive(this.chartTheme);
+    const darkTheme = this.darkTheme;
     const textColor = darkTheme ? '#f5f5f5' : '#1f1f1f';
     const axisColor = darkTheme ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.28)';
     const gridColor = darkTheme ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)';
@@ -836,7 +835,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   private buildZoomBarOnlyOption(): ChartOption {
-    const darkTheme = isDarkChartThemeActive(this.chartTheme);
+    const darkTheme = this.darkTheme;
     const axisColor = darkTheme ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.28)';
     const sliderTrackColor = darkTheme ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
     const sliderSelectionColor = darkTheme ? 'rgba(144,202,249,0.30)' : 'rgba(25,118,210,0.22)';
@@ -1028,7 +1027,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const tooltipKey = `${marker.lapNumber}|${marker.xValue}`;
     this.activeLapTooltipKey = tooltipKey;
 
-    const darkTheme = isDarkChartThemeActive(this.chartTheme);
+    const darkTheme = this.darkTheme;
     const textColor = darkTheme ? '#f5f5f5' : '#1f1f1f';
     const tooltipBackgroundColor = darkTheme ? '#303030' : '#ffffff';
     const tooltipBorderColor = darkTheme ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.12)';

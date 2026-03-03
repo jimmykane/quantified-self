@@ -16,8 +16,8 @@ import { Router } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { User } from '@sports-alliance/sports-lib';
-import { ChartThemes } from '@sports-alliance/sports-lib';
 import { AppThemeService } from '../../services/app.theme.service';
+import { AppThemes } from '@sports-alliance/sports-lib';
 import { DataActivityTypes } from '@sports-alliance/sports-lib';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { LoggerService } from '../../services/logger.service';
@@ -63,8 +63,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public tileTypes = TileTypes;
 
 
-  private chartThemeSubscription: Subscription;
-  public chartTheme: ChartThemes;
+  private appThemeSubscription: Subscription;
+  public darkTheme = false;
   private logger: LoggerService;
 
   private getChartDataCache: { string: SummariesChartDataInterface[] }[] = []
@@ -157,9 +157,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private async unsubscribeAndCreateCharts() {
     const buildStart = performance.now();
     this.unsubscribeFromAll();
-    // Subscribe to the chartTheme changes
-    this.chartThemeSubscription = this.themeService.getChartTheme().subscribe((chartTheme) => {
-      this.chartTheme = chartTheme;
+    this.appThemeSubscription = this.themeService.getAppTheme().subscribe((theme) => {
+      this.darkTheme = theme === AppThemes.Dark;
     });
     if (this.events) {
       this.events = this.events.filter(event => !event.isMerge).sort((eventA: EventInterface, eventB: EventInterface) => +eventA.startDate - +eventB.startDate)
@@ -262,8 +261,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   private unsubscribeFromAll() {
-    if (this.chartThemeSubscription) {
-      this.chartThemeSubscription.unsubscribe();
+    if (this.appThemeSubscription) {
+      this.appThemeSubscription.unsubscribe();
     }
   }
 

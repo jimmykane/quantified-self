@@ -4,7 +4,6 @@ import {
     ChartCursorBehaviours,
     ChartDataCategoryTypes,
     ChartDataValueTypes,
-    ChartThemes,
     ChartTypes,
     DataTypeSettings,
     DateRanges,
@@ -69,13 +68,6 @@ import { StripeRole } from '../models/stripe-role.model';
  * and providing default application/user settings.
  */
 export class AppUserUtilities {
-
-    /**
-     * Returns the default chart theme.
-     */
-    static getDefaultChartTheme(): ChartThemes {
-        return ChartThemes.Material;
-    }
 
     /**
      * Returns the default application theme.
@@ -322,7 +314,6 @@ export class AppUserUtilities {
         // Chart
         settings.chartSettings = settings.chartSettings || <UserChartSettingsInterface>{};
         settings.chartSettings.dataTypeSettings = settings.chartSettings.dataTypeSettings || AppUserUtilities.getDefaultUserChartSettingsDataTypeSettings();
-        settings.chartSettings.theme = settings.chartSettings.theme || AppUserUtilities.getDefaultChartTheme();
         settings.chartSettings.useAnimations = settings.chartSettings.useAnimations === true;
         settings.chartSettings.xAxisType = XAxisTypes[settings.chartSettings.xAxisType] || AppUserUtilities.getDefaultXAxisType();
         settings.chartSettings.showAllData = settings.chartSettings.showAllData === true;

@@ -14,7 +14,6 @@ import {
 } from '@sports-alliance/sports-lib';
 import {
   ChartCursorBehaviours,
-  ChartThemes,
   DataTypeSettings,
   UserChartSettingsInterface,
   XAxisTypes

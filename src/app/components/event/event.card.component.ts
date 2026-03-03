@@ -20,7 +20,6 @@ import { AppAuthService } from '../../authentication/app.auth.service';
 import { User } from '@sports-alliance/sports-lib';
 import {
   ChartCursorBehaviours,
-  ChartThemes,
   XAxisTypes
 } from '@sports-alliance/sports-lib';
 import {
@@ -152,7 +151,7 @@ export class EventCardComponent implements OnInit {
   // User settings (derived from query service)
   public userUnitSettings = this.userSettingsQuery.unitSettings;
 
-  public chartTheme = toSignal(this.themeService.getChartTheme(), { initialValue: ChartThemes.Material });
+  public darkTheme = computed(() => this.themeService.appTheme() === AppThemes.Dark);
 
   // Required for app-event-intensity-zones until it is also refactored
   public useChartAnimations = computed(() =>

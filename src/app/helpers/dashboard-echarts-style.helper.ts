@@ -1,6 +1,3 @@
-import { ChartThemes } from '@sports-alliance/sports-lib';
-import { isDarkChartThemeActive } from './echarts-theme.helper';
-
 export interface DashboardEChartsStyleTokens {
   darkTheme: boolean;
   textColor: string;
@@ -15,11 +12,10 @@ export interface DashboardEChartsStyleTokens {
 const DEFAULT_COMPACT_WIDTH = 680;
 
 export function buildDashboardEChartsStyleTokens(
-  chartTheme: ChartThemes | string,
+  darkTheme: boolean,
   chartWidth: number,
   compactWidth: number = DEFAULT_COMPACT_WIDTH
 ): DashboardEChartsStyleTokens {
-  const darkTheme = isDarkChartThemeActive(chartTheme);
   const isCompactLayout = chartWidth > 0 && chartWidth < compactWidth;
 
   return {

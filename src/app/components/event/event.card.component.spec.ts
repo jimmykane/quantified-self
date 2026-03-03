@@ -8,8 +8,8 @@ import { AppUserService } from '../../services/app.user.service';
 import { AppActivitySelectionService } from '../../services/activity-selection-service/app-activity-selection.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppThemeService } from '../../services/app.theme.service';
-import { NO_ERRORS_SCHEMA } from '@angular/core';
-import { EventInterface, User, ActivityInterface, ChartThemes, AppThemes, XAxisTypes, DataSpeed, LapTypes } from '@sports-alliance/sports-lib';
+import { NO_ERRORS_SCHEMA, signal } from '@angular/core';
+import { EventInterface, User, ActivityInterface, AppThemes, XAxisTypes, DataSpeed, LapTypes } from '@sports-alliance/sports-lib';
 import { LoggerService } from '../../services/logger.service';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { shouldRenderIntensityZonesChart } from '../../helpers/intensity-zones-chart-data-helper';
@@ -154,7 +154,7 @@ describe('EventCardComponent', () => {
         };
 
         mockThemeService = {
-            getChartTheme: () => of(ChartThemes.Material),
+            appTheme: signal(AppThemes.Normal),
             getAppTheme: () => of(AppThemes.Normal),
 
         };
@@ -342,7 +342,7 @@ describe('EventCardComponent', () => {
     });
 
     it('should get theme signals from theme service', () => {
-        expect(component.chartTheme()).toBe(ChartThemes.Material);
+        expect(component.darkTheme()).toBe(false);
     });
 
     describe('computed flags with activities that have data', () => {

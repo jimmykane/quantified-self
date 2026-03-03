@@ -14,7 +14,6 @@ import { Subscription } from 'rxjs';
 import type { EChartsType } from 'echarts/core';
 
 import {
-  ChartThemes,
   DataDuration,
   DataHeartRate,
   StatsClassInterface,
@@ -46,7 +45,7 @@ type ChartOption = Parameters<EChartsType['setOption']>[0];
 })
 export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() activities: StatsClassInterface[] = [];
-  @Input() chartTheme: ChartThemes = ChartThemes.Material;
+  @Input() darkTheme = false;
   @Input() useAnimations = false;
   @Input() orientation: 'horizontal' | 'vertical' = 'horizontal';
   @Input() showHeader = true;
@@ -92,7 +91,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     if (!this.chartHost.getChart()) {
       return;
     }
-    if (changes.activities || changes.chartTheme || changes.useAnimations || changes.orientation) {
+    if (changes.activities || changes.darkTheme || changes.useAnimations || changes.orientation) {
       this.refreshChart();
     }
   }
@@ -117,7 +116,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
   }
 
   private buildChartOption(data: IntensityZonesEChartsData): ChartOption {
-    const chartStyle = buildEventEChartsVisualTokens(this.chartTheme, this.isMobile, {
+    const chartStyle = buildEventEChartsVisualTokens(this.darkTheme, this.isMobile, {
       textColorDark: '#ffffff',
       textColorLight: '#2a2a2a',
       tooltipBackgroundColorDark: '#303030',

@@ -1,6 +1,3 @@
-import { ChartThemes } from '@sports-alliance/sports-lib';
-import { isDarkChartThemeActive } from './echarts-theme.helper';
-
 export interface EventEChartsVisualTokenOverrides {
   textColorDark?: string;
   textColorLight?: string;
@@ -36,12 +33,10 @@ export interface EventEChartsAxisRangeOptions {
 const MOBILE_TOOLTIP_EXTRA_CSS_TEXT = 'max-width: min(80vw, 280px); white-space: normal; overflow-wrap: anywhere; word-break: break-word;';
 
 export function buildEventEChartsVisualTokens(
-  chartTheme: ChartThemes | string,
+  darkTheme: boolean,
   isMobile: boolean,
   overrides: EventEChartsVisualTokenOverrides = {}
 ): EventEChartsVisualTokens {
-  const darkTheme = isDarkChartThemeActive(chartTheme);
-
   return {
     darkTheme,
     textColor: darkTheme

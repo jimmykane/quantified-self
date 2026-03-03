@@ -3,7 +3,6 @@ import { BreakpointObserver } from '@angular/cdk/layout';
 import { SimpleChange } from '@angular/core';
 import { Subject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ChartThemes } from '@sports-alliance/sports-lib';
 
 import { EventPowerCurveComponent } from './event.power-curve.component';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
@@ -137,7 +136,7 @@ describe('EventPowerCurveComponent', () => {
     fixture = TestBed.createComponent(EventPowerCurveComponent);
     component = fixture.componentInstance;
     component.activities = [{ getID: () => 'a1', creator: { name: 'Device A' } } as any];
-    component.chartTheme = ChartThemes.Material;
+    component.darkTheme = false;
     component.useAnimations = false;
     component.isMerge = false;
   });
@@ -313,8 +312,8 @@ describe('EventPowerCurveComponent', () => {
     expect(getLastOption().legend.show).toBe(true);
   });
 
-  it('should apply dark theme styles when chartTheme is dark', async () => {
-    component.chartTheme = ChartThemes.Dark;
+  it('should apply dark theme styles when darkTheme is enabled', async () => {
+    component.darkTheme = true;
 
     fixture.detectChanges();
     await waitForChartStabilization();

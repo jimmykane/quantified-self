@@ -6,14 +6,12 @@ import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ChartCursorBehaviours,
-  ChartThemes,
   DataDistance,
   DataStrydDistance,
   XAxisTypes,
 } from '@sports-alliance/sports-lib';
 import { EventCardChartComponent } from './event.card.chart.component';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
-import { AppThemeService } from '../../../services/app.theme.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppActivityCursorService } from '../../../services/activity-cursor/app-activity-cursor.service';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
@@ -42,10 +40,6 @@ describe('EventCardChartComponent', () => {
     updateChartSettings: vi.fn().mockResolvedValue(undefined),
   };
 
-  const mockThemeService = {
-    getChartTheme: vi.fn().mockReturnValue(of(ChartThemes.Material)),
-  };
-
   const mockUserService = {
     getUserChartDataTypesToUse: vi.fn().mockReturnValue(['power']),
   };
@@ -68,7 +62,6 @@ describe('EventCardChartComponent', () => {
   };
 
   beforeEach(async () => {
-    mockThemeService.getChartTheme.mockReturnValue(of(ChartThemes.Material));
     mockUserSettingsQuery.updateChartSettings.mockResolvedValue(undefined);
     mockActivityCursorService.setCursor.mockReset();
     mockChartSettingsStorage.getDataTypeIDsToShow.mockReturnValue([]);
@@ -85,7 +78,6 @@ describe('EventCardChartComponent', () => {
       providers: [
         { provide: BreakpointObserver, useValue: mockBreakpointObserver },
         { provide: AppUserSettingsQueryService, useValue: mockUserSettingsQuery },
-        { provide: AppThemeService, useValue: mockThemeService },
         { provide: AppUserService, useValue: mockUserService },
         { provide: AppActivityCursorService, useValue: mockActivityCursorService },
         { provide: AppEventColorService, useValue: mockEventColorService },
@@ -97,6 +89,7 @@ describe('EventCardChartComponent', () => {
 
     fixture = TestBed.createComponent(EventCardChartComponent);
     component = fixture.componentInstance;
+    component.darkTheme = false;
 
     component.user = { uid: 'u1' } as any;
     component.targetUserID = 'u1';

@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
 
-import { ActivityInterface, ChartThemes } from '@sports-alliance/sports-lib';
+import { ActivityInterface } from '@sports-alliance/sports-lib';
 
 type PerformanceTabId = 'intensity' | 'powerCurve' | 'durability' | 'cadencePower';
 
@@ -13,7 +13,7 @@ type PerformanceTabId = 'intensity' | 'powerCurve' | 'durability' | 'cadencePowe
 })
 export class EventPerformanceChartsComponent {
   @Input() activities: ActivityInterface[] = [];
-  @Input() chartTheme: ChartThemes = ChartThemes.Material;
+  @Input() darkTheme = false;
   @Input() useAnimations = false;
   @Input() isMerge = false;
 

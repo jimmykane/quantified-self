@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { ChartThemes } from '@sports-alliance/sports-lib';
 import {
   buildEventEChartsVisualTokens,
   calculateEventEChartsAxisRange,
@@ -8,7 +7,7 @@ import {
 
 describe('event-echarts-common.helper', () => {
   it('should build mobile dark visual tokens', () => {
-    const tokens = buildEventEChartsVisualTokens(ChartThemes.Dark, true);
+    const tokens = buildEventEChartsVisualTokens(true, true);
 
     expect(tokens.darkTheme).toBe(true);
     expect(tokens.axisLabelFontSize).toBe(11);
@@ -19,7 +18,7 @@ describe('event-echarts-common.helper', () => {
   });
 
   it('should honor visual token overrides', () => {
-    const tokens = buildEventEChartsVisualTokens(ChartThemes.Material, false, {
+    const tokens = buildEventEChartsVisualTokens(false, false, {
       textColorLight: '#101010',
       tooltipBackgroundColorLight: '#efefef'
     });

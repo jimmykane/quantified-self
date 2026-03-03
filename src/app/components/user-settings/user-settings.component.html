@@ -287,15 +287,6 @@
                 }
               </mat-select>
             </mat-form-field>
-
-            <mat-form-field appearance="outline">
-              <mat-label>Chart Aesthetics</mat-label>
-              <mat-select formControlName="chartTheme">
-                @for (t of chartThemes | keyvalue; track t) {
-                <mat-option [value]="t.value">{{t.key}}</mat-option>
-                }
-              </mat-select>
-            </mat-form-field>
           </div>
 
           <mat-form-field appearance="outline">

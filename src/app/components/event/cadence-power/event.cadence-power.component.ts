@@ -15,7 +15,6 @@ import type { EChartsType } from 'echarts/core';
 
 import {
   ActivityInterface,
-  ChartThemes,
   DataCadence,
   DataDuration,
   DataPower,
@@ -52,7 +51,7 @@ const CADENCE_SYMBOLS = ['circle', 'diamond', 'triangle', 'rect', 'roundRect'];
 })
 export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() activities: ActivityInterface[] = [];
-  @Input() chartTheme: ChartThemes = ChartThemes.Material;
+  @Input() darkTheme = false;
   @Input() useAnimations = false;
   @Input() isMerge = false;
 
@@ -100,7 +99,7 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
       return;
     }
 
-    if (changes.activities || changes.chartTheme || changes.useAnimations || changes.isMerge) {
+    if (changes.activities || changes.darkTheme || changes.useAnimations || changes.isMerge) {
       this.refreshChart();
     }
   }
@@ -128,7 +127,7 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
   }
 
   private buildChartOption(cadencePowerSeries: PerformanceCurveCadencePowerSeries[]): ChartOption {
-    const chartStyle = buildEventEChartsVisualTokens(this.chartTheme, this.isMobile);
+    const chartStyle = buildEventEChartsVisualTokens(this.darkTheme, this.isMobile);
     const darkTheme = chartStyle.darkTheme;
     const textColor = chartStyle.textColor;
     const axisColor = chartStyle.axisColor;

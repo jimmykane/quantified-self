@@ -2,9 +2,7 @@ import { Injectable, OnDestroy, Signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppUserService } from './app.user.service';
-import { AppUserUtilities } from '../utils/app.user.utilities';
 import { User } from '@sports-alliance/sports-lib';
-import { ChartThemes } from '@sports-alliance/sports-lib';
 import { BehaviorSubject, Observable, Subscription } from 'rxjs';
 import { AppAuthService } from '../authentication/app.auth.service';
 
@@ -14,7 +12,6 @@ import { AppAuthService } from '../authentication/app.auth.service';
 })
 export class AppThemeService implements OnDestroy {
 
-  private chartTheme: BehaviorSubject<ChartThemes | null> = new BehaviorSubject<ChartThemes | null>(null);
   private appThemeSubject: BehaviorSubject<AppThemes> = new BehaviorSubject<AppThemes>(AppThemes.Normal);
 
   /**
@@ -38,15 +35,10 @@ export class AppThemeService implements OnDestroy {
     this.mediaQueryList.addEventListener('change', this.systemThemeListener);
 
     this.initializeTheme();
-
-    this.setChartTheme(this.getChartThemeFromStorage());
     this.userSubscription = this.authService.user$.subscribe(user => {
       this.user = user;
       if (this.user?.settings?.appSettings?.theme) {
         this.setAppTheme(this.user.settings.appSettings.theme)
-      }
-      if (this.user?.settings?.chartSettings?.theme) {
-        this.setChartTheme(this.user.settings.chartSettings.theme)
       }
     })
   }
@@ -69,14 +61,10 @@ export class AppThemeService implements OnDestroy {
   }
 
   private async changeTheme(theme: AppThemes) {
-    const chartTheme = theme === AppThemes.Normal ? ChartThemes.Material : ChartThemes.Dark;
     // Save it to the user if he exists
     if (this.user?.settings) {
       if (this.user.settings.appSettings) {
         this.user.settings.appSettings.theme = theme;
-      }
-      if (this.user.settings.chartSettings) {
-        this.user.settings.chartSettings.theme = chartTheme;
       }
       await this.userService.updateUserProperties(this.user, {
         settings: this.user.settings
@@ -84,7 +72,6 @@ export class AppThemeService implements OnDestroy {
     } else {
       // Save it to local storage to prevent flashes
       this.setAppTheme(theme);
-      this.setChartTheme(chartTheme);
     }
   }
 
@@ -103,21 +90,8 @@ export class AppThemeService implements OnDestroy {
     this.appThemeSubject.next(appTheme);
   }
 
-  public setChartTheme(chartTheme: ChartThemes) {
-    if (this.chartTheme.getValue() === chartTheme) {
-      return;
-    }
-    localStorage.setItem('chartTheme', chartTheme);
-    this.chartTheme.next(chartTheme);
-  }
-
-
   public getAppTheme(): Observable<AppThemes> {
     return this.appThemeSubject.asObservable();
-  }
-
-  public getChartTheme(): Observable<ChartThemes | null> {
-    return this.chartTheme.asObservable();
   }
 
 
@@ -151,18 +125,6 @@ export class AppThemeService implements OnDestroy {
       }
     }
     return null;
-  }
-
-
-  private getChartThemeFromStorage(): ChartThemes {
-    const item = localStorage.getItem('chartTheme');
-    if (item !== null) {
-      const key = this.getEnumKeyByEnumValue(ChartThemes, item);
-      if (key !== null) {
-        return ChartThemes[key];
-      }
-    }
-    return AppUserUtilities.getDefaultChartTheme();
   }
 
   private getEnumKeyByEnumValue<T extends Record<string, string>>(myEnum: T, enumValue: string): keyof T | null {

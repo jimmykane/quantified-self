@@ -3,7 +3,6 @@ import { NO_ERRORS_SCHEMA, SimpleChange } from '@angular/core';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
-  ChartThemes,
   DataDistance,
   TimeIntervals
 } from '@sports-alliance/sports-lib';
@@ -88,7 +87,7 @@ describe('ChartsPieComponent', () => {
 
     fixture = TestBed.createComponent(ChartsPieComponent);
     component = fixture.componentInstance;
-    component.chartTheme = ChartThemes.Material;
+    component.darkTheme = false;
     component.useAnimations = false;
     component.chartDataType = DataDistance.type;
     component.chartDataValueType = ChartDataValueTypes.Total;
@@ -205,7 +204,7 @@ describe('ChartsPieComponent', () => {
   });
 
   it('should use dark tooltip styles for dark chart theme', async () => {
-    component.chartTheme = ChartThemes.Dark;
+    component.darkTheme = true;
     component.data = [
       { type: 'Running', [ChartDataValueTypes.Total]: 10, count: 1 },
     ];

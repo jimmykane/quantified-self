@@ -14,13 +14,12 @@ import {
   Injector,
   runInInjectionContext,
 } from '@angular/core';
-import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { throttleTime } from 'rxjs/operators';
 import { Subject, asyncScheduler } from 'rxjs';
 import {
   ActivityInterface,
   ChartCursorBehaviours,
-  ChartThemes,
   DataDistance,
   DataStrydDistance,
   DynamicDataLoader,
@@ -31,7 +30,6 @@ import {
 } from '@sports-alliance/sports-lib';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
-import { AppThemeService } from '../../../services/app.theme.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppActivityCursorService } from '../../../services/activity-cursor/app-activity-cursor.service';
 import { AppChartSettingsLocalStorageService } from '../../../services/storage/app.chart.settings.local.storage.service';
@@ -74,11 +72,11 @@ export class EventCardChartComponent implements OnInit, OnChanges {
   @Input() selectedActivities: ActivityInterface[] = [];
   @Input() isVisible!: boolean;
   @Input() waterMark?: string;
+  @Input() darkTheme = false;
 
   @Output() loadingStatus = new EventEmitter<boolean>();
 
   public isLoading = false;
-  public chartTheme: ChartThemes = ChartThemes.Material;
   public allChartPanels: EventChartPanelModel[] = [];
   public chartPanels: EventChartPanelModel[] = [];
   public dataTypeLegendItems: EventDataTypeLegendItem[] = [];
@@ -222,7 +220,6 @@ export class EventCardChartComponent implements OnInit, OnChanges {
   }
 
   private userSettingsQuery = inject(AppUserSettingsQueryService);
-  private themeService = inject(AppThemeService);
   private userService = inject(AppUserService);
   private activityCursorService = inject(AppActivityCursorService);
   private chartSettingsLocalStorageService = inject(AppChartSettingsLocalStorageService);
@@ -232,7 +229,6 @@ export class EventCardChartComponent implements OnInit, OnChanges {
   private cdr = inject(ChangeDetectorRef);
   private destroyRef = inject(DestroyRef);
 
-  private themeSignal = toSignal(this.themeService.getChartTheme(), { initialValue: ChartThemes.Material });
   private cursorPositionSubject = new Subject<number>();
   private xAxisTypeOverride: XAxisTypes | null = null;
   private cursorBehaviourOverride: ChartCursorBehaviours | null = null;
@@ -246,11 +242,8 @@ export class EventCardChartComponent implements OnInit, OnChanges {
   constructor() {
     runInInjectionContext(this.injector, () => {
       effect(() => {
-        const theme = this.themeSignal();
         this.userSettingsQuery.chartSettings();
         this.userSettingsQuery.unitSettings();
-
-        this.chartTheme = theme ?? ChartThemes.Material;
         this.queueRebuild('settings-effect');
       }, { injector: this.injector });
     });
@@ -273,6 +266,7 @@ export class EventCardChartComponent implements OnInit, OnChanges {
       || simpleChanges.selectedActivities
       || simpleChanges.targetUserID
       || simpleChanges.user
+      || simpleChanges.darkTheme
     ) {
       this.queueRebuild('ngOnChanges');
     }

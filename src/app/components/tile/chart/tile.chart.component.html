@@ -7,14 +7,14 @@
   </app-tile-chart-actions>
   }
   @if (chartType === chartTypes.Pie) {
-  <app-pie-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [chartTheme]="chartTheme" [chartDataType]="dataType"
+  <app-pie-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme" [chartDataType]="dataType"
     [chartDataValueType]="dataValueType" [chartDataCategoryType]="dataCategoryType"
     [chartDataTimeInterval]="dataTimeInterval">
   </app-pie-chart>
   }
   @if (chartType === chartTypes.LinesHorizontal
   || chartType === chartTypes.LinesVertical) {
-  <app-xy-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [chartTheme]="chartTheme" [chartDataType]="dataType"
+  <app-xy-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme" [chartDataType]="dataType"
     [chartDataValueType]="dataValueType" [chartDataCategoryType]="dataCategoryType"
     [chartDataTimeInterval]="dataTimeInterval" [vertical]="chartType !== chartTypes.LinesHorizontal">
   </app-xy-chart>
@@ -22,7 +22,7 @@
   @if (chartType === chartTypes.ColumnsHorizontal
   || chartType === chartTypes.ColumnsVertical
   || chartType === chartTypes.PyramidsVertical) {
-  <app-columns-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [chartTheme]="chartTheme" [type]="(chartType === chartTypes.ColumnsVertical || chartType === chartTypes.ColumnsHorizontal)
+  <app-columns-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme" [type]="(chartType === chartTypes.ColumnsVertical || chartType === chartTypes.ColumnsHorizontal)
       ? 'columns'
       : 'pyramids'" [vertical]="chartType !== chartTypes.ColumnsHorizontal" [chartDataType]="dataType" [chartDataValueType]="dataValueType"
     [chartDataCategoryType]="dataCategoryType" [chartDataTimeInterval]="dataTimeInterval">
@@ -33,7 +33,7 @@
   <app-loading-overlay [isLoading]="isLoading || isTileActionSaving" [hasError]="data?.length === 0" [errorMessage]="'No data yet'"
     [errorHint]="'Needs activities with heart rate or power data'" [errorIcon]="'favorite'" [showSkeleton]="false"
     height="100%" [style.height.%]="100">
-    <app-event-intensity-zones [activities]="data" [chartTheme]="chartTheme" [orientation]="'vertical'"
+    <app-event-intensity-zones [activities]="data" [darkTheme]="darkTheme" [orientation]="'vertical'"
       [showHeader]="false">
     </app-event-intensity-zones>
   </app-loading-overlay>

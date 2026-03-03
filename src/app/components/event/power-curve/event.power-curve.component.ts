@@ -15,7 +15,6 @@ import type { EChartsType } from 'echarts/core';
 
 import {
   ActivityInterface,
-  ChartThemes,
   DataDuration,
   DataPower,
 } from '@sports-alliance/sports-lib';
@@ -57,7 +56,7 @@ const MOBILE_MAX_LABEL_CONFIG = [
 })
 export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() activities: ActivityInterface[] = [];
-  @Input() chartTheme: ChartThemes = ChartThemes.Material;
+  @Input() darkTheme = false;
   @Input() useAnimations = false;
   @Input() isMerge = false;
 
@@ -105,7 +104,7 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
       return;
     }
 
-    if (changes.activities || changes.chartTheme || changes.useAnimations || changes.isMerge) {
+    if (changes.activities || changes.darkTheme || changes.useAnimations || changes.isMerge) {
       this.refreshChart();
     }
   }
@@ -132,7 +131,7 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
   }
 
   private buildChartOption(powerSeries: PowerCurveChartSeries[]): ChartOption {
-    const chartStyle = buildEventEChartsVisualTokens(this.chartTheme, this.isMobile);
+    const chartStyle = buildEventEChartsVisualTokens(this.darkTheme, this.isMobile);
     const darkTheme = chartStyle.darkTheme;
     const textColor = chartStyle.textColor;
     const axisColor = chartStyle.axisColor;

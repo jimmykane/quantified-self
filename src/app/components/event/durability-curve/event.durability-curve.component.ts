@@ -15,7 +15,6 @@ import type { EChartsType } from 'echarts/core';
 
 import {
   ActivityInterface,
-  ChartThemes,
   DataDuration,
   DataHeartRate,
   DataPower,
@@ -58,7 +57,7 @@ const DURABILITY_FALLBACK_COLORS = ['#16B4EA', '#FF7043', '#66BB6A', '#AB47BC', 
 })
 export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() activities: ActivityInterface[] = [];
-  @Input() chartTheme: ChartThemes = ChartThemes.Material;
+  @Input() darkTheme = false;
   @Input() useAnimations = false;
   @Input() isMerge = false;
 
@@ -106,7 +105,7 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
       return;
     }
 
-    if (changes.activities || changes.chartTheme || changes.useAnimations || changes.isMerge) {
+    if (changes.activities || changes.darkTheme || changes.useAnimations || changes.isMerge) {
       this.refreshChart();
     }
   }
@@ -143,7 +142,7 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
     durabilitySeries: PerformanceCurveDurabilitySeries[],
     bestEffortMarkers: PerformanceCurveBestEffortMarker[]
   ): ChartOption {
-    const chartStyle = buildEventEChartsVisualTokens(this.chartTheme, this.isMobile);
+    const chartStyle = buildEventEChartsVisualTokens(this.darkTheme, this.isMobile);
     const darkTheme = chartStyle.darkTheme;
     const textColor = chartStyle.textColor;
     const axisColor = chartStyle.axisColor;

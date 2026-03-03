@@ -14,7 +14,6 @@ import { LoggerService } from '../../services/logger.service';
 import { Privacy, UserSettingsInterface } from '@sports-alliance/sports-lib';
 import {
   ChartCursorBehaviours,
-  ChartThemes,
   UserChartSettingsInterface,
   XAxisTypes,
 } from '@sports-alliance/sports-lib';
@@ -85,7 +84,6 @@ export class UserSettingsComponent implements OnChanges {
   ];
 
   public appThemes = AppThemes;
-  public chartThemes = ChartThemes;
   public lapTypes = LapTypesHelper.getLapTypesAsUniqueArray();
 
   public eventsPerPage = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000];
@@ -178,9 +176,6 @@ export class UserSettingsComponent implements OnChanges {
         },
         [this.maxTrimmedLength(this.brandTextMaxLength)]
       ),
-      chartTheme: new UntypedFormControl(this.user.settings.chartSettings.theme, [
-        Validators.required,
-      ]),
       chartDownSamplingLevel: new UntypedFormControl(this.user.settings.chartSettings.downSamplingLevel, [
         Validators.required,
       ]),
@@ -300,7 +295,6 @@ export class UserSettingsComponent implements OnChanges {
 
       const userChartSettings: UserChartSettingsInterface = {
         dataTypeSettings: dataTypeSettings,
-        theme: this.userSettingsFormGroup.get('chartTheme').value,
         useAnimations: this.userSettingsFormGroup.get('useAnimations').value,
         xAxisType: this.userSettingsFormGroup.get('xAxisType').value,
         showAllData: this.userSettingsFormGroup.get('showAllData').value,

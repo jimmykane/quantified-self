@@ -14,7 +14,6 @@ import {
   ActivityTypes,
   ChartDataCategoryTypes,
   ChartDataValueTypes,
-  ChartThemes,
   TimeIntervals
 } from '@sports-alliance/sports-lib';
 import { AppColors } from '../../../services/color/app.colors';
@@ -59,7 +58,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
   @Input() chartDataValueType?: ChartDataValueTypes;
   @Input() chartDataCategoryType?: ChartDataCategoryTypes;
   @Input() chartDataTimeInterval?: TimeIntervals;
-  @Input() chartTheme: ChartThemes = ChartThemes.Material;
+  @Input() darkTheme = false;
   @Input() useAnimations = false;
   @Input() isLoading = false;
 
@@ -106,7 +105,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
 
     if (
       changes.data ||
-      changes.chartTheme ||
+      changes.darkTheme ||
       changes.useAnimations ||
       changes.chartDataType ||
       changes.chartDataValueType ||
@@ -156,7 +155,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     aggregate: ReturnType<typeof getDashboardAggregateData>
   ): ChartOption {
     const chartWidth = this.chartDiv?.nativeElement?.clientWidth || 0;
-    const chartStyle = buildDashboardEChartsStyleTokens(this.chartTheme, chartWidth);
+    const chartStyle = buildDashboardEChartsStyleTokens(this.darkTheme, chartWidth);
     const darkTheme = chartStyle.darkTheme;
     const textColor = chartStyle.textColor;
     const axisColor = chartStyle.axisColor;
