@@ -26,7 +26,11 @@ import {
 import { AppEventColorService } from '../services/color/app.event.color.service';
 import { isEventLapTypeAllowed, normalizeEventLapType } from './event-lap-type.helper';
 import { applyEventChartCanonicalOrderOverride } from './event-chart-order.helper';
-import { resolveEventColorGroupKey, resolveEventSeriesColor } from './event-echarts-style.helper';
+import {
+  isEventPaceStreamType,
+  resolveEventColorGroupKey,
+  resolveEventSeriesColor
+} from './event-echarts-style.helper';
 import { EventChartRange, normalizeEventRange } from './event-echarts-xaxis.helper';
 import { normalizeUnitDerivedTypeLabel } from './stat-label.helper';
 
@@ -34,7 +38,7 @@ export { normalizeEventLapType } from './event-lap-type.helper';
 
 export interface EventChartPoint {
   x: number;
-  y: number;
+  y: number | null;
   time: number;
 }
 
@@ -93,6 +97,8 @@ export interface BuildEventChartPanelsInput {
 const EMPTY_PANEL_DOMAIN = { minX: 0, maxX: 1 };
 const EVENT_ZOOM_OVERVIEW_BUCKET_COUNT = 96;
 const EVENT_ZOOM_OVERVIEW_MAX_SAMPLES_PER_SERIES = 720;
+const PACE_MIN_MOVING_SPEED_MPS = 0.5;
+const PACE_MAX_DISPLAY_SECONDS = 1800;
 const NEVER_RENDER_STREAM_TYPES = new Set<string>([
   DataDuration.type,
   XAxisTypes.Time,
@@ -549,6 +555,11 @@ function toSeriesPoints(
     return [];
   }
 
+  const shouldTreatAsPace = isEventPaceStreamType(stream.type);
+  const speedValues = shouldTreatAsPace
+    ? getActivityStreamNumericValues(activity, DataSpeed.type, activityCache)
+    : null;
+
   if (xAxisType === XAxisTypes.Distance) {
     const distanceValues = getActivityDistanceValues(activity, activityCache);
     const absoluteTimes = getActivityAbsoluteTimes(activity, activityCache);
@@ -556,10 +567,12 @@ function toSeriesPoints(
 
     const points: EventChartPoint[] = [];
     for (let index = 0; index < length; index += 1) {
-      const y = streamValues[index];
+      const y = shouldTreatAsPace
+        ? getRenderablePaceValue(streamValues[index], speedValues, index)
+        : streamValues[index];
       const x = distanceValues[index];
       const time = absoluteTimes[index];
-      if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(time)) {
+      if (!Number.isFinite(x) || !Number.isFinite(time)) {
         continue;
       }
       points.push({
@@ -577,10 +590,12 @@ function toSeriesPoints(
   const points: EventChartPoint[] = [];
 
   for (let index = 0; index < length; index += 1) {
-    const y = streamValues[index];
+    const y = shouldTreatAsPace
+      ? getRenderablePaceValue(streamValues[index], speedValues, index)
+      : streamValues[index];
     const seconds = timeValues[index];
     const time = absoluteTimes[index];
-    if (!Number.isFinite(y) || !Number.isFinite(seconds)) {
+    if (!Number.isFinite(seconds)) {
       continue;
     }
 
@@ -596,6 +611,25 @@ function toSeriesPoints(
   }
 
   return points;
+}
+
+function getRenderablePaceValue(
+  rawPaceValue: number,
+  speedValues: number[] | null,
+  index: number
+): number | null {
+  if (!Number.isFinite(rawPaceValue) || rawPaceValue <= 0 || rawPaceValue > PACE_MAX_DISPLAY_SECONDS) {
+    return null;
+  }
+
+  if (Array.isArray(speedValues) && index < speedValues.length) {
+    const speedValue = speedValues[index];
+    if (!Number.isFinite(speedValue) || speedValue <= PACE_MIN_MOVING_SPEED_MPS) {
+      return null;
+    }
+  }
+
+  return rawPaceValue;
 }
 
 function toNumericArray(data: unknown): number[] {

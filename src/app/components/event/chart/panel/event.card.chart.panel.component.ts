@@ -106,7 +106,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private zoomBarVisibleForViewport = true;
   private zoomSyncVisibleForViewport = true;
   private seriesByID = new Map<string, PanelSeriesModel>();
-  private seriesDataCache = new WeakMap<EventChartPoint[], Array<[number, number]>>();
+  private seriesDataCache = new WeakMap<EventChartPoint[], Array<[number, number | null]>>();
   private formattedValueCache = new Map<string, string>();
   private activeLapTooltipKey: string | null = null;
   private applyingSharedSelectionRange = false;
@@ -327,8 +327,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       seriesOptions[0].markLine = this.buildLapMarkLine(darkTheme);
     }
 
-    const hasPaceSeries = panel.series.some((series) => /pace/i.test(series.streamType));
-
     return {
       animation: this.useAnimations === true,
       animationThreshold: PROGRESSIVE_THRESHOLD,
@@ -386,7 +384,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       },
       yAxis: {
         type: 'value',
-        inverse: yAxisConfig.inverse || hasPaceSeries,
+        inverse: yAxisConfig.inverse,
         min: yAxisConfig.min,
         max: yAxisConfig.max,
         interval: yAxisConfig.interval,
@@ -1440,14 +1438,14 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
   }
 
-  private getSeriesLineData(points: EventChartPoint[]): Array<[number, number]> {
+  private getSeriesLineData(points: EventChartPoint[]): Array<[number, number | null]> {
     const pointsRef = points as EventChartPoint[];
     const cachedData = this.seriesDataCache.get(pointsRef);
     if (cachedData) {
       return cachedData;
     }
 
-    const data = new Array<[number, number]>(points.length);
+    const data = new Array<[number, number | null]>(points.length);
     for (let index = 0; index < points.length; index += 1) {
       const point = points[index];
       data[index] = [point.x, point.y];

@@ -396,6 +396,63 @@ describe('event-echarts-data.helper', () => {
     expect(panels[0].series[0].points.map((point) => point.y)).toEqual([100, 101, 102, 105]);
   });
 
+  it('introduces gaps for pace points when movement is effectively stopped', () => {
+    vi.spyOn(ActivityUtilities, 'createUnitStreamsFromStreams').mockReturnValue([] as any);
+    vi.spyOn(DynamicDataLoader, 'getUnitBasedDataTypesFromDataTypes').mockImplementation((types: any) => types as any);
+    vi.spyOn(DynamicDataLoader, 'getUnitBasedDataTypesFromDataType').mockImplementation((type: any) => [type] as any);
+    vi.spyOn(DynamicDataLoader, 'getNonUnitBasedDataTypes').mockReturnValue([DataDistance.type]);
+    vi.spyOn(DynamicDataLoader, 'getDataClassFromDataType').mockImplementation((type: string) => ({
+      displayType: type,
+      type,
+      unit: type === DataPace.type ? 'min/km' : 'km/h'
+    } as any));
+
+    const paceStream = {
+      type: DataPace.type,
+      getData: () => [300, 320, 340, 360],
+    } as any;
+    const speedStream = {
+      type: DataSpeed.type,
+      getData: () => [3.1, 0.2, 2.8, 0],
+    } as any;
+    const timeStream = {
+      type: XAxisTypes.Time,
+      getData: () => [0, 1, 2, 3],
+    } as any;
+
+    const activity = {
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      creator: { name: 'Garmin' },
+      type: 'Running',
+      getID: () => 'a-pace-gap',
+      getAllStreams: () => [paceStream, speedStream],
+      getStream: (type: string) => {
+        if (type === XAxisTypes.Time) {
+          return timeStream;
+        }
+        if (type === DataSpeed.type) {
+          return speedStream;
+        }
+        return null;
+      },
+    } as any;
+
+    const panels = buildEventChartPanels({
+      selectedActivities: [activity],
+      allActivities: [activity],
+      xAxisType: XAxisTypes.Duration,
+      showAllData: false,
+      dataTypesToUse: [DataPace.type],
+      userUnitSettings: {} as any,
+      eventColorService: {
+        getActivityColor: () => '#ff0000'
+      } as any,
+    });
+
+    expect(panels).toHaveLength(1);
+    expect(panels[0].series[0].points.map((point) => point.y)).toEqual([300, null, 340, null]);
+  });
+
   it('orders panels by canonical datatype order with event priority overrides', () => {
     vi.spyOn(ActivityUtilities, 'createUnitStreamsFromStreams').mockReturnValue([] as any);
     vi.spyOn(DynamicDataLoader, 'getUnitBasedDataTypesFromDataTypes').mockImplementation((types: any) => types as any);

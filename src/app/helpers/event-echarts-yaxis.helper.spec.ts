@@ -58,7 +58,7 @@ describe('event-echarts-yaxis.helper', () => {
     expect(config.max).toBeGreaterThan(42);
   });
 
-  it('returns inverted config for pace streams', () => {
+  it('keeps pace streams inverted while using the shared default numeric scale', () => {
     const config = buildEventPanelYAxisConfig({
       panel: buildPanel(DataPace.type, [300, 305, 310, 315]),
       visibleRange: null,
@@ -69,11 +69,12 @@ describe('event-echarts-yaxis.helper', () => {
     expect(config.inverse).toBe(true);
     expect(config.min).toBeDefined();
     expect(config.max).toBeDefined();
-    expect(config.min).toBe(300);
-    expect(config.max).toBe(315);
+    expect(config.min).toBeLessThanOrEqual(300);
+    expect(config.max).toBeGreaterThanOrEqual(315);
+    expect(config.interval).toBeDefined();
   });
 
-  it('treats effort pace streams like pace for y-axis scaling', () => {
+  it('keeps effort pace streams inverted while using the shared default numeric scale', () => {
     const config = buildEventPanelYAxisConfig({
       panel: buildPanel(DataEffortPace.type, [280, 290, 300, 310]),
       visibleRange: null,
@@ -84,6 +85,7 @@ describe('event-echarts-yaxis.helper', () => {
     expect(config.inverse).toBe(true);
     expect(config.min).toBeDefined();
     expect(config.max).toBeDefined();
+    expect(config.interval).toBeDefined();
   });
 
   it('uses visible range when computing scale', () => {

@@ -9,7 +9,6 @@ import {
 import { EventChartPanelModel } from './event-echarts-data.helper';
 import { isEventPaceStreamType } from './event-echarts-style.helper';
 import { EventChartRange, normalizeEventRange } from './event-echarts-xaxis.helper';
-import { computePaceAxisScaling } from './pace-axis.helper';
 
 const DEFAULT_NON_POWER_EXTRA_MAX = 0.1;
 const DEFAULT_NON_PACE_TARGET_TICK_COUNT = 6;
@@ -44,11 +43,14 @@ export interface BuildEventPanelYAxisConfigInput {
 
 export function buildEventPanelYAxisConfig(input: BuildEventPanelYAxisConfigInput): EventPanelYAxisConfig {
   const streamTypes = input.panel.series.map((series) => series.streamType || '');
-  const hasPaceStream = streamTypes.some((streamType) => isEventPaceStreamType(streamType));
   const values = getVisibleValues(input.panel, input.visibleRange);
+  const hasPaceStream = streamTypes.some((streamType) => isEventPaceStreamType(streamType));
 
   if (hasPaceStream) {
-    return buildPaceAxis(values, input.extraMaxForPace);
+    return {
+      ...buildDefaultAxis(values, false, input.extraMaxForPower),
+      inverse: true,
+    };
   }
 
   const hasCadenceStream = streamTypes.some((streamType) => CADENCE_STREAM_TYPES.has(streamType));
@@ -86,44 +88,8 @@ function getVisibleValues(panel: EventChartPanelModel, visibleRange: EventChartR
       }
       return point.x >= normalizedRange.start && point.x <= normalizedRange.end;
     })
-    .map((point) => Number(point.y))
+    .map((point) => typeof point.y === 'number' ? point.y : Number.NaN)
     .filter((value) => Number.isFinite(value));
-}
-
-function buildPaceAxis(values: number[], extraMaxForPace: number): EventPanelYAxisConfig {
-  const positiveValues = values.filter((value) => value > 0);
-  if (!positiveValues.length) {
-    return { inverse: true };
-  }
-
-  if (positiveValues.length === 1) {
-    return buildSingleValueRange(positiveValues[0], true);
-  }
-
-  const paceScaling = computePaceAxisScaling(positiveValues, extraMaxForPace);
-  if (Number.isFinite(paceScaling.min) && Number.isFinite(paceScaling.max) && (paceScaling.max as number) > (paceScaling.min as number)) {
-    return {
-      inverse: true,
-      min: paceScaling.min,
-      max: paceScaling.max,
-    };
-  }
-
-  const extrema = getValueExtrema(positiveValues);
-  if (!extrema) {
-    return { inverse: true };
-  }
-
-  const { min, max } = extrema;
-  if (max <= min) {
-    return buildSingleValueRange(min, true);
-  }
-
-  return {
-    inverse: true,
-    min,
-    max,
-  };
 }
 
 function buildDefaultAxis(values: number[], isPower: boolean, extraMaxForPower: number): EventPanelYAxisConfig {
