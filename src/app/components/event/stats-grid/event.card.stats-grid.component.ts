@@ -441,9 +441,13 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
       return;
     }
 
-    fontsApi.ready.then(() => {
-      this.scheduleTabBodyHeightSync('allow_shrink', true);
-    });
+    void fontsApi.ready
+      .then(() => {
+        this.scheduleTabBodyHeightSync('allow_shrink', true);
+      })
+      .catch(() => {
+        this.scheduleTabBodyHeightSync('allow_shrink', true);
+      });
   }
 
   private syncTabBodyHeight(mode: TabBodyHeightSyncMode = 'allow_shrink') {

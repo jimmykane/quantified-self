@@ -344,10 +344,15 @@ export class EventCardChartComponent implements OnInit, OnChanges {
     }
 
     this.pendingRebuild = true;
-    Promise.resolve().then(() => {
-      this.pendingRebuild = false;
-      this.rebuildPanels(source);
-    });
+    void Promise.resolve()
+      .then(() => {
+        this.pendingRebuild = false;
+        this.rebuildPanels(source);
+      })
+      .catch((error) => {
+        this.pendingRebuild = false;
+        this.logger.error('[EventCardChart] Failed to queue panel rebuild', error);
+      });
   }
 
   private rebuildPanels(source: string): void {

@@ -253,12 +253,16 @@ export class AppUserService implements OnDestroy {
     authState(this.auth).subscribe((user) => {
       if (user) {
         this.logger.setUser({ id: user.uid, email: user.email || undefined });
-        user.getIdTokenResult().then((token) => {
-          const role = token.claims['stripeRole'] as string;
-          if (role) {
-            this.logger.setTag("subscription_role", role);
-          }
-        });
+        void user.getIdTokenResult()
+          .then((token) => {
+            const role = token.claims['stripeRole'] as string;
+            if (role) {
+              this.logger.setTag("subscription_role", role);
+            }
+          })
+          .catch((error) => {
+            this.logger.warn('[AppUserService] Failed to resolve auth token claims for logging context', error);
+          });
       } else {
         this.logger.setUser(null);
         this.logger.setTag("subscription_role", "anonymous");

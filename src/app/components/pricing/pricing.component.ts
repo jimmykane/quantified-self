@@ -106,11 +106,15 @@ export class PricingComponent implements OnInit, OnDestroy {
         // we force-refresh the user token to get the new claims (set by Cloud Function).
         const subscriptions$ = this.paymentService.getUserSubscriptions().pipe(
             map(subs => {
-                this.userService.getSubscriptionRole().then(newRole => {
-                    if (this.currentRole !== newRole) {
-                        this.currentRole = newRole;
-                    }
-                });
+                void this.userService.getSubscriptionRole()
+                    .then(newRole => {
+                        if (this.currentRole !== newRole) {
+                            this.currentRole = newRole;
+                        }
+                    })
+                    .catch((error) => {
+                        this.logger.error('Failed to refresh subscription role after subscription update', error);
+                    });
                 return subs.filter(sub => sub.role !== 'free');
             })
         );

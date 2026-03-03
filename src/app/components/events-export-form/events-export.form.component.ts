@@ -27,6 +27,7 @@ import { DataPace } from '@sports-alliance/sports-lib';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { DataSwimPace } from '@sports-alliance/sports-lib';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { LoggerService } from '../../services/logger.service';
 
 
 @Component({
@@ -47,6 +48,7 @@ export class EventsExportFormComponent extends FormsAbstract {
   public endDate: Date;
   public isLoading: boolean;
   private analyticsService = inject(AppAnalyticsService);
+  private logger = inject(LoggerService);
 
 
   constructor(
@@ -350,11 +352,14 @@ export class EventsExportFormComponent extends FormsAbstract {
       { type: 'data:text/csv;charset=utf-8' },
     )), `${this.startDate.toLocaleDateString()}-${this.endDate.toLocaleDateString()}`, 'csv');
 
-    this.close(new Event('Done')).then(() => {
-      this.userService.updateUserProperties(this.user, {
-        settings: this.user.settings
-      });
-      this.analyticsService.logEvent('download_csv', {});
-    })
+    await this.close(new Event('Done'));
+
+    void this.userService.updateUserProperties(this.user, {
+      settings: this.user.settings
+    }).catch((error) => {
+      this.logger.error('[EventsExportFormComponent] Failed to persist export settings', error);
+    });
+
+    this.analyticsService.logEvent('download_csv', {});
   }
 }

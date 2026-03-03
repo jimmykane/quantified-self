@@ -99,15 +99,24 @@ export class AppBenchmarkFlowService {
     });
 
     if (seededActivities.length === 0) {
-      void this.resolveEventWithActivities(config).then((activeEvent) => {
-        resolvedEvent = activeEvent;
-        if (closed) return;
-        const activities = activeEvent.getActivities?.() || [];
-        const nextSelection = (config.initialSelection && config.initialSelection.length)
-          ? config.initialSelection
-          : activities.slice(0, 2);
-        dialogRef.componentInstance?.setActivities(activities, nextSelection);
-      });
+      void this.resolveEventWithActivities(config)
+        .then((activeEvent) => {
+          resolvedEvent = activeEvent;
+          if (closed) return;
+          const activities = activeEvent.getActivities?.() || [];
+          const nextSelection = (config.initialSelection && config.initialSelection.length)
+            ? config.initialSelection
+            : activities.slice(0, 2);
+          dialogRef.componentInstance?.setActivities(activities, nextSelection);
+        })
+        .catch((error) => {
+          this.logger.error('[AppBenchmarkFlowService] Failed to resolve event activities for benchmark dialog', error);
+          if (closed) {
+            return;
+          }
+          dialogRef.componentInstance?.setActivities([], []);
+          this.snackBar.open('Could not load activities for benchmarking', undefined, { duration: 3000 });
+        });
     }
   }
 

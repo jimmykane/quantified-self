@@ -59,10 +59,14 @@ export class ServicesComponent implements OnInit, OnDestroy {
       // We could update resolver, but for now let's just fetch it here.
       // We accept that it might "pop" in a millisecond later.
       this.processUser(resolvedData.user, resolvedData.isPro);
-      this.userService.isAdmin().then(isAdmin => {
-        this.isAdmin = isAdmin;
-        // Re-process to update any dependent logic if necessary (though current processUser doesn't use isAdmin, UI does)
-      });
+      void this.userService.isAdmin()
+        .then(isAdmin => {
+          this.isAdmin = isAdmin;
+          // Re-process to update any dependent logic if necessary (though current processUser doesn't use isAdmin, UI does)
+        })
+        .catch(() => {
+          this.isAdmin = false;
+        });
       this.isLoading = false;
     }
 

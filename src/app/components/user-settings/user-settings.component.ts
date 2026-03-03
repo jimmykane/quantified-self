@@ -139,10 +139,16 @@ export class UserSettingsComponent implements OnChanges {
 
   ngOnChanges(): void {
     if (this.user) {
-      this.userService.isAdmin().then(isAdmin => {
-        this.isAdminUser = isAdmin;
-        this.syncBrandTextControlState();
-      });
+      void this.userService.isAdmin()
+        .then(isAdmin => {
+          this.isAdminUser = isAdmin;
+          this.syncBrandTextControlState();
+        })
+        .catch((error) => {
+          this.isAdminUser = false;
+          this.syncBrandTextControlState();
+          this.logger.error('[UserSettingsComponent] Failed to resolve admin status', error);
+        });
     }
     // Initialize the user settings and get the enabled ones
     const dataTypesToUse = Object.keys(this.user.settings.chartSettings.dataTypeSettings).filter((dataTypeSettingKey) => {

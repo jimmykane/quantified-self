@@ -452,7 +452,7 @@ export const scheduleSportsLibReparseScan = onSchedule({
             }
         })();
         inFlightProcessing.add(processPromise);
-        processPromise.then(() => {
+        void processPromise.then(() => {
             inFlightProcessing.delete(processPromise);
         }, () => {
             inFlightProcessing.delete(processPromise);

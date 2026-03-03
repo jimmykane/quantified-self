@@ -82,14 +82,19 @@ export class SideNavComponent implements OnInit, OnDestroy {
 
   async logout() {
     this.analyticsService.logEvent('logout', {});
-    this.router.navigate(['/']).then(async () => {
+    try {
+      await this.router.navigate(['/']);
       await this.authService.signOut();
       localStorage.clear();
       this.windowService.windowRef.location.reload();
       this.snackBar.open('Signed out', undefined, {
         duration: 2000,
       });
-    });
+    } catch {
+      this.snackBar.open('Could not sign out', undefined, {
+        duration: 2000,
+      });
+    }
   }
 
   ngOnDestroy(): void {

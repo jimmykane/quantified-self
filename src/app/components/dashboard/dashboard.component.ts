@@ -99,9 +99,14 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         this.targetUser = await this.userService.getUserByID(userID).pipe(take(1)).toPromise();
         this.logPerf('target_user_fetch', targetUserFetchStart, { userID });
       } catch (e) {
-        return this.router.navigate(['dashboard']).then(() => {
-          this.snackBar.open('Page not found');
-        });
+        void this.router.navigate(['dashboard'])
+          .then(() => {
+            this.snackBar.open('Page not found');
+          })
+          .catch((error) => {
+            this.logger.error('[DashboardComponent] Failed to redirect after missing target user', error);
+          });
+        return;
       }
     }
     merge(this.authService.user$, this.manualSearchTrigger$).pipe(
@@ -120,9 +125,13 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
 
       // Get the user
       if (!user) {
-        this.router.navigate(['login']).then(() => {
-          this.snackBar.open('You were signed out out')
-        });
+        void this.router.navigate(['login'])
+          .then(() => {
+            this.snackBar.open('You were signed out out');
+          })
+          .catch((error) => {
+            this.logger.error('[DashboardComponent] Failed to navigate to login after sign-out', error);
+          });
         return of({ user: null, events: null });
       }
 
