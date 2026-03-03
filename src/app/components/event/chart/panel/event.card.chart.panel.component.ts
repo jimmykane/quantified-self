@@ -13,7 +13,7 @@ import {
   ViewChild
 } from '@angular/core';
 import { ChartCursorBehaviours, ChartThemes, LapTypes, XAxisTypes } from '@sports-alliance/sports-lib';
-import type { EChartsType } from 'echarts/core';
+import type { ECElementEvent, EChartsType } from 'echarts/core';
 import { EChartsLoaderService } from '../../../../services/echarts-loader.service';
 import { LoggerService } from '../../../../services/logger.service';
 import {
@@ -47,6 +47,25 @@ type ChartOption = Parameters<EChartsType['setOption']>[0];
 type ChartAction = Parameters<EChartsType['dispatchAction']>[0];
 type PanelSeriesModel = EventChartPanelModel['series'][number];
 type ChartLineSeriesOption = LineSeriesOption;
+type TooltipFormatterParams = {
+  value?: unknown;
+  seriesId?: string;
+  seriesName?: string;
+  color?: string;
+};
+type AxisPointerEvent = {
+  axesInfo?: Array<{
+    value?: number | string;
+  }>;
+};
+type BrushAreaPayload = {
+  coordRange?: [number, number] | number[];
+  coordRanges?: Array<[number, number] | number[]>;
+};
+type BrushEventParams = {
+  $from?: string;
+  areas?: BrushAreaPayload[];
+};
 
 const PROGRESSIVE_THRESHOLD = 6000;
 const PROGRESSIVE_STEP = 900;
@@ -378,7 +397,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           fontFamily: "'Barlow Condensed', sans-serif",
           fontSize: 12,
         },
-        formatter: (params: any) => this.formatTooltip(params)
+        formatter: (params: TooltipFormatterParams | TooltipFormatterParams[]) => this.formatTooltip(params)
       },
       brush: this.buildBrushOption(darkTheme),
       xAxis: {
@@ -542,7 +561,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     if (this.panel && !TEMP_DISABLE_AXIS_POINTER_CURSOR_EMIT) {
-      chart.on('updateAxisPointer', (params: any) => {
+      chart.on('updateAxisPointer', (params: AxisPointerEvent) => {
         const value = Number(params?.axesInfo?.[0]?.value);
         if (Number.isFinite(value)) {
           this.cursorPositionChange.emit(value);
@@ -551,7 +570,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     if (this.panel) {
-      chart.on('mousemove', (params: any) => {
+      chart.on('mousemove', (params: ECElementEvent) => {
         if (params?.componentType === 'markLine') {
           this.showLocalLapTooltip(params);
           return;
@@ -576,10 +595,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     });
 
     if (this.panel) {
-      chart.on('brush', (params: any) => {
+      chart.on('brush', (params: BrushEventParams) => {
         this.handleBrushEvent(params);
       });
-      chart.on('brushEnd', (params: any) => {
+      chart.on('brushEnd', (params: BrushEventParams) => {
         this.handleBrushEnd(params);
       });
     }
@@ -908,20 +927,21 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     } as ChartOption;
   }
 
-  private formatTooltip(params: any): string {
-    if (!this.panel || !Array.isArray(params) || params.length === 0) {
+  private formatTooltip(params: TooltipFormatterParams | TooltipFormatterParams[]): string {
+    const tooltipParams = Array.isArray(params) ? params : [params];
+    if (!this.panel || tooltipParams.length === 0) {
       return '';
     }
 
-    const xValue = Number(params[0]?.value?.[0]);
+    const xValue = Number(Array.isArray(tooltipParams[0]?.value) ? tooltipParams[0].value[0] : undefined);
     const header = formatEventXAxisValue(
       xValue,
       this.xAxisType,
       { includeDateForTime: this.showDateOnTimeAxis }
     );
     const tooltipLines: string[] = [];
-    for (let index = 0; index < params.length; index += 1) {
-      const point = params[index];
+    for (let index = 0; index < tooltipParams.length; index += 1) {
+      const point = tooltipParams[index];
       const seriesModel = this.seriesByID.get(point.seriesId);
       const streamType = seriesModel?.streamType || this.panel?.dataType;
       const rawYValue = Array.isArray(point.value) ? point.value[1] : point.value;
@@ -967,7 +987,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     return lines.join('');
   }
 
-  private showLocalLapTooltip(params: any): void {
+  private showLocalLapTooltip(params: ECElementEvent): void {
     const chart = this.chartHost.getChart();
     const marker = params?.data as EventChartLapMarker | undefined;
     const offsetX = Number(params?.event?.offsetX);
@@ -1119,7 +1139,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
   }
 
-  private handleBrushEvent(params: any): void {
+  private handleBrushEvent(params: BrushEventParams): void {
     if (this.showZoomBar || this.cursorBehaviour !== ChartCursorBehaviours.SelectX) {
       return;
     }
@@ -1140,7 +1160,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.selectedRangeChange.emit(nextRange);
   }
 
-  private handleBrushEnd(params: any): void {
+  private handleBrushEnd(params: BrushEventParams): void {
     if (this.showZoomBar || this.cursorBehaviour !== ChartCursorBehaviours.ZoomX) {
       return;
     }
@@ -1242,7 +1262,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     };
   }
 
-  private extractBrushRange(params: any): EventChartRange | null {
+  private extractBrushRange(params: BrushEventParams): EventChartRange | null {
     const rawAreas = Array.isArray(params?.areas) ? params.areas : [];
     const firstArea = rawAreas[0];
     if (!firstArea) {
