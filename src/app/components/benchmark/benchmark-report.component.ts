@@ -541,7 +541,7 @@ export class BenchmarkReportComponent implements OnChanges {
 
         this.diffChips = displayList
             .filter(stat => diffMap.has(stat.type))
-            .map((stat) => {
+            .map<BenchmarkDiffChip | null>((stat) => {
                 const diff = diffMap.get(stat.type);
                 if (!diff) {
                     return null;

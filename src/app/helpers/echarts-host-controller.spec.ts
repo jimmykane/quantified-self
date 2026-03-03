@@ -140,6 +140,8 @@ describe('EChartsHostController', () => {
       eChartsLoader: loader as any,
     });
     const container = document.createElement('div');
+    Object.defineProperty(container, 'clientWidth', { configurable: true, value: 320 });
+    Object.defineProperty(container, 'clientHeight', { configurable: true, value: 180 });
 
     await controller.init(container);
     const didSet = controller.setOption({ series: [] } as any, { notMerge: true, lazyUpdate: true });
@@ -148,6 +150,9 @@ describe('EChartsHostController', () => {
     expect(didSet).toBe(true);
     expect(loader.setOption).toHaveBeenCalledTimes(1);
     expect(loader.resize).toHaveBeenCalledTimes(1);
+    expect(loader.resize).toHaveBeenCalledWith(chartMock, {
+      silent: true,
+    });
   });
 
   it('should resize from resize observer callback using raf throttling', async () => {
@@ -156,6 +161,8 @@ describe('EChartsHostController', () => {
       eChartsLoader: loader as any,
     });
     const container = document.createElement('div');
+    Object.defineProperty(container, 'clientWidth', { configurable: true, value: 400 });
+    Object.defineProperty(container, 'clientHeight', { configurable: true, value: 220 });
 
     await controller.init(container);
 
@@ -173,6 +180,8 @@ describe('EChartsHostController', () => {
       eChartsLoader: loader as any,
     });
     const container = document.createElement('div');
+    Object.defineProperty(container, 'clientWidth', { configurable: true, value: 360 });
+    Object.defineProperty(container, 'clientHeight', { configurable: true, value: 240 });
 
     await controller.init(container);
 
@@ -189,6 +198,21 @@ describe('EChartsHostController', () => {
     visualViewportResizeListener?.(new Event('resize'));
 
     expect(loader.resize).toHaveBeenCalledTimes(1);
+  });
+
+  it('should skip resize when container dimensions are zero', async () => {
+    const loader = buildLoaderMock();
+    const controller = new EChartsHostController({
+      eChartsLoader: loader as any,
+    });
+    const container = document.createElement('div');
+    Object.defineProperty(container, 'clientWidth', { configurable: true, value: 0 });
+    Object.defineProperty(container, 'clientHeight', { configurable: true, value: 0 });
+
+    await controller.init(container);
+    controller.scheduleResize();
+
+    expect(loader.resize).not.toHaveBeenCalled();
   });
 
   it('should dispose chart and disconnect observers', async () => {

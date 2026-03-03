@@ -216,10 +216,11 @@ describe('EChartsLoaderService', () => {
       resize: vi.fn(),
     } as any;
 
-    service.resize(chart);
+    service.resize(chart, { width: 320, height: 200, silent: true });
 
     expect(runOutsideAngularSpy).toHaveBeenCalled();
     expect(chart.resize).toHaveBeenCalledTimes(1);
+    expect(chart.resize).toHaveBeenCalledWith({ width: 320, height: 200, silent: true });
   });
 
   it('should connect and disconnect ECharts groups in runOutsideAngular', async () => {

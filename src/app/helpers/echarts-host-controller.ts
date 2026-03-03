@@ -93,12 +93,12 @@ export class EChartsHostController {
   }
 
   public scheduleResize(): void {
-    if (!this.chart) {
+    if (!this.chart || !this.observedContainer) {
       return;
     }
 
     if (typeof requestAnimationFrame === 'undefined') {
-      this.config.eChartsLoader.resize(this.chart);
+      this.resizeToContainer();
       return;
     }
 
@@ -108,10 +108,10 @@ export class EChartsHostController {
 
     this.resizeFrameId = requestAnimationFrame(() => {
       this.resizeFrameId = null;
-      if (!this.chart) {
+      if (!this.chart || !this.observedContainer) {
         return;
       }
-      this.config.eChartsLoader.resize(this.chart);
+      this.resizeToContainer();
     });
   }
 
@@ -147,6 +147,39 @@ export class EChartsHostController {
     this.resizeObserver.observe(container);
 
     this.observedContainer = container;
+  }
+
+  private resizeToContainer(): void {
+    if (!this.chart || !this.observedContainer) {
+      return;
+    }
+
+    const { width, height } = this.getContainerSize(this.observedContainer);
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      return;
+    }
+
+    this.config.eChartsLoader.resize(this.chart, {
+      silent: true,
+    });
+  }
+
+  private getContainerSize(container: HTMLElement): { width: number; height: number } {
+    const clientWidth = Number(container.clientWidth);
+    const clientHeight = Number(container.clientHeight);
+
+    if (Number.isFinite(clientWidth) && Number.isFinite(clientHeight) && clientWidth > 0 && clientHeight > 0) {
+      return {
+        width: clientWidth,
+        height: clientHeight,
+      };
+    }
+
+    const rect = container.getBoundingClientRect();
+    return {
+      width: rect.width,
+      height: rect.height,
+    };
   }
 
   private observeViewport(): void {

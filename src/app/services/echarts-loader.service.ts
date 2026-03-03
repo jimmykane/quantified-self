@@ -6,6 +6,7 @@ type EChartsCoreModule = typeof import('echarts/core');
 type EChartsOption = Parameters<EChartsType['setOption']>[0];
 type EChartsSetOptionSettings = Parameters<EChartsType['setOption']>[1];
 type EChartsThemeDefinition = Record<string, unknown>;
+type EChartsResizeOptions = NonNullable<Parameters<EChartsType['resize']>[0]>;
 
 export const ECHARTS_GLOBAL_FONT_FAMILY = "'Barlow Condensed', sans-serif";
 const ECHARTS_LIGHT_THEME_NAME = 'quantified-self-light';
@@ -130,9 +131,9 @@ export class EChartsLoaderService {
     });
   }
 
-  public resize(chart: EChartsType): void {
+  public resize(chart: EChartsType, options?: EChartsResizeOptions): void {
     this.zone.runOutsideAngular(() => {
-      chart.resize();
+      chart.resize(options);
     });
   }
 
