@@ -237,11 +237,13 @@ async function parseUploadedEvent(payload: Buffer, resolvedExtension: string): P
   throw new HttpStatusError(400, `Unsupported file extension: ${baseExtension}.`);
 }
 
-function generateUploadEventID(payload: Buffer, resolvedExtension: string): string {
+function generateUploadEventID(userID: string, payload: Buffer, resolvedExtension: string): string {
   const baseExtension = getBaseExtension(resolvedExtension);
 
   return createHash('sha256')
     .update(baseExtension)
+    .update(':')
+    .update(userID)
     .update(':')
     .update(payload)
     .digest('hex');
@@ -328,7 +330,7 @@ export const uploadActivity = onRequest({
       throw new HttpStatusError(400, 'Could not parse uploaded payload.');
     }
 
-    const eventID = generateUploadEventID(payloadForParsing, resolvedExtension);
+    const eventID = generateUploadEventID(userID, payloadForParsing, resolvedExtension);
     event.setID(eventID);
 
     const resolvedEventName = resolveEventNameFromHeader(originalFilename);

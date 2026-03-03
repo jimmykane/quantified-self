@@ -219,9 +219,11 @@ function arrayBufferToBuffer(data: ArrayBuffer): Buffer {
   return Buffer.from(new Uint8Array(data));
 }
 
-function expectedUploadEventID(payload: Buffer, baseExtension: string): string {
+function expectedUploadEventID(userID: string, payload: Buffer, baseExtension: string): string {
   return createHash('sha256')
     .update(baseExtension)
+    .update(':')
+    .update(userID)
     .update(':')
     .update(payload)
     .digest('hex');
@@ -323,7 +325,7 @@ describe('uploadActivity', () => {
     hoisted.mockVerifyIdToken.mockResolvedValueOnce({ uid: 'verified-user' });
     const response = makeResponse();
     const rawBody = Buffer.from([1, 2, 3, 4]);
-    const expectedEventID = expectedUploadEventID(rawBody, 'fit');
+    const expectedEventID = expectedUploadEventID('verified-user', rawBody, 'fit');
 
     await invokeUploadActivity(makeRequest({
       headers: {
@@ -614,7 +616,7 @@ describe('uploadActivity', () => {
   it('should persist parsed FIT and return response', async () => {
     const response = makeResponse();
     const rawBody = Buffer.from([1, 2, 3, 4]);
-    const expectedEventID = expectedUploadEventID(rawBody, 'fit');
+    const expectedEventID = expectedUploadEventID('user-1', rawBody, 'fit');
 
     await invokeUploadActivity(makeRequest({
       headers: {
@@ -783,7 +785,7 @@ describe('uploadActivity', () => {
     const response = makeResponse();
     const fitBytes = Buffer.from([0x0e, 0x10, 0x01, 0x02, 0x03]);
     const gzippedFit = gzipSync(fitBytes);
-    const expectedEventID = expectedUploadEventID(fitBytes, 'fit');
+    const expectedEventID = expectedUploadEventID('user-1', fitBytes, 'fit');
 
     await invokeUploadActivity(makeRequest({
       headers: {
@@ -808,6 +810,46 @@ describe('uploadActivity', () => {
     );
     expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
       eventId: expectedEventID,
+    }));
+  });
+
+  it('should derive different event ids for the same payload across verified users', async () => {
+    const rawBody = Buffer.from([0x09, 0x08, 0x07, 0x06]);
+    const firstResponse = makeResponse();
+    const secondResponse = makeResponse();
+    hoisted.mockVerifyIdToken
+      .mockResolvedValueOnce({ uid: 'user-a' })
+      .mockResolvedValueOnce({ uid: 'user-b' });
+
+    await invokeUploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token-a',
+        'X-Firebase-AppCheck': 'app-check',
+        'X-File-Extension': 'fit',
+        'X-Original-Filename': 'shared.fit',
+      },
+      rawBody,
+    }), firstResponse);
+
+    await invokeUploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token-b',
+        'X-Firebase-AppCheck': 'app-check',
+        'X-File-Extension': 'fit',
+        'X-Original-Filename': 'shared.fit',
+      },
+      rawBody,
+    }), secondResponse);
+
+    const firstEventID = expectedUploadEventID('user-a', rawBody, 'fit');
+    const secondEventID = expectedUploadEventID('user-b', rawBody, 'fit');
+
+    expect(firstEventID).not.toBe(secondEventID);
+    expect(firstResponse.json).toHaveBeenCalledWith(expect.objectContaining({
+      eventId: firstEventID,
+    }));
+    expect(secondResponse.json).toHaveBeenCalledWith(expect.objectContaining({
+      eventId: secondEventID,
     }));
   });
 
