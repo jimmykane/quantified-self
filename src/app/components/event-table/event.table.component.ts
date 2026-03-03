@@ -80,6 +80,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   public show = true
 
   private deleteConfirmationSubscription!: Subscription;
+  private searchSubscription!: Subscription;
   private sortSubscription!: Subscription;
   private breakpointSubscription!: Subscription;
   private isHandset = false;
@@ -133,7 +134,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       throw new Error(`Component needs user`)
     }
     this.updateDisplayedColumns();
-    this.searchSubject.pipe(
+    this.searchSubscription = this.searchSubject.pipe(
       debounceTime(250)
     ).subscribe(searchTextValue => {
       this.search(searchTextValue);
@@ -707,6 +708,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   private unsubscribeFromAll() {
     if (this.deleteConfirmationSubscription) {
       this.deleteConfirmationSubscription.unsubscribe();
+    }
+    if (this.searchSubscription) {
+      this.searchSubscription.unsubscribe();
     }
     if (this.sortSubscription) {
       this.sortSubscription.unsubscribe();

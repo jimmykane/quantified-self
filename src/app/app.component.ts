@@ -1,15 +1,16 @@
 import {
   ChangeDetectorRef,
   Component,
+  DestroyRef,
   OnDestroy,
   OnInit,
   ViewChild,
   afterNextRender,
   inject,
 } from '@angular/core';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { MatSidenav } from '@angular/material/sidenav';
 import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
-import { toSignal } from '@angular/core/rxjs-interop';
 import { Observable, Subscription } from 'rxjs';
 import { map } from 'rxjs/operators';
 import {
@@ -52,9 +53,9 @@ export class AppComponent implements OnInit, OnDestroy {
   public bannerHeight = 0;
   public hasBanner = false;
   private actionButtonsSubscription!: Subscription;
-  private routerEventSubscription!: Subscription;
   public authState: boolean | null = null;
   public isOnboardingRoute = false;
+  private destroyRef = inject(DestroyRef);
   private routeAnimationStateService = inject(RouteAnimationStateService);
   public routeAnimationState = this.routeAnimationStateService.animationState;
   public onboardingCompleted = true; // Default to true to avoid hiding chrome of non-authenticated users prematurely
@@ -108,37 +109,43 @@ export class AppComponent implements OnInit, OnDestroy {
     this.seoService.init(); // Initialize SEO service
     this.seoService.init(); // Initialize SEO service
 
-    this.authService.user$.subscribe(async user => {
-      this.authState = !!user;
-      this.currentUser = user;
-      this.updateOnboardingState();
-      // Check admin status when user is authenticated
-      if (user) {
-        try {
-          this.isAdminUser = await this.userService.isAdmin();
-          this.whatsNewService.setAdminMode(this.isAdminUser);
-        } catch {
+    this.authService.user$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(async user => {
+        this.authState = !!user;
+        this.currentUser = user;
+        this.updateOnboardingState();
+        // Check admin status when user is authenticated
+        if (user) {
+          try {
+            this.isAdminUser = await this.userService.isAdmin();
+            this.whatsNewService.setAdminMode(this.isAdminUser);
+          } catch {
+            this.isAdminUser = false;
+            this.whatsNewService.setAdminMode(false);
+          }
+        } else {
           this.isAdminUser = false;
           this.whatsNewService.setAdminMode(false);
         }
-      } else {
-        this.isAdminUser = false;
-        this.whatsNewService.setAdminMode(false);
-      }
-    });
-    this.routerEventSubscription = this.router.events.subscribe((event) => {
-      if (event instanceof NavigationEnd) {
-        this.updateOnboardingState();
-        this.scrollToTopAfterNavigation();
-      }
-    });
+      });
+    this.router.events
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((event) => {
+        if (event instanceof NavigationEnd) {
+          this.updateOnboardingState();
+          this.scrollToTopAfterNavigation();
+        }
+      });
 
     // Subscribe to theme changes for circular reveal animation
-    this.themeService.themeChange$.subscribe(change => {
-      if (change) {
-        this.triggerCircularReveal(change.x, change.y, change.theme);
-      }
-    });
+    this.themeService.themeChange$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(change => {
+        if (change) {
+          this.triggerCircularReveal(change.x, change.y, change.theme);
+        }
+      });
   }
 
   get isDashboardRoute(): boolean {
@@ -312,7 +319,6 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.routerEventSubscription.unsubscribe();
     if (this.actionButtonsSubscription) {
       this.actionButtonsSubscription.unsubscribe();
     }

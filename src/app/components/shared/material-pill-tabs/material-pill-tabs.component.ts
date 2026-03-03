@@ -4,11 +4,14 @@ import {
   ChangeDetectionStrategy,
   Component,
   ContentChildren,
+  DestroyRef,
   EventEmitter,
   Input,
+  inject,
   Output,
   QueryList
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MaterialPillTabDirective } from './material-pill-tab.directive';
 
 @Component({
@@ -34,16 +37,19 @@ export class MaterialPillTabsComponent implements AfterContentInit {
   @Output() selectedIndexChange = new EventEmitter<number>();
 
   tabs: MaterialPillTabDirective[] = [];
+  private destroyRef = inject(DestroyRef);
 
   constructor(private cdr: ChangeDetectorRef) {}
 
   ngAfterContentInit() {
     this.tabs = this.projectedTabs.toArray();
     this.cdr.markForCheck();
-    this.projectedTabs.changes.subscribe((tabs) => {
-      this.tabs = tabs.toArray();
-      this.cdr.markForCheck();
-    });
+    this.projectedTabs.changes
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((tabs) => {
+        this.tabs = tabs.toArray();
+        this.cdr.markForCheck();
+      });
   }
 
   onSelectedIndexChange(index: number) {

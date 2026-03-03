@@ -392,24 +392,18 @@ describe('AppComponent', () => {
         );
     });
 
-    it('should unsubscribe subscriptions on destroy', () => {
-        const routerEventSubscription = { unsubscribe: vi.fn() } as any;
+    it('should unsubscribe action buttons subscription on destroy when present', () => {
         const actionButtonsSubscription = { unsubscribe: vi.fn() } as any;
-        (component as any).routerEventSubscription = routerEventSubscription;
         (component as any).actionButtonsSubscription = actionButtonsSubscription;
 
         component.ngOnDestroy();
 
-        expect(routerEventSubscription.unsubscribe).toHaveBeenCalled();
         expect(actionButtonsSubscription.unsubscribe).toHaveBeenCalled();
     });
 
     it('should handle missing actionButtonsSubscription on destroy', () => {
-        const routerEventSubscription = { unsubscribe: vi.fn() } as any;
-        (component as any).routerEventSubscription = routerEventSubscription;
         (component as any).actionButtonsSubscription = undefined;
 
         expect(() => component.ngOnDestroy()).not.toThrow();
-        expect(routerEventSubscription.unsubscribe).toHaveBeenCalled();
     });
 });

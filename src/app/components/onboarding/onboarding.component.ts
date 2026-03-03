@@ -1,4 +1,5 @@
-import { Component, Input, ViewChild, inject, OnInit, AfterViewInit, OnChanges, SimpleChanges } from '@angular/core';
+import { AfterViewInit, Component, DestroyRef, Input, OnChanges, OnInit, SimpleChanges, ViewChild, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { MatStepperModule, MatStepper } from '@angular/material/stepper';
@@ -49,6 +50,7 @@ export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
     private _formBuilder = inject(FormBuilder);
     private logger = inject(LoggerService);
     private analyticsService = inject(AppAnalyticsService);
+    private destroyRef = inject(DestroyRef);
 
     ngOnInit() {
         // Log onboarding start
@@ -56,13 +58,15 @@ export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
 
         // If user wasn't passed via Input (routing), get it from service
         if (!this.user) {
-            this.authService.user$.subscribe(user => {
-                if (user) {
-                    this.user = user;
-                    this.updateForm();
-                    this.checkAndAdvance();
-                }
-            });
+            this.authService.user$
+                .pipe(takeUntilDestroyed(this.destroyRef))
+                .subscribe(user => {
+                    if (user) {
+                        this.user = user;
+                        this.updateForm();
+                        this.checkAndAdvance();
+                    }
+                });
         }
 
         this.updateForm();

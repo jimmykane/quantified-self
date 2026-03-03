@@ -333,16 +333,19 @@ describe('EventTableComponent', () => {
 
     it('should unsubscribe tracked subscriptions on destroy', () => {
         const deleteSub = { unsubscribe: vi.fn() } as any;
+        const searchSub = { unsubscribe: vi.fn() } as any;
         const sortSub = { unsubscribe: vi.fn() } as any;
         const breakpointSub = { unsubscribe: vi.fn() } as any;
 
         (component as any).deleteConfirmationSubscription = deleteSub;
+        (component as any).searchSubscription = searchSub;
         (component as any).sortSubscription = sortSub;
         (component as any).breakpointSubscription = breakpointSub;
 
         component.ngOnDestroy();
 
         expect(deleteSub.unsubscribe).toHaveBeenCalledTimes(1);
+        expect(searchSub.unsubscribe).toHaveBeenCalledTimes(1);
         expect(sortSub.unsubscribe).toHaveBeenCalledTimes(1);
         expect(breakpointSub.unsubscribe).toHaveBeenCalledTimes(1);
     });

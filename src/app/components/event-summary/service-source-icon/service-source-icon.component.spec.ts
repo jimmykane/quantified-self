@@ -78,4 +78,27 @@ describe('ServiceSourceIconComponent', () => {
         expect(component.serviceName).toBe(ServiceNames.COROSAPI);
         expect(component.serviceLogo).toBe('coros');
     });
+
+    it('should clear stale service source when the next lookup has no keys', () => {
+        const user = { getID: () => 'user-1' } as any as User;
+        const event = { getID: () => 'event-1' } as any as EventInterface;
+
+        eventService.getEventMetaDataKeys.mockReturnValueOnce(of([ServiceNames.GarminAPI]));
+        component.user = user;
+        component.event = event;
+        component.ngOnChanges({
+            event: { currentValue: event, previousValue: null, firstChange: true, isFirstChange: () => true }
+        });
+
+        expect(component.serviceName).toBe(ServiceNames.GarminAPI);
+        expect(component.serviceLogo).toBe('garmin');
+
+        eventService.getEventMetaDataKeys.mockReturnValueOnce(of([]));
+        component.ngOnChanges({
+            event: { currentValue: event, previousValue: event, firstChange: false, isFirstChange: () => false }
+        });
+
+        expect(component.serviceName).toBeNull();
+        expect(component.serviceLogo).toBeNull();
+    });
 });

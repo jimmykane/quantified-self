@@ -1,6 +1,7 @@
-import { Component, OnChanges, OnDestroy, OnInit, inject } from '@angular/core';
+import { Component, DestroyRef, OnChanges, OnDestroy, OnInit, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AppEventService } from '../../services/app.event.service';
-import { merge, of, Subject, Subscription } from 'rxjs';
+import { merge, of, Subject } from 'rxjs';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -30,7 +31,6 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   public user: AppUserInterface;
   public targetUser: AppUserInterface;
   public events: EventInterface[];
-  public dataSubscription: Subscription;
   public searchTerm: string;
   public searchStartDate: Date;
   public searchEndDate: Date;
@@ -47,6 +47,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   private initialResolvedUserIDForReconcile: string | null = null;
   private analyticsService = inject(AppAnalyticsService);
   private logger = inject(LoggerService);
+  private destroyRef = inject(DestroyRef);
 
 
   constructor(public authService: AppAuthService,
@@ -103,7 +104,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         });
       }
     }
-    this.dataSubscription = merge(this.authService.user$, this.manualSearchTrigger$).pipe(
+    merge(this.authService.user$, this.manualSearchTrigger$).pipe(
       map((user: AppUserInterface | null) => ({
         user,
         eventsListenerKey: this.getEventsListenerKey(user),
@@ -246,7 +247,8 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
           map((events) => {
             return { events: events, user: user }
           }))
-    })
+    }),
+      takeUntilDestroyed(this.destroyRef)
     ).subscribe((eventsAndUser) => {
 
       this.shouldSearch = false;
@@ -316,9 +318,6 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
 
 
   ngOnDestroy(): void {
-    if (this.dataSubscription) {
-      this.dataSubscription.unsubscribe();
-    }
     this.manualSearchTrigger$.complete();
   }
 

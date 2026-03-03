@@ -1,13 +1,15 @@
-import { Injectable, Inject, PLATFORM_ID } from '@angular/core';
+import { Injectable, Inject, OnDestroy, PLATFORM_ID } from '@angular/core';
 import { Title, Meta } from '@angular/platform-browser';
 import { Router, NavigationEnd, ActivatedRoute } from '@angular/router';
 import { filter, map, mergeMap } from 'rxjs/operators';
 import { DOCUMENT, isPlatformBrowser } from '@angular/common';
+import { Subscription } from 'rxjs';
 
 @Injectable({
     providedIn: 'root'
 })
-export class SeoService {
+export class SeoService implements OnDestroy {
+    private routerEventsSubscription?: Subscription;
 
     constructor(
         private titleService: Title,
@@ -19,7 +21,11 @@ export class SeoService {
     ) { }
 
     public init() {
-        this.router.events.pipe(
+        if (this.routerEventsSubscription && !this.routerEventsSubscription.closed) {
+            return;
+        }
+
+        this.routerEventsSubscription = this.router.events.pipe(
             filter(event => event instanceof NavigationEnd),
             map(() => this.activatedRoute),
             map(route => {
@@ -36,6 +42,10 @@ export class SeoService {
             this.updateCanonicalTag();
             this.updateJsonLd(data);
         });
+    }
+
+    ngOnDestroy(): void {
+        this.routerEventsSubscription?.unsubscribe();
     }
 
     private updateTitle(title: string) {

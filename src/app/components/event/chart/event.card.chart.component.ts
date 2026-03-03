@@ -2,10 +2,10 @@ import {
   ChangeDetectorRef,
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   EventEmitter,
   Input,
   OnChanges,
-  OnDestroy,
   OnInit,
   Output,
   SimpleChanges,
@@ -14,9 +14,9 @@ import {
   Injector,
   runInInjectionContext,
 } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { throttleTime } from 'rxjs/operators';
-import { Subject, Subscription, asyncScheduler } from 'rxjs';
+import { Subject, asyncScheduler } from 'rxjs';
 import {
   ActivityInterface,
   ChartCursorBehaviours,
@@ -67,7 +67,7 @@ const LEGEND_MUTED_DOT_COLOR = 'var(--mat-sys-outline)';
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: false
 })
-export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
+export class EventCardChartComponent implements OnInit, OnChanges {
   @Input() event!: EventInterface;
   @Input() targetUserID!: string;
   @Input() user!: User;
@@ -230,10 +230,10 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   private logger = inject(LoggerService);
   private injector = inject(Injector);
   private cdr = inject(ChangeDetectorRef);
+  private destroyRef = inject(DestroyRef);
 
   private themeSignal = toSignal(this.themeService.getChartTheme(), { initialValue: ChartThemes.Material });
   private cursorPositionSubject = new Subject<number>();
-  private cursorPositionSubscription?: Subscription;
   private xAxisTypeOverride: XAxisTypes | null = null;
   private cursorBehaviourOverride: ChartCursorBehaviours | null = null;
   private pendingRebuild = false;
@@ -257,8 +257,9 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.cursorPositionSubscription = this.cursorPositionSubject.pipe(
-      throttleTime(250, asyncScheduler, { leading: true, trailing: true })
+    this.cursorPositionSubject.pipe(
+      throttleTime(250, asyncScheduler, { leading: true, trailing: true }),
+      takeUntilDestroyed(this.destroyRef)
     ).subscribe((axisValue) => {
       this.pushCursorToMap(axisValue);
     });
@@ -275,10 +276,6 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     ) {
       this.queueRebuild('ngOnChanges');
     }
-  }
-
-  ngOnDestroy(): void {
-    this.cursorPositionSubscription?.unsubscribe();
   }
 
   public onPanelCursorPositionChange(axisValue: number): void {
