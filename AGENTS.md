@@ -3,6 +3,7 @@
 Read this file first for every task. Then read the nearest deeper `AGENTS.md` for the area you are changing.
 
 Inheritance rule: root instructions remain in force unless a deeper `AGENTS.md` explicitly replaces them.
+Keep deeper `AGENTS.md` files additive and minimal: list only area-specific rules, workflows, or exceptions instead of repeating root guidance.
 
 Shared library path (keep stable for antigravity and other apps/agents): `.agent/`
 

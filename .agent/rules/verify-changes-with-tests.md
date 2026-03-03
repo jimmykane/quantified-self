@@ -12,6 +12,7 @@ Run verification immediately after each round of edits. Do not wait until the en
 2. Run that check before moving to the next task step.
 3. Report pass/fail clearly and fix failures before continuing.
 4. If no tests exist, add a basic test when practical or state why automated verification was skipped.
+5. Prefer narrow helper or service specs for deterministic transformation logic instead of broader component or integration tests when they cover the behavior completely.
 
 ## Repo Command Matrix
 

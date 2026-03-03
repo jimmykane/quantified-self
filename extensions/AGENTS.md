@@ -1,13 +1,8 @@
 # Extensions Agent Instructions
 
-Read `/Users/dimitrios/Projects/quantified-self/AGENTS.md` first. Root rules remain mandatory here.
+Read `/Users/dimitrios/Projects/quantified-self/AGENTS.md` first.
 
-Shared instruction files stay in `../.agent/` for reuse by other apps/agents.
-
-Inherited always-on rules:
-- `../.agent/rules/verify-changes-with-tests.md` when extension changes have automated coverage
-
-Role rules:
+Extensions-only rules:
 - `../.agent/rules/security-reviewer.md`
 
 Verification note:
