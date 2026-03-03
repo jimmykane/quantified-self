@@ -34,7 +34,8 @@ describe('AdminQueueStatsComponent', () => {
             init: vi.fn().mockResolvedValue(chartMock),
             setOption: vi.fn(),
             resize: vi.fn(),
-            dispose: vi.fn()
+            dispose: vi.fn(),
+            subscribeToViewportResize: vi.fn(() => () => { })
         };
 
         await TestBed.configureTestingModule({

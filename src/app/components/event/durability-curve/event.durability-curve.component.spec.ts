@@ -23,6 +23,7 @@ describe('EventDurabilityCurveComponent', () => {
     setOption: ReturnType<typeof vi.fn>;
     resize: ReturnType<typeof vi.fn>;
     dispose: ReturnType<typeof vi.fn>;
+    subscribeToViewportResize: ReturnType<typeof vi.fn>;
   };
 
   let mockService: {
@@ -65,6 +66,7 @@ describe('EventDurabilityCurveComponent', () => {
       setOption: vi.fn(),
       resize: vi.fn(),
       dispose: vi.fn(),
+      subscribeToViewportResize: vi.fn(() => () => { }),
     };
 
     mockService = {

@@ -8,6 +8,7 @@ import {
   buildDashboardPieChartData,
   getDashboardPieSliceDisplayLabel
 } from './dashboard-pie-chart-data.helper';
+import { formatDashboardDateByInterval } from './dashboard-chart-data.helper';
 
 describe('dashboard-pie-chart-data.helper', () => {
   it('should group activity slices under threshold into "Other"', () => {
@@ -79,6 +80,6 @@ describe('dashboard-pie-chart-data.helper', () => {
       TimeIntervals.Daily
     );
 
-    expect(label).toBe('01 Jan 2024');
+    expect(label).toBe(formatDashboardDateByInterval(1704067200000, TimeIntervals.Daily));
   });
 });

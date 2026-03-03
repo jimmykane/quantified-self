@@ -36,6 +36,7 @@ describe('ChartsColumnsComponent', () => {
     setOption: ReturnType<typeof vi.fn>;
     resize: ReturnType<typeof vi.fn>;
     dispose: ReturnType<typeof vi.fn>;
+    subscribeToViewportResize: ReturnType<typeof vi.fn>;
   };
 
   let mockColorService: {
@@ -77,6 +78,7 @@ describe('ChartsColumnsComponent', () => {
       setOption: vi.fn(),
       resize: vi.fn(),
       dispose: vi.fn(),
+      subscribeToViewportResize: vi.fn(() => () => { }),
     };
 
     mockColorService = {
