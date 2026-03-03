@@ -31,6 +31,7 @@ import {
   EventChartRange,
   clampEventRange,
   formatEventXAxisValue,
+  formatDurationSeconds,
   normalizeEventRange,
 } from '../../../../helpers/event-echarts-xaxis.helper';
 import { buildEventPanelYAxisConfig } from '../../../../helpers/event-echarts-yaxis.helper';
@@ -154,24 +155,52 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     return !!normalizeEventRange(this.selectedRange);
   }
 
-  public get selectedRangeLabel(): string {
+  public get selectedRangeStartLabel(): string {
     const normalizedRange = normalizeEventRange(this.selectedRange);
     if (!normalizedRange) {
       return '';
     }
 
-    const startLabel = formatEventXAxisValue(
+    return formatEventXAxisValue(
       normalizedRange.start,
       this.xAxisType,
       { includeDateForTime: this.showDateOnTimeAxis }
     );
-    const endLabel = formatEventXAxisValue(
+  }
+
+  public get selectedRangeEndLabel(): string {
+    const normalizedRange = normalizeEventRange(this.selectedRange);
+    if (!normalizedRange) {
+      return '';
+    }
+
+    return formatEventXAxisValue(
       normalizedRange.end,
       this.xAxisType,
       { includeDateForTime: this.showDateOnTimeAxis }
     );
+  }
 
-    return `${startLabel} - ${endLabel}`;
+  public get selectedRangeSpanLabel(): string {
+    const normalizedRange = normalizeEventRange(this.selectedRange);
+    if (!normalizedRange) {
+      return '';
+    }
+
+    const span = normalizedRange.end - normalizedRange.start;
+    if (!Number.isFinite(span) || span < 0) {
+      return '';
+    }
+
+    switch (this.xAxisType) {
+      case XAxisTypes.Time:
+        return formatDurationSeconds(span / 1000);
+      case XAxisTypes.Distance:
+        return formatEventXAxisValue(span, XAxisTypes.Distance);
+      case XAxisTypes.Duration:
+      default:
+        return formatDurationSeconds(span);
+    }
   }
 
   public getRangeStatEntries(stat: EventPanelRangeStat): Array<{ label: string; value: string }> {

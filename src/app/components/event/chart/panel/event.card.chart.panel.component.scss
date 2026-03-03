@@ -64,8 +64,23 @@
 }
 
 .event-chart-panel__stats-range {
-  font-size: 0.84rem;
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 0.78rem;
   opacity: 0.72;
+}
+
+.event-chart-panel__stats-boundary,
+.event-chart-panel__stats-span {
+  font-weight: 600;
+  opacity: 0.92;
+}
+
+.event-chart-panel__stats-arrow,
+.event-chart-panel__stats-separator {
+  opacity: 0.56;
 }
 
 .event-chart-panel__stats-grid {
@@ -107,7 +122,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.94rem;
+  font-size: 0.86rem;
   font-weight: 600;
 }
 
@@ -129,7 +144,7 @@
 
 .event-chart-panel__stats-chip-label {
   font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   letter-spacing: 0.02em;
   text-transform: uppercase;
   opacity: 0.7;
@@ -137,6 +152,6 @@
 
 .event-chart-panel__stats-chip-value {
   font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.98rem;
+  font-size: 0.86rem;
   font-weight: 600;
 }

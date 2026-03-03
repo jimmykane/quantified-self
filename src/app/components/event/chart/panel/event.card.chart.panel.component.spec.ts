@@ -575,6 +575,15 @@ describe('EventCardChartPanelComponent', () => {
     getDataInstanceSpy.mockRestore();
   });
 
+  it('exposes selection start/end/span labels for the compact range readout', () => {
+    component.xAxisType = XAxisTypes.Duration;
+    component.selectedRange = { start: 65, end: 140 };
+
+    expect(component.selectedRangeStartLabel).toBe('01:05');
+    expect(component.selectedRangeEndLabel).toBe('02:20');
+    expect(component.selectedRangeSpanLabel).toBe('01:15');
+  });
+
   it('hides activity names in selection stats when tooltip activity names are disabled', async () => {
     const getDataInstanceSpy = vi.spyOn(DynamicDataLoader, 'getDataInstanceFromDataType').mockImplementation((_type: string, value: number) => ({
       getDisplayValue: () => value.toFixed(0),
