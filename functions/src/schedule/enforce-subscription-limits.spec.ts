@@ -3,15 +3,24 @@ import * as admin from 'firebase-admin';
 
 // Mock dependencies using vi.hoisted for top-level access
 const {
+    mockBulkWriterClose,
+    mockBulkWriterDelete,
+    mockGetUser,
     mockSetCustomUserClaims,
     mockRecursiveDelete,
     mockFirestoreInstance,
     mockAuthInstance
 } = vi.hoisted(() => {
+    const bulkWriter = {
+        delete: vi.fn().mockResolvedValue(undefined),
+        close: vi.fn().mockResolvedValue(undefined)
+    };
     const auth = {
+        getUser: vi.fn().mockResolvedValue({ customClaims: {} }),
         setCustomUserClaims: vi.fn().mockResolvedValue(undefined)
     };
     const fs: any = {
+        bulkWriter: vi.fn(() => bulkWriter),
         collection: vi.fn(),
         doc: vi.fn(),
         recursiveDelete: vi.fn().mockResolvedValue(undefined),
@@ -33,6 +42,9 @@ const {
         delete: () => 'DELETE_SENTINEL'
     };
     return {
+        mockBulkWriterClose: bulkWriter.close,
+        mockBulkWriterDelete: bulkWriter.delete,
+        mockGetUser: auth.getUser,
         mockSetCustomUserClaims: auth.setCustomUserClaims,
         mockAuthInstance: auth,
         mockRecursiveDelete: fs.recursiveDelete,
@@ -70,6 +82,7 @@ describe('enforceSubscriptionLimits', () => {
     beforeEach(() => {
         vi.clearAllMocks();
 
+        mockGetUser.mockResolvedValue({ customClaims: {} });
         deauthorizeServiceSpy = vi.spyOn(OAuth2, 'deauthorizeServiceForUser').mockResolvedValue(undefined);
         vi.spyOn(Claims, 'reconcileClaims').mockResolvedValue({ role: 'free' });
     });
@@ -202,6 +215,7 @@ describe('enforceSubscriptionLimits', () => {
 
     it('should disconnect and prune (Free user, limits exceeded)', async () => {
         const pastDate = new Date(Date.now() - 100000);
+        const systemDoc = mockDoc({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(pastDate) });
 
         // Setup User1: Free, 12 events (limit 10)
         mockFirestoreInstance.collection.mockImplementation((path: string) => {
@@ -219,7 +233,7 @@ describe('enforceSubscriptionLimits', () => {
         });
 
         mockFirestoreInstance.doc.mockImplementation((path: string) => {
-            if (path === 'users/user1/system/status') return mockDoc({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(pastDate) });
+            if (path === 'users/user1/system/status') return systemDoc;
             return mockDoc({});
         });
 
@@ -231,9 +245,15 @@ describe('enforceSubscriptionLimits', () => {
         expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.COROSAPI);
         expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.GarminAPI);
         expect(mockSetCustomUserClaims).toHaveBeenCalledWith('user1', { stripeRole: 'free' });
+        expect(systemDoc.set).toHaveBeenCalledWith({
+            gracePeriodUntil: 'DELETE_SENTINEL',
+            lastDowngradedAt: 'DELETE_SENTINEL'
+        }, { merge: true });
 
         // Verify pruning matches older events logic
-        expect(mockRecursiveDelete).toHaveBeenCalledTimes(2);
+        expect(mockBulkWriterDelete).toHaveBeenCalledTimes(2);
+        expect(mockBulkWriterClose).toHaveBeenCalledTimes(1);
+        expect(mockRecursiveDelete).not.toHaveBeenCalled();
     });
 
     it('should respect Basic limits (100 events)', async () => {
@@ -273,7 +293,8 @@ describe('enforceSubscriptionLimits', () => {
         expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.GarminAPI);
 
         // Should prune excess 5 events (105 - 100)
-        expect(mockRecursiveDelete).toHaveBeenCalledTimes(5);
+        expect(mockBulkWriterDelete).toHaveBeenCalledTimes(5);
+        expect(mockBulkWriterClose).toHaveBeenCalledTimes(1);
     });
 
     it('should skip pruning for Pro users', async () => {
@@ -345,5 +366,43 @@ describe('enforceSubscriptionLimits', () => {
         // Should have called all deauths despite error
         expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.SuuntoApp);
         expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.COROSAPI);
+    });
+
+    it('should preserve unrelated claims while clearing subscription access', async () => {
+        const pastDate = new Date(Date.now() - 100000);
+        const systemDoc = mockDoc({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(pastDate) });
+
+        mockGetUser.mockResolvedValue({
+            customClaims: {
+                admin: true,
+                gracePeriodUntil: pastDate.getTime() + 1000,
+                someOtherClaim: 'keep-me'
+            }
+        });
+
+        mockFirestoreInstance.collection.mockImplementation((path: string) => {
+            if (path === GARMIN_API_TOKENS_COLLECTION_NAME) return mockQuery([{ id: 'user1' }]);
+            if (path.includes('subscriptions')) return mockQuery([]);
+            if (path.includes('events')) return mockQuery([], 10);
+            return mockQuery([]);
+        });
+
+        mockFirestoreInstance.doc.mockImplementation((path: string) => {
+            if (path === 'users/user1/system/status') return systemDoc;
+            return mockDoc({});
+        });
+
+        const wrapped = enforceSubscriptionLimits as any;
+        await wrapped({});
+
+        expect(mockSetCustomUserClaims).toHaveBeenCalledWith('user1', {
+            admin: true,
+            someOtherClaim: 'keep-me',
+            stripeRole: 'free'
+        });
+        expect(systemDoc.set).toHaveBeenCalledWith({
+            gracePeriodUntil: 'DELETE_SENTINEL',
+            lastDowngradedAt: 'DELETE_SENTINEL'
+        }, { merge: true });
     });
 });

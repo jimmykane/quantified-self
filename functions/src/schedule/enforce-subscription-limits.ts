@@ -10,6 +10,8 @@ import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../coros/constants';
 import { GARMIN_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
 import { GRACE_PERIOD_DAYS } from '../shared/limits';
 
+const EVENT_PRUNE_BATCH_SIZE = 250;
+
 /**
  * Disconnects external services (Garmin, Suunto, COROS) for users who have no active pro subscription.
  * Iterates through all connected tokens to ensure strict enforcement.
@@ -105,8 +107,24 @@ async function processUser(uid: string) {
     if (!isPro) {
         logger.info(`Disconnecting services and clearing claims for user ${uid} (No active pro status and grace period expired).`);
 
-        // Clear Auth claims
-        try { await admin.auth().setCustomUserClaims(uid, { stripeRole: 'free' }); } catch (e) { logger.error(`Error clearing claims for ${uid}`, e); }
+        // Clear stale grace period state and preserve unrelated claims such as admin.
+        try {
+            await admin.firestore().doc(`users/${uid}/system/status`).set({
+                gracePeriodUntil: admin.firestore.FieldValue.delete(),
+                lastDowngradedAt: admin.firestore.FieldValue.delete()
+            }, { merge: true });
+        } catch (e) {
+            logger.error(`Error clearing grace period state for ${uid}`, e);
+        }
+
+        try {
+            const user = await admin.auth().getUser(uid);
+            const nextClaims = { ...(user.customClaims || {}), stripeRole: 'free' } as Record<string, unknown>;
+            delete nextClaims.gracePeriodUntil;
+            await admin.auth().setCustomUserClaims(uid, nextClaims);
+        } catch (e) {
+            logger.error(`Error clearing claims for ${uid}`, e);
+        }
 
         // Disconnect sync
         try { await deauthorizeServiceForUser(uid, ServiceNames.SuuntoApp); } catch (e) { logger.error(`Error deauthorizing Suunto for ${uid}`, e); }
@@ -127,16 +145,35 @@ async function processUser(uid: string) {
             const excess = actualCount - limit;
 
             logger.info(`User ${uid} has ${actualCount} events (limit: ${limit}). Deleting ${excess} oldest events.`);
+            let remainingToDelete = excess;
 
-            // Get the OLDEST 'excess' events
-            const excessSnapshot = await eventsRef
-                .orderBy('startDate', 'asc') // Oldest first
-                .limit(excess)
-                .get();
+            while (remainingToDelete > 0) {
+                const chunkSize = Math.min(EVENT_PRUNE_BATCH_SIZE, remainingToDelete);
+                const excessSnapshot = await eventsRef
+                    .orderBy('startDate', 'asc') // Oldest first
+                    .limit(chunkSize)
+                    .get();
 
-            for (const eventDoc of excessSnapshot.docs) {
-                logger.info(`Deleting excess event ${eventDoc.id}`);
-                await admin.firestore().recursiveDelete(eventDoc.ref);
+                if (excessSnapshot.empty) {
+                    logger.warn(`Expected ${remainingToDelete} more events to prune for ${uid}, but no more events were found.`);
+                    break;
+                }
+
+                const bulkWriter = admin.firestore().bulkWriter();
+                const deletePromises = excessSnapshot.docs.map((eventDoc) => {
+                    logger.info(`Deleting excess event ${eventDoc.id}`);
+                    return bulkWriter.delete(eventDoc.ref);
+                });
+
+                await bulkWriter.close();
+
+                const deleteResults = await Promise.allSettled(deletePromises);
+                const firstFailure = deleteResults.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+                if (firstFailure) {
+                    throw firstFailure.reason;
+                }
+
+                remainingToDelete -= excessSnapshot.docs.length;
             }
         }
     }
