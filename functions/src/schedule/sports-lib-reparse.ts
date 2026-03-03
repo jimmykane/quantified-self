@@ -25,6 +25,17 @@ import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
 const SPORTS_LIB_REPARSE_SCAN_CONCURRENCY = 25;
 const SPORTS_LIB_REPARSE_ENQUEUE_SPREAD_SECONDS = 10 * 60;
 
+type ProcessingTaskResult = {
+    trackedPromise: Promise<ProcessingTaskResult>;
+} & (
+    | { ok: true }
+    | { ok: false; error: unknown }
+);
+
+type EnqueueSlotLease = {
+    release: () => void;
+};
+
 function getCurrentSettings(): {
     enabled: boolean;
     scanLimit: number;
@@ -96,7 +107,7 @@ export const scheduleSportsLibReparseScan = onSchedule({
     region: FUNCTIONS_MANIFEST.scheduleSportsLibReparseScan.region,
     schedule: 'every 10 minutes',
     timeoutSeconds: 300,
-}, async (_event) => {
+}, async () => {
     const settings = getCurrentSettings();
     if (!settings.enabled) {
         logger.info('[sports-lib-reparse] Scheduler disabled (SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.enabled=false).');
@@ -128,38 +139,40 @@ export const scheduleSportsLibReparseScan = onSchedule({
     let lastProcessingVersionCode: number | null = null;
     const hasReachedEnqueueLimit = (): boolean => enqueuedCount >= settings.enqueueLimit;
     const hasAvailableEnqueueSlot = (): boolean => (enqueuedCount + enqueueReservationCount) < settings.enqueueLimit;
-    const tryReserveEnqueueSlot = (): boolean => {
+    const tryAcquireEnqueueSlotLease = (): EnqueueSlotLease | null => {
         if (!hasAvailableEnqueueSlot()) {
-            return false;
+            return null;
         }
         enqueueReservationCount++;
-        return true;
-    };
-    const releaseEnqueueSlot = (): void => {
-        if (enqueueReservationCount > 0) {
-            enqueueReservationCount--;
-        }
+        let released = false;
+        return {
+            release: (): void => {
+                if (released) {
+                    return;
+                }
+                released = true;
+                enqueueReservationCount--;
+            },
+        };
     };
 
     const processEventData = async (
         eventRef: admin.firestore.DocumentReference,
         eventData: Record<string, unknown>,
-        options?: { skipCandidateCheck?: boolean; reservedEnqueueSlot?: boolean },
+        options?: { skipCandidateCheck?: boolean; reservationLease?: EnqueueSlotLease | null },
     ): Promise<void> => {
         const parsed = parseUidAndEventIdFromEventPath(eventRef.path);
+        let reservationLease = options?.reservationLease ?? null;
         if (!parsed) {
-            if (options?.reservedEnqueueSlot === true) {
-                releaseEnqueueSlot();
-            }
+            reservationLease?.release();
             return;
         }
         const { uid, eventId } = parsed;
 
-        let slotReserved = options?.reservedEnqueueSlot === true;
-        if (!slotReserved) {
-            slotReserved = tryReserveEnqueueSlot();
+        if (!reservationLease) {
+            reservationLease = tryAcquireEnqueueSlotLease();
         }
-        if (!slotReserved) {
+        if (!reservationLease) {
             return;
         }
 
@@ -246,7 +259,7 @@ export const scheduleSportsLibReparseScan = onSchedule({
                 throw error;
             }
         } finally {
-            releaseEnqueueSlot();
+            reservationLease.release();
         }
     };
 
@@ -347,14 +360,18 @@ export const scheduleSportsLibReparseScan = onSchedule({
     }
 
     let stoppedByEnqueueLimit = false;
-    const inFlightProcessing = new Set<Promise<void>>();
+    const inFlightProcessing = new Set<Promise<ProcessingTaskResult>>();
     for (const processingDoc of processingSnapshot.docs) {
         while (inFlightProcessing.size >= SPORTS_LIB_REPARSE_SCAN_CONCURRENCY || !hasAvailableEnqueueSlot()) {
             if (inFlightProcessing.size === 0) {
                 stoppedByEnqueueLimit = hasReachedEnqueueLimit();
                 break;
             }
-            await Promise.race(inFlightProcessing);
+            const settledTask = await Promise.race(inFlightProcessing);
+            inFlightProcessing.delete(settledTask.trackedPromise);
+            if (!settledTask.ok) {
+                throw settledTask.error;
+            }
         }
         if (stoppedByEnqueueLimit) {
             break;
@@ -421,7 +438,8 @@ export const scheduleSportsLibReparseScan = onSchedule({
             continue;
         }
 
-        if (!tryReserveEnqueueSlot()) {
+        const reservationLease = tryAcquireEnqueueSlotLease();
+        if (!reservationLease) {
             stoppedByEnqueueLimit = hasReachedEnqueueLimit();
             if (stoppedByEnqueueLimit) {
                 break;
@@ -430,7 +448,7 @@ export const scheduleSportsLibReparseScan = onSchedule({
         }
 
         const processPromise = (async (): Promise<void> => {
-            let reservationTransferred = false;
+            let activeReservationLease: EnqueueSlotLease | null = reservationLease;
             try {
                 const eventSnapshot = await eventRef.get();
                 if (!eventSnapshot.exists) {
@@ -440,27 +458,44 @@ export const scheduleSportsLibReparseScan = onSchedule({
                     });
                     return;
                 }
-                reservationTransferred = true;
+                const inheritedReservationLease = activeReservationLease;
+                activeReservationLease = null;
                 await processEventData(eventRef, eventSnapshot.data() as Record<string, unknown>, {
                     skipCandidateCheck: true,
-                    reservedEnqueueSlot: true,
+                    reservationLease: inheritedReservationLease,
                 });
             } finally {
-                if (!reservationTransferred) {
-                    releaseEnqueueSlot();
-                }
+                activeReservationLease?.release();
             }
         })();
-        inFlightProcessing.add(processPromise);
-        void processPromise.then(() => {
-            inFlightProcessing.delete(processPromise);
-        }, () => {
-            inFlightProcessing.delete(processPromise);
-        });
+        const trackedPromise = processPromise.then(
+            (): ProcessingTaskResult => ({
+                trackedPromise,
+                ok: true,
+            }),
+            (error): ProcessingTaskResult => {
+                logger.error('[sports-lib-reparse] Failed to process candidate from processing metadata scan.', {
+                    processingDocPath: processingDoc.ref.path,
+                    eventPath: eventRef.path,
+                    error: toErrorMessage(error),
+                });
+                return {
+                    trackedPromise,
+                    ok: false,
+                    error,
+                };
+            },
+        );
+        inFlightProcessing.add(trackedPromise);
     }
 
     if (inFlightProcessing.size > 0) {
-        await Promise.all(inFlightProcessing);
+        const settledTasks = await Promise.all(inFlightProcessing);
+        for (const settledTask of settledTasks) {
+            if (!settledTask.ok) {
+                throw settledTask.error;
+            }
+        }
     }
 
     const passCompleted = !stoppedByEnqueueLimit && processingSnapshot.size < settings.scanLimit;

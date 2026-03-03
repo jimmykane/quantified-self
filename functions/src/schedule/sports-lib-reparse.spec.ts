@@ -804,6 +804,37 @@ describe('scheduleSportsLibReparseScan', () => {
         );
     });
 
+    it('should log and rethrow processing metadata candidate failures', async () => {
+        hoisted.buildSportsLibReparseJobId.mockImplementation((_uid: string, eventId: string) => `job-${eventId}`);
+
+        const successEventRef = createEventRef('u1', 'e1', { originalFile: { path: 'success.fit' } });
+        const failingEventRef = createEventRef('u1', 'e2', { originalFile: { path: 'broken.fit' } });
+        failingEventRef.get = vi.fn(async () => {
+            throw new Error('candidate-failed');
+        });
+
+        hoisted.processingDocs.push(
+            createProcessingDoc(successEventRef, {
+                sportsLibVersion: '9.0.0',
+                sportsLibVersionCode: 9_000_000,
+            }),
+            createProcessingDoc(failingEventRef, {
+                sportsLibVersion: '9.0.0',
+                sportsLibVersionCode: 9_000_000,
+            }),
+        );
+
+        await expect((scheduleSportsLibReparseScan as any)({})).rejects.toThrow('candidate-failed');
+        expect(hoisted.loggerError).toHaveBeenCalledWith(
+            '[sports-lib-reparse] Failed to process candidate from processing metadata scan.',
+            expect.objectContaining({
+                processingDocPath: `${failingEventRef.path}/metaData/processing`,
+                eventPath: failingEventRef.path,
+                error: 'candidate-failed',
+            }),
+        );
+    });
+
     it('should mark job as failed when task enqueue fails', async () => {
         const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
         hoisted.processingDocs.push(createProcessingDoc(eventRef, {
