@@ -352,4 +352,54 @@ describe('DashboardComponent', () => {
         expect(component.user.settings.dashboardSettings.activityTypes).toEqual(previousActivityTypes);
         expect(mockSnackBar.open).toHaveBeenCalledWith('Could not update dashboard filters');
     });
+
+    it('should re-run manual search when submitting identical filters twice', async () => {
+        const eventsSubject = new BehaviorSubject([{ id: 'event1' }] as any);
+        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
+        mockActivatedRoute.snapshot.data.dashboardData.events = [{ id: 'event1' }];
+        mockEventService.getEventsBy.mockReturnValue(eventsSubject.asObservable());
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        component.user = {
+            ...mockUser,
+            settings: {
+                ...mockUser.settings,
+                dashboardSettings: {
+                    ...mockUser.settings.dashboardSettings,
+                    includeMergedEvents: true,
+                    dateRange: DateRanges.thisMonth,
+                    startDate: null,
+                    endDate: null,
+                    activityTypes: []
+                }
+            }
+        } as AppUserInterface;
+
+        const search = {
+            searchTerm: '',
+            startDate: null,
+            endDate: null,
+            dateRange: DateRanges.thisMonth,
+            activityTypes: [] as any,
+            includeMergedEvents: true
+        };
+
+        const baselineCalls = mockEventService.getEventsBy.mock.calls.length;
+
+        await component.search(search);
+        await fixture.whenStable();
+
+        expect(component.isLoading).toBe(false);
+        expect(mockEventService.getEventsBy.mock.calls.length).toBeGreaterThan(baselineCalls);
+
+        const callsAfterFirstSearch = mockEventService.getEventsBy.mock.calls.length;
+
+        await component.search(search);
+        await fixture.whenStable();
+
+        expect(component.isLoading).toBe(false);
+        expect(mockEventService.getEventsBy.mock.calls.length).toBeGreaterThan(callsAfterFirstSearch);
+    });
 });

@@ -213,14 +213,25 @@ export class AppUserService implements OnDestroy {
     const gracePeriodUntil = user.gracePeriodUntil;
     if (!gracePeriodUntil) return null;
     // Handle Firestore Timestamp
-    if (typeof gracePeriodUntil.toDate === 'function') {
+    if (
+      typeof gracePeriodUntil === 'object'
+      && 'toDate' in gracePeriodUntil
+      && typeof gracePeriodUntil.toDate === 'function'
+    ) {
       return gracePeriodUntil.toDate();
     }
     // Handle seconds/nanoseconds object
-    if (typeof gracePeriodUntil === 'object' && gracePeriodUntil.seconds) {
+    if (
+      typeof gracePeriodUntil === 'object'
+      && 'seconds' in gracePeriodUntil
+      && typeof gracePeriodUntil.seconds === 'number'
+    ) {
       return new Date(gracePeriodUntil.seconds * 1000);
     }
     // Handle Date or number
+    if (gracePeriodUntil instanceof Date) {
+      return gracePeriodUntil;
+    }
     return new Date(gracePeriodUntil);
   });
 

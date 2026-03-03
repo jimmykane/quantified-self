@@ -41,7 +41,8 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   public hasMergedEvents = false;
 
   private shouldSearch: boolean;
-  private manualSearchTrigger$ = new Subject<AppUserInterface | null>();
+  private manualSearchTrigger$ = new Subject<{ user: AppUserInterface | null; refreshToken: number }>();
+  private manualSearchRefreshToken = 0;
   private initialLiveReconcilePending = false;
   private initialResolvedEventsForReconcile: EventInterface[] = [];
   private initialResolvedUserIDForReconcile: string | null = null;
@@ -109,12 +110,21 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         return;
       }
     }
-    merge(this.authService.user$, this.manualSearchTrigger$).pipe(
-      map((user: AppUserInterface | null) => ({
+    merge(
+      this.authService.user$.pipe(
+        map((user: AppUserInterface | null) => ({ user, refreshToken: 0 }))
+      ),
+      this.manualSearchTrigger$
+    ).pipe(
+      map(({ user, refreshToken }) => ({
         user,
+        refreshToken,
         eventsListenerKey: this.getEventsListenerKey(user),
       })),
-      distinctUntilChanged((previous, current) => previous.eventsListenerKey === current.eventsListenerKey),
+      distinctUntilChanged((previous, current) => (
+        previous.eventsListenerKey === current.eventsListenerKey
+        && previous.refreshToken === current.refreshToken
+      )),
       map(({ user }) => user),
       switchMap((user: AppUserInterface | null) => {
       const userEmissionStart = performance.now();
@@ -301,7 +311,11 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       this.user.settings.dashboardSettings.startDate = search.startDate && search.startDate.getTime();
       this.user.settings.dashboardSettings.endDate = search.endDate && search.endDate.getTime();
       this.user.settings.dashboardSettings.activityTypes = search.activityTypes;
-      this.manualSearchTrigger$.next(this.user);
+      this.manualSearchRefreshToken += 1;
+      this.manualSearchTrigger$.next({
+        user: this.user,
+        refreshToken: this.manualSearchRefreshToken,
+      });
       this.analyticsService.logEvent('dashboard_search', { method: DateRanges[search.dateRange] });
       await this.userService.updateUserProperties(this.user, { settings: this.user.settings });
     } catch (error) {
