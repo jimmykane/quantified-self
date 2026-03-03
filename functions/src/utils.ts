@@ -331,7 +331,7 @@ export class UserNotFoundError extends Error {
   }
 }
 
-import { USAGE_LIMITS } from './shared/limits';
+import { getUsageLimitForRole } from './shared/limits';
 
 export async function checkEventUsageLimit(userID: string, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number, gracePeriodUntil?: number }>>, pendingWrites?: Map<string, number>): Promise<void> {
   const { role, gracePeriodUntil } = await getUserRoleAndGracePeriod(userID);
@@ -349,7 +349,10 @@ export async function checkEventUsageLimit(userID: string, usageCache?: Map<stri
     let usagePromise = usageCache.get(userID);
     if (!usagePromise) {
       usagePromise = (async () => {
-        const limit = USAGE_LIMITS[role] || 10;
+        const limit = getUsageLimitForRole(role);
+        if (limit === null) {
+          throw new Error(`Role '${role}' should not reach limited usage checks.`);
+        }
         const eventsCollection = admin.firestore().collection('users').doc(userID).collection('events');
         const snapshot = await eventsCollection.count().get();
         return { role, limit, currentCount: snapshot.data().count, gracePeriodUntil };
@@ -358,7 +361,10 @@ export async function checkEventUsageLimit(userID: string, usageCache?: Map<stri
     }
     roleData = await usagePromise;
   } else {
-    const limit = USAGE_LIMITS[role] || 10;
+    const limit = getUsageLimitForRole(role);
+    if (limit === null) {
+      throw new Error(`Role '${role}' should not reach limited usage checks.`);
+    }
     const eventsCollection = admin.firestore().collection('users').doc(userID).collection('events');
     const snapshot = await eventsCollection.count().get();
     roleData = { role, limit, currentCount: snapshot.data().count, gracePeriodUntil };

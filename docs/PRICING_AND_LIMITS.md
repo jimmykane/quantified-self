@@ -23,6 +23,7 @@ The application defines three primary user roles based on subscription status:
 *   **Role Key:** `pro`
 
 > **Note:** Exact pricing amounts are configured in the Stripe Dashboard and populated dynamically in the UI.
+> Activity-count limits are defined in `functions/src/shared/limits.ts` and reused by backend enforcement and frontend plan messaging.
 
 ---
 
@@ -31,7 +32,7 @@ The application defines three primary user roles based on subscription status:
 Limits are enforced through a scheduled background process (`enforceSubscriptionLimits`) that runs every 24 hours (Europe/London time).
 
 ### Activity Counters
-*   If a user exceeds their tier's limit (e.g., a Free user has 15 events), the system will automatically **delete the newest events** until the count matches the limit.
+*   If a user exceeds their tier's limit (e.g., a Free user has 15 events), the system will automatically **delete the oldest events** until the count matches the limit.
 *   **Deletion Policy:** Recursive deletion (removes the event and all its subcollections).
 
 ### Device Synchronization
@@ -56,7 +57,7 @@ To prevent immediate data loss or service interruption upon payment failure or s
 Once the 30-day window expires:
 1.  **Role Reversion:** The user's role is set to `free`.
 2.  **Service Disconnection:** External APIs (Garmin, etc.) are deauthorized.
-3.  **Data Pruning:** The enforcement job will reduce the user's event history to the Free limit (10 events), deleting the most recent entries first.
+3.  **Data Pruning:** The enforcement job will reduce the user's event history to the Free limit (10 events), deleting the oldest entries first.
 
 ## User Notifications (Frontend)
 

@@ -137,6 +137,12 @@ describe('utils higher-level helpers', () => {
             // count() should have been invoked once (via first call)
             expect(cache.size).toBe(1);
         });
+
+        it('throws for unsupported roles instead of silently using the free-tier limit', async () => {
+            hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'enterprise' } });
+
+            await expect(checkEventUsageLimit('u1')).rejects.toThrow("Unsupported subscription role 'enterprise'");
+        });
     });
 
     describe('hasProAccess', () => {

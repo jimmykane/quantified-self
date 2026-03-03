@@ -8,7 +8,7 @@ import { reconcileClaims } from '../stripe/claims';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../suunto/constants';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../coros/constants';
 import { GARMIN_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
-import { GRACE_PERIOD_DAYS } from '../shared/limits';
+import { GRACE_PERIOD_DAYS, getUsageLimitForRole } from '../shared/limits';
 
 const EVENT_PRUNE_BATCH_SIZE = 250;
 
@@ -69,8 +69,8 @@ async function processUser(uid: string) {
         .get();
 
     const subscription = activeSubSnapshot.empty ? null : activeSubSnapshot.docs[0].data();
-    const isPro = subscription?.role === 'pro';
-    const isBasic = subscription?.role === 'basic';
+    const activeRole = subscription?.role ?? 'free';
+    const isPro = activeRole === 'pro';
 
 
 
@@ -133,9 +133,9 @@ async function processUser(uid: string) {
     }
 
     // 5. Activity Pruning (Destructive - Delete OLDEST)
-    const limit = isPro ? Infinity : (isBasic ? 100 : 10);
+    const limit = getUsageLimitForRole(activeRole);
 
-    if (limit !== Infinity) {
+    if (limit !== null) {
         const eventsRef = admin.firestore().collection(`users/${uid}/events`);
         const countSnapshot = await eventsRef.count().get();
         const actualCount = countSnapshot.data().count;
