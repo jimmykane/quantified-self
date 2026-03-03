@@ -175,8 +175,18 @@ export class EChartsLoaderService {
       return;
     }
 
-    this.groupRefCounts.delete(normalizedGroupID);
     const echarts = await this.load();
+    const latestRefCount = this.groupRefCounts.get(normalizedGroupID);
+    if (!latestRefCount) {
+      return;
+    }
+
+    if (latestRefCount > 1) {
+      this.groupRefCounts.set(normalizedGroupID, latestRefCount - 1);
+      return;
+    }
+
+    this.groupRefCounts.delete(normalizedGroupID);
     this.zone.runOutsideAngular(() => {
       echarts.disconnect(normalizedGroupID);
     });
