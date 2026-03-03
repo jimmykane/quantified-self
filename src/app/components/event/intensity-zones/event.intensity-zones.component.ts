@@ -66,7 +66,10 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     this.chartHost = new EChartsHostController({
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
-      logPrefix: '[EventIntensityZonesComponent]'
+      logPrefix: '[EventIntensityZonesComponent]',
+      initOptions: {
+        useDirtyRect: true,
+      },
     });
 
     this.breakpointSubscription = this.breakpointObserver

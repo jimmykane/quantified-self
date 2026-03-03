@@ -122,6 +122,23 @@ describe('EChartsHostController', () => {
     expect(visualViewportEventListeners.has('resize')).toBe(true);
   });
 
+  it('should forward init options to the loader during initialization', async () => {
+    const loader = buildLoaderMock();
+    const controller = new EChartsHostController({
+      eChartsLoader: loader as any,
+      initOptions: {
+        useDirtyRect: true,
+      },
+    });
+    const container = document.createElement('div');
+
+    await controller.init(container);
+
+    expect(loader.init).toHaveBeenCalledWith(container, undefined, {
+      useDirtyRect: true,
+    });
+  });
+
   it('should no-op setOption before chart initialization', () => {
     const loader = buildLoaderMock();
     const controller = new EChartsHostController({

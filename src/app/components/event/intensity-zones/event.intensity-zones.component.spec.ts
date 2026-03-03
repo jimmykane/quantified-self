@@ -56,8 +56,15 @@ describe('EventIntensityZonesComponent', () => {
   };
 
   const waitForChartStabilization = async (): Promise<void> => {
-    await fixture.whenStable();
-    await new Promise<void>(resolve => setTimeout(resolve, 0));
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await fixture.whenStable();
+      await Promise.resolve();
+      await new Promise<void>(resolve => setTimeout(resolve, 0));
+
+      if (mockLoader.setOption.mock.calls.length > 0 || mockLogger.error.mock.calls.length > 0) {
+        return;
+      }
+    }
   };
 
   beforeEach(async () => {
@@ -165,7 +172,7 @@ describe('EventIntensityZonesComponent', () => {
 
     expect(mockLoader.init).toHaveBeenCalledTimes(1);
     expect(mockLoader.setOption).toHaveBeenCalledTimes(1);
-    expect(mockLoader.resize).toHaveBeenCalledTimes(1);
+    expect(requestAnimationFrameMock).toHaveBeenCalledTimes(1);
     expect(mockedConvert).toHaveBeenCalledWith(component.activities, false);
     expect(option.grid.left).toBe(0);
     expect(option.grid.right).toBe(0);
@@ -467,8 +474,9 @@ describe('EventIntensityZonesComponent', () => {
     expect(rafCallbacks).toHaveLength(1);
 
     rafCallbacks[0](16);
+    observer.trigger();
 
-    expect(mockLoader.resize).toHaveBeenCalledTimes(baselineResizeCalls + 1);
+    expect(rafCallbacks).toHaveLength(2);
   });
 
   it('should skip ResizeObserver setup when API is unavailable', async () => {

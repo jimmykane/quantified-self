@@ -179,7 +179,7 @@ describe('EChartsLoaderService', () => {
     expect(runOutsideAngularSpy).toHaveBeenCalled();
     expect(echartsCoreMock.init).toHaveBeenCalledWith(container, 'quantified-self-dark', {
       renderer: 'canvas',
-      useDirtyRect: true,
+      useDirtyRect: false,
     });
     expect(initialized).toBe(chart);
   });
@@ -192,6 +192,20 @@ describe('EChartsLoaderService', () => {
     const initialized = await service.init(container);
 
     expect(echartsCoreMock.init).toHaveBeenCalledWith(container, 'quantified-self-light', {
+      renderer: 'canvas',
+      useDirtyRect: false,
+    });
+    expect(initialized).toBe(chart);
+  });
+
+  it('should allow callers to override init options such as dirty rect', async () => {
+    const chart = { id: 'chart-3' };
+    const container = document.createElement('div');
+    echartsCoreMock.init.mockReturnValue(chart);
+
+    const initialized = await service.init(container, 'dark', { useDirtyRect: true });
+
+    expect(echartsCoreMock.init).toHaveBeenCalledWith(container, 'quantified-self-dark', {
       renderer: 'canvas',
       useDirtyRect: true,
     });

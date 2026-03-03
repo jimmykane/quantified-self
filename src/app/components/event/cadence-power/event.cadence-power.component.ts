@@ -72,7 +72,10 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
     this.chartHost = new EChartsHostController({
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
-      logPrefix: '[EventCadencePowerComponent]'
+      logPrefix: '[EventCadencePowerComponent]',
+      initOptions: {
+        useDirtyRect: true,
+      },
     });
 
     this.breakpointSubscription = this.breakpointObserver

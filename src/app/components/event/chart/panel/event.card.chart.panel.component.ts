@@ -122,7 +122,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.chartHost = new EChartsHostController({
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
-      logPrefix: '[EventCardChartPanelComponent]'
+      logPrefix: '[EventCardChartPanelComponent]',
+      initOptions: {
+        useDirtyRect: true,
+      },
     });
   }
 

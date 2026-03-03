@@ -7,6 +7,7 @@ type EChartsOption = Parameters<EChartsType['setOption']>[0];
 type EChartsSetOptionSettings = Parameters<EChartsType['setOption']>[1];
 type EChartsThemeDefinition = Record<string, unknown>;
 type EChartsResizeOptions = NonNullable<Parameters<EChartsType['resize']>[0]>;
+type EChartsInitOptions = Parameters<EChartsCoreModule['init']>[2];
 
 export const ECHARTS_GLOBAL_FONT_FAMILY = "'Barlow Condensed', sans-serif";
 const ECHARTS_LIGHT_THEME_NAME = 'quantified-self-light';
@@ -116,12 +117,13 @@ export class EChartsLoaderService {
     return this.loader;
   }
 
-  public async init(container: HTMLElement, theme?: string): Promise<EChartsType> {
+  public async init(container: HTMLElement, theme?: string, options?: EChartsInitOptions): Promise<EChartsType> {
     const echarts = await this.load();
     const resolvedTheme = this.resolveThemeName(theme);
     return this.zone.runOutsideAngular(() => echarts.init(container, resolvedTheme, {
       renderer: 'canvas',
-      useDirtyRect: true,
+      useDirtyRect: false,
+      ...options,
     }));
   }
 

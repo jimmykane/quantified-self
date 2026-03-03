@@ -77,7 +77,10 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
     this.chartHost = new EChartsHostController({
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
-      logPrefix: '[EventPowerCurveComponent]'
+      logPrefix: '[EventPowerCurveComponent]',
+      initOptions: {
+        useDirtyRect: true,
+      },
     });
 
     this.breakpointSubscription = this.breakpointObserver

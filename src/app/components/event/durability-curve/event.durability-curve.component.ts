@@ -78,7 +78,10 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
     this.chartHost = new EChartsHostController({
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
-      logPrefix: '[EventDurabilityCurveComponent]'
+      logPrefix: '[EventDurabilityCurveComponent]',
+      initOptions: {
+        useDirtyRect: true,
+      },
     });
 
     this.breakpointSubscription = this.breakpointObserver

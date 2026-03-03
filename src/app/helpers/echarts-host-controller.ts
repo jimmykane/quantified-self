@@ -3,6 +3,7 @@ import { EChartsLoaderService } from '../services/echarts-loader.service';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type ChartSetOptionSettings = Parameters<EChartsType['setOption']>[1];
+type ChartInitSettings = NonNullable<Parameters<EChartsLoaderService['init']>[2]>;
 type ChartMainType = 'series' | 'xAxis' | 'yAxis' | 'dataZoom';
 
 function buildMergeUpdateSettings(replaceMerge: readonly ChartMainType[]): ChartSetOptionSettings {
@@ -28,6 +29,7 @@ export interface EChartsHostControllerConfig {
     error?: (...args: unknown[]) => void;
   };
   logPrefix?: string;
+  initOptions?: ChartInitSettings;
 }
 
 export class EChartsHostController {
@@ -61,7 +63,7 @@ export class EChartsHostController {
 
     this.initPromise = (async () => {
       try {
-        this.chart = await this.config.eChartsLoader.init(container, theme);
+        this.chart = await this.config.eChartsLoader.init(container, theme, this.config.initOptions);
         this.observeContainer(container);
         this.observeViewport();
         return this.chart;
