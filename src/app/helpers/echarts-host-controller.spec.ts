@@ -25,6 +25,7 @@ describe('EChartsHostController', () => {
     setOption: vi.fn(),
     resize: vi.fn(),
     dispose: vi.fn(),
+    subscribeToViewportResize: vi.fn(() => () => { }),
   });
 
   beforeEach(() => {
@@ -117,9 +118,9 @@ describe('EChartsHostController', () => {
     expect(loader.init).toHaveBeenCalledTimes(1);
     expect(resizeObserverRecords).toHaveLength(1);
     expect(resizeObserverRecords[0].observe).toHaveBeenCalledWith(container);
-    expect(windowEventListeners.has('resize')).toBe(true);
-    expect(windowEventListeners.has('orientationchange')).toBe(true);
-    expect(visualViewportEventListeners.has('resize')).toBe(true);
+    expect(loader.subscribeToViewportResize).toHaveBeenCalledTimes(1);
+    expect(windowEventListeners.size).toBe(0);
+    expect(visualViewportEventListeners.size).toBe(0);
   });
 
   it('should forward init options to the loader during initialization', async () => {
@@ -191,8 +192,15 @@ describe('EChartsHostController', () => {
     expect(loader.resize).toHaveBeenCalledTimes(1);
   });
 
-  it('should resize from viewport fallback listeners using raf throttling', async () => {
+  it('should subscribe viewport fallback resize handling through the loader', async () => {
     const loader = buildLoaderMock();
+    let viewportResizeListener: (() => void) | undefined;
+    loader.subscribeToViewportResize.mockImplementation((listener: () => void) => {
+      viewportResizeListener = listener;
+      return () => {
+        viewportResizeListener = undefined;
+      };
+    });
     const controller = new EChartsHostController({
       eChartsLoader: loader as any,
     });
@@ -202,17 +210,11 @@ describe('EChartsHostController', () => {
 
     await controller.init(container);
 
-    const resizeListener = windowEventListeners.get('resize');
-    const orientationListener = windowEventListeners.get('orientationchange');
-    const visualViewportResizeListener = visualViewportEventListeners.get('resize');
+    expect(viewportResizeListener).toBeTypeOf('function');
 
-    expect(resizeListener).toBeTypeOf('function');
-    expect(orientationListener).toBeTypeOf('function');
-    expect(visualViewportResizeListener).toBeTypeOf('function');
-
-    resizeListener?.(new Event('resize'));
-    orientationListener?.(new Event('orientationchange'));
-    visualViewportResizeListener?.(new Event('resize'));
+    viewportResizeListener?.();
+    viewportResizeListener?.();
+    viewportResizeListener?.();
 
     expect(loader.resize).toHaveBeenCalledTimes(1);
   });
@@ -244,9 +246,7 @@ describe('EChartsHostController', () => {
 
     expect(resizeObserverRecords[0].disconnect).toHaveBeenCalledTimes(1);
     expect(loader.dispose).toHaveBeenCalledWith(chartMock);
-    expect(windowEventListeners.has('resize')).toBe(false);
-    expect(windowEventListeners.has('orientationchange')).toBe(false);
-    expect(visualViewportEventListeners.has('resize')).toBe(false);
+    expect(loader.subscribeToViewportResize).toHaveBeenCalledTimes(1);
   });
 
   it('should log initialization failures and return null', async () => {

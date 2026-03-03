@@ -59,6 +59,29 @@ export class EChartsLoaderService {
   private cachedCore: EChartsCoreModule | null = null;
   private themesRegistered = false;
   private groupRefCounts = new Map<string, number>();
+  private viewportResizeSubscribers = new Set<() => void>();
+  private viewportListenersBound = false;
+  private viewportResizeFrameId: number | null = null;
+
+  private readonly handleViewportResize = () => {
+    if (!this.viewportResizeSubscribers.size) {
+      return;
+    }
+
+    if (typeof requestAnimationFrame === 'undefined') {
+      this.notifyViewportResizeSubscribers();
+      return;
+    }
+
+    if (this.viewportResizeFrameId !== null) {
+      return;
+    }
+
+    this.viewportResizeFrameId = requestAnimationFrame(() => {
+      this.viewportResizeFrameId = null;
+      this.notifyViewportResizeSubscribers();
+    });
+  };
 
   constructor(private zone: NgZone, @Inject(PLATFORM_ID) private platformId: object) { }
 
@@ -204,6 +227,23 @@ export class EChartsLoaderService {
     });
   }
 
+  public subscribeToViewportResize(listener: () => void): () => void {
+    if (!isPlatformBrowser(this.platformId)) {
+      return () => { };
+    }
+
+    this.viewportResizeSubscribers.add(listener);
+    this.bindViewportListeners();
+
+    return () => {
+      this.viewportResizeSubscribers.delete(listener);
+
+      if (!this.viewportResizeSubscribers.size) {
+        this.unbindViewportListeners();
+      }
+    };
+  }
+
   private registerThemes(core: EChartsCoreModule): void {
     if (this.themesRegistered) {
       return;
@@ -224,5 +264,39 @@ export class EChartsLoaderService {
     }
 
     return theme || ECHARTS_LIGHT_THEME_NAME;
+  }
+
+  private notifyViewportResizeSubscribers(): void {
+    const listeners = [...this.viewportResizeSubscribers];
+    for (const listener of listeners) {
+      listener();
+    }
+  }
+
+  private bindViewportListeners(): void {
+    if (this.viewportListenersBound || !isPlatformBrowser(this.platformId)) {
+      return;
+    }
+
+    window.addEventListener('resize', this.handleViewportResize, { passive: true });
+    window.addEventListener('orientationchange', this.handleViewportResize, { passive: true });
+    window.visualViewport?.addEventListener('resize', this.handleViewportResize, { passive: true });
+    this.viewportListenersBound = true;
+  }
+
+  private unbindViewportListeners(): void {
+    if (!this.viewportListenersBound || !isPlatformBrowser(this.platformId)) {
+      return;
+    }
+
+    if (this.viewportResizeFrameId !== null && typeof cancelAnimationFrame !== 'undefined') {
+      cancelAnimationFrame(this.viewportResizeFrameId);
+      this.viewportResizeFrameId = null;
+    }
+
+    window.removeEventListener('resize', this.handleViewportResize);
+    window.removeEventListener('orientationchange', this.handleViewportResize);
+    window.visualViewport?.removeEventListener('resize', this.handleViewportResize);
+    this.viewportListenersBound = false;
   }
 }

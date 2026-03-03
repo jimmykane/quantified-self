@@ -38,10 +38,7 @@ export class EChartsHostController {
   private resizeFrameId: number | null = null;
   private initPromise: Promise<EChartsType | null> | null = null;
   private observedContainer: HTMLElement | null = null;
-  private viewportListenersBound = false;
-  private readonly handleViewportResize = () => {
-    this.scheduleResize();
-  };
+  private unsubscribeViewportResize: (() => void) | null = null;
 
   constructor(private readonly config: EChartsHostControllerConfig) { }
 
@@ -65,7 +62,7 @@ export class EChartsHostController {
       try {
         this.chart = await this.config.eChartsLoader.init(container, theme, this.config.initOptions);
         this.observeContainer(container);
-        this.observeViewport();
+        this.subscribeToViewportResize();
         return this.chart;
       } catch (error) {
         this.chart = null;
@@ -124,7 +121,8 @@ export class EChartsHostController {
     }
 
     this.observedContainer = null;
-    this.teardownViewportListeners();
+    this.unsubscribeViewportResize?.();
+    this.unsubscribeViewportResize = null;
 
     if (this.resizeFrameId !== null && typeof cancelAnimationFrame !== 'undefined') {
       cancelAnimationFrame(this.resizeFrameId);
@@ -184,25 +182,13 @@ export class EChartsHostController {
     };
   }
 
-  private observeViewport(): void {
-    if (this.viewportListenersBound || typeof window === 'undefined') {
+  private subscribeToViewportResize(): void {
+    if (this.unsubscribeViewportResize) {
       return;
     }
 
-    window.addEventListener('resize', this.handleViewportResize, { passive: true });
-    window.addEventListener('orientationchange', this.handleViewportResize, { passive: true });
-    window.visualViewport?.addEventListener('resize', this.handleViewportResize, { passive: true });
-    this.viewportListenersBound = true;
-  }
-
-  private teardownViewportListeners(): void {
-    if (!this.viewportListenersBound || typeof window === 'undefined') {
-      return;
-    }
-
-    window.removeEventListener('resize', this.handleViewportResize);
-    window.removeEventListener('orientationchange', this.handleViewportResize);
-    window.visualViewport?.removeEventListener('resize', this.handleViewportResize);
-    this.viewportListenersBound = false;
+    this.unsubscribeViewportResize = this.config.eChartsLoader.subscribeToViewportResize(() => {
+      this.scheduleResize();
+    });
   }
 }

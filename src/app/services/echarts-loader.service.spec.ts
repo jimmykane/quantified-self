@@ -79,8 +79,51 @@ function createDeferredPromise<T>() {
 describe('EChartsLoaderService', () => {
   let service: EChartsLoaderService;
   let zone: NgZone;
+  let originalRequestAnimationFrame: typeof requestAnimationFrame | undefined;
+  let originalCancelAnimationFrame: typeof cancelAnimationFrame | undefined;
+  let originalVisualViewport: VisualViewport | undefined;
+  let windowEventListeners: Map<string, EventListener>;
+  let visualViewportEventListeners: Map<string, EventListener>;
+  let rafCallbacks: FrameRequestCallback[];
 
   beforeEach(() => {
+    windowEventListeners = new Map();
+    visualViewportEventListeners = new Map();
+    rafCallbacks = [];
+    originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+    originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
+    originalVisualViewport = window.visualViewport;
+
+    globalThis.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as unknown as typeof requestAnimationFrame;
+    globalThis.cancelAnimationFrame = vi.fn();
+
+    vi.spyOn(window, 'addEventListener').mockImplementation(((type: string, listener: EventListenerOrEventListenerObject) => {
+      if (typeof listener === 'function') {
+        windowEventListeners.set(type, listener);
+      }
+    }) as typeof window.addEventListener);
+
+    vi.spyOn(window, 'removeEventListener').mockImplementation(((type: string) => {
+      windowEventListeners.delete(type);
+    }) as typeof window.removeEventListener);
+
+    Object.defineProperty(window, 'visualViewport', {
+      configurable: true,
+      value: {
+        addEventListener: vi.fn((type: string, listener: EventListenerOrEventListenerObject) => {
+          if (typeof listener === 'function') {
+            visualViewportEventListeners.set(type, listener);
+          }
+        }),
+        removeEventListener: vi.fn((type: string) => {
+          visualViewportEventListeners.delete(type);
+        }),
+      },
+    });
+
     TestBed.configureTestingModule({
       providers: [
         EChartsLoaderService,
@@ -93,6 +136,23 @@ describe('EChartsLoaderService', () => {
   });
 
   afterEach(() => {
+    if (originalRequestAnimationFrame) {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+    } else {
+      delete (globalThis as { requestAnimationFrame?: typeof requestAnimationFrame }).requestAnimationFrame;
+    }
+
+    if (originalCancelAnimationFrame) {
+      globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
+    } else {
+      delete (globalThis as { cancelAnimationFrame?: typeof cancelAnimationFrame }).cancelAnimationFrame;
+    }
+
+    Object.defineProperty(window, 'visualViewport', {
+      configurable: true,
+      value: originalVisualViewport,
+    });
+
     vi.clearAllMocks();
   });
 
@@ -307,6 +367,50 @@ describe('EChartsLoaderService', () => {
     expect(runOutsideAngularSpy).toHaveBeenCalled();
     expect(activeChart.dispose).toHaveBeenCalledTimes(1);
     expect(disposedChart.dispose).not.toHaveBeenCalled();
+  });
+
+  it('should bind one set of viewport listeners for all resize subscribers', () => {
+    const firstListener = vi.fn();
+    const secondListener = vi.fn();
+
+    const unsubscribeFirst = service.subscribeToViewportResize(firstListener);
+    const unsubscribeSecond = service.subscribeToViewportResize(secondListener);
+
+    expect(windowEventListeners.has('resize')).toBe(true);
+    expect(windowEventListeners.has('orientationchange')).toBe(true);
+    expect(visualViewportEventListeners.has('resize')).toBe(true);
+
+    unsubscribeFirst();
+    expect(windowEventListeners.has('resize')).toBe(true);
+
+    unsubscribeSecond();
+    expect(windowEventListeners.has('resize')).toBe(false);
+    expect(windowEventListeners.has('orientationchange')).toBe(false);
+    expect(visualViewportEventListeners.has('resize')).toBe(false);
+  });
+
+  it('should fan out viewport resizes once per animation frame', () => {
+    const firstListener = vi.fn();
+    const secondListener = vi.fn();
+
+    service.subscribeToViewportResize(firstListener);
+    service.subscribeToViewportResize(secondListener);
+
+    const resizeListener = windowEventListeners.get('resize');
+    expect(resizeListener).toBeTypeOf('function');
+
+    resizeListener?.(new Event('resize'));
+    resizeListener?.(new Event('resize'));
+    resizeListener?.(new Event('resize'));
+
+    expect(rafCallbacks).toHaveLength(1);
+    expect(firstListener).not.toHaveBeenCalled();
+    expect(secondListener).not.toHaveBeenCalled();
+
+    rafCallbacks[0](0);
+
+    expect(firstListener).toHaveBeenCalledTimes(1);
+    expect(secondListener).toHaveBeenCalledTimes(1);
   });
 
   it('should throw when loading in non-browser platform', async () => {
