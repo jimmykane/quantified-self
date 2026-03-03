@@ -66,6 +66,16 @@ section.container {
   width: 100%;
 }
 
+::ng-deep .event-chart-actions__series-icon .mat-badge-content {
+  min-width: 24px;
+  width: auto;
+  height: 18px;
+  line-height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 10px;
+}
+
 @include xsmall {
   section.container {
     justify-content: flex-end;
