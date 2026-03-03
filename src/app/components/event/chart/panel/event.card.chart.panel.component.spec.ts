@@ -806,6 +806,31 @@ describe('EventCardChartPanelComponent', () => {
     expect(tooltipHtml).toContain('Garmin:');
   });
 
+  it('skips synced tooltip rows whose series value is null', async () => {
+    component.showActivityNamesInTooltip = true;
+    fixture.detectChanges();
+    await component.ngAfterViewInit();
+
+    const tooltipHtml = (component as any).formatTooltip([
+      {
+        seriesId: 'a1::power',
+        seriesName: 'Garmin',
+        color: '#ff0000',
+        value: [10, null],
+      },
+      {
+        seriesId: 'a1::power',
+        seriesName: 'Garmin',
+        color: '#ff0000',
+        value: [10, 120],
+      }
+    ]);
+
+    expect(tooltipHtml).toContain('120');
+    expect(tooltipHtml).not.toContain('null');
+    expect(tooltipHtml).toContain('Garmin:');
+  });
+
   it('shows lap tooltip locally without propagating to connected charts', async () => {
     component.showZoomBar = false;
     component.showLaps = true;

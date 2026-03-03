@@ -919,12 +919,23 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       const point = params[index];
       const seriesModel = this.seriesByID.get(point.seriesId);
       const streamType = seriesModel?.streamType || this.panel?.dataType;
-      const yValue = Number(Array.isArray(point.value) ? point.value[1] : point.value);
+      const rawYValue = Array.isArray(point.value) ? point.value[1] : point.value;
+      if (rawYValue === null || rawYValue === undefined || rawYValue === '') {
+        continue;
+      }
+      const yValue = Number(rawYValue);
+      if (!Number.isFinite(yValue)) {
+        continue;
+      }
       const formatted = this.formatDataValue(streamType || '', yValue);
       const label = this.showActivityNamesInTooltip ? `${point.seriesName}: ` : '';
       tooltipLines.push(
         `<div><span style="display:inline-block;margin-right:6px;border-radius:50%;width:8px;height:8px;background:${point.color};"></span>${label}${formatted}</div>`
       );
+    }
+
+    if (!tooltipLines.length) {
+      return '';
     }
 
     return `<div style="font-weight:600;margin-bottom:4px;">${header}</div>${tooltipLines.join('')}`;
