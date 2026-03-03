@@ -13,6 +13,7 @@ import { EventChartRange, normalizeEventRange } from './event-echarts-xaxis.help
 const DEFAULT_NON_POWER_EXTRA_MAX = 0.1;
 const DEFAULT_NON_PACE_TARGET_TICK_COUNT = 6;
 const NICE_INTERVAL_FACTORS = [1, 1.5, 2, 2.5, 3, 5, 7.5, 10];
+const AXIS_INTERVAL_DIVISIBILITY_EPSILON = 1e-9;
 
 const POWER_STREAM_TYPES = new Set<string>([
   DataPower.type,
@@ -189,14 +190,22 @@ function sanitizeExtraMax(value: number, fallback: number): number {
   return Math.max(0, Math.min(0.75, value));
 }
 
-function selectPreferredAxisInterval(
+export function selectPreferredAxisInterval(
   range: number,
   candidateIntervals: number[],
   targetTickCount: number,
   fallbackInterval: number
 ): number {
   const candidates = candidateIntervals
-    .filter((candidate) => Number.isFinite(candidate) && candidate > 0 && range % candidate === 0);
+    .filter((candidate) => {
+      if (!Number.isFinite(candidate) || candidate <= 0) {
+        return false;
+      }
+
+      const remainder = range % candidate;
+      return Math.abs(remainder) < AXIS_INTERVAL_DIVISIBILITY_EPSILON
+        || Math.abs(remainder - candidate) < AXIS_INTERVAL_DIVISIBILITY_EPSILON;
+    });
   if (!candidates.length) {
     return fallbackInterval;
   }

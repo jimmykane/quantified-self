@@ -36,6 +36,7 @@ describe('EventCardChartPanelComponent', () => {
     setOption: vi.fn(),
     resize: vi.fn(),
     dispose: vi.fn(),
+    subscribeToViewportResize: vi.fn(() => () => { }),
     connectGroup: vi.fn().mockResolvedValue(undefined),
     disconnectGroup: vi.fn().mockResolvedValue(undefined),
   };

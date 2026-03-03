@@ -2,6 +2,7 @@ import { DataCadence, DataEffortPace, DataPace, DataPower } from '@sports-allian
 import { describe, expect, it } from 'vitest';
 import {
   buildEventPanelYAxisConfig,
+  selectPreferredAxisInterval,
 } from './event-echarts-yaxis.helper';
 
 function buildPanel(streamType: string, values: number[]) {
@@ -125,5 +126,16 @@ describe('event-echarts-yaxis.helper', () => {
     expect(config.interval).toBe(15);
     expect(config.max).toBe(120);
     expect(config.max).not.toBe(140);
+  });
+
+  it('accepts floating-point divisible ranges when selecting a preferred interval', () => {
+    const interval = selectPreferredAxisInterval(
+      0.3,
+      [0.05, 0.1, 0.15],
+      3,
+      1,
+    );
+
+    expect(interval).toBe(0.1);
   });
 });

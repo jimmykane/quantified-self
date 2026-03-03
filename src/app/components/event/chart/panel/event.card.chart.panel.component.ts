@@ -41,10 +41,12 @@ import {
 import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import type { EventChartPoint } from '../../../../helpers/event-echarts-data.helper';
 import { AppUserUtilities } from '../../../../utils/app.user.utilities';
+import type { LineSeriesOption } from 'echarts/charts';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type ChartAction = Parameters<EChartsType['dispatchAction']>[0];
 type PanelSeriesModel = EventChartPanelModel['series'][number];
+type ChartLineSeriesOption = LineSeriesOption;
 
 const PROGRESSIVE_THRESHOLD = 6000;
 const PROGRESSIVE_STEP = 900;
@@ -316,7 +318,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       ? resolvedStrokeWidth
       : AppUserUtilities.getDefaultChartStrokeWidth();
 
-    const seriesOptions: any[] = panel.series.map((series) => ({
+    const seriesOptions: ChartLineSeriesOption[] = panel.series.map((series) => ({
       id: series.id,
       name: series.activityName,
       type: 'line',
@@ -337,7 +339,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       emphasis: {
         disabled: true,
       },
-      data: this.getSeriesLineData(series.points)
+      data: this.getSeriesLineData(series.points),
     }));
 
     if (seriesOptions[0]) {
@@ -901,7 +903,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           },
           data: overviewData,
           markLine: this.buildLapMarkLine(darkTheme),
-        }
+        } satisfies ChartLineSeriesOption
       ]
     } as ChartOption;
   }
