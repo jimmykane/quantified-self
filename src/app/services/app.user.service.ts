@@ -232,7 +232,10 @@ export class AppUserService implements OnDestroy {
     if (gracePeriodUntil instanceof Date) {
       return gracePeriodUntil;
     }
-    return new Date(gracePeriodUntil);
+    if (typeof gracePeriodUntil === 'number') {
+      return new Date(gracePeriodUntil);
+    }
+    return null;
   });
 
   public async getSubscriptionRole(): Promise<StripeRole | null> {
