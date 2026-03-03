@@ -220,9 +220,18 @@ mat-paginator {
 }
 
 .buttons button[mat-icon-button] mat-icon {
-  font-size: 20px !important;
-  width: 20px !important;
-  height: 20px !important;
+  font-size: 24px !important;
+  width: 24px !important;
+  height: 24px !important;
+}
+
+.action-icon-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 24px;
+  height: 24px;
 }
 
 /* Force smaller badges for table actions */
