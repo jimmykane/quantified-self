@@ -376,7 +376,7 @@ describe('EventWriter', () => {
             expect(mockLogger.error).toHaveBeenCalled();
         });
 
-        it('should log document path and undefined fields when Firestore rejects undefined values', async () => {
+        it('should warn with document path and undefined fields when Firestore rejects undefined values', async () => {
             const firestoreUndefinedError = new Error(
                 'Value for argument "data" is not a valid Firestore document. Cannot use "undefined" as a Firestore value.'
             );
@@ -415,7 +415,7 @@ describe('EventWriter', () => {
 
             expect(errorMessage).toContain('Firestore write failed for users/user-1/events/event-1');
             expect(errorMessage).toContain('events.6.Jump Event.jumpData.height');
-            expect(mockLogger.error).toHaveBeenCalledWith(
+            expect(mockLogger.warn).toHaveBeenCalledWith(
                 'Firestore write payload contains undefined values',
                 expect.objectContaining({
                     documentPath: 'users/user-1/events/event-1',
@@ -502,6 +502,13 @@ describe('EventWriter', () => {
 
             expect(errorMessage).toContain('Could not write event data: Firestore write failed for users/user-1/events/event-1: Invalid argument: undefined is not allowed by downstream service.');
             expect(errorMessage).not.toContain('Undefined field paths:');
+            expect(mockLogger.warn).toHaveBeenCalledWith(
+                'Firestore write payload contains undefined values',
+                expect.objectContaining({
+                    documentPath: 'users/user-1/events/event-1',
+                    undefinedFieldPaths: expect.arrayContaining(['events.6.Jump Event.jumpData.height']),
+                })
+            );
         });
 
         it('should use default console logger when no logger is provided', async () => {

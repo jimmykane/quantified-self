@@ -263,8 +263,8 @@ export class EventWriter {
             const undefinedPaths = collectUndefinedPaths(data);
             const hasUndefinedValueWriteError = undefinedPaths.length > 0 && isFirestoreUndefinedValueError(error);
 
-            if (hasUndefinedValueWriteError) {
-                this.logger.error('Firestore write payload contains undefined values', {
+            if (undefinedPaths.length > 0) {
+                this.logger.warn('Firestore write payload contains undefined values', {
                     documentPath,
                     undefinedFieldPaths: undefinedPaths,
                 });
