@@ -112,6 +112,12 @@ describe('EventCardChartPanelComponent', () => {
     }
   });
 
+  async function flushQueuedChartRefreshes(iterations = 4): Promise<void> {
+    for (let index = 0; index < iterations; index += 1) {
+      await Promise.resolve();
+    }
+  }
+
   function getRenderedOption(): any {
     return eChartsLoaderMock.setOption.mock.calls.find(([, option]) => option?.series)?.[1] as any;
   }
@@ -142,6 +148,37 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.dataZoom?.[0]?.moveOnMouseWheel).toBe(false);
     expect(option?.dataZoom?.[1]?.show).toBe(true);
     expect(option?.dataZoom?.[1]?.filterMode).toBe('filter');
+  });
+
+  it('serializes queued chart refresh requests', async () => {
+    const refreshOrder: string[] = [];
+    (component as any).refreshChart = vi.fn(() => {
+      refreshOrder.push('refresh-start');
+      if (refreshOrder.filter((entry) => entry === 'refresh-start').length === 1) {
+        (component as any).queueChartRefresh('nested');
+      }
+      refreshOrder.push('refresh-end');
+    });
+    (component as any).syncViewportObserver = vi.fn(() => {
+      refreshOrder.push('sync');
+    });
+
+    (component as any).queueChartRefresh('first');
+    (component as any).queueChartRefresh('second');
+    await flushQueuedChartRefreshes();
+
+    expect((component as any).refreshChart).toHaveBeenCalledTimes(3);
+    expect(refreshOrder).toEqual([
+      'refresh-start',
+      'refresh-end',
+      'sync',
+      'refresh-start',
+      'refresh-end',
+      'sync',
+      'refresh-start',
+      'refresh-end',
+      'sync',
+    ]);
   });
 
   it('recomputes canonical x-axis interval and visible-range y-axis scale from the zoomed visible range', async () => {
@@ -376,6 +413,7 @@ describe('EventCardChartPanelComponent', () => {
         false
       ),
     });
+    await flushQueuedChartRefreshes();
 
     const option = eChartsLoaderMock.setOption.mock.calls.at(-1)?.[1] as any;
     expect(option?.series?.[0]?.data).toEqual(component.zoomBarOverviewData);
@@ -682,6 +720,7 @@ describe('EventCardChartPanelComponent', () => {
     component.ngOnChanges({
       showLaps: new SimpleChange(true, false, false),
     });
+    await flushQueuedChartRefreshes();
 
     option = eChartsLoaderMock.setOption.mock.calls.findLast(([, candidate]) => candidate?.series)?.[1] as any;
     expect(option?.series?.[0]?.markLine?.data).toEqual([]);

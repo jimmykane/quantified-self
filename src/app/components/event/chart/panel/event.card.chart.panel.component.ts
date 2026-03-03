@@ -112,6 +112,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private activeLapTooltipKey: string | null = null;
   private applyingSharedSelectionRange = false;
   private applyingSharedZoomRange = false;
+  private chartRefreshSequence: Promise<void> = Promise.resolve();
 
   constructor(
     private eChartsLoader: EChartsLoaderService,
@@ -174,8 +175,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.bindWheelPassThrough();
     this.syncNativeZoomGroup();
     this.bindChartEvents();
-    this.refreshChart();
-    this.syncViewportObserver();
+    this.queueChartRefresh('ngAfterViewInit');
   }
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -199,8 +199,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       || changes.waterMark
       || changes.zoomBarOverviewData
     ) {
-      this.refreshChart();
-      this.syncViewportObserver();
+      this.queueChartRefresh('ngOnChanges');
     }
 
     if (changes.cursorBehaviour && !changes.cursorBehaviour.firstChange) {
@@ -226,6 +225,20 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.unbindWheelPassThrough();
     this.disconnectNativeZoomGroup();
     this.chartHost.dispose();
+  }
+
+  private queueChartRefresh(source: string): void {
+    this.chartRefreshSequence = this.chartRefreshSequence
+      .then(() => {
+        this.refreshChart();
+        this.syncViewportObserver();
+      })
+      .catch((error) => {
+        this.logger.error('[EventCardChartPanelComponent] Failed to queue chart refresh', {
+          source,
+          error,
+        });
+      });
   }
 
   private refreshChart(): void {
