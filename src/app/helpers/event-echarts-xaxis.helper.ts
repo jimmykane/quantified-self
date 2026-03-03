@@ -1,4 +1,5 @@
 import { DataDistance, DynamicDataLoader, EventInterface, XAxisTypes } from '@sports-alliance/sports-lib';
+import { getBrowserLocale } from '../shared/adapters/date-locale.config';
 
 export interface EventChartRange {
   start: number;
@@ -7,6 +8,7 @@ export interface EventChartRange {
 
 export interface EventXAxisFormatOptions {
   includeDateForTime?: boolean;
+  locale?: string;
 }
 
 const EVENT_X_AXIS_TARGET_TICK_COUNT = 6;
@@ -45,6 +47,8 @@ export function formatEventXAxisValue(value: number, axisType: XAxisTypes, optio
     return '';
   }
 
+  const locale = options?.locale || getBrowserLocale();
+
   switch (axisType) {
     case XAxisTypes.Time: {
       const date = new Date(value);
@@ -53,7 +57,7 @@ export function formatEventXAxisValue(value: number, axisType: XAxisTypes, optio
       }
       const includeDate = options?.includeDateForTime !== false;
       if (includeDate) {
-        return date.toLocaleString('en-GB', {
+        return date.toLocaleString(locale, {
           hour: '2-digit',
           minute: '2-digit',
           second: '2-digit',
@@ -61,7 +65,7 @@ export function formatEventXAxisValue(value: number, axisType: XAxisTypes, optio
           month: 'short'
         });
       }
-      return date.toLocaleTimeString('en-GB', {
+      return date.toLocaleTimeString(locale, {
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',

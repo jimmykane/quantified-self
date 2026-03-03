@@ -41,11 +41,28 @@ describe('event-echarts-xaxis.helper', () => {
 
   it('formats time axis with optional date visibility', () => {
     const timestamp = new Date('2024-01-02T03:04:05.000Z').getTime();
-    const withDate = formatEventXAxisValue(timestamp, XAxisTypes.Time, { includeDateForTime: true });
-    const timeOnly = formatEventXAxisValue(timestamp, XAxisTypes.Time, { includeDateForTime: false });
+    const withDate = formatEventXAxisValue(timestamp, XAxisTypes.Time, { includeDateForTime: true, locale: 'en-GB' });
+    const timeOnly = formatEventXAxisValue(timestamp, XAxisTypes.Time, { includeDateForTime: false, locale: 'en-GB' });
 
     expect(withDate.length).toBeGreaterThan(timeOnly.length);
     expect(timeOnly).toContain(':');
+  });
+
+  it('formats time axis using the provided locale instead of a hardcoded british locale', () => {
+    const timestamp = new Date('2024-03-02T15:04:05.000Z').getTime();
+
+    const british = formatEventXAxisValue(timestamp, XAxisTypes.Time, {
+      includeDateForTime: true,
+      locale: 'en-GB',
+    });
+    const american = formatEventXAxisValue(timestamp, XAxisTypes.Time, {
+      includeDateForTime: true,
+      locale: 'en-US',
+    });
+
+    expect(british).not.toBe(american);
+    expect(british).toContain('02 Mar');
+    expect(american).toContain('Mar 02');
   });
 
   it('picks canonical duration and time intervals from the visible range', () => {

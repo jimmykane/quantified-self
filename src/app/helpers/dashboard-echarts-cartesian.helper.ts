@@ -78,6 +78,25 @@ function getPreviousIntervalTime(time: number, interval: TimeIntervals): number 
   return previous.getTime();
 }
 
+function countInclusiveIntervals(startTime: number, endTime: number, interval: TimeIntervals): number | null {
+  if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || startTime > endTime) {
+    return null;
+  }
+
+  let count = 0;
+  let cursor = startTime;
+  while (cursor <= endTime) {
+    count += 1;
+    const nextCursor = getNextIntervalTime(cursor, interval);
+    if (nextCursor <= cursor) {
+      return null;
+    }
+    cursor = nextCursor;
+  }
+
+  return count;
+}
+
 function toFiniteNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === '') {
     return null;
@@ -218,34 +237,39 @@ export function buildDashboardCartesianPoints(
     return points;
   }
 
-  const contiguousPoints: DashboardCartesianPoint[] = [];
+  const expectedPointCount = countInclusiveIntervals(startTime, endTime, chartDataTimeInterval);
+  if (!expectedPointCount) {
+    return points;
+  }
+
+  const contiguousPoints = new Array<DashboardCartesianPoint>(expectedPointCount);
   let cursor = startTime;
-  let guard = 0;
-  while (cursor <= endTime && guard < 10000) {
+  for (let index = 0; index < expectedPointCount; index += 1) {
     const existingPoint = pointsByTime.get(cursor);
     if (existingPoint) {
-      contiguousPoints.push({
+      contiguousPoints[index] = {
         ...existingPoint,
-        index: contiguousPoints.length
-      });
+        index
+      };
     } else {
-      contiguousPoints.push({
-        index: contiguousPoints.length,
+      contiguousPoints[index] = {
+        index,
         label: formatDashboardDateByInterval(cursor, chartDataTimeInterval),
         value: 0,
         count: 0,
         time: cursor,
         activityType: null,
         rawItem: null
-      });
+      };
     }
 
-    const nextCursor = getNextIntervalTime(cursor, chartDataTimeInterval);
-    if (nextCursor <= cursor) {
-      break;
+    if (index < expectedPointCount - 1) {
+      const nextCursor = getNextIntervalTime(cursor, chartDataTimeInterval);
+      if (nextCursor <= cursor) {
+        return points;
+      }
+      cursor = nextCursor;
     }
-    cursor = nextCursor;
-    guard += 1;
   }
 
   if (contiguousPoints.length === 1 && contiguousPoints[0].time !== null) {

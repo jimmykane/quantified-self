@@ -4,7 +4,7 @@ import {
   TimeIntervals
 } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
-import { getDashboardSummaryMetaLabel } from './dashboard-chart-data.helper';
+import { formatDashboardDateByInterval, getDashboardSummaryMetaLabel } from './dashboard-chart-data.helper';
 
 describe('dashboard-chart-data.helper', () => {
   it('should return per interval labels for date categories', () => {
@@ -31,5 +31,16 @@ describe('dashboard-chart-data.helper', () => {
     const label = getDashboardSummaryMetaLabel(undefined, ChartDataValueTypes.Minimum, undefined);
 
     expect(label).toBe('Minimum');
+  });
+
+  it('should format dashboard dates using the provided locale', () => {
+    const timestamp = Date.UTC(2024, 2, 2, 15, 4, 0);
+
+    const british = formatDashboardDateByInterval(timestamp, TimeIntervals.Hourly, 'en-GB');
+    const american = formatDashboardDateByInterval(timestamp, TimeIntervals.Hourly, 'en-US');
+
+    expect(british).not.toBe(american);
+    expect(british).toContain('02 Mar 2024');
+    expect(american).toContain('Mar 02, 2024');
   });
 });

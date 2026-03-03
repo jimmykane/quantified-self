@@ -78,6 +78,28 @@ describe('dashboard-echarts-cartesian.helper', () => {
     expect(points[2].time).toBe(dayThree);
   });
 
+  it('should not truncate long hourly ranges beyond ten thousand buckets', () => {
+    const startHour = Date.UTC(2024, 0, 1, 0, 0, 0, 0);
+    const endHour = startHour + (10000 * 60 * 60 * 1000);
+
+    const points = buildDashboardCartesianPoints({
+      data: [
+        { time: startHour, [ChartDataValueTypes.Total]: 10, count: 1 },
+        { time: endHour, [ChartDataValueTypes.Total]: 20, count: 1 },
+      ],
+      chartDataValueType: ChartDataValueTypes.Total,
+      chartDataCategoryType: ChartDataCategoryTypes.DateType,
+      chartDataTimeInterval: TimeIntervals.Hourly,
+    });
+
+    expect(points).toHaveLength(10001);
+    expect(points[0].time).toBe(startHour);
+    expect(points[0].value).toBe(10);
+    expect(points[9999].value).toBe(0);
+    expect(points[10000].time).toBe(endHour);
+    expect(points[10000].value).toBe(20);
+  });
+
   it('should advance daily buckets in UTC across DST boundaries', () => {
     const previousTimeZone = process.env.TZ;
     process.env.TZ = 'Europe/Berlin';

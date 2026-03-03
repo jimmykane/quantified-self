@@ -7,6 +7,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import * as weeknumber from 'weeknumber';
 import { SummariesChartDataInterface } from '../components/summaries/summaries.component';
+import { getBrowserLocale } from '../shared/adapters/date-locale.config';
 
 type WarnLogger = {
   warn?: (...args: unknown[]) => void;
@@ -62,7 +63,7 @@ export function getDashboardAxisDateFormat(timeInterval: TimeIntervals): string 
   }
 }
 
-export function formatDashboardDateByInterval(value: number | Date, timeInterval: TimeIntervals): string {
+export function formatDashboardDateByInterval(value: number | Date, timeInterval: TimeIntervals, locale = getBrowserLocale()): string {
   const date = toValidDate(value);
   if (!date) {
     return '';
@@ -72,17 +73,17 @@ export function formatDashboardDateByInterval(value: number | Date, timeInterval
     case TimeIntervals.Yearly:
       return `${date.getFullYear()}`;
     case TimeIntervals.Monthly:
-      return date.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+      return date.toLocaleDateString(locale, { month: 'short', year: 'numeric' });
     case TimeIntervals.Weekly: {
       const week = weeknumber.weekNumber(date);
-      const dateLabel = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      const dateLabel = date.toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' });
       return `Week ${week} ${dateLabel}`;
     }
     case TimeIntervals.Daily:
-      return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      return date.toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' });
     case TimeIntervals.Hourly: {
-      const timeLabel = date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
-      const dateLabel = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      const timeLabel = date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', hour12: false });
+      const dateLabel = date.toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' });
       return `${timeLabel} ${dateLabel}`;
     }
     default:
