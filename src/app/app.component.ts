@@ -33,6 +33,7 @@ import { AppWhatsNewService } from './services/app.whats-new.service';
 import { MatDialog } from '@angular/material/dialog';
 import { WhatsNewDialogComponent } from './components/whats-new/whats-new-dialog.component';
 import { RouteAnimationStateService } from './services/route-animation-state.service';
+import { AppThemes } from '@sports-alliance/sports-lib';
 
 @Component({
   selector: 'app-root',
@@ -72,6 +73,8 @@ export class AppComponent implements OnInit, OnDestroy {
   public themeOverlayActive = false;
   public themeOverlayClass = '';
   public themeOverlayStyle: { [key: string]: string } = {};
+  private themeOverlayApplyTimeout: ReturnType<typeof setTimeout> | null = null;
+  private themeOverlayResetTimeout: ReturnType<typeof setTimeout> | null = null;
 
   private breakpointObserver = inject(BreakpointObserver);
   public isHandset = toSignal(this.breakpointObserver.observe([Breakpoints.XSmall, Breakpoints.Small]).pipe(map(result => result.matches)), { initialValue: false });
@@ -278,32 +281,49 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
-  private triggerCircularReveal(x: number, y: number, theme: any) {
-    // Set the overlay class based on new theme
-    this.themeOverlayClass = theme === 'Dark' ? 'dark-theme' : '';
+  private triggerCircularReveal(x: number, y: number, theme: AppThemes) {
+    this.clearThemeOverlayTimeouts();
 
-    // Clear any previous style (not needed for gradient sweep, but kept for compatibility)
-    this.themeOverlayStyle = {};
+    const viewportWidth = typeof window === 'undefined' ? 0 : window.innerWidth;
+    const viewportHeight = typeof window === 'undefined' ? 0 : window.innerHeight;
+    const safeX = Number.isFinite(x) ? x : viewportWidth / 2;
+    const safeY = Number.isFinite(y) ? y : viewportHeight / 2;
+    const radius = Math.hypot(
+      Math.max(safeX, viewportWidth - safeX),
+      Math.max(safeY, viewportHeight - safeY)
+    );
+
+    this.themeOverlayClass = theme === AppThemes.Dark ? 'dark-theme' : '';
+    this.themeOverlayStyle = {
+      '--qs-theme-reveal-x': `${safeX}px`,
+      '--qs-theme-reveal-y': `${safeY}px`,
+      '--qs-theme-reveal-radius': `${radius}px`,
+    };
 
     // Activate overlay immediately
     this.themeOverlayActive = true;
     this.changeDetectorRef.detectChanges();
 
-    // Apply the actual theme to body mid-animation (around 50%)
-    // This ensures the theme changes under the overlay while it's still covering
-    setTimeout(() => {
-      if (theme === 'Dark') {
-        document.body.classList.add('dark-theme');
-      } else {
-        document.body.classList.remove('dark-theme');
-      }
+    this.themeOverlayApplyTimeout = setTimeout(() => {
+      this.themeService.applyBodyTheme(theme);
     }, 300); // Apply at ~50% of 600ms animation
 
-    // After animation completes, deactivate overlay
-    setTimeout(() => {
+    this.themeOverlayResetTimeout = setTimeout(() => {
       this.themeOverlayActive = false;
       this.changeDetectorRef.detectChanges();
     }, 600); // Match animation duration
+  }
+
+  private clearThemeOverlayTimeouts() {
+    if (this.themeOverlayApplyTimeout) {
+      clearTimeout(this.themeOverlayApplyTimeout);
+      this.themeOverlayApplyTimeout = null;
+    }
+
+    if (this.themeOverlayResetTimeout) {
+      clearTimeout(this.themeOverlayResetTimeout);
+      this.themeOverlayResetTimeout = null;
+    }
   }
 
   public openWhatsNew() {
@@ -319,6 +339,7 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.clearThemeOverlayTimeouts();
     if (this.actionButtonsSubscription) {
       this.actionButtonsSubscription.unsubscribe();
     }

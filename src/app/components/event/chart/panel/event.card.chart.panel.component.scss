@@ -3,8 +3,8 @@
 }
 
 .event-chart-panel {
-  border: 1px solid var(--mat-sys-outline-variant);
-  border-radius: 12px;
+  border: 0;
+  border-radius: 0;
   padding: 0px 0;
   background: transparent;
 }
@@ -92,8 +92,8 @@
   display: grid;
   gap: 4px;
   padding: 0;
-  border: 1px solid var(--mat-sys-outline-variant);
-  border-radius: 12px;
+  border: 0;
+  border-radius: 0;
   background: transparent;
 }
 

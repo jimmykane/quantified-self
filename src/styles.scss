@@ -326,7 +326,7 @@ section.component-container {
   --mat-app-tertiary-container: var(--mat-sys-tertiary-container);
   --mat-app-on-tertiary-container: var(--mat-sys-on-tertiary-container);
   --mat-sidenav-content-background-color: var(--mat-app-background);
-  --mat-sidenav-container-background-color: var(--mat-app-surface);
+  --mat-sidenav-container-background-color: var(--mat-app-surface-container-lowest);
 }
 
 .dark-theme {
@@ -356,7 +356,7 @@ section.component-container {
   --mat-app-tertiary-container: var(--mat-sys-tertiary-container);
   --mat-app-on-tertiary-container: var(--mat-sys-on-tertiary-container);
   --mat-sidenav-content-background-color: var(--mat-app-background);
-  --mat-sidenav-container-background-color: var(--mat-app-surface);
+  --mat-sidenav-container-background-color: var(--mat-app-surface-container-lowest);
 }
 
 

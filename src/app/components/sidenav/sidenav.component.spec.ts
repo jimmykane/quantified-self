@@ -14,12 +14,14 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 
 import { AppWhatsNewService } from '../../services/app.whats-new.service';
 import { signal } from '@angular/core';
+import { AppThemes } from '@sports-alliance/sports-lib';
 
 describe('SideNavComponent', () => {
     let component: SideNavComponent;
     let fixture: ComponentFixture<SideNavComponent>;
     let mockAuthService: any;
     let mockUserService: any;
+    let mockThemeService: any;
 
     beforeEach(async () => {
         mockAuthService = {
@@ -28,6 +30,10 @@ describe('SideNavComponent', () => {
         mockUserService = {
             isAdmin: vi.fn().mockResolvedValue(false),
         };
+        mockThemeService = {
+            getAppTheme: () => of(AppThemes.Normal),
+            setPreferredTheme: vi.fn().mockResolvedValue(undefined)
+        };
 
         await TestBed.configureTestingModule({
             declarations: [SideNavComponent],
@@ -35,7 +41,7 @@ describe('SideNavComponent', () => {
                 { provide: AppAuthService, useValue: mockAuthService },
                 { provide: AppUserService, useValue: mockUserService },
                 { provide: AppSideNavService, useValue: { close: vi.fn() } },
-                { provide: AppThemeService, useValue: { getAppTheme: () => of('normal') } },
+                { provide: AppThemeService, useValue: mockThemeService },
                 { provide: AppWindowService, useValue: {} },
                 { provide: AppAnalyticsService, useValue: { logEvent: vi.fn() } },
                 { provide: MatSnackBar, useValue: {} },
@@ -51,6 +57,14 @@ describe('SideNavComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('should delegate theme changes to the theme service', async () => {
+        const event = new MouseEvent('click');
+
+        await component.setTheme(AppThemes.Dark, event);
+
+        expect(mockThemeService.setPreferredTheme).toHaveBeenCalledWith(AppThemes.Dark, event);
     });
 
     it('isProUser should be false for basic role', () => {

@@ -109,12 +109,24 @@
   <!-- Preferences Section -->
   <div class="sidenav-section-header">Preferences</div>
 
-  <mat-list-item (click)="$event.stopPropagation(); $event.preventDefault(); themeService.toggleTheme($event)">
-    <mat-icon>dark_mode</mat-icon>
-    <span>Dark theme</span>
+  <mat-list-item class="theme-toggle-item" aria-label="Theme preference">
     <span class="fill-space"></span>
-    <mat-slide-toggle [disabled]="!appTheme" [checked]="appTheme === appThemes.Dark">
-    </mat-slide-toggle>
+    <mat-button-toggle-group class="theme-toggle-group" name="theme" aria-label="Theme selection"
+      hideSingleSelectionIndicator [value]="appTheme()">
+      <mat-button-toggle [value]="appThemes.Normal" aria-label="Use light theme"
+        (click)="setTheme(appThemes.Normal, $event)">
+        <span class="theme-toggle-option">
+          <mat-icon>light_mode</mat-icon>
+          <span>Light</span>
+        </span>
+      </mat-button-toggle>
+      <mat-button-toggle [value]="appThemes.Dark" aria-label="Use dark theme" (click)="setTheme(appThemes.Dark, $event)">
+        <span class="theme-toggle-option">
+          <mat-icon>dark_mode</mat-icon>
+          <span>Dark</span>
+        </span>
+      </mat-button-toggle>
+    </mat-button-toggle-group>
   </mat-list-item>
 
 

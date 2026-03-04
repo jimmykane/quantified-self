@@ -16,7 +16,7 @@
       @if (this.selection.selected.length > 1) {
       <button mat-icon-button matTooltip="Merge {{selection.selected.length}} events"
         (click)="$event.preventDefault(); $event.stopPropagation();mergeSelection($event)">
-        <span class="action-icon-badge" [matBadge]="selection.selected.length" matBadgeColor="primary" matBadgeSize="small">
+        <span class="action-icon-badge" [matBadge]="selection.selected.length" matBadgeSize="small">
           <mat-icon>compare_arrows</mat-icon>
         </span>
       </button>
@@ -24,20 +24,20 @@
       <button mat-icon-button [disabled]="selection.selected.length > 20"
         matTooltip="{{ selection.selected.length > 20 ? 'Selection limit reached (max 20)' : 'Download as csv ' + selection.selected.length + ' events' }}"
         (click)="$event.preventDefault(); $event.stopPropagation(); downloadAsCSV($event)">
-        <span class="action-icon-badge" [matBadge]="selection.selected.length" matBadgeColor="accent" matBadgeSize="small">
+        <span class="action-icon-badge" [matBadge]="selection.selected.length" matBadgeSize="small">
           <mat-icon>csv</mat-icon>
         </span>
       </button>
       <button mat-icon-button [disabled]="selection.selected.length > 20"
         matTooltip="{{ selection.selected.length > 20 ? 'Selection limit reached (max 20)' : 'Download original files' }}"
         (click)="$event.preventDefault(); $event.stopPropagation(); downloadOriginals()">
-        <span class="action-icon-badge" [matBadge]="selection.selected.length" matBadgeColor="primary" matBadgeSize="small">
+        <span class="action-icon-badge" [matBadge]="selection.selected.length" matBadgeSize="small">
           <mat-icon>folder_zip</mat-icon>
         </span>
       </button>
       <button mat-icon-button matTooltip="Delete {{selection.selected.length}} events"
         (click)="$event.preventDefault(); $event.stopPropagation();deleteSelection()">
-        <span class="action-icon-badge" [matBadge]="selection.selected.length" matBadgeColor="warn" matBadgeSize="small">
+        <span class="action-icon-badge" [matBadge]="selection.selected.length" matBadgeSize="small">
           <mat-icon>delete</mat-icon>
         </span>
       </button>

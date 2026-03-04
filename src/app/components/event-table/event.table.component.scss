@@ -16,7 +16,7 @@
   align-items: center;
   gap: 4px;
   margin-left: auto;
-  padding: 10px 8px 4px 4px;
+  padding: 10px 16px 4px 4px;
   /* Extra top padding for badges */
   white-space: nowrap;
   overflow: visible;
@@ -251,10 +251,12 @@ mat-paginator {
 
 /* Compact icon buttons for table actions */
 .buttons button[mat-icon-button] {
-  width: 32px !important;
-  height: 32px !important;
-  padding: 0 !important;
-  line-height: 32px !important;
+  width: 40px !important;
+  height: 40px !important;
+  padding: 8px !important;
+  line-height: 40px !important;
+  border-radius: 10px !important;
+  overflow: visible !important;
 }
 
 .buttons button[mat-icon-button] mat-icon {
@@ -272,13 +274,18 @@ mat-paginator {
   height: 24px;
 }
 
-/* Force smaller badges for table actions */
 .buttons ::ng-deep .mat-badge-content {
-  width: 14px !important;
-  height: 14px !important;
-  line-height: 14px !important;
-  font-size: 9px !important;
+  min-width: 24px !important;
+  width: auto !important;
+  height: 18px !important;
+  line-height: 18px !important;
+  padding: 0 5px !important;
+  border-radius: 999px !important;
+  font-size: 10px !important;
   font-weight: 500 !important;
+  background-color: var(--mat-app-primary);
+  color: var(--mat-sys-on-primary);
+  inset-inline-end: -6px !important;
 }
 
 /* Align activity type icon and text */

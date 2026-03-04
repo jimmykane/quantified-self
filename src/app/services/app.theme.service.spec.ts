@@ -170,6 +170,22 @@ describe('AppThemeService', () => {
             const theme = await firstValueFrom(service.getAppTheme());
             expect(theme).toBe(AppThemes.Normal);
         });
+
+        it('should update the local theme immediately for signed-in users', async () => {
+            const mockUser = {
+                settings: {
+                    appSettings: { theme: AppThemes.Normal }
+                }
+            };
+
+            userSubject.next(mockUser);
+
+            await service.setPreferredTheme(AppThemes.Dark, { x: 10, y: 20 });
+
+            const theme = await firstValueFrom(service.getAppTheme());
+            expect(theme).toBe(AppThemes.Dark);
+            expect(mockUserService.updateUserProperties).toHaveBeenCalled();
+        });
     });
 
     describe('setAppTheme', () => {

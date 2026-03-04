@@ -1,10 +1,10 @@
-import { Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { Component, inject } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppSideNavService } from '../../services/side-nav/app-side-nav.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
-import { Subscription } from 'rxjs';
 import { User } from '@sports-alliance/sports-lib';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
@@ -20,35 +20,26 @@ import { environment } from '../../../environments/environment';
   styleUrls: ['./sidenav.component.scss'],
   standalone: false
 })
-export class SideNavComponent implements OnInit, OnDestroy {
+export class SideNavComponent {
 
   public events: EventInterface[] = [];
   public appVersion = environment.appVersion;
 
-
-  public appTheme!: AppThemes
+  private themeService = inject(AppThemeService);
   public appThemes = AppThemes;
-
-  private themeSubscription!: Subscription
+  public appTheme = toSignal(this.themeService.getAppTheme(), { initialValue: AppThemes.Normal });
   private analyticsService = inject(AppAnalyticsService);
 
   constructor(
     public authService: AppAuthService,
     public userService: AppUserService,
     public sideNav: AppSideNavService,
-    public themeService: AppThemeService,
     public whatsNewService: AppWhatsNewService,
     private windowService: AppWindowService,
     private snackBar: MatSnackBar,
     private router: Router) {
   }
 
-
-  ngOnInit() {
-    this.themeSubscription = this.themeService.getAppTheme().subscribe(theme => {
-      this.appTheme = theme
-    })
-  }
 
   get isProUser(): boolean {
     return this.userService.isProSignal();
@@ -97,10 +88,8 @@ export class SideNavComponent implements OnInit, OnDestroy {
     }
   }
 
-  ngOnDestroy(): void {
-    if (this.themeSubscription) {
-      this.themeSubscription.unsubscribe();
-    }
+  public async setTheme(theme: AppThemes, event?: MouseEvent) {
+    await this.themeService.setPreferredTheme(theme, event);
   }
 
 }

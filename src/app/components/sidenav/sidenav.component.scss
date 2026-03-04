@@ -293,11 +293,30 @@ mat-list-item:hover mat-icon {
   flex: 1 1 auto;
 }
 
-/* Dark Mode Toggle */
-mat-slide-toggle {
-  vertical-align: middle;
-  margin-left: 4px;
+/* Theme Selection */
+.theme-toggle-item {
+  min-height: 56px !important;
+}
+
+.theme-toggle-group {
   margin-right: 8px;
+}
+
+.theme-toggle-group mat-button-toggle {
+  min-width: 72px;
+}
+
+.theme-toggle-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.theme-toggle-option mat-icon {
+  margin: 0;
+  opacity: 1;
 }
 
 /* External Link Icon */

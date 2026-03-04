@@ -89,6 +89,8 @@ section.container {
   padding: 0 5px;
   border-radius: 999px;
   font-size: 10px;
+  background-color: var(--mat-app-primary);
+  color: var(--mat-sys-on-primary);
 }
 
 @include xsmall {

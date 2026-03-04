@@ -6,6 +6,7 @@ import { User } from '@sports-alliance/sports-lib';
 import { BehaviorSubject, Observable, Subscription } from 'rxjs';
 import { AppAuthService } from '../authentication/app.auth.service';
 
+type ThemeChangeOrigin = MouseEvent | HTMLElement | { x: number; y: number } | null | undefined;
 
 @Injectable({
   providedIn: 'root',
@@ -60,34 +61,54 @@ export class AppThemeService implements OnDestroy {
     }
   }
 
-  private async changeTheme(theme: AppThemes) {
-    // Save it to the user if he exists
-    if (this.user?.settings) {
-      if (this.user.settings.appSettings) {
-        this.user.settings.appSettings.theme = theme;
-      }
-      await this.userService.updateUserProperties(this.user, {
-        settings: this.user.settings
-      });
-    } else {
-      // Save it to local storage to prevent flashes
-      this.setAppTheme(theme);
+  private async persistTheme(theme: AppThemes) {
+    if (!this.user) {
+      return;
     }
+
+    const nextSettings = {
+      ...this.user.settings,
+      appSettings: {
+        ...this.user.settings?.appSettings,
+        theme,
+      }
+    };
+
+    this.user = Object.assign(
+      Object.create(Object.getPrototypeOf(this.user)),
+      this.user,
+      { settings: nextSettings }
+    ) as User;
+
+    await this.userService.updateUserProperties(this.user, {
+      settings: nextSettings
+    });
   }
 
-  public setAppTheme(appTheme: AppThemes, saveToStorage: boolean = true) {
+  private applyThemeState(appTheme: AppThemes, saveToStorage: boolean = true, applyToBody: boolean = true) {
     if (this.appThemeSubject.getValue() === appTheme) {
       return;
     }
-    if (appTheme === AppThemes.Normal) {
-      document.body.classList.remove('dark-theme');
-    } else {
-      document.body.classList.add('dark-theme');
+    if (applyToBody) {
+      this.applyBodyTheme(appTheme);
     }
     if (saveToStorage) {
       localStorage.setItem('appTheme', appTheme);
     }
     this.appThemeSubject.next(appTheme);
+  }
+
+  public applyBodyTheme(appTheme: AppThemes) {
+    if (appTheme === AppThemes.Normal) {
+      document.body.classList.remove('dark-theme');
+      return;
+    }
+
+    document.body.classList.add('dark-theme');
+  }
+
+  public setAppTheme(appTheme: AppThemes, saveToStorage: boolean = true) {
+    this.applyThemeState(appTheme, saveToStorage, true);
   }
 
   public getAppTheme(): Observable<AppThemes> {
@@ -99,21 +120,50 @@ export class AppThemeService implements OnDestroy {
   private themeChangeSubject = new BehaviorSubject<{ x: number; y: number; theme: AppThemes } | null>(null);
   public themeChange$ = this.themeChangeSubject.asObservable();
 
-  public async toggleTheme(event?: MouseEvent) {
-    // Toggling implies an explicit action, so we use the current value to determine the next
-    const current = this.appThemeSubject.getValue();
-    const newTheme = current === AppThemes.Dark ? AppThemes.Normal : AppThemes.Dark;
+  public async setPreferredTheme(theme: AppThemes, origin?: ThemeChangeOrigin) {
+    if (this.appThemeSubject.getValue() === theme) {
+      return;
+    }
 
-    // Emit animation coordinates if event is provided
-    if (event) {
+    if (origin) {
+      const coordinates = this.resolveThemeOrigin(origin);
       this.themeChangeSubject.next({
-        x: event.clientX,
-        y: event.clientY,
-        theme: newTheme
+        ...coordinates,
+        theme
       });
     }
 
-    await this.changeTheme(newTheme);
+    this.applyThemeState(theme, true, !origin);
+    await this.persistTheme(theme);
+  }
+
+  public async toggleTheme(origin?: ThemeChangeOrigin) {
+    const current = this.appThemeSubject.getValue();
+    const newTheme = current === AppThemes.Dark ? AppThemes.Normal : AppThemes.Dark;
+    await this.setPreferredTheme(newTheme, origin);
+  }
+
+  private resolveThemeOrigin(origin: ThemeChangeOrigin): { x: number; y: number } {
+    if (origin instanceof MouseEvent) {
+      return { x: origin.clientX, y: origin.clientY };
+    }
+
+    if (origin instanceof HTMLElement) {
+      const rect = origin.getBoundingClientRect();
+      return {
+        x: rect.left + (rect.width / 2),
+        y: rect.top + (rect.height / 2),
+      };
+    }
+
+    if (origin && typeof origin === 'object' && 'x' in origin && 'y' in origin) {
+      return origin;
+    }
+
+    return {
+      x: window.innerWidth / 2,
+      y: window.innerHeight / 2,
+    };
   }
 
   private getAppThemeFromStorage(): AppThemes | null {

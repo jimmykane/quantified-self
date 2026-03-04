@@ -14,6 +14,7 @@ mat-sidenav {
   width: 300px;
   min-width: 300px;
   max-width: 360px;
+  background: var(--mat-app-surface-container-lowest);
   border-right: 1px solid rgba(0, 0, 0, 0.08);
 
   // Hide scrollbar completely - sidenav should fit content
@@ -228,7 +229,7 @@ mat-progress-bar {
   }
 }
 
-/* Gradient Sweep Theme Animation Overlay */
+/* Theme transition overlay */
 .theme-reveal-overlay {
   position: fixed;
   top: 0;
@@ -237,39 +238,25 @@ mat-progress-bar {
   height: 100vh;
   z-index: 99999;
   pointer-events: none;
-
-  /* Gradient that sweeps from left to right */
-  background: linear-gradient(90deg,
-      #ffffff 0%,
-      #ffffff 50%,
-      transparent 50%,
-      transparent 100%);
-  background-size: 200% 100%;
-  background-position: 100% 0;
-  animation: gradient-sweep 0.6s ease-in-out forwards;
+  background: #fafafa;
+  opacity: 0;
+  clip-path: circle(0 at var(--qs-theme-reveal-x, 50vw) var(--qs-theme-reveal-y, 50vh));
+  animation: theme-reveal 0.6s cubic-bezier(0.2, 0.9, 0.2, 1) forwards;
 
   &.dark-theme {
-    background: linear-gradient(90deg,
-        #121212 0%,
-        #121212 50%,
-        transparent 50%,
-        transparent 100%);
-    background-size: 200% 100%;
-    background-position: 100% 0;
+    background: #121212;
   }
 }
 
-@keyframes gradient-sweep {
+@keyframes theme-reveal {
   0% {
-    background-position: 100% 0;
-  }
-
-  50% {
-    background-position: 0% 0;
+    opacity: 0.92;
+    clip-path: circle(0 at var(--qs-theme-reveal-x, 50vw) var(--qs-theme-reveal-y, 50vh));
   }
 
   100% {
-    background-position: -100% 0;
+    opacity: 0;
+    clip-path: circle(var(--qs-theme-reveal-radius, 150vmax) at var(--qs-theme-reveal-x, 50vw) var(--qs-theme-reveal-y, 50vh));
   }
 }
 
