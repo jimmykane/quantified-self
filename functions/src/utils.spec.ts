@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { USAGE_LIMITS } from './shared/limits';
 import {
     generateIDFromParts,
     generateIDFromPartsOld,
@@ -361,29 +362,27 @@ describe('utils', () => {
                 expect(mockCollection).not.toHaveBeenCalled();
             });
 
-            it('should enforce limit of 10 for free users', async () => {
+            it('should enforce the configured limit for free users', async () => {
                 mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'free' } });
                 const { checkEventUsageLimit } = await getUtils();
+                const freeLimit = USAGE_LIMITS.free;
 
-                // Case: Under Limit (9)
-                mockCountGet.mockResolvedValueOnce({ data: () => ({ count: 9 }) });
+                mockCountGet.mockResolvedValueOnce({ data: () => ({ count: freeLimit - 1 }) });
                 await expect(checkEventUsageLimit('user1')).resolves.not.toThrow();
 
-                // Case: Over Limit (10)
-                mockCountGet.mockResolvedValueOnce({ data: () => ({ count: 10 }) });
+                mockCountGet.mockResolvedValueOnce({ data: () => ({ count: freeLimit }) });
                 await expect(checkEventUsageLimit('user1')).rejects.toThrow();
             });
 
-            it('should enforce limit of 100 for basic users', async () => {
+            it('should enforce the configured limit for basic users', async () => {
                 mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'basic' } });
                 const { checkEventUsageLimit } = await getUtils();
+                const basicLimit = USAGE_LIMITS.basic;
 
-                // Case: Under Limit (99)
-                mockCountGet.mockResolvedValueOnce({ data: () => ({ count: 99 }) });
+                mockCountGet.mockResolvedValueOnce({ data: () => ({ count: basicLimit - 1 }) });
                 await expect(checkEventUsageLimit('user1')).resolves.not.toThrow();
 
-                // Case: Over Limit (100)
-                mockCountGet.mockResolvedValueOnce({ data: () => ({ count: 100 }) });
+                mockCountGet.mockResolvedValueOnce({ data: () => ({ count: basicLimit }) });
                 await expect(checkEventUsageLimit('user1')).rejects.toThrow();
             });
 
@@ -426,8 +425,7 @@ describe('utils', () => {
                 mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'free' } });
                 const { checkEventUsageLimit } = await getUtils();
 
-                // Free limit is 10, so 9 should pass
-                mockCountGet.mockResolvedValueOnce({ data: () => ({ count: 9 }) });
+                mockCountGet.mockResolvedValueOnce({ data: () => ({ count: USAGE_LIMITS.free - 1 }) });
                 await expect(checkEventUsageLimit('user1')).resolves.not.toThrow();
             });
 
@@ -436,7 +434,7 @@ describe('utils', () => {
                 const { checkEventUsageLimit } = await getUtils();
 
                 // No claims means free tier
-                mockCountGet.mockResolvedValueOnce({ data: () => ({ count: 11 }) });
+                mockCountGet.mockResolvedValueOnce({ data: () => ({ count: USAGE_LIMITS.free + 1 }) });
                 await expect(checkEventUsageLimit('user1')).rejects.toThrow();
             });
 
@@ -445,7 +443,7 @@ describe('utils', () => {
                 const { checkEventUsageLimit } = await getUtils();
 
                 // Empty claims means free tier
-                mockCountGet.mockResolvedValueOnce({ data: () => ({ count: 11 }) });
+                mockCountGet.mockResolvedValueOnce({ data: () => ({ count: USAGE_LIMITS.free + 1 }) });
                 await expect(checkEventUsageLimit('user1')).rejects.toThrow();
             });
         });

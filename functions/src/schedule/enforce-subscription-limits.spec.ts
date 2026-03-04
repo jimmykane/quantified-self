@@ -78,6 +78,7 @@ import * as Claims from '../stripe/claims';
 
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { GARMIN_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
+import { USAGE_LIMITS } from '../shared/limits';
 
 describe('enforceSubscriptionLimits', () => {
     let deauthorizeServiceSpy: any;
@@ -233,7 +234,9 @@ describe('enforceSubscriptionLimits', () => {
         const pastDate = new Date(Date.now() - 100000);
         const systemDoc = mockDoc({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(pastDate) });
 
-        // Setup User1: Free, 12 events (limit 10)
+        const freeExcessCount = 2;
+
+        // Setup User1: Free, limit + excess events
         mockFirestoreInstance.collection.mockImplementation((path: string) => {
             if (path === GARMIN_API_TOKENS_COLLECTION_NAME) return mockQuery([{ id: 'user1' }]);
             if (path === 'users') return mockQuery([mockUserDoc('user1')]);
@@ -244,7 +247,7 @@ describe('enforceSubscriptionLimits', () => {
                     { id: 'event1', ref: { id: 'event1' } },
                     { id: 'event2', ref: { id: 'event2' } }
                 ];
-                return mockQuery(docs, 12);
+                return mockQuery(docs, USAGE_LIMITS.free + freeExcessCount);
             }
             return mockQuery([]);
         });
@@ -273,8 +276,9 @@ describe('enforceSubscriptionLimits', () => {
         expect(mockRecursiveDelete).not.toHaveBeenCalled();
     });
 
-    it('should respect Basic limits (100 events)', async () => {
+    it('should respect the configured Basic limit', async () => {
         const pastDate = new Date(Date.now() - 100000);
+        const basicExcessCount = 5;
 
         mockFirestoreInstance.collection.mockImplementation((path: string) => {
             if (path === GARMIN_API_TOKENS_COLLECTION_NAME) return mockQuery([{ id: 'user1' }]);
@@ -284,9 +288,8 @@ describe('enforceSubscriptionLimits', () => {
                 return mockQuery([{ data: () => ({ role: 'basic' }) }]);
             }
             if (path.includes('events')) {
-                // 105 events, limit 100
-                const docs = Array(5).fill(0).map((_, i) => ({ id: `ev${i}`, ref: { id: `ev${i}` } }));
-                return mockQuery(docs, 105);
+                const docs = Array(basicExcessCount).fill(0).map((_, i) => ({ id: `ev${i}`, ref: { id: `ev${i}` } }));
+                return mockQuery(docs, USAGE_LIMITS.basic + basicExcessCount);
             }
             return mockQuery([]);
         });
@@ -310,8 +313,7 @@ describe('enforceSubscriptionLimits', () => {
         expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.COROSAPI);
         expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.GarminAPI);
 
-        // Should prune excess 5 events (105 - 100)
-        expect(mockBulkWriterDelete).toHaveBeenCalledTimes(5);
+        expect(mockBulkWriterDelete).toHaveBeenCalledTimes(basicExcessCount);
         expect(mockBulkWriterClose).toHaveBeenCalledTimes(1);
     });
 
@@ -350,7 +352,7 @@ describe('enforceSubscriptionLimits', () => {
                     { id: 'event1', ref: { id: 'event1' } },
                     { id: 'event2', ref: { id: 'event2' } }
                 ];
-                return mockQuery(docs, 12);
+                return mockQuery(docs, USAGE_LIMITS.free + 2);
             }
             return mockQuery([]);
         });
@@ -451,7 +453,7 @@ describe('enforceSubscriptionLimits', () => {
 
         const eventsQuery = {
             count: vi.fn().mockReturnValue({
-                get: vi.fn().mockResolvedValue({ data: () => ({ count: 12 }) })
+                get: vi.fn().mockResolvedValue({ data: () => ({ count: 102 }) })
             }),
             orderBy: vi.fn().mockReturnThis(),
             limit: vi.fn().mockReturnThis(),
@@ -459,7 +461,7 @@ describe('enforceSubscriptionLimits', () => {
                 empty: true,
                 docs: [],
                 forEach: vi.fn(),
-                data: () => ({ count: 12 })
+                data: () => ({ count: USAGE_LIMITS.free + 2 })
             })
         };
 
@@ -494,7 +496,7 @@ describe('enforceSubscriptionLimits', () => {
             if (path === 'users') return mockQuery([mockUserDoc('user1', { hasSubscribedOnce: true })]);
             if (path.includes('subscriptions')) return mockQuery([]);
             if (path.includes('events')) {
-                return mockQuery([{ id: 'event1', ref: { id: 'event1' } }], 11);
+                return mockQuery([{ id: 'event1', ref: { id: 'event1' } }], USAGE_LIMITS.free + 1);
             }
             return mockQuery([]);
         });

@@ -8,12 +8,12 @@ The application defines three primary user roles based on subscription status:
 
 ### 1. Free
 *   **Cost:** $0 / month
-*   **Activity Limit:** 10 Activities (Events)
+*   **Activity Limit:** 100 Activities (Events)
 *   **Device Sync:** Not Available
 *   **Role Key:** `free`
 
 ### 2. Basic
-*   **Activity Limit:** 100 Activities (Events)
+*   **Activity Limit:** 1,000 Activities (Events)
 *   **Device Sync:** Not Available
 *   **Role Key:** `basic`
 
@@ -57,7 +57,7 @@ To prevent immediate data loss or service interruption upon payment failure or s
 Once the 30-day window expires:
 1.  **Role Reversion:** The user's role is set to `free`.
 2.  **Service Disconnection:** External APIs (Garmin, etc.) are deauthorized.
-3.  **Data Pruning:** The enforcement job will reduce the user's event history to the Free limit (10 events), deleting the oldest entries first.
+3.  **Data Pruning:** The enforcement job will reduce the user's event history to the Free limit (100 events), deleting the oldest entries first.
 
 ## User Notifications (Frontend)
 

@@ -2,6 +2,7 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
+import { USAGE_LIMITS } from '../shared/limits';
 
 // Reusing the same ROLE_DISPLAY_NAMES map or importing simple map if needed
 const ROLE_DISPLAY_NAMES: { [key: string]: string } = {
@@ -73,7 +74,8 @@ export const checkSubscriptionNotifications = onSchedule({ schedule: 'every 24 h
                 name: 'subscription_expiring_soon',
                 data: {
                     role: ROLE_DISPLAY_NAMES[sub.role] || sub.role,
-                    expiration_date: expirationDate
+                    expiration_date: expirationDate,
+                    free_limit: String(USAGE_LIMITS.free)
                 }
             },
             expireAt: getExpireAtTimestamp(TTL_CONFIG.MAIL_IN_DAYS),
@@ -131,7 +133,8 @@ export const checkSubscriptionNotifications = onSchedule({ schedule: 'every 24 h
             template: {
                 name: 'grace_period_ending',
                 data: {
-                    expiration_date: expirationDate
+                    expiration_date: expirationDate,
+                    free_limit: String(USAGE_LIMITS.free)
                 }
             },
             expireAt: getExpireAtTimestamp(TTL_CONFIG.MAIL_IN_DAYS),

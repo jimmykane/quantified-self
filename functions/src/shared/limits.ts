@@ -1,6 +1,6 @@
 export const USAGE_LIMITS = {
-    free: 10,
-    basic: 100,
+    free: 100,
+    basic: 1000,
 } as const;
 
 export type LimitedSubscriptionRole = keyof typeof USAGE_LIMITS;

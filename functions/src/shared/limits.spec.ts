@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { getUsageLimitForRole, USAGE_LIMITS } from './limits';
 
 describe('USAGE_LIMITS', () => {
-    it('should have correct limits defined', () => {
-        expect(USAGE_LIMITS.free).toBe(10);
-        expect(USAGE_LIMITS.basic).toBe(100);
+    it('should define positive increasing limits for limited roles', () => {
+        expect(USAGE_LIMITS.free).toBeGreaterThan(0);
+        expect(USAGE_LIMITS.basic).toBeGreaterThan(USAGE_LIMITS.free);
     });
 
     it('should not have more than expected keys', () => {
@@ -12,8 +12,8 @@ describe('USAGE_LIMITS', () => {
     });
 
     it('should resolve limits explicitly for supported roles', () => {
-        expect(getUsageLimitForRole('free')).toBe(10);
-        expect(getUsageLimitForRole('basic')).toBe(100);
+        expect(getUsageLimitForRole('free')).toBe(USAGE_LIMITS.free);
+        expect(getUsageLimitForRole('basic')).toBe(USAGE_LIMITS.basic);
         expect(getUsageLimitForRole('pro')).toBeNull();
     });
 

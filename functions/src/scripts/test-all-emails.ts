@@ -32,7 +32,7 @@ const EMAIL_TESTS: EmailTestConfig[] = [
     },
     {
         templateName: 'subscription_downgrade',
-        data: { new_role: 'free', limit: '10' }
+        data: { new_role: 'free', limit: '100' }
     },
     {
         templateName: 'subscription_cancellation',
@@ -40,11 +40,15 @@ const EMAIL_TESTS: EmailTestConfig[] = [
     },
     {
         templateName: 'subscription_expiring_soon',
-        data: { role: 'pro', expiration_date: 'December 31, 2025' }
+        data: { role: 'pro', expiration_date: 'December 31, 2025', free_limit: '100' }
     },
     {
         templateName: 'grace_period_ending',
-        data: { expiration_date: 'January 30, 2026' }
+        data: { expiration_date: 'January 30, 2026', free_limit: '100' }
+    },
+    {
+        templateName: 'development_update',
+        data: { first_name: 'Alex', last_name: 'Example', free_limit: '100', basic_limit: '1000' }
     }
 ];
 

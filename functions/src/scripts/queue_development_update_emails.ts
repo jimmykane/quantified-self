@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import pLimit from 'p-limit';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
+import { USAGE_LIMITS } from '../shared/limits';
 
 // Initialize Firebase Admin
 if (admin.apps.length === 0) {
@@ -140,7 +141,9 @@ async function queueSingleEmail(
                 name: TEMPLATE_NAME,
                 data: {
                     first_name: user.firstName,
-                    last_name: user.lastName
+                    last_name: user.lastName,
+                    free_limit: String(USAGE_LIMITS.free),
+                    basic_limit: String(USAGE_LIMITS.basic)
                 }
             },
             expireAt: getExpireAtTimestamp(TTL_CONFIG.MAIL_IN_DAYS)
@@ -214,7 +217,7 @@ async function queueEmails() {
         const namePart = fullName ? ` (${fullName})` : '';
         console.log(
             `${index + 1}. ${user.email}${namePart} [csvIndex=${user.originalIndex}] ` +
-            `-> template data: first_name="${user.firstName}", last_name="${user.lastName}"`
+            `-> template data: first_name="${user.firstName}", last_name="${user.lastName}", free_limit="${USAGE_LIMITS.free}", basic_limit="${USAGE_LIMITS.basic}"`
         );
     });
 

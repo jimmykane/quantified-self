@@ -34,6 +34,7 @@
 
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
+import { getUsageLimitForRole, USAGE_LIMITS } from '../shared/limits';
 import { ROLE_HIERARCHY, ROLE_DISPLAY_NAMES } from '../shared/pricing';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 import { DocumentData } from 'firebase-admin/firestore';
@@ -199,6 +200,12 @@ export async function checkAndSendSubscriptionEmails(
             if (!exists) {
                 const userRecord = await admin.auth().getUser(uid);
                 if (userRecord.email) {
+                    let limit: number | null;
+                    try {
+                        limit = getUsageLimitForRole(newRole);
+                    } catch {
+                        limit = USAGE_LIMITS.free;
+                    }
                     logger.info(`[checkAndSendSubscriptionEmails] Queuing DOWNGRADE email for user ${uid}`);
                     await mailRef.set({
                         to: userRecord.email,
@@ -208,7 +215,7 @@ export async function checkAndSendSubscriptionEmails(
                             data: {
                                 new_role: displayNames[newRole] || newRole,
                                 old_role: displayNames[oldRole] || oldRole,
-                                limit: (newRole === 'basic') ? '100' : '10', // Basic=100, Free=10
+                                limit: limit === null ? 'Unlimited' : String(limit),
                             }
                         },
                         expireAt: getExpireAtTimestamp(TTL_CONFIG.MAIL_IN_DAYS),
@@ -252,4 +259,3 @@ export async function checkAndSendSubscriptionEmails(
         }
     }
 }
-
