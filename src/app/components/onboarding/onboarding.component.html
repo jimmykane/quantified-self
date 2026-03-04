@@ -57,7 +57,7 @@
                         </div>
 
                         <div class="qs-form-actions">
-                            <button mat-flat-button type="button" color="primary" [disabled]="!termsFormGroup.valid || isLoading"
+                            <button mat-flat-button type="button" class="qs-mat-primary" [disabled]="!termsFormGroup.valid || isLoading"
                                 (click)="onTermsSubmit()">
                                 @if (isLoading) {
                                 Processing...
@@ -65,7 +65,7 @@
                                 Next
                                 }
                             </button>
-                            <button mat-stroked-button type="button" color="warn" (click)="logout()">Logout</button>
+                            <button mat-stroked-button type="button" class="qs-mat-warn" (click)="logout()">Logout</button>
                         </div>
                     </div>
                 </form>

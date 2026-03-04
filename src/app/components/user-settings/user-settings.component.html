@@ -98,7 +98,7 @@
           <div class="brand-text-upgrade">
             <mat-icon>lock</mat-icon>
             <span>Custom watermark text is available on Basic and Pro plans.</span>
-            <a mat-stroked-button color="primary" routerLink="/subscriptions">Upgrade Plan</a>
+            <a mat-stroked-button class="qs-mat-primary" routerLink="/subscriptions">Upgrade Plan</a>
           </div>
           }
 
@@ -119,7 +119,7 @@
           </p>
 
           <div style="margin-top: 16px;">
-            <button mat-stroked-button color="warn" (click)="deleteUser($event)">
+            <button mat-stroked-button class="qs-mat-warn" (click)="deleteUser($event)">
               <mat-icon>delete_forever</mat-icon>
               Delete My Account
             </button>
@@ -384,7 +384,7 @@
       <!-- Floating Action Button for Save (Desktop Only) -->
       @if (!hasError()) {
       <div class="qs-form-actions-floating">
-        <button mat-fab color="primary" [disabled]="isSaving || !userSettingsFormGroup.dirty" matTooltip="Save Changes"
+        <button mat-fab class="qs-mat-primary" [disabled]="isSaving || !userSettingsFormGroup.dirty" matTooltip="Save Changes"
           (click)="onSubmit($event)">
           <mat-icon>save</mat-icon>
         </button>
@@ -394,7 +394,7 @@
       <!-- Sticky Save for Mobile -->
       @if (!hasError()) {
       <div class="mobile-save-bar">
-        <button mat-flat-button color="primary" [disabled]="isSaving || !userSettingsFormGroup.dirty"
+        <button mat-flat-button class="qs-mat-primary" [disabled]="isSaving || !userSettingsFormGroup.dirty"
           (click)="onSubmit($event)">
           Save Settings
         </button>

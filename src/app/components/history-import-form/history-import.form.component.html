@@ -117,7 +117,7 @@
     </mat-form-field>
   </div>
   <div class="confirmation-section">
-    <mat-checkbox formControlName="accepted" color="primary">
+    <mat-checkbox formControlName="accepted" class="qs-checkbox-primary">
       <span class="checkbox-label">
         @if (serviceName === serviceNames.SuuntoApp || serviceName === serviceNames.COROSAPI) {
         I understand this may take hours to days.
@@ -129,11 +129,11 @@
     </mat-checkbox>
   </div>
   <div class="qs-form-actions">
-    <button mat-flat-button color="primary" (click)="onSubmit($event)"
+    <button mat-flat-button class="qs-mat-primary" (click)="onSubmit($event)"
       [disabled]="!formGroup.valid || isSubmitting || isLoadingParent || formGroup.disabled">
       @if (isSubmitting) {
       <mat-spinner diameter="20" style="display:inline-block; vertical-align: middle; margin-right: 8px;"
-        color="accent"></mat-spinner>
+        class="qs-spinner-accent"></mat-spinner>
       Importing History...
       } @else {
       Import History
@@ -144,7 +144,7 @@
 } @else {
 <div class="pro-required">
   <p>History import is a Pro feature.</p>
-  <button mat-flat-button color="primary" routerLink="/subscriptions">Upgrade to Pro</button>
+  <button mat-flat-button class="qs-mat-primary" routerLink="/subscriptions">Upgrade to Pro</button>
 </div>
 }
 }

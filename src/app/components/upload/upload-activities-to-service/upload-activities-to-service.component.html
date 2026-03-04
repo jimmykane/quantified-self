@@ -2,10 +2,10 @@
   ondragenter="event.stopPropagation(); event.preventDefault();"
   ondragover="event.stopPropagation(); event.preventDefault();this.classList.add('drag');"
   ondragleave="event.stopPropagation(); event.preventDefault();this.classList.remove('drag');">
-  <button mat-flat-button color="primary" (click)="inputFile.click()" [disabled]="!hasProAccess || isUploading">
+  <button mat-flat-button class="qs-mat-primary" (click)="inputFile.click()" [disabled]="!hasProAccess || isUploading">
     @if (isUploading) {
     <mat-spinner diameter="20" style="display:inline-block; vertical-align: middle; margin-right: 8px;"
-      color="accent"></mat-spinner>
+      class="qs-spinner-accent"></mat-spinner>
     Uploading Activity...
     } @else {
     Open or drag and drop file

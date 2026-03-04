@@ -342,6 +342,24 @@
     align-self: center;
   }
 
+  .pricing-chip-primary {
+    background-color: var(--mat-sys-primary-container);
+    color: var(--mat-sys-on-primary-container);
+
+    mat-icon {
+      color: inherit;
+    }
+  }
+
+  .pricing-chip-warn {
+    background-color: var(--mat-sys-error-container);
+    color: var(--mat-sys-on-error-container);
+
+    mat-icon {
+      color: inherit;
+    }
+  }
+
   .manage-subscription-container .manage-content {
     align-items: stretch;
     display: grid;

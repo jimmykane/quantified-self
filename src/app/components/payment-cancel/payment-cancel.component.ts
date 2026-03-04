@@ -19,7 +19,7 @@ import { RouterModule } from '@angular/router';
         </mat-card-content>
         <mat-card-actions class="action-row">
           <button mat-button routerLink="/dashboard">Back to Dashboard</button>
-          <button mat-flat-button color="warn" routerLink="/subscriptions">Try Again</button>
+          <button mat-flat-button class="qs-mat-warn" routerLink="/subscriptions">Try Again</button>
         </mat-card-actions>
       </mat-card>
     </div>

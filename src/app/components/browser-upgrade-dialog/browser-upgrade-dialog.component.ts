@@ -10,7 +10,7 @@ import { MatIconModule } from '@angular/material/icon';
     imports: [CommonModule, MatDialogModule, MatButtonModule, MatIconModule],
     template: `
     <h2 mat-dialog-title class="display-flex align-center">
-      <mat-icon color="warn" class="margin-right-8">warning</mat-icon>
+      <mat-icon class="qs-color-warn margin-right-8">warning</mat-icon>
       Browser Upgrade Required
     </h2>
     <mat-dialog-content>
@@ -19,7 +19,7 @@ import { MatIconModule } from '@angular/material/icon';
     </mat-dialog-content>
     <mat-dialog-actions align="end">
       <button mat-button (click)="dialogRef.close()">Close</button>
-      <a mat-flat-button color="primary" href="https://browsehappy.com/" target="_blank">Learn More</a>
+      <a mat-flat-button class="qs-mat-primary" href="https://browsehappy.com/" target="_blank">Learn More</a>
     </mat-dialog-actions>
   `,
     styles: [`

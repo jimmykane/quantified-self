@@ -1,5 +1,5 @@
 <ng-container *ngIf="hasProAccess || (uploadCount !== null && uploadLimit !== null && uploadCount < uploadLimit)">
-  <button mat-flat-button color="accent" (drop)="getFiles($event);" (click)="inputFile.click()"
+  <button mat-flat-button class="upload-cta" (drop)="getFiles($event);" (click)="inputFile.click()"
     ondragenter="event.stopPropagation(); event.preventDefault();"
     ondragover="event.stopPropagation(); event.preventDefault();this.classList.add('drag');"
     ondragleave="event.stopPropagation(); event.preventDefault();this.classList.remove('drag');"
@@ -14,7 +14,7 @@
   </button>
 </ng-container>
 
-<a mat-flat-button color="accent" routerLink="/subscriptions"
+<a mat-flat-button class="upload-cta" routerLink="/subscriptions"
   *ngIf="!hasProAccess && uploadCount !== null && uploadLimit !== null && uploadCount >= uploadLimit"
   [class.icon-only]="isHandset" [matTooltip]="isHandset ? 'Upgrade to Pro' : ''">
   <mat-icon *ngIf="isHandset">upgrade</mat-icon>

@@ -14,7 +14,7 @@ export interface ErrorDialogData {
       <p>{{ data.message }}</p>
     </mat-dialog-content>
     <mat-dialog-actions align="end">
-      <button mat-button mat-dialog-close color="primary">OK</button>
+      <button mat-button mat-dialog-close class="qs-mat-primary">OK</button>
     </mat-dialog-actions>
   `,
     styles: [`

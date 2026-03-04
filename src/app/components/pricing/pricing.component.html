@@ -17,9 +17,9 @@
         </div>
         @if (subscriptionSummary$ | async; as summary) {
         <mat-chip-set class="status-chips">
-          <mat-chip color="primary" selected>{{ summary.isTrialing ? 'Trialing' : 'Active' }}</mat-chip>
+          <mat-chip class="pricing-chip-primary" selected>{{ summary.isTrialing ? 'Trialing' : 'Active' }}</mat-chip>
           @if (summary.cancelAtPeriodEnd) {
-          <mat-chip color="warn" selected>Ends at period end</mat-chip>
+          <mat-chip class="pricing-chip-warn" selected>Ends at period end</mat-chip>
           }
         </mat-chip-set>
         } @else {
@@ -61,7 +61,7 @@
             <button mat-stroked-button (click)="manageSubscription()" [disabled]="isLoading">
               Manage Billing
             </button>
-            <button mat-flat-button color="primary" (click)="upgradeToPro()" [disabled]="isLoading">
+            <button mat-flat-button class="qs-mat-primary" (click)="upgradeToPro()" [disabled]="isLoading">
               @if (isLoading) {
               <mat-spinner diameter="20"></mat-spinner>
               } @else {
@@ -70,7 +70,7 @@
             </button>
           </div>
           } @else {
-          <button mat-flat-button color="primary" (click)="manageSubscription()" [disabled]="isLoading">
+          <button mat-flat-button class="qs-mat-primary" (click)="manageSubscription()" [disabled]="isLoading">
             @if (isLoading) {
             <mat-spinner diameter="20"></mat-spinner>
             } @else {
@@ -122,15 +122,15 @@
           </ul>
           } @else if (product.metadata['role'] === 'basic') {
           <ul>
-            <li><mat-icon color="accent">check</mat-icon> {{ getActivityLimitLabel(product.metadata['role']) }}</li>
-            <li><mat-icon color="accent">check</mat-icon> Manual uploads</li>
-            <li><mat-icon color="primary">favorite</mat-icon> Supports independent, privacy-first development</li>
+            <li><mat-icon class="qs-color-accent">check</mat-icon> {{ getActivityLimitLabel(product.metadata['role']) }}</li>
+            <li><mat-icon class="qs-color-accent">check</mat-icon> Manual uploads</li>
+            <li><mat-icon class="qs-color-primary">favorite</mat-icon> Supports independent, privacy-first development</li>
           </ul>
           } @else if (product.metadata['role'] === 'pro') {
           <ul>
-            <li><mat-icon color="primary">check_circle</mat-icon> {{ getActivityLimitLabel(product.metadata['role']) }}</li>
-            <li><mat-icon color="primary">check_circle</mat-icon> Auto-sync from your watch</li>
-            <li><mat-icon color="warn">favorite</mat-icon> Helps fund faster feature releases</li>
+            <li><mat-icon class="qs-color-primary">check_circle</mat-icon> {{ getActivityLimitLabel(product.metadata['role']) }}</li>
+            <li><mat-icon class="qs-color-primary">check_circle</mat-icon> Auto-sync from your watch</li>
+            <li><mat-icon class="qs-color-warn">favorite</mat-icon> Helps fund faster feature releases</li>
           </ul>
           }
         </div>
@@ -158,7 +158,7 @@
           @if ((product.metadata['role'] === 'free' && (!currentRole || currentRole === 'free')) || (currentRole &&
           product.metadata['role'] === currentRole)) {
           <div class="current-plan-chip">
-            <mat-chip-row highlighted color="primary" class="current-plan-indicator"
+            <mat-chip-row highlighted class="current-plan-indicator pricing-chip-primary"
               [style.backgroundColor]="product.metadata['role'] === 'free' ? 'grey' : null"
               [style.color]="product.metadata['role'] === 'free' ? 'white' : null">
               <mat-icon matChipAvatar>check_circle</mat-icon>
@@ -183,8 +183,8 @@
           }
           } @else {
           <!-- Subscribe for new users or free users upgrading to paid plans -->
-          <button mat-flat-button color="primary" (click)="subscribe(price)" [disabled]="isLoading"
-            class="subscribe-btn">
+          <button mat-flat-button class="subscribe-btn qs-mat-primary" (click)="subscribe(price)" [disabled]="isLoading"
+            >
             @if (loadingPriceId === price.id) {
             <mat-spinner diameter="20"></mat-spinner>
             } @else {

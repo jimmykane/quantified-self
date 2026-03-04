@@ -18,7 +18,7 @@
   }
   @if (enableLapsToggle) {
   <section mat-menu-item>
-    <mat-slide-toggle [color]="'accent'" [checked]="showLaps" [disabled]="!user || disabled"
+    <mat-slide-toggle [checked]="showLaps" [disabled]="!user || disabled"
       (change)="onShowLapsToggle($event.checked)">
       Show Laps
     </mat-slide-toggle>
@@ -26,7 +26,7 @@
   }
   @if (enableArrowsToggle) {
   <section mat-menu-item>
-    <mat-slide-toggle [color]="'accent'" [checked]="showArrows" [disabled]="!user || disabled"
+    <mat-slide-toggle [checked]="showArrows" [disabled]="!user || disabled"
       (change)="onShowArrowsToggle($event.checked)">
       Show Arrows
     </mat-slide-toggle>
@@ -34,7 +34,7 @@
   }
   @if (enableJumpHeatmapToggle) {
   <section mat-menu-item>
-    <mat-slide-toggle class="jump-heat-toggle" [color]="'accent'" [checked]="showJumpHeatmap" [disabled]="!user || disabled"
+    <mat-slide-toggle class="jump-heat-toggle" [checked]="showJumpHeatmap" [disabled]="!user || disabled"
       (change)="onShowJumpHeatmapToggle($event.checked)">
       Show Jump Heatmap
     </mat-slide-toggle>
@@ -42,7 +42,7 @@
   }
   @if (enable3DToggle) {
   <section mat-menu-item>
-    <mat-slide-toggle [color]="'accent'" [checked]="is3D" [disabled]="!user || disabled"
+    <mat-slide-toggle [checked]="is3D" [disabled]="!user || disabled"
       (change)="onShow3DToggle($event.checked)">
       Enable 3D Terrain
     </mat-slide-toggle>

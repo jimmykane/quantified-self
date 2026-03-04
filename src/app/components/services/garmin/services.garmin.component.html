@@ -84,12 +84,12 @@
 
         <div style="margin-top: auto; padding-top: 16px;">
           @if (!isConnectedToService()) {
-          <button mat-flat-button color="primary" style="width: 100%"
+          <button mat-flat-button class="qs-mat-primary" style="width: 100%"
             [disabled]="!user || isLoading || isConnecting || !hasProAccess" (click)="connectWithService($event)">
             @if (isConnecting) {
             <ng-container>
               <mat-spinner diameter="20" style="display:inline-block; vertical-align: middle; margin-right: 8px;"
-                color="accent"></mat-spinner>
+                class="qs-spinner-accent"></mat-spinner>
               Connecting...
             </ng-container>
             } @else {
@@ -101,12 +101,12 @@
           }
 
           @if (isConnectedToService()) {
-          <button mat-stroked-button color="warn" style="width: 100%" [disabled]="isLoading || isDisconnecting"
+          <button mat-stroked-button class="qs-mat-warn" style="width: 100%" [disabled]="isLoading || isDisconnecting"
             (click)="deauthorizeService($event)">
             @if (isDisconnecting) {
             <ng-container>
               <mat-spinner diameter="20" style="display:inline-block; vertical-align: middle; margin-right: 8px;"
-                color="warn"></mat-spinner>
+                class="qs-spinner-warn"></mat-spinner>
               Disconnecting...
             </ng-container>
             } @else {

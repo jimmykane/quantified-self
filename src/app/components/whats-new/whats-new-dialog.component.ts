@@ -39,7 +39,7 @@ const WHATS_NEW_DIALOG_MOBILE_QUERY = AppBreakpoints.XSmall;
                 <strong>New version available</strong>
                 <span>Reload to apply updates</span>
             </div>
-            <button mat-flat-button color="primary" (click)="reload()">Reload</button>
+            <button mat-flat-button class="qs-mat-primary" (click)="reload()">Reload</button>
         </div>
       }
 
@@ -50,7 +50,7 @@ const WHATS_NEW_DIALOG_MOBILE_QUERY = AppBreakpoints.XSmall;
     <mat-divider></mat-divider>
     <mat-dialog-actions align="end">
       <button mat-button *ngIf="!isReleasesPage()" (click)="navigateToReleases()">View All Updates</button>
-      <button mat-raised-button color="primary" mat-dialog-close>Got it</button>
+      <button mat-raised-button class="qs-mat-primary" mat-dialog-close>Got it</button>
     </mat-dialog-actions>
   `,
   styles: [`

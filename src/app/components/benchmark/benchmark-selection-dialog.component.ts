@@ -41,7 +41,7 @@ export interface BenchmarkSelectionData {
       </app-loading-overlay>
 
       <div *ngIf="!isLoading && selectedActivities.length !== 2" class="selection-hint">
-        <mat-icon color="warn">info</mat-icon>
+        <mat-icon class="qs-color-warn">info</mat-icon>
         <span>{{ selectedActivities.length === 0 ? 'Select two activities' : 'Select one more activity' }}</span>
       </div>
 
@@ -93,7 +93,7 @@ export interface BenchmarkSelectionData {
     </mat-dialog-content>
     <mat-dialog-actions align="end">
       <button mat-button mat-dialog-close>Cancel</button>
-      <button mat-flat-button color="primary" 
+      <button mat-flat-button class="qs-mat-primary" 
               [disabled]="selectedActivities.length !== 2"
               (click)="confirm()">
         Run Benchmark

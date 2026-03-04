@@ -1,7 +1,7 @@
 <mat-card-header>
   @if (showToggle()) {
   <div mat-card-avatar>
-    <mat-slide-toggle (change)="onActivitySelect($event, activity())" [color]="'accent'" [checked]="isSelected()">
+    <mat-slide-toggle (change)="onActivitySelect($event, activity())" [checked]="isSelected()">
     </mat-slide-toggle>
   </div>
   }

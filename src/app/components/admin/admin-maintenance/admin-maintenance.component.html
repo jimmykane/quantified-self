@@ -20,7 +20,7 @@
                     <span *ngIf="prodMaintenance.enabled" class="status-text offline">Offline</span>
 
                     <mat-slide-toggle [checked]="prodMaintenance.enabled" (change)="onMaintenanceToggle($event, 'prod')"
-                        (click)="$event.stopPropagation()" [disabled]="isUpdatingMaintenance" color="warn">
+                        (click)="$event.stopPropagation()" [disabled]="isUpdatingMaintenance">
                     </mat-slide-toggle>
                 </mat-panel-description>
             </mat-expansion-panel-header>
@@ -38,8 +38,8 @@
                     </mat-form-field>
 
                     <div class="maintenance-actions">
-                        <button mat-raised-button color="primary" (click)="saveMaintenanceMessage('prod')"
-                            [disabled]="isUpdatingMaintenance || !hasMessageChanged('prod')" class="save-btn">
+                        <button mat-raised-button class="save-btn qs-mat-primary" (click)="saveMaintenanceMessage('prod')"
+                            [disabled]="isUpdatingMaintenance || !hasMessageChanged('prod')" >
                             <mat-icon>save</mat-icon>
                             Save
                         </button>
@@ -65,7 +65,7 @@
                     <span *ngIf="betaMaintenance.enabled" class="status-text offline">Offline</span>
 
                     <mat-slide-toggle [checked]="betaMaintenance.enabled" (change)="onMaintenanceToggle($event, 'beta')"
-                        (click)="$event.stopPropagation()" [disabled]="isUpdatingMaintenance" color="warn">
+                        (click)="$event.stopPropagation()" [disabled]="isUpdatingMaintenance">
                     </mat-slide-toggle>
                 </mat-panel-description>
             </mat-expansion-panel-header>
@@ -83,8 +83,8 @@
                     </mat-form-field>
 
                     <div class="maintenance-actions">
-                        <button mat-raised-button color="primary" (click)="saveMaintenanceMessage('beta')"
-                            [disabled]="isUpdatingMaintenance || !hasMessageChanged('beta')" class="save-btn">
+                        <button mat-raised-button class="save-btn qs-mat-primary" (click)="saveMaintenanceMessage('beta')"
+                            [disabled]="isUpdatingMaintenance || !hasMessageChanged('beta')" >
                             <mat-icon>save</mat-icon>
                             Save
                         </button>
@@ -110,7 +110,7 @@
                     <span *ngIf="devMaintenance.enabled" class="status-text offline">Offline</span>
 
                     <mat-slide-toggle [checked]="devMaintenance.enabled" (change)="onMaintenanceToggle($event, 'dev')"
-                        (click)="$event.stopPropagation()" [disabled]="isUpdatingMaintenance" color="warn">
+                        (click)="$event.stopPropagation()" [disabled]="isUpdatingMaintenance">
                     </mat-slide-toggle>
                 </mat-panel-description>
             </mat-expansion-panel-header>
@@ -128,8 +128,8 @@
                     </mat-form-field>
 
                     <div class="maintenance-actions">
-                        <button mat-raised-button color="primary" (click)="saveMaintenanceMessage('dev')"
-                            [disabled]="isUpdatingMaintenance || !hasMessageChanged('dev')" class="save-btn">
+                        <button mat-raised-button class="save-btn qs-mat-primary" (click)="saveMaintenanceMessage('dev')"
+                            [disabled]="isUpdatingMaintenance || !hasMessageChanged('dev')" >
                             <mat-icon>save</mat-icon>
                             Save
                         </button>

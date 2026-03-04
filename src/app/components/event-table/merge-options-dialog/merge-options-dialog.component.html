@@ -32,7 +32,7 @@
 </mat-dialog-content>
 <mat-dialog-actions align="end">
   <button mat-button (click)="cancel()" [disabled]="isMerging">Cancel</button>
-  <button mat-flat-button color="primary" (click)="confirm()" [disabled]="isMerging">
+  <button mat-flat-button class="qs-mat-primary" (click)="confirm()" [disabled]="isMerging">
     <span class="merge-button-content">
       @if (isMerging) {
       <mat-progress-spinner class="merge-spinner" diameter="18" mode="indeterminate"></mat-progress-spinner>

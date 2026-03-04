@@ -29,7 +29,7 @@
     <span class="fill-space"></span>
 
     @if (authState === null && !isDashboardRoute && !isLoginRoute) {
-    <button mat-flat-button class="right" color="accent" disabled>
+    <button mat-flat-button class="right qs-mat-accent" disabled>
       Loading
     </button>
     }
@@ -44,7 +44,7 @@
     }
 
     @if (authState === true && !isDashboardRoute) {
-    <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/dashboard']);"
+    <button mat-flat-button class="right qs-mat-accent" (click)="router.navigate(['/dashboard']);"
       [matTooltip]="isHandset() ? 'Dashboard' : ''" [class.icon-only]="isHandset()">
       @if (isHandset()) {
       <mat-icon>dashboard</mat-icon>
@@ -68,7 +68,7 @@
     }
 
     @if (authState === false && !isLoginRoute) {
-    <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/login']);"
+    <button mat-flat-button class="right qs-mat-accent" (click)="router.navigate(['/login']);"
       [matTooltip]="isHandset() ? 'Login or Register' : ''" [class.icon-only]="isHandset()">
       @if (isHandset()) {
       <mat-icon>login</mat-icon>

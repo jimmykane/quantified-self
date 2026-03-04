@@ -79,7 +79,7 @@
 
                 <div class="qs-form-actions">
                     <button mat-button type="button" (click)="cancel()">Cancel</button>
-                    <button mat-raised-button color="primary" type="submit" [disabled]="form.invalid || saving">
+                    <button mat-raised-button class="qs-mat-primary" type="submit" [disabled]="form.invalid || saving">
                         {{ saving ? 'Saving...' : 'Save' }}
                     </button>
                 </div>
@@ -92,7 +92,7 @@
                 <mat-icon>history_edu</mat-icon>
                 Entries
             </h2>
-            <button mat-raised-button color="primary" (click)="createNew()">
+            <button mat-raised-button class="qs-mat-primary" (click)="createNew()">
                 <mat-icon>add</mat-icon>
                 New Entry
             </button>
@@ -148,10 +148,10 @@
                         <th mat-header-cell *matHeaderCellDef> Actions </th>
                         <td mat-cell *matCellDef="let post">
                             <div class="qs-form-actions table-actions">
-                                <button mat-icon-button color="primary" (click)="edit(post)" matTooltip="Edit">
+                                <button mat-icon-button class="qs-mat-primary" (click)="edit(post)" matTooltip="Edit">
                                     <mat-icon>edit</mat-icon>
                                 </button>
-                                <button mat-icon-button color="warn" (click)="delete(post)" matTooltip="Delete">
+                                <button mat-icon-button class="qs-mat-warn" (click)="delete(post)" matTooltip="Delete">
                                     <mat-icon>delete</mat-icon>
                                 </button>
                             </div>

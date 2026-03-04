@@ -5,15 +5,15 @@
     </div>
 
     <div class="navigation-actions">
-        <button mat-stroked-button color="primary" routerLink="/admin">
+        <button mat-stroked-button class="qs-mat-primary" routerLink="/admin">
             <mat-icon>dashboard</mat-icon>
             Back To Dashboard
         </button>
-        <button mat-stroked-button color="primary" routerLink="/admin/queues/workout" [disabled]="queueView === 'workout'">
+        <button mat-stroked-button class="qs-mat-primary" routerLink="/admin/queues/workout" [disabled]="queueView === 'workout'">
             <mat-icon>fitness_center</mat-icon>
             Workout Queue
         </button>
-        <button mat-stroked-button color="primary" routerLink="/admin/queues/reparse" [disabled]="queueView === 'reparse'">
+        <button mat-stroked-button class="qs-mat-primary" routerLink="/admin/queues/reparse" [disabled]="queueView === 'reparse'">
             <mat-icon>autorenew</mat-icon>
             Reparse Queue
         </button>

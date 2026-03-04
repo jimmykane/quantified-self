@@ -1,7 +1,6 @@
 // Custom Theming for Angular Material
 // For more information: https://material.angular.io/guide/theming
 @use '@angular/material' as mat;
-@use 'sass:map';
 @use 'styles/forms';
 @use 'styles/search';
 @use 'styles/segmented-buttons';
@@ -27,20 +26,44 @@
 // Be sure that you only ever include this mixin once!
 @include mat.core();
 
-// Light Theme Palettes (Royal Blue)
-// A classic, trustworthy blue with a warm distinctive accent
-$light-primary: mat.m2-define-palette(mat.$m2-blue-palette);
-$light-accent: mat.m2-define-palette(mat.$m2-amber-palette, A200, A100, A400);
-$light-warn: mat.m2-define-palette(mat.$m2-red-palette);
+// Material 3 theme configuration.
+// Keep the palette direction close to the current app branding while moving to the
+// official v20 theming system and CSS tokens.
+$app-light-theme: mat.define-theme((
+  color: (
+    theme-type: light,
+    primary: mat.$azure-palette,
+    tertiary: mat.$blue-palette,
+  ),
+  typography: (
+    plain-family: "'Noto Sans', sans-serif",
+    brand-family: "'Noto Sans', sans-serif",
+    medium-weight: 500,
+    regular-weight: 400,
+    bold-weight: 700,
+  ),
+  density: (
+    scale: 0,
+  ),
+));
 
-// Dark Theme Palettes (Deep Ocean)
-// Dark blue-grey background with a bright, electric blue accent
-$dark-primary: mat.m2-define-palette(mat.$m2-blue-grey-palette);
-$dark-accent: mat.m2-define-palette(mat.$m2-light-blue-palette, A200, A100, A400);
-$dark-warn: mat.m2-define-palette(mat.$m2-red-palette);
-
-// Define typography using our local font
-$app-typography: mat.m2-define-typography-config($font-family: "'Noto Sans', sans-serif");
+$app-dark-theme: mat.define-theme((
+  color: (
+    theme-type: dark,
+    primary: mat.$azure-palette,
+    tertiary: mat.$blue-palette,
+  ),
+  typography: (
+    plain-family: "'Noto Sans', sans-serif",
+    brand-family: "'Noto Sans', sans-serif",
+    medium-weight: 500,
+    regular-weight: 400,
+    bold-weight: 700,
+  ),
+  density: (
+    scale: 0,
+  ),
+));
 
 // Activity Gradients
 :root {
@@ -58,29 +81,13 @@ $app-typography: mat.m2-define-typography-config($font-family: "'Noto Sans', san
   --gradient-unspecified: linear-gradient(135deg, #A3ADB0, #546E7A);
 }
 
-// Create the theme object. A theme consists of configurations for individual
-// theming systems such as "color" or "typography".
-$app-light-theme: mat.m2-define-light-theme((color: (primary: $light-primary,
-        accent: $light-accent,
-        warn: $light-warn,
-      ),
-      typography: $app-typography,
-    ));
-
-$app-dark-theme: mat.m2-define-dark-theme((color: (primary: $dark-primary,
-        accent: $dark-accent,
-        warn: $dark-warn,
-      ),
-      typography: $app-typography,
-    ));
-
 // Include theme styles for core and each component used in your app.
 // Alternatively, you can import and @include the theme mixins for each component
 // that you are using.
 @include mat.all-component-themes($app-light-theme);
 
 .dark-theme {
-  @include mat.all-component-themes($app-dark-theme);
+  @include mat.all-component-colors($app-dark-theme);
 }
 
 
@@ -139,11 +146,9 @@ body.app-hydrated mat-icon {
 }
 
 .dark-theme {
-  $dark-bg: map.get($app-dark-theme, background);
-  $dark-fg: map.get($app-dark-theme, foreground);
-
-  background-color: mat.m2-get-color-from-palette($dark-bg, background);
-  color: mat.m2-get-color-from-palette($dark-fg, text);
+  color-scheme: dark;
+  background-color: var(--mat-sys-background);
+  color: var(--mat-sys-on-surface);
 }
 
 // ... existing code ...
@@ -923,6 +928,162 @@ tr.mat-row:focus,
 
 .qs-action-menu-icon-button .mat-icon {
   margin: 0;
+}
+
+.qs-color-primary {
+  color: var(--mat-sys-primary) !important;
+}
+
+.qs-color-accent {
+  color: var(--mat-sys-tertiary) !important;
+}
+
+.qs-color-warn {
+  color: var(--mat-sys-error) !important;
+}
+
+.qs-spinner-primary {
+  --mat-progress-spinner-active-indicator-color: var(--mat-sys-primary);
+}
+
+.qs-spinner-accent {
+  --mat-progress-spinner-active-indicator-color: var(--mat-sys-tertiary);
+}
+
+.qs-spinner-warn {
+  --mat-progress-spinner-active-indicator-color: var(--mat-sys-error);
+}
+
+.qs-progress-primary {
+  --mat-progress-bar-active-indicator-color: var(--mat-sys-primary);
+}
+
+.qs-progress-accent {
+  --mat-progress-bar-active-indicator-color: var(--mat-sys-tertiary);
+}
+
+.qs-progress-warn {
+  --mat-progress-bar-active-indicator-color: var(--mat-sys-error);
+}
+
+.qs-checkbox-primary {
+  --mat-checkbox-selected-checkmark-color: var(--mat-sys-on-primary);
+  --mat-checkbox-selected-icon-color: var(--mat-sys-primary);
+  --mat-checkbox-selected-focus-icon-color: var(--mat-sys-primary);
+  --mat-checkbox-selected-hover-icon-color: var(--mat-sys-primary);
+  --mat-checkbox-selected-pressed-icon-color: var(--mat-sys-primary);
+  --mat-checkbox-selected-focus-state-layer-color: var(--mat-sys-primary);
+  --mat-checkbox-selected-hover-state-layer-color: var(--mat-sys-primary);
+}
+
+.qs-checkbox-warn {
+  --mat-checkbox-selected-checkmark-color: var(--mat-sys-on-error);
+  --mat-checkbox-selected-icon-color: var(--mat-sys-error);
+  --mat-checkbox-selected-focus-icon-color: var(--mat-sys-error);
+  --mat-checkbox-selected-hover-icon-color: var(--mat-sys-error);
+  --mat-checkbox-selected-pressed-icon-color: var(--mat-sys-error);
+  --mat-checkbox-selected-focus-state-layer-color: var(--mat-sys-error);
+  --mat-checkbox-selected-hover-state-layer-color: var(--mat-sys-error);
+}
+
+.qs-mat-primary {
+  --mat-button-filled-container-color: var(--mat-sys-primary);
+  --mat-button-filled-label-text-color: var(--mat-sys-on-primary);
+  --mat-button-filled-ripple-color: color-mix(in srgb, var(--mat-sys-on-primary) 12%, transparent);
+  --mat-button-filled-state-layer-color: var(--mat-sys-on-primary);
+  --mat-button-outlined-label-text-color: var(--mat-sys-primary);
+  --mat-button-outlined-ripple-color: color-mix(in srgb, var(--mat-sys-primary) 12%, transparent);
+  --mat-button-outlined-state-layer-color: var(--mat-sys-primary);
+  --mat-button-protected-container-color: var(--mat-sys-primary);
+  --mat-button-protected-label-text-color: var(--mat-sys-on-primary);
+  --mat-button-protected-ripple-color: color-mix(in srgb, var(--mat-sys-on-primary) 12%, transparent);
+  --mat-button-protected-state-layer-color: var(--mat-sys-on-primary);
+  --mat-button-text-label-text-color: var(--mat-sys-primary);
+  --mat-button-text-ripple-color: color-mix(in srgb, var(--mat-sys-primary) 12%, transparent);
+  --mat-button-text-state-layer-color: var(--mat-sys-primary);
+  --mat-button-tonal-container-color: var(--mat-sys-primary);
+  --mat-button-tonal-label-text-color: var(--mat-sys-on-primary);
+  --mat-button-tonal-ripple-color: color-mix(in srgb, var(--mat-sys-on-primary) 12%, transparent);
+  --mat-button-tonal-state-layer-color: var(--mat-sys-on-primary);
+  --mat-icon-button-icon-color: var(--mat-sys-primary);
+  --mat-icon-button-state-layer-color: var(--mat-sys-primary);
+  --mat-icon-button-ripple-color: color-mix(in srgb, var(--mat-sys-primary) 12%, transparent);
+  --mat-fab-container-color: var(--mat-sys-primary);
+  --mat-fab-foreground-color: var(--mat-sys-on-primary);
+  --mat-fab-ripple-color: color-mix(in srgb, var(--mat-sys-primary) 12%, transparent);
+  --mat-fab-small-container-color: var(--mat-sys-primary);
+  --mat-fab-small-foreground-color: var(--mat-sys-on-primary);
+  --mat-fab-small-ripple-color: color-mix(in srgb, var(--mat-sys-on-primary) 12%, transparent);
+  --mat-fab-small-state-layer-color: var(--mat-sys-on-primary);
+  --mat-fab-state-layer-color: var(--mat-sys-on-primary);
+}
+
+.qs-mat-accent {
+  --mat-button-filled-container-color: var(--mat-sys-tertiary);
+  --mat-button-filled-label-text-color: var(--mat-sys-on-tertiary);
+  --mat-button-filled-ripple-color: color-mix(in srgb, var(--mat-sys-on-tertiary) 12%, transparent);
+  --mat-button-filled-state-layer-color: var(--mat-sys-on-tertiary);
+  --mat-button-outlined-label-text-color: var(--mat-sys-tertiary);
+  --mat-button-outlined-ripple-color: color-mix(in srgb, var(--mat-sys-tertiary) 12%, transparent);
+  --mat-button-outlined-state-layer-color: var(--mat-sys-tertiary);
+  --mat-button-protected-container-color: var(--mat-sys-tertiary);
+  --mat-button-protected-label-text-color: var(--mat-sys-on-tertiary);
+  --mat-button-protected-ripple-color: color-mix(in srgb, var(--mat-sys-on-tertiary) 12%, transparent);
+  --mat-button-protected-state-layer-color: var(--mat-sys-on-tertiary);
+  --mat-button-text-label-text-color: var(--mat-sys-tertiary);
+  --mat-button-text-ripple-color: color-mix(in srgb, var(--mat-sys-tertiary) 12%, transparent);
+  --mat-button-text-state-layer-color: var(--mat-sys-tertiary);
+  --mat-button-tonal-container-color: var(--mat-sys-tertiary);
+  --mat-button-tonal-label-text-color: var(--mat-sys-on-tertiary);
+  --mat-button-tonal-ripple-color: color-mix(in srgb, var(--mat-sys-on-tertiary) 12%, transparent);
+  --mat-button-tonal-state-layer-color: var(--mat-sys-on-tertiary);
+  --mat-icon-button-icon-color: var(--mat-sys-tertiary);
+  --mat-icon-button-state-layer-color: var(--mat-sys-tertiary);
+  --mat-icon-button-ripple-color: color-mix(in srgb, var(--mat-sys-tertiary) 12%, transparent);
+  --mat-fab-container-color: var(--mat-sys-tertiary);
+  --mat-fab-foreground-color: var(--mat-sys-on-tertiary);
+  --mat-fab-ripple-color: color-mix(in srgb, var(--mat-sys-tertiary) 12%, transparent);
+  --mat-fab-small-container-color: var(--mat-sys-tertiary);
+  --mat-fab-small-foreground-color: var(--mat-sys-on-tertiary);
+  --mat-fab-small-ripple-color: color-mix(in srgb, var(--mat-sys-on-tertiary) 12%, transparent);
+  --mat-fab-small-state-layer-color: var(--mat-sys-on-tertiary);
+  --mat-fab-state-layer-color: var(--mat-sys-on-tertiary);
+}
+
+.qs-mat-warn {
+  --mat-button-filled-container-color: var(--mat-sys-error);
+  --mat-button-filled-label-text-color: var(--mat-sys-on-error);
+  --mat-button-filled-ripple-color: color-mix(in srgb, var(--mat-sys-on-error) 12%, transparent);
+  --mat-button-filled-state-layer-color: var(--mat-sys-on-error);
+  --mat-button-outlined-label-text-color: var(--mat-sys-error);
+  --mat-button-outlined-ripple-color: color-mix(in srgb, var(--mat-sys-error) 12%, transparent);
+  --mat-button-outlined-state-layer-color: var(--mat-sys-error);
+  --mat-button-protected-container-color: var(--mat-sys-error);
+  --mat-button-protected-label-text-color: var(--mat-sys-on-error);
+  --mat-button-protected-ripple-color: color-mix(in srgb, var(--mat-sys-on-error) 12%, transparent);
+  --mat-button-protected-state-layer-color: var(--mat-sys-on-error);
+  --mat-button-text-label-text-color: var(--mat-sys-error);
+  --mat-button-text-ripple-color: color-mix(in srgb, var(--mat-sys-error) 12%, transparent);
+  --mat-button-text-state-layer-color: var(--mat-sys-error);
+  --mat-button-tonal-container-color: var(--mat-sys-error);
+  --mat-button-tonal-label-text-color: var(--mat-sys-on-error);
+  --mat-button-tonal-ripple-color: color-mix(in srgb, var(--mat-sys-on-error) 12%, transparent);
+  --mat-button-tonal-state-layer-color: var(--mat-sys-on-error);
+  --mat-icon-button-icon-color: var(--mat-sys-error);
+  --mat-icon-button-state-layer-color: var(--mat-sys-error);
+  --mat-icon-button-ripple-color: color-mix(in srgb, var(--mat-sys-error) 12%, transparent);
+  --mat-fab-container-color: var(--mat-sys-error);
+  --mat-fab-foreground-color: var(--mat-sys-on-error);
+  --mat-fab-ripple-color: color-mix(in srgb, var(--mat-sys-error) 12%, transparent);
+  --mat-fab-small-container-color: var(--mat-sys-error);
+  --mat-fab-small-foreground-color: var(--mat-sys-on-error);
+  --mat-fab-small-ripple-color: color-mix(in srgb, var(--mat-sys-on-error) 12%, transparent);
+  --mat-fab-small-state-layer-color: var(--mat-sys-on-error);
+  --mat-fab-state-layer-color: var(--mat-sys-on-error);
+}
+
+.qs-link-accent {
+  color: var(--mat-sys-tertiary);
 }
 
 /* Section/Item Layout for menus used for settings */

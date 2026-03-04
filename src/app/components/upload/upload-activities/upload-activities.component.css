@@ -15,6 +15,22 @@ a[mat-flat-button] {
   box-sizing: border-box;
 }
 
+button.upload-cta,
+a.upload-cta[mat-flat-button] {
+  --mat-button-filled-container-color: #f4c84a;
+  --mat-button-filled-label-text-color: #1f1f1f;
+  --mat-button-filled-state-layer-color: #1f1f1f;
+  --mat-button-filled-ripple-color: rgba(31, 31, 31, 0.14);
+}
+
+:host-context(.dark-theme) button.upload-cta,
+:host-context(.dark-theme) a.upload-cta[mat-flat-button] {
+  --mat-button-filled-container-color: #d9ab1f;
+  --mat-button-filled-label-text-color: #101010;
+  --mat-button-filled-state-layer-color: #101010;
+  --mat-button-filled-ripple-color: rgba(16, 16, 16, 0.18);
+}
+
 /* Icon-only button for mobile */
 button.icon-only,
 a.icon-only {
