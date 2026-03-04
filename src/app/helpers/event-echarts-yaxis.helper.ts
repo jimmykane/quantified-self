@@ -44,19 +44,19 @@ export interface BuildEventPanelYAxisConfigInput {
 
 export function buildEventPanelYAxisConfig(input: BuildEventPanelYAxisConfigInput): EventPanelYAxisConfig {
   const streamTypes = input.panel.series.map((series) => series.streamType || '');
-  const values = getVisibleValues(input.panel, input.visibleRange);
+  const visibleExtrema = getVisibleExtrema(input.panel, input.visibleRange);
   const hasPaceStream = streamTypes.some((streamType) => isEventPaceStreamType(streamType));
 
   if (hasPaceStream) {
     return {
-      ...buildDefaultAxis(values, false, input.extraMaxForPower),
+      ...buildDefaultAxis(visibleExtrema, false, input.extraMaxForPower),
       inverse: true,
     };
   }
 
   const hasCadenceStream = streamTypes.some((streamType) => CADENCE_STREAM_TYPES.has(streamType));
   if (hasCadenceStream) {
-    return buildStepBasedAxis(values, {
+    return buildStepBasedAxis(visibleExtrema, {
       baseStep: 5,
       candidateIntervals: [5, 10, 15, 20],
       targetTickCount: 6,
@@ -66,7 +66,7 @@ export function buildEventPanelYAxisConfig(input: BuildEventPanelYAxisConfigInpu
 
   const hasHeartRateStream = streamTypes.some((streamType) => HEART_RATE_STREAM_TYPES.has(streamType));
   if (hasHeartRateStream) {
-    return buildStepBasedAxis(values, {
+    return buildStepBasedAxis(visibleExtrema, {
       baseStep: 10,
       candidateIntervals: [10, 15, 20, 25],
       targetTickCount: 5,
@@ -75,30 +75,88 @@ export function buildEventPanelYAxisConfig(input: BuildEventPanelYAxisConfigInpu
   }
 
   const hasPowerStream = streamTypes.some((streamType) => POWER_STREAM_TYPES.has(streamType));
-  return buildDefaultAxis(values, hasPowerStream, input.extraMaxForPower);
+  return buildDefaultAxis(visibleExtrema, hasPowerStream, input.extraMaxForPower);
 }
 
-function getVisibleValues(panel: EventChartPanelModel, visibleRange: EventChartRange | null): number[] {
+interface VisibleExtrema {
+  min: number;
+  max: number;
+}
+
+function getVisibleExtrema(panel: EventChartPanelModel, visibleRange: EventChartRange | null): VisibleExtrema | null {
   const normalizedRange = normalizeEventRange(visibleRange);
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  let foundValue = false;
 
-  return panel.series
-    .flatMap((series) => series.points)
-    .filter((point) => {
-      if (!normalizedRange) {
-        return true;
+  for (let seriesIndex = 0; seriesIndex < panel.series.length; seriesIndex += 1) {
+    const points = panel.series[seriesIndex]?.points || [];
+    if (!points.length) {
+      continue;
+    }
+
+    const startIndex = normalizedRange
+      ? findFirstPointAtOrAfter(points, normalizedRange.start)
+      : 0;
+    const endExclusive = normalizedRange
+      ? findFirstPointAfter(points, normalizedRange.end)
+      : points.length;
+
+    for (let pointIndex = startIndex; pointIndex < endExclusive; pointIndex += 1) {
+      const y = points[pointIndex]?.y;
+      if (typeof y !== 'number' || !Number.isFinite(y)) {
+        continue;
       }
-      return point.x >= normalizedRange.start && point.x <= normalizedRange.end;
-    })
-    .map((point) => typeof point.y === 'number' ? point.y : Number.NaN)
-    .filter((value) => Number.isFinite(value));
-}
-
-function buildDefaultAxis(values: number[], isPower: boolean, extraMaxForPower: number): EventPanelYAxisConfig {
-  if (!values.length) {
-    return { inverse: false };
+      if (y < min) {
+        min = y;
+      }
+      if (y > max) {
+        max = y;
+      }
+      foundValue = true;
+    }
   }
 
-  const extrema = getValueExtrema(values);
+  if (!foundValue) {
+    return null;
+  }
+
+  return { min, max };
+}
+
+function findFirstPointAtOrAfter(points: EventChartPanelModel['series'][number]['points'], xValue: number): number {
+  let low = 0;
+  let high = points.length;
+
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2);
+    if (points[mid].x < xValue) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+
+  return low;
+}
+
+function findFirstPointAfter(points: EventChartPanelModel['series'][number]['points'], xValue: number): number {
+  let low = 0;
+  let high = points.length;
+
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2);
+    if (points[mid].x <= xValue) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+
+  return low;
+}
+
+function buildDefaultAxis(extrema: VisibleExtrema | null, isPower: boolean, extraMaxForPower: number): EventPanelYAxisConfig {
   if (!extrema) {
     return { inverse: false };
   }
@@ -129,7 +187,7 @@ function buildDefaultAxis(values: number[], isPower: boolean, extraMaxForPower: 
 }
 
 function buildStepBasedAxis(
-  values: number[],
+  extrema: VisibleExtrema | null,
   options: {
     baseStep: number;
     candidateIntervals: number[];
@@ -137,11 +195,6 @@ function buildStepBasedAxis(
     minFloor?: number;
   }
 ): EventPanelYAxisConfig {
-  if (!values.length) {
-    return { inverse: false };
-  }
-
-  const extrema = getValueExtrema(values);
   if (!extrema) {
     return { inverse: false };
   }
@@ -223,30 +276,6 @@ export function selectPreferredAxisInterval(
   }
 
   return best;
-}
-
-function getValueExtrema(values: number[]): { min: number; max: number } | null {
-  let min = Number.POSITIVE_INFINITY;
-  let max = Number.NEGATIVE_INFINITY;
-
-  for (let index = 0; index < values.length; index += 1) {
-    const value = values[index];
-    if (!Number.isFinite(value)) {
-      continue;
-    }
-    if (value < min) {
-      min = value;
-    }
-    if (value > max) {
-      max = value;
-    }
-  }
-
-  if (!Number.isFinite(min) || !Number.isFinite(max)) {
-    return null;
-  }
-
-  return { min, max };
 }
 
 function buildNiceAxisRange(min: number, max: number, targetTickCount: number): { min: number; max: number; interval: number } {

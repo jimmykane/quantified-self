@@ -221,7 +221,9 @@ describe('EventCardChartPanelComponent', () => {
 
     eChartsLoaderMock.setOption.mockClear();
     dataZoomHandler();
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
 
+    expect(eChartsLoaderMock.setOption).toHaveBeenCalledTimes(1);
     expect(eChartsLoaderMock.setOption).toHaveBeenNthCalledWith(
       1,
       chart,
@@ -231,18 +233,7 @@ describe('EventCardChartPanelComponent', () => {
           minInterval: 60,
           maxInterval: 60,
           splitNumber: 6,
-        }
-      },
-      {
-        notMerge: false,
-        lazyUpdate: true,
-        silent: true,
-      }
-    );
-    expect(eChartsLoaderMock.setOption).toHaveBeenNthCalledWith(
-      2,
-      chart,
-      {
+        },
         yAxis: {
           inverse: false,
           interval: 5,
@@ -465,6 +456,7 @@ describe('EventCardChartPanelComponent', () => {
     expect(dataZoomHandler).toBeTypeOf('function');
 
     dataZoomHandler();
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
 
     expect(emitSpy).toHaveBeenCalledWith({ start: 15, end: 75 });
   });

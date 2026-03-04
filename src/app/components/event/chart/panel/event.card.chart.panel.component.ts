@@ -139,6 +139,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private applyingSharedSelectionRange = false;
   private applyingSharedZoomRange = false;
   private chartRefreshSequence: Promise<void> = Promise.resolve();
+  private pendingAxisScaleFrame: number | null = null;
   private axisPointerCursorBoundChart: EChartsType | null = null;
   private readonly axisPointerCursorHandler = (params: AxisPointerEvent) => {
     const value = Number(params?.axesInfo?.[0]?.value);
@@ -298,6 +299,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   ngOnDestroy(): void {
+    this.cancelPendingFrame('axisScale');
     this.teardownViewportObserver();
     this.unbindWheelPassThrough();
     this.unbindAxisPointerCursorEmit();
@@ -366,7 +368,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.seriesByID = new Map(this.panel.series.map((series) => [series.id, series]));
     this.chartHost.setOption(this.buildOption(), ECHARTS_INTERACTIVE_CARTESIAN_MERGE_UPDATE_SETTINGS);
     this.syncAxisPointerCursorEmitBinding();
-    this.applyCanonicalXAxisScale();
+    this.applyCanonicalAxisScales();
     this.syncInteractionMode();
     this.applySharedSelectionRange();
     this.updateRangeStats();
@@ -665,8 +667,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     chart.on('datazoom', () => {
       if (this.panel) {
-        this.applyCanonicalXAxisScale();
-        this.applyCanonicalYAxisScale();
+        this.scheduleCanonicalAxisScaleUpdate();
       }
       if (this.showZoomBar && !this.applyingSharedZoomRange) {
         this.emitVisibleZoomRange();
@@ -1140,31 +1141,28 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     chart.dispatchAction(hideTipAction);
   }
 
-  private applyCanonicalXAxisScale(): void {
+  private scheduleCanonicalAxisScaleUpdate(): void {
+    if (this.pendingAxisScaleFrame !== null) {
+      return;
+    }
+
+    this.pendingAxisScaleFrame = this.requestFrame(() => {
+      this.pendingAxisScaleFrame = null;
+      this.applyCanonicalAxisScales();
+    });
+  }
+
+  private applyCanonicalAxisScales(): void {
+    if (!this.panel) {
+      return;
+    }
+
     const chart = this.chartHost.getChart();
     if (!chart) {
       return;
     }
 
     const scaleOptions = buildEventCanonicalXAxisScaleOptions(this.xAxisType, this.getVisibleXAxisRange());
-    if (!scaleOptions) {
-      return;
-    }
-
-    this.chartHost.setOption({
-      xAxis: scaleOptions,
-    }, {
-      notMerge: false,
-      lazyUpdate: true,
-      silent: true,
-    });
-  }
-
-  private applyCanonicalYAxisScale(): void {
-    if (!this.panel) {
-      return;
-    }
-
     const yAxisConfig = buildEventPanelYAxisConfig({
       panel: this.panel,
       visibleRange: this.getVisibleXAxisRange(),
@@ -1173,6 +1171,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     });
 
     this.chartHost.setOption({
+      ...(scaleOptions ? { xAxis: scaleOptions } : {}),
       yAxis: {
         inverse: yAxisConfig.inverse,
         min: yAxisConfig.min,
@@ -1591,5 +1590,28 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     this.seriesDataCache.set(pointsRef, data);
     return data;
+  }
+
+  private requestFrame(callback: () => void): number {
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      return window.requestAnimationFrame(callback);
+    }
+
+    return globalThis.setTimeout(callback, 16) as unknown as number;
+  }
+
+  private cancelPendingFrame(target: 'axisScale'): void {
+    const handle = this.pendingAxisScaleFrame;
+    if (handle === null) {
+      return;
+    }
+
+    if (typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
+      window.cancelAnimationFrame(handle);
+    } else {
+      globalThis.clearTimeout(handle);
+    }
+
+    this.pendingAxisScaleFrame = null;
   }
 }
