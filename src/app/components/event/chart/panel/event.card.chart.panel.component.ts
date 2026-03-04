@@ -630,7 +630,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   private buildBrushOption(chartStyle: ReturnType<typeof buildEventEChartsVisualTokens>): Record<string, unknown> {
     return {
-      toolbox: [],
       brushLink: 'none',
       xAxisIndex: 0,
       brushMode: 'single',
