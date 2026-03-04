@@ -10,7 +10,7 @@
 </ng-template>
 
 <!-- COMPACT MODE: Cards (Dialog) -->
-<mat-card *ngIf="displayMode() === 'compact'" class="changelog-card" (click)="onCardClick()">
+<mat-card *ngIf="displayMode() === 'compact'" class="changelog-card qs-overlay-flat-surface" (click)="onCardClick()">
     <mat-card-header>
         <div class="header-line">
             <div class="header-left">
@@ -27,7 +27,7 @@
 </mat-card>
 
 <!-- FULL MODE: Expansion Panels (Releases Page) -->
-<mat-expansion-panel *ngIf="displayMode() === 'full'" [expanded]="expanded()" class="changelog-panel">
+<mat-expansion-panel *ngIf="displayMode() === 'full'" [expanded]="expanded()" class="changelog-panel qs-overlay-flat-surface">
     <mat-expansion-panel-header>
         <mat-panel-title>
             <div class="header-stack">

@@ -878,6 +878,29 @@ mat-table {
   }
 }
 
+/* Shared overlay content reset for report/feed content rendered inside an already styled
+   dialog or bottom-sheet shell. Keep this opt-in so selection/config dialogs can retain
+   their internal cards. */
+.qs-dialog-container .qs-overlay-flat-root,
+.qs-bottom-sheet-container .qs-overlay-flat-root,
+.qs-whats-new-dialog .qs-overlay-flat-root,
+.qs-whats-new-page .qs-overlay-flat-root {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+.qs-dialog-container .qs-overlay-flat-surface,
+.qs-bottom-sheet-container .qs-overlay-flat-surface,
+.qs-whats-new-dialog .qs-overlay-flat-surface,
+.qs-whats-new-page .qs-overlay-flat-surface {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
 /* ==========================================================================
    Global Table Styles
    Standardized Material table overrides for glassmorphism.
