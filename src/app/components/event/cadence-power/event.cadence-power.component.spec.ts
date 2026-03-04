@@ -163,6 +163,7 @@ describe('EventCadencePowerComponent', () => {
     ]);
 
     component.ngOnChanges({ activities: { currentValue: [], previousValue: [], firstChange: false, isFirstChange: () => false } as any });
+    await waitForChartStabilization();
 
     expect(getLastOption().legend.show).toBe(true);
   });
@@ -198,7 +199,7 @@ describe('EventCadencePowerComponent', () => {
     fixture.detectChanges();
     await waitForChartStabilization();
 
-    expect(getLastOption().tooltip.backgroundColor).toBe('#222222');
+    expect(getLastOption().tooltip.backgroundColor).toBe('rgba(58,62,68,1)');
   });
 
   it('should return empty option when there is no cadence-power data', async () => {

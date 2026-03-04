@@ -206,6 +206,7 @@ describe('EventPowerCurveComponent', () => {
     ]);
 
     component.ngOnChanges({ activities: new SimpleChange([], [{}], false) });
+    await waitForChartStabilization();
     expect(getLastOption().series[0].showSymbol).toBe(true);
   });
 
@@ -277,6 +278,7 @@ describe('EventPowerCurveComponent', () => {
     });
 
     breakpointSubject.next({ matches: true });
+    await waitForChartStabilization();
 
     const option = getLastOption();
     const formatter = option.xAxis.axisLabel.formatter as (value: string | number) => string;
@@ -308,6 +310,7 @@ describe('EventPowerCurveComponent', () => {
     ]);
 
     component.ngOnChanges({ activities: new SimpleChange([], [{}], false) });
+    await waitForChartStabilization();
 
     expect(getLastOption().legend.show).toBe(true);
   });
@@ -320,8 +323,8 @@ describe('EventPowerCurveComponent', () => {
 
     const option = getLastOption();
 
-    expect(option.tooltip.backgroundColor).toBe('#222222');
-    expect(option.legend.textStyle.color).toBe('#f5f5f5');
+    expect(option.tooltip.backgroundColor).toBe('rgba(58,62,68,1)');
+    expect(option.legend.textStyle.color).toBe('rgba(223,223,225,1)');
   });
 
   it('should handle empty data gracefully', async () => {

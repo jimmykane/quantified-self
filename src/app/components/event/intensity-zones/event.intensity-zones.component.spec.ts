@@ -217,6 +217,7 @@ describe('EventIntensityZonesComponent', () => {
       darkTheme: new SimpleChange(false, true, false),
       useAnimations: new SimpleChange(false, true, false),
     });
+    await waitForChartStabilization();
 
     expect(mockLoader.setOption).toHaveBeenCalledTimes(2);
   });
@@ -239,6 +240,7 @@ describe('EventIntensityZonesComponent', () => {
     await waitForChartStabilization();
 
     breakpointSubject.next({ matches: true });
+    await waitForChartStabilization();
 
     expect(mockedConvert).toHaveBeenLastCalledWith(component.activities, true);
     expect(mockLoader.setOption).toHaveBeenCalledTimes(2);
@@ -254,8 +256,8 @@ describe('EventIntensityZonesComponent', () => {
     await waitForChartStabilization();
 
     const option = getLastOption();
-    expect(option.tooltip?.backgroundColor).toBe('#303030');
-    expect(option.legend?.textStyle?.color).toBe('#ffffff');
+    expect(option.tooltip?.backgroundColor).toBe('rgba(58,62,68,1)');
+    expect(option.legend?.textStyle?.color).toBe('rgba(223,223,225,1)');
     expect(option.yAxis.splitArea.areaStyle.color).toEqual([
       'rgba(22, 180, 234, 0.18)',
       'rgba(22, 180, 234, 0.18)',
@@ -284,7 +286,7 @@ describe('EventIntensityZonesComponent', () => {
 
     const option = getLastOption();
     expect(option.tooltip?.backgroundColor).toBe('#ffffff');
-    expect(option.yAxis?.axisLabel?.color).toBe('#2a2a2a');
+    expect(option.yAxis?.axisLabel?.color).toBe('#3c3c41');
   });
 
   it('should include zone rich styles from color service', async () => {

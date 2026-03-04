@@ -483,8 +483,8 @@ describe('ChartsColumnsComponent', () => {
     await waitForChartStabilization();
 
     const option = getLastOption();
-    expect(option.tooltip.backgroundColor).toBe('#303030');
-    expect(option.textStyle.color).toBe('#f5f5f5');
+    expect(option.tooltip.backgroundColor).toBe('rgba(58,62,68,1)');
+    expect(option.textStyle.color).toBe('rgba(223,223,225,1)');
   });
 
   it('should ignore ngOnChanges before chart initialization', () => {

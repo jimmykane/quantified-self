@@ -298,7 +298,7 @@ describe('EventDurabilityCurveComponent', () => {
     await waitForChartStabilization();
 
     const option = getLastOption();
-    expect(option.tooltip.backgroundColor).toBe('#222222');
+    expect(option.tooltip.backgroundColor).toBe('rgba(58,62,68,1)');
   });
 
   it('should return empty option when there is no durability data', async () => {
@@ -323,6 +323,7 @@ describe('EventDurabilityCurveComponent', () => {
 
     const baseline = mockLoader.setOption.mock.calls.length;
     breakpointSubject.next({ matches: true });
+    await waitForChartStabilization();
 
     expect(mockLoader.setOption.mock.calls.length).toBeGreaterThan(baseline);
   });

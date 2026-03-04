@@ -115,20 +115,34 @@ describe('EventCardChartPanelComponent', () => {
 
   async function flushQueuedChartRefreshes(iterations = 4): Promise<void> {
     for (let index = 0; index < iterations; index += 1) {
+      await fixture.whenStable();
       await Promise.resolve();
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
   }
 
+  async function waitForChartStabilization(iterations = 6): Promise<void> {
+    for (let index = 0; index < iterations; index += 1) {
+      await fixture.whenStable();
+      await Promise.resolve();
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    }
+  }
+
+  async function renderComponent(): Promise<void> {
+    fixture.detectChanges();
+    await waitForChartStabilization();
+  }
+
   function getRenderedOption(): any {
-    return eChartsLoaderMock.setOption.mock.calls.find(([, option]) => option?.series)?.[1] as any;
+    return eChartsLoaderMock.setOption.mock.calls.findLast(([, option]) => option?.series)?.[1] as any;
   }
 
   it('initializes chart host and renders panel option', async () => {
     component.showZoomBar = true;
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
-    expect(eChartsLoaderMock.init).toHaveBeenCalledTimes(1);
+    expect(eChartsLoaderMock.init).toHaveBeenCalledTimes(2);
     expect(eChartsLoaderMock.connectGroup).toHaveBeenCalledWith('event-zoom-group');
     expect(eChartsLoaderMock.setOption).toHaveBeenCalled();
     expect(chart.on).not.toHaveBeenCalledWith('click', expect.any(Function));
@@ -193,8 +207,7 @@ describe('EventCardChartPanelComponent', () => {
       ]
     });
 
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
     const dataZoomHandler = chart.on.mock.calls.find(([eventName]) => eventName === 'datazoom')?.[1] as (() => void);
     expect(dataZoomHandler).toBeTypeOf('function');
@@ -240,8 +253,7 @@ describe('EventCardChartPanelComponent', () => {
 
   it('hides slider zoom bar when showZoomBar is false', async () => {
     component.showZoomBar = false;
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
     const option = getRenderedOption();
     expect(option?.dataZoom?.[1]?.show).toBe(false);
@@ -249,8 +261,7 @@ describe('EventCardChartPanelComponent', () => {
 
   it('applies series fill opacity to rendered event line series', async () => {
     component.fillOpacity = 0.4;
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
     const option = getRenderedOption();
     expect(option?.series?.[0]?.areaStyle).toEqual(
@@ -263,8 +274,7 @@ describe('EventCardChartPanelComponent', () => {
 
   it('switches to selection mode with native brush and disables inside zoom', async () => {
     component.cursorBehaviour = ChartCursorBehaviours.SelectX;
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
     const option = getRenderedOption();
     expect(option?.dataZoom?.[0]?.disabled).toBe(true);
@@ -280,8 +290,7 @@ describe('EventCardChartPanelComponent', () => {
   it('uses brush drag to trigger native dataZoom updates in zoom mode', async () => {
     component.cursorBehaviour = ChartCursorBehaviours.ZoomX;
     const emitSpy = vi.spyOn(component.zoomRangeChange, 'emit');
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
     chart.dispatchAction.mockClear();
     const brushEndHandler = chart.on.mock.calls.find(([eventName]) => eventName === 'brushEnd')?.[1] as ((params: any) => void);
@@ -316,8 +325,7 @@ describe('EventCardChartPanelComponent', () => {
   it('emits normalized selected range from brush events in selection mode', async () => {
     component.cursorBehaviour = ChartCursorBehaviours.SelectX;
     const emitSpy = vi.spyOn(component.selectedRangeChange, 'emit');
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
     const brushHandler = chart.on.mock.calls.find(([eventName]) => eventName === 'brush')?.[1] as ((params: any) => void);
     expect(brushHandler).toBeTypeOf('function');
@@ -335,8 +343,7 @@ describe('EventCardChartPanelComponent', () => {
 
   it('applies incoming shared selection range with official brush action', async () => {
     component.cursorBehaviour = ChartCursorBehaviours.SelectX;
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
     chart.dispatchAction.mockClear();
     component.selectedRange = { start: 25, end: 55 };
@@ -382,8 +389,7 @@ describe('EventCardChartPanelComponent', () => {
       [60, 0.8],
       [120, 0.35],
     ];
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
     const option = eChartsLoaderMock.setOption.mock.calls.at(-1)?.[1] as any;
     expect(option?.tooltip?.show).toBe(false);
@@ -412,8 +418,7 @@ describe('EventCardChartPanelComponent', () => {
       [0, 0.1],
       [120, 0.4],
     ];
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
     eChartsLoaderMock.setOption.mockClear();
     component.zoomBarOverviewData = [
@@ -447,8 +452,7 @@ describe('EventCardChartPanelComponent', () => {
       ]
     });
 
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
     const dataZoomHandler = chart.on.mock.calls.find(([eventName]) => eventName === 'datazoom')?.[1] as (() => void);
     expect(dataZoomHandler).toBeTypeOf('function');
@@ -461,8 +465,7 @@ describe('EventCardChartPanelComponent', () => {
   it('renders empty-axis no-data option without joining a zoom group when panel is null outside zoom mode', async () => {
     component.panel = null;
     component.showZoomBar = false;
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
     const option = eChartsLoaderMock.setOption.mock.calls.at(-1)?.[1] as any;
     expect(Array.isArray(option?.xAxis)).toBe(true);
@@ -475,8 +478,7 @@ describe('EventCardChartPanelComponent', () => {
   });
 
   it('replays stored zoom range once when a hidden panel becomes visible again', async () => {
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
     chart.dispatchAction.mockClear();
     chart.group = undefined;
@@ -503,16 +505,14 @@ describe('EventCardChartPanelComponent', () => {
   });
 
   it('enables tooltip hover without requiring a click first', async () => {
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
     const option = getRenderedOption();
     expect(option?.tooltip?.triggerOn).toBe('mousemove|click');
   });
 
   it('hides tooltip when chart panel leaves viewport', async () => {
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
     expect(intersectionObserverCallbacks).toHaveLength(1);
     intersectionObserverCallbacks[0]([
@@ -529,8 +529,7 @@ describe('EventCardChartPanelComponent', () => {
   });
 
   it('restores tooltip when chart panel re-enters viewport', async () => {
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
     expect(intersectionObserverCallbacks).toHaveLength(1);
     intersectionObserverCallbacks[0]([
@@ -550,8 +549,7 @@ describe('EventCardChartPanelComponent', () => {
   });
 
   it('formats y-axis labels without units', async () => {
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
     const option = getRenderedOption();
     const formatter = option?.yAxis?.axisLabel?.formatter as ((value: number) => string);
@@ -573,8 +571,7 @@ describe('EventCardChartPanelComponent', () => {
       getDisplayUnit: () => 'u',
     } as any));
 
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
     component.selectedRange = { start: 0, end: 10 };
     component.ngOnChanges({
@@ -605,8 +602,7 @@ describe('EventCardChartPanelComponent', () => {
     } as any));
 
     component.showActivityNamesInTooltip = false;
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
     component.selectedRange = { start: 0, end: 10 };
     component.ngOnChanges({
@@ -622,8 +618,7 @@ describe('EventCardChartPanelComponent', () => {
 
   it('uses strokeWidth input for line series width', async () => {
     component.strokeWidth = 3.25;
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
     const option = getRenderedOption();
     expect(option?.series?.[0]?.lineStyle?.width).toBe(3.25);
@@ -631,8 +626,7 @@ describe('EventCardChartPanelComponent', () => {
 
   it('renders a per-panel watermark graphic in the lower-right plot area', async () => {
     component.waterMark = 'Dimitrios';
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
     const option = getRenderedOption();
     expect(option?.graphic).toEqual([
@@ -652,8 +646,7 @@ describe('EventCardChartPanelComponent', () => {
     component.panel = null;
     component.showZoomBar = true;
     component.waterMark = 'Dimitrios';
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
     const option = eChartsLoaderMock.setOption.mock.calls.at(-1)?.[1] as any;
     expect(option?.graphic).toBeUndefined();
@@ -678,8 +671,7 @@ describe('EventCardChartPanelComponent', () => {
         ]
       }
     ];
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
     const option = getRenderedOption();
     expect(option?.series?.[0]?.markLine?.data).toEqual([
@@ -710,8 +702,7 @@ describe('EventCardChartPanelComponent', () => {
         tooltipDetails: []
       }
     ];
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
     const option = getRenderedOption();
     expect(option?.series?.[0]?.markLine?.data).toEqual([]);
@@ -733,8 +724,7 @@ describe('EventCardChartPanelComponent', () => {
         tooltipDetails: [],
       }
     ];
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
     let option = getRenderedOption();
     expect(option?.series?.[0]?.markLine?.data).toHaveLength(1);
@@ -776,8 +766,7 @@ describe('EventCardChartPanelComponent', () => {
         ]
       }
     ];
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
     const tooltipHtml = (component as any).formatLapMarkerTooltip({
       data: component.lapMarkers[0],
@@ -797,8 +786,7 @@ describe('EventCardChartPanelComponent', () => {
 
   it('omits activity names from the main tooltip when disabled', async () => {
     component.showActivityNamesInTooltip = false;
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
     const tooltipHtml = (component as any).formatTooltip([
       {
@@ -815,8 +803,7 @@ describe('EventCardChartPanelComponent', () => {
 
   it('shows activity names in the main tooltip when enabled', async () => {
     component.showActivityNamesInTooltip = true;
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
     const tooltipHtml = (component as any).formatTooltip([
       {
@@ -832,8 +819,7 @@ describe('EventCardChartPanelComponent', () => {
 
   it('skips synced tooltip rows whose series value is null', async () => {
     component.showActivityNamesInTooltip = true;
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
     const formatSpy = vi.spyOn(component as any, 'formatDataValue');
     const tooltipHtml = (component as any).formatTooltip([
@@ -875,8 +861,7 @@ describe('EventCardChartPanelComponent', () => {
         ]
       }
     ];
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
     const mousemoveHandler = chart.on.mock.calls.find(([eventName]) => eventName === 'mousemove')?.[1] as ((params: any) => void);
     expect(mousemoveHandler).toBeTypeOf('function');
@@ -916,8 +901,7 @@ describe('EventCardChartPanelComponent', () => {
         ]
       }
     ];
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
     const mousemoveHandler = chart.on.mock.calls.find(([eventName]) => eventName === 'mousemove')?.[1] as ((params: any) => void);
     mousemoveHandler({
@@ -945,8 +929,7 @@ describe('EventCardChartPanelComponent', () => {
   });
 
   it('disconnects zoom group on destroy', async () => {
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
     component.ngOnDestroy();
 
@@ -958,8 +941,7 @@ describe('EventCardChartPanelComponent', () => {
   it('hides and restores zoom-bar slider based on viewport visibility', async () => {
     component.panel = null;
     component.showZoomBar = true;
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
     expect(intersectionObserverCallbacks).toHaveLength(1);
     intersectionObserverCallbacks[0]([
@@ -982,8 +964,7 @@ describe('EventCardChartPanelComponent', () => {
   });
 
   it('stops wheel event propagation on chart container to preserve page scrolling', async () => {
-    fixture.detectChanges();
-    await component.ngAfterViewInit();
+    await renderComponent();
 
     const hostElement = fixture.nativeElement as HTMLElement;
     const bubbleWheelSpy = vi.fn();
