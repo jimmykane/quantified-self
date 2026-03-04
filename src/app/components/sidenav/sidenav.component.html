@@ -144,6 +144,9 @@
   <!-- Compact Footer -->
   <div class="sidenav-footer">
     <div class="sidenav-footer-links">
+      <button mat-icon-button matTooltip="Help & Support" routerLink="/help" (click)="sideNav.close();">
+        <mat-icon>help</mat-icon>
+      </button>
       <button mat-icon-button matTooltip="Release Notes" routerLink="/releases" (click)="sideNav.close();">
         <mat-icon class="qs-app-badge qs-app-badge--small"
           [matBadge]="whatsNewService.unreadCount()" [matBadgeHidden]="whatsNewService.unreadCount() === 0"

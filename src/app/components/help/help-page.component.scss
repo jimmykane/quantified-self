@@ -1,0 +1,56 @@
+:host {
+  display: block;
+}
+
+.help-page {
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: 2rem 1rem 3rem;
+}
+
+.hero {
+  margin-bottom: 1.5rem;
+}
+
+.hero-title {
+  margin: 0 0 0.75rem;
+}
+
+.hero-subtitle {
+  margin: 0;
+}
+
+.section-stack {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.card-content {
+  display: grid;
+  gap: 1rem;
+}
+
+.section-card {
+  scroll-margin-top: 6rem;
+}
+
+.section-icon {
+  color: var(--mat-sys-primary);
+}
+
+.section-copy :is(h2, h3) {
+  margin-top: 1.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.section-copy :is(ul, ol) {
+  margin: 0.75rem 0 1rem;
+  padding-left: 1.25rem;
+}
+
+@media (max-width: 48rem) {
+  .help-page {
+    padding: 1.5rem 1rem 2.5rem;
+  }
+}
