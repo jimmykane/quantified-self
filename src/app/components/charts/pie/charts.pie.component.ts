@@ -33,6 +33,7 @@ import {
   EChartsHostController
 } from '../../../helpers/echarts-host-controller';
 import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
+import { getOrCreateEChartsTooltipHost } from '../../../helpers/echarts-tooltip-host.helper';
 import { getViewportConstrainedTooltipPosition } from '../../../helpers/echarts-tooltip-position.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
 import {
@@ -205,7 +206,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
       tooltip: {
         trigger: 'item',
         renderMode: 'html',
-        appendToBody: true,
+        appendTo: getOrCreateEChartsTooltipHost,
         confine: false,
         position: getViewportConstrainedTooltipPosition,
         backgroundColor: tooltipBackgroundColor,

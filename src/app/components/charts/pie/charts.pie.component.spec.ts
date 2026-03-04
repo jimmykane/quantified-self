@@ -11,6 +11,7 @@ import { ChartsPieComponent } from './charts.pie.component';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { LoggerService } from '../../../services/logger.service';
+import { getOrCreateEChartsTooltipHost } from '../../../helpers/echarts-tooltip-host.helper';
 import { getViewportConstrainedTooltipPosition } from '../../../helpers/echarts-tooltip-position.helper';
 
 type ResizeObserverRecord = {
@@ -130,7 +131,7 @@ describe('ChartsPieComponent', () => {
     expect(mockLoader.init).toHaveBeenCalledTimes(1);
     expect(resizeObserverRecords).toHaveLength(1);
     expect(option.tooltip.renderMode).toBe('html');
-    expect(option.tooltip.appendToBody).toBe(true);
+    expect(option.tooltip.appendTo).toBe(getOrCreateEChartsTooltipHost);
     expect(option.tooltip.confine).toBe(false);
     expect(option.tooltip.position).toBe(getViewportConstrainedTooltipPosition);
     expect(option.series[0].type).toBe('pie');

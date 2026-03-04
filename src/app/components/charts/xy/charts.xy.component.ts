@@ -24,6 +24,7 @@ import {
   ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS,
   EChartsHostController
 } from '../../../helpers/echarts-host-controller';
+import { getOrCreateEChartsTooltipHost } from '../../../helpers/echarts-tooltip-host.helper';
 import { getViewportConstrainedTooltipPosition } from '../../../helpers/echarts-tooltip-position.helper';
 import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
@@ -263,7 +264,7 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
       tooltip: {
         trigger: 'item',
         renderMode: 'html',
-        appendToBody: true,
+        appendTo: getOrCreateEChartsTooltipHost,
         confine: false,
         position: getViewportConstrainedTooltipPosition,
         backgroundColor: tooltipBackgroundColor,
