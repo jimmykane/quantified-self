@@ -886,25 +886,10 @@ mat-table {
 .qs-bottom-sheet-container,
 .qs-whats-new-dialog,
 .qs-whats-new-page {
-  --qs-overlay-content-bg: transparent;
-  --qs-overlay-content-border: transparent;
-  --qs-overlay-content-shadow: none;
-  --qs-overlay-content-filter: none;
   --qs-overlay-section-bg: var(--mat-app-surface-container-high);
   --qs-overlay-section-border: var(--mat-sys-outline-variant);
   --qs-overlay-section-shadow: none;
   --qs-overlay-section-radius: 12px;
-  --qs-overlay-section-flat-bg: transparent;
-  --qs-overlay-section-flat-border: transparent;
-  --qs-overlay-section-flat-shadow: none;
-  --qs-overlay-media-flat-border: transparent;
-}
-
-.qs-overlay-content-root {
-  background: var(--qs-overlay-content-bg) !important;
-  border: 0 !important;
-  box-shadow: var(--qs-overlay-content-shadow) !important;
-  backdrop-filter: var(--qs-overlay-content-filter) !important;
 }
 
 .qs-overlay-section {
@@ -917,26 +902,21 @@ mat-table {
 /* Default overlay section treatment for common overlay surface primitives rendered
    inside dialogs and bottom sheets. Custom div sections still opt in with
    .qs-overlay-section. */
-.qs-dialog-container :is(.mat-mdc-card, .mat-expansion-panel, .glass-card):not(.qs-overlay-section--flat):not(.mat-mdc-dialog-container):not(.mat-mdc-dialog-surface),
-.qs-bottom-sheet-container :is(.mat-mdc-card, .mat-expansion-panel, .glass-card):not(.qs-overlay-section--flat):not(.mat-bottom-sheet-container),
-.qs-whats-new-dialog :is(.mat-mdc-card, .mat-expansion-panel, .glass-card):not(.qs-overlay-section--flat):not(.mat-mdc-dialog-container):not(.mat-mdc-dialog-surface),
-.qs-whats-new-page :is(.mat-mdc-card, .mat-expansion-panel, .glass-card):not(.qs-overlay-section--flat) {
+.qs-dialog-container :is(.mat-mdc-card, .mat-expansion-panel, .glass-card):not(.qs-overlay-flat):not(.mat-mdc-dialog-container):not(.mat-mdc-dialog-surface),
+.qs-bottom-sheet-container :is(.mat-mdc-card, .mat-expansion-panel, .glass-card):not(.qs-overlay-flat):not(.mat-bottom-sheet-container),
+.qs-whats-new-dialog :is(.mat-mdc-card, .mat-expansion-panel, .glass-card):not(.qs-overlay-flat):not(.mat-mdc-dialog-container):not(.mat-mdc-dialog-surface),
+.qs-whats-new-page :is(.mat-mdc-card, .mat-expansion-panel, .glass-card):not(.qs-overlay-flat) {
   background: var(--qs-overlay-section-bg) !important;
   border: 1px solid var(--qs-overlay-section-border);
   box-shadow: var(--qs-overlay-section-shadow) !important;
   border-radius: var(--qs-overlay-section-radius) !important;
 }
 
-.qs-overlay-section--flat {
-  background: var(--qs-overlay-section-flat-bg) !important;
-  border-color: var(--qs-overlay-section-flat-border) !important;
-  box-shadow: var(--qs-overlay-section-flat-shadow) !important;
-  backdrop-filter: none !important;
-}
-
-.qs-overlay-media--flat {
-  border-color: var(--qs-overlay-media-flat-border) !important;
+.qs-overlay-flat {
+  background: transparent !important;
+  border-color: transparent !important;
   box-shadow: none !important;
+  backdrop-filter: none !important;
 }
 
 /* ==========================================================================

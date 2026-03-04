@@ -32,6 +32,7 @@ import {
   ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS,
   EChartsHostController
 } from '../../../helpers/echarts-host-controller';
+import { getViewportConstrainedTooltipPosition } from '../../../helpers/echarts-tooltip-position.helper';
 import { buildEventEChartsVisualTokens } from '../../../helpers/event-echarts-common.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
 
@@ -256,6 +257,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
         renderMode: 'html',
         appendToBody: !this.isMobile,
         confine: this.isMobile,
+        position: getViewportConstrainedTooltipPosition,
         extraCssText: tooltipExtraCssText,
         backgroundColor: chartStyle.tooltipBackgroundColor,
         borderColor: chartStyle.tooltipBorderColor,

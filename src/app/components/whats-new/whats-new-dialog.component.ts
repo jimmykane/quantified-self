@@ -59,6 +59,7 @@ const WHATS_NEW_DIALOG_MOBILE_QUERY = AppBreakpoints.XSmall;
       align-items: center;
       gap: 12px;
       padding: 16px 24px !important;
+      border-bottom: 1px solid var(--mat-app-outline-variant);
       
       .header-icon {
         color: var(--mat-sys-primary);

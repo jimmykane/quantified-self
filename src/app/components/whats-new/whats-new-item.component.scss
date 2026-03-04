@@ -18,19 +18,19 @@
     }
 }
 
-.changelog-panel.qs-overlay-section--flat {
+.changelog-panel.qs-overlay-flat {
     background: transparent !important;
     border: 0 !important;
     border-radius: 0 !important;
     margin-bottom: 0;
 }
 
-.changelog-panel.qs-overlay-section--flat.mat-expanded {
+.changelog-panel.qs-overlay-flat.mat-expanded {
     background: transparent !important;
     border-color: transparent !important;
 }
 
-.changelog-panel.qs-overlay-section--flat.mat-expansion-panel-spacing {
+.changelog-panel.qs-overlay-flat.mat-expansion-panel-spacing {
     margin: 0 !important;
 }
 

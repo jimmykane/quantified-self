@@ -12,6 +12,7 @@ import { ChartsXYComponent } from './charts.xy.component';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { LoggerService } from '../../../services/logger.service';
+import { getViewportConstrainedTooltipPosition } from '../../../helpers/echarts-tooltip-position.helper';
 
 type ResizeObserverRecord = {
   observe: ReturnType<typeof vi.fn>;
@@ -140,6 +141,10 @@ describe('ChartsXYComponent', () => {
 
     expect(mockLoader.init).toHaveBeenCalledTimes(1);
     expect(resizeObserverRecords).toHaveLength(1);
+    expect(option.tooltip.renderMode).toBe('html');
+    expect(option.tooltip.appendToBody).toBe(true);
+    expect(option.tooltip.confine).toBe(false);
+    expect(option.tooltip.position).toBe(getViewportConstrainedTooltipPosition);
     expect(option.series[0].type).toBe('line');
     expect(option.xAxis.type).toBe('category');
     expect(option.yAxis.type).toBe('value');

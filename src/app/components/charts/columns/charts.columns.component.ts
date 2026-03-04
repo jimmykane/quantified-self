@@ -24,6 +24,7 @@ import {
   ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS,
   EChartsHostController
 } from '../../../helpers/echarts-host-controller';
+import { getViewportConstrainedTooltipPosition } from '../../../helpers/echarts-tooltip-position.helper';
 import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
 import {
@@ -300,6 +301,10 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
       tooltip: {
         trigger: useDateActivitySegmentation ? 'axis' : 'item',
         axisPointer: useDateActivitySegmentation ? { type: 'shadow' } : undefined,
+        renderMode: 'html',
+        appendToBody: true,
+        confine: false,
+        position: getViewportConstrainedTooltipPosition,
         backgroundColor: tooltipBackgroundColor,
         borderColor: tooltipBorderColor,
         borderWidth: 1,

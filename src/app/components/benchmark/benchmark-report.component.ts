@@ -61,7 +61,7 @@ interface InsightItem {
 @Component({
     selector: 'app-benchmark-report',
     template: `
-    <div class="benchmark-container qs-overlay-content-root" *ngIf="result">
+    <div class="benchmark-container" *ngIf="result">
 
       <!-- Header -->
       <div class="report-header">
