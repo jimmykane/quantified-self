@@ -28,7 +28,7 @@ describe('HelpPageComponent', () => {
 
   it('should render the hero title and all section titles', () => {
     const title = fixture.debugElement.query(By.css('.hero-title'))?.nativeElement as HTMLElement | undefined;
-    expect(title?.textContent).toContain('Get quick answers');
+    expect(title?.textContent).toContain('Help for setup, uploads, billing, and integrations.');
 
     const renderedTitles = fixture.debugElement
       .queryAll(By.css('.section-card mat-card-title'))
@@ -38,7 +38,7 @@ describe('HelpPageComponent', () => {
   });
 
   it('should render all global support actions', () => {
-    const actionButtons = fixture.debugElement.queryAll(By.css('mat-nav-list[aria-label="Support actions"] a'));
+    const actionButtons = fixture.debugElement.queryAll(By.css('.support-actions[aria-label="Support actions"] a'));
     expect(actionButtons).toHaveLength(HELP_ACTIONS.length);
 
     HELP_ACTIONS.forEach(action => {
@@ -49,7 +49,7 @@ describe('HelpPageComponent', () => {
 
   it('should scroll to the selected section from the quick navigation list', () => {
     const scrollToSectionSpy = vi.spyOn(component, 'scrollToSection');
-    const navButtons = fixture.debugElement.queryAll(By.css('mat-action-list button'));
+    const navButtons = fixture.debugElement.queryAll(By.css('.section-nav button'));
 
     expect(navButtons).toHaveLength(HELP_SECTIONS.length);
     navButtons[0].triggerEventHandler('click', new MouseEvent('click'));
@@ -74,13 +74,13 @@ describe('HelpPageComponent', () => {
     expect(loginLink?.attributes['target']).toBeUndefined();
 
     const policiesLink = fixture.debugElement
-      .queryAll(By.css('mat-nav-list[aria-label="Support actions"] a'))
+      .queryAll(By.css('.support-actions[aria-label="Support actions"] a'))
       .find(node => node.nativeElement.textContent.includes('Policies'));
     expect(policiesLink?.attributes['href']).toContain('/policies');
     expect(policiesLink?.attributes['target']).toBeUndefined();
 
     const emailLink = fixture.debugElement
-      .queryAll(By.css('mat-nav-list[aria-label="Support actions"] a'))
+      .queryAll(By.css('.support-actions[aria-label="Support actions"] a'))
       .find(node => node.nativeElement.textContent.includes('Email Support'));
     expect(emailLink?.attributes['href']).toContain('mailto:');
     expect(emailLink?.attributes['target']).toBe('_blank');

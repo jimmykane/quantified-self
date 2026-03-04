@@ -185,9 +185,9 @@ The app accepts these file types for manual activity upload:
 
 ## Common upload failures
 
-- **401** usually means your session is no longer authorized. Sign in again.
-- **429** usually means you reached the limit for your current plan.
-- **400** usually means the file could not be processed or is not valid for this importer.
+- Your session may have expired. Sign in again and retry.
+- You may have reached your current plan's activity limit.
+- The file may be invalid, unsupported, or unreadable by the importer.
 
 ## Export and backup options
 
@@ -310,15 +310,6 @@ This action cannot be undone.
 - Garmin backfills can arrive gradually.
 - Suunto and COROS imports are queue-based and can take hours or days.
 - Check cooldowns and connection status before retrying.
-
-## Garmin permissions
-
-If Garmin import is blocked by missing permissions:
-
-1. Open Garmin Connect.
-2. Open the connected-app permissions area.
-3. Update permissions.
-4. Reconnect Quantified Self.
 
 ## Browser compatibility
 

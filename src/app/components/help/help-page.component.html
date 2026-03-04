@@ -1,44 +1,57 @@
 <div class="help-page">
   <section class="hero">
-    <p class="mat-body-small">Help &amp; Support</p>
-    <h1 class="mat-display-small hero-title">Get quick answers without leaving the app.</h1>
-    <p class="mat-body-large hero-subtitle">Find quick answers for setup, uploads, billing, integrations, and troubleshooting.</p>
+    <p class="mat-label-large">Help &amp; Support</p>
+    <h1 class="mat-headline-medium hero-title">Help for setup, uploads, billing, and integrations.</h1>
+    <p class="mat-body-large hero-subtitle">Use this page to solve common issues fast, then contact support if you still need help.</p>
   </section>
 
-  <mat-card appearance="outlined">
+  <mat-card appearance="outlined" class="help-nav-card">
     <mat-card-header>
       <mat-card-title>Jump to a section</mat-card-title>
       <mat-card-subtitle>Use the quick links below or contact support directly.</mat-card-subtitle>
     </mat-card-header>
 
-    <mat-card-content class="card-content">
-      <mat-action-list aria-label="Help section navigation">
+    <mat-card-content class="help-nav-content">
+      <p class="mat-title-small nav-group-title">Sections</p>
+      <div class="section-nav" aria-label="Help section navigation">
         @for (section of sections; track section.id) {
-          <button mat-list-item type="button" (click)="scrollToSection(section.id)">
-            <mat-icon matListItemIcon>{{ section.icon }}</mat-icon>
-            <div matListItemTitle>{{ section.title }}</div>
-            <div matListItemLine>{{ section.summary }}</div>
+          <button
+            mat-stroked-button
+            class="section-nav-link"
+            type="button"
+            (click)="scrollToSection(section.id)">
+            <mat-icon>{{ section.icon }}</mat-icon>
+            <span>{{ section.title }}</span>
           </button>
         }
-      </mat-action-list>
+      </div>
 
       <mat-divider></mat-divider>
 
-      <mat-nav-list aria-label="Support actions">
+      <p class="mat-title-small nav-group-title">Support</p>
+      <div class="support-actions" aria-label="Support actions">
         @for (action of actions; track action.id) {
           @if (action.kind === 'route') {
-            <a mat-list-item [routerLink]="action.target">
-              <mat-icon matListItemIcon>{{ action.icon }}</mat-icon>
-              <div matListItemTitle>{{ action.label }}</div>
+            <a
+              mat-flat-button
+              class="support-action"
+              [routerLink]="action.target">
+              <mat-icon>{{ action.icon }}</mat-icon>
+              <span>{{ action.label }}</span>
             </a>
           } @else {
-            <a mat-list-item [href]="action.target" target="_blank" rel="noopener noreferrer">
-              <mat-icon matListItemIcon>{{ action.icon }}</mat-icon>
-              <div matListItemTitle>{{ action.label }}</div>
+            <a
+              mat-flat-button
+              class="support-action"
+              [href]="action.target"
+              target="_blank"
+              rel="noopener noreferrer">
+              <mat-icon>{{ action.icon }}</mat-icon>
+              <span>{{ action.label }}</span>
             </a>
           }
         }
-      </mat-nav-list>
+      </div>
     </mat-card-content>
   </mat-card>
 
@@ -46,29 +59,39 @@
     @for (section of sections; track section.id) {
       <mat-card appearance="outlined" class="section-card" [attr.id]="section.id">
         <mat-card-header>
-          <mat-icon class="section-icon">{{ section.icon }}</mat-icon>
+          <div mat-card-avatar class="section-avatar">
+            <mat-icon>{{ section.icon }}</mat-icon>
+          </div>
           <mat-card-title>{{ section.title }}</mat-card-title>
           <mat-card-subtitle>{{ section.summary }}</mat-card-subtitle>
         </mat-card-header>
 
-        <mat-card-content class="card-content">
+        <mat-card-content>
           <div class="section-copy" [innerHTML]="section.content | markdown | async"></div>
 
-          <mat-nav-list aria-label="Section links">
+          <div class="section-links">
             @for (link of section.links; track link.label) {
               @if (link.kind === 'route') {
-                <a mat-list-item [routerLink]="link.target">
-                  <mat-icon matListItemIcon>{{ link.icon }}</mat-icon>
-                  <div matListItemTitle>{{ link.label }}</div>
+                <a
+                  mat-stroked-button
+                  class="section-link"
+                  [routerLink]="link.target">
+                  <mat-icon>{{ link.icon }}</mat-icon>
+                  <span>{{ link.label }}</span>
                 </a>
               } @else {
-                <a mat-list-item [href]="link.target" target="_blank" rel="noopener noreferrer">
-                  <mat-icon matListItemIcon>{{ link.icon }}</mat-icon>
-                  <div matListItemTitle>{{ link.label }}</div>
+                <a
+                  mat-stroked-button
+                  class="section-link"
+                  [href]="link.target"
+                  target="_blank"
+                  rel="noopener noreferrer">
+                  <mat-icon>{{ link.icon }}</mat-icon>
+                  <span>{{ link.label }}</span>
                 </a>
               }
             }
-          </mat-nav-list>
+          </div>
         </mat-card-content>
       </mat-card>
     }
