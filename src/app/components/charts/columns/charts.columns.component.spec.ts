@@ -354,6 +354,30 @@ describe('ChartsColumnsComponent', () => {
     expect(totalLabelSeries.type).toBe('custom');
   });
 
+  it('should build segmented pyramid polygon styles from visual color without deprecated api.style helpers', () => {
+    const apiMock = {
+      value: vi.fn((dimension: number) => [0, 100, 20, 60][dimension]),
+      coord: vi.fn((value: [number, number]) => [value[0] * 10, 200 - value[1]]),
+      size: vi.fn(() => [40, 0]),
+      visual: vi.fn((key: string) => key === 'color' ? '#16B4EA' : undefined),
+      style: vi.fn(),
+      styleEmphasis: vi.fn(),
+    };
+
+    const shape = (component as any).renderSegmentedPyramidItem({}, apiMock);
+
+    expect(apiMock.visual).toHaveBeenCalledWith('color');
+    expect(apiMock.style).not.toHaveBeenCalled();
+    expect(apiMock.styleEmphasis).not.toHaveBeenCalled();
+    expect(shape).toMatchObject({
+      type: 'polygon',
+      style: { fill: '#16B4EA' },
+      emphasis: {
+        style: { fill: '#16B4EA' }
+      }
+    });
+  });
+
   it('should render stacked date series in horizontal mode', async () => {
     const activityTypeAliases = Object.keys(ActivityTypes).filter((key) => (
       Number.isNaN(Number(key))

@@ -541,6 +541,8 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     const endRatio = Math.max(0, Math.min(1, end / total));
     const startHalfWidth = baseHalfWidth * (1 - startRatio);
     const endHalfWidth = baseHalfWidth * (1 - endRatio);
+    const fillColor = api.visual('color');
+    const polygonStyle = fillColor ? { fill: fillColor } : {};
 
     return {
       type: 'polygon',
@@ -552,9 +554,9 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
           [centerX - endHalfWidth, endCoord[1]]
         ]
       },
-      style: api.style(),
+      style: polygonStyle,
       emphasis: {
-        style: api.styleEmphasis ? api.styleEmphasis() : api.style()
+        style: polygonStyle
       }
     };
   }
