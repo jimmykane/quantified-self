@@ -339,6 +339,59 @@ describe('EventCardChartPanelComponent', () => {
     expect(emitSpy).not.toHaveBeenCalled();
   });
 
+  it('disables hover tooltips during an active selection brush and restores them on brush end', async () => {
+    component.cursorBehaviour = ChartCursorBehaviours.SelectX;
+    await renderComponent();
+
+    const brushHandler = chart.on.mock.calls.find(([eventName]) => eventName === 'brush')?.[1] as ((params: any) => void);
+    const brushEndHandler = chart.on.mock.calls.find(([eventName]) => eventName === 'brushEnd')?.[1] as ((params: any) => void);
+    expect(brushHandler).toBeTypeOf('function');
+    expect(brushEndHandler).toBeTypeOf('function');
+
+    eChartsLoaderMock.setOption.mockClear();
+    chart.dispatchAction.mockClear();
+
+    brushHandler({
+      areas: [
+        {
+          coordRange: [20, 60],
+        }
+      ]
+    });
+
+    expect(chart.dispatchAction).toHaveBeenCalledWith({ type: 'hideTip' });
+    expect(eChartsLoaderMock.setOption).toHaveBeenCalledWith(
+      chart,
+      {
+        tooltip: {
+          show: false,
+          triggerOn: 'none',
+        },
+      },
+      expect.objectContaining({ lazyUpdate: true, silent: true })
+    );
+
+    eChartsLoaderMock.setOption.mockClear();
+    brushEndHandler({
+      areas: [
+        {
+          coordRange: [20, 60],
+        }
+      ]
+    });
+
+    expect(eChartsLoaderMock.setOption).toHaveBeenCalledWith(
+      chart,
+      {
+        tooltip: {
+          show: true,
+          triggerOn: 'mousemove|click',
+        },
+      },
+      expect.objectContaining({ lazyUpdate: true, silent: true })
+    );
+  });
+
   it('commits the selected range on brush end in selection mode', async () => {
     component.cursorBehaviour = ChartCursorBehaviours.SelectX;
     const previewEmitSpy = vi.spyOn(component.previewRangeChange, 'emit');
@@ -953,6 +1006,56 @@ describe('EventCardChartPanelComponent', () => {
       x: 52,
       y: 36,
       escapeConnect: true,
+    }));
+  });
+
+  it('suppresses lap tooltip while a selection brush is active', async () => {
+    component.cursorBehaviour = ChartCursorBehaviours.SelectX;
+    component.showZoomBar = false;
+    component.showLaps = true;
+    component.lapMarkers = [
+      {
+        xValue: 5,
+        label: 'Lap 1',
+        color: '#00ff00',
+        lapType: 'Autolap',
+        lapNumber: 1,
+        activityID: 'a1',
+        activityName: 'Garmin',
+        tooltipTitle: 'Lap 1',
+        tooltipDetails: [
+          { label: 'Duration', value: '00:05' }
+        ]
+      }
+    ];
+    await renderComponent();
+
+    const brushHandler = chart.on.mock.calls.find(([eventName]) => eventName === 'brush')?.[1] as ((params: any) => void);
+    const mousemoveHandler = chart.on.mock.calls.find(([eventName]) => eventName === 'mousemove')?.[1] as ((params: any) => void);
+    expect(brushHandler).toBeTypeOf('function');
+    expect(mousemoveHandler).toBeTypeOf('function');
+
+    chart.dispatchAction.mockClear();
+    brushHandler({
+      areas: [
+        {
+          coordRange: [20, 60],
+        }
+      ]
+    });
+    chart.dispatchAction.mockClear();
+
+    mousemoveHandler({
+      componentType: 'markLine',
+      data: component.lapMarkers[0],
+      event: {
+        offsetX: 40,
+        offsetY: 24,
+      }
+    });
+
+    expect(chart.dispatchAction).not.toHaveBeenCalledWith(expect.objectContaining({
+      type: 'showTip',
     }));
   });
 

@@ -141,6 +141,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private activeLapTooltipKey: string | null = null;
   private applyingSharedSelectionRange = false;
   private applyingSharedZoomRange = false;
+  private selectionBrushActive = false;
   private chartRefreshSequence: Promise<void> = Promise.resolve();
   private pendingAxisScaleFrame: number | null = null;
   private axisPointerCursorBoundChart: EChartsType | null = null;
@@ -387,6 +388,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   private buildOption(): ChartOption {
     const panel = this.panel as EventChartPanelModel;
+    const hoverTooltipEnabled = this.isHoverTooltipEnabled();
     const chartStyle = buildEventEChartsVisualTokens(this.darkTheme, this.isMobile);
     const textColor = chartStyle.textColor;
     const axisLabelColor = textColor;
@@ -461,8 +463,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       },
       tooltip: {
         trigger: 'axis',
-        show: this.tooltipVisibleForViewport,
-        triggerOn: 'mousemove|click',
+        show: this.tooltipVisibleForViewport && hoverTooltipEnabled,
+        triggerOn: hoverTooltipEnabled ? 'mousemove|click' : 'none',
         renderMode: 'html',
         appendTo: getOrCreateEChartsTooltipHost,
         confine: this.isMobile,
@@ -1089,6 +1091,11 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   private showLocalLapTooltip(params: ECElementEvent): void {
+    if (!this.isHoverTooltipEnabled()) {
+      this.hideLocalLapTooltip();
+      return;
+    }
+
     const chart = this.chartHost.getChart();
     const marker = params?.data as EventChartLapMarker | undefined;
     const offsetX = Number(params?.event?.offsetX);
@@ -1203,8 +1210,15 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     const selectModeActive = this.cursorBehaviour === ChartCursorBehaviours.SelectX;
+    if (!selectModeActive) {
+      this.updateSelectionBrushState(false);
+    }
 
     this.chartHost.setOption({
+      tooltip: {
+        show: this.tooltipVisibleForViewport && this.isHoverTooltipEnabled(),
+        triggerOn: this.isHoverTooltipEnabled() ? 'mousemove|click' : 'none',
+      },
       dataZoom: [
         {
           disabled: selectModeActive,
@@ -1234,6 +1248,11 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     chart.dispatchAction(takeGlobalCursorAction);
 
+    if (this.selectionBrushActive) {
+      this.hideLocalLapTooltip();
+      this.safeHideTip(chart);
+    }
+
     if (!selectModeActive) {
       this.applySharedSelectionRange();
     }
@@ -1248,11 +1267,13 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return;
     }
 
+    const nextRange = this.extractBrushRange(params);
+    this.updateSelectionBrushState(!!nextRange);
+
     if (!ENABLE_LIVE_SELECTION_PREVIEW) {
       return;
     }
 
-    const nextRange = this.extractBrushRange(params);
     const currentRange = normalizeEventRange(this.selectedRange);
     if (
       currentRange?.start === nextRange?.start
@@ -1274,6 +1295,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     const nextRange = this.extractBrushRange(params);
+    this.updateSelectionBrushState(false);
     if (this.cursorBehaviour === ChartCursorBehaviours.SelectX) {
       this.previewRangeChange.emit(nextRange);
       this.selectedRangeChange.emit(nextRange);
@@ -1556,6 +1578,38 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     return normalizeEventRange(this.selectedRange);
+  }
+
+  private isHoverTooltipEnabled(): boolean {
+    return !this.selectionBrushActive;
+  }
+
+  private updateSelectionBrushState(isActive: boolean): void {
+    if (this.selectionBrushActive === isActive) {
+      return;
+    }
+
+    this.selectionBrushActive = isActive;
+    const chart = this.chartHost.getChart();
+    if (!chart) {
+      return;
+    }
+
+    if (isActive) {
+      this.hideLocalLapTooltip();
+      this.safeHideTip(chart);
+    }
+
+    this.chartHost.setOption({
+      tooltip: {
+        show: this.tooltipVisibleForViewport && this.isHoverTooltipEnabled(),
+        triggerOn: this.isHoverTooltipEnabled() ? 'mousemove|click' : 'none',
+      },
+    }, {
+      notMerge: false,
+      lazyUpdate: true,
+      silent: true,
+    });
   }
 
   private emitVisibleZoomRange(): void {
