@@ -111,7 +111,7 @@
                 </span>
               }
               @if (!row['Merged Event'] && row[column]) {
-              <app-activity-type-icon [activityType]="row[column]" size="18px" vAlign="middle"></app-activity-type-icon>
+              <app-activity-type-icon [activityType]="row[column]" [event]="$any(row.Event)" size="18px" vAlign="middle"></app-activity-type-icon>
               }
               <span class="activity-type-text">{{ row[column] }}</span>
             </span>

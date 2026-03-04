@@ -146,7 +146,7 @@ export class AppComponent implements OnInit, OnDestroy {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(change => {
         if (change) {
-          this.triggerCircularReveal(change.x, change.y, change.theme);
+          this.triggerThemeReveal(change.x, change.y, change.theme);
         }
       });
   }
@@ -281,7 +281,7 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
-  private triggerCircularReveal(x: number, y: number, theme: AppThemes) {
+  private triggerThemeReveal(x: number, y: number, theme: AppThemes) {
     this.clearThemeOverlayTimeouts();
 
     this.themeOverlayClass = theme === AppThemes.Dark ? 'dark-theme' : '';

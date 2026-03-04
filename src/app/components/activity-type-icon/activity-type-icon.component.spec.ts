@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { describe, expect, it, vi } from 'vitest';
 import { ActivityTypeIconComponent } from './activity-type-icon.component';
 
 describe('ActivityTypeIconComponent', () => {
@@ -77,5 +78,37 @@ describe('ActivityTypeIconComponent', () => {
     const component = new ActivityTypeIconComponent();
     component.activityType = { type: 'Open Water Swimming' };
     expect(component.getIcon()).toBe('waves');
+  });
+
+  it('resolves icon color from activity context via AppEventColorService', () => {
+    const mockColorService = {
+      getActivityColor: vi.fn().mockReturnValue('#ff5500'),
+      getColorForActivityTypeByActivityTypeGroup: vi.fn().mockReturnValue('#00aa00'),
+    } as any;
+    const activities = [
+      { getID: () => 'a1' },
+      { getID: () => 'a2' },
+    ] as any[];
+    const component = new ActivityTypeIconComponent(mockColorService);
+    component.activityType = 'Run';
+    component.activities = activities as any;
+    component.activity = activities[1] as any;
+
+    expect(component.resolvedIconColor).toBe('#ff5500');
+    expect(mockColorService.getActivityColor).toHaveBeenCalledWith(activities, activities[1]);
+    expect(mockColorService.getColorForActivityTypeByActivityTypeGroup).not.toHaveBeenCalled();
+  });
+
+  it('falls back to activity type group color when no activity context exists', () => {
+    const mockColorService = {
+      getActivityColor: vi.fn(),
+      getColorForActivityTypeByActivityTypeGroup: vi.fn().mockReturnValue('#22aa44'),
+    } as any;
+    const component = new ActivityTypeIconComponent(mockColorService);
+    component.activityType = 'Run';
+
+    expect(component.resolvedIconColor).toBe('#22aa44');
+    expect(mockColorService.getColorForActivityTypeByActivityTypeGroup).toHaveBeenCalledWith(ActivityTypes.Running);
+    expect(mockColorService.getActivityColor).not.toHaveBeenCalled();
   });
 });
