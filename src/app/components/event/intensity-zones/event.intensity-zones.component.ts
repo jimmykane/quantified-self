@@ -209,7 +209,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
       },
       axisLabel: {
         interval: 0,
-        margin: isHorizontal ? 8 : 2,
+        margin: isHorizontal ? 8 : 0,
         color: textColor,
         fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
         formatter: (value: string) => {
@@ -287,14 +287,24 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     borderRadius: number;
     color: string;
     fontWeight: number;
+    fontSize: number;
     width: number;
     align: 'center';
     verticalAlign: 'middle';
     lineHeight: number;
     padding: number[];
   }> {
-    const badgeWidth = this.isMobile ? 28 : 56;
-    const badgeLineHeight = this.isMobile ? 16 : 18;
+    const isVertical = this.orientation === 'vertical';
+    const badgeWidth = isVertical
+      ? (this.isMobile ? 36 : 64)
+      : (this.isMobile ? 28 : 56);
+    const badgeFontSize = isVertical
+      ? (this.isMobile ? 11 : 13)
+      : (this.isMobile ? 10 : 11);
+    const badgeLineHeight = isVertical
+      ? (this.isMobile ? 18 : 22)
+      : (this.isMobile ? 16 : 18);
+    const badgePadding = isVertical ? [2, 6, 2, 6] : [1, 4, 1, 4];
 
     return zones.reduce((styles, zone, zoneIndex) => {
       styles[`zone_${zoneIndex}`] = {
@@ -302,11 +312,12 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
         borderRadius: 6,
         color: '#ffffff',
         fontWeight: 600,
+        fontSize: badgeFontSize,
         width: badgeWidth,
         align: 'center',
         verticalAlign: 'middle',
         lineHeight: badgeLineHeight,
-        padding: [1, 4, 1, 4],
+        padding: badgePadding,
       };
       return styles;
     }, {} as Record<string, {
@@ -314,6 +325,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
       borderRadius: number;
       color: string;
       fontWeight: number;
+      fontSize: number;
       width: number;
       align: 'center';
       verticalAlign: 'middle';

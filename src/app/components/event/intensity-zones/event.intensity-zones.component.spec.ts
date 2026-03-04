@@ -249,6 +249,20 @@ describe('EventIntensityZonesComponent', () => {
     expect(option.grid.bottom).toBe(0);
   });
 
+  it('should use larger zone badges with zero gap in vertical mode', async () => {
+    component.orientation = 'vertical';
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const option = getLastOption();
+
+    expect(option.xAxis.axisLabel.margin).toBe(0);
+    expect(option.xAxis.axisLabel.rich.zone_0.fontSize).toBe(13);
+    expect(option.xAxis.axisLabel.rich.zone_0.width).toBe(64);
+    expect(option.xAxis.axisLabel.rich.zone_0.padding).toEqual([2, 6, 2, 6]);
+  });
+
   it('should apply dark theme styles when darkTheme is enabled', async () => {
     component.darkTheme = true;
 

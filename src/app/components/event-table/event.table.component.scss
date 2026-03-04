@@ -270,12 +270,13 @@ mat-paginator {
   align-items: center;
   justify-content: center;
   position: relative;
-  width: 24px;
+  width: 30px;
   height: 24px;
+  padding-inline-end: 6px;
 }
 
 .buttons ::ng-deep .mat-badge-content {
-  inset-inline-end: -6px !important;
+  inset-inline-end: 0 !important;
 }
 
 /* Align activity type icon and text */

@@ -968,6 +968,10 @@ tr.mat-row:focus,
 
 .qs-app-badge {
   position: relative;
+  --mat-badge-background-color: var(--mat-app-primary);
+  --mat-badge-text-color: var(--mat-sys-on-primary);
+  --mat-badge-disabled-state-background-color: color-mix(in srgb, var(--mat-app-primary) 38%, transparent);
+  --mat-badge-disabled-state-text-color: var(--mat-sys-on-primary);
 }
 
 .qs-app-badge ::ng-deep .mat-badge-content {
