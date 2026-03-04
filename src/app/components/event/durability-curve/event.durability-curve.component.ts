@@ -33,6 +33,8 @@ import {
   ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS,
   EChartsHostController
 } from '../../../helpers/echarts-host-controller';
+import { getOrCreateEChartsTooltipHost } from '../../../helpers/echarts-tooltip-host.helper';
+import { getViewportConstrainedTooltipPosition } from '../../../helpers/echarts-tooltip-position.helper';
 import {
   buildEventEChartsVisualTokens,
   calculateEventEChartsAxisRange,
@@ -341,8 +343,10 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
             },
           }
           : undefined,
-        appendToBody: !this.isMobile,
+        renderMode: 'html',
+        appendTo: getOrCreateEChartsTooltipHost,
         confine: this.isMobile,
+        position: getViewportConstrainedTooltipPosition,
         extraCssText: tooltipExtraCssText,
         backgroundColor: chartStyle.tooltipBackgroundColor,
         borderColor: chartStyle.tooltipBorderColor,

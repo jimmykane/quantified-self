@@ -8,6 +8,8 @@ import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { LoggerService } from '../../../services/logger.service';
 import { PerformanceCurveDataService } from '../../../services/performance-curve-data.service';
+import { getOrCreateEChartsTooltipHost } from '../../../helpers/echarts-tooltip-host.helper';
+import { getViewportConstrainedTooltipPosition } from '../../../helpers/echarts-tooltip-position.helper';
 
 describe('EventCadencePowerComponent', () => {
   let fixture: ComponentFixture<EventCadencePowerComponent>;
@@ -127,6 +129,10 @@ describe('EventCadencePowerComponent', () => {
 
     expect(mockService.buildCadencePowerSeries).toHaveBeenCalled();
     expect(option.series).toHaveLength(1);
+    expect(option.tooltip.renderMode).toBe('html');
+    expect(option.tooltip.appendTo).toBe(getOrCreateEChartsTooltipHost);
+    expect(option.tooltip.confine).toBe(false);
+    expect(option.tooltip.position).toBe(getViewportConstrainedTooltipPosition);
     expect(option.series[0].type).toBe('scatter');
     expect(option.visualMap).toBeDefined();
   });

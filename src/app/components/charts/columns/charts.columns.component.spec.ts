@@ -162,6 +162,22 @@ describe('ChartsColumnsComponent', () => {
     expect(option.xAxis.type).toBe('value');
     expect(option.yAxis.type).toBe('category');
     expect(option.yAxis.inverse).toBe(true);
+    expect(option.yAxis.axisLine.show).toBe(false);
+  });
+
+  it('should snap value axis max to a logical grid boundary', async () => {
+    component.data = [
+      { type: 'Running', [ChartDataValueTypes.Total]: 30, count: 2 },
+      { type: 'Cycling', [ChartDataValueTypes.Total]: 100, count: 1 },
+    ];
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const option = getLastOption();
+    expect(option.yAxis.max).toBe(120);
+    expect(option.yAxis.interval).toBe(20);
+    expect(option.yAxis.max).not.toBe(110);
   });
 
   it('should render pictorial bars for pyramids in vertical mode', async () => {

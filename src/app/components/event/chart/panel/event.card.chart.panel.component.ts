@@ -21,6 +21,8 @@ import {
   ECHARTS_INTERACTIVE_CARTESIAN_MERGE_UPDATE_SETTINGS,
   EChartsHostController
 } from '../../../../helpers/echarts-host-controller';
+import { getOrCreateEChartsTooltipHost } from '../../../../helpers/echarts-tooltip-host.helper';
+import { getViewportConstrainedTooltipPosition } from '../../../../helpers/echarts-tooltip-position.helper';
 import {
   EventChartLapMarker,
   EventChartPanelModel,
@@ -432,6 +434,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         trigger: 'axis',
         show: this.tooltipVisibleForViewport,
         triggerOn: 'mousemove|click',
+        renderMode: 'html',
+        appendTo: getOrCreateEChartsTooltipHost,
+        confine: this.isMobile,
+        position: getViewportConstrainedTooltipPosition,
         axisPointer: {
           type: 'line',
           animation: false
@@ -1060,6 +1066,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       escapeConnect: true,
       tooltip: {
         trigger: 'item',
+        renderMode: 'html',
+        appendTo: getOrCreateEChartsTooltipHost,
+        confine: this.isMobile,
+        position: getViewportConstrainedTooltipPosition,
         backgroundColor: chartStyle.tooltipBackgroundColor,
         borderColor: chartStyle.tooltipBorderColor,
         borderWidth: 1,

@@ -27,6 +27,7 @@ import {
 import { getOrCreateEChartsTooltipHost } from '../../../helpers/echarts-tooltip-host.helper';
 import { getViewportConstrainedTooltipPosition } from '../../../helpers/echarts-tooltip-position.helper';
 import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
+import { buildDashboardValueAxisConfig } from '../../../helpers/dashboard-echarts-yaxis.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
 import {
   getDashboardAggregateData,
@@ -170,13 +171,7 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
     }
 
     const values = points.map(point => point.value);
-    const valueMin = Math.min(...values);
-    const valueMax = Math.max(...values);
-    const axisMin = valueMin < 0 ? valueMin * 1.1 : 0;
-    let axisMax = valueMax > 0 ? valueMax * 1.1 : 0;
-    if (axisMin === axisMax) {
-      axisMax = axisMin + 1;
-    }
+    const valueAxisConfig = buildDashboardValueAxisConfig(values);
 
     const categories = points.map(point => point.label);
     const lineData = points.map((point) => {
@@ -231,8 +226,9 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
 
     const valueAxis = {
       type: 'value',
-      min: axisMin,
-      max: axisMax,
+      min: valueAxisConfig.min,
+      max: valueAxisConfig.max,
+      interval: valueAxisConfig.interval,
       axisLine: {
         lineStyle: { color: axisColor }
       },

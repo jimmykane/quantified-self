@@ -5,6 +5,8 @@ import { ChartCursorBehaviours, DynamicDataLoader, LapTypes, XAxisTypes } from '
 import { EventCardChartPanelComponent } from './event.card.chart.panel.component';
 import { EChartsLoaderService } from '../../../../services/echarts-loader.service';
 import { LoggerService } from '../../../../services/logger.service';
+import { getOrCreateEChartsTooltipHost } from '../../../../helpers/echarts-tooltip-host.helper';
+import { getViewportConstrainedTooltipPosition } from '../../../../helpers/echarts-tooltip-position.helper';
 
 describe('EventCardChartPanelComponent', () => {
   let fixture: ComponentFixture<EventCardChartPanelComponent>;
@@ -154,6 +156,10 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.xAxis?.max).toBe(120);
     expect(option?.xAxis?.interval).toBe(15);
     expect(option?.yAxis?.interval).toBe(5);
+    expect(option?.tooltip?.renderMode).toBe('html');
+    expect(option?.tooltip?.appendTo).toBe(getOrCreateEChartsTooltipHost);
+    expect(option?.tooltip?.confine).toBe(false);
+    expect(option?.tooltip?.position).toBe(getViewportConstrainedTooltipPosition);
     expect(option?.tooltip?.triggerOn).toBe('mousemove|click');
     expect(option?.brush?.brushMode).toBe('single');
     expect(option?.dataZoom?.[0]?.zoomOnMouseWheel).toBe(false);
