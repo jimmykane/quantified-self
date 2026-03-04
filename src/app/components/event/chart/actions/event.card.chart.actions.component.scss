@@ -40,7 +40,7 @@ section.container {
 }
 
 .series-menu__item:hover {
-  background: rgba(127, 127, 127, 0.08);
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
 }
 
 .series-menu__swatch {

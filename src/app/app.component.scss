@@ -15,7 +15,7 @@ mat-sidenav {
   min-width: 300px;
   max-width: 360px;
   background: var(--mat-app-surface-container-lowest);
-  border-right: 1px solid rgba(0, 0, 0, 0.08);
+  border-right: 1px solid var(--mat-app-outline-variant);
 
   // Hide scrollbar completely - sidenav should fit content
   .mat-drawer-inner-container {
@@ -40,8 +40,8 @@ mat-sidenav {
   height: 64px;
   /* Standard toolbar height */
   padding: 0 16px;
-  background-color: #ffffff;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+  background-color: var(--mat-app-surface-container-lowest);
+  box-shadow: 0 2px 4px color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
   /* Subtle shadow for depth */
   position: fixed;
   top: 0;
@@ -71,7 +71,7 @@ mat-sidenav {
 
 .mat-tab-link mat-icon {
   margin: 0;
-  color: #5f6368;
+  color: var(--mat-sys-on-surface-variant);
   /* Standard icon color */
 }
 
@@ -210,22 +210,21 @@ mat-progress-bar {
 /* Dark Theme Overrides */
 :host-context(.dark-theme) {
   .custom-header {
-    background-color: #424242;
-    /* Standard Material Dark Surface */
-    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    background-color: var(--mat-app-surface-container-lowest);
+    border-bottom: 1px solid var(--mat-app-outline-variant);
+    box-shadow: 0 2px 4px color-mix(in srgb, black 20%, transparent);
   }
 
   .mat-tab-link mat-icon {
-    color: rgba(255, 255, 255, 0.7);
+    color: color-mix(in srgb, var(--mat-sys-on-surface) 70%, transparent);
   }
 
   .mat-tab-link:hover mat-icon {
-    color: #ffffff;
+    color: var(--mat-sys-on-surface);
   }
 
   mat-sidenav {
-    border-right: 1px solid rgba(255, 255, 255, 0.12);
+    border-right: 1px solid var(--mat-app-outline-variant);
   }
 }
 

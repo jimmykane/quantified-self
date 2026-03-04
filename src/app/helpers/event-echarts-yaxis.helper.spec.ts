@@ -1,4 +1,4 @@
-import { DataCadence, DataEffortPace, DataPace, DataPower } from '@sports-alliance/sports-lib';
+import { DataCadence, DataEffortPace, DataHeartRate, DataPace, DataPower } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import {
   buildEventPanelYAxisConfig,
@@ -126,6 +126,19 @@ describe('event-echarts-yaxis.helper', () => {
     expect(config.interval).toBe(15);
     expect(config.max).toBe(120);
     expect(config.max).not.toBe(140);
+  });
+
+  it('uses coarser logical steps for heart-rate axes', () => {
+    const config = buildEventPanelYAxisConfig({
+      panel: buildPanel(DataHeartRate.type, [98, 111, 126, 143, 151, 164]),
+      visibleRange: null,
+      extraMaxForPower: 0,
+      extraMaxForPace: -0.25,
+    });
+
+    expect(config.inverse).toBe(false);
+    expect(config.interval).toBeGreaterThanOrEqual(15);
+    expect(config.max).toBeGreaterThanOrEqual(170);
   });
 
   it('accepts floating-point divisible ranges when selecting a preferred interval', () => {

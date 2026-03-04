@@ -38,7 +38,8 @@
     @if (authState !== null) {
     <button mat-icon-button class="right" (click)="openWhatsNew()" matTooltip="What's New"
       aria-label="View recent updates">
-      <mat-icon [matBadge]="unreadWhatsNewCount" [matBadgeHidden]="unreadWhatsNewCount === 0" matBadgeColor="primary"
+      <mat-icon class="qs-app-badge qs-app-badge--small"
+        [matBadge]="unreadWhatsNewCount" [matBadgeHidden]="unreadWhatsNewCount === 0"
         aria-hidden="false">campaign</mat-icon>
     </button>
     }

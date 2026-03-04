@@ -67,9 +67,9 @@ export function buildEventPanelYAxisConfig(input: BuildEventPanelYAxisConfigInpu
   const hasHeartRateStream = streamTypes.some((streamType) => HEART_RATE_STREAM_TYPES.has(streamType));
   if (hasHeartRateStream) {
     return buildStepBasedAxis(values, {
-      baseStep: 5,
+      baseStep: 10,
       candidateIntervals: [10, 15, 20, 25],
-      targetTickCount: 6,
+      targetTickCount: 5,
       minFloor: 0,
     });
   }

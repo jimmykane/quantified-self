@@ -13,8 +13,10 @@
 /* User Profile Header container */
 .user-profile-header {
     border-radius: 16px !important;
-    background: linear-gradient(135deg, rgba(63, 81, 181, 0.08), rgba(63, 81, 181, 0.03)) !important;
-    border: 1px solid rgba(63, 81, 181, 0.1) !important;
+    background: linear-gradient(135deg,
+            color-mix(in srgb, var(--mat-app-primary) 8%, transparent),
+            color-mix(in srgb, var(--mat-app-primary) 3%, transparent)) !important;
+    border: 1px solid color-mix(in srgb, var(--mat-app-primary) 10%, transparent) !important;
     transition: transform 0.2s ease, box-shadow 0.2s ease !important;
     cursor: default;
 
@@ -74,8 +76,10 @@
 }
 
 :host-context(.dark-theme) .user-profile-header {
-    background: linear-gradient(135deg, rgba(144, 202, 249, 0.1), rgba(144, 202, 249, 0.03)) !important;
-    border-color: rgba(144, 202, 249, 0.15) !important;
+    background: linear-gradient(135deg,
+            color-mix(in srgb, var(--mat-app-primary) 10%, transparent),
+            color-mix(in srgb, var(--mat-app-primary) 3%, transparent)) !important;
+    border-color: color-mix(in srgb, var(--mat-app-primary) 15%, transparent) !important;
 
     &:hover {
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4) !important;
@@ -199,16 +203,12 @@
 }
 
 .danger-card {
-    // border: 1px solid #ffccd2; /* Red-ish border */
-    border: 1px solid rgba(255, 0, 0, 0.2);
-    // background-color: #fffafb; /* REMOVED */
-    background-color: rgba(255, 0, 0, 0.02);
-    /* Slight red tint safe for both modes */
+    border: 1px solid color-mix(in srgb, var(--mat-sys-error) 20%, transparent);
+    background-color: color-mix(in srgb, var(--mat-sys-error) 2%, transparent);
 }
 
 .danger-title {
-    color: #d32f2f;
-    /* Error red usually fine, or var(--mat-sys-error) */
+    color: var(--mat-sys-error);
     display: flex;
     align-items: center;
     gap: 8px;
@@ -226,13 +226,13 @@
         width: 100%;
         height: auto;
         border-right: none;
-        border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+        border-bottom: 1px solid var(--mat-app-outline-variant);
         position: relative;
         padding: 12px 0;
     }
 
     :host-context(.dark-theme) .settings-sidebar {
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        border-bottom: 1px solid var(--mat-app-outline-variant);
     }
 
     .settings-nav {
@@ -259,16 +259,14 @@
     left: 0;
     right: 0;
     padding: 16px;
-    background: var(--mat-sys-surface, white);
-    /* Use surface color */
-    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1);
+    background: var(--mat-app-surface-container-lowest);
+    box-shadow: 0 -4px 20px color-mix(in srgb, var(--mat-sys-on-surface) 10%, transparent);
     z-index: 100;
 }
 
 :host-context(.dark-theme) .mobile-save-bar {
-    background: #1e1e1e; // fallback
-    background: var(--mat-app-surface, #1e1e1e);
-    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+    background: var(--mat-app-surface-container-lowest);
+    box-shadow: 0 -4px 20px color-mix(in srgb, black 50%, transparent);
 }
 
 .mobile-save-bar button {
