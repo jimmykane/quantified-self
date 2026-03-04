@@ -291,6 +291,15 @@ describe('EventTableComponent', () => {
         expect(component.data.data.length).toBe(3);
     });
 
+    it('should support comma-separated search terms', () => {
+        component.ngAfterViewInit();
+        const row = component.data.data[0] as any;
+
+        expect(component.data.filterPredicate(row, 'test run,missing')).toBe(true);
+        expect(component.data.filterPredicate(row, 'missing,test description')).toBe(true);
+        expect(component.data.filterPredicate(row, 'missing,unknown')).toBe(false);
+    });
+
     it('should patch-save event description via updateEventProperties', async () => {
         const event = new MockEvent('event-description') as any;
 

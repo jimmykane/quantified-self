@@ -1,7 +1,7 @@
 <!-- Table Section -->
 <div class="glass-card table-container">
   <div class="table-toolbar">
-    <mat-form-field appearance="outline" class="qs-search-field">
+    <mat-form-field appearance="outline" class="qs-search-field" subscriptSizing="dynamic">
       <mat-label>Search events</mat-label>
       <input matInput [value]="searchTerm" (input)="onSearchInput($event)" placeholder="Date, name, type, etc..."
         autocomplete="off">

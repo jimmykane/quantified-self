@@ -85,6 +85,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   private breakpointSubscription!: Subscription;
   private isHandset = false;
   private readonly defaultSelectedColumns = AppUserUtilities.getDefaultSelectedTableColumns();
+  private readonly nonSearchableRowKeys = new Set(['Color', 'Gradient', 'Event']);
 
 
   private searchSubject: Subject<string> = new Subject();
@@ -160,6 +161,23 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     this.data.sort = this.sort;
     this.data.sortingDataAccessor = (statRowElement: StatRowElement, header) => {
       return (statRowElement as any)[`sort.${header}`];
+    };
+    this.data.filterPredicate = (row: any, filter: string) => {
+      const terms = filter
+        .split(',')
+        .map(term => term.trim())
+        .filter(term => term.length > 0);
+
+      if (terms.length === 0) {
+        return true;
+      }
+
+      const rowText = Object.entries(row)
+        .filter(([key, value]) => !key.startsWith('sort.') && !this.nonSearchableRowKeys.has(key) && value != null && typeof value !== 'object')
+        .map(([, value]) => String(value).toLowerCase())
+        .join(' ');
+
+      return terms.some(term => rowText.includes(term));
     };
     this.sortSubscription = this.sort.sortChange.subscribe(async (sort) => {
       const tableSettings = this.user?.settings?.dashboardSettings?.tableSettings;
@@ -594,6 +612,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   onSearchInput(event: Event) {
     const filterValue = (event.target as HTMLInputElement).value;
+    this.searchTerm = filterValue;
     this.searchSubject.next(filterValue);
   }
 
