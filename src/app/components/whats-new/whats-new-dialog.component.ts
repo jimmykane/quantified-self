@@ -30,24 +30,24 @@ const WHATS_NEW_DIALOG_MOBILE_QUERY = AppBreakpoints.XSmall;
       <mat-icon class="header-icon">campaign</mat-icon>
       <span class="header-text">What's New</span>
     </div>
-    <mat-divider></mat-divider>
     <mat-dialog-content class="dialog-content qs-scrollbar">
-      @if (isUpdateAvailable()) {
-        <div class="update-banner">
-            <mat-icon>system_update</mat-icon>
-            <div class="message">
-                <strong>New version available</strong>
-                <span>Reload to apply updates</span>
-            </div>
-            <button mat-flat-button class="qs-mat-primary" (click)="reload()">Reload</button>
-        </div>
-      }
+      <div class="dialog-body">
+        @if (isUpdateAvailable()) {
+          <div class="update-banner">
+              <mat-icon>system_update</mat-icon>
+              <div class="message">
+                  <strong>New version available</strong>
+                  <span>Reload to apply updates</span>
+              </div>
+              <button mat-flat-button class="qs-mat-primary" (click)="reload()">Reload</button>
+          </div>
+        }
 
-      <div class="feed-wrapper">
-        <app-whats-new-feed [limit]="1" [displayMode]="'full'"></app-whats-new-feed>
+        <div class="feed-wrapper">
+          <app-whats-new-feed [limit]="1" [displayMode]="'full'"></app-whats-new-feed>
+        </div>
       </div>
     </mat-dialog-content>
-    <mat-divider></mat-divider>
     <mat-dialog-actions align="end">
       <button mat-button *ngIf="!isReleasesPage()" (click)="navigateToReleases()">View All Updates</button>
       <button mat-raised-button class="qs-mat-primary" mat-dialog-close>Got it</button>
@@ -59,7 +59,6 @@ const WHATS_NEW_DIALOG_MOBILE_QUERY = AppBreakpoints.XSmall;
       align-items: center;
       gap: 12px;
       padding: 16px 24px !important;
-      background: var(--mat-sys-surface-container-highest);
       
       .header-icon {
         color: var(--mat-sys-primary);
@@ -76,19 +75,23 @@ const WHATS_NEW_DIALOG_MOBILE_QUERY = AppBreakpoints.XSmall;
     }
 
     .dialog-content {
-      min-width: 500px;
-      max-width: 800px;
-      padding: 20px 24px !important;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      background: var(--mat-sys-surface);
-      
-      /* Avoid scrollbars clipping hover effects */
+      width: 100%;
+      min-width: 0;
+      max-width: none;
+      padding: 0 !important;
       overflow-x: hidden !important;
     }
 
+    .dialog-body {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      width: 100%;
+      padding: 20px 24px !important;
+    }
+
     .feed-wrapper {
+      width: 100%;
       padding: 4px; /* Space for hover transform */
     }
 
@@ -127,6 +130,9 @@ const WHATS_NEW_DIALOG_MOBILE_QUERY = AppBreakpoints.XSmall;
       .dialog-content {
         min-width: unset;
         width: 100%;
+      }
+
+      .dialog-body {
         padding: 16px !important;
       }
     }

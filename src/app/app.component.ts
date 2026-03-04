@@ -330,7 +330,8 @@ export class AppComponent implements OnInit, OnDestroy {
     this.dialog.open(WhatsNewDialogComponent, {
       width: '860px',
       maxWidth: '96vw',
-      autoFocus: false
+      autoFocus: false,
+      panelClass: ['qs-dialog-container', 'qs-whats-new-dialog']
     });
   }
 

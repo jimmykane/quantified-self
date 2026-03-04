@@ -178,9 +178,12 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     });
 
     const isHorizontal = this.orientation === 'horizontal';
+    const verticalValueAxisMax = isHorizontal ? undefined : this.getVerticalValueAxisMax(data);
+    const verticalEdgeBleed = isHorizontal ? 0 : -3;
 
     const valueAxisConfig = {
       type: 'value',
+      max: verticalValueAxisMax,
       axisLabel: { show: false },
       axisTick: { show: false },
       splitLine: { show: false },
@@ -230,10 +233,10 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
         fontFamily: ECHARTS_GLOBAL_FONT_FAMILY
       },
       grid: {
-        left: 0,
-        right: isHorizontal ? rightInset : 0,
+        left: verticalEdgeBleed,
+        right: isHorizontal ? rightInset : verticalEdgeBleed,
         top: 0,
-        bottom: isHorizontal ? 0 : '0.25em',
+        bottom: 0,
         containLabel: true
       },
       legend: {
@@ -250,6 +253,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
       tooltip: {
         trigger: 'item',
         triggerOn: this.isMobile ? 'click' : 'mousemove|click',
+        renderMode: 'html',
         appendToBody: !this.isMobile,
         confine: this.isMobile,
         extraCssText: tooltipExtraCssText,
@@ -379,6 +383,21 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
       return 0;
     }
     return Math.round(Math.max(0, value));
+  }
+
+  private getVerticalValueAxisMax(data: IntensityZonesEChartsData): number | undefined {
+    const maxValue = data.series.reduce((currentMax, seriesEntry) => {
+      const seriesMax = seriesEntry.values.reduce((entryMax, value) => {
+        return Number.isFinite(value) ? Math.max(entryMax, value) : entryMax;
+      }, 0);
+      return Math.max(currentMax, seriesMax);
+    }, 0);
+
+    if (maxValue <= 0) {
+      return undefined;
+    }
+
+    return maxValue * 1.08;
   }
 
   private toTransparentColor(hex: string, alpha: number): string {

@@ -7,8 +7,8 @@ import { WhatsNewFeedComponent } from './whats-new-feed.component';
     selector: 'app-whats-new-page',
     standalone: true,
     imports: [CommonModule, WhatsNewFeedComponent],
-    template: `
-    <div class="page-container">
+  template: `
+    <div class="page-container qs-whats-new-page">
       <h1 class="mat-headline-large page-title">Release Notes</h1>
       <app-whats-new-feed></app-whats-new-feed>
     </div>

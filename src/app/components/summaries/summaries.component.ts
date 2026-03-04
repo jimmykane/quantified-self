@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
+  DoCheck,
   HostListener,
   Input,
   OnChanges,
@@ -49,7 +50,7 @@ import { MapStyleName } from '../../services/map/map-style.types';
   standalone: false
 })
 
-export class SummariesComponent extends LoadingAbstractDirective implements OnInit, OnDestroy, OnChanges {
+export class SummariesComponent extends LoadingAbstractDirective implements OnInit, OnDestroy, OnChanges, DoCheck {
   @Input() events: EventInterface[];
   @Input() user: User;
   @Input() showActions: boolean;
@@ -68,6 +69,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private logger: LoggerService;
 
   private getChartDataCache: { string: SummariesChartDataInterface[] }[] = []
+  private dashboardTileSettingsSnapshot: TileSettingsInterface[] = [];
 
   constructor(private router: Router,
     private authService: AppAuthService,
@@ -99,6 +101,17 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.getChartDataCache = [];
       return this.unsubscribeAndCreateCharts();
     }
+  }
+
+  ngDoCheck(): void {
+    const nextTileSettingsSnapshot = this.getDashboardTileSettingsSnapshot();
+    if (equal(this.dashboardTileSettingsSnapshot, nextTileSettingsSnapshot)) {
+      return;
+    }
+
+    this.dashboardTileSettingsSnapshot = nextTileSettingsSnapshot;
+    this.getChartDataCache = [];
+    void this.unsubscribeAndCreateCharts();
   }
 
   ngOnDestroy(): void {
@@ -165,6 +178,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
 
     const newTiles = this.getChartsAndData(this.user.settings.dashboardSettings.tiles, this.events);
+    this.dashboardTileSettingsSnapshot = this.getDashboardTileSettingsSnapshot();
     this.logger.log('[perf] summaries_build_tiles', {
       durationMs: Number((performance.now() - buildStart).toFixed(2)),
       inputEvents: this.events?.length || 0,
@@ -258,6 +272,24 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       }
       return chartsAndData;
     }, [])
+  }
+
+  private getDashboardTileSettingsSnapshot(): TileSettingsInterface[] {
+    return (this.user?.settings?.dashboardSettings?.tiles ?? []).map((tile: TileSettingsInterface) => {
+      const snapshot: TileSettingsInterface = {
+        ...tile,
+        size: tile.size ? { ...tile.size } : tile.size
+      };
+
+      if (tile.type !== TileTypes.Chart) {
+        return snapshot;
+      }
+
+      return {
+        ...snapshot,
+        dataTimeInterval: (tile as TileChartSettingsInterface).dataTimeInterval || TimeIntervals.Auto
+      } as TileChartSettingsInterface;
+    });
   }
 
   private unsubscribeFromAll() {

@@ -22,6 +22,46 @@
     }
 }
 
+:host-context(.qs-whats-new-dialog) .changelog-panel {
+    background: transparent !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    margin-bottom: 0;
+}
+
+:host-context(.qs-whats-new-dialog) .changelog-panel.mat-expanded {
+    background: transparent !important;
+    border-color: transparent !important;
+}
+
+:host-context(.qs-whats-new-dialog) .expandable-image {
+    border: 0;
+}
+
+:host-context(.qs-whats-new-dialog) ::ng-deep .mat-expansion-panel-spacing {
+    margin: 0 !important;
+}
+
+:host-context(.qs-whats-new-page) .changelog-panel {
+    background: transparent !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    margin-bottom: 0;
+}
+
+:host-context(.qs-whats-new-page) .changelog-panel.mat-expanded {
+    background: transparent !important;
+    border-color: transparent !important;
+}
+
+:host-context(.qs-whats-new-page) .expandable-image {
+    border: 0;
+}
+
+:host-context(.qs-whats-new-page) ::ng-deep .mat-expansion-panel-spacing {
+    margin: 0 !important;
+}
+
 .mat-expansion-panel-header {
     padding: 0 24px;
     width: 100%;

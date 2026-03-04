@@ -179,6 +179,9 @@ describe('EventIntensityZonesComponent', () => {
     expect(option.grid.right).toBe(0);
     expect(option.grid.top).toBe(0);
     expect(option.grid.bottom).toBe(0);
+    expect(option.tooltip.renderMode).toBe('html');
+    expect(option.tooltip.appendToBody).toBe(true);
+    expect(option.tooltip.confine).toBe(false);
     expect(option.series[0].clip).toBe(false);
     expect(option.series[0].label.position).toBe('right');
     expect(option.series[0].label.align).toBe('left');
@@ -247,6 +250,9 @@ describe('EventIntensityZonesComponent', () => {
     const option = getLastOption();
     expect(option.grid.right).toBe(0);
     expect(option.grid.bottom).toBe(0);
+    expect(option.tooltip.renderMode).toBe('html');
+    expect(option.tooltip.appendToBody).toBe(false);
+    expect(option.tooltip.confine).toBe(true);
   });
 
   it('should use larger zone badges with zero gap in vertical mode', async () => {
@@ -257,10 +263,27 @@ describe('EventIntensityZonesComponent', () => {
 
     const option = getLastOption();
 
+    expect(option.grid.left).toBe(-3);
+    expect(option.grid.right).toBe(-3);
+    expect(option.grid.bottom).toBe(0);
     expect(option.xAxis.axisLabel.margin).toBe(0);
     expect(option.xAxis.axisLabel.rich.zone_0.fontSize).toBe(13);
     expect(option.xAxis.axisLabel.rich.zone_0.width).toBe(64);
     expect(option.xAxis.axisLabel.rich.zone_0.padding).toEqual([2, 6, 2, 6]);
+    expect(option.yAxis.max).toBe(216);
+  });
+
+  it('should keep horizontal value axis auto-sized', async () => {
+    component.orientation = 'horizontal';
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const option = getLastOption();
+
+    expect(option.grid.left).toBe(0);
+    expect(option.grid.right).toBe(0);
+    expect(option.xAxis.max).toBeUndefined();
   });
 
   it('should apply dark theme styles when darkTheme is enabled', async () => {

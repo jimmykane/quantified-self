@@ -33,7 +33,7 @@ $app-light-theme: mat.define-theme((
   color: (
     theme-type: light,
     primary: mat.$azure-palette,
-    tertiary: mat.$magenta-palette,
+    tertiary: mat.$yellow-palette,
   ),
   typography: (
     plain-family: "'Noto Sans', sans-serif",
@@ -51,7 +51,7 @@ $app-dark-theme: mat.define-theme((
   color: (
     theme-type: dark,
     primary: mat.$azure-palette,
-    tertiary: mat.$magenta-palette,
+    tertiary: mat.$cyan-palette,
   ),
   typography: (
     plain-family: "'Noto Sans', sans-serif",
@@ -870,6 +870,14 @@ mat-table {
   }
 }
 
+.qs-whats-new-dialog {
+  .mat-mdc-dialog-content {
+    padding: 0 !important;
+    overflow: auto !important;
+    scrollbar-gutter: stable;
+  }
+}
+
 /* ==========================================================================
    Global Table Styles
    Standardized Material table overrides for glassmorphism.
@@ -982,21 +990,23 @@ tr.mat-row:focus,
 }
 
 .qs-app-badge--small ::ng-deep .mat-badge-content {
-  min-width: 24px !important;
+  min-width: 20px !important;
   width: auto !important;
-  height: 18px !important;
-  line-height: 18px !important;
-  padding: 0 5px !important;
-  font-size: 10px !important;
+  max-width: max-content !important;
+  height: 16px !important;
+  line-height: 16px !important;
+  padding: 0 4px !important;
+  font-size: 9px !important;
 }
 
 .qs-app-badge--large ::ng-deep .mat-badge-content {
-  min-width: 24px !important;
+  min-width: 20px !important;
   width: auto !important;
-  height: 18px !important;
-  line-height: 18px !important;
-  padding: 0 5px !important;
-  font-size: 10px !important;
+  max-width: max-content !important;
+  height: 16px !important;
+  line-height: 16px !important;
+  padding: 0 4px !important;
+  font-size: 9px !important;
 }
 
 .qs-color-primary {
