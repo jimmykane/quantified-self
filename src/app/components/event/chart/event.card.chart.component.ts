@@ -88,6 +88,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   public showDateOnTimeAxis = false;
   public zoomSyncGroupId: string | null = null;
   public zoomRange: EventChartRange | null = null;
+  public previewSelectedRange: EventChartRange | null = null;
   public selectedRange: EventChartRange | null = null;
 
   public get showAllData() { return this.userSettingsQuery.chartSettings()?.showAllData ?? false; }
@@ -147,6 +148,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
 
     this.cursorBehaviourOverride = value;
     if (value === ChartCursorBehaviours.ZoomX) {
+      this.previewSelectedRange = null;
       this.selectedRange = null;
     }
     this.cdr.markForCheck();
@@ -361,6 +363,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   public onSelectedRangeChange(range: EventChartRange | null): void {
     const domain = this.xDomain;
     if (!domain) {
+      this.previewSelectedRange = null;
       this.selectedRange = null;
       this.cdr.markForCheck();
       return;
@@ -375,7 +378,29 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       return;
     }
 
+    this.previewSelectedRange = nextRange;
     this.selectedRange = nextRange;
+    this.cdr.markForCheck();
+  }
+
+  public onPreviewSelectedRangeChange(range: EventChartRange | null): void {
+    const domain = this.xDomain;
+    if (!domain) {
+      this.previewSelectedRange = null;
+      this.cdr.markForCheck();
+      return;
+    }
+
+    const nextRange = range ? clampEventRange(range, domain.start, domain.end) : null;
+    const currentRange = this.previewSelectedRange;
+    if (
+      currentRange?.start === nextRange?.start
+      && currentRange?.end === nextRange?.end
+    ) {
+      return;
+    }
+
+    this.previewSelectedRange = nextRange;
     this.cdr.markForCheck();
   }
 

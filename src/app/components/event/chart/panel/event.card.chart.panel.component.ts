@@ -82,6 +82,7 @@ const LAP_TOOLTIP_OFFSET_Y = 12;
 const ZOOM_BAR_SLIDER_HEIGHT = 24;
 const ZOOM_BAR_HANDLE_SIZE = 24;
 const SELECTION_BRUSH_SOURCE = 'event-chart-selection-sync';
+const PREVIEW_RANGE_STATS_THROTTLE_MS = 66;
 
 @Component({
   selector: 'app-event-card-chart-panel',
@@ -99,6 +100,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @Input() zoomGroupId: string | null = null;
   @Input() xDomain: EventChartRange | null = null;
   @Input() cursorBehaviour: ChartCursorBehaviours = ChartCursorBehaviours.ZoomX;
+  @Input() previewRange: EventChartRange | null = null;
   @Input() selectedRange: EventChartRange | null = null;
   @Input() showDateOnTimeAxis = true;
   @Input() showLaps = true;
@@ -116,6 +118,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @Input() sharedZoomRange: EventChartRange | null = null;
 
   @Output() cursorPositionChange = new EventEmitter<number>();
+  @Output() previewRangeChange = new EventEmitter<EventChartRange | null>();
   @Output() selectedRangeChange = new EventEmitter<EventChartRange | null>();
   @Output() zoomRangeChange = new EventEmitter<EventChartRange | null>();
 
@@ -140,6 +143,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private applyingSharedZoomRange = false;
   private chartRefreshSequence: Promise<void> = Promise.resolve();
   private pendingAxisScaleFrame: number | null = null;
+  private previewStatsTimer: ReturnType<typeof setTimeout> | null = null;
   private axisPointerCursorBoundChart: EChartsType | null = null;
   private readonly axisPointerCursorHandler = (params: AxisPointerEvent) => {
     const value = Number(params?.axesInfo?.[0]?.value);
@@ -168,11 +172,11 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   public get hasSelection(): boolean {
-    return !!normalizeEventRange(this.selectedRange);
+    return !!this.getActiveSelectionRange();
   }
 
   public get selectedRangeStartLabel(): string {
-    const normalizedRange = normalizeEventRange(this.selectedRange);
+    const normalizedRange = this.getActiveSelectionRange();
     if (!normalizedRange) {
       return '';
     }
@@ -185,7 +189,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   public get selectedRangeEndLabel(): string {
-    const normalizedRange = normalizeEventRange(this.selectedRange);
+    const normalizedRange = this.getActiveSelectionRange();
     if (!normalizedRange) {
       return '';
     }
@@ -198,7 +202,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   public get selectedRangeSpanLabel(): string {
-    const normalizedRange = normalizeEventRange(this.selectedRange);
+    const normalizedRange = this.getActiveSelectionRange();
     if (!normalizedRange) {
       return '';
     }
@@ -285,11 +289,12 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     if (
-      (changes.selectedRange && !changes.selectedRange.firstChange)
+      (changes.previewRange && !changes.previewRange.firstChange)
+      || (changes.selectedRange && !changes.selectedRange.firstChange)
       || (changes.xDomain && !changes.xDomain.firstChange)
     ) {
       this.applySharedSelectionRange();
-      this.updateRangeStats();
+      this.syncRangeStatsWithSelection();
       this.cdr.markForCheck();
     }
 
@@ -300,6 +305,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   ngOnDestroy(): void {
     this.cancelPendingFrame('axisScale');
+    this.clearPreviewStatsTimer();
     this.teardownViewportObserver();
     this.unbindWheelPassThrough();
     this.unbindAxisPointerCursorEmit();
@@ -371,7 +377,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.applyCanonicalAxisScales();
     this.syncInteractionMode();
     this.applySharedSelectionRange();
-    this.updateRangeStats();
+    this.syncRangeStatsWithSelection();
     this.syncNativeZoomGroup();
     this.chartHost.scheduleResize();
     this.cdr.markForCheck();
@@ -1250,11 +1256,11 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return;
     }
 
-    this.selectedRangeChange.emit(nextRange);
+    this.previewRangeChange.emit(nextRange);
   }
 
   private handleBrushEnd(params: BrushEventParams): void {
-    if (this.showZoomBar || this.cursorBehaviour !== ChartCursorBehaviours.ZoomX) {
+    if (this.showZoomBar) {
       return;
     }
 
@@ -1263,6 +1269,16 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     const nextRange = this.extractBrushRange(params);
+    if (this.cursorBehaviour === ChartCursorBehaviours.SelectX) {
+      this.previewRangeChange.emit(nextRange);
+      this.selectedRangeChange.emit(nextRange);
+      return;
+    }
+
+    if (this.cursorBehaviour !== ChartCursorBehaviours.ZoomX) {
+      return;
+    }
+
     this.clearSelectionOverlay();
     if (!nextRange) {
       return;
@@ -1273,6 +1289,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return;
     }
 
+    this.previewRangeChange.emit(nextRange);
     this.zoomRangeChange.emit(this.normalizeZoomRange(nextRange));
     const dataZoomAction: ChartAction = {
       type: 'dataZoom',
@@ -1291,12 +1308,13 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     const chart = this.chartHost.getChart();
     const domain = this.getActiveDomain();
+    const activeRange = this.getActiveSelectionRange();
     if (!chart) {
       return;
     }
 
-    const nextRange = this.selectedRange
-      ? clampEventRange(this.selectedRange, domain.start, domain.end)
+    const nextRange = activeRange
+      ? clampEventRange(activeRange, domain.start, domain.end)
       : null;
 
     this.applyingSharedSelectionRange = true;
@@ -1313,7 +1331,38 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
   }
 
-  private updateRangeStats(): void {
+  private syncRangeStatsWithSelection(): void {
+    if (this.previewRange) {
+      this.schedulePreviewStatsUpdate();
+      return;
+    }
+
+    this.clearPreviewStatsTimer();
+    this.updateRangeStats(this.selectedRange);
+  }
+
+  private schedulePreviewStatsUpdate(): void {
+    if (this.previewStatsTimer !== null) {
+      return;
+    }
+
+    this.previewStatsTimer = setTimeout(() => {
+      this.previewStatsTimer = null;
+      this.updateRangeStats(this.previewRange);
+      this.cdr.markForCheck();
+    }, PREVIEW_RANGE_STATS_THROTTLE_MS);
+  }
+
+  private clearPreviewStatsTimer(): void {
+    if (this.previewStatsTimer === null) {
+      return;
+    }
+
+    clearTimeout(this.previewStatsTimer);
+    this.previewStatsTimer = null;
+  }
+
+  private updateRangeStats(range: EventChartRange | null): void {
     if (!this.panel || !this.panel.series.length) {
       this.rangeStats = [];
       return;
@@ -1321,7 +1370,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     this.rangeStats = computeEventPanelRangeStats({
       panel: this.panel,
-      range: this.selectedRange,
+      range,
       xAxisType: this.xAxisType,
       gainAndLossThreshold: this.gainAndLossThreshold,
     });
@@ -1525,6 +1574,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     return domain;
+  }
+
+  private getActiveSelectionRange(): EventChartRange | null {
+    return normalizeEventRange(this.previewRange ?? this.selectedRange);
   }
 
   private emitVisibleZoomRange(): void {

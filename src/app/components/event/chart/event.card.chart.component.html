@@ -27,7 +27,7 @@
         @for (panel of chartPanels; track panel.dataType) {
         <app-event-card-chart-panel [panel]="panel" [xAxisType]="renderedXAxisType" [darkTheme]="darkTheme"
           [useAnimations]="useAnimations" [showZoomBar]="false" [zoomGroupId]="zoomSyncGroupId" [xDomain]="xDomain"
-          [cursorBehaviour]="cursorBehaviour" [selectedRange]="selectedRange"
+          [cursorBehaviour]="cursorBehaviour" [previewRange]="previewSelectedRange" [selectedRange]="selectedRange"
           [showDateOnTimeAxis]="showDateOnTimeAxis"
           [showLaps]="showLaps" [lapTypes]="lapTypes" [lapMarkers]="lapMarkers"
           [gainAndLossThreshold]="gainAndLossThreshold"
@@ -38,6 +38,7 @@
           [sharedZoomRange]="zoomRange"
           [showActivityNamesInTooltip]="showActivityNamesInTooltip"
           (zoomRangeChange)="onZoomRangeChange($event)"
+          (previewRangeChange)="onPreviewSelectedRangeChange($event)"
           (selectedRangeChange)="onSelectedRangeChange($event)"
           (cursorPositionChange)="onPanelCursorPositionChange($event)">
         </app-event-card-chart-panel>

@@ -320,9 +320,9 @@ describe('EventCardChartPanelComponent', () => {
     expect(emitSpy).toHaveBeenCalledWith({ start: 15, end: 75 });
   });
 
-  it('emits normalized selected range from brush events in selection mode', async () => {
+  it('emits normalized preview range from brush events in selection mode', async () => {
     component.cursorBehaviour = ChartCursorBehaviours.SelectX;
-    const emitSpy = vi.spyOn(component.selectedRangeChange, 'emit');
+    const emitSpy = vi.spyOn(component.previewRangeChange, 'emit');
     await renderComponent();
 
     const brushHandler = chart.on.mock.calls.find(([eventName]) => eventName === 'brush')?.[1] as ((params: any) => void);
@@ -337,6 +337,27 @@ describe('EventCardChartPanelComponent', () => {
     });
 
     expect(emitSpy).toHaveBeenCalledWith({ start: 20, end: 60 });
+  });
+
+  it('commits the selected range on brush end in selection mode', async () => {
+    component.cursorBehaviour = ChartCursorBehaviours.SelectX;
+    const previewEmitSpy = vi.spyOn(component.previewRangeChange, 'emit');
+    const selectedEmitSpy = vi.spyOn(component.selectedRangeChange, 'emit');
+    await renderComponent();
+
+    const brushEndHandler = chart.on.mock.calls.find(([eventName]) => eventName === 'brushEnd')?.[1] as ((params: any) => void);
+    expect(brushEndHandler).toBeTypeOf('function');
+
+    brushEndHandler({
+      areas: [
+        {
+          coordRange: [20, 60],
+        }
+      ]
+    });
+
+    expect(previewEmitSpy).toHaveBeenCalledWith({ start: 20, end: 60 });
+    expect(selectedEmitSpy).toHaveBeenCalledWith({ start: 20, end: 60 });
   });
 
   it('applies incoming shared selection range with official brush action', async () => {

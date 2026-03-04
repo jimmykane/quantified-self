@@ -218,16 +218,19 @@ describe('EventCardChartComponent', () => {
 
   it('should persist cursorBehaviour changes and clear selection when returning to zoom mode', async () => {
     fixture.detectChanges();
+    component.previewSelectedRange = { start: 10, end: 20 };
     component.selectedRange = { start: 10, end: 20 };
 
     component.cursorBehaviour = ChartCursorBehaviours.SelectX;
     expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith({ chartCursorBehaviour: ChartCursorBehaviours.SelectX });
 
     vi.clearAllMocks();
+    component.previewSelectedRange = { start: 10, end: 20 };
     component.selectedRange = { start: 10, end: 20 };
     component.cursorBehaviour = ChartCursorBehaviours.ZoomX;
 
     expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith({ chartCursorBehaviour: ChartCursorBehaviours.ZoomX });
+    expect(component.previewSelectedRange).toBeNull();
     expect(component.selectedRange).toBeNull();
   });
 
