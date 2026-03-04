@@ -10,7 +10,7 @@
 
   <div #chartDiv class="event-chart-panel__chart" [class.event-chart-panel__chart--zoom-only]="!panel && showZoomBar"></div>
 
-  @if (hasSelection && rangeStats.length > 0) {
+  @if (hasSelection) {
   <section class="event-chart-panel__stats">
     <header class="event-chart-panel__stats-header">
       <span class="event-chart-panel__stats-range">
@@ -24,6 +24,7 @@
       </span>
     </header>
 
+    @if (hasCommittedSelection && rangeStats.length > 0) {
     <div class="event-chart-panel__stats-grid">
       @for (stat of rangeStats; track stat.activityID) {
       <article class="event-chart-panel__stats-card" [class.event-chart-panel__stats-card--anonymous]="!showActivityNamesInTooltip">
@@ -45,6 +46,7 @@
       </article>
       }
     </div>
+    }
   </section>
   }
 </section>

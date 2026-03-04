@@ -82,7 +82,7 @@ const LAP_TOOLTIP_OFFSET_Y = 12;
 const ZOOM_BAR_SLIDER_HEIGHT = 24;
 const ZOOM_BAR_HANDLE_SIZE = 24;
 const SELECTION_BRUSH_SOURCE = 'event-chart-selection-sync';
-const PREVIEW_RANGE_STATS_THROTTLE_MS = 66;
+const ENABLE_LIVE_SELECTION_PREVIEW = false;
 
 @Component({
   selector: 'app-event-card-chart-panel',
@@ -143,7 +143,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private applyingSharedZoomRange = false;
   private chartRefreshSequence: Promise<void> = Promise.resolve();
   private pendingAxisScaleFrame: number | null = null;
-  private previewStatsTimer: ReturnType<typeof setTimeout> | null = null;
   private axisPointerCursorBoundChart: EChartsType | null = null;
   private readonly axisPointerCursorHandler = (params: AxisPointerEvent) => {
     const value = Number(params?.axesInfo?.[0]?.value);
@@ -173,6 +172,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   public get hasSelection(): boolean {
     return !!this.getActiveSelectionRange();
+  }
+
+  public get hasCommittedSelection(): boolean {
+    return !!normalizeEventRange(this.selectedRange);
   }
 
   public get selectedRangeStartLabel(): string {
@@ -294,7 +297,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       || (changes.xDomain && !changes.xDomain.firstChange)
     ) {
       this.applySharedSelectionRange();
-      this.syncRangeStatsWithSelection();
+      this.updateRangeStats(this.selectedRange);
       this.cdr.markForCheck();
     }
 
@@ -305,7 +308,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   ngOnDestroy(): void {
     this.cancelPendingFrame('axisScale');
-    this.clearPreviewStatsTimer();
     this.teardownViewportObserver();
     this.unbindWheelPassThrough();
     this.unbindAxisPointerCursorEmit();
@@ -377,7 +379,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.applyCanonicalAxisScales();
     this.syncInteractionMode();
     this.applySharedSelectionRange();
-    this.syncRangeStatsWithSelection();
+    this.updateRangeStats(this.selectedRange);
     this.syncNativeZoomGroup();
     this.chartHost.scheduleResize();
     this.cdr.markForCheck();
@@ -1246,6 +1248,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return;
     }
 
+    if (!ENABLE_LIVE_SELECTION_PREVIEW) {
+      return;
+    }
+
     const nextRange = this.extractBrushRange(params);
     const currentRange = normalizeEventRange(this.selectedRange);
     if (
@@ -1328,37 +1334,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     } finally {
       this.applyingSharedSelectionRange = false;
     }
-  }
-
-  private syncRangeStatsWithSelection(): void {
-    if (this.previewRange) {
-      this.schedulePreviewStatsUpdate();
-      return;
-    }
-
-    this.clearPreviewStatsTimer();
-    this.updateRangeStats(this.selectedRange);
-  }
-
-  private schedulePreviewStatsUpdate(): void {
-    if (this.previewStatsTimer !== null) {
-      return;
-    }
-
-    this.previewStatsTimer = setTimeout(() => {
-      this.previewStatsTimer = null;
-      this.updateRangeStats(this.previewRange);
-      this.cdr.markForCheck();
-    }, PREVIEW_RANGE_STATS_THROTTLE_MS);
-  }
-
-  private clearPreviewStatsTimer(): void {
-    if (this.previewStatsTimer === null) {
-      return;
-    }
-
-    clearTimeout(this.previewStatsTimer);
-    this.previewStatsTimer = null;
   }
 
   private updateRangeStats(range: EventChartRange | null): void {
@@ -1576,7 +1551,11 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   private getActiveSelectionRange(): EventChartRange | null {
-    return normalizeEventRange(this.previewRange ?? this.selectedRange);
+    if (ENABLE_LIVE_SELECTION_PREVIEW) {
+      return normalizeEventRange(this.previewRange ?? this.selectedRange);
+    }
+
+    return normalizeEventRange(this.selectedRange);
   }
 
   private emitVisibleZoomRange(): void {

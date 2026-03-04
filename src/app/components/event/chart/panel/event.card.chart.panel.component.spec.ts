@@ -320,7 +320,7 @@ describe('EventCardChartPanelComponent', () => {
     expect(emitSpy).toHaveBeenCalledWith({ start: 15, end: 75 });
   });
 
-  it('emits normalized preview range from brush events in selection mode', async () => {
+  it('does not emit preview range from brush events when live selection preview is disabled', async () => {
     component.cursorBehaviour = ChartCursorBehaviours.SelectX;
     const emitSpy = vi.spyOn(component.previewRangeChange, 'emit');
     await renderComponent();
@@ -336,7 +336,7 @@ describe('EventCardChartPanelComponent', () => {
       ]
     });
 
-    expect(emitSpy).toHaveBeenCalledWith({ start: 20, end: 60 });
+    expect(emitSpy).not.toHaveBeenCalled();
   });
 
   it('commits the selected range on brush end in selection mode', async () => {
@@ -651,6 +651,16 @@ describe('EventCardChartPanelComponent', () => {
 
   it('exposes selection start/end/span labels for the compact range readout', () => {
     component.xAxisType = XAxisTypes.Duration;
+    component.selectedRange = { start: 65, end: 140 };
+
+    expect(component.selectedRangeStartLabel).toBe('01:05');
+    expect(component.selectedRangeEndLabel).toBe('02:20');
+    expect(component.selectedRangeSpanLabel).toBe('01:15');
+  });
+
+  it('ignores previewRange for labels when live selection preview is disabled', () => {
+    component.xAxisType = XAxisTypes.Duration;
+    component.previewRange = { start: 10, end: 20 };
     component.selectedRange = { start: 65, end: 140 };
 
     expect(component.selectedRangeStartLabel).toBe('01:05');
