@@ -85,7 +85,7 @@ interface InsightItem {
       </div>
 
       <!-- Verdict Summary -->
-      <div class="verdict-card metric-card qs-overlay-section qs-overlay-section--flat" [ngClass]="getOverallGrade()">
+      <div class="verdict-card metric-card qs-overlay-section" [ngClass]="getOverallGrade()">
         <div class="metric-card-header">
           <div class="grade-avatar" [ngClass]="getOverallGrade()">
             <mat-icon>{{ getGradeIcon(getOverallGrade()) }}</mat-icon>
@@ -110,7 +110,7 @@ interface InsightItem {
       <div class="diff-chips-section" *ngIf="diffChips.length > 0">
         <div class="diff-chips-title">Stat Differences</div>
         <div class="diff-chips">
-          <div class="diff-chip qs-overlay-section qs-overlay-section--flat" *ngFor="let chip of diffChips" [class.no-diff]="!chip.hasDiff">
+          <div class="diff-chip qs-overlay-section" *ngFor="let chip of diffChips" [class.no-diff]="!chip.hasDiff">
             <span class="chip-label">{{ chip.label }}</span>
             <ng-container *ngIf="chip.hasDiff; else noDiff">
               <span class="chip-value">Δ {{ chip.display }}</span>
@@ -124,7 +124,7 @@ interface InsightItem {
       </div>
 
       <!-- GNSS Section -->
-      <section class="metric-card gnss-card qs-overlay-section qs-overlay-section--flat">
+      <section class="metric-card gnss-card qs-overlay-section">
         <div class="metric-card-header">
             <div class="grade-avatar" [ngClass]="getGnssGrade()">
                 <mat-icon>{{ getGradeIcon(getGnssGrade()) }}</mat-icon>
@@ -154,7 +154,7 @@ interface InsightItem {
         </div>
       </section>
 
-      <section class="metric-card info-card qs-overlay-section qs-overlay-section--flat" *ngIf="result && (result.alignmentApplied || (result.qualityIssues && result.qualityIssues.length > 0))">
+      <section class="metric-card info-card qs-overlay-section" *ngIf="result && (result.alignmentApplied || (result.qualityIssues && result.qualityIssues.length > 0))">
         <div class="metric-card-header">
             <div class="grade-avatar">
                 <mat-icon>tune</mat-icon>
@@ -165,7 +165,7 @@ interface InsightItem {
             </div>
         </div>
         <div class="metric-card-content">
-            <div class="quality-item qs-overlay-section qs-overlay-section--flat" *ngIf="result.alignmentApplied">
+            <div class="quality-item qs-overlay-section" *ngIf="result.alignmentApplied">
                 <mat-icon class="info-icon">schedule</mat-icon>
                 <span>Auto-aligned by <strong>{{ result.timeOffsetSeconds }}s</strong> to maximize correlation.</span>
             </div>
@@ -173,7 +173,7 @@ interface InsightItem {
             <div class="quality-issues-list" *ngIf="qualityIssueGroups.length > 0">
                 <p class="issues-title">Detected Issues:</p>
                 <div class="quality-issue-group" *ngFor="let group of qualityIssueGroups">
-                    <button class="issue-group-header qs-overlay-section qs-overlay-section--flat" type="button"
+                    <button class="issue-group-header qs-overlay-section" type="button"
                         (click)="toggleIssueGroup(group.key)"
                         [attr.aria-expanded]="isIssueGroupExpanded(group.key)">
                         <span class="issue-group-title">
@@ -197,7 +197,7 @@ interface InsightItem {
                         </span>
                     </button>
                     <div class="issue-group-details" *ngIf="isIssueGroupExpanded(group.key)">
-                        <div class="quality-issue qs-overlay-section qs-overlay-section--flat" *ngFor="let issue of group.issues" [ngClass]="issue.severity">
+                        <div class="quality-issue qs-overlay-section" *ngFor="let issue of group.issues" [ngClass]="issue.severity">
                             <mat-icon>{{ getIssueIcon(issue.type) }}</mat-icon>
                             <div class="issue-details">
                                 <span class="issue-desc">{{ formatIssueDetail(issue) }}</span>
@@ -213,7 +213,7 @@ interface InsightItem {
       </section>
 
       <div class="streams-container">
-        <section class="metric-card stream-card qs-overlay-section qs-overlay-section--flat" *ngFor="let stream of objectKeys(result.metrics.streamMetrics)">
+        <section class="metric-card stream-card qs-overlay-section" *ngFor="let stream of objectKeys(result.metrics.streamMetrics)">
             <div class="metric-card-header">
                 <div class="grade-avatar" [ngClass]="getCorrelationGrade(result.metrics.streamMetrics[stream].pearsonCorrelation)">
                     <mat-icon>{{ getGradeIcon(getCorrelationGrade(result.metrics.streamMetrics[stream].pearsonCorrelation)) }}</mat-icon>
