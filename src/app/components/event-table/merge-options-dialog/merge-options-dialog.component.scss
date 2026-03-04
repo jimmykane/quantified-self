@@ -22,7 +22,7 @@
 
 .option-card.selected {
   border-color: var(--mat-sys-primary);
-  box-shadow: 0 8px 20px rgba(var(--mat-sys-primary-rgb), 0.2);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--mat-sys-primary) 20%, transparent);
   transform: translateY(-1px);
 }
 

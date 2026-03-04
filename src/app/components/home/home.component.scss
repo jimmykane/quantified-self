@@ -236,7 +236,7 @@
 
             &.primary {
                 &:hover {
-                    box-shadow: 0 4px 12px rgba(var(--mat-sys-primary-rgb), 0.3);
+                    box-shadow: 0 4px 12px color-mix(in srgb, var(--mat-sys-primary) 30%, transparent);
                 }
             }
         }

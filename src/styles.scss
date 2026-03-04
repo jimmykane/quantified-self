@@ -33,7 +33,7 @@ $app-light-theme: mat.define-theme((
   color: (
     theme-type: light,
     primary: mat.$azure-palette,
-    tertiary: mat.$blue-palette,
+    tertiary: mat.$magenta-palette,
   ),
   typography: (
     plain-family: "'Noto Sans', sans-serif",
@@ -51,7 +51,7 @@ $app-dark-theme: mat.define-theme((
   color: (
     theme-type: dark,
     primary: mat.$azure-palette,
-    tertiary: mat.$blue-palette,
+    tertiary: mat.$magenta-palette,
   ),
   typography: (
     plain-family: "'Noto Sans', sans-serif",
@@ -85,9 +85,13 @@ $app-dark-theme: mat.define-theme((
 // Alternatively, you can import and @include the theme mixins for each component
 // that you are using.
 @include mat.all-component-themes($app-light-theme);
+@include mat.system-level-colors($app-light-theme);
+@include mat.system-level-typography($app-light-theme);
 
 .dark-theme {
   @include mat.all-component-colors($app-dark-theme);
+  @include mat.system-level-colors($app-dark-theme);
+  @include mat.system-level-typography($app-dark-theme);
 }
 
 
@@ -105,7 +109,7 @@ body {
 }
 
 body {
-  background-color: var(--mat-sys-background);
+  background-color: var(--mat-app-background, var(--mat-sys-background));
   color: var(--mat-sys-on-surface);
   font-family: 'Noto Sans', sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -147,7 +151,7 @@ body.app-hydrated mat-icon {
 
 .dark-theme {
   color-scheme: dark;
-  background-color: var(--mat-sys-background);
+  background-color: var(--mat-app-background, var(--mat-sys-background));
   color: var(--mat-sys-on-surface);
 }
 
@@ -294,25 +298,35 @@ section.component-container {
   background-size: cover;
 }
 
-/* CSS Variables for Theming */
+/* App aliases over official Material M3 system tokens. */
 :root {
   --mat-sys-background: #fafafa;
   --mat-sys-surface: rgba(255, 255, 255, 0.90);
   --mat-sys-on-surface: rgba(0, 0, 0, 0.87);
   --mat-sys-on-surface-variant: rgba(0, 0, 0, 0.60);
-  --mat-sys-error: #f44336;
-  --mat-sys-primary: #2196F3;
-  --mat-sys-primary-rgb: 33, 150, 243;
-  --mat-sys-secondary: #ff4081;
-  --mat-sys-secondary-rgb: 255, 64, 129;
-  --mat-sys-tertiary: #009688;
-  --mat-app-surface: var(--mat-sys-surface);
+  --mat-sys-surface-container-lowest: #ffffff;
+  --mat-sys-surface-container-low: rgba(0, 0, 0, 0.03);
+  --mat-sys-surface-container: rgba(0, 0, 0, 0.05);
+  --mat-sys-surface-container-high: rgba(0, 0, 0, 0.08);
+  --mat-sys-surface-container-highest: rgba(0, 0, 0, 0.12);
+  --mat-app-background: #fafafa;
+  --mat-app-surface: rgba(255, 255, 255, 0.90);
   --mat-app-on-surface: var(--mat-sys-on-surface);
   --mat-app-on-surface-variant: var(--mat-sys-on-surface-variant);
+  --mat-app-surface-container-lowest: #ffffff;
   --mat-app-surface-container-low: rgba(0, 0, 0, 0.03);
   --mat-app-surface-container-high: rgba(0, 0, 0, 0.08);
-  --mat-app-outline-variant: rgba(0, 0, 0, 0.1);
+  --mat-app-surface-container-highest: rgba(0, 0, 0, 0.12);
+  --mat-app-outline-variant: rgba(0, 0, 0, 0.10);
   --mat-app-primary: var(--mat-sys-primary);
+  --mat-app-primary-container: var(--mat-sys-primary-container);
+  --mat-app-on-primary-container: var(--mat-sys-on-primary-container);
+  --mat-app-secondary-container: var(--mat-sys-secondary-container);
+  --mat-app-on-secondary-container: var(--mat-sys-on-secondary-container);
+  --mat-app-tertiary-container: var(--mat-sys-tertiary-container);
+  --mat-app-on-tertiary-container: var(--mat-sys-on-tertiary-container);
+  --mat-sidenav-content-background-color: var(--mat-app-background);
+  --mat-sidenav-container-background-color: var(--mat-app-surface);
 }
 
 .dark-theme {
@@ -320,19 +334,29 @@ section.component-container {
   --mat-sys-surface: rgba(30, 30, 30, 0.80);
   --mat-sys-on-surface: rgba(255, 255, 255, 0.87);
   --mat-sys-on-surface-variant: rgba(255, 255, 255, 0.60);
-  --mat-sys-error: #ffb4ab;
-  --mat-sys-primary: #b0bec5;
-  --mat-sys-primary-rgb: 176, 190, 197;
-  --mat-sys-secondary: #f48fb1;
-  --mat-sys-secondary-rgb: 244, 143, 177;
-  --mat-sys-tertiary: #80cbc4;
-  --mat-app-surface: var(--mat-sys-surface);
+  --mat-sys-surface-container-lowest: rgba(18, 18, 18, 0.96);
+  --mat-sys-surface-container-low: rgba(255, 255, 255, 0.05);
+  --mat-sys-surface-container: rgba(255, 255, 255, 0.08);
+  --mat-sys-surface-container-high: rgba(255, 255, 255, 0.12);
+  --mat-sys-surface-container-highest: rgba(255, 255, 255, 0.16);
+  --mat-app-background: #121212;
+  --mat-app-surface: rgba(30, 30, 30, 0.80);
   --mat-app-on-surface: var(--mat-sys-on-surface);
   --mat-app-on-surface-variant: var(--mat-sys-on-surface-variant);
+  --mat-app-surface-container-lowest: rgba(18, 18, 18, 0.96);
   --mat-app-surface-container-low: rgba(255, 255, 255, 0.05);
   --mat-app-surface-container-high: rgba(255, 255, 255, 0.12);
-  --mat-app-outline-variant: rgba(255, 255, 255, 0.1);
+  --mat-app-surface-container-highest: rgba(255, 255, 255, 0.16);
+  --mat-app-outline-variant: rgba(255, 255, 255, 0.10);
   --mat-app-primary: var(--mat-sys-primary);
+  --mat-app-primary-container: var(--mat-sys-primary-container);
+  --mat-app-on-primary-container: var(--mat-sys-on-primary-container);
+  --mat-app-secondary-container: var(--mat-sys-secondary-container);
+  --mat-app-on-secondary-container: var(--mat-sys-on-secondary-container);
+  --mat-app-tertiary-container: var(--mat-sys-tertiary-container);
+  --mat-app-on-tertiary-container: var(--mat-sys-on-tertiary-container);
+  --mat-sidenav-content-background-color: var(--mat-app-background);
+  --mat-sidenav-container-background-color: var(--mat-app-surface);
 }
 
 
@@ -393,7 +417,7 @@ mat-table {
   align-items: center;
   justify-content: space-between;
   padding: 24px 40px;
-  background: var(--mat-sys-surface);
+  background: var(--mat-app-surface);
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
   border: 1px solid var(--mat-app-outline-variant);
@@ -722,11 +746,16 @@ mat-table {
 .mat-bottom-sheet-container {
   @extend .qs-glass-card-panel;
   @extend .qs-scrollbar;
+  --qs-glass-panel-blur: 16px;
   --mat-bottom-sheet-container-background-color: transparent;
   --mat-bottom-sheet-container-shape: 20px;
-  background: var(--mat-sys-surface) !important;
+  background: var(--mat-app-surface) !important;
   /* Keep only the top corners rounded; bottom edge stays flush with viewport */
   border-radius: 20px 20px 0 0 !important;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow:
+    0 -8px 32px rgba(0, 0, 0, 0.12),
+    0 -2px 8px rgba(0, 0, 0, 0.08) !important;
   padding: 16px !important;
   display: flex;
   flex-direction: column;
@@ -747,11 +776,11 @@ mat-table {
   overflow: auto;
 
   &::-webkit-scrollbar-track {
-    background: var(--mat-sys-surface);
+    background: var(--mat-app-surface);
   }
 
   &::-webkit-scrollbar-corner {
-    background: var(--mat-sys-surface);
+    background: var(--mat-app-surface);
   }
 }
 
@@ -760,6 +789,13 @@ mat-table {
     min-width: 100%;
     width: 100%;
   }
+}
+
+.dark-theme .mat-bottom-sheet-container {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 -8px 32px rgba(0, 0, 0, 0.4),
+    0 -2px 8px rgba(0, 0, 0, 0.2) !important;
 }
 
 /* Ensure Overlays (Bottom Sheets, Dialogs) are always on top of App Bars and Banners */
@@ -778,7 +814,7 @@ mat-table {
   .mat-mdc-dialog-surface {
     @extend .qs-glass-card-panel;
     --qs-glass-panel-blur: 16px;
-    background: var(--mat-sys-surface) !important;
+    background: var(--mat-app-surface) !important;
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 16px !important;
     box-shadow:
@@ -889,7 +925,7 @@ tr.mat-row:focus,
 .mat-mdc-menu-panel.qs-menu-panel {
   @extend .qs-glass-card-panel;
   @include qs-scrollbar-skin;
-  background: var(--mat-sys-surface) !important;
+  background: var(--mat-app-surface) !important;
   min-width: 180px !important;
   max-width: min(360px, calc(100vw - 24px)) !important;
   overflow: hidden !important;
@@ -1050,6 +1086,20 @@ tr.mat-row:focus,
   --mat-fab-state-layer-color: var(--mat-sys-on-tertiary);
 }
 
+.mat-mdc-unelevated-button.qs-mat-accent {
+  background-color: var(--mat-sys-tertiary) !important;
+  color: var(--mat-sys-on-tertiary) !important;
+}
+
+.mat-mdc-unelevated-button.qs-mat-accent:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--mat-sys-tertiary) 92%, black) !important;
+}
+
+.mat-mdc-unelevated-button.qs-mat-accent:disabled {
+  background-color: color-mix(in srgb, var(--mat-sys-tertiary) 24%, transparent) !important;
+  color: color-mix(in srgb, var(--mat-sys-on-tertiary) 48%, transparent) !important;
+}
+
 .qs-mat-warn {
   --mat-button-filled-container-color: var(--mat-sys-error);
   --mat-button-filled-label-text-color: var(--mat-sys-on-error);
@@ -1114,7 +1164,7 @@ tr.mat-row:focus,
 
 .mat-mdc-select-panel.qs-config-submenu {
   @extend .qs-glass-card-panel;
-  background: var(--mat-sys-surface) !important;
+  background: var(--mat-app-surface) !important;
   border-radius: 12px !important;
   padding: 4px 0 !important;
   max-width: min(320px, calc(100vw - 24px)) !important;

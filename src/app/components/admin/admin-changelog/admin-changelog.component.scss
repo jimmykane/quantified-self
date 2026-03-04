@@ -167,7 +167,7 @@ td.mat-cell {
     }
 
     &.minor {
-        background: rgba(var(--mat-sys-primary-rgb), 0.1);
+        background: color-mix(in srgb, var(--mat-sys-primary) 10%, transparent);
         color: var(--mat-sys-primary);
     }
 
