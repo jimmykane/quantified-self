@@ -166,9 +166,9 @@ export class AppUserService implements OnDestroy {
     }
 
     // Check for force-refresh (if DB was updated more recently than token issuance)
-    const claimsUpdatedAt = (identity as any).claimsUpdatedAt;
+    const claimsUpdatedAt = identity.claimsUpdatedAt;
     if (claimsUpdatedAt) {
-      const updatedAtDate = claimsUpdatedAt.toDate ? claimsUpdatedAt.toDate() : new Date(claimsUpdatedAt.seconds * 1000);
+      const updatedAtDate = claimsUpdatedAt.toDate();
       const iat = (claims['iat'] as number) * 1000;
       if (updatedAtDate.getTime() > iat + 2000) {
         this.logger.log(`[AppUserService] Refreshing token for ${firebaseUser.uid}...`);
