@@ -2,7 +2,3 @@ section.map-actions {
   display: flex;
   justify-content: flex-end;
 }
-
-.map-layer-toggle {
-  width: 100%;
-}

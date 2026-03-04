@@ -78,14 +78,14 @@
   <mat-divider></mat-divider>
 
   <section mat-menu-item>
-    <mat-slide-toggle class="chart-option-toggle" [checked]="showLaps" [disabled]="!user"
+    <mat-slide-toggle [color]="'accent'" [checked]="showLaps" [disabled]="!user"
       (click)="$event.stopPropagation()" (change)="onShowLapsToggle($event.checked)">
       Show Laps
     </mat-slide-toggle>
   </section>
 
   <section mat-menu-item>
-    <mat-slide-toggle class="chart-option-toggle" [checked]="showAllData" [disabled]="!user"
+    <mat-slide-toggle [color]="'accent'" [checked]="showAllData" [disabled]="!user"
       (click)="$event.stopPropagation()" (change)="onShowAllDataToggle($event.checked)">
       Show All Data
     </mat-slide-toggle>
