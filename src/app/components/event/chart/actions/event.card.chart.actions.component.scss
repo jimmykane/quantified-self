@@ -81,18 +81,6 @@ section.container {
   font-family: 'Barlow Condensed', sans-serif;
 }
 
-::ng-deep .event-chart-actions__series-icon .mat-badge-content {
-  min-width: 24px;
-  width: auto;
-  height: 18px;
-  line-height: 18px;
-  padding: 0 5px;
-  border-radius: 999px;
-  font-size: 10px;
-  background-color: var(--mat-app-primary);
-  color: var(--mat-sys-on-primary);
-}
-
 @include xsmall {
   section.container {
     justify-content: flex-end;

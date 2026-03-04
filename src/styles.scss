@@ -966,6 +966,35 @@ tr.mat-row:focus,
   margin: 0;
 }
 
+.qs-app-badge {
+  position: relative;
+}
+
+.qs-app-badge ::ng-deep .mat-badge-content {
+  background-color: var(--mat-app-primary);
+  color: var(--mat-sys-on-primary);
+  font-weight: 500;
+  border-radius: 999px;
+}
+
+.qs-app-badge--small ::ng-deep .mat-badge-content {
+  min-width: 24px !important;
+  width: auto !important;
+  height: 18px !important;
+  line-height: 18px !important;
+  padding: 0 5px !important;
+  font-size: 10px !important;
+}
+
+.qs-app-badge--large ::ng-deep .mat-badge-content {
+  min-width: 24px !important;
+  width: auto !important;
+  height: 18px !important;
+  line-height: 18px !important;
+  padding: 0 5px !important;
+  font-size: 10px !important;
+}
+
 .qs-color-primary {
   color: var(--mat-sys-primary) !important;
 }

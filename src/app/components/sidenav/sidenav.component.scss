@@ -58,9 +58,11 @@ mat-icon.app-icon {
   gap: 14px;
   padding: 20px 16px;
   margin: 8px 12px 16px 12px;
-  background: linear-gradient(135deg, rgba(63, 81, 181, 0.08), rgba(63, 81, 181, 0.03));
+  background: linear-gradient(135deg,
+      color-mix(in srgb, var(--mat-app-primary) 8%, transparent),
+      color-mix(in srgb, var(--mat-app-primary) 3%, transparent));
   border-radius: 16px;
-  border: 1px solid rgba(63, 81, 181, 0.1);
+  border: 1px solid color-mix(in srgb, var(--mat-app-primary) 10%, transparent);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -70,8 +72,10 @@ mat-icon.app-icon {
 }
 
 :host-context(.dark-theme) .sidenav-profile {
-  background: linear-gradient(135deg, rgba(144, 202, 249, 0.1), rgba(144, 202, 249, 0.03));
-  border-color: rgba(144, 202, 249, 0.15);
+  background: linear-gradient(135deg,
+      color-mix(in srgb, var(--mat-app-primary) 10%, transparent),
+      color-mix(in srgb, var(--mat-app-primary) 3%, transparent));
+  border-color: color-mix(in srgb, var(--mat-app-primary) 15%, transparent);
 }
 
 :host-context(.dark-theme) .sidenav-profile:hover {
@@ -199,32 +203,40 @@ mat-list-item {
 }
 
 mat-list-item:hover {
-  background-color: rgba(0, 0, 0, 0.04) !important;
+  background-color: var(--mat-sys-state-hover, rgba(0, 0, 0, 0.04)) !important;
 }
 
 :host-context(.dark-theme) mat-list-item:hover {
-  background-color: rgba(255, 255, 255, 0.06) !important;
+  background-color: var(--mat-sys-state-hover, rgba(255, 255, 255, 0.06)) !important;
 }
 
 /* Active State - Full width with accent border */
 .active {
   font-weight: 500 !important;
-  background: linear-gradient(90deg, rgba(63, 81, 181, 0.12), rgba(63, 81, 181, 0.04)) !important;
-  border-left: 3px solid #3f51b5 !important;
+  background: linear-gradient(90deg,
+      color-mix(in srgb, var(--mat-app-primary) 12%, transparent),
+      color-mix(in srgb, var(--mat-app-primary) 4%, transparent)) !important;
+  border-left: 3px solid var(--mat-app-primary) !important;
 }
 
 /* Ensure active state styles persist on hover */
 mat-list-item.active:hover {
-  background: linear-gradient(90deg, rgba(63, 81, 181, 0.15), rgba(63, 81, 181, 0.07)) !important;
+  background: linear-gradient(90deg,
+      color-mix(in srgb, var(--mat-app-primary) 15%, transparent),
+      color-mix(in srgb, var(--mat-app-primary) 7%, transparent)) !important;
 }
 
 :host-context(.dark-theme) .active {
-  background: linear-gradient(90deg, rgba(144, 202, 249, 0.15), rgba(144, 202, 249, 0.05)) !important;
-  border-left: 3px solid #90caf9 !important;
+  background: linear-gradient(90deg,
+      color-mix(in srgb, var(--mat-app-primary) 15%, transparent),
+      color-mix(in srgb, var(--mat-app-primary) 5%, transparent)) !important;
+  border-left: 3px solid var(--mat-app-primary) !important;
 }
 
 :host-context(.dark-theme) mat-list-item.active:hover {
-  background: linear-gradient(90deg, rgba(144, 202, 249, 0.18), rgba(144, 202, 249, 0.08)) !important;
+  background: linear-gradient(90deg,
+      color-mix(in srgb, var(--mat-app-primary) 18%, transparent),
+      color-mix(in srgb, var(--mat-app-primary) 8%, transparent)) !important;
 }
 
 /* Icon Styling */
@@ -252,11 +264,11 @@ mat-list-item:hover mat-icon {
 
 .active mat-icon {
   opacity: 1;
-  color: #3f51b5;
+  color: var(--mat-app-primary);
 }
 
 :host-context(.dark-theme) .active mat-icon {
-  color: #90caf9;
+  color: var(--mat-app-primary);
 }
 
 /* Icon Container (for special icons) */
