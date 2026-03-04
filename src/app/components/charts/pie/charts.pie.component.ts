@@ -246,13 +246,13 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
           avoidLabelOverlap: true,
           minAngle: 1.5,
           label: {
-            show: !isCompactLayout,
+            show: false,
             color: textColor,
             fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
             formatter: '{b}\n{d}%'
           },
           labelLine: {
-            show: !isCompactLayout
+            show: false
           },
           data: seriesData
         }

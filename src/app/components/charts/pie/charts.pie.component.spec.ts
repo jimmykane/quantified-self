@@ -214,7 +214,22 @@ describe('ChartsPieComponent', () => {
     await new Promise(resolve => setTimeout(resolve, 0));
 
     const option = mockLoader.setOption.mock.calls.at(-1)?.[1] as Record<string, any>;
-    expect(option.tooltip.backgroundColor).toBe('#303030');
+    expect(option.tooltip.backgroundColor).toBe('rgba(58,62,68,1)');
+  });
+
+  it('should keep pie labels and connector lines disabled', async () => {
+    component.data = [
+      { type: 'Running', [ChartDataValueTypes.Total]: 60, count: 2 },
+      { type: 'Cycling', [ChartDataValueTypes.Total]: 40, count: 1 },
+    ];
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    const option = mockLoader.setOption.mock.calls.at(-1)?.[1] as Record<string, any>;
+    expect(option.series[0].label.show).toBe(false);
+    expect(option.series[0].labelLine.show).toBe(false);
   });
 
   it('should ignore ngOnChanges before chart initialization', () => {

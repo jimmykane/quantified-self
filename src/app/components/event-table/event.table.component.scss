@@ -22,6 +22,21 @@
   overflow: visible;
 }
 
+.table-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px 8px;
+  border-bottom: 1px solid var(--mat-app-outline-variant);
+  background: color-mix(in srgb, var(--mat-app-surface-container-low), transparent 12%);
+}
+
+.table-toolbar .qs-search-field {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 420px;
+}
+
 /* Allow columns to size naturally or use flex */
 .mat-column-Privacy,
 .mat-column-Actions {
@@ -44,6 +59,16 @@
 }
 
 @include bp.handset-or-tablet-portrait {
+
+  .table-toolbar {
+    flex-wrap: wrap;
+    padding: 12px;
+    gap: 8px;
+  }
+
+  .table-toolbar .qs-search-field {
+    max-width: 100%;
+  }
 
   .mat-column-Start-Date,
   .cdk-column-Start-Date,
