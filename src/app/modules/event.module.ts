@@ -26,16 +26,15 @@ import { EventStatsBottomSheetComponent } from '../components/event/stats-table/
 import { EventDevicesBottomSheetComponent } from '../components/event/devices/event-devices-bottom-sheet/event-devices-bottom-sheet.component';
 
 import { JumpMarkerPopupComponent } from '../components/event/map/popups/jump-marker-popup/jump-marker-popup.component';
-import { BenchmarkSelectionDialogComponent } from '../components/benchmark/benchmark-selection-dialog.component';
-import { BenchmarkReportComponent } from '../components/benchmark/benchmark-report.component';
-import { BenchmarkBottomSheetComponent } from '../components/benchmark/benchmark-bottom-sheet.component';
 import { DeviceNameEditDialogComponent } from '../components/event/activities-toggles/device-name-edit-dialog/device-name-edit-dialog.component';
+import { BenchmarkModule } from './benchmark.module';
 
 @NgModule({
     imports: [
         CommonModule,
         SharedModule,
         MaterialModule,
+        BenchmarkModule,
         EventRoutingModule,
     ],
     exports: [
@@ -64,9 +63,6 @@ import { DeviceNameEditDialogComponent } from '../components/event/activities-to
         EventPerformanceChartsComponent,
         LapTypeIconComponent,
         JumpMarkerPopupComponent,
-        BenchmarkSelectionDialogComponent,
-        BenchmarkReportComponent,
-        BenchmarkBottomSheetComponent,
         DeviceNameEditDialogComponent,
     ]
 })

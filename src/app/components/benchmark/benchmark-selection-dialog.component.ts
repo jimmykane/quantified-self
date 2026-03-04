@@ -40,7 +40,7 @@ export interface BenchmarkSelectionData {
         }
       </app-loading-overlay>
 
-      <div *ngIf="!isLoading && selectedActivities.length !== 2" class="selection-hint">
+      <div *ngIf="!isLoading && selectedActivities.length !== 2" class="selection-hint qs-overlay-section">
         <mat-icon class="qs-color-warn">info</mat-icon>
         <span>{{ selectedActivities.length === 0 ? 'Select two activities' : 'Select one more activity' }}</span>
       </div>
@@ -49,7 +49,7 @@ export interface BenchmarkSelectionData {
         <p class="preview-title">Ready to Compare:</p>
         
         <div class="role-assignment">
-          <div class="role-card reference" [style.--role-color]="getSelectedActivityColor(0)">
+          <div class="role-card reference qs-overlay-section" [style.--role-color]="getSelectedActivityColor(0)">
             <span class="role-label">Reference (Ground Truth)</span>
             <span class="device-pill" [style.--pill-color]="getSelectedActivityColor(0)">
               <mat-icon>watch</mat-icon>
@@ -61,7 +61,7 @@ export interface BenchmarkSelectionData {
             <mat-icon>swap_horiz</mat-icon>
           </button>
           
-          <div class="role-card test" [style.--role-color]="getSelectedActivityColor(1)">
+          <div class="role-card test qs-overlay-section" [style.--role-color]="getSelectedActivityColor(1)">
             <span class="role-label">Test Device</span>
             <span class="device-pill" [style.--pill-color]="getSelectedActivityColor(1)">
               <mat-icon>watch</mat-icon>

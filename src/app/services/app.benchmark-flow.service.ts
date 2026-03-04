@@ -38,16 +38,22 @@ export class AppBenchmarkFlowService {
     private analyticsService: AppAnalyticsService
   ) { }
 
-  openBenchmarkReport(config: BenchmarkFlowConfig): void {
+  async openBenchmarkReport(config: BenchmarkFlowConfig): Promise<void> {
     if (!config.result) return;
+    const activeEvent = await this.resolveEventWithActivitiesOnly(config);
+    const nextConfig: BenchmarkFlowConfig = {
+      ...config,
+      event: activeEvent,
+      persistEvent: config.persistEvent ?? config.event
+    };
 
     const sheetRef = this.bottomSheet.open(BenchmarkBottomSheetComponent, {
       data: {
-        result: config.result,
-        event: config.event,
-        unitSettings: config.user?.settings?.unitSettings ?? AppUserUtilities.getDefaultUserUnitSettings(),
-        summariesSettings: config.user?.settings?.summariesSettings,
-        brandText: (config.user as any)?.brandText ?? null,
+        result: nextConfig.result,
+        event: nextConfig.event,
+        unitSettings: nextConfig.user?.settings?.unitSettings ?? AppUserUtilities.getDefaultUserUnitSettings(),
+        summariesSettings: nextConfig.user?.settings?.summariesSettings,
+        brandText: (nextConfig.user as any)?.brandText ?? null,
       },
       autoFocus: 'dialog',
       scrollStrategy: this.overlay.scrollStrategies.noop()
@@ -55,7 +61,7 @@ export class AppBenchmarkFlowService {
 
     sheetRef.afterDismissed().subscribe((res: { rerun?: boolean } | undefined) => {
       if (res?.rerun) {
-        this.openBenchmarkSelectionDialog(config);
+        this.openBenchmarkSelectionDialog(nextConfig);
       }
     });
   }
@@ -194,6 +200,26 @@ export class AppBenchmarkFlowService {
       return fullEvent || config.event;
     } catch (error) {
       this.logger.error('Failed to load activities for benchmark selection', error);
+      return config.event;
+    }
+  }
+
+  private async resolveEventWithActivitiesOnly(config: BenchmarkFlowConfig): Promise<AppEventInterface> {
+    const activities = config.event.getActivities?.() || [];
+    if (activities.length > 0) {
+      return config.event;
+    }
+
+    const eventID = config.event.getID?.();
+    if (!config.user || !eventID) {
+      return config.event;
+    }
+
+    try {
+      const eventWithActivities = await firstValueFrom(this.eventService.getEventAndActivities(config.user, eventID));
+      return eventWithActivities || config.event;
+    } catch (error) {
+      this.logger.error('Failed to load activities for benchmark report', error);
       return config.event;
     }
   }

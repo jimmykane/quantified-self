@@ -5,16 +5,12 @@
 
 // Full Mode (Expansion Panels)
 .changelog-panel {
-    background: var(--mat-sys-surface-container-low) !important;
-    border: 1px solid var(--mat-sys-outline-variant);
-    border-radius: 12px !important;
     margin-bottom: 12px;
     overflow: hidden;
     box-shadow: none !important;
 
     &.mat-expanded {
         border-color: var(--mat-sys-outline);
-        background: var(--mat-sys-surface-container) !important;
     }
 
     ::ng-deep .mat-expansion-panel-body {
@@ -22,43 +18,19 @@
     }
 }
 
-:host-context(.qs-whats-new-dialog) .changelog-panel {
+.changelog-panel.qs-overlay-section--flat {
     background: transparent !important;
     border: 0 !important;
     border-radius: 0 !important;
     margin-bottom: 0;
 }
 
-:host-context(.qs-whats-new-dialog) .changelog-panel.mat-expanded {
+.changelog-panel.qs-overlay-section--flat.mat-expanded {
     background: transparent !important;
     border-color: transparent !important;
 }
 
-:host-context(.qs-whats-new-dialog) .expandable-image {
-    border: 0;
-}
-
-:host-context(.qs-whats-new-dialog) ::ng-deep .mat-expansion-panel-spacing {
-    margin: 0 !important;
-}
-
-:host-context(.qs-whats-new-page) .changelog-panel {
-    background: transparent !important;
-    border: 0 !important;
-    border-radius: 0 !important;
-    margin-bottom: 0;
-}
-
-:host-context(.qs-whats-new-page) .changelog-panel.mat-expanded {
-    background: transparent !important;
-    border-color: transparent !important;
-}
-
-:host-context(.qs-whats-new-page) .expandable-image {
-    border: 0;
-}
-
-:host-context(.qs-whats-new-page) ::ng-deep .mat-expansion-panel-spacing {
+.changelog-panel.qs-overlay-section--flat.mat-expansion-panel-spacing {
     margin: 0 !important;
 }
 
@@ -103,8 +75,6 @@
 .changelog-card {
     cursor: pointer;
     transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    border: 1px solid var(--mat-sys-outline-variant);
-    background: var(--mat-sys-surface-container-low) !important;
     border-radius: 12px;
     overflow: hidden;
 
