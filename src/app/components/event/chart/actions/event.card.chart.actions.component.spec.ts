@@ -53,6 +53,7 @@ describe('EventCardChartActionsComponent', () => {
     component.cursorBehaviour = ChartCursorBehaviours.ZoomX;
     component.showAllData = false;
     component.showLaps = false;
+    component.syncChartHoverToMap = false;
     fixture.detectChanges();
     vi.clearAllMocks();
   });
@@ -121,6 +122,15 @@ describe('EventCardChartActionsComponent', () => {
 
     expect(emitSpy).toHaveBeenCalledWith(0.45);
     expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('event_chart_settings_change', { property: 'fillOpacity' });
+  });
+
+  it('should emit syncChartHoverToMap changes and log analytics', async () => {
+    const emitSpy = vi.spyOn(component.syncChartHoverToMapChange, 'emit');
+
+    await component.onSyncChartHoverToMapToggle(true);
+
+    expect(emitSpy).toHaveBeenCalledWith(true);
+    expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('event_chart_settings_change', { property: 'syncChartHoverToMap' });
   });
 
   it('should emit series visibility toggle requests', () => {

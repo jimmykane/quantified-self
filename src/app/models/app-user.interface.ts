@@ -33,6 +33,7 @@ export interface AppDashboardSettingsInterface extends UserDashboardSettingsInte
 export interface AppChartSettingsInterface extends Omit<UserChartSettingsInterface, 'theme'> {
     theme?: ChartThemes;
     fillOpacityVersion?: number;
+    syncChartHoverToMap?: boolean;
 }
 
 export interface AppAppSettingsInterface extends UserAppSettingsInterface {

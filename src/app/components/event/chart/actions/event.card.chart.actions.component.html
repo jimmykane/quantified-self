@@ -84,6 +84,13 @@
   </section>
 
   <section mat-menu-item>
+    <mat-slide-toggle [checked]="syncChartHoverToMap" [disabled]="!user"
+      (click)="$event.stopPropagation()" (change)="onSyncChartHoverToMapToggle($event.checked)">
+      Sync Hover to Map
+    </mat-slide-toggle>
+  </section>
+
+  <section mat-menu-item>
     <mat-slide-toggle [checked]="showAllData" [disabled]="!user"
       (click)="$event.stopPropagation()" (change)="onShowAllDataToggle($event.checked)">
       Show All Data

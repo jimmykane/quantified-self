@@ -1,6 +1,8 @@
 // Custom Theming for Angular Material
 // For more information: https://material.angular.io/guide/theming
 @use '@angular/material' as mat;
+@use 'styles/theme-colors-dark' as app-dark-colors;
+@use 'styles/theme-colors-light' as app-light-colors;
 @use 'styles/forms';
 @use 'styles/search';
 @use 'styles/segmented-buttons';
@@ -27,11 +29,15 @@
 @include mat.core();
 
 // Material 3 theme configuration.
-// Keep the palette direction close to the current app branding while moving to the
-// official v20 theming system and CSS tokens.
+// These palettes are custom M3 tonal palettes generated from the exact old M2 seeds
+// that `origin/main` used:
+// - Light primary:  #2196f3 (blue 500)
+// - Light accent:   #ffd740 (amber A200)
+// - Dark primary:   #607d8b (blue-grey 500)
+// - Dark accent:    #40c4ff (light-blue A200)
 $app-light-theme: mat.define-theme((color: (theme-type: light,
-        primary: mat.$blue-palette,
-        tertiary: mat.$chartreuse-palette,
+        primary: app-light-colors.$primary-palette,
+        tertiary: app-light-colors.$tertiary-palette,
       ),
       typography: (plain-family: "'Noto Sans', sans-serif",
         brand-family: "'Noto Sans', sans-serif",
@@ -44,8 +50,8 @@ $app-light-theme: mat.define-theme((color: (theme-type: light,
     ));
 
 $app-dark-theme: mat.define-theme((color: (theme-type: dark,
-        primary: mat.$blue-palette,
-        tertiary: mat.$cyan-palette,
+        primary: app-dark-colors.$primary-palette,
+        tertiary: app-dark-colors.$tertiary-palette,
       ),
       typography: (plain-family: "'Noto Sans', sans-serif",
         brand-family: "'Noto Sans', sans-serif",
@@ -292,6 +298,10 @@ section.component-container {
 
 /* App aliases over official Material M3 system tokens. */
 :root {
+  --qs-theme-primary: #2196f3;
+  --qs-theme-on-primary: #ffffff;
+  --qs-theme-accent: #ffd740;
+  --qs-theme-on-accent: rgba(0, 0, 0, 0.87);
   --mat-sys-background: #fafafa;
   --mat-sys-surface: rgba(255, 255, 255, 0.90);
   --mat-sys-on-surface: rgba(0, 0, 0, 0.87);
@@ -310,7 +320,7 @@ section.component-container {
   --mat-app-surface-container-high: rgba(0, 0, 0, 0.08);
   --mat-app-surface-container-highest: rgba(0, 0, 0, 0.12);
   --mat-app-outline-variant: rgba(0, 0, 0, 0.10);
-  --mat-app-primary: var(--mat-sys-primary);
+  --mat-app-primary: var(--qs-theme-primary);
   --mat-app-primary-container: var(--mat-sys-primary-container);
   --mat-app-on-primary-container: var(--mat-sys-on-primary-container);
   --mat-app-secondary-container: var(--mat-sys-secondary-container);
@@ -322,6 +332,10 @@ section.component-container {
 }
 
 .dark-theme {
+  --qs-theme-primary: #607d8b;
+  --qs-theme-on-primary: #ffffff;
+  --qs-theme-accent: #40c4ff;
+  --qs-theme-on-accent: rgba(0, 0, 0, 0.87);
   --mat-sys-background: #121212;
   --mat-sys-surface: rgba(30, 30, 30, 0.80);
   --mat-sys-on-surface: rgba(255, 255, 255, 0.87);
@@ -340,7 +354,7 @@ section.component-container {
   --mat-app-surface-container-high: rgba(255, 255, 255, 0.12);
   --mat-app-surface-container-highest: rgba(255, 255, 255, 0.16);
   --mat-app-outline-variant: rgba(255, 255, 255, 0.10);
-  --mat-app-primary: var(--mat-sys-primary);
+  --mat-app-primary: var(--qs-theme-primary);
   --mat-app-primary-container: var(--mat-sys-primary-container);
   --mat-app-on-primary-container: var(--mat-sys-on-primary-container);
   --mat-app-secondary-container: var(--mat-sys-secondary-container);
@@ -1043,11 +1057,11 @@ tr.mat-row:focus,
 }
 
 .qs-color-primary {
-  color: var(--mat-sys-primary) !important;
+  color: var(--qs-theme-primary) !important;
 }
 
 .qs-color-accent {
-  color: var(--mat-sys-tertiary) !important;
+  color: var(--qs-theme-accent) !important;
 }
 
 .qs-color-warn {
@@ -1055,11 +1069,11 @@ tr.mat-row:focus,
 }
 
 .qs-spinner-primary {
-  --mat-progress-spinner-active-indicator-color: var(--mat-sys-primary);
+  --mat-progress-spinner-active-indicator-color: var(--qs-theme-primary);
 }
 
 .qs-spinner-accent {
-  --mat-progress-spinner-active-indicator-color: var(--mat-sys-tertiary);
+  --mat-progress-spinner-active-indicator-color: var(--qs-theme-accent);
 }
 
 .qs-spinner-warn {
@@ -1067,11 +1081,11 @@ tr.mat-row:focus,
 }
 
 .qs-progress-primary {
-  --mat-progress-bar-active-indicator-color: var(--mat-sys-primary);
+  --mat-progress-bar-active-indicator-color: var(--qs-theme-primary);
 }
 
 .qs-progress-accent {
-  --mat-progress-bar-active-indicator-color: var(--mat-sys-tertiary);
+  --mat-progress-bar-active-indicator-color: var(--qs-theme-accent);
 }
 
 .qs-progress-warn {
@@ -1079,13 +1093,13 @@ tr.mat-row:focus,
 }
 
 .qs-checkbox-primary {
-  --mat-checkbox-selected-checkmark-color: var(--mat-sys-on-primary);
-  --mat-checkbox-selected-icon-color: var(--mat-sys-primary);
-  --mat-checkbox-selected-focus-icon-color: var(--mat-sys-primary);
-  --mat-checkbox-selected-hover-icon-color: var(--mat-sys-primary);
-  --mat-checkbox-selected-pressed-icon-color: var(--mat-sys-primary);
-  --mat-checkbox-selected-focus-state-layer-color: var(--mat-sys-primary);
-  --mat-checkbox-selected-hover-state-layer-color: var(--mat-sys-primary);
+  --mat-checkbox-selected-checkmark-color: var(--qs-theme-on-primary);
+  --mat-checkbox-selected-icon-color: var(--qs-theme-primary);
+  --mat-checkbox-selected-focus-icon-color: var(--qs-theme-primary);
+  --mat-checkbox-selected-hover-icon-color: var(--qs-theme-primary);
+  --mat-checkbox-selected-pressed-icon-color: var(--qs-theme-primary);
+  --mat-checkbox-selected-focus-state-layer-color: var(--qs-theme-primary);
+  --mat-checkbox-selected-hover-state-layer-color: var(--qs-theme-primary);
 }
 
 .qs-checkbox-warn {
@@ -1099,81 +1113,81 @@ tr.mat-row:focus,
 }
 
 .qs-mat-primary {
-  --mat-button-filled-container-color: var(--mat-sys-primary);
-  --mat-button-filled-label-text-color: var(--mat-sys-on-primary);
-  --mat-button-filled-ripple-color: color-mix(in srgb, var(--mat-sys-on-primary) 12%, transparent);
-  --mat-button-filled-state-layer-color: var(--mat-sys-on-primary);
-  --mat-button-outlined-label-text-color: var(--mat-sys-primary);
-  --mat-button-outlined-ripple-color: color-mix(in srgb, var(--mat-sys-primary) 12%, transparent);
-  --mat-button-outlined-state-layer-color: var(--mat-sys-primary);
-  --mat-button-protected-container-color: var(--mat-sys-primary);
-  --mat-button-protected-label-text-color: var(--mat-sys-on-primary);
-  --mat-button-protected-ripple-color: color-mix(in srgb, var(--mat-sys-on-primary) 12%, transparent);
-  --mat-button-protected-state-layer-color: var(--mat-sys-on-primary);
-  --mat-button-text-label-text-color: var(--mat-sys-primary);
-  --mat-button-text-ripple-color: color-mix(in srgb, var(--mat-sys-primary) 12%, transparent);
-  --mat-button-text-state-layer-color: var(--mat-sys-primary);
-  --mat-button-tonal-container-color: var(--mat-sys-primary);
-  --mat-button-tonal-label-text-color: var(--mat-sys-on-primary);
-  --mat-button-tonal-ripple-color: color-mix(in srgb, var(--mat-sys-on-primary) 12%, transparent);
-  --mat-button-tonal-state-layer-color: var(--mat-sys-on-primary);
-  --mat-icon-button-icon-color: var(--mat-sys-primary);
-  --mat-icon-button-state-layer-color: var(--mat-sys-primary);
-  --mat-icon-button-ripple-color: color-mix(in srgb, var(--mat-sys-primary) 12%, transparent);
-  --mat-fab-container-color: var(--mat-sys-primary);
-  --mat-fab-foreground-color: var(--mat-sys-on-primary);
-  --mat-fab-ripple-color: color-mix(in srgb, var(--mat-sys-primary) 12%, transparent);
-  --mat-fab-small-container-color: var(--mat-sys-primary);
-  --mat-fab-small-foreground-color: var(--mat-sys-on-primary);
-  --mat-fab-small-ripple-color: color-mix(in srgb, var(--mat-sys-on-primary) 12%, transparent);
-  --mat-fab-small-state-layer-color: var(--mat-sys-on-primary);
-  --mat-fab-state-layer-color: var(--mat-sys-on-primary);
+  --mat-button-filled-container-color: var(--qs-theme-primary);
+  --mat-button-filled-label-text-color: var(--qs-theme-on-primary);
+  --mat-button-filled-ripple-color: color-mix(in srgb, var(--qs-theme-on-primary) 12%, transparent);
+  --mat-button-filled-state-layer-color: var(--qs-theme-on-primary);
+  --mat-button-outlined-label-text-color: var(--qs-theme-primary);
+  --mat-button-outlined-ripple-color: color-mix(in srgb, var(--qs-theme-primary) 12%, transparent);
+  --mat-button-outlined-state-layer-color: var(--qs-theme-primary);
+  --mat-button-protected-container-color: var(--qs-theme-primary);
+  --mat-button-protected-label-text-color: var(--qs-theme-on-primary);
+  --mat-button-protected-ripple-color: color-mix(in srgb, var(--qs-theme-on-primary) 12%, transparent);
+  --mat-button-protected-state-layer-color: var(--qs-theme-on-primary);
+  --mat-button-text-label-text-color: var(--qs-theme-primary);
+  --mat-button-text-ripple-color: color-mix(in srgb, var(--qs-theme-primary) 12%, transparent);
+  --mat-button-text-state-layer-color: var(--qs-theme-primary);
+  --mat-button-tonal-container-color: var(--qs-theme-primary);
+  --mat-button-tonal-label-text-color: var(--qs-theme-on-primary);
+  --mat-button-tonal-ripple-color: color-mix(in srgb, var(--qs-theme-on-primary) 12%, transparent);
+  --mat-button-tonal-state-layer-color: var(--qs-theme-on-primary);
+  --mat-icon-button-icon-color: var(--qs-theme-primary);
+  --mat-icon-button-state-layer-color: var(--qs-theme-primary);
+  --mat-icon-button-ripple-color: color-mix(in srgb, var(--qs-theme-primary) 12%, transparent);
+  --mat-fab-container-color: var(--qs-theme-primary);
+  --mat-fab-foreground-color: var(--qs-theme-on-primary);
+  --mat-fab-ripple-color: color-mix(in srgb, var(--qs-theme-primary) 12%, transparent);
+  --mat-fab-small-container-color: var(--qs-theme-primary);
+  --mat-fab-small-foreground-color: var(--qs-theme-on-primary);
+  --mat-fab-small-ripple-color: color-mix(in srgb, var(--qs-theme-on-primary) 12%, transparent);
+  --mat-fab-small-state-layer-color: var(--qs-theme-on-primary);
+  --mat-fab-state-layer-color: var(--qs-theme-on-primary);
 }
 
 .qs-mat-accent {
-  --mat-button-filled-container-color: var(--mat-sys-tertiary);
-  --mat-button-filled-label-text-color: var(--mat-sys-on-tertiary);
-  --mat-button-filled-ripple-color: color-mix(in srgb, var(--mat-sys-on-tertiary) 12%, transparent);
-  --mat-button-filled-state-layer-color: var(--mat-sys-on-tertiary);
-  --mat-button-outlined-label-text-color: var(--mat-sys-tertiary);
-  --mat-button-outlined-ripple-color: color-mix(in srgb, var(--mat-sys-tertiary) 12%, transparent);
-  --mat-button-outlined-state-layer-color: var(--mat-sys-tertiary);
-  --mat-button-protected-container-color: var(--mat-sys-tertiary);
-  --mat-button-protected-label-text-color: var(--mat-sys-on-tertiary);
-  --mat-button-protected-ripple-color: color-mix(in srgb, var(--mat-sys-on-tertiary) 12%, transparent);
-  --mat-button-protected-state-layer-color: var(--mat-sys-on-tertiary);
-  --mat-button-text-label-text-color: var(--mat-sys-tertiary);
-  --mat-button-text-ripple-color: color-mix(in srgb, var(--mat-sys-tertiary) 12%, transparent);
-  --mat-button-text-state-layer-color: var(--mat-sys-tertiary);
-  --mat-button-tonal-container-color: var(--mat-sys-tertiary);
-  --mat-button-tonal-label-text-color: var(--mat-sys-on-tertiary);
-  --mat-button-tonal-ripple-color: color-mix(in srgb, var(--mat-sys-on-tertiary) 12%, transparent);
-  --mat-button-tonal-state-layer-color: var(--mat-sys-on-tertiary);
-  --mat-icon-button-icon-color: var(--mat-sys-tertiary);
-  --mat-icon-button-state-layer-color: var(--mat-sys-tertiary);
-  --mat-icon-button-ripple-color: color-mix(in srgb, var(--mat-sys-tertiary) 12%, transparent);
-  --mat-fab-container-color: var(--mat-sys-tertiary);
-  --mat-fab-foreground-color: var(--mat-sys-on-tertiary);
-  --mat-fab-ripple-color: color-mix(in srgb, var(--mat-sys-tertiary) 12%, transparent);
-  --mat-fab-small-container-color: var(--mat-sys-tertiary);
-  --mat-fab-small-foreground-color: var(--mat-sys-on-tertiary);
-  --mat-fab-small-ripple-color: color-mix(in srgb, var(--mat-sys-on-tertiary) 12%, transparent);
-  --mat-fab-small-state-layer-color: var(--mat-sys-on-tertiary);
-  --mat-fab-state-layer-color: var(--mat-sys-on-tertiary);
+  --mat-button-filled-container-color: var(--qs-theme-accent);
+  --mat-button-filled-label-text-color: var(--qs-theme-on-accent);
+  --mat-button-filled-ripple-color: color-mix(in srgb, var(--qs-theme-on-accent) 12%, transparent);
+  --mat-button-filled-state-layer-color: var(--qs-theme-on-accent);
+  --mat-button-outlined-label-text-color: var(--qs-theme-accent);
+  --mat-button-outlined-ripple-color: color-mix(in srgb, var(--qs-theme-accent) 12%, transparent);
+  --mat-button-outlined-state-layer-color: var(--qs-theme-accent);
+  --mat-button-protected-container-color: var(--qs-theme-accent);
+  --mat-button-protected-label-text-color: var(--qs-theme-on-accent);
+  --mat-button-protected-ripple-color: color-mix(in srgb, var(--qs-theme-on-accent) 12%, transparent);
+  --mat-button-protected-state-layer-color: var(--qs-theme-on-accent);
+  --mat-button-text-label-text-color: var(--qs-theme-accent);
+  --mat-button-text-ripple-color: color-mix(in srgb, var(--qs-theme-accent) 12%, transparent);
+  --mat-button-text-state-layer-color: var(--qs-theme-accent);
+  --mat-button-tonal-container-color: var(--qs-theme-accent);
+  --mat-button-tonal-label-text-color: var(--qs-theme-on-accent);
+  --mat-button-tonal-ripple-color: color-mix(in srgb, var(--qs-theme-on-accent) 12%, transparent);
+  --mat-button-tonal-state-layer-color: var(--qs-theme-on-accent);
+  --mat-icon-button-icon-color: var(--qs-theme-accent);
+  --mat-icon-button-state-layer-color: var(--qs-theme-accent);
+  --mat-icon-button-ripple-color: color-mix(in srgb, var(--qs-theme-accent) 12%, transparent);
+  --mat-fab-container-color: var(--qs-theme-accent);
+  --mat-fab-foreground-color: var(--qs-theme-on-accent);
+  --mat-fab-ripple-color: color-mix(in srgb, var(--qs-theme-accent) 12%, transparent);
+  --mat-fab-small-container-color: var(--qs-theme-accent);
+  --mat-fab-small-foreground-color: var(--qs-theme-on-accent);
+  --mat-fab-small-ripple-color: color-mix(in srgb, var(--qs-theme-on-accent) 12%, transparent);
+  --mat-fab-small-state-layer-color: var(--qs-theme-on-accent);
+  --mat-fab-state-layer-color: var(--qs-theme-on-accent);
 }
 
 .mat-mdc-unelevated-button.qs-mat-accent {
-  background-color: var(--mat-sys-tertiary) !important;
-  color: var(--mat-sys-on-tertiary) !important;
+  background-color: var(--qs-theme-accent) !important;
+  color: var(--qs-theme-on-accent) !important;
 }
 
 .mat-mdc-unelevated-button.qs-mat-accent:hover:not(:disabled) {
-  background-color: color-mix(in srgb, var(--mat-sys-tertiary) 92%, black) !important;
+  background-color: color-mix(in srgb, var(--qs-theme-accent) 92%, black) !important;
 }
 
 .mat-mdc-unelevated-button.qs-mat-accent:disabled {
-  background-color: color-mix(in srgb, var(--mat-sys-tertiary) 24%, transparent) !important;
-  color: color-mix(in srgb, var(--mat-sys-on-tertiary) 48%, transparent) !important;
+  background-color: color-mix(in srgb, var(--qs-theme-accent) 24%, transparent) !important;
+  color: color-mix(in srgb, var(--qs-theme-on-accent) 48%, transparent) !important;
 }
 
 .qs-mat-warn {

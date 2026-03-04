@@ -173,6 +173,7 @@ describe('AppUserUtilities', () => {
             const settings = AppUserUtilities.fillMissingAppSettings(user);
             expect(settings.appSettings?.theme).toBe(AppThemes.Normal);
             expect(settings.chartSettings?.stackYAxes).toBe(false);
+            expect(settings.chartSettings?.syncChartHoverToMap).toBe(false);
             expect(settings.dashboardSettings?.dateRange).toBe(DateRanges.all);
             expect(settings.dashboardSettings?.includeMergedEvents).toBe(true);
             expect(settings.unitSettings?.startOfTheWeek).toBe(1); // Monday

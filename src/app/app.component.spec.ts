@@ -79,6 +79,7 @@ describe('AppComponent', () => {
     const mockThemeService = {
         getAppTheme: vi.fn().mockReturnValue(of('Normal')),
         applyBodyTheme: vi.fn(),
+        setAppTheme: vi.fn(),
         themeChange$: new Subject()
     };
 
@@ -296,7 +297,7 @@ describe('AppComponent', () => {
     it('should apply and clear circular theme overlay during reveal animation', () => {
         vi.useFakeTimers();
         const detectSpy = vi.spyOn((component as any).changeDetectorRef, 'detectChanges');
-        mockThemeService.applyBodyTheme.mockClear();
+        mockThemeService.setAppTheme.mockClear();
 
         (component as any).triggerCircularReveal(10, 20, 'Dark');
         expect(component.themeOverlayActive).toBe(true);
@@ -304,14 +305,14 @@ describe('AppComponent', () => {
         expect(detectSpy).toHaveBeenCalled();
 
         vi.advanceTimersByTime(300);
-        expect(mockThemeService.applyBodyTheme).toHaveBeenCalledWith('Dark');
+        expect(mockThemeService.setAppTheme).toHaveBeenCalledWith('Dark', true);
 
         vi.advanceTimersByTime(300);
         expect(component.themeOverlayActive).toBe(false);
 
         (component as any).triggerCircularReveal(10, 20, 'Light');
         vi.advanceTimersByTime(300);
-        expect(mockThemeService.applyBodyTheme).toHaveBeenCalledWith('Light');
+        expect(mockThemeService.setAppTheme).toHaveBeenCalledWith('Light', true);
 
         vi.useRealTimers();
     });

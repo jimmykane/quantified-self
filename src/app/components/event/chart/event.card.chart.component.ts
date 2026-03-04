@@ -163,6 +163,31 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       });
   }
 
+  public get syncChartHoverToMap(): boolean {
+    return this.syncChartHoverToMapOverride
+      ?? this.userSettingsQuery.chartSettings()?.syncChartHoverToMap
+      ?? AppUserUtilities.getDefaultSyncChartHoverToMap();
+  }
+  public set syncChartHoverToMap(value: boolean) {
+    if (value === this.syncChartHoverToMap) {
+      return;
+    }
+
+    this.syncChartHoverToMapOverride = value;
+    this.cdr.markForCheck();
+
+    void this.userSettingsQuery.updateChartSettings({ syncChartHoverToMap: value })
+      .then(() => {
+        this.syncChartHoverToMapOverride = null;
+        this.cdr.markForCheck();
+      })
+      .catch((error) => {
+        this.logger.error('[EventCardChart] Failed to persist syncChartHoverToMap setting', error);
+        this.syncChartHoverToMapOverride = null;
+        this.cdr.markForCheck();
+      });
+  }
+
   public get extraMaxForPower() {
     return this.userSettingsQuery.chartSettings()?.extraMaxForPower ?? AppUserUtilities.getDefaultExtraMaxForPower();
   }
@@ -251,6 +276,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   private cursorPositionSubject = new Subject<number>();
   private xAxisTypeOverride: XAxisTypes | null = null;
   private cursorBehaviourOverride: ChartCursorBehaviours | null = null;
+  private syncChartHoverToMapOverride: boolean | null = null;
   private fillOpacityOverride: number | null = null;
   private fillOpacityPersistTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingRebuild = false;

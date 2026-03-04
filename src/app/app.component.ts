@@ -284,28 +284,15 @@ export class AppComponent implements OnInit, OnDestroy {
   private triggerCircularReveal(x: number, y: number, theme: AppThemes) {
     this.clearThemeOverlayTimeouts();
 
-    const viewportWidth = typeof window === 'undefined' ? 0 : window.innerWidth;
-    const viewportHeight = typeof window === 'undefined' ? 0 : window.innerHeight;
-    const safeX = Number.isFinite(x) ? x : viewportWidth / 2;
-    const safeY = Number.isFinite(y) ? y : viewportHeight / 2;
-    const radius = Math.hypot(
-      Math.max(safeX, viewportWidth - safeX),
-      Math.max(safeY, viewportHeight - safeY)
-    );
-
     this.themeOverlayClass = theme === AppThemes.Dark ? 'dark-theme' : '';
-    this.themeOverlayStyle = {
-      '--qs-theme-reveal-x': `${safeX}px`,
-      '--qs-theme-reveal-y': `${safeY}px`,
-      '--qs-theme-reveal-radius': `${radius}px`,
-    };
+    this.themeOverlayStyle = {};
 
     // Activate overlay immediately
     this.themeOverlayActive = true;
     this.changeDetectorRef.detectChanges();
 
     this.themeOverlayApplyTimeout = setTimeout(() => {
-      this.themeService.applyBodyTheme(theme);
+      this.themeService.setAppTheme(theme, true);
     }, 300); // Apply at ~50% of 600ms animation
 
     this.themeOverlayResetTimeout = setTimeout(() => {

@@ -18,6 +18,7 @@ describe('EventCardChartPanelComponent', () => {
 
   const chart = {
     on: vi.fn(),
+    off: vi.fn(),
     dispatchAction: vi.fn(),
     getOption: vi.fn().mockReturnValue({
       dataZoom: [
@@ -515,6 +516,49 @@ describe('EventCardChartPanelComponent', () => {
 
     const option = getRenderedOption();
     expect(option?.tooltip?.triggerOn).toBe('mousemove|click');
+  });
+
+  it('keeps axis-pointer cursor emission disabled by default', async () => {
+    await renderComponent();
+
+    expect(chart.on).not.toHaveBeenCalledWith('updateAxisPointer', expect.any(Function));
+  });
+
+  it('binds axis-pointer cursor emission when enabled and forwards pointer values', async () => {
+    component.emitAxisPointerCursor = true;
+    const emitSpy = vi.spyOn(component.cursorPositionChange, 'emit');
+
+    await renderComponent();
+
+    const axisPointerHandler = chart.on.mock.calls.find(([eventName]) => eventName === 'updateAxisPointer')?.[1] as ((params: any) => void);
+    expect(axisPointerHandler).toBeTypeOf('function');
+
+    axisPointerHandler({
+      axesInfo: [{ value: 42 }],
+    });
+
+    expect(emitSpy).toHaveBeenCalledWith(42);
+  });
+
+  it('binds and unbinds axis-pointer cursor emission when the input toggles', async () => {
+    await renderComponent();
+
+    chart.on.mockClear();
+    component.emitAxisPointerCursor = true;
+    component.ngOnChanges({
+      emitAxisPointerCursor: new SimpleChange(false, true, false),
+    });
+
+    const axisPointerHandler = chart.on.mock.calls.find(([eventName]) => eventName === 'updateAxisPointer')?.[1];
+    expect(axisPointerHandler).toBeTypeOf('function');
+
+    chart.off.mockClear();
+    component.emitAxisPointerCursor = false;
+    component.ngOnChanges({
+      emitAxisPointerCursor: new SimpleChange(true, false, false),
+    });
+
+    expect(chart.off).toHaveBeenCalledWith('updateAxisPointer', axisPointerHandler);
   });
 
   it('hides tooltip when chart panel leaves viewport', async () => {

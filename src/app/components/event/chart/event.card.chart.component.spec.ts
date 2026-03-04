@@ -27,6 +27,7 @@ describe('EventCardChartComponent', () => {
   const chartSettingsSignal = signal({
     showAllData: false,
     showLaps: true,
+    syncChartHoverToMap: false,
     lapTypes: [],
     xAxisType: XAxisTypes.Duration,
     chartCursorBehaviour: ChartCursorBehaviours.ZoomX,
@@ -228,6 +229,14 @@ describe('EventCardChartComponent', () => {
 
     expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith({ chartCursorBehaviour: ChartCursorBehaviours.ZoomX });
     expect(component.selectedRange).toBeNull();
+  });
+
+  it('should persist syncChartHoverToMap changes', async () => {
+    fixture.detectChanges();
+
+    component.syncChartHoverToMap = true;
+
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith({ syncChartHoverToMap: true });
   });
 
   it('debounces fill opacity persistence while exposing the local override immediately', async () => {

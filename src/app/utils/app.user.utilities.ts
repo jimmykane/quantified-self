@@ -54,6 +54,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import { isNumber } from 'lodash-es';
 import {
+    AppChartSettingsInterface,
     AppMapStyleName,
     AppDashboardSettingsInterface,
     AppMapSettingsInterface,
@@ -268,6 +269,10 @@ export class AppUserUtilities {
         return 0;
     }
 
+    static getDefaultSyncChartHoverToMap(): boolean {
+        return false;
+    }
+
     static getResolvedChartFillOpacity(chartSettings?: { fillOpacity?: number; fillOpacityVersion?: number } | null): number {
         if (chartSettings?.fillOpacityVersion === 1 && isNumber(chartSettings.fillOpacity)) {
             return Math.min(1, Math.max(0, Number(chartSettings.fillOpacity)));
@@ -334,6 +339,7 @@ export class AppUserUtilities {
         settings.chartSettings.extraMaxForPace = isNumber(settings.chartSettings.extraMaxForPace) ? settings.chartSettings.extraMaxForPace : AppUserUtilities.getDefaultExtraMaxForPace();
         settings.chartSettings.lapTypes = settings.chartSettings.lapTypes || AppUserUtilities.getDefaultChartLapTypes();
         settings.chartSettings.showLaps = settings.chartSettings.showLaps !== false;
+        (settings.chartSettings as AppChartSettingsInterface).syncChartHoverToMap = (settings.chartSettings as AppChartSettingsInterface).syncChartHoverToMap === true;
         settings.chartSettings.showGrid = settings.chartSettings.showGrid !== false;
         settings.chartSettings.stackYAxes = false;
         settings.chartSettings.disableGrouping = settings.chartSettings.disableGrouping === true;

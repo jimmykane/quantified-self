@@ -28,6 +28,7 @@ export class EventCardChartActionsComponent implements OnChanges {
   @Input() showAllData: boolean;
   @Input() showLaps: boolean;
   @Input() cursorBehaviour: ChartCursorBehaviours = ChartCursorBehaviours.ZoomX;
+  @Input() syncChartHoverToMap = false;
   @Input() fillOpacity = 0;
   @Input() showSeriesMenu = false;
   @Input() seriesMenuSummary = '';
@@ -37,6 +38,7 @@ export class EventCardChartActionsComponent implements OnChanges {
   @Output() xAxisTypeChange: EventEmitter<XAxisTypes> = new EventEmitter<XAxisTypes>();
   @Output() fillOpacityChange = new EventEmitter<number>();
   @Output() cursorBehaviourChange = new EventEmitter<ChartCursorBehaviours>();
+  @Output() syncChartHoverToMapChange = new EventEmitter<boolean>();
   @Output() seriesVisibilityToggle = new EventEmitter<{ dataType: string; visible: boolean }>();
   @Output() showAllSeries = new EventEmitter<void>();
 
@@ -116,6 +118,11 @@ export class EventCardChartActionsComponent implements OnChanges {
     await this.somethingChanged('fillOpacity');
   }
 
+  async onSyncChartHoverToMapToggle(checked: boolean) {
+    this.syncChartHoverToMap = checked;
+    await this.somethingChanged('syncChartHoverToMap');
+  }
+
   async somethingChanged(prop?: string) {
     if (prop === 'xAxisType') {
       this.xAxisTypeChange.emit(this.xAxisType);
@@ -123,6 +130,8 @@ export class EventCardChartActionsComponent implements OnChanges {
       this.fillOpacityChange.emit(this.fillOpacity);
     } else if (prop === 'cursorBehaviour') {
       this.cursorBehaviourChange.emit(this.cursorBehaviour);
+    } else if (prop === 'syncChartHoverToMap') {
+      this.syncChartHoverToMapChange.emit(this.syncChartHoverToMap);
     } else if (prop === 'showAllData') {
       this.showAllDataChange.emit(this.showAllData);
     } else if (prop === 'showLaps') {
@@ -132,6 +141,7 @@ export class EventCardChartActionsComponent implements OnChanges {
       this.xAxisTypeChange.emit(this.xAxisType);
       this.fillOpacityChange.emit(this.fillOpacity);
       this.cursorBehaviourChange.emit(this.cursorBehaviour);
+      this.syncChartHoverToMapChange.emit(this.syncChartHoverToMap);
       this.showAllDataChange.emit(this.showAllData);
       this.showLapsChange.emit(this.showLaps);
     }

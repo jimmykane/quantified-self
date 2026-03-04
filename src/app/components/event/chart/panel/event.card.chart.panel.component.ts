@@ -82,8 +82,6 @@ const LAP_TOOLTIP_OFFSET_Y = 12;
 const ZOOM_BAR_SLIDER_HEIGHT = 24;
 const ZOOM_BAR_HANDLE_SIZE = 24;
 const SELECTION_BRUSH_SOURCE = 'event-chart-selection-sync';
-// Temporary perf toggle: disable axis-pointer -> map cursor emission path.
-const TEMP_DISABLE_AXIS_POINTER_CURSOR_EMIT = true;
 
 @Component({
   selector: 'app-event-card-chart-panel',
@@ -106,6 +104,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @Input() showLaps = true;
   @Input() lapTypes: LapTypes[] = [];
   @Input() lapMarkers: EventChartLapMarker[] = [];
+  @Input() emitAxisPointerCursor = false;
   @Input() gainAndLossThreshold = AppUserUtilities.getDefaultGainAndLossThreshold();
   @Input() extraMaxForPower = 0;
   @Input() extraMaxForPace = -0.25;
@@ -140,6 +139,13 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private applyingSharedSelectionRange = false;
   private applyingSharedZoomRange = false;
   private chartRefreshSequence: Promise<void> = Promise.resolve();
+  private axisPointerCursorBoundChart: EChartsType | null = null;
+  private readonly axisPointerCursorHandler = (params: AxisPointerEvent) => {
+    const value = Number(params?.axesInfo?.[0]?.value);
+    if (Number.isFinite(value)) {
+      this.cursorPositionChange.emit(value);
+    }
+  };
 
   private get isMobile(): boolean {
     return typeof window !== 'undefined' && window.matchMedia(AppBreakpoints.XSmall).matches;
@@ -255,6 +261,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       || changes.xDomain
       || changes.showLaps
       || changes.lapMarkers
+      || changes.emitAxisPointerCursor
       || changes.extraMaxForPower
       || changes.extraMaxForPace
       || changes.strokeWidth
@@ -267,6 +274,13 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     if (changes.cursorBehaviour && !changes.cursorBehaviour.firstChange) {
       this.syncInteractionMode();
+    }
+
+    if (
+      (changes.emitAxisPointerCursor && !changes.emitAxisPointerCursor.firstChange)
+      || (changes.panel && !changes.panel.firstChange)
+    ) {
+      this.syncAxisPointerCursorEmitBinding();
     }
 
     if (
@@ -286,6 +300,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   ngOnDestroy(): void {
     this.teardownViewportObserver();
     this.unbindWheelPassThrough();
+    this.unbindAxisPointerCursorEmit();
     this.disconnectNativeZoomGroup();
     this.chartHost.dispose();
   }
@@ -316,6 +331,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       this.rangeStats = [];
       if (this.showZoomBar) {
         this.chartHost.setOption(this.buildZoomBarOnlyOption(), { notMerge: true, lazyUpdate: true });
+        this.syncAxisPointerCursorEmitBinding();
         this.syncNativeZoomGroup();
         this.chartHost.scheduleResize();
         this.cdr.markForCheck();
@@ -323,6 +339,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       }
 
       this.disconnectNativeZoomGroup();
+      this.syncAxisPointerCursorEmitBinding();
       this.chartHost.setOption({
         animation: this.useAnimations === true,
         xAxis: [],
@@ -336,6 +353,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       this.seriesByID.clear();
       this.rangeStats = [];
       this.disconnectNativeZoomGroup();
+      this.syncAxisPointerCursorEmitBinding();
       this.chartHost.setOption({
         animation: this.useAnimations === true,
         xAxis: [],
@@ -347,6 +365,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     this.seriesByID = new Map(this.panel.series.map((series) => [series.id, series]));
     this.chartHost.setOption(this.buildOption(), ECHARTS_INTERACTIVE_CARTESIAN_MERGE_UPDATE_SETTINGS);
+    this.syncAxisPointerCursorEmitBinding();
     this.applyCanonicalXAxisScale();
     this.syncInteractionMode();
     this.applySharedSelectionRange();
@@ -629,15 +648,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return;
     }
 
-    if (this.panel && !TEMP_DISABLE_AXIS_POINTER_CURSOR_EMIT) {
-      chart.on('updateAxisPointer', (params: AxisPointerEvent) => {
-        const value = Number(params?.axesInfo?.[0]?.value);
-        if (Number.isFinite(value)) {
-          this.cursorPositionChange.emit(value);
-        }
-      });
-    }
-
     if (this.panel) {
       chart.on('mousemove', (params: ECElementEvent) => {
         if (params?.componentType === 'markLine') {
@@ -673,6 +683,32 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     this.eventsBound = true;
+  }
+
+  private syncAxisPointerCursorEmitBinding(): void {
+    const chart = this.chartHost.getChart();
+    const shouldEmitAxisPointerCursor = !!this.panel && this.emitAxisPointerCursor;
+
+    if (this.axisPointerCursorBoundChart && (this.axisPointerCursorBoundChart !== chart || !shouldEmitAxisPointerCursor)) {
+      this.axisPointerCursorBoundChart.off('updateAxisPointer', this.axisPointerCursorHandler);
+      this.axisPointerCursorBoundChart = null;
+    }
+
+    if (!chart || !shouldEmitAxisPointerCursor || this.axisPointerCursorBoundChart === chart) {
+      return;
+    }
+
+    chart.on('updateAxisPointer', this.axisPointerCursorHandler);
+    this.axisPointerCursorBoundChart = chart;
+  }
+
+  private unbindAxisPointerCursorEmit(): void {
+    if (!this.axisPointerCursorBoundChart) {
+      return;
+    }
+
+    this.axisPointerCursorBoundChart.off('updateAxisPointer', this.axisPointerCursorHandler);
+    this.axisPointerCursorBoundChart = null;
   }
 
   private syncViewportObserver(): void {

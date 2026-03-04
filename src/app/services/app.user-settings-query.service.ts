@@ -40,7 +40,7 @@ export class AppUserSettingsQueryService {
      */
     public readonly chartSettings = toSignal(
         this.user$.pipe(
-            map(user => user?.settings?.chartSettings ?? {} as AppChartSettingsInterface),
+            map(user => (user?.settings?.chartSettings ?? {}) as AppChartSettingsInterface),
             distinctUntilChanged((prev, curr) => equal(prev, curr))
         ),
         { initialValue: {} as AppChartSettingsInterface }

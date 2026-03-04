@@ -131,9 +131,11 @@ export class AppThemeService implements OnDestroy {
         ...coordinates,
         theme
       });
+      await this.persistTheme(theme);
+      return;
     }
 
-    this.applyThemeState(theme, true, !origin);
+    this.applyThemeState(theme, true, true);
     await this.persistTheme(theme);
   }
 
