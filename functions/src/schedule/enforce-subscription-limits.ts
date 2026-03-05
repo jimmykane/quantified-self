@@ -234,16 +234,19 @@ async function processUser(uid: string, hasConnectedServices: boolean, hasPaidHi
                 }
 
                 const bulkWriter = admin.firestore().bulkWriter();
-                const deletePromises = excessSnapshot.docs.map((eventDoc) => {
-                    logger.info(`Deleting excess event ${eventDoc.id}`);
-                    return admin.firestore().recursiveDelete(eventDoc.ref, bulkWriter);
-                });
+                try {
+                    const deletePromises = excessSnapshot.docs.map((eventDoc) => {
+                        logger.info(`Deleting excess event ${eventDoc.id}`);
+                        return admin.firestore().recursiveDelete(eventDoc.ref, bulkWriter);
+                    });
 
-                const deleteResults = await Promise.allSettled(deletePromises);
-                const firstFailure = deleteResults.find((result): result is PromiseRejectedResult => result.status === 'rejected');
-                await bulkWriter.close();
-                if (firstFailure) {
-                    throw firstFailure.reason;
+                    const deleteResults = await Promise.allSettled(deletePromises);
+                    const firstFailure = deleteResults.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+                    if (firstFailure) {
+                        throw firstFailure.reason;
+                    }
+                } finally {
+                    await bulkWriter.close();
                 }
 
                 remainingToDelete -= excessSnapshot.docs.length;
