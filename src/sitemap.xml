@@ -20,4 +20,14 @@
     <lastmod>2026-01-07</lastmod>
     <priority>0.9</priority>
   </url>
+  <url>
+    <loc>https://quantified-self.io/help</loc>
+    <lastmod>2026-03-05</lastmod>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://quantified-self.io/releases</loc>
+    <lastmod>2026-03-05</lastmod>
+    <priority>0.7</priority>
+  </url>
 </urlset>
