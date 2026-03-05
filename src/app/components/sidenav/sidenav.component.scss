@@ -346,6 +346,10 @@ mat-list-item:not(.theme-toggle-item):hover mat-icon {
   display: flex;
 }
 
+:host ::ng-deep .theme-toggle-group .mat-button-toggle-label-content {
+  padding: 0 8px !important;
+}
+
 .theme-toggle-group mat-button-toggle {
   flex: 1 1 0;
   min-width: 0;
@@ -363,7 +367,7 @@ mat-list-item:not(.theme-toggle-item):hover mat-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 4px;
   width: auto;
   white-space: nowrap;
   font-size: 0.78rem;
@@ -373,10 +377,10 @@ mat-list-item:not(.theme-toggle-item):hover mat-icon {
 .theme-toggle-option mat-icon {
   margin: 0 !important;
   padding: 0;
-  width: 20px;
-  height: 20px;
-  font-size: 20px;
-  line-height: 20px;
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
+  line-height: 18px;
   opacity: 1;
 }
 
@@ -434,6 +438,16 @@ mat-divider {
   display: flex;
   justify-content: center;
   gap: 4px;
+}
+
+.help-cta-button {
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+.help-cta-button mat-icon {
+  margin: 0 8px 0 0;
+  opacity: 1;
 }
 
 .sidenav-footer-links button {

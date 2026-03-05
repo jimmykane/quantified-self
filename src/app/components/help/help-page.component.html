@@ -9,7 +9,11 @@
     @if (isHandset()) {
       <mat-form-field appearance="outline" class="section-picker">
         <mat-label>Choose a help topic</mat-label>
-        <mat-select [value]="selectedSectionId" (selectionChange)="onSectionSelect($event.value)">
+        <mat-select
+          [value]="selectedSectionId"
+          [hideSingleSelectionIndicator]="true"
+          [disableOptionCentering]="true"
+          (selectionChange)="onSectionSelect($event.value)">
           <mat-select-trigger>
             <span class="picker-option">
               <span class="topic-avatar">
@@ -20,12 +24,8 @@
           </mat-select-trigger>
           @for (section of sections; track section.id) {
             <mat-option [value]="section.id">
-              <span class="picker-option">
-                <span class="topic-avatar">
-                  <mat-icon>{{ section.icon }}</mat-icon>
-                </span>
-                <span>{{ section.title }}</span>
-              </span>
+              <mat-icon>{{ section.icon }}</mat-icon>
+              <span>{{ section.title }}</span>
             </mat-option>
           }
         </mat-select>

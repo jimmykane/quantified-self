@@ -117,6 +117,10 @@
     box-shadow: none !important;
 }
 
+:host ::ng-deep .policy-details-panel .mat-expansion-panel-body {
+    padding: 1rem;
+}
+
 .qs-form-actions {
     display: flex;
     justify-content: flex-end;

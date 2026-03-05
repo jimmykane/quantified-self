@@ -34,9 +34,12 @@
 .topic-avatar {
   width: 1.5rem;
   height: 1.5rem;
+  flex: 0 0 1.5rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  line-height: 1;
+  overflow: hidden;
   border-radius: 50%;
   background-color: rgba(0, 0, 0, 0.05);
   color: var(--mat-sys-primary);
@@ -46,6 +49,9 @@
   font-size: 1.05rem;
   width: 1.05rem;
   height: 1.05rem;
+  line-height: 1.05rem;
+  margin: 0;
+  display: block;
 }
 
 .section-picker {
@@ -56,6 +62,8 @@
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+  min-height: 1.5rem;
+  line-height: 1.2;
 }
 
 .help-content-grid {
