@@ -207,13 +207,12 @@ async function processUser(uid: string, hasConnectedServices: boolean, hasPaidHi
                 const bulkWriter = admin.firestore().bulkWriter();
                 const deletePromises = excessSnapshot.docs.map((eventDoc) => {
                     logger.info(`Deleting excess event ${eventDoc.id}`);
-                    return bulkWriter.delete(eventDoc.ref);
+                    return admin.firestore().recursiveDelete(eventDoc.ref, bulkWriter);
                 });
-
-                await bulkWriter.close();
 
                 const deleteResults = await Promise.allSettled(deletePromises);
                 const firstFailure = deleteResults.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+                await bulkWriter.close();
                 if (firstFailure) {
                     throw firstFailure.reason;
                 }

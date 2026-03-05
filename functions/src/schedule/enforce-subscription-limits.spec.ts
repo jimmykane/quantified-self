@@ -4,7 +4,6 @@ import * as admin from 'firebase-admin';
 // Mock dependencies using vi.hoisted for top-level access
 const {
     mockBulkWriterClose,
-    mockBulkWriterDelete,
     mockGetUser,
     mockSetCustomUserClaims,
     mockRecursiveDelete,
@@ -12,7 +11,6 @@ const {
     mockAuthInstance
 } = vi.hoisted(() => {
     const bulkWriter = {
-        delete: vi.fn().mockResolvedValue(undefined),
         close: vi.fn().mockResolvedValue(undefined)
     };
     const auth = {
@@ -46,7 +44,6 @@ const {
     };
     return {
         mockBulkWriterClose: bulkWriter.close,
-        mockBulkWriterDelete: bulkWriter.delete,
         mockGetUser: auth.getUser,
         mockSetCustomUserClaims: auth.setCustomUserClaims,
         mockAuthInstance: auth,
@@ -271,9 +268,8 @@ describe('enforceSubscriptionLimits', () => {
         }, { merge: true });
 
         // Verify pruning matches older events logic
-        expect(mockBulkWriterDelete).toHaveBeenCalledTimes(2);
+        expect(mockRecursiveDelete).toHaveBeenCalledTimes(2);
         expect(mockBulkWriterClose).toHaveBeenCalledTimes(1);
-        expect(mockRecursiveDelete).not.toHaveBeenCalled();
     });
 
     it('should respect the configured Basic limit', async () => {
@@ -313,7 +309,7 @@ describe('enforceSubscriptionLimits', () => {
         expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.COROSAPI);
         expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.GarminAPI);
 
-        expect(mockBulkWriterDelete).toHaveBeenCalledTimes(basicExcessCount);
+        expect(mockRecursiveDelete).toHaveBeenCalledTimes(basicExcessCount);
         expect(mockBulkWriterClose).toHaveBeenCalledTimes(1);
     });
 
@@ -344,13 +340,16 @@ describe('enforceSubscriptionLimits', () => {
     });
 
     it('should prune non-connected free users without deauthorizing services or rewriting claims', async () => {
+        const event1Ref = { id: 'event1' };
+        const event2Ref = { id: 'event2' };
+
         mockFirestoreInstance.collection.mockImplementation((path: string) => {
             if (path === 'users') return mockQuery([mockUserDoc('user2')]);
             if (path.includes('subscriptions')) return mockQuery([]);
             if (path.includes('events')) {
                 const docs = [
-                    { id: 'event1', ref: { id: 'event1' } },
-                    { id: 'event2', ref: { id: 'event2' } }
+                    { id: 'event1', ref: event1Ref },
+                    { id: 'event2', ref: event2Ref }
                 ];
                 return mockQuery(docs, USAGE_LIMITS.free + 2);
             }
@@ -365,7 +364,16 @@ describe('enforceSubscriptionLimits', () => {
         const wrapped = enforceSubscriptionLimits as any;
         await wrapped({});
 
-        expect(mockBulkWriterDelete).toHaveBeenCalledTimes(2);
+        expect(mockRecursiveDelete).toHaveBeenCalledTimes(2);
+        expect(mockFirestoreInstance.bulkWriter).toHaveBeenCalledTimes(1);
+        expect(mockBulkWriterClose).toHaveBeenCalledTimes(1);
+
+        const [firstRef, firstWriter] = mockRecursiveDelete.mock.calls[0];
+        const [secondRef, secondWriter] = mockRecursiveDelete.mock.calls[1];
+        expect(firstRef).toBe(event1Ref);
+        expect(secondRef).toBe(event2Ref);
+        expect(firstWriter).toBe(secondWriter);
+
         expect(deauthorizeServiceSpy).not.toHaveBeenCalled();
         expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
     });
@@ -398,7 +406,7 @@ describe('enforceSubscriptionLimits', () => {
             lastDowngradedAt: 'SERVER_TIMESTAMP'
         }), { merge: true });
         expect(Claims.reconcileClaims).toHaveBeenCalledWith('user3');
-        expect(mockBulkWriterDelete).not.toHaveBeenCalled();
+        expect(mockRecursiveDelete).not.toHaveBeenCalled();
         expect(deauthorizeServiceSpy).not.toHaveBeenCalled();
     });
 
@@ -483,13 +491,13 @@ describe('enforceSubscriptionLimits', () => {
         const wrapped = enforceSubscriptionLimits as any;
         await wrapped({});
 
-        expect(mockBulkWriterDelete).not.toHaveBeenCalled();
+        expect(mockRecursiveDelete).not.toHaveBeenCalled();
         expect(eventsQuery.get).toHaveBeenCalledTimes(1);
     });
 
     it('should handle pruning delete failures without aborting the scheduler run', async () => {
         const pastDate = new Date(Date.now() - 100000);
-        mockBulkWriterDelete.mockRejectedValueOnce(new Error('delete failed'));
+        mockRecursiveDelete.mockRejectedValueOnce(new Error('delete failed'));
 
         mockFirestoreInstance.collection.mockImplementation((path: string) => {
             if (path === GARMIN_API_TOKENS_COLLECTION_NAME) return mockQuery([{ id: 'user1' }]);
