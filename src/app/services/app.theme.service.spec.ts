@@ -5,6 +5,7 @@ import { AppAuthService } from '../authentication/app.auth.service';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { BehaviorSubject, firstValueFrom } from 'rxjs';
 import { AppThemes } from '@sports-alliance/sports-lib';
+import { SYSTEM_THEME_PREFERENCE } from '../models/app-theme-preference.type';
 
 describe('AppThemeService', () => {
     let service: AppThemeService;
@@ -135,12 +136,7 @@ describe('AppThemeService', () => {
         });
 
         it('should NOT react to system theme changes when preference is stored', async () => {
-            // Store explicit preference
-            localStorage.setItem('appTheme', AppThemes.Normal);
-
-            service.ngOnDestroy();
-            mockMediaQueryList.matches = false;
-            service = TestBed.inject(AppThemeService);
+            await service.setPreferredTheme(AppThemes.Normal);
 
             // Simulate system theme change to dark
             const event = { matches: true } as MediaQueryListEvent;
@@ -149,6 +145,21 @@ describe('AppThemeService', () => {
             const theme = await firstValueFrom(service.getAppTheme());
             expect(theme).toBe(AppThemes.Normal); // Should still be light
         });
+
+        it('should react to system changes when explicit System preference is selected', async () => {
+            mockMediaQueryList.matches = false;
+            await service.setPreferredTheme(SYSTEM_THEME_PREFERENCE);
+
+            let theme = await firstValueFrom(service.getAppTheme());
+            expect(theme).toBe(AppThemes.Normal);
+
+            const event = { matches: true } as MediaQueryListEvent;
+            mediaQueryListeners.forEach(listener => listener(event));
+
+            theme = await firstValueFrom(service.getAppTheme());
+            expect(theme).toBe(AppThemes.Dark);
+        });
+
     });
 
     describe('toggleTheme', () => {
@@ -229,6 +240,49 @@ describe('AppThemeService', () => {
 
             const theme = await firstValueFrom(service.getAppTheme());
             expect(theme).toBe(AppThemes.Dark);
+        });
+
+        it('should apply user system theme preference when user logs in', async () => {
+            mockMediaQueryList.matches = true;
+
+            const mockUser = {
+                settings: {
+                    appSettings: { themePreference: SYSTEM_THEME_PREFERENCE, theme: AppThemes.Normal },
+                    mapSettings: {}
+                }
+            };
+
+            userSubject.next(mockUser);
+
+            const theme = await firstValueFrom(service.getAppTheme());
+            expect(theme).toBe(AppThemes.Dark);
+        });
+
+        it('should not override local system preference with legacy user theme values', async () => {
+            mockMediaQueryList.matches = false;
+            await service.setPreferredTheme(SYSTEM_THEME_PREFERENCE);
+
+            const legacyThemeUser = {
+                settings: {
+                    appSettings: { theme: AppThemes.Dark },
+                    mapSettings: {}
+                }
+            };
+
+            userSubject.next(legacyThemeUser);
+
+            const theme = await firstValueFrom(service.getAppTheme());
+            expect(theme).toBe(AppThemes.Normal);
+            expect(localStorage.getItem('appTheme')).toBe(SYSTEM_THEME_PREFERENCE);
+        });
+
+        it('should persist explicit system selection even if the theme does not change immediately', async () => {
+            mockMediaQueryList.matches = false;
+            localStorage.clear();
+
+            await service.setPreferredTheme(SYSTEM_THEME_PREFERENCE);
+
+            expect(localStorage.getItem('appTheme')).toBe(SYSTEM_THEME_PREFERENCE);
         });
     });
 

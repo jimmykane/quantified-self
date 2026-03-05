@@ -202,11 +202,11 @@ mat-list-item {
   width: 100%;
 }
 
-mat-list-item:hover {
+mat-list-item:not(.theme-toggle-item):hover {
   background-color: var(--mat-sys-state-hover, rgba(0, 0, 0, 0.04)) !important;
 }
 
-:host-context(.dark-theme) mat-list-item:hover {
+:host-context(.dark-theme) mat-list-item:not(.theme-toggle-item):hover {
   background-color: var(--mat-sys-state-hover, rgba(255, 255, 255, 0.06)) !important;
 }
 
@@ -257,7 +257,7 @@ mat-list-item mat-icon svg rect {
   fill: currentColor !important;
 }
 
-mat-list-item:hover mat-icon {
+mat-list-item:not(.theme-toggle-item):hover mat-icon {
   opacity: 1;
   transform: scale(1.05);
 }
@@ -312,6 +312,9 @@ mat-list-item:hover mat-icon {
   --mat-list-list-item-hover-state-layer-color: transparent;
   --mat-list-list-item-hover-state-layer-opacity: 0;
   --mat-list-list-item-focus-state-layer-opacity: 0;
+  --mdc-list-list-item-hover-state-layer-color: transparent;
+  --mdc-list-list-item-hover-state-layer-opacity: 0;
+  --mdc-list-list-item-focus-state-layer-opacity: 0;
 
   &:hover {
     background-color: transparent !important;
@@ -338,22 +341,42 @@ mat-list-item:hover mat-icon {
 
 .theme-toggle-group {
   margin: 0 auto;
+  width: 100%;
+  max-width: 276px;
+  display: flex;
 }
 
 .theme-toggle-group mat-button-toggle {
-  min-width: 72px;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.theme-toggle-group mat-button-toggle:hover:not(.mat-button-toggle-checked) {
+  background-color: var(--mat-sys-state-hover, rgba(0, 0, 0, 0.04));
+}
+
+:host-context(.dark-theme) .theme-toggle-group mat-button-toggle:hover:not(.mat-button-toggle-checked) {
+  background-color: var(--mat-sys-state-hover, rgba(255, 255, 255, 0.06));
 }
 
 .theme-toggle-option {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  width: 100%;
+  gap: 6px;
+  width: auto;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  line-height: 1;
 }
 
 .theme-toggle-option mat-icon {
-  margin: 0;
+  margin: 0 !important;
+  padding: 0;
+  width: 20px;
+  height: 20px;
+  font-size: 20px;
+  line-height: 20px;
   opacity: 1;
 }
 

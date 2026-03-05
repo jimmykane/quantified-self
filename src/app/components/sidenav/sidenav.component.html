@@ -112,12 +112,19 @@
   <mat-list-item class="theme-toggle-item" aria-label="Theme preference">
     <div class="theme-toggle-row">
       <mat-button-toggle-group class="theme-toggle-group" name="theme" aria-label="Theme selection"
-        hideSingleSelectionIndicator [value]="appTheme()">
+        hideSingleSelectionIndicator [value]="themePreference()">
         <mat-button-toggle [value]="appThemes.Normal" aria-label="Use light theme"
           (click)="setTheme(appThemes.Normal, $event)">
           <span class="theme-toggle-option">
             <mat-icon>light_mode</mat-icon>
             <span>Light</span>
+          </span>
+        </mat-button-toggle>
+        <mat-button-toggle [value]="systemThemePreference" aria-label="Use system theme"
+          (click)="setTheme(systemThemePreference, $event)">
+          <span class="theme-toggle-option">
+            <mat-icon>brightness_auto</mat-icon>
+            <span>System</span>
           </span>
         </mat-button-toggle>
         <mat-button-toggle [value]="appThemes.Dark" aria-label="Use dark theme" (click)="setTheme(appThemes.Dark, $event)">

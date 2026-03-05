@@ -34,6 +34,7 @@ import {
   MapTypes,
   UserMapSettingsInterface
 } from '@sports-alliance/sports-lib';
+import { AppThemePreference, isAppThemePreference, SYSTEM_THEME_PREFERENCE } from '../../models/app-theme-preference.type';
 
 @Component({
   selector: 'app-user-settings',
@@ -82,7 +83,11 @@ export class UserSettingsComponent implements OnChanges {
     },
   ];
 
-  public appThemes = AppThemes;
+  public readonly appThemeOptions: Array<{ label: string; value: AppThemePreference }> = [
+    { label: 'System', value: SYSTEM_THEME_PREFERENCE },
+    { label: 'Light', value: AppThemes.Normal },
+    { label: 'Dark', value: AppThemes.Dark },
+  ];
   public lapTypes = LapTypesHelper.getLapTypesAsUniqueArray();
 
   public eventsPerPage = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000];
@@ -152,6 +157,10 @@ export class UserSettingsComponent implements OnChanges {
       return this.user.settings.chartSettings.dataTypeSettings[dataTypeSettingKey].enabled === true;
     });
 
+    const initialThemePreference = isAppThemePreference(this.user.settings.appSettings.themePreference)
+      ? this.user.settings.appSettings.themePreference
+      : (isAppThemePreference(this.user.settings.appSettings.theme) ? this.user.settings.appSettings.theme : AppThemes.Normal);
+
     this.userSettingsFormGroup = new UntypedFormGroup({
       displayName: new UntypedFormControl(this.user.displayName, [
         Validators.required,
@@ -163,9 +172,11 @@ export class UserSettingsComponent implements OnChanges {
       dataTypesToUse: new UntypedFormControl(dataTypesToUse, [
         Validators.required,
       ]),
-      appTheme: new UntypedFormControl(this.user.settings.appSettings.theme, [
-        Validators.required,
-      ]),
+      appTheme: new UntypedFormControl(
+        initialThemePreference,
+        [
+          Validators.required,
+        ]),
       acceptedTrackingPolicy: new UntypedFormControl(this.user.acceptedTrackingPolicy, []),
       acceptedMarketingPolicy: new UntypedFormControl(this.user.acceptedMarketingPolicy || false, []),
       brandText: new UntypedFormControl(
@@ -314,6 +325,14 @@ export class UserSettingsComponent implements OnChanges {
         downSamplingLevel: this.userSettingsFormGroup.get('chartDownSamplingLevel').value,
       };
 
+      const selectedThemeControlValue = this.userSettingsFormGroup.get('appTheme').value;
+      const selectedThemePreference = isAppThemePreference(selectedThemeControlValue)
+        ? selectedThemeControlValue
+        : AppThemes.Normal;
+      const resolvedTheme = selectedThemePreference === SYSTEM_THEME_PREFERENCE
+        ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? AppThemes.Dark : AppThemes.Normal)
+        : selectedThemePreference;
+
       const propertiesToUpdate: any = {
         displayName: this.userSettingsFormGroup.get('displayName').value,
         privacy: this.userSettingsFormGroup.get('privacy').value,
@@ -322,7 +341,10 @@ export class UserSettingsComponent implements OnChanges {
         acceptedMarketingPolicy: this.userSettingsFormGroup.get('acceptedMarketingPolicy').value,
         settings: <UserSettingsInterface>{
           chartSettings: userChartSettings as unknown as UserSettingsInterface['chartSettings'],
-          appSettings: <UserAppSettingsInterface>{ theme: this.userSettingsFormGroup.get('appTheme').value },
+          appSettings: <UserAppSettingsInterface & { themePreference?: AppThemePreference }>{
+            theme: resolvedTheme,
+            themePreference: selectedThemePreference
+          },
           mapSettings: <UserMapSettingsInterface>{
             showLaps: this.userSettingsFormGroup.get('showMapLaps').value,
 

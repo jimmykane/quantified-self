@@ -305,14 +305,14 @@ describe('AppComponent', () => {
         expect(detectSpy).toHaveBeenCalled();
 
         vi.advanceTimersByTime(300);
-        expect(mockThemeService.setAppTheme).toHaveBeenCalledWith('Dark', true);
+        expect(mockThemeService.setAppTheme).toHaveBeenCalledWith('Dark', false);
 
         vi.advanceTimersByTime(300);
         expect(component.themeOverlayActive).toBe(false);
 
         (component as any).triggerThemeReveal(10, 20, 'Light');
         vi.advanceTimersByTime(300);
-        expect(mockThemeService.setAppTheme).toHaveBeenCalledWith('Light', true);
+        expect(mockThemeService.setAppTheme).toHaveBeenCalledWith('Light', false);
 
         vi.useRealTimers();
     });

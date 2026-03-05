@@ -140,9 +140,9 @@
           <mat-form-field appearance="outline">
             <mat-label>Interface Theme</mat-label>
             <mat-select formControlName="appTheme">
-              @for (appTheme of appThemes | keyvalue; track appTheme) {
+              @for (appTheme of appThemeOptions; track appTheme.value) {
               <mat-option [value]="appTheme.value">
-                {{appTheme.key}}
+                {{appTheme.label}}
               </mat-option>
               }
             </mat-select>

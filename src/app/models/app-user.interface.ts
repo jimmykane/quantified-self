@@ -11,6 +11,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import { Timestamp } from '@angular/fire/firestore';
 import { StripeRole } from './stripe-role.model';
+import { AppThemePreference } from './app-theme-preference.type';
 
 export type AppMapStyleName = 'default' | 'satellite' | 'outdoors';
 
@@ -38,6 +39,7 @@ export interface AppChartSettingsInterface extends Omit<UserChartSettingsInterfa
 
 export interface AppAppSettingsInterface extends UserAppSettingsInterface {
     lastSeenChangelogDate?: { seconds: number, nanoseconds: number } | Date;
+    themePreference?: AppThemePreference;
 }
 
 export interface AppUserSettingsInterface extends UserSettingsInterface {

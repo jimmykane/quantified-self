@@ -15,6 +15,7 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { AppWhatsNewService } from '../../services/app.whats-new.service';
 import { signal } from '@angular/core';
 import { AppThemes } from '@sports-alliance/sports-lib';
+import { SYSTEM_THEME_PREFERENCE } from '../../models/app-theme-preference.type';
 
 describe('SideNavComponent', () => {
     let component: SideNavComponent;
@@ -32,6 +33,7 @@ describe('SideNavComponent', () => {
         };
         mockThemeService = {
             getAppTheme: () => of(AppThemes.Normal),
+            getThemePreference: () => of(SYSTEM_THEME_PREFERENCE),
             setPreferredTheme: vi.fn().mockResolvedValue(undefined)
         };
 
@@ -65,6 +67,14 @@ describe('SideNavComponent', () => {
         await component.setTheme(AppThemes.Dark, event);
 
         expect(mockThemeService.setPreferredTheme).toHaveBeenCalledWith(AppThemes.Dark, event);
+    });
+
+    it('should delegate system theme preference changes to the theme service', async () => {
+        const event = new MouseEvent('click');
+
+        await component.setTheme(SYSTEM_THEME_PREFERENCE, event);
+
+        expect(mockThemeService.setPreferredTheme).toHaveBeenCalledWith(SYSTEM_THEME_PREFERENCE, event);
     });
 
     it('isProUser should be false for basic role', () => {

@@ -1,10 +1,14 @@
 import { Injectable, OnDestroy, Signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { AppThemes } from '@sports-alliance/sports-lib';
-import { AppUserService } from './app.user.service';
-import { User } from '@sports-alliance/sports-lib';
+import { AppThemes, User } from '@sports-alliance/sports-lib';
 import { BehaviorSubject, Observable, Subscription } from 'rxjs';
+import { AppUserService } from './app.user.service';
 import { AppAuthService } from '../authentication/app.auth.service';
+import {
+  AppThemePreference,
+  isAppThemePreference,
+  SYSTEM_THEME_PREFERENCE,
+} from '../models/app-theme-preference.type';
 
 type ThemeChangeOrigin = MouseEvent | HTMLElement | { x: number; y: number } | null | undefined;
 
@@ -13,15 +17,27 @@ type ThemeChangeOrigin = MouseEvent | HTMLElement | { x: number; y: number } | n
 })
 export class AppThemeService implements OnDestroy {
 
+  private readonly LOCAL_STORAGE_KEY = 'appTheme';
+  private readonly MEDIA_QUERY = '(prefers-color-scheme: dark)';
+
   private appThemeSubject: BehaviorSubject<AppThemes> = new BehaviorSubject<AppThemes>(AppThemes.Normal);
 
   /**
-   * Signal that tracks the current application theme.
+   * Signal that tracks the currently applied application theme.
    */
   public appTheme: Signal<AppThemes> = toSignal(this.appThemeSubject, { initialValue: AppThemes.Normal });
 
+  private themePreferenceSubject = new BehaviorSubject<AppThemePreference>(SYSTEM_THEME_PREFERENCE);
+
+  /**
+   * Signal that tracks the selected theme preference (Light / Dark / System).
+   */
+  public themePreference: Signal<AppThemePreference> = toSignal(
+    this.themePreferenceSubject,
+    { initialValue: SYSTEM_THEME_PREFERENCE }
+  );
+
   private userSubscription: Subscription;
-  private readonly MEDIA_QUERY = '(prefers-color-scheme: dark)';
   private mediaQueryList: MediaQueryList;
   private systemThemeListener: (e: MediaQueryListEvent) => void;
 
@@ -38,40 +54,54 @@ export class AppThemeService implements OnDestroy {
     this.initializeTheme();
     this.userSubscription = this.authService.user$.subscribe(user => {
       this.user = user;
-      if (this.user?.settings?.appSettings?.theme) {
-        this.setAppTheme(this.user.settings.appSettings.theme)
+      const userPreference = this.getThemePreferenceFromUser(user);
+      if (!userPreference) {
+        return;
       }
-    })
+
+      if (!this.hasExplicitUserThemePreference(user) && this.getThemePreferenceFromStorage()) {
+        return;
+      }
+
+      this.applyThemePreference(userPreference, true, true);
+    });
   }
 
   private initializeTheme() {
-    const storedTheme = this.getAppThemeFromStorage();
-    if (storedTheme) {
-      this.setAppTheme(storedTheme);
-    } else {
-      // No preference? Use system default
-      this.setAppTheme(this.mediaQueryList.matches ? AppThemes.Dark : AppThemes.Normal, false);
+    const storedPreference = this.getThemePreferenceFromStorage();
+    if (storedPreference) {
+      this.applyThemePreference(storedPreference, false, true);
+      return;
     }
+
+    // No saved preference? Follow the operating system.
+    this.applyThemePreference(SYSTEM_THEME_PREFERENCE, false, true);
   }
 
   private handleSystemThemeChange(e: MediaQueryListEvent) {
-    // Only react to system changes if no explicit preference is stored
-    if (!localStorage.getItem('appTheme') && !this.user) {
-      this.setAppTheme(e.matches ? AppThemes.Dark : AppThemes.Normal, false);
+    if (this.themePreferenceSubject.getValue() !== SYSTEM_THEME_PREFERENCE) {
+      return;
     }
+
+    this.setAppTheme(e.matches ? AppThemes.Dark : AppThemes.Normal, false);
   }
 
-  private async persistTheme(theme: AppThemes) {
+  private async persistTheme(themePreference: AppThemePreference) {
     if (!this.user) {
       return;
     }
 
+    const currentSettings = this.user.settings ?? {};
+    const currentAppSettings = currentSettings.appSettings ?? {};
+    const resolvedTheme = this.resolveThemePreference(themePreference);
+
     const nextSettings = {
-      ...this.user.settings,
+      ...currentSettings,
       appSettings: {
-        ...this.user.settings?.appSettings,
-        theme,
-      }
+        ...currentAppSettings,
+        theme: resolvedTheme,
+        themePreference,
+      },
     };
 
     this.user = Object.assign(
@@ -85,17 +115,58 @@ export class AppThemeService implements OnDestroy {
     });
   }
 
-  private applyThemeState(appTheme: AppThemes, saveToStorage: boolean = true, applyToBody: boolean = true) {
+  private applyThemeState(appTheme: AppThemes, applyToBody: boolean = true) {
     if (this.appThemeSubject.getValue() === appTheme) {
       return;
     }
+
     if (applyToBody) {
       this.applyBodyTheme(appTheme);
     }
-    if (saveToStorage) {
-      localStorage.setItem('appTheme', appTheme);
-    }
+
     this.appThemeSubject.next(appTheme);
+  }
+
+  private setThemePreference(themePreference: AppThemePreference, saveToStorage: boolean = true) {
+    if (this.themePreferenceSubject.getValue() !== themePreference) {
+      this.themePreferenceSubject.next(themePreference);
+    }
+
+    if (saveToStorage) {
+      localStorage.setItem(this.LOCAL_STORAGE_KEY, themePreference);
+    }
+  }
+
+  private applyThemePreference(themePreference: AppThemePreference, saveToStorage: boolean = true, applyToBody: boolean = true) {
+    this.setThemePreference(themePreference, saveToStorage);
+    this.applyThemeState(this.resolveThemePreference(themePreference), applyToBody);
+  }
+
+  private resolveThemePreference(themePreference: AppThemePreference): AppThemes {
+    if (themePreference === SYSTEM_THEME_PREFERENCE) {
+      return this.mediaQueryList.matches ? AppThemes.Dark : AppThemes.Normal;
+    }
+
+    return themePreference;
+  }
+
+  private getThemePreferenceFromUser(user: User | null): AppThemePreference | null {
+    const userPreference = (user?.settings?.appSettings as { themePreference?: unknown } | undefined)?.themePreference;
+    if (isAppThemePreference(userPreference)) {
+      return userPreference;
+    }
+
+    const userTheme = user?.settings?.appSettings?.theme;
+    if (isAppThemePreference(userTheme)) {
+      return userTheme;
+    }
+
+    return null;
+  }
+
+  private hasExplicitUserThemePreference(user: User | null): boolean {
+    const userPreference = (user?.settings?.appSettings as { themePreference?: unknown } | undefined)?.themePreference;
+    return isAppThemePreference(userPreference);
   }
 
   public applyBodyTheme(appTheme: AppThemes) {
@@ -107,36 +178,58 @@ export class AppThemeService implements OnDestroy {
     document.body.classList.add('dark-theme');
   }
 
+  /**
+   * Applies a concrete theme immediately. When `saveToStorage` is true,
+   * this also stores an explicit Light/Dark preference.
+   */
   public setAppTheme(appTheme: AppThemes, saveToStorage: boolean = true) {
-    this.applyThemeState(appTheme, saveToStorage, true);
+    if (saveToStorage) {
+      this.setThemePreference(appTheme, true);
+    }
+
+    this.applyThemeState(appTheme, true);
   }
 
   public getAppTheme(): Observable<AppThemes> {
     return this.appThemeSubject.asObservable();
   }
 
+  public getThemePreference(): Observable<AppThemePreference> {
+    return this.themePreferenceSubject.asObservable();
+  }
 
   // Subject for theme change animation
   private themeChangeSubject = new BehaviorSubject<{ x: number; y: number; theme: AppThemes } | null>(null);
   public themeChange$ = this.themeChangeSubject.asObservable();
 
-  public async setPreferredTheme(theme: AppThemes, origin?: ThemeChangeOrigin) {
-    if (this.appThemeSubject.getValue() === theme) {
+  public async setPreferredTheme(themePreference: AppThemePreference, origin?: ThemeChangeOrigin) {
+    const currentPreference = this.themePreferenceSubject.getValue();
+    const resolvedTheme = this.resolveThemePreference(themePreference);
+    const currentTheme = this.appThemeSubject.getValue();
+    const preferenceChanged = currentPreference !== themePreference;
+    const themeChanged = currentTheme !== resolvedTheme;
+
+    // Ensure explicit user selections are persisted even when already on the same state.
+    if (!preferenceChanged
+      && !themeChanged
+      && this.getThemePreferenceFromStorage() === themePreference) {
       return;
     }
 
-    if (origin) {
+    this.setThemePreference(themePreference, true);
+
+    if (origin && themeChanged) {
       const coordinates = this.resolveThemeOrigin(origin);
       this.themeChangeSubject.next({
         ...coordinates,
-        theme
+        theme: resolvedTheme
       });
-      await this.persistTheme(theme);
+      await this.persistTheme(themePreference);
       return;
     }
 
-    this.applyThemeState(theme, true, true);
-    await this.persistTheme(theme);
+    this.applyThemeState(resolvedTheme, true);
+    await this.persistTheme(themePreference);
   }
 
   public async toggleTheme(origin?: ThemeChangeOrigin) {
@@ -168,25 +261,22 @@ export class AppThemeService implements OnDestroy {
     };
   }
 
-  private getAppThemeFromStorage(): AppThemes | null {
-    const item = localStorage.getItem('appTheme');
-    if (item !== null) {
-      const key = this.getEnumKeyByEnumValue(AppThemes, item);
-      if (key !== null) {
-        return AppThemes[key];
-      }
+  private getThemePreferenceFromStorage(): AppThemePreference | null {
+    const item = localStorage.getItem(this.LOCAL_STORAGE_KEY);
+    if (!item) {
+      return null;
     }
-    return null;
-  }
 
-  private getEnumKeyByEnumValue<T extends Record<string, string>>(myEnum: T, enumValue: string): keyof T | null {
-    const keys = Object.keys(myEnum).filter(x => myEnum[x] === enumValue);
-    return keys.length > 0 ? keys[0] as keyof T : null;
+    if (isAppThemePreference(item)) {
+      return item;
+    }
+
+    return null;
   }
 
   ngOnDestroy(): void {
     if (this.userSubscription) {
-      this.userSubscription.unsubscribe()
+      this.userSubscription.unsubscribe();
     }
     if (this.mediaQueryList) {
       this.mediaQueryList.removeEventListener('change', this.systemThemeListener);

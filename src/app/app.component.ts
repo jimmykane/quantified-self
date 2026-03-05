@@ -292,7 +292,7 @@ export class AppComponent implements OnInit, OnDestroy {
     this.changeDetectorRef.detectChanges();
 
     this.themeOverlayApplyTimeout = setTimeout(() => {
-      this.themeService.setAppTheme(theme, true);
+      this.themeService.setAppTheme(theme, false);
     }, 300); // Apply at ~50% of 600ms animation
 
     this.themeOverlayResetTimeout = setTimeout(() => {

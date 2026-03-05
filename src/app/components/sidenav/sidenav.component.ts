@@ -13,6 +13,7 @@ import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserService } from '../../services/app.user.service';
 import { AppWhatsNewService } from '../../services/app.whats-new.service';
 import { environment } from '../../../environments/environment';
+import { AppThemePreference, SYSTEM_THEME_PREFERENCE } from '../../models/app-theme-preference.type';
 
 @Component({
   selector: 'app-sidenav',
@@ -27,7 +28,8 @@ export class SideNavComponent {
 
   private themeService = inject(AppThemeService);
   public appThemes = AppThemes;
-  public appTheme = toSignal(this.themeService.getAppTheme(), { initialValue: AppThemes.Normal });
+  public readonly systemThemePreference = SYSTEM_THEME_PREFERENCE;
+  public themePreference = toSignal(this.themeService.getThemePreference(), { initialValue: SYSTEM_THEME_PREFERENCE });
   private analyticsService = inject(AppAnalyticsService);
 
   constructor(
@@ -88,7 +90,7 @@ export class SideNavComponent {
     }
   }
 
-  public async setTheme(theme: AppThemes, event?: MouseEvent) {
+  public async setTheme(theme: AppThemePreference, event?: MouseEvent) {
     await this.themeService.setPreferredTheme(theme, event);
   }
 
