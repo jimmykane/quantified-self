@@ -24,6 +24,7 @@ export const enforceSubscriptionLimits = onSchedule({
 }, async (_event) => {
     const connectedUserIds = await getConnectedUserIds();
     logger.info(`Found ${connectedUserIds.size} users with connected services.`);
+    const pendingConnectedUserIds = new Set(connectedUserIds);
 
     let cursor: FirebaseFirestore.QueryDocumentSnapshot | undefined;
 
@@ -46,14 +47,17 @@ export const enforceSubscriptionLimits = onSchedule({
         const users = snapshot.docs.map((doc) => ({
             uid: doc.id,
             hasConnectedServices: connectedUserIds.has(doc.id),
-            hasPaidHistory: doc.data()?.hasSubscribedOnce === true
+            hasPaidHistory: doc.data()?.hasSubscribedOnce === true,
+            userExists: true
         }));
+
+        users.forEach((user) => pendingConnectedUserIds.delete(user.uid));
 
         for (let i = 0; i < users.length; i += USER_PROCESS_BATCH_SIZE) {
             const batch = users.slice(i, i + USER_PROCESS_BATCH_SIZE);
             await Promise.all(batch.map(async (user) => {
                 try {
-                    await processUser(user.uid, user.hasConnectedServices, user.hasPaidHistory);
+                    await processUser(user.uid, user.hasConnectedServices, user.hasPaidHistory, user.userExists);
                 } catch (err) {
                     logger.error(`Error processing user ${user.uid}`, err);
                 }
@@ -65,6 +69,27 @@ export const enforceSubscriptionLimits = onSchedule({
         }
 
         cursor = snapshot.docs[snapshot.docs.length - 1];
+    }
+
+    if (pendingConnectedUserIds.size > 0) {
+        logger.info(`Found ${pendingConnectedUserIds.size} connected-service users without users/{uid} doc. Processing token cleanup.`);
+        const orphanUsers = Array.from(pendingConnectedUserIds).map((uid) => ({
+            uid,
+            hasConnectedServices: true,
+            hasPaidHistory: false,
+            userExists: false
+        }));
+
+        for (let i = 0; i < orphanUsers.length; i += USER_PROCESS_BATCH_SIZE) {
+            const batch = orphanUsers.slice(i, i + USER_PROCESS_BATCH_SIZE);
+            await Promise.all(batch.map(async (user) => {
+                try {
+                    await processUser(user.uid, user.hasConnectedServices, user.hasPaidHistory, user.userExists);
+                } catch (err) {
+                    logger.error(`Error processing connected token cleanup for user ${user.uid}`, err);
+                }
+            }));
+        }
     }
 });
 
@@ -116,7 +141,7 @@ function isGracePeriodActive(gracePeriodUntil?: FirebaseFirestore.Timestamp): bo
     return gracePeriodUntil.toMillis() > admin.firestore.Timestamp.now().toMillis();
 }
 
-async function processUser(uid: string, hasConnectedServices: boolean, hasPaidHistory: boolean) {
+async function processUser(uid: string, hasConnectedServices: boolean, hasPaidHistory: boolean, userExists: boolean) {
     const { activeRole, hasActiveSubscription, gracePeriodUntil } = await getUserEntitlementState(uid);
     const isPro = activeRole === 'pro';
 
@@ -130,7 +155,7 @@ async function processUser(uid: string, hasConnectedServices: boolean, hasPaidHi
             return;
         }
 
-        if (!gracePeriodUntil && (hasConnectedServices || (!hasActiveSubscription && hasPaidHistory))) {
+        if (userExists && !gracePeriodUntil && (hasConnectedServices || (!hasActiveSubscription && hasPaidHistory))) {
             // FAIL-SAFE: Trigger might have failed. Initialize grace period now.
             const newGracePeriodUntil = admin.firestore.Timestamp.fromDate(
                 new Date(Date.now() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000)
@@ -152,23 +177,27 @@ async function processUser(uid: string, hasConnectedServices: boolean, hasPaidHi
     if (hasConnectedServices && !isPro) {
         logger.info(`Disconnecting services and clearing claims for user ${uid} (No active pro status and grace period expired).`);
 
-        // Clear stale grace period state and preserve unrelated claims such as admin.
-        try {
-            await admin.firestore().doc(`users/${uid}/system/status`).set({
-                gracePeriodUntil: admin.firestore.FieldValue.delete(),
-                lastDowngradedAt: admin.firestore.FieldValue.delete()
-            }, { merge: true });
-        } catch (e) {
-            logger.error(`Error clearing grace period state for ${uid}`, e);
-        }
+        if (userExists) {
+            // Clear stale grace period state and preserve unrelated claims such as admin.
+            try {
+                await admin.firestore().doc(`users/${uid}/system/status`).set({
+                    gracePeriodUntil: admin.firestore.FieldValue.delete(),
+                    lastDowngradedAt: admin.firestore.FieldValue.delete()
+                }, { merge: true });
+            } catch (e) {
+                logger.error(`Error clearing grace period state for ${uid}`, e);
+            }
 
-        try {
-            const user = await admin.auth().getUser(uid);
-            const nextClaims = { ...(user.customClaims || {}), stripeRole: 'free' } as Record<string, unknown>;
-            delete nextClaims.gracePeriodUntil;
-            await admin.auth().setCustomUserClaims(uid, nextClaims);
-        } catch (e) {
-            logger.error(`Error clearing claims for ${uid}`, e);
+            try {
+                const user = await admin.auth().getUser(uid);
+                const nextClaims = { ...(user.customClaims || {}), stripeRole: 'free' } as Record<string, unknown>;
+                delete nextClaims.gracePeriodUntil;
+                await admin.auth().setCustomUserClaims(uid, nextClaims);
+            } catch (e) {
+                logger.error(`Error clearing claims for ${uid}`, e);
+            }
+        } else {
+            logger.info(`User ${uid} has connected services but no users/{uid} document. Skipping status/claims updates and deauthorizing services.`);
         }
 
         // Disconnect sync

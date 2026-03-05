@@ -138,6 +138,34 @@ describe('enforceSubscriptionLimits', () => {
         expect(mockFirestoreInstance.doc).not.toHaveBeenCalled();
     });
 
+    it('should process connected-token users even when users/{uid} does not exist', async () => {
+        const orphanSystemDoc = mockDoc({});
+
+        mockFirestoreInstance.collection.mockImplementation((path: string) => {
+            if (path === GARMIN_API_TOKENS_COLLECTION_NAME) return mockQuery([{ id: 'orphan1' }]);
+            if (path === 'users') return mockQuery([]);
+            if (path.includes('subscriptions')) return mockQuery([]);
+            if (path.includes('events')) return mockQuery([], 0);
+            return mockQuery([]);
+        });
+
+        mockFirestoreInstance.doc.mockImplementation((path: string) => {
+            if (path === 'users/orphan1/system/status') return orphanSystemDoc;
+            return mockDoc({});
+        });
+
+        const wrapped = enforceSubscriptionLimits as any;
+        await wrapped({});
+
+        expect(deauthorizeServiceSpy).toHaveBeenCalledWith('orphan1', ServiceNames.SuuntoApp);
+        expect(deauthorizeServiceSpy).toHaveBeenCalledWith('orphan1', ServiceNames.COROSAPI);
+        expect(deauthorizeServiceSpy).toHaveBeenCalledWith('orphan1', ServiceNames.GarminAPI);
+
+        expect(orphanSystemDoc.set).not.toHaveBeenCalled();
+        expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
+        expect(Claims.reconcileClaims).not.toHaveBeenCalled();
+    });
+
     it('should skip cleanup if user is within grace period', async () => {
         const futureDate = new Date(Date.now() + 100000);
 
