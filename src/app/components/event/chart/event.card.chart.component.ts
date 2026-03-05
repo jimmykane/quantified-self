@@ -147,10 +147,6 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     }
 
     this.cursorBehaviourOverride = value;
-    if (value === ChartCursorBehaviours.ZoomX) {
-      this.previewSelectedRange = null;
-      this.selectedRange = null;
-    }
     this.cdr.markForCheck();
 
     void this.userSettingsQuery.updateChartSettings({ chartCursorBehaviour: value })

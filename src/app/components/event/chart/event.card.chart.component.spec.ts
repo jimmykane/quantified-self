@@ -216,7 +216,7 @@ describe('EventCardChartComponent', () => {
     expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith({ xAxisType: XAxisTypes.Distance });
   });
 
-  it('should persist cursorBehaviour changes and clear selection when returning to zoom mode', async () => {
+  it('should persist cursorBehaviour changes and keep selection when returning to zoom mode', async () => {
     fixture.detectChanges();
     component.previewSelectedRange = { start: 10, end: 20 };
     component.selectedRange = { start: 10, end: 20 };
@@ -230,8 +230,8 @@ describe('EventCardChartComponent', () => {
     component.cursorBehaviour = ChartCursorBehaviours.ZoomX;
 
     expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith({ chartCursorBehaviour: ChartCursorBehaviours.ZoomX });
-    expect(component.previewSelectedRange).toBeNull();
-    expect(component.selectedRange).toBeNull();
+    expect(component.previewSelectedRange).toEqual({ start: 10, end: 20 });
+    expect(component.selectedRange).toEqual({ start: 10, end: 20 });
   });
 
   it('should persist syncChartHoverToMap changes', async () => {

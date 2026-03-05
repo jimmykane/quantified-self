@@ -1245,9 +1245,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       this.safeHideTip(chart);
     }
 
-    if (!selectModeActive) {
-      this.applySharedSelectionRange();
-    }
+    this.applySharedSelectionRange();
   }
 
   private handleBrushEvent(params: BrushEventParams): void {
@@ -1320,7 +1318,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   private applySharedSelectionRange(): void {
-    if (this.showZoomBar || this.cursorBehaviour !== ChartCursorBehaviours.SelectX) {
+    if (this.showZoomBar) {
       this.clearSelectionOverlay();
       return;
     }

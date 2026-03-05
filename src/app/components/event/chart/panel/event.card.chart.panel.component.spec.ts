@@ -285,6 +285,25 @@ describe('EventCardChartPanelComponent', () => {
     );
   });
 
+  it('keeps the selection overlay visible when switching from select to zoom mode', async () => {
+    component.cursorBehaviour = ChartCursorBehaviours.SelectX;
+    component.selectedRange = { start: 20, end: 60 };
+    await renderComponent();
+
+    chart.dispatchAction.mockClear();
+    component.cursorBehaviour = ChartCursorBehaviours.ZoomX;
+    component.ngOnChanges({
+      cursorBehaviour: new SimpleChange(ChartCursorBehaviours.SelectX, ChartCursorBehaviours.ZoomX, false),
+    });
+
+    expect(chart.dispatchAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'brush',
+        areas: [expect.objectContaining({ coordRange: [20, 60] })],
+      })
+    );
+  });
+
   it('uses brush drag to trigger native dataZoom updates in zoom mode', async () => {
     component.cursorBehaviour = ChartCursorBehaviours.ZoomX;
     const emitSpy = vi.spyOn(component.zoomRangeChange, 'emit');
