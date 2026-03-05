@@ -16,6 +16,7 @@ import { AppWhatsNewService } from '../../services/app.whats-new.service';
 import { signal } from '@angular/core';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { SYSTEM_THEME_PREFERENCE } from '../../models/app-theme-preference.type';
+import { AppHapticsService } from '../../services/app.haptics.service';
 
 describe('SideNavComponent', () => {
     let component: SideNavComponent;
@@ -23,6 +24,8 @@ describe('SideNavComponent', () => {
     let mockAuthService: any;
     let mockUserService: any;
     let mockThemeService: any;
+    let mockSideNavService: any;
+    let mockHapticsService: any;
 
     beforeEach(async () => {
         mockAuthService = {
@@ -36,14 +39,21 @@ describe('SideNavComponent', () => {
             getThemePreference: () => of(SYSTEM_THEME_PREFERENCE),
             setPreferredTheme: vi.fn().mockResolvedValue(undefined)
         };
+        mockSideNavService = {
+            close: vi.fn()
+        };
+        mockHapticsService = {
+            selection: vi.fn()
+        };
 
         await TestBed.configureTestingModule({
             declarations: [SideNavComponent],
             providers: [
                 { provide: AppAuthService, useValue: mockAuthService },
                 { provide: AppUserService, useValue: mockUserService },
-                { provide: AppSideNavService, useValue: { close: vi.fn() } },
+                { provide: AppSideNavService, useValue: mockSideNavService },
                 { provide: AppThemeService, useValue: mockThemeService },
+                { provide: AppHapticsService, useValue: mockHapticsService },
                 { provide: AppWindowService, useValue: {} },
                 { provide: AppAnalyticsService, useValue: { logEvent: vi.fn() } },
                 { provide: MatSnackBar, useValue: {} },
@@ -67,6 +77,7 @@ describe('SideNavComponent', () => {
         await component.setTheme(AppThemes.Dark, event);
 
         expect(mockThemeService.setPreferredTheme).toHaveBeenCalledWith(AppThemes.Dark, event);
+        expect(mockHapticsService.selection).toHaveBeenCalled();
     });
 
     it('should delegate system theme preference changes to the theme service', async () => {
@@ -75,6 +86,14 @@ describe('SideNavComponent', () => {
         await component.setTheme(SYSTEM_THEME_PREFERENCE, event);
 
         expect(mockThemeService.setPreferredTheme).toHaveBeenCalledWith(SYSTEM_THEME_PREFERENCE, event);
+        expect(mockHapticsService.selection).toHaveBeenCalled();
+    });
+
+    it('should close sidenav with haptic feedback', () => {
+        component.closeSideNavWithHaptic();
+
+        expect(mockHapticsService.selection).toHaveBeenCalled();
+        expect(mockSideNavService.close).toHaveBeenCalled();
     });
 
     it('isProUser should be false for basic role', () => {

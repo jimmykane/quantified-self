@@ -12,6 +12,7 @@ import { AppIconService } from './services/app.icon.service';
 import { AppThemeService } from './services/app.theme.service';
 import { AppWhatsNewService } from './services/app.whats-new.service';
 import { MatDialog } from '@angular/material/dialog';
+import { AppHapticsService } from './services/app.haptics.service';
 
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { Router, RouterModule, ActivatedRoute, NavigationEnd } from '@angular/router';
@@ -82,6 +83,9 @@ describe('AppComponent', () => {
         setAppTheme: vi.fn(),
         themeChange$: new Subject()
     };
+    const mockHapticsService = {
+        selection: vi.fn()
+    };
 
 
     beforeEach(async () => {
@@ -126,6 +130,7 @@ describe('AppComponent', () => {
                         open: vi.fn()
                     }
                 },
+                { provide: AppHapticsService, useValue: mockHapticsService },
                 ChangeDetectorRef
             ],
             schemas: [CUSTOM_ELEMENTS_SCHEMA]
@@ -251,20 +256,47 @@ describe('AppComponent', () => {
     });
 
     it('should navigate to dashboard on logo click when authenticated', () => {
+        mockHapticsService.selection.mockClear();
         component.authState = true;
         component.onLogoClick();
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
+        expect(mockHapticsService.selection).toHaveBeenCalled();
     });
 
     it('should navigate home on logo click when unauthenticated', () => {
+        mockHapticsService.selection.mockClear();
         component.authState = false;
         component.onLogoClick();
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/']);
+        expect(mockHapticsService.selection).toHaveBeenCalled();
     });
 
     it('should toggle sidenav through side nav service', () => {
+        mockHapticsService.selection.mockClear();
         component.toggleSidenav();
         expect(mockAppSideNavService.toggle).toHaveBeenCalled();
+        expect(mockHapticsService.selection).toHaveBeenCalled();
+    });
+
+    it('should navigate to dashboard with haptic feedback', () => {
+        mockHapticsService.selection.mockClear();
+        component.navigateToDashboard();
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
+        expect(mockHapticsService.selection).toHaveBeenCalled();
+    });
+
+    it('should navigate to admin with haptic feedback', () => {
+        mockHapticsService.selection.mockClear();
+        component.navigateToAdmin();
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/admin']);
+        expect(mockHapticsService.selection).toHaveBeenCalled();
+    });
+
+    it('should navigate to login with haptic feedback', () => {
+        mockHapticsService.selection.mockClear();
+        component.navigateToLogin();
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/login']);
+        expect(mockHapticsService.selection).toHaveBeenCalled();
     });
 
     it('should no-op banner updates when height and state are unchanged', () => {
@@ -282,6 +314,7 @@ describe('AppComponent', () => {
     });
 
     it('should open whats new dialog with expected config', () => {
+        mockHapticsService.selection.mockClear();
         const dialog = TestBed.inject(MatDialog) as any;
         component.openWhatsNew();
         expect(dialog.open).toHaveBeenCalledWith(
@@ -292,6 +325,7 @@ describe('AppComponent', () => {
                 autoFocus: false
             })
         );
+        expect(mockHapticsService.selection).toHaveBeenCalled();
     });
 
     it('should apply and clear theme overlay during reveal animation', () => {

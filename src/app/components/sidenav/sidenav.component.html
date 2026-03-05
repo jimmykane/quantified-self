@@ -1,5 +1,5 @@
 <mat-toolbar class="mat-nav-list">
-  <mat-toolbar-row class="mat-elevation-z0 mat-list-item mat-app-background" (click)="sideNav.close();">
+  <mat-toolbar-row class="mat-elevation-z0 mat-list-item mat-app-background" (click)="closeSideNavWithHaptic()">
     <mat-icon class="app-icon" svgIcon="logo"></mat-icon>
     Quantified Self &nbsp;
     <span style="font-size: 0.6em;">{{appVersion}}</span>
@@ -9,7 +9,7 @@
 <mat-nav-list>
   <!-- User Profile Section (when logged in) -->
   @if (user) {
-  <div class="sidenav-profile" routerLink="/settings" (click)="sideNav.close();">
+  <div class="sidenav-profile" routerLink="/settings" (click)="closeSideNavWithHaptic()">
     <div class="sidenav-avatar"
       [style.backgroundImage]="'url('+ ($any(user).photoURL ? $any(user).photoURL : 'https://ui-avatars.com/api/?name=' + (user.displayName || 'User')) +')'">
     </div>
@@ -37,28 +37,28 @@
 
   @if (!user) {
   <mat-list-item routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" routerLink="/"
-    (click)="sideNav.close();">
+    (click)="closeSideNavWithHaptic()">
     <mat-icon>home</mat-icon>
     <span>Home</span>
   </mat-list-item>
   }
 
   @if (user) {
-  <mat-list-item routerLinkActive="active" routerLink="/dashboard" (click)="sideNav.close();">
+  <mat-list-item routerLinkActive="active" routerLink="/dashboard" (click)="closeSideNavWithHaptic()">
     <mat-icon>dashboard</mat-icon>
     <span>Dashboard</span>
   </mat-list-item>
   }
 
   @if (!user) {
-  <mat-list-item routerLinkActive="active" routerLink="/pricing" (click)="sideNav.close();">
+  <mat-list-item routerLinkActive="active" routerLink="/pricing" (click)="closeSideNavWithHaptic()">
     <mat-icon>card_membership</mat-icon>
     <span>Membership</span>
   </mat-list-item>
   }
 
   @if (!user) {
-  <mat-list-item routerLinkActive="active" routerLink="/login" (click)="sideNav.close();">
+  <mat-list-item routerLinkActive="active" routerLink="/login" (click)="closeSideNavWithHaptic()">
     <mat-icon>assignment_ind</mat-icon>
     <span>Login</span>
   </mat-list-item>
@@ -66,7 +66,7 @@
 
   @if (user) {
   <mat-list-item routerLinkActive="active" [routerLink]="hasPaidAccess ? '/mytracks' : '/subscriptions'"
-    (click)="sideNav.close();">
+    (click)="closeSideNavWithHaptic()">
     <mat-icon>layers</mat-icon>
     <span>My Tracks <span class="mat-small">(Beta)</span></span>
     <span class="fill-space"></span>
@@ -84,7 +84,7 @@
   <div class="sidenav-section-header">Account</div>
 
   <mat-list-item routerLinkActive="active" [routerLink]="hasPaidAccess ? '/services' : '/subscriptions'"
-    (click)="sideNav.close();">
+    (click)="closeSideNavWithHaptic()">
     <mat-icon>leak_add</mat-icon>
     <span>Services</span>
     <span class="fill-space"></span>
@@ -94,12 +94,12 @@
     }
   </mat-list-item>
 
-  <mat-list-item routerLinkActive="active" [routerLink]="'/settings'" (click)="sideNav.close();">
+  <mat-list-item routerLinkActive="active" [routerLink]="'/settings'" (click)="closeSideNavWithHaptic()">
     <mat-icon>settings</mat-icon>
     <span>Settings</span>
   </mat-list-item>
 
-  <mat-list-item routerLinkActive="active" routerLink="/subscriptions" (click)="sideNav.close();">
+  <mat-list-item routerLinkActive="active" routerLink="/subscriptions" (click)="closeSideNavWithHaptic()">
     <mat-icon>card_membership</mat-icon>
     <span>Subscription</span>
   </mat-list-item>
@@ -151,13 +151,13 @@
 
   <!-- Compact Footer -->
   <div class="sidenav-footer">
-    <button mat-stroked-button class="help-cta-button" routerLink="/help" (click)="sideNav.close();">
+    <button mat-stroked-button class="help-cta-button" routerLink="/help" (click)="closeSideNavWithHaptic()">
       <mat-icon>help</mat-icon>
       <span>Help &amp; Support</span>
     </button>
 
     <div class="sidenav-footer-links">
-      <button mat-icon-button matTooltip="Release Notes" routerLink="/releases" (click)="sideNav.close();">
+      <button mat-icon-button matTooltip="Release Notes" routerLink="/releases" (click)="closeSideNavWithHaptic()">
         <mat-icon class="qs-app-badge qs-app-badge--small"
           [matBadge]="whatsNewService.unreadCount()" [matBadgeHidden]="whatsNewService.unreadCount() === 0"
           matBadgeSize="small" aria-hidden="false">campaign</mat-icon>
@@ -172,7 +172,7 @@
         onclick="window.open('https://github.com/jimmykane/quantified-self/issues')">
         <mat-icon>bug_report</mat-icon>
       </button>
-      <button mat-icon-button matTooltip="Policies" routerLink="/policies" (click)="sideNav.close();">
+      <button mat-icon-button matTooltip="Policies" routerLink="/policies" (click)="closeSideNavWithHaptic()">
         <mat-icon>policy</mat-icon>
       </button>
     </div>

@@ -34,6 +34,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { WhatsNewDialogComponent } from './components/whats-new/whats-new-dialog.component';
 import { RouteAnimationStateService } from './services/route-animation-state.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
+import { AppHapticsService } from './services/app.haptics.service';
 
 @Component({
   selector: 'app-root',
@@ -78,6 +79,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
   private breakpointObserver = inject(BreakpointObserver);
   public isHandset = toSignal(this.breakpointObserver.observe([Breakpoints.XSmall, Breakpoints.Small]).pipe(map(result => result.matches)), { initialValue: false });
+  private hapticsService = inject(AppHapticsService);
 
   get layoutTopOffsetPx(): number {
     return this.showNavigation ? this.bannerHeight + 64 : 0;
@@ -235,6 +237,7 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   public onLogoClick() {
+    this.hapticsService.selection();
     if (this.authState) {
       this.router.navigate(['/dashboard']);
     } else {
@@ -243,7 +246,23 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   public toggleSidenav() {
+    this.hapticsService.selection();
     this.sideNavService.toggle();
+  }
+
+  public navigateToDashboard() {
+    this.hapticsService.selection();
+    this.router.navigate(['/dashboard']);
+  }
+
+  public navigateToAdmin() {
+    this.hapticsService.selection();
+    this.router.navigate(['/admin']);
+  }
+
+  public navigateToLogin() {
+    this.hapticsService.selection();
+    this.router.navigate(['/login']);
   }
 
   dismissGracePeriodBanner() {
@@ -314,6 +333,7 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   public openWhatsNew() {
+    this.hapticsService.selection();
     this.dialog.open(WhatsNewDialogComponent, {
       width: '860px',
       maxWidth: '96vw',

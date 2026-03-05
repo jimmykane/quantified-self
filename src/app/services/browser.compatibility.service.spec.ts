@@ -3,6 +3,7 @@ import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
 import { BrowserUpgradeDialogComponent } from '../components/browser-upgrade-dialog/browser-upgrade-dialog.component';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { AppWindowService } from './app.window.service';
 
 describe('BrowserCompatibilityService', () => {
     let service: BrowserCompatibilityService;
@@ -11,13 +12,19 @@ describe('BrowserCompatibilityService', () => {
     const mockDialog = {
         open: vi.fn()
     };
+    const mockWindowService = {
+        windowRef: {
+            navigator: {}
+        }
+    };
 
     beforeEach(() => {
         TestBed.configureTestingModule({
             imports: [MatDialogModule],
             providers: [
                 BrowserCompatibilityService,
-                { provide: MatDialog, useValue: mockDialog }
+                { provide: MatDialog, useValue: mockDialog },
+                { provide: AppWindowService, useValue: mockWindowService }
             ]
         });
         service = TestBed.inject(BrowserCompatibilityService);
@@ -82,6 +89,18 @@ describe('BrowserCompatibilityService', () => {
 
             const result = service.checkCompressionSupport(false);
             expect(result).toBe(false);
+        });
+    });
+
+    describe('checkVibrationSupport', () => {
+        it('should return true when navigator.vibrate is supported', () => {
+            mockWindowService.windowRef.navigator.vibrate = vi.fn();
+            expect(service.checkVibrationSupport()).toBe(true);
+        });
+
+        it('should return false when navigator.vibrate is not supported', () => {
+            mockWindowService.windowRef.navigator.vibrate = undefined;
+            expect(service.checkVibrationSupport()).toBe(false);
         });
     });
 });
