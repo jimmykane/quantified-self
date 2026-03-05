@@ -11,6 +11,8 @@ import { isEventPaceStreamType } from './event-echarts-style.helper';
 import { EventChartRange, normalizeEventRange } from './event-echarts-xaxis.helper';
 
 const DEFAULT_NON_POWER_EXTRA_MAX = 0.1;
+const EVENT_POWER_EXTRA_MAX = 0;
+const EVENT_PACE_EXTRA_MAX = 0;
 const DEFAULT_NON_PACE_TARGET_TICK_COUNT = 6;
 const NICE_INTERVAL_FACTORS = [1, 1.5, 2, 2.5, 3, 5, 7.5, 10];
 const AXIS_INTERVAL_DIVISIBILITY_EPSILON = 1e-9;
@@ -38,8 +40,6 @@ export interface EventPanelYAxisConfig {
 export interface BuildEventPanelYAxisConfigInput {
   panel: EventChartPanelModel;
   visibleRange: EventChartRange | null;
-  extraMaxForPower: number;
-  extraMaxForPace: number;
 }
 
 export function buildEventPanelYAxisConfig(input: BuildEventPanelYAxisConfigInput): EventPanelYAxisConfig {
@@ -49,7 +49,7 @@ export function buildEventPanelYAxisConfig(input: BuildEventPanelYAxisConfigInpu
 
   if (hasPaceStream) {
     return {
-      ...buildDefaultAxis(visibleExtrema, false, input.extraMaxForPower, input.extraMaxForPace),
+      ...buildDefaultAxis(visibleExtrema, false, EVENT_PACE_EXTRA_MAX),
       inverse: true,
     };
   }
@@ -75,7 +75,7 @@ export function buildEventPanelYAxisConfig(input: BuildEventPanelYAxisConfigInpu
   }
 
   const hasPowerStream = streamTypes.some((streamType) => POWER_STREAM_TYPES.has(streamType));
-  return buildDefaultAxis(visibleExtrema, hasPowerStream, input.extraMaxForPower);
+  return buildDefaultAxis(visibleExtrema, hasPowerStream);
 }
 
 interface VisibleExtrema {
@@ -159,7 +159,6 @@ function findFirstPointAfter(points: EventChartPanelModel['series'][number]['poi
 function buildDefaultAxis(
   extrema: VisibleExtrema | null,
   isPower: boolean,
-  extraMaxForPower: number,
   extraMaxForNonPowerOverride = DEFAULT_NON_POWER_EXTRA_MAX
 ): EventPanelYAxisConfig {
   if (!extrema) {
@@ -173,7 +172,7 @@ function buildDefaultAxis(
 
   const span = max - min;
   const topPaddingRatio = isPower
-    ? sanitizeExtraMax(extraMaxForPower, 0)
+    ? sanitizeExtraMax(EVENT_POWER_EXTRA_MAX, 0)
     : sanitizeExtraMax(extraMaxForNonPowerOverride, DEFAULT_NON_POWER_EXTRA_MAX);
   const minPadding = span * 0.02;
   const maxPadding = span * topPaddingRatio;

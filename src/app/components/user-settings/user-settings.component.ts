@@ -198,12 +198,6 @@ export class UserSettingsComponent implements OnChanges {
       chartStrokeOpacity: new UntypedFormControl(this.user.settings.chartSettings.strokeOpacity, [
         Validators.required,
       ]),
-      chartExtraMaxForPower: new UntypedFormControl(this.user.settings.chartSettings.extraMaxForPower, [
-        Validators.required,
-      ]),
-      chartExtraMaxForPace: new UntypedFormControl(this.user.settings.chartSettings.extraMaxForPace, [
-        Validators.required,
-      ]),
       chartFillOpacity: new UntypedFormControl(AppUserUtilities.getResolvedChartFillOpacity(this.user.settings.chartSettings as AppChartSettingsInterface), [
         Validators.required,
       ]),
@@ -311,8 +305,6 @@ export class UserSettingsComponent implements OnChanges {
         chartCursorBehaviour: this.userSettingsFormGroup.get('chartCursorBehaviour').value ? ChartCursorBehaviours.SelectX : ChartCursorBehaviours.ZoomX,
         strokeWidth: this.userSettingsFormGroup.get('chartStrokeWidth').value,
         strokeOpacity: this.userSettingsFormGroup.get('chartStrokeOpacity').value,
-        extraMaxForPower: this.userSettingsFormGroup.get('chartExtraMaxForPower').value,
-        extraMaxForPace: this.userSettingsFormGroup.get('chartExtraMaxForPace').value,
         fillOpacity: this.userSettingsFormGroup.get('chartFillOpacity').value,
         fillOpacityVersion: 1,
         lapTypes: this.userSettingsFormGroup.get('chartLapTypes').value,

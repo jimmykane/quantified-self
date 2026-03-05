@@ -185,14 +185,6 @@ export class AppUserUtilities {
         return 1;
     }
 
-    static getDefaultExtraMaxForPower(): number {
-        return 0;
-    }
-
-    static getDefaultExtraMaxForPace(): number {
-        return -0.25;
-    }
-
     static getDefaultMapType(): MapTypes {
         return MapTypes.RoadMap;
     }
@@ -335,8 +327,6 @@ export class AppUserUtilities {
         settings.chartSettings.strokeWidth = settings.chartSettings.strokeWidth || AppUserUtilities.getDefaultChartStrokeWidth();
         settings.chartSettings.strokeOpacity = isNumber(settings.chartSettings.strokeOpacity) ? settings.chartSettings.strokeOpacity : AppUserUtilities.getDefaultChartStrokeOpacity();
         settings.chartSettings.fillOpacity = isNumber(settings.chartSettings.fillOpacity) ? settings.chartSettings.fillOpacity : AppUserUtilities.getDefaultChartFillOpacity();
-        settings.chartSettings.extraMaxForPower = isNumber(settings.chartSettings.extraMaxForPower) ? settings.chartSettings.extraMaxForPower : AppUserUtilities.getDefaultExtraMaxForPower();
-        settings.chartSettings.extraMaxForPace = isNumber(settings.chartSettings.extraMaxForPace) ? settings.chartSettings.extraMaxForPace : AppUserUtilities.getDefaultExtraMaxForPace();
         settings.chartSettings.lapTypes = settings.chartSettings.lapTypes || AppUserUtilities.getDefaultChartLapTypes();
         settings.chartSettings.showLaps = settings.chartSettings.showLaps !== false;
         (settings.chartSettings as AppChartSettingsInterface).syncChartHoverToMap = (settings.chartSettings as AppChartSettingsInterface).syncChartHoverToMap === true;

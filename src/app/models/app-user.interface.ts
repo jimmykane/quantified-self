@@ -31,7 +31,7 @@ export interface AppDashboardSettingsInterface extends UserDashboardSettingsInte
     includeMergedEvents?: boolean;
 }
 
-export interface AppChartSettingsInterface extends Omit<UserChartSettingsInterface, 'theme'> {
+export interface AppChartSettingsInterface extends Omit<UserChartSettingsInterface, 'theme' | 'extraMaxForPower' | 'extraMaxForPace'> {
     theme?: ChartThemes;
     fillOpacityVersion?: number;
     syncChartHoverToMap?: boolean;

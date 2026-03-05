@@ -37,13 +37,11 @@ describe('event-echarts-yaxis.helper', () => {
     const config = buildEventPanelYAxisConfig({
       panel: buildPanel(DataPower.type, [100, 200]),
       visibleRange: null,
-      extraMaxForPower: 0.2,
-      extraMaxForPace: -0.25,
     });
 
     expect(config.inverse).toBe(false);
     expect(config.min).toBeLessThanOrEqual(100);
-    expect(config.max).toBeGreaterThan(200);
+    expect(config.max).toBeGreaterThanOrEqual(200);
     expect(config.interval).toBeDefined();
   });
 
@@ -51,8 +49,6 @@ describe('event-echarts-yaxis.helper', () => {
     const config = buildEventPanelYAxisConfig({
       panel: buildPanel('speed', [42]),
       visibleRange: null,
-      extraMaxForPower: 0,
-      extraMaxForPace: -0.25,
     });
 
     expect(config.min).toBeLessThan(42);
@@ -63,8 +59,6 @@ describe('event-echarts-yaxis.helper', () => {
     const config = buildEventPanelYAxisConfig({
       panel: buildPanel(DataPace.type, [300, 305, 310, 315]),
       visibleRange: null,
-      extraMaxForPower: 0,
-      extraMaxForPace: -0.25,
     });
 
     expect(config.inverse).toBe(true);
@@ -75,33 +69,10 @@ describe('event-echarts-yaxis.helper', () => {
     expect(config.interval).toBeDefined();
   });
 
-  it('honors extraMaxForPace when building pace-axis headroom', () => {
-    const noHeadroom = buildEventPanelYAxisConfig({
-      panel: buildPanel(DataPace.type, [300, 330, 360]),
-      visibleRange: null,
-      extraMaxForPower: 0,
-      extraMaxForPace: 0,
-    });
-    const extraHeadroom = buildEventPanelYAxisConfig({
-      panel: buildPanel(DataPace.type, [300, 330, 360]),
-      visibleRange: null,
-      extraMaxForPower: 0,
-      extraMaxForPace: 0.5,
-    });
-
-    expect(noHeadroom.inverse).toBe(true);
-    expect(extraHeadroom.inverse).toBe(true);
-    expect(noHeadroom.max).toBeDefined();
-    expect(extraHeadroom.max).toBeDefined();
-    expect(extraHeadroom.max as number).toBeGreaterThan(noHeadroom.max as number);
-  });
-
   it('keeps effort pace streams inverted while using the shared default numeric scale', () => {
     const config = buildEventPanelYAxisConfig({
       panel: buildPanel(DataEffortPace.type, [280, 290, 300, 310]),
       visibleRange: null,
-      extraMaxForPower: 0,
-      extraMaxForPace: -0.25,
     });
 
     expect(config.inverse).toBe(true);
@@ -114,8 +85,6 @@ describe('event-echarts-yaxis.helper', () => {
     const config = buildEventPanelYAxisConfig({
       panel: buildPanel('speed', [10, 20, 200]),
       visibleRange: { start: 0, end: 1 },
-      extraMaxForPower: 0,
-      extraMaxForPace: -0.25,
     });
 
     expect((config.max as number)).toBeLessThan(200);
@@ -126,8 +95,6 @@ describe('event-echarts-yaxis.helper', () => {
     const config = buildEventPanelYAxisConfig({
       panel: buildPanel('speed', values),
       visibleRange: null,
-      extraMaxForPower: 0,
-      extraMaxForPace: -0.25,
     });
 
     expect(config.inverse).toBe(false);
@@ -139,8 +106,6 @@ describe('event-echarts-yaxis.helper', () => {
     const config = buildEventPanelYAxisConfig({
       panel: buildPanel(DataCadence.type, [30, 60, 90, 117]),
       visibleRange: null,
-      extraMaxForPower: 0,
-      extraMaxForPace: -0.25,
     });
 
     expect(config.inverse).toBe(false);
@@ -153,8 +118,6 @@ describe('event-echarts-yaxis.helper', () => {
     const config = buildEventPanelYAxisConfig({
       panel: buildPanel(DataHeartRate.type, [98, 111, 126, 143, 151, 164]),
       visibleRange: null,
-      extraMaxForPower: 0,
-      extraMaxForPace: -0.25,
     });
 
     expect(config.inverse).toBe(false);

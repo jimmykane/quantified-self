@@ -190,16 +190,8 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       });
   }
 
-  public get extraMaxForPower() {
-    return this.userSettingsQuery.chartSettings()?.extraMaxForPower ?? AppUserUtilities.getDefaultExtraMaxForPower();
-  }
-
   public get gainAndLossThreshold() {
     return this.userSettingsQuery.chartSettings()?.gainAndLossThreshold ?? AppUserUtilities.getDefaultGainAndLossThreshold();
-  }
-
-  public get extraMaxForPace() {
-    return this.userSettingsQuery.chartSettings()?.extraMaxForPace ?? AppUserUtilities.getDefaultExtraMaxForPace();
   }
 
   public get fillOpacity() {

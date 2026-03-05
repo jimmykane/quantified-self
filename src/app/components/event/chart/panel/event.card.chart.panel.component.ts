@@ -108,8 +108,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @Input() lapMarkers: EventChartLapMarker[] = [];
   @Input() emitAxisPointerCursor = false;
   @Input() gainAndLossThreshold = AppUserUtilities.getDefaultGainAndLossThreshold();
-  @Input() extraMaxForPower = 0;
-  @Input() extraMaxForPace = -0.25;
   @Input() strokeWidth = AppUserUtilities.getDefaultChartStrokeWidth();
   @Input() fillOpacity = AppUserUtilities.getDefaultChartFillOpacity();
   @Input() waterMark = '';
@@ -271,8 +269,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       || changes.showLaps
       || changes.lapMarkers
       || changes.emitAxisPointerCursor
-      || changes.extraMaxForPower
-      || changes.extraMaxForPace
       || changes.strokeWidth
       || changes.fillOpacity
       || changes.waterMark
@@ -402,8 +398,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const yAxisConfig = buildEventPanelYAxisConfig({
       panel,
       visibleRange,
-      extraMaxForPower: this.extraMaxForPower,
-      extraMaxForPace: this.extraMaxForPace,
     });
     const resolvedStrokeWidth = Number(this.strokeWidth);
     const seriesStrokeWidth = Number.isFinite(resolvedStrokeWidth) && resolvedStrokeWidth > 0
@@ -1180,8 +1174,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const yAxisConfig = buildEventPanelYAxisConfig({
       panel: this.panel,
       visibleRange: this.getVisibleXAxisRange(),
-      extraMaxForPower: this.extraMaxForPower,
-      extraMaxForPace: this.extraMaxForPace,
     });
 
     this.chartHost.setOption({
