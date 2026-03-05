@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { USAGE_LIMITS } from '../shared/limits';
 
 const hoisted = vi.hoisted(() => {
   const state = {
@@ -412,7 +413,7 @@ describe('mergeEvents', () => {
   });
 
   it('should enforce free/basic upload limits and bypass for pro/grace', async () => {
-    hoisted.state.eventCount = 10;
+    hoisted.state.eventCount = USAGE_LIMITS.free;
 
     await expect(mergeEvents({
       auth: { uid: 'u1' },
@@ -421,7 +422,7 @@ describe('mergeEvents', () => {
     } as any)).rejects.toMatchObject({ code: 'resource-exhausted' });
 
     hoisted.mockHasBasicAccess.mockResolvedValue(true);
-    hoisted.state.eventCount = 100;
+    hoisted.state.eventCount = USAGE_LIMITS.basic;
     await expect(mergeEvents({
       auth: { uid: 'u1' },
       app: { appId: 'app-id' },
@@ -470,7 +471,7 @@ describe('mergeEvents', () => {
       sourceEventsCount: 2,
       sourceFilesCount: 2,
       activitiesCount: 2,
-      uploadLimit: 10,
+      uploadLimit: USAGE_LIMITS.free,
       uploadCountAfterWrite: 1,
     });
   });

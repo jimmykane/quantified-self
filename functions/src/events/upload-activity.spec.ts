@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import type { Response } from 'express';
 import type { Request } from 'firebase-functions/v2/https';
+import { USAGE_LIMITS } from '../shared/limits';
 
 const hoisted = vi.hoisted(() => {
   const capturedOnRequestOptions = { value: undefined as unknown };
@@ -551,7 +552,7 @@ describe('uploadActivity', () => {
   });
 
   it('should enforce free upload limits', async () => {
-    hoisted.mockEventsCountGet.mockResolvedValueOnce({ data: () => ({ count: 10 }) });
+    hoisted.mockEventsCountGet.mockResolvedValueOnce({ data: () => ({ count: USAGE_LIMITS.free }) });
     const response = makeResponse();
     await invokeUploadActivity(makeRequest({
       headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
@@ -563,7 +564,7 @@ describe('uploadActivity', () => {
 
   it('should allow basic users up to basic tier limit', async () => {
     hoisted.mockHasBasicAccess.mockResolvedValueOnce(true);
-    hoisted.mockEventsCountGet.mockResolvedValueOnce({ data: () => ({ count: 99 }) });
+    hoisted.mockEventsCountGet.mockResolvedValueOnce({ data: () => ({ count: USAGE_LIMITS.basic - 1 }) });
 
     const response = makeResponse();
     await invokeUploadActivity(makeRequest({
@@ -572,8 +573,8 @@ describe('uploadActivity', () => {
 
     expect(response.status).toHaveBeenCalledWith(200);
     expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
-      uploadLimit: 100,
-      uploadCountAfterWrite: 100,
+      uploadLimit: USAGE_LIMITS.basic,
+      uploadCountAfterWrite: USAGE_LIMITS.basic,
     }));
   });
 
@@ -642,7 +643,7 @@ describe('uploadActivity', () => {
     expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
       eventId: expectedEventID,
       activitiesCount: 1,
-      uploadLimit: 10,
+      uploadLimit: USAGE_LIMITS.free,
       uploadCountAfterWrite: 1,
     }));
   });
