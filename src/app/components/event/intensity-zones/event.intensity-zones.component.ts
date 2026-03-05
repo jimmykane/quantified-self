@@ -32,8 +32,6 @@ import {
   ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS,
   EChartsHostController
 } from '../../../helpers/echarts-host-controller';
-import { getOrCreateEChartsTooltipHost } from '../../../helpers/echarts-tooltip-host.helper';
-import { getViewportConstrainedTooltipPosition } from '../../../helpers/echarts-tooltip-position.helper';
 import { buildEventEChartsVisualTokens } from '../../../helpers/event-echarts-common.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
 
@@ -256,9 +254,8 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
         trigger: 'item',
         triggerOn: this.isMobile ? 'click' : 'mousemove|click',
         renderMode: 'html',
-        appendTo: getOrCreateEChartsTooltipHost,
+        appendToBody: !this.isMobile,
         confine: this.isMobile,
-        position: getViewportConstrainedTooltipPosition,
         extraCssText: tooltipExtraCssText,
         backgroundColor: chartStyle.tooltipBackgroundColor,
         borderColor: chartStyle.tooltipBorderColor,

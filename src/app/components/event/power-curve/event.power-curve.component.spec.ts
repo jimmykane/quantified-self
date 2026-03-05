@@ -9,8 +9,6 @@ import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { LoggerService } from '../../../services/logger.service';
 import { PerformanceCurveDataService } from '../../../services/performance-curve-data.service';
-import { getOrCreateEChartsTooltipHost } from '../../../helpers/echarts-tooltip-host.helper';
-import { getViewportConstrainedTooltipPosition } from '../../../helpers/echarts-tooltip-position.helper';
 
 type ResizeObserverRecord = {
   observe: ReturnType<typeof vi.fn>;
@@ -174,9 +172,8 @@ describe('EventPowerCurveComponent', () => {
     expect(mockLoader.init).toHaveBeenCalledTimes(1);
     expect(mockPerformanceCurveDataService.buildPowerCurveSeries).toHaveBeenCalledWith(component.activities, { isMerge: false });
     expect(option.tooltip.renderMode).toBe('html');
-    expect(option.tooltip.appendTo).toBe(getOrCreateEChartsTooltipHost);
+    expect(option.tooltip.appendToBody).toBe(true);
     expect(option.tooltip.confine).toBe(false);
-    expect(option.tooltip.position).toBe(getViewportConstrainedTooltipPosition);
     expect(option.xAxis.type).toBe('category');
     expect(option.yAxis.type).toBe('value');
     expect(option.series).toHaveLength(1);
