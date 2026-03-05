@@ -10,7 +10,7 @@
   <div class="features-grid">
 
     <!-- Connectivity Card (Now inside Pro Grid) -->
-    <mat-card class="feature-card glass-card" [class.locked]="!hasProAccess && !isConnectedToService()"
+    <mat-card class="feature-card" [class.locked]="!hasProAccess && !isConnectedToService()"
       [class.unlocked]="hasProAccess || isConnectedToService()"
       (click)="!hasProAccess && !isConnectedToService() && triggerUpsell()">
       @if (!hasProAccess && !isConnectedToService()) {
@@ -85,7 +85,7 @@
     </mat-card>
 
     <!-- History Import Card -->
-    <mat-card class="feature-card glass-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess"
+    <mat-card class="feature-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess"
       (click)="!hasProAccess && triggerUpsell()">
       <!-- Lock Overlay -->
       @if (!hasProAccess) {
@@ -126,7 +126,7 @@
     </mat-card>
 
     <!-- FIT Upload Card - No (click) handler to allow file input interaction -->
-    <mat-card class="feature-card glass-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess">
+    <mat-card class="feature-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess">
       @if (!hasProAccess) {
       <div class="lock-overlay" (click)="triggerUpsell()">
         <mat-icon class="lock-icon-large">lock</mat-icon>
@@ -154,7 +154,7 @@
     </mat-card>
 
     <!-- GPX Upload Card - No (click) handler to allow file input interaction -->
-    <mat-card class="feature-card glass-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess">
+    <mat-card class="feature-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess">
       @if (!hasProAccess) {
       <div class="lock-overlay" (click)="triggerUpsell()">
         <mat-icon class="lock-icon-large">lock</mat-icon>

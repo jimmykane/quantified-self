@@ -13,7 +13,7 @@
 
     <div class="dashboard-section">
         <!-- Editor Section -->
-        <div class="glass-card editor-card" *ngIf="isNew || editingPost">
+        <mat-card class="editor-card" *ngIf="isNew || editingPost">
             <div class="section-title">
                 <h2>
                     <mat-icon>{{ isNew ? 'add_circle' : 'edit' }}</mat-icon>
@@ -84,7 +84,7 @@
                     </button>
                 </div>
             </form>
-        </div>
+        </mat-card>
 
         <!-- Add Button (Only visible when not editing) -->
         <div class="section-title" *ngIf="!isNew && !editingPost">
@@ -99,7 +99,7 @@
         </div>
 
         <!-- Table Section -->
-        <div class="glass-card table-container">
+        <mat-card class="table-container">
             <div class="table-wrapper">
                 <table mat-table [dataSource]="changelogs() || []">
                     <!-- Date Column -->
@@ -169,6 +169,6 @@
                     No changelog entries found.
                 </div>
             </div>
-        </div>
+        </mat-card>
     </div>
 </div>

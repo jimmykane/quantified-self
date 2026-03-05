@@ -6,7 +6,7 @@
 
     <div class="maintenance-grid">
         <!-- Production Maintenance -->
-        <mat-expansion-panel class="maintenance-panel glass-card" [expanded]="true">
+        <mat-expansion-panel class="maintenance-panel" [expanded]="true">
             <mat-expansion-panel-header
                 [style.border-left]="prodMaintenance.enabled ? '4px solid #f44336' : '4px solid #4caf50'">
                 <mat-panel-title class="maintenance-header-title">
@@ -51,7 +51,7 @@
         </mat-expansion-panel>
 
         <!-- Beta Maintenance -->
-        <mat-expansion-panel class="maintenance-panel glass-card" [expanded]="true">
+        <mat-expansion-panel class="maintenance-panel" [expanded]="true">
             <mat-expansion-panel-header
                 [style.border-left]="betaMaintenance.enabled ? '4px solid #f44336' : '4px solid #4caf50'">
                 <mat-panel-title class="maintenance-header-title">
@@ -96,7 +96,7 @@
         </mat-expansion-panel>
 
         <!-- Dev Maintenance -->
-        <mat-expansion-panel class="maintenance-panel glass-card" [expanded]="true">
+        <mat-expansion-panel class="maintenance-panel" [expanded]="true">
             <mat-expansion-panel-header
                 [style.border-left]="devMaintenance.enabled ? '4px solid #f44336' : '4px solid #4caf50'">
                 <mat-panel-title class="maintenance-header-title">

@@ -219,7 +219,7 @@ mat-icon {
 }
 
 
-/* Removed mat-card specific margins/padding since we use glass-card now */
+/* Removed mat-card specific margins/padding since table container now uses qs-glass-card-panel */
 
 .merged {
   opacity: 0.7;

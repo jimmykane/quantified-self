@@ -8,7 +8,7 @@
 
     <div class="stats-grid">
         <!-- Stripe Revenue -->
-        <div class="glass-card app-stat-card status-success">
+        <mat-card class="app-stat-card status-success">
             <div class="app-stat-header">
                 <mat-icon>payments</mat-icon>
                 <span>Stripe Revenue (Net)</span>
@@ -22,10 +22,10 @@
             <span class="stat-subtitle" *ngIf="stats" style="font-size: 0.75rem; opacity: 0.8;">
                 from {{ stats.revenue.invoiceCount }} paid invoices
             </span>
-        </div>
+        </mat-card>
 
         <!-- GCP Costs -->
-        <div class="glass-card app-stat-card status-pending" style="cursor: pointer;" *ngIf="stats?.cost?.reportUrl"
+        <mat-card class="app-stat-card status-pending" style="cursor: pointer;" *ngIf="stats?.cost?.reportUrl"
             (click)="openExternalLink(stats?.cost?.reportUrl)">
             <div class="app-stat-header">
                 <mat-icon>cloud</mat-icon>
@@ -61,15 +61,15 @@
                     Last update: {{ stats.cost.lastUpdated | date:'short' }}
                 </span>
             </div>
-        </div>
+        </mat-card>
         <!-- Fallback if no report URL -->
-        <div class="glass-card app-stat-card status-error" *ngIf="!loading && !stats?.cost?.reportUrl">
+        <mat-card class="app-stat-card status-error" *ngIf="!loading && !stats?.cost?.reportUrl">
             <div class="app-stat-header">
                 <mat-icon>cloud_off</mat-icon>
                 <span>GCP Billing</span>
             </div>
             <div class="app-stat-value" style="font-size: 1.2rem;">Not Configured</div>
             <span class="stat-subtitle">Check IAM permissions</span>
-        </div>
+        </mat-card>
     </div>
 </div>

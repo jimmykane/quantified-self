@@ -6,14 +6,14 @@
       [rowspan]="tile.size.rows">
       <!--      [rowspan]="(tile.size.rows >= tiles.length/numberOfCols) ? tiles.length/numberOfCols : tile.size.rows">-->
       @if (tile.type === tileTypes.Chart) {
-      <app-tile-chart class="glass-card" [user]="user" [type]="tile.type" [chartType]="getChartTile(tile).chartType"
+      <app-tile-chart class="qs-glass-card-panel" [user]="user" [type]="tile.type" [chartType]="getChartTile(tile).chartType"
         [isLoading]="isLoading" [data]="getChartTile(tile).data" [showActions]="showActions" [darkTheme]="darkTheme"
         [dataType]="getChartTile(tile).dataType" [dataValueType]="getChartTile(tile).dataValueType"
         [dataCategoryType]="getChartTile(tile).dataCategoryType" [dataTimeInterval]="getChartTile(tile).timeInterval"
         [size]="tile.size" [order]="tile.order"></app-tile-chart>
       }
       @if (tile.type === tileTypes.Map) {
-      <app-tile-map class="glass-card" [user]="user" [type]="tile.type" [isLoading]="isLoading"
+      <app-tile-map class="qs-glass-card-panel" [user]="user" [type]="tile.type" [isLoading]="isLoading"
         [showActions]="showActions" [events]="getMapTile(tile).events" [mapStyle]="getMapTile(tile).mapStyle || 'default'"
         [clusterMarkers]="getMapTile(tile).clusterMarkers" [size]="tile.size" [order]="tile.order"></app-tile-map>
       }

@@ -11,6 +11,7 @@ import { MatSortModule, Sort, MatSort } from '@angular/material/sort';
 import { MatInputModule } from '@angular/material/input';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
+import { MatCardModule } from '@angular/material/card';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { Subject } from 'rxjs';
@@ -64,6 +65,7 @@ type ChartOption = Parameters<EChartsType['setOption']>[0];
         MatInputModule,
         MatFormFieldModule,
         MatSelectModule,
+        MatCardModule,
         MatDialogModule,
         MatSnackBarModule,
     ]

@@ -85,7 +85,7 @@
   } @else {
   <div class="products-grid" *ngIf="products$ | async as products; else loading">
     @for (product of products; track product.id) {
-    <mat-card class="product-card glass-card"
+    <mat-card class="product-card"
       [class.current-plan-highlight]="(product.metadata['role'] === 'free' && (!currentRole || currentRole === 'free')) || product.metadata['role'] === currentRole"
       [class.pro-card]="product.metadata['role'] === 'pro'" [class.basic-card]="product.metadata['role'] === 'basic'"
       [class.free-card]="product.metadata['role'] === 'free'">

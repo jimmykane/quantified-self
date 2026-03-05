@@ -120,7 +120,6 @@ describe('PeekPanelComponent', () => {
   it('uses shared panel styling classes', () => {
     const panel = fixture.nativeElement.querySelector('.peek-panel') as HTMLElement;
     expect(panel.classList.contains('qs-glass-card-panel')).toBe(true);
-    expect(panel.classList.contains('glass-card')).toBe(true);
   });
 
   it('supports optional border mode for content border rendering', () => {

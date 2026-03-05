@@ -13,7 +13,7 @@
         </h3>
 
         <div class="stats-grid">
-            <div class="glass-card app-stat-card status-pending">
+            <mat-card class="app-stat-card status-pending">
                 <div class="app-stat-header">
                     <mat-icon>hourglass_empty</mat-icon>
                     <span>Pending (DB)</span>
@@ -23,8 +23,8 @@
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
                 <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">waiting in Firestore</span>
-            </div>
-            <div class="glass-card app-stat-card status-info"
+            </mat-card>
+            <mat-card class="app-stat-card status-info"
                 matTooltip="Tasks currently in flight or scheduled in the workout ingestion Cloud Tasks queue.">
                 <div class="app-stat-header">
                     <mat-icon>fitness_center</mat-icon>
@@ -35,8 +35,8 @@
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
                 <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">queue: workout</span>
-            </div>
-            <div class="glass-card app-stat-card status-success">
+            </mat-card>
+            <mat-card class="app-stat-card status-success">
                 <div class="app-stat-header">
                     <mat-icon>check_circle</mat-icon>
                     <span>Succeeded (Ingestion)</span>
@@ -45,8 +45,8 @@
                 <div class="app-spinner-mini" *ngIf="loading">
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
-            </div>
-            <div class="glass-card app-stat-card status-error">
+            </mat-card>
+            <mat-card class="app-stat-card status-error">
                 <div class="app-stat-header">
                     <mat-icon>error</mat-icon>
                     <span>Stuck (Ingestion)</span>
@@ -55,8 +55,8 @@
                 <div class="app-spinner-mini" *ngIf="loading">
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
-            </div>
-            <div class="glass-card app-stat-card status-dlq" *ngIf="stats?.dlq"
+            </mat-card>
+            <mat-card class="app-stat-card status-dlq" *ngIf="stats?.dlq"
                 style="background: rgba(244, 67, 54, 0.1);">
                 <div class="app-stat-header">
                     <mat-icon style="color: #f44336;">error_outline</mat-icon>
@@ -66,31 +66,31 @@
                 <div class="app-spinner-mini" *ngIf="loading">
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
-            </div>
+            </mat-card>
         </div>
 
         <div class="stats-grid" *ngIf="stats?.advanced">
-            <div class="glass-card app-stat-card status-success">
+            <mat-card class="app-stat-card status-success">
                 <div class="app-stat-header">
                     <mat-icon>speed</mat-icon>
                     <span>Throughput (1h)</span>
                 </div>
                 <div class="app-stat-value">{{ stats?.advanced?.throughput ?? 0 }}</div>
                 <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">items processed</span>
-            </div>
+            </mat-card>
 
-            <div class="glass-card app-stat-card status-pending">
+            <mat-card class="app-stat-card status-pending">
                 <div class="app-stat-header">
                     <mat-icon>update</mat-icon>
                     <span>Max Lag</span>
                 </div>
                 <div class="app-stat-value">{{ formatDuration(stats?.advanced?.maxLagMs || 0) }}</div>
                 <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">oldest pending</span>
-            </div>
+            </mat-card>
         </div>
 
         <div class="pipeline-grid">
-            <div class="glass-card" style="margin-bottom: 0;">
+            <mat-card style="margin-bottom: 0;">
                 <h3 class="chart-header">Retry Distribution (Pending Items)</h3>
 
                 <div class="spinner-container" *ngIf="loading" style="height: 180px; justify-content: center;">
@@ -104,10 +104,10 @@
                         <span>No pending retries right now</span>
                     </div>
                 </div>
-            </div>
+            </mat-card>
         </div>
 
-        <div class="glass-card table-container" *ngIf="stats?.dlq?.total" style="margin-bottom: 24px;">
+        <mat-card class="table-container" *ngIf="stats?.dlq?.total" style="margin-bottom: 24px;">
             <h3 class="card-title">Recent Failures Analysis (Last 50)</h3>
             <div class="failures-analysis-container">
                 <div class="analysis-column">
@@ -138,9 +138,9 @@
                     </div>
                 </div>
             </div>
-        </div>
+        </mat-card>
 
-        <div class="glass-card table-container" *ngIf="stats?.providers?.length" style="margin-bottom: 0;">
+        <mat-card class="table-container" *ngIf="stats?.providers?.length" style="margin-bottom: 0;">
             <h3 class="card-title">Provider Queue Status (Ingestion)</h3>
             <div class="table-wrapper">
                 <table mat-table [dataSource]="stats?.providers || []">
@@ -198,7 +198,7 @@
                     </tr>
                 </table>
             </div>
-        </div>
+        </mat-card>
     </div>
 
     <div class="pipeline-section" *ngIf="showReparseSection">
@@ -208,7 +208,7 @@
         </h3>
 
         <div class="stats-grid">
-            <div class="glass-card app-stat-card status-info"
+            <mat-card class="app-stat-card status-info"
                 matTooltip="Tasks currently in flight or scheduled in the sports-lib reparse Cloud Tasks queue.">
                 <div class="app-stat-header">
                     <mat-icon>autorenew</mat-icon>
@@ -219,8 +219,8 @@
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
                 <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">queue: reparse</span>
-            </div>
-            <div class="glass-card app-stat-card status-pending">
+            </mat-card>
+            <mat-card class="app-stat-card status-pending">
                 <div class="app-stat-header">
                     <mat-icon>schedule</mat-icon>
                     <span>Reparse Jobs (Pending)</span>
@@ -229,8 +229,8 @@
                 <div class="app-spinner-mini" *ngIf="loading">
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
-            </div>
-            <div class="glass-card app-stat-card status-info">
+            </mat-card>
+            <mat-card class="app-stat-card status-info">
                 <div class="app-stat-header">
                     <mat-icon>sync</mat-icon>
                     <span>Reparse Jobs (Processing)</span>
@@ -239,8 +239,8 @@
                 <div class="app-spinner-mini" *ngIf="loading">
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
-            </div>
-            <div class="glass-card app-stat-card status-success">
+            </mat-card>
+            <mat-card class="app-stat-card status-success">
                 <div class="app-stat-header">
                     <mat-icon>check_circle</mat-icon>
                     <span>Reparse Jobs (Completed)</span>
@@ -249,8 +249,8 @@
                 <div class="app-spinner-mini" *ngIf="loading">
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
-            </div>
-            <div class="glass-card app-stat-card status-error">
+            </mat-card>
+            <mat-card class="app-stat-card status-error">
                 <div class="app-stat-header">
                     <mat-icon>error</mat-icon>
                     <span>Reparse Jobs (Failed)</span>
@@ -259,8 +259,8 @@
                 <div class="app-spinner-mini" *ngIf="loading">
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
-            </div>
-            <div class="glass-card app-stat-card status-info">
+            </mat-card>
+            <mat-card class="app-stat-card status-info">
                 <div class="app-stat-header">
                     <mat-icon>flag</mat-icon>
                     <span>Target Version</span>
@@ -269,8 +269,8 @@
                 <div class="app-spinner-mini" *ngIf="loading">
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
-            </div>
-            <div class="glass-card app-stat-card status-info">
+            </mat-card>
+            <mat-card class="app-stat-card status-info">
                 <div class="app-stat-header">
                     <mat-icon>history</mat-icon>
                     <span>Last Scan</span>
@@ -279,8 +279,8 @@
                 <div class="app-spinner-mini" *ngIf="loading">
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
-            </div>
-            <div class="glass-card app-stat-card status-info">
+            </mat-card>
+            <mat-card class="app-stat-card status-info">
                 <div class="app-stat-header">
                     <mat-icon>event</mat-icon>
                     <span>Last Pass Completed</span>
@@ -289,8 +289,8 @@
                 <div class="app-spinner-mini" *ngIf="loading">
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
-            </div>
-            <div class="glass-card app-stat-card status-info">
+            </mat-card>
+            <mat-card class="app-stat-card status-info">
                 <div class="app-stat-header">
                     <mat-icon>find_in_page</mat-icon>
                     <span>Last Scan Count</span>
@@ -299,8 +299,8 @@
                 <div class="app-spinner-mini" *ngIf="loading">
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
-            </div>
-            <div class="glass-card app-stat-card status-info">
+            </mat-card>
+            <mat-card class="app-stat-card status-info">
                 <div class="app-stat-header">
                     <mat-icon>publish</mat-icon>
                     <span>Last Enqueued</span>
@@ -309,8 +309,8 @@
                 <div class="app-spinner-mini" *ngIf="loading">
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
-            </div>
-            <div class="glass-card app-stat-card status-info">
+            </mat-card>
+            <mat-card class="app-stat-card status-info">
                 <div class="app-stat-header">
                     <mat-icon>person_search</mat-icon>
                     <span>Override Users Active</span>
@@ -319,10 +319,10 @@
                 <div class="app-spinner-mini" *ngIf="loading">
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
-            </div>
+            </mat-card>
         </div>
 
-        <div class="glass-card table-container" style="margin-bottom: 0;">
+        <mat-card class="table-container" style="margin-bottom: 0;">
             <h3 class="card-title">Recent Reparse Failures</h3>
             <div class="table-wrapper" *ngIf="getReparseFailureRows().length > 0; else noReparseFailuresTemplate">
                 <table mat-table [dataSource]="getReparseFailureRows()">
@@ -360,6 +360,6 @@
             <ng-template #noReparseFailuresTemplate>
                 <div class="empty-table-state">No recent reparse failures.</div>
             </ng-template>
-        </div>
+        </mat-card>
     </div>
 </div>

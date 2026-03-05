@@ -1,7 +1,6 @@
 /* ==========================================================================
    Shared Glass Panel Primitive
    Canonical class: .qs-glass-card-panel
-   Backward-compatible alias: .glass-card
    ========================================================================== */
 
 :root {
@@ -35,8 +34,7 @@
   border: 1px solid var(--qs-glass-panel-border);
 }
 
-.qs-glass-card-panel,
-.glass-card {
+.qs-glass-card-panel {
   background: var(--qs-glass-panel-bg) !important;
   backdrop-filter: blur(var(--qs-glass-panel-blur));
   -webkit-backdrop-filter: blur(var(--qs-glass-panel-blur));
@@ -61,8 +59,7 @@
     border: 1px solid rgba(255, 255, 255, 0.1);
   }
 
-  .qs-glass-card-panel,
-  .glass-card {
+  .qs-glass-card-panel {
     background: var(--qs-glass-panel-bg) !important;
     border: 1px solid rgba(255, 255, 255, 0.1);
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2) !important;

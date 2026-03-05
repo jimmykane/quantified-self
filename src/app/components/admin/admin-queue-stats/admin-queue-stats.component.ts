@@ -5,6 +5,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatTableModule } from '@angular/material/table';
+import { MatCardModule } from '@angular/material/card';
 
 import { QueueStats, ReparseFailurePreview } from '../../../services/admin.service';
 import { AppThemeService } from '../../../services/app.theme.service';
@@ -31,7 +32,8 @@ export type AdminQueueStatsView = 'all' | 'workout' | 'reparse';
         MatProgressSpinnerModule,
         MatButtonModule,
         MatTooltipModule,
-        MatTableModule
+        MatTableModule,
+        MatCardModule
     ]
 })
 export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, AfterViewInit {
