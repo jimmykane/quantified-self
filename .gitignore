@@ -54,6 +54,7 @@ credentials.tar.gz
 firebase-debug.log
 firestore-debug.log
 ui-debug.log
+firepit-log.txt
 quantified-self-io-firebase-adminsdk.json
 
 functions/src/service-account.json
