@@ -509,6 +509,22 @@ describe('EventCardChartComponent', () => {
     expect(component.zoomRange).toEqual({ start: 0, end: 40 });
   });
 
+  it('exposes active zoom state only when a non-null zoom range exists', () => {
+    component.zoomRange = null;
+    expect(component.hasActiveZoomRange).toBe(false);
+
+    component.zoomRange = { start: 10, end: 50 };
+    expect(component.hasActiveZoomRange).toBe(true);
+  });
+
+  it('clears active zoom range when reset is requested', () => {
+    component.zoomRange = { start: 10, end: 50 };
+
+    component.onResetZoomRequested();
+
+    expect(component.zoomRange).toBeNull();
+  });
+
   it('exposes branded watermark text when provided', () => {
     component.waterMark = 'Dimitrios';
 

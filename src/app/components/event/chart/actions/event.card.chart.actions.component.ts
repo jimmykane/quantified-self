@@ -33,6 +33,7 @@ export class EventCardChartActionsComponent implements OnChanges {
   @Input() showSeriesMenu = false;
   @Input() seriesMenuSummary = '';
   @Input() seriesMenuItems: ChartSeriesMenuItem[] = [];
+  @Input() showResetZoom = false;
   @Output() showAllDataChange: EventEmitter<boolean> = new EventEmitter<boolean>();
   @Output() showLapsChange: EventEmitter<boolean> = new EventEmitter<boolean>();
   @Output() xAxisTypeChange: EventEmitter<XAxisTypes> = new EventEmitter<XAxisTypes>();
@@ -41,6 +42,7 @@ export class EventCardChartActionsComponent implements OnChanges {
   @Output() syncChartHoverToMapChange = new EventEmitter<boolean>();
   @Output() seriesVisibilityToggle = new EventEmitter<{ dataType: string; visible: boolean }>();
   @Output() showAllSeries = new EventEmitter<void>();
+  @Output() resetZoom = new EventEmitter<void>();
 
   public xAxisTypes = XAxisTypes;
   private analyticsService = inject(AppAnalyticsService);
@@ -110,6 +112,11 @@ export class EventCardChartActionsComponent implements OnChanges {
         ? ChartCursorBehaviours.ZoomX
         : ChartCursorBehaviours.SelectX
     );
+  }
+
+  onResetZoom(): void {
+    this.resetZoom.emit();
+    this.analyticsService.logEvent('event_chart_settings_change', { property: 'resetZoom' });
   }
 
   async onFillOpacityChange(value: number | null) {

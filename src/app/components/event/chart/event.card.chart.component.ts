@@ -245,6 +245,10 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     return `Series ${this.visibleDataTypeCount}/${this.dataTypeLegendItems.length}`;
   }
 
+  public get hasActiveZoomRange(): boolean {
+    return this.zoomRange !== null;
+  }
+
   public get hasWaterMark(): boolean {
     return this.waterMarkText.length > 0;
   }
@@ -407,6 +411,14 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     }
 
     this.zoomRange = nextRange;
+    this.cdr.markForCheck();
+  }
+
+  public onResetZoomRequested(): void {
+    if (this.zoomRange === null) {
+      return;
+    }
+    this.zoomRange = null;
     this.cdr.markForCheck();
   }
 

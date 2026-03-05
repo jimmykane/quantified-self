@@ -9,6 +9,17 @@
     </button>
   </span>
 
+  @if (showResetZoom) {
+  <span matTooltip="Reset zoom">
+    <button mat-icon-button type="button"
+      class="qs-action-menu-icon-button event-chart-actions__mode-button"
+      aria-label="Reset chart zoom"
+      (click)="onResetZoom()">
+      <mat-icon>restart_alt</mat-icon>
+    </button>
+  </span>
+  }
+
   @if (showSeriesMenu) {
   <span [matTooltip]="seriesMenuSummary || 'Series visibility'">
     <button mat-icon-button type="button"

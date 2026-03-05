@@ -2,11 +2,13 @@
   <app-event-card-chart-actions [(xAxisType)]="xAxisType" [(showAllData)]="showAllData" [(showLaps)]="showLaps"
     [(cursorBehaviour)]="cursorBehaviour" [(syncChartHoverToMap)]="syncChartHoverToMap" [(fillOpacity)]="fillOpacity"
     [event]="event" [user]="user"
+    [showResetZoom]="hasActiveZoomRange"
     [showSeriesMenu]="dataTypeLegendItems.length > 0"
     [seriesMenuSummary]="seriesMenuSummary"
     [seriesMenuItems]="dataTypeLegendItems"
     (seriesVisibilityToggle)="onDataTypeLegendSelectionChange($event.dataType, $event.visible)"
-    (showAllSeries)="onShowAllDataTypes()">
+    (showAllSeries)="onShowAllDataTypes()"
+    (resetZoom)="onResetZoomRequested()">
   </app-event-card-chart-actions>
 </app-event-section-header>
 

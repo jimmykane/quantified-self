@@ -149,6 +149,15 @@ describe('EventCardChartActionsComponent', () => {
     expect(emitSpy).toHaveBeenCalledTimes(1);
   });
 
+  it('should emit reset zoom requests and log analytics', () => {
+    const emitSpy = vi.spyOn(component.resetZoom, 'emit');
+
+    component.onResetZoom();
+
+    expect(emitSpy).toHaveBeenCalledTimes(1);
+    expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('event_chart_settings_change', { property: 'resetZoom' });
+  });
+
   it('should expose a visible/total badge label for the series trigger', () => {
     component.seriesMenuItems = [
       { dataType: 'speed', label: 'Speed', color: '#111111', visible: true },
