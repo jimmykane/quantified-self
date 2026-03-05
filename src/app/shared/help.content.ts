@@ -72,7 +72,7 @@ export const HELP_SECTIONS: HelpSection[] = [
     id: 'getting-started',
     icon: 'rocket_launch',
     title: 'Getting Started',
-    summary: 'Sign in, pick a plan, and learn where the core parts of the app live.',
+    summary: 'Sign in, pick a plan, and learn where key features and workflows live.',
     content: `## Start in three steps
 
 1. Sign in with an email magic link, Google, or GitHub.
@@ -90,9 +90,28 @@ export const HELP_SECTIONS: HelpSection[] = [
 ## Good first workflow
 
 - Upload a few files manually if you want to test the app before connecting services.
-- Move to **Pro** when you need automatic integrations or history import tools.`,
+- Move to **Pro** when you need automatic integrations or history import tools.
+
+## Core dashboard features
+
+### Merge events
+
+- In the dashboard event table, select at least two events and use the merge action.
+- Merge requests support up to **10 events** at once.
+- Selected events must still have original source file metadata available.
+- **Benchmark merge** creates a merged event for benchmark workflows.
+- **Multi activity merge** creates a standard merged event for regular multi-activity analysis.
+
+### Benchmark workflows
+
+- Merged rows show an analytics icon in the activity-type column.
+- If a benchmark exists, that icon opens the saved report.
+- If no benchmark exists yet, it opens the benchmark selection flow.
+- Benchmark comparison uses exactly two activities, supports role swap, and can auto-align time.
+- Benchmark reports can be rerun, shared, and saved as an image.`,
     links: [
       { label: 'Login', icon: 'login', kind: 'route', target: '/login' },
+      { label: 'Dashboard', icon: 'space_dashboard', kind: 'route', target: '/dashboard' },
       { label: 'Membership', icon: 'card_membership', kind: 'route', target: '/pricing' },
       { label: 'Release Notes', icon: 'campaign', kind: 'route', target: '/releases' },
     ],
@@ -166,7 +185,7 @@ Contact support if:
     id: 'uploads-and-imports',
     icon: 'upload_file',
     title: 'Uploads & Imports',
-    summary: 'Manual file uploads, supported formats, export options, and common upload errors.',
+    summary: 'Manual uploads, file-validation guidance, exports, and reprocessing.',
     content: `## Manual uploads
 
 The app accepts these file types for manual activity upload:
@@ -177,13 +196,13 @@ The app accepts these file types for manual activity upload:
 - \`.json\`
 - \`.sml\`
 
-## Limits
+## Activity limits
 
 - Manual uploads count toward your activity limit on limited plans.
 - **Starter** and **Basic** have activity caps.
 - **Pro** does not have an activity cap.
 
-## Common upload failures
+## Common upload issues
 
 - Your session may have expired. Sign in again and retry.
 - You may have reached your current plan's activity limit.
@@ -192,6 +211,7 @@ The app accepts these file types for manual activity upload:
 ## Export and backup options
 
 - You can export dashboard activity tables to CSV.
+- From selected dashboard rows, CSV export and original-file download actions support up to **20 events** per action.
 - From an activity action menu, you can download **JSON**.
 - If an activity has positional data, you can download **GPX**.
 - If original source files are stored for an activity, you can download the original file or files.
@@ -204,6 +224,7 @@ From an activity action menu you can also:
 - **Reimport activity from file** when original source files are available`,
     links: [
       { label: 'Subscription', icon: 'credit_card', kind: 'route', target: '/subscriptions' },
+      { label: 'Dashboard', icon: 'space_dashboard', kind: 'route', target: '/dashboard' },
       { label: 'Email Support', icon: 'email', kind: 'external', target: SUPPORT_MAILTO },
     ],
   },
@@ -310,6 +331,14 @@ This action cannot be undone.
 - Garmin backfills can arrive gradually.
 - Suunto and COROS imports are queue-based and can take hours or days.
 - Check cooldowns and connection status before retrying.
+
+## Merge and benchmark checks
+
+- Merge requires at least two selected events.
+- Merge requests are limited to 10 events at a time.
+- If merge fails because source files are missing, select events that still have their original uploaded files.
+- If merge fails at plan limits, free space or upgrade your plan before retrying.
+- Benchmark comparison requires exactly two activities for the selected pair.
 
 ## Browser compatibility
 

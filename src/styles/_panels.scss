@@ -15,6 +15,26 @@
     0 10px 15px -3px rgba(0, 0, 0, 0.05);
 }
 
+/* Make Material cards default to glass tokens unless explicitly opted out. */
+.mat-mdc-card:not(.qs-card-plain):not(.qs-overlay-flat):not(.mat-mdc-dialog-surface):not(.mat-mdc-dialog-container) {
+  --mat-card-elevated-container-shape: var(--qs-glass-panel-radius);
+  --mat-card-filled-container-shape: var(--qs-glass-panel-radius);
+  --mat-card-outlined-container-shape: var(--qs-glass-panel-radius);
+  --mat-card-elevated-container-color: var(--qs-glass-panel-bg);
+  --mat-card-filled-container-color: var(--qs-glass-panel-bg);
+  --mat-card-outlined-container-color: var(--qs-glass-panel-bg);
+  --mat-card-outlined-outline-color: var(--qs-glass-panel-border);
+  --mat-card-elevated-container-elevation: var(--qs-glass-panel-shadow);
+  --mat-card-filled-container-elevation: var(--qs-glass-panel-shadow);
+  --mat-card-outlined-container-elevation: var(--qs-glass-panel-shadow);
+  --mat-card-outlined-outline-width: 1px;
+
+  backdrop-filter: blur(var(--qs-glass-panel-blur));
+  -webkit-backdrop-filter: blur(var(--qs-glass-panel-blur));
+  border-radius: var(--qs-glass-panel-radius) !important;
+  border: 1px solid var(--qs-glass-panel-border);
+}
+
 .qs-glass-card-panel,
 .glass-card {
   background: var(--qs-glass-panel-bg) !important;
@@ -28,6 +48,18 @@
 
 .dark-theme {
   --qs-glass-panel-bg: var(--mat-app-surface, rgba(30, 30, 30, 0.8));
+
+  .mat-mdc-card:not(.qs-card-plain):not(.qs-overlay-flat):not(.mat-mdc-dialog-surface):not(.mat-mdc-dialog-container) {
+    --mat-card-elevated-container-color: var(--qs-glass-panel-bg);
+    --mat-card-filled-container-color: var(--qs-glass-panel-bg);
+    --mat-card-outlined-container-color: var(--qs-glass-panel-bg);
+    --mat-card-outlined-outline-color: rgba(255, 255, 255, 0.1);
+    --mat-card-elevated-container-elevation: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+    --mat-card-filled-container-elevation: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+    --mat-card-outlined-container-elevation: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
 
   .qs-glass-card-panel,
   .glass-card {

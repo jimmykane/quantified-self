@@ -3,7 +3,7 @@
 }
 
 .help-page {
-  max-width: 60rem;
+  max-width: 72rem;
   margin: 0 auto;
   padding: 1.5rem 1rem 2.5rem;
 }
@@ -20,35 +20,49 @@
   margin: 0;
 }
 
-.section-stack {
+.help-nav {
+  margin: 0.5rem 0 0;
+}
+
+.tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+}
+
+.topic-avatar {
+  width: 1.5rem;
+  height: 1.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background-color: rgba(0, 0, 0, 0.05);
+  color: var(--mat-sys-primary);
+}
+
+.topic-avatar mat-icon {
+  font-size: 1.05rem;
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.section-picker {
+  width: 100%;
+}
+
+.picker-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.help-content-grid {
   display: grid;
+  align-items: start;
   gap: 1rem;
   margin-top: 1rem;
-}
-
-.help-nav-content {
-  display: grid;
-  gap: 1rem;
-}
-
-.nav-group-title {
-  margin: 0;
-}
-
-.help-nav-content mat-divider {
-  margin: 0.25rem 0;
-}
-
-.section-nav {
-  display: grid;
-  gap: 0.75rem;
-  grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
-}
-
-.support-actions {
-  display: grid;
-  gap: 0.75rem;
-  grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
 }
 
 .section-links {
@@ -57,8 +71,6 @@
   grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
 }
 
-.section-nav-link,
-.support-action,
 .section-link {
   justify-content: flex-start;
   width: 100%;
@@ -67,8 +79,13 @@
   white-space: normal;
 }
 
-.section-card {
-  scroll-margin-top: 6rem;
+.section-card mat-card-content {
+  display: grid;
+  gap: 1rem;
+}
+
+.support-card mat-nav-list {
+  padding-top: 0;
 }
 
 .section-avatar {
@@ -84,6 +101,10 @@
   background-color: rgba(255, 255, 255, 0.1);
 }
 
+:host-context(.dark-theme) .topic-avatar {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
 .section-copy :is(h2, h3) {
   margin-top: 1.25rem;
   margin-bottom: 0.75rem;
@@ -94,21 +115,44 @@
   padding-left: 1.25rem;
 }
 
-@media (max-width: 48rem) {
-  .help-page {
-    padding: 1.5rem 1rem 2.5rem;
+@media (min-width: 64rem) {
+  .help-content-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 18rem);
+    gap: 1.25rem;
   }
 
-  .section-nav,
-  .support-actions,
+  .support-card {
+    position: sticky;
+    top: 1rem;
+  }
+}
+
+@media (max-width: 48rem) {
+  .help-page {
+    padding: 1.25rem 0.875rem 2rem;
+  }
+
   .section-links {
     grid-template-columns: 1fr;
+  }
+
+  .section-card mat-card-header {
+    margin-bottom: 0.5rem;
+  }
+
+  .section-copy :is(h2, h3) {
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .section-copy :is(ul, ol) {
+    margin: 0.5rem 0 0.75rem;
   }
 }
 
 @media (max-width: 37.5rem) {
   .help-page {
-    padding: 1.25rem 0.75rem 2rem;
+    padding: 1rem 0.75rem 1.75rem;
   }
 
   .hero-title {

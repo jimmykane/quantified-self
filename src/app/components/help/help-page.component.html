@@ -5,95 +5,118 @@
     <p class="mat-body-large hero-subtitle">Use this page to solve common issues fast, then contact support if you still need help.</p>
   </section>
 
-  <mat-card appearance="outlined" class="help-nav-card">
-    <mat-card-header>
-      <mat-card-title>Jump to a section</mat-card-title>
-      <mat-card-subtitle>Use the quick links below or contact support directly.</mat-card-subtitle>
-    </mat-card-header>
-
-    <mat-card-content class="help-nav-content">
-      <p class="mat-title-small nav-group-title">Sections</p>
-      <div class="section-nav" aria-label="Help section navigation">
-        @for (section of sections; track section.id) {
-          <button
-            mat-stroked-button
-            class="section-nav-link"
-            type="button"
-            (click)="scrollToSection(section.id)">
-            <mat-icon>{{ section.icon }}</mat-icon>
-            <span>{{ section.title }}</span>
-          </button>
-        }
-      </div>
-
-      <mat-divider></mat-divider>
-
-      <p class="mat-title-small nav-group-title">Support</p>
-      <div class="support-actions" aria-label="Support actions">
-        @for (action of actions; track action.id) {
-          @if (action.kind === 'route') {
-            <a
-              mat-flat-button
-              class="support-action"
-              [routerLink]="action.target">
-              <mat-icon>{{ action.icon }}</mat-icon>
-              <span>{{ action.label }}</span>
-            </a>
-          } @else {
-            <a
-              mat-flat-button
-              class="support-action"
-              [href]="action.target"
-              target="_blank"
-              rel="noopener noreferrer">
-              <mat-icon>{{ action.icon }}</mat-icon>
-              <span>{{ action.label }}</span>
-            </a>
+  <section class="help-nav" aria-label="Help topics">
+    @if (isHandset()) {
+      <mat-form-field appearance="outline" class="section-picker">
+        <mat-label>Choose a help topic</mat-label>
+        <mat-select [value]="selectedSectionId" (selectionChange)="onSectionSelect($event.value)">
+          <mat-select-trigger>
+            <span class="picker-option">
+              <span class="topic-avatar">
+                <mat-icon>{{ selectedSection.icon }}</mat-icon>
+              </span>
+              <span>{{ selectedSection.title }}</span>
+            </span>
+          </mat-select-trigger>
+          @for (section of sections; track section.id) {
+            <mat-option [value]="section.id">
+              <span class="picker-option">
+                <span class="topic-avatar">
+                  <mat-icon>{{ section.icon }}</mat-icon>
+                </span>
+                <span>{{ section.title }}</span>
+              </span>
+            </mat-option>
           }
+        </mat-select>
+      </mat-form-field>
+    } @else {
+      <nav mat-tab-nav-bar [tabPanel]="helpTabsPanel" class="help-tabs">
+        @for (section of sections; track section.id; let index = $index) {
+          <a
+            mat-tab-link
+            [active]="selectedSectionId === section.id"
+            (click)="onSectionTabChange(index)">
+            <span class="tab-label">
+              <span class="topic-avatar">
+                <mat-icon>{{ section.icon }}</mat-icon>
+              </span>
+              <span>{{ section.title }}</span>
+            </span>
+          </a>
         }
-      </div>
-    </mat-card-content>
-  </mat-card>
-
-  <div class="section-stack">
-    @for (section of sections; track section.id) {
-      <mat-card appearance="outlined" class="section-card" [attr.id]="section.id">
-        <mat-card-header>
-          <div mat-card-avatar class="section-avatar">
-            <mat-icon>{{ section.icon }}</mat-icon>
-          </div>
-          <mat-card-title>{{ section.title }}</mat-card-title>
-          <mat-card-subtitle>{{ section.summary }}</mat-card-subtitle>
-        </mat-card-header>
-
-        <mat-card-content>
-          <div class="section-copy" [innerHTML]="section.content | markdown | async"></div>
-
-          <div class="section-links">
-            @for (link of section.links; track link.label) {
-              @if (link.kind === 'route') {
-                <a
-                  mat-stroked-button
-                  class="section-link"
-                  [routerLink]="link.target">
-                  <mat-icon>{{ link.icon }}</mat-icon>
-                  <span>{{ link.label }}</span>
-                </a>
-              } @else {
-                <a
-                  mat-stroked-button
-                  class="section-link"
-                  [href]="link.target"
-                  target="_blank"
-                  rel="noopener noreferrer">
-                  <mat-icon>{{ link.icon }}</mat-icon>
-                  <span>{{ link.label }}</span>
-                </a>
-              }
-            }
-          </div>
-        </mat-card-content>
-      </mat-card>
+      </nav>
+      <mat-tab-nav-panel #helpTabsPanel></mat-tab-nav-panel>
     }
+  </section>
+
+  <div class="help-content-grid">
+    <mat-card appearance="outlined" class="section-card" id="help-section-content">
+      <mat-card-header>
+        <div mat-card-avatar class="section-avatar">
+          <mat-icon>{{ selectedSection.icon }}</mat-icon>
+        </div>
+        <mat-card-title>{{ selectedSection.title }}</mat-card-title>
+        <mat-card-subtitle>{{ selectedSection.summary }}</mat-card-subtitle>
+      </mat-card-header>
+
+      <mat-card-content>
+        <div class="section-copy" [innerHTML]="renderedSectionContent[selectedSection.id] || ''"></div>
+
+        <mat-divider></mat-divider>
+
+        <div class="section-links">
+          @for (link of selectedSection.links; track link.label) {
+            @if (link.kind === 'route') {
+              <a
+                mat-stroked-button
+                class="section-link"
+                [routerLink]="link.target">
+                <mat-icon>{{ link.icon }}</mat-icon>
+                <span>{{ link.label }}</span>
+              </a>
+            } @else {
+              <a
+                mat-stroked-button
+                class="section-link"
+                [href]="link.target"
+                target="_blank"
+                rel="noopener noreferrer">
+                <mat-icon>{{ link.icon }}</mat-icon>
+                <span>{{ link.label }}</span>
+              </a>
+            }
+          }
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card appearance="outlined" class="support-card">
+      <mat-card-header>
+        <div mat-card-avatar class="section-avatar">
+          <mat-icon>support_agent</mat-icon>
+        </div>
+        <mat-card-title>Support</mat-card-title>
+        <mat-card-subtitle>Direct links for common support actions.</mat-card-subtitle>
+      </mat-card-header>
+
+      <mat-card-content>
+        <mat-nav-list aria-label="Support actions">
+          @for (action of actions; track action.id) {
+            @if (action.kind === 'route') {
+              <a mat-list-item [routerLink]="action.target">
+                <mat-icon matListItemIcon>{{ action.icon }}</mat-icon>
+                <span matListItemTitle>{{ action.label }}</span>
+              </a>
+            } @else {
+              <a mat-list-item [href]="action.target" target="_blank" rel="noopener noreferrer">
+                <mat-icon matListItemIcon>{{ action.icon }}</mat-icon>
+                <span matListItemTitle>{{ action.label }}</span>
+              </a>
+            }
+          }
+        </mat-nav-list>
+      </mat-card-content>
+    </mat-card>
   </div>
 </div>
