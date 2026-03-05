@@ -49,7 +49,7 @@ export function buildEventPanelYAxisConfig(input: BuildEventPanelYAxisConfigInpu
 
   if (hasPaceStream) {
     return {
-      ...buildDefaultAxis(visibleExtrema, false, input.extraMaxForPower),
+      ...buildDefaultAxis(visibleExtrema, false, input.extraMaxForPower, input.extraMaxForPace),
       inverse: true,
     };
   }
@@ -156,7 +156,12 @@ function findFirstPointAfter(points: EventChartPanelModel['series'][number]['poi
   return low;
 }
 
-function buildDefaultAxis(extrema: VisibleExtrema | null, isPower: boolean, extraMaxForPower: number): EventPanelYAxisConfig {
+function buildDefaultAxis(
+  extrema: VisibleExtrema | null,
+  isPower: boolean,
+  extraMaxForPower: number,
+  extraMaxForNonPowerOverride = DEFAULT_NON_POWER_EXTRA_MAX
+): EventPanelYAxisConfig {
   if (!extrema) {
     return { inverse: false };
   }
@@ -169,7 +174,7 @@ function buildDefaultAxis(extrema: VisibleExtrema | null, isPower: boolean, extr
   const span = max - min;
   const topPaddingRatio = isPower
     ? sanitizeExtraMax(extraMaxForPower, 0)
-    : DEFAULT_NON_POWER_EXTRA_MAX;
+    : sanitizeExtraMax(extraMaxForNonPowerOverride, DEFAULT_NON_POWER_EXTRA_MAX);
   const minPadding = span * 0.02;
   const maxPadding = span * topPaddingRatio;
 

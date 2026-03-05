@@ -75,6 +75,27 @@ describe('event-echarts-yaxis.helper', () => {
     expect(config.interval).toBeDefined();
   });
 
+  it('honors extraMaxForPace when building pace-axis headroom', () => {
+    const noHeadroom = buildEventPanelYAxisConfig({
+      panel: buildPanel(DataPace.type, [300, 330, 360]),
+      visibleRange: null,
+      extraMaxForPower: 0,
+      extraMaxForPace: 0,
+    });
+    const extraHeadroom = buildEventPanelYAxisConfig({
+      panel: buildPanel(DataPace.type, [300, 330, 360]),
+      visibleRange: null,
+      extraMaxForPower: 0,
+      extraMaxForPace: 0.5,
+    });
+
+    expect(noHeadroom.inverse).toBe(true);
+    expect(extraHeadroom.inverse).toBe(true);
+    expect(noHeadroom.max).toBeDefined();
+    expect(extraHeadroom.max).toBeDefined();
+    expect(extraHeadroom.max as number).toBeGreaterThan(noHeadroom.max as number);
+  });
+
   it('keeps effort pace streams inverted while using the shared default numeric scale', () => {
     const config = buildEventPanelYAxisConfig({
       panel: buildPanel(DataEffortPace.type, [280, 290, 300, 310]),
