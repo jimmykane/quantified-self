@@ -67,11 +67,11 @@
 
 .status-text {
     &.online {
-        color: #4caf50;
+        color: var(--mat-sys-primary);
     }
 
     &.offline {
-        color: #f44336;
+        color: var(--mat-sys-error);
     }
 }
 
