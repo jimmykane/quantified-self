@@ -8,6 +8,7 @@
 @use 'styles/segmented-buttons';
 @use 'styles/panels';
 @use 'styles/icons';
+@use 'styles/app-loader';
 
 /* Bundle app fonts locally to avoid runtime dependency on external font CDNs. */
 @import '@fontsource/noto-sans/300.css';
@@ -180,7 +181,7 @@ section.component-container {
 }
 
 /**
- Styles for the main page spinner
+ Styles for the main page spinner (legacy cube loader used in-app)
   */
 .spinner-container {
   display: flex;

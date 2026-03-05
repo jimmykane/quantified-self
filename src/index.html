@@ -60,27 +60,16 @@
     <!--
     This whole content will be replaced thus no need to worry about polluting or misplacing DOM elements
   -->
-    <div class="spinner-container">
-      <div class="sk-cube-grid">
-        <div class="sk-cube sk-cube1"></div>
-        <div class="sk-cube sk-cube2"></div>
-        <div class="sk-cube sk-cube3"></div>
-        <div class="sk-cube sk-cube4"></div>
-        <div class="sk-cube sk-cube5"></div>
-        <div class="sk-cube sk-cube6"></div>
-        <div class="sk-cube sk-cube7"></div>
-        <div class="sk-cube sk-cube8"></div>
-        <div class="sk-cube sk-cube9"></div>
-      </div>
-    </div>
+    <div class="qs-app-boot-screen" aria-hidden="true"></div>
     <!-- Up to here -->
   </app-root>
   <noscript>Please enable JavaScript</noscript>
   <script>
     const theme = localStorage.getItem('appTheme');
-    if (theme === 'Dark') {
-      document.body.classList.add('dark-theme');
-    }
+    const followsSystem = !theme || theme === 'System';
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const shouldUseDarkTheme = theme === 'Dark' || (followsSystem && prefersDark);
+    document.body.classList.toggle('dark-theme', shouldUseDarkTheme);
   </script>
 </body>
 
