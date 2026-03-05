@@ -17,6 +17,7 @@ const hoisted = vi.hoisted(() => {
   const mockVerifyAppCheckToken = vi.fn();
   const mockEventsCountGet = vi.fn();
   const mockDocSet = vi.fn();
+  const mockDocGet = vi.fn();
   const mockStorageSave = vi.fn();
   const mockWriteAllEventData = vi.fn();
   const mockGenerateEventID = vi.fn();
@@ -41,6 +42,7 @@ const hoisted = vi.hoisted(() => {
     mockVerifyAppCheckToken,
     mockEventsCountGet,
     mockDocSet,
+    mockDocGet,
     mockStorageSave,
     mockWriteAllEventData,
     mockGenerateEventID,
@@ -84,7 +86,8 @@ vi.mock('firebase-admin', () => {
       }
       return { doc: () => ({}) };
     },
-    doc: (_path: string) => ({
+    doc: (path: string) => ({
+      get: () => hoisted.mockDocGet(path),
       set: hoisted.mockDocSet,
     }),
   }));
@@ -241,6 +244,7 @@ describe('uploadActivity', () => {
     hoisted.mockEventsCountGet.mockResolvedValue({ data: () => ({ count: 0 }) });
     hoisted.mockWriteAllEventData.mockResolvedValue(undefined);
     hoisted.mockDocSet.mockResolvedValue(undefined);
+    hoisted.mockDocGet.mockResolvedValue({ exists: false });
     hoisted.mockStorageSave.mockResolvedValue(undefined);
     hoisted.mockGenerateEventID.mockResolvedValue('event-1');
     hoisted.mockGenerateActivityID.mockResolvedValue('activity-1');
@@ -559,7 +563,49 @@ describe('uploadActivity', () => {
     }), response);
 
     expect(response.status).toHaveBeenCalledWith(429);
+    expect(hoisted.mockDocGet).toHaveBeenCalledTimes(1);
     expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+  });
+
+  it('should allow idempotent overwrite when user is at upload limit', async () => {
+    const rawBody = Buffer.from([0x55, 0x44, 0x33, 0x22]);
+    const expectedEventID = expectedUploadEventID('user-1', rawBody, 'fit');
+    hoisted.mockEventsCountGet.mockResolvedValueOnce({ data: () => ({ count: USAGE_LIMITS.free }) });
+    hoisted.mockDocGet.mockResolvedValueOnce({ exists: true });
+
+    const response = makeResponse();
+    await invokeUploadActivity(makeRequest({
+      headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check', 'X-File-Extension': 'fit' },
+      rawBody,
+    }), response);
+
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(hoisted.mockDocGet).toHaveBeenCalledWith(`users/user-1/events/${expectedEventID}`);
+    expect(hoisted.mockWriteAllEventData).toHaveBeenCalled();
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      eventId: expectedEventID,
+      uploadCountAfterWrite: USAGE_LIMITS.free,
+    }));
+  });
+
+  it('should keep uploadCountAfterWrite unchanged when overwriting below upload limit', async () => {
+    const rawBody = Buffer.from([0x12, 0x34, 0x56, 0x78]);
+    const expectedEventID = expectedUploadEventID('user-1', rawBody, 'fit');
+    hoisted.mockEventsCountGet.mockResolvedValueOnce({ data: () => ({ count: USAGE_LIMITS.free - 1 }) });
+    hoisted.mockDocGet.mockResolvedValueOnce({ exists: true });
+
+    const response = makeResponse();
+    await invokeUploadActivity(makeRequest({
+      headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check', 'X-File-Extension': 'fit' },
+      rawBody,
+    }), response);
+
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(hoisted.mockDocGet).toHaveBeenCalledWith(`users/user-1/events/${expectedEventID}`);
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      eventId: expectedEventID,
+      uploadCountAfterWrite: USAGE_LIMITS.free - 1,
+    }));
   });
 
   it('should allow basic users up to basic tier limit', async () => {
@@ -591,6 +637,28 @@ describe('uploadActivity', () => {
     expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
       uploadLimit: null,
       uploadCountAfterWrite: 251,
+    }));
+  });
+
+  it('should keep uploadCountAfterWrite unchanged for pro overwrites', async () => {
+    const rawBody = Buffer.from([0x0a, 0x0b, 0x0c]);
+    const expectedEventID = expectedUploadEventID('user-1', rawBody, 'fit');
+    hoisted.mockHasProAccess.mockResolvedValueOnce(true);
+    hoisted.mockEventsCountGet.mockResolvedValueOnce({ data: () => ({ count: 250 }) });
+    hoisted.mockDocGet.mockResolvedValueOnce({ exists: true });
+
+    const response = makeResponse();
+    await invokeUploadActivity(makeRequest({
+      headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check', 'X-File-Extension': 'fit' },
+      rawBody,
+    }), response);
+
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(hoisted.mockDocGet).toHaveBeenCalledWith(`users/user-1/events/${expectedEventID}`);
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      eventId: expectedEventID,
+      uploadLimit: null,
+      uploadCountAfterWrite: 250,
     }));
   });
 

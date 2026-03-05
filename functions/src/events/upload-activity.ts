@@ -207,6 +207,13 @@ async function getEventCountForUser(userID: string): Promise<number> {
   return countSnapshot.data().count;
 }
 
+async function eventExistsForUser(userID: string, eventID: string): Promise<boolean> {
+  const snapshot = await admin.firestore()
+    .doc(`users/${userID}/events/${eventID}`)
+    .get();
+  return snapshot.exists;
+}
+
 async function parseUploadedEvent(payload: Buffer, resolvedExtension: string): Promise<EventInterface> {
   const parsingOptions = createParsingOptions();
   const baseExtension = getBaseExtension(resolvedExtension);
@@ -311,16 +318,18 @@ export const uploadActivity = onRequest({
       throw new HttpStatusError(400, `File is too large (${(rawBody.length / 1024 / 1024).toFixed(1)}MB). Maximum size is 10MB.`);
     }
 
+    const payloadForParsing = maybeDecompressPayloadForParsing(rawBody, resolvedExtension);
+    const eventID = generateUploadEventID(userID, payloadForParsing, resolvedExtension);
+    const eventAlreadyExists = await eventExistsForUser(userID, eventID);
+
     const currentCount = await getEventCountForUser(userID);
     const uploadLimit = await resolveUploadLimitForUser(userID);
-    if (uploadLimit !== null && currentCount >= uploadLimit) {
+    if (uploadLimit !== null && currentCount >= uploadLimit && !eventAlreadyExists) {
       throw new HttpStatusError(429, `Upload limit reached for your tier. You have ${currentCount} events. Limit is ${uploadLimit}.`);
     }
 
     let event: EventInterface;
-    let payloadForParsing: Buffer;
     try {
-      payloadForParsing = maybeDecompressPayloadForParsing(rawBody, resolvedExtension);
       event = await parseUploadedEvent(payloadForParsing, resolvedExtension);
     } catch (error) {
       if (error instanceof HttpStatusError) {
@@ -330,7 +339,6 @@ export const uploadActivity = onRequest({
       throw new HttpStatusError(400, 'Could not parse uploaded payload.');
     }
 
-    const eventID = generateUploadEventID(userID, payloadForParsing, resolvedExtension);
     event.setID(eventID);
 
     const resolvedEventName = resolveEventNameFromHeader(originalFilename);
@@ -360,7 +368,7 @@ export const uploadActivity = onRequest({
       eventId: eventID,
       activitiesCount: activities.length,
       uploadLimit,
-      uploadCountAfterWrite: currentCount + 1,
+      uploadCountAfterWrite: eventAlreadyExists ? currentCount : (currentCount + 1),
     });
   } catch (error) {
     if (error instanceof HttpStatusError) {
