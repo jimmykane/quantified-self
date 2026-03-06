@@ -20,6 +20,11 @@ section.container {
   inline-size: max-content;
   min-inline-size: 0;
   max-inline-size: min(72vw, 240px);
+  max-block-size: min(62dvh, 460px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   padding: 8px;
 }
 

@@ -243,5 +243,42 @@ describe('AppUserUtilities', () => {
             const settings = AppUserUtilities.fillMissingAppSettings(user);
             expect((settings.dashboardSettings?.tiles?.[0] as any)?.chartType).toBe(ChartTypes.LinesVertical);
         });
+
+        it('should normalize malformed legacy chart, unit, and table settings', () => {
+            const user = {
+                settings: {
+                    chartSettings: {
+                        dataTypeSettings: {
+                            Altitude: { enabled: false },
+                            Speed: { enabled: false }
+                        }
+                    },
+                    unitSettings: {
+                        speedUnits: [],
+                        paceUnits: [],
+                        swimPaceUnits: [],
+                        verticalSpeedUnits: []
+                    },
+                    dashboardSettings: {
+                        tableSettings: {}
+                    }
+                }
+            } as unknown as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+            const enabledDataTypes = Object.entries(settings.chartSettings.dataTypeSettings)
+                .filter(([, value]) => value.enabled === true)
+                .map(([key]) => key);
+
+            expect(enabledDataTypes).toEqual(expect.arrayContaining(AppUserUtilities.getDefaultChartDataTypesToShowOnLoad()));
+            expect(settings.unitSettings.speedUnits).toEqual(AppUserUtilities.getDefaultSpeedUnits());
+            expect(settings.unitSettings.paceUnits).toEqual(AppUserUtilities.getDefaultPaceUnits());
+            expect(settings.unitSettings.swimPaceUnits).toEqual(AppUserUtilities.getDefaultSwimPaceUnits());
+            expect(settings.unitSettings.verticalSpeedUnits).toEqual(AppUserUtilities.getDefaultVerticalSpeedUnits());
+            expect(settings.dashboardSettings.tableSettings.active).toBe('startDate');
+            expect(settings.dashboardSettings.tableSettings.direction).toBe('desc');
+            expect(settings.dashboardSettings.tableSettings.eventsPerPage).toBe(10);
+            expect(settings.dashboardSettings.tableSettings.selectedColumns.length).toBeGreaterThan(0);
+        });
     });
 });

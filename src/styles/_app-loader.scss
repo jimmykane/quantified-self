@@ -157,14 +157,20 @@
 
 .qs-digit-c .qs-digit-roll {
   --value-width: 3.2ch;
-  --digit-cycle: 4.9s;
-  --digit-offset: -0.6s;
+  --digit-cycle: 5.6s;
+  --digit-offset: 0s;
 }
 
 .qs-digit-d .qs-digit-roll {
   --value-width: 3.2ch;
-  --digit-cycle: 4s;
-  --digit-offset: -2.1s;
+  --digit-cycle: 5s;
+  --digit-offset: 0s;
+}
+
+.qs-digit-c .qs-digit-track,
+.qs-digit-d .qs-digit-track {
+  animation-iteration-count: 1;
+  animation-fill-mode: forwards;
 }
 
 @keyframes qs-digit-tick {

@@ -91,7 +91,7 @@ describe('UserSettingsComponent', () => {
                 { provide: MatSnackBar, useValue: { open: vi.fn() } },
                 { provide: AppWindowService, useValue: {} },
                 { provide: MatDialog, useValue: {} },
-                { provide: LoggerService, useValue: { error: vi.fn() } },
+                { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn() } },
                 { provide: AppAnalyticsService, useValue: { logEvent: vi.fn() } },
                 { provide: Analytics, useValue: null },
             ],
@@ -401,5 +401,138 @@ describe('UserSettingsComponent', () => {
 
         // Should be unique
         expect(new Set(formValue).size).toBe(formValue.length);
+    });
+
+    it('keeps save actions visible and disabled when form is invalid', () => {
+        component.ngOnChanges();
+        component.userSettingsFormGroup.get('displayName').setValue('');
+        fixture.detectChanges();
+
+        const desktopSaveButton = fixture.nativeElement.querySelector('.qs-form-actions-floating button') as HTMLButtonElement;
+        const mobileSaveButton = fixture.nativeElement.querySelector('.mobile-save-bar button') as HTMLButtonElement;
+
+        expect(desktopSaveButton).toBeTruthy();
+        expect(mobileSaveButton).toBeTruthy();
+        expect(desktopSaveButton.disabled).toBe(true);
+        expect(mobileSaveButton.disabled).toBe(true);
+    });
+
+    it('shows validation helper immediately on load when profile is already invalid', () => {
+        component.userSettingsFormGroup.markAsPristine();
+        component.user = {
+            ...(component.user as any),
+            displayName: ''
+        } as any;
+
+        component.ngOnChanges();
+        expect(component.userSettingsFormGroup.invalid).toBe(true);
+        expect(component.userSettingsFormGroup.dirty).toBe(false);
+        expect(component.shouldShowValidationDebug).toBe(true);
+        expect(component.invalidControlDiagnostics).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                control: 'displayName'
+            })
+        ]));
+    });
+
+    it('logs invalid control diagnostics when submit is blocked by validation', async () => {
+        const logger = TestBed.inject(LoggerService);
+        const warnSpy = vi.spyOn(logger, 'warn');
+
+        component.ngOnChanges();
+        component.userSettingsFormGroup.get('displayName').setValue('');
+        component.userSettingsFormGroup.get('displayName').markAsTouched();
+
+        await component.onSubmit(new Event('submit'));
+
+        expect(warnSpy).toHaveBeenCalledWith(
+            '[UserSettingsComponent] Save blocked by invalid form controls',
+            expect.objectContaining({
+                uid: 'test-uid',
+                invalidControls: expect.arrayContaining([
+                    expect.objectContaining({
+                        control: 'displayName'
+                    })
+                ])
+            })
+        );
+    });
+
+    it('preserves dirty chart edits when the same user input refreshes', () => {
+        component.ngOnChanges();
+        component.userSettingsFormGroup.get('chartStrokeWidth').setValue(5);
+        component.userSettingsFormGroup.get('chartStrokeWidth').markAsDirty();
+        component.userSettingsFormGroup.markAsDirty();
+        expect(component.userSettingsFormGroup.dirty).toBe(true);
+
+        component.user = { ...(component.user as any), displayName: 'Remote Update' } as any;
+        component.ngOnChanges();
+
+        expect(component.userSettingsFormGroup.get('chartStrokeWidth').value).toBe(5);
+        expect(component.userSettingsFormGroup.dirty).toBe(true);
+    });
+
+    it('marks the form pristine after successful save', async () => {
+        const userService = TestBed.inject(AppUserService);
+        vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
+
+        component.ngOnChanges();
+        component.userSettingsFormGroup.get('chartStrokeWidth').setValue(7);
+        component.userSettingsFormGroup.get('chartStrokeWidth').markAsDirty();
+        component.userSettingsFormGroup.markAsDirty();
+        expect(component.userSettingsFormGroup.dirty).toBe(true);
+
+        await component.onSubmit(new Event('submit'));
+
+        expect(component.userSettingsFormGroup.pristine).toBe(true);
+    });
+
+    it('normalizes malformed legacy settings so required chart/unit controls stay valid', () => {
+        component.user = {
+            ...(component.user as any),
+            settings: {
+                ...(component.user as any).settings,
+                chartSettings: {
+                    ...(component.user as any).settings.chartSettings,
+                    dataTypeSettings: {
+                        Altitude: { enabled: false },
+                        Speed: { enabled: false }
+                    }
+                },
+                unitSettings: {
+                    ...(component.user as any).settings.unitSettings,
+                    speedUnits: [],
+                    paceUnits: [],
+                    swimPaceUnits: [],
+                    verticalSpeedUnits: []
+                },
+                dashboardSettings: {
+                    ...(component.user as any).settings.dashboardSettings,
+                    tableSettings: {}
+                }
+            }
+        } as any;
+
+        component.ngOnChanges();
+
+        expect(component.userSettingsFormGroup.get('dataTypesToUse').value.length).toBeGreaterThan(0);
+        expect(component.userSettingsFormGroup.get('speedUnitsToUse').value.length).toBeGreaterThan(0);
+        expect(component.userSettingsFormGroup.get('paceUnitsToUse').value.length).toBeGreaterThan(0);
+        expect(component.userSettingsFormGroup.get('swimPaceUnitsToUse').value.length).toBeGreaterThan(0);
+        expect(component.userSettingsFormGroup.get('verticalSpeedUnitsToUse').value.length).toBeGreaterThan(0);
+        expect(component.userSettingsFormGroup.get('eventsPerPage').value).toBe(10);
+    });
+
+    it('exposes invalid control diagnostics with labels', () => {
+        component.ngOnChanges();
+        component.userSettingsFormGroup.get('displayName').setValue('');
+        component.userSettingsFormGroup.get('displayName').markAsTouched();
+
+        const diagnostics = component.invalidControlDiagnostics;
+        const displayNameDiagnostic = diagnostics.find(entry => entry.control === 'displayName');
+
+        expect(displayNameDiagnostic).toBeTruthy();
+        expect(displayNameDiagnostic?.label).toBe('Public Name');
+        expect(displayNameDiagnostic?.errors).toContain('required');
     });
 });

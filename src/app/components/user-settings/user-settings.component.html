@@ -41,6 +41,24 @@
     <app-loading-overlay [isLoading]="isSaving || isDeleting" [hasError]="errorSaving || errorDeleting"
       [errorMessage]="errorSaving || errorDeleting" [showSkeleton]="false" height="auto">
       <form [formGroup]="userSettingsFormGroup" (submit)="onSubmit($event)" class="qs-form">
+      <ng-template #settingsValidationInfo>
+        @if (shouldShowValidationDebug) {
+        <div class="settings-validation-debug" role="status" aria-live="polite">
+          <div class="settings-validation-debug__title">
+            <mat-icon>info</mat-icon>
+            <span>Save is disabled. Resolve these fields first:</span>
+          </div>
+          <ul class="settings-validation-debug__list">
+            @for (entry of invalidControlDiagnostics; track entry.control) {
+            <li>
+              <strong>{{ entry.label }}</strong>
+              <span class="settings-validation-debug__errors">: {{ entry.errors.join(', ') }}</span>
+            </li>
+            }
+          </ul>
+        </div>
+        }
+      </ng-template>
       <app-material-pill-tabs class="settings-nav" [selectedIndex]="selectedSectionIndex"
         (selectedIndexChange)="onSelectedSectionIndexChange($event)" [dynamicHeight]="true"
         [lazyContent]="tabsLazyContent"
@@ -49,6 +67,7 @@
 
       <!-- Profile Section -->
       <ng-template appMaterialPillTab="Profile">
+      <ng-container *ngTemplateOutlet="settingsValidationInfo"></ng-container>
       <mat-card class="settings-card">
         <div style="padding: 24px; padding-bottom: 0;">
           <h1 style="margin: 0 0 8px 0; font-size: 1.8rem; font-weight: 800;">Profile Settings</h1>
@@ -131,6 +150,7 @@
 
       <!-- General App Settings -->
       <ng-template appMaterialPillTab="General">
+      <ng-container *ngTemplateOutlet="settingsValidationInfo"></ng-container>
       <mat-card class="settings-card">
         <div style="padding: 24px; padding-bottom: 0;">
           <h1 style="margin: 0 0 8px 0; font-size: 1.8rem; font-weight: 800;">General Settings</h1>
@@ -173,6 +193,7 @@
 
       <!-- Dashboard Settings -->
       <ng-template appMaterialPillTab="Dashboard">
+      <ng-container *ngTemplateOutlet="settingsValidationInfo"></ng-container>
       <mat-card class="settings-card">
         <div style="padding: 24px; padding-bottom: 0;">
           <h1 style="margin: 0 0 8px 0; font-size: 1.8rem; font-weight: 800;">Dashboard Settings</h1>
@@ -228,6 +249,7 @@
 
       <!-- Map Settings -->
       <ng-template appMaterialPillTab="Maps">
+      <ng-container *ngTemplateOutlet="settingsValidationInfo"></ng-container>
       <mat-card class="settings-card">
         <div style="padding: 24px; padding-bottom: 0;">
           <h1 style="margin: 0 0 8px 0; font-size: 1.8rem; font-weight: 800;">Map Settings</h1>
@@ -272,6 +294,7 @@
 
       <!-- Chart Settings -->
       <ng-template appMaterialPillTab="Charts">
+      <ng-container *ngTemplateOutlet="settingsValidationInfo"></ng-container>
       <mat-card class="settings-card">
         <div style="padding: 24px; padding-bottom: 0;">
           <h1 style="margin: 0 0 8px 0; font-size: 1.8rem; font-weight: 800;">Chart Settings</h1>
@@ -331,6 +354,7 @@
 
       <!-- Unit Settings -->
       <ng-template appMaterialPillTab="Units">
+      <ng-container *ngTemplateOutlet="settingsValidationInfo"></ng-container>
       <mat-card class="settings-card">
         <div style="padding: 24px; padding-bottom: 0;">
           <h1 style="margin: 0 0 8px 0; font-size: 1.8rem; font-weight: 800;">Measurement Units</h1>
@@ -382,24 +406,20 @@
       </app-material-pill-tabs>
 
       <!-- Floating Action Button for Save (Desktop Only) -->
-      @if (!hasError()) {
       <div class="qs-form-actions-floating">
-        <button mat-fab class="qs-mat-primary" [disabled]="isSaving || !userSettingsFormGroup.dirty" matTooltip="Save Changes"
+        <button mat-fab class="qs-mat-primary" [disabled]="isSaving || !userSettingsFormGroup.dirty || userSettingsFormGroup.invalid" matTooltip="Save Changes"
           (click)="onSubmit($event)">
           <mat-icon>save</mat-icon>
         </button>
       </div>
-      }
 
       <!-- Sticky Save for Mobile -->
-      @if (!hasError()) {
       <div class="mobile-save-bar">
-        <button mat-flat-button class="qs-mat-primary" [disabled]="isSaving || !userSettingsFormGroup.dirty"
+        <button mat-flat-button class="qs-mat-primary" [disabled]="isSaving || !userSettingsFormGroup.dirty || userSettingsFormGroup.invalid"
           (click)="onSubmit($event)">
           Save Settings
         </button>
       </div>
-      }
 
       </form>
     </app-loading-overlay>
