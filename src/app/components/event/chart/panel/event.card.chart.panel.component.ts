@@ -79,8 +79,13 @@ const FORMATTED_VALUE_CACHE_LIMIT = 600;
 const TOOLTIP_VIEWPORT_THRESHOLD = 0.1;
 const LAP_TOOLTIP_OFFSET_X = 12;
 const LAP_TOOLTIP_OFFSET_Y = 12;
+const ZOOM_BAR_PANEL_HEIGHT = 56; // Keep in sync with .event-chart-panel__chart--zoom-only height.
+const ZOOM_BAR_SLIDER_LEFT = 12;
+const ZOOM_BAR_SLIDER_RIGHT = 44;
+const ZOOM_BAR_SLIDER_TOP = 8;
 const ZOOM_BAR_SLIDER_HEIGHT = 24;
 const ZOOM_BAR_HANDLE_SIZE = 24;
+const ZOOM_BAR_GRID_BOTTOM = Math.max(0, ZOOM_BAR_PANEL_HEIGHT - (ZOOM_BAR_SLIDER_TOP + ZOOM_BAR_SLIDER_HEIGHT));
 const SELECTION_BRUSH_SOURCE = 'event-chart-selection-sync';
 const ENABLE_LIVE_SELECTION_PREVIEW = false;
 
@@ -925,10 +930,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       animation: false,
       backgroundColor: 'transparent',
       grid: {
-        left: 0,
-        right: 0,
-        top: 2,
-        bottom: 2,
+        left: ZOOM_BAR_SLIDER_LEFT,
+        right: ZOOM_BAR_SLIDER_RIGHT,
+        top: ZOOM_BAR_SLIDER_TOP,
+        bottom: ZOOM_BAR_GRID_BOTTOM,
         containLabel: false
       },
       tooltip: { show: false },
@@ -949,9 +954,9 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           type: 'slider',
           xAxisIndex: 0,
           show: this.zoomBarVisibleForViewport,
-          left: 12,
-          right: 44,
-          top: 8,
+          left: ZOOM_BAR_SLIDER_LEFT,
+          right: ZOOM_BAR_SLIDER_RIGHT,
+          top: ZOOM_BAR_SLIDER_TOP,
           height: ZOOM_BAR_SLIDER_HEIGHT,
           filterMode: 'filter',
           showDataShadow: true,

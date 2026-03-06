@@ -23,7 +23,8 @@ section.placeholder {
 }
 
 mat-card.map-legend {
-  border: 0;
+  border: 0 !important;
+  outline: none !important;
   padding-top: 0.4em;
   padding-bottom: 0.4em;
   padding-left: 0;

@@ -15,6 +15,7 @@ import { AppEventService } from '../../../services/app.event.service';
 import { LoggerService } from '../../../services/logger.service';
 import { DeviceNameEditDialogComponent } from './device-name-edit-dialog/device-name-edit-dialog.component';
 import { firstValueFrom } from 'rxjs';
+import { isMergeOrBenchmarkEvent } from '../../../helpers/event-visibility.helper';
 
 @Component({
   selector: 'app-activities-toggles',
@@ -54,11 +55,7 @@ export class ActivitiesTogglesComponent {
 
   // Computed: check if device names should show
   shouldShowDeviceNames = computed(() => {
-    if (!this.event()?.isMerge) return false;
-    const acts = this.activities();
-    if (acts.length <= 1) return false;
-    const ids = acts.map(a => `${a.creator?.name || ''}-${a.creator?.serialNumber || ''}`);
-    return new Set(ids).size > 1;
+    return isMergeOrBenchmarkEvent(this.event());
   });
 
   // Computed: normalize current selection into fast lookup sets.
@@ -170,7 +167,15 @@ export class ActivitiesTogglesComponent {
   getDeviceName(activity: ActivityInterface): string {
     const name = activity.creator?.name || '';
     const swInfo = activity.creator?.swInfo || '';
-    return swInfo ? `${name} ${swInfo}` : name;
+    const label = swInfo ? `${name} ${swInfo}` : name;
+    return `${label}`.trim() || activity.type || '';
+  }
+
+  getPrimaryLabel(activity: ActivityInterface): string {
+    if (this.shouldShowDeviceNames()) {
+      return this.getDeviceName(activity);
+    }
+    return activity.type || '';
   }
 
   /**

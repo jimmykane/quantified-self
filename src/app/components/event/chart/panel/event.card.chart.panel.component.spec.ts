@@ -485,6 +485,12 @@ describe('EventCardChartPanelComponent', () => {
     const option = eChartsLoaderMock.setOption.mock.calls.at(-1)?.[1] as any;
     expect(option?.tooltip?.show).toBe(false);
     expect(option?.xAxis?.show).toBe(false);
+    expect(option?.grid).toEqual(expect.objectContaining({
+      left: 12,
+      right: 44,
+      top: 8,
+      bottom: 24,
+    }));
     expect(option?.dataZoom?.[0]?.type).toBe('slider');
     expect(option?.dataZoom?.[0]?.show).toBe(true);
     expect(option?.dataZoom?.[0]?.filterMode).toBe('filter');

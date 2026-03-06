@@ -8,10 +8,7 @@
 
   <mat-card-title (click)="onActivityClick(activity())"
     [ngStyle]="event().isMerge && isSelected() && {color: activityColor()}">
-    <span><b>{{activity().type}}</b></span>
-    @if (event().isMerge) {
-    <span style="font-size: 0.8em;"> {{activity().creator.name}} {{activity().creator.swInfo}}</span>
-    }
+    <span><b>{{ primaryLabel() }}</b></span>
   </mat-card-title>
   @if (showDate()) {
   <mat-card-subtitle>

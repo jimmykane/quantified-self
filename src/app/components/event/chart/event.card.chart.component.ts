@@ -49,6 +49,7 @@ import {
   EventChartRange,
   resolveEventChartXAxisType,
 } from '../../../helpers/event-echarts-xaxis.helper';
+import { isMergeOrBenchmarkEvent } from '../../../helpers/event-visibility.helper';
 
 interface EventDataTypeLegendItem {
   dataType: string;
@@ -217,16 +218,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   public get showActivityNamesInTooltip(): boolean {
-    const event = this.event as (EventInterface & {
-      benchmarkResults?: unknown;
-      benchmarkResult?: unknown;
-      benchmarkDevices?: unknown[];
-    }) | null | undefined;
-
-    return event?.isMerge === true
-      || !!event?.benchmarkResults
-      || !!event?.benchmarkResult
-      || (Array.isArray(event?.benchmarkDevices) && event.benchmarkDevices.length > 0);
+    return isMergeOrBenchmarkEvent(this.event);
   }
 
   public get userUnitSettings() {
