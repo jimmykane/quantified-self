@@ -22,7 +22,7 @@
         <!-- User Stats -->
         <div class="stats-grid">
             <!-- Total Users -->
-            <div class="glass-card app-stat-card users">
+            <mat-card class="app-stat-card users">
                 <div class="app-stat-header">
                     <mat-icon>people</mat-icon>
                     <span>Total Users</span>
@@ -31,10 +31,10 @@
                 <div class="app-spinner-mini" *ngIf="!userStats">
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
-            </div>
+            </mat-card>
 
             <!-- Pro Users -->
-            <div class="glass-card app-stat-card status-success">
+            <mat-card class="app-stat-card status-success">
                 <div class="app-stat-header">
                     <mat-icon>verified</mat-icon>
                     <span>Pro Users</span>
@@ -43,10 +43,10 @@
                 <div class="app-spinner-mini" *ngIf="!userStats">
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
-            </div>
+            </mat-card>
 
             <!-- Basic Users -->
-            <div class="glass-card app-stat-card status-pending">
+            <mat-card class="app-stat-card status-pending">
                 <div class="app-stat-header">
                     <mat-icon>person_outline</mat-icon>
                     <span>Basic Users</span>
@@ -55,10 +55,10 @@
                 <div class="app-spinner-mini" *ngIf="!userStats">
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
-            </div>
+            </mat-card>
 
             <!-- Free Users -->
-            <div class="glass-card app-stat-card">
+            <mat-card class="app-stat-card">
                 <div class="app-stat-header">
                     <mat-icon>money_off</mat-icon>
                     <span>Free Users</span>
@@ -67,10 +67,10 @@
                 <div class="app-spinner-mini" *ngIf="!userStats">
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
-            </div>
+            </mat-card>
 
             <!-- Onboarded Users -->
-            <div class="glass-card app-stat-card status-success">
+            <mat-card class="app-stat-card status-success">
                 <div class="app-stat-header">
                     <mat-icon>how_to_reg</mat-icon>
                     <span>Onboarded Users</span>
@@ -79,11 +79,11 @@
                 <div class="app-spinner-mini" *ngIf="!userStats">
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
-            </div>
+            </mat-card>
         </div>
 
         <!-- Auth Provider Breakdown Chart -->
-        <div class="glass-card chart-card">
+        <mat-card class="chart-card">
             <h3 class="chart-header">
                 <mat-icon>security</mat-icon>
                 Auth Provider Breakdown
@@ -96,9 +96,9 @@
             <div *ngIf="!userStats?.providers" class="empty-state chart-empty-state">
                 No provider data available
             </div>
-        </div>
+        </mat-card>
 
-        <div class="glass-card qs-filter-container">
+        <mat-card class="qs-filter-container">
             <mat-form-field appearance="outline" class="qs-search-field" subscriptSizing="dynamic">
                 <mat-label>Search users</mat-label>
                 <input matInput [value]="searchTerm" (input)="onSearchInput($event)"
@@ -119,9 +119,9 @@
                     <mat-option value="coros">Coros</mat-option>
                 </mat-select>
             </mat-form-field>
-        </div>
+        </mat-card>
 
-        <div class="glass-card table-container">
+        <mat-card class="table-container">
             <div class="loading-shade" *ngIf="isLoading">
                 <mat-spinner></mat-spinner>
             </div>
@@ -200,7 +200,7 @@
                         <td mat-cell *matCellDef="let user">
                             {{ getSubscriptionDetails(user) }}
                             <a *ngIf="user.subscription?.stripeLink" [href]="user.subscription.stripeLink"
-                                target="_blank" mat-icon-button color="primary" matTooltip="View in Stripe">
+                                target="_blank" mat-icon-button class="qs-mat-primary" matTooltip="View in Stripe">
                                 <mat-icon>open_in_new</mat-icon>
                             </a>
                         </td>
@@ -261,7 +261,7 @@
                     <ng-container matColumnDef="actions">
                         <th mat-header-cell *matHeaderCellDef> Actions </th>
                         <td mat-cell *matCellDef="let user">
-                            <button mat-icon-button color="primary" matTooltip="Impersonate User"
+                            <button mat-icon-button class="qs-mat-primary" matTooltip="Impersonate User"
                                 (click)="onImpersonate(user)" *ngIf="!isAdmin(user)">
                                 <mat-icon>supervised_user_circle</mat-icon>
                             </button>
@@ -284,6 +284,6 @@
             <mat-paginator [length]="totalCount" [pageIndex]="currentPage" [pageSize]="pageSize"
                 [pageSizeOptions]="pageSizeOptions" (page)="onPageChange($event)" aria-label="Select page of users">
             </mat-paginator>
-        </div>
+        </mat-card>
     </div>
 </div>

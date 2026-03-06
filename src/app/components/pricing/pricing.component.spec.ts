@@ -9,6 +9,7 @@ import { Analytics } from '@angular/fire/analytics';
 import { Router } from '@angular/router';
 
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { USAGE_LIMITS } from '../../../../functions/src/shared/limits';
 
 class MockAppPaymentService {
     getProducts() {
@@ -120,6 +121,12 @@ describe('PricingComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('should derive activity limit labels from the shared limits map', () => {
+        expect(component.getActivityLimitLabel('free')).toBe(`Up to ${USAGE_LIMITS.free} activities`);
+        expect(component.getActivityLimitLabel('basic')).toBe(`Up to ${USAGE_LIMITS.basic} activities`);
+        expect(component.getActivityLimitLabel('pro')).toBe('Unlimited activities');
     });
 
     it('should show downgrade warning for pro users', async () => {

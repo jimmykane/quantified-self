@@ -34,13 +34,16 @@ export class UserComponent implements OnInit, OnDestroy {
 
     this.userSubscription = this.authService.user$.subscribe((user) => {
       if (!user) {
-        this.router.navigate(['login']).then(() => {
-          this.snackBar.open('You were signed out out')
-        });
+        const showSignedOutMessage = () => {
+          this.snackBar.open('You were signed out out');
+        };
+        void this.router.navigate(['login'])
+          .then(showSignedOutMessage)
+          .catch(showSignedOutMessage);
+        return;
       }
-      // First get our current user
-      this.user = user!;
-    })
+      this.user = user;
+    });
   }
 
 

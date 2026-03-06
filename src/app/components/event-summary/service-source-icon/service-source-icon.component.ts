@@ -1,5 +1,7 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges, SimpleChanges } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges, OnDestroy, SimpleChanges } from '@angular/core';
 import { EventInterface, ServiceNames, User } from '@sports-alliance/sports-lib';
+import { Subscription } from 'rxjs';
+import { take } from 'rxjs/operators';
 import { AppEventService } from '../../../services/app.event.service';
 
 @Component({
@@ -9,12 +11,13 @@ import { AppEventService } from '../../../services/app.event.service';
     changeDetection: ChangeDetectionStrategy.OnPush,
     standalone: false
 })
-export class ServiceSourceIconComponent implements OnChanges {
+export class ServiceSourceIconComponent implements OnChanges, OnDestroy {
     @Input() event!: EventInterface;
     @Input() user!: User;
 
     serviceName: ServiceNames | null = null;
     serviceLogo: string | null = null;
+    private metadataKeysSubscription?: Subscription;
 
     constructor(private eventService: AppEventService, private cd: ChangeDetectorRef) { }
 
@@ -25,32 +28,37 @@ export class ServiceSourceIconComponent implements OnChanges {
     }
 
     private checkServiceSource() {
-        if (!this.user || !this.event || !this.event.getID()) {
+        this.metadataKeysSubscription?.unsubscribe();
+
+        const eventID = this.event?.getID?.();
+        if (!this.user || !this.event || !eventID) {
             this.serviceName = null;
             this.serviceLogo = null;
             this.cd.markForCheck();
             return;
         }
-        this.eventService.getEventMetaDataKeys(this.user, this.event.getID()!).subscribe(keys => {
-            if (keys && keys.length > 0) {
-                if (keys.includes(ServiceNames.COROSAPI)) {
+        this.metadataKeysSubscription = this.eventService.getEventMetaDataKeys(this.user, eventID)
+            .pipe(take(1))
+            .subscribe(keys => {
+                if (keys?.includes(ServiceNames.COROSAPI)) {
                     this.serviceName = ServiceNames.COROSAPI;
-                } else if (keys.includes(ServiceNames.SuuntoApp)) {
+                } else if (keys?.includes(ServiceNames.SuuntoApp)) {
                     this.serviceName = ServiceNames.SuuntoApp;
-                } else if (keys.includes(ServiceNames.GarminAPI)) {
+                } else if (keys?.includes(ServiceNames.GarminAPI)) {
                     this.serviceName = ServiceNames.GarminAPI;
                 } else {
                     this.serviceName = null;
                 }
 
-                if (this.serviceName) {
-                    this.serviceLogo = this.getServiceLogo(this.serviceName);
-                } else {
-                    this.serviceLogo = null;
-                }
+                this.serviceLogo = this.serviceName
+                    ? this.getServiceLogo(this.serviceName)
+                    : null;
                 this.cd.markForCheck();
-            }
-        });
+            });
+    }
+
+    ngOnDestroy(): void {
+        this.metadataKeysSubscription?.unsubscribe();
     }
 
     private getServiceLogo(serviceName: ServiceNames): string {

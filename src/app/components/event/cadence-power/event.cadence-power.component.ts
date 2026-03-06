@@ -4,7 +4,6 @@ import {
   Component,
   ElementRef,
   Input,
-  NgZone,
   OnChanges,
   OnDestroy,
   SimpleChanges,
@@ -16,7 +15,6 @@ import type { EChartsType } from 'echarts/core';
 
 import {
   ActivityInterface,
-  ChartThemes,
   DataCadence,
   DataDuration,
   DataPower,
@@ -30,6 +28,16 @@ import {
   PerformanceCurveCadencePowerSeries,
   PerformanceCurveDataService,
 } from '../../../services/performance-curve-data.service';
+import {
+  ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS,
+  EChartsHostController
+} from '../../../helpers/echarts-host-controller';
+import {
+  buildEventEChartsVisualTokens,
+  calculateEventEChartsAxisRange,
+  toFiniteEventEChartsNumber
+} from '../../../helpers/event-echarts-common.helper';
+import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 
@@ -44,50 +52,55 @@ const CADENCE_SYMBOLS = ['circle', 'diamond', 'triangle', 'rect', 'roundRect'];
 })
 export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() activities: ActivityInterface[] = [];
-  @Input() chartTheme: ChartThemes = ChartThemes.Material;
+  @Input() darkTheme = false;
   @Input() useAnimations = false;
   @Input() isMerge = false;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
-  private chart: EChartsType | null = null;
+  private chartHost: EChartsHostController;
   private isMobile = false;
   private breakpointSubscription: Subscription;
-  private resizeObserver: ResizeObserver | null = null;
-  private resizeFrameId: number | null = null;
 
   constructor(
     private breakpointObserver: BreakpointObserver,
     private eChartsLoader: EChartsLoaderService,
     private eventColorService: AppEventColorService,
     private logger: LoggerService,
-    private performanceCurveDataService: PerformanceCurveDataService,
-    private zone: NgZone
+    private performanceCurveDataService: PerformanceCurveDataService
   ) {
+    this.chartHost = new EChartsHostController({
+      eChartsLoader: this.eChartsLoader,
+      logger: this.logger,
+      logPrefix: '[EventCadencePowerComponent]',
+      initOptions: {
+        useDirtyRect: true,
+      },
+    });
+
     this.breakpointSubscription = this.breakpointObserver
       .observe([AppBreakpoints.XSmall])
       .subscribe((result) => {
         const wasMobile = this.isMobile;
         this.isMobile = result.matches;
 
-        if (this.chart && wasMobile !== this.isMobile) {
-          this.refreshChart();
+        if (this.chartDiv?.nativeElement && wasMobile !== this.isMobile) {
+          void this.refreshChart();
         }
       });
   }
 
   async ngAfterViewInit(): Promise<void> {
-    await this.initializeChart();
-    this.refreshChart();
+    await this.refreshChart();
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (!this.chart) {
+    if (!this.chartDiv?.nativeElement) {
       return;
     }
 
-    if (changes.activities || changes.chartTheme || changes.useAnimations || changes.isMerge) {
-      this.refreshChart();
+    if (changes.activities || changes.darkTheme || changes.useAnimations || changes.isMerge) {
+      void this.refreshChart();
     }
   }
 
@@ -95,49 +108,15 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
     if (this.breakpointSubscription) {
       this.breakpointSubscription.unsubscribe();
     }
-
-    if (this.resizeObserver) {
-      this.resizeObserver.disconnect();
-      this.resizeObserver = null;
-    }
-
-    if (this.resizeFrameId !== null && typeof cancelAnimationFrame !== 'undefined') {
-      cancelAnimationFrame(this.resizeFrameId);
-      this.resizeFrameId = null;
-    }
-
-    this.eChartsLoader.dispose(this.chart);
-    this.chart = null;
+    this.chartHost.dispose();
   }
 
-  private async initializeChart(): Promise<void> {
-    if (!this.chartDiv?.nativeElement) {
-      return;
-    }
-
-    try {
-      this.chart = await this.eChartsLoader.init(this.chartDiv.nativeElement);
-      this.setupResizeObserver();
-    } catch (error) {
-      this.logger.error('[EventCadencePowerComponent] Failed to initialize ECharts', error);
-    }
-  }
-
-  private setupResizeObserver(): void {
-    if (typeof ResizeObserver === 'undefined' || !this.chartDiv?.nativeElement) {
-      return;
-    }
-
-    this.zone.runOutsideAngular(() => {
-      this.resizeObserver = new ResizeObserver(() => {
-        this.scheduleResize();
-      });
-      this.resizeObserver.observe(this.chartDiv.nativeElement);
-    });
-  }
-
-  private refreshChart(): void {
-    if (!this.chart) {
+  private async refreshChart(): Promise<void> {
+    const chart = await this.chartHost.init(
+      this.chartDiv?.nativeElement,
+      resolveEChartsThemeName(this.darkTheme)
+    );
+    if (!chart) {
       return;
     }
 
@@ -146,35 +125,18 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
       maxPointsPerSeries: this.isMobile ? 420 : 1500,
     });
 
-    const cadenceValues = cadencePowerSeries
-      .flatMap((seriesEntry) => seriesEntry.points)
-      .map((point) => point.cadence)
-      .filter((value) => Number.isFinite(value))
-      .sort((left, right) => left - right);
-    const uniqueCadenceValues = [...new Set(cadenceValues.map((value) => Math.round(value)))];
-
-    this.logger.log('[EventCadencePowerComponent] x-axis cadence debug', {
-      seriesCount: cadencePowerSeries.length,
-      pointCount: cadenceValues.length,
-      minCadence: cadenceValues.length ? cadenceValues[0] : null,
-      maxCadence: cadenceValues.length ? cadenceValues[cadenceValues.length - 1] : null,
-      uniqueCadenceCount: uniqueCadenceValues.length,
-      uniqueCadenceValuesSample: uniqueCadenceValues.slice(0, 60),
-    });
-
     const option = this.buildChartOption(cadencePowerSeries);
-    this.eChartsLoader.setOption(this.chart, option, { notMerge: true, lazyUpdate: true });
-    this.scheduleResize();
+    this.chartHost.setOption(option, ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS);
+    this.chartHost.scheduleResize();
   }
 
   private buildChartOption(cadencePowerSeries: PerformanceCurveCadencePowerSeries[]): ChartOption {
-    const darkTheme = this.isDarkThemeActive();
-    const textColor = darkTheme ? '#f5f5f5' : '#1f1f1f';
-    const axisColor = darkTheme ? 'rgba(255,255,255,0.24)' : 'rgba(0,0,0,0.24)';
-    const axisLabelFontSize = this.isMobile ? 11 : 12;
-    const tooltipExtraCssText = this.isMobile
-      ? 'max-width: min(80vw, 280px); white-space: normal; overflow-wrap: anywhere; word-break: break-word;'
-      : '';
+    const chartStyle = buildEventEChartsVisualTokens(this.darkTheme, this.isMobile);
+    const darkTheme = chartStyle.darkTheme;
+    const textColor = chartStyle.textColor;
+    const axisColor = chartStyle.axisColor;
+    const axisLabelFontSize = chartStyle.axisLabelFontSize;
+    const tooltipExtraCssText = chartStyle.tooltipExtraCssText;
 
     if (cadencePowerSeries.length === 0) {
       return {
@@ -191,7 +153,7 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
     const cadenceValues = cadencePoints.map((point) => point.cadence);
     const powerValues = cadencePoints.map((point) => point.power);
     const cadenceAxisConfig = this.buildCadenceAxisConfig(cadenceValues);
-    const [powerMin, powerMax] = this.calculateAxisRange(powerValues, {
+    const [powerMin, powerMax] = calculateEventEChartsAxisRange(powerValues, {
       minFloor: 0,
       fallbackMin: 100,
       fallbackMax: 350,
@@ -211,19 +173,13 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
           cadence: point.cadence,
           power: point.power,
           density: point.density,
-        })),
-        symbolSize: (value: unknown) => {
-          const density = this.toFiniteNumber(Array.isArray(value) ? value[2] : null) ?? 0.2;
-          return this.isMobile
-            ? 3 + density * 2.5
-            : 4 + density * 3.5;
-        },
-        itemStyle: {
-          color: (params: { value?: unknown[] }) => {
-            const density = this.toFiniteNumber(Array.isArray(params?.value) ? params.value[2] : null) ?? 0.2;
-            return this.getCadencePointColor(baseColor, density, darkTheme);
+          symbolSize: this.resolveCadencePointSymbolSize(point.density),
+          itemStyle: {
+            color: this.getCadencePointColor(baseColor, point.density, darkTheme),
           },
-          borderColor: darkTheme ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.45)',
+        })),
+        itemStyle: {
+          borderColor: chartStyle.subtleBorderColor,
           borderWidth: 0.8,
         },
         emphasis: {
@@ -238,7 +194,7 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
       animation: this.useAnimations === true,
       textStyle: {
         color: textColor,
-        fontFamily: "'Barlow Condensed', sans-serif",
+        fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
       },
       legend: {
         show: !singleActivity,
@@ -247,7 +203,7 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
         left: 'center',
         textStyle: {
           color: textColor,
-          fontFamily: "'Barlow Condensed', sans-serif",
+          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
           fontSize: this.isMobile ? 12 : 13,
         },
       },
@@ -268,7 +224,7 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
         nameGap: this.isMobile ? 26 : 30,
         nameTextStyle: {
           color: textColor,
-          fontFamily: "'Barlow Condensed', sans-serif",
+          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
         },
         axisLine: {
           lineStyle: { color: axisColor },
@@ -291,7 +247,7 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
         nameGap: this.isMobile ? 34 : 40,
         nameTextStyle: {
           color: textColor,
-          fontFamily: "'Barlow Condensed', sans-serif",
+          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
         },
         axisLine: {
           lineStyle: { color: axisColor },
@@ -307,15 +263,16 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
       tooltip: {
         trigger: 'item',
         triggerOn: this.isMobile ? 'click' : 'mousemove|click',
+        renderMode: 'html',
         appendToBody: !this.isMobile,
         confine: this.isMobile,
         extraCssText: tooltipExtraCssText,
-        backgroundColor: darkTheme ? '#222222' : '#ffffff',
-        borderColor: darkTheme ? '#555555' : '#d6d6d6',
+        backgroundColor: chartStyle.tooltipBackgroundColor,
+        borderColor: chartStyle.tooltipBorderColor,
         borderWidth: 1,
         textStyle: {
-          color: darkTheme ? '#ffffff' : '#2a2a2a',
-          fontFamily: "'Barlow Condensed', sans-serif",
+          color: chartStyle.tooltipTextColor,
+          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
         },
         formatter: (params: unknown) => this.formatTooltip(params, !singleActivity),
       },
@@ -344,9 +301,9 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
       value?: unknown;
     };
 
-    const cadence = this.toFiniteNumber(entry?.data?.cadence) ?? this.extractTupleValue(entry?.value, 0);
-    const power = this.toFiniteNumber(entry?.data?.power) ?? this.extractTupleValue(entry?.value, 1);
-    const duration = this.toFiniteNumber(entry?.data?.duration);
+    const cadence = toFiniteEventEChartsNumber(entry?.data?.cadence) ?? this.extractTupleValue(entry?.value, 0);
+    const power = toFiniteEventEChartsNumber(entry?.data?.power) ?? this.extractTupleValue(entry?.value, 1);
+    const duration = toFiniteEventEChartsNumber(entry?.data?.duration);
 
     if (cadence === null || power === null) {
       return '';
@@ -372,7 +329,14 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
       return null;
     }
 
-    return this.toFiniteNumber(value[index]);
+    return toFiniteEventEChartsNumber(value[index]);
+  }
+
+  private resolveCadencePointSymbolSize(density: number): number {
+    const resolvedDensity = Number.isFinite(density) ? density : 0.2;
+    return this.isMobile
+      ? 3 + resolvedDensity * 2.5
+      : 4 + resolvedDensity * 3.5;
   }
 
   private getCadencePointColor(baseColor: string, density: number, darkTheme: boolean): string {
@@ -429,35 +393,6 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
     };
   }
 
-  private calculateAxisRange(values: number[], options: {
-    minFloor?: number;
-    fallbackMin: number;
-    fallbackMax: number;
-  }): [number, number] {
-    const validValues = values.filter((value) => Number.isFinite(value));
-    if (!validValues.length) {
-      return [options.fallbackMin, options.fallbackMax];
-    }
-
-    const minRaw = Math.min(...validValues);
-    const maxRaw = Math.max(...validValues);
-    const range = Math.max(1, maxRaw - minRaw);
-    const padding = Math.max(0.05, range * 0.12);
-
-    let min = minRaw - padding;
-    let max = maxRaw + padding;
-
-    if (Number.isFinite(options.minFloor)) {
-      min = Math.max(options.minFloor as number, min);
-    }
-
-    if (max <= min) {
-      max = min + 1;
-    }
-
-    return [min, max];
-  }
-
   private buildCadenceAxisConfig(values: number[]): { min: number; max: number; interval: number } {
     const validValues = values.filter((value) => Number.isFinite(value));
     if (!validValues.length) {
@@ -507,19 +442,6 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
     return best;
   }
 
-  private toFiniteNumber(value: unknown): number | null {
-    if (typeof value === 'number' && Number.isFinite(value)) {
-      return value;
-    }
-
-    if (typeof value === 'string' && value.trim().length > 0) {
-      const numeric = Number(value);
-      return Number.isFinite(numeric) ? numeric : null;
-    }
-
-    return null;
-  }
-
   private formatCadenceLabel(cadence: number, includeUnit = false): string {
     if (!Number.isFinite(cadence)) {
       return '';
@@ -554,40 +476,4 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
       : value;
   }
 
-  private scheduleResize(): void {
-    if (!this.chart) {
-      return;
-    }
-
-    if (typeof requestAnimationFrame === 'undefined') {
-      this.eChartsLoader.resize(this.chart);
-      return;
-    }
-
-    if (this.resizeFrameId !== null) {
-      return;
-    }
-
-    this.resizeFrameId = requestAnimationFrame(() => {
-      this.resizeFrameId = null;
-      if (!this.chart) {
-        return;
-      }
-
-      this.eChartsLoader.resize(this.chart);
-    });
-  }
-
-  private isDarkThemeActive(): boolean {
-    const chartTheme = `${this.chartTheme}`.toLowerCase();
-    if (chartTheme === 'dark' || chartTheme === 'amchartsdark') {
-      return true;
-    }
-
-    if (typeof document === 'undefined') {
-      return false;
-    }
-
-    return document.body.classList.contains('dark-theme');
-  }
 }

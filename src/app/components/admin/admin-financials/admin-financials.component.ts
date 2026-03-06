@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatButtonModule } from '@angular/material/button';
+import { MatCardModule } from '@angular/material/card';
 import { FinancialStats } from '../../../services/admin.service';
 
 @Component({
@@ -14,7 +15,8 @@ import { FinancialStats } from '../../../services/admin.service';
         CommonModule,
         MatIconModule,
         MatProgressSpinnerModule,
-        MatButtonModule
+        MatButtonModule,
+        MatCardModule
     ]
 })
 export class AdminFinancialsComponent {

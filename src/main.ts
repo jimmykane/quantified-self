@@ -7,6 +7,7 @@ import { environment } from './environments/environment';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import * as Sentry from '@sentry/angular';
 import { registerAppLocales } from './app/shared/adapters/date-locale.config';
+import { SYSTEM_THEME_PREFERENCE } from './app/models/app-theme-preference.type';
 
 // Register locales immediately
 registerAppLocales();
@@ -40,11 +41,11 @@ if (environment.production) {
 }
 
 // Set the theme before app is running
-if (localStorage.getItem('appTheme')) {
-  if (localStorage.getItem('appTheme') === AppThemes.Normal) {
-    document.body.classList.remove('dark-theme');
-  }
-}
+const storedThemePreference = localStorage.getItem('appTheme');
+const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+const followsSystem = !storedThemePreference || storedThemePreference === SYSTEM_THEME_PREFERENCE;
+const shouldUseDarkTheme = storedThemePreference === AppThemes.Dark || (followsSystem && systemPrefersDark);
+document.body.classList.toggle('dark-theme', shouldUseDarkTheme);
 
 import('./app/app.module')
   .then(x => platformBrowserDynamic().bootstrapModule(x.AppModule))

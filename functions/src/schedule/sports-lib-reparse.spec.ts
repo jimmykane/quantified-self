@@ -59,7 +59,7 @@ const hoisted = vi.hoisted(() => {
     };
 
     const collectionGroup = vi.fn((path: string) => {
-        if (path !== 'processing') {
+        if (path !== 'metaData') {
             throw new Error(`Unexpected collectionGroup path: ${path}`);
         }
         const q = {
@@ -358,7 +358,7 @@ describe('scheduleSportsLibReparseScan', () => {
         expect(hoisted.collectionGroup).not.toHaveBeenCalled();
     });
 
-    it('should enqueue candidate jobs from processing collectionGroup in global mode', async () => {
+    it('should enqueue candidate jobs from processing metadata collectionGroup in global mode', async () => {
         const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
         hoisted.processingDocs.push(createProcessingDoc(eventRef, {
             sportsLibVersion: '9.0.0',
@@ -367,9 +367,30 @@ describe('scheduleSportsLibReparseScan', () => {
 
         await (scheduleSportsLibReparseScan as any)({});
 
-        expect(hoisted.collectionGroup).toHaveBeenCalledWith('processing');
+        expect(hoisted.collectionGroup).toHaveBeenCalledWith('metaData');
         expect(hoisted.shouldEventBeReparsed).not.toHaveBeenCalled();
         expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledWith('job-1');
+    });
+
+    it('should spread enqueue schedule delays across multiple sequential override enqueues', async () => {
+        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
+        hoisted.runtimeDefaults.enqueueLimit = 100;
+        hoisted.buildSportsLibReparseJobId
+            .mockReturnValueOnce('job-e1')
+            .mockReturnValueOnce('job-e2');
+        hoisted.userEventsByUID.set('u1', [
+            createEventDoc('u1', 'e1', { originalFile: { path: 'first.fit' } }),
+            createEventDoc('u1', 'e2', { originalFile: { path: 'second.fit' } }),
+        ]);
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        const firstCallArgs = hoisted.enqueueSportsLibReparseTask.mock.calls[0];
+        const secondCallArgs = hoisted.enqueueSportsLibReparseTask.mock.calls[1];
+        expect(firstCallArgs).toEqual(['job-e1']);
+        expect(secondCallArgs[0]).toBe('job-e2');
+        expect(typeof secondCallArgs[1]).toBe('number');
+        expect(secondCallArgs[1]).toBeGreaterThan(1);
     });
 
     it('should apply tuple cursor startAfter in global mode', async () => {
@@ -665,7 +686,7 @@ describe('scheduleSportsLibReparseScan', () => {
         });
 
         hoisted.collectionGroup.mockImplementationOnce((path: string) => {
-            if (path !== 'processing') {
+            if (path !== 'metaData') {
                 throw new Error(`Unexpected collectionGroup path: ${path}`);
             }
             const q: any = {
@@ -688,6 +709,32 @@ describe('scheduleSportsLibReparseScan', () => {
         const finalCheckpointPayload = hoisted.checkpointSet.mock.calls[hoisted.checkpointSet.mock.calls.length - 1][0];
         expect(finalCheckpointPayload.lastScanCount).toBe(1);
         expect(finalCheckpointPayload.lastEnqueuedCount).toBe(0);
+    });
+
+    it('should skip non-processing metadata docs from global candidate query', async () => {
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        hoisted.processingDocs.push({
+            ref: {
+                path: `${eventRef.path}/metaData/customMetadataDoc`,
+                parent: {
+                    parent: eventRef,
+                },
+            },
+            data: () => ({
+                sportsLibVersion: '9.0.0',
+                sportsLibVersionCode: 9_000_000,
+            }),
+        });
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[sports-lib-reparse] Skipping non-processing metadata doc from candidate query.',
+            expect.objectContaining({
+                processingDocPath: `${eventRef.path}/metaData/customMetadataDoc`,
+            }),
+        );
     });
 
     it('should skip global processing docs when semver conversion throws', async () => {
@@ -753,6 +800,37 @@ describe('scheduleSportsLibReparseScan', () => {
             expect.objectContaining({
                 processingDocPath: `${staleEventRef.path}/metaData/processing`,
                 eventPath: staleEventRef.path,
+            }),
+        );
+    });
+
+    it('should log and rethrow processing metadata candidate failures', async () => {
+        hoisted.buildSportsLibReparseJobId.mockImplementation((_uid: string, eventId: string) => `job-${eventId}`);
+
+        const successEventRef = createEventRef('u1', 'e1', { originalFile: { path: 'success.fit' } });
+        const failingEventRef = createEventRef('u1', 'e2', { originalFile: { path: 'broken.fit' } });
+        failingEventRef.get = vi.fn(async () => {
+            throw new Error('candidate-failed');
+        });
+
+        hoisted.processingDocs.push(
+            createProcessingDoc(successEventRef, {
+                sportsLibVersion: '9.0.0',
+                sportsLibVersionCode: 9_000_000,
+            }),
+            createProcessingDoc(failingEventRef, {
+                sportsLibVersion: '9.0.0',
+                sportsLibVersionCode: 9_000_000,
+            }),
+        );
+
+        await expect((scheduleSportsLibReparseScan as any)({})).rejects.toThrow('candidate-failed');
+        expect(hoisted.loggerError).toHaveBeenCalledWith(
+            '[sports-lib-reparse] Failed to process candidate from processing metadata scan.',
+            expect.objectContaining({
+                processingDocPath: `${failingEventRef.path}/metaData/processing`,
+                eventPath: failingEventRef.path,
+                error: 'candidate-failed',
             }),
         );
     });
@@ -860,5 +938,75 @@ describe('scheduleSportsLibReparseScan', () => {
         expect(finalCheckpointPayload.cursorProcessingVersionCode).toBe(9_000_001);
         expect(finalCheckpointPayload.lastPassCompletedAt).toBeUndefined();
         expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
+    });
+
+    it('should release reserved enqueue slot when global candidate parent event path is invalid', async () => {
+        hoisted.runtimeDefaults.scanLimit = 2;
+        hoisted.runtimeDefaults.enqueueLimit = 1;
+        hoisted.buildSportsLibReparseJobId.mockImplementation((_uid: string, eventId: string) => `job-${eventId}`);
+
+        const invalidEventRef = {
+            path: 'invalid/root',
+            get: vi.fn(async () => ({
+                exists: true,
+                data: () => ({ originalFile: { path: 'invalid.fit' } }),
+            })),
+        };
+        const validEventRef = createEventRef('u1', 'e1', { originalFile: { path: 'valid.fit' } });
+
+        hoisted.processingDocs.push(
+            createProcessingDoc(invalidEventRef, {
+                sportsLibVersion: '9.0.0',
+                sportsLibVersionCode: 9_000_000,
+            }),
+            createProcessingDoc(validEventRef, {
+                sportsLibVersion: '9.0.0',
+                sportsLibVersionCode: 9_000_000,
+            }),
+        );
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledWith('job-e1');
+        const finalCheckpointPayload = hoisted.checkpointSet.mock.calls[hoisted.checkpointSet.mock.calls.length - 1][0];
+        expect(finalCheckpointPayload.lastEnqueuedCount).toBe(1);
+    });
+
+    it('should reuse released reservation for subsequent valid global candidates after invalid path', async () => {
+        hoisted.runtimeDefaults.scanLimit = 3;
+        hoisted.runtimeDefaults.enqueueLimit = 2;
+        hoisted.buildSportsLibReparseJobId.mockImplementation((_uid: string, eventId: string) => `job-${eventId}`);
+
+        const invalidEventRef = {
+            path: 'invalid/root',
+            get: vi.fn(async () => ({
+                exists: true,
+                data: () => ({ originalFile: { path: 'invalid.fit' } }),
+            })),
+        };
+        const validEventRefOne = createEventRef('u1', 'e1', { originalFile: { path: 'valid-1.fit' } });
+        const validEventRefTwo = createEventRef('u1', 'e2', { originalFile: { path: 'valid-2.fit' } });
+
+        hoisted.processingDocs.push(
+            createProcessingDoc(invalidEventRef, {
+                sportsLibVersion: '9.0.0',
+                sportsLibVersionCode: 9_000_000,
+            }),
+            createProcessingDoc(validEventRefOne, {
+                sportsLibVersion: '9.0.0',
+                sportsLibVersionCode: 9_000_000,
+            }),
+            createProcessingDoc(validEventRefTwo, {
+                sportsLibVersion: '9.0.0',
+                sportsLibVersionCode: 9_000_000,
+            }),
+        );
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenNthCalledWith(1, 'job-e1');
+        expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenNthCalledWith(2, 'job-e2', expect.any(Number));
+        const finalCheckpointPayload = hoisted.checkpointSet.mock.calls[hoisted.checkpointSet.mock.calls.length - 1][0];
+        expect(finalCheckpointPayload.lastEnqueuedCount).toBe(2);
     });
 });

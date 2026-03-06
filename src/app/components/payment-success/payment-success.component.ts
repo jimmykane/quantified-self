@@ -67,7 +67,7 @@ import { LoggerService } from '../../services/logger.service';
         </mat-card-content>
         
         <mat-card-actions>
-          <button mat-flat-button color="primary" routerLink="/dashboard" [disabled]="isRefreshing">
+          <button mat-flat-button class="qs-mat-primary" routerLink="/dashboard" [disabled]="isRefreshing">
             Go to Dashboard
           </button>
         </mat-card-actions>

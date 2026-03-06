@@ -14,7 +14,7 @@ app-tile-map {
   padding: 0;
   box-sizing: border-box;
 
-  /* Glass styles moved to .glass-card */
+  /* Glass styles moved to .qs-glass-card-panel */
 
   display: flex;
   /* Ensure they control their internal layout */

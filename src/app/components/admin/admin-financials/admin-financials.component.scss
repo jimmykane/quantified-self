@@ -52,19 +52,19 @@
     }
 
     &.status-success {
-        border-left-color: #4caf50;
+        border-left-color: var(--mat-sys-primary);
     }
 
     &.status-pending {
-        border-left-color: #ff9800;
+        border-left-color: var(--mat-sys-tertiary);
     }
 
     &.status-error {
-        border-left-color: #f44336;
+        border-left-color: var(--mat-sys-error);
     }
 
     &.status-info {
-        border-left-color: #2196f3;
+        border-left-color: var(--mat-sys-secondary);
     }
 }
 

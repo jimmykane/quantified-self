@@ -6,15 +6,13 @@
     [style.--chip-accent-color]="getActivityColor(activity)" (click)="toggleActivity(activity)"
     class="activity-chip">
     <div class="chip-content">
-      <span class="chip-type">{{ activity.type }}</span>
+      <span class="chip-type">{{ getPrimaryLabel(activity) }}</span>
       <span class="chip-stats">
         {{ activity.getDuration().getDisplayValue() }} • {{ activity.getDistance().getDisplayValue() }}{{
         activity.getDistance().getDisplayUnit() }}
       </span>
-      @if (shouldShowDeviceNames()) {
+      @if (shouldShowDeviceNames() && isOwner()) {
       <span class="chip-device-row">
-        <span class="chip-device">{{ getDeviceName(activity) }}</span>
-        @if (isOwner()) {
         <button
           mat-icon-button
           class="chip-device-edit-button"
@@ -23,7 +21,6 @@
           (click)="$event.stopPropagation(); renameDevice(activity)">
           <mat-icon>edit</mat-icon>
         </button>
-        }
       </span>
       }
     </div>

@@ -4,6 +4,7 @@ export const AppActivityTypeGroupGradients: { [key in ActivityTypeGroups]: { sta
     [ActivityTypeGroups.Running]: { start: '#FDD300', end: '#FF9100' },          // Yellow -> Deep Orange
     [ActivityTypeGroups.TrailRunning]: { start: '#c7ef0c', end: '#8bc34a' },     // Lime -> Light Green
     [ActivityTypeGroups.Cycling]: { start: '#FF7C3B', end: '#d84315' },          // Orange -> Burnt Orange
+    [ActivityTypeGroups.MountainBiking]: { start: '#9CCC65', end: '#33691E' },   // Light Green -> Dark Green
     [ActivityTypeGroups.Swimming]: { start: '#40C4FF', end: '#0288D1' },         // Light Blue -> Blue
     [ActivityTypeGroups.Performance]: { start: '#AFE443', end: '#689F38' },      // Light Green -> Dark Green
     [ActivityTypeGroups.IndoorSports]: { start: '#FF467E', end: '#C2185B' },     // Pink -> Dark Pink

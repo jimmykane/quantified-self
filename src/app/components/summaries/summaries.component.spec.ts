@@ -7,10 +7,19 @@ import { AppEventService } from '../../services/app.event.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
-import { ChangeDetectorRef } from '@angular/core';
+import { ChangeDetectorRef, NO_ERRORS_SCHEMA } from '@angular/core';
 import { LoggerService } from '../../services/logger.service';
 import { of } from 'rxjs';
-import { ActivityTypes, ChartDataValueTypes, ChartDataCategoryTypes, TimeIntervals, DataAscent, DataDescent } from '@sports-alliance/sports-lib';
+import {
+    ActivityTypes,
+    ChartDataValueTypes,
+    ChartDataCategoryTypes,
+    TimeIntervals,
+    DataAscent,
+    DataDescent,
+    ChartTypes,
+    TileTypes
+} from '@sports-alliance/sports-lib';
 
 describe('SummariesComponent', () => {
     let component: SummariesComponent;
@@ -28,7 +37,8 @@ describe('SummariesComponent', () => {
         mockAuthService = {};
         mockEventService = {};
         mockThemeService = {
-            getChartTheme: vi.fn().mockReturnValue(of('light'))
+            getChartTheme: vi.fn().mockReturnValue(of('light')),
+            getAppTheme: vi.fn().mockReturnValue(of('light'))
         };
         mockSnackBar = { open: vi.fn() };
         mockDialog = { open: vi.fn() };
@@ -36,6 +46,7 @@ describe('SummariesComponent', () => {
 
         await TestBed.configureTestingModule({
             declarations: [SummariesComponent],
+            schemas: [NO_ERRORS_SCHEMA],
             providers: [
                 { provide: Router, useValue: mockRouter },
                 { provide: AppAuthService, useValue: mockAuthService },
@@ -54,6 +65,49 @@ describe('SummariesComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('should rebuild tiles when dashboard settings mutate in place', async () => {
+        component.user = {
+            settings: {
+                dashboardSettings: {
+                    tiles: [
+                        {
+                            type: TileTypes.Chart,
+                            order: 0,
+                            chartType: ChartTypes.IntensityZones,
+                            dataType: DataAscent.type,
+                            dataValueType: ChartDataValueTypes.Total,
+                            dataCategoryType: ChartDataCategoryTypes.ActivityType,
+                            size: { columns: 1, rows: 1 }
+                        }
+                    ]
+                }
+            }
+        } as any;
+        component.events = [];
+
+        await component.ngOnChanges({
+            user: {
+                currentValue: component.user,
+                previousValue: null,
+                firstChange: true,
+                isFirstChange: () => true
+            } as any,
+            events: {
+                currentValue: component.events,
+                previousValue: null,
+                firstChange: true,
+                isFirstChange: () => true
+            } as any
+        });
+
+        expect((component.tiles[0] as any).chartType).toBe(ChartTypes.IntensityZones);
+
+        component.user.settings.dashboardSettings.tiles[0].chartType = ChartTypes.ColumnsVertical;
+        component.ngDoCheck();
+
+        expect((component.tiles[0] as any).chartType).toBe(ChartTypes.ColumnsVertical);
     });
 
     describe('getChartData', () => {

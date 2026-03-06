@@ -95,6 +95,17 @@
     }
 }
 
+.queue-actions {
+    display: flex;
+    gap: 12px;
+
+    @include bp.xsmall {
+        width: 100%;
+        flex-direction: column;
+        gap: 10px;
+    }
+}
+
 // Chart Styles (Pie Chart still remains in dashboard?)
 // Check if Auth Pie chart uses these
 .chart-header {

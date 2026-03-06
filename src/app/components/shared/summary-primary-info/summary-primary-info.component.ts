@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output } from '@angular/core';
+import { EventInterface } from '@sports-alliance/sports-lib';
 
 export interface SummaryPrimaryInfoMetric {
   value: string;
@@ -16,6 +17,7 @@ export interface SummaryPrimaryInfoMetric {
 export class SummaryPrimaryInfoComponent {
   @Input() activityType = '';
   @Input() iconActivityType = '';
+  @Input() iconEvent: EventInterface | null = null;
   @Input() startDate: number | Date | null | undefined = null;
   @Input() fallbackTopMetaText = 'Activity start';
   @Input() metrics: SummaryPrimaryInfoMetric[] = [];

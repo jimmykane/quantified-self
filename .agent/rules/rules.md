@@ -23,6 +23,13 @@ These are baseline rules that apply across the repository unless a deeper `AGENT
 - Prefer `inject()` for new code.
 - Constructor injection is acceptable in existing code paths.
 
+## Zone and External APIs
+- Avoid Zone.js-driven behavior fixes (`NgZone.run`, manual change-detection nudges) as a first-line solution.
+- Prefer official framework/library APIs for coordination (for example ECharts `connect`, `dispatchAction`, `takeGlobalCursor`, native event contracts).
+- If Angular boundary handling is unavoidable, keep it isolated at integration edges and document why the official API path was insufficient.
+- Do not introduce new Zone.js coupling in chart synchronization flows when an ECharts-native mechanism exists.
+- Reuse shared external-integration controllers/helpers before adding component-local init, resize, or disposal logic.
+
 ## Firebase
 - Use modular SDK imports (`@angular/fire/*`, `firebase/*`).
 - Avoid compat APIs unless required by existing integration.
@@ -38,6 +45,9 @@ These are baseline rules that apply across the repository unless a deeper `AGENT
 - Handle nullable values defensively due to loose strictness.
 - Avoid `any` casts, especially around Firestore/external payloads.
 - Use `BrowserCompatibilityService` for modern API checks before use.
+- Extract deterministic chart/data shaping into pure helpers and keep components/directives focused on orchestration and rendering.
+- Split files when one unit starts owning multiple concerns such as data shaping, external-library lifecycle, and UI state.
+- When the same behavior must work in frontend and functions, prefer shared library code with small environment adapters over duplicated implementations.
 
 ## Event/Activity Firestore Writes
 - Always sanitize event/activity Firestore payloads with shared helpers from `functions/src/shared/firestore-write-sanitizer.ts`.

@@ -37,7 +37,7 @@ type NativeShareStatus = 'shared' | 'unsupported' | 'cancelled' | 'failed';
                 <mat-icon>close</mat-icon>
             </button>
         </app-bottom-sheet-header>
-        <mat-progress-bar *ngIf="isSharing" class="share-progress" mode="indeterminate" color="accent"></mat-progress-bar>
+        <mat-progress-bar *ngIf="isSharing" class="share-progress qs-progress-accent" mode="indeterminate"></mat-progress-bar>
         <div class="bottom-sheet-content qs-scrollbar">
             <div #shareFrame class="benchmark-share-frame">
               <app-benchmark-report
@@ -192,8 +192,13 @@ export class BenchmarkBottomSheetComponent {
     const displayUrl = this.getDisplayUrl(appUrl);
     const filename = `benchmark-${this.shareTimestamp.getTime()}.png`;
     const customBrandText = (this.data.brandText || '').trim();
+    const shareFrameElement = this.shareFrame?.nativeElement;
 
-    const dataUrl = await this.shareService.shareBenchmarkAsImage(this.shareFrame!.nativeElement, {
+    if (!shareFrameElement) {
+      return null;
+    }
+
+    const dataUrl = await this.shareService.shareBenchmarkAsImage(shareFrameElement, {
       scale: isMobile ? 1.5 : 2,
       width: 1080,
       embedFonts: true,

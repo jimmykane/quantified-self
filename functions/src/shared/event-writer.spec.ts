@@ -240,6 +240,35 @@ describe('EventWriter', () => {
         expect(activityData.id).toBe('activity-1');
     });
 
+    it('should overwrite conflicting activity ownership fields with the trusted write context', async () => {
+        activityMock.toJSON.mockReturnValue({
+            id: 'activity-1',
+            userID: 'spoofed-user',
+            eventID: 'spoofed-event',
+            eventStartDate: new Date('2020-01-01T00:00:00.000Z'),
+            streams: [{ type: 'Power', values: [100, 200] }],
+        });
+
+        await writer.writeAllEventData('user-1', eventMock);
+        const setDocFn = adapter.setDoc as any;
+
+        const activityCall = setDocFn.mock.calls.find((call: any) =>
+            call[0][0] === 'users' && call[0][1] === 'user-1' && call[0][2] === 'activities'
+        );
+
+        expect(activityCall).toBeTruthy();
+        expect(activityCall[1]).toEqual(expect.objectContaining({
+            id: 'activity-1',
+            userID: 'user-1',
+            eventID: 'event-1',
+            eventStartDate: eventMock.startDate,
+        }));
+        expect(activityCall[1]).not.toEqual(expect.objectContaining({
+            userID: 'spoofed-user',
+            eventID: 'spoofed-event',
+        }));
+    });
+
     it('should strip activities from event document', async () => {
         // Ensure the mock returns activities initially so we can verify they are removed
         eventMock.toJSON.mockReturnValue({
@@ -347,7 +376,7 @@ describe('EventWriter', () => {
             expect(mockLogger.error).toHaveBeenCalled();
         });
 
-        it('should log document path and undefined fields when Firestore rejects undefined values', async () => {
+        it('should warn with document path and undefined fields when Firestore rejects undefined values', async () => {
             const firestoreUndefinedError = new Error(
                 'Value for argument "data" is not a valid Firestore document. Cannot use "undefined" as a Firestore value.'
             );
@@ -386,7 +415,94 @@ describe('EventWriter', () => {
 
             expect(errorMessage).toContain('Firestore write failed for users/user-1/events/event-1');
             expect(errorMessage).toContain('events.6.Jump Event.jumpData.height');
-            expect(mockLogger.error).toHaveBeenCalledWith(
+            expect(mockLogger.warn).toHaveBeenCalledWith(
+                'Firestore write payload contains undefined values',
+                expect.objectContaining({
+                    documentPath: 'users/user-1/events/event-1',
+                    undefinedFieldPaths: expect.arrayContaining(['events.6.Jump Event.jumpData.height']),
+                })
+            );
+        });
+
+        it('should not append undefined field paths when Firestore error is DEADLINE_EXCEEDED', async () => {
+            const deadlineExceededError = new Error(
+                '4 DEADLINE_EXCEEDED: Deadline exceeded after 65.218s'
+            );
+            const conditionalFailingAdapter: FirestoreAdapter = {
+                setDoc: vi.fn().mockImplementation(async (path: string[]) => {
+                    if (path[2] === 'events') {
+                        throw deadlineExceededError;
+                    }
+                    return undefined;
+                }),
+                createBlob: vi.fn((data) => data),
+                generateID: vi.fn().mockReturnValue('generated-id'),
+            };
+            const writerWithLogger = new EventWriter(conditionalFailingAdapter, undefined, undefined, mockLogger);
+
+            eventMock.toJSON.mockReturnValue({
+                id: 'event-1',
+                activities: [],
+                events: {
+                    6: {
+                        'Jump Event': {
+                            jumpData: {
+                                height: undefined,
+                            },
+                        },
+                    },
+                },
+            });
+
+            let errorMessage = '';
+            try {
+                await writerWithLogger.writeAllEventData('user-1', eventMock);
+            } catch (error) {
+                errorMessage = (error as Error).message;
+            }
+
+            expect(errorMessage).toContain('Could not write event data: Firestore write failed for users/user-1/events/event-1: 4 DEADLINE_EXCEEDED: Deadline exceeded after 65.218s.');
+            expect(errorMessage).not.toContain('Undefined field paths:');
+        });
+
+        it('should not append undefined field paths for unrelated errors that mention undefined', async () => {
+            const unrelatedUndefinedError = new Error('Invalid argument: undefined is not allowed by downstream service');
+            const conditionalFailingAdapter: FirestoreAdapter = {
+                setDoc: vi.fn().mockImplementation(async (path: string[]) => {
+                    if (path[2] === 'events') {
+                        throw unrelatedUndefinedError;
+                    }
+                    return undefined;
+                }),
+                createBlob: vi.fn((data) => data),
+                generateID: vi.fn().mockReturnValue('generated-id'),
+            };
+            const writerWithLogger = new EventWriter(conditionalFailingAdapter, undefined, undefined, mockLogger);
+
+            eventMock.toJSON.mockReturnValue({
+                id: 'event-1',
+                activities: [],
+                events: {
+                    6: {
+                        'Jump Event': {
+                            jumpData: {
+                                height: undefined,
+                            },
+                        },
+                    },
+                },
+            });
+
+            let errorMessage = '';
+            try {
+                await writerWithLogger.writeAllEventData('user-1', eventMock);
+            } catch (error) {
+                errorMessage = (error as Error).message;
+            }
+
+            expect(errorMessage).toContain('Could not write event data: Firestore write failed for users/user-1/events/event-1: Invalid argument: undefined is not allowed by downstream service.');
+            expect(errorMessage).not.toContain('Undefined field paths:');
+            expect(mockLogger.warn).toHaveBeenCalledWith(
                 'Firestore write payload contains undefined values',
                 expect.objectContaining({
                     documentPath: 'users/user-1/events/event-1',

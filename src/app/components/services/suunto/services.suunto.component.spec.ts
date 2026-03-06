@@ -108,4 +108,34 @@ describe('ServicesSuuntoComponent', () => {
             expect(cardContent).toContain('Connect Account First');
         });
     });
+
+    describe('Upload Cards', () => {
+        it('should hide upload actions and show connect-first messaging when pro user is not connected', () => {
+            component.hasProAccess = true;
+            component.serviceTokens = [];
+            fixture.detectChanges();
+
+            const cards = fixture.nativeElement.querySelectorAll('.feature-card');
+            const fitUploadCard = cards[2];
+            const gpxUploadCard = cards[3];
+
+            expect(fitUploadCard.querySelector('app-upload-activity-to-service')).toBeFalsy();
+            expect(gpxUploadCard.querySelector('app-upload-route-to-service')).toBeFalsy();
+            expect(fitUploadCard.textContent).toContain('Connect Account First');
+            expect(gpxUploadCard.textContent).toContain('Connect Account First');
+        });
+
+        it('should render upload actions when pro user is connected', () => {
+            component.hasProAccess = true;
+            component.serviceTokens = [{ accessToken: 'token' } as any];
+            fixture.detectChanges();
+
+            const cards = fixture.nativeElement.querySelectorAll('.feature-card');
+            const fitUploadCard = cards[2];
+            const gpxUploadCard = cards[3];
+
+            expect(fitUploadCard.querySelector('app-upload-activity-to-service')).toBeTruthy();
+            expect(gpxUploadCard.querySelector('app-upload-route-to-service')).toBeTruthy();
+        });
+    });
 });

@@ -76,7 +76,7 @@
     // background-color: rgba(46, 125, 50, 0.04); /* Light green tint */
     /* Keep generic or specific semantic color with low opacity allowed in dark mode? */
     /* Use a safe primary color tint */
-    background-color: rgba(var(--mat-sys-primary-rgb, 0, 0, 0), 0.04);
+    background-color: color-mix(in srgb, var(--mat-sys-primary) 4%, transparent);
 }
 
 .benefit {

@@ -2,13 +2,10 @@ import { DataJumpEvent } from '@sports-alliance/sports-lib';
 import { MarkerFactoryService } from '../../../services/map/marker-factory.service';
 import { LoggerService } from '../../../services/logger.service';
 import {
-  bindLayerClickOnce,
   ensureLayer,
-  LayerBindingRegistry,
   removeLayerIfExists,
   removeSourceIfExists,
   setPaintIfLayerExists,
-  unbindLayerClicks,
   upsertGeoJsonSource,
 } from '../../../services/map/mapbox-layer.utils';
 import {
@@ -55,7 +52,6 @@ export interface EventMapRenderOptions {
   strokeWidth: number;
 }
 
-type TrackClickHandler = (activityId: string, latitudeDegrees: number, longitudeDegrees: number) => void;
 type JumpClickHandler = (jump: DataJumpEvent, latitudeDegrees: number, longitudeDegrees: number) => void;
 
 interface StoredTrackLayers {
@@ -69,14 +65,12 @@ export class EventCardMapManager {
   private mapboxgl: any | null = null;
   private styleLoadHandler: (() => void) | null = null;
   private styleLoadHandlerCleanup: (() => void) | null = null;
-  private trackClickHandler: TrackClickHandler | null = null;
   private jumpClickHandler: JumpClickHandler | null = null;
 
   private currentTracks: EventTrackRenderData[] = [];
   private currentOptions: EventMapRenderOptions = { showArrows: true, strokeWidth: 3 };
 
   private activeLayersByActivityId = new Map<string, StoredTrackLayers>();
-  private clickBindings: LayerBindingRegistry = [];
   private startMarkers = new Map<string, any>();
   private endMarkers = new Map<string, any>();
   private lapMarkers = new Map<string, any[]>();
@@ -117,10 +111,6 @@ export class EventCardMapManager {
       this.styleLoadHandler,
       'event-card-map-manager'
     );
-  }
-
-  public setTrackClickHandler(handler: TrackClickHandler | null): void {
-    this.trackClickHandler = handler;
   }
 
   public setJumpClickHandler(handler: JumpClickHandler | null): void {
@@ -359,7 +349,6 @@ export class EventCardMapManager {
         'text-opacity': 1,
       });
     } else {
-      this.unbindLineClick(arrowLayerId);
       removeLayerIfExists(this.map, arrowLayerId);
     }
 
@@ -368,11 +357,6 @@ export class EventCardMapManager {
       lineLayerId,
       arrowLayerId
     });
-
-    this.bindLineClick(lineLayerId, track.activityId);
-    if (this.currentOptions.showArrows) {
-      this.bindLineClick(arrowLayerId, track.activityId);
-    }
 
     this.renderTrackMarkers(track, coordinates);
   }
@@ -425,27 +409,6 @@ export class EventCardMapManager {
     return marker;
   }
 
-  private bindLineClick(layerId: string, activityId: string): void {
-    if (!this.map || !this.map.getLayer?.(layerId)) {
-      return;
-    }
-
-    const clickHandler = (event: any) => {
-      const lat = event?.lngLat?.lat;
-      const lng = event?.lngLat?.lng;
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-        return;
-      }
-      this.trackClickHandler?.(activityId, lat, lng);
-    };
-
-    bindLayerClickOnce(this.map, this.clickBindings, layerId, clickHandler);
-  }
-
-  private unbindLineClick(layerId: string): void {
-    unbindLayerClicks(this.map, this.clickBindings, layerId);
-  }
-
   private renderCursorMarkers(): void {
     if (!this.map || !this.mapboxgl) {
       return;
@@ -479,8 +442,6 @@ export class EventCardMapManager {
       return;
     }
 
-    unbindLayerClicks(this.map, this.clickBindings);
-
     this.activeLayersByActivityId.forEach((ids) => {
       removeLayerIfExists(this.map, ids.arrowLayerId);
       removeLayerIfExists(this.map, ids.lineLayerId);
@@ -506,8 +467,6 @@ export class EventCardMapManager {
     }
     const ids = this.activeLayersByActivityId.get(activityId);
     if (ids) {
-      this.unbindLineClick(ids.arrowLayerId);
-      this.unbindLineClick(ids.lineLayerId);
       removeLayerIfExists(this.map, ids.arrowLayerId);
       removeLayerIfExists(this.map, ids.lineLayerId);
       removeSourceIfExists(this.map, ids.sourceId);

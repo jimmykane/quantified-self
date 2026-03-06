@@ -9,7 +9,7 @@ section.event-section-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px;
+  padding: 16px 0;
   gap: 16px;
 }
 
@@ -44,7 +44,7 @@ section.event-section-header {
 
 @include xsmall {
   section.event-section-header {
-    padding: 8px;
+    padding: 8px 0;
     gap: 8px;
   }
 }

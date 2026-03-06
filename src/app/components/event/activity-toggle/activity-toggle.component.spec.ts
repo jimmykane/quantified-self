@@ -60,10 +60,11 @@ describe('ActivityToggleComponent', () => {
     getActivityColor: vi.fn(() => '#ff0000'),
   };
 
-  const setRequiredInputs = (activity: any, selectedActivities: any[]) => {
+  const setRequiredInputs = (activity: any, selectedActivities: any[], eventOverrides: Record<string, unknown> = {}) => {
     const event = {
       isMerge: true,
       getActivities: () => [activity],
+      ...eventOverrides,
     } as any;
 
     fixture.componentRef.setInput('event', event);
@@ -132,5 +133,26 @@ describe('ActivityToggleComponent', () => {
 
     expect(mockSelectionService.selectedActivities.select).not.toHaveBeenCalled();
     expect(mockSelectionService.selectedActivities.deselect).not.toHaveBeenCalled();
+  });
+
+  it('uses device name as primary label for merge events', () => {
+    const renderedActivity = createActivity('a1');
+    setRequiredInputs(renderedActivity, [renderedActivity], { isMerge: true });
+
+    expect(component.primaryLabel()).toBe('Garmin 1.0');
+  });
+
+  it('uses device name as primary label for benchmark events', () => {
+    const renderedActivity = createActivity('a1');
+    setRequiredInputs(renderedActivity, [renderedActivity], { isMerge: false, hasBenchmark: true });
+
+    expect(component.primaryLabel()).toBe('Garmin 1.0');
+  });
+
+  it('uses activity type as primary label for normal events', () => {
+    const renderedActivity = createActivity('a1');
+    setRequiredInputs(renderedActivity, [renderedActivity], { isMerge: false, hasBenchmark: false });
+
+    expect(component.primaryLabel()).toBe('Run');
   });
 });

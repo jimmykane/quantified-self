@@ -146,6 +146,46 @@ describe('ActivitiesTogglesComponent', () => {
     expect(nonOwnerButtons.length).toBe(0);
   });
 
+  it('shows device names as primary labels for benchmark events', () => {
+    const a1 = createActivity('a1', 'Garmin', '111', '21.19');
+    const event = {
+      getID: () => 'event-1',
+      isMerge: false,
+      hasBenchmark: true,
+      getActivities: () => [a1],
+      addStat: vi.fn(),
+    } as any;
+
+    fixture.componentRef.setInput('event', event);
+    fixture.componentRef.setInput('selectedActivities', [a1]);
+    fixture.componentRef.setInput('isOwner', false);
+    fixture.componentRef.setInput('user', user);
+    fixture.detectChanges();
+
+    expect(component.shouldShowDeviceNames()).toBe(true);
+    expect(component.getPrimaryLabel(a1)).toBe('Garmin 21.19');
+  });
+
+  it('shows activity type as primary label for non-merge non-benchmark events', () => {
+    const a1 = createActivity('a1', 'Garmin', '111', '21.19');
+    const event = {
+      getID: () => 'event-1',
+      isMerge: false,
+      hasBenchmark: false,
+      getActivities: () => [a1],
+      addStat: vi.fn(),
+    } as any;
+
+    fixture.componentRef.setInput('event', event);
+    fixture.componentRef.setInput('selectedActivities', [a1]);
+    fixture.componentRef.setInput('isOwner', false);
+    fixture.componentRef.setInput('user', user);
+    fixture.detectChanges();
+
+    expect(component.shouldShowDeviceNames()).toBe(false);
+    expect(component.getPrimaryLabel(a1)).toBe('Run');
+  });
+
   it('edit button click does not toggle activity selection', () => {
     setupInputs(true);
     const toggleSpy = vi.spyOn(component, 'toggleActivity');

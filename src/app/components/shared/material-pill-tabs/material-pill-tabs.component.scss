@@ -2,6 +2,12 @@
   display: block;
 }
 
+:host ::ng-deep .material-pill-tabs {
+  --mat-tab-header-divider-color: transparent;
+  --mdc-secondary-navigation-tab-active-indicator-color: transparent;
+  --mdc-secondary-navigation-tab-active-indicator-height: 0px;
+}
+
 :host ::ng-deep .material-pill-tabs .mat-mdc-tab-header {
   border-bottom: 0;
   padding-inline: 8px;
@@ -21,6 +27,7 @@
 :host ::ng-deep .material-pill-tabs .mat-mdc-tab-label-container {
   min-width: max-content;
   overflow: visible;
+  border: 0 !important;
 }
 
 :host ::ng-deep .material-pill-tabs.sticky-header .mat-mdc-tab-header {
@@ -33,6 +40,11 @@
 
 :host ::ng-deep .material-pill-tabs .mdc-tab-indicator {
   display: none;
+}
+
+:host ::ng-deep .material-pill-tabs .mdc-tab-indicator__content--underline {
+  border-top-width: 0 !important;
+  border-color: transparent !important;
 }
 
 :host ::ng-deep .material-pill-tabs .mat-mdc-tab-labels {

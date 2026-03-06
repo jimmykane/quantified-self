@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as admin from 'firebase-admin';
 import { checkAndSendSubscriptionEmails } from './email-triggers';
+import { USAGE_LIMITS } from '../shared/limits';
 
 // Mock pricing
 vi.mock('../shared/pricing', () => ({
@@ -135,7 +136,7 @@ describe('checkAndSendSubscriptionEmails', () => {
                 data: {
                     new_role: 'Basic',
                     old_role: 'Pro',
-                    limit: '100'
+                    limit: String(USAGE_LIMITS.basic)
                 }
             },
             expireAt: expect.any(Object)
@@ -342,7 +343,7 @@ describe('checkAndSendSubscriptionEmails', () => {
                 name: 'subscription_downgrade',
                 data: expect.objectContaining({
                     new_role: 'unknown-role',
-                    limit: '10' // default
+                    limit: String(USAGE_LIMITS.free)
                 })
             })
         }));
@@ -446,5 +447,3 @@ describe('checkAndSendSubscriptionEmails', () => {
         expect(setSpy).not.toHaveBeenCalled();
     });
 });
-
-

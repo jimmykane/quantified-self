@@ -2,7 +2,6 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { Subject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ChartThemes } from '@sports-alliance/sports-lib';
 
 import { EventCadencePowerComponent } from './event.cadence-power.component';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
@@ -23,6 +22,7 @@ describe('EventCadencePowerComponent', () => {
     setOption: ReturnType<typeof vi.fn>;
     resize: ReturnType<typeof vi.fn>;
     dispose: ReturnType<typeof vi.fn>;
+    subscribeToViewportResize: ReturnType<typeof vi.fn>;
   };
 
   let mockService: {
@@ -34,6 +34,11 @@ describe('EventCadencePowerComponent', () => {
   };
 
   const getLastOption = (): Record<string, any> => mockLoader.setOption.mock.calls.at(-1)?.[1] as Record<string, any>;
+
+  const waitForChartStabilization = async (): Promise<void> => {
+    await fixture.whenStable();
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
+  };
 
   beforeEach(async () => {
     breakpointSubject = new Subject<{ matches: boolean }>();
@@ -59,6 +64,7 @@ describe('EventCadencePowerComponent', () => {
       setOption: vi.fn(),
       resize: vi.fn(),
       dispose: vi.fn(),
+      subscribeToViewportResize: vi.fn(() => () => { }),
     };
 
     mockService = {
@@ -94,7 +100,7 @@ describe('EventCadencePowerComponent', () => {
     fixture = TestBed.createComponent(EventCadencePowerComponent);
     component = fixture.componentInstance;
     component.activities = [{ getID: () => 'a1' } as any];
-    component.chartTheme = ChartThemes.Material;
+    component.darkTheme = false;
   });
 
   afterEach(() => {
@@ -115,19 +121,22 @@ describe('EventCadencePowerComponent', () => {
 
   it('should render cadence-power scatter with visual map', async () => {
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
 
     expect(mockService.buildCadencePowerSeries).toHaveBeenCalled();
     expect(option.series).toHaveLength(1);
+    expect(option.tooltip.renderMode).toBe('html');
+    expect(option.tooltip.appendToBody).toBe(true);
+    expect(option.tooltip.confine).toBe(false);
     expect(option.series[0].type).toBe('scatter');
     expect(option.visualMap).toBeDefined();
   });
 
   it('should use standardized cadence x-axis bounds and interval', async () => {
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
 
@@ -138,7 +147,7 @@ describe('EventCadencePowerComponent', () => {
 
   it('should hide legend for single activity and show for multiple activities', async () => {
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
     expect(getLastOption().legend.show).toBe(false);
 
     mockService.buildCadencePowerSeries.mockReturnValue([
@@ -157,34 +166,50 @@ describe('EventCadencePowerComponent', () => {
     ]);
 
     component.ngOnChanges({ activities: { currentValue: [], previousValue: [], firstChange: false, isFirstChange: () => false } as any });
+    await waitForChartStabilization();
 
     expect(getLastOption().legend.show).toBe(true);
   });
 
   it('should produce different point colors by density', async () => {
+    mockService.buildCadencePowerSeries.mockReturnValue([
+      {
+        activity: { getID: () => 'a1' } as any,
+        activityId: 'a1',
+        label: 'Ride',
+        points: [
+          { duration: 60, cadence: 92, power: 340, density: 0.2 },
+          { duration: 61, cadence: 93, power: 338, density: 0.9 },
+        ],
+      },
+    ]);
+
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
-    const colorFormatter = option.series[0].itemStyle.color as (params: { value?: unknown[] }) => string;
+    const pointA = option.series[0].data[0];
+    const pointB = option.series[0].data[1];
 
-    expect(colorFormatter({ value: [90, 300, 0.2] })).not.toBe(colorFormatter({ value: [90, 300, 0.9] }));
+    expect(pointA.itemStyle.color).not.toBe(pointB.itemStyle.color);
+    expect(pointA.symbolSize).toBeLessThan(pointB.symbolSize);
+    expect(option.series[0].symbolSize).toBeUndefined();
   });
 
   it('should apply dark theme tooltip style', async () => {
-    component.chartTheme = ChartThemes.Dark;
+    component.darkTheme = true;
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
-    expect(getLastOption().tooltip.backgroundColor).toBe('#222222');
+    expect(getLastOption().tooltip.backgroundColor).toBe('rgba(58,62,68,1)');
   });
 
   it('should return empty option when there is no cadence-power data', async () => {
     mockService.buildCadencePowerSeries.mockReturnValue([]);
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
 

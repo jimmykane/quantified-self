@@ -37,13 +37,13 @@
                 <mat-progress-spinner diameter="20" [strokeWidth]="3" mode="indeterminate"></mat-progress-spinner>
                 }
                 @case ('completed') {
-                <mat-icon color="primary">check_circle</mat-icon>
+                <mat-icon class="qs-color-primary">check_circle</mat-icon>
                 }
                 @case ('duplicate') {
-                <mat-icon color="accent">info</mat-icon>
+                <mat-icon class="qs-color-accent">info</mat-icon>
                 }
                 @case ('failed') {
-                <mat-icon color="warn">error</mat-icon>
+                <mat-icon class="qs-color-warn">error</mat-icon>
                 }
                 @default {
                 <mat-icon>hourglass_empty</mat-icon>

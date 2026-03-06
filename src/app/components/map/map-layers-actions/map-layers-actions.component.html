@@ -1,26 +1,24 @@
 <section class="map-actions">
   <span [matTooltip]="user ? 'Map layers' : 'Sign in to use this'">
-    <button mat-stroked-button class="layers-trigger qs-glass-card-panel glass-card" [matMenuTriggerFor]="layersMenu" [disabled]="!user || disabled"
+    <button mat-icon-button type="button"
+      class="qs-action-menu-icon-button map-actions__icon-button"
+      [matMenuTriggerFor]="layersMenu" [disabled]="!user || disabled"
       aria-label="Map layers">
       <mat-icon>layers</mat-icon>
-      Layers
     </button>
   </span>
 </section>
 
-<mat-menu #layersMenu="matMenu" xPosition="before" class="qs-menu-panel">
-  @for (style of mapStyleOptions; track style.value) {
-  <button mat-menu-item [disabled]="!user || disabled" (click)="onMapStyleSelect(style.value)">
-    <mat-icon>{{ mapStyle === style.value ? 'radio_button_checked' : 'radio_button_unchecked' }}</mat-icon>
-    <span>{{ style.label }}</span>
-  </button>
-  }
+<mat-menu #layersMenu="matMenu" xPosition="before" class="qs-menu-panel qs-menu-panel-form qs-config-menu">
+  <app-menu-radio-list [value]="mapStyle" [options]="mapStyleOptions" [disabled]="!user || disabled"
+    (valueChange)="onMapStyleSelect($event)">
+  </app-menu-radio-list>
   @if (enableLapsToggle || enableArrowsToggle || enable3DToggle || enableJumpHeatmapToggle) {
   <mat-divider></mat-divider>
   }
   @if (enableLapsToggle) {
   <section mat-menu-item>
-    <mat-slide-toggle class="map-layer-toggle" [checked]="showLaps" [disabled]="!user || disabled"
+    <mat-slide-toggle [checked]="showLaps" [disabled]="!user || disabled"
       (change)="onShowLapsToggle($event.checked)">
       Show Laps
     </mat-slide-toggle>
@@ -28,7 +26,7 @@
   }
   @if (enableArrowsToggle) {
   <section mat-menu-item>
-    <mat-slide-toggle class="map-layer-toggle" [checked]="showArrows" [disabled]="!user || disabled"
+    <mat-slide-toggle [checked]="showArrows" [disabled]="!user || disabled"
       (change)="onShowArrowsToggle($event.checked)">
       Show Arrows
     </mat-slide-toggle>
@@ -36,7 +34,7 @@
   }
   @if (enableJumpHeatmapToggle) {
   <section mat-menu-item>
-    <mat-slide-toggle class="map-layer-toggle jump-heat-toggle" [checked]="showJumpHeatmap" [disabled]="!user || disabled"
+    <mat-slide-toggle class="jump-heat-toggle" [checked]="showJumpHeatmap" [disabled]="!user || disabled"
       (change)="onShowJumpHeatmapToggle($event.checked)">
       Show Jump Heatmap
     </mat-slide-toggle>
@@ -44,7 +42,7 @@
   }
   @if (enable3DToggle) {
   <section mat-menu-item>
-    <mat-slide-toggle class="map-layer-toggle" [checked]="is3D" [disabled]="!user || disabled"
+    <mat-slide-toggle [checked]="is3D" [disabled]="!user || disabled"
       (change)="onShow3DToggle($event.checked)">
       Enable 3D Terrain
     </mat-slide-toggle>

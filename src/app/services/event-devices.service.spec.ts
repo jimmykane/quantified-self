@@ -100,6 +100,22 @@ describe('EventDevicesService', () => {
             const groups = service['groupDevices']([{ type: 'di2', manufacturer: 'shimano' }]);
             expect(groups[0].category).toBe('shifting');
         });
+
+        it('should ignore non-string device metadata without throwing', () => {
+            const groups = service['groupDevices']([{
+                type: { raw: 'heart_rate' },
+                manufacturer: { raw: 'garmin' },
+                sourceType: ['local'],
+                serialNumber: 12345
+            }]);
+
+            expect(groups.length).toBe(1);
+            expect(groups[0].type).toBe('');
+            expect(groups[0].manufacturer).toBe('');
+            expect(groups[0].sourceType).toBeNull();
+            expect(groups[0].displayName).toBe('Unknown Device');
+            expect(groups[0].category).toBe('other');
+        });
     });
 
     describe('formatType', () => {

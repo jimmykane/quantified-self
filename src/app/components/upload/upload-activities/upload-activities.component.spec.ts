@@ -15,6 +15,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 import { UPLOAD_STATUS } from '../upload-status/upload.status';
+import { USAGE_LIMITS } from '../../../../../functions/src/shared/limits';
 
 describe('UploadActivitiesComponent', () => {
   let component: UploadActivitiesComponent;
@@ -131,7 +132,7 @@ describe('UploadActivitiesComponent', () => {
     expect(authServiceMock.getUser).toHaveBeenCalled();
     expect(eventServiceMock.getEventCount).toHaveBeenCalledWith({ uid: 'u1' });
     expect(component.uploadCount).toBe(5);
-    expect(component.uploadLimit).toBe(10);
+    expect(component.uploadLimit).toBe(USAGE_LIMITS.free);
   });
 
   it('should skip upload count checks for pro users', async () => {

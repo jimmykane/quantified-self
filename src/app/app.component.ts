@@ -1,15 +1,16 @@
 import {
   ChangeDetectorRef,
   Component,
+  DestroyRef,
   OnDestroy,
   OnInit,
   ViewChild,
   afterNextRender,
   inject,
 } from '@angular/core';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { MatSidenav } from '@angular/material/sidenav';
 import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
-import { toSignal } from '@angular/core/rxjs-interop';
 import { Observable, Subscription } from 'rxjs';
 import { map } from 'rxjs/operators';
 import {
@@ -32,6 +33,8 @@ import { AppWhatsNewService } from './services/app.whats-new.service';
 import { MatDialog } from '@angular/material/dialog';
 import { WhatsNewDialogComponent } from './components/whats-new/whats-new-dialog.component';
 import { RouteAnimationStateService } from './services/route-animation-state.service';
+import { AppThemes } from '@sports-alliance/sports-lib';
+import { AppHapticsService } from './services/app.haptics.service';
 
 @Component({
   selector: 'app-root',
@@ -52,9 +55,10 @@ export class AppComponent implements OnInit, OnDestroy {
   public bannerHeight = 0;
   public hasBanner = false;
   private actionButtonsSubscription!: Subscription;
-  private routerEventSubscription!: Subscription;
   public authState: boolean | null = null;
+  public showInitialLoader = true;
   public isOnboardingRoute = false;
+  private destroyRef = inject(DestroyRef);
   private routeAnimationStateService = inject(RouteAnimationStateService);
   public routeAnimationState = this.routeAnimationStateService.animationState;
   public onboardingCompleted = true; // Default to true to avoid hiding chrome of non-authenticated users prematurely
@@ -71,9 +75,16 @@ export class AppComponent implements OnInit, OnDestroy {
   public themeOverlayActive = false;
   public themeOverlayClass = '';
   public themeOverlayStyle: { [key: string]: string } = {};
+  private themeOverlayApplyTimeout: ReturnType<typeof setTimeout> | null = null;
+  private themeOverlayResetTimeout: ReturnType<typeof setTimeout> | null = null;
+  private initialLoaderTimeout: ReturnType<typeof setTimeout> | null = null;
+  private initialAuthResolved = false;
+  private readonly initialLoaderStartedAt = Date.now();
+  private readonly minimumLoaderDurationMs = this.resolveMinimumLoaderDuration();
 
   private breakpointObserver = inject(BreakpointObserver);
   public isHandset = toSignal(this.breakpointObserver.observe([Breakpoints.XSmall, Breakpoints.Small]).pipe(map(result => result.matches)), { initialValue: false });
+  private hapticsService = inject(AppHapticsService);
 
   get layoutTopOffsetPx(): number {
     return this.showNavigation ? this.bannerHeight + 64 : 0;
@@ -108,37 +119,48 @@ export class AppComponent implements OnInit, OnDestroy {
     this.seoService.init(); // Initialize SEO service
     this.seoService.init(); // Initialize SEO service
 
-    this.authService.user$.subscribe(async user => {
-      this.authState = !!user;
-      this.currentUser = user;
-      this.updateOnboardingState();
-      // Check admin status when user is authenticated
-      if (user) {
-        try {
-          this.isAdminUser = await this.userService.isAdmin();
-          this.whatsNewService.setAdminMode(this.isAdminUser);
-        } catch {
+    this.authService.user$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(async user => {
+        this.authState = !!user;
+        this.currentUser = user;
+        this.updateOnboardingState();
+        // Check admin status when user is authenticated
+        if (user) {
+          try {
+            this.isAdminUser = await this.userService.isAdmin();
+            this.whatsNewService.setAdminMode(this.isAdminUser);
+          } catch {
+            this.isAdminUser = false;
+            this.whatsNewService.setAdminMode(false);
+          }
+        } else {
           this.isAdminUser = false;
           this.whatsNewService.setAdminMode(false);
         }
-      } else {
-        this.isAdminUser = false;
-        this.whatsNewService.setAdminMode(false);
-      }
-    });
-    this.routerEventSubscription = this.router.events.subscribe((event) => {
-      if (event instanceof NavigationEnd) {
-        this.updateOnboardingState();
-        this.scrollToTopAfterNavigation();
-      }
-    });
+
+        if (!this.initialAuthResolved) {
+          this.initialAuthResolved = true;
+          this.scheduleInitialLoaderHide();
+        }
+      });
+    this.router.events
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((event) => {
+        if (event instanceof NavigationEnd) {
+          this.updateOnboardingState();
+          this.scrollToTopAfterNavigation();
+        }
+      });
 
     // Subscribe to theme changes for circular reveal animation
-    this.themeService.themeChange$.subscribe(change => {
-      if (change) {
-        this.triggerCircularReveal(change.x, change.y, change.theme);
-      }
-    });
+    this.themeService.themeChange$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(change => {
+        if (change) {
+          this.triggerThemeReveal(change.x, change.y, change.theme);
+        }
+      });
   }
 
   get isDashboardRoute(): boolean {
@@ -225,6 +247,7 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   public onLogoClick() {
+    this.hapticsService.selection();
     if (this.authState) {
       this.router.navigate(['/dashboard']);
     } else {
@@ -233,7 +256,23 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   public toggleSidenav() {
+    this.hapticsService.selection();
     this.sideNavService.toggle();
+  }
+
+  public navigateToDashboard() {
+    this.hapticsService.selection();
+    this.router.navigate(['/dashboard']);
+  }
+
+  public navigateToAdmin() {
+    this.hapticsService.selection();
+    this.router.navigate(['/admin']);
+  }
+
+  public navigateToLogin() {
+    this.hapticsService.selection();
+    this.router.navigate(['/login']);
   }
 
   dismissGracePeriodBanner() {
@@ -271,39 +310,77 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
-  private triggerCircularReveal(x: number, y: number, theme: any) {
-    // Set the overlay class based on new theme
-    this.themeOverlayClass = theme === 'Dark' ? 'dark-theme' : '';
+  private triggerThemeReveal(x: number, y: number, theme: AppThemes) {
+    this.clearThemeOverlayTimeouts();
 
-    // Clear any previous style (not needed for gradient sweep, but kept for compatibility)
+    this.themeOverlayClass = theme === AppThemes.Dark ? 'dark-theme' : '';
     this.themeOverlayStyle = {};
 
     // Activate overlay immediately
     this.themeOverlayActive = true;
     this.changeDetectorRef.detectChanges();
 
-    // Apply the actual theme to body mid-animation (around 50%)
-    // This ensures the theme changes under the overlay while it's still covering
-    setTimeout(() => {
-      if (theme === 'Dark') {
-        document.body.classList.add('dark-theme');
-      } else {
-        document.body.classList.remove('dark-theme');
-      }
+    this.themeOverlayApplyTimeout = setTimeout(() => {
+      this.themeService.setAppTheme(theme, false);
     }, 300); // Apply at ~50% of 600ms animation
 
-    // After animation completes, deactivate overlay
-    setTimeout(() => {
+    this.themeOverlayResetTimeout = setTimeout(() => {
       this.themeOverlayActive = false;
       this.changeDetectorRef.detectChanges();
     }, 600); // Match animation duration
   }
 
+  private clearThemeOverlayTimeouts() {
+    if (this.themeOverlayApplyTimeout) {
+      clearTimeout(this.themeOverlayApplyTimeout);
+      this.themeOverlayApplyTimeout = null;
+    }
+
+    if (this.themeOverlayResetTimeout) {
+      clearTimeout(this.themeOverlayResetTimeout);
+      this.themeOverlayResetTimeout = null;
+    }
+  }
+
+  private scheduleInitialLoaderHide(): void {
+    const elapsed = Date.now() - this.initialLoaderStartedAt;
+    const remaining = Math.max(0, this.minimumLoaderDurationMs - elapsed);
+
+    if (remaining === 0) {
+      this.hideInitialLoader();
+      return;
+    }
+
+    this.initialLoaderTimeout = setTimeout(() => {
+      this.initialLoaderTimeout = null;
+      this.hideInitialLoader();
+    }, remaining);
+  }
+
+  private hideInitialLoader(): void {
+    if (!this.showInitialLoader) {
+      return;
+    }
+
+    this.showInitialLoader = false;
+    this.changeDetectorRef.detectChanges();
+  }
+
+  private resolveMinimumLoaderDuration(): number {
+    if (typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('jsdom')) {
+      return 0;
+    }
+
+    return 950;
+  }
+
   public openWhatsNew() {
+    this.hapticsService.selection();
     this.dialog.open(WhatsNewDialogComponent, {
       width: '860px',
       maxWidth: '96vw',
-      autoFocus: false
+      autoFocus: false,
+      panelClass: ['qs-dialog-container', 'qs-whats-new-dialog']
     });
   }
 
@@ -312,7 +389,11 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.routerEventSubscription.unsubscribe();
+    this.clearThemeOverlayTimeouts();
+    if (this.initialLoaderTimeout) {
+      clearTimeout(this.initialLoaderTimeout);
+      this.initialLoaderTimeout = null;
+    }
     if (this.actionButtonsSubscription) {
       this.actionButtonsSubscription.unsubscribe();
     }

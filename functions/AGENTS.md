@@ -1,7 +1,10 @@
 # Functions Agent Instructions
 
-Shared instruction files stay in `../.agent/` for reuse by other apps/agents.
+Read `/Users/dimitrios/Projects/quantified-self/AGENTS.md` first.
 
-Role rules: ../.agent/rules/security-reviewer.md
-Workflows: ../.agent/workflows/start-emulators.md
-Mandatory data-write rule: ../.agent/rules/firestore-write-sanitization.md
+Functions-only rules:
+- `../.agent/rules/security-reviewer.md`
+- `../.agent/rules/firestore-recursive-delete-cleanups.md`
+
+Workflows:
+- `../.agent/workflows/start-emulators.md`

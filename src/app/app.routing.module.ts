@@ -9,7 +9,7 @@ import { loggedInGuard } from './authentication/logged-in.guard';
 import { pricingRedirectGuard } from './authentication/pricing-redirect.guard';
 import { releasesResolver } from './resolvers/releases.resolver';
 
-const routes: Routes = [
+export const routes: Routes = [
   {
     path: 'login',
     loadChildren: () => import('./modules/login.module').then(module => module.LoginModule),
@@ -58,6 +58,40 @@ const routes: Routes = [
     loadComponent: () => import('./components/payment-success/payment-success.component').then(m => m.PaymentSuccessComponent),
     canMatch: [authGuard],
     data: { title: 'Payment Success' }
+  },
+  {
+    path: 'help',
+    loadComponent: () => import('./components/help/help-page.component').then(m => m.HelpPageComponent),
+    data: {
+      title: 'Help & Support',
+      preload: true,
+      animation: 'Help',
+      description: 'Get help with account setup, uploads, device integrations, billing, privacy, and common troubleshooting in Quantified Self.',
+      keywords: 'help, support, faq, garmin, suunto, coros, uploads, billing, privacy, quantified self',
+      jsonLd: {
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        "name": "Quantified Self Help & Support",
+        "description": "Get help with account setup, uploads, device integrations, billing, privacy, and common troubleshooting in Quantified Self.",
+        "url": "https://www.quantified-self.io/help",
+        "inLanguage": "en",
+        "isPartOf": {
+          "@type": "WebSite",
+          "name": "Quantified Self",
+          "url": "https://www.quantified-self.io"
+        },
+        "about": [
+          "Account setup",
+          "Manual uploads",
+          "Membership and billing",
+          "Garmin integration",
+          "Suunto integration",
+          "COROS integration",
+          "Privacy controls",
+          "Troubleshooting"
+        ]
+      }
+    }
   },
   {
     path: 'releases',

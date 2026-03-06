@@ -167,7 +167,7 @@ td.mat-cell {
     }
 
     &.minor {
-        background: rgba(var(--mat-sys-primary-rgb), 0.1);
+        background: color-mix(in srgb, var(--mat-sys-primary) 10%, transparent);
         color: var(--mat-sys-primary);
     }
 
@@ -184,13 +184,13 @@ td.mat-cell {
     display: inline-block;
 
     &.published {
-        background: rgba(76, 175, 80, 0.1);
-        color: #4caf50;
+        background: rgba(var(--mat-sys-primary-rgb), 0.1);
+        color: var(--mat-sys-primary);
     }
 
     &.draft {
-        background: rgba(158, 158, 158, 0.1);
-        color: #9e9e9e;
+        background: rgba(var(--mat-sys-on-surface-rgb), 0.1);
+        color: var(--mat-sys-on-surface-variant);
     }
 }
 

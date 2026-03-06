@@ -2,7 +2,6 @@
 
 .benchmark-container {
   padding: 1.5rem;
-  background: var(--mat-sys-surface-container);
   color: var(--mat-sys-on-surface);
   border-radius: 12px;
 }
@@ -170,8 +169,6 @@ li {
   gap: 0.4rem;
   padding: 0.35rem 0.6rem;
   border-radius: 999px;
-  background: var(--mat-sys-surface-variant);
-  border: 1px solid var(--mat-sys-outline-variant);
   font-size: 0.75rem;
   line-height: 1.1;
   color: var(--mat-sys-on-surface);
@@ -249,10 +246,7 @@ li {
 }
 
 .metric-card {
-  background: var(--mat-app-surface-container-high);
   margin-bottom: 1rem;
-  box-shadow: none;
-  border: 1px solid var(--mat-sys-outline-variant);
   border-radius: 12px;
 }
 
@@ -435,7 +429,6 @@ li {
   align-items: center;
   gap: 0.75rem;
   padding: 0.75rem;
-  background: var(--mat-sys-secondary-container);
   color: var(--mat-sys-on-secondary-container);
   border-radius: 8px;
   margin-bottom: 1rem;
@@ -469,8 +462,6 @@ li {
   gap: 0.75rem;
   padding: 0.65rem 0.75rem;
   border-radius: 10px;
-  border: 1px solid var(--mat-sys-outline-variant);
-  background: var(--mat-sys-surface-variant);
   color: var(--mat-sys-on-surface);
   text-align: left;
   cursor: pointer;
@@ -519,7 +510,6 @@ li {
   gap: 0.75rem;
   padding: 0.75rem;
   border-radius: 8px;
-  background: var(--mat-sys-surface-variant);
   margin-bottom: 0.5rem;
   margin-right: 4px;
 }

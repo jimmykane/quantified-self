@@ -1,10 +1,29 @@
 import { describe, it, expect } from 'vitest';
 import { AppUserUtilities } from './app.user.utilities';
-import { User, ActivityTypes, DateRanges, AppThemes, ChartThemes } from '@sports-alliance/sports-lib';
+import {
+    User,
+    ActivityTypes,
+    DateRanges,
+    AppThemes,
+    ChartDataCategoryTypes,
+    ChartDataValueTypes,
+    ChartTypes,
+    TileTypes,
+    TimeIntervals
+} from '@sports-alliance/sports-lib';
 import { AppUserInterface } from '../models/app-user.interface';
 
 describe('AppUserUtilities', () => {
     const mockUser = { uid: 'u1', settings: {} } as any;
+
+    it('should default chart fill opacity to zero', () => {
+        expect(AppUserUtilities.getDefaultChartFillOpacity()).toBe(0);
+    });
+
+    it('should ignore legacy chart fill opacity until the new version marker is set', () => {
+        expect(AppUserUtilities.getResolvedChartFillOpacity({ fillOpacity: 0.6 })).toBe(0);
+        expect(AppUserUtilities.getResolvedChartFillOpacity({ fillOpacity: 0.6, fillOpacityVersion: 1 })).toBe(0.6);
+    });
 
     describe('isGracePeriodActive', () => {
         it('should return false for null user', () => {
@@ -153,7 +172,8 @@ describe('AppUserUtilities', () => {
             const user = { settings: {} } as User;
             const settings = AppUserUtilities.fillMissingAppSettings(user);
             expect(settings.appSettings?.theme).toBe(AppThemes.Normal);
-            expect(settings.chartSettings?.theme).toBe(ChartThemes.Material);
+            expect(settings.chartSettings?.stackYAxes).toBe(false);
+            expect(settings.chartSettings?.syncChartHoverToMap).toBe(false);
             expect(settings.dashboardSettings?.dateRange).toBe(DateRanges.all);
             expect(settings.dashboardSettings?.includeMergedEvents).toBe(true);
             expect(settings.unitSettings?.startOfTheWeek).toBe(1); // Monday
@@ -184,6 +204,81 @@ describe('AppUserUtilities', () => {
 
             const settings = AppUserUtilities.fillMissingAppSettings(user);
             expect((settings.myTracksSettings as any)?.showJumpHeatmap).toBe(false);
+        });
+
+        it('should remove legacy mapSettings.showPoints', () => {
+            const user = {
+                settings: {
+                    mapSettings: {
+                        showPoints: true
+                    }
+                }
+            } as any;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+            expect((settings.mapSettings as any)?.showPoints).toBeUndefined();
+        });
+
+        it('should migrate legacy Spiral dashboard tiles to LinesVertical', () => {
+            const user = {
+                settings: {
+                    dashboardSettings: {
+                        tiles: [
+                            {
+                                type: TileTypes.Chart,
+                                chartType: ChartTypes.Spiral,
+                                dataType: 'distance',
+                                dataValueType: ChartDataValueTypes.Total,
+                                dataCategoryType: ChartDataCategoryTypes.DateType,
+                                dataTimeInterval: TimeIntervals.Daily,
+                                name: 'Legacy Spiral',
+                                order: 0,
+                                size: { columns: 1, rows: 1 }
+                            }
+                        ]
+                    }
+                }
+            } as unknown as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+            expect((settings.dashboardSettings?.tiles?.[0] as any)?.chartType).toBe(ChartTypes.LinesVertical);
+        });
+
+        it('should normalize malformed legacy chart, unit, and table settings', () => {
+            const user = {
+                settings: {
+                    chartSettings: {
+                        dataTypeSettings: {
+                            Altitude: { enabled: false },
+                            Speed: { enabled: false }
+                        }
+                    },
+                    unitSettings: {
+                        speedUnits: [],
+                        paceUnits: [],
+                        swimPaceUnits: [],
+                        verticalSpeedUnits: []
+                    },
+                    dashboardSettings: {
+                        tableSettings: {}
+                    }
+                }
+            } as unknown as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+            const enabledDataTypes = Object.entries(settings.chartSettings.dataTypeSettings)
+                .filter(([, value]) => value.enabled === true)
+                .map(([key]) => key);
+
+            expect(enabledDataTypes).toEqual(expect.arrayContaining(AppUserUtilities.getDefaultChartDataTypesToShowOnLoad()));
+            expect(settings.unitSettings.speedUnits).toEqual(AppUserUtilities.getDefaultSpeedUnits());
+            expect(settings.unitSettings.paceUnits).toEqual(AppUserUtilities.getDefaultPaceUnits());
+            expect(settings.unitSettings.swimPaceUnits).toEqual(AppUserUtilities.getDefaultSwimPaceUnits());
+            expect(settings.unitSettings.verticalSpeedUnits).toEqual(AppUserUtilities.getDefaultVerticalSpeedUnits());
+            expect(settings.dashboardSettings.tableSettings.active).toBe('startDate');
+            expect(settings.dashboardSettings.tableSettings.direction).toBe('desc');
+            expect(settings.dashboardSettings.tableSettings.eventsPerPage).toBe(10);
+            expect(settings.dashboardSettings.tableSettings.selectedColumns.length).toBeGreaterThan(0);
         });
     });
 });

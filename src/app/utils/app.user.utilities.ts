@@ -4,7 +4,6 @@ import {
     ChartCursorBehaviours,
     ChartDataCategoryTypes,
     ChartDataValueTypes,
-    ChartThemes,
     ChartTypes,
     DataTypeSettings,
     DateRanges,
@@ -55,6 +54,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import { isNumber } from 'lodash-es';
 import {
+    AppChartSettingsInterface,
     AppMapStyleName,
     AppDashboardSettingsInterface,
     AppMapSettingsInterface,
@@ -69,13 +69,6 @@ import { StripeRole } from '../models/stripe-role.model';
  * and providing default application/user settings.
  */
 export class AppUserUtilities {
-
-    /**
-     * Returns the default chart theme.
-     */
-    static getDefaultChartTheme(): ChartThemes {
-        return ChartThemes.Material;
-    }
 
     /**
      * Returns the default application theme.
@@ -192,14 +185,6 @@ export class AppUserUtilities {
         return 1;
     }
 
-    static getDefaultExtraMaxForPower(): number {
-        return 0;
-    }
-
-    static getDefaultExtraMaxForPace(): number {
-        return -0.25;
-    }
-
     static getDefaultMapType(): MapTypes {
         return MapTypes.RoadMap;
     }
@@ -273,7 +258,19 @@ export class AppUserUtilities {
     }
 
     static getDefaultChartFillOpacity(): number {
-        return 0.35;
+        return 0;
+    }
+
+    static getDefaultSyncChartHoverToMap(): boolean {
+        return false;
+    }
+
+    static getResolvedChartFillOpacity(chartSettings?: { fillOpacity?: number; fillOpacityVersion?: number } | null): number {
+        if (chartSettings?.fillOpacityVersion === 1 && isNumber(chartSettings.fillOpacity)) {
+            return Math.min(1, Math.max(0, Number(chartSettings.fillOpacity)));
+        }
+
+        return AppUserUtilities.getDefaultChartFillOpacity();
     }
 
     static getDefaultTableSettings(): TableSettings {
@@ -316,13 +313,34 @@ export class AppUserUtilities {
 
     public static fillMissingAppSettings(user: User): AppUserSettingsInterface {
         const settings: AppUserSettingsInterface = user.settings || {};
+        const defaultTableSettings = AppUserUtilities.getDefaultTableSettings();
+        const allDataTypes = [...DynamicDataLoader.basicDataTypes, ...DynamicDataLoader.advancedDataTypes];
+
         // App
         settings.appSettings = settings.appSettings || <UserAppSettingsInterface>{};
         settings.appSettings.theme = settings.appSettings.theme || AppUserUtilities.getDefaultAppTheme();
+
         // Chart
         settings.chartSettings = settings.chartSettings || <UserChartSettingsInterface>{};
-        settings.chartSettings.dataTypeSettings = settings.chartSettings.dataTypeSettings || AppUserUtilities.getDefaultUserChartSettingsDataTypeSettings();
-        settings.chartSettings.theme = settings.chartSettings.theme || AppUserUtilities.getDefaultChartTheme();
+        const existingDataTypeSettings = settings.chartSettings.dataTypeSettings || AppUserUtilities.getDefaultUserChartSettingsDataTypeSettings();
+        const normalizedDataTypeSettings: DataTypeSettings = {};
+        let hasEnabledDataType = false;
+        for (const dataType of allDataTypes) {
+            const enabled = existingDataTypeSettings[dataType]?.enabled === true;
+            normalizedDataTypeSettings[dataType] = { enabled };
+            if (enabled) {
+                hasEnabledDataType = true;
+            }
+        }
+        if (!hasEnabledDataType) {
+            const fallbackDataTypes = AppUserUtilities.getDefaultChartDataTypesToShowOnLoad();
+            for (const dataType of fallbackDataTypes) {
+                if (normalizedDataTypeSettings[dataType]) {
+                    normalizedDataTypeSettings[dataType].enabled = true;
+                }
+            }
+        }
+        settings.chartSettings.dataTypeSettings = normalizedDataTypeSettings;
         settings.chartSettings.useAnimations = settings.chartSettings.useAnimations === true;
         settings.chartSettings.xAxisType = XAxisTypes[settings.chartSettings.xAxisType] || AppUserUtilities.getDefaultXAxisType();
         settings.chartSettings.showAllData = settings.chartSettings.showAllData === true;
@@ -331,24 +349,33 @@ export class AppUserUtilities {
         settings.chartSettings.strokeWidth = settings.chartSettings.strokeWidth || AppUserUtilities.getDefaultChartStrokeWidth();
         settings.chartSettings.strokeOpacity = isNumber(settings.chartSettings.strokeOpacity) ? settings.chartSettings.strokeOpacity : AppUserUtilities.getDefaultChartStrokeOpacity();
         settings.chartSettings.fillOpacity = isNumber(settings.chartSettings.fillOpacity) ? settings.chartSettings.fillOpacity : AppUserUtilities.getDefaultChartFillOpacity();
-        settings.chartSettings.extraMaxForPower = isNumber(settings.chartSettings.extraMaxForPower) ? settings.chartSettings.extraMaxForPower : AppUserUtilities.getDefaultExtraMaxForPower();
-        settings.chartSettings.extraMaxForPace = isNumber(settings.chartSettings.extraMaxForPace) ? settings.chartSettings.extraMaxForPace : AppUserUtilities.getDefaultExtraMaxForPace();
-        settings.chartSettings.lapTypes = settings.chartSettings.lapTypes || AppUserUtilities.getDefaultChartLapTypes();
+        settings.chartSettings.lapTypes = Array.isArray(settings.chartSettings.lapTypes) ? settings.chartSettings.lapTypes : AppUserUtilities.getDefaultChartLapTypes();
         settings.chartSettings.showLaps = settings.chartSettings.showLaps !== false;
+        (settings.chartSettings as AppChartSettingsInterface).syncChartHoverToMap = (settings.chartSettings as AppChartSettingsInterface).syncChartHoverToMap === true;
         settings.chartSettings.showGrid = settings.chartSettings.showGrid !== false;
-        settings.chartSettings.stackYAxes = settings.chartSettings.stackYAxes !== false;
+        settings.chartSettings.stackYAxes = false;
         settings.chartSettings.disableGrouping = settings.chartSettings.disableGrouping === true;
         settings.chartSettings.hideAllSeriesOnInit = settings.chartSettings.hideAllSeriesOnInit === true;
         settings.chartSettings.gainAndLossThreshold = settings.chartSettings.gainAndLossThreshold || AppUserUtilities.getDefaultGainAndLossThreshold();
+
         // Units
         settings.unitSettings = settings.unitSettings || <UserUnitSettingsInterface>{};
-        settings.unitSettings.speedUnits = settings.unitSettings.speedUnits || AppUserUtilities.getDefaultSpeedUnits();
-        settings.unitSettings.paceUnits = settings.unitSettings.paceUnits || AppUserUtilities.getDefaultPaceUnits();
+        settings.unitSettings.speedUnits = Array.isArray(settings.unitSettings.speedUnits) && settings.unitSettings.speedUnits.length > 0
+            ? settings.unitSettings.speedUnits
+            : AppUserUtilities.getDefaultSpeedUnits();
+        settings.unitSettings.paceUnits = Array.isArray(settings.unitSettings.paceUnits) && settings.unitSettings.paceUnits.length > 0
+            ? settings.unitSettings.paceUnits
+            : AppUserUtilities.getDefaultPaceUnits();
         settings.unitSettings.gradeAdjustedSpeedUnits = settings.unitSettings.gradeAdjustedSpeedUnits || AppUserUtilities.getGradeAdjustedSpeedUnitsFromSpeedUnits(settings.unitSettings.speedUnits);
         settings.unitSettings.gradeAdjustedPaceUnits = settings.unitSettings.gradeAdjustedPaceUnits || AppUserUtilities.getGradeAdjustedPaceUnitsFromPaceUnits(settings.unitSettings.paceUnits);
-        settings.unitSettings.swimPaceUnits = settings.unitSettings.swimPaceUnits || AppUserUtilities.getDefaultSwimPaceUnits();
-        settings.unitSettings.verticalSpeedUnits = settings.unitSettings.verticalSpeedUnits || AppUserUtilities.getDefaultVerticalSpeedUnits()
+        settings.unitSettings.swimPaceUnits = Array.isArray(settings.unitSettings.swimPaceUnits) && settings.unitSettings.swimPaceUnits.length > 0
+            ? settings.unitSettings.swimPaceUnits
+            : AppUserUtilities.getDefaultSwimPaceUnits();
+        settings.unitSettings.verticalSpeedUnits = Array.isArray(settings.unitSettings.verticalSpeedUnits) && settings.unitSettings.verticalSpeedUnits.length > 0
+            ? settings.unitSettings.verticalSpeedUnits
+            : AppUserUtilities.getDefaultVerticalSpeedUnits();
         settings.unitSettings.startOfTheWeek = isNumber(settings.unitSettings.startOfTheWeek) ? settings.unitSettings.startOfTheWeek : AppUserUtilities.getDefaultStartOfTheWeek();
+
         // Dashboard
         settings.dashboardSettings = settings.dashboardSettings || <AppDashboardSettingsInterface>{};
         settings.dashboardSettings.dateRange = isNumber(settings.dashboardSettings.dateRange) ? settings.dashboardSettings.dateRange : AppUserUtilities.getDefaultDateRange();
@@ -358,6 +385,14 @@ export class AppUserUtilities {
         settings.dashboardSettings.includeMergedEvents = settings.dashboardSettings.includeMergedEvents !== false;
         settings.dashboardSettings.tiles = settings.dashboardSettings.tiles || AppUserUtilities.getDefaultUserDashboardTiles();
         settings.dashboardSettings.tiles = settings.dashboardSettings.tiles.map((tile: TileSettingsInterface) => {
+            if (tile.type === TileTypes.Chart) {
+                const chartTile = tile as TileChartSettingsInterface;
+                if (chartTile.chartType === ChartTypes.Spiral) {
+                    chartTile.chartType = ChartTypes.LinesVertical;
+                }
+                return chartTile;
+            }
+
             if (tile.type !== TileTypes.Map) {
                 return tile;
             }
@@ -368,23 +403,33 @@ export class AppUserUtilities {
             return mapTile;
         });
         // Patch missing defaults
-        settings.dashboardSettings.tableSettings = settings.dashboardSettings.tableSettings || AppUserUtilities.getDefaultTableSettings();
-        settings.dashboardSettings.tableSettings.selectedColumns = settings.dashboardSettings.tableSettings.selectedColumns || AppUserUtilities.getDefaultSelectedTableColumns()
+        settings.dashboardSettings.tableSettings = settings.dashboardSettings.tableSettings || defaultTableSettings;
+        settings.dashboardSettings.tableSettings.active = settings.dashboardSettings.tableSettings.active || defaultTableSettings.active;
+        settings.dashboardSettings.tableSettings.direction = settings.dashboardSettings.tableSettings.direction || defaultTableSettings.direction;
+        settings.dashboardSettings.tableSettings.eventsPerPage = isNumber(settings.dashboardSettings.tableSettings.eventsPerPage)
+            ? settings.dashboardSettings.tableSettings.eventsPerPage
+            : defaultTableSettings.eventsPerPage;
+        settings.dashboardSettings.tableSettings.selectedColumns = Array.isArray(settings.dashboardSettings.tableSettings.selectedColumns)
+            && settings.dashboardSettings.tableSettings.selectedColumns.length > 0
+            ? settings.dashboardSettings.tableSettings.selectedColumns
+            : AppUserUtilities.getDefaultSelectedTableColumns();
 
         // Summaries
         settings.summariesSettings = settings.summariesSettings || <UserSummariesSettingsInterface>{};
         settings.summariesSettings.removeAscentForEventTypes = settings.summariesSettings.removeAscentForEventTypes || AppUserUtilities.getDefaultActivityTypesToRemoveAscentFromSummaries();
+
         // Map
         settings.mapSettings = settings.mapSettings || <AppMapSettingsInterface>{};
         settings.mapSettings.theme = settings.mapSettings.theme || MapThemes.Normal;
         settings.mapSettings.showLaps = settings.mapSettings.showLaps !== false;
 
         settings.mapSettings.showArrows = settings.mapSettings.showArrows !== false;
-        settings.mapSettings.lapTypes = settings.mapSettings.lapTypes || AppUserUtilities.getDefaultMapLapTypes();
+        settings.mapSettings.lapTypes = Array.isArray(settings.mapSettings.lapTypes) ? settings.mapSettings.lapTypes : AppUserUtilities.getDefaultMapLapTypes();
         settings.mapSettings.mapType = settings.mapSettings.mapType || AppUserUtilities.getDefaultMapType();
         settings.mapSettings.mapStyle = settings.mapSettings.mapStyle || 'default';
         settings.mapSettings.is3D = settings.mapSettings.is3D === true;
         settings.mapSettings.strokeWidth = settings.mapSettings.strokeWidth || AppUserUtilities.getDefaultMapStrokeWidth();
+        delete (settings.mapSettings as any).showPoints;
         // MyTracks
         settings.myTracksSettings = settings.myTracksSettings || <UserMyTracksSettingsInterface>{};
         settings.myTracksSettings.dateRange = isNumber(settings.myTracksSettings.dateRange)

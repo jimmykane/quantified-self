@@ -92,6 +92,12 @@ describe('TileMapActionsComponent', () => {
         expect(compactClassMatches.length).toBe(2);
     });
 
+    it('should not use deprecated accent color input on mat-slide-toggle', () => {
+        const templatePath = resolve(process.cwd(), 'src/app/components/tile/actions/map/tile.map.actions.component.html');
+        const template = readFileSync(templatePath, 'utf8');
+        expect(template).not.toMatch(/<mat-slide-toggle[^>]*\s\[color\]\s*=\s*"['"]accent['"]"/);
+    });
+
     it('should render header component', () => {
         // Check if the header component is present in the template logic
         // We simulate the menu trigger click to ensure content is rendered if lazy
@@ -121,6 +127,16 @@ describe('TileMapActionsComponent', () => {
 
         expect(userMock.settings.dashboardSettings.tiles[0].mapStyle).toBe('outdoors');
         expect(userMock.settings.dashboardSettings.tiles[0].mapType).toBeUndefined();
+        expect(userMock.updateUserProperties).toHaveBeenCalled();
+    });
+
+    it('should emit savingChange while persisting map settings', async () => {
+        const emittedStates: boolean[] = [];
+        component.savingChange.subscribe(isSaving => emittedStates.push(isSaving));
+
+        await component.switchClusterMarkers({ checked: true } as any);
+
+        expect(emittedStates).toEqual([true, false]);
         expect(userMock.updateUserProperties).toHaveBeenCalled();
     });
 });

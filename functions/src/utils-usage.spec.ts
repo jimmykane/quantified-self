@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { UsageLimitExceededError, checkEventUsageLimit, hasBasicAccess, hasProAccess, getUserRoleAndGracePeriod, setEvent, determineRedirectURI, setAccessControlHeadersOnResponse } from './utils';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { SPORTS_LIB_VERSION } from './shared/sports-lib-version.node';
+import { USAGE_LIMITS } from './shared/limits';
 
 // Hoisted shared/id-generator mock
 vi.mock('./shared/id-generator', () => ({
@@ -120,8 +121,8 @@ describe('utils higher-level helpers', () => {
 
         it('throws UsageLimitExceededError when over limit including pending writes', async () => {
             hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'free' } });
-            hoisted.setCount(9);
-            const pending = new Map<string, number>([['u1', 2]]); // total 11 > limit 10
+            hoisted.setCount(USAGE_LIMITS.free - 1);
+            const pending = new Map<string, number>([['u1', 2]]); // total exceeds free-tier limit
 
             await expect(checkEventUsageLimit('u1', undefined, pending)).rejects.toBeInstanceOf(UsageLimitExceededError);
         });
@@ -136,6 +137,12 @@ describe('utils higher-level helpers', () => {
 
             // count() should have been invoked once (via first call)
             expect(cache.size).toBe(1);
+        });
+
+        it('throws for unsupported roles instead of silently using the free-tier limit', async () => {
+            hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'enterprise' } });
+
+            await expect(checkEventUsageLimit('u1')).rejects.toThrow("Unsupported subscription role 'enterprise'");
         });
     });
 

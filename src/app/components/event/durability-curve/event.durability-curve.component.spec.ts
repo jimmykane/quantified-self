@@ -2,7 +2,6 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { Subject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ChartThemes } from '@sports-alliance/sports-lib';
 
 import { EventDurabilityCurveComponent } from './event.durability-curve.component';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
@@ -23,10 +22,11 @@ describe('EventDurabilityCurveComponent', () => {
     setOption: ReturnType<typeof vi.fn>;
     resize: ReturnType<typeof vi.fn>;
     dispose: ReturnType<typeof vi.fn>;
+    subscribeToViewportResize: ReturnType<typeof vi.fn>;
   };
 
   let mockService: {
-    buildDurabilitySeries: ReturnType<typeof vi.fn>;
+    buildDurabilitySeriesWithMarkerSource: ReturnType<typeof vi.fn>;
     buildBestEffortMarkers: ReturnType<typeof vi.fn>;
   };
 
@@ -35,6 +35,11 @@ describe('EventDurabilityCurveComponent', () => {
   };
 
   const getLastOption = (): Record<string, any> => mockLoader.setOption.mock.calls.at(-1)?.[1] as Record<string, any>;
+
+  const waitForChartStabilization = async (): Promise<void> => {
+    await fixture.whenStable();
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
+  };
 
   beforeEach(async () => {
     breakpointSubject = new Subject<{ matches: boolean }>();
@@ -60,20 +65,34 @@ describe('EventDurabilityCurveComponent', () => {
       setOption: vi.fn(),
       resize: vi.fn(),
       dispose: vi.fn(),
+      subscribeToViewportResize: vi.fn(() => () => { }),
     };
 
     mockService = {
-      buildDurabilitySeries: vi.fn().mockReturnValue([
-        {
-          activity: { getID: () => 'a1' } as any,
-          activityId: 'a1',
-          label: 'Ride',
-          points: [
-            { duration: 10, efficiency: 2.2, power: 280, heartRate: 127, rawPower: 282, rawHeartRate: 128 },
-            { duration: 20, efficiency: 2.1, power: 275, heartRate: 131, rawPower: 276, rawHeartRate: 132 },
-          ],
-        },
-      ]),
+      buildDurabilitySeriesWithMarkerSource: vi.fn().mockReturnValue({
+        renderSeries: [
+          {
+            activity: { getID: () => 'a1' } as any,
+            activityId: 'a1',
+            label: 'Ride',
+            points: [
+              { duration: 10, efficiency: 2.2, power: 280, heartRate: 127, rawPower: 282, rawHeartRate: 128 },
+              { duration: 20, efficiency: 2.1, power: 275, heartRate: 131, rawPower: 276, rawHeartRate: 132 },
+            ],
+          },
+        ],
+        markerSourceSeries: [
+          {
+            activity: { getID: () => 'a1' } as any,
+            activityId: 'a1',
+            label: 'Ride',
+            points: [
+              { duration: 10, efficiency: 2.2, power: 280, heartRate: 127, rawPower: 282, rawHeartRate: 128 },
+              { duration: 20, efficiency: 2.1, power: 275, heartRate: 131, rawPower: 276, rawHeartRate: 132 },
+            ],
+          },
+        ],
+      }),
       buildBestEffortMarkers: vi.fn().mockReturnValue([
         {
           activity: { getID: () => 'a1' } as any,
@@ -109,7 +128,7 @@ describe('EventDurabilityCurveComponent', () => {
     fixture = TestBed.createComponent(EventDurabilityCurveComponent);
     component = fixture.componentInstance;
     component.activities = [{ getID: () => 'a1' } as any];
-    component.chartTheme = ChartThemes.Material;
+    component.darkTheme = false;
   });
 
   afterEach(() => {
@@ -130,13 +149,16 @@ describe('EventDurabilityCurveComponent', () => {
 
   it('should render durability lines and best-effort markers', async () => {
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
 
-    expect(mockService.buildDurabilitySeries).toHaveBeenCalled();
+    expect(mockService.buildDurabilitySeriesWithMarkerSource).toHaveBeenCalled();
     expect(mockService.buildBestEffortMarkers).toHaveBeenCalled();
     expect(option.series.length).toBeGreaterThanOrEqual(2);
+    expect(option.tooltip.renderMode).toBe('html');
+    expect(option.tooltip.appendToBody).toBe(true);
+    expect(option.tooltip.confine).toBe(false);
     expect(option.xAxis.type).toBe('value');
     expect(option.xAxis.interval).toBe(5);
     expect(option.xAxis.max).toBe(20);
@@ -147,36 +169,58 @@ describe('EventDurabilityCurveComponent', () => {
     mockService.buildBestEffortMarkers.mockReturnValue([]);
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
     expect(option.legend.show).toBe(false);
   });
 
   it('should assign different colors when activity color service returns duplicates', async () => {
-    mockService.buildDurabilitySeries.mockReturnValue([
-      {
-        activity: { getID: () => 'a1' } as any,
-        activityId: 'a1',
-        label: 'Ride',
-        points: [
-          { duration: 10, efficiency: 2.2, power: 280, heartRate: 127, rawPower: 282, rawHeartRate: 128 },
-          { duration: 20, efficiency: 2.1, power: 275, heartRate: 131, rawPower: 276, rawHeartRate: 132 },
-        ],
-      },
-      {
-        activity: { getID: () => 'a2' } as any,
-        activityId: 'a2',
-        label: 'Run',
-        points: [
-          { duration: 10, efficiency: 2.0, power: 250, heartRate: 126, rawPower: 252, rawHeartRate: 127 },
-          { duration: 20, efficiency: 1.9, power: 245, heartRate: 129, rawPower: 246, rawHeartRate: 130 },
-        ],
-      },
-    ]);
+    mockService.buildDurabilitySeriesWithMarkerSource.mockReturnValue({
+      renderSeries: [
+        {
+          activity: { getID: () => 'a1' } as any,
+          activityId: 'a1',
+          label: 'Ride',
+          points: [
+            { duration: 10, efficiency: 2.2, power: 280, heartRate: 127, rawPower: 282, rawHeartRate: 128 },
+            { duration: 20, efficiency: 2.1, power: 275, heartRate: 131, rawPower: 276, rawHeartRate: 132 },
+          ],
+        },
+        {
+          activity: { getID: () => 'a2' } as any,
+          activityId: 'a2',
+          label: 'Run',
+          points: [
+            { duration: 10, efficiency: 2.0, power: 250, heartRate: 126, rawPower: 252, rawHeartRate: 127 },
+            { duration: 20, efficiency: 1.9, power: 245, heartRate: 129, rawPower: 246, rawHeartRate: 130 },
+          ],
+        },
+      ],
+      markerSourceSeries: [
+        {
+          activity: { getID: () => 'a1' } as any,
+          activityId: 'a1',
+          label: 'Ride',
+          points: [
+            { duration: 10, efficiency: 2.2, power: 280, heartRate: 127, rawPower: 282, rawHeartRate: 128 },
+            { duration: 20, efficiency: 2.1, power: 275, heartRate: 131, rawPower: 276, rawHeartRate: 132 },
+          ],
+        },
+        {
+          activity: { getID: () => 'a2' } as any,
+          activityId: 'a2',
+          label: 'Run',
+          points: [
+            { duration: 10, efficiency: 2.0, power: 250, heartRate: 126, rawPower: 252, rawHeartRate: 127 },
+            { duration: 20, efficiency: 1.9, power: 245, heartRate: 129, rawPower: 246, rawHeartRate: 130 },
+          ],
+        },
+      ],
+    });
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
     const lineSeries = option.series.filter((entry: { type?: string }) => entry.type === 'line');
@@ -185,17 +229,30 @@ describe('EventDurabilityCurveComponent', () => {
   });
 
   it('should avoid marker colors colliding with line colors in legend entries', async () => {
-    mockService.buildDurabilitySeries.mockReturnValue([
-      {
-        activity: { getID: () => 'a1' } as any,
-        activityId: 'a1',
-        label: 'Ride',
-        points: [
-          { duration: 10, efficiency: 2.2, power: 280, heartRate: 127, rawPower: 282, rawHeartRate: 128 },
-          { duration: 20, efficiency: 2.1, power: 275, heartRate: 131, rawPower: 276, rawHeartRate: 132 },
-        ],
-      },
-    ]);
+    mockService.buildDurabilitySeriesWithMarkerSource.mockReturnValue({
+      renderSeries: [
+        {
+          activity: { getID: () => 'a1' } as any,
+          activityId: 'a1',
+          label: 'Ride',
+          points: [
+            { duration: 10, efficiency: 2.2, power: 280, heartRate: 127, rawPower: 282, rawHeartRate: 128 },
+            { duration: 20, efficiency: 2.1, power: 275, heartRate: 131, rawPower: 276, rawHeartRate: 132 },
+          ],
+        },
+      ],
+      markerSourceSeries: [
+        {
+          activity: { getID: () => 'a1' } as any,
+          activityId: 'a1',
+          label: 'Ride',
+          points: [
+            { duration: 10, efficiency: 2.2, power: 280, heartRate: 127, rawPower: 282, rawHeartRate: 128 },
+            { duration: 20, efficiency: 2.1, power: 275, heartRate: 131, rawPower: 276, rawHeartRate: 132 },
+          ],
+        },
+      ],
+    });
     mockService.buildBestEffortMarkers.mockReturnValue([
       {
         activity: { getID: () => 'a1' } as any,
@@ -224,7 +281,7 @@ describe('EventDurabilityCurveComponent', () => {
     ]);
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
     const lineColor = option.series.find((entry: { type?: string }) => entry.type === 'line')?.lineStyle?.color;
@@ -238,21 +295,24 @@ describe('EventDurabilityCurveComponent', () => {
   });
 
   it('should apply dark theme tooltip style', async () => {
-    component.chartTheme = ChartThemes.Dark;
+    component.darkTheme = true;
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
-    expect(option.tooltip.backgroundColor).toBe('#222222');
+    expect(option.tooltip.backgroundColor).toBe('rgba(58,62,68,1)');
   });
 
   it('should return empty option when there is no durability data', async () => {
-    mockService.buildDurabilitySeries.mockReturnValue([]);
+    mockService.buildDurabilitySeriesWithMarkerSource.mockReturnValue({
+      renderSeries: [],
+      markerSourceSeries: [],
+    });
     mockService.buildBestEffortMarkers.mockReturnValue([]);
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
     expect(option.series).toEqual([]);
@@ -262,10 +322,11 @@ describe('EventDurabilityCurveComponent', () => {
 
   it('should refresh on mobile breakpoint changes', async () => {
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const baseline = mockLoader.setOption.mock.calls.length;
     breakpointSubject.next({ matches: true });
+    await waitForChartStabilization();
 
     expect(mockLoader.setOption.mock.calls.length).toBeGreaterThan(baseline);
   });

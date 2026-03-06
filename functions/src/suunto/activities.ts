@@ -17,6 +17,50 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
 
+const SUUNTO_TRANSIENT_STATUS_CODES = new Set([503, 504]);
+const SUUNTO_MAX_TRANSIENT_RETRIES = 2;
+const SUUNTO_TRANSIENT_BACKOFF_MS = 1000;
+
+function getStatusCode(error: unknown): number | undefined {
+  return typeof (error as any)?.statusCode === 'number' ? (error as any).statusCode : undefined;
+}
+
+function isRetryableSuuntoTransientError(error: unknown): boolean {
+  const statusCode = getStatusCode(error);
+  return statusCode !== undefined && SUUNTO_TRANSIENT_STATUS_CODES.has(statusCode);
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withSuuntoTransientRetry<T>(
+  operationName: string,
+  operation: () => Promise<T>
+): Promise<T> {
+  let attempt = 0;
+  let lastError: unknown;
+
+  while (attempt <= SUUNTO_MAX_TRANSIENT_RETRIES) {
+    try {
+      return await operation();
+    } catch (error: unknown) {
+      lastError = error;
+      attempt++;
+
+      if (!isRetryableSuuntoTransientError(error) || attempt > SUUNTO_MAX_TRANSIENT_RETRIES) {
+        throw error;
+      }
+
+      const statusCode = getStatusCode(error);
+      logger.warn(`${operationName} failed with transient status ${statusCode}. Retrying attempt ${attempt}/${SUUNTO_MAX_TRANSIENT_RETRIES}.`);
+      await sleep(SUUNTO_TRANSIENT_BACKOFF_MS * attempt);
+    }
+  }
+
+  throw lastError;
+}
+
 /**
  * Uploads an activity to Suunto app
  */
@@ -68,20 +112,23 @@ export const importActivityToSuuntoApp = onCall({
           // Initialize the upload
           let result: any;
           try {
-            result = await requestPromise.post({
-              headers: {
-                'Authorization': accessToken,
-                'Content-Type': 'application/json',
-                'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
-              },
-              json: true,
-              body: {
-                // description: "#qs",
-                // comment: "",
-                notifyUser: true,
-              },
-              url: 'https://cloudapi.suunto.com/v2/upload/',
-            });
+            result = await withSuuntoTransientRetry(
+              `Init activity upload for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`,
+              async () => requestPromise.post({
+                headers: {
+                  'Authorization': accessToken,
+                  'Content-Type': 'application/json',
+                  'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
+                },
+                json: true,
+                body: {
+                  // description: "#qs",
+                  // comment: "",
+                  notifyUser: true,
+                },
+                url: 'https://cloudapi.suunto.com/v2/upload/',
+              })
+            );
             // Result is already parsed because json: true
           } catch (e: any) {
             // Start logging and rethrowing for retry-helper to catch matching 401s
@@ -124,14 +171,17 @@ export const importActivityToSuuntoApp = onCall({
             await new Promise(resolve => setTimeout(resolve, 2000));
 
             try {
-              const statusResponse = await requestPromise.get({
-                headers: {
-                  'Authorization': accessToken,
-                  'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
-                },
-                json: true,
-                url: `https://cloudapi.suunto.com/v2/upload/${uploadId}`,
-              });
+              const statusResponse = await withSuuntoTransientRetry(
+                `Check upload status for ${uploadId} for user ${userID}`,
+                async () => requestPromise.get({
+                  headers: {
+                    'Authorization': accessToken,
+                    'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
+                  },
+                  json: true,
+                  url: `https://cloudapi.suunto.com/v2/upload/${uploadId}`,
+                })
+              );
 
               // Response is already parsed
               const statusJson = statusResponse;

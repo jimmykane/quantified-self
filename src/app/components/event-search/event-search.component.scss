@@ -71,7 +71,7 @@ mat-button-toggle {
 
 /* Reactive Hover State */
 mat-button-toggle:hover:not(.mat-button-toggle-checked) {
-  background: rgba(var(--mat-sys-primary-rgb), 0.08) !important;
+  background: color-mix(in srgb, var(--mat-sys-primary) 8%, transparent) !important;
   color: var(--mat-sys-primary) !important;
 }
 
@@ -95,7 +95,7 @@ mat-button-toggle:hover:not(.mat-button-toggle-checked) {
 mat-button-toggle.mat-button-toggle-checked {
   background-color: var(--mat-sys-primary) !important;
   color: var(--mat-sys-on-primary) !important;
-  box-shadow: 0 4px 12px rgba(var(--mat-sys-primary-rgb), 0.3) !important;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--mat-sys-primary) 30%, transparent) !important;
   transform: scale(1.02);
   z-index: 1;
   /* Subtle pop for the active item */

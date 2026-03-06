@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
+  DoCheck,
   HostListener,
   Input,
   OnChanges,
@@ -16,8 +17,8 @@ import { Router } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { User } from '@sports-alliance/sports-lib';
-import { ChartThemes } from '@sports-alliance/sports-lib';
 import { AppThemeService } from '../../services/app.theme.service';
+import { AppThemes } from '@sports-alliance/sports-lib';
 import { DataActivityTypes } from '@sports-alliance/sports-lib';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { LoggerService } from '../../services/logger.service';
@@ -49,7 +50,7 @@ import { MapStyleName } from '../../services/map/map-style.types';
   standalone: false
 })
 
-export class SummariesComponent extends LoadingAbstractDirective implements OnInit, OnDestroy, OnChanges {
+export class SummariesComponent extends LoadingAbstractDirective implements OnInit, OnDestroy, OnChanges, DoCheck {
   @Input() events: EventInterface[];
   @Input() user: User;
   @Input() showActions: boolean;
@@ -63,11 +64,12 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public tileTypes = TileTypes;
 
 
-  private chartThemeSubscription: Subscription;
-  public chartTheme: ChartThemes;
+  private appThemeSubscription: Subscription;
+  public darkTheme = false;
   private logger: LoggerService;
 
   private getChartDataCache: { string: SummariesChartDataInterface[] }[] = []
+  private dashboardTileSettingsSnapshot: TileSettingsInterface[] = [];
 
   constructor(private router: Router,
     private authService: AppAuthService,
@@ -99,6 +101,17 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.getChartDataCache = [];
       return this.unsubscribeAndCreateCharts();
     }
+  }
+
+  ngDoCheck(): void {
+    const nextTileSettingsSnapshot = this.getDashboardTileSettingsSnapshot();
+    if (equal(this.dashboardTileSettingsSnapshot, nextTileSettingsSnapshot)) {
+      return;
+    }
+
+    this.dashboardTileSettingsSnapshot = nextTileSettingsSnapshot;
+    this.getChartDataCache = [];
+    void this.unsubscribeAndCreateCharts();
   }
 
   ngOnDestroy(): void {
@@ -157,15 +170,15 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private async unsubscribeAndCreateCharts() {
     const buildStart = performance.now();
     this.unsubscribeFromAll();
-    // Subscribe to the chartTheme changes
-    this.chartThemeSubscription = this.themeService.getChartTheme().subscribe((chartTheme) => {
-      this.chartTheme = chartTheme;
+    this.appThemeSubscription = this.themeService.getAppTheme().subscribe((theme) => {
+      this.darkTheme = theme === AppThemes.Dark;
     });
     if (this.events) {
       this.events = this.events.filter(event => !event.isMerge).sort((eventA: EventInterface, eventB: EventInterface) => +eventA.startDate - +eventB.startDate)
     }
 
     const newTiles = this.getChartsAndData(this.user.settings.dashboardSettings.tiles, this.events);
+    this.dashboardTileSettingsSnapshot = this.getDashboardTileSettingsSnapshot();
     this.logger.log('[perf] summaries_build_tiles', {
       durationMs: Number((performance.now() - buildStart).toFixed(2)),
       inputEvents: this.events?.length || 0,
@@ -261,9 +274,27 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }, [])
   }
 
+  private getDashboardTileSettingsSnapshot(): TileSettingsInterface[] {
+    return (this.user?.settings?.dashboardSettings?.tiles ?? []).map((tile: TileSettingsInterface) => {
+      const snapshot: TileSettingsInterface = {
+        ...tile,
+        size: tile.size ? { ...tile.size } : tile.size
+      };
+
+      if (tile.type !== TileTypes.Chart) {
+        return snapshot;
+      }
+
+      return {
+        ...snapshot,
+        dataTimeInterval: (tile as TileChartSettingsInterface).dataTimeInterval || TimeIntervals.Auto
+      } as TileChartSettingsInterface;
+    });
+  }
+
   private unsubscribeFromAll() {
-    if (this.chartThemeSubscription) {
-      this.chartThemeSubscription.unsubscribe();
+    if (this.appThemeSubscription) {
+      this.appThemeSubscription.unsubscribe();
     }
   }
 

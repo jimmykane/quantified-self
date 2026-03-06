@@ -5,6 +5,10 @@ import type { EChartsType } from 'echarts/core';
 type EChartsCoreModule = typeof import('echarts/core');
 type EChartsOption = Parameters<EChartsType['setOption']>[0];
 type EChartsSetOptionSettings = Parameters<EChartsType['setOption']>[1];
+type EChartsResizeOptions = NonNullable<Parameters<EChartsType['resize']>[0]>;
+type EChartsInitOptions = Parameters<EChartsCoreModule['init']>[2];
+
+export { ECHARTS_GLOBAL_FONT_FAMILY } from '../helpers/echarts-theme.helper';
 
 @Injectable({
   providedIn: 'root'
@@ -12,6 +16,30 @@ type EChartsSetOptionSettings = Parameters<EChartsType['setOption']>[1];
 export class EChartsLoaderService {
   private loader: Promise<EChartsCoreModule> | null = null;
   private cachedCore: EChartsCoreModule | null = null;
+  private groupRefCounts = new Map<string, number>();
+  private viewportResizeSubscribers = new Set<() => void>();
+  private viewportListenersBound = false;
+  private viewportResizeFrameId: number | null = null;
+
+  private readonly handleViewportResize = () => {
+    if (!this.viewportResizeSubscribers.size) {
+      return;
+    }
+
+    if (typeof requestAnimationFrame === 'undefined') {
+      this.notifyViewportResizeSubscribers();
+      return;
+    }
+
+    if (this.viewportResizeFrameId !== null) {
+      return;
+    }
+
+    this.viewportResizeFrameId = requestAnimationFrame(() => {
+      this.viewportResizeFrameId = null;
+      this.notifyViewportResizeSubscribers();
+    });
+  };
 
   constructor(private zone: NgZone, @Inject(PLATFORM_ID) private platformId: object) { }
 
@@ -38,17 +66,23 @@ export class EChartsLoaderService {
         ]);
 
         core.use([
-          charts.BarChart,
-          charts.PieChart,
-          charts.LineChart,
-          charts.ScatterChart,
+            charts.BarChart,
+            charts.PictorialBarChart,
+            charts.CustomChart,
+            charts.PieChart,
+            charts.LineChart,
+            charts.ScatterChart,
           components.GraphicComponent,
           components.GridComponent,
           components.TooltipComponent,
           components.LegendComponent,
           components.TitleComponent,
           components.AxisPointerComponent,
+          components.MarkLineComponent,
           components.VisualMapComponent,
+          components.ToolboxComponent,
+          components.DataZoomComponent,
+          components.BrushComponent,
           renderers.CanvasRenderer
         ]);
 
@@ -64,9 +98,14 @@ export class EChartsLoaderService {
     return this.loader;
   }
 
-  public async init(container: HTMLElement, theme?: string): Promise<EChartsType> {
+  public async init(container: HTMLElement, theme?: string, options?: EChartsInitOptions): Promise<EChartsType> {
     const echarts = await this.load();
-    return this.zone.runOutsideAngular(() => echarts.init(container, theme));
+    const resolvedTheme = this.resolveThemeName(theme);
+    return this.zone.runOutsideAngular(() => echarts.init(container, resolvedTheme, {
+      renderer: 'canvas',
+      useDirtyRect: false,
+      ...options,
+    }));
   }
 
   public setOption(chart: EChartsType, option: EChartsOption, settings?: EChartsSetOptionSettings): void {
@@ -75,9 +114,65 @@ export class EChartsLoaderService {
     });
   }
 
-  public resize(chart: EChartsType): void {
+  public resize(chart: EChartsType, options?: EChartsResizeOptions): void {
     this.zone.runOutsideAngular(() => {
-      chart.resize();
+      chart.resize(options);
+    });
+  }
+
+  public async connectGroup(groupId: string): Promise<void> {
+    const normalizedGroupID = `${groupId || ''}`.trim();
+    if (!normalizedGroupID) {
+      return;
+    }
+
+    const currentRefCount = this.groupRefCounts.get(normalizedGroupID) ?? 0;
+    this.groupRefCounts.set(normalizedGroupID, currentRefCount + 1);
+    if (currentRefCount > 0) {
+      return;
+    }
+
+    try {
+      const echarts = await this.load();
+      this.zone.runOutsideAngular(() => {
+        echarts.connect(normalizedGroupID);
+      });
+    } catch (error) {
+      this.groupRefCounts.delete(normalizedGroupID);
+      throw error;
+    }
+  }
+
+  public async disconnectGroup(groupId: string): Promise<void> {
+    const normalizedGroupID = `${groupId || ''}`.trim();
+    if (!normalizedGroupID) {
+      return;
+    }
+
+    const currentRefCount = this.groupRefCounts.get(normalizedGroupID);
+    if (!currentRefCount) {
+      return;
+    }
+
+    if (currentRefCount > 1) {
+      this.groupRefCounts.set(normalizedGroupID, currentRefCount - 1);
+      return;
+    }
+
+    const echarts = await this.load();
+    const latestRefCount = this.groupRefCounts.get(normalizedGroupID);
+    if (!latestRefCount) {
+      return;
+    }
+
+    if (latestRefCount > 1) {
+      this.groupRefCounts.set(normalizedGroupID, latestRefCount - 1);
+      return;
+    }
+
+    this.groupRefCounts.delete(normalizedGroupID);
+    this.zone.runOutsideAngular(() => {
+      echarts.disconnect(normalizedGroupID);
     });
   }
 
@@ -88,5 +183,68 @@ export class EChartsLoaderService {
     this.zone.runOutsideAngular(() => {
       chart.dispose();
     });
+  }
+
+  public subscribeToViewportResize(listener: () => void): () => void {
+    if (!isPlatformBrowser(this.platformId)) {
+      return () => { };
+    }
+
+    this.viewportResizeSubscribers.add(listener);
+    this.bindViewportListeners();
+
+    return () => {
+      this.viewportResizeSubscribers.delete(listener);
+
+      if (!this.viewportResizeSubscribers.size) {
+        this.unbindViewportListeners();
+      }
+    };
+  }
+
+  private resolveThemeName(theme?: string): string | undefined {
+    const normalizedTheme = `${theme || ''}`.trim().toLowerCase();
+    if (!normalizedTheme || normalizedTheme === 'light' || normalizedTheme.endsWith('light')) {
+      return undefined;
+    }
+    if (normalizedTheme === 'dark' || normalizedTheme.endsWith('dark')) {
+      return 'dark';
+    }
+
+    return theme || undefined;
+  }
+
+  private notifyViewportResizeSubscribers(): void {
+    const listeners = [...this.viewportResizeSubscribers];
+    for (const listener of listeners) {
+      listener();
+    }
+  }
+
+  private bindViewportListeners(): void {
+    if (this.viewportListenersBound || !isPlatformBrowser(this.platformId)) {
+      return;
+    }
+
+    window.addEventListener('resize', this.handleViewportResize, { passive: true });
+    window.addEventListener('orientationchange', this.handleViewportResize, { passive: true });
+    window.visualViewport?.addEventListener('resize', this.handleViewportResize, { passive: true });
+    this.viewportListenersBound = true;
+  }
+
+  private unbindViewportListeners(): void {
+    if (!this.viewportListenersBound || !isPlatformBrowser(this.platformId)) {
+      return;
+    }
+
+    if (this.viewportResizeFrameId !== null && typeof cancelAnimationFrame !== 'undefined') {
+      cancelAnimationFrame(this.viewportResizeFrameId);
+      this.viewportResizeFrameId = null;
+    }
+
+    window.removeEventListener('resize', this.handleViewportResize);
+    window.removeEventListener('orientationchange', this.handleViewportResize);
+    window.visualViewport?.removeEventListener('resize', this.handleViewportResize);
+    this.viewportListenersBound = false;
   }
 }

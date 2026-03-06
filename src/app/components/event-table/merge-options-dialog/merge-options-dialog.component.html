@@ -1,7 +1,7 @@
 <h2 mat-dialog-title>Merge events</h2>
 <mat-dialog-content>
   <div class="merge-options">
-    <div class="glass-card option-card" role="button" tabindex="0"
+    <div class="qs-glass-card-panel option-card" role="button" tabindex="0"
       [class.selected]="selectedOption === 'benchmark'"
       [class.disabled]="isMerging" [attr.aria-disabled]="isMerging"
       (click)="selectOption('benchmark')" (keydown.enter)="selectOption('benchmark')"
@@ -15,7 +15,7 @@
       </app-status-info>
     </div>
 
-    <div class="glass-card option-card" role="button" tabindex="0"
+    <div class="qs-glass-card-panel option-card" role="button" tabindex="0"
       [class.selected]="selectedOption === 'multi'"
       [class.disabled]="isMerging" [attr.aria-disabled]="isMerging"
       (click)="selectOption('multi')" (keydown.enter)="selectOption('multi')"
@@ -32,7 +32,7 @@
 </mat-dialog-content>
 <mat-dialog-actions align="end">
   <button mat-button (click)="cancel()" [disabled]="isMerging">Cancel</button>
-  <button mat-flat-button color="primary" (click)="confirm()" [disabled]="isMerging">
+  <button mat-flat-button class="qs-mat-primary" (click)="confirm()" [disabled]="isMerging">
     <span class="merge-button-content">
       @if (isMerging) {
       <mat-progress-spinner class="merge-spinner" diameter="18" mode="indeterminate"></mat-progress-spinner>

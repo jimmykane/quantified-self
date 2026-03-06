@@ -34,7 +34,8 @@ describe('AdminQueueStatsComponent', () => {
             init: vi.fn().mockResolvedValue(chartMock),
             setOption: vi.fn(),
             resize: vi.fn(),
-            dispose: vi.fn()
+            dispose: vi.fn(),
+            subscribeToViewportResize: vi.fn(() => () => { })
         };
 
         await TestBed.configureTestingModule({
@@ -195,6 +196,7 @@ describe('AdminQueueStatsComponent', () => {
             const host: HTMLElement = fixture.nativeElement;
             expect(host.textContent).toContain('Cloud Tasks (Workout)');
             expect(host.textContent).toContain('Cloud Tasks (Reparse)');
+            expect(host.textContent).not.toContain('Cloud Tasks (All Queues)');
             expect(host.textContent).toContain('42');
             expect(host.textContent).toContain('8');
         });
@@ -212,11 +214,76 @@ describe('AdminQueueStatsComponent', () => {
             };
 
             fixture.detectChanges();
-            const queueValues = Array.from(
-                fixture.nativeElement.querySelectorAll('.app-stat-card.status-info .app-stat-value')
-            ).map((node: Element) => node.textContent?.trim() || '');
+            const host: HTMLElement = fixture.nativeElement;
+            expect(host.textContent).not.toContain('Cloud Tasks (All Queues)');
 
-            expect(queueValues).toEqual(expect.arrayContaining(['7', '0', '0']));
+            const cards = Array.from(host.querySelectorAll('.app-stat-card')) as HTMLElement[];
+            const readCardValue = (label: string): string | undefined => {
+                const card = cards.find((node) =>
+                    node.querySelector('.app-stat-header span')?.textContent?.trim() === label
+                );
+                return card?.querySelector('.app-stat-value')?.textContent?.trim();
+            };
+
+            expect(readCardValue('Cloud Tasks (Workout)')).toBe('0');
+            expect(readCardValue('Cloud Tasks (Reparse)')).toBe('0');
+        });
+    });
+
+    describe('Queue View Filtering', () => {
+        it('should hide workout section in reparse-only view', () => {
+            component.loading = false;
+            component.queueView = 'reparse';
+            component.stats = {
+                pending: 1,
+                succeeded: 1,
+                stuck: 0,
+                providers: [],
+                cloudTasks: { pending: 0 },
+                reparse: {
+                    queuePending: 0,
+                    targetSportsLibVersion: '9.1.5',
+                    jobs: { total: 0, pending: 0, processing: 0, completed: 0, failed: 0 },
+                    checkpoint: {
+                        cursorEventPath: null,
+                        lastScanAt: null,
+                        lastPassStartedAt: null,
+                        lastPassCompletedAt: null,
+                        lastScanCount: 0,
+                        lastEnqueuedCount: 0,
+                        overrideUsersInProgress: 0
+                    },
+                    recentFailures: []
+                }
+            };
+
+            fixture.detectChanges();
+            const host: HTMLElement = fixture.nativeElement;
+            expect(host.textContent).not.toContain('Workout Ingestion');
+            expect(host.textContent).toContain('Sports-lib Reparse');
+        });
+
+        it('should hide reparse section in workout-only view', () => {
+            component.loading = false;
+            component.queueView = 'workout';
+            component.stats = {
+                pending: 1,
+                succeeded: 1,
+                stuck: 0,
+                providers: [],
+                cloudTasks: { pending: 0 },
+                advanced: {
+                    throughput: 0,
+                    maxLagMs: 0,
+                    retryHistogram: { '0-3': 0, '4-7': 0, '8-9': 0 },
+                    topErrors: []
+                }
+            };
+
+            fixture.detectChanges();
+            const host: HTMLElement = fixture.nativeElement;
+            expect(host.textContent).toContain('Workout Ingestion');
+            expect(host.textContent).not.toContain('Sports-lib Reparse');
         });
     });
 

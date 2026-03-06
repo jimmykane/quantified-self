@@ -1,7 +1,7 @@
 import { Component, Input, OnChanges, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AppWindowService } from '../../services/app.window.service';
-import { AppUserInterface } from '../../models/app-user.interface';
+import { AppChartSettingsInterface, AppUserInterface } from '../../models/app-user.interface';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppUserService } from '../../services/app.user.service';
 import { AppUserUtilities } from '../../utils/app.user.utilities';
@@ -11,11 +11,9 @@ import { DeleteAccountDialogComponent } from '../delete-account-dialog/delete-ac
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AbstractControl, UntypedFormControl, UntypedFormGroup, ValidationErrors, ValidatorFn, Validators } from '@angular/forms';
 import { LoggerService } from '../../services/logger.service';
-import { Privacy, UserSettingsInterface } from '@sports-alliance/sports-lib';
+import { Privacy, User, UserSettingsInterface } from '@sports-alliance/sports-lib';
 import {
   ChartCursorBehaviours,
-  ChartThemes,
-  UserChartSettingsInterface,
   XAxisTypes,
 } from '@sports-alliance/sports-lib';
 import { AppThemes, UserAppSettingsInterface } from '@sports-alliance/sports-lib';
@@ -36,6 +34,7 @@ import {
   MapTypes,
   UserMapSettingsInterface
 } from '@sports-alliance/sports-lib';
+import { AppThemePreference, isAppThemePreference, SYSTEM_THEME_PREFERENCE } from '../../models/app-theme-preference.type';
 
 @Component({
   selector: 'app-user-settings',
@@ -67,7 +66,7 @@ export class UserSettingsComponent implements OnChanges {
   public readonly tabsStickyHeader = true;
   public readonly tabsTopOffset = '0px';
   public readonly tabsLazyContent = false;
-  public readonly brandTextMaxLength = 30;
+  public readonly brandTextMaxLength = 60;
 
   public xAxisTypes = XAxisTypes;
 
@@ -84,8 +83,11 @@ export class UserSettingsComponent implements OnChanges {
     },
   ];
 
-  public appThemes = AppThemes;
-  public chartThemes = ChartThemes;
+  public readonly appThemeOptions: Array<{ label: string; value: AppThemePreference }> = [
+    { label: 'System', value: SYSTEM_THEME_PREFERENCE },
+    { label: 'Light', value: AppThemes.Normal },
+    { label: 'Dark', value: AppThemes.Dark },
+  ];
   public lapTypes = LapTypesHelper.getLapTypesAsUniqueArray();
 
   public eventsPerPage = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000];
@@ -104,6 +106,23 @@ export class UserSettingsComponent implements OnChanges {
 
 
   public isAdminUser = false;
+  private initializedUserUID: string | null = null;
+  private readonly controlLabels: Record<string, string> = {
+    displayName: 'Public Name',
+    privacy: 'Profile Visibility',
+    appTheme: 'Interface Theme',
+    dataTypesToUse: 'Visible Metrics',
+    xAxisType: 'Data Scaling (X-Axis)',
+    chartStrokeWidth: 'Line Width',
+    chartFillOpacity: 'Fill Intensity',
+    startOfTheWeek: 'Start of the Week',
+    speedUnitsToUse: 'Preferred Speed Units',
+    paceUnitsToUse: 'Preferred Pace Units',
+    swimPaceUnitsToUse: 'Swim Pace Preference',
+    verticalSpeedUnitsToUse: 'Vertical Speed Preference',
+    mapType: 'Map Layer (Default)',
+    eventsPerPage: 'Activities per Page',
+  };
 
   get isProUser(): boolean {
     return AppUserUtilities.isProUser(this.user, this.isAdminUser);
@@ -138,16 +157,41 @@ export class UserSettingsComponent implements OnChanges {
 
 
   ngOnChanges(): void {
-    if (this.user) {
-      this.userService.isAdmin().then(isAdmin => {
-        this.isAdminUser = isAdmin;
-        this.syncBrandTextControlState();
-      });
+    if (!this.user) {
+      return;
     }
+
+    if (this.user) {
+      void this.userService.isAdmin()
+        .then(isAdmin => {
+          this.isAdminUser = isAdmin;
+          this.syncBrandTextControlState();
+        })
+        .catch((error) => {
+          this.isAdminUser = false;
+          this.syncBrandTextControlState();
+          this.logger.error('[UserSettingsComponent] Failed to resolve admin status', error);
+        });
+    }
+
+    const shouldPreserveDirtyFormState = !!this.userSettingsFormGroup
+      && this.initializedUserUID === this.user.uid
+      && this.userSettingsFormGroup.dirty;
+    if (shouldPreserveDirtyFormState) {
+      this.syncBrandTextControlState();
+      return;
+    }
+
+    const settings = AppUserUtilities.fillMissingAppSettings(this.user as unknown as User);
+
     // Initialize the user settings and get the enabled ones
-    const dataTypesToUse = Object.keys(this.user.settings.chartSettings.dataTypeSettings).filter((dataTypeSettingKey) => {
-      return this.user.settings.chartSettings.dataTypeSettings[dataTypeSettingKey].enabled === true;
-    });
+    const dataTypesToUse = Object.keys(settings.chartSettings.dataTypeSettings).filter((dataTypeSettingKey) =>
+      settings.chartSettings.dataTypeSettings[dataTypeSettingKey].enabled === true
+    );
+
+    const initialThemePreference = isAppThemePreference(settings.appSettings.themePreference)
+      ? settings.appSettings.themePreference
+      : (isAppThemePreference(settings.appSettings.theme) ? settings.appSettings.theme : AppThemes.Normal);
 
     this.userSettingsFormGroup = new UntypedFormGroup({
       displayName: new UntypedFormControl(this.user.displayName, [
@@ -160,9 +204,11 @@ export class UserSettingsComponent implements OnChanges {
       dataTypesToUse: new UntypedFormControl(dataTypesToUse, [
         Validators.required,
       ]),
-      appTheme: new UntypedFormControl(this.user.settings.appSettings.theme, [
-        Validators.required,
-      ]),
+      appTheme: new UntypedFormControl(
+        initialThemePreference,
+        [
+          Validators.required,
+        ]),
       acceptedTrackingPolicy: new UntypedFormControl(this.user.acceptedTrackingPolicy, []),
       acceptedMarketingPolicy: new UntypedFormControl(this.user.acceptedMarketingPolicy || false, []),
       brandText: new UntypedFormControl(
@@ -172,70 +218,60 @@ export class UserSettingsComponent implements OnChanges {
         },
         [this.maxTrimmedLength(this.brandTextMaxLength)]
       ),
-      chartTheme: new UntypedFormControl(this.user.settings.chartSettings.theme, [
+      chartDownSamplingLevel: new UntypedFormControl(settings.chartSettings.downSamplingLevel, [
         Validators.required,
       ]),
-      chartDownSamplingLevel: new UntypedFormControl(this.user.settings.chartSettings.downSamplingLevel, [
+      chartStrokeWidth: new UntypedFormControl(settings.chartSettings.strokeWidth, [
         Validators.required,
       ]),
-      chartStrokeWidth: new UntypedFormControl(this.user.settings.chartSettings.strokeWidth, [
+      chartGainAndLossThreshold: new UntypedFormControl(settings.chartSettings.gainAndLossThreshold, [
         Validators.required,
       ]),
-      chartGainAndLossThreshold: new UntypedFormControl(this.user.settings.chartSettings.gainAndLossThreshold, [
+      chartStrokeOpacity: new UntypedFormControl(settings.chartSettings.strokeOpacity, [
         Validators.required,
       ]),
-      chartStrokeOpacity: new UntypedFormControl(this.user.settings.chartSettings.strokeOpacity, [
+      chartFillOpacity: new UntypedFormControl(AppUserUtilities.getResolvedChartFillOpacity(settings.chartSettings as AppChartSettingsInterface), [
         Validators.required,
       ]),
-      chartExtraMaxForPower: new UntypedFormControl(this.user.settings.chartSettings.extraMaxForPower, [
+      chartLapTypes: new UntypedFormControl(settings.chartSettings.lapTypes, []),
+      showChartLaps: new UntypedFormControl(settings.chartSettings.showLaps, []),
+      showChartGrid: new UntypedFormControl(settings.chartSettings.showGrid, []),
+      xAxisType: new UntypedFormControl(settings.chartSettings.xAxisType, [
         Validators.required,
       ]),
-      chartExtraMaxForPace: new UntypedFormControl(this.user.settings.chartSettings.extraMaxForPace, [
+      useAnimations: new UntypedFormControl(settings.chartSettings.useAnimations, []),
+      chartHideAllSeriesOnInit: new UntypedFormControl(settings.chartSettings.hideAllSeriesOnInit, []),
+      showAllData: new UntypedFormControl(settings.chartSettings.showAllData, []),
+      chartDisableGrouping: new UntypedFormControl(settings.chartSettings.disableGrouping, []),
+      removeAscentForActivitiesSummaries: new UntypedFormControl([...new Set([...(settings.summariesSettings?.removeAscentForEventTypes || []), ...this.mandatoryAscentExclusions])], []),
+      removeDescentForActivitiesSummaries: new UntypedFormControl([...new Set([...((settings.summariesSettings as any)?.removeDescentForEventTypes || []), ...this.mandatoryDescentExclusions])], []),
+      chartCursorBehaviour: new UntypedFormControl(settings.chartSettings.chartCursorBehaviour === ChartCursorBehaviours.SelectX, []),
+      startOfTheWeek: new UntypedFormControl(settings.unitSettings.startOfTheWeek, [
         Validators.required,
       ]),
-      chartFillOpacity: new UntypedFormControl(this.user.settings.chartSettings.fillOpacity, [
+      speedUnitsToUse: new UntypedFormControl(settings.unitSettings.speedUnits, [
         Validators.required,
       ]),
-      chartLapTypes: new UntypedFormControl(this.user.settings.chartSettings.lapTypes, []),
-      showChartLaps: new UntypedFormControl(this.user.settings.chartSettings.showLaps, []),
-      showChartGrid: new UntypedFormControl(this.user.settings.chartSettings.showGrid, []),
-      stackYAxes: new UntypedFormControl(this.user.settings.chartSettings.stackYAxes, []),
-      xAxisType: new UntypedFormControl(this.user.settings.chartSettings.xAxisType, [
+      paceUnitsToUse: new UntypedFormControl(settings.unitSettings.paceUnits, [
         Validators.required,
       ]),
-      useAnimations: new UntypedFormControl(this.user.settings.chartSettings.useAnimations, []),
-      chartHideAllSeriesOnInit: new UntypedFormControl(this.user.settings.chartSettings.hideAllSeriesOnInit, []),
-      showAllData: new UntypedFormControl(this.user.settings.chartSettings.showAllData, []),
-      chartDisableGrouping: new UntypedFormControl(this.user.settings.chartSettings.disableGrouping, []),
-      removeAscentForActivitiesSummaries: new UntypedFormControl([...new Set([...(this.user.settings.summariesSettings?.removeAscentForEventTypes || []), ...this.mandatoryAscentExclusions])], []),
-      removeDescentForActivitiesSummaries: new UntypedFormControl([...new Set([...((this.user.settings.summariesSettings as any)?.removeDescentForEventTypes || []), ...this.mandatoryDescentExclusions])], []),
-      chartCursorBehaviour: new UntypedFormControl(this.user.settings.chartSettings.chartCursorBehaviour === ChartCursorBehaviours.SelectX, []),
-      startOfTheWeek: new UntypedFormControl(this.user.settings.unitSettings.startOfTheWeek, [
+      swimPaceUnitsToUse: new UntypedFormControl(settings.unitSettings.swimPaceUnits, [
         Validators.required,
       ]),
-      speedUnitsToUse: new UntypedFormControl(this.user.settings.unitSettings.speedUnits, [
+      verticalSpeedUnitsToUse: new UntypedFormControl(settings.unitSettings.verticalSpeedUnits, [
         Validators.required,
       ]),
-      paceUnitsToUse: new UntypedFormControl(this.user.settings.unitSettings.paceUnits, [
-        Validators.required,
-      ]),
-      swimPaceUnitsToUse: new UntypedFormControl(this.user.settings.unitSettings.swimPaceUnits, [
-        Validators.required,
-      ]),
-      verticalSpeedUnitsToUse: new UntypedFormControl(this.user.settings.unitSettings.verticalSpeedUnits, [
-        Validators.required,
-      ]),
-      mapType: new UntypedFormControl(this.user.settings.mapSettings.mapType, []),
-      mapStrokeWidth: new UntypedFormControl(this.user.settings.mapSettings.strokeWidth, []),
-      showMapLaps: new UntypedFormControl(this.user.settings.mapSettings.showLaps, []),
-      showMapArrows: new UntypedFormControl(this.user.settings.mapSettings.showArrows, []),
-      showMapPoints: new UntypedFormControl(this.user.settings.mapSettings.showPoints ?? true, []),
-      mapLapTypes: new UntypedFormControl(this.user.settings.mapSettings.lapTypes, []),
-      eventsPerPage: new UntypedFormControl(this.user.settings.dashboardSettings.tableSettings.eventsPerPage, [
+      mapType: new UntypedFormControl(settings.mapSettings.mapType, []),
+      mapStrokeWidth: new UntypedFormControl(settings.mapSettings.strokeWidth, []),
+      showMapLaps: new UntypedFormControl(settings.mapSettings.showLaps, []),
+      showMapArrows: new UntypedFormControl(settings.mapSettings.showArrows, []),
+      mapLapTypes: new UntypedFormControl(settings.mapSettings.lapTypes, []),
+      eventsPerPage: new UntypedFormControl(settings.dashboardSettings.tableSettings.eventsPerPage, [
         Validators.required,
       ]),
     });
 
+    this.initializedUserUID = this.user.uid;
     this.syncBrandTextControlState();
   }
 
@@ -244,6 +280,24 @@ export class UserSettingsComponent implements OnChanges {
       return !this.userSettingsFormGroup.valid;
     }
     return !(this.userSettingsFormGroup.get(field).valid && this.userSettingsFormGroup.get(field).touched);
+  }
+
+  get invalidControlDiagnostics(): Array<{ control: string; label: string; errors: string[] }> {
+    if (!this.userSettingsFormGroup) {
+      return [];
+    }
+
+    return Object.entries(this.userSettingsFormGroup.controls)
+      .filter(([, control]) => control.invalid)
+      .map(([controlName, control]) => ({
+        control: controlName,
+        label: this.controlLabels[controlName] || controlName,
+        errors: Object.keys(control.errors || {}),
+      }));
+  }
+
+  get shouldShowValidationDebug(): boolean {
+    return !!this.userSettingsFormGroup && this.userSettingsFormGroup.invalid;
   }
 
   isMandatoryExclusion(type: any): boolean {
@@ -275,6 +329,11 @@ export class UserSettingsComponent implements OnChanges {
   async onSubmit(event) {
     event.preventDefault();
     if (!this.userSettingsFormGroup.valid) {
+      const invalidControls = this.invalidControlDiagnostics;
+      this.logger.warn('[UserSettingsComponent] Save blocked by invalid form controls', {
+        uid: this.user?.uid,
+        invalidControls,
+      });
       this.validateAllFormFields(this.userSettingsFormGroup);
       return;
     }
@@ -294,27 +353,34 @@ export class UserSettingsComponent implements OnChanges {
         dataTypeSettings[dataType] = { enabled: selectedTypesSet.has(dataType) };
       }
 
-      const userChartSettings: UserChartSettingsInterface = {
+      const userChartSettings: AppChartSettingsInterface = {
         dataTypeSettings: dataTypeSettings,
-        theme: this.userSettingsFormGroup.get('chartTheme').value,
         useAnimations: this.userSettingsFormGroup.get('useAnimations').value,
         xAxisType: this.userSettingsFormGroup.get('xAxisType').value,
         showAllData: this.userSettingsFormGroup.get('showAllData').value,
         chartCursorBehaviour: this.userSettingsFormGroup.get('chartCursorBehaviour').value ? ChartCursorBehaviours.SelectX : ChartCursorBehaviours.ZoomX,
         strokeWidth: this.userSettingsFormGroup.get('chartStrokeWidth').value,
         strokeOpacity: this.userSettingsFormGroup.get('chartStrokeOpacity').value,
-        extraMaxForPower: this.userSettingsFormGroup.get('chartExtraMaxForPower').value,
-        extraMaxForPace: this.userSettingsFormGroup.get('chartExtraMaxForPace').value,
         fillOpacity: this.userSettingsFormGroup.get('chartFillOpacity').value,
+        fillOpacityVersion: 1,
         lapTypes: this.userSettingsFormGroup.get('chartLapTypes').value,
         showLaps: this.userSettingsFormGroup.get('showChartLaps').value,
         showGrid: this.userSettingsFormGroup.get('showChartGrid').value,
-        stackYAxes: this.userSettingsFormGroup.get('stackYAxes').value,
+        stackYAxes: false,
         disableGrouping: this.userSettingsFormGroup.get('chartDisableGrouping').value,
         hideAllSeriesOnInit: this.userSettingsFormGroup.get('chartHideAllSeriesOnInit').value,
         gainAndLossThreshold: this.userSettingsFormGroup.get('chartGainAndLossThreshold').value,
         downSamplingLevel: this.userSettingsFormGroup.get('chartDownSamplingLevel').value,
       };
+
+      const selectedThemeControlValue = this.userSettingsFormGroup.get('appTheme').value;
+      const selectedThemePreference = isAppThemePreference(selectedThemeControlValue)
+        ? selectedThemeControlValue
+        : AppThemes.Normal;
+      const resolvedTheme = selectedThemePreference === SYSTEM_THEME_PREFERENCE
+        ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? AppThemes.Dark : AppThemes.Normal)
+        : selectedThemePreference;
+      const settings = AppUserUtilities.fillMissingAppSettings(this.user as unknown as User);
 
       const propertiesToUpdate: any = {
         displayName: this.userSettingsFormGroup.get('displayName').value,
@@ -323,13 +389,15 @@ export class UserSettingsComponent implements OnChanges {
         acceptedTrackingPolicy: this.userSettingsFormGroup.get('acceptedTrackingPolicy').value,
         acceptedMarketingPolicy: this.userSettingsFormGroup.get('acceptedMarketingPolicy').value,
         settings: <UserSettingsInterface>{
-          chartSettings: userChartSettings,
-          appSettings: <UserAppSettingsInterface>{ theme: this.userSettingsFormGroup.get('appTheme').value },
+          chartSettings: userChartSettings as unknown as UserSettingsInterface['chartSettings'],
+          appSettings: <UserAppSettingsInterface & { themePreference?: AppThemePreference }>{
+            theme: resolvedTheme,
+            themePreference: selectedThemePreference
+          },
           mapSettings: <UserMapSettingsInterface>{
             showLaps: this.userSettingsFormGroup.get('showMapLaps').value,
 
             showArrows: this.userSettingsFormGroup.get('showMapArrows').value,
-            showPoints: this.userSettingsFormGroup.get('showMapPoints').value,
             lapTypes: this.userSettingsFormGroup.get('mapLapTypes').value,
             mapType: this.userSettingsFormGroup.get('mapType').value,
             strokeWidth: this.userSettingsFormGroup.get('mapStrokeWidth').value
@@ -344,14 +412,14 @@ export class UserSettingsComponent implements OnChanges {
             startOfTheWeek: this.userSettingsFormGroup.get('startOfTheWeek').value,
           },
           dashboardSettings: <AppDashboardSettingsInterface>{
-            tiles: this.user.settings.dashboardSettings.tiles,
-            startDate: this.user.settings.dashboardSettings.startDate,
-            endDate: this.user.settings.dashboardSettings.endDate,
-            dateRange: this.user.settings.dashboardSettings.dateRange,
-            includeMergedEvents: this.user.settings.dashboardSettings.includeMergedEvents,
+            tiles: settings.dashboardSettings.tiles,
+            startDate: settings.dashboardSettings.startDate,
+            endDate: settings.dashboardSettings.endDate,
+            dateRange: settings.dashboardSettings.dateRange,
+            includeMergedEvents: settings.dashboardSettings.includeMergedEvents,
             tableSettings: {
-              active: this.user.settings.dashboardSettings.tableSettings.active,
-              direction: this.user.settings.dashboardSettings.tableSettings.direction,
+              active: settings.dashboardSettings.tableSettings.active,
+              direction: settings.dashboardSettings.tableSettings.direction,
               eventsPerPage: this.userSettingsFormGroup.get('eventsPerPage').value
             }
           },
@@ -359,7 +427,7 @@ export class UserSettingsComponent implements OnChanges {
             removeAscentForEventTypes: this.userSettingsFormGroup.get('removeAscentForActivitiesSummaries').value,
             removeDescentForEventTypes: this.userSettingsFormGroup.get('removeDescentForActivitiesSummaries').value
           },
-          exportToCSVSettings: this.user.settings.exportToCSVSettings
+          exportToCSVSettings: settings.exportToCSVSettings
         }
       };
 
@@ -370,6 +438,8 @@ export class UserSettingsComponent implements OnChanges {
       }
 
       await this.userService.updateUserProperties(this.user, propertiesToUpdate);
+      this.userSettingsFormGroup.markAsPristine();
+      this.userSettingsFormGroup.markAsUntouched();
       this.snackBar.open('User updated', undefined, {
         duration: 2000,
       });

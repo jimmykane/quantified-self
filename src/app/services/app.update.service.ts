@@ -24,7 +24,11 @@ export class AppUpdateService {
     const everyTenMinutes = interval(10 * 60 * 1000);
     const everyTenMinutesOnceAppIsStable$ = concat(appIsStable, everyTenMinutes);
 
-    everyTenMinutesOnceAppIsStable$.subscribe(() => updates.checkForUpdate());
+    everyTenMinutesOnceAppIsStable$.subscribe(() => {
+      void Promise.resolve(updates.checkForUpdate()).catch((error) => {
+        this.logger.error('[AppUpdateService] Failed to check for updates', error);
+      });
+    });
     updates.versionUpdates
       .pipe(filter((evt): evt is VersionReadyEvent => evt.type === 'VERSION_READY'))
       .subscribe((event) => {
@@ -42,7 +46,11 @@ export class AppUpdateService {
         snack
           .onAction()
           .subscribe(() => {
-            updates.activateUpdate().then(() => this.windowService.windowRef.location.reload());
+            void updates.activateUpdate()
+              .then(() => this.windowService.windowRef.location.reload())
+              .catch((error) => {
+                this.logger.error('[AppUpdateService] Failed to activate update', error);
+              });
           });
       });
 

@@ -11,6 +11,7 @@ import { MatSortModule, Sort, MatSort } from '@angular/material/sort';
 import { MatInputModule } from '@angular/material/input';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
+import { MatCardModule } from '@angular/material/card';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { Subject } from 'rxjs';
@@ -25,6 +26,11 @@ import { AdminResolverData } from '../../../resolvers/admin.resolver';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import type { EChartsType } from 'echarts/core';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
+import {
+    ECHARTS_SERIES_MERGE_UPDATE_SETTINGS,
+    EChartsHostController
+} from '../../../helpers/echarts-host-controller';
+import { buildOfficialEChartsThemeTokens, ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
 import dayjs from 'dayjs';
 import localizedFormat from 'dayjs/plugin/localizedFormat';
 
@@ -59,6 +65,7 @@ type ChartOption = Parameters<EChartsType['setOption']>[0];
         MatInputModule,
         MatFormFieldModule,
         MatSelectModule,
+        MatCardModule,
         MatDialogModule,
         MatSnackBarModule,
     ]
@@ -103,14 +110,14 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     private searchSubject = new Subject<string>();
     private destroy$ = new Subject<void>();
 
-    private chart: EChartsType | null = null;
+    private chartHost = new EChartsHostController({
+        eChartsLoader: this.eChartsLoader,
+        logger: this.logger,
+        logPrefix: '[AdminUserManagementComponent]'
+    });
     private isDark = false;
-    private resizeObserver: ResizeObserver | null = null;
     private providerData: Record<string, number> | null = null;
     private readonly dayjsLocale = this.normalizeDayjsLocale(this.locale);
-
-    private readonly CHART_TEXT_DARK = 'rgba(255, 255, 255, 0.8)';
-    private readonly CHART_TEXT_LIGHT = 'rgba(0, 0, 0, 0.8)';
 
     async ngOnInit(): Promise<void> {
         // Handle search debounce
@@ -127,7 +134,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
         // Handle theme changes for chart
         this.appThemeService.getAppTheme().pipe(takeUntil(this.destroy$)).subscribe(theme => {
             this.isDark = theme === AppThemes.Dark;
-            this.updateChartTheme();
+            void this.updateChartTheme();
         });
 
         // Use resolved data if available
@@ -161,12 +168,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     ngOnDestroy(): void {
         this.destroy$.next();
         this.destroy$.complete();
-        if (this.resizeObserver) {
-            this.resizeObserver.disconnect();
-            this.resizeObserver = null;
-        }
-        this.eChartsLoader.dispose(this.chart);
-        this.chart = null;
+        this.chartHost.dispose();
     }
 
     fetchUsers(): void {
@@ -360,39 +362,17 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
         if (!this.authChartRef?.nativeElement) {
             return;
         }
-        try {
-            this.chart = await this.eChartsLoader.init(this.authChartRef.nativeElement);
-            this.setupResizeObserver();
-        } catch (error) {
-            this.logger.error('[AdminUserManagementComponent] Failed to initialize ECharts', error);
-        }
-    }
-
-    private setupResizeObserver(): void {
-        if (typeof ResizeObserver === 'undefined' || !this.authChartRef?.nativeElement) {
-            return;
-        }
-        this.resizeObserver = new ResizeObserver(() => this.scheduleResize());
-        this.resizeObserver.observe(this.authChartRef.nativeElement);
-    }
-
-    private scheduleResize(): void {
-        if (!this.chart) return;
-        if (typeof requestAnimationFrame === 'undefined') {
-            this.eChartsLoader.resize(this.chart);
-            return;
-        }
-        requestAnimationFrame(() => this.eChartsLoader.resize(this.chart!));
+        await this.chartHost.init(this.authChartRef.nativeElement, resolveEChartsThemeName(this.isDark));
     }
 
     private renderAuthChart(): void {
-        if (!this.chart || !this.providerData || Object.keys(this.providerData).length === 0) {
+        if (!this.chartHost.getChart() || !this.providerData || Object.keys(this.providerData).length === 0) {
             return;
         }
 
         const option = this.buildAuthChartOption(this.providerData);
-        this.eChartsLoader.setOption(this.chart, option, { notMerge: true, lazyUpdate: true });
-        this.scheduleResize();
+        this.chartHost.setOption(option, ECHARTS_SERIES_MERGE_UPDATE_SETTINGS);
+        this.chartHost.scheduleResize();
     }
 
     private buildAuthChartOption(providers: Record<string, number>): ChartOption {
@@ -414,8 +394,9 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
         const sorted = [...entries].sort((a, b) => b[1] - a[1]);
         const topProvider = sorted[0]?.[0];
 
-        const textColor = this.isDark ? this.CHART_TEXT_DARK : this.CHART_TEXT_LIGHT;
-        const borderColor = this.isDark ? 'rgba(255,255,255,0.05)' : '#ffffff';
+        const themeTokens = buildOfficialEChartsThemeTokens(this.isDark);
+        const textColor = themeTokens.textSecondary;
+        const borderColor = themeTokens.subtleBorderColor;
         const containerWidth = this.authChartRef?.nativeElement?.clientWidth ?? 0;
         const isMobileLayout = containerWidth > 0 && containerWidth < 680;
 
@@ -440,6 +421,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
                 top: isMobileLayout ? 'bottom' : 'center',
                 textStyle: {
                     color: textColor,
+                    fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
                     fontSize: isMobileLayout ? 11 : 12
                 },
                 itemGap: isMobileLayout ? 10 : 8
@@ -474,6 +456,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
                                 fontSize: isMobileLayout ? 20 : 24,
                                 fontWeight: 700,
                                 fill: textColor,
+                                fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
                                 textAlign: 'center'
                             },
                             left: 'center',
@@ -487,6 +470,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
                                 fontWeight: 400,
                                 fill: textColor,
                                 opacity: 0.75,
+                                fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
                                 textAlign: 'center'
                             },
                             left: 'center',
@@ -500,6 +484,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
                                 fontWeight: 500,
                                 fill: textColor,
                                 opacity: 0.9,
+                                fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
                                 textAlign: 'center'
                             },
                             left: 'center',
@@ -513,10 +498,11 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
         return option;
     }
 
-    private updateChartTheme(): void {
-        if (!this.chart) {
+    private async updateChartTheme(): Promise<void> {
+        if (!this.authChartRef?.nativeElement) {
             return;
         }
+        await this.chartHost.init(this.authChartRef.nativeElement, resolveEChartsThemeName(this.isDark));
         this.renderAuthChart();
     }
 }

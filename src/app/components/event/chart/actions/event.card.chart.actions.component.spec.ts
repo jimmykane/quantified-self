@@ -3,110 +3,168 @@ import { resolve } from 'node:path';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { CommonModule } from '@angular/common';
+import { MatBadgeModule } from '@angular/material/badge';
 import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
-import { MatSelectModule } from '@angular/material/select';
+import { MatSliderModule } from '@angular/material/slider';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { EventInterface, User, XAxisTypes } from '@sports-alliance/sports-lib';
+import { ChartCursorBehaviours, EventInterface, User, XAxisTypes } from '@sports-alliance/sports-lib';
 import { vi } from 'vitest';
 import { EventCardChartActionsComponent } from './event.card.chart.actions.component';
 import { AppAnalyticsService } from '../../../../services/app.analytics.service';
+import { MenuRadioListComponent } from '../../../shared/menu-radio-list/menu-radio-list.component';
+import { MatDividerModule } from '@angular/material/divider';
 
 describe('EventCardChartActionsComponent', () => {
-    let component: EventCardChartActionsComponent;
-    let fixture: ComponentFixture<EventCardChartActionsComponent>;
+  let component: EventCardChartActionsComponent;
+  let fixture: ComponentFixture<EventCardChartActionsComponent>;
 
-    const analyticsServiceMock = {
-        logEvent: vi.fn(),
-    };
+  const analyticsServiceMock = {
+    logEvent: vi.fn(),
+  };
 
-    beforeEach(async () => {
-        await TestBed.configureTestingModule({
-            declarations: [EventCardChartActionsComponent],
-            imports: [
-                CommonModule,
-                BrowserAnimationsModule,
-                MatButtonModule,
-                MatFormFieldModule,
-                MatIconModule,
-                MatMenuModule,
-                MatSelectModule,
-                MatSlideToggleModule,
-                MatTooltipModule,
-            ],
-            providers: [
-                { provide: AppAnalyticsService, useValue: analyticsServiceMock },
-            ],
-        }).compileComponents();
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [
+        CommonModule,
+        BrowserAnimationsModule,
+        MatBadgeModule,
+        MatButtonModule,
+        MatDividerModule,
+        MatIconModule,
+        MatMenuModule,
+        MatSliderModule,
+        MatSlideToggleModule,
+        MatTooltipModule,
+      ],
+      declarations: [EventCardChartActionsComponent, MenuRadioListComponent],
+      providers: [
+        { provide: AppAnalyticsService, useValue: analyticsServiceMock },
+      ],
+    }).compileComponents();
 
-        fixture = TestBed.createComponent(EventCardChartActionsComponent);
-        component = fixture.componentInstance;
-        component.user = { uid: 'test-user' } as User;
-        component.event = { isMultiSport: () => false } as EventInterface;
-        component.xAxisType = XAxisTypes.Duration;
-        component.showAllData = false;
-        component.showLaps = false;
-        component.stackYAxes = false;
-        fixture.detectChanges();
-        vi.clearAllMocks();
-    });
+    fixture = TestBed.createComponent(EventCardChartActionsComponent);
+    component = fixture.componentInstance;
+    component.user = { uid: 'test-user' } as User;
+    component.event = { isMultiSport: () => false } as EventInterface;
+    component.xAxisType = XAxisTypes.Duration;
+    component.cursorBehaviour = ChartCursorBehaviours.ZoomX;
+    component.showAllData = false;
+    component.showLaps = false;
+    component.syncChartHoverToMap = false;
+    fixture.detectChanges();
+    vi.clearAllMocks();
+  });
 
-    it('should create', () => {
-        expect(component).toBeTruthy();
-    });
+  it('should create', () => {
+    expect(component).toBeTruthy();
+  });
 
-    it('should use form menu panel classes', () => {
-        const templatePath = resolve(process.cwd(), 'src/app/components/event/chart/actions/event.card.chart.actions.component.html');
-        const template = readFileSync(templatePath, 'utf8');
-        expect(template).toMatch(/<mat-menu[^>]*class="[^"]*qs-menu-panel[^"]*qs-menu-panel-form[^"]*qs-config-menu[^"]*"/);
-    });
+  it('should keep menu panel classes in template', () => {
+    const templatePath = resolve(process.cwd(), 'src/app/components/event/chart/actions/event.card.chart.actions.component.html');
+    const template = readFileSync(templatePath, 'utf8');
+    expect(template).toMatch(/<mat-menu[^>]*class="[^"]*qs-menu-panel[^"]*qs-menu-panel-form[^"]*qs-config-menu[^"]*"/);
+  });
 
-    it('should apply submenu panel class to x-axis select', () => {
-        const templatePath = resolve(process.cwd(), 'src/app/components/event/chart/actions/event.card.chart.actions.component.html');
-        const template = readFileSync(templatePath, 'utf8');
-        expect(template).toContain('<mat-select [value]="xAxisType" panelClass="qs-config-submenu"');
-    });
+  it('should emit xAxisType changes and log analytics', async () => {
+    const xAxisTypeEmitSpy = vi.spyOn(component.xAxisTypeChange, 'emit');
 
-    it('should emit stackYAxes changes and log analytics', async () => {
-        const stackYAxesEmitSpy = vi.spyOn(component.stackYAxesChange, 'emit');
+    await component.onXAxisTypeChange(XAxisTypes.Distance);
 
-        await component.onStackYAxesToggle(true);
+    expect(xAxisTypeEmitSpy).toHaveBeenCalledWith(XAxisTypes.Distance);
+    expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('event_chart_settings_change', { property: 'xAxisType' });
+  });
 
-        expect(component.stackYAxes).toBe(true);
-        expect(stackYAxesEmitSpy).toHaveBeenCalledWith(true);
-        expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('event_chart_settings_change', { property: 'stackYAxes' });
-    });
+  it('should emit cursorBehaviour changes and log analytics', async () => {
+    const emitSpy = vi.spyOn(component.cursorBehaviourChange, 'emit');
 
-    it('should emit xAxisType changes and log analytics', async () => {
-        const xAxisTypeEmitSpy = vi.spyOn(component.xAxisTypeChange, 'emit');
+    await component.onCursorBehaviourChange(ChartCursorBehaviours.SelectX);
 
-        await component.onXAxisTypeChange(XAxisTypes.Distance);
+    expect(emitSpy).toHaveBeenCalledWith(ChartCursorBehaviours.SelectX);
+    expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('event_chart_settings_change', { property: 'cursorBehaviour' });
+  });
 
-        expect(component.xAxisType).toBe(XAxisTypes.Distance);
-        expect(xAxisTypeEmitSpy).toHaveBeenCalledWith(XAxisTypes.Distance);
-        expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('event_chart_settings_change', { property: 'xAxisType' });
-    });
+  it('should toggle cursorBehaviour between zoom and select', async () => {
+    const emitSpy = vi.spyOn(component.cursorBehaviourChange, 'emit');
 
-    it('should emit all changes on fallback and log analytics', async () => {
-        const showAllDataEmitSpy = vi.spyOn(component.showAllDataChange, 'emit');
-        const showLapsEmitSpy = vi.spyOn(component.showLapsChange, 'emit');
-        const stackYAxesEmitSpy = vi.spyOn(component.stackYAxesChange, 'emit');
-        const xAxisTypeEmitSpy = vi.spyOn(component.xAxisTypeChange, 'emit');
+    component.cursorBehaviour = ChartCursorBehaviours.ZoomX;
+    await component.onCursorBehaviourToggle();
+    expect(emitSpy).toHaveBeenLastCalledWith(ChartCursorBehaviours.SelectX);
 
-        component.showAllData = true;
-        component.showLaps = true;
-        component.stackYAxes = true;
-        component.xAxisType = XAxisTypes.Time;
+    await component.onCursorBehaviourToggle();
+    expect(emitSpy).toHaveBeenLastCalledWith(ChartCursorBehaviours.ZoomX);
+  });
 
-        await component.somethingChanged();
+  it('should emit showAllData changes and log analytics', async () => {
+    const emitSpy = vi.spyOn(component.showAllDataChange, 'emit');
 
-        expect(showAllDataEmitSpy).toHaveBeenCalledWith(true);
-        expect(showLapsEmitSpy).toHaveBeenCalledWith(true);
-        expect(stackYAxesEmitSpy).toHaveBeenCalledWith(true);
-        expect(xAxisTypeEmitSpy).toHaveBeenCalledWith(XAxisTypes.Time);
-        expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('event_chart_settings_change', { property: undefined });
-    });
+    await component.onShowAllDataToggle(true);
+
+    expect(emitSpy).toHaveBeenCalledWith(true);
+    expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('event_chart_settings_change', { property: 'showAllData' });
+  });
+
+  it('should emit showLaps changes and log analytics', async () => {
+    const emitSpy = vi.spyOn(component.showLapsChange, 'emit');
+
+    await component.onShowLapsToggle(true);
+
+    expect(emitSpy).toHaveBeenCalledWith(true);
+    expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('event_chart_settings_change', { property: 'showLaps' });
+  });
+
+  it('should emit fillOpacity changes and log analytics', async () => {
+    const emitSpy = vi.spyOn(component.fillOpacityChange, 'emit');
+
+    await component.onFillOpacityChange(0.45);
+
+    expect(emitSpy).toHaveBeenCalledWith(0.45);
+    expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('event_chart_settings_change', { property: 'fillOpacity' });
+  });
+
+  it('should emit syncChartHoverToMap changes and log analytics', async () => {
+    const emitSpy = vi.spyOn(component.syncChartHoverToMapChange, 'emit');
+
+    await component.onSyncChartHoverToMapToggle(true);
+
+    expect(emitSpy).toHaveBeenCalledWith(true);
+    expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('event_chart_settings_change', { property: 'syncChartHoverToMap' });
+  });
+
+  it('should emit series visibility toggle requests', () => {
+    const emitSpy = vi.spyOn(component.seriesVisibilityToggle, 'emit');
+
+    component.onSeriesVisibilityToggle('pace', false);
+
+    expect(emitSpy).toHaveBeenCalledWith({ dataType: 'pace', visible: false });
+  });
+
+  it('should emit show all series requests', () => {
+    const emitSpy = vi.spyOn(component.showAllSeries, 'emit');
+
+    component.onShowAllSeries();
+
+    expect(emitSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('should emit reset zoom requests and log analytics', () => {
+    const emitSpy = vi.spyOn(component.resetZoom, 'emit');
+
+    component.onResetZoom();
+
+    expect(emitSpy).toHaveBeenCalledTimes(1);
+    expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('event_chart_settings_change', { property: 'resetZoom' });
+  });
+
+  it('should expose a visible/total badge label for the series trigger', () => {
+    component.seriesMenuItems = [
+      { dataType: 'speed', label: 'Speed', color: '#111111', visible: true },
+      { dataType: 'power', label: 'Power', color: '#222222', visible: false },
+      { dataType: 'heart-rate', label: 'Heart Rate', color: '#333333', visible: true },
+    ];
+
+    expect(component.seriesBadgeLabel).toBe('2/3');
+  });
 });

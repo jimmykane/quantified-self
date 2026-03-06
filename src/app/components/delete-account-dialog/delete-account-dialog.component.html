@@ -23,14 +23,14 @@
         <strong>This action is irreversible.</strong> Your data cannot be recovered.
     </p>
 
-    <mat-checkbox [(ngModel)]="confirmChecked" color="warn">
+    <mat-checkbox [(ngModel)]="confirmChecked" class="qs-checkbox-warn">
         I understand and want to delete my account
     </mat-checkbox>
 </mat-dialog-content>
 
 <mat-dialog-actions align="end">
     <button mat-button (click)="onCancel()">Cancel</button>
-    <button mat-flat-button color="warn" [disabled]="!confirmChecked" (click)="onConfirm()">
+    <button mat-flat-button class="qs-mat-warn" [disabled]="!confirmChecked" (click)="onConfirm()">
         Delete Account
     </button>
 </mat-dialog-actions>

@@ -84,6 +84,15 @@ function collectUndefinedPaths(
     return paths;
 }
 
+function isFirestoreUndefinedValueError(error: Error): boolean {
+    const message = (error.message || '').toLowerCase();
+    const hasCannotUseUndefined = /cannot use ['"]?undefined['"]? as a firestore value/.test(message);
+    const hasInvalidDocumentUndefinedPattern = message.includes('not a valid firestore document')
+        && (message.includes('found in field') || message.includes('ignoreundefinedproperties'));
+
+    return hasCannotUseUndefined || hasInvalidDocumentUndefinedPattern;
+}
+
 export class EventWriter {
     private logger: LogAdapter;
 
@@ -252,8 +261,10 @@ export class EventWriter {
             const error = e as Error;
             const documentPath = path.join('/');
             const undefinedPaths = collectUndefinedPaths(data);
+            const hasUndefinedValueWriteError = undefinedPaths.length > 0 && isFirestoreUndefinedValueError(error);
+
             if (undefinedPaths.length > 0) {
-                this.logger.error('Firestore write payload contains undefined values', {
+                this.logger.warn('Firestore write payload contains undefined values', {
                     documentPath,
                     undefinedFieldPaths: undefinedPaths,
                 });
@@ -263,7 +274,7 @@ export class EventWriter {
                 errorMessage: error?.message || `${error}`,
             });
 
-            const undefinedSuffix = undefinedPaths.length > 0
+            const undefinedSuffix = hasUndefinedValueWriteError
                 ? ` Undefined field paths: ${undefinedPaths.join(', ')}.`
                 : '';
             throw new Error(`Firestore write failed for ${documentPath}: ${error.message}.${undefinedSuffix}`);

@@ -75,7 +75,8 @@ export class EventSummaryComponent implements OnChanges {
   }
 
   async toggleEventPrivacy() {
-    if (!this.user || !this.event.getID()) {
+    const eventID = this.event.getID();
+    if (!this.user || !eventID) {
       return
     }
     // Optimistically toggle locally
@@ -83,7 +84,7 @@ export class EventSummaryComponent implements OnChanges {
     this.cd.markForCheck(); // Trigger detection immediately
 
     // Then call service
-    await this.eventService.setEventPrivacy(this.user, this.event.getID()!, this.event.privacy);
+    await this.eventService.setEventPrivacy(this.user, eventID, this.event.privacy);
   }
 
   openEditDetails() {
@@ -131,7 +132,12 @@ export class EventSummaryComponent implements OnChanges {
 
     // For 2 activities, check if we have a saved result for this pair
     if (activities.length === 2) {
-      const key = getBenchmarkPairKey(activities[0].getID()!, activities[1].getID()!);
+      const referenceID = activities[0].getID();
+      const testID = activities[1].getID();
+      if (!referenceID || !testID) {
+        return;
+      }
+      const key = getBenchmarkPairKey(referenceID, testID);
       const savedResult = this.event.benchmarkResults?.[key];
       if (savedResult) {
         this.benchmarkResult = savedResult;

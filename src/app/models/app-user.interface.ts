@@ -1,5 +1,7 @@
 import {
     User,
+    ChartThemes,
+    UserChartSettingsInterface,
     UserMyTracksSettingsInterface,
     UserSettingsInterface,
     ActivityTypes,
@@ -7,6 +9,9 @@ import {
     UserDashboardSettingsInterface,
     UserMapSettingsInterface
 } from '@sports-alliance/sports-lib';
+import { Timestamp } from '@angular/fire/firestore';
+import { StripeRole } from './stripe-role.model';
+import { AppThemePreference } from './app-theme-preference.type';
 
 export type AppMapStyleName = 'default' | 'satellite' | 'outdoors';
 
@@ -26,8 +31,15 @@ export interface AppDashboardSettingsInterface extends UserDashboardSettingsInte
     includeMergedEvents?: boolean;
 }
 
+export interface AppChartSettingsInterface extends Omit<UserChartSettingsInterface, 'theme' | 'extraMaxForPower' | 'extraMaxForPace'> {
+    theme?: ChartThemes;
+    fillOpacityVersion?: number;
+    syncChartHoverToMap?: boolean;
+}
+
 export interface AppAppSettingsInterface extends UserAppSettingsInterface {
     lastSeenChangelogDate?: { seconds: number, nanoseconds: number } | Date;
+    themePreference?: AppThemePreference;
 }
 
 export interface AppUserSettingsInterface extends UserSettingsInterface {
@@ -39,7 +51,9 @@ export interface AppUserSettingsInterface extends UserSettingsInterface {
 
 export interface AppUserInterface extends User {
     acceptedMarketingPolicy?: boolean;
-    claimsUpdatedAt?: { seconds: number, nanoseconds: number } | Date;
+    claimsUpdatedAt?: Timestamp | null;
     settings?: AppUserSettingsInterface;
-    gracePeriodUntil?: { seconds: number, nanoseconds: number } | Date | number;
+    stripeRole?: StripeRole | null;
+    gracePeriodUntil?: { seconds: number, nanoseconds: number } | { toDate: () => Date; toMillis?: () => number } | Date | number | null;
+    admin?: boolean;
 }

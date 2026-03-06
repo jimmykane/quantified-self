@@ -1,6 +1,6 @@
 {
   "name": "quantified-self",
-  "version": "7.4.5",
+  "version": "7.5.0",
   "license": "SEE LICENSE IN LICENSE.md",
   "scripts": {
     "ng": "ng",
@@ -27,7 +27,6 @@
     "firebase": "^12.8.0"
   },
   "dependencies": {
-    "@amcharts/amcharts4": "^4.10.40",
     "@angular/animations": "20.3.15",
     "@angular/cdk": "^20.2.14",
     "@angular/common": "20.3.15",
@@ -44,7 +43,7 @@
     "@fontsource/material-symbols-rounded": "^5.2.35",
     "@fontsource/noto-sans": "^5.2.10",
     "@sentry/angular": "^10.34.0",
-    "@sports-alliance/sports-lib": "^9.1.5",
+    "@sports-alliance/sports-lib": "^9.1.8",
     "@types/file-saver": "^2.0.7",
     "@zumer/snapdom": "^2.0.2",
     "buffer": "^6.0.3",

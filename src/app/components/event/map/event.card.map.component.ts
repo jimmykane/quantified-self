@@ -24,14 +24,14 @@ import {
   DataJumpEvent,
   DataLatitudeDegrees,
   DataLongitudeDegrees,
+  DataPositionInterface,
   DynamicDataLoader,
   EventInterface,
-  GeoLibAdapter,
   LapInterface,
   LapTypes,
   User
 } from '@sports-alliance/sports-lib';
-import { Subject, Subscription, asyncScheduler } from 'rxjs';
+import { Subscription, asyncScheduler } from 'rxjs';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { AppUserUtilities } from '../../../utils/app.user.utilities';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
@@ -52,6 +52,7 @@ import {
   EventCursorRenderData,
   EventTrackRenderData,
 } from './event-card-map.manager';
+import { isEventLapTypeAllowed } from '../../../helpers/event-lap-type.helper';
 
 interface MapViewSettingsState {
   showLaps: boolean;
@@ -144,8 +145,6 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   public apiLoaded = signal(false);
 
   private activitiesCursorSubscription: Subscription = new Subscription();
-  private lineMouseMoveSubject: Subject<{ latitudeDegrees: number; longitudeDegrees: number; activityMapData: MapData }> = new Subject();
-  private lineMouseMoveSubscription: Subscription = new Subscription();
 
   private processSequence = 0;
   private previousState: any = {};
@@ -310,10 +309,6 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
 
       this.pushCursorMarkersToMap();
       this.changeDetectorRef.detectChanges();
-    }));
-
-    this.lineMouseMoveSubscription.add(this.lineMouseMoveSubject.subscribe(value => {
-      this.lineMouseMove(value.latitudeDegrees, value.longitudeDegrees, value.activityMapData);
     }));
   }
 
@@ -484,9 +479,6 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       this.logPerformance('initializeMap:loadMapbox', loadMapboxStartedAt);
 
       this.mapManager.setMap(map, mapboxgl);
-      this.mapManager.setTrackClickHandler((activityId, latitudeDegrees, longitudeDegrees) => {
-        this.zone.run(() => this.onTrackLineClick(activityId, latitudeDegrees, longitudeDegrees));
-      });
       this.mapManager.setJumpClickHandler((jump, latitudeDegrees, longitudeDegrees) => {
         this.zone.run(() => this.openJumpMarkerInfoWindow(jump, latitudeDegrees, longitudeDegrees));
       });
@@ -606,6 +598,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       activitiesWithPositions++;
 
       const positionData = activity.getSquashedPositionData();
+      const indexedPositionData = activity.getPositionData?.() || [];
       const positions = activity.generateTimeStream([DataLatitudeDegrees.type, DataLongitudeDegrees.type])
         .getData(true)
         .reduce<PositionWithTime[]>((positionWithTimeArray, time, index) => {
@@ -620,15 +613,30 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
           return positionWithTimeArray;
         }, []);
 
-      const laps = activity.getLaps().reduce<any[]>((lapsArray, lap) => {
+      const lapCandidates = activity.getLaps().map((lap, lapIndex) => {
         const lapPositionData = activity.getSquashedPositionData(lap.startDate, lap.endDate);
-        if (!lapPositionData.length || !this.showLaps) return lapsArray;
-        if (this.lapTypes.indexOf(lap.type) === -1) return lapsArray;
-        lapsArray.push({
+        const indexedLapPosition = this.resolveLapPositionByIndex(indexedPositionData, lap, activity);
+        return {
+          lapIndex,
           lap,
+          lapPositionData,
+          indexedLapPosition,
+          allowed: isEventLapTypeAllowed(lap.type, this.lapTypes),
+        };
+      });
+
+      const laps = lapCandidates.reduce<MapData['laps']>((lapsArray, candidate) => {
+        if (!candidate.lapPositionData.length || !this.showLaps) return lapsArray;
+        if (!candidate.allowed) return lapsArray;
+        lapsArray.push({
+          lap: candidate.lap,
           lapPosition: {
-            latitudeDegrees: lapPositionData[lapPositionData.length - 1]?.latitudeDegrees || 0,
-            longitudeDegrees: lapPositionData[lapPositionData.length - 1]?.longitudeDegrees || 0
+            latitudeDegrees: candidate.indexedLapPosition?.latitudeDegrees
+              || candidate.lapPositionData[candidate.lapPositionData.length - 1]?.latitudeDegrees
+              || 0,
+            longitudeDegrees: candidate.indexedLapPosition?.longitudeDegrees
+              || candidate.lapPositionData[candidate.lapPositionData.length - 1]?.longitudeDegrees
+              || 0
           }
         });
         return lapsArray;
@@ -771,50 +779,6 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       hasAppliedInitialBounds: this.hasAppliedInitialBounds,
       activitiesMapDataLength: this.activitiesMapData.length,
     });
-  }
-
-  private onTrackLineClick(activityId: string, latitudeDegrees: number, longitudeDegrees: number): void {
-    const activityMapData = this.activitiesMapData.find(data => (data.activity.getID() || '') === activityId);
-    if (!activityMapData) {
-      return;
-    }
-
-    this.lineMouseMoveSubject.next({
-      latitudeDegrees,
-      longitudeDegrees,
-      activityMapData,
-    });
-  }
-
-  private lineMouseMove(latitudeDegrees: number, longitudeDegrees: number, activityMapData: MapData) {
-    const activityId = activityMapData.activity.getID() || '';
-
-    this.activitiesCursors.set(activityId, {
-      latitudeDegrees,
-      longitudeDegrees,
-    });
-
-    const nearest = <{ latitude: number, longitude: number, time: number }>(new GeoLibAdapter()).findNearest({
-      latitude: latitudeDegrees,
-      longitude: longitudeDegrees
-    }, activityMapData.positions.map(a => ({
-      latitude: a.latitudeDegrees,
-      longitude: a.longitudeDegrees,
-      time: a.time
-    })));
-
-    if (!nearest) {
-      return;
-    }
-
-    this.activityCursorService.setCursor({
-      activityID: activityId,
-      time: nearest.time,
-      byMap: true,
-    });
-
-    this.pushCursorMarkersToMap();
-    this.changeDetectorRef.markForCheck();
   }
 
   private pushCursorMarkersToMap() {
@@ -1103,9 +1067,6 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     if (this.activitiesCursorSubscription) {
       this.activitiesCursorSubscription.unsubscribe();
     }
-    if (this.lineMouseMoveSubscription) {
-      this.lineMouseMoveSubscription.unsubscribe();
-    }
   }
 
   private requestMapActivities(shouldFitBounds: boolean, reason: string): void {
@@ -1145,6 +1106,38 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     });
     this.mapActivities(++this.processSequence, deferred.shouldFitBounds);
     return true;
+  }
+
+  private resolveLapPositionByIndex(
+    positionData: Array<DataPositionInterface | null>,
+    lap: LapInterface,
+    activity: ActivityInterface
+  ): DataPositionInterface | null {
+    if (typeof lap.getEndIndex !== 'function' || !positionData.length) {
+      return null;
+    }
+
+    const endIndex = lap.getEndIndex(activity);
+    if (!Number.isFinite(endIndex)) {
+      return null;
+    }
+
+    const clampedIndex = Math.min(positionData.length - 1, Math.max(0, Math.trunc(endIndex)));
+    for (let index = clampedIndex; index >= 0; index -= 1) {
+      const position = positionData[index];
+      if (position?.latitudeDegrees !== undefined && position?.longitudeDegrees !== undefined) {
+        return position;
+      }
+    }
+
+    for (let index = clampedIndex + 1; index < positionData.length; index += 1) {
+      const position = positionData[index];
+      if (position?.latitudeDegrees !== undefined && position?.longitudeDegrees !== undefined) {
+        return position;
+      }
+    }
+
+    return null;
   }
 }
 

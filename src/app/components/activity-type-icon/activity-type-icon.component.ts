@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
-import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
+import { ActivityInterface, ActivityTypes, ActivityTypesHelper, EventInterface } from '@sports-alliance/sports-lib';
 import { AppActivityTypeGroupIcons } from '../../services/color/app.activity-type-group.icons';
+import { AppEventColorService } from '../../services/color/app.event.color.service';
 
 const ACTIVITY_TYPE_ICON_OVERRIDES: Readonly<Record<string, string>> = {
     virtualcycling: 'computer',
@@ -57,7 +58,12 @@ const ACTIVITY_TYPE_ICON_OVERRIDES: Readonly<Record<string, string>> = {
     standalone: false
 })
 export class ActivityTypeIconComponent {
+    constructor(private eventColorService?: AppEventColorService) {}
+
     @Input() activityType!: unknown;
+    @Input() event: EventInterface | null = null;
+    @Input() activity: ActivityInterface | null = null;
+    @Input() activities: ActivityInterface[] | null = null;
     @Input() size?: string;
     @Input() vAlign?: string;
 
@@ -118,6 +124,37 @@ export class ActivityTypeIconComponent {
         return String(value).trim();
     }
 
+    private resolveColorActivityContext(): { activity: ActivityInterface; activities: ActivityInterface[] } | null {
+        const resolvedActivities = this.activities ?? this.event?.getActivities?.() ?? [];
+        const resolvedActivity = this.activity ?? resolvedActivities[0] ?? null;
+        if (!resolvedActivity || !resolvedActivities.length) {
+            return null;
+        }
+
+        return {
+            activity: resolvedActivity,
+            activities: resolvedActivities,
+        };
+    }
+
+    public get resolvedIconColor(): string {
+        const activityContext = this.resolveColorActivityContext();
+        if (this.eventColorService && activityContext) {
+            const activityColor = this.eventColorService.getActivityColor(activityContext.activities, activityContext.activity);
+            if (activityColor) {
+                return activityColor;
+            }
+        }
+
+        const activity = this.resolvePrimaryActivityType();
+        if (!activity || !this.eventColorService) {
+            return '';
+        }
+
+        const activityTypeEnum = ActivityTypesHelper.resolveActivityType(activity) || ActivityTypes.Other;
+        return this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activityTypeEnum) || '';
+    }
+
     getIcon(): string {
         const activity = this.resolvePrimaryActivityType();
         if (!activity) {
@@ -130,7 +167,7 @@ export class ActivityTypeIconComponent {
             return overrideIcon;
         }
 
-        const activityTypeEnum = ActivityTypes[activity as keyof typeof ActivityTypes] || (Object.values(ActivityTypes).includes(activity as ActivityTypes) ? activity as ActivityTypes : ActivityTypes.Other);
+        const activityTypeEnum = ActivityTypesHelper.resolveActivityType(activity) || ActivityTypes.Other;
         const group = ActivityTypesHelper.getActivityGroupForActivityType(activityTypeEnum);
         return AppActivityTypeGroupIcons[group] || 'category';
     }

@@ -14,9 +14,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import {
   ChartCursorBehaviours,
-  ChartThemes,
   DataTypeSettings,
-  UserChartSettingsInterface,
   XAxisTypes
 } from '@sports-alliance/sports-lib';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib';
@@ -70,6 +68,7 @@ import { UserSummariesSettingsInterface } from '@sports-alliance/sports-lib';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { AppWindowService } from './app.window.service';
 import { LoggerService } from './logger.service';
+import { applyEventChartCanonicalOrderOverride } from '../helpers/event-chart-order.helper';
 import { UserMyTracksSettingsInterface } from '@sports-alliance/sports-lib';
 import { DataDescription } from '@sports-alliance/sports-lib';
 import { DataActivityTypes } from '@sports-alliance/sports-lib';
@@ -129,6 +128,13 @@ export class AppUserService implements OnDestroy {
     const gracePeriodUntil = (claims['gracePeriodUntil'] as number) || null;
     const isAdmin = claims['admin'] === true;
 
+    const creationDate = firebaseUser.metadata?.creationTime
+      ? new Date(firebaseUser.metadata.creationTime)
+      : new Date();
+    const lastSignInDate = firebaseUser.metadata?.lastSignInTime
+      ? new Date(firebaseUser.metadata.lastSignInTime)
+      : creationDate;
+
     // Use current DB user or create a synthetic one for new accounts/loading states
     const identity: AppUserInterface = dbUser ? { ...dbUser } : {
       uid: firebaseUser.uid,
@@ -143,26 +149,26 @@ export class AppUserService implements OnDestroy {
       acceptedDiagnosticsPolicy: true,
       privacy: Privacy.Private,
       isAnonymous: false,
-      creationDate: new Date(firebaseUser.metadata.creationTime!),
-      lastSignInDate: new Date(firebaseUser.metadata.lastSignInTime!)
+      creationDate,
+      lastSignInDate
     } as any;
 
     // Prioritize Claims for role and grace period, but fallback to DB data if claims are missing
     identity.uid = firebaseUser.uid;
     if (stripeRole) {
-      (identity as any).stripeRole = stripeRole;
+      identity.stripeRole = stripeRole;
     }
     if (gracePeriodUntil) {
-      (identity as any).gracePeriodUntil = gracePeriodUntil;
+      identity.gracePeriodUntil = gracePeriodUntil;
     }
     if (isAdmin) {
-      (identity as any).admin = true;
+      identity.admin = true;
     }
 
     // Check for force-refresh (if DB was updated more recently than token issuance)
-    const claimsUpdatedAt = (identity as any).claimsUpdatedAt;
+    const claimsUpdatedAt = identity.claimsUpdatedAt;
     if (claimsUpdatedAt) {
-      const updatedAtDate = claimsUpdatedAt.toDate ? claimsUpdatedAt.toDate() : new Date(claimsUpdatedAt.seconds * 1000);
+      const updatedAtDate = claimsUpdatedAt.toDate();
       const iat = (claims['iat'] as number) * 1000;
       if (updatedAtDate.getTime() > iat + 2000) {
         this.logger.log(`[AppUserService] Refreshing token for ${firebaseUser.uid}...`);
@@ -172,10 +178,10 @@ export class AppUserService implements OnDestroy {
           const freshStripeRole = freshToken.claims['stripeRole'] as StripeRole;
           const freshGracePeriodUntil = freshToken.claims['gracePeriodUntil'] as number;
           if (freshStripeRole) {
-            (identity as any).stripeRole = freshStripeRole;
+            identity.stripeRole = freshStripeRole;
           }
           if (freshGracePeriodUntil) {
-            (identity as any).gracePeriodUntil = freshGracePeriodUntil;
+            identity.gracePeriodUntil = freshGracePeriodUntil;
           }
         } catch (e) {
           this.logger.error('[AppUserService] Token refresh failed', e);
@@ -190,8 +196,8 @@ export class AppUserService implements OnDestroy {
     { initialValue: null, injector: this.injector }
   );
 
-  public readonly stripeRoleSignal = computed(() => (this.user() as any)?.stripeRole as StripeRole || null);
-  public readonly isAdminSignal = computed(() => (this.user() as any)?.admin === true);
+  public readonly stripeRoleSignal = computed(() => this.user()?.stripeRole || null);
+  public readonly isAdminSignal = computed(() => this.user()?.admin === true);
   public readonly isProSignal = computed(() => AppUserUtilities.hasProAccess(this.user(), this.isAdminSignal()));
   public readonly isBasicSignal = computed(() => AppUserUtilities.isBasicUser(this.user()));
 
@@ -202,28 +208,42 @@ export class AppUserService implements OnDestroy {
   public readonly gracePeriodUntil = computed(() => {
     const user = this.user();
     if (!user) return null;
-    const gracePeriodUntil = (user as any).gracePeriodUntil;
+    const gracePeriodUntil = user.gracePeriodUntil;
     if (!gracePeriodUntil) return null;
     // Handle Firestore Timestamp
-    if (typeof gracePeriodUntil.toDate === 'function') {
+    if (
+      typeof gracePeriodUntil === 'object'
+      && 'toDate' in gracePeriodUntil
+      && typeof gracePeriodUntil.toDate === 'function'
+    ) {
       return gracePeriodUntil.toDate();
     }
     // Handle seconds/nanoseconds object
-    if (typeof gracePeriodUntil === 'object' && gracePeriodUntil.seconds) {
+    if (
+      typeof gracePeriodUntil === 'object'
+      && 'seconds' in gracePeriodUntil
+      && typeof gracePeriodUntil.seconds === 'number'
+    ) {
       return new Date(gracePeriodUntil.seconds * 1000);
     }
     // Handle Date or number
-    return new Date(gracePeriodUntil);
+    if (gracePeriodUntil instanceof Date) {
+      return gracePeriodUntil;
+    }
+    if (typeof gracePeriodUntil === 'number') {
+      return new Date(gracePeriodUntil);
+    }
+    return null;
   });
 
   public async getSubscriptionRole(): Promise<StripeRole | null> {
     const user = await firstValueFrom(this.user$.pipe(take(1)));
-    return (user as any)?.stripeRole as StripeRole || null;
+    return user?.stripeRole || null;
   }
 
   public async isPro(): Promise<boolean> {
     const user = await firstValueFrom(this.user$.pipe(take(1)));
-    const isAdmin = (user as any)?.admin === true;
+    const isAdmin = user?.admin === true;
     return AppUserUtilities.hasProAccess(user, isAdmin);
   }
 
@@ -233,7 +253,7 @@ export class AppUserService implements OnDestroy {
 
   public async hasPaidAccess(): Promise<boolean> {
     const user = await firstValueFrom(this.user$.pipe(take(1)));
-    const isAdmin = (user as any)?.admin === true;
+    const isAdmin = user?.admin === true;
     return AppUserUtilities.hasPaidAccessUser(user, isAdmin);
   }
 
@@ -252,12 +272,16 @@ export class AppUserService implements OnDestroy {
     authState(this.auth).subscribe((user) => {
       if (user) {
         this.logger.setUser({ id: user.uid, email: user.email || undefined });
-        user.getIdTokenResult().then((token) => {
-          const role = token.claims['stripeRole'] as string;
-          if (role) {
-            this.logger.setTag("subscription_role", role);
-          }
-        });
+        void user.getIdTokenResult()
+          .then((token) => {
+            const role = token.claims['stripeRole'] as string;
+            if (role) {
+              this.logger.setTag("subscription_role", role);
+            }
+          })
+          .catch((error) => {
+            this.logger.warn('[AppUserService] Failed to resolve auth token claims for logging context', error);
+          });
       } else {
         this.logger.setUser(null);
         this.logger.setTag("subscription_role", "anonymous");
@@ -597,7 +621,7 @@ export class AppUserService implements OnDestroy {
 
   public async isAdmin(): Promise<boolean> {
     const user = await firstValueFrom(this.user$.pipe(take(1)));
-    return (user as any)?.admin === true;
+    return user?.admin === true;
   }
 
 
@@ -614,12 +638,24 @@ export class AppUserService implements OnDestroy {
     if (!user.settings?.chartSettings?.dataTypeSettings) {
       return [];
     }
-    return Object.keys(user.settings.chartSettings.dataTypeSettings).reduce<string[]>((dataTypesToUse, dataTypeSettingsKey) => {
-      if (user.settings.chartSettings.dataTypeSettings[dataTypeSettingsKey].enabled === true) {
-        dataTypesToUse.push(dataTypeSettingsKey);
-      }
-      return dataTypesToUse;
-    }, [])
+
+    const enabledDataTypeSet = new Set(
+      Object.keys(user.settings.chartSettings.dataTypeSettings).filter((dataTypeSettingKey) => {
+        return user.settings.chartSettings.dataTypeSettings[dataTypeSettingKey].enabled === true;
+      })
+    );
+    const canonicalDataTypes = [
+      ...DynamicDataLoader.basicDataTypes,
+      ...DynamicDataLoader.advancedDataTypes.filter((dataType) => !DynamicDataLoader.basicDataTypes.includes(dataType)),
+    ];
+    const orderedDataTypes = applyEventChartCanonicalOrderOverride(
+      canonicalDataTypes.filter((dataType) => enabledDataTypeSet.has(dataType))
+    );
+    const extraEnabledDataTypes = [...enabledDataTypeSet]
+      .filter((dataType) => !orderedDataTypes.includes(dataType))
+      .sort((left, right) => left.localeCompare(right));
+
+    return orderedDataTypes.concat(extraEnabledDataTypes);
   }
 
   ngOnDestroy() {

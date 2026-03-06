@@ -5,14 +5,21 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatTableModule } from '@angular/material/table';
+import { MatCardModule } from '@angular/material/card';
 
 import { QueueStats, ReparseFailurePreview } from '../../../services/admin.service';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
-import type { EChartsType } from 'echarts/core';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
+import {
+    ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS,
+    EChartsHostController
+} from '../../../helpers/echarts-host-controller';
+import { buildOfficialEChartsThemeTokens, ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
+
+export type AdminQueueStatsView = 'all' | 'workout' | 'reparse';
 
 @Component({
     selector: 'app-admin-queue-stats',
@@ -25,12 +32,14 @@ import { EChartsLoaderService } from '../../../services/echarts-loader.service';
         MatProgressSpinnerModule,
         MatButtonModule,
         MatTooltipModule,
-        MatTableModule
+        MatTableModule,
+        MatCardModule
     ]
 })
 export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, AfterViewInit {
     @Input() stats: QueueStats | null = null;
     @Input() loading = false;
+    @Input() queueView: AdminQueueStatsView = 'all';
     hasRetryData = false;
     readonly reparseFailureColumns = ['uid', 'eventId', 'attemptCount', 'updatedAt', 'lastError'];
 
@@ -39,12 +48,7 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
         this._retryChartRef = ref;
 
         if (!ref) {
-            if (this.resizeObserver) {
-                this.resizeObserver.disconnect();
-                this.resizeObserver = null;
-            }
-            this.eChartsLoader.dispose(this.chart);
-            this.chart = null;
+            this.chartHost.dispose();
             return;
         }
 
@@ -53,30 +57,28 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
         }
     }
 
-    private chart: EChartsType | null = null;
+    private chartHost: EChartsHostController;
     private chartInitialization: Promise<void> | null = null;
     private viewInitialized = false;
     private _retryChartRef: ElementRef<HTMLDivElement> | undefined;
     private isDark = false;
-    private resizeObserver: ResizeObserver | null = null;
-
-    // Theme constants
-    private readonly CHART_TEXT_DARK = 'rgba(255, 255, 255, 0.8)';
-    private readonly CHART_TEXT_LIGHT = 'rgba(0, 0, 0, 0.8)';
-    private readonly CHART_GRID_DARK = 'rgba(255, 255, 255, 0.1)';
-    private readonly CHART_GRID_LIGHT = 'rgba(0, 0, 0, 0.1)';
 
     private destroy$ = new Subject<void>();
 
     constructor(
         private appThemeService: AppThemeService,
         private eChartsLoader: EChartsLoaderService
-    ) { }
+    ) {
+        this.chartHost = new EChartsHostController({
+            eChartsLoader: this.eChartsLoader,
+            logPrefix: '[AdminQueueStatsComponent]'
+        });
+    }
 
     ngOnInit(): void {
         this.appThemeService.getAppTheme().pipe(takeUntil(this.destroy$)).subscribe(theme => {
             this.isDark = theme === AppThemes.Dark;
-            this.updateChartTheme();
+            void this.updateChartTheme();
         });
     }
 
@@ -94,12 +96,7 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
     ngOnDestroy(): void {
         this.destroy$.next();
         this.destroy$.complete();
-        if (this.resizeObserver) {
-            this.resizeObserver.disconnect();
-            this.resizeObserver = null;
-        }
-        this.eChartsLoader.dispose(this.chart);
-        this.chart = null;
+        this.chartHost.dispose();
     }
 
     private async tryInitializeChartAndRender(): Promise<void> {
@@ -108,15 +105,14 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
     }
 
     private async initializeChart(): Promise<void> {
-        if (this.chart || this.chartInitialization || !this._retryChartRef?.nativeElement) {
+        if (this.chartHost.getChart() || this.chartInitialization || !this._retryChartRef?.nativeElement) {
             return;
         }
 
         const container = this._retryChartRef.nativeElement;
         this.chartInitialization = (async () => {
             try {
-                this.chart = await this.eChartsLoader.init(container);
-                this.setupResizeObserver(container);
+                await this.chartHost.init(container, resolveEChartsThemeName(this.isDark));
             } catch (error) {
                 console.error('[AdminQueueStatsComponent] Failed to initialize ECharts', error);
             } finally {
@@ -127,28 +123,8 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
         await this.chartInitialization;
     }
 
-    private setupResizeObserver(container: HTMLElement): void {
-        if (typeof ResizeObserver === 'undefined') {
-            return;
-        }
-
-        this.resizeObserver = new ResizeObserver(() => {
-            this.scheduleResize();
-        });
-        this.resizeObserver.observe(container);
-    }
-
-    private scheduleResize(): void {
-        if (!this.chart) return;
-        if (typeof requestAnimationFrame === 'undefined') {
-            this.eChartsLoader.resize(this.chart);
-            return;
-        }
-        requestAnimationFrame(() => this.eChartsLoader.resize(this.chart!));
-    }
-
     private updateChartData(): void {
-        if (!this.chart || !this._retryChartRef?.nativeElement) {
+        if (!this.chartHost.getChart() || !this._retryChartRef?.nativeElement) {
             return;
         }
 
@@ -163,13 +139,15 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
         const maxValue = Math.max(...values);
         this.hasRetryData = maxValue > 0;
 
-        const textColor = this.isDark ? this.CHART_TEXT_DARK : this.CHART_TEXT_LIGHT;
-        const gridColor = this.isDark ? this.CHART_GRID_DARK : this.CHART_GRID_LIGHT;
+        const themeTokens = buildOfficialEChartsThemeTokens(this.isDark);
+        const textColor = themeTokens.textSecondary;
+        const gridColor = themeTokens.splitLineColor;
 
         const option = {
             tooltip: {
                 trigger: 'axis',
                 axisPointer: { type: 'shadow' },
+                textStyle: { fontFamily: ECHARTS_GLOBAL_FONT_FAMILY },
                 formatter: (params: any) => {
                     const item = Array.isArray(params) ? params[0] : params;
                     return `${item?.axisValueLabel || item?.name}: ${item?.value ?? 0}`;
@@ -214,6 +192,7 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
                         show: true,
                         position: 'top',
                         color: textColor,
+                        fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
                         fontWeight: 600,
                         fontSize: 12,
                         distance: 6
@@ -222,14 +201,15 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
             ]
         };
 
-        this.eChartsLoader.setOption(this.chart, option, { notMerge: true, lazyUpdate: true });
-        this.scheduleResize();
+        this.chartHost.setOption(option, ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS);
+        this.chartHost.scheduleResize();
     }
 
-    private updateChartTheme(): void {
-        if (!this.chart) {
+    private async updateChartTheme(): Promise<void> {
+        if (!this._retryChartRef?.nativeElement) {
             return;
         }
+        await this.chartHost.init(this._retryChartRef.nativeElement, resolveEChartsThemeName(this.isDark));
         this.updateChartData();
     }
 
@@ -255,6 +235,14 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
 
     getReparseFailureRows(): ReparseFailurePreview[] {
         return this.stats?.reparse?.recentFailures || [];
+    }
+
+    get showWorkoutSection(): boolean {
+        return this.queueView !== 'reparse';
+    }
+
+    get showReparseSection(): boolean {
+        return this.queueView !== 'workout';
     }
 
     formatTimestamp(value: unknown): string {

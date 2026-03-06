@@ -22,6 +22,7 @@ describe('AppBenchmarkFlowService', () => {
   let benchmarkService: { generateBenchmark: ReturnType<typeof vi.fn> };
   let eventService: {
     updateEventProperties: ReturnType<typeof vi.fn>;
+    getEventAndActivities: ReturnType<typeof vi.fn>;
     getEventActivitiesAndAllStreams: ReturnType<typeof vi.fn>;
   };
   let logger: { error: ReturnType<typeof vi.fn> };
@@ -56,6 +57,7 @@ describe('AppBenchmarkFlowService', () => {
     benchmarkService = { generateBenchmark: vi.fn() };
     eventService = {
       updateEventProperties: vi.fn().mockResolvedValue(undefined),
+      getEventAndActivities: vi.fn(),
       getEventActivitiesAndAllStreams: vi.fn(),
     };
     logger = { error: vi.fn() };
@@ -90,25 +92,50 @@ describe('AppBenchmarkFlowService', () => {
     bottomSheet.open.mockReturnValueOnce({ afterDismissed: () => of({ rerun: true }) });
     dialog.open.mockReturnValueOnce({ afterClosed: () => of(undefined), componentInstance: { setActivities: vi.fn() } });
 
-    service.openBenchmarkReport({ event, result });
-
-    await Promise.resolve();
+    await service.openBenchmarkReport({ event, result });
 
     expect(bottomSheet.open).toHaveBeenCalledTimes(1);
     expect(dialog.open).toHaveBeenCalledTimes(1);
     expect(analyticsService.logEvent).not.toHaveBeenCalled();
   });
 
-  it('passes user brandText to benchmark bottom sheet data', () => {
+  it('passes user brandText to benchmark bottom sheet data', async () => {
     const event = createEvent();
     const result = createResult();
     const user = { uid: 'user-1', brandText: 'My Brand' } as User;
 
-    service.openBenchmarkReport({ event, result, user });
+    await service.openBenchmarkReport({ event, result, user });
 
     const openCallArgs = bottomSheet.open.mock.calls[0];
     expect(openCallArgs).toBeTruthy();
     expect(openCallArgs[1]?.data?.brandText).toBe('My Brand');
+  });
+
+  it('loads only event activities before opening report when benchmark is launched from a summary event', async () => {
+    const summaryEvent = {
+      benchmarkResults: {},
+      getActivities: () => [],
+      getID: () => 'event-2',
+    } as unknown as AppEventInterface;
+    const fullEvent = createEvent();
+    const result = createResult();
+    const user = { uid: 'user-1' } as User;
+
+    eventService.getEventAndActivities.mockReturnValueOnce(of(fullEvent));
+
+    await service.openBenchmarkReport({ event: summaryEvent, persistEvent: summaryEvent, result, user });
+
+    expect(eventService.getEventAndActivities).toHaveBeenCalledWith(user, summaryEvent.getID());
+    expect(eventService.getEventActivitiesAndAllStreams).not.toHaveBeenCalled();
+    expect(bottomSheet.open).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        data: expect.objectContaining({
+          event: fullEvent,
+          result
+        })
+      })
+    );
   });
 
   it('opens selection dialog and runs benchmark when two activities returned', async () => {

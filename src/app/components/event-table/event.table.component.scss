@@ -16,10 +16,38 @@
   align-items: center;
   gap: 4px;
   margin-left: auto;
-  padding: 10px 8px 4px 4px;
-  /* Extra top padding for badges */
+  min-height: 40px;
+  padding: 0 16px 0 4px;
   white-space: nowrap;
-  overflow: visible;
+  overflow: visible !important;
+}
+
+.table-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px 8px;
+  border-bottom: 1px solid var(--mat-app-outline-variant);
+  background: color-mix(in srgb, var(--mat-app-surface-container-low), transparent 12%);
+}
+
+.table-toolbar .qs-search-field {
+  --mat-form-field-container-height: 44px;
+  --mat-form-field-container-vertical-padding: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 420px;
+}
+
+.table-toolbar .qs-search-field ::ng-deep .mat-mdc-form-field-infix {
+  min-height: 44px;
+  padding-top: 10px !important;
+  padding-bottom: 10px !important;
+}
+
+.table-toolbar .qs-search-field ::ng-deep .mat-mdc-icon-button {
+  width: 36px;
+  height: 36px;
 }
 
 /* Allow columns to size naturally or use flex */
@@ -44,6 +72,16 @@
 }
 
 @include bp.handset-or-tablet-portrait {
+
+  .table-toolbar {
+    flex-wrap: wrap;
+    padding: 12px;
+    gap: 8px;
+  }
+
+  .table-toolbar .qs-search-field {
+    max-width: 100%;
+  }
 
   .mat-column-Start-Date,
   .cdk-column-Start-Date,
@@ -181,7 +219,7 @@ mat-icon {
 }
 
 
-/* Removed mat-card specific margins/padding since we use glass-card now */
+/* Removed mat-card specific margins/padding since table container now uses qs-glass-card-panel */
 
 .merged {
   opacity: 0.7;
@@ -213,25 +251,24 @@ mat-paginator {
 
 /* Compact icon buttons for table actions */
 .buttons button[mat-icon-button] {
-  width: 32px !important;
-  height: 32px !important;
-  padding: 0 !important;
-  line-height: 32px !important;
+  width: 40px !important;
+  height: 40px !important;
+  padding: 8px !important;
+  border-radius: 10px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
 }
 
 .buttons button[mat-icon-button] mat-icon {
-  font-size: 20px !important;
-  width: 20px !important;
-  height: 20px !important;
+  font-size: 24px !important;
+  width: 24px !important;
+  height: 24px !important;
+  line-height: 24px !important;
 }
 
-/* Force smaller badges for table actions */
-.buttons ::ng-deep .mat-badge-content {
-  width: 14px !important;
-  height: 14px !important;
-  line-height: 14px !important;
-  font-size: 9px !important;
-  font-weight: 500 !important;
+.action-icon-button {
+  overflow: visible;
 }
 
 /* Align activity type icon and text */

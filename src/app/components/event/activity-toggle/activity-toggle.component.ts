@@ -9,6 +9,7 @@ import { EventInterface, ActivityInterface } from '@sports-alliance/sports-lib';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { AppActivitySelectionService } from '../../../services/activity-selection-service/app-activity-selection.service';
 import { MatSlideToggleChange } from '@angular/material/slide-toggle';
+import { isMergeOrBenchmarkEvent } from '../../../helpers/event-visibility.helper';
 
 @Component({
   selector: 'app-activity-toggle',
@@ -35,6 +36,25 @@ export class ActivityToggleComponent {
 
   // Computed: cache activity color
   activityColor = computed(() => this.eventColorService.getActivityColor(this.event().getActivities(), this.activity()));
+
+  // Merge or benchmark events should use device name as the primary label.
+  useDeviceNameAsPrimaryLabel = computed(() => isMergeOrBenchmarkEvent(this.event()));
+
+  primaryLabel = computed(() => {
+    const activity = this.activity();
+    if (!activity) {
+      return '';
+    }
+
+    if (!this.useDeviceNameAsPrimaryLabel()) {
+      return activity.type || '';
+    }
+
+    const name = `${activity.creator?.name || ''}`.trim();
+    const swInfo = `${activity.creator?.swInfo || ''}`.trim();
+    const label = swInfo ? `${name} ${swInfo}` : name;
+    return label || activity.type || '';
+  });
 
   onActivitySelect(event: MatSlideToggleChange, activity: ActivityInterface) {
     if (event.checked) {

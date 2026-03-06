@@ -4,7 +4,6 @@ import {
   Component,
   ElementRef,
   Input,
-  NgZone,
   OnChanges,
   OnDestroy,
   SimpleChanges,
@@ -15,7 +14,6 @@ import { Subscription } from 'rxjs';
 import type { EChartsType } from 'echarts/core';
 
 import {
-  ChartThemes,
   DataDuration,
   DataHeartRate,
   StatsClassInterface,
@@ -30,6 +28,12 @@ import {
   convertIntensityZonesStatsToEchartsData,
   IntensityZonesEChartsData,
 } from '../../../helpers/intensity-zones-chart-data-helper';
+import {
+  ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS,
+  EChartsHostController
+} from '../../../helpers/echarts-host-controller';
+import { buildEventEChartsVisualTokens } from '../../../helpers/event-echarts-common.helper';
+import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 
@@ -42,48 +46,53 @@ type ChartOption = Parameters<EChartsType['setOption']>[0];
 })
 export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() activities: StatsClassInterface[] = [];
-  @Input() chartTheme: ChartThemes = ChartThemes.Material;
+  @Input() darkTheme = false;
   @Input() useAnimations = false;
   @Input() orientation: 'horizontal' | 'vertical' = 'horizontal';
   @Input() showHeader = true;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
-  private chart: EChartsType | null = null;
+  private chartHost: EChartsHostController;
   private isMobile = false;
   private breakpointSubscription: Subscription;
-  private resizeObserver: ResizeObserver | null = null;
-  private resizeFrameId: number | null = null;
 
   constructor(
     private breakpointObserver: BreakpointObserver,
     private eChartsLoader: EChartsLoaderService,
     private eventColorService: AppEventColorService,
-    private logger: LoggerService,
-    private zone: NgZone
+    private logger: LoggerService
   ) {
+    this.chartHost = new EChartsHostController({
+      eChartsLoader: this.eChartsLoader,
+      logger: this.logger,
+      logPrefix: '[EventIntensityZonesComponent]',
+      initOptions: {
+        useDirtyRect: true,
+      },
+    });
+
     this.breakpointSubscription = this.breakpointObserver
       .observe([AppBreakpoints.XSmall])
       .subscribe(result => {
         const wasMobile = this.isMobile;
         this.isMobile = result.matches;
-        if (this.chart && wasMobile !== this.isMobile) {
-          this.refreshChart();
+        if (this.chartDiv?.nativeElement && wasMobile !== this.isMobile) {
+          void this.refreshChart();
         }
       });
   }
 
   async ngAfterViewInit(): Promise<void> {
-    await this.initializeChart();
-    this.refreshChart();
+    await this.refreshChart();
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (!this.chart) {
+    if (!this.chartDiv?.nativeElement) {
       return;
     }
-    if (changes.activities || changes.chartTheme || changes.useAnimations || changes.orientation) {
-      this.refreshChart();
+    if (changes.activities || changes.darkTheme || changes.useAnimations || changes.orientation) {
+      void this.refreshChart();
     }
   }
 
@@ -91,64 +100,32 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     if (this.breakpointSubscription) {
       this.breakpointSubscription.unsubscribe();
     }
-    if (this.resizeObserver) {
-      this.resizeObserver.disconnect();
-      this.resizeObserver = null;
-    }
-    if (this.resizeFrameId !== null && typeof cancelAnimationFrame !== 'undefined') {
-      cancelAnimationFrame(this.resizeFrameId);
-      this.resizeFrameId = null;
-    }
-    this.eChartsLoader.dispose(this.chart);
-    this.chart = null;
+    this.chartHost.dispose();
   }
 
-  private async initializeChart(): Promise<void> {
-    if (!this.chartDiv?.nativeElement) {
-      return;
-    }
-
-    try {
-      this.chart = await this.eChartsLoader.init(this.chartDiv.nativeElement);
-      this.setupResizeObserver();
-    } catch (error) {
-      this.logger.error('[EventIntensityZonesComponent] Failed to initialize ECharts', error);
-    }
-  }
-
-  private setupResizeObserver(): void {
-    if (typeof ResizeObserver === 'undefined' || !this.chartDiv?.nativeElement) {
-      return;
-    }
-
-    this.zone.runOutsideAngular(() => {
-      this.resizeObserver = new ResizeObserver(() => {
-        this.scheduleResize();
-      });
-      this.resizeObserver.observe(this.chartDiv.nativeElement);
-    });
-  }
-
-  private refreshChart(): void {
-    if (!this.chart) {
+  private async refreshChart(): Promise<void> {
+    const chart = await this.chartHost.init(
+      this.chartDiv?.nativeElement,
+      resolveEChartsThemeName(this.darkTheme)
+    );
+    if (!chart) {
       return;
     }
 
     const statsClassInstances = Array.isArray(this.activities) ? this.activities : [];
     const data = convertIntensityZonesStatsToEchartsData(statsClassInstances, this.isMobile);
     const option = this.buildChartOption(data);
-    this.eChartsLoader.setOption(this.chart, option, { notMerge: true, lazyUpdate: true });
-    this.scheduleResize();
+    this.chartHost.setOption(option, ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS);
+    this.chartHost.scheduleResize();
   }
 
   private buildChartOption(data: IntensityZonesEChartsData): ChartOption {
-    const darkTheme = this.isDarkThemeActive();
-    const textColor = darkTheme ? '#ffffff' : '#2a2a2a';
-    const gridLineColor = darkTheme ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)';
+    const chartStyle = buildEventEChartsVisualTokens(this.darkTheme, this.isMobile);
+    const darkTheme = chartStyle.darkTheme;
+    const textColor = chartStyle.textColor;
+    const gridLineColor = chartStyle.gridColor;
     const zoneBackgroundOpacity = darkTheme ? 0.18 : 0.12;
-    const tooltipExtraCssText = this.isMobile
-      ? 'max-width: min(80vw, 280px); white-space: normal; overflow-wrap: anywhere; word-break: break-word;'
-      : '';
+    const tooltipExtraCssText = chartStyle.tooltipExtraCssText;
     const rightInset = 0;
     const zoneAxisRichStyles = this.createZoneAxisRichStyles(data.zones);
     const zoneBulletRichStyles = this.createZoneBulletRichStyles(data.zones);
@@ -201,9 +178,12 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     });
 
     const isHorizontal = this.orientation === 'horizontal';
+    const verticalValueAxisMax = isHorizontal ? undefined : this.getVerticalValueAxisMax(data);
+    const verticalEdgeBleed = isHorizontal ? 0 : -3;
 
     const valueAxisConfig = {
       type: 'value',
+      max: verticalValueAxisMax,
       axisLabel: { show: false },
       axisTick: { show: false },
       splitLine: { show: false },
@@ -232,9 +212,9 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
       },
       axisLabel: {
         interval: 0,
-        margin: isHorizontal ? 8 : 2,
+        margin: isHorizontal ? 8 : 0,
         color: textColor,
-        fontFamily: "'Barlow Condensed', sans-serif",
+        fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
         formatter: (value: string) => {
           const zoneIndex = data.zones.indexOf(value);
           if (zoneIndex === -1) {
@@ -250,13 +230,13 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
       animation: this.useAnimations === true,
       textStyle: {
         color: textColor,
-        fontFamily: "'Barlow Condensed', sans-serif"
+        fontFamily: ECHARTS_GLOBAL_FONT_FAMILY
       },
       grid: {
-        left: 0,
-        right: isHorizontal ? rightInset : 0,
+        left: verticalEdgeBleed,
+        right: isHorizontal ? rightInset : verticalEdgeBleed,
         top: 0,
-        bottom: isHorizontal ? 0 : '0.25em',
+        bottom: 0,
         containLabel: true
       },
       legend: {
@@ -267,20 +247,21 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
         orient: 'horizontal',
         textStyle: {
           color: textColor,
-          fontFamily: "'Barlow Condensed', sans-serif",
+          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
         }
       },
       tooltip: {
         trigger: 'item',
         triggerOn: this.isMobile ? 'click' : 'mousemove|click',
+        renderMode: 'html',
         appendToBody: !this.isMobile,
         confine: this.isMobile,
         extraCssText: tooltipExtraCssText,
-        backgroundColor: darkTheme ? '#303030' : '#ffffff',
-        borderColor: darkTheme ? '#6b6b6b' : '#d6d6d6',
+        backgroundColor: chartStyle.tooltipBackgroundColor,
+        borderColor: chartStyle.tooltipBorderColor,
         textStyle: {
-          color: darkTheme ? '#ffffff' : '#2a2a2a',
-          fontFamily: "'Barlow Condensed', sans-serif",
+          color: chartStyle.tooltipTextColor,
+          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
         },
         formatter: (params: { dataIndex: number; seriesIndex: number; marker: string }) => {
           const dataIndex = params.dataIndex;
@@ -310,14 +291,24 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     borderRadius: number;
     color: string;
     fontWeight: number;
+    fontSize: number;
     width: number;
     align: 'center';
     verticalAlign: 'middle';
     lineHeight: number;
     padding: number[];
   }> {
-    const badgeWidth = this.isMobile ? 28 : 56;
-    const badgeLineHeight = this.isMobile ? 16 : 18;
+    const isVertical = this.orientation === 'vertical';
+    const badgeWidth = isVertical
+      ? (this.isMobile ? 36 : 64)
+      : (this.isMobile ? 28 : 56);
+    const badgeFontSize = isVertical
+      ? (this.isMobile ? 11 : 13)
+      : (this.isMobile ? 10 : 11);
+    const badgeLineHeight = isVertical
+      ? (this.isMobile ? 18 : 22)
+      : (this.isMobile ? 16 : 18);
+    const badgePadding = isVertical ? [2, 6, 2, 6] : [1, 4, 1, 4];
 
     return zones.reduce((styles, zone, zoneIndex) => {
       styles[`zone_${zoneIndex}`] = {
@@ -325,11 +316,12 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
         borderRadius: 6,
         color: '#ffffff',
         fontWeight: 600,
+        fontSize: badgeFontSize,
         width: badgeWidth,
         align: 'center',
         verticalAlign: 'middle',
         lineHeight: badgeLineHeight,
-        padding: [1, 4, 1, 4],
+        padding: badgePadding,
       };
       return styles;
     }, {} as Record<string, {
@@ -337,6 +329,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
       borderRadius: number;
       color: string;
       fontWeight: number;
+      fontSize: number;
       width: number;
       align: 'center';
       verticalAlign: 'middle';
@@ -385,34 +378,26 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     }>);
   }
 
-  private scheduleResize(): void {
-    if (!this.chart) {
-      return;
-    }
-
-    if (typeof requestAnimationFrame === 'undefined') {
-      this.eChartsLoader.resize(this.chart);
-      return;
-    }
-
-    if (this.resizeFrameId !== null) {
-      return;
-    }
-
-    this.resizeFrameId = requestAnimationFrame(() => {
-      this.resizeFrameId = null;
-      if (!this.chart) {
-        return;
-      }
-      this.eChartsLoader.resize(this.chart);
-    });
-  }
-
   private formatPercentage(value: number): number {
     if (!Number.isFinite(value)) {
       return 0;
     }
     return Math.round(Math.max(0, value));
+  }
+
+  private getVerticalValueAxisMax(data: IntensityZonesEChartsData): number | undefined {
+    const maxValue = data.series.reduce((currentMax, seriesEntry) => {
+      const seriesMax = seriesEntry.values.reduce((entryMax, value) => {
+        return Number.isFinite(value) ? Math.max(entryMax, value) : entryMax;
+      }, 0);
+      return Math.max(currentMax, seriesMax);
+    }, 0);
+
+    if (maxValue <= 0) {
+      return undefined;
+    }
+
+    return maxValue * 1.08;
   }
 
   private toTransparentColor(hex: string, alpha: number): string {
@@ -459,14 +444,4 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     return colorMap[type] ?? AppColors.Blue;
   }
 
-  private isDarkThemeActive(): boolean {
-    const chartTheme = `${this.chartTheme}`.toLowerCase();
-    if (chartTheme === 'dark' || chartTheme === 'amchartsdark') {
-      return true;
-    }
-    if (typeof document === 'undefined') {
-      return false;
-    }
-    return document.body.classList.contains('dark-theme');
-  }
 }

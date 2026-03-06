@@ -33,7 +33,7 @@ mat-table {
 
 .selected-row {
   /* Use a visible, distinct color. Using a semi-transparent primary-like color */
-  background-color: rgba(var(--mat-sys-primary-rgb, 103, 58, 183), 0.12) !important;
+  background-color: color-mix(in srgb, var(--mat-sys-primary) 12%, transparent) !important;
   /* Add a border or outline indicator for better visibility */
   position: relative;
 }
@@ -49,7 +49,7 @@ mat-table {
 }
 
 .selected-row:hover {
-  background-color: rgba(var(--mat-sys-primary-rgb, 103, 58, 183), 0.16) !important;
+  background-color: color-mix(in srgb, var(--mat-sys-primary) 16%, transparent) !important;
 }
 
 mat-row {

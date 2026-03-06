@@ -12,21 +12,21 @@
       <ng-template matTabContent>
         @switch (tab) {
         @case ('intensity') {
-        <app-event-intensity-zones [activities]="activities" [useAnimations]="useAnimations" [chartTheme]="chartTheme">
+        <app-event-intensity-zones [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme">
         </app-event-intensity-zones>
         }
         @case ('powerCurve') {
-        <app-event-power-curve [activities]="activities" [useAnimations]="useAnimations" [chartTheme]="chartTheme"
+        <app-event-power-curve [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme"
           [isMerge]="isMerge">
         </app-event-power-curve>
         }
         @case ('durability') {
-        <app-event-durability-curve [activities]="activities" [useAnimations]="useAnimations" [chartTheme]="chartTheme"
+        <app-event-durability-curve [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme"
           [isMerge]="isMerge">
         </app-event-durability-curve>
         }
         @case ('cadencePower') {
-        <app-event-cadence-power [activities]="activities" [useAnimations]="useAnimations" [chartTheme]="chartTheme"
+        <app-event-cadence-power [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme"
           [isMerge]="isMerge">
         </app-event-cadence-power>
         }
@@ -38,21 +38,21 @@
   } @else if (singleChartTab) {
   @switch (singleChartTab) {
   @case ('intensity') {
-  <app-event-intensity-zones [activities]="activities" [useAnimations]="useAnimations" [chartTheme]="chartTheme">
+  <app-event-intensity-zones [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme">
   </app-event-intensity-zones>
   }
   @case ('powerCurve') {
-  <app-event-power-curve [activities]="activities" [useAnimations]="useAnimations" [chartTheme]="chartTheme"
+  <app-event-power-curve [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme"
     [isMerge]="isMerge">
   </app-event-power-curve>
   }
   @case ('durability') {
-  <app-event-durability-curve [activities]="activities" [useAnimations]="useAnimations" [chartTheme]="chartTheme"
+  <app-event-durability-curve [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme"
     [isMerge]="isMerge">
   </app-event-durability-curve>
   }
   @case ('cadencePower') {
-  <app-event-cadence-power [activities]="activities" [useAnimations]="useAnimations" [chartTheme]="chartTheme"
+  <app-event-cadence-power [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme"
     [isMerge]="isMerge">
   </app-event-cadence-power>
   }

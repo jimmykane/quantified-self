@@ -11,9 +11,10 @@ Target version source of truth:
 
 ### Global mode (production path)
 Global discovery is query-first on processing metadata:
-- query: `collectionGroup('processing')`
+- query: `collectionGroup('metaData')`
 - filter: `where('sportsLibVersionCode', '<', targetSportsLibVersionCode)`
 - order: `orderBy('sportsLibVersionCode', 'asc').orderBy('__name__', 'asc')`
+- path guard: only docs at `.../metaData/processing` are treated as reparse candidates
 
 For each processing doc hit:
 1. Derive identity from parent path only (`users/{uid}/events/{eventId}` from `processingRef.parent.parent`).
@@ -178,8 +179,9 @@ Fields:
 
 ## Required Firestore Index
 Global processing-query discovery requires:
-- collection group: `processing`
-- fields: `sportsLibVersionCode ASC`, `__name__ ASC`
+- single-field override on collection group: `metaData`
+- field: `sportsLibVersionCode`
+- index: `COLLECTION_GROUP ASCENDING`
 
 Defined in:
 - `firestore.indexes.json`

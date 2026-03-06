@@ -14,6 +14,7 @@ import { ActivitiesTogglesComponent } from '../components/event/activities-toggl
 import { EventCardStatsTableComponent } from '../components/event/stats-table/event.card.stats-table.component';
 import { EventCardStatsGridComponent } from '../components/event/stats-grid/event.card.stats-grid.component';
 import { EventCardChartComponent } from '../components/event/chart/event.card.chart.component';
+import { EventCardChartPanelComponent } from '../components/event/chart/panel/event.card.chart.panel.component';
 import { ActivityToggleComponent } from '../components/event/activity-toggle/activity-toggle.component';
 import { EventPowerCurveComponent } from '../components/event/power-curve/event.power-curve.component';
 import { EventDurabilityCurveComponent } from '../components/event/durability-curve/event.durability-curve.component';
@@ -25,16 +26,15 @@ import { EventStatsBottomSheetComponent } from '../components/event/stats-table/
 import { EventDevicesBottomSheetComponent } from '../components/event/devices/event-devices-bottom-sheet/event-devices-bottom-sheet.component';
 
 import { JumpMarkerPopupComponent } from '../components/event/map/popups/jump-marker-popup/jump-marker-popup.component';
-import { BenchmarkSelectionDialogComponent } from '../components/benchmark/benchmark-selection-dialog.component';
-import { BenchmarkReportComponent } from '../components/benchmark/benchmark-report.component';
-import { BenchmarkBottomSheetComponent } from '../components/benchmark/benchmark-bottom-sheet.component';
 import { DeviceNameEditDialogComponent } from '../components/event/activities-toggles/device-name-edit-dialog/device-name-edit-dialog.component';
+import { BenchmarkModule } from './benchmark.module';
 
 @NgModule({
     imports: [
         CommonModule,
         SharedModule,
         MaterialModule,
+        BenchmarkModule,
         EventRoutingModule,
     ],
     exports: [
@@ -47,6 +47,7 @@ import { DeviceNameEditDialogComponent } from '../components/event/activities-to
         EventCardStatsGridComponent,
         EventCardLapsComponent,
         EventCardChartComponent,
+        EventCardChartPanelComponent,
         EventCardChartActionsComponent,
         EventCardDevicesComponent,
         EventSummaryComponent,
@@ -62,9 +63,6 @@ import { DeviceNameEditDialogComponent } from '../components/event/activities-to
         EventPerformanceChartsComponent,
         LapTypeIconComponent,
         JumpMarkerPopupComponent,
-        BenchmarkSelectionDialogComponent,
-        BenchmarkReportComponent,
-        BenchmarkBottomSheetComponent,
         DeviceNameEditDialogComponent,
     ]
 })

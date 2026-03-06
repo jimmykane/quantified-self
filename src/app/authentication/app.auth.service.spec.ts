@@ -21,6 +21,15 @@ vi.mock('@angular/fire/auth', async () => {
     };
 });
 
+vi.mock('@angular/fire/firestore', async () => {
+    const actual = await vi.importActual('@angular/fire/firestore');
+    return {
+        ...actual,
+        terminate: vi.fn(),
+        clearIndexedDbPersistence: vi.fn(),
+    };
+});
+
 import { TestBed } from '@angular/core/testing';
 import { AppAuthService } from './app.auth.service';
 import { AppUserService } from '../services/app.user.service';
@@ -69,6 +78,7 @@ describe('AppAuthService', () => {
     let userSubject: BehaviorSubject<any>;
 
     beforeEach(() => {
+        vi.clearAllMocks();
         userSubject = new BehaviorSubject<any>(null);
         mockUserFunction.mockReturnValue(userSubject);
         mockUserService.user$.next(null); // Reset
@@ -91,6 +101,20 @@ describe('AppAuthService', () => {
 
     it('should be created', () => {
         expect(service).toBeTruthy();
+    });
+
+    it('signOut should clear storage, purge Firestore persistence, and redirect', async () => {
+        const redirectSpy = vi.spyOn(service as any, 'redirectToLogin').mockImplementation(() => { });
+        const { signOut } = await import('@angular/fire/auth');
+        const { terminate, clearIndexedDbPersistence } = await import('@angular/fire/firestore');
+
+        await service.signOut();
+
+        expect(signOut).toHaveBeenCalledWith(mockAuth);
+        expect(terminate).toHaveBeenCalledWith(mockFirestore);
+        expect(mockLocalStorageService.clearAllStorage).toHaveBeenCalled();
+        expect(clearIndexedDbPersistence).toHaveBeenCalledWith(mockFirestore);
+        expect(redirectSpy).toHaveBeenCalled();
     });
 
     it('githubLogin should call signInWithProvider with GithubAuthProvider', async () => {

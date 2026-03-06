@@ -1,12 +1,14 @@
 import { Injectable, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { BrowserUpgradeDialogComponent } from '../components/browser-upgrade-dialog/browser-upgrade-dialog.component';
+import { AppWindowService } from './app.window.service';
 
 @Injectable({
     providedIn: 'root'
 })
 export class BrowserCompatibilityService {
     private dialog = inject(MatDialog);
+    private windowService = inject(AppWindowService);
 
     /**
      * Checks if the browser supports CompressionStream and DecompressionStream.
@@ -25,5 +27,13 @@ export class BrowserCompatibilityService {
         }
 
         return isSupported;
+    }
+
+    public checkVibrationSupport(): boolean {
+        try {
+            return typeof this.windowService.windowRef.navigator?.vibrate === 'function';
+        } catch {
+            return false;
+        }
     }
 }

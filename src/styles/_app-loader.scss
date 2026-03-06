@@ -1,0 +1,230 @@
+/**
+ Styles for the index pre-bootstrap splash loader
+  */
+.qs-splash-loader {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #fff;
+}
+
+.dark-theme .qs-splash-loader {
+  background: #000;
+}
+
+.qs-loader-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+}
+
+.qs-app-boot-screen {
+  width: 100vw;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: #fff;
+}
+
+.dark-theme .qs-app-boot-screen {
+  background: #000;
+}
+
+.qs-digit-grid {
+  --tile-size: min(196px, 76vw);
+  --grid-gap: clamp(8px, 2vw, 12px);
+  --cell-size: calc((var(--tile-size) - var(--grid-gap)) / 2);
+  --step: calc(var(--cell-size) + var(--grid-gap));
+  width: var(--tile-size);
+  height: var(--tile-size);
+  position: relative;
+  color: #000;
+}
+
+.dark-theme .qs-digit-grid {
+  color: #fff;
+}
+
+.qs-digit-tile {
+  position: absolute;
+  width: var(--cell-size);
+  height: var(--cell-size);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(3px, 1vw, 6px);
+  min-width: 0;
+  min-height: 0;
+}
+
+.qs-digit-a {
+  left: 0;
+  top: 0;
+}
+
+.qs-digit-b {
+  left: var(--step);
+  top: 0;
+}
+
+.qs-digit-c {
+  left: 0;
+  top: var(--step);
+}
+
+.qs-digit-d {
+  left: var(--step);
+  top: var(--step);
+}
+
+.qs-digit-label {
+  font-family: "Roboto Mono", "Barlow Condensed", monospace;
+  font-size: clamp(9px, 1vw, 11px);
+  font-weight: 500;
+  letter-spacing: 0.09em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+  opacity: 0.72;
+}
+
+.qs-digit-value {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: clamp(3px, 0.8vw, 6px);
+}
+
+.qs-digit-roll {
+  --line-height: 1.04em;
+  --digit-cycle: 4.1s;
+  --digit-offset: 0s;
+  --roll-end: calc(var(--line-height) * -11);
+  display: block;
+  height: var(--line-height);
+  overflow: hidden;
+  min-width: var(--value-width, 7ch);
+  font-family: "Roboto Mono", "Barlow Condensed", monospace;
+  font-size: clamp(17px, 3.7vw, 28px);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: var(--line-height);
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.qs-digit-unit {
+  font-family: "Roboto Mono", "Barlow Condensed", monospace;
+  font-size: clamp(10px, 1.7vw, 13px);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  text-transform: lowercase;
+  opacity: 0.66;
+  white-space: nowrap;
+}
+
+.qs-digit-track {
+  display: block;
+  will-change: transform;
+  animation: qs-digit-tick var(--digit-cycle) steps(11, end) infinite;
+  animation-delay: var(--digit-offset);
+}
+
+.qs-digit-track span {
+  display: block;
+  height: var(--line-height);
+  line-height: var(--line-height);
+}
+
+.qs-digit-a .qs-digit-roll {
+  --value-width: 4.2ch;
+  --digit-cycle: 4.4s;
+  --digit-offset: -0.8s;
+}
+
+.qs-digit-b .qs-digit-roll {
+  --value-width: 3.4ch;
+  --digit-cycle: 3.7s;
+  --digit-offset: -1.6s;
+}
+
+.qs-digit-c .qs-digit-roll {
+  --value-width: 3.2ch;
+  --digit-cycle: 5.6s;
+  --digit-offset: 0s;
+}
+
+.qs-digit-d .qs-digit-roll {
+  --value-width: 3.2ch;
+  --digit-cycle: 5s;
+  --digit-offset: 0s;
+}
+
+.qs-digit-c .qs-digit-track,
+.qs-digit-d .qs-digit-track {
+  animation-iteration-count: 1;
+  animation-fill-mode: forwards;
+}
+
+@keyframes qs-digit-tick {
+  0% {
+    transform: translateY(0);
+  }
+
+  100% {
+    transform: translateY(var(--roll-end));
+  }
+}
+
+@media (max-width: 480px) {
+  .qs-digit-grid {
+    --tile-size: min(166px, 72vw);
+    --grid-gap: clamp(6px, 2.4vw, 8px);
+  }
+
+  .qs-digit-label {
+    font-size: clamp(8px, 2.8vw, 10px);
+  }
+
+  .qs-digit-roll {
+    font-size: clamp(14px, 5.8vw, 21px);
+    letter-spacing: 0.02em;
+  }
+
+  .qs-digit-unit {
+    font-size: clamp(9px, 3.2vw, 11px);
+  }
+}
+
+@media (max-width: 360px) {
+  .qs-digit-grid {
+    --tile-size: min(152px, 70vw);
+  }
+
+  .qs-digit-label {
+    font-size: clamp(8px, 2.9vw, 9px);
+  }
+
+  .qs-digit-roll {
+    font-size: clamp(13px, 6vw, 19px);
+  }
+
+  .qs-digit-unit {
+    font-size: clamp(8px, 3.3vw, 10px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .qs-digit-roll,
+  .qs-digit-track {
+    animation: none;
+  }
+}

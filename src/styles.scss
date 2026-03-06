@@ -1,12 +1,14 @@
 // Custom Theming for Angular Material
 // For more information: https://material.angular.io/guide/theming
 @use '@angular/material' as mat;
-@use 'sass:map';
+@use 'styles/theme-colors-dark' as app-dark-colors;
+@use 'styles/theme-colors-light' as app-light-colors;
 @use 'styles/forms';
 @use 'styles/search';
 @use 'styles/segmented-buttons';
 @use 'styles/panels';
 @use 'styles/icons';
+@use 'styles/app-loader';
 
 /* Bundle app fonts locally to avoid runtime dependency on external font CDNs. */
 @import '@fontsource/noto-sans/300.css';
@@ -27,20 +29,40 @@
 // Be sure that you only ever include this mixin once!
 @include mat.core();
 
-// Light Theme Palettes (Royal Blue)
-// A classic, trustworthy blue with a warm distinctive accent
-$light-primary: mat.m2-define-palette(mat.$m2-blue-palette);
-$light-accent: mat.m2-define-palette(mat.$m2-amber-palette, A200, A100, A400);
-$light-warn: mat.m2-define-palette(mat.$m2-red-palette);
+// Material 3 theme configuration.
+// These palettes are custom M3 tonal palettes generated from the exact old M2 seeds
+// that `origin/main` used:
+// - Light primary:  #2196f3 (blue 500)
+// - Light accent:   #ffd740 (amber A200)
+// - Dark primary:   #607d8b (blue-grey 500)
+// - Dark accent:    #40c4ff (light-blue A200)
+$app-light-theme: mat.define-theme((color: (theme-type: light,
+        primary: app-light-colors.$primary-palette,
+        tertiary: app-light-colors.$tertiary-palette,
+      ),
+      typography: (plain-family: "'Noto Sans', sans-serif",
+        brand-family: "'Noto Sans', sans-serif",
+        medium-weight: 500,
+        regular-weight: 400,
+        bold-weight: 700,
+      ),
+      density: (scale: 0,
+      ),
+    ));
 
-// Dark Theme Palettes (Deep Ocean)
-// Dark blue-grey background with a bright, electric blue accent
-$dark-primary: mat.m2-define-palette(mat.$m2-blue-grey-palette);
-$dark-accent: mat.m2-define-palette(mat.$m2-light-blue-palette, A200, A100, A400);
-$dark-warn: mat.m2-define-palette(mat.$m2-red-palette);
-
-// Define typography using our local font
-$app-typography: mat.m2-define-typography-config($font-family: "'Noto Sans', sans-serif");
+$app-dark-theme: mat.define-theme((color: (theme-type: dark,
+        primary: app-dark-colors.$primary-palette,
+        tertiary: app-dark-colors.$tertiary-palette,
+      ),
+      typography: (plain-family: "'Noto Sans', sans-serif",
+        brand-family: "'Noto Sans', sans-serif",
+        medium-weight: 500,
+        regular-weight: 400,
+        bold-weight: 700,
+      ),
+      density: (scale: 0,
+      ),
+    ));
 
 // Activity Gradients
 :root {
@@ -58,29 +80,17 @@ $app-typography: mat.m2-define-typography-config($font-family: "'Noto Sans', san
   --gradient-unspecified: linear-gradient(135deg, #A3ADB0, #546E7A);
 }
 
-// Create the theme object. A theme consists of configurations for individual
-// theming systems such as "color" or "typography".
-$app-light-theme: mat.m2-define-light-theme((color: (primary: $light-primary,
-        accent: $light-accent,
-        warn: $light-warn,
-      ),
-      typography: $app-typography,
-    ));
-
-$app-dark-theme: mat.m2-define-dark-theme((color: (primary: $dark-primary,
-        accent: $dark-accent,
-        warn: $dark-warn,
-      ),
-      typography: $app-typography,
-    ));
-
 // Include theme styles for core and each component used in your app.
 // Alternatively, you can import and @include the theme mixins for each component
 // that you are using.
 @include mat.all-component-themes($app-light-theme);
+@include mat.system-level-colors($app-light-theme);
+@include mat.system-level-typography($app-light-theme);
 
 .dark-theme {
-  @include mat.all-component-themes($app-dark-theme);
+  @include mat.all-component-colors($app-dark-theme);
+  @include mat.system-level-colors($app-dark-theme);
+  @include mat.system-level-typography($app-dark-theme);
 }
 
 
@@ -98,7 +108,7 @@ body {
 }
 
 body {
-  background-color: var(--mat-sys-background);
+  background-color: var(--mat-app-background, var(--mat-sys-background));
   color: var(--mat-sys-on-surface);
   font-family: 'Noto Sans', sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -139,25 +149,9 @@ body.app-hydrated mat-icon {
 }
 
 .dark-theme {
-  $dark-bg: map.get($app-dark-theme, background);
-  $dark-fg: map.get($app-dark-theme, foreground);
-
-  background-color: mat.m2-get-color-from-palette($dark-bg, background);
-  color: mat.m2-get-color-from-palette($dark-fg, text);
-
-  // Force SVG text to be light in dark mode for amCharts
-  text,
-  tspan,
-  .amcharts-Label {
-    fill: mat.m2-get-color-from-palette($dark-fg, text) !important;
-  }
-
-  // Ensure tooltips have dark background
-  .amcharts-Tooltip-bg {
-    fill: mat.m2-get-color-from-palette($dark-bg, background) !important;
-    stroke: mat.m2-get-color-from-palette($dark-fg, text) !important;
-    fill-opacity: 0.9 !important;
-  }
+  color-scheme: dark;
+  background-color: var(--mat-app-background, var(--mat-sys-background));
+  color: var(--mat-sys-on-surface);
 }
 
 // ... existing code ...
@@ -187,7 +181,7 @@ section.component-container {
 }
 
 /**
- Styles for the main page spinner
+ Styles for the main page spinner (legacy cube loader used in-app)
   */
 .spinner-container {
   display: flex;
@@ -303,45 +297,73 @@ section.component-container {
   background-size: cover;
 }
 
-/* CSS Variables for Theming */
+/* App aliases over official Material M3 system tokens. */
 :root {
+  --qs-theme-primary: #2196f3;
+  --qs-theme-on-primary: #ffffff;
+  --qs-theme-accent: #ffd740;
+  --qs-theme-on-accent: rgba(0, 0, 0, 0.87);
   --mat-sys-background: #fafafa;
   --mat-sys-surface: rgba(255, 255, 255, 0.90);
   --mat-sys-on-surface: rgba(0, 0, 0, 0.87);
   --mat-sys-on-surface-variant: rgba(0, 0, 0, 0.60);
-  --mat-sys-error: #f44336;
-  --mat-sys-primary: #2196F3;
-  --mat-sys-primary-rgb: 33, 150, 243;
-  --mat-sys-secondary: #ff4081;
-  --mat-sys-secondary-rgb: 255, 64, 129;
-  --mat-sys-tertiary: #009688;
-  --mat-app-surface: var(--mat-sys-surface);
+  --mat-sys-surface-container-lowest: #ffffff;
+  --mat-sys-surface-container-low: rgba(0, 0, 0, 0.03);
+  --mat-sys-surface-container: rgba(0, 0, 0, 0.05);
+  --mat-sys-surface-container-high: rgba(0, 0, 0, 0.08);
+  --mat-sys-surface-container-highest: rgba(0, 0, 0, 0.12);
+  --mat-app-background: #fafafa;
+  --mat-app-surface: rgba(255, 255, 255, 0.90);
   --mat-app-on-surface: var(--mat-sys-on-surface);
   --mat-app-on-surface-variant: var(--mat-sys-on-surface-variant);
+  --mat-app-surface-container-lowest: #ffffff;
   --mat-app-surface-container-low: rgba(0, 0, 0, 0.03);
   --mat-app-surface-container-high: rgba(0, 0, 0, 0.08);
-  --mat-app-outline-variant: rgba(0, 0, 0, 0.1);
-  --mat-app-primary: var(--mat-sys-primary);
+  --mat-app-surface-container-highest: rgba(0, 0, 0, 0.12);
+  --mat-app-outline-variant: rgba(0, 0, 0, 0.10);
+  --mat-app-primary: var(--qs-theme-primary);
+  --mat-app-primary-container: var(--mat-sys-primary-container);
+  --mat-app-on-primary-container: var(--mat-sys-on-primary-container);
+  --mat-app-secondary-container: var(--mat-sys-secondary-container);
+  --mat-app-on-secondary-container: var(--mat-sys-on-secondary-container);
+  --mat-app-tertiary-container: var(--mat-sys-tertiary-container);
+  --mat-app-on-tertiary-container: var(--mat-sys-on-tertiary-container);
+  --mat-sidenav-content-background-color: var(--mat-app-background);
+  --mat-sidenav-container-background-color: var(--mat-app-surface-container-lowest);
 }
 
 .dark-theme {
+  --qs-theme-primary: #607d8b;
+  --qs-theme-on-primary: #ffffff;
+  --qs-theme-accent: #40c4ff;
+  --qs-theme-on-accent: rgba(0, 0, 0, 0.87);
   --mat-sys-background: #121212;
   --mat-sys-surface: rgba(30, 30, 30, 0.80);
   --mat-sys-on-surface: rgba(255, 255, 255, 0.87);
   --mat-sys-on-surface-variant: rgba(255, 255, 255, 0.60);
-  --mat-sys-error: #ffb4ab;
-  --mat-sys-primary: #b0bec5;
-  --mat-sys-primary-rgb: 176, 190, 197;
-  --mat-sys-secondary: #f48fb1;
-  --mat-sys-secondary-rgb: 244, 143, 177;
-  --mat-sys-tertiary: #80cbc4;
-  --mat-app-surface: var(--mat-sys-surface);
+  --mat-sys-surface-container-lowest: rgba(18, 18, 18, 0.96);
+  --mat-sys-surface-container-low: rgba(255, 255, 255, 0.05);
+  --mat-sys-surface-container: rgba(255, 255, 255, 0.08);
+  --mat-sys-surface-container-high: rgba(255, 255, 255, 0.12);
+  --mat-sys-surface-container-highest: rgba(255, 255, 255, 0.16);
+  --mat-app-background: #121212;
+  --mat-app-surface: rgba(30, 30, 30, 0.80);
   --mat-app-on-surface: var(--mat-sys-on-surface);
   --mat-app-on-surface-variant: var(--mat-sys-on-surface-variant);
+  --mat-app-surface-container-lowest: rgba(18, 18, 18, 0.96);
   --mat-app-surface-container-low: rgba(255, 255, 255, 0.05);
   --mat-app-surface-container-high: rgba(255, 255, 255, 0.12);
-  --mat-app-outline-variant: rgba(255, 255, 255, 0.1);
-  --mat-app-primary: var(--mat-sys-primary);
+  --mat-app-surface-container-highest: rgba(255, 255, 255, 0.16);
+  --mat-app-outline-variant: rgba(255, 255, 255, 0.10);
+  --mat-app-primary: var(--qs-theme-primary);
+  --mat-app-primary-container: var(--mat-sys-primary-container);
+  --mat-app-on-primary-container: var(--mat-sys-on-primary-container);
+  --mat-app-secondary-container: var(--mat-sys-secondary-container);
+  --mat-app-on-secondary-container: var(--mat-sys-on-secondary-container);
+  --mat-app-tertiary-container: var(--mat-sys-tertiary-container);
+  --mat-app-on-tertiary-container: var(--mat-sys-on-tertiary-container);
+  --mat-sidenav-content-background-color: var(--mat-app-background);
+  --mat-sidenav-container-background-color: var(--mat-app-surface-container-lowest);
 }
 
 
@@ -402,7 +424,7 @@ mat-table {
   align-items: center;
   justify-content: space-between;
   padding: 24px 40px;
-  background: var(--mat-sys-surface);
+  background: var(--mat-app-surface);
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
   border: 1px solid var(--mat-app-outline-variant);
@@ -501,7 +523,7 @@ mat-table {
 .app-stat-card {
   padding: 1.25rem;
   border-radius: 12px;
-  // Glass background handled by .glass-card if combined, or inherit transparency
+  // Glass background handled by .qs-glass-card-panel if combined, or inherit transparency
   background: transparent;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   display: flex;
@@ -653,6 +675,7 @@ mat-table {
 
   &::-webkit-scrollbar-track {
     background: transparent;
+    border-radius: 999px;
   }
 
   &::-webkit-scrollbar-thumb {
@@ -668,6 +691,15 @@ mat-table {
 
   &::-webkit-scrollbar-thumb:active {
     background-color: color-mix(in srgb, var(--mat-sys-on-surface) 56%, transparent);
+  }
+
+  &::-webkit-scrollbar-track-piece {
+    border-radius: 999px;
+  }
+
+  &::-webkit-scrollbar-corner {
+    background: transparent;
+    border-radius: 999px;
   }
 }
 
@@ -721,11 +753,16 @@ mat-table {
 .mat-bottom-sheet-container {
   @extend .qs-glass-card-panel;
   @extend .qs-scrollbar;
+  --qs-glass-panel-blur: 16px;
   --mat-bottom-sheet-container-background-color: transparent;
   --mat-bottom-sheet-container-shape: 20px;
-  background: var(--mat-sys-surface) !important;
+  background: var(--mat-app-surface) !important;
   /* Keep only the top corners rounded; bottom edge stays flush with viewport */
   border-radius: 20px 20px 0 0 !important;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow:
+    0 -8px 32px rgba(0, 0, 0, 0.12),
+    0 -2px 8px rgba(0, 0, 0, 0.08) !important;
   padding: 16px !important;
   display: flex;
   flex-direction: column;
@@ -746,11 +783,11 @@ mat-table {
   overflow: auto;
 
   &::-webkit-scrollbar-track {
-    background: var(--mat-sys-surface);
+    background: var(--mat-app-surface);
   }
 
   &::-webkit-scrollbar-corner {
-    background: var(--mat-sys-surface);
+    background: var(--mat-app-surface);
   }
 }
 
@@ -759,6 +796,13 @@ mat-table {
     min-width: 100%;
     width: 100%;
   }
+}
+
+.dark-theme .mat-bottom-sheet-container {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 -8px 32px rgba(0, 0, 0, 0.4),
+    0 -2px 8px rgba(0, 0, 0, 0.2) !important;
 }
 
 /* Ensure Overlays (Bottom Sheets, Dialogs) are always on top of App Bars and Banners */
@@ -777,7 +821,7 @@ mat-table {
   .mat-mdc-dialog-surface {
     @extend .qs-glass-card-panel;
     --qs-glass-panel-blur: 16px;
-    background: var(--mat-sys-surface) !important;
+    background: var(--mat-app-surface) !important;
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 16px !important;
     box-shadow:
@@ -831,6 +875,55 @@ mat-table {
       0 8px 32px rgba(0, 0, 0, 0.4),
       0 2px 8px rgba(0, 0, 0, 0.2) !important;
   }
+}
+
+.qs-whats-new-dialog {
+  .mat-mdc-dialog-content {
+    padding: 0 !important;
+    overflow: auto !important;
+    scrollbar-gutter: stable;
+  }
+}
+
+/* Shared overlay surface system.
+   One global overlay theme, with semantic content variants for components rendered inside
+   dialog/bottom-sheet shells. Use --flat only for report/feed style content that should not
+   stack a second surface inside an already styled overlay shell. */
+.qs-dialog-container,
+.qs-bottom-sheet-container,
+.qs-whats-new-dialog,
+.qs-whats-new-page {
+  --qs-overlay-section-bg: var(--mat-app-surface-container-high);
+  --qs-overlay-section-border: var(--mat-sys-outline-variant);
+  --qs-overlay-section-shadow: none;
+  --qs-overlay-section-radius: 12px;
+}
+
+.qs-overlay-section {
+  background: var(--qs-overlay-section-bg) !important;
+  border: 1px solid var(--qs-overlay-section-border);
+  box-shadow: var(--qs-overlay-section-shadow) !important;
+  border-radius: var(--qs-overlay-section-radius);
+}
+
+/* Default overlay section treatment for common overlay surface primitives rendered
+   inside dialogs and bottom sheets. Custom div sections still opt in with
+   .qs-overlay-section. */
+.qs-dialog-container :is(.mat-mdc-card, .mat-expansion-panel, .qs-glass-card-panel):not(.qs-overlay-flat):not(.mat-mdc-dialog-container):not(.mat-mdc-dialog-surface),
+.qs-bottom-sheet-container :is(.mat-mdc-card, .mat-expansion-panel, .qs-glass-card-panel):not(.qs-overlay-flat):not(.mat-bottom-sheet-container),
+.qs-whats-new-dialog :is(.mat-mdc-card, .mat-expansion-panel, .qs-glass-card-panel):not(.qs-overlay-flat):not(.mat-mdc-dialog-container):not(.mat-mdc-dialog-surface),
+.qs-whats-new-page :is(.mat-mdc-card, .mat-expansion-panel, .qs-glass-card-panel):not(.qs-overlay-flat) {
+  background: var(--qs-overlay-section-bg) !important;
+  border: 1px solid var(--qs-overlay-section-border);
+  box-shadow: var(--qs-overlay-section-shadow) !important;
+  border-radius: var(--qs-overlay-section-radius) !important;
+}
+
+.qs-overlay-flat {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
 }
 
 /* ==========================================================================
@@ -887,9 +980,11 @@ tr.mat-row:focus,
 /* Base menu panel style applied globally via MAT_MENU_DEFAULT_OPTIONS */
 .mat-mdc-menu-panel.qs-menu-panel {
   @extend .qs-glass-card-panel;
-  background: var(--mat-sys-surface) !important;
+  @include qs-scrollbar-skin;
+  background: var(--mat-app-surface) !important;
   min-width: 180px !important;
   max-width: min(360px, calc(100vw - 24px)) !important;
+  overflow: hidden !important;
 }
 
 /* Form-heavy menu panels */
@@ -901,7 +996,235 @@ tr.mat-row:focus,
 
 .mat-mdc-menu-panel.qs-menu-panel .mat-mdc-menu-content {
   @extend .qs-scrollbar;
+  overflow: auto;
+  max-height: inherit;
+  border-radius: inherit;
   padding: 6px 0;
+}
+
+.qs-action-menu-trigger {
+  min-width: 0 !important;
+}
+
+.qs-action-menu-trigger .mat-icon {
+  margin-right: 4px;
+}
+
+.qs-action-menu-icon-button {
+  color: var(--mat-sys-on-surface);
+  width: 40px;
+  height: 40px;
+  padding: 8px;
+  border-radius: 10px !important;
+}
+
+.qs-action-menu-icon-button .mat-icon {
+  margin: 0;
+}
+
+.qs-app-badge {
+  position: relative;
+  --mat-badge-background-color: var(--mat-app-primary);
+  --mat-badge-text-color: var(--mat-sys-on-primary);
+  --mat-badge-disabled-state-background-color: color-mix(in srgb, var(--mat-app-primary) 38%, transparent);
+  --mat-badge-disabled-state-text-color: var(--mat-sys-on-primary);
+}
+
+.qs-app-badge ::ng-deep .mat-badge-content {
+  background-color: var(--mat-app-primary);
+  color: var(--mat-sys-on-primary);
+  font-weight: 500;
+  border-radius: 999px;
+}
+
+.qs-app-badge--small ::ng-deep .mat-badge-content {
+  min-width: 20px !important;
+  width: auto !important;
+  max-width: max-content !important;
+  height: 16px !important;
+  line-height: 16px !important;
+  padding: 0 4px !important;
+  font-size: 9px !important;
+}
+
+.qs-app-badge--large ::ng-deep .mat-badge-content {
+  min-width: 20px !important;
+  width: auto !important;
+  max-width: max-content !important;
+  height: 16px !important;
+  line-height: 16px !important;
+  padding: 0 4px !important;
+  font-size: 9px !important;
+}
+
+.qs-color-primary {
+  color: var(--qs-theme-primary) !important;
+}
+
+.qs-color-accent {
+  color: var(--qs-theme-accent) !important;
+}
+
+.qs-color-warn {
+  color: var(--mat-sys-error) !important;
+}
+
+.qs-spinner-primary {
+  --mat-progress-spinner-active-indicator-color: var(--qs-theme-primary);
+}
+
+.qs-spinner-accent {
+  --mat-progress-spinner-active-indicator-color: var(--qs-theme-accent);
+}
+
+.qs-spinner-warn {
+  --mat-progress-spinner-active-indicator-color: var(--mat-sys-error);
+}
+
+.qs-progress-primary {
+  --mat-progress-bar-active-indicator-color: var(--qs-theme-primary);
+}
+
+.qs-progress-accent {
+  --mat-progress-bar-active-indicator-color: var(--qs-theme-accent);
+}
+
+.qs-progress-warn {
+  --mat-progress-bar-active-indicator-color: var(--mat-sys-error);
+}
+
+.qs-checkbox-primary {
+  --mat-checkbox-selected-checkmark-color: var(--qs-theme-on-primary);
+  --mat-checkbox-selected-icon-color: var(--qs-theme-primary);
+  --mat-checkbox-selected-focus-icon-color: var(--qs-theme-primary);
+  --mat-checkbox-selected-hover-icon-color: var(--qs-theme-primary);
+  --mat-checkbox-selected-pressed-icon-color: var(--qs-theme-primary);
+  --mat-checkbox-selected-focus-state-layer-color: var(--qs-theme-primary);
+  --mat-checkbox-selected-hover-state-layer-color: var(--qs-theme-primary);
+}
+
+.qs-checkbox-warn {
+  --mat-checkbox-selected-checkmark-color: var(--mat-sys-on-error);
+  --mat-checkbox-selected-icon-color: var(--mat-sys-error);
+  --mat-checkbox-selected-focus-icon-color: var(--mat-sys-error);
+  --mat-checkbox-selected-hover-icon-color: var(--mat-sys-error);
+  --mat-checkbox-selected-pressed-icon-color: var(--mat-sys-error);
+  --mat-checkbox-selected-focus-state-layer-color: var(--mat-sys-error);
+  --mat-checkbox-selected-hover-state-layer-color: var(--mat-sys-error);
+}
+
+.qs-mat-primary {
+  --mat-button-filled-container-color: var(--qs-theme-primary);
+  --mat-button-filled-label-text-color: var(--qs-theme-on-primary);
+  --mat-button-filled-ripple-color: color-mix(in srgb, var(--qs-theme-on-primary) 12%, transparent);
+  --mat-button-filled-state-layer-color: var(--qs-theme-on-primary);
+  --mat-button-outlined-label-text-color: var(--qs-theme-primary);
+  --mat-button-outlined-ripple-color: color-mix(in srgb, var(--qs-theme-primary) 12%, transparent);
+  --mat-button-outlined-state-layer-color: var(--qs-theme-primary);
+  --mat-button-protected-container-color: var(--qs-theme-primary);
+  --mat-button-protected-label-text-color: var(--qs-theme-on-primary);
+  --mat-button-protected-ripple-color: color-mix(in srgb, var(--qs-theme-on-primary) 12%, transparent);
+  --mat-button-protected-state-layer-color: var(--qs-theme-on-primary);
+  --mat-button-text-label-text-color: var(--qs-theme-primary);
+  --mat-button-text-ripple-color: color-mix(in srgb, var(--qs-theme-primary) 12%, transparent);
+  --mat-button-text-state-layer-color: var(--qs-theme-primary);
+  --mat-button-tonal-container-color: var(--qs-theme-primary);
+  --mat-button-tonal-label-text-color: var(--qs-theme-on-primary);
+  --mat-button-tonal-ripple-color: color-mix(in srgb, var(--qs-theme-on-primary) 12%, transparent);
+  --mat-button-tonal-state-layer-color: var(--qs-theme-on-primary);
+  --mat-icon-button-icon-color: var(--qs-theme-primary);
+  --mat-icon-button-state-layer-color: var(--qs-theme-primary);
+  --mat-icon-button-ripple-color: color-mix(in srgb, var(--qs-theme-primary) 12%, transparent);
+  --mat-fab-container-color: var(--qs-theme-primary);
+  --mat-fab-foreground-color: var(--qs-theme-on-primary);
+  --mat-fab-ripple-color: color-mix(in srgb, var(--qs-theme-primary) 12%, transparent);
+  --mat-fab-small-container-color: var(--qs-theme-primary);
+  --mat-fab-small-foreground-color: var(--qs-theme-on-primary);
+  --mat-fab-small-ripple-color: color-mix(in srgb, var(--qs-theme-on-primary) 12%, transparent);
+  --mat-fab-small-state-layer-color: var(--qs-theme-on-primary);
+  --mat-fab-state-layer-color: var(--qs-theme-on-primary);
+}
+
+.qs-mat-accent {
+  --mat-button-filled-container-color: var(--qs-theme-accent);
+  --mat-button-filled-label-text-color: var(--qs-theme-on-accent);
+  --mat-button-filled-ripple-color: color-mix(in srgb, var(--qs-theme-on-accent) 12%, transparent);
+  --mat-button-filled-state-layer-color: var(--qs-theme-on-accent);
+  --mat-button-outlined-label-text-color: var(--qs-theme-accent);
+  --mat-button-outlined-ripple-color: color-mix(in srgb, var(--qs-theme-accent) 12%, transparent);
+  --mat-button-outlined-state-layer-color: var(--qs-theme-accent);
+  --mat-button-protected-container-color: var(--qs-theme-accent);
+  --mat-button-protected-label-text-color: var(--qs-theme-on-accent);
+  --mat-button-protected-ripple-color: color-mix(in srgb, var(--qs-theme-on-accent) 12%, transparent);
+  --mat-button-protected-state-layer-color: var(--qs-theme-on-accent);
+  --mat-button-text-label-text-color: var(--qs-theme-accent);
+  --mat-button-text-ripple-color: color-mix(in srgb, var(--qs-theme-accent) 12%, transparent);
+  --mat-button-text-state-layer-color: var(--qs-theme-accent);
+  --mat-button-tonal-container-color: var(--qs-theme-accent);
+  --mat-button-tonal-label-text-color: var(--qs-theme-on-accent);
+  --mat-button-tonal-ripple-color: color-mix(in srgb, var(--qs-theme-on-accent) 12%, transparent);
+  --mat-button-tonal-state-layer-color: var(--qs-theme-on-accent);
+  --mat-icon-button-icon-color: var(--qs-theme-accent);
+  --mat-icon-button-state-layer-color: var(--qs-theme-accent);
+  --mat-icon-button-ripple-color: color-mix(in srgb, var(--qs-theme-accent) 12%, transparent);
+  --mat-fab-container-color: var(--qs-theme-accent);
+  --mat-fab-foreground-color: var(--qs-theme-on-accent);
+  --mat-fab-ripple-color: color-mix(in srgb, var(--qs-theme-accent) 12%, transparent);
+  --mat-fab-small-container-color: var(--qs-theme-accent);
+  --mat-fab-small-foreground-color: var(--qs-theme-on-accent);
+  --mat-fab-small-ripple-color: color-mix(in srgb, var(--qs-theme-on-accent) 12%, transparent);
+  --mat-fab-small-state-layer-color: var(--qs-theme-on-accent);
+  --mat-fab-state-layer-color: var(--qs-theme-on-accent);
+}
+
+.mat-mdc-unelevated-button.qs-mat-accent {
+  background-color: var(--qs-theme-accent) !important;
+  color: var(--qs-theme-on-accent) !important;
+}
+
+.mat-mdc-unelevated-button.qs-mat-accent:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--qs-theme-accent) 92%, black) !important;
+}
+
+.mat-mdc-unelevated-button.qs-mat-accent:disabled {
+  background-color: color-mix(in srgb, var(--qs-theme-accent) 24%, transparent) !important;
+  color: color-mix(in srgb, var(--qs-theme-on-accent) 48%, transparent) !important;
+}
+
+.qs-mat-warn {
+  --mat-button-filled-container-color: var(--mat-sys-error);
+  --mat-button-filled-label-text-color: var(--mat-sys-on-error);
+  --mat-button-filled-ripple-color: color-mix(in srgb, var(--mat-sys-on-error) 12%, transparent);
+  --mat-button-filled-state-layer-color: var(--mat-sys-on-error);
+  --mat-button-outlined-label-text-color: var(--mat-sys-error);
+  --mat-button-outlined-ripple-color: color-mix(in srgb, var(--mat-sys-error) 12%, transparent);
+  --mat-button-outlined-state-layer-color: var(--mat-sys-error);
+  --mat-button-protected-container-color: var(--mat-sys-error);
+  --mat-button-protected-label-text-color: var(--mat-sys-on-error);
+  --mat-button-protected-ripple-color: color-mix(in srgb, var(--mat-sys-on-error) 12%, transparent);
+  --mat-button-protected-state-layer-color: var(--mat-sys-on-error);
+  --mat-button-text-label-text-color: var(--mat-sys-error);
+  --mat-button-text-ripple-color: color-mix(in srgb, var(--mat-sys-error) 12%, transparent);
+  --mat-button-text-state-layer-color: var(--mat-sys-error);
+  --mat-button-tonal-container-color: var(--mat-sys-error);
+  --mat-button-tonal-label-text-color: var(--mat-sys-on-error);
+  --mat-button-tonal-ripple-color: color-mix(in srgb, var(--mat-sys-on-error) 12%, transparent);
+  --mat-button-tonal-state-layer-color: var(--mat-sys-on-error);
+  --mat-icon-button-icon-color: var(--mat-sys-error);
+  --mat-icon-button-state-layer-color: var(--mat-sys-error);
+  --mat-icon-button-ripple-color: color-mix(in srgb, var(--mat-sys-error) 12%, transparent);
+  --mat-fab-container-color: var(--mat-sys-error);
+  --mat-fab-foreground-color: var(--mat-sys-on-error);
+  --mat-fab-ripple-color: color-mix(in srgb, var(--mat-sys-error) 12%, transparent);
+  --mat-fab-small-container-color: var(--mat-sys-error);
+  --mat-fab-small-foreground-color: var(--mat-sys-on-error);
+  --mat-fab-small-ripple-color: color-mix(in srgb, var(--mat-sys-on-error) 12%, transparent);
+  --mat-fab-small-state-layer-color: var(--mat-sys-on-error);
+  --mat-fab-state-layer-color: var(--mat-sys-on-error);
+}
+
+.qs-link-accent {
+  color: var(--mat-sys-tertiary);
 }
 
 /* Section/Item Layout for menus used for settings */
@@ -932,10 +1255,31 @@ tr.mat-row:focus,
 
 .mat-mdc-select-panel.qs-config-submenu {
   @extend .qs-glass-card-panel;
-  background: var(--mat-sys-surface) !important;
+  background: var(--mat-app-surface) !important;
   border-radius: 12px !important;
   padding: 4px 0 !important;
   max-width: min(320px, calc(100vw - 24px)) !important;
+}
+
+/* Apply QS scrollbar skin to all Material select panels globally. */
+.mat-mdc-select-panel {
+  @include qs-scrollbar-skin;
+}
+
+.dark-theme .mat-mdc-select-panel {
+  scrollbar-color: color-mix(in srgb, var(--mat-sys-on-surface) 44%, transparent) transparent;
+
+  &::-webkit-scrollbar-thumb {
+    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 40%, transparent);
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 56%, transparent);
+  }
+
+  &::-webkit-scrollbar-thumb:active {
+    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 66%, transparent);
+  }
 }
 
 .mat-mdc-select-panel.qs-config-submenu-compact {

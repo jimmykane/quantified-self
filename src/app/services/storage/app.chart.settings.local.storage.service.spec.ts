@@ -51,4 +51,18 @@ describe('AppChartSettingsLocalStorageService', () => {
     service.hideSeriesID(event, fullId);
     expect(service.getSeriesIDsToShow(event)).toEqual([]);
   });
+
+  it('should expose datatype id helpers over the same storage namespace', () => {
+    const event = mockEvent('event-3');
+    const ids = ['Power', 'Speed'];
+
+    service.setDataTypeIDsToShow(event, ids);
+    expect(service.getDataTypeIDsToShow(event)).toEqual(ids);
+
+    service.hideDataTypeID(event, 'Power');
+    expect(service.getDataTypeIDsToShow(event)).toEqual(['Speed']);
+
+    service.showDataTypeID(event, 'Power');
+    expect(service.getDataTypeIDsToShow(event)).toEqual(['Speed', 'Power']);
+  });
 });

@@ -28,6 +28,7 @@ import { AppUserSettingsQueryService } from '../../services/app.user-settings-qu
 const EVENTS_SOURCE_ID = 'events-map-events-source';
 const EVENTS_UNCLUSTERED_LAYER_ID = 'events-map-events-unclustered';
 const EVENTS_CLUSTER_LAYER_ID = 'events-map-events-clusters';
+const EVENTS_CLUSTER_COUNT_LAYER_ID = 'events-map-events-cluster-count';
 const SELECTED_TRACKS_SOURCE_ID = 'events-map-selected-event-tracks-source';
 
 describe('EventsMapComponent', () => {
@@ -265,18 +266,28 @@ describe('EventsMapComponent', () => {
     expect(mockColorService.getColorForActivityTypeByActivityTypeGroup).toHaveBeenCalledWith(ActivityTypes.Cycling);
   });
 
-  it('uses stable cluster palette with emissive readability', async () => {
+  it('uses polished cluster colors with readable outlines and labels', async () => {
     await initMap();
 
     expect(map.setPaintProperty).toHaveBeenCalledWith(
       EVENTS_CLUSTER_LAYER_ID,
       'circle-color',
-      expect.arrayContaining(['step', ['get', 'point_count'], '#50b5ff'])
+      expect.arrayContaining(['step', ['get', 'point_count'], '#87d4ff'])
+    );
+    expect(map.setPaintProperty).toHaveBeenCalledWith(
+      EVENTS_CLUSTER_LAYER_ID,
+      'circle-stroke-color',
+      'rgba(244, 248, 255, 0.92)'
     );
     expect(map.setPaintProperty).toHaveBeenCalledWith(
       EVENTS_CLUSTER_LAYER_ID,
       'circle-emissive-strength',
       1
+    );
+    expect(map.setPaintProperty).toHaveBeenCalledWith(
+      EVENTS_CLUSTER_COUNT_LAYER_ID,
+      'text-halo-color',
+      'rgba(16, 37, 63, 0.28)'
     );
   });
 

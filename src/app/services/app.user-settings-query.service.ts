@@ -5,7 +5,6 @@ import { map, distinctUntilChanged } from 'rxjs/operators';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { AppUserService } from './app.user.service';
 import {
-    UserChartSettingsInterface,
     UserMyTracksSettingsInterface,
     UserSummariesSettingsInterface,
     AppThemes
@@ -14,6 +13,7 @@ import { AppUserUtilities } from '../utils/app.user.utilities';
 import equal from 'fast-deep-equal';
 import {
     AppMapSettingsInterface,
+    AppChartSettingsInterface,
     AppMyTracksSettings,
     AppUserInterface
 } from '../models/app-user.interface';
@@ -40,10 +40,10 @@ export class AppUserSettingsQueryService {
      */
     public readonly chartSettings = toSignal(
         this.user$.pipe(
-            map(user => user?.settings?.chartSettings ?? {} as UserChartSettingsInterface),
+            map(user => (user?.settings?.chartSettings ?? {}) as AppChartSettingsInterface),
             distinctUntilChanged((prev, curr) => equal(prev, curr))
         ),
-        { initialValue: {} as UserChartSettingsInterface }
+        { initialValue: {} as AppChartSettingsInterface }
     );
 
     /**
@@ -170,9 +170,9 @@ export class AppUserSettingsQueryService {
     /**
      * Updates Chart settings by merging the provided partial settings.
      */
-    public async updateChartSettings(settings: Partial<UserChartSettingsInterface>): Promise<void> {
+    public async updateChartSettings(settings: Partial<AppChartSettingsInterface>): Promise<void> {
         const currentSettings = this.chartSettings();
-        const hasChanges = Object.keys(settings).some(key => !equal(settings[key as keyof UserChartSettingsInterface], currentSettings[key as keyof UserChartSettingsInterface]));
+        const hasChanges = Object.keys(settings).some(key => !equal(settings[key as keyof AppChartSettingsInterface], currentSettings[key as keyof AppChartSettingsInterface]));
         if (!hasChanges) {
             return;
         }

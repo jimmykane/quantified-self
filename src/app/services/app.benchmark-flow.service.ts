@@ -38,16 +38,22 @@ export class AppBenchmarkFlowService {
     private analyticsService: AppAnalyticsService
   ) { }
 
-  openBenchmarkReport(config: BenchmarkFlowConfig): void {
+  async openBenchmarkReport(config: BenchmarkFlowConfig): Promise<void> {
     if (!config.result) return;
+    const activeEvent = await this.resolveEventWithActivitiesOnly(config);
+    const nextConfig: BenchmarkFlowConfig = {
+      ...config,
+      event: activeEvent,
+      persistEvent: config.persistEvent ?? config.event
+    };
 
     const sheetRef = this.bottomSheet.open(BenchmarkBottomSheetComponent, {
       data: {
-        result: config.result,
-        event: config.event,
-        unitSettings: config.user?.settings?.unitSettings ?? AppUserUtilities.getDefaultUserUnitSettings(),
-        summariesSettings: config.user?.settings?.summariesSettings,
-        brandText: (config.user as any)?.brandText ?? null,
+        result: nextConfig.result,
+        event: nextConfig.event,
+        unitSettings: nextConfig.user?.settings?.unitSettings ?? AppUserUtilities.getDefaultUserUnitSettings(),
+        summariesSettings: nextConfig.user?.settings?.summariesSettings,
+        brandText: (nextConfig.user as any)?.brandText ?? null,
       },
       autoFocus: 'dialog',
       scrollStrategy: this.overlay.scrollStrategies.noop()
@@ -55,7 +61,7 @@ export class AppBenchmarkFlowService {
 
     sheetRef.afterDismissed().subscribe((res: { rerun?: boolean } | undefined) => {
       if (res?.rerun) {
-        this.openBenchmarkSelectionDialog(config);
+        this.openBenchmarkSelectionDialog(nextConfig);
       }
     });
   }
@@ -99,15 +105,24 @@ export class AppBenchmarkFlowService {
     });
 
     if (seededActivities.length === 0) {
-      void this.resolveEventWithActivities(config).then((activeEvent) => {
-        resolvedEvent = activeEvent;
-        if (closed) return;
-        const activities = activeEvent.getActivities?.() || [];
-        const nextSelection = (config.initialSelection && config.initialSelection.length)
-          ? config.initialSelection
-          : activities.slice(0, 2);
-        dialogRef.componentInstance?.setActivities(activities, nextSelection);
-      });
+      void this.resolveEventWithActivities(config)
+        .then((activeEvent) => {
+          resolvedEvent = activeEvent;
+          if (closed) return;
+          const activities = activeEvent.getActivities?.() || [];
+          const nextSelection = (config.initialSelection && config.initialSelection.length)
+            ? config.initialSelection
+            : activities.slice(0, 2);
+          dialogRef.componentInstance?.setActivities(activities, nextSelection);
+        })
+        .catch((error) => {
+          this.logger.error('[AppBenchmarkFlowService] Failed to resolve event activities for benchmark dialog', error);
+          if (closed) {
+            return;
+          }
+          dialogRef.componentInstance?.setActivities([], []);
+          this.snackBar.open('Could not load activities for benchmarking', undefined, { duration: 3000 });
+        });
     }
   }
 
@@ -121,7 +136,12 @@ export class AppBenchmarkFlowService {
     try {
       this.analyticsService.logEvent('benchmark_generate_start');
       const benchmarkResult = await this.benchmarkService.generateBenchmark(config.ref, config.test, config.options);
-      const key = getBenchmarkPairKey(config.ref.getID()!, config.test.getID()!);
+      const referenceID = config.ref.getID();
+      const testID = config.test.getID();
+      if (!referenceID || !testID) {
+        throw new Error('Benchmark activities are missing IDs');
+      }
+      const key = getBenchmarkPairKey(referenceID, testID);
 
       const persistEvent = config.persistEvent ?? config.event;
       if (!persistEvent.benchmarkResults) persistEvent.benchmarkResults = {};
@@ -143,8 +163,9 @@ export class AppBenchmarkFlowService {
         config.event.benchmarkLatestAt = benchmarkLatestAt;
       }
 
-      if (config.user && persistEvent.getID()) {
-        await this.eventService.updateEventProperties(config.user, persistEvent.getID()!, {
+      const persistEventID = persistEvent.getID();
+      if (config.user && persistEventID) {
+        await this.eventService.updateEventProperties(config.user, persistEventID, {
           benchmarkResults: persistEvent.benchmarkResults,
           hasBenchmark: true,
           benchmarkDevices,
@@ -169,15 +190,36 @@ export class AppBenchmarkFlowService {
       return config.event;
     }
 
-    if (!config.user || !config.event.getID?.()) {
+    const eventID = config.event.getID?.();
+    if (!config.user || !eventID) {
       return config.event;
     }
 
     try {
-      const fullEvent = await firstValueFrom(this.eventService.getEventActivitiesAndAllStreams(config.user, config.event.getID()!));
+      const fullEvent = await firstValueFrom(this.eventService.getEventActivitiesAndAllStreams(config.user, eventID));
       return fullEvent || config.event;
     } catch (error) {
       this.logger.error('Failed to load activities for benchmark selection', error);
+      return config.event;
+    }
+  }
+
+  private async resolveEventWithActivitiesOnly(config: BenchmarkFlowConfig): Promise<AppEventInterface> {
+    const activities = config.event.getActivities?.() || [];
+    if (activities.length > 0) {
+      return config.event;
+    }
+
+    const eventID = config.event.getID?.();
+    if (!config.user || !eventID) {
+      return config.event;
+    }
+
+    try {
+      const eventWithActivities = await firstValueFrom(this.eventService.getEventAndActivities(config.user, eventID));
+      return eventWithActivities || config.event;
+    } catch (error) {
+      this.logger.error('Failed to load activities for benchmark report', error);
       return config.event;
     }
   }

@@ -51,4 +51,52 @@ describe('pace-axis.helper', () => {
     expect(scaling.max).toBeUndefined();
     expect(scaling.extraMax).toBe(0.1);
   });
+
+  it('should cover a modest slow-end tail with a small cushion', () => {
+    const scaling = computePaceAxisScaling([
+      25,
+      300,
+      305,
+      310,
+      315,
+      320,
+      325,
+      330,
+      335,
+      340,
+      345,
+      350,
+      355,
+      360,
+      380,
+    ], 0.1);
+
+    expect(scaling.strictMinMax).toBe(true);
+    expect(scaling.max).toBeDefined();
+    expect(scaling.max!).toBeGreaterThan(380);
+  });
+
+  it('should keep extreme slow-end outliers bounded', () => {
+    const scaling = computePaceAxisScaling([
+      25,
+      300,
+      305,
+      310,
+      315,
+      320,
+      325,
+      330,
+      335,
+      340,
+      345,
+      350,
+      355,
+      360,
+      1200,
+    ], 0);
+
+    expect(scaling.strictMinMax).toBe(true);
+    expect(scaling.max).toBeDefined();
+    expect(scaling.max!).toBeLessThan(1250);
+  });
 });

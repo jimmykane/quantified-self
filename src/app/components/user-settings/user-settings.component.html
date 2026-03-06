@@ -41,6 +41,24 @@
     <app-loading-overlay [isLoading]="isSaving || isDeleting" [hasError]="errorSaving || errorDeleting"
       [errorMessage]="errorSaving || errorDeleting" [showSkeleton]="false" height="auto">
       <form [formGroup]="userSettingsFormGroup" (submit)="onSubmit($event)" class="qs-form">
+      <ng-template #settingsValidationInfo>
+        @if (shouldShowValidationDebug) {
+        <div class="settings-validation-debug" role="status" aria-live="polite">
+          <div class="settings-validation-debug__title">
+            <mat-icon>info</mat-icon>
+            <span>Save is disabled. Resolve these fields first:</span>
+          </div>
+          <ul class="settings-validation-debug__list">
+            @for (entry of invalidControlDiagnostics; track entry.control) {
+            <li>
+              <strong>{{ entry.label }}</strong>
+              <span class="settings-validation-debug__errors">: {{ entry.errors.join(', ') }}</span>
+            </li>
+            }
+          </ul>
+        </div>
+        }
+      </ng-template>
       <app-material-pill-tabs class="settings-nav" [selectedIndex]="selectedSectionIndex"
         (selectedIndexChange)="onSelectedSectionIndexChange($event)" [dynamicHeight]="true"
         [lazyContent]="tabsLazyContent"
@@ -49,7 +67,8 @@
 
       <!-- Profile Section -->
       <ng-template appMaterialPillTab="Profile">
-      <mat-card class="settings-card glass-card">
+      <ng-container *ngTemplateOutlet="settingsValidationInfo"></ng-container>
+      <mat-card class="settings-card">
         <div style="padding: 24px; padding-bottom: 0;">
           <h1 style="margin: 0 0 8px 0; font-size: 1.8rem; font-weight: 800;">Profile Settings</h1>
           <p style="margin: 0; opacity: 0.7; font-size: 1rem;">Manage your public persona and account visibility.</p>
@@ -98,7 +117,7 @@
           <div class="brand-text-upgrade">
             <mat-icon>lock</mat-icon>
             <span>Custom watermark text is available on Basic and Pro plans.</span>
-            <a mat-stroked-button color="primary" routerLink="/subscriptions">Upgrade Plan</a>
+            <a mat-stroked-button class="qs-mat-primary" routerLink="/subscriptions">Upgrade Plan</a>
           </div>
           }
 
@@ -119,7 +138,7 @@
           </p>
 
           <div style="margin-top: 16px;">
-            <button mat-stroked-button color="warn" (click)="deleteUser($event)">
+            <button mat-stroked-button class="qs-mat-warn" (click)="deleteUser($event)">
               <mat-icon>delete_forever</mat-icon>
               Delete My Account
             </button>
@@ -131,7 +150,8 @@
 
       <!-- General App Settings -->
       <ng-template appMaterialPillTab="General">
-      <mat-card class="settings-card glass-card">
+      <ng-container *ngTemplateOutlet="settingsValidationInfo"></ng-container>
+      <mat-card class="settings-card">
         <div style="padding: 24px; padding-bottom: 0;">
           <h1 style="margin: 0 0 8px 0; font-size: 1.8rem; font-weight: 800;">General Settings</h1>
           <p style="margin: 0; opacity: 0.7; font-size: 1rem;">Customize your application experience.</p>
@@ -140,9 +160,9 @@
           <mat-form-field appearance="outline">
             <mat-label>Interface Theme</mat-label>
             <mat-select formControlName="appTheme">
-              @for (appTheme of appThemes | keyvalue; track appTheme) {
+              @for (appTheme of appThemeOptions; track appTheme.value) {
               <mat-option [value]="appTheme.value">
-                {{appTheme.key}}
+                {{appTheme.label}}
               </mat-option>
               }
             </mat-select>
@@ -173,7 +193,8 @@
 
       <!-- Dashboard Settings -->
       <ng-template appMaterialPillTab="Dashboard">
-      <mat-card class="settings-card glass-card">
+      <ng-container *ngTemplateOutlet="settingsValidationInfo"></ng-container>
+      <mat-card class="settings-card">
         <div style="padding: 24px; padding-bottom: 0;">
           <h1 style="margin: 0 0 8px 0; font-size: 1.8rem; font-weight: 800;">Dashboard Settings</h1>
           <p style="margin: 0; opacity: 0.7; font-size: 1rem;">Fine-tune your main activity views.</p>
@@ -228,7 +249,8 @@
 
       <!-- Map Settings -->
       <ng-template appMaterialPillTab="Maps">
-      <mat-card class="settings-card glass-card">
+      <ng-container *ngTemplateOutlet="settingsValidationInfo"></ng-container>
+      <mat-card class="settings-card">
         <div style="padding: 24px; padding-bottom: 0;">
           <h1 style="margin: 0 0 8px 0; font-size: 1.8rem; font-weight: 800;">Map Settings</h1>
           <p style="margin: 0; opacity: 0.7; font-size: 1rem;">Configure how your activities are drawn.</p>
@@ -258,7 +280,6 @@
           <div style="display: flex; flex-direction: column; gap: 16px; margin: 8px 0;">
             <mat-slide-toggle formControlName="showMapLaps">Enable Auto-Laps</mat-slide-toggle>
             <mat-slide-toggle formControlName="showMapArrows">Show Directional Arrows</mat-slide-toggle>
-            <mat-slide-toggle formControlName="showMapPoints">Show GPS Data Points</mat-slide-toggle>
           </div>
 
           <div style="margin-top: 16px;">
@@ -273,7 +294,8 @@
 
       <!-- Chart Settings -->
       <ng-template appMaterialPillTab="Charts">
-      <mat-card class="settings-card glass-card">
+      <ng-container *ngTemplateOutlet="settingsValidationInfo"></ng-container>
+      <mat-card class="settings-card">
         <div style="padding: 24px; padding-bottom: 0;">
           <h1 style="margin: 0 0 8px 0; font-size: 1.8rem; font-weight: 800;">Chart Settings</h1>
           <p style="margin: 0; opacity: 0.7; font-size: 1rem;">Customize data visualization and analysis.</p>
@@ -285,15 +307,6 @@
               <mat-select formControlName="xAxisType">
                 @for (x of xAxisTypes | keyvalue; track x) {
                 <mat-option [value]="x.value">{{x.key}}</mat-option>
-                }
-              </mat-select>
-            </mat-form-field>
-
-            <mat-form-field appearance="outline">
-              <mat-label>Chart Aesthetics</mat-label>
-              <mat-select formControlName="chartTheme">
-                @for (t of chartThemes | keyvalue; track t) {
-                <mat-option [value]="t.value">{{t.key}}</mat-option>
                 }
               </mat-select>
             </mat-form-field>
@@ -319,7 +332,6 @@
             <mat-slide-toggle formControlName="showAllData">Show All Data Points</mat-slide-toggle>
             <mat-slide-toggle formControlName="chartCursorBehaviour">Selection Tool by Default</mat-slide-toggle>
             <mat-slide-toggle formControlName="useAnimations">Enable Animations</mat-slide-toggle>
-            <mat-slide-toggle formControlName="stackYAxes">Stack Multi-Charts</mat-slide-toggle>
           </div>
 
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 16px;">
@@ -342,7 +354,8 @@
 
       <!-- Unit Settings -->
       <ng-template appMaterialPillTab="Units">
-      <mat-card class="settings-card glass-card">
+      <ng-container *ngTemplateOutlet="settingsValidationInfo"></ng-container>
+      <mat-card class="settings-card">
         <div style="padding: 24px; padding-bottom: 0;">
           <h1 style="margin: 0 0 8px 0; font-size: 1.8rem; font-weight: 800;">Measurement Units</h1>
           <p style="margin: 0; opacity: 0.7; font-size: 1rem;">Choose your preferred units for sporting data.</p>
@@ -393,24 +406,20 @@
       </app-material-pill-tabs>
 
       <!-- Floating Action Button for Save (Desktop Only) -->
-      @if (!hasError()) {
       <div class="qs-form-actions-floating">
-        <button mat-fab color="primary" [disabled]="isSaving || !userSettingsFormGroup.dirty" matTooltip="Save Changes"
+        <button mat-fab class="qs-mat-primary" [disabled]="isSaving || !userSettingsFormGroup.dirty || userSettingsFormGroup.invalid" matTooltip="Save Changes"
           (click)="onSubmit($event)">
           <mat-icon>save</mat-icon>
         </button>
       </div>
-      }
 
       <!-- Sticky Save for Mobile -->
-      @if (!hasError()) {
       <div class="mobile-save-bar">
-        <button mat-flat-button color="primary" [disabled]="isSaving || !userSettingsFormGroup.dirty"
+        <button mat-flat-button class="qs-mat-primary" [disabled]="isSaving || !userSettingsFormGroup.dirty || userSettingsFormGroup.invalid"
           (click)="onSubmit($event)">
           Save Settings
         </button>
       </div>
-      }
 
       </form>
     </app-loading-overlay>

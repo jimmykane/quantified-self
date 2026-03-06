@@ -264,9 +264,40 @@ describe('EventTableComponent', () => {
         expect(updateDisplayedColumnsSpy).toHaveBeenCalled();
     });
 
+    it('should not change paginator page size when already in sync', () => {
+        const updateDisplayedColumnsSpy = vi.spyOn(component as any, 'updateDisplayedColumns');
+        component.user.settings.dashboardSettings.tableSettings.selectedColumns = ['Name', 'Start Date'];
+        component.user.settings.dashboardSettings.tableSettings.eventsPerPage = 25;
+        (component.paginator as any).pageSize = 25;
+
+        component.ngOnChanges({
+            user: new SimpleChange(null, component.user, false),
+        } as any);
+
+        expect(component.paginator._changePageSize).not.toHaveBeenCalled();
+        expect(updateDisplayedColumnsSpy).toHaveBeenCalled();
+    });
+
+    it('should not persist page size when page event does not change size', async () => {
+        component.user.settings.dashboardSettings.tableSettings.eventsPerPage = 25;
+
+        await component.pageChanges({ pageSize: 25 } as any);
+
+        expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+    });
+
     it('should initialize data source with events', () => {
         component.ngAfterViewInit();
         expect(component.data.data.length).toBe(3);
+    });
+
+    it('should support comma-separated search terms', () => {
+        component.ngAfterViewInit();
+        const row = component.data.data[0] as any;
+
+        expect(component.data.filterPredicate(row, 'test run,missing')).toBe(true);
+        expect(component.data.filterPredicate(row, 'missing,test description')).toBe(true);
+        expect(component.data.filterPredicate(row, 'missing,unknown')).toBe(false);
     });
 
     it('should patch-save event description via updateEventProperties', async () => {
@@ -311,16 +342,19 @@ describe('EventTableComponent', () => {
 
     it('should unsubscribe tracked subscriptions on destroy', () => {
         const deleteSub = { unsubscribe: vi.fn() } as any;
+        const searchSub = { unsubscribe: vi.fn() } as any;
         const sortSub = { unsubscribe: vi.fn() } as any;
         const breakpointSub = { unsubscribe: vi.fn() } as any;
 
         (component as any).deleteConfirmationSubscription = deleteSub;
+        (component as any).searchSubscription = searchSub;
         (component as any).sortSubscription = sortSub;
         (component as any).breakpointSubscription = breakpointSub;
 
         component.ngOnDestroy();
 
         expect(deleteSub.unsubscribe).toHaveBeenCalledTimes(1);
+        expect(searchSub.unsubscribe).toHaveBeenCalledTimes(1);
         expect(sortSub.unsubscribe).toHaveBeenCalledTimes(1);
         expect(breakpointSub.unsubscribe).toHaveBeenCalledTimes(1);
     });

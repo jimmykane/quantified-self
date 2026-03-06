@@ -1,47 +1,66 @@
-<!-- Search Section -->
-<div class="glass-card qs-filter-container">
-  <mat-form-field appearance="outline" class="qs-search-field">
-    <mat-label>Search events</mat-label>
-    <input matInput [value]="searchTerm" (input)="onSearchInput($event)" placeholder="Date, name, type, etc..."
-      autocomplete="off">
-    <mat-icon matSuffix *ngIf="!searchTerm">search</mat-icon>
-    <button mat-icon-button matSuffix *ngIf="searchTerm" (click)="clearSearch()" aria-label="Clear">
-      <mat-icon>close</mat-icon>
-    </button>
-  </mat-form-field>
-
-  @if (selection.selected.length) {
-  <div class="buttons" [@expandCollapse]>
-    @if (this.selection.selected.length > 1) {
-    <button mat-icon-button [matBadge]="selection.selected.length" matBadgeColor="primary" matBadgeSize="small"
-      matTooltip="Merge {{selection.selected.length}} events"
-      (click)="$event.preventDefault(); $event.stopPropagation();mergeSelection($event)">
-      <mat-icon>compare_arrows</mat-icon>
-    </button>
-    }
-    <button mat-icon-button [matBadge]="selection.selected.length" matBadgeColor="accent" matBadgeSize="small"
-      [disabled]="selection.selected.length > 20"
-      matTooltip="{{ selection.selected.length > 20 ? 'Selection limit reached (max 20)' : 'Download as csv ' + selection.selected.length + ' events' }}"
-      (click)="$event.preventDefault(); $event.stopPropagation(); downloadAsCSV($event)">
-      <mat-icon>csv</mat-icon>
-    </button>
-    <button mat-icon-button [matBadge]="selection.selected.length" matBadgeColor="primary" matBadgeSize="small"
-      [disabled]="selection.selected.length > 20"
-      matTooltip="{{ selection.selected.length > 20 ? 'Selection limit reached (max 20)' : 'Download original files' }}"
-      (click)="$event.preventDefault(); $event.stopPropagation(); downloadOriginals()">
-      <mat-icon>folder_zip</mat-icon>
-    </button>
-    <button mat-icon-button [matBadge]="selection.selected.length" matBadgeColor="warn" matBadgeSize="small"
-      matTooltip="Delete {{selection.selected.length}} events"
-      (click)="$event.preventDefault(); $event.stopPropagation();deleteSelection()">
-      <mat-icon>delete</mat-icon>
-    </button>
-  </div>
-  }
-</div>
-
 <!-- Table Section -->
-<div class="glass-card table-container">
+<div class="qs-glass-card-panel table-container">
+  <div class="table-toolbar">
+    <mat-form-field appearance="outline" class="qs-search-field" subscriptSizing="dynamic">
+      <mat-label>Search events</mat-label>
+      <input matInput [value]="searchTerm" (input)="onSearchInput($event)" placeholder="Date, name, type, etc..."
+        autocomplete="off">
+      <mat-icon matSuffix *ngIf="!searchTerm">search</mat-icon>
+      <button mat-icon-button matSuffix *ngIf="searchTerm" (click)="clearSearch()" aria-label="Clear">
+        <mat-icon>close</mat-icon>
+      </button>
+    </mat-form-field>
+
+    @if (selection.selected.length) {
+    <div class="buttons" [@expandCollapse]>
+      @if (this.selection.selected.length > 1) {
+      <button mat-icon-button matTooltip="Merge {{selection.selected.length}} events"
+        class="action-icon-button"
+        (click)="$event.preventDefault(); $event.stopPropagation();mergeSelection($event)">
+        <mat-icon
+          class="qs-app-badge qs-app-badge--large"
+          [matBadge]="selection.selected.length"
+          matBadgeSize="large"
+          matBadgePosition="above after"
+          matBadgeOverlap="true">compare_arrows</mat-icon>
+      </button>
+      }
+      <button mat-icon-button [disabled]="selection.selected.length > 20"
+        class="action-icon-button"
+        matTooltip="{{ selection.selected.length > 20 ? 'Selection limit reached (max 20)' : 'Download as csv ' + selection.selected.length + ' events' }}"
+        (click)="$event.preventDefault(); $event.stopPropagation(); downloadAsCSV($event)">
+        <mat-icon
+          class="qs-app-badge qs-app-badge--large"
+          [matBadge]="selection.selected.length"
+          matBadgeSize="large"
+          matBadgePosition="above after"
+          matBadgeOverlap="true">csv</mat-icon>
+      </button>
+      <button mat-icon-button [disabled]="selection.selected.length > 20"
+        class="action-icon-button"
+        matTooltip="{{ selection.selected.length > 20 ? 'Selection limit reached (max 20)' : 'Download original files' }}"
+        (click)="$event.preventDefault(); $event.stopPropagation(); downloadOriginals()">
+        <mat-icon
+          class="qs-app-badge qs-app-badge--large"
+          [matBadge]="selection.selected.length"
+          matBadgeSize="large"
+          matBadgePosition="above after"
+          matBadgeOverlap="true">folder_zip</mat-icon>
+      </button>
+      <button mat-icon-button matTooltip="Delete {{selection.selected.length}} events"
+        class="action-icon-button"
+        (click)="$event.preventDefault(); $event.stopPropagation();deleteSelection()">
+        <mat-icon
+          class="qs-app-badge qs-app-badge--large"
+          [matBadge]="selection.selected.length"
+          matBadgeSize="large"
+          matBadgePosition="above after"
+          matBadgeOverlap="true">delete</mat-icon>
+      </button>
+    </div>
+    }
+  </div>
+
   <app-loading-overlay [isLoading]="isLoading" [hasError]="this.events && this.events.length === 0"
     [errorMessage]="'No events yet'" [errorHint]="'Import activities or adjust filters to see rows'"
     [errorIcon]="'table_rows'" [showSkeleton]="false" height="auto" borderRadius="12px">
@@ -92,7 +111,7 @@
                 </span>
               }
               @if (!row['Merged Event'] && row[column]) {
-              <app-activity-type-icon [activityType]="row[column]" size="18px" vAlign="middle"></app-activity-type-icon>
+              <app-activity-type-icon [activityType]="row[column]" [event]="$any(row.Event)" size="18px" vAlign="middle"></app-activity-type-icon>
               }
               <span class="activity-type-text">{{ row[column] }}</span>
             </span>

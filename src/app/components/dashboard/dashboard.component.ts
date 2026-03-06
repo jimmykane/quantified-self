@@ -1,6 +1,7 @@
-import { Component, OnChanges, OnDestroy, OnInit, inject } from '@angular/core';
+import { Component, DestroyRef, OnChanges, OnDestroy, OnInit, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AppEventService } from '../../services/app.event.service';
-import { merge, of, Subject, Subscription } from 'rxjs';
+import { merge, of, Subject } from 'rxjs';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -30,7 +31,6 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   public user: AppUserInterface;
   public targetUser: AppUserInterface;
   public events: EventInterface[];
-  public dataSubscription: Subscription;
   public searchTerm: string;
   public searchStartDate: Date;
   public searchEndDate: Date;
@@ -41,12 +41,14 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   public hasMergedEvents = false;
 
   private shouldSearch: boolean;
-  private manualSearchTrigger$ = new Subject<AppUserInterface | null>();
+  private manualSearchTrigger$ = new Subject<{ user: AppUserInterface | null; refreshToken: number }>();
+  private manualSearchRefreshToken = 0;
   private initialLiveReconcilePending = false;
   private initialResolvedEventsForReconcile: EventInterface[] = [];
   private initialResolvedUserIDForReconcile: string | null = null;
   private analyticsService = inject(AppAnalyticsService);
   private logger = inject(LoggerService);
+  private destroyRef = inject(DestroyRef);
 
 
   constructor(public authService: AppAuthService,
@@ -98,12 +100,33 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         this.targetUser = await this.userService.getUserByID(userID).pipe(take(1)).toPromise();
         this.logPerf('target_user_fetch', targetUserFetchStart, { userID });
       } catch (e) {
-        return this.router.navigate(['dashboard']).then(() => {
-          this.snackBar.open('Page not found');
-        });
+        void this.router.navigate(['dashboard'])
+          .then(() => {
+            this.snackBar.open('Page not found');
+          })
+          .catch((error) => {
+            this.logger.error('[DashboardComponent] Failed to redirect after missing target user', error);
+          });
+        return;
       }
     }
-    this.dataSubscription = merge(this.authService.user$, this.manualSearchTrigger$).pipe(switchMap((user: AppUserInterface | null) => {
+    merge(
+      this.authService.user$.pipe(
+        map((user: AppUserInterface | null) => ({ user, refreshToken: 0 }))
+      ),
+      this.manualSearchTrigger$
+    ).pipe(
+      map(({ user, refreshToken }) => ({
+        user,
+        refreshToken,
+        eventsListenerKey: this.getEventsListenerKey(user),
+      })),
+      distinctUntilChanged((previous, current) => (
+        previous.eventsListenerKey === current.eventsListenerKey
+        && previous.refreshToken === current.refreshToken
+      )),
+      map(({ user }) => user),
+      switchMap((user: AppUserInterface | null) => {
       const userEmissionStart = performance.now();
 
       if (this.shouldSearch || !this.isInitialized) {
@@ -112,9 +135,13 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
 
       // Get the user
       if (!user) {
-        this.router.navigate(['login']).then(() => {
-          this.snackBar.open('You were signed out out')
-        });
+        void this.router.navigate(['login'])
+          .then(() => {
+            this.snackBar.open('You were signed out out');
+          })
+          .catch((error) => {
+            this.logger.error('[DashboardComponent] Failed to navigate to login after sign-out', error);
+          });
         return of({ user: null, events: null });
       }
 
@@ -239,7 +266,9 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
           map((events) => {
             return { events: events, user: user }
           }))
-    })).subscribe((eventsAndUser) => {
+    }),
+      takeUntilDestroyed(this.destroyRef)
+    ).subscribe((eventsAndUser) => {
 
       this.shouldSearch = false;
       this.events = eventsAndUser.events || [];
@@ -282,7 +311,11 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       this.user.settings.dashboardSettings.startDate = search.startDate && search.startDate.getTime();
       this.user.settings.dashboardSettings.endDate = search.endDate && search.endDate.getTime();
       this.user.settings.dashboardSettings.activityTypes = search.activityTypes;
-      this.manualSearchTrigger$.next(this.user);
+      this.manualSearchRefreshToken += 1;
+      this.manualSearchTrigger$.next({
+        user: this.user,
+        refreshToken: this.manualSearchRefreshToken,
+      });
       this.analyticsService.logEvent('dashboard_search', { method: DateRanges[search.dateRange] });
       await this.userService.updateUserProperties(this.user, { settings: this.user.settings });
     } catch (error) {
@@ -308,9 +341,6 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
 
 
   ngOnDestroy(): void {
-    if (this.dataSubscription) {
-      this.dataSubscription.unsubscribe();
-    }
     this.manualSearchTrigger$.complete();
   }
 
@@ -359,5 +389,27 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       return startDate;
     }
     return null;
+  }
+
+  private getEventsListenerKey(user: AppUserInterface | null): string {
+    if (!user) {
+      return 'anonymous';
+    }
+
+    const dashboardSettings = user.settings?.dashboardSettings;
+    const activityTypes = Array.isArray(dashboardSettings?.activityTypes)
+      ? [...dashboardSettings.activityTypes].sort((left, right) => `${left}`.localeCompare(`${right}`))
+      : [];
+
+    return JSON.stringify({
+      queryUserID: this.targetUser?.uid || user.uid,
+      dateRange: dashboardSettings?.dateRange ?? null,
+      startDate: dashboardSettings?.startDate ?? null,
+      endDate: dashboardSettings?.endDate ?? null,
+      includeMergedEvents: dashboardSettings?.includeMergedEvents !== false,
+      activityTypes,
+      startOfTheWeek: user.settings?.unitSettings?.startOfTheWeek ?? null,
+      searchTerm: this.searchTerm || null,
+    });
   }
 }

@@ -1,5 +1,9 @@
 # Extensions Agent Instructions
 
-Shared instruction files stay in `../.agent/` for reuse by other apps/agents.
+Read `/Users/dimitrios/Projects/quantified-self/AGENTS.md` first.
 
-Role rules: ../.agent/rules/security-reviewer.md
+Extensions-only rules:
+- `../.agent/rules/security-reviewer.md`
+
+Verification note:
+- Most extension env/config changes are documentation or deployment configuration only. If no automated tests cover the change, state that explicitly and validate the affected Firebase config manually.

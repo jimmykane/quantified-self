@@ -1,46 +1,110 @@
 <section class="container">
+  <span [matTooltip]="user ? cursorBehaviourTooltip : 'Sign in to use this'">
+    <button mat-icon-button type="button"
+      class="qs-action-menu-icon-button event-chart-actions__mode-button"
+      [disabled]="!user"
+      aria-label="Toggle chart interaction mode"
+      (click)="onCursorBehaviourToggle()">
+      <mat-icon>{{ cursorBehaviourIcon }}</mat-icon>
+    </button>
+  </span>
+
+  @if (showResetZoom) {
+  <span matTooltip="Reset zoom">
+    <button mat-icon-button type="button"
+      class="qs-action-menu-icon-button event-chart-actions__mode-button"
+      aria-label="Reset chart zoom"
+      (click)="onResetZoom()">
+      <mat-icon>restart_alt</mat-icon>
+    </button>
+  </span>
+  }
+
+  @if (showSeriesMenu) {
+  <span [matTooltip]="seriesMenuSummary || 'Series visibility'">
+    <button mat-icon-button type="button"
+      class="qs-action-menu-icon-button event-chart-actions__icon-button"
+      [matMenuTriggerFor]="seriesMenu"
+      aria-label="Series visibility">
+      <mat-icon
+        class="event-chart-actions__series-icon qs-app-badge qs-app-badge--large"
+        [matBadge]="seriesBadgeLabel"
+        [matBadgeHidden]="!totalSeriesCount"
+        matBadgeSize="large"
+        matBadgePosition="above after"
+        matBadgeOverlap="true"
+        aria-hidden="false">stacked_line_chart</mat-icon>
+    </button>
+  </span>
+  }
+
   <span [matTooltip]="user ? 'Chart options' : 'Sign in to use this'">
-    <button mat-stroked-button class="options-trigger" [matMenuTriggerFor]="optionsMenu" [disabled]="!user"
+    <button mat-icon-button type="button"
+      class="qs-action-menu-icon-button event-chart-actions__icon-button"
+      [matMenuTriggerFor]="optionsMenu" [disabled]="!user"
       aria-label="Chart options">
       <mat-icon>tune</mat-icon>
-      Options
     </button>
   </span>
 </section>
 
+<mat-menu #seriesMenu="matMenu" xPosition="before" class="qs-menu-panel">
+  <div class="series-menu" (click)="$event.stopPropagation()">
+    @for (item of seriesMenuItems; track item.dataType) {
+    <button type="button" class="series-menu__item" [attr.aria-pressed]="item.visible"
+      (click)="$event.stopPropagation(); onSeriesVisibilityToggle(item.dataType, !item.visible)">
+      <span class="series-menu__swatch" [style.background]="item.color"></span>
+      <span class="series-menu__label">{{ item.label }}</span>
+    </button>
+    }
+
+    @if (shouldShowAllSeriesAction) {
+    <div class="series-menu__actions">
+      <button mat-stroked-button type="button" (click)="$event.stopPropagation(); onShowAllSeries()">
+        Show all data types
+      </button>
+    </div>
+    }
+  </div>
+</mat-menu>
+
 <mat-menu #optionsMenu="matMenu" xPosition="before" class="qs-menu-panel qs-menu-panel-form qs-config-menu chart-options-menu">
-  <section mat-menu-item>
-    <mat-slide-toggle class="chart-option-toggle" [checked]="stackYAxes" [disabled]="!user"
-      (click)="$event.stopPropagation()" (change)="onStackYAxesToggle($event.checked)">
-      Stack Y Axes
-    </mat-slide-toggle>
+  <app-menu-radio-list label="X Axis" [value]="xAxisType" [options]="xAxisOptions"
+    [disabled]="!user || event?.isMultiSport()" (valueChange)="onXAxisTypeChange($event)">
+  </app-menu-radio-list>
+
+  <mat-divider></mat-divider>
+
+  <section class="chart-options-menu__slider-section" (click)="$event.stopPropagation()">
+    <div class="chart-options-menu__slider-header">
+      <span>Fill Opacity</span>
+      <span>{{ fillOpacityPercentLabel }}</span>
+    </div>
+    <mat-slider [max]="1" [min]="0" [step]="0.05" discrete>
+      <input matSliderThumb [value]="fillOpacity" [disabled]="!user" (valueChange)="onFillOpacityChange($event)">
+    </mat-slider>
   </section>
 
+  <mat-divider></mat-divider>
+
   <section mat-menu-item>
-    <mat-slide-toggle class="chart-option-toggle" [checked]="showLaps" [disabled]="!user"
+    <mat-slide-toggle [checked]="showLaps" [disabled]="!user"
       (click)="$event.stopPropagation()" (change)="onShowLapsToggle($event.checked)">
       Show Laps
     </mat-slide-toggle>
   </section>
 
   <section mat-menu-item>
-    <mat-slide-toggle class="chart-option-toggle" [checked]="showAllData" [disabled]="!user"
-      (click)="$event.stopPropagation()" (change)="onShowAllDataToggle($event.checked)">
-      Show All Data
+    <mat-slide-toggle [checked]="syncChartHoverToMap" [disabled]="!user"
+      (click)="$event.stopPropagation()" (change)="onSyncChartHoverToMapToggle($event.checked)">
+      Sync Hover to Map
     </mat-slide-toggle>
   </section>
 
   <section mat-menu-item>
-    <mat-form-field class="x-axis-field">
-      <mat-label>X Axis</mat-label>
-      <mat-select [value]="xAxisType" panelClass="qs-config-submenu" [disabled]="!user || event?.isMultiSport()"
-        (selectionChange)="onXAxisTypeChange($event.value)">
-        @for (xAxisType of xAxisTypes | keyvalue; track xAxisType) {
-        <mat-option [value]="xAxisType.value">
-          {{xAxisType.key}}
-        </mat-option>
-        }
-      </mat-select>
-    </mat-form-field>
+    <mat-slide-toggle [checked]="showAllData" [disabled]="!user"
+      (click)="$event.stopPropagation()" (change)="onShowAllDataToggle($event.checked)">
+      Show All Data
+    </mat-slide-toggle>
   </section>
 </mat-menu>

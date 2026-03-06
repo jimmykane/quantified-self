@@ -20,7 +20,6 @@ import { AppAuthService } from '../../authentication/app.auth.service';
 import { User } from '@sports-alliance/sports-lib';
 import {
   ChartCursorBehaviours,
-  ChartThemes,
   XAxisTypes
 } from '@sports-alliance/sports-lib';
 import {
@@ -43,6 +42,9 @@ import { AppEventService } from '../../services/app.event.service';
 import { shouldRenderIntensityZonesChart } from '../../helpers/intensity-zones-chart-data-helper';
 import { PerformanceCurveDataService } from '../../services/performance-curve-data.service';
 import { reconcileEventDetailsLiveUpdate } from '../../utils/event-live-reconcile';
+import { hasEventChartableData } from '../../helpers/event-echarts-data.helper';
+import { resolveEventChartXAxisType } from '../../helpers/event-echarts-xaxis.helper';
+import { hasVisibleEventLaps } from '../../helpers/event-lap-type.helper';
 @Component({
   selector: 'app-event-card',
   templateUrl: './event.card.component.html',
@@ -79,7 +81,7 @@ export class EventCardComponent implements OnInit {
 
   // Computed signals for template - replaces method calls
   public hasLapsFlag = computed(() =>
-    this.event()?.getActivities().some(a => a.getLaps().length > 0) ?? false
+    hasVisibleEventLaps(this.event()?.getActivities() ?? [])
   );
 
   public hasIntensityZonesFlag = computed(() =>
@@ -118,6 +120,26 @@ export class EventCardComponent implements OnInit {
     this.event()?.getActivities().some(a => a.hasPositionData()) ?? false
   );
 
+  public hasChartDataFlag = computed(() => {
+    const event = this.event();
+    const user = this.currentUser();
+    const selectedActivities = this.selectedActivitiesDebounced();
+
+    if (!event || !user || selectedActivities.length === 0) {
+      return false;
+    }
+
+    const chartSettings = this.userSettingsQuery.chartSettings();
+    const userUnitSettings = this.userUnitSettings();
+    const dataTypesToUse = this.userService.getUserChartDataTypesToUse(user);
+    const xAxisType = resolveEventChartXAxisType(
+      event,
+      chartSettings?.xAxisType ?? XAxisTypes.Duration
+    );
+
+    return hasEventChartableData(selectedActivities, xAxisType);
+  });
+
   // Computed ownership check
   public isOwner = computed(() => {
     const targetUID = this.targetUserID();
@@ -129,7 +151,7 @@ export class EventCardComponent implements OnInit {
   // User settings (derived from query service)
   public userUnitSettings = this.userSettingsQuery.unitSettings;
 
-  public chartTheme = toSignal(this.themeService.getChartTheme(), { initialValue: ChartThemes.Material });
+  public darkTheme = computed(() => this.themeService.appTheme() === AppThemes.Dark);
 
   // Required for app-event-intensity-zones until it is also refactored
   public useChartAnimations = computed(() =>

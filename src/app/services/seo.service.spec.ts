@@ -253,4 +253,21 @@ describe('SeoService', () => {
         expect(mockDocument.head.appendChild).toHaveBeenCalledWith(mockScript);
         expect(mockScript.textContent).toBe(JSON.stringify(customJsonLd));
     });
+
+    it('should not register duplicate router subscriptions when init is called multiple times', () => {
+        mockActivatedRoute.data = of({ title: 'Deduped' });
+        mockRouter.url = '/deduped';
+        mockRouter.parseUrl = vi.fn().mockReturnValue({
+            queryParams: {},
+            fragment: null,
+            toString: () => '/deduped'
+        });
+
+        service.init();
+        service.init();
+        routerEventsSubject.next(new NavigationEnd(1, '/deduped', '/deduped'));
+
+        expect(titleServiceSpy.setTitle).toHaveBeenCalledTimes(1);
+        expect(titleServiceSpy.setTitle).toHaveBeenCalledWith('Deduped - Quantified Self');
+    });
 });

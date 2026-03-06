@@ -1,31 +1,53 @@
 import {
+  AfterViewInit,
   ChangeDetectionStrategy,
-  ChangeDetectorRef,
   Component,
+  ElementRef,
   Input,
-  NgZone,
   OnChanges,
   OnDestroy,
+  SimpleChanges,
+  ViewChild
 } from '@angular/core';
-
-import { AmChartsService } from '../../../services/am-charts.service';
-
-// Type-only imports
-import type * as am4core from '@amcharts/amcharts4/core';
-import type * as am4charts from '@amcharts/amcharts4/charts';
-import type * as am4plugins_regression from '@amcharts/amcharts4/plugins/regression';
-
-
-import { DynamicDataLoader } from '@sports-alliance/sports-lib';
-import { DashboardChartAbstractDirective } from '../dashboard-chart-abstract-component.directive';
-import { AppEventColorService } from '../../../services/color/app.event.color.service';
-import { LoggerService } from '../../../services/logger.service';
-
+import type { EChartsType } from 'echarts/core';
+import {
+  ActivityTypes,
+  ChartDataCategoryTypes,
+  ChartDataValueTypes,
+  TimeIntervals
+} from '@sports-alliance/sports-lib';
 import { AppColors } from '../../../services/color/app.colors';
-import { ActivityTypes } from '@sports-alliance/sports-lib';
-import { ChartDataCategoryTypes, TimeIntervals } from '@sports-alliance/sports-lib';
+import { AppEventColorService } from '../../../services/color/app.event.color.service';
+import { EChartsLoaderService } from '../../../services/echarts-loader.service';
+import { LoggerService } from '../../../services/logger.service';
+import {
+  ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS,
+  EChartsHostController
+} from '../../../helpers/echarts-host-controller';
+import { getOrCreateEChartsTooltipHost } from '../../../helpers/echarts-tooltip-host.helper';
+import { getViewportConstrainedTooltipPosition } from '../../../helpers/echarts-tooltip-position.helper';
+import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
+import { buildDashboardValueAxisConfig } from '../../../helpers/dashboard-echarts-yaxis.helper';
+import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
+import {
+  getDashboardAggregateData,
+  getDashboardDataInstanceOrNull,
+  getDashboardSummaryMetaLabel
+} from '../../../helpers/dashboard-chart-data.helper';
+import {
+  buildDashboardCartesianPoints,
+  buildDashboardDateRegressionLine,
+  DashboardCartesianPoint
+} from '../../../helpers/dashboard-echarts-cartesian.helper';
+import {
+  buildDashboardDateActivitySegmentation,
+  DashboardDateActivityBucket,
+  DashboardDateActivitySegmentationResult,
+  DashboardDateActivitySeriesEntry
+} from '../../../helpers/dashboard-date-activity-segmentation.helper';
 import { normalizeUnitDerivedTypeLabel } from '../../../helpers/stat-label.helper';
 
+type ChartOption = Parameters<EChartsType['setOption']>[0];
 
 @Component({
   selector: 'app-columns-chart',
@@ -34,225 +56,645 @@ import { normalizeUnitDerivedTypeLabel } from '../../../helpers/stat-label.helpe
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: false
 })
-export class ChartsColumnsComponent extends DashboardChartAbstractDirective implements OnChanges, OnDestroy {
+export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestroy {
+  @Input() data: any;
+  @Input() chartDataType?: string;
+  @Input() chartDataValueType?: ChartDataValueTypes;
+  @Input() chartDataCategoryType?: ChartDataCategoryTypes;
+  @Input() chartDataTimeInterval?: TimeIntervals;
+  @Input() darkTheme = false;
+  @Input() useAnimations = false;
+  @Input() isLoading = false;
+
   @Input() vertical = true;
-  @Input() type: 'columns' | 'pyramids';
+  @Input() type: 'columns' | 'pyramids' = 'columns';
 
+  @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
+  private readonly chartHost: EChartsHostController;
+  private readonly dateTypePalette = [
+    AppColors.Blue,
+    AppColors.Green,
+    AppColors.Orange,
+    AppColors.Purple,
+    AppColors.LightBlue,
+    AppColors.Yellow,
+    AppColors.Pink,
+    AppColors.Red,
+    AppColors.DeepBlue,
+    AppColors.LightGreen
+  ];
 
-  constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, protected eventColorService: AppEventColorService, protected amChartsService: AmChartsService, protected logger: LoggerService) {
-    super(zone, changeDetector, amChartsService, logger);
+  constructor(
+    private eChartsLoader: EChartsLoaderService,
+    private eventColorService: AppEventColorService,
+    private logger: LoggerService
+  ) {
+    this.chartHost = new EChartsHostController({
+      eChartsLoader: this.eChartsLoader,
+      logger: this.logger,
+      logPrefix: '[ChartsColumnsComponent]'
+    });
   }
 
-  protected async createChart(): Promise<am4charts.XYChart> {
-    const { core, charts } = await this.amChartsService.load();
-    const regression = await import('@amcharts/amcharts4/plugins/regression');
+  async ngAfterViewInit(): Promise<void> {
+    await this.refreshChart();
+  }
 
-    const chart = await super.createChart(charts.XYChart) as am4charts.XYChart;
-
-    // chart.exporting.menu = this.getExportingMenu();
-    chart.hiddenState.properties.opacity = 0;
-    chart.padding(10, 0, 0, 10);
-    chart.paddingBottom = this.vertical ? 20 : 0;
-    chart.fontSize = '0.8em';
-
-    // top container for labels
-    const topContainer = chart.chartContainer.createChild(core.Container);
-    topContainer.layout = 'absolute';
-    topContainer.toBack();
-    topContainer.paddingBottom = 5;
-    topContainer.width = core.percent(100);
-    // Title
-    const chartTitle = topContainer.createChild(core.Label);
-    chartTitle.align = 'left';
-    chartTitle.adapter.add('text', (text, target, key) => {
-      const data = target.parent.parent.parent.parent['data'];
-      const value = this.getAggregateData(data, this.chartDataValueType);
-      if (!value) {
-        return `[font-size: 1.4em]${this.chartDataValueType || 'Value'}[/] [bold font-size: 1.3em]--[/]`;
-      }
-      const normalizedLabel = normalizeUnitDerivedTypeLabel(value.getType(), value.getDisplayType());
-      return `[font-size: 1.4em]${normalizedLabel}[/] [bold font-size: 1.3em]${value.getDisplayValue()}${value.getDisplayUnit()}[/] (${this.chartDataValueType}${this.chartDataCategoryType === ChartDataCategoryTypes.DateType ? ` @ ${TimeIntervals[this.chartDataTimeInterval]}` : ``})`;
-    });
-    chartTitle.marginTop = core.percent(20);
-    const categoryAxis = this.vertical ? chart.xAxes.push(this.getCategoryAxis(this.chartDataCategoryType, this.chartDataTimeInterval, charts)) : chart.yAxes.push(this.getCategoryAxis(this.chartDataCategoryType, this.chartDataTimeInterval, charts));
-    if (categoryAxis instanceof charts.CategoryAxis) {
-      categoryAxis.dataFields.category = 'type';
-    } else if (categoryAxis instanceof charts.DateAxis) {
-      categoryAxis.dataFields.date = 'time';
-      chart.dateFormatter.dateFormat = categoryAxis.dateFormatter.dateFormat;
-    }
-    categoryAxis.renderer.grid.template.location = 0;
-    categoryAxis.renderer.cellStartLocation = 0.1;
-    categoryAxis.renderer.cellEndLocation = 0.9;
-    categoryAxis.renderer.opposite = !this.vertical;
-    categoryAxis.renderer.minGridDistance = this.vertical ? 1 : 1;
-    categoryAxis.renderer.grid.template.disabled = this.vertical || (categoryAxis instanceof charts.CategoryAxis);
-
-    categoryAxis.renderer.labels.template.adapter.add('dy', (dy, target) => {
-      if (this.vertical && target.dataItem && target.dataItem.index % 2) {
-        return dy + 20;
-      }
-      return dy;
-    });
-
-
-    const valueAxis = this.vertical ? chart.yAxes.push(new charts.ValueAxis()) : chart.xAxes.push(new charts.ValueAxis());
-    valueAxis.renderer.opposite = this.vertical;
-    valueAxis.extraMax = this.vertical ? 0.15 : 0.15;
-    valueAxis.numberFormatter = new core.NumberFormatter();
-    valueAxis.numberFormatter.numberFormat = `#`;
-    // valueAxis.numberFormatter.numberFormat = `#${DynamicDataLoader.getDataClassFromDataType(this.chartDataType).unit}`;
-    valueAxis.renderer.labels.template.adapter.add('text', (text, target) => {
-      const data = this.getDataInstanceOrNull(text);
-      if (!data) {
-        return '';
-      }
-      return `[bold font-size: 1.0em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
-    });
-    valueAxis.renderer.labels.template.adapter.add('dx', (text, target) => {
-      // console.log(target.dataItem.index);
-      return (target.dataItem.index === 2 && !this.vertical) ? 15 : 0;
-    });
-
-    // valueAxis.renderer.minLabelPosition = this.vertical ? 0 : 0.005;
-    // valueAxis.renderer.minGridDistance = this.vertical ?  0 : 200;
-    valueAxis.min = 0;
-
-    let series;
-    let regressionSeries: am4charts.XYSeries;
-
-    series = this.vertical && this.type === 'pyramids' ? chart.series.push(new charts.CurvedColumnSeries()) : chart.series.push(new charts.ColumnSeries());
-    series.columns.template.tension = this.vertical && this.type === 'pyramids' ? 1 : 0;
-    series.columns.template.strokeOpacity = this.getStrokeOpacity();
-    series.columns.template.strokeWidth = this.getStrokeWidth();
-    series.columns.template.stroke = core.color('#175e84');
-    series.columns.template.fillOpacity = 1;
-    series.columns.template.tooltipText = this.vertical ? '{valueY}' : '{valueX}';
-    series.columns.template.adapter.add('tooltipText', (text, target, key) => {
-      if (!target.dataItem || !target.dataItem.dataContext) {
-        return '';
-      }
-      const data = this.getDataInstanceOrNull(target.dataItem.dataContext[this.chartDataValueType]);
-      if (!data) {
-        return '';
-      }
-      return `${this.vertical ? `{dateX}{categoryX}` : '{dateY}{categoryY}'}\n[bold]${this.chartDataValueType}: ${data.getDisplayValue()}${data.getDisplayUnit()}[/b]\n${target.dataItem.dataContext['count'] ? `[bold]${target.dataItem.dataContext['count']}[/b] Activities` : ``}`
-    });
-
-    // Add distinctive colors for each column using adapter
-    series.columns.template.adapter.add('fill', (fill, target) => {
-      if (categoryAxis instanceof charts.CategoryAxis) {
-        return core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(ActivityTypes[target.dataItem.dataContext.type]))
-      }
-      return this.getFillColor(chart, target.dataItem.index);
-    });
-
-
-    // series.columns.template.filters.push(ChartHelper.getShadowFilter());
-
-    if (this.type === 'columns') {
-      this.vertical ? series.columns.template.column.cornerRadiusTopLeft = 2 : series.columns.template.column.cornerRadiusTopRight = 2;
-      this.vertical ? series.columns.template.column.cornerRadiusTopRight = 2 : series.columns.template.column.cornerRadiusBottomRight = 2;
+  ngOnChanges(changes: SimpleChanges): void {
+    if (!this.chartDiv?.nativeElement) {
+      return;
     }
 
-    if (this.vertical && this.chartDataCategoryType === ChartDataCategoryTypes.DateType) {
-      // Add the trend
-      regressionSeries = chart.series.push(new charts.LineSeries());
-      regressionSeries.strokeWidth = 1;
-      regressionSeries.name = 'Linear Regression';
-      regressionSeries.stroke = core.color(AppColors.DarkGray);
-      regressionSeries.strokeOpacity = 1;
-      regressionSeries.strokeDasharray = '10,5';
-      const regressionPlugin = new regression.Regression();
-      regressionPlugin.simplify = false;
-      regressionSeries.plugins.push(regressionPlugin);
-      // regressionSeries.filters.push(ChartHelper.getShadowFilter());
+    if (
+      changes.data ||
+      changes.darkTheme ||
+      changes.useAnimations ||
+      changes.chartDataType ||
+      changes.chartDataValueType ||
+      changes.chartDataCategoryType ||
+      changes.chartDataTimeInterval ||
+      changes.vertical ||
+      changes.type
+    ) {
+      void this.refreshChart();
+    }
+  }
+
+  ngOnDestroy(): void {
+    this.chartHost.dispose();
+  }
+
+  private readonly stackedActivitySeriesKey = 'date-activity-stack';
+  private readonly stackedTotalLabelSeriesName = '__date_activity_totals__';
+
+  private async refreshChart(): Promise<void> {
+    const chart = await this.chartHost.init(
+      this.chartDiv?.nativeElement,
+      resolveEChartsThemeName(this.darkTheme)
+    );
+    if (!chart) {
+      return;
     }
 
-    // @todo base on count !
-    // This breaks on the count/categoy type
-    if (this.data.length < 200) {
-      const categoryLabel = series.bullets.push(new charts.LabelBullet());
-      if (this.vertical) {
-        categoryLabel.dy = -15;
-      } else {
-        categoryLabel.label.dx = 40;
+    const points = buildDashboardCartesianPoints({
+      data: this.data,
+      chartDataValueType: this.chartDataValueType,
+      chartDataCategoryType: this.chartDataCategoryType,
+      chartDataTimeInterval: this.chartDataTimeInterval
+    });
+    const aggregateSourceData = this.chartDataValueType
+      ? points.map((point) => ({ [this.chartDataValueType as string]: point.value }))
+      : [];
+    const aggregate = getDashboardAggregateData(
+      aggregateSourceData,
+      this.chartDataValueType,
+      this.chartDataType,
+      this.logger
+    );
+    const option = this.buildChartOption(points, aggregate);
+    this.chartHost.setOption(option, ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS);
+    this.chartHost.scheduleResize();
+  }
+
+  private buildChartOption(
+    points: DashboardCartesianPoint[],
+    aggregate: ReturnType<typeof getDashboardAggregateData>
+  ): ChartOption {
+    const chartWidth = this.chartDiv?.nativeElement?.clientWidth || 0;
+    const chartStyle = buildDashboardEChartsStyleTokens(this.darkTheme, chartWidth);
+    const textColor = chartStyle.textColor;
+    const axisColor = chartStyle.axisColor;
+    const gridColor = chartStyle.gridColor;
+    const tooltipBackgroundColor = chartStyle.tooltipBackgroundColor;
+    const tooltipBorderColor = chartStyle.tooltipBorderColor;
+    const isCompactLayout = chartStyle.isCompactLayout;
+    const axisFontSize = chartStyle.axisFontSize;
+    const isDateCategory = this.chartDataCategoryType === ChartDataCategoryTypes.DateType;
+    const dateActivitySegmentation = isDateCategory
+      ? buildDashboardDateActivitySegmentation({
+        rawData: this.data,
+        points,
+        chartDataValueType: this.chartDataValueType
+      })
+      : null;
+    const useDateActivitySegmentation = isDateCategory && !!dateActivitySegmentation;
+    const showValueLabels = points.length > 0 && points.length <= 200 && !useDateActivitySegmentation;
+
+    if (!points.length) {
+      return {
+        animation: this.useAnimations === true,
+        legend: { show: false },
+        xAxis: [],
+        yAxis: [],
+        series: [],
+      };
+    }
+
+    const values = points.map(point => point.value);
+    const valueAxisConfig = buildDashboardValueAxisConfig(values);
+    const categories = points.map(point => point.label);
+
+    const seriesData = points.map((point, index) => ({
+      value: point.value,
+      itemStyle: {
+        color: this.getPointColor(point, index)
       }
-      categoryLabel.label.adapter.add('text', (text, target) => {
-        if (!target.dataItem || !target.dataItem.dataContext) {
-          return '';
+    }));
+
+    const dateActivityColorMap = useDateActivitySegmentation
+      ? this.buildDateActivityColorMap(dateActivitySegmentation)
+      : null;
+    const segmentedDataSeries = useDateActivitySegmentation
+      ? this.buildDateActivitySeries(
+        dateActivitySegmentation,
+        dateActivityColorMap as Map<string, string>,
+        isCompactLayout
+      )
+      : [this.buildBarSeries(
+        seriesData,
+        showValueLabels,
+        textColor,
+        isCompactLayout,
+        points
+      )];
+    const totalLabelSeries = useDateActivitySegmentation && dateActivitySegmentation
+      ? this.buildDateActivityTotalLabelSeries(dateActivitySegmentation, textColor, isCompactLayout)
+      : null;
+    const dataSeries = totalLabelSeries
+      ? [...segmentedDataSeries, totalLabelSeries]
+      : segmentedDataSeries;
+    const shouldRenderTrend = this.vertical
+      && this.chartDataCategoryType === ChartDataCategoryTypes.DateType;
+    const trendSeries = shouldRenderTrend
+      ? this.buildTrendSeries(points, chartStyle.trendLineColor)
+      : null;
+
+    const summaryLabel = aggregate
+      ? normalizeUnitDerivedTypeLabel(aggregate.getType(), aggregate.getDisplayType())
+      : (this.chartDataValueType || 'Value');
+    const summaryValue = aggregate
+      ? `${aggregate.getDisplayValue()}${aggregate.getDisplayUnit()}`
+      : '--';
+    const summaryMeta = getDashboardSummaryMetaLabel(
+      this.chartDataCategoryType,
+      this.chartDataValueType,
+      this.chartDataTimeInterval
+    );
+
+    const categoryAxis = {
+      type: 'category',
+      data: categories,
+      inverse: !this.vertical,
+      axisLine: {
+        show: this.vertical,
+        lineStyle: { color: axisColor }
+      },
+      axisTick: { show: false },
+      splitLine: { show: false },
+      axisLabel: {
+        color: textColor,
+        fontSize: axisFontSize,
+        hideOverlap: true,
+        interval: 0,
+        rotate: this.vertical && this.chartDataCategoryType === ChartDataCategoryTypes.DateType
+          ? (isCompactLayout ? 54 : 42)
+          : 0
+      }
+    };
+
+    const valueAxis = {
+      type: 'value',
+      min: valueAxisConfig.min,
+      max: valueAxisConfig.max,
+      interval: valueAxisConfig.interval,
+      axisLine: {
+        lineStyle: { color: axisColor }
+      },
+      axisTick: { show: false },
+      splitLine: {
+        show: true,
+        lineStyle: { color: gridColor }
+      },
+      axisLabel: {
+        color: textColor,
+        fontSize: axisFontSize,
+        formatter: (value: number) => this.formatValue(value)
+      }
+    };
+
+    return {
+      animation: this.useAnimations === true,
+      textStyle: {
+        color: textColor,
+        fontFamily: ECHARTS_GLOBAL_FONT_FAMILY
+      },
+      grid: {
+        left: this.vertical ? 4 : 6,
+        right: 8,
+        top: 62,
+        bottom: this.vertical ? (isCompactLayout ? 16 : 10) : 8,
+        containLabel: true
+      },
+      tooltip: {
+        trigger: useDateActivitySegmentation ? 'axis' : 'item',
+        axisPointer: useDateActivitySegmentation ? { type: 'shadow' } : undefined,
+        renderMode: 'html',
+        appendTo: getOrCreateEChartsTooltipHost,
+        confine: false,
+        position: getViewportConstrainedTooltipPosition,
+        backgroundColor: tooltipBackgroundColor,
+        borderColor: tooltipBorderColor,
+        borderWidth: 1,
+        textStyle: {
+          color: chartStyle.tooltipTextColor,
+          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+          fontSize: isCompactLayout ? 12 : 13
+        },
+        formatter: useDateActivitySegmentation && dateActivitySegmentation && dateActivityColorMap
+          ? (params: any) => this.formatDateActivityTooltip(
+            dateActivitySegmentation.buckets,
+            params,
+            dateActivityColorMap
+          )
+          : (params: { dataIndex: number }) => this.formatTooltip(points, params.dataIndex)
+      },
+      legend: { show: false },
+      xAxis: this.vertical ? categoryAxis : valueAxis,
+      yAxis: this.vertical ? valueAxis : categoryAxis,
+      series: trendSeries ? [...dataSeries, trendSeries] : dataSeries,
+      graphic: [
+        {
+          type: 'group',
+          left: 8,
+          top: 4,
+          bounding: 'raw',
+          children: [
+            {
+              type: 'text',
+              style: {
+                text: summaryLabel,
+                fontSize: isCompactLayout ? 12 : 13,
+                fontWeight: 500,
+                fill: textColor,
+                opacity: 0.85,
+                fontFamily: "'Barlow Condensed', sans-serif"
+              },
+              left: 0,
+              top: 0
+            },
+            {
+              type: 'text',
+              style: {
+                text: summaryValue,
+                fontSize: isCompactLayout ? 20 : 22,
+                fontWeight: 700,
+                fill: textColor,
+                fontFamily: "'Barlow Condensed', sans-serif"
+              },
+              left: 0,
+              top: 14
+            },
+            {
+              type: 'text',
+              style: {
+                text: summaryMeta,
+                fontSize: isCompactLayout ? 11 : 12,
+                fontWeight: 500,
+                fill: textColor,
+                opacity: 0.72,
+                fontFamily: "'Barlow Condensed', sans-serif"
+              },
+              left: 0,
+              top: isCompactLayout ? 38 : 40
+            }
+          ]
         }
-        const data = this.getDataInstanceOrNull(target.dataItem.dataContext[this.chartDataValueType]);
-        if (!data) {
-          return '';
-        }
-        return `[bold font-size: 1.1em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
+      ]
+    };
+  }
+
+  private buildDateActivityColorMap(
+    segmentation: DashboardDateActivitySegmentationResult
+  ): Map<string, string> {
+    const colorMap = new Map<string, string>();
+    segmentation.series.forEach((seriesEntry, index) => {
+      colorMap.set(seriesEntry.key, this.getActivitySeriesColor(seriesEntry, index));
+    });
+    return colorMap;
+  }
+
+  private getActivitySeriesColor(seriesEntry: DashboardDateActivitySeriesEntry, index: number): string {
+    if (seriesEntry.activityType) {
+      return this.eventColorService.getColorForActivityTypeByActivityTypeGroup(seriesEntry.activityType);
+    }
+    return this.dateTypePalette[index % this.dateTypePalette.length];
+  }
+
+  private buildDateActivitySeries(
+    segmentation: DashboardDateActivitySegmentationResult,
+    colorMap: Map<string, string>,
+    isCompactLayout: boolean
+  ): Record<string, unknown>[] {
+    if (this.type === 'pyramids' && this.vertical) {
+      return this.buildSegmentedPyramidSeries(segmentation, colorMap);
+    }
+    return this.buildSegmentedStackedBarSeries(segmentation, colorMap, isCompactLayout);
+  }
+
+  private buildDateActivityTotalLabelSeries(
+    segmentation: DashboardDateActivitySegmentationResult,
+    textColor: string,
+    isCompactLayout: boolean
+  ): Record<string, unknown> {
+    return {
+      type: 'custom',
+      name: this.stackedTotalLabelSeriesName,
+      z: 200,
+      silent: true,
+      animation: this.useAnimations === true,
+      data: segmentation.buckets.map((bucket) => [bucket.index, bucket.total]),
+      renderItem: (params: any, api: any) => this.renderDateActivityTotalLabel(params, api, textColor, isCompactLayout),
+      tooltip: { show: false }
+    };
+  }
+
+  private renderDateActivityTotalLabel(
+    params: any,
+    api: any,
+    textColor: string,
+    isCompactLayout: boolean
+  ): Record<string, unknown> | null {
+    const categoryIndex = Number(api.value(0));
+    const total = Number(api.value(1));
+    if (!Number.isFinite(categoryIndex) || !Number.isFinite(total) || total === 0) {
+      return null;
+    }
+
+    const coord = this.vertical
+      ? api.coord([categoryIndex, total])
+      : api.coord([total, categoryIndex]);
+    const offsetX = this.vertical ? 0 : 8;
+    const offsetY = this.vertical ? -8 : 0;
+
+    return {
+      type: 'text',
+      x: coord[0] + offsetX,
+      y: coord[1] + offsetY,
+      style: {
+        text: this.formatValue(total),
+        fill: textColor,
+        fontFamily: "'Barlow Condensed', sans-serif",
+        fontSize: isCompactLayout ? 11 : 12,
+        fontWeight: 700,
+        textAlign: this.vertical ? 'center' : 'left',
+        textVerticalAlign: this.vertical ? 'bottom' : 'middle'
+      }
+    };
+  }
+
+  private buildSegmentedStackedBarSeries(
+    segmentation: DashboardDateActivitySegmentationResult,
+    colorMap: Map<string, string>,
+    isCompactLayout: boolean
+  ): Record<string, unknown>[] {
+    return segmentation.series.map((seriesEntry) => ({
+      type: 'bar',
+      name: seriesEntry.label,
+      stack: this.stackedActivitySeriesKey,
+      animation: this.useAnimations === true,
+      data: segmentation.buckets.map((bucket) => (
+        bucket.segments.find((segment) => segment.activityKey === seriesEntry.key)?.value ?? 0
+      )),
+      barMaxWidth: this.vertical ? (isCompactLayout ? 28 : 36) : (isCompactLayout ? 20 : 24),
+      itemStyle: {
+        color: colorMap.get(seriesEntry.key) || this.dateTypePalette[0]
+      },
+      label: {
+        show: false
+      },
+      emphasis: {
+        focus: 'series'
+      }
+    }));
+  }
+
+  private buildSegmentedPyramidSeries(
+    segmentation: DashboardDateActivitySegmentationResult,
+    colorMap: Map<string, string>
+  ): Record<string, unknown>[] {
+    const cumulativeBounds = segmentation.buckets.map((bucket) => {
+      const boundsByKey = new Map<string, { start: number; end: number }>();
+      let cursor = 0;
+      segmentation.series.forEach((seriesEntry) => {
+        const segmentValue = bucket.segments.find((segment) => segment.activityKey === seriesEntry.key)?.value ?? 0;
+        boundsByKey.set(seriesEntry.key, {
+          start: cursor,
+          end: cursor + segmentValue
+        });
+        cursor += segmentValue;
       });
-      categoryLabel.label.background.fillOpacity = 1;
-      categoryLabel.label.background.strokeOpacity = 1;
-      categoryLabel.label.padding(5, 10, 5, 10);
-      categoryLabel.label.textAlign = 'middle';
-      categoryLabel.label.verticalCenter = 'middle';
-      categoryLabel.label.horizontalCenter = 'middle';
-      categoryLabel.label.hideOversized = false;
-      categoryLabel.label.truncate = false;
+      return boundsByKey;
+    });
 
-      // Set text color to white for high contrast
-      categoryLabel.label.fill = core.color("#ffffff");
+    return segmentation.series.map((seriesEntry, seriesIndex) => ({
+      type: 'custom',
+      name: seriesEntry.label,
+      z: 10 + seriesIndex,
+      encode: { x: 0, y: 1, tooltip: [1] },
+      animation: this.useAnimations === true,
+      itemStyle: {
+        color: colorMap.get(seriesEntry.key) || this.dateTypePalette[0]
+      },
+      data: segmentation.buckets.map((bucket, bucketIndex) => {
+        const bounds = cumulativeBounds[bucketIndex].get(seriesEntry.key) || { start: 0, end: 0 };
+        return [bucketIndex, bucket.total, bounds.start, bounds.end];
+      }),
+      renderItem: (params: any, api: any) => this.renderSegmentedPyramidItem(params, api)
+    }));
+  }
 
-      // Set BACKGROUND fill to the series color
-      categoryLabel.label.background.adapter.add('fill', (fill, target) => {
-        if (!target.dataItem || !target.dataItem.dataContext) {
-          return fill;
+  private renderSegmentedPyramidItem(params: any, api: any): Record<string, unknown> | null {
+    const categoryIndex = Number(api.value(0));
+    const total = Number(api.value(1));
+    const start = Number(api.value(2));
+    const end = Number(api.value(3));
+
+    if (!Number.isFinite(categoryIndex) || !Number.isFinite(total) || total <= 0) {
+      return null;
+    }
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+      return null;
+    }
+
+    const baseCoord = api.coord([categoryIndex, 0]);
+    const startCoord = api.coord([categoryIndex, start]);
+    const endCoord = api.coord([categoryIndex, end]);
+    const centerX = baseCoord[0];
+    const bandWidth = Math.max(8, Math.min(56, api.size([1, 0])[0] || 0));
+    const baseHalfWidth = bandWidth * 0.48;
+
+    const startRatio = Math.max(0, Math.min(1, start / total));
+    const endRatio = Math.max(0, Math.min(1, end / total));
+    const startHalfWidth = baseHalfWidth * (1 - startRatio);
+    const endHalfWidth = baseHalfWidth * (1 - endRatio);
+    const fillColor = api.visual('color');
+    const polygonStyle = fillColor ? { fill: fillColor } : {};
+
+    return {
+      type: 'polygon',
+      shape: {
+        points: [
+          [centerX - startHalfWidth, startCoord[1]],
+          [centerX + startHalfWidth, startCoord[1]],
+          [centerX + endHalfWidth, endCoord[1]],
+          [centerX - endHalfWidth, endCoord[1]]
+        ]
+      },
+      style: polygonStyle,
+      emphasis: {
+        style: polygonStyle
+      }
+    };
+  }
+
+  private buildBarSeries(
+    seriesData: Array<{ value: number; itemStyle: { color: string } }>,
+    showValueLabels: boolean,
+    textColor: string,
+    isCompactLayout: boolean,
+    points: DashboardCartesianPoint[]
+  ): Record<string, unknown> {
+    const barBase = {
+      data: seriesData,
+      animation: this.useAnimations === true,
+      barMaxWidth: this.vertical ? (isCompactLayout ? 28 : 36) : (isCompactLayout ? 20 : 24),
+      label: {
+        show: showValueLabels,
+        position: this.vertical ? 'top' : 'right',
+        color: textColor,
+        fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+        fontSize: isCompactLayout ? 11 : 12,
+        formatter: (params: { dataIndex: number }) => {
+          const point = points[params.dataIndex];
+          if (!point) {
+            return '';
+          }
+          return this.formatValue(point.value);
         }
-        if (categoryAxis instanceof charts.CategoryAxis) {
-          return core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(ActivityTypes[target.dataItem.dataContext.type]))
-        }
-        return this.getFillColor(chart, target.dataItem.index)
+      },
+      emphasis: {
+        focus: 'series'
+      }
+    };
+
+    if (this.type === 'pyramids' && this.vertical) {
+      return {
+        ...barBase,
+        type: 'pictorialBar',
+        // Triangle path for a clear pyramid silhouette.
+        symbol: 'path://M50,0 L100,100 L0,100 Z',
+        symbolRepeat: false,
+        symbolClip: false,
+        symbolSize: ['108%', '100%'],
+        symbolPosition: 'end'
+      };
+    }
+
+    return {
+      ...barBase,
+      type: 'bar',
+      itemStyle: {
+        borderRadius: this.vertical ? [6, 6, 0, 0] : [0, 6, 6, 0]
+      }
+    };
+  }
+
+  private buildTrendSeries(points: DashboardCartesianPoint[], trendLineColor: string): Record<string, unknown> | null {
+    const regressionLine = buildDashboardDateRegressionLine(points);
+    if (regressionLine.length < 2) {
+      return null;
+    }
+
+    return {
+      type: 'line',
+      name: 'Trend',
+      data: regressionLine.map(point => point.y),
+      symbol: 'none',
+      smooth: false,
+      z: 30,
+      lineStyle: {
+        width: 1.5,
+        type: 'dashed',
+        color: trendLineColor
+      },
+      tooltip: {
+        show: false
+      }
+    };
+  }
+
+  private getPointColor(point: DashboardCartesianPoint, index: number): string {
+    if (this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType) {
+      if (point.activityType) {
+        return this.eventColorService.getColorForActivityTypeByActivityTypeGroup(point.activityType as ActivityTypes);
+      }
+      return this.dateTypePalette[index % this.dateTypePalette.length];
+    }
+    return this.dateTypePalette[index % this.dateTypePalette.length];
+  }
+
+  private formatValue(value: number): string {
+    const data = getDashboardDataInstanceOrNull(this.chartDataType, value, this.logger);
+    if (!data) {
+      return Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
+    }
+    return `${data.getDisplayValue()}${data.getDisplayUnit()}`;
+  }
+
+  private formatTooltip(points: DashboardCartesianPoint[], dataIndex: number): string {
+    const point = points[dataIndex];
+    if (!point) {
+      return '';
+    }
+
+    const valueText = this.formatValue(point.value);
+    const valueTypeLabel = this.chartDataValueType || 'Value';
+    const activityCountLabel = point.count > 0 ? `<br/>${point.count} Activities` : '';
+    return `${point.label}<br/>${valueTypeLabel}: <strong>${valueText}</strong>${activityCountLabel}`;
+  }
+
+  private formatDateActivityTooltip(
+    buckets: DashboardDateActivityBucket[],
+    params: any,
+    colorMap: Map<string, string>
+  ): string {
+    const paramArray = Array.isArray(params) ? params : [params];
+    const firstWithDataIndex = paramArray.find((entry) => Number.isFinite(entry?.dataIndex));
+    const dataIndex = Number(firstWithDataIndex?.dataIndex);
+    if (!Number.isFinite(dataIndex)) {
+      return '';
+    }
+
+    const bucket = buckets[dataIndex];
+    if (!bucket) {
+      return '';
+    }
+
+    const totalText = this.formatValue(bucket.total);
+    const valueTypeLabel = this.chartDataValueType || 'Value';
+    const activityCountLabel = bucket.count > 0 ? `<br/>${bucket.count} Activities` : '';
+    const lines = bucket.segments
+      .filter((segment) => Number.isFinite(segment.value) && segment.value !== 0)
+      .map((segment, index) => {
+        const color = colorMap.get(segment.activityKey) || this.dateTypePalette[index % this.dateTypePalette.length];
+        const marker = `<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${color};margin-right:6px;"></span>`;
+        const valueText = this.formatValue(segment.value);
+        const countText = segment.count > 0 ? `, ${segment.count} Activities` : '';
+        return `${marker}${segment.label}: <strong>${valueText}</strong> (${segment.percent.toFixed(1)}%)${countText}`;
       });
 
-      // Set BACKGROUND stroke (border) to the series color (optional, looks cleaner)
-      categoryLabel.label.background.adapter.add('stroke', (stroke, target) => {
-        if (!target.dataItem || !target.dataItem.dataContext) {
-          return stroke;
-        }
-        if (categoryAxis instanceof charts.CategoryAxis) {
-          return core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(ActivityTypes[target.dataItem.dataContext.type]))
-        }
-        return this.getFillColor(chart, target.dataItem.index)
-      });
-    }
-    series.dataFields[this.getSeriesCategoryFieldName()] = this.getSeriesValueFieldName();
-    series.dataFields[this.getSeriesValuesFieldName()] = this.chartDataValueType;
-
-    if (regressionSeries) {
-      regressionSeries.dataFields[this.getSeriesCategoryFieldName()] = this.getSeriesValueFieldName();
-      regressionSeries.dataFields[this.getSeriesValuesFieldName()] = this.chartDataValueType;
-    }
-
-    series.name = DynamicDataLoader.getDataClassFromDataType(this.chartDataType).type;
-    return chart;
-  }
-
-  private getSeriesCategoryFieldName(): string {
-    if (this.vertical && this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType) {
-      return 'categoryX';
-    }
-    if (this.vertical && this.chartDataCategoryType === ChartDataCategoryTypes.DateType) {
-      return 'dateX';
-    }
-    return this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? 'categoryY' : 'dateY';
-  }
-
-  private getSeriesValueFieldName(): string {
-    return this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? 'type' : 'time';
-  }
-
-  private getSeriesValuesFieldName(): string {
-    if (this.vertical) {
-      return 'valueY';
-    }
-    return 'valueX';
+    const breakdownText = lines.length ? `<br/>${lines.join('<br/>')}` : '';
+    return `${bucket.label}<br/>${valueTypeLabel}: <strong>${totalText}</strong>${activityCountLabel}${breakdownText}`;
   }
 }

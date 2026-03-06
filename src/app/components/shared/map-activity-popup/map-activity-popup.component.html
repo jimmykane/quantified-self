@@ -1,4 +1,4 @@
-<div class="track-start-popup qs-glass-card-panel glass-card">
+<div class="track-start-popup qs-glass-card-panel">
   @if (dismissible) {
   <button class="track-start-popup-close" mat-icon-button type="button" (click)="onDismiss($event)" aria-label="Close popup">
     <mat-icon>close</mat-icon>
@@ -8,6 +8,7 @@
   <app-summary-primary-info
     [activityType]="activityType || 'Activity'"
     [iconActivityType]="iconActivityType"
+    [iconEvent]="event || null"
     [startDate]="startDate"
     [fallbackTopMetaText]="fallbackTopMetaText"
     [metrics]="metrics"
@@ -19,7 +20,7 @@
 
   @if (actionLabel) {
   <div class="track-start-popup-actions">
-    <button mat-button color="primary" type="button" (click)="onActionClick()">{{ actionLabel }}</button>
+    <button mat-button class="qs-mat-primary" type="button" (click)="onActionClick()">{{ actionLabel }}</button>
   </div>
   }
 </div>

@@ -3,7 +3,6 @@ import { SimpleChange } from '@angular/core';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { Subject } from 'rxjs';
 import { vi, describe, it, beforeEach, afterEach, expect } from 'vitest';
-import { ChartThemes } from '@sports-alliance/sports-lib';
 
 import { EventIntensityZonesComponent } from './event.intensity-zones.component';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
@@ -36,6 +35,7 @@ describe('EventIntensityZonesComponent', () => {
     setOption: ReturnType<typeof vi.fn>;
     resize: ReturnType<typeof vi.fn>;
     dispose: ReturnType<typeof vi.fn>;
+    subscribeToViewportResize: ReturnType<typeof vi.fn>;
   };
 
   let mockColorService: {
@@ -53,6 +53,18 @@ describe('EventIntensityZonesComponent', () => {
 
   const getLastOption = (): Record<string, any> => {
     return mockLoader.setOption.mock.calls.at(-1)?.[1] as Record<string, any>;
+  };
+
+  const waitForChartStabilization = async (): Promise<void> => {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await fixture.whenStable();
+      await Promise.resolve();
+      await new Promise<void>(resolve => setTimeout(resolve, 0));
+
+      if (mockLoader.setOption.mock.calls.length > 0 || mockLogger.error.mock.calls.length > 0) {
+        return;
+      }
+    }
   };
 
   beforeEach(async () => {
@@ -89,6 +101,7 @@ describe('EventIntensityZonesComponent', () => {
       setOption: vi.fn(),
       resize: vi.fn(),
       dispose: vi.fn(),
+      subscribeToViewportResize: vi.fn(() => () => { }),
     };
 
     mockColorService = {
@@ -128,7 +141,7 @@ describe('EventIntensityZonesComponent', () => {
     fixture = TestBed.createComponent(EventIntensityZonesComponent);
     component = fixture.componentInstance;
     component.activities = [];
-    component.chartTheme = ChartThemes.Material;
+    component.darkTheme = false;
     component.useAnimations = false;
   });
 
@@ -154,18 +167,21 @@ describe('EventIntensityZonesComponent', () => {
 
   it('should initialize ECharts and render options once view is ready', async () => {
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
 
     expect(mockLoader.init).toHaveBeenCalledTimes(1);
     expect(mockLoader.setOption).toHaveBeenCalledTimes(1);
-    expect(mockLoader.resize).toHaveBeenCalledTimes(1);
+    expect(requestAnimationFrameMock).toHaveBeenCalledTimes(1);
     expect(mockedConvert).toHaveBeenCalledWith(component.activities, false);
     expect(option.grid.left).toBe(0);
     expect(option.grid.right).toBe(0);
     expect(option.grid.top).toBe(0);
     expect(option.grid.bottom).toBe(0);
+    expect(option.tooltip.renderMode).toBe('html');
+    expect(option.tooltip.appendToBody).toBe(true);
+    expect(option.tooltip.confine).toBe(false);
     expect(option.series[0].clip).toBe(false);
     expect(option.series[0].label.position).toBe('right');
     expect(option.series[0].label.align).toBe('left');
@@ -182,7 +198,7 @@ describe('EventIntensityZonesComponent', () => {
     component.activities = undefined as unknown as any;
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     expect(mockedConvert).toHaveBeenCalledWith([], false);
   });
@@ -197,20 +213,21 @@ describe('EventIntensityZonesComponent', () => {
 
   it('should refresh chart for activities, theme, and animation input changes', async () => {
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     component.ngOnChanges({
       activities: new SimpleChange([], [{}], false),
-      chartTheme: new SimpleChange(ChartThemes.Material, ChartThemes.Dark, false),
+      darkTheme: new SimpleChange(false, true, false),
       useAnimations: new SimpleChange(false, true, false),
     });
+    await waitForChartStabilization();
 
     expect(mockLoader.setOption).toHaveBeenCalledTimes(2);
   });
 
   it('should not refresh chart for unrelated input changes', async () => {
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const callCountBefore = mockLoader.setOption.mock.calls.length;
 
@@ -223,26 +240,61 @@ describe('EventIntensityZonesComponent', () => {
 
   it('should switch to short labels when xsmall breakpoint matches', async () => {
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     breakpointSubject.next({ matches: true });
+    await waitForChartStabilization();
 
     expect(mockedConvert).toHaveBeenLastCalledWith(component.activities, true);
     expect(mockLoader.setOption).toHaveBeenCalledTimes(2);
     const option = getLastOption();
     expect(option.grid.right).toBe(0);
     expect(option.grid.bottom).toBe(0);
+    expect(option.tooltip.renderMode).toBe('html');
+    expect(option.tooltip.appendToBody).toBe(false);
+    expect(option.tooltip.confine).toBe(true);
   });
 
-  it('should apply dark theme styles when chartTheme is dark', async () => {
-    component.chartTheme = ChartThemes.Dark;
+  it('should use larger zone badges with zero gap in vertical mode', async () => {
+    component.orientation = 'vertical';
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
-    expect(option.tooltip?.backgroundColor).toBe('#303030');
-    expect(option.legend?.textStyle?.color).toBe('#ffffff');
+
+    expect(option.grid.left).toBe(-3);
+    expect(option.grid.right).toBe(-3);
+    expect(option.grid.bottom).toBe(0);
+    expect(option.xAxis.axisLabel.margin).toBe(0);
+    expect(option.xAxis.axisLabel.rich.zone_0.fontSize).toBe(13);
+    expect(option.xAxis.axisLabel.rich.zone_0.width).toBe(64);
+    expect(option.xAxis.axisLabel.rich.zone_0.padding).toEqual([2, 6, 2, 6]);
+    expect(option.yAxis.max).toBe(216);
+  });
+
+  it('should keep horizontal value axis auto-sized', async () => {
+    component.orientation = 'horizontal';
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const option = getLastOption();
+
+    expect(option.grid.left).toBe(0);
+    expect(option.grid.right).toBe(0);
+    expect(option.xAxis.max).toBeUndefined();
+  });
+
+  it('should apply dark theme styles when darkTheme is enabled', async () => {
+    component.darkTheme = true;
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const option = getLastOption();
+    expect(option.tooltip?.backgroundColor).toBe('rgba(58,62,68,1)');
+    expect(option.legend?.textStyle?.color).toBe('rgba(223,223,225,1)');
     expect(option.yAxis.splitArea.areaStyle.color).toEqual([
       'rgba(22, 180, 234, 0.18)',
       'rgba(22, 180, 234, 0.18)',
@@ -254,7 +306,7 @@ describe('EventIntensityZonesComponent', () => {
     component.showHeader = false;
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
     expect(option.xAxis.type).toBe('category');
@@ -264,15 +316,14 @@ describe('EventIntensityZonesComponent', () => {
     expect(option.xAxis.axisLabel.interval).toBe(0);
   });
 
-  it('should apply dark theme styles from body class even with light chartTheme', async () => {
-    document.body.classList.add('dark-theme');
+  it('should keep light theme styles when darkTheme is disabled', async () => {
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
-    expect(option.tooltip?.backgroundColor).toBe('#303030');
-    expect(option.yAxis?.axisLabel?.color).toBe('#ffffff');
+    expect(option.tooltip?.backgroundColor).toBe('#ffffff');
+    expect(option.yAxis?.axisLabel?.color).toBe('#3c3c41');
   });
 
   it('should include zone rich styles from color service', async () => {
@@ -292,7 +343,7 @@ describe('EventIntensityZonesComponent', () => {
     });
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
 
@@ -320,7 +371,7 @@ describe('EventIntensityZonesComponent', () => {
     });
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
     const formatter = option.series[0].label.formatter as (params: { dataIndex: number }) => string;
@@ -342,7 +393,7 @@ describe('EventIntensityZonesComponent', () => {
     });
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
     const formatter = option.tooltip.formatter as (params: { dataIndex: number; seriesIndex: number; marker: string }) => string;
@@ -367,7 +418,7 @@ describe('EventIntensityZonesComponent', () => {
     });
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
     expect(option.series[0].name).toBe('HR');
@@ -388,7 +439,7 @@ describe('EventIntensityZonesComponent', () => {
     });
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
     const labelFormatter = option.series[0].label.formatter as (params: { dataIndex: number }) => string;
@@ -413,7 +464,7 @@ describe('EventIntensityZonesComponent', () => {
     });
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
 
@@ -423,7 +474,7 @@ describe('EventIntensityZonesComponent', () => {
 
   it('should observe container resize and call chart resize', async () => {
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     expect(resizeObserverRecords).toHaveLength(1);
     const baselineResizeCalls = mockLoader.resize.mock.calls.length;
@@ -449,7 +500,7 @@ describe('EventIntensityZonesComponent', () => {
     }) as typeof requestAnimationFrame;
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const baselineResizeCalls = mockLoader.resize.mock.calls.length;
     const observer = resizeObserverRecords[0];
@@ -462,15 +513,16 @@ describe('EventIntensityZonesComponent', () => {
     expect(rafCallbacks).toHaveLength(1);
 
     rafCallbacks[0](16);
+    observer.trigger();
 
-    expect(mockLoader.resize).toHaveBeenCalledTimes(baselineResizeCalls + 1);
+    expect(rafCallbacks).toHaveLength(2);
   });
 
   it('should skip ResizeObserver setup when API is unavailable', async () => {
     delete (globalThis as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver;
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     expect(resizeObserverRecords).toHaveLength(0);
     expect(mockLoader.setOption).toHaveBeenCalledTimes(1);
@@ -480,7 +532,7 @@ describe('EventIntensityZonesComponent', () => {
     mockLoader.init.mockRejectedValueOnce(new Error('init failed'));
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     expect(mockLogger.error).toHaveBeenCalledWith(
       '[EventIntensityZonesComponent] Failed to initialize ECharts',
@@ -491,7 +543,7 @@ describe('EventIntensityZonesComponent', () => {
 
   it('should disconnect observers and dispose chart on destroy', async () => {
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const observer = resizeObserverRecords[0];
     const renderCallCount = mockLoader.setOption.mock.calls.length;

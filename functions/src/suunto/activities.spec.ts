@@ -212,6 +212,35 @@ describe('importActivityToSuuntoApp', () => {
         }));
     }, 30000);
 
+    it('should retry initialization on transient 504 and then succeed', async () => {
+        const transientError: any = new Error('Gateway Timeout');
+        transientError.statusCode = 504;
+
+        requestMocks.post
+            .mockRejectedValueOnce(transientError)
+            .mockResolvedValueOnce({
+                id: 'retry-upload-id',
+                url: 'https://storage.suunto.com/upload-url-retry',
+                headers: { 'x-ms-blob-type': 'BlockBlob' }
+            });
+
+        requestMocks.put.mockResolvedValue({});
+        requestMocks.get.mockResolvedValue({ status: 'PROCESSED', workoutKey: 'retry-workout-key' });
+
+        const fileContent = Buffer.from('retry-data');
+        const request = createMockRequest({
+            data: { file: fileContent.toString('base64') }
+        });
+
+        const result = await importActivityToSuuntoApp(request as any);
+
+        expect(requestMocks.post).toHaveBeenCalledTimes(2);
+        expect(result).toEqual(expect.objectContaining({
+            status: 'success',
+            workoutKey: 'retry-workout-key'
+        }));
+    }, 30000);
+
     it('should throw internal error if initialization response is missing url or id', async () => {
         // Setup Mocks
         tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });

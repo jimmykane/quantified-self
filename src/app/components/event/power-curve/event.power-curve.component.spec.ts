@@ -3,7 +3,6 @@ import { BreakpointObserver } from '@angular/cdk/layout';
 import { SimpleChange } from '@angular/core';
 import { Subject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ChartThemes } from '@sports-alliance/sports-lib';
 
 import { EventPowerCurveComponent } from './event.power-curve.component';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
@@ -31,6 +30,7 @@ describe('EventPowerCurveComponent', () => {
     setOption: ReturnType<typeof vi.fn>;
     resize: ReturnType<typeof vi.fn>;
     dispose: ReturnType<typeof vi.fn>;
+    subscribeToViewportResize: ReturnType<typeof vi.fn>;
   };
 
   let mockColorService: {
@@ -51,6 +51,11 @@ describe('EventPowerCurveComponent', () => {
 
   const getLastOption = (): Record<string, any> => {
     return mockLoader.setOption.mock.calls.at(-1)?.[1] as Record<string, any>;
+  };
+
+  const waitForChartStabilization = async (): Promise<void> => {
+    await fixture.whenStable();
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
   };
 
   beforeEach(async () => {
@@ -86,6 +91,7 @@ describe('EventPowerCurveComponent', () => {
       setOption: vi.fn(),
       resize: vi.fn(),
       dispose: vi.fn(),
+      subscribeToViewportResize: vi.fn(() => () => { }),
     };
 
     mockColorService = {
@@ -130,7 +136,7 @@ describe('EventPowerCurveComponent', () => {
     fixture = TestBed.createComponent(EventPowerCurveComponent);
     component = fixture.componentInstance;
     component.activities = [{ getID: () => 'a1', creator: { name: 'Device A' } } as any];
-    component.chartTheme = ChartThemes.Material;
+    component.darkTheme = false;
     component.useAnimations = false;
     component.isMerge = false;
   });
@@ -159,16 +165,52 @@ describe('EventPowerCurveComponent', () => {
 
   it('should initialize ECharts and render a power-only chart', async () => {
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
 
     expect(mockLoader.init).toHaveBeenCalledTimes(1);
     expect(mockPerformanceCurveDataService.buildPowerCurveSeries).toHaveBeenCalledWith(component.activities, { isMerge: false });
+    expect(option.tooltip.renderMode).toBe('html');
+    expect(option.tooltip.appendToBody).toBe(true);
+    expect(option.tooltip.confine).toBe(false);
     expect(option.xAxis.type).toBe('category');
     expect(option.yAxis.type).toBe('value');
     expect(option.series).toHaveLength(1);
     expect(option.legend.show).toBe(false);
+  });
+
+  it('disables point symbols for dense series and keeps them for sparse series', async () => {
+    const densePoints = Array.from({ length: 260 }, (_, index) => ({
+      duration: index + 1,
+      power: 500 - index,
+    }));
+    mockPerformanceCurveDataService.buildPowerCurveSeries.mockReturnValue([
+      {
+        activity: { getID: () => 'a1' } as any,
+        activityId: 'a1',
+        label: 'Ride',
+        points: densePoints,
+      },
+    ]);
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    expect(getLastOption().series[0].showSymbol).toBe(false);
+
+    mockPerformanceCurveDataService.buildPowerCurveSeries.mockReturnValue([
+      {
+        activity: { getID: () => 'a1' } as any,
+        activityId: 'a1',
+        label: 'Ride',
+        points: densePoints.slice(0, 120),
+      },
+    ]);
+
+    component.ngOnChanges({ activities: new SimpleChange([], [{}], false) });
+    await waitForChartStabilization();
+    expect(getLastOption().series[0].showSymbol).toBe(true);
   });
 
   it('should add aligned 2h marker points for long durations', async () => {
@@ -189,7 +231,7 @@ describe('EventPowerCurveComponent', () => {
     ]);
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
     const markPointData = option.series[0]?.markPoint?.data ?? [];
@@ -231,7 +273,7 @@ describe('EventPowerCurveComponent', () => {
     ]);
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     Object.defineProperty(component.chartDiv.nativeElement, 'clientWidth', {
       value: 320,
@@ -239,6 +281,7 @@ describe('EventPowerCurveComponent', () => {
     });
 
     breakpointSubject.next({ matches: true });
+    await waitForChartStabilization();
 
     const option = getLastOption();
     const formatter = option.xAxis.axisLabel.formatter as (value: string | number) => string;
@@ -251,7 +294,7 @@ describe('EventPowerCurveComponent', () => {
 
   it('should hide legend for single activity and show for multi-activity', async () => {
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
     expect(getLastOption().legend.show).toBe(false);
 
     mockPerformanceCurveDataService.buildPowerCurveSeries.mockReturnValue([
@@ -270,27 +313,28 @@ describe('EventPowerCurveComponent', () => {
     ]);
 
     component.ngOnChanges({ activities: new SimpleChange([], [{}], false) });
+    await waitForChartStabilization();
 
     expect(getLastOption().legend.show).toBe(true);
   });
 
-  it('should apply dark theme styles when chartTheme is dark', async () => {
-    component.chartTheme = ChartThemes.Dark;
+  it('should apply dark theme styles when darkTheme is enabled', async () => {
+    component.darkTheme = true;
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
 
-    expect(option.tooltip.backgroundColor).toBe('#222222');
-    expect(option.legend.textStyle.color).toBe('#f5f5f5');
+    expect(option.tooltip.backgroundColor).toBe('rgba(58,62,68,1)');
+    expect(option.legend.textStyle.color).toBe('rgba(223,223,225,1)');
   });
 
   it('should handle empty data gracefully', async () => {
     mockPerformanceCurveDataService.buildPowerCurveSeries.mockReturnValue([]);
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     const option = getLastOption();
 
@@ -301,7 +345,7 @@ describe('EventPowerCurveComponent', () => {
 
   it('should observe container resize and trigger chart resize', async () => {
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     expect(resizeObserverRecords).toHaveLength(1);
     const baselineResizeCalls = mockLoader.resize.mock.calls.length;
@@ -315,7 +359,7 @@ describe('EventPowerCurveComponent', () => {
     mockLoader.init.mockRejectedValueOnce(new Error('init failed'));
 
     fixture.detectChanges();
-    await fixture.whenStable();
+    await waitForChartStabilization();
 
     expect(mockLogger.error).toHaveBeenCalledWith(
       '[EventPowerCurveComponent] Failed to initialize ECharts',

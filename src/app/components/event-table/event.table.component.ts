@@ -80,10 +80,12 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   public show = true
 
   private deleteConfirmationSubscription!: Subscription;
+  private searchSubscription!: Subscription;
   private sortSubscription!: Subscription;
   private breakpointSubscription!: Subscription;
   private isHandset = false;
   private readonly defaultSelectedColumns = AppUserUtilities.getDefaultSelectedTableColumns();
+  private readonly nonSearchableRowKeys = new Set(['Color', 'Gradient', 'Event']);
 
 
   private searchSubject: Subject<string> = new Subject();
@@ -117,7 +119,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     }
     if (this.user && simpleChanges.user) {
       this.selectedColumns = this.user.settings?.dashboardSettings?.tableSettings?.selectedColumns || AppUserUtilities.getDefaultSelectedTableColumns();
-      this.paginator?._changePageSize(this.user.settings?.dashboardSettings?.tableSettings?.eventsPerPage || 10);
+      const nextPageSize = this.user.settings?.dashboardSettings?.tableSettings?.eventsPerPage || 10;
+      if (this.paginator && this.paginator.pageSize !== nextPageSize) {
+        this.paginator._changePageSize(nextPageSize);
+      }
       this.updateDisplayedColumns();
     }
     if (simpleChanges.showActions) {
@@ -130,7 +135,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       throw new Error(`Component needs user`)
     }
     this.updateDisplayedColumns();
-    this.searchSubject.pipe(
+    this.searchSubscription = this.searchSubject.pipe(
       debounceTime(250)
     ).subscribe(searchTextValue => {
       this.search(searchTextValue);
@@ -157,10 +162,31 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     this.data.sortingDataAccessor = (statRowElement: StatRowElement, header) => {
       return (statRowElement as any)[`sort.${header}`];
     };
+    this.data.filterPredicate = (row: any, filter: string) => {
+      const terms = filter
+        .split(',')
+        .map(term => term.trim())
+        .filter(term => term.length > 0);
+
+      if (terms.length === 0) {
+        return true;
+      }
+
+      const rowText = Object.entries(row)
+        .filter(([key, value]) => !key.startsWith('sort.') && !this.nonSearchableRowKeys.has(key) && value != null && typeof value !== 'object')
+        .map(([, value]) => String(value).toLowerCase())
+        .join(' ');
+
+      return terms.some(term => rowText.includes(term));
+    };
     this.sortSubscription = this.sort.sortChange.subscribe(async (sort) => {
-      if (this.user.settings.dashboardSettings.tableSettings.active !== sort.active || this.user.settings.dashboardSettings.tableSettings.direction !== sort.direction) {
-        this.user.settings.dashboardSettings.tableSettings.active = sort.active;
-        this.user.settings.dashboardSettings.tableSettings.direction = sort.direction as OrderByDirection;
+      const tableSettings = this.user?.settings?.dashboardSettings?.tableSettings;
+      if (!tableSettings) {
+        return;
+      }
+      if (tableSettings.active !== sort.active || tableSettings.direction !== sort.direction) {
+        tableSettings.active = sort.active;
+        tableSettings.direction = sort.direction as OrderByDirection;
         await this.userService.updateUserProperties(this.user, { settings: this.user.settings })
       }
     });
@@ -497,7 +523,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         const blob = new Blob([file.data]);
         // Extract extension from fileName (e.g., "2024-01-15.fit" -> "fit")
         const parts = file.fileName.split('.');
-        const extension = parts.length > 1 ? parts.pop()! : 'fit';
+        const extension = parts.length > 1 ? (parts.pop() || 'fit') : 'fit';
         const baseNameWithoutExt = parts.join('.');
         this.fileService.downloadFile(blob, baseNameWithoutExt, extension);
         this.processingService.completeJob(jobId, 'Downloaded 1 file');
@@ -569,6 +595,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   async pageChanges(pageEvent: PageEvent) {
     // @important This is nasty because it's called if anything almost changes
     if (this.user.settings?.dashboardSettings?.tableSettings) {
+      if (this.user.settings.dashboardSettings.tableSettings.eventsPerPage === pageEvent.pageSize) {
+        return;
+      }
       this.user.settings.dashboardSettings.tableSettings.eventsPerPage = pageEvent.pageSize;
       return this.userService.updateUserProperties(this.user, { settings: this.user.settings })
     }
@@ -583,6 +612,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   onSearchInput(event: Event) {
     const filterValue = (event.target as HTMLInputElement).value;
+    this.searchTerm = filterValue;
     this.searchSubject.next(filterValue);
   }
 
@@ -697,6 +727,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   private unsubscribeFromAll() {
     if (this.deleteConfirmationSubscription) {
       this.deleteConfirmationSubscription.unsubscribe();
+    }
+    if (this.searchSubscription) {
+      this.searchSubscription.unsubscribe();
     }
     if (this.sortSubscription) {
       this.sortSubscription.unsubscribe();

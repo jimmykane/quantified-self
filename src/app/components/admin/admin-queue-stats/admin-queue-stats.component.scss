@@ -81,23 +81,23 @@
     }
 
     &.status-success {
-        border-left-color: #4caf50;
+        border-left-color: var(--mat-sys-primary);
     }
 
     &.status-pending {
-        border-left-color: #ff9800;
+        border-left-color: var(--mat-sys-tertiary);
     }
 
     &.status-error {
-        border-left-color: #f44336;
+        border-left-color: var(--mat-sys-error);
     }
 
     &.status-info {
-        border-left-color: #2196f3;
+        border-left-color: var(--mat-sys-secondary);
     }
 
     &.status-dlq {
-        border-left-color: #f44336;
+        border-left-color: var(--mat-sys-errorContainer);
     }
 }
 
@@ -200,7 +200,7 @@
         pointer-events: none;
 
         mat-icon {
-            color: #4caf50;
+            color: var(--mat-sys-primary);
         }
 
         :host-context(.dark-theme) & {
@@ -287,12 +287,12 @@
     padding: 4px 12px;
     border-radius: 16px;
     font-size: 0.75rem;
-    background: #ffebee;
-    color: #c62828;
+    background: rgba(var(--mat-sys-error-rgb), 0.1);
+    color: var(--mat-sys-error);
 
     :host-context(.dark-theme) & {
-        background: rgba(198, 40, 40, 0.2);
-        color: #ef9a9a;
+        background: rgba(var(--mat-sys-error-rgb), 0.2);
+        color: var(--mat-sys-error);
     }
 }
 
@@ -351,19 +351,19 @@ td.mat-cell {
     height: 8px;
     width: 8px;
     border-radius: 50%;
-    background-color: #cbd5e1;
+    background-color: var(--mat-sys-outline-variant);
     display: inline-block;
 
     &.active {
-        background-color: #f59e0b;
-        box-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
+        background-color: var(--mat-sys-tertiary);
+        box-shadow: 0 0 8px rgba(var(--mat-sys-tertiary-rgb), 0.4);
     }
 
     :host-context(.dark-theme) & {
         background-color: rgba(255, 255, 255, 0.2);
 
         &.active {
-            background-color: #f59e0b;
+            background-color: var(--mat-sys-tertiary);
         }
     }
 }

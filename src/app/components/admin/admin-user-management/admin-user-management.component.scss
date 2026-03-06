@@ -97,15 +97,15 @@
     }
 
     &.status-success {
-        border-left-color: #4caf50;
+        border-left-color: var(--mat-sys-primary);
     }
 
     &.status-pending {
-        border-left-color: #ff9800;
+        border-left-color: var(--mat-sys-tertiary);
     }
 
     &.users {
-        border-left-color: #2196f3;
+        border-left-color: var(--mat-sys-secondary);
     }
 }
 
@@ -271,7 +271,7 @@ td.mat-cell {
 
 .error-message {
     padding: 16px;
-    color: #f44336;
+    color: var(--mat-sys-error);
     text-align: center;
 }
 
@@ -331,18 +331,18 @@ td.mat-cell {
     font-weight: 500;
 
     &.pro {
-        background: rgba(76, 175, 80, 0.15);
-        color: #4caf50;
+        background: rgba(var(--mat-sys-primary-rgb), 0.15);
+        color: var(--mat-sys-primary);
     }
 
     &.basic {
-        background: rgba(255, 152, 0, 0.15);
-        color: #ff9800;
+        background: rgba(var(--mat-sys-tertiary-rgb), 0.15);
+        color: var(--mat-sys-tertiary);
     }
 
     &.free {
-        background: rgba(158, 158, 158, 0.15);
-        color: #9e9e9e;
+        background: rgba(var(--mat-sys-on-surface-rgb), 0.15);
+        color: var(--mat-sys-on-surface-variant);
     }
 }
 
@@ -354,13 +354,13 @@ td.mat-cell {
     font-weight: 500;
 
     &.active {
-        background: rgba(76, 175, 80, 0.15);
-        color: #4caf50;
+        background: rgba(var(--mat-sys-primary-rgb), 0.15);
+        color: var(--mat-sys-primary);
     }
 
     &.disabled {
-        background: rgba(244, 67, 54, 0.15);
-        color: #f44336;
+        background: rgba(var(--mat-sys-error-rgb), 0.15);
+        color: var(--mat-sys-error);
     }
 }
 

@@ -43,7 +43,7 @@ export class TileMapActionsComponent extends TileActionsAbstractDirective implem
       tile.mapStyle = this.mapStyleService.normalizeStyle(event.value);
       delete (tile as any).mapType;
     }
-    return this.userService.updateUserProperties(this.user!, { settings: this.user!.settings })
+    return this.persistUserSettings();
   }
 
 
@@ -54,9 +54,8 @@ export class TileMapActionsComponent extends TileActionsAbstractDirective implem
     if (tile) {
       tile.clusterMarkers = this.clusterMarkers;
     }
-    return this.userService.updateUserProperties(this.user!, { settings: this.user!.settings })
+    return this.persistUserSettings();
   }
 
 }
-
 

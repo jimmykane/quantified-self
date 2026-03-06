@@ -5,15 +5,29 @@ import { TileAbstractDirective } from '../tile-abstract.directive';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppUserUtilities } from '../../../utils/app.user.utilities';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
-import { Input, Directive, inject } from '@angular/core';
+import { EventEmitter, Input, Output, Directive, inject } from '@angular/core';
 import { User } from '@sports-alliance/sports-lib';
 
 @Directive()
 export class TileActionsAbstractDirective extends TileAbstractDirective {
   protected analyticsService = inject(AppAnalyticsService);
+  @Output() savingChange = new EventEmitter<boolean>();
 
   constructor(protected userService: AppUserService) {
     super();
+  }
+
+  protected async withSavingState<T>(operation: () => Promise<T>): Promise<T> {
+    this.savingChange.emit(true);
+    try {
+      return await operation();
+    } finally {
+      this.savingChange.emit(false);
+    }
+  }
+
+  protected async persistUserSettings(): Promise<unknown> {
+    return this.withSavingState(() => this.userService.updateUserProperties(this.user, { settings: this.user.settings }));
   }
 
   async changeTileType(event) {
@@ -21,21 +35,21 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
     const tileIndex = this.user.settings.dashboardSettings.tiles.findIndex(tile => tile.order === this.order);
     this.user.settings.dashboardSettings.tiles[tileIndex] = this.type === TileTypes.Map ? AppUserUtilities.getDefaultUserDashboardChartTile() : AppUserUtilities.getDefaultUserDashboardMapTile();
     this.user.settings.dashboardSettings.tiles[tileIndex].order = this.order;
-    return this.userService.updateUserProperties(this.user, { settings: this.user.settings })
+    return this.persistUserSettings();
   }
 
   async changeTileColumnSize(event) {
     this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeTileSize' });
     const tile = <TileSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tileToFind => tileToFind.order === this.order);
     tile.size.columns = event.value;
-    return this.userService.updateUserProperties(this.user, { settings: this.user.settings })
+    return this.persistUserSettings();
   }
 
   async changeTileRowSize(event) {
     this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeTileSize' });
     const tile = <TileSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tileToFind => tileToFind.order === this.order);
     tile.size.rows = event.value;
-    return this.userService.updateUserProperties(this.user, { settings: this.user.settings })
+    return this.persistUserSettings();
   }
 
   async addNewTile($event: MouseEvent) {
@@ -43,7 +57,7 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
     const chart = Object.assign({}, (<TileSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)));
     chart.order = this.user.settings.dashboardSettings.tiles.length;
     this.user.settings.dashboardSettings.tiles.push(chart);
-    return this.userService.updateUserProperties(this.user, { settings: this.user.settings })
+    return this.persistUserSettings();
   }
 
   async deleteTile(event) {
@@ -58,7 +72,7 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
         chartSetting.order = index;
         return chartSetting
       });
-    return this.userService.updateUserProperties(this.user, { settings: this.user.settings })
+    return this.persistUserSettings();
   }
 
   /**

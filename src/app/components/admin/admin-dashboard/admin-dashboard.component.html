@@ -15,7 +15,7 @@
                 <mat-icon>build</mat-icon>
                 System Maintenance
             </h2>
-            <button mat-stroked-button color="primary" routerLink="/admin/maintenance">
+            <button mat-stroked-button class="qs-mat-primary" routerLink="/admin/maintenance">
                 <mat-icon>settings</mat-icon>
                 Manage Maintenance
             </button>
@@ -29,7 +29,7 @@
                 <mat-icon>article</mat-icon>
                 Content Management
             </h2>
-            <button mat-stroked-button color="primary" routerLink="/admin/changelog">
+            <button mat-stroked-button class="qs-mat-primary" routerLink="/admin/changelog">
                 <mat-icon>history_edu</mat-icon>
                 Manage Changelog
             </button>
@@ -43,14 +43,30 @@
                 <mat-icon>people</mat-icon>
                 User Management
             </h2>
-            <button mat-stroked-button color="primary" routerLink="/admin/users">
+            <button mat-stroked-button class="qs-mat-primary" routerLink="/admin/users">
                 <mat-icon>manage_accounts</mat-icon>
                 Manage Users
             </button>
         </div>
     </div>
 
-    <!-- Queue Status & Health Section -->
-    <app-admin-queue-stats [stats]="queueStats" [loading]="isLoadingStats">
-    </app-admin-queue-stats>
+    <!-- Queue Status & Health Navigation -->
+    <div class="dashboard-section">
+        <div class="section-title">
+            <h2>
+                <mat-icon>dns</mat-icon>
+                Queue Monitoring
+            </h2>
+            <div class="queue-actions">
+                <button mat-stroked-button class="qs-mat-primary" routerLink="/admin/queues/workout">
+                    <mat-icon>fitness_center</mat-icon>
+                    Workout Queue
+                </button>
+                <button mat-stroked-button class="qs-mat-primary" routerLink="/admin/queues/reparse">
+                    <mat-icon>autorenew</mat-icon>
+                    Reparse Queue
+                </button>
+            </div>
+        </div>
+    </div>
 </div>

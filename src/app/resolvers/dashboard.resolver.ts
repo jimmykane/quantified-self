@@ -88,7 +88,8 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
             // The original component used `this.user`(current logged in user) for settings like `dashboardSettings`.
             // So we use `user.settings`.
 
-            if (!user.settings?.dashboardSettings) {
+            const dashboardSettings = user.settings?.dashboardSettings;
+            if (!dashboardSettings) {
                 logger.info('[perf] dashboard_resolver_missing_settings', {
                     runId,
                     durationMs: Number((performance.now() - resolverStart).toFixed(2)),
@@ -99,23 +100,23 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
             let searchStartDate: Date | null = null;
             let searchEndDate: Date | null = null;
 
-            if (user.settings.dashboardSettings.dateRange === DateRanges.custom && user.settings.dashboardSettings.startDate && user.settings.dashboardSettings.endDate) {
-                searchStartDate = new Date(user.settings.dashboardSettings.startDate);
-                searchEndDate = new Date(user.settings.dashboardSettings.endDate);
+            if (dashboardSettings.dateRange === DateRanges.custom && dashboardSettings.startDate && dashboardSettings.endDate) {
+                searchStartDate = new Date(dashboardSettings.startDate);
+                searchEndDate = new Date(dashboardSettings.endDate);
             } else if (user.settings.unitSettings?.startOfTheWeek !== undefined) {
-                const range = getDatesForDateRange(user.settings.dashboardSettings.dateRange, user.settings.unitSettings.startOfTheWeek);
+                const range = getDatesForDateRange(dashboardSettings.dateRange, user.settings.unitSettings.startOfTheWeek);
                 searchStartDate = range.startDate;
                 searchEndDate = range.endDate;
             }
 
             const where: any[] = [];
-            const includeMergedEvents = user.settings.dashboardSettings.includeMergedEvents !== false;
+            const includeMergedEvents = dashboardSettings.includeMergedEvents !== false;
 
-            if ((!searchStartDate || !searchEndDate) && user.settings.dashboardSettings.dateRange === DateRanges.custom) {
+            if ((!searchStartDate || !searchEndDate) && dashboardSettings.dateRange === DateRanges.custom) {
                 return { events: [], user: user, targetUser, hasMergedEvents: false };
             }
 
-            if (user.settings.dashboardSettings.dateRange !== DateRanges.all && searchStartDate && searchEndDate) {
+            if (dashboardSettings.dateRange !== DateRanges.all && searchStartDate && searchEndDate) {
                 where.push({
                     fieldPath: 'startDate',
                     opStr: <WhereFilterOp>'>=',
@@ -158,7 +159,8 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
             const filteredByMerge = includeMergedEvents ? rawEvents : rawEvents.filter(event => !event.isMerge);
 
             // Filter by Activity Types
-            if (!user.settings.dashboardSettings.activityTypes || !user.settings.dashboardSettings.activityTypes.length) {
+            const dashboardActivityTypes = dashboardSettings.activityTypes ?? [];
+            if (!dashboardActivityTypes.length) {
                 logger.info('[perf] dashboard_resolver_complete', {
                     runId,
                     durationMs: Number((performance.now() - resolverStart).toFixed(2)),
@@ -174,7 +176,9 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
             }
 
             const filteredEvents = (filteredByMerge || []).filter(event => {
-                return event.getActivityTypesAsArray().some(activityType => user.settings!.dashboardSettings!.activityTypes!.indexOf(ActivityTypes[activityType as unknown as keyof typeof ActivityTypes]) >= 0)
+                return event.getActivityTypesAsArray().some(activityType => (
+                    dashboardActivityTypes.includes(ActivityTypes[activityType as unknown as keyof typeof ActivityTypes])
+                ));
             });
 
             logger.info('[perf] dashboard_resolver_complete', {

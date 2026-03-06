@@ -1,10 +1,10 @@
-import { Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { Component, inject } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppSideNavService } from '../../services/side-nav/app-side-nav.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
-import { Subscription } from 'rxjs';
 import { User } from '@sports-alliance/sports-lib';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
@@ -13,6 +13,8 @@ import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserService } from '../../services/app.user.service';
 import { AppWhatsNewService } from '../../services/app.whats-new.service';
 import { environment } from '../../../environments/environment';
+import { AppThemePreference, SYSTEM_THEME_PREFERENCE } from '../../models/app-theme-preference.type';
+import { AppHapticsService } from '../../services/app.haptics.service';
 
 @Component({
   selector: 'app-sidenav',
@@ -20,35 +22,28 @@ import { environment } from '../../../environments/environment';
   styleUrls: ['./sidenav.component.scss'],
   standalone: false
 })
-export class SideNavComponent implements OnInit, OnDestroy {
+export class SideNavComponent {
 
   public events: EventInterface[] = [];
   public appVersion = environment.appVersion;
 
-
-  public appTheme!: AppThemes
+  private themeService = inject(AppThemeService);
   public appThemes = AppThemes;
-
-  private themeSubscription!: Subscription
+  public readonly systemThemePreference = SYSTEM_THEME_PREFERENCE;
+  public themePreference = toSignal(this.themeService.getThemePreference(), { initialValue: SYSTEM_THEME_PREFERENCE });
   private analyticsService = inject(AppAnalyticsService);
+  private hapticsService = inject(AppHapticsService);
 
   constructor(
     public authService: AppAuthService,
     public userService: AppUserService,
     public sideNav: AppSideNavService,
-    public themeService: AppThemeService,
     public whatsNewService: AppWhatsNewService,
     private windowService: AppWindowService,
     private snackBar: MatSnackBar,
     private router: Router) {
   }
 
-
-  ngOnInit() {
-    this.themeSubscription = this.themeService.getAppTheme().subscribe(theme => {
-      this.appTheme = theme
-    })
-  }
 
   get isProUser(): boolean {
     return this.userService.isProSignal();
@@ -67,6 +62,7 @@ export class SideNavComponent implements OnInit, OnDestroy {
   }
 
   async donate() {
+    this.hapticsService.selection();
     this.analyticsService.logEvent('donate_click', { method: 'PayPal' });
     window.open('https://paypal.me/DKanellopoulos');
   }
@@ -76,26 +72,37 @@ export class SideNavComponent implements OnInit, OnDestroy {
 
 
   async gitHubStar() {
+    this.hapticsService.selection();
     this.analyticsService.logEvent('github_star');
     window.open('https://github.com/jimmykane/quantified-self/');
   }
 
   async logout() {
+    this.hapticsService.selection();
     this.analyticsService.logEvent('logout', {});
-    this.router.navigate(['/']).then(async () => {
+    try {
+      await this.router.navigate(['/']);
       await this.authService.signOut();
       localStorage.clear();
       this.windowService.windowRef.location.reload();
       this.snackBar.open('Signed out', undefined, {
         duration: 2000,
       });
-    });
+    } catch {
+      this.snackBar.open('Could not sign out', undefined, {
+        duration: 2000,
+      });
+    }
   }
 
-  ngOnDestroy(): void {
-    if (this.themeSubscription) {
-      this.themeSubscription.unsubscribe();
-    }
+  public async setTheme(theme: AppThemePreference, event?: MouseEvent) {
+    this.hapticsService.selection();
+    await this.themeService.setPreferredTheme(theme, event);
+  }
+
+  public closeSideNavWithHaptic(): void {
+    this.hapticsService.selection();
+    this.sideNav.close();
   }
 
 }
