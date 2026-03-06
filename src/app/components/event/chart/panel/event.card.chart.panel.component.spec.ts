@@ -162,6 +162,7 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.tooltip?.confine).toBe(false);
     expect(option?.tooltip?.position).toBe(getViewportConstrainedTooltipPosition);
     expect(option?.tooltip?.triggerOn).toBe('mousemove|click');
+    expect(option?.toolbox?.show).toBe(false);
     expect(option?.brush?.brushMode).toBe('single');
     expect(option?.dataZoom?.[0]?.zoomOnMouseWheel).toBe(false);
     expect(option?.dataZoom?.[0]?.disabled).toBe(false);
@@ -339,7 +340,7 @@ describe('EventCardChartPanelComponent', () => {
     expect(emitSpy).toHaveBeenCalledWith({ start: 15, end: 75 });
   });
 
-  it('does not emit preview range from brush events when live selection preview is disabled', async () => {
+  it('emits preview range from brush events while dragging in selection mode', async () => {
     component.cursorBehaviour = ChartCursorBehaviours.SelectX;
     const emitSpy = vi.spyOn(component.previewRangeChange, 'emit');
     await renderComponent();
@@ -355,7 +356,7 @@ describe('EventCardChartPanelComponent', () => {
       ]
     });
 
-    expect(emitSpy).not.toHaveBeenCalled();
+    expect(emitSpy).toHaveBeenCalledWith({ start: 20, end: 60 });
   });
 
   it('disables hover tooltips during an active selection brush and restores them on brush end', async () => {
@@ -736,14 +737,26 @@ describe('EventCardChartPanelComponent', () => {
     expect(component.selectedRangeSpanLabel).toBe('01:15');
   });
 
-  it('ignores previewRange for labels when live selection preview is disabled', () => {
+  it('uses previewRange for labels while live selection sync is enabled', () => {
     component.xAxisType = XAxisTypes.Duration;
     component.previewRange = { start: 10, end: 20 };
     component.selectedRange = { start: 65, end: 140 };
 
-    expect(component.selectedRangeStartLabel).toBe('01:05');
-    expect(component.selectedRangeEndLabel).toBe('02:20');
-    expect(component.selectedRangeSpanLabel).toBe('01:15');
+    expect(component.selectedRangeStartLabel).toBe('00:10');
+    expect(component.selectedRangeEndLabel).toBe('00:20');
+    expect(component.selectedRangeSpanLabel).toBe('00:10');
+  });
+
+  it('does not recalculate range stats from preview-only selection changes', async () => {
+    await renderComponent();
+
+    const updateRangeStatsSpy = vi.spyOn(component as any, 'updateRangeStats');
+    component.previewRange = { start: 20, end: 60 };
+    component.ngOnChanges({
+      previewRange: new SimpleChange(null, component.previewRange, false),
+    });
+
+    expect(updateRangeStatsSpy).not.toHaveBeenCalled();
   });
 
   it('hides activity names in selection stats when tooltip activity names are disabled', async () => {

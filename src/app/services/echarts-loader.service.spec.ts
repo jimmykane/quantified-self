@@ -26,6 +26,7 @@ const echartsModulesMock = vi.hoisted(() => ({
   axisPointerComponent: { component: 'axisPointer' },
   markLineComponent: { component: 'markLine' },
   visualMapComponent: { component: 'visualMap' },
+  toolboxComponent: { component: 'toolbox' },
   dataZoomComponent: { component: 'dataZoom' },
   brushComponent: { component: 'brush' },
   canvasRenderer: { renderer: 'canvas' },
@@ -56,6 +57,7 @@ vi.mock('echarts/components', () => ({
   AxisPointerComponent: echartsModulesMock.axisPointerComponent,
   MarkLineComponent: echartsModulesMock.markLineComponent,
   VisualMapComponent: echartsModulesMock.visualMapComponent,
+  ToolboxComponent: echartsModulesMock.toolboxComponent,
   DataZoomComponent: echartsModulesMock.dataZoomComponent,
   BrushComponent: echartsModulesMock.brushComponent,
 }));
@@ -175,6 +177,7 @@ describe('EChartsLoaderService', () => {
       echartsModulesMock.axisPointerComponent,
       echartsModulesMock.markLineComponent,
       echartsModulesMock.visualMapComponent,
+      echartsModulesMock.toolboxComponent,
       echartsModulesMock.dataZoomComponent,
       echartsModulesMock.brushComponent,
       echartsModulesMock.canvasRenderer,

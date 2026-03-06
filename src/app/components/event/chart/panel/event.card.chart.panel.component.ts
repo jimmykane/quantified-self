@@ -87,7 +87,8 @@ const ZOOM_BAR_SLIDER_HEIGHT = 24;
 const ZOOM_BAR_HANDLE_SIZE = 24;
 const ZOOM_BAR_GRID_BOTTOM = Math.max(0, ZOOM_BAR_PANEL_HEIGHT - (ZOOM_BAR_SLIDER_TOP + ZOOM_BAR_SLIDER_HEIGHT));
 const SELECTION_BRUSH_SOURCE = 'event-chart-selection-sync';
-const ENABLE_LIVE_SELECTION_PREVIEW = false;
+const ENABLE_LIVE_SELECTION_SYNC = false;
+const ENABLE_LIVE_SELECTION_PREVIEW_STATS = false;
 
 @Component({
   selector: 'app-event-card-chart-panel',
@@ -293,13 +294,14 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       this.syncAxisPointerCursorEmitBinding();
     }
 
-    if (
-      (changes.previewRange && !changes.previewRange.firstChange)
-      || (changes.selectedRange && !changes.selectedRange.firstChange)
-      || (changes.xDomain && !changes.xDomain.firstChange)
-    ) {
+    const previewRangeChanged = !!changes.previewRange && !changes.previewRange.firstChange;
+    const selectedRangeChanged = !!changes.selectedRange && !changes.selectedRange.firstChange;
+    const xDomainChanged = !!changes.xDomain && !changes.xDomain.firstChange;
+    if (previewRangeChanged || selectedRangeChanged || xDomainChanged) {
       this.applySharedSelectionRange();
-      this.updateRangeStats(this.selectedRange);
+      if (selectedRangeChanged || xDomainChanged || (ENABLE_LIVE_SELECTION_PREVIEW_STATS && previewRangeChanged)) {
+        this.updateRangeStats(ENABLE_LIVE_SELECTION_PREVIEW_STATS ? this.getActiveSelectionRange() : this.selectedRange);
+      }
       this.cdr.markForCheck();
     }
 
@@ -484,6 +486,16 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           fontSize: 12,
         },
         formatter: (params: TooltipFormatterParams | TooltipFormatterParams[]) => this.formatTooltip(params)
+      },
+      toolbox: {
+        show: false,
+        feature: {
+          // Keep brush feature typed to prevent ECharts from injecting default
+          // visible toolbox buttons when brush is enabled.
+          brush: {
+            type: ['lineX'],
+          },
+        },
       },
       brush: this.buildBrushOption(chartStyle),
       xAxis: {
@@ -1232,17 +1244,11 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const takeGlobalCursorAction: ChartAction = {
       type: 'takeGlobalCursor',
       key: 'brush',
-      brushOption: selectModeActive
-        ? {
-          brushType: 'lineX',
-          brushMode: 'single',
-          removeOnClick: true,
-        }
-        : {
-          brushType: 'lineX',
-          brushMode: 'single',
-          removeOnClick: true,
-        },
+      brushOption: {
+        brushType: 'lineX',
+        brushMode: 'single',
+        removeOnClick: true,
+      },
     };
 
     chart.dispatchAction(takeGlobalCursorAction);
@@ -1267,11 +1273,11 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const nextRange = this.extractBrushRange(params);
     this.updateSelectionBrushState(!!nextRange);
 
-    if (!ENABLE_LIVE_SELECTION_PREVIEW) {
+    if (!ENABLE_LIVE_SELECTION_SYNC) {
       return;
     }
 
-    const currentRange = normalizeEventRange(this.selectedRange);
+    const currentRange = this.getActiveSelectionRange();
     if (
       currentRange?.start === nextRange?.start
       && currentRange?.end === nextRange?.end
@@ -1570,7 +1576,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   private getActiveSelectionRange(): EventChartRange | null {
-    if (ENABLE_LIVE_SELECTION_PREVIEW) {
+    if (ENABLE_LIVE_SELECTION_SYNC) {
       return normalizeEventRange(this.previewRange ?? this.selectedRange);
     }
 

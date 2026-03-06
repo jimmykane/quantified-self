@@ -80,6 +80,7 @@ export class EChartsLoaderService {
           components.AxisPointerComponent,
           components.MarkLineComponent,
           components.VisualMapComponent,
+          components.ToolboxComponent,
           components.DataZoomComponent,
           components.BrushComponent,
           renderers.CanvasRenderer
