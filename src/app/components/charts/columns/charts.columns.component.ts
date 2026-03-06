@@ -143,11 +143,8 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
       chartDataCategoryType: this.chartDataCategoryType,
       chartDataTimeInterval: this.chartDataTimeInterval
     });
-    const aggregateSourceData = this.chartDataValueType
-      ? points.map((point) => ({ [this.chartDataValueType as string]: point.value }))
-      : [];
     const aggregate = getDashboardAggregateData(
-      aggregateSourceData,
+      Array.isArray(this.data) ? this.data : [],
       this.chartDataValueType,
       this.chartDataType,
       this.logger
@@ -191,7 +188,9 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
       };
     }
 
-    const values = points.map(point => point.value);
+    const values = points
+      .map(point => point.value)
+      .filter((value): value is number => Number.isFinite(value));
     const valueAxisConfig = buildDashboardValueAxisConfig(values);
     const categories = points.map(point => point.label);
 
@@ -463,9 +462,12 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
       name: seriesEntry.label,
       stack: this.stackedActivitySeriesKey,
       animation: this.useAnimations === true,
-      data: segmentation.buckets.map((bucket) => (
-        bucket.segments.find((segment) => segment.activityKey === seriesEntry.key)?.value ?? 0
-      )),
+      data: segmentation.buckets.map((bucket) => {
+        if (!Number.isFinite(bucket.total)) {
+          return null;
+        }
+        return bucket.segments.find((segment) => segment.activityKey === seriesEntry.key)?.value ?? 0;
+      }),
       barMaxWidth: this.vertical ? (isCompactLayout ? 28 : 36) : (isCompactLayout ? 20 : 24),
       itemStyle: {
         color: colorMap.get(seriesEntry.key) || this.dateTypePalette[0]
@@ -559,7 +561,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
   }
 
   private buildBarSeries(
-    seriesData: Array<{ value: number; itemStyle: { color: string } }>,
+    seriesData: Array<{ value: number | null; itemStyle: { color: string } }>,
     showValueLabels: boolean,
     textColor: string,
     isCompactLayout: boolean,
@@ -577,7 +579,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
         fontSize: isCompactLayout ? 11 : 12,
         formatter: (params: { dataIndex: number }) => {
           const point = points[params.dataIndex];
-          if (!point) {
+          if (!point || !Number.isFinite(point.value)) {
             return '';
           }
           return this.formatValue(point.value);
@@ -644,7 +646,10 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     return this.dateTypePalette[index % this.dateTypePalette.length];
   }
 
-  private formatValue(value: number): string {
+  private formatValue(value: number | null): string {
+    if (!Number.isFinite(value)) {
+      return '--';
+    }
     const data = getDashboardDataInstanceOrNull(this.chartDataType, value, this.logger);
     if (!data) {
       return Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
@@ -654,7 +659,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
 
   private formatTooltip(points: DashboardCartesianPoint[], dataIndex: number): string {
     const point = points[dataIndex];
-    if (!point) {
+    if (!point || !Number.isFinite(point.value)) {
       return '';
     }
 
@@ -678,6 +683,9 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
 
     const bucket = buckets[dataIndex];
     if (!bucket) {
+      return '';
+    }
+    if (!Number.isFinite(bucket.total)) {
       return '';
     }
 

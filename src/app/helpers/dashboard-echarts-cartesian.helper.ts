@@ -13,7 +13,7 @@ import {
 export interface DashboardCartesianPoint {
   index: number;
   label: string;
-  value: number;
+  value: number | null;
   count: number;
   time: number | null;
   activityType: ActivityTypes | null;
@@ -30,6 +30,10 @@ export interface BuildDashboardCartesianPointsInput {
 export interface DashboardRegressionPoint {
   x: number;
   y: number;
+}
+
+function getMissingBucketValue(chartDataValueType: ChartDataValueTypes | undefined): number | null {
+  return chartDataValueType === ChartDataValueTypes.Total ? 0 : null;
 }
 
 function getNextIntervalTime(time: number, interval: TimeIntervals): number {
@@ -243,6 +247,7 @@ export function buildDashboardCartesianPoints(
   }
 
   const contiguousPoints = new Array<DashboardCartesianPoint>(expectedPointCount);
+  const missingBucketValue = getMissingBucketValue(input.chartDataValueType);
   let cursor = startTime;
   for (let index = 0; index < expectedPointCount; index += 1) {
     const existingPoint = pointsByTime.get(cursor);
@@ -255,7 +260,7 @@ export function buildDashboardCartesianPoints(
       contiguousPoints[index] = {
         index,
         label: formatDashboardDateByInterval(cursor, chartDataTimeInterval),
-        value: 0,
+        value: missingBucketValue,
         count: 0,
         time: cursor,
         activityType: null,
@@ -276,12 +281,13 @@ export function buildDashboardCartesianPoints(
     const anchorTime = contiguousPoints[0].time as number;
     const previousTime = getPreviousIntervalTime(anchorTime, chartDataTimeInterval);
     const nextTime = getNextIntervalTime(anchorTime, chartDataTimeInterval);
+    const paddingBucketValue = getMissingBucketValue(input.chartDataValueType);
 
     return [
       {
         index: 0,
         label: formatDashboardDateByInterval(previousTime, chartDataTimeInterval),
-        value: 0,
+        value: paddingBucketValue,
         count: 0,
         time: previousTime,
         activityType: null,
@@ -294,7 +300,7 @@ export function buildDashboardCartesianPoints(
       {
         index: 2,
         label: formatDashboardDateByInterval(nextTime, chartDataTimeInterval),
-        value: 0,
+        value: paddingBucketValue,
         count: 0,
         time: nextTime,
         activityType: null,
@@ -337,10 +343,10 @@ export function buildLinearRegressionPoints(points: DashboardRegressionPoint[]):
 
 export function buildDashboardDateRegressionLine(points: DashboardCartesianPoint[]): DashboardRegressionPoint[] {
   const modelSourcePoints = points
-    .filter((point) => point.time !== null && point.count > 0)
+    .filter((point) => point.time !== null && point.count > 0 && Number.isFinite(point.value))
     .map((point) => ({
       x: point.time as number,
-      y: point.value
+      y: point.value as number
     }));
 
   if (modelSourcePoints.length < 2) {

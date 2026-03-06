@@ -78,6 +78,25 @@ describe('dashboard-echarts-cartesian.helper', () => {
     expect(points[2].time).toBe(dayThree);
   });
 
+  it('should keep missing daily average buckets null instead of zero', () => {
+    const dayOne = Date.UTC(2024, 0, 1);
+    const dayThree = Date.UTC(2024, 0, 3);
+
+    const points = buildDashboardCartesianPoints({
+      data: [
+        { time: dayOne, [ChartDataValueTypes.Average]: 10, count: 1 },
+        { time: dayThree, [ChartDataValueTypes.Average]: 30, count: 1 },
+      ],
+      chartDataValueType: ChartDataValueTypes.Average,
+      chartDataCategoryType: ChartDataCategoryTypes.DateType,
+      chartDataTimeInterval: TimeIntervals.Daily,
+    });
+
+    expect(points).toHaveLength(3);
+    expect(points[1].value).toBeNull();
+    expect(points[1].count).toBe(0);
+  });
+
   it('should not truncate long hourly ranges beyond ten thousand buckets', () => {
     const startHour = Date.UTC(2024, 0, 1, 0, 0, 0, 0);
     const endHour = startHour + (10000 * 60 * 60 * 1000);
@@ -146,6 +165,23 @@ describe('dashboard-echarts-cartesian.helper', () => {
     expect(points[0].value).toBe(0);
     expect(points[1].value).toBe(10);
     expect(points[2].value).toBe(0);
+  });
+
+  it('should pad a single daily average point with adjacent null buckets', () => {
+    const day = Date.UTC(2024, 0, 2);
+    const points = buildDashboardCartesianPoints({
+      data: [
+        { time: day, [ChartDataValueTypes.Average]: 10, count: 1 }
+      ],
+      chartDataValueType: ChartDataValueTypes.Average,
+      chartDataCategoryType: ChartDataCategoryTypes.DateType,
+      chartDataTimeInterval: TimeIntervals.Daily,
+    });
+
+    expect(points).toHaveLength(3);
+    expect(points[0].value).toBeNull();
+    expect(points[1].value).toBe(10);
+    expect(points[2].value).toBeNull();
   });
 
   it('should ignore non-finite values while preserving finite negatives', () => {

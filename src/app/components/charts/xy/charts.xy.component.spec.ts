@@ -147,6 +147,7 @@ describe('ChartsXYComponent', () => {
     expect(option.tooltip.confine).toBe(false);
     expect(option.tooltip.position).toBe(getViewportConstrainedTooltipPosition);
     expect(option.series[0].type).toBe('line');
+    expect(option.series[0].connectNulls).toBe(true);
     expect(option.xAxis.type).toBe('category');
     expect(option.yAxis.type).toBe('value');
   });
@@ -262,6 +263,28 @@ describe('ChartsXYComponent', () => {
     ));
     expect(trendSeries).toBeDefined();
     expect(trendSeries.data).toHaveLength(3);
+  });
+
+  it('should keep missing daily average buckets null and compute the summary from raw data only', async () => {
+    component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.chartDataTimeInterval = TimeIntervals.Daily;
+    component.chartDataValueType = ChartDataValueTypes.Average;
+    component.data = [
+      { time: Date.UTC(2024, 0, 1), [ChartDataValueTypes.Average]: 10, count: 1 },
+      { time: Date.UTC(2024, 0, 3), [ChartDataValueTypes.Average]: 30, count: 1 },
+    ];
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const option = getLastOption();
+    expect(option.xAxis.data).toHaveLength(3);
+    expect(option.series[0].data.map((entry: { value: number | null }) => entry.value)).toEqual([10, null, 30]);
+    expect(option.graphic[0].children[1].style.text).toBe('20.0m');
+    const categoryFormatter = option.xAxis.axisLabel.formatter as (value: string, index: number) => string;
+    expect(categoryFormatter(option.xAxis.data[0], 0)).toBe(option.xAxis.data[0]);
+    expect(categoryFormatter(option.xAxis.data[1], 1)).toBe('');
+    expect(categoryFormatter(option.xAxis.data[2], 2)).toBe(option.xAxis.data[2]);
   });
 
   it('should pad single date point and avoid trend line', async () => {
