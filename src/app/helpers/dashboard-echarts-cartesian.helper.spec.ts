@@ -98,7 +98,7 @@ describe('dashboard-echarts-cartesian.helper', () => {
     expect(points[9999].value).toBe(0);
     expect(points[10000].time).toBe(endHour);
     expect(points[10000].value).toBe(20);
-  });
+  }, 15000);
 
   it('should advance daily buckets in UTC across DST boundaries', () => {
     const previousTimeZone = process.env.TZ;

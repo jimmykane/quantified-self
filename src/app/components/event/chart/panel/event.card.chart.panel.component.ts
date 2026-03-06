@@ -87,8 +87,8 @@ const ZOOM_BAR_SLIDER_HEIGHT = 24;
 const ZOOM_BAR_HANDLE_SIZE = 24;
 const ZOOM_BAR_GRID_BOTTOM = Math.max(0, ZOOM_BAR_PANEL_HEIGHT - (ZOOM_BAR_SLIDER_TOP + ZOOM_BAR_SLIDER_HEIGHT));
 const SELECTION_BRUSH_SOURCE = 'event-chart-selection-sync';
-const ENABLE_LIVE_SELECTION_SYNC = false;
-const ENABLE_LIVE_SELECTION_PREVIEW_STATS = false;
+export const ENABLE_LIVE_SELECTION_SYNC = false;
+export const ENABLE_LIVE_SELECTION_PREVIEW_STATS = false;
 
 @Component({
   selector: 'app-event-card-chart-panel',

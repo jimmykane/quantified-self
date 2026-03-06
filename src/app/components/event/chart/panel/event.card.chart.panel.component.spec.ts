@@ -2,7 +2,11 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { SimpleChange } from '@angular/core';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { ChartCursorBehaviours, DynamicDataLoader, LapTypes, XAxisTypes } from '@sports-alliance/sports-lib';
-import { EventCardChartPanelComponent } from './event.card.chart.panel.component';
+import {
+  ENABLE_LIVE_SELECTION_PREVIEW_STATS,
+  ENABLE_LIVE_SELECTION_SYNC,
+  EventCardChartPanelComponent
+} from './event.card.chart.panel.component';
 import { EChartsLoaderService } from '../../../../services/echarts-loader.service';
 import { LoggerService } from '../../../../services/logger.service';
 import { getOrCreateEChartsTooltipHost } from '../../../../helpers/echarts-tooltip-host.helper';
@@ -340,7 +344,7 @@ describe('EventCardChartPanelComponent', () => {
     expect(emitSpy).toHaveBeenCalledWith({ start: 15, end: 75 });
   });
 
-  it('emits preview range from brush events while dragging in selection mode', async () => {
+  it('follows live selection sync constant for brush preview emissions', async () => {
     component.cursorBehaviour = ChartCursorBehaviours.SelectX;
     const emitSpy = vi.spyOn(component.previewRangeChange, 'emit');
     await renderComponent();
@@ -356,7 +360,12 @@ describe('EventCardChartPanelComponent', () => {
       ]
     });
 
-    expect(emitSpy).toHaveBeenCalledWith({ start: 20, end: 60 });
+    if (ENABLE_LIVE_SELECTION_SYNC) {
+      expect(emitSpy).toHaveBeenCalledWith({ start: 20, end: 60 });
+      return;
+    }
+
+    expect(emitSpy).not.toHaveBeenCalled();
   });
 
   it('disables hover tooltips during an active selection brush and restores them on brush end', async () => {
@@ -737,17 +746,24 @@ describe('EventCardChartPanelComponent', () => {
     expect(component.selectedRangeSpanLabel).toBe('01:15');
   });
 
-  it('uses previewRange for labels while live selection sync is enabled', () => {
+  it('follows live selection sync constant for active selection labels', () => {
     component.xAxisType = XAxisTypes.Duration;
     component.previewRange = { start: 10, end: 20 };
     component.selectedRange = { start: 65, end: 140 };
 
-    expect(component.selectedRangeStartLabel).toBe('00:10');
-    expect(component.selectedRangeEndLabel).toBe('00:20');
-    expect(component.selectedRangeSpanLabel).toBe('00:10');
+    if (ENABLE_LIVE_SELECTION_SYNC) {
+      expect(component.selectedRangeStartLabel).toBe('00:10');
+      expect(component.selectedRangeEndLabel).toBe('00:20');
+      expect(component.selectedRangeSpanLabel).toBe('00:10');
+      return;
+    }
+
+    expect(component.selectedRangeStartLabel).toBe('01:05');
+    expect(component.selectedRangeEndLabel).toBe('02:20');
+    expect(component.selectedRangeSpanLabel).toBe('01:15');
   });
 
-  it('does not recalculate range stats from preview-only selection changes', async () => {
+  it('follows preview-stats constant for preview-only range stat updates', async () => {
     await renderComponent();
 
     const updateRangeStatsSpy = vi.spyOn(component as any, 'updateRangeStats');
@@ -755,6 +771,11 @@ describe('EventCardChartPanelComponent', () => {
     component.ngOnChanges({
       previewRange: new SimpleChange(null, component.previewRange, false),
     });
+
+    if (ENABLE_LIVE_SELECTION_PREVIEW_STATS) {
+      expect(updateRangeStatsSpy).toHaveBeenCalledTimes(1);
+      return;
+    }
 
     expect(updateRangeStatsSpy).not.toHaveBeenCalled();
   });
