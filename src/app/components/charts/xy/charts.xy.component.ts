@@ -131,11 +131,8 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
       chartDataCategoryType: this.chartDataCategoryType,
       chartDataTimeInterval: this.chartDataTimeInterval
     });
-    const aggregateSourceData = this.chartDataValueType
-      ? points.map((point) => ({ [this.chartDataValueType as string]: point.value }))
-      : [];
     const aggregate = getDashboardAggregateData(
-      aggregateSourceData,
+      Array.isArray(this.data) ? this.data : [],
       this.chartDataValueType,
       this.chartDataType,
       this.logger
@@ -170,7 +167,9 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
       };
     }
 
-    const values = points.map(point => point.value);
+    const values = points
+      .map(point => point.value)
+      .filter((value): value is number => Number.isFinite(value));
     const valueAxisConfig = buildDashboardValueAxisConfig(values);
 
     const categories = points.map(point => point.label);
@@ -281,6 +280,7 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
           type: 'line',
           data: lineData,
           smooth: false,
+          connectNulls: true,
           symbol: 'circle',
           symbolSize: isCompactLayout ? 6 : 7,
           showSymbol: true,
@@ -297,7 +297,7 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
             fontSize: isCompactLayout ? 11 : 12,
             formatter: (params: { dataIndex: number }) => {
               const point = points[params.dataIndex];
-              if (!point) {
+              if (!point || !Number.isFinite(point.value)) {
                 return '';
               }
               return this.formatValue(point.value);
@@ -395,7 +395,10 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
     return this.dateTypePalette[index % this.dateTypePalette.length];
   }
 
-  private formatValue(value: number): string {
+  private formatValue(value: number | null): string {
+    if (!Number.isFinite(value)) {
+      return '--';
+    }
     const data = getDashboardDataInstanceOrNull(this.chartDataType, value, this.logger);
     if (!data) {
       return Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
@@ -405,7 +408,7 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
 
   private formatTooltip(points: DashboardCartesianPoint[], dataIndex: number): string {
     const point = points[dataIndex];
-    if (!point) {
+    if (!point || !Number.isFinite(point.value)) {
       return '';
     }
 

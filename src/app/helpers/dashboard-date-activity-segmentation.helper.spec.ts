@@ -8,7 +8,7 @@ describe('dashboard-date-activity-segmentation.helper', () => {
   const dayTwo = Date.UTC(2024, 0, 2);
   const dayThree = Date.UTC(2024, 0, 3);
 
-  const buildPoints = (values: number[]): DashboardCartesianPoint[] => values.map((value, index) => ({
+  const buildPoints = (values: Array<number | null>): DashboardCartesianPoint[] => values.map((value, index) => ({
     index,
     label: `D${index + 1}`,
     value,
@@ -157,5 +157,28 @@ describe('dashboard-date-activity-segmentation.helper', () => {
     expect(result.buckets[1].time).toBe(dayTwo);
     expect(result.buckets[1].segments).toEqual([]);
     expect(result.series.map((entry) => entry.key)).toEqual(['Climbing', 'Hiking']);
+  });
+
+  it('should keep missing average days null instead of coercing them to zero', () => {
+    const result = buildDashboardDateActivitySegmentation({
+      rawData: [
+        {
+          time: dayOne,
+          [ChartDataValueTypes.Average]: 10,
+          Hiking: 10
+        },
+        {
+          time: dayThree,
+          [ChartDataValueTypes.Average]: 30,
+          Climbing: 30
+        }
+      ],
+      points: buildPoints([10, null, 30]),
+      chartDataValueType: ChartDataValueTypes.Average
+    });
+
+    expect(result.buckets[1].time).toBe(dayTwo);
+    expect(result.buckets[1].total).toBeNull();
+    expect(result.buckets[1].segments).toEqual([]);
   });
 });

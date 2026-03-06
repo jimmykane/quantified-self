@@ -251,6 +251,24 @@ describe('ChartsColumnsComponent', () => {
     expect(option.series[0].data).toEqual([10, 0, 30]);
   });
 
+  it('should keep missing daily average buckets null and compute the summary from raw data only', async () => {
+    component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.chartDataTimeInterval = TimeIntervals.Daily;
+    component.chartDataValueType = ChartDataValueTypes.Average;
+    component.data = [
+      { time: Date.UTC(2024, 0, 1), [ChartDataValueTypes.Average]: 10, count: 1 },
+      { time: Date.UTC(2024, 0, 3), [ChartDataValueTypes.Average]: 30, count: 1 },
+    ];
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const option = getLastOption();
+    expect(option.xAxis.data).toHaveLength(3);
+    expect(option.series[0].data).toEqual([10, null, 30]);
+    expect(option.graphic[0].children[1].style.text).toBe('20.0m');
+  });
+
   it('should pad a single daily point with adjacent zero buckets and skip trend line', async () => {
     component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
     component.chartDataTimeInterval = TimeIntervals.Daily;

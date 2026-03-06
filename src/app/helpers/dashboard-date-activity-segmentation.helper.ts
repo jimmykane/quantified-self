@@ -20,7 +20,7 @@ export interface DashboardDateActivityBucket {
   index: number;
   label: string;
   time: number | null;
-  total: number;
+  total: number | null;
   count: number;
   segments: DashboardDateActivitySegment[];
   rawItem: any;
@@ -231,11 +231,11 @@ export function buildDashboardDateActivitySegmentation(
   const rawDataByTime = buildRawDataByTime(input.rawData, input.chartDataValueType);
 
   const buckets = points.map((point) => {
-    const total = Number.isFinite(point.value) ? point.value : 0;
+    const total = Number.isFinite(point.value) ? point.value : null;
     const pointCount = Math.max(0, toFiniteNumber(point.count) || 0);
     const rawBucket = point.time !== null ? rawDataByTime.get(point.time) : undefined;
 
-    if (total === 0) {
+    if (!Number.isFinite(total) || total === 0) {
       return {
         index: point.index,
         label: point.label,
