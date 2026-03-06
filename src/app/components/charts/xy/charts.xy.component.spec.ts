@@ -281,6 +281,10 @@ describe('ChartsXYComponent', () => {
     expect(option.xAxis.data).toHaveLength(3);
     expect(option.series[0].data.map((entry: { value: number | null }) => entry.value)).toEqual([10, null, 30]);
     expect(option.graphic[0].children[1].style.text).toBe('20.0m');
+    const categoryFormatter = option.xAxis.axisLabel.formatter as (value: string, index: number) => string;
+    expect(categoryFormatter(option.xAxis.data[0], 0)).toBe(option.xAxis.data[0]);
+    expect(categoryFormatter(option.xAxis.data[1], 1)).toBe('');
+    expect(categoryFormatter(option.xAxis.data[2], 2)).toBe(option.xAxis.data[2]);
   });
 
   it('should pad single date point and avoid trend line', async () => {

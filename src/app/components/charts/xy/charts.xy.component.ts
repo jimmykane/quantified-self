@@ -202,6 +202,16 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
       this.chartDataTimeInterval
     );
 
+    const categoryLabelFormatter = (value: string, index: number): string => {
+      if (
+        this.chartDataCategoryType === ChartDataCategoryTypes.DateType
+        && (!points[index] || !Number.isFinite(points[index].value))
+      ) {
+        return '';
+      }
+      return value;
+    };
+
     const categoryAxis = {
       type: 'category',
       data: categories,
@@ -217,6 +227,7 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
         fontSize: axisFontSize,
         hideOverlap: true,
         interval: 0,
+        formatter: categoryLabelFormatter,
         rotate: this.vertical && this.chartDataCategoryType === ChartDataCategoryTypes.DateType
           ? (isCompactLayout ? 54 : 42)
           : 0
