@@ -407,6 +407,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const seriesFillOpacity = Number.isFinite(resolvedFillOpacity)
       ? Math.min(1, Math.max(0, resolvedFillOpacity))
       : AppUserUtilities.getDefaultChartFillOpacity();
+    const areaFillOrigin: 'start' | 'end' = yAxisConfig.inverse ? 'end' : 'start';
 
     const seriesOptions: ChartLineSeriesOption[] = panel.series.map((series) => ({
       id: series.id,
@@ -429,6 +430,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       areaStyle: {
         color: series.color,
         opacity: seriesFillOpacity,
+        origin: areaFillOrigin,
       },
       emphasis: {
         disabled: true,
