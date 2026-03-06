@@ -149,7 +149,21 @@
 
       <div class="feature-card-content">
         <p class="feature-description" *ngIf="!hasProAccess">Upload standard FIT files to Suunto.</p>
+        @if (hasProAccess) {
+        @if (isConnectedToService()) {
         <app-upload-activity-to-service [user]="user" [hasProAccess]="hasProAccess"></app-upload-activity-to-service>
+        } @else {
+        <div
+          style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; color: var(--mat-sys-on-surface-variant);">
+          <mat-icon
+            style="font-size: 40px; height: 40px; width: 40px; margin-bottom: 12px; opacity: 0.5;">link_off</mat-icon>
+          <div style="font-weight: 500; font-size: 1rem;">Connect Account First</div>
+          <div style="font-size: 0.85rem; margin-top: 4px; opacity: 0.8; max-width: 280px;">
+            You need to connect your Suunto account in the section above before uploading activities.
+          </div>
+        </div>
+        }
+        }
       </div>
     </mat-card>
 
@@ -176,7 +190,21 @@
 
       <div class="feature-card-content">
         <p class="feature-description" *ngIf="!hasProAccess">Upload GPX routes to Suunto.</p>
+        @if (hasProAccess) {
+        @if (isConnectedToService()) {
         <app-upload-route-to-service [user]="user" [hasProAccess]="hasProAccess"></app-upload-route-to-service>
+        } @else {
+        <div
+          style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; color: var(--mat-sys-on-surface-variant);">
+          <mat-icon
+            style="font-size: 40px; height: 40px; width: 40px; margin-bottom: 12px; opacity: 0.5;">link_off</mat-icon>
+          <div style="font-weight: 500; font-size: 1rem;">Connect Account First</div>
+          <div style="font-size: 0.85rem; margin-top: 4px; opacity: 0.8; max-width: 280px;">
+            You need to connect your Suunto account in the section above before uploading routes.
+          </div>
+        </div>
+        }
+        }
       </div>
     </mat-card>
 
