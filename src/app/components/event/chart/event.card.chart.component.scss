@@ -4,6 +4,7 @@ app-event-card-chart-actions {
 }
 
 .event-chart-content {
+  --event-chart-panel-height: clamp(320px, 38vh, 460px);
   position: relative;
   min-height: 60vh;
   padding-left: 0;
@@ -23,4 +24,10 @@ app-event-card-chart-actions {
   display: grid;
   gap: 12px;
   grid-template-columns: minmax(0, 1fr);
+}
+
+@media (max-width: 959px) {
+  .event-chart-content {
+    --event-chart-panel-height: clamp(300px, 42vh, 380px);
+  }
 }

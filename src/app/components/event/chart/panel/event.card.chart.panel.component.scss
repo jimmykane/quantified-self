@@ -36,7 +36,7 @@
 
 .event-chart-panel__chart {
   width: 100%;
-  height: 260px;
+  height: var(--event-chart-panel-height, 360px);
 }
 
 .event-chart-panel__chart--zoom-only {
