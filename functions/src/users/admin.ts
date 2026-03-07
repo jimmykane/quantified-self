@@ -1086,15 +1086,17 @@ export const getFinancialStats = onAdminCall<void, any>({
                             logger.info(`Found BigQuery export table: ${tableName}`);
                             const fullTableName = `\`${bqProjectId}.${bqDatasetId}.${tableName}\``;
 
-                            // 2. Query for current month's cost
-                            // invoice.month is in YYYYMM format
+                            // 2. Query for current usage month's cost.
+                            // We intentionally filter by usage timestamps, not invoice.month, so dashboard
+                            // numbers align with Cloud Billing usage-based reports for the same month.
                             const query = `
                                 SELECT 
                                     SUM(cost) + SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as total_cost,
                                     MAX(usage_end_time) as last_updated,
                                     currency 
                                 FROM ${fullTableName} 
-                                WHERE invoice.month = FORMAT_DATE('%Y%m', CURRENT_DATE())
+                                WHERE DATE(usage_start_time) >= DATE_TRUNC(CURRENT_DATE(), MONTH)
+                                AND DATE(usage_start_time) < DATE_ADD(DATE_TRUNC(CURRENT_DATE(), MONTH), INTERVAL 1 MONTH)
                                 AND project.id = @projectId
                                 GROUP BY currency
                                 LIMIT 1

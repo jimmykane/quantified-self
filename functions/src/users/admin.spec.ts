@@ -1247,6 +1247,22 @@ describe('getFinancialStats Cloud Function', () => {
         expect(result.cost.lastUpdated).toBe(mockTimestamp);
     });
 
+    it('should query BigQuery by usage month instead of invoice month', async () => {
+        mockGetProjectBillingInfo.mockResolvedValue([{
+            billingAccountName: 'billingAccounts/000000-000000-000000'
+        }]);
+        mockGetTables.mockResolvedValue([[{ id: 'gcp_billing_export_v1_123' }]]);
+        mockBigQueryQuery.mockResolvedValue([[]]);
+
+        await (getFinancialStats as any)(request);
+
+        expect(mockBigQueryQuery).toHaveBeenCalledTimes(1);
+        const queryText = mockBigQueryQuery.mock.calls[0][0].query as string;
+        expect(queryText).toContain('DATE(usage_start_time) >= DATE_TRUNC(CURRENT_DATE(), MONTH)');
+        expect(queryText).toContain('DATE(usage_start_time) < DATE_ADD(DATE_TRUNC(CURRENT_DATE(), MONTH), INTERVAL 1 MONTH)');
+        expect(queryText).not.toContain('invoice.month');
+    });
+
     it('should handle pagination for Stripe invoices', async () => {
         productsDocs.push({ id: 'prod_valid_1' });
 
