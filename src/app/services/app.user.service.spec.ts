@@ -104,6 +104,20 @@ describe('AppUserService', () => {
         expect(mergedUser.impersonatedBy).toBe('admin-uid');
     });
 
+    it('should clear stale impersonatedBy when the auth claim is absent', async () => {
+        (docData as any).mockReturnValue(of({
+            impersonatedBy: 'admin-uid'
+        }));
+        mockAuth.currentUser.getIdTokenResult.mockResolvedValue({
+            claims: {}
+        });
+
+        service = TestBed.inject(AppUserService);
+        const mergedUser = await firstValueFrom(service.user$.pipe(filter((user): user is AppUserInterface => !!user), take(1)));
+
+        expect(mergedUser.impersonatedBy).toBeUndefined();
+    });
+
     it('returns enabled chart data types in canonical order with event chart priority overrides', () => {
         service = TestBed.inject(AppUserService);
         const user = {
@@ -438,6 +452,41 @@ describe('AppUserService', () => {
             (updateDoc as any).mockRejectedValueOnce(new Error('permission-denied'));
 
             await expect(service.updateUserProperties(user, propertiesToUpdate)).rejects.toThrow('permission-denied');
+        });
+
+        it('should strip impersonatedBy from partial updates before writing the main user doc', async () => {
+            const user = { uid: 'test-uid' } as AppUserInterface;
+            const propertiesToUpdate = {
+                displayName: 'New Name',
+                impersonatedBy: 'admin-uid'
+            };
+
+            await service.updateUserProperties(user, propertiesToUpdate);
+
+            expect(updateDoc).toHaveBeenCalledWith(
+                expect.anything(),
+                { displayName: 'New Name' }
+            );
+        });
+    });
+
+    describe('updateUser', () => {
+        beforeEach(() => {
+            service = TestBed.inject(AppUserService);
+        });
+
+        it('should strip impersonatedBy from full user writes', async () => {
+            const user = {
+                uid: 'test-uid',
+                displayName: 'Test User',
+                impersonatedBy: 'admin-uid'
+            } as AppUserInterface;
+
+            await service.updateUser(user);
+
+            const [, writtenData] = (setDoc as any).mock.calls[0];
+            expect(writtenData.displayName).toBe('Test User');
+            expect(writtenData.impersonatedBy).toBeUndefined();
         });
     });
 

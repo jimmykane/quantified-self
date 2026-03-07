@@ -167,6 +167,8 @@ export class AppUserService implements OnDestroy {
     }
     if (typeof impersonatedBy === 'string' && impersonatedBy.length > 0) {
       identity.impersonatedBy = impersonatedBy;
+    } else {
+      delete identity.impersonatedBy;
     }
 
     // Check for force-refresh (if DB was updated more recently than token issuance)
@@ -519,6 +521,12 @@ export class AppUserService implements OnDestroy {
         );
       }
 
+      // Keep auth-claim state out of the main profile doc.
+      if ('impersonatedBy' in propertiesToUpdate) {
+        this.logger.warn('[AppUserService] Stripping claim-managed field \'impersonatedBy\' from update payload.');
+        delete propertiesToUpdate.impersonatedBy;
+      }
+
       if (Object.keys(propertiesToUpdate).length > 0) {
         const userDocRef = doc(this.firestore, 'users', user.uid);
         promises.push(updateDoc(userDocRef, propertiesToUpdate)
@@ -557,6 +565,7 @@ export class AppUserService implements OnDestroy {
       'lastDowngradedAt',
       'stripeRole',
       'isPro',
+      'impersonatedBy',
       ...AppUserService.legalFields
     ];
 
