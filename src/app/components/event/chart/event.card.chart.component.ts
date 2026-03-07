@@ -49,7 +49,7 @@ import {
   EventChartRange,
   resolveEventChartXAxisType,
 } from '../../../helpers/event-echarts-xaxis.helper';
-import { isMergeOrBenchmarkEvent } from '../../../helpers/event-visibility.helper';
+import { isMergeEvent, isMergeOrBenchmarkEvent } from '../../../helpers/event-visibility.helper';
 
 interface EventDataTypeLegendItem {
   dataType: string;
@@ -219,6 +219,10 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
 
   public get showActivityNamesInTooltip(): boolean {
     return isMergeOrBenchmarkEvent(this.event);
+  }
+
+  public get showMergeSeriesLegend(): boolean {
+    return isMergeEvent(this.event);
   }
 
   public get userUnitSettings() {

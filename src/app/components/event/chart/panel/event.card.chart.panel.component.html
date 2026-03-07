@@ -3,9 +3,22 @@
   @if (panel) {
   <header class="event-chart-panel__header">
     <div class="event-chart-panel__heading">
-      <h3>{{ panel?.displayName }}</h3>
-      @if (panel?.unit) {
-      <span>({{ panel?.unit }})</span>
+      <div class="event-chart-panel__title">
+        <h3>{{ panel?.displayName }}</h3>
+        @if (panel?.unit) {
+        <span>({{ panel?.unit }})</span>
+        }
+      </div>
+
+      @if (seriesLegendItems.length > 0) {
+      <div class="event-chart-panel__series-legend">
+        @for (item of seriesLegendItems; track item.key) {
+        <span class="event-chart-panel__series-legend-item">
+          <span class="event-chart-panel__series-legend-dot" [style.background]="item.color"></span>
+          <span class="event-chart-panel__series-legend-label">{{ item.label }}</span>
+        </span>
+        }
+      </div>
       }
     </div>
 

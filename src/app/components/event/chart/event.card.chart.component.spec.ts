@@ -141,6 +141,25 @@ describe('EventCardChartComponent', () => {
     expect(component.showActivityNamesInTooltip).toBe(true);
   });
 
+  it('shows the series legend only for merge events', () => {
+    component.event = {
+      isMerge: true,
+      getActivities: () => [],
+      getID: () => 'event-1',
+    } as any;
+
+    expect(component.showMergeSeriesLegend).toBe(true);
+
+    component.event = {
+      isMerge: false,
+      hasBenchmark: true,
+      getActivities: () => [],
+      getID: () => 'event-1',
+    } as any;
+
+    expect(component.showMergeSeriesLegend).toBe(false);
+  });
+
   it('shows activity names in tooltips for benchmark events', () => {
     component.event = {
       isMerge: false,

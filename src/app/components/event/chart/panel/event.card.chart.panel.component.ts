@@ -69,6 +69,11 @@ type TooltipFormatterParams = {
   seriesName?: string;
   color?: string;
 };
+type PanelSeriesLegendItem = {
+  key: string;
+  label: string;
+  color: string;
+};
 type AxisPointerEvent = {
   axesInfo?: Array<{
     value?: number | string;
@@ -129,6 +134,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @Input() fillOpacity = AppUserUtilities.getDefaultChartFillOpacity();
   @Input() waterMark = '';
   @Input() showActivityNamesInTooltip = false;
+  @Input() showSeriesLegend = false;
   @Input() zoomBarOverviewData: Array<[number, number]> = [];
   @Input() sharedZoomRange: EventChartRange | null = null;
 
@@ -197,6 +203,33 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   public get hasCommittedSelection(): boolean {
     return !!normalizeEventRange(this.selectedRange);
+  }
+
+  public get seriesLegendItems(): PanelSeriesLegendItem[] {
+    if (!this.showSeriesLegend || !this.panel?.series?.length) {
+      return [];
+    }
+
+    const legendItems: PanelSeriesLegendItem[] = [];
+    const seenKeys = new Set<string>();
+    for (let index = 0; index < this.panel.series.length; index += 1) {
+      const series = this.panel.series[index];
+      const activityID = `${series.activityID || ''}`.trim();
+      const label = `${series.activityName || 'Activity'}`.trim() || 'Activity';
+      const key = activityID || label;
+      if (seenKeys.has(key)) {
+        continue;
+      }
+
+      seenKeys.add(key);
+      legendItems.push({
+        key,
+        label,
+        color: series.color,
+      });
+    }
+
+    return legendItems;
   }
 
   public get canToggleFullscreen(): boolean {

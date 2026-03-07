@@ -263,6 +263,38 @@ describe('EventCardChartPanelComponent', () => {
     expect(component.isFullscreen).toBe(false);
   });
 
+  it('renders a merge-only series legend under the chart title', async () => {
+    component.showSeriesLegend = true;
+    component.panel = {
+      ...(component.panel as any),
+      series: [
+        {
+          ...(component.panel as any).series[0],
+        },
+        {
+          id: 'a2::power',
+          activityID: 'a2',
+          activityName: 'Wahoo',
+          color: '#00ff00',
+          streamType: 'power',
+          displayName: 'Power',
+          unit: 'W',
+          points: [
+            { x: 0, y: 101, time: 0 },
+            { x: 10, y: 121, time: 10 },
+          ],
+        }
+      ],
+    } as any;
+
+    await renderComponent();
+
+    const legendItems = fixture.nativeElement.querySelectorAll('.event-chart-panel__series-legend-item');
+    expect(legendItems).toHaveLength(2);
+    expect(fixture.nativeElement.textContent).toContain('Garmin');
+    expect(fixture.nativeElement.textContent).toContain('Wahoo');
+  });
+
   it('serializes queued chart refresh requests', async () => {
     const refreshOrder: string[] = [];
     (component as any).refreshChart = vi.fn(() => {

@@ -17,13 +17,19 @@
 
 .event-chart-panel__header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
   margin-bottom: 6px;
   font-family: 'Barlow Condensed', sans-serif;
 }
 
 .event-chart-panel__heading {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.event-chart-panel__title {
   display: flex;
   align-items: baseline;
   gap: 6px;
@@ -36,7 +42,7 @@
   font-weight: 600;
 }
 
-.event-chart-panel__header span {
+.event-chart-panel__title > span {
   font-size: 0.88rem;
   opacity: 0.75;
 }
@@ -44,6 +50,38 @@
 .event-chart-panel__fullscreen-button {
   margin-left: auto;
   flex: 0 0 auto;
+}
+
+.event-chart-panel__series-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+.event-chart-panel__series-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.8rem;
+  opacity: 0.82;
+}
+
+.event-chart-panel__series-legend-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+.event-chart-panel__series-legend-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .event-chart-panel__chart {
