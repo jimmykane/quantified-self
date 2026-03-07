@@ -1,17 +1,82 @@
 @use '../../../../styles/breakpoints' as bp;
 
+mat-dialog-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dialog-intro {
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+  line-height: 1.5;
+}
+
 .merge-options {
   display: grid;
   gap: 16px;
 }
 
 .option-card {
-  padding: 16px;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  padding: 18px;
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  gap: 14px;
+  border-color: color-mix(in srgb, var(--mat-sys-outline-variant) 90%, transparent);
+  outline: 2px solid transparent;
+  outline-offset: 0;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--mat-sys-surface-container-low) 92%, var(--mat-sys-surface)) 0%,
+      var(--mat-sys-surface) 100%
+    ) !important;
+  transition:
+    border-color 0.2s ease,
+    outline-color 0.2s ease,
+    background 0.2s ease;
+}
+
+.option-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.option-card:not(.disabled):hover {
+  border-color: color-mix(in srgb, var(--mat-sys-outline) 34%, var(--mat-sys-outline-variant));
+}
+
+.option-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.option-card.option-card-benchmark:not(.disabled):hover {
+  outline-color: color-mix(in srgb, var(--mat-sys-secondary) 22%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--mat-sys-secondary-container) 28%, var(--mat-sys-surface)) 0%,
+      var(--mat-sys-surface) 100%
+    ) !important;
+}
+
+.option-card.option-card-multi:not(.disabled):hover {
+  outline-color: color-mix(in srgb, var(--mat-sys-primary) 22%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--mat-sys-primary-container) 30%, var(--mat-sys-surface)) 0%,
+      var(--mat-sys-surface) 100%
+    ) !important;
 }
 
 .option-card.disabled {
@@ -19,26 +84,118 @@
   opacity: 0.7;
 }
 
-.option-card.selected {
+.option-card.option-card-benchmark::before {
+  background: var(--mat-sys-secondary);
+}
+
+.option-card.option-card-multi::before {
+  background: var(--mat-sys-primary);
+}
+
+.option-card.option-card-benchmark.selected {
+  border-color: var(--mat-sys-secondary);
+  outline-color: color-mix(in srgb, var(--mat-sys-secondary) 28%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--mat-sys-secondary-container) 64%, var(--mat-sys-surface)) 0%,
+      var(--mat-sys-surface) 100%
+    ) !important;
+}
+
+.option-card.option-card-multi.selected {
   border-color: var(--mat-sys-primary);
-  box-shadow: 0 8px 20px color-mix(in srgb, var(--mat-sys-primary) 20%, transparent);
-  transform: translateY(-1px);
+  outline-color: color-mix(in srgb, var(--mat-sys-primary) 28%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--mat-sys-primary-container) 68%, var(--mat-sys-surface)) 0%,
+      var(--mat-sys-surface) 100%
+    ) !important;
+}
+
+.option-card.selected::before {
+  opacity: 1;
+}
+
+.option-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.option-eyebrow {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.option-card-benchmark .option-eyebrow {
+  color: var(--mat-sys-secondary);
+}
+
+.option-card-multi .option-eyebrow {
+  color: var(--mat-sys-primary);
+}
+
+.option-indicator {
+  color: var(--mat-sys-outline);
+  flex-shrink: 0;
+  transition: color 0.2s ease;
+}
+
+.option-card-benchmark.selected .option-indicator {
+  color: var(--mat-sys-secondary);
+}
+
+.option-card-multi.selected .option-indicator {
+  color: var(--mat-sys-primary);
 }
 
 .option-title {
   font-size: 1rem;
   font-weight: 600;
+  line-height: 1.3;
 }
 
 .option-summary {
   font-size: 0.875rem;
-  opacity: 0.8;
+  color: var(--mat-sys-on-surface-variant);
+  line-height: 1.45;
+}
+
+.option-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.option-chip {
+  pointer-events: none;
+}
+
+.option-chip-primary {
+  --mdc-chip-elevated-container-color: var(--mat-sys-primary-container);
+  --mdc-chip-label-text-color: var(--mat-sys-on-primary-container);
+}
+
+.option-chip-secondary {
+  --mdc-chip-elevated-container-color: var(--mat-sys-secondary-container);
+  --mdc-chip-label-text-color: var(--mat-sys-on-secondary-container);
 }
 
 .merge-button-content {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+}
+
+.merge-submit-button {
+  min-inline-size: 14rem;
 }
 
 .merge-spinner {
@@ -49,5 +206,9 @@
 @include bp.xsmall {
   .option-card {
     padding: 14px;
+  }
+
+  .option-header {
+    gap: 8px;
   }
 }

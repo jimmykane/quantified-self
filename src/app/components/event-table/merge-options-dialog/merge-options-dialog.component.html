@@ -1,43 +1,89 @@
 <h2 mat-dialog-title>Merge events</h2>
 <mat-dialog-content>
-  <div class="merge-options">
-    <div class="qs-glass-card-panel option-card" role="button" tabindex="0"
+  <p class="dialog-intro">
+    Choose how the merged event should behave after it is created.
+  </p>
+
+  <div class="merge-options" role="radiogroup" aria-label="Merge event behavior">
+    <div class="qs-glass-card-panel option-card option-card-benchmark" role="radio"
       [class.selected]="selectedOption === 'benchmark'"
+      [attr.aria-checked]="selectedOption === 'benchmark'"
       [class.disabled]="isMerging" [attr.aria-disabled]="isMerging"
       (click)="selectOption('benchmark')" (keydown.enter)="selectOption('benchmark')"
+      (keydown.space)="selectOption('benchmark'); $event.preventDefault()"
       [attr.tabindex]="isMerging ? -1 : 0">
-      <div class="option-title">Create a benchmark merge</div>
+      <div class="option-header">
+        <div>
+          <div class="option-eyebrow">Best for comparisons</div>
+          <div class="option-title">Create a benchmark merge</div>
+        </div>
+        <mat-icon class="option-indicator" aria-hidden="true">
+          {{ selectedOption === 'benchmark' ? 'check_circle' : 'radio_button_unchecked' }}
+        </mat-icon>
+      </div>
       <div class="option-summary">
         Creates a merged event flagged as a benchmark merge.
       </div>
-      <app-status-info type="info" title="What this does">
-        This merged event is excluded from stats and enables benchmark comparison tools and reports.
+      <mat-chip-set class="option-chips" aria-label="Benchmark merge highlights">
+        <mat-chip class="option-chip option-chip-secondary" disableRipple>
+          Excluded from stats
+        </mat-chip>
+        <mat-chip class="option-chip option-chip-secondary" disableRipple>
+          Benchmark tools enabled
+        </mat-chip>
+      </mat-chip-set>
+      <app-status-info type="pending" title="What changes">
+        Use this when you want comparison reports and benchmark workflows instead of normal training totals.
       </app-status-info>
     </div>
 
-    <div class="qs-glass-card-panel option-card" role="button" tabindex="0"
+    <div class="qs-glass-card-panel option-card option-card-multi" role="radio"
       [class.selected]="selectedOption === 'multi'"
+      [attr.aria-checked]="selectedOption === 'multi'"
       [class.disabled]="isMerging" [attr.aria-disabled]="isMerging"
       (click)="selectOption('multi')" (keydown.enter)="selectOption('multi')"
+      (keydown.space)="selectOption('multi'); $event.preventDefault()"
       [attr.tabindex]="isMerging ? -1 : 0">
-      <div class="option-title">Create a new multi activity event</div>
+      <div class="option-header">
+        <div>
+          <div class="option-eyebrow">Best for normal analysis</div>
+          <div class="option-title">Create a new multi-activity event</div>
+        </div>
+        <mat-icon class="option-indicator" aria-hidden="true">
+          {{ selectedOption === 'multi' ? 'check_circle' : 'radio_button_unchecked' }}
+        </mat-icon>
+      </div>
       <div class="option-summary">
         Creates a standard multi-activity event.
       </div>
-      <app-status-info type="info" title="What this does">
-        This event is treated like any other multi-activity event and remains included in stats.
+      <mat-chip-set class="option-chips" aria-label="Multi activity merge highlights">
+        <mat-chip class="option-chip option-chip-primary" disableRipple>
+          Included in stats
+        </mat-chip>
+        <mat-chip class="option-chip option-chip-primary" disableRipple>
+          Standard event behavior
+        </mat-chip>
+      </mat-chip-set>
+      <app-status-info type="success" title="What changes">
+        Use this when you want one normal event that still behaves like any other multi-activity workout.
       </app-status-info>
     </div>
   </div>
 </mat-dialog-content>
 <mat-dialog-actions align="end">
   <button mat-button (click)="cancel()" [disabled]="isMerging">Cancel</button>
-  <button mat-flat-button class="qs-mat-primary" (click)="confirm()" [disabled]="isMerging">
+  <button mat-flat-button class="qs-mat-primary merge-submit-button" (click)="confirm()" [disabled]="isMerging">
     <span class="merge-button-content">
       @if (isMerging) {
       <mat-progress-spinner class="merge-spinner" diameter="18" mode="indeterminate"></mat-progress-spinner>
       }
-      <span>{{ isMerging ? 'Merging…' : 'Merge' }}</span>
+      <span>
+        {{
+        isMerging
+        ? 'Merging events…'
+        : 'Merge selected events'
+        }}
+      </span>
     </span>
   </button>
 </mat-dialog-actions>
