@@ -384,6 +384,11 @@ describe('ChartsXYComponent', () => {
     expect(option.series).toEqual([]);
     expect(option.xAxis).toEqual([]);
     expect(option.yAxis).toEqual([]);
+    expect(option.tooltip.show).toBe(false);
+    expect(mockLoader.setOption.mock.calls.at(-1)?.[2]).toEqual({
+      notMerge: true,
+      lazyUpdate: false
+    });
   });
 
   it('should dispose chart on destroy', async () => {

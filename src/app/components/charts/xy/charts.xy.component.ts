@@ -42,6 +42,7 @@ import {
 import { normalizeUnitDerivedTypeLabel } from '../../../helpers/stat-label.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
+type ChartSetOptionSettings = Parameters<EChartsType['setOption']>[1];
 
 @Component({
   selector: 'app-xy-chart',
@@ -76,6 +77,10 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
     AppColors.DeepBlue,
     AppColors.LightGreen
   ];
+  private static readonly EMPTY_DATA_UPDATE_SETTINGS: ChartSetOptionSettings = {
+    notMerge: true,
+    lazyUpdate: false
+  };
 
   constructor(
     private eChartsLoader: EChartsLoaderService,
@@ -138,7 +143,12 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
       this.logger
     );
     const option = this.buildChartOption(points, aggregate);
-    this.chartHost.setOption(option, ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS);
+    this.chartHost.setOption(
+      option,
+      points.length
+        ? ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS
+        : ChartsXYComponent.EMPTY_DATA_UPDATE_SETTINGS
+    );
     this.chartHost.scheduleResize();
   }
 
@@ -160,10 +170,12 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
     if (!points.length) {
       return {
         animation: this.useAnimations === true,
+        tooltip: { show: false },
         legend: { show: false },
         xAxis: [],
         yAxis: [],
         series: [],
+        graphic: []
       };
     }
 
