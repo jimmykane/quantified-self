@@ -16,9 +16,6 @@
 }
 
 .event-chart-panel__header {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
   margin-bottom: 6px;
   font-family: 'Barlow Condensed', sans-serif;
 }
@@ -29,26 +26,37 @@
   min-width: 0;
 }
 
+.event-chart-panel__title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .event-chart-panel__title {
   display: flex;
   align-items: baseline;
   gap: 6px;
   min-width: 0;
+  flex: 1 1 auto;
 }
 
 .event-chart-panel__header h3 {
   margin: 0;
   font-size: 1.1rem;
   font-weight: 600;
+  line-height: 1;
 }
 
 .event-chart-panel__title > span {
   font-size: 0.88rem;
   opacity: 0.75;
+  line-height: 1;
 }
 
 .event-chart-panel__fullscreen-button {
   margin-left: auto;
+  align-self: center;
   flex: 0 0 auto;
 }
 
