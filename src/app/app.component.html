@@ -93,20 +93,6 @@
 </div>
 </ng-template>
 
-<ng-template #impersonationBanner>
-  <section class="impersonation-banner mat-typography" aria-live="polite">
-    <div class="impersonation-banner__copy">
-      <mat-icon>visibility</mat-icon>
-      <span>Impersonating {{ impersonatedAccountLabel }}.</span>
-    </div>
-    <button mat-stroked-button type="button" class="impersonation-banner__action" (click)="returnToAdmin()"
-      [disabled]="isReturningToAdmin">
-      <mat-icon>{{ isReturningToAdmin ? 'sync' : 'undo' }}</mat-icon>
-      <span>{{ isReturningToAdmin ? 'Returning...' : 'Return to Admin' }}</span>
-    </button>
-  </section>
-</ng-template>
-
 @if (authState !== null) {
 <!-- Circular Reveal Theme Overlay -->
 @if (themeOverlayActive) {
@@ -129,9 +115,7 @@
 
   <!-- Maintenance & Replacement Logic -->
   @if (maintenanceMode() && !isHomeRoute && !isOnboardingRoute) {
-  @if (isImpersonatingSession) {
-  <ng-container [ngTemplateOutlet]="impersonationBanner"></ng-container>
-  }
+  <app-impersonation-banner></app-impersonation-banner>
   <app-maintenance [message]="maintenanceMessage()"></app-maintenance>
   } @else {
   <!-- New Header Layout -->
@@ -208,9 +192,7 @@
     }
 
     <mat-sidenav-content>
-      @if (isImpersonatingSession) {
-      <ng-container [ngTemplateOutlet]="impersonationBanner"></ng-container>
-      }
+      <app-impersonation-banner></app-impersonation-banner>
       <div class="router-outlet-container" [@routeAnimations]="routeAnimationState()">
         @if (maintenanceLoading()) {
         <div class="loading-overlay">

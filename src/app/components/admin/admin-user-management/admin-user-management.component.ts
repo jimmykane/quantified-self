@@ -1,6 +1,6 @@
 import { AfterViewInit, Component, ElementRef, LOCALE_ID, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ActivatedRoute, Router, RouterModule } from '@angular/router';
+import { ActivatedRoute, RouterModule } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatButtonModule } from '@angular/material/button';
@@ -13,13 +13,13 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { MatCardModule } from '@angular/material/card';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
-import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatSnackBarModule } from '@angular/material/snack-bar';
 import { Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged, takeUntil } from 'rxjs/operators';
 
 import { AdminService, AdminUser, ListUsersParams } from '../../../services/admin.service';
 import { AppThemeService } from '../../../services/app.theme.service';
-import { AppAuthService } from '../../../authentication/app.auth.service';
+import { AppImpersonationService } from '../../../services/app.impersonation.service';
 import { LoggerService } from '../../../services/logger.service';
 import { ConfirmationDialogComponent } from '../../confirmation-dialog/confirmation-dialog.component';
 import { AdminResolverData } from '../../../resolvers/admin.resolver';
@@ -77,11 +77,9 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     // Injected services
     private adminService = inject(AdminService);
     private appThemeService = inject(AppThemeService);
-    private authService = inject(AppAuthService);
+    private impersonationService = inject(AppImpersonationService);
     private route = inject(ActivatedRoute);
-    private router = inject(Router);
     private dialog = inject(MatDialog);
-    private snackBar = inject(MatSnackBar);
     private logger = inject(LoggerService);
     private eChartsLoader = inject(EChartsLoaderService);
     private locale = inject(LOCALE_ID);
@@ -248,30 +246,12 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
             if (!confirmed) return;
 
             this.isLoading = true;
-            this.adminService.impersonateUser(user.uid).subscribe({
-                next: async (res) => {
-                    this.logger.log('Impersonation token received. Switching user...', res);
-                    await this.authService.loginWithCustomToken(res.token);
-                    window.location.href = '/dashboard';
-                },
-                error: (err) => {
-                    this.logger.error('Impersonation failed', err);
-                    this.isLoading = false;
-
-                    let errorMessage = 'Impersonation failed. ';
-                    if (err.message && err.message.includes('CORS')) {
-                        errorMessage += 'This usually happens if the backend function is not deployed or accessible.';
-                    } else if (err.status === 0 || (err.name && err.name === 'FirebaseError' && err.code === 'internal')) {
-                        errorMessage += 'Network or Server Error. Please ensure the backend is deployed.';
-                    } else {
-                        errorMessage += err.message || 'Unknown error';
-                    }
-
-                    this.snackBar.open(errorMessage, 'Close', {
-                        duration: 5000,
-                        panelClass: ['error-snackbar']
-                    });
-                }
+            void this.impersonationService.startImpersonation({
+                uid: user.uid,
+                email: user.email,
+                displayName: user.displayName
+            }).catch(() => undefined).finally(() => {
+                this.isLoading = false;
             });
         });
     }

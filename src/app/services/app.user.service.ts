@@ -593,7 +593,7 @@ export class AppUserService implements OnDestroy {
     // But the guard checks "hasPaidAccess".
 
     // Let's look at the guard again.
-    // const hasPaidAccess = stripeRole === 'pro' || stripeRole === 'basic' || (user as any).isPro === true;
+    // const hasPaidAccess = AppUserUtilities.hasPaidAccessUser(user);
     // const onboardingCompleted = termsAccepted && (hasPaidAccess || hasSubscribedOnce);
 
     // So if I just set 'onboardingCompleted' property on the user in Firestore, 

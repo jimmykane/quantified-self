@@ -13,7 +13,6 @@ import { AppThemeService } from './services/app.theme.service';
 import { AppWhatsNewService } from './services/app.whats-new.service';
 import { MatDialog } from '@angular/material/dialog';
 import { AppHapticsService } from './services/app.haptics.service';
-import { AppWindowService } from './services/app.window.service';
 
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { Router, RouterModule, ActivatedRoute, NavigationEnd } from '@angular/router';
@@ -32,8 +31,7 @@ describe('AppComponent', () => {
     let fixture: ComponentFixture<AppComponent>;
 
     const mockAppAuthService = {
-        user$: of(null),
-        returnToAdmin: vi.fn().mockResolvedValue(undefined)
+        user$: of(null)
     };
 
     const mockRouter = {
@@ -88,13 +86,6 @@ describe('AppComponent', () => {
     const mockHapticsService = {
         selection: vi.fn()
     };
-    const mockWindowService = {
-        windowRef: {
-            location: {
-                assign: vi.fn()
-            }
-        }
-    };
 
 
     beforeEach(async () => {
@@ -140,7 +131,6 @@ describe('AppComponent', () => {
                     }
                 },
                 { provide: AppHapticsService, useValue: mockHapticsService },
-                { provide: AppWindowService, useValue: mockWindowService },
                 ChangeDetectorRef
             ],
             schemas: [CUSTOM_ELEMENTS_SCHEMA]
@@ -261,15 +251,13 @@ describe('AppComponent', () => {
         expect(component.showUploadActivities).toBe(false);
     });
 
-    it('should expose impersonation state from the current user claim', () => {
-        component['currentUser'] = {
-            uid: 'u1',
-            email: 'user@example.com',
-            impersonatedBy: 'admin-uid'
-        } as any;
+    it('should place the impersonation banner inside the maintenance branch', () => {
+        mockRouter.url = '/dashboard';
+        mockRemoteConfigService.maintenanceMode.set(true);
+        fixture.detectChanges();
 
-        expect(component.isImpersonatingSession).toBe(true);
-        expect(component.impersonatedAccountLabel).toBe('user@example.com');
+        const banners = fixture.nativeElement.querySelectorAll('app-impersonation-banner');
+        expect(banners).toHaveLength(1);
     });
 
     it('should return unread whats-new count from service signal', () => {
@@ -320,49 +308,13 @@ describe('AppComponent', () => {
         expect(mockHapticsService.selection).toHaveBeenCalled();
     });
 
-    it('should return to admin and redirect when impersonating', async () => {
-        mockHapticsService.selection.mockClear();
-        mockAppAuthService.returnToAdmin.mockClear();
-        component['currentUser'] = {
-            uid: 'u1',
-            email: 'user@example.com',
-            impersonatedBy: 'admin-uid'
-        } as any;
-        mockWindowService.windowRef.location.assign.mockClear();
+    it('should place the impersonation banner inside the main shell content', () => {
+        mockRemoteConfigService.maintenanceMode.set(false);
+        fixture.detectChanges();
 
-        await component.returnToAdmin();
-
-        expect(mockAppAuthService.returnToAdmin).toHaveBeenCalled();
-        expect(mockWindowService.windowRef.location.assign).toHaveBeenCalledWith('/admin');
-        expect(component.isReturningToAdmin).toBe(false);
-        expect(mockHapticsService.selection).toHaveBeenCalled();
-    });
-
-    it('should not attempt to return to admin when session is not impersonated', async () => {
-        mockAppAuthService.returnToAdmin.mockClear();
-        mockHapticsService.selection.mockClear();
-        component['currentUser'] = { uid: 'u1' } as any;
-
-        await component.returnToAdmin();
-
-        expect(mockAppAuthService.returnToAdmin).not.toHaveBeenCalled();
-        expect(mockHapticsService.selection).not.toHaveBeenCalled();
-    });
-
-    it('should log and reset state when returning to admin fails', async () => {
-        mockAppAuthService.returnToAdmin.mockRejectedValueOnce(new Error('restore failed'));
-        component['currentUser'] = {
-            uid: 'u1',
-            impersonatedBy: 'admin-uid'
-        } as any;
-        const loggerErrorSpy = vi.spyOn(component['logger'] as any, 'error').mockImplementation(() => { });
-        mockWindowService.windowRef.location.assign.mockClear();
-
-        await component.returnToAdmin();
-
-        expect(loggerErrorSpy).toHaveBeenCalledWith('Failed to return to admin session', expect.any(Error));
-        expect(mockWindowService.windowRef.location.assign).not.toHaveBeenCalled();
-        expect(component.isReturningToAdmin).toBe(false);
+        const sidenavContent = fixture.nativeElement.querySelector('mat-sidenav-content') as HTMLElement | null;
+        const banner = sidenavContent?.querySelector('app-impersonation-banner');
+        expect(banner).toBeTruthy();
     });
 
     it('should no-op banner updates when height and state are unchanged', () => {

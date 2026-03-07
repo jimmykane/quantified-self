@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AdminUserManagementComponent } from './admin-user-management.component';
 import { AdminService, AdminUser, ListUsersResponse } from '../../../services/admin.service';
-import { AppAuthService } from '../../../authentication/app.auth.service';
+import { AppImpersonationService } from '../../../services/app.impersonation.service';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { LoggerService } from '../../../services/logger.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
@@ -78,7 +78,7 @@ describe('AdminUserManagementComponent', () => {
     let component: AdminUserManagementComponent;
     let fixture: ComponentFixture<AdminUserManagementComponent>;
     let adminServiceSpy: any;
-    let authServiceSpy: any;
+    let impersonationServiceSpy: any;
     let routerSpy: any;
     let matDialogSpy: any;
     let appThemeServiceMock: any;
@@ -118,11 +118,10 @@ describe('AdminUserManagementComponent', () => {
         adminServiceSpy = {
             getUsers: vi.fn().mockReturnValue(of(mockResponse)),
             getTotalUserCount: vi.fn().mockReturnValue(of({ total: 100, pro: 30, basic: 70, free: 0, onboardingCompleted: 80 })),
-            impersonateUser: vi.fn().mockReturnValue(of({ token: 'test-token' })),
         };
 
-        authServiceSpy = {
-            loginWithCustomToken: vi.fn().mockResolvedValue({})
+        impersonationServiceSpy = {
+            startImpersonation: vi.fn().mockResolvedValue(undefined)
         };
 
         routerSpy = {
@@ -174,7 +173,7 @@ describe('AdminUserManagementComponent', () => {
             ],
             providers: [
                 { provide: AdminService, useValue: adminServiceSpy },
-                { provide: AppAuthService, useValue: authServiceSpy },
+                { provide: AppImpersonationService, useValue: impersonationServiceSpy },
                 { provide: AppThemeService, useValue: appThemeServiceMock },
                 { provide: LoggerService, useValue: mockLogger },
                 { provide: Router, useValue: routerSpy },
@@ -299,6 +298,28 @@ describe('AdminUserManagementComponent', () => {
         component.clearSearch();
 
         expect(component.searchTerm).toBe('');
+    });
+
+    it('should delegate confirmed impersonation to the impersonation service', async () => {
+        component.onImpersonate(mockUsers[0]);
+        await Promise.resolve();
+
+        expect(impersonationServiceSpy.startImpersonation).toHaveBeenCalledWith({
+            uid: 'user1',
+            email: 'user1@example.com',
+            displayName: 'User One'
+        });
+        expect(component.isLoading).toBe(false);
+    });
+
+    it('should not start impersonation when the confirmation dialog is cancelled', () => {
+        matDialogSpy.open.mockReturnValueOnce({
+            afterClosed: () => of(false)
+        });
+
+        component.onImpersonate(mockUsers[0]);
+
+        expect(impersonationServiceSpy.startImpersonation).not.toHaveBeenCalled();
     });
 
     describe('getRole', () => {
