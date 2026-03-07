@@ -22,6 +22,7 @@ describe('EventCardChartPanelComponent', () => {
   let originalRequestFullscreenDescriptor: PropertyDescriptor | undefined;
   let originalExitFullscreenDescriptor: PropertyDescriptor | undefined;
   let originalFullscreenElementDescriptor: PropertyDescriptor | undefined;
+  let originalMatchMedia: typeof window.matchMedia | undefined;
 
   const chart = {
     on: vi.fn(),
@@ -47,8 +48,6 @@ describe('EventCardChartPanelComponent', () => {
     resize: vi.fn(),
     dispose: vi.fn(),
     subscribeToViewportResize: vi.fn(() => () => { }),
-    connectGroup: vi.fn().mockResolvedValue(undefined),
-    disconnectGroup: vi.fn().mockResolvedValue(undefined),
   };
 
   beforeEach(async () => {
@@ -78,6 +77,7 @@ describe('EventCardChartPanelComponent', () => {
     originalRequestFullscreenDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'requestFullscreen');
     originalExitFullscreenDescriptor = Object.getOwnPropertyDescriptor(document, 'exitFullscreen');
     originalFullscreenElementDescriptor = Object.getOwnPropertyDescriptor(document, 'fullscreenElement');
+    originalMatchMedia = window.matchMedia;
     Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', {
       configurable: true,
       writable: true,
@@ -92,6 +92,20 @@ describe('EventCardChartPanelComponent', () => {
       configurable: true,
       writable: true,
       value: null,
+    });
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      writable: true,
+      value: vi.fn().mockImplementation(() => ({
+        matches: false,
+        media: '',
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
     });
 
     await TestBed.configureTestingModule({
@@ -130,7 +144,6 @@ describe('EventCardChartPanelComponent', () => {
     };
     component.xAxisType = XAxisTypes.Duration;
     component.xDomain = { start: 0, end: 120 };
-    component.zoomGroupId = 'event-zoom-group';
     component.cursorBehaviour = ChartCursorBehaviours.ZoomX;
   });
 
@@ -157,6 +170,16 @@ describe('EventCardChartPanelComponent', () => {
       Object.defineProperty(document, 'fullscreenElement', originalFullscreenElementDescriptor);
     } else {
       delete (document as Document & { fullscreenElement?: unknown }).fullscreenElement;
+    }
+
+    if (originalMatchMedia) {
+      Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        writable: true,
+        value: originalMatchMedia,
+      });
+    } else {
+      delete (window as Window & { matchMedia?: unknown }).matchMedia;
     }
   });
 
@@ -190,7 +213,6 @@ describe('EventCardChartPanelComponent', () => {
     await renderComponent();
 
     expect(eChartsLoaderMock.init).toHaveBeenCalledTimes(2);
-    expect(eChartsLoaderMock.connectGroup).toHaveBeenCalledWith('event-zoom-group');
     expect(eChartsLoaderMock.setOption).toHaveBeenCalled();
     expect(chart.on).not.toHaveBeenCalledWith('click', expect.any(Function));
     expect(intersectionObserverObserveSpies).toHaveLength(1);
@@ -215,6 +237,31 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.dataZoom?.[0]?.moveOnMouseWheel).toBe(false);
     expect(option?.dataZoom?.[1]?.show).toBe(true);
     expect(option?.dataZoom?.[1]?.filterMode).toBe('filter');
+  });
+
+  it('uses native confined tooltip placement on mobile panels', async () => {
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      writable: true,
+      value: vi.fn().mockImplementation(() => ({
+        matches: true,
+        media: '',
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+
+    component.showZoomBar = true;
+    await renderComponent();
+
+    const option = getRenderedOption();
+    expect(option?.tooltip?.appendTo).toBeUndefined();
+    expect(option?.tooltip?.position).toBeUndefined();
+    expect(option?.tooltip?.confine).toBe(true);
   });
 
   it('shows a fullscreen toggle only for real data panels', async () => {
@@ -688,7 +735,7 @@ describe('EventCardChartPanelComponent', () => {
     expect(emitSpy).toHaveBeenCalledWith({ start: 15, end: 75 });
   });
 
-  it('renders empty-axis no-data option without joining a zoom group when panel is null outside zoom mode', async () => {
+  it('renders empty-axis no-data option when panel is null outside zoom mode', async () => {
     component.panel = null;
     component.showZoomBar = false;
     await renderComponent();
@@ -699,16 +746,31 @@ describe('EventCardChartPanelComponent', () => {
     expect(Array.isArray(option?.yAxis)).toBe(true);
     expect(option?.yAxis).toHaveLength(0);
     expect(Array.isArray(option?.series)).toBe(true);
-    expect(eChartsLoaderMock.connectGroup).not.toHaveBeenCalled();
-    expect(eChartsLoaderMock.disconnectGroup).not.toHaveBeenCalled();
+  });
+
+  it('applies incoming shared zoom range to visible data panels', async () => {
+    await renderComponent();
+
+    chart.dispatchAction.mockClear();
+    component.sharedZoomRange = { start: 20, end: 60 };
+
+    component.ngOnChanges({
+      sharedZoomRange: new SimpleChange(null, component.sharedZoomRange, false),
+    });
+
+    expect(chart.dispatchAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'dataZoom',
+        startValue: 20,
+        endValue: 60,
+      })
+    );
   });
 
   it('replays stored zoom range once when a hidden panel becomes visible again', async () => {
     await renderComponent();
 
     chart.dispatchAction.mockClear();
-    chart.group = undefined;
-    (component as any).connectedZoomGroupId = null;
     (component as any).viewportVisible = false;
     (component as any).zoomSyncVisibleForViewport = false;
     component.sharedZoomRange = { start: 20, end: 60 };
@@ -727,7 +789,6 @@ describe('EventCardChartPanelComponent', () => {
         endValue: 60,
       })
     );
-    expect(eChartsLoaderMock.connectGroup).toHaveBeenLastCalledWith('event-zoom-group');
   });
 
   it('enables tooltip hover without requiring a click first', async () => {
@@ -789,7 +850,6 @@ describe('EventCardChartPanelComponent', () => {
     ], {} as IntersectionObserver);
 
     expect(chart.dispatchAction).toHaveBeenCalledWith({ type: 'hideTip' });
-    expect(eChartsLoaderMock.disconnectGroup).toHaveBeenCalledWith('event-zoom-group');
     expect(eChartsLoaderMock.setOption).toHaveBeenCalledWith(
       chart,
       { tooltip: { show: false } },
@@ -808,8 +868,26 @@ describe('EventCardChartPanelComponent', () => {
       { isIntersecting: true, intersectionRatio: 1 } as IntersectionObserverEntry
     ], {} as IntersectionObserver);
 
-    expect(eChartsLoaderMock.connectGroup).toHaveBeenCalledTimes(2);
-    expect(eChartsLoaderMock.connectGroup).toHaveBeenNthCalledWith(2, 'event-zoom-group');
+    expect(eChartsLoaderMock.setOption).toHaveBeenCalledWith(
+      chart,
+      { tooltip: { show: true } },
+      expect.objectContaining({ lazyUpdate: true, silent: true })
+    );
+  });
+
+  it('keeps tooltip enabled when a chart is only partially intersecting the viewport', async () => {
+    await renderComponent();
+
+    expect(intersectionObserverCallbacks).toHaveLength(1);
+    intersectionObserverCallbacks[0]([
+      { isIntersecting: false, intersectionRatio: 0 } as IntersectionObserverEntry
+    ], {} as IntersectionObserver);
+
+    eChartsLoaderMock.setOption.mockClear();
+    intersectionObserverCallbacks[0]([
+      { isIntersecting: true, intersectionRatio: 0.05 } as IntersectionObserverEntry
+    ], {} as IntersectionObserver);
+
     expect(eChartsLoaderMock.setOption).toHaveBeenCalledWith(
       chart,
       { tooltip: { show: true } },
@@ -1377,12 +1455,11 @@ describe('EventCardChartPanelComponent', () => {
     }));
   });
 
-  it('disconnects zoom group on destroy', async () => {
+  it('tears down viewport observation on destroy', async () => {
     await renderComponent();
 
     component.ngOnDestroy();
 
-    expect(eChartsLoaderMock.disconnectGroup).toHaveBeenCalledWith('event-zoom-group');
     expect(intersectionObserverDisconnectSpies).toHaveLength(1);
     expect(intersectionObserverDisconnectSpies[0]).toHaveBeenCalledTimes(1);
   });

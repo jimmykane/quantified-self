@@ -66,16 +66,6 @@ vi.mock('echarts/renderers', () => ({
   CanvasRenderer: echartsModulesMock.canvasRenderer,
 }));
 
-function createDeferredPromise<T>() {
-  let resolve!: (value: T | PromiseLike<T>) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((innerResolve, innerReject) => {
-    resolve = innerResolve;
-    reject = innerReject;
-  });
-  return { promise, resolve, reject };
-}
-
 describe('EChartsLoaderService', () => {
   let service: EChartsLoaderService;
   let zone: NgZone;
@@ -277,56 +267,6 @@ describe('EChartsLoaderService', () => {
     expect(runOutsideAngularSpy).toHaveBeenCalled();
     expect(chart.resize).toHaveBeenCalledTimes(1);
     expect(chart.resize).toHaveBeenCalledWith({ width: 320, height: 200, silent: true });
-  });
-
-  it('should connect and disconnect ECharts groups in runOutsideAngular', async () => {
-    const runOutsideAngularSpy = vi.spyOn(zone, 'runOutsideAngular');
-
-    await service.connectGroup('event-zoom-group');
-    await service.disconnectGroup('event-zoom-group');
-
-    expect(runOutsideAngularSpy).toHaveBeenCalled();
-    expect(echartsCoreMock.connect).toHaveBeenCalledWith('event-zoom-group');
-    expect(echartsCoreMock.disconnect).toHaveBeenCalledWith('event-zoom-group');
-  });
-
-  it('should keep group connected until last disconnect call', async () => {
-    await service.connectGroup('event-zoom-group');
-    await service.connectGroup('event-zoom-group');
-    expect(echartsCoreMock.connect).toHaveBeenCalledTimes(1);
-
-    await service.disconnectGroup('event-zoom-group');
-    expect(echartsCoreMock.disconnect).not.toHaveBeenCalled();
-
-    await service.disconnectGroup('event-zoom-group');
-    expect(echartsCoreMock.disconnect).toHaveBeenCalledTimes(1);
-    expect(echartsCoreMock.disconnect).toHaveBeenCalledWith('event-zoom-group');
-  });
-
-  it('should not disconnect a group that was reconnected while disconnect was awaiting load', async () => {
-    const deferredLoad = createDeferredPromise<typeof echartsCoreMock>();
-    const loadSpy = vi.spyOn(service, 'load')
-      .mockResolvedValueOnce(echartsCoreMock as never)
-      .mockImplementationOnce(() => deferredLoad.promise as Promise<never>);
-
-    await service.connectGroup('event-zoom-group');
-    expect(echartsCoreMock.connect).toHaveBeenCalledTimes(1);
-
-    const disconnectPromise = service.disconnectGroup('event-zoom-group');
-    await Promise.resolve();
-
-    await service.connectGroup('event-zoom-group');
-    expect(loadSpy).toHaveBeenCalledTimes(2);
-    expect(echartsCoreMock.connect).toHaveBeenCalledTimes(1);
-
-    deferredLoad.resolve(echartsCoreMock);
-    await disconnectPromise;
-
-    expect(echartsCoreMock.disconnect).not.toHaveBeenCalled();
-
-    await service.disconnectGroup('event-zoom-group');
-    expect(echartsCoreMock.disconnect).toHaveBeenCalledTimes(1);
-    expect(echartsCoreMock.disconnect).toHaveBeenCalledWith('event-zoom-group');
   });
 
   it('should dispose active charts and skip already-disposed charts', () => {

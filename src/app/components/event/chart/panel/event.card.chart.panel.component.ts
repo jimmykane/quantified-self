@@ -119,7 +119,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @Input() darkTheme = false;
   @Input() useAnimations = false;
   @Input() showZoomBar = false;
-  @Input() zoomGroupId: string | null = null;
   @Input() xDomain: EventChartRange | null = null;
   @Input() cursorBehaviour: ChartCursorBehaviours = ChartCursorBehaviours.ZoomX;
   @Input() previewRange: EventChartRange | null = null;
@@ -150,7 +149,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   private readonly chartHost: EChartsHostController;
   private eventsBound = false;
-  private connectedZoomGroupId: string | null = null;
   private wheelPassThroughListener: ((event: Event) => void) | null = null;
   private viewportObserver: IntersectionObserver | null = null;
   private viewportVisible = true;
@@ -327,7 +325,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.bindFullscreenEvents();
     this.syncFullscreenState();
     this.bindWheelPassThrough();
-    this.syncNativeZoomGroup();
     this.bindChartEvents();
     this.queueChartRefresh('ngAfterViewInit');
   }
@@ -343,7 +340,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       || changes.darkTheme
       || changes.useAnimations
       || changes.showZoomBar
-      || changes.zoomGroupId
       || changes.xDomain
       || changes.showLaps
       || changes.lapMarkers
@@ -369,6 +365,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     const previewRangeChanged = !!changes.previewRange && !changes.previewRange.firstChange;
     const selectedRangeChanged = !!changes.selectedRange && !changes.selectedRange.firstChange;
+    const sharedZoomRangeChanged = !!changes.sharedZoomRange && !changes.sharedZoomRange.firstChange;
     const xDomainChanged = !!changes.xDomain && !changes.xDomain.firstChange;
     if (previewRangeChanged || selectedRangeChanged || xDomainChanged) {
       this.applySharedSelectionRange();
@@ -378,7 +375,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       this.cdr.markForCheck();
     }
 
-    if (changes.sharedZoomRange && !changes.sharedZoomRange.firstChange && this.showZoomBar) {
+    if (sharedZoomRangeChanged) {
       this.applyStoredZoomRange();
     }
   }
@@ -389,7 +386,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.teardownViewportObserver();
     this.unbindWheelPassThrough();
     this.unbindAxisPointerCursorEmit();
-    this.disconnectNativeZoomGroup();
     this.chartHost.dispose();
   }
 
@@ -436,13 +432,12 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       if (this.showZoomBar) {
         this.chartHost.setOption(this.buildZoomBarOnlyOption(), { notMerge: true, lazyUpdate: true });
         this.syncAxisPointerCursorEmitBinding();
-        this.syncNativeZoomGroup();
+        this.applyStoredZoomRange();
         this.chartHost.scheduleResize();
         this.cdr.markForCheck();
         return;
       }
 
-      this.disconnectNativeZoomGroup();
       this.syncAxisPointerCursorEmitBinding();
       this.chartHost.setOption({
         animation: this.useAnimations === true,
@@ -456,7 +451,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     if (!this.panel.series.length) {
       this.seriesByID.clear();
       this.rangeStats = [];
-      this.disconnectNativeZoomGroup();
       this.syncAxisPointerCursorEmitBinding();
       this.chartHost.setOption({
         animation: this.useAnimations === true,
@@ -474,7 +468,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.syncInteractionMode();
     this.applySharedSelectionRange();
     this.updateRangeStats(this.selectedRange);
-    this.syncNativeZoomGroup();
+    this.applyStoredZoomRange();
     this.chartHost.scheduleResize();
     this.cdr.markForCheck();
   }
@@ -505,6 +499,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       ? Math.min(1, Math.max(0, resolvedFillOpacity))
       : AppUserUtilities.getDefaultChartFillOpacity();
     const areaFillOrigin: 'start' | 'end' = yAxisConfig.inverse ? 'end' : 'start';
+    const tooltipSurfaceConfig = this.buildTooltipSurfaceConfig();
 
     const seriesOptions: ChartLineSeriesOption[] = panel.series.map((series) => ({
       id: series.id,
@@ -559,9 +554,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         show: this.tooltipVisibleForViewport && hoverTooltipEnabled,
         triggerOn: hoverTooltipEnabled ? 'mousemove|click' : 'none',
         renderMode: 'html',
-        appendTo: getOrCreateEChartsTooltipHost,
-        confine: this.isMobile,
-        position: getViewportConstrainedTooltipPosition,
+        ...tooltipSurfaceConfig,
         axisPointer: {
           type: 'line',
           animation: false
@@ -837,7 +830,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       this.tooltipVisibleForViewport = true;
       this.zoomBarVisibleForViewport = true;
       this.zoomSyncVisibleForViewport = true;
-      this.syncNativeZoomGroup();
       return;
     }
 
@@ -856,7 +848,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         (entries) => this.handleViewportEntries(entries),
         {
           root: observerRoot,
-          threshold: [TOOLTIP_VIEWPORT_THRESHOLD],
+          threshold: [0, TOOLTIP_VIEWPORT_THRESHOLD],
         }
       );
       this.viewportObserver.observe(container);
@@ -886,7 +878,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     const primaryEntry = entries[0];
-    const isVisible = primaryEntry.isIntersecting && primaryEntry.intersectionRatio >= TOOLTIP_VIEWPORT_THRESHOLD;
+    const isVisible = primaryEntry.isIntersecting;
     if (this.viewportVisible === isVisible) {
       return;
     }
@@ -963,7 +955,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     this.zoomSyncVisibleForViewport = isVisible;
-    this.syncNativeZoomGroup();
   }
 
   private applyZoomBarVisibilityForViewport(isVisible: boolean): void {
@@ -1311,6 +1302,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     const chartStyle = buildEventEChartsVisualTokens(this.darkTheme, this.isMobile);
     const tooltipHtml = this.formatLapMarkerTooltip({ data: marker, name: marker.label });
+    const tooltipSurfaceConfig = this.buildTooltipSurfaceConfig();
 
     const showTipAction: ChartAction = {
       type: 'showTip',
@@ -1320,9 +1312,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       tooltip: {
         trigger: 'item',
         renderMode: 'html',
-        appendTo: getOrCreateEChartsTooltipHost,
-        confine: this.isMobile,
-        position: getViewportConstrainedTooltipPosition,
+        ...tooltipSurfaceConfig,
         backgroundColor: chartStyle.tooltipBackgroundColor,
         borderColor: chartStyle.tooltipBorderColor,
         borderWidth: 1,
@@ -1651,48 +1641,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     return formattedValue;
   }
 
-  private syncNativeZoomGroup(): void {
-    const chart = this.chartHost.getChart();
-    if (!chart) {
-      return;
-    }
-
-    const requestedGroupId = `${this.zoomGroupId || ''}`.trim() || null;
-    const hasRenderableSeries = Array.isArray(this.panel?.series) && this.panel.series.length > 0;
-    const hasRenderableChart = this.showZoomBar || hasRenderableSeries;
-    const shouldJoinZoomGroup = hasRenderableChart && (this.showZoomBar || this.zoomSyncVisibleForViewport);
-    const nextGroupId = shouldJoinZoomGroup ? requestedGroupId : null;
-    if (this.connectedZoomGroupId === nextGroupId) {
-      return;
-    }
-
-    const previousGroupId = this.connectedZoomGroupId;
-    if (!previousGroupId && nextGroupId) {
-      this.applyStoredZoomRange();
-    }
-    chart.group = nextGroupId || undefined;
-    this.connectedZoomGroupId = nextGroupId;
-    if (previousGroupId && previousGroupId !== nextGroupId) {
-      void this.eChartsLoader.disconnectGroup(previousGroupId);
-    }
-    if (nextGroupId) {
-      void this.eChartsLoader.connectGroup(nextGroupId);
-    }
-  }
-
-  private disconnectNativeZoomGroup(): void {
-    const chart = this.chartHost.getChart();
-    if (chart?.group) {
-      chart.group = undefined;
-    }
-
-    if (!this.connectedZoomGroupId) {
-      return;
-    }
-    void this.eChartsLoader.disconnectGroup(this.connectedZoomGroupId);
-    this.connectedZoomGroupId = null;
-  }
-
   private bindWheelPassThrough(): void {
     const container = this.chartDiv?.nativeElement;
     if (!container || this.wheelPassThroughListener) {
@@ -1964,5 +1912,23 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     this.pendingAxisScaleFrame = null;
+  }
+
+  private buildTooltipSurfaceConfig(): {
+    confine: boolean;
+    appendTo?: typeof getOrCreateEChartsTooltipHost;
+    position?: typeof getViewportConstrainedTooltipPosition;
+  } {
+    if (this.isMobile) {
+      return {
+        confine: true,
+      };
+    }
+
+    return {
+      appendTo: getOrCreateEChartsTooltipHost,
+      confine: false,
+      position: getViewportConstrainedTooltipPosition,
+    };
   }
 }
