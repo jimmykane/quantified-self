@@ -87,7 +87,6 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   public zoomBarOverviewData: Array<[number, number]> = [];
   public renderedXAxisType: XAxisTypes = XAxisTypes.Duration;
   public showDateOnTimeAxis = false;
-  public zoomSyncGroupId: string | null = null;
   public zoomRange: EventChartRange | null = null;
   public previewSelectedRange: EventChartRange | null = null;
   public selectedRange: EventChartRange | null = null;
@@ -271,6 +270,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   private lastPanelRebuildKey: string | null = null;
   private lastLapMarkersKey: string | null = null;
   private lastPersistedVisibleDataTypeKey: string | null = null;
+  private zoomRangeOwnerEventID: string | null = null;
 
   constructor() {
     runInInjectionContext(this.injector, () => {
@@ -443,15 +443,15 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     const allActivities = this.event?.getActivities?.() || this.selectedActivities || [];
     const selectedActivities = this.selectedActivities || [];
     const effectiveXAxisType = resolveEventChartXAxisType(this.event, this.xAxisType);
-    const zoomSyncGroupId = this.resolveZoomSyncGroupID(this.event);
+    const nextEventID = this.event?.getID?.() || null;
     const panelRebuildKey = this.buildPanelRebuildKey(selectedActivities, allActivities, effectiveXAxisType);
     const lapMarkersKey = this.buildLapMarkersRebuildKey(selectedActivities, allActivities, effectiveXAxisType);
     const shouldRebuildPanels = this.lastPanelRebuildKey !== panelRebuildKey;
     const shouldRebuildLaps = this.lastLapMarkersKey !== lapMarkersKey;
 
-    const previousZoomSyncGroupId = this.zoomSyncGroupId;
+    const previousZoomRangeOwnerEventID = this.zoomRangeOwnerEventID;
     this.renderedXAxisType = effectiveXAxisType;
-    this.zoomSyncGroupId = zoomSyncGroupId;
+    this.zoomRangeOwnerEventID = nextEventID;
 
     if (!shouldRebuildPanels && !shouldRebuildLaps) {
       this.cdr.markForCheck();
@@ -494,7 +494,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
 
       const globalDomain = this.resolveGlobalDomain(this.allChartPanels);
       this.xDomain = globalDomain;
-      this.zoomRange = previousZoomSyncGroupId !== this.zoomSyncGroupId
+      this.zoomRange = previousZoomRangeOwnerEventID !== this.zoomRangeOwnerEventID
         ? null
         : this.normalizeZoomRange(this.zoomRange, globalDomain);
       this.updateZoomBarOverviewData(globalDomain);
@@ -514,7 +514,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       this.zoomBarOverviewData = [];
       this.showDateOnTimeAxis = false;
       this.renderedXAxisType = resolveEventChartXAxisType(this.event, this.xAxisType);
-      this.zoomSyncGroupId = this.resolveZoomSyncGroupID(this.event);
+      this.zoomRangeOwnerEventID = this.event?.getID?.() || null;
       this.lastPanelRebuildKey = null;
       this.lastLapMarkersKey = null;
       this.lastPersistedVisibleDataTypeKey = null;
@@ -759,14 +759,6 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     }
 
     return `${value ?? ''}`;
-  }
-
-  private resolveZoomSyncGroupID(event: EventInterface | null | undefined): string | null {
-    const eventID = event?.getID?.();
-    if (!eventID) {
-      return null;
-    }
-    return `event-chart-zoom-${eventID}`;
   }
 
   private pushCursorToMap(axisValue: number): void {

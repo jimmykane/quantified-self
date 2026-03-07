@@ -251,6 +251,15 @@ describe('AppComponent', () => {
         expect(component.showUploadActivities).toBe(false);
     });
 
+    it('should place the impersonation banner inside the maintenance branch', () => {
+        mockRouter.url = '/dashboard';
+        mockRemoteConfigService.maintenanceMode.set(true);
+        fixture.detectChanges();
+
+        const banners = fixture.nativeElement.querySelectorAll('app-impersonation-banner');
+        expect(banners).toHaveLength(1);
+    });
+
     it('should return unread whats-new count from service signal', () => {
         expect(component.unreadWhatsNewCount).toBe(0);
     });
@@ -297,6 +306,15 @@ describe('AppComponent', () => {
         component.navigateToLogin();
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/login']);
         expect(mockHapticsService.selection).toHaveBeenCalled();
+    });
+
+    it('should place the impersonation banner inside the main shell content', () => {
+        mockRemoteConfigService.maintenanceMode.set(false);
+        fixture.detectChanges();
+
+        const sidenavContent = fixture.nativeElement.querySelector('mat-sidenav-content') as HTMLElement | null;
+        const banner = sidenavContent?.querySelector('app-impersonation-banner');
+        expect(banner).toBeTruthy();
     });
 
     it('should no-op banner updates when height and state are unchanged', () => {

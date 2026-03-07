@@ -17,7 +17,7 @@
     <section class="event-chart-shell" [class.event-chart-shell--loading]="isLoading">
       @if (chartPanels.length > 0) {
       <app-event-card-chart-panel class="event-chart-shell__zoom-bar" [xAxisType]="renderedXAxisType"
-        [darkTheme]="darkTheme" [useAnimations]="false" [showZoomBar]="true" [zoomGroupId]="zoomSyncGroupId"
+        [darkTheme]="darkTheme" [useAnimations]="false" [showZoomBar]="true"
         [xDomain]="xDomain" [showDateOnTimeAxis]="showDateOnTimeAxis" [showLaps]="showLaps" [lapTypes]="lapTypes"
         [lapMarkers]="lapMarkers"
         [strokeWidth]="strokeWidth" [zoomBarOverviewData]="zoomBarOverviewData" [sharedZoomRange]="zoomRange"
@@ -28,7 +28,7 @@
       <section class="event-chart-shell__panels">
         @for (panel of chartPanels; track panel.dataType) {
         <app-event-card-chart-panel [panel]="panel" [xAxisType]="renderedXAxisType" [darkTheme]="darkTheme"
-          [useAnimations]="useAnimations" [showZoomBar]="false" [zoomGroupId]="zoomSyncGroupId" [xDomain]="xDomain"
+          [useAnimations]="useAnimations" [showZoomBar]="false" [xDomain]="xDomain"
           [cursorBehaviour]="cursorBehaviour" [previewRange]="previewSelectedRange" [selectedRange]="selectedRange"
           [showDateOnTimeAxis]="showDateOnTimeAxis"
           [showLaps]="showLaps" [lapTypes]="lapTypes" [lapMarkers]="lapMarkers"

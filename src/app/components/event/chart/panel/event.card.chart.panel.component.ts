@@ -52,11 +52,27 @@ type ChartOption = Parameters<EChartsType['setOption']>[0];
 type ChartAction = Parameters<EChartsType['dispatchAction']>[0];
 type PanelSeriesModel = EventChartPanelModel['series'][number];
 type ChartLineSeriesOption = LineSeriesOption;
+type FullscreenHostElement = HTMLElement & {
+  webkitRequestFullscreen?: () => Promise<void> | void;
+};
+type FullscreenCapableDocument = Document & {
+  fullscreenEnabled?: boolean;
+  fullscreenElement?: Element | null;
+  exitFullscreen?: () => Promise<void> | void;
+  webkitFullscreenEnabled?: boolean;
+  webkitFullscreenElement?: Element | null;
+  webkitExitFullscreen?: () => Promise<void> | void;
+};
 type TooltipFormatterParams = {
   value?: unknown;
   seriesId?: string;
   seriesName?: string;
   color?: string;
+};
+type PanelSeriesLegendItem = {
+  key: string;
+  label: string;
+  color: string;
 };
 type AxisPointerEvent = {
   axesInfo?: Array<{
@@ -89,6 +105,9 @@ const ZOOM_BAR_GRID_BOTTOM = Math.max(0, ZOOM_BAR_PANEL_HEIGHT - (ZOOM_BAR_SLIDE
 const SELECTION_BRUSH_SOURCE = 'event-chart-selection-sync';
 export const ENABLE_LIVE_SELECTION_SYNC = false;
 export const ENABLE_LIVE_SELECTION_PREVIEW_STATS = false;
+const TOOLTIP_MAX_DURATION_DISTANCE_SECONDS = 120;
+const TOOLTIP_MAX_TIME_DISTANCE_MS = TOOLTIP_MAX_DURATION_DISTANCE_SECONDS * 1000;
+const TOOLTIP_MAX_DISTANCE_METERS = 500;
 
 @Component({
   selector: 'app-event-card-chart-panel',
@@ -103,7 +122,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @Input() darkTheme = false;
   @Input() useAnimations = false;
   @Input() showZoomBar = false;
-  @Input() zoomGroupId: string | null = null;
   @Input() xDomain: EventChartRange | null = null;
   @Input() cursorBehaviour: ChartCursorBehaviours = ChartCursorBehaviours.ZoomX;
   @Input() previewRange: EventChartRange | null = null;
@@ -127,12 +145,13 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @Output() zoomRangeChange = new EventEmitter<EventChartRange | null>();
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
+  @ViewChild('panelRoot', { static: true }) panelRoot!: ElementRef<HTMLElement>;
 
   public rangeStats: EventPanelRangeStat[] = [];
+  public isFullscreen = false;
 
   private readonly chartHost: EChartsHostController;
   private eventsBound = false;
-  private connectedZoomGroupId: string | null = null;
   private wheelPassThroughListener: ((event: Event) => void) | null = null;
   private viewportObserver: IntersectionObserver | null = null;
   private viewportVisible = true;
@@ -154,6 +173,9 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     if (Number.isFinite(value)) {
       this.cursorPositionChange.emit(value);
     }
+  };
+  private readonly fullscreenChangeHandler = () => {
+    this.syncFullscreenState();
   };
 
   private get isMobile(): boolean {
@@ -181,6 +203,56 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   public get hasCommittedSelection(): boolean {
     return !!normalizeEventRange(this.selectedRange);
+  }
+
+  public get seriesLegendItems(): PanelSeriesLegendItem[] {
+    if (!this.showActivityNamesInTooltip || !this.panel?.series?.length) {
+      return [];
+    }
+
+    const legendItems: PanelSeriesLegendItem[] = [];
+    const seenKeys = new Set<string>();
+    for (let index = 0; index < this.panel.series.length; index += 1) {
+      const series = this.panel.series[index];
+      const activityID = `${series.activityID || ''}`.trim();
+      const label = `${series.activityName || 'Activity'}`.trim() || 'Activity';
+      const key = activityID || label;
+      if (seenKeys.has(key)) {
+        continue;
+      }
+
+      seenKeys.add(key);
+      legendItems.push({
+        key,
+        label,
+        color: series.color,
+      });
+    }
+
+    return legendItems;
+  }
+
+  public get canToggleFullscreen(): boolean {
+    if (!this.panel || this.showZoomBar) {
+      return false;
+    }
+
+    const documentRef = this.getFullscreenDocument();
+    const panelElement = this.panelRoot?.nativeElement as FullscreenHostElement | undefined;
+    return !!panelElement && (
+      typeof panelElement.requestFullscreen === 'function'
+      || typeof panelElement.webkitRequestFullscreen === 'function'
+      || documentRef.fullscreenEnabled === true
+      || documentRef.webkitFullscreenEnabled === true
+    );
+  }
+
+  public get fullscreenIcon(): string {
+    return this.isFullscreen ? 'fullscreen_exit' : 'fullscreen';
+  }
+
+  public get fullscreenTooltip(): string {
+    return this.isFullscreen ? 'Exit fullscreen' : 'Open panel fullscreen';
   }
 
   public get selectedRangeStartLabel(): string {
@@ -253,8 +325,9 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   async ngAfterViewInit(): Promise<void> {
     await this.chartHost.init(this.chartDiv?.nativeElement, resolveEChartsThemeName(this.darkTheme));
+    this.bindFullscreenEvents();
+    this.syncFullscreenState();
     this.bindWheelPassThrough();
-    this.syncNativeZoomGroup();
     this.bindChartEvents();
     this.queueChartRefresh('ngAfterViewInit');
   }
@@ -270,7 +343,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       || changes.darkTheme
       || changes.useAnimations
       || changes.showZoomBar
-      || changes.zoomGroupId
       || changes.xDomain
       || changes.showLaps
       || changes.lapMarkers
@@ -296,6 +368,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     const previewRangeChanged = !!changes.previewRange && !changes.previewRange.firstChange;
     const selectedRangeChanged = !!changes.selectedRange && !changes.selectedRange.firstChange;
+    const sharedZoomRangeChanged = !!changes.sharedZoomRange && !changes.sharedZoomRange.firstChange;
     const xDomainChanged = !!changes.xDomain && !changes.xDomain.firstChange;
     if (previewRangeChanged || selectedRangeChanged || xDomainChanged) {
       this.applySharedSelectionRange();
@@ -305,18 +378,34 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       this.cdr.markForCheck();
     }
 
-    if (changes.sharedZoomRange && !changes.sharedZoomRange.firstChange && this.showZoomBar) {
+    if (sharedZoomRangeChanged) {
       this.applyStoredZoomRange();
     }
   }
 
   ngOnDestroy(): void {
     this.cancelPendingFrame('axisScale');
+    this.unbindFullscreenEvents();
     this.teardownViewportObserver();
     this.unbindWheelPassThrough();
     this.unbindAxisPointerCursorEmit();
-    this.disconnectNativeZoomGroup();
     this.chartHost.dispose();
+  }
+
+  public async onFullscreenToggle(): Promise<void> {
+    if (!this.canToggleFullscreen) {
+      return;
+    }
+
+    try {
+      if (this.isPanelFullscreen()) {
+        await this.exitFullscreen();
+      } else {
+        await this.enterFullscreen();
+      }
+    } catch (error) {
+      this.logger.error('[EventCardChartPanelComponent] Failed to toggle fullscreen', error);
+    }
   }
 
   private queueChartRefresh(source: string): void {
@@ -346,13 +435,12 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       if (this.showZoomBar) {
         this.chartHost.setOption(this.buildZoomBarOnlyOption(), { notMerge: true, lazyUpdate: true });
         this.syncAxisPointerCursorEmitBinding();
-        this.syncNativeZoomGroup();
+        this.applyStoredZoomRange();
         this.chartHost.scheduleResize();
         this.cdr.markForCheck();
         return;
       }
 
-      this.disconnectNativeZoomGroup();
       this.syncAxisPointerCursorEmitBinding();
       this.chartHost.setOption({
         animation: this.useAnimations === true,
@@ -366,7 +454,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     if (!this.panel.series.length) {
       this.seriesByID.clear();
       this.rangeStats = [];
-      this.disconnectNativeZoomGroup();
       this.syncAxisPointerCursorEmitBinding();
       this.chartHost.setOption({
         animation: this.useAnimations === true,
@@ -384,7 +471,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.syncInteractionMode();
     this.applySharedSelectionRange();
     this.updateRangeStats(this.selectedRange);
-    this.syncNativeZoomGroup();
+    this.applyStoredZoomRange();
     this.chartHost.scheduleResize();
     this.cdr.markForCheck();
   }
@@ -415,6 +502,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       ? Math.min(1, Math.max(0, resolvedFillOpacity))
       : AppUserUtilities.getDefaultChartFillOpacity();
     const areaFillOrigin: 'start' | 'end' = yAxisConfig.inverse ? 'end' : 'start';
+    const tooltipSurfaceConfig = this.buildTooltipSurfaceConfig();
 
     const seriesOptions: ChartLineSeriesOption[] = panel.series.map((series) => ({
       id: series.id,
@@ -469,9 +557,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         show: this.tooltipVisibleForViewport && hoverTooltipEnabled,
         triggerOn: hoverTooltipEnabled ? 'mousemove|click' : 'none',
         renderMode: 'html',
-        appendTo: getOrCreateEChartsTooltipHost,
-        confine: this.isMobile,
-        position: getViewportConstrainedTooltipPosition,
+        ...tooltipSurfaceConfig,
         axisPointer: {
           type: 'line',
           animation: false
@@ -691,7 +777,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       if (this.panel) {
         this.scheduleCanonicalAxisScaleUpdate();
       }
-      if (this.showZoomBar && !this.applyingSharedZoomRange) {
+      if (!this.applyingSharedZoomRange) {
         this.emitVisibleZoomRange();
       }
     });
@@ -747,7 +833,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       this.tooltipVisibleForViewport = true;
       this.zoomBarVisibleForViewport = true;
       this.zoomSyncVisibleForViewport = true;
-      this.syncNativeZoomGroup();
       return;
     }
 
@@ -766,7 +851,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         (entries) => this.handleViewportEntries(entries),
         {
           root: observerRoot,
-          threshold: [TOOLTIP_VIEWPORT_THRESHOLD],
+          threshold: [0, TOOLTIP_VIEWPORT_THRESHOLD],
         }
       );
       this.viewportObserver.observe(container);
@@ -796,7 +881,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     const primaryEntry = entries[0];
-    const isVisible = primaryEntry.isIntersecting && primaryEntry.intersectionRatio >= TOOLTIP_VIEWPORT_THRESHOLD;
+    const isVisible = primaryEntry.isIntersecting;
     if (this.viewportVisible === isVisible) {
       return;
     }
@@ -873,7 +958,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     this.zoomSyncVisibleForViewport = isVisible;
-    this.syncNativeZoomGroup();
   }
 
   private applyZoomBarVisibilityForViewport(isVisible: boolean): void {
@@ -1049,29 +1133,24 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return '';
     }
 
-    const xValue = Number(Array.isArray(tooltipParams[0]?.value) ? tooltipParams[0].value[0] : undefined);
+    const xValue = this.getTooltipXAxisValue(tooltipParams);
+    if (!Number.isFinite(xValue)) {
+      return '';
+    }
+
     const header = formatEventXAxisValue(
       xValue,
       this.xAxisType,
       { includeDateForTime: this.showDateOnTimeAxis }
     );
     const tooltipLines: string[] = [];
-    for (let index = 0; index < tooltipParams.length; index += 1) {
-      const point = tooltipParams[index];
-      const seriesModel = this.seriesByID.get(point.seriesId);
-      const streamType = seriesModel?.streamType || this.panel?.dataType;
-      const rawYValue = Array.isArray(point.value) ? point.value[1] : point.value;
-      if (rawYValue === null || rawYValue === undefined || rawYValue === '') {
-        continue;
-      }
-      const yValue = Number(rawYValue);
-      if (!Number.isFinite(yValue)) {
-        continue;
-      }
-      const formatted = this.formatDataValue(streamType || '', yValue);
-      const label = this.showActivityNamesInTooltip ? `${point.seriesName}: ` : '';
+    const resolvedPoints = this.resolveTooltipPointsAtX(xValue);
+    for (let index = 0; index < resolvedPoints.length; index += 1) {
+      const resolvedPoint = resolvedPoints[index];
+      const formatted = this.formatDataValue(resolvedPoint.series.streamType || '', resolvedPoint.point.y as number);
+      const label = this.showActivityNamesInTooltip ? `${resolvedPoint.series.activityName}: ` : '';
       tooltipLines.push(
-        `<div><span style="display:inline-block;margin-right:6px;border-radius:50%;width:8px;height:8px;background:${point.color};"></span>${label}${formatted}</div>`
+        `<div><span style="display:inline-block;margin-right:6px;border-radius:50%;width:8px;height:8px;background:${resolvedPoint.series.color};"></span>${label}${formatted}</div>`
       );
     }
 
@@ -1080,6 +1159,161 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     return `<div style="font-weight:600;margin-bottom:4px;">${header}</div>${tooltipLines.join('')}`;
+  }
+
+  private getTooltipXAxisValue(params: TooltipFormatterParams[]): number {
+    for (let index = 0; index < params.length; index += 1) {
+      const point = params[index];
+      if (Array.isArray(point?.value) && Number.isFinite(Number(point.value[0]))) {
+        return Number(point.value[0]);
+      }
+    }
+
+    return Number.NaN;
+  }
+
+  private resolveTooltipPointsAtX(xValue: number): Array<{ series: PanelSeriesModel; point: EventChartPoint }> {
+    if (!this.panel) {
+      return [];
+    }
+
+    const pixelTolerance = this.getTooltipMaxXDistance();
+    const resolvedPoints: Array<{ series: PanelSeriesModel; point: EventChartPoint }> = [];
+
+    for (let index = 0; index < this.panel.series.length; index += 1) {
+      const series = this.panel.series[index];
+      const nearestPoint = this.findNearestTooltipPoint(series.points, xValue);
+      if (!nearestPoint || !Number.isFinite(nearestPoint.point.y)) {
+        continue;
+      }
+
+      const maxAcceptedDistance = this.getTooltipAcceptedXDistance(series.points, nearestPoint.index, pixelTolerance);
+      if (nearestPoint.distance > maxAcceptedDistance) {
+        continue;
+      }
+
+      resolvedPoints.push({
+        series,
+        point: nearestPoint.point,
+      });
+    }
+
+    return resolvedPoints;
+  }
+
+  private getTooltipMaxXDistance(): number {
+    const domain = this.getActiveDomain();
+    const visibleRange = this.sharedZoomRange
+      ? clampEventRange(this.sharedZoomRange, domain.start, domain.end) || domain
+      : domain;
+    const span = Math.max(0, visibleRange.end - visibleRange.start);
+    if (!Number.isFinite(span) || span <= 0) {
+      return 0;
+    }
+
+    const chartWidth = this.chartDiv?.nativeElement?.clientWidth || 360;
+    const hoverTolerancePixels = this.isMobile ? 24 : 18;
+    return (span / Math.max(chartWidth, 1)) * hoverTolerancePixels;
+  }
+
+  private findNearestTooltipPoint(
+    points: EventChartPoint[],
+    xValue: number
+  ): { point: EventChartPoint; distance: number; index: number } | null {
+    if (!Array.isArray(points) || points.length === 0 || !Number.isFinite(xValue)) {
+      return null;
+    }
+
+    let low = 0;
+    let high = points.length - 1;
+
+    while (low <= high) {
+      const middle = Math.floor((low + high) / 2);
+      const middleX = Number(points[middle]?.x);
+      if (!Number.isFinite(middleX)) {
+        return null;
+      }
+
+      if (middleX < xValue) {
+        low = middle + 1;
+      } else if (middleX > xValue) {
+        high = middle - 1;
+      } else {
+        return {
+          point: points[middle],
+          distance: 0,
+          index: middle,
+        };
+      }
+    }
+
+    const candidates = [
+      { point: points[Math.max(0, high)], index: Math.max(0, high) },
+      { point: points[Math.min(points.length - 1, low)], index: Math.min(points.length - 1, low) }
+    ].filter((candidate): candidate is { point: EventChartPoint; index: number } => !!candidate.point && Number.isFinite(candidate.point.x));
+    if (!candidates.length) {
+      return null;
+    }
+
+    let nearestCandidate = candidates[0];
+    let nearestDistance = Math.abs(nearestCandidate.point.x - xValue);
+
+    for (let index = 1; index < candidates.length; index += 1) {
+      const candidate = candidates[index];
+      const candidateDistance = Math.abs(candidate.point.x - xValue);
+      if (candidateDistance < nearestDistance) {
+        nearestCandidate = candidate;
+        nearestDistance = candidateDistance;
+      }
+    }
+
+    return {
+      point: nearestCandidate.point,
+      distance: nearestDistance,
+      index: nearestCandidate.index,
+    };
+  }
+
+  private getTooltipAcceptedXDistance(
+    points: EventChartPoint[],
+    pointIndex: number,
+    pixelTolerance: number
+  ): number {
+    const localSpacingBound = this.getTooltipLocalSpacingBound(points, pointIndex);
+    const hardCap = this.getTooltipHardDistanceCap();
+    return Math.min(pixelTolerance, localSpacingBound, hardCap);
+  }
+
+  private getTooltipLocalSpacingBound(points: EventChartPoint[], pointIndex: number): number {
+    const point = points[pointIndex];
+    if (!point || !Number.isFinite(point.x)) {
+      return 0;
+    }
+
+    const previousPoint = pointIndex > 0 ? points[pointIndex - 1] : null;
+    const nextPoint = pointIndex < points.length - 1 ? points[pointIndex + 1] : null;
+    const neighborDistances = [
+      previousPoint && Number.isFinite(previousPoint.x) ? Math.abs(point.x - previousPoint.x) : Number.NaN,
+      nextPoint && Number.isFinite(nextPoint.x) ? Math.abs(nextPoint.x - point.x) : Number.NaN,
+    ].filter((distance) => Number.isFinite(distance) && distance > 0);
+
+    if (!neighborDistances.length) {
+      return Number.POSITIVE_INFINITY;
+    }
+
+    return Math.max(...neighborDistances) / 2;
+  }
+
+  private getTooltipHardDistanceCap(): number {
+    switch (this.xAxisType) {
+      case XAxisTypes.Time:
+        return TOOLTIP_MAX_TIME_DISTANCE_MS;
+      case XAxisTypes.Distance:
+        return TOOLTIP_MAX_DISTANCE_METERS;
+      case XAxisTypes.Duration:
+      default:
+        return TOOLTIP_MAX_DURATION_DISTANCE_SECONDS;
+    }
   }
 
   private formatLapMarkerTooltip(params: any): string {
@@ -1122,6 +1356,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     const chartStyle = buildEventEChartsVisualTokens(this.darkTheme, this.isMobile);
     const tooltipHtml = this.formatLapMarkerTooltip({ data: marker, name: marker.label });
+    const tooltipSurfaceConfig = this.buildTooltipSurfaceConfig();
 
     const showTipAction: ChartAction = {
       type: 'showTip',
@@ -1131,9 +1366,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       tooltip: {
         trigger: 'item',
         renderMode: 'html',
-        appendTo: getOrCreateEChartsTooltipHost,
-        confine: this.isMobile,
-        position: getViewportConstrainedTooltipPosition,
+        ...tooltipSurfaceConfig,
         backgroundColor: chartStyle.tooltipBackgroundColor,
         borderColor: chartStyle.tooltipBorderColor,
         borderWidth: 1,
@@ -1462,48 +1695,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     return formattedValue;
   }
 
-  private syncNativeZoomGroup(): void {
-    const chart = this.chartHost.getChart();
-    if (!chart) {
-      return;
-    }
-
-    const requestedGroupId = `${this.zoomGroupId || ''}`.trim() || null;
-    const hasRenderableSeries = Array.isArray(this.panel?.series) && this.panel.series.length > 0;
-    const hasRenderableChart = this.showZoomBar || hasRenderableSeries;
-    const shouldJoinZoomGroup = hasRenderableChart && (this.showZoomBar || this.zoomSyncVisibleForViewport);
-    const nextGroupId = shouldJoinZoomGroup ? requestedGroupId : null;
-    if (this.connectedZoomGroupId === nextGroupId) {
-      return;
-    }
-
-    const previousGroupId = this.connectedZoomGroupId;
-    if (!previousGroupId && nextGroupId) {
-      this.applyStoredZoomRange();
-    }
-    chart.group = nextGroupId || undefined;
-    this.connectedZoomGroupId = nextGroupId;
-    if (previousGroupId && previousGroupId !== nextGroupId) {
-      void this.eChartsLoader.disconnectGroup(previousGroupId);
-    }
-    if (nextGroupId) {
-      void this.eChartsLoader.connectGroup(nextGroupId);
-    }
-  }
-
-  private disconnectNativeZoomGroup(): void {
-    const chart = this.chartHost.getChart();
-    if (chart?.group) {
-      chart.group = undefined;
-    }
-
-    if (!this.connectedZoomGroupId) {
-      return;
-    }
-    void this.eChartsLoader.disconnectGroup(this.connectedZoomGroupId);
-    this.connectedZoomGroupId = null;
-  }
-
   private bindWheelPassThrough(): void {
     const container = this.chartDiv?.nativeElement;
     if (!container || this.wheelPassThroughListener) {
@@ -1524,6 +1715,80 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
     container.removeEventListener('wheel', this.wheelPassThroughListener, { capture: true });
     this.wheelPassThroughListener = null;
+  }
+
+  private bindFullscreenEvents(): void {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    document.addEventListener('fullscreenchange', this.fullscreenChangeHandler);
+    document.addEventListener('webkitfullscreenchange', this.fullscreenChangeHandler as EventListener);
+  }
+
+  private unbindFullscreenEvents(): void {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    document.removeEventListener('fullscreenchange', this.fullscreenChangeHandler);
+    document.removeEventListener('webkitfullscreenchange', this.fullscreenChangeHandler as EventListener);
+  }
+
+  private syncFullscreenState(): void {
+    const nextFullscreenState = this.isPanelFullscreen();
+    if (nextFullscreenState === this.isFullscreen) {
+      if (nextFullscreenState) {
+        this.chartHost.scheduleResize();
+      }
+      return;
+    }
+
+    this.isFullscreen = nextFullscreenState;
+    this.chartHost.scheduleResize();
+    this.cdr.markForCheck();
+  }
+
+  private isPanelFullscreen(): boolean {
+    const fullscreenElement = this.getFullscreenElement();
+    return !!fullscreenElement && fullscreenElement === this.panelRoot?.nativeElement;
+  }
+
+  private getFullscreenElement(): Element | null {
+    const documentRef = this.getFullscreenDocument();
+    return documentRef.fullscreenElement ?? documentRef.webkitFullscreenElement ?? null;
+  }
+
+  private getFullscreenDocument(): FullscreenCapableDocument {
+    return document as FullscreenCapableDocument;
+  }
+
+  private async enterFullscreen(): Promise<void> {
+    const panelElement = this.panelRoot?.nativeElement as FullscreenHostElement | undefined;
+    if (!panelElement) {
+      return;
+    }
+
+    if (typeof panelElement.requestFullscreen === 'function') {
+      await panelElement.requestFullscreen();
+      return;
+    }
+
+    if (typeof panelElement.webkitRequestFullscreen === 'function') {
+      await panelElement.webkitRequestFullscreen();
+    }
+  }
+
+  private async exitFullscreen(): Promise<void> {
+    const documentRef = this.getFullscreenDocument();
+    if (typeof documentRef.exitFullscreen === 'function') {
+      await documentRef.exitFullscreen();
+      return;
+    }
+
+    if (typeof documentRef.webkitExitFullscreen === 'function') {
+      await documentRef.webkitExitFullscreen();
+    }
   }
 
   private getActiveDomain(): EventChartRange {
@@ -1701,5 +1966,23 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     this.pendingAxisScaleFrame = null;
+  }
+
+  private buildTooltipSurfaceConfig(): {
+    confine: boolean;
+    appendTo?: typeof getOrCreateEChartsTooltipHost;
+    position?: typeof getViewportConstrainedTooltipPosition;
+  } {
+    if (this.isMobile) {
+      return {
+        confine: true,
+      };
+    }
+
+    return {
+      appendTo: getOrCreateEChartsTooltipHost,
+      confine: false,
+      position: getViewportConstrainedTooltipPosition,
+    };
   }
 }

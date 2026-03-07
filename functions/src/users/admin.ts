@@ -1,4 +1,4 @@
-import { HttpsError } from 'firebase-functions/v2/https';
+import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import { onAdminCall } from '../shared/auth';
@@ -6,7 +6,7 @@ import { getStripe } from '../stripe/client';
 import { CloudBillingClient } from '@google-cloud/billing';
 import { BudgetServiceClient } from '@google-cloud/billing-budgets';
 import { BigQuery } from '@google-cloud/bigquery';
-import { getCloudTaskQueueDepthForQueue } from '../utils';
+import { ALLOWED_CORS_ORIGINS, enforceAppCheck, getCloudTaskQueueDepthForQueue } from '../utils';
 import { GARMIN_API_TOKENS_COLLECTION_NAME, GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME } from '../garmin/constants';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME, SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from '../suunto/constants';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME, COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME } from '../coros/constants';
@@ -861,6 +861,57 @@ export const impersonateUser = onAdminCall<{ uid: string }, { token: string }>({
 });
 
 /**
+ * Ends an impersonation session and restores the original admin account.
+ *
+ * This relies on the `impersonatedBy` claim that was attached to the
+ * impersonated user's custom token when the session started.
+ */
+export const stopImpersonation = onCall({
+    region: FUNCTIONS_MANIFEST.stopImpersonation.region,
+    memory: '256MiB',
+    cors: ALLOWED_CORS_ORIGINS,
+}, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
+    }
+
+    enforceAppCheck(request);
+
+    const adminUid = request.auth.token.impersonatedBy;
+    if (typeof adminUid !== 'string' || adminUid.length === 0) {
+        throw new HttpsError('permission-denied', 'The current session is not impersonating another user.');
+    }
+
+    const auth = admin.auth();
+
+    try {
+        const adminUser = await auth.getUser(adminUid);
+        if (adminUser.disabled || adminUser.customClaims?.admin !== true) {
+            throw new HttpsError('permission-denied', 'The original admin session is no longer eligible for restoration.');
+        }
+    } catch (error: unknown) {
+        if (error instanceof HttpsError) {
+            throw error;
+        }
+
+        logger.warn(`Unable to load original admin ${adminUid} while ending impersonation for ${request.auth.uid}`, error);
+        throw new HttpsError('permission-denied', 'The original admin session is no longer available.');
+    }
+
+    try {
+        const customToken = await auth.createCustomToken(adminUid);
+        logger.info(`User ${request.auth.uid} ended impersonation and returned to admin ${adminUid}`);
+        return {
+            token: customToken
+        };
+    } catch (error: unknown) {
+        logger.error('Error creating admin restoration token:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Failed to create token';
+        throw new HttpsError('internal', errorMessage);
+    }
+});
+
+/**
  * Gets financial statistics for the current month.
  * - Revenue: Calculated from Stripe Invoices (Total - Tax)
  * - Cost: Links to GCP Cloud Billing Report (since API doesn't provide live spend safely)
@@ -1035,15 +1086,17 @@ export const getFinancialStats = onAdminCall<void, any>({
                             logger.info(`Found BigQuery export table: ${tableName}`);
                             const fullTableName = `\`${bqProjectId}.${bqDatasetId}.${tableName}\``;
 
-                            // 2. Query for current month's cost
-                            // invoice.month is in YYYYMM format
+                            // 2. Query for current usage month's cost.
+                            // We intentionally filter by usage timestamps, not invoice.month, so dashboard
+                            // numbers align with Cloud Billing usage-based reports for the same month.
                             const query = `
                                 SELECT 
                                     SUM(cost) + SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as total_cost,
                                     MAX(usage_end_time) as last_updated,
                                     currency 
                                 FROM ${fullTableName} 
-                                WHERE invoice.month = FORMAT_DATE('%Y%m', CURRENT_DATE())
+                                WHERE DATE(usage_start_time) >= DATE_TRUNC(CURRENT_DATE(), MONTH)
+                                AND DATE(usage_start_time) < DATE_ADD(DATE_TRUNC(CURRENT_DATE(), MONTH), INTERVAL 1 MONTH)
                                 AND project.id = @projectId
                                 GROUP BY currency
                                 LIMIT 1

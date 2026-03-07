@@ -79,6 +79,7 @@ describe('AppAuthService', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        mockAuth.currentUser = null;
         userSubject = new BehaviorSubject<any>(null);
         mockUserFunction.mockReturnValue(userSubject);
         mockUserService.user$.next(null); // Reset

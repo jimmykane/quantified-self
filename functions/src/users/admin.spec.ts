@@ -4,6 +4,7 @@ import { CallableRequest } from 'firebase-functions/v2/https';
 const {
     mockListUsers,
     mockCreateCustomToken,
+    mockGetUser,
     mockAuth,
     mockOnCall,
     mockCollection,
@@ -22,7 +23,8 @@ const {
 } = vi.hoisted(() => {
     const mockListUsers = vi.fn();
     const mockCreateCustomToken = vi.fn();
-    const mockAuth = { listUsers: mockListUsers, createCustomToken: mockCreateCustomToken };
+    const mockGetUser = vi.fn();
+    const mockAuth = { listUsers: mockListUsers, createCustomToken: mockCreateCustomToken, getUser: mockGetUser };
     const mockOnCall = vi.fn((_options: unknown, handler: unknown) => handler);
 
     const mockCollection = vi.fn() as any;
@@ -66,6 +68,7 @@ const {
     return {
         mockListUsers,
         mockCreateCustomToken,
+        mockGetUser,
         mockAuth,
         mockOnCall,
         mockCollection,
@@ -86,6 +89,7 @@ const {
 
 mockAuth.listUsers = mockListUsers;
 mockAuth.createCustomToken = mockCreateCustomToken;
+mockAuth.getUser = mockGetUser;
 
 vi.mock('../stripe/client', () => ({
     getStripe: vi.fn().mockResolvedValue(mockStripeClient)
@@ -156,7 +160,7 @@ vi.mock('../config', () => ({
     },
 }));
 
-import { listUsers, getQueueStats, getUserCount, getMaintenanceStatus, setMaintenanceMode, impersonateUser, getFinancialStats } from './admin';
+import { listUsers, getQueueStats, getUserCount, getMaintenanceStatus, setMaintenanceMode, impersonateUser, stopImpersonation, getFinancialStats } from './admin';
 
 // Helper for authenticated admin requests
 const getAdminRequest = (data: any = {}) => ({
@@ -655,6 +659,86 @@ describe('listUsers Cloud Function', () => {
         } as unknown as CallableRequest<any>;
 
         await expect((impersonateUser as any)(request)).rejects.toThrow();
+    });
+
+    it('should restore the original admin session for an impersonated user', async () => {
+        const adminUid = 'admin-uid';
+        mockGetUser.mockResolvedValue({
+            uid: adminUid,
+            disabled: false,
+            customClaims: { admin: true }
+        });
+        mockCreateCustomToken.mockResolvedValue('restored-admin-token');
+        const request = {
+            auth: { uid: 'target-user-uid', token: { impersonatedBy: adminUid } },
+            app: { appId: 'mock-app-id' }
+        } as unknown as CallableRequest<any>;
+
+        const result: any = await (stopImpersonation as any)(request);
+
+        expect(mockGetUser).toHaveBeenCalledWith(adminUid);
+        expect(mockCreateCustomToken).toHaveBeenCalledWith(adminUid);
+        expect(result.token).toBe('restored-admin-token');
+    });
+
+    it('should reject stopImpersonation when session is not impersonated', async () => {
+        const request = {
+            auth: { uid: 'user1', token: {} },
+            app: { appId: 'mock-app-id' }
+        } as unknown as CallableRequest<any>;
+
+        await expect((stopImpersonation as any)(request)).rejects.toThrow('The current session is not impersonating another user.');
+    });
+
+    it('should reject stopImpersonation when unauthenticated', async () => {
+        const request = {
+            auth: null,
+            app: { appId: 'mock-app-id' }
+        } as unknown as CallableRequest<any>;
+
+        await expect((stopImpersonation as any)(request)).rejects.toThrow('The function must be called while authenticated.');
+    });
+
+    it('should reject stopImpersonation when original admin is no longer eligible', async () => {
+        const adminUid = 'admin-uid';
+        mockGetUser.mockResolvedValue({
+            uid: adminUid,
+            disabled: false,
+            customClaims: { admin: false }
+        });
+        const request = {
+            auth: { uid: 'target-user-uid', token: { impersonatedBy: adminUid } },
+            app: { appId: 'mock-app-id' }
+        } as unknown as CallableRequest<any>;
+
+        await expect((stopImpersonation as any)(request)).rejects.toThrow('The original admin session is no longer eligible for restoration.');
+    });
+
+    it('should reject stopImpersonation when original admin cannot be loaded', async () => {
+        const adminUid = 'admin-uid';
+        mockGetUser.mockRejectedValue(new Error('not-found'));
+        const request = {
+            auth: { uid: 'target-user-uid', token: { impersonatedBy: adminUid } },
+            app: { appId: 'mock-app-id' }
+        } as unknown as CallableRequest<any>;
+
+        await expect((stopImpersonation as any)(request)).rejects.toThrow('The original admin session is no longer available.');
+    });
+
+    it('should throw internal when creating the restoration token fails', async () => {
+        const adminUid = 'admin-uid';
+        mockGetUser.mockResolvedValue({
+            uid: adminUid,
+            disabled: false,
+            customClaims: { admin: true }
+        });
+        mockCreateCustomToken.mockRejectedValue(new Error('token gen failed'));
+        const request = {
+            auth: { uid: 'target-user-uid', token: { impersonatedBy: adminUid } },
+            app: { appId: 'mock-app-id' }
+        } as unknown as CallableRequest<any>;
+
+        await expect((stopImpersonation as any)(request)).rejects.toThrow('token gen failed');
     });
 });
 
@@ -1161,6 +1245,22 @@ describe('getFinancialStats Cloud Function', () => {
 
         expect(result.cost.total).toBe(1550); // 15.5 * 100
         expect(result.cost.lastUpdated).toBe(mockTimestamp);
+    });
+
+    it('should query BigQuery by usage month instead of invoice month', async () => {
+        mockGetProjectBillingInfo.mockResolvedValue([{
+            billingAccountName: 'billingAccounts/000000-000000-000000'
+        }]);
+        mockGetTables.mockResolvedValue([[{ id: 'gcp_billing_export_v1_123' }]]);
+        mockBigQueryQuery.mockResolvedValue([[]]);
+
+        await (getFinancialStats as any)(request);
+
+        expect(mockBigQueryQuery).toHaveBeenCalledTimes(1);
+        const queryText = mockBigQueryQuery.mock.calls[0][0].query as string;
+        expect(queryText).toContain('DATE(usage_start_time) >= DATE_TRUNC(CURRENT_DATE(), MONTH)');
+        expect(queryText).toContain('DATE(usage_start_time) < DATE_ADD(DATE_TRUNC(CURRENT_DATE(), MONTH), INTERVAL 1 MONTH)');
+        expect(queryText).not.toContain('invoice.month');
     });
 
     it('should handle pagination for Stripe invoices', async () => {

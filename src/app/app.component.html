@@ -115,6 +115,7 @@
 
   <!-- Maintenance & Replacement Logic -->
   @if (maintenanceMode() && !isHomeRoute && !isOnboardingRoute) {
+  <app-impersonation-banner></app-impersonation-banner>
   <app-maintenance [message]="maintenanceMessage()"></app-maintenance>
   } @else {
   <!-- New Header Layout -->
@@ -191,6 +192,7 @@
     }
 
     <mat-sidenav-content>
+      <app-impersonation-banner></app-impersonation-banner>
       <div class="router-outlet-container" [@routeAnimations]="routeAnimationState()">
         @if (maintenanceLoading()) {
         <div class="loading-overlay">

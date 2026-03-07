@@ -1,6 +1,6 @@
 {
   "name": "quantified-self",
-  "version": "7.5.0",
+  "version": "7.5.1",
   "license": "SEE LICENSE IN LICENSE.md",
   "scripts": {
     "ng": "ng",
@@ -43,7 +43,7 @@
     "@fontsource/material-symbols-rounded": "^5.2.35",
     "@fontsource/noto-sans": "^5.2.10",
     "@sentry/angular": "^10.34.0",
-    "@sports-alliance/sports-lib": "^9.1.8",
+    "@sports-alliance/sports-lib": "^9.2.4",
     "@types/file-saver": "^2.0.7",
     "@zumer/snapdom": "^2.0.2",
     "buffer": "^6.0.3",

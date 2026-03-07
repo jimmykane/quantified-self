@@ -1,0 +1,13 @@
+@if (impersonationService.session(); as session) {
+<section class="impersonation-banner mat-typography" aria-live="polite">
+  <div class="impersonation-banner__copy">
+    <mat-icon>visibility</mat-icon>
+    <span>Impersonating {{ session.label }}.</span>
+  </div>
+  <button mat-stroked-button type="button" class="impersonation-banner__action" (click)="onReturnToAdmin()"
+    [disabled]="impersonationService.isReturning()">
+    <mat-icon>{{ impersonationService.isReturning() ? 'sync' : 'undo' }}</mat-icon>
+    <span>{{ impersonationService.isReturning() ? 'Returning...' : 'Return to Admin' }}</span>
+  </button>
+</section>
+}

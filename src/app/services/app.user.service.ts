@@ -127,6 +127,7 @@ export class AppUserService implements OnDestroy {
     const stripeRole = (claims['stripeRole'] as StripeRole) || null;
     const gracePeriodUntil = (claims['gracePeriodUntil'] as number) || null;
     const isAdmin = claims['admin'] === true;
+    const impersonatedBy = claims['impersonatedBy'];
 
     const creationDate = firebaseUser.metadata?.creationTime
       ? new Date(firebaseUser.metadata.creationTime)
@@ -163,6 +164,11 @@ export class AppUserService implements OnDestroy {
     }
     if (isAdmin) {
       identity.admin = true;
+    }
+    if (typeof impersonatedBy === 'string' && impersonatedBy.length > 0) {
+      identity.impersonatedBy = impersonatedBy;
+    } else {
+      delete identity.impersonatedBy;
     }
 
     // Check for force-refresh (if DB was updated more recently than token issuance)
@@ -515,6 +521,12 @@ export class AppUserService implements OnDestroy {
         );
       }
 
+      // Keep auth-claim state out of the main profile doc.
+      if ('impersonatedBy' in propertiesToUpdate) {
+        this.logger.warn('[AppUserService] Stripping claim-managed field \'impersonatedBy\' from update payload.');
+        delete propertiesToUpdate.impersonatedBy;
+      }
+
       if (Object.keys(propertiesToUpdate).length > 0) {
         const userDocRef = doc(this.firestore, 'users', user.uid);
         promises.push(updateDoc(userDocRef, propertiesToUpdate)
@@ -553,6 +565,7 @@ export class AppUserService implements OnDestroy {
       'lastDowngradedAt',
       'stripeRole',
       'isPro',
+      'impersonatedBy',
       ...AppUserService.legalFields
     ];
 
@@ -589,7 +602,7 @@ export class AppUserService implements OnDestroy {
     // But the guard checks "hasPaidAccess".
 
     // Let's look at the guard again.
-    // const hasPaidAccess = stripeRole === 'pro' || stripeRole === 'basic' || (user as any).isPro === true;
+    // const hasPaidAccess = AppUserUtilities.hasPaidAccessUser(user);
     // const onboardingCompleted = termsAccepted && (hasPaidAccess || hasSubscribedOnce);
 
     // So if I just set 'onboardingCompleted' property on the user in Firestore, 

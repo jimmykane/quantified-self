@@ -16,27 +16,85 @@
 }
 
 .event-chart-panel__header {
+  margin-bottom: 6px;
+  font-family: 'Barlow Condensed', sans-serif;
+}
+
+.event-chart-panel__heading {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.event-chart-panel__title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.event-chart-panel__title {
   display: flex;
   align-items: baseline;
   gap: 6px;
-  margin-bottom: 6px;
-  font-family: 'Barlow Condensed', sans-serif;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .event-chart-panel__header h3 {
   margin: 0;
   font-size: 1.1rem;
   font-weight: 600;
+  line-height: 1;
 }
 
-.event-chart-panel__header span {
+.event-chart-panel__title > span {
   font-size: 0.88rem;
   opacity: 0.75;
+  line-height: 1;
+}
+
+.event-chart-panel__fullscreen-button {
+  margin-left: auto;
+  align-self: center;
+  flex: 0 0 auto;
+}
+
+.event-chart-panel__series-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+.event-chart-panel__series-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.8rem;
+  opacity: 0.82;
+}
+
+.event-chart-panel__series-legend-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+.event-chart-panel__series-legend-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .event-chart-panel__chart {
   width: 100%;
-  height: 260px;
+  height: var(--event-chart-panel-height, 360px);
 }
 
 .event-chart-panel__chart--zoom-only {
@@ -154,4 +212,32 @@
   font-family: 'Barlow Condensed', sans-serif;
   font-size: 0.86rem;
   font-weight: 600;
+}
+
+.event-chart-panel--fullscreen,
+.event-chart-panel:fullscreen {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 16px 20px 20px;
+  background: var(--mat-sys-surface);
+  overflow: hidden;
+}
+
+.event-chart-panel--fullscreen .event-chart-panel__header,
+.event-chart-panel:fullscreen .event-chart-panel__header {
+  margin-bottom: 0;
+}
+
+.event-chart-panel--fullscreen .event-chart-panel__chart,
+.event-chart-panel:fullscreen .event-chart-panel__chart {
+  height: 100%;
+  min-height: 0;
+}
+
+.event-chart-panel--fullscreen .event-chart-panel__stats,
+.event-chart-panel:fullscreen .event-chart-panel__stats {
+  max-height: min(30dvh, 260px);
+  overflow: auto;
+  padding-right: 4px;
 }

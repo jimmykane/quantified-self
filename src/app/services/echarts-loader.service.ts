@@ -16,7 +16,6 @@ export { ECHARTS_GLOBAL_FONT_FAMILY } from '../helpers/echarts-theme.helper';
 export class EChartsLoaderService {
   private loader: Promise<EChartsCoreModule> | null = null;
   private cachedCore: EChartsCoreModule | null = null;
-  private groupRefCounts = new Map<string, number>();
   private viewportResizeSubscribers = new Set<() => void>();
   private viewportListenersBound = false;
   private viewportResizeFrameId: number | null = null;
@@ -117,62 +116,6 @@ export class EChartsLoaderService {
   public resize(chart: EChartsType, options?: EChartsResizeOptions): void {
     this.zone.runOutsideAngular(() => {
       chart.resize(options);
-    });
-  }
-
-  public async connectGroup(groupId: string): Promise<void> {
-    const normalizedGroupID = `${groupId || ''}`.trim();
-    if (!normalizedGroupID) {
-      return;
-    }
-
-    const currentRefCount = this.groupRefCounts.get(normalizedGroupID) ?? 0;
-    this.groupRefCounts.set(normalizedGroupID, currentRefCount + 1);
-    if (currentRefCount > 0) {
-      return;
-    }
-
-    try {
-      const echarts = await this.load();
-      this.zone.runOutsideAngular(() => {
-        echarts.connect(normalizedGroupID);
-      });
-    } catch (error) {
-      this.groupRefCounts.delete(normalizedGroupID);
-      throw error;
-    }
-  }
-
-  public async disconnectGroup(groupId: string): Promise<void> {
-    const normalizedGroupID = `${groupId || ''}`.trim();
-    if (!normalizedGroupID) {
-      return;
-    }
-
-    const currentRefCount = this.groupRefCounts.get(normalizedGroupID);
-    if (!currentRefCount) {
-      return;
-    }
-
-    if (currentRefCount > 1) {
-      this.groupRefCounts.set(normalizedGroupID, currentRefCount - 1);
-      return;
-    }
-
-    const echarts = await this.load();
-    const latestRefCount = this.groupRefCounts.get(normalizedGroupID);
-    if (!latestRefCount) {
-      return;
-    }
-
-    if (latestRefCount > 1) {
-      this.groupRefCounts.set(normalizedGroupID, latestRefCount - 1);
-      return;
-    }
-
-    this.groupRefCounts.delete(normalizedGroupID);
-    this.zone.runOutsideAngular(() => {
-      echarts.disconnect(normalizedGroupID);
     });
   }
 

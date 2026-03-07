@@ -246,6 +246,24 @@ describe('ChartsPieComponent', () => {
     expect(mockLoader.setOption).not.toHaveBeenCalled();
   });
 
+  it('should fully reset chart option when there is no data', async () => {
+    component.data = [];
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    const option = mockLoader.setOption.mock.calls.at(-1)?.[1] as Record<string, any>;
+    const settings = mockLoader.setOption.mock.calls.at(-1)?.[2];
+
+    expect(option.series).toEqual([]);
+    expect(option.tooltip.show).toBe(false);
+    expect(settings).toEqual({
+      notMerge: true,
+      lazyUpdate: false
+    });
+  });
+
   it('should dispose chart on destroy', async () => {
     component.data = [
       { type: 'Running', [ChartDataValueTypes.Total]: 10, count: 1 },

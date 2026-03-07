@@ -18,6 +18,7 @@ import { DateRanges } from '@sports-alliance/sports-lib';
 import { getDatesForDateRange } from '../../helpers/date-range-helper';
 import { MatDatepickerInputEvent } from '@angular/material/datepicker';
 import dayjs from 'dayjs';
+import { AppHapticsService } from '../../services/app.haptics.service';
 
 @Component({
   selector: 'app-event-search',
@@ -61,7 +62,10 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   public activityTypes = ActivityTypesHelper.getActivityTypesAsUniqueArray();
 
 
-  constructor(changeDetector: ChangeDetectorRef) {
+  constructor(
+    changeDetector: ChangeDetectorRef,
+    private hapticsService: AppHapticsService
+  ) {
     super(changeDetector);
   }
 
@@ -144,6 +148,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   }
 
   dateToggleChange(event: MatButtonToggleChange) {
+    this.hapticsService.selection();
     const nextRange = event.source.value;
     const computedRange = getDatesForDateRange(nextRange, this.startOfTheWeek);
     this.startDateControl?.setValue(computedRange.startDate);
@@ -179,6 +184,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     if (this.mergedEventsToggleDisabled) {
       return;
     }
+    this.hapticsService.selection();
     const selected = Array.isArray(event.value) ? event.value : [];
     this.includeMergedEvents = selected.includes('merged');
     return this.search();

@@ -1,10 +1,38 @@
-<section class="event-chart-panel" [class.event-chart-panel--zoom-only]="!panel && showZoomBar">
+<section #panelRoot class="event-chart-panel" [class.event-chart-panel--zoom-only]="!panel && showZoomBar"
+  [class.event-chart-panel--fullscreen]="isFullscreen">
   @if (panel) {
   <header class="event-chart-panel__header">
-    <h3>{{ panel?.displayName }}</h3>
-    @if (panel?.unit) {
-    <span>({{ panel?.unit }})</span>
-    }
+    <div class="event-chart-panel__heading">
+      <div class="event-chart-panel__title-row">
+        <div class="event-chart-panel__title">
+          <h3>{{ panel?.displayName }}</h3>
+          @if (panel?.unit) {
+          <span>({{ panel?.unit }})</span>
+          }
+        </div>
+
+        @if (canToggleFullscreen) {
+        <button mat-icon-button type="button"
+          class="qs-action-menu-icon-button event-chart-panel__fullscreen-button"
+          [matTooltip]="fullscreenTooltip"
+          [attr.aria-label]="fullscreenTooltip"
+          (click)="onFullscreenToggle()">
+          <mat-icon>{{ fullscreenIcon }}</mat-icon>
+        </button>
+        }
+      </div>
+
+      @if (seriesLegendItems.length > 0) {
+      <div class="event-chart-panel__series-legend">
+        @for (item of seriesLegendItems; track item.key) {
+        <span class="event-chart-panel__series-legend-item">
+          <span class="event-chart-panel__series-legend-dot" [style.background]="item.color"></span>
+          <span class="event-chart-panel__series-legend-label">{{ item.label }}</span>
+        </span>
+        }
+      </div>
+      }
+    </div>
   </header>
   }
 

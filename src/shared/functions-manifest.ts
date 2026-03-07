@@ -7,6 +7,7 @@ export const FUNCTIONS_MANIFEST = {
     setMaintenanceMode: { name: 'setMaintenanceMode', region: 'europe-west2' },
     getMaintenanceStatus: { name: 'getMaintenanceStatus', region: 'europe-west2' },
     impersonateUser: { name: 'impersonateUser', region: 'europe-west2' },
+    stopImpersonation: { name: 'stopImpersonation', region: 'europe-west2' },
     getFinancialStats: { name: 'getFinancialStats', region: 'europe-west2' },
 
     // User Functions

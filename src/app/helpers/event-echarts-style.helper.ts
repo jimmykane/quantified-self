@@ -155,6 +155,17 @@ const FALLBACK_COLORS: string[] = [
   AppColors.Yellow,
   AppColors.DeepBlue,
 ];
+const CONTRAST_VARIANT_PALETTE: string[] = [
+  AppColors.Blue,
+  AppColors.Orange,
+  AppColors.StrongRed,
+  AppColors.Green,
+  AppColors.Purple,
+  AppColors.DeepBlue,
+  AppColors.Yellow,
+  AppColors.Pink,
+];
+const MIN_COMPARE_COLOR_DISTANCE = 200;
 
 export function resolveEventColorGroupKey(streamType: string): string {
   if (ALTITUDE_GROUP.has(streamType)) {
@@ -201,6 +212,17 @@ export function resolveEventSeriesColor(groupKey: string, seriesIndex: number, s
   const colorMap = AppDataColors as unknown as Record<string, string>;
   const normalizedIndex = Number.isFinite(seriesIndex) ? Math.max(0, Math.floor(seriesIndex)) : 0;
   const normalizedCount = Number.isFinite(seriesCount) ? Math.max(1, Math.floor(seriesCount)) : 1;
+  const baseColor = colorMap[groupKey] || resolveFallbackColor(groupKey);
+  const baseSeriesColor = colorMap[`${groupKey}_0`] || baseColor;
+
+  if (normalizedCount === 2) {
+    if (normalizedIndex === 0) {
+      return baseSeriesColor;
+    }
+
+    const explicitCompareVariant = colorMap[`${groupKey}_1`];
+    return resolveCompareSeriesColor(baseSeriesColor, explicitCompareVariant);
+  }
 
   if (normalizedCount > 1) {
     const explicitVariant = colorMap[`${groupKey}_${normalizedIndex}`];
@@ -209,14 +231,13 @@ export function resolveEventSeriesColor(groupKey: string, seriesIndex: number, s
     }
   }
 
-  const baseColor = colorMap[groupKey] || resolveFallbackColor(groupKey);
   if (normalizedCount <= 1) {
     return baseColor;
   }
   if (normalizedIndex === 0) {
-    return baseColor;
+    return baseSeriesColor;
   }
-  return resolveFallbackVariantColor(groupKey, normalizedIndex, baseColor);
+  return resolveFallbackVariantColor(groupKey, normalizedIndex, baseSeriesColor);
 }
 
 function resolveFallbackColor(groupKey: string): string {
@@ -238,6 +259,69 @@ function resolveFallbackVariantColor(groupKey: string, seriesIndex: number, base
 
 function isSameColor(left: string, right: string): boolean {
   return `${left || ''}`.trim().toLowerCase() === `${right || ''}`.trim().toLowerCase();
+}
+
+function resolveCompareSeriesColor(baseColor: string, explicitVariant: string | undefined): string {
+  if (explicitVariant && computeColorDistance(baseColor, explicitVariant) >= MIN_COMPARE_COLOR_DISTANCE) {
+    return explicitVariant;
+  }
+
+  let bestCandidate = explicitVariant && !isSameColor(explicitVariant, baseColor)
+    ? explicitVariant
+    : null;
+  let bestDistance = bestCandidate ? computeColorDistance(baseColor, bestCandidate) : -1;
+
+  for (let index = 0; index < CONTRAST_VARIANT_PALETTE.length; index += 1) {
+    const candidate = CONTRAST_VARIANT_PALETTE[index];
+    if (isSameColor(candidate, baseColor)) {
+      continue;
+    }
+
+    const candidateDistance = computeColorDistance(baseColor, candidate);
+    if (candidateDistance > bestDistance) {
+      bestCandidate = candidate;
+      bestDistance = candidateDistance;
+    }
+  }
+
+  return bestCandidate || explicitVariant || baseColor;
+}
+
+function computeColorDistance(left: string, right: string): number {
+  const leftRgb = parseColor(left);
+  const rightRgb = parseColor(right);
+  if (!leftRgb || !rightRgb) {
+    return isSameColor(left, right) ? 0 : Number.POSITIVE_INFINITY;
+  }
+
+  const redDelta = leftRgb.r - rightRgb.r;
+  const greenDelta = leftRgb.g - rightRgb.g;
+  const blueDelta = leftRgb.b - rightRgb.b;
+  return Math.sqrt((redDelta ** 2) + (greenDelta ** 2) + (blueDelta ** 2));
+}
+
+function parseColor(value: string): { r: number; g: number; b: number } | null {
+  const normalized = `${value || ''}`.trim().toLowerCase();
+  const hexMatch = normalized.match(/^#([0-9a-f]{6})$/i);
+  if (hexMatch) {
+    const hex = hexMatch[1];
+    return {
+      r: Number.parseInt(hex.slice(0, 2), 16),
+      g: Number.parseInt(hex.slice(2, 4), 16),
+      b: Number.parseInt(hex.slice(4, 6), 16),
+    };
+  }
+
+  const rgbMatch = normalized.match(/^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/i);
+  if (rgbMatch) {
+    return {
+      r: Number.parseInt(rgbMatch[1], 10),
+      g: Number.parseInt(rgbMatch[2], 10),
+      b: Number.parseInt(rgbMatch[3], 10),
+    };
+  }
+
+  return null;
 }
 
 function hashString(value: string): number {

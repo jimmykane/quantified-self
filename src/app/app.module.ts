@@ -36,6 +36,7 @@ import { MaintenanceComponent } from './components/maintenance/maintenance.compo
 import { GracePeriodBannerComponent } from './components/grace-period-banner/grace-period-banner.component';
 import { RouteLoaderComponent } from './components/route-loader/route-loader.component';
 import { ProcessingIndicatorComponent } from './components/notifications/processing-indicator/processing-indicator.component';
+import { ImpersonationBannerComponent } from './components/impersonation-banner/impersonation-banner.component';
 import { AppRemoteConfigService } from './services/app.remote-config.service';
 import { firstValueFrom } from 'rxjs';
 
@@ -71,7 +72,8 @@ const enableAppCheck = environment.production || environment.beta || environment
     MaterialModule,
     ServiceWorkerModule.register('ngsw-worker.js', { enabled: environment.production || environment.beta }),
     OnboardingComponent,
-    MaintenanceComponent
+    MaintenanceComponent,
+    ImpersonationBannerComponent
   ],
   providers: [
     provideAnimations(),

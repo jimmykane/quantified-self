@@ -35,6 +35,8 @@ import { WhatsNewDialogComponent } from './components/whats-new/whats-new-dialog
 import { RouteAnimationStateService } from './services/route-animation-state.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppHapticsService } from './services/app.haptics.service';
+import { AppUserInterface } from './models/app-user.interface';
+import { AppUserUtilities } from './utils/app.user.utilities';
 
 @Component({
   selector: 'app-root',
@@ -67,7 +69,7 @@ export class AppComponent implements OnInit, OnDestroy {
   public maintenanceMessage = this.remoteConfigService.maintenanceMessage;
   public maintenanceLoading = this.remoteConfigService.isLoading;
   public configLoaded = this.remoteConfigService.configLoaded;
-  public currentUser: any = null;
+  public currentUser: AppUserInterface | null = null;
   public isAdminUser = false;
   public currentTheme$: Observable<any>;
 
@@ -196,8 +198,7 @@ export class AppComponent implements OnInit, OnDestroy {
         (user as any).acceptedTos === true;
 
       const hasSubscribedOnce = (user as any).hasSubscribedOnce === true;
-      const stripeRole = user.stripeRole;
-      const hasPaidAccess = stripeRole === 'pro' || stripeRole === 'basic' || user.isPro === true;
+      const hasPaidAccess = AppUserUtilities.hasPaidAccessUser(user);
 
       const explicitOnboardingComplete = (user as any).onboardingCompleted === true;
       this.onboardingCompleted = termsAccepted && (hasPaidAccess || hasSubscribedOnce || explicitOnboardingComplete);

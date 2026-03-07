@@ -33,6 +33,15 @@ describe('event-echarts-style.helper', () => {
     expect(resolveEventSeriesColor(DataCadence.type, 0, 1)).toBe((AppDataColors as any).Cadence);
   });
 
+  it('upgrades weak two-series compare variants to a higher-contrast pair', () => {
+    const base = resolveEventSeriesColor('Altitude', 0, 2);
+    const compare = resolveEventSeriesColor('Altitude', 1, 2);
+
+    expect(base).toBe((AppDataColors as any).Altitude_0);
+    expect(compare).not.toBe((AppDataColors as any).Altitude_1);
+    expect(compare).not.toBe(base);
+  });
+
   it('builds deterministic distinct palette variants when explicit variants are missing', () => {
     const base = resolveEventSeriesColor('Speed', 0, 3);
     const colorA = resolveEventSeriesColor('Speed', 1, 3);

@@ -44,6 +44,7 @@ import {
 } from '../../../helpers/dashboard-chart-data.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
+type ChartSetOptionSettings = Parameters<EChartsType['setOption']>[1];
 
 @Component({
   selector: 'app-pie-chart',
@@ -77,6 +78,10 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
     AppColors.DeepBlue,
     AppColors.LightGreen
   ];
+  private static readonly EMPTY_DATA_UPDATE_SETTINGS: ChartSetOptionSettings = {
+    notMerge: true,
+    lazyUpdate: false
+  };
 
   constructor(
     private eChartsLoader: EChartsLoaderService,
@@ -143,7 +148,12 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
       this.logger
     );
     const option = this.buildChartOption(pieData, aggregate);
-    this.chartHost.setOption(option, ECHARTS_SERIES_MERGE_UPDATE_SETTINGS);
+    this.chartHost.setOption(
+      option,
+      seriesHasData(pieData)
+        ? ECHARTS_SERIES_MERGE_UPDATE_SETTINGS
+        : ChartsPieComponent.EMPTY_DATA_UPDATE_SETTINGS
+    );
     this.chartHost.scheduleResize();
   }
 
@@ -180,8 +190,10 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
     if (!seriesData.length) {
       return {
         animation: this.useAnimations === true,
+        tooltip: { show: false },
         legend: { show: false },
         series: [],
+        graphic: []
       };
     }
 
@@ -331,4 +343,8 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
 
     return this.dateTypePalette[index % this.dateTypePalette.length];
   }
+}
+
+function seriesHasData(pieData: DashboardPieChartData): boolean {
+  return Array.isArray(pieData.slices) && pieData.slices.length > 0;
 }

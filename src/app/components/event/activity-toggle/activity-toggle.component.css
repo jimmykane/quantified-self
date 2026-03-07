@@ -1,13 +1,7 @@
 /* Glass Card Effect */
 :host {
   display: block;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--mat-app-outline-variant);
-  border-radius: 12px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
   padding: 8px 12px;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
   margin-bottom: 0.5em;
 }
 
