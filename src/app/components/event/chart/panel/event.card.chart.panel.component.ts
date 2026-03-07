@@ -777,7 +777,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       if (this.panel) {
         this.scheduleCanonicalAxisScaleUpdate();
       }
-      if (this.showZoomBar && !this.applyingSharedZoomRange) {
+      if (!this.applyingSharedZoomRange) {
         this.emitVisibleZoomRange();
       }
     });
