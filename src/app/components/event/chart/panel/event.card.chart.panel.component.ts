@@ -105,6 +105,9 @@ const ZOOM_BAR_GRID_BOTTOM = Math.max(0, ZOOM_BAR_PANEL_HEIGHT - (ZOOM_BAR_SLIDE
 const SELECTION_BRUSH_SOURCE = 'event-chart-selection-sync';
 export const ENABLE_LIVE_SELECTION_SYNC = false;
 export const ENABLE_LIVE_SELECTION_PREVIEW_STATS = false;
+const TOOLTIP_MAX_DURATION_DISTANCE_SECONDS = 120;
+const TOOLTIP_MAX_TIME_DISTANCE_MS = TOOLTIP_MAX_DURATION_DISTANCE_SECONDS * 1000;
+const TOOLTIP_MAX_DISTANCE_METERS = 500;
 
 @Component({
   selector: 'app-event-card-chart-panel',
@@ -1174,13 +1177,18 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return [];
     }
 
-    const maxXDistance = this.getTooltipMaxXDistance();
+    const pixelTolerance = this.getTooltipMaxXDistance();
     const resolvedPoints: Array<{ series: PanelSeriesModel; point: EventChartPoint }> = [];
 
     for (let index = 0; index < this.panel.series.length; index += 1) {
       const series = this.panel.series[index];
       const nearestPoint = this.findNearestTooltipPoint(series.points, xValue);
-      if (!nearestPoint || !Number.isFinite(nearestPoint.point.y) || nearestPoint.distance > maxXDistance) {
+      if (!nearestPoint || !Number.isFinite(nearestPoint.point.y)) {
+        continue;
+      }
+
+      const maxAcceptedDistance = this.getTooltipAcceptedXDistance(series.points, nearestPoint.index, pixelTolerance);
+      if (nearestPoint.distance > maxAcceptedDistance) {
         continue;
       }
 
@@ -1211,7 +1219,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private findNearestTooltipPoint(
     points: EventChartPoint[],
     xValue: number
-  ): { point: EventChartPoint; distance: number } | null {
+  ): { point: EventChartPoint; distance: number; index: number } | null {
     if (!Array.isArray(points) || points.length === 0 || !Number.isFinite(xValue)) {
       return null;
     }
@@ -1234,32 +1242,78 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         return {
           point: points[middle],
           distance: 0,
+          index: middle,
         };
       }
     }
 
-    const candidates = [points[Math.max(0, high)], points[Math.min(points.length - 1, low)]]
-      .filter((point): point is EventChartPoint => !!point && Number.isFinite(point.x));
+    const candidates = [
+      { point: points[Math.max(0, high)], index: Math.max(0, high) },
+      { point: points[Math.min(points.length - 1, low)], index: Math.min(points.length - 1, low) }
+    ].filter((candidate): candidate is { point: EventChartPoint; index: number } => !!candidate.point && Number.isFinite(candidate.point.x));
     if (!candidates.length) {
       return null;
     }
 
-    let nearestPoint = candidates[0];
-    let nearestDistance = Math.abs(nearestPoint.x - xValue);
+    let nearestCandidate = candidates[0];
+    let nearestDistance = Math.abs(nearestCandidate.point.x - xValue);
 
     for (let index = 1; index < candidates.length; index += 1) {
       const candidate = candidates[index];
-      const candidateDistance = Math.abs(candidate.x - xValue);
+      const candidateDistance = Math.abs(candidate.point.x - xValue);
       if (candidateDistance < nearestDistance) {
-        nearestPoint = candidate;
+        nearestCandidate = candidate;
         nearestDistance = candidateDistance;
       }
     }
 
     return {
-      point: nearestPoint,
+      point: nearestCandidate.point,
       distance: nearestDistance,
+      index: nearestCandidate.index,
     };
+  }
+
+  private getTooltipAcceptedXDistance(
+    points: EventChartPoint[],
+    pointIndex: number,
+    pixelTolerance: number
+  ): number {
+    const localSpacingBound = this.getTooltipLocalSpacingBound(points, pointIndex);
+    const hardCap = this.getTooltipHardDistanceCap();
+    return Math.min(pixelTolerance, localSpacingBound, hardCap);
+  }
+
+  private getTooltipLocalSpacingBound(points: EventChartPoint[], pointIndex: number): number {
+    const point = points[pointIndex];
+    if (!point || !Number.isFinite(point.x)) {
+      return 0;
+    }
+
+    const previousPoint = pointIndex > 0 ? points[pointIndex - 1] : null;
+    const nextPoint = pointIndex < points.length - 1 ? points[pointIndex + 1] : null;
+    const neighborDistances = [
+      previousPoint && Number.isFinite(previousPoint.x) ? Math.abs(point.x - previousPoint.x) : Number.NaN,
+      nextPoint && Number.isFinite(nextPoint.x) ? Math.abs(nextPoint.x - point.x) : Number.NaN,
+    ].filter((distance) => Number.isFinite(distance) && distance > 0);
+
+    if (!neighborDistances.length) {
+      return Number.POSITIVE_INFINITY;
+    }
+
+    return Math.max(...neighborDistances) / 2;
+  }
+
+  private getTooltipHardDistanceCap(): number {
+    switch (this.xAxisType) {
+      case XAxisTypes.Time:
+        return TOOLTIP_MAX_TIME_DISTANCE_MS;
+      case XAxisTypes.Distance:
+        return TOOLTIP_MAX_DISTANCE_METERS;
+      case XAxisTypes.Duration:
+      default:
+        return TOOLTIP_MAX_DURATION_DISTANCE_SECONDS;
+    }
   }
 
   private formatLapMarkerTooltip(params: any): string {

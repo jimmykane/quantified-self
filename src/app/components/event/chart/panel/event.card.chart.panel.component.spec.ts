@@ -1320,6 +1320,54 @@ describe('EventCardChartPanelComponent', () => {
     expect(tooltipHtml).toContain('121');
   });
 
+  it('omits far nearest points on long domains even when the global pixel tolerance would allow them', async () => {
+    component.showActivityNamesInTooltip = true;
+    component.xAxisType = XAxisTypes.Duration;
+    component.xDomain = { start: 0, end: 36_000 };
+    component.panel = {
+      ...(component.panel as any),
+      minX: 0,
+      maxX: 36_000,
+      series: [
+        {
+          ...(component.panel as any).series[0],
+          points: [
+            { x: 10_000, y: 120, time: 10_000 },
+            { x: 10_001, y: 121, time: 10_001 },
+          ],
+        },
+        {
+          id: 'a2::power',
+          activityID: 'a2',
+          activityName: 'Wahoo',
+          color: '#00ff00',
+          streamType: 'power',
+          displayName: 'Power',
+          unit: 'W',
+          points: [
+            { x: 11_000, y: 130, time: 11_000 },
+            { x: 21_000, y: 131, time: 21_000 },
+          ],
+        }
+      ],
+    } as any;
+    await renderComponent();
+
+    const tooltipHtml = (component as any).formatTooltip([
+      {
+        seriesId: 'a1::power',
+        seriesName: 'Garmin',
+        color: '#ff0000',
+        value: [10_000, 120],
+      }
+    ]);
+
+    expect(tooltipHtml).toContain('Garmin:');
+    expect(tooltipHtml).not.toContain('Wahoo:');
+    expect(tooltipHtml).toContain('120');
+    expect(tooltipHtml).not.toContain('130');
+  });
+
   it('shows lap tooltip locally without propagating to connected charts', async () => {
     component.showZoomBar = false;
     component.showLaps = true;
