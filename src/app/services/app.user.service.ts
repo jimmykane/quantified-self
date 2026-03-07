@@ -127,6 +127,7 @@ export class AppUserService implements OnDestroy {
     const stripeRole = (claims['stripeRole'] as StripeRole) || null;
     const gracePeriodUntil = (claims['gracePeriodUntil'] as number) || null;
     const isAdmin = claims['admin'] === true;
+    const impersonatedBy = claims['impersonatedBy'];
 
     const creationDate = firebaseUser.metadata?.creationTime
       ? new Date(firebaseUser.metadata.creationTime)
@@ -163,6 +164,9 @@ export class AppUserService implements OnDestroy {
     }
     if (isAdmin) {
       identity.admin = true;
+    }
+    if (typeof impersonatedBy === 'string' && impersonatedBy.length > 0) {
+      identity.impersonatedBy = impersonatedBy;
     }
 
     // Check for force-refresh (if DB was updated more recently than token issuance)

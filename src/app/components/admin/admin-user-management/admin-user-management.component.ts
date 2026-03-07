@@ -237,7 +237,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
             width: '400px',
             data: {
                 title: 'Impersonate User?',
-                message: `Are you sure you want to impersonate ${user.email}? You will be logged out of your admin account and logged in as this user.`,
+                message: `Are you sure you want to impersonate ${user.email}? You will switch into that user's session and see a persistent return-to-admin control while impersonating.`,
                 confirmText: 'Impersonate',
                 cancelText: 'Cancel',
                 isDangerous: true

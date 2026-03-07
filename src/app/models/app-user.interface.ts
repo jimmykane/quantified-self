@@ -50,10 +50,15 @@ export interface AppUserSettingsInterface extends UserSettingsInterface {
 }
 
 export interface AppUserInterface extends User {
+    email?: string | null;
+    displayName?: string | null;
+    photoURL?: string | null;
+    emailVerified?: boolean;
     acceptedMarketingPolicy?: boolean;
     claimsUpdatedAt?: Timestamp | null;
     settings?: AppUserSettingsInterface;
     stripeRole?: StripeRole | null;
     gracePeriodUntil?: { seconds: number, nanoseconds: number } | { toDate: () => Date; toMillis?: () => number } | Date | number | null;
     admin?: boolean;
+    impersonatedBy?: string;
 }

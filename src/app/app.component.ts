@@ -35,6 +35,8 @@ import { WhatsNewDialogComponent } from './components/whats-new/whats-new-dialog
 import { RouteAnimationStateService } from './services/route-animation-state.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppHapticsService } from './services/app.haptics.service';
+import { AppUserInterface } from './models/app-user.interface';
+import { AppWindowService } from './services/app.window.service';
 
 @Component({
   selector: 'app-root',
@@ -67,8 +69,9 @@ export class AppComponent implements OnInit, OnDestroy {
   public maintenanceMessage = this.remoteConfigService.maintenanceMessage;
   public maintenanceLoading = this.remoteConfigService.isLoading;
   public configLoaded = this.remoteConfigService.configLoaded;
-  public currentUser: any = null;
+  public currentUser: AppUserInterface | null = null;
   public isAdminUser = false;
+  public isReturningToAdmin = false;
   public currentTheme$: Observable<any>;
 
   // Circular reveal animation state
@@ -85,6 +88,7 @@ export class AppComponent implements OnInit, OnDestroy {
   private breakpointObserver = inject(BreakpointObserver);
   public isHandset = toSignal(this.breakpointObserver.observe([Breakpoints.XSmall, Breakpoints.Small]).pipe(map(result => result.matches)), { initialValue: false });
   private hapticsService = inject(AppHapticsService);
+  private windowService = inject(AppWindowService);
 
   get layoutTopOffsetPx(): number {
     return this.showNavigation ? this.bannerHeight + 64 : 0;
@@ -183,6 +187,14 @@ export class AppComponent implements OnInit, OnDestroy {
     return this.isDashboardRoute && !!this.currentUser;
   }
 
+  get isImpersonatingSession(): boolean {
+    return typeof this.currentUser?.impersonatedBy === 'string' && this.currentUser.impersonatedBy.length > 0;
+  }
+
+  get impersonatedAccountLabel(): string {
+    return this.currentUser?.email || this.currentUser?.displayName || this.currentUser?.uid || 'this account';
+  }
+
   private updateOnboardingState() {
     const previousOnboardingRoute = this.isOnboardingRoute;
     const previousOnboardingCompleted = this.onboardingCompleted;
@@ -197,7 +209,8 @@ export class AppComponent implements OnInit, OnDestroy {
 
       const hasSubscribedOnce = (user as any).hasSubscribedOnce === true;
       const stripeRole = user.stripeRole;
-      const hasPaidAccess = stripeRole === 'pro' || stripeRole === 'basic' || user.isPro === true;
+      const legacyIsPro = (user as { isPro?: boolean }).isPro === true;
+      const hasPaidAccess = stripeRole === 'pro' || stripeRole === 'basic' || legacyIsPro;
 
       const explicitOnboardingComplete = (user as any).onboardingCompleted === true;
       this.onboardingCompleted = termsAccepted && (hasPaidAccess || hasSubscribedOnce || explicitOnboardingComplete);
@@ -273,6 +286,26 @@ export class AppComponent implements OnInit, OnDestroy {
   public navigateToLogin() {
     this.hapticsService.selection();
     this.router.navigate(['/login']);
+  }
+
+  public async returnToAdmin() {
+    if (this.isReturningToAdmin || !this.isImpersonatingSession) {
+      return;
+    }
+
+    this.hapticsService.selection();
+    this.isReturningToAdmin = true;
+    this.changeDetectorRef.detectChanges();
+
+    try {
+      await this.authService.returnToAdmin();
+      this.redirectTo('/admin');
+    } catch (error) {
+      this.logger.error('Failed to return to admin session', error);
+    } finally {
+      this.isReturningToAdmin = false;
+      this.changeDetectorRef.detectChanges();
+    }
   }
 
   dismissGracePeriodBanner() {
@@ -364,6 +397,10 @@ export class AppComponent implements OnInit, OnDestroy {
 
     this.showInitialLoader = false;
     this.changeDetectorRef.detectChanges();
+  }
+
+  private redirectTo(path: string): void {
+    this.windowService.windowRef.location.assign(path);
   }
 
   private resolveMinimumLoaderDuration(): number {

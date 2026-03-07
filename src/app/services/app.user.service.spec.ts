@@ -91,6 +91,19 @@ describe('AppUserService', () => {
         expect(service).toBeTruthy();
     });
 
+    it('should surface impersonatedBy from auth claims on the merged user', async () => {
+        mockAuth.currentUser.getIdTokenResult.mockResolvedValue({
+            claims: {
+                impersonatedBy: 'admin-uid'
+            }
+        });
+
+        service = TestBed.inject(AppUserService);
+        const mergedUser = await firstValueFrom(service.user$.pipe(filter((user): user is AppUserInterface => !!user), take(1)));
+
+        expect(mergedUser.impersonatedBy).toBe('admin-uid');
+    });
+
     it('returns enabled chart data types in canonical order with event chart priority overrides', () => {
         service = TestBed.inject(AppUserService);
         const user = {

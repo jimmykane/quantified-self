@@ -33,6 +33,7 @@ vi.mock('@angular/fire/firestore', async () => {
 import { TestBed } from '@angular/core/testing';
 import { AppAuthService } from './app.auth.service';
 import { AppUserService } from '../services/app.user.service';
+import { AppFunctionsService } from '../services/app.functions.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { LocalStorageService } from '../services/storage/app.local.storage.service';
 import { Auth, GithubAuthProvider, GoogleAuthProvider, user as fireAuthUser } from '@angular/fire/auth';
@@ -72,6 +73,10 @@ const mockLocalStorageService = {
     clearAllStorage: vi.fn()
 };
 
+const mockFunctionsService = {
+    call: vi.fn()
+};
+
 
 describe('AppAuthService', () => {
     let service: AppAuthService;
@@ -79,6 +84,7 @@ describe('AppAuthService', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        mockAuth.currentUser = null;
         userSubject = new BehaviorSubject<any>(null);
         mockUserFunction.mockReturnValue(userSubject);
         mockUserService.user$.next(null); // Reset
@@ -91,6 +97,7 @@ describe('AppAuthService', () => {
                 { provide: Firestore, useValue: mockFirestore },
                 { provide: Analytics, useValue: null },
                 { provide: AppUserService, useValue: mockUserService },
+                { provide: AppFunctionsService, useValue: mockFunctionsService },
                 { provide: MatSnackBar, useValue: mockSnackBar },
                 { provide: LocalStorageService, useValue: mockLocalStorageService },
                 { provide: APP_STORAGE, useValue: localStorage },
@@ -264,6 +271,71 @@ describe('AppAuthService', () => {
             await service.loginWithCustomToken(token);
 
             expect(signInWithCustomToken).toHaveBeenCalled();
+        });
+    });
+
+    describe('returnToAdmin', () => {
+        it('should reject when there is no authenticated user', async () => {
+            mockAuth.currentUser = null;
+
+            await expect(service.returnToAdmin()).rejects.toThrow('Cannot return to admin without an authenticated user.');
+            expect(mockFunctionsService.call).not.toHaveBeenCalled();
+            expect(mockSnackBar.open).not.toHaveBeenCalled();
+        });
+
+        it('should call stopImpersonation and sign back in with the returned token', async () => {
+            const { signInWithCustomToken } = await import('@angular/fire/auth');
+            mockAuth.currentUser = {
+                getIdTokenResult: vi.fn().mockResolvedValue({
+                    claims: {
+                        impersonatedBy: 'admin-uid'
+                    }
+                })
+            };
+            mockFunctionsService.call.mockResolvedValue({
+                data: {
+                    token: 'admin-custom-token'
+                }
+            });
+
+            await service.returnToAdmin();
+
+            expect(mockFunctionsService.call).toHaveBeenCalledWith('stopImpersonation');
+            expect(signInWithCustomToken).toHaveBeenCalledWith(mockAuth, 'admin-custom-token');
+        });
+
+        it('should reject when the current session is not impersonated', async () => {
+            mockAuth.currentUser = {
+                getIdTokenResult: vi.fn().mockResolvedValue({
+                    claims: {}
+                })
+            };
+
+            await expect(service.returnToAdmin()).rejects.toThrow('Current session is not impersonating another user.');
+            expect(mockFunctionsService.call).not.toHaveBeenCalled();
+            expect(mockSnackBar.open).toHaveBeenCalledWith(
+                'Could not return to admin: Current session is not impersonating another user.',
+                'Close',
+                { duration: 4000 }
+            );
+        });
+
+        it('should surface a callable failure when stopImpersonation fails', async () => {
+            mockAuth.currentUser = {
+                getIdTokenResult: vi.fn().mockResolvedValue({
+                    claims: {
+                        impersonatedBy: 'admin-uid'
+                    }
+                })
+            };
+            mockFunctionsService.call.mockRejectedValue(new Error('restore failed'));
+
+            await expect(service.returnToAdmin()).rejects.toThrow('restore failed');
+            expect(mockSnackBar.open).toHaveBeenCalledWith(
+                'Could not return to admin: restore failed',
+                'Close',
+                { duration: 4000 }
+            );
         });
     });
 });

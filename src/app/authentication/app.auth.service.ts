@@ -8,6 +8,7 @@ import { Privacy, User } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../services/app.user.service';
 import { LocalStorageService } from '../services/storage/app.local.storage.service';
 import { LoggerService } from '../services/logger.service';
+import { AppFunctionsService } from '../services/app.functions.service';
 import { environment } from '../../environments/environment';
 
 import { AppUserInterface } from '../models/app-user.interface';
@@ -25,6 +26,7 @@ export class AppAuthService {
   private auth = inject(Auth);
   private injector = inject(EnvironmentInjector);
   private zone = inject(NgZone);
+  private functionsService = inject(AppFunctionsService);
 
   get currentUser() {
     return this.auth.currentUser;
@@ -179,6 +181,31 @@ export class AppAuthService {
     } catch (e: any) {
       this.handleError(e);
       throw e;
+    }
+  }
+
+  async returnToAdmin() {
+    const currentUser = this.auth.currentUser;
+    if (!currentUser) {
+      throw new Error('Cannot return to admin without an authenticated user.');
+    }
+
+    try {
+      const tokenResult = await currentUser.getIdTokenResult();
+      const impersonatedBy = tokenResult.claims['impersonatedBy'];
+      if (typeof impersonatedBy !== 'string' || impersonatedBy.length === 0) {
+        throw new Error('Current session is not impersonating another user.');
+      }
+
+      const result = await this.functionsService.call<void, { token: string }>('stopImpersonation');
+      return await runInInjectionContext(this.injector, () => signInWithCustomToken(this.auth, result.data.token));
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error('[Auth] returnToAdmin error:', error);
+      this.snackBar.open(`Could not return to admin: ${message}`, 'Close', {
+        duration: 4000
+      });
+      throw error;
     }
   }
 
