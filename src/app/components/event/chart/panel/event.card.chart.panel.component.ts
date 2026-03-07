@@ -134,7 +134,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @Input() fillOpacity = AppUserUtilities.getDefaultChartFillOpacity();
   @Input() waterMark = '';
   @Input() showActivityNamesInTooltip = false;
-  @Input() showSeriesLegend = false;
   @Input() zoomBarOverviewData: Array<[number, number]> = [];
   @Input() sharedZoomRange: EventChartRange | null = null;
 
@@ -206,7 +205,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   public get seriesLegendItems(): PanelSeriesLegendItem[] {
-    if (!this.showSeriesLegend || !this.panel?.series?.length) {
+    if (!this.showActivityNamesInTooltip || !this.panel?.series?.length) {
       return [];
     }
 

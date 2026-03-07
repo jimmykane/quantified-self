@@ -141,14 +141,14 @@ describe('EventCardChartComponent', () => {
     expect(component.showActivityNamesInTooltip).toBe(true);
   });
 
-  it('shows the series legend only for merge events', () => {
+  it('uses the existing merge-or-benchmark visibility flag for legend-capable events', () => {
     component.event = {
       isMerge: true,
       getActivities: () => [],
       getID: () => 'event-1',
     } as any;
 
-    expect(component.showMergeSeriesLegend).toBe(true);
+    expect(component.showActivityNamesInTooltip).toBe(true);
 
     component.event = {
       isMerge: false,
@@ -157,7 +157,7 @@ describe('EventCardChartComponent', () => {
       getID: () => 'event-1',
     } as any;
 
-    expect(component.showMergeSeriesLegend).toBe(false);
+    expect(component.showActivityNamesInTooltip).toBe(true);
   });
 
   it('shows activity names in tooltips for benchmark events', () => {

@@ -264,7 +264,7 @@ describe('EventCardChartPanelComponent', () => {
   });
 
   it('renders a merge-only series legend under the chart title', async () => {
-    component.showSeriesLegend = true;
+    component.showActivityNamesInTooltip = true;
     component.panel = {
       ...(component.panel as any),
       series: [
