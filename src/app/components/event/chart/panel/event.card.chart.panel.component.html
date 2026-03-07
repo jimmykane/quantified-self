@@ -1,9 +1,22 @@
-<section class="event-chart-panel" [class.event-chart-panel--zoom-only]="!panel && showZoomBar">
+<section #panelRoot class="event-chart-panel" [class.event-chart-panel--zoom-only]="!panel && showZoomBar"
+  [class.event-chart-panel--fullscreen]="isFullscreen">
   @if (panel) {
   <header class="event-chart-panel__header">
-    <h3>{{ panel?.displayName }}</h3>
-    @if (panel?.unit) {
-    <span>({{ panel?.unit }})</span>
+    <div class="event-chart-panel__heading">
+      <h3>{{ panel?.displayName }}</h3>
+      @if (panel?.unit) {
+      <span>({{ panel?.unit }})</span>
+      }
+    </div>
+
+    @if (canToggleFullscreen) {
+    <button mat-icon-button type="button"
+      class="qs-action-menu-icon-button event-chart-panel__fullscreen-button"
+      [matTooltip]="fullscreenTooltip"
+      [attr.aria-label]="fullscreenTooltip"
+      (click)="onFullscreenToggle()">
+      <mat-icon>{{ fullscreenIcon }}</mat-icon>
+    </button>
     }
   </header>
   }

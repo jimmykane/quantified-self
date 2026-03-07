@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { SimpleChange } from '@angular/core';
+import { NO_ERRORS_SCHEMA, SimpleChange } from '@angular/core';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { ChartCursorBehaviours, DynamicDataLoader, LapTypes, XAxisTypes } from '@sports-alliance/sports-lib';
 import {
@@ -19,6 +19,9 @@ describe('EventCardChartPanelComponent', () => {
   let intersectionObserverObserveSpies: Array<ReturnType<typeof vi.fn>> = [];
   let intersectionObserverDisconnectSpies: Array<ReturnType<typeof vi.fn>> = [];
   let originalIntersectionObserver: typeof IntersectionObserver | undefined;
+  let originalRequestFullscreenDescriptor: PropertyDescriptor | undefined;
+  let originalExitFullscreenDescriptor: PropertyDescriptor | undefined;
+  let originalFullscreenElementDescriptor: PropertyDescriptor | undefined;
 
   const chart = {
     on: vi.fn(),
@@ -72,6 +75,24 @@ describe('EventCardChartPanelComponent', () => {
     }
 
     globalThis.IntersectionObserver = IntersectionObserverMock as unknown as typeof IntersectionObserver;
+    originalRequestFullscreenDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'requestFullscreen');
+    originalExitFullscreenDescriptor = Object.getOwnPropertyDescriptor(document, 'exitFullscreen');
+    originalFullscreenElementDescriptor = Object.getOwnPropertyDescriptor(document, 'fullscreenElement');
+    Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', {
+      configurable: true,
+      writable: true,
+      value: vi.fn().mockResolvedValue(undefined),
+    });
+    Object.defineProperty(document, 'exitFullscreen', {
+      configurable: true,
+      writable: true,
+      value: vi.fn().mockResolvedValue(undefined),
+    });
+    Object.defineProperty(document, 'fullscreenElement', {
+      configurable: true,
+      writable: true,
+      value: null,
+    });
 
     await TestBed.configureTestingModule({
       declarations: [EventCardChartPanelComponent],
@@ -79,6 +100,7 @@ describe('EventCardChartPanelComponent', () => {
         { provide: EChartsLoaderService, useValue: eChartsLoaderMock },
         { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), log: vi.fn() } },
       ],
+      schemas: [NO_ERRORS_SCHEMA],
     }).compileComponents();
 
     fixture = TestBed.createComponent(EventCardChartPanelComponent);
@@ -117,6 +139,24 @@ describe('EventCardChartPanelComponent', () => {
       globalThis.IntersectionObserver = originalIntersectionObserver;
     } else {
       delete (globalThis as { IntersectionObserver?: typeof IntersectionObserver }).IntersectionObserver;
+    }
+
+    if (originalRequestFullscreenDescriptor) {
+      Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', originalRequestFullscreenDescriptor);
+    } else {
+      delete (HTMLElement.prototype as { requestFullscreen?: unknown }).requestFullscreen;
+    }
+
+    if (originalExitFullscreenDescriptor) {
+      Object.defineProperty(document, 'exitFullscreen', originalExitFullscreenDescriptor);
+    } else {
+      delete (document as Document & { exitFullscreen?: unknown }).exitFullscreen;
+    }
+
+    if (originalFullscreenElementDescriptor) {
+      Object.defineProperty(document, 'fullscreenElement', originalFullscreenElementDescriptor);
+    } else {
+      delete (document as Document & { fullscreenElement?: unknown }).fullscreenElement;
     }
   });
 
@@ -175,6 +215,52 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.dataZoom?.[0]?.moveOnMouseWheel).toBe(false);
     expect(option?.dataZoom?.[1]?.show).toBe(true);
     expect(option?.dataZoom?.[1]?.filterMode).toBe('filter');
+  });
+
+  it('shows a fullscreen toggle only for real data panels', async () => {
+    await renderComponent();
+
+    expect(component.canToggleFullscreen).toBe(true);
+    expect(fixture.nativeElement.querySelector('.event-chart-panel__fullscreen-button')).not.toBeNull();
+
+    component.panel = null;
+    component.showZoomBar = true;
+    fixture.detectChanges();
+
+    expect(component.canToggleFullscreen).toBe(false);
+    expect(fixture.nativeElement.querySelector('.event-chart-panel__fullscreen-button')).toBeNull();
+  });
+
+  it('toggles fullscreen on the current panel only', async () => {
+    await renderComponent();
+
+    const panelElement = component.panelRoot.nativeElement as HTMLElement & { requestFullscreen: ReturnType<typeof vi.fn> };
+    const requestFullscreenSpy = vi.spyOn(panelElement, 'requestFullscreen');
+    const exitFullscreenSpy = vi.spyOn(document, 'exitFullscreen' as never);
+
+    await component.onFullscreenToggle();
+    expect(requestFullscreenSpy).toHaveBeenCalledTimes(1);
+
+    Object.defineProperty(document, 'fullscreenElement', {
+      configurable: true,
+      writable: true,
+      value: panelElement,
+    });
+    document.dispatchEvent(new Event('fullscreenchange'));
+
+    expect(component.isFullscreen).toBe(true);
+
+    await component.onFullscreenToggle();
+    expect(exitFullscreenSpy).toHaveBeenCalledTimes(1);
+
+    Object.defineProperty(document, 'fullscreenElement', {
+      configurable: true,
+      writable: true,
+      value: null,
+    });
+    document.dispatchEvent(new Event('fullscreenchange'));
+
+    expect(component.isFullscreen).toBe(false);
   });
 
   it('serializes queued chart refresh requests', async () => {

@@ -17,10 +17,17 @@
 
 .event-chart-panel__header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
   margin-bottom: 6px;
   font-family: 'Barlow Condensed', sans-serif;
+}
+
+.event-chart-panel__heading {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
 }
 
 .event-chart-panel__header h3 {
@@ -32,6 +39,11 @@
 .event-chart-panel__header span {
   font-size: 0.88rem;
   opacity: 0.75;
+}
+
+.event-chart-panel__fullscreen-button {
+  margin-left: auto;
+  flex: 0 0 auto;
 }
 
 .event-chart-panel__chart {
@@ -154,4 +166,32 @@
   font-family: 'Barlow Condensed', sans-serif;
   font-size: 0.86rem;
   font-weight: 600;
+}
+
+.event-chart-panel--fullscreen,
+.event-chart-panel:fullscreen {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 16px 20px 20px;
+  background: var(--mat-sys-surface);
+  overflow: hidden;
+}
+
+.event-chart-panel--fullscreen .event-chart-panel__header,
+.event-chart-panel:fullscreen .event-chart-panel__header {
+  margin-bottom: 0;
+}
+
+.event-chart-panel--fullscreen .event-chart-panel__chart,
+.event-chart-panel:fullscreen .event-chart-panel__chart {
+  height: 100%;
+  min-height: 0;
+}
+
+.event-chart-panel--fullscreen .event-chart-panel__stats,
+.event-chart-panel:fullscreen .event-chart-panel__stats {
+  max-height: min(30dvh, 260px);
+  overflow: auto;
+  padding-right: 4px;
 }

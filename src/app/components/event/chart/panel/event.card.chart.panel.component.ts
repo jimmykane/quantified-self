@@ -52,6 +52,17 @@ type ChartOption = Parameters<EChartsType['setOption']>[0];
 type ChartAction = Parameters<EChartsType['dispatchAction']>[0];
 type PanelSeriesModel = EventChartPanelModel['series'][number];
 type ChartLineSeriesOption = LineSeriesOption;
+type FullscreenHostElement = HTMLElement & {
+  webkitRequestFullscreen?: () => Promise<void> | void;
+};
+type FullscreenCapableDocument = Document & {
+  fullscreenEnabled?: boolean;
+  fullscreenElement?: Element | null;
+  exitFullscreen?: () => Promise<void> | void;
+  webkitFullscreenEnabled?: boolean;
+  webkitFullscreenElement?: Element | null;
+  webkitExitFullscreen?: () => Promise<void> | void;
+};
 type TooltipFormatterParams = {
   value?: unknown;
   seriesId?: string;
@@ -127,8 +138,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @Output() zoomRangeChange = new EventEmitter<EventChartRange | null>();
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
+  @ViewChild('panelRoot', { static: true }) panelRoot!: ElementRef<HTMLElement>;
 
   public rangeStats: EventPanelRangeStat[] = [];
+  public isFullscreen = false;
 
   private readonly chartHost: EChartsHostController;
   private eventsBound = false;
@@ -154,6 +167,9 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     if (Number.isFinite(value)) {
       this.cursorPositionChange.emit(value);
     }
+  };
+  private readonly fullscreenChangeHandler = () => {
+    this.syncFullscreenState();
   };
 
   private get isMobile(): boolean {
@@ -181,6 +197,29 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   public get hasCommittedSelection(): boolean {
     return !!normalizeEventRange(this.selectedRange);
+  }
+
+  public get canToggleFullscreen(): boolean {
+    if (!this.panel || this.showZoomBar) {
+      return false;
+    }
+
+    const documentRef = this.getFullscreenDocument();
+    const panelElement = this.panelRoot?.nativeElement as FullscreenHostElement | undefined;
+    return !!panelElement && (
+      typeof panelElement.requestFullscreen === 'function'
+      || typeof panelElement.webkitRequestFullscreen === 'function'
+      || documentRef.fullscreenEnabled === true
+      || documentRef.webkitFullscreenEnabled === true
+    );
+  }
+
+  public get fullscreenIcon(): string {
+    return this.isFullscreen ? 'fullscreen_exit' : 'fullscreen';
+  }
+
+  public get fullscreenTooltip(): string {
+    return this.isFullscreen ? 'Exit fullscreen' : 'Open panel fullscreen';
   }
 
   public get selectedRangeStartLabel(): string {
@@ -253,6 +292,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   async ngAfterViewInit(): Promise<void> {
     await this.chartHost.init(this.chartDiv?.nativeElement, resolveEChartsThemeName(this.darkTheme));
+    this.bindFullscreenEvents();
+    this.syncFullscreenState();
     this.bindWheelPassThrough();
     this.syncNativeZoomGroup();
     this.bindChartEvents();
@@ -312,11 +353,28 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   ngOnDestroy(): void {
     this.cancelPendingFrame('axisScale');
+    this.unbindFullscreenEvents();
     this.teardownViewportObserver();
     this.unbindWheelPassThrough();
     this.unbindAxisPointerCursorEmit();
     this.disconnectNativeZoomGroup();
     this.chartHost.dispose();
+  }
+
+  public async onFullscreenToggle(): Promise<void> {
+    if (!this.canToggleFullscreen) {
+      return;
+    }
+
+    try {
+      if (this.isPanelFullscreen()) {
+        await this.exitFullscreen();
+      } else {
+        await this.enterFullscreen();
+      }
+    } catch (error) {
+      this.logger.error('[EventCardChartPanelComponent] Failed to toggle fullscreen', error);
+    }
   }
 
   private queueChartRefresh(source: string): void {
@@ -1524,6 +1582,80 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
     container.removeEventListener('wheel', this.wheelPassThroughListener, { capture: true });
     this.wheelPassThroughListener = null;
+  }
+
+  private bindFullscreenEvents(): void {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    document.addEventListener('fullscreenchange', this.fullscreenChangeHandler);
+    document.addEventListener('webkitfullscreenchange', this.fullscreenChangeHandler as EventListener);
+  }
+
+  private unbindFullscreenEvents(): void {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    document.removeEventListener('fullscreenchange', this.fullscreenChangeHandler);
+    document.removeEventListener('webkitfullscreenchange', this.fullscreenChangeHandler as EventListener);
+  }
+
+  private syncFullscreenState(): void {
+    const nextFullscreenState = this.isPanelFullscreen();
+    if (nextFullscreenState === this.isFullscreen) {
+      if (nextFullscreenState) {
+        this.chartHost.scheduleResize();
+      }
+      return;
+    }
+
+    this.isFullscreen = nextFullscreenState;
+    this.chartHost.scheduleResize();
+    this.cdr.markForCheck();
+  }
+
+  private isPanelFullscreen(): boolean {
+    const fullscreenElement = this.getFullscreenElement();
+    return !!fullscreenElement && fullscreenElement === this.panelRoot?.nativeElement;
+  }
+
+  private getFullscreenElement(): Element | null {
+    const documentRef = this.getFullscreenDocument();
+    return documentRef.fullscreenElement ?? documentRef.webkitFullscreenElement ?? null;
+  }
+
+  private getFullscreenDocument(): FullscreenCapableDocument {
+    return document as FullscreenCapableDocument;
+  }
+
+  private async enterFullscreen(): Promise<void> {
+    const panelElement = this.panelRoot?.nativeElement as FullscreenHostElement | undefined;
+    if (!panelElement) {
+      return;
+    }
+
+    if (typeof panelElement.requestFullscreen === 'function') {
+      await panelElement.requestFullscreen();
+      return;
+    }
+
+    if (typeof panelElement.webkitRequestFullscreen === 'function') {
+      await panelElement.webkitRequestFullscreen();
+    }
+  }
+
+  private async exitFullscreen(): Promise<void> {
+    const documentRef = this.getFullscreenDocument();
+    if (typeof documentRef.exitFullscreen === 'function') {
+      await documentRef.exitFullscreen();
+      return;
+    }
+
+    if (typeof documentRef.webkitExitFullscreen === 'function') {
+      await documentRef.webkitExitFullscreen();
+    }
   }
 
   private getActiveDomain(): EventChartRange {
