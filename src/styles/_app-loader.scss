@@ -159,12 +159,14 @@
   --value-width: 3.2ch;
   --digit-cycle: 5.6s;
   --digit-offset: 0s;
+  --roll-end: calc(var(--line-height) * -10);
 }
 
 .qs-digit-d .qs-digit-roll {
   --value-width: 3.2ch;
   --digit-cycle: 5s;
   --digit-offset: 0s;
+  --roll-end: calc(var(--line-height) * -10);
 }
 
 .qs-digit-c .qs-digit-track,
