@@ -2,14 +2,19 @@ import { ChangeDetectorRef } from '@angular/core';
 import { DateRanges, DaysOfTheWeek } from '@sports-alliance/sports-lib';
 import { describe, expect, it, vi } from 'vitest';
 import { EventSearchComponent } from './event-search.component';
+import { AppHapticsService } from '../../services/app.haptics.service';
 
 describe('EventSearchComponent', () => {
+  const hapticsService = {
+    selection: vi.fn(),
+  } as unknown as AppHapticsService;
+
   const createComponent = () => {
     const changeDetectorRef = {
       markForCheck: vi.fn(),
       detectChanges: vi.fn(),
     } as unknown as ChangeDetectorRef;
-    const component = new EventSearchComponent(changeDetectorRef);
+    const component = new EventSearchComponent(changeDetectorRef, hapticsService);
     component.selectedDateRange = DateRanges.thisWeek;
     component.selectedStartDate = new Date('2025-01-01T00:00:00.000Z');
     component.selectedEndDate = new Date('2025-01-31T23:59:59.999Z');
@@ -18,6 +23,22 @@ describe('EventSearchComponent', () => {
     component.ngOnInit();
     return component;
   };
+
+  it('should trigger haptic feedback when a date toggle is selected', async () => {
+    const component = createComponent();
+    const searchSpy = vi.spyOn(component, 'search').mockResolvedValue(undefined);
+    const event = {
+      source: { value: DateRanges.lastWeek },
+    } as any;
+
+    hapticsService.selection = vi.fn();
+
+    await component.dateToggleChange(event);
+
+    expect(hapticsService.selection).toHaveBeenCalledTimes(1);
+    expect(searchSpy).toHaveBeenCalledTimes(1);
+    expect(component.selectedDateRange).toBe(DateRanges.lastWeek);
+  });
 
   it('should auto-search when a valid custom date change occurs', async () => {
     const component = createComponent();
@@ -46,5 +67,37 @@ describe('EventSearchComponent', () => {
     component.setCustomDateRange();
 
     expect(component.selectedDateRange).toBe(DateRanges.custom);
+  });
+
+  it('should trigger haptic feedback when merged toggle changes', async () => {
+    const component = createComponent();
+    const searchSpy = vi.spyOn(component, 'search').mockResolvedValue(undefined);
+    const event = {
+      value: ['merged'],
+    } as any;
+
+    hapticsService.selection = vi.fn();
+
+    await component.onMergedEventsToggleChange(event);
+
+    expect(hapticsService.selection).toHaveBeenCalledTimes(1);
+    expect(searchSpy).toHaveBeenCalledTimes(1);
+    expect(component.includeMergedEvents).toBe(true);
+  });
+
+  it('should not trigger haptic feedback when merged toggle is disabled', async () => {
+    const component = createComponent();
+    component.mergedEventsToggleDisabled = true;
+    const searchSpy = vi.spyOn(component, 'search').mockResolvedValue(undefined);
+    const event = {
+      value: [],
+    } as any;
+
+    hapticsService.selection = vi.fn();
+
+    await component.onMergedEventsToggleChange(event);
+
+    expect(hapticsService.selection).not.toHaveBeenCalled();
+    expect(searchSpy).not.toHaveBeenCalled();
   });
 });
