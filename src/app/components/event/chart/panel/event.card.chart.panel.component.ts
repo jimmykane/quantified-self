@@ -1107,29 +1107,24 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return '';
     }
 
-    const xValue = Number(Array.isArray(tooltipParams[0]?.value) ? tooltipParams[0].value[0] : undefined);
+    const xValue = this.getTooltipXAxisValue(tooltipParams);
+    if (!Number.isFinite(xValue)) {
+      return '';
+    }
+
     const header = formatEventXAxisValue(
       xValue,
       this.xAxisType,
       { includeDateForTime: this.showDateOnTimeAxis }
     );
     const tooltipLines: string[] = [];
-    for (let index = 0; index < tooltipParams.length; index += 1) {
-      const point = tooltipParams[index];
-      const seriesModel = this.seriesByID.get(point.seriesId);
-      const streamType = seriesModel?.streamType || this.panel?.dataType;
-      const rawYValue = Array.isArray(point.value) ? point.value[1] : point.value;
-      if (rawYValue === null || rawYValue === undefined || rawYValue === '') {
-        continue;
-      }
-      const yValue = Number(rawYValue);
-      if (!Number.isFinite(yValue)) {
-        continue;
-      }
-      const formatted = this.formatDataValue(streamType || '', yValue);
-      const label = this.showActivityNamesInTooltip ? `${point.seriesName}: ` : '';
+    const resolvedPoints = this.resolveTooltipPointsAtX(xValue);
+    for (let index = 0; index < resolvedPoints.length; index += 1) {
+      const resolvedPoint = resolvedPoints[index];
+      const formatted = this.formatDataValue(resolvedPoint.series.streamType || '', resolvedPoint.point.y as number);
+      const label = this.showActivityNamesInTooltip ? `${resolvedPoint.series.activityName}: ` : '';
       tooltipLines.push(
-        `<div><span style="display:inline-block;margin-right:6px;border-radius:50%;width:8px;height:8px;background:${point.color};"></span>${label}${formatted}</div>`
+        `<div><span style="display:inline-block;margin-right:6px;border-radius:50%;width:8px;height:8px;background:${resolvedPoint.series.color};"></span>${label}${formatted}</div>`
       );
     }
 
@@ -1138,6 +1133,110 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     return `<div style="font-weight:600;margin-bottom:4px;">${header}</div>${tooltipLines.join('')}`;
+  }
+
+  private getTooltipXAxisValue(params: TooltipFormatterParams[]): number {
+    for (let index = 0; index < params.length; index += 1) {
+      const point = params[index];
+      if (Array.isArray(point?.value) && Number.isFinite(Number(point.value[0]))) {
+        return Number(point.value[0]);
+      }
+    }
+
+    return Number.NaN;
+  }
+
+  private resolveTooltipPointsAtX(xValue: number): Array<{ series: PanelSeriesModel; point: EventChartPoint }> {
+    if (!this.panel) {
+      return [];
+    }
+
+    const maxXDistance = this.getTooltipMaxXDistance();
+    const resolvedPoints: Array<{ series: PanelSeriesModel; point: EventChartPoint }> = [];
+
+    for (let index = 0; index < this.panel.series.length; index += 1) {
+      const series = this.panel.series[index];
+      const nearestPoint = this.findNearestTooltipPoint(series.points, xValue);
+      if (!nearestPoint || !Number.isFinite(nearestPoint.point.y) || nearestPoint.distance > maxXDistance) {
+        continue;
+      }
+
+      resolvedPoints.push({
+        series,
+        point: nearestPoint.point,
+      });
+    }
+
+    return resolvedPoints;
+  }
+
+  private getTooltipMaxXDistance(): number {
+    const domain = this.getActiveDomain();
+    const visibleRange = this.sharedZoomRange
+      ? clampEventRange(this.sharedZoomRange, domain.start, domain.end) || domain
+      : domain;
+    const span = Math.max(0, visibleRange.end - visibleRange.start);
+    if (!Number.isFinite(span) || span <= 0) {
+      return 0;
+    }
+
+    const chartWidth = this.chartDiv?.nativeElement?.clientWidth || 360;
+    const hoverTolerancePixels = this.isMobile ? 24 : 18;
+    return (span / Math.max(chartWidth, 1)) * hoverTolerancePixels;
+  }
+
+  private findNearestTooltipPoint(
+    points: EventChartPoint[],
+    xValue: number
+  ): { point: EventChartPoint; distance: number } | null {
+    if (!Array.isArray(points) || points.length === 0 || !Number.isFinite(xValue)) {
+      return null;
+    }
+
+    let low = 0;
+    let high = points.length - 1;
+
+    while (low <= high) {
+      const middle = Math.floor((low + high) / 2);
+      const middleX = Number(points[middle]?.x);
+      if (!Number.isFinite(middleX)) {
+        return null;
+      }
+
+      if (middleX < xValue) {
+        low = middle + 1;
+      } else if (middleX > xValue) {
+        high = middle - 1;
+      } else {
+        return {
+          point: points[middle],
+          distance: 0,
+        };
+      }
+    }
+
+    const candidates = [points[Math.max(0, high)], points[Math.min(points.length - 1, low)]]
+      .filter((point): point is EventChartPoint => !!point && Number.isFinite(point.x));
+    if (!candidates.length) {
+      return null;
+    }
+
+    let nearestPoint = candidates[0];
+    let nearestDistance = Math.abs(nearestPoint.x - xValue);
+
+    for (let index = 1; index < candidates.length; index += 1) {
+      const candidate = candidates[index];
+      const candidateDistance = Math.abs(candidate.x - xValue);
+      if (candidateDistance < nearestDistance) {
+        nearestPoint = candidate;
+        nearestDistance = candidateDistance;
+      }
+    }
+
+    return {
+      point: nearestPoint,
+      distance: nearestDistance,
+    };
   }
 
   private formatLapMarkerTooltip(params: any): string {

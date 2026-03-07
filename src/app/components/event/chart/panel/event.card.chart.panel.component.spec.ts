@@ -1114,6 +1114,102 @@ describe('EventCardChartPanelComponent', () => {
     expect(formatSpy).toHaveBeenCalledWith('power', 120);
   });
 
+  it('deduplicates repeated tooltip rows for the same series on distance-style sync', async () => {
+    component.showActivityNamesInTooltip = true;
+    component.panel = {
+      ...(component.panel as any),
+      series: [
+        {
+          ...(component.panel as any).series[0],
+        },
+        {
+          id: 'a2::power',
+          activityID: 'a2',
+          activityName: 'Wahoo',
+          color: '#00ff00',
+          streamType: 'power',
+          displayName: 'Power',
+          unit: 'W',
+          points: [
+            { x: 0, y: 101, time: 0 },
+            { x: 10, y: 121, time: 10 },
+          ],
+        }
+      ],
+    } as any;
+    await renderComponent();
+
+    const tooltipHtml = (component as any).formatTooltip([
+      {
+        seriesId: 'a1::power',
+        seriesName: 'Garmin',
+        color: '#ff0000',
+        value: [10, 120],
+      },
+      {
+        seriesId: 'a1::power',
+        seriesName: 'Garmin',
+        color: '#ff0000',
+        value: [10, 120],
+      },
+      {
+        seriesId: 'a1::power',
+        seriesName: 'Garmin',
+        color: '#ff0000',
+        value: [10, 120],
+      },
+      {
+        seriesId: 'a2::power',
+        seriesName: 'Wahoo',
+        color: '#00ff00',
+        value: [10, 121],
+      }
+    ]);
+
+    expect((tooltipHtml.match(/Garmin:/g) || [])).toHaveLength(1);
+    expect((tooltipHtml.match(/Wahoo:/g) || [])).toHaveLength(1);
+  });
+
+  it('includes nearby points from other visible series even when ECharts omits them from tooltip params', async () => {
+    component.showActivityNamesInTooltip = true;
+    component.panel = {
+      ...(component.panel as any),
+      series: [
+        {
+          ...(component.panel as any).series[0],
+        },
+        {
+          id: 'a2::power',
+          activityID: 'a2',
+          activityName: 'Wahoo',
+          color: '#00ff00',
+          streamType: 'power',
+          displayName: 'Power',
+          unit: 'W',
+          points: [
+            { x: 0.2, y: 102, time: 0 },
+            { x: 10.4, y: 121, time: 10 },
+          ],
+        }
+      ],
+    } as any;
+    await renderComponent();
+
+    const tooltipHtml = (component as any).formatTooltip([
+      {
+        seriesId: 'a1::power',
+        seriesName: 'Garmin',
+        color: '#ff0000',
+        value: [10, 120],
+      }
+    ]);
+
+    expect(tooltipHtml).toContain('Garmin:');
+    expect(tooltipHtml).toContain('Wahoo:');
+    expect(tooltipHtml).toContain('120');
+    expect(tooltipHtml).toContain('121');
+  });
+
   it('shows lap tooltip locally without propagating to connected charts', async () => {
     component.showZoomBar = false;
     component.showLaps = true;
