@@ -76,6 +76,7 @@ interface EnrichedUser extends BasicUser {
     } | null;
     connectedServices: { provider: string; connectedAt: unknown }[];
     onboardingCompleted: boolean;
+    hasSubscribedOnce: boolean;
 }
 
 /**
@@ -86,15 +87,19 @@ async function enrichUsers(
     users: BasicUser[],
     db: admin.firestore.Firestore
 ): Promise<EnrichedUser[]> {
-    const onboardingStatusByUid = new Map<string, boolean>();
+    const userFlagsByUid = new Map<string, { onboardingCompleted: boolean; hasSubscribedOnce: boolean }>();
 
     if (users.length > 0) {
         try {
-            const onboardingDocRefs = users.map(user => db.collection('users').doc(user.uid));
-            const onboardingDocs = await db.getAll(...onboardingDocRefs);
+            const userDocRefs = users.map(user => db.collection('users').doc(user.uid));
+            const userDocs = await db.getAll(...userDocRefs);
 
-            onboardingDocs.forEach(snapshot => {
-                onboardingStatusByUid.set(snapshot.id, snapshot.data()?.onboardingCompleted === true);
+            userDocs.forEach(snapshot => {
+                const userData = snapshot.data() || {};
+                userFlagsByUid.set(snapshot.id, {
+                    onboardingCompleted: userData.onboardingCompleted === true,
+                    hasSubscribedOnce: userData.hasSubscribedOnce === true
+                });
             });
         } catch (e) {
             logger.warn('Failed to fetch onboarding flags for admin user list', e);
@@ -153,7 +158,8 @@ async function enrichUsers(
                 ...user,
                 subscription: subscriptionData,
                 connectedServices: connectedServices,
-                onboardingCompleted: onboardingStatusByUid.get(user.uid) === true
+                onboardingCompleted: userFlagsByUid.get(user.uid)?.onboardingCompleted === true,
+                hasSubscribedOnce: userFlagsByUid.get(user.uid)?.hasSubscribedOnce === true
             };
         })
     );
@@ -361,29 +367,41 @@ export const getUserCount = onAdminCall<void, any>({
 }, async () => {
     try {
         const db = admin.firestore();
+        const activeSubscriptionStatuses = ['active', 'trialing', 'past_due'];
 
         // 1. Get stats from Firestore (subscriptions)
         // Parallel efficient count queries
-        const [totalSnapshot, proSnapshot, basicSnapshot, onboardedSnapshot] = await Promise.all([
+        const [totalSnapshot, proSnapshot, basicSnapshot, onboardedSnapshot, everPaidSnapshot, cancelScheduledSnapshot] = await Promise.all([
             db.collection('users').count().get(),
             db.collectionGroup('subscriptions')
-                .where('status', 'in', ['active', 'trialing'])
+                .where('status', 'in', activeSubscriptionStatuses)
                 .where('role', '==', 'pro')
                 .count().get(),
             db.collectionGroup('subscriptions')
-                .where('status', 'in', ['active', 'trialing'])
+                .where('status', 'in', activeSubscriptionStatuses)
                 .where('role', '==', 'basic')
                 .count().get(),
             db.collection('users')
                 .where('onboardingCompleted', '==', true)
+                .count().get(),
+            db.collection('users')
+                .where('hasSubscribedOnce', '==', true)
+                .count().get(),
+            db.collectionGroup('subscriptions')
+                .where('status', 'in', activeSubscriptionStatuses)
+                .where('cancel_at_period_end', '==', true)
                 .count().get()
         ]);
 
         const total = totalSnapshot.data().count;
         const pro = proSnapshot.data().count;
         const basic = basicSnapshot.data().count;
+        const activePaid = pro + basic;
         const onboardingCompleted = onboardedSnapshot.data().count;
-        const free = Math.max(0, total - pro - basic); // Users with no active subscription
+        const everPaid = everPaidSnapshot.data().count;
+        const cancelScheduled = cancelScheduledSnapshot.data().count;
+        const canceled = Math.max(0, everPaid - activePaid);
+        const free = Math.max(0, total - activePaid); // Users with no active subscription
 
         // 2. Get provider breakdown from Firebase Auth
         // This is done by listing ALL users. 
@@ -418,6 +436,9 @@ export const getUserCount = onAdminCall<void, any>({
             pro,
             basic,
             free,
+            everPaid,
+            canceled,
+            cancelScheduled,
             onboardingCompleted,
             providers: providerCounts
         };

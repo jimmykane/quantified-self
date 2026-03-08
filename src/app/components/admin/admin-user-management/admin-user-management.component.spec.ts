@@ -94,7 +94,8 @@ describe('AdminUserManagementComponent', () => {
             customClaims: { stripeRole: 'pro', admin: true },
             metadata: { lastSignInTime: '2023-01-01', creationTime: '2022-01-01' },
             disabled: false,
-            providerIds: ['password']
+            providerIds: ['password'],
+            hasSubscribedOnce: true
         },
         {
             uid: 'user2',
@@ -103,7 +104,8 @@ describe('AdminUserManagementComponent', () => {
             customClaims: { stripeRole: 'free' },
             metadata: { lastSignInTime: '2023-01-02', creationTime: '2022-01-02' },
             disabled: true,
-            providerIds: ['google.com']
+            providerIds: ['google.com'],
+            hasSubscribedOnce: false
         }
     ];
 
@@ -117,7 +119,16 @@ describe('AdminUserManagementComponent', () => {
     beforeEach(async () => {
         adminServiceSpy = {
             getUsers: vi.fn().mockReturnValue(of(mockResponse)),
-            getTotalUserCount: vi.fn().mockReturnValue(of({ total: 100, pro: 30, basic: 70, free: 0, onboardingCompleted: 80 })),
+            getTotalUserCount: vi.fn().mockReturnValue(of({
+                total: 100,
+                pro: 30,
+                basic: 70,
+                free: 0,
+                everPaid: 85,
+                canceled: 15,
+                cancelScheduled: 8,
+                onboardingCompleted: 80
+            })),
         };
 
         impersonationServiceSpy = {
@@ -187,7 +198,16 @@ describe('AdminUserManagementComponent', () => {
                             data: {
                                 adminData: {
                                     usersData: mockResponse,
-                                    userStats: { total: 100, pro: 30, basic: 70, free: 0, onboardingCompleted: 80 }
+                                    userStats: {
+                                        total: 100,
+                                        pro: 30,
+                                        basic: 70,
+                                        free: 0,
+                                        everPaid: 85,
+                                        canceled: 15,
+                                        cancelScheduled: 8,
+                                        onboardingCompleted: 80
+                                    }
                                 }
                             }
                         }
@@ -221,7 +241,16 @@ describe('AdminUserManagementComponent', () => {
 
     it('should use resolved user stats on init', () => {
         expect(adminServiceSpy.getTotalUserCount).not.toHaveBeenCalled();
-        expect(component.userStats).toEqual({ total: 100, pro: 30, basic: 70, free: 0, onboardingCompleted: 80 });
+        expect(component.userStats).toEqual({
+            total: 100,
+            pro: 30,
+            basic: 70,
+            free: 0,
+            everPaid: 85,
+            canceled: 15,
+            cancelScheduled: 8,
+            onboardingCompleted: 80
+        });
     });
 
     it('should handle errors when fetching users', () => {
@@ -367,6 +396,32 @@ describe('AdminUserManagementComponent', () => {
 
         it('should return empty for unknown', () => {
             expect(component.getServiceLogo('unknown')).toBe('');
+        });
+    });
+
+    describe('subscription history helpers', () => {
+        it('should return active when user has active subscription', () => {
+            const user = { subscription: { status: 'active', cancel_at_period_end: false } } as any;
+            expect(component.getSubscriptionHistoryState(user)).toBe('active');
+            expect(component.getSubscriptionHistoryLabel(user)).toBe('Active');
+        });
+
+        it('should return scheduled when cancellation is scheduled', () => {
+            const user = { subscription: { status: 'active', cancel_at_period_end: true } } as any;
+            expect(component.getSubscriptionHistoryState(user)).toBe('scheduled');
+            expect(component.getSubscriptionHistoryLabel(user)).toBe('Cancel Scheduled');
+        });
+
+        it('should return canceled when user has paid history but no active subscription', () => {
+            const user = { hasSubscribedOnce: true } as any;
+            expect(component.getSubscriptionHistoryState(user)).toBe('canceled');
+            expect(component.getSubscriptionHistoryLabel(user)).toBe('Canceled');
+        });
+
+        it('should return never when user has no paid history', () => {
+            const user = { hasSubscribedOnce: false } as any;
+            expect(component.getSubscriptionHistoryState(user)).toBe('never');
+            expect(component.getSubscriptionHistoryLabel(user)).toBe('Never Subscribed');
         });
     });
 

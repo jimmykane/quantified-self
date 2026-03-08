@@ -57,6 +57,33 @@
                 </div>
             </mat-card>
 
+            <!-- Ever Paid -->
+            <mat-card class="app-stat-card status-success">
+                <div class="app-stat-header">
+                    <mat-icon>credit_card</mat-icon>
+                    <span>Ever Paid</span>
+                </div>
+                <div class="app-stat-value" *ngIf="userStats">{{ userStats.everPaid }}</div>
+                <div class="app-spinner-mini" *ngIf="!userStats">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+
+            <!-- Canceled Subscriptions -->
+            <mat-card class="app-stat-card status-warn">
+                <div class="app-stat-header">
+                    <mat-icon>person_off</mat-icon>
+                    <span>Canceled Subs</span>
+                </div>
+                <div class="app-stat-value" *ngIf="userStats">{{ userStats.canceled }}</div>
+                <div class="app-stat-footnote" *ngIf="userStats && userStats.everPaid > 0">
+                    {{ (userStats.canceled / userStats.everPaid) * 100 | number:'1.0-1' }}% of ever-paid users
+                </div>
+                <div class="app-spinner-mini" *ngIf="!userStats">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+
             <!-- Free Users -->
             <mat-card class="app-stat-card">
                 <div class="app-stat-header">
@@ -190,6 +217,16 @@
                         <td mat-cell *matCellDef="let user">
                             <span class="role-badge" [ngClass]="getRole(user)">
                                 {{getRole(user) | uppercase}}
+                            </span>
+                        </td>
+                    </ng-container>
+
+                    <!-- Subscription History Column -->
+                    <ng-container matColumnDef="subscriptionHistory">
+                        <th mat-header-cell *matHeaderCellDef> Subscription History </th>
+                        <td mat-cell *matCellDef="let user">
+                            <span class="subscription-history-badge" [ngClass]="getSubscriptionHistoryState(user)">
+                                {{ getSubscriptionHistoryLabel(user) }}
                             </span>
                         </td>
                     </ng-container>

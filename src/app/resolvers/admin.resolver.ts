@@ -1,13 +1,13 @@
 import { inject } from '@angular/core';
 import { ResolveFn } from '@angular/router';
-import { AdminService, AdminUser, ListUsersParams } from '../services/admin.service';
+import { AdminService, AdminUser, ListUsersParams, UserCountStats } from '../services/admin.service';
 import { LoggerService } from '../services/logger.service';
 import { forkJoin, of } from 'rxjs';
 import { map, catchError } from 'rxjs/operators';
 
 export interface AdminResolverData {
     usersData: { users: AdminUser[], totalCount: number };
-    userStats: { total: number, pro: number, basic: number, free: number, onboardingCompleted: number, providers: Record<string, number> } | null;
+    userStats: UserCountStats | null;
 }
 
 export const adminResolver: ResolveFn<AdminResolverData> = (route, state) => {

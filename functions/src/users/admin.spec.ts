@@ -256,11 +256,12 @@ describe('listUsers Cloud Function', () => {
             pageToken: undefined
         });
         mockGetAll.mockResolvedValue([
-            { id: 'user1', data: () => ({ onboardingCompleted: true }) }
+            { id: 'user1', data: () => ({ onboardingCompleted: true, hasSubscribedOnce: true }) }
         ]);
 
         const result: any = await (listUsers as any)(getAdminRequest({ page: 0, pageSize: 25 }));
         expect(result.users[0].onboardingCompleted).toBe(true);
+        expect(result.users[0].hasSubscribedOnce).toBe(true);
     });
 
     it('should default onboardingCompleted=false when user doc is missing the flag', async () => {
@@ -274,6 +275,7 @@ describe('listUsers Cloud Function', () => {
 
         const result: any = await (listUsers as any)(getAdminRequest({ page: 0, pageSize: 25 }));
         expect(result.users[0].onboardingCompleted).toBe(false);
+        expect(result.users[0].hasSubscribedOnce).toBe(false);
     });
 
     it('should filter users by searchTerm', async () => {
@@ -934,12 +936,16 @@ describe('getUserCount Cloud Function', () => {
             auth: { uid: 'admin-uid', token: { admin: true } },
             app: { appId: 'mock-app-id' }
         } as unknown as CallableRequest<any>;
+        mockListUsers.mockResolvedValue({ users: [], pageToken: undefined });
 
         const mockTotalCount = vi.fn().mockResolvedValue({
             data: () => ({ count: 150 })
         });
         const mockProCount = vi.fn().mockResolvedValue({
             data: () => ({ count: 50 })
+        });
+        const mockEverPaidCount = vi.fn().mockResolvedValue({
+            data: () => ({ count: 120 })
         });
         const mockOnboardingCount = vi.fn().mockResolvedValue({
             data: () => ({ count: 40 })
@@ -955,12 +961,22 @@ describe('getUserCount Cloud Function', () => {
 
         mockCollection.mockImplementation((name) => {
             if (name === 'users') {
-                return {
-                    where: vi.fn().mockReturnValue({
+                const usersWhere = vi.fn((field: string) => {
+                    if (field === 'hasSubscribedOnce') {
+                        return {
+                            count: vi.fn().mockReturnValue({
+                                get: mockEverPaidCount
+                            })
+                        };
+                    }
+                    return {
                         count: vi.fn().mockReturnValue({
                             get: mockOnboardingCount
                         })
-                    }),
+                    };
+                });
+                return {
+                    where: usersWhere,
                     count: vi.fn().mockReturnValue({
                         get: mockTotalCount
                     })
@@ -981,6 +997,9 @@ describe('getUserCount Cloud Function', () => {
             pro: 50,
             basic: 50,
             free: 50,
+            everPaid: 120,
+            canceled: 20,
+            cancelScheduled: 50,
             onboardingCompleted: 40,
             providers: {}
         });
