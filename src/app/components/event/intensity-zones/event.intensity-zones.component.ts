@@ -33,7 +33,10 @@ import {
   EChartsHostController
 } from '../../../helpers/echarts-host-controller';
 import { buildEventEChartsVisualTokens } from '../../../helpers/event-echarts-common.helper';
-import { resolveEChartsTooltipTriggerOn } from '../../../helpers/echarts-tooltip-interaction.helper';
+import {
+  resolveEChartsTooltipSurfaceConfig,
+  resolveEChartsTooltipTriggerOn
+} from '../../../helpers/echarts-tooltip-interaction.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
@@ -255,8 +258,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
         trigger: 'item',
         triggerOn: resolveEChartsTooltipTriggerOn(true, this.isMobile),
         renderMode: 'html',
-        appendToBody: !this.isMobile,
-        confine: this.isMobile,
+        ...resolveEChartsTooltipSurfaceConfig(this.isMobile),
         extraCssText: tooltipExtraCssText,
         backgroundColor: chartStyle.tooltipBackgroundColor,
         borderColor: chartStyle.tooltipBorderColor,

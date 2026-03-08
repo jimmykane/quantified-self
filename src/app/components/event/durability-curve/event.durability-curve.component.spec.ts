@@ -8,6 +8,8 @@ import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { LoggerService } from '../../../services/logger.service';
 import { PerformanceCurveDataService } from '../../../services/performance-curve-data.service';
+import { getOrCreateEChartsTooltipHost } from '../../../helpers/echarts-tooltip-host.helper';
+import { getViewportConstrainedTooltipPosition } from '../../../helpers/echarts-tooltip-position.helper';
 
 describe('EventDurabilityCurveComponent', () => {
   let fixture: ComponentFixture<EventDurabilityCurveComponent>;
@@ -157,8 +159,9 @@ describe('EventDurabilityCurveComponent', () => {
     expect(mockService.buildBestEffortMarkers).toHaveBeenCalled();
     expect(option.series.length).toBeGreaterThanOrEqual(2);
     expect(option.tooltip.renderMode).toBe('html');
-    expect(option.tooltip.appendToBody).toBe(true);
+    expect(option.tooltip.appendTo).toBe(getOrCreateEChartsTooltipHost);
     expect(option.tooltip.confine).toBe(false);
+    expect(option.tooltip.position).toBe(getViewportConstrainedTooltipPosition);
     expect(option.xAxis.type).toBe('value');
     expect(option.xAxis.interval).toBe(5);
     expect(option.xAxis.max).toBe(20);

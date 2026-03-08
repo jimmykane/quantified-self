@@ -33,9 +33,11 @@ import {
   EChartsHostController
 } from '../../../helpers/echarts-host-controller';
 import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
-import { getOrCreateEChartsTooltipHost } from '../../../helpers/echarts-tooltip-host.helper';
-import { getViewportConstrainedTooltipPosition } from '../../../helpers/echarts-tooltip-position.helper';
-import { resolveEChartsTooltipTriggerOn } from '../../../helpers/echarts-tooltip-interaction.helper';
+import {
+  isEChartsMobileTooltipViewport,
+  resolveEChartsTooltipSurfaceConfig,
+  resolveEChartsTooltipTriggerOn
+} from '../../../helpers/echarts-tooltip-interaction.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
 import {
   getDashboardAggregateData,
@@ -169,6 +171,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
     const tooltipBackgroundColor = chartStyle.tooltipBackgroundColor;
     const tooltipBorderColor = chartStyle.tooltipBorderColor;
     const isCompactLayout = chartStyle.isCompactLayout;
+    const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
 
     const seriesData = pieData.slices.map((slice, index) => ({
       name: getDashboardPieSliceDisplayLabel(
@@ -218,11 +221,9 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
       },
       tooltip: {
         trigger: 'item',
-        triggerOn: resolveEChartsTooltipTriggerOn(),
+        triggerOn: resolveEChartsTooltipTriggerOn(true, isMobileTooltipViewport),
         renderMode: 'html',
-        appendTo: getOrCreateEChartsTooltipHost,
-        confine: false,
-        position: getViewportConstrainedTooltipPosition,
+        ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),
         backgroundColor: tooltipBackgroundColor,
         borderColor: tooltipBorderColor,
         borderWidth: 1,

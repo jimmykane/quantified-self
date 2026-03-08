@@ -21,9 +21,11 @@ import {
   ECHARTS_INTERACTIVE_CARTESIAN_MERGE_UPDATE_SETTINGS,
   EChartsHostController
 } from '../../../../helpers/echarts-host-controller';
-import { getOrCreateEChartsTooltipHost } from '../../../../helpers/echarts-tooltip-host.helper';
-import { getViewportConstrainedTooltipPosition } from '../../../../helpers/echarts-tooltip-position.helper';
-import { resolveEChartsTooltipTriggerOn } from '../../../../helpers/echarts-tooltip-interaction.helper';
+import {
+  EChartsTooltipSurfaceConfig,
+  resolveEChartsTooltipSurfaceConfig,
+  resolveEChartsTooltipTriggerOn
+} from '../../../../helpers/echarts-tooltip-interaction.helper';
 import {
   EventChartLapMarker,
   EventChartPanelModel,
@@ -1970,21 +1972,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.pendingAxisScaleFrame = null;
   }
 
-  private buildTooltipSurfaceConfig(): {
-    confine: boolean;
-    appendTo?: typeof getOrCreateEChartsTooltipHost;
-    position?: typeof getViewportConstrainedTooltipPosition;
-  } {
-    if (this.isMobile) {
-      return {
-        confine: true,
-      };
-    }
-
-    return {
-      appendTo: getOrCreateEChartsTooltipHost,
-      confine: false,
-      position: getViewportConstrainedTooltipPosition,
-    };
+  private buildTooltipSurfaceConfig(): EChartsTooltipSurfaceConfig {
+    return resolveEChartsTooltipSurfaceConfig(this.isMobile);
   }
 }
