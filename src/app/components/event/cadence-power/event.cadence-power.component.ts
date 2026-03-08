@@ -37,6 +37,7 @@ import {
   calculateEventEChartsAxisRange,
   toFiniteEventEChartsNumber
 } from '../../../helpers/event-echarts-common.helper';
+import { resolveEChartsTooltipTriggerOn } from '../../../helpers/echarts-tooltip-interaction.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
@@ -262,7 +263,7 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
       },
       tooltip: {
         trigger: 'item',
-        triggerOn: this.isMobile ? 'click' : 'mousemove|click',
+        triggerOn: resolveEChartsTooltipTriggerOn(true, this.isMobile),
         renderMode: 'html',
         appendToBody: !this.isMobile,
         confine: this.isMobile,

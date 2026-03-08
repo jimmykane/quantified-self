@@ -26,6 +26,7 @@ import {
 } from '../../../helpers/echarts-host-controller';
 import { getOrCreateEChartsTooltipHost } from '../../../helpers/echarts-tooltip-host.helper';
 import { getViewportConstrainedTooltipPosition } from '../../../helpers/echarts-tooltip-position.helper';
+import { resolveEChartsTooltipTriggerOn } from '../../../helpers/echarts-tooltip-interaction.helper';
 import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
 import { buildDashboardValueAxisConfig } from '../../../helpers/dashboard-echarts-yaxis.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
@@ -297,6 +298,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
       },
       tooltip: {
         trigger: useDateActivitySegmentation ? 'axis' : 'item',
+        triggerOn: resolveEChartsTooltipTriggerOn(),
         axisPointer: useDateActivitySegmentation ? { type: 'shadow' } : undefined,
         renderMode: 'html',
         appendTo: getOrCreateEChartsTooltipHost,

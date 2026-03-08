@@ -35,6 +35,7 @@ import {
 import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
 import { getOrCreateEChartsTooltipHost } from '../../../helpers/echarts-tooltip-host.helper';
 import { getViewportConstrainedTooltipPosition } from '../../../helpers/echarts-tooltip-position.helper';
+import { resolveEChartsTooltipTriggerOn } from '../../../helpers/echarts-tooltip-interaction.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
 import {
   getDashboardAggregateData,
@@ -217,6 +218,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
       },
       tooltip: {
         trigger: 'item',
+        triggerOn: resolveEChartsTooltipTriggerOn(),
         renderMode: 'html',
         appendTo: getOrCreateEChartsTooltipHost,
         confine: false,
