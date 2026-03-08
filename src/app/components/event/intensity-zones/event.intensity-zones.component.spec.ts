@@ -9,6 +9,8 @@ import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { LoggerService } from '../../../services/logger.service';
 import { convertIntensityZonesStatsToEchartsData } from '../../../helpers/intensity-zones-chart-data-helper';
+import { getOrCreateEChartsTooltipHost } from '../../../helpers/echarts-tooltip-host.helper';
+import { getViewportConstrainedTooltipPosition } from '../../../helpers/echarts-tooltip-position.helper';
 
 vi.mock('../../../helpers/intensity-zones-chart-data-helper', () => ({
   convertIntensityZonesStatsToEchartsData: vi.fn(),
@@ -180,8 +182,9 @@ describe('EventIntensityZonesComponent', () => {
     expect(option.grid.top).toBe(0);
     expect(option.grid.bottom).toBe(0);
     expect(option.tooltip.renderMode).toBe('html');
-    expect(option.tooltip.appendToBody).toBe(true);
+    expect(option.tooltip.appendTo).toBe(getOrCreateEChartsTooltipHost);
     expect(option.tooltip.confine).toBe(false);
+    expect(option.tooltip.position).toBe(getViewportConstrainedTooltipPosition);
     expect(option.series[0].clip).toBe(false);
     expect(option.series[0].label.position).toBe('right');
     expect(option.series[0].label.align).toBe('left');
@@ -251,8 +254,9 @@ describe('EventIntensityZonesComponent', () => {
     expect(option.grid.right).toBe(0);
     expect(option.grid.bottom).toBe(0);
     expect(option.tooltip.renderMode).toBe('html');
-    expect(option.tooltip.appendToBody).toBe(false);
+    expect(option.tooltip.appendTo).toBeUndefined();
     expect(option.tooltip.confine).toBe(true);
+    expect(option.tooltip.position).toBeUndefined();
   });
 
   it('should use larger zone badges with zero gap in vertical mode', async () => {

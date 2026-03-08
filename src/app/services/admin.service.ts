@@ -31,6 +31,7 @@ export interface AdminUser {
         provider: string;
         connectedAt?: { seconds: number; nanoseconds: number } | string | number | null;
     }[];
+    hasSubscribedOnce?: boolean;
 }
 
 export interface ListUsersParams {
@@ -47,6 +48,18 @@ export interface ListUsersResponse {
     totalCount: number;
     page: number;
     pageSize: number;
+}
+
+export interface UserCountStats {
+    total: number;
+    pro: number;
+    basic: number;
+    free: number;
+    everPaid: number;
+    canceled: number;
+    cancelScheduled: number;
+    onboardingCompleted: number;
+    providers: Record<string, number>;
 }
 
 export interface DLQStats {
@@ -170,13 +183,27 @@ export class AdminService {
         );
     }
 
-    getTotalUserCount(): Observable<{ total: number; pro: number; basic: number; free: number; onboardingCompleted: number; providers: Record<string, number> }> {
-        return from(this.functionsService.call<void, { count: number; total: number; pro: number; basic: number; free: number; onboardingCompleted?: number; providers: Record<string, number> }>('getUserCount')).pipe(
+    getTotalUserCount(): Observable<UserCountStats> {
+        return from(this.functionsService.call<void, {
+            count: number;
+            total: number;
+            pro: number;
+            basic: number;
+            free: number;
+            everPaid?: number;
+            canceled?: number;
+            cancelScheduled?: number;
+            onboardingCompleted?: number;
+            providers: Record<string, number>;
+        }>('getUserCount')).pipe(
             map(result => ({
                 total: result.data.total ?? result.data.count, // Fallback for safety
                 pro: result.data.pro ?? 0,
                 basic: result.data.basic ?? 0,
                 free: result.data.free ?? 0,
+                everPaid: result.data.everPaid ?? 0,
+                canceled: result.data.canceled ?? 0,
+                cancelScheduled: result.data.cancelScheduled ?? 0,
                 onboardingCompleted: result.data.onboardingCompleted ?? 0,
                 providers: result.data.providers || {}
             }))

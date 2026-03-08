@@ -21,8 +21,11 @@ import {
   ECHARTS_INTERACTIVE_CARTESIAN_MERGE_UPDATE_SETTINGS,
   EChartsHostController
 } from '../../../../helpers/echarts-host-controller';
-import { getOrCreateEChartsTooltipHost } from '../../../../helpers/echarts-tooltip-host.helper';
-import { getViewportConstrainedTooltipPosition } from '../../../../helpers/echarts-tooltip-position.helper';
+import {
+  EChartsTooltipSurfaceConfig,
+  resolveEChartsTooltipSurfaceConfig,
+  resolveEChartsTooltipTriggerOn
+} from '../../../../helpers/echarts-tooltip-interaction.helper';
 import {
   EventChartLapMarker,
   EventChartPanelModel,
@@ -503,6 +506,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       : AppUserUtilities.getDefaultChartFillOpacity();
     const areaFillOrigin: 'start' | 'end' = yAxisConfig.inverse ? 'end' : 'start';
     const tooltipSurfaceConfig = this.buildTooltipSurfaceConfig();
+    const tooltipTriggerOn = resolveEChartsTooltipTriggerOn(hoverTooltipEnabled, this.isMobile);
 
     const seriesOptions: ChartLineSeriesOption[] = panel.series.map((series) => ({
       id: series.id,
@@ -555,7 +559,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       tooltip: {
         trigger: 'axis',
         show: this.tooltipVisibleForViewport && hoverTooltipEnabled,
-        triggerOn: hoverTooltipEnabled ? 'mousemove|click' : 'none',
+        triggerOn: tooltipTriggerOn,
         renderMode: 'html',
         ...tooltipSurfaceConfig,
         axisPointer: {
@@ -1461,7 +1465,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.chartHost.setOption({
       tooltip: {
         show: this.tooltipVisibleForViewport && this.isHoverTooltipEnabled(),
-        triggerOn: this.isHoverTooltipEnabled() ? 'mousemove|click' : 'none',
+        triggerOn: resolveEChartsTooltipTriggerOn(this.isHoverTooltipEnabled(), this.isMobile),
       },
       dataZoom: [
         {
@@ -1871,7 +1875,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.chartHost.setOption({
       tooltip: {
         show: this.tooltipVisibleForViewport && this.isHoverTooltipEnabled(),
-        triggerOn: this.isHoverTooltipEnabled() ? 'mousemove|click' : 'none',
+        triggerOn: resolveEChartsTooltipTriggerOn(this.isHoverTooltipEnabled(), this.isMobile),
       },
     }, {
       notMerge: false,
@@ -1968,21 +1972,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.pendingAxisScaleFrame = null;
   }
 
-  private buildTooltipSurfaceConfig(): {
-    confine: boolean;
-    appendTo?: typeof getOrCreateEChartsTooltipHost;
-    position?: typeof getViewportConstrainedTooltipPosition;
-  } {
-    if (this.isMobile) {
-      return {
-        confine: true,
-      };
-    }
-
-    return {
-      appendTo: getOrCreateEChartsTooltipHost,
-      confine: false,
-      position: getViewportConstrainedTooltipPosition,
-    };
+  private buildTooltipSurfaceConfig(): EChartsTooltipSurfaceConfig {
+    return resolveEChartsTooltipSurfaceConfig(this.isMobile);
   }
 }

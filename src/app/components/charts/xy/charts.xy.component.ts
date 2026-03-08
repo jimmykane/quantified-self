@@ -24,8 +24,11 @@ import {
   ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS,
   EChartsHostController
 } from '../../../helpers/echarts-host-controller';
-import { getOrCreateEChartsTooltipHost } from '../../../helpers/echarts-tooltip-host.helper';
-import { getViewportConstrainedTooltipPosition } from '../../../helpers/echarts-tooltip-position.helper';
+import {
+  isEChartsMobileTooltipViewport,
+  resolveEChartsTooltipSurfaceConfig,
+  resolveEChartsTooltipTriggerOn
+} from '../../../helpers/echarts-tooltip-interaction.helper';
 import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
 import { buildDashboardValueAxisConfig } from '../../../helpers/dashboard-echarts-yaxis.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
@@ -165,6 +168,7 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
     const tooltipBorderColor = chartStyle.tooltipBorderColor;
     const isCompactLayout = chartStyle.isCompactLayout;
     const axisFontSize = chartStyle.axisFontSize;
+    const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
     const showValueLabels = points.length > 0 && points.length <= 200;
 
     if (!points.length) {
@@ -281,10 +285,9 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
       },
       tooltip: {
         trigger: 'item',
+        triggerOn: resolveEChartsTooltipTriggerOn(true, isMobileTooltipViewport),
         renderMode: 'html',
-        appendTo: getOrCreateEChartsTooltipHost,
-        confine: false,
-        position: getViewportConstrainedTooltipPosition,
+        ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),
         backgroundColor: tooltipBackgroundColor,
         borderColor: tooltipBorderColor,
         borderWidth: 1,

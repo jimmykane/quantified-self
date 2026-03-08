@@ -17,7 +17,7 @@ import { MatSnackBarModule } from '@angular/material/snack-bar';
 import { Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged, takeUntil } from 'rxjs/operators';
 
-import { AdminService, AdminUser, ListUsersParams } from '../../../services/admin.service';
+import { AdminService, AdminUser, ListUsersParams, UserCountStats } from '../../../services/admin.service';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { AppImpersonationService } from '../../../services/app.impersonation.service';
 import { LoggerService } from '../../../services/logger.service';
@@ -36,14 +36,7 @@ import localizedFormat from 'dayjs/plugin/localizedFormat';
 
 dayjs.extend(localizedFormat);
 
-export interface UserStats {
-    total: number;
-    pro: number;
-    basic: number;
-    free: number;
-    onboardingCompleted: number;
-    providers?: Record<string, number>;
-}
+type SubscriptionHistoryState = 'active' | 'scheduled' | 'canceled' | 'never';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 
@@ -86,7 +79,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
 
     // Data state
     users: AdminUser[] = [];
-    userStats: UserStats | null = null;
+    userStats: UserCountStats | null = null;
     isLoading = true;
     error: string | null = null;
     totalCount = 0;
@@ -101,7 +94,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     sortDirection: 'asc' | 'desc' = 'desc';
 
     displayedColumns: string[] = [
-        'photoURL', 'email', 'uid', 'providerIds', 'displayName', 'role', 'subscription',
+        'photoURL', 'email', 'uid', 'providerIds', 'displayName', 'role', 'subscriptionHistory', 'subscription',
         'services', 'created', 'lastLogin', 'onboarding', 'status', 'actions'
     ];
 
@@ -276,6 +269,33 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
         }
 
         return details;
+    }
+
+    getSubscriptionHistoryState(user: AdminUser): SubscriptionHistoryState {
+        const status = user.subscription?.status?.toLowerCase();
+        const hasActiveSubscription = status === 'active' || status === 'trialing' || status === 'past_due';
+
+        if (hasActiveSubscription && user.subscription?.cancel_at_period_end) {
+            return 'scheduled';
+        }
+
+        if (hasActiveSubscription) {
+            return 'active';
+        }
+
+        if (user.hasSubscribedOnce === true) {
+            return 'canceled';
+        }
+
+        return 'never';
+    }
+
+    getSubscriptionHistoryLabel(user: AdminUser): string {
+        const state = this.getSubscriptionHistoryState(user);
+        if (state === 'scheduled') return 'Cancel Scheduled';
+        if (state === 'active') return 'Active';
+        if (state === 'canceled') return 'Canceled';
+        return 'Never Subscribed';
     }
 
     private formatDate(timestamp: any): string {

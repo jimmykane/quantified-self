@@ -104,6 +104,10 @@
         border-left-color: var(--mat-sys-tertiary);
     }
 
+    &.status-warn {
+        border-left-color: var(--mat-sys-error);
+    }
+
     &.users {
         border-left-color: var(--mat-sys-secondary);
     }
@@ -143,6 +147,12 @@
 
 .app-stat-value-muted {
     opacity: 0.7;
+}
+
+.app-stat-footnote {
+    margin-top: 0.35rem;
+    font-size: 0.8rem;
+    color: var(--mat-sys-on-surface-variant);
 }
 
 .app-spinner-mini {
@@ -361,6 +371,33 @@ td.mat-cell {
     &.disabled {
         background: rgba(var(--mat-sys-error-rgb), 0.15);
         color: var(--mat-sys-error);
+    }
+}
+
+.subscription-history-badge {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+
+    &.active {
+        background: rgba(var(--mat-sys-primary-rgb), 0.15);
+        color: var(--mat-sys-primary);
+    }
+
+    &.scheduled {
+        background: rgba(var(--mat-sys-tertiary-rgb), 0.15);
+        color: var(--mat-sys-tertiary);
+    }
+
+    &.canceled {
+        background: rgba(var(--mat-sys-error-rgb), 0.15);
+        color: var(--mat-sys-error);
+    }
+
+    &.never {
+        background: rgba(var(--mat-sys-on-surface-rgb), 0.12);
+        color: var(--mat-sys-on-surface-variant);
     }
 }
 
