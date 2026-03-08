@@ -100,23 +100,29 @@
   gap: clamp(3px, 0.8vw, 6px);
 }
 
-.qs-digit-roll {
-  --line-height: 1.04em;
-  --digit-cycle: 4.1s;
-  --digit-offset: 0s;
-  --roll-end: calc(var(--line-height) * -11);
-  display: block;
-  height: var(--line-height);
-  overflow: hidden;
-  min-width: var(--value-width, 7ch);
+.qs-digit-counter {
+  --digit-step: 1.12em;
+  --digit-viewport: 1.36em;
+  --counter-width: 3ch;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(0.1em, 0.2vw, 0.18em);
+  min-width: var(--counter-width);
   font-family: "Roboto Mono", "Barlow Condensed", monospace;
   font-size: clamp(17px, 3.7vw, 28px);
   font-weight: 600;
   letter-spacing: 0.04em;
-  line-height: var(--line-height);
+  line-height: 1;
   text-align: center;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+}
+
+.qs-digit-static {
+  display: inline-block;
+  width: 0.8ch;
+  line-height: 1.08;
 }
 
 .qs-digit-unit {
@@ -130,58 +136,103 @@
   white-space: nowrap;
 }
 
-.qs-digit-track {
+.qs-digit-wheel {
+  width: 0.8ch;
+  height: var(--digit-viewport);
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+
+.qs-digit-wheel-track {
+  --wheel-cycle: 4s;
+  --wheel-delay: 0s;
+  --wheel-end: calc(var(--digit-step) * -10);
   display: block;
+  box-sizing: border-box;
+  padding-block: calc((var(--digit-viewport) - var(--digit-step)) / 2 + 0.03em);
   will-change: transform;
-  animation: qs-digit-tick var(--digit-cycle) steps(11, end) infinite;
-  animation-delay: var(--digit-offset);
+  animation: qs-wheel-roll var(--wheel-cycle) cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  animation-delay: var(--wheel-delay);
 }
 
-.qs-digit-track span {
-  display: block;
-  height: var(--line-height);
-  line-height: var(--line-height);
-}
-
-.qs-digit-a .qs-digit-roll {
-  --value-width: 4.2ch;
-  --digit-cycle: 4.4s;
-  --digit-offset: -0.8s;
-}
-
-.qs-digit-b .qs-digit-roll {
-  --value-width: 3.4ch;
-  --digit-cycle: 3.7s;
-  --digit-offset: -1.6s;
-}
-
-.qs-digit-c .qs-digit-roll {
-  --value-width: 3.2ch;
-  --digit-cycle: 5.6s;
-  --digit-offset: 0s;
-  --roll-end: calc(var(--line-height) * -10);
-}
-
-.qs-digit-d .qs-digit-roll {
-  --value-width: 3.2ch;
-  --digit-cycle: 5s;
-  --digit-offset: 0s;
-  --roll-end: calc(var(--line-height) * -10);
-}
-
-.qs-digit-c .qs-digit-track,
-.qs-digit-d .qs-digit-track {
+.qs-digit-wheel-track--once {
   animation-iteration-count: 1;
   animation-fill-mode: forwards;
 }
 
-@keyframes qs-digit-tick {
+.qs-digit-wheel-track span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--digit-step);
+  line-height: 1;
+}
+
+.qs-digit-separator {
+  display: inline-block;
+  width: 0.55ch;
+  opacity: 0.82;
+  transform: translateY(-0.04em);
+}
+
+.qs-counter-distance {
+  --counter-width: 2.3ch;
+}
+
+.qs-counter-heart-rate,
+.qs-counter-ascent,
+.qs-counter-descent {
+  --counter-width: 2.15ch;
+}
+
+.qs-track-distance-whole {
+  --wheel-cycle: 24s;
+  --wheel-delay: -4s;
+}
+
+.qs-track-distance-decimal {
+  --wheel-cycle: 4.2s;
+  --wheel-delay: -1.1s;
+}
+
+.qs-track-heart-rate-tens {
+  --wheel-cycle: 18s;
+  --wheel-delay: -5.4s;
+}
+
+.qs-track-heart-rate-ones {
+  --wheel-cycle: 4.6s;
+  --wheel-delay: -1.6s;
+}
+
+.qs-track-ascent-tens {
+  --wheel-cycle: 8.2s;
+  --wheel-delay: 0s;
+}
+
+.qs-track-ascent-ones {
+  --wheel-cycle: 6.4s;
+  --wheel-delay: -0.45s;
+}
+
+.qs-track-descent-tens {
+  --wheel-cycle: 7.8s;
+  --wheel-delay: 0s;
+}
+
+.qs-track-descent-ones {
+  --wheel-cycle: 6s;
+  --wheel-delay: -0.7s;
+}
+
+@keyframes qs-wheel-roll {
   0% {
     transform: translateY(0);
   }
 
   100% {
-    transform: translateY(var(--roll-end));
+    transform: translateY(var(--wheel-end));
   }
 }
 
@@ -195,7 +246,7 @@
     font-size: clamp(8px, 2.8vw, 10px);
   }
 
-  .qs-digit-roll {
+  .qs-digit-counter {
     font-size: clamp(14px, 5.8vw, 21px);
     letter-spacing: 0.02em;
   }
@@ -214,7 +265,7 @@
     font-size: clamp(8px, 2.9vw, 9px);
   }
 
-  .qs-digit-roll {
+  .qs-digit-counter {
     font-size: clamp(13px, 6vw, 19px);
   }
 
@@ -225,8 +276,7 @@
 
 @media (prefers-reduced-motion: reduce) {
 
-  .qs-digit-roll,
-  .qs-digit-track {
+  .qs-digit-wheel-track {
     animation: none;
   }
 }
