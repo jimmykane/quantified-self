@@ -1261,6 +1261,10 @@ describe('getFinancialStats Cloud Function', () => {
         expect(queryText).toContain('DATE(usage_start_time) >= DATE_TRUNC(CURRENT_DATE(), MONTH)');
         expect(queryText).toContain('DATE(usage_start_time) < DATE_ADD(DATE_TRUNC(CURRENT_DATE(), MONTH), INTERVAL 1 MONTH)');
         expect(queryText).not.toContain('invoice.month');
+        expect(queryText).toContain('ANY_VALUE(currency) as currency');
+        expect(queryText).toContain('COUNT(DISTINCT currency) as currency_count');
+        expect(queryText).not.toContain('GROUP BY currency');
+        expect(queryText).not.toContain('LIMIT 1');
     });
 
     it('should handle pagination for Stripe invoices', async () => {

@@ -1093,13 +1093,12 @@ export const getFinancialStats = onAdminCall<void, any>({
                                 SELECT 
                                     SUM(cost) + SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as total_cost,
                                     MAX(usage_end_time) as last_updated,
-                                    currency 
+                                    ANY_VALUE(currency) as currency,
+                                    COUNT(DISTINCT currency) as currency_count
                                 FROM ${fullTableName} 
                                 WHERE DATE(usage_start_time) >= DATE_TRUNC(CURRENT_DATE(), MONTH)
                                 AND DATE(usage_start_time) < DATE_ADD(DATE_TRUNC(CURRENT_DATE(), MONTH), INTERVAL 1 MONTH)
                                 AND project.id = @projectId
-                                GROUP BY currency
-                                LIMIT 1
                             `;
 
                             const options = {
@@ -1119,6 +1118,11 @@ export const getFinancialStats = onAdminCall<void, any>({
                                 stats.cost.total = (row.total_cost || 0) * 100;
                                 (stats.cost as any).lastUpdated = row.last_updated?.value || row.last_updated;
                                 logger.info(`Calculated total cost: ${stats.cost.total} ${row.currency}, last updated: ${stats.cost as any}.lastUpdated`);
+                                if (Number(row.currency_count || 0) > 1) {
+                                    logger.warn(`Multiple currencies detected in billing export for project ${projectIdForBilling}; total may not be directly comparable`, {
+                                        currencyCount: row.currency_count
+                                    });
+                                }
                                 if (row.currency) {
                                     stats.cost.currency = row.currency.toLowerCase();
                                 }
