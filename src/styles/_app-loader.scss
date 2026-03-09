@@ -107,7 +107,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: clamp(0.1em, 0.2vw, 0.18em);
+  gap: clamp(0.16em, 0.35vw, 0.28em);
   min-width: var(--counter-width);
   font-family: "Roboto Mono", "Barlow Condensed", monospace;
   font-size: clamp(17px, 3.7vw, 28px);
@@ -121,7 +121,7 @@
 
 .qs-digit-static {
   display: inline-block;
-  width: 0.8ch;
+  width: 0.95ch;
   line-height: 1.08;
 }
 
@@ -137,7 +137,7 @@
 }
 
 .qs-digit-wheel {
-  width: 0.8ch;
+  width: 0.95ch;
   height: var(--digit-viewport);
   display: flex;
   align-items: center;
@@ -171,19 +171,19 @@
 
 .qs-digit-separator {
   display: inline-block;
-  width: 0.55ch;
+  width: 0.78ch;
   opacity: 0.82;
   transform: translateY(-0.04em);
 }
 
 .qs-counter-distance {
-  --counter-width: 2.3ch;
+  --counter-width: 2.9ch;
 }
 
 .qs-counter-heart-rate,
 .qs-counter-ascent,
 .qs-counter-descent {
-  --counter-width: 2.15ch;
+  --counter-width: 2.8ch;
 }
 
 .qs-track-distance-whole {
