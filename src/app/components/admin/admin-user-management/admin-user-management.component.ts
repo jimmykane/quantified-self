@@ -447,7 +447,11 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
             return;
         }
 
-        const option = this.buildSubscriptionTrendChartOption(this.subscriptionHistoryTrend);
+        const option = this.buildSubscriptionTrendChartOption(
+            this.subscriptionHistoryTrend,
+            this.getCurrentBasicSubscriptions(),
+            this.getCurrentProSubscriptions()
+        );
         this.subscriptionTrendChartHost.setOption(option, ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS);
         this.subscriptionTrendChartHost.scheduleResize();
     }
@@ -575,12 +579,22 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
         return option;
     }
 
-    private buildSubscriptionTrendChartOption(trendData: SubscriptionHistoryTrendResponse): ChartOption {
+    private buildSubscriptionTrendChartOption(
+        trendData: SubscriptionHistoryTrendResponse,
+        currentBasicSubscriptions: number,
+        currentProSubscriptions: number
+    ): ChartOption {
         const buckets = trendData.buckets || [];
         const labels = buckets.map(bucket => bucket.label);
-        const newSubscriptions = buckets.map(bucket => bucket.newSubscriptions || 0);
-        const plannedCancellations = buckets.map(bucket => bucket.plannedCancellations || 0);
-        const netValues = buckets.map(bucket => bucket.net || 0);
+        const basicNetValues = buckets.map(bucket => Number(bucket.basicNet ?? 0));
+        const proNetValues = buckets.map(bucket => Number(bucket.proNet ?? 0));
+        const endingBasic = Math.max(0, Number(currentBasicSubscriptions) || 0);
+        const endingPro = Math.max(0, Number(currentProSubscriptions) || 0);
+        const endingAll = endingBasic + endingPro;
+
+        const cumulativeBasicTotal = this.buildCumulativeSeriesFromEndingTotal(basicNetValues, endingBasic);
+        const cumulativeProTotal = this.buildCumulativeSeriesFromEndingTotal(proNetValues, endingPro);
+        const cumulativeAllTotal = cumulativeBasicTotal.map((value, index) => value + (cumulativeProTotal[index] || 0));
 
         const themeTokens = buildOfficialEChartsThemeTokens(this.isDark);
         const textColor = themeTokens.textSecondary;
@@ -590,8 +604,9 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
         const isMobileLayout = containerWidth > 0 && containerWidth < 680;
 
         const primaryColor = this.resolveMaterialChartColor('--mat-sys-primary', '#1976d2');
-        const errorColor = this.resolveMaterialChartColor('--mat-sys-error', '#d32f2f');
         const tertiaryColor = this.resolveMaterialChartColor('--mat-sys-tertiary', '#00796b');
+        const secondaryColor = this.resolveMaterialChartColor('--mat-sys-secondary', '#5f6abf');
+        const totalsSummary = `Current  Basic ${endingBasic}  |  Pro ${endingPro}  |  All ${endingAll}`;
 
         const option: ChartOption = {
             tooltip: {
@@ -649,44 +664,102 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
             },
             series: [
                 {
-                    name: 'New Subscriptions',
-                    type: 'bar',
-                    data: newSubscriptions,
-                    barMaxWidth: 30,
-                    itemStyle: {
-                        color: primaryColor,
-                        borderRadius: [5, 5, 0, 0]
-                    }
-                },
-                {
-                    name: 'Planned Cancellations',
-                    type: 'bar',
-                    data: plannedCancellations,
-                    barMaxWidth: 30,
-                    itemStyle: {
-                        color: errorColor,
-                        borderRadius: [5, 5, 0, 0]
-                    }
-                },
-                {
-                    name: 'Net',
+                    name: 'Basic Totals',
                     type: 'line',
-                    data: netValues,
+                    data: cumulativeBasicTotal,
                     smooth: true,
                     symbol: 'circle',
-                    symbolSize: 7,
+                    symbolSize: 6,
+                    lineStyle: {
+                        color: primaryColor,
+                        width: 2.2
+                    },
+                    itemStyle: {
+                        color: primaryColor
+                    },
+                    emphasis: {
+                        focus: 'series'
+                    }
+                },
+                {
+                    name: 'Pro Totals',
+                    type: 'line',
+                    data: cumulativeProTotal,
+                    smooth: true,
+                    symbol: 'circle',
+                    symbolSize: 6,
                     lineStyle: {
                         color: tertiaryColor,
-                        width: 2.5
+                        width: 2.2
                     },
                     itemStyle: {
                         color: tertiaryColor
+                    },
+                    emphasis: {
+                        focus: 'series'
+                    }
+                },
+                {
+                    name: 'All Totals',
+                    type: 'line',
+                    data: cumulativeAllTotal,
+                    smooth: true,
+                    symbol: 'circle',
+                    symbolSize: 6,
+                    lineStyle: {
+                        color: secondaryColor,
+                        width: 2.2
+                    },
+                    itemStyle: {
+                        color: secondaryColor
+                    },
+                    emphasis: {
+                        focus: 'series'
                     }
                 }
-            ]
+            ],
+            graphic: isMobileLayout
+                ? undefined
+                : [
+                    {
+                        type: 'text',
+                        right: 12,
+                        top: 10,
+                        z: 10,
+                        style: {
+                            text: totalsSummary,
+                            fill: textColor,
+                            opacity: 0.9,
+                            fontSize: 11,
+                            fontWeight: 500,
+                            fontFamily: ECHARTS_GLOBAL_FONT_FAMILY
+                        }
+                    }
+                ]
         };
 
         return option;
+    }
+
+    private buildCumulativeSeriesFromEndingTotal(netValues: number[], endingTotal: number): number[] {
+        const safeEndingTotal = Math.max(0, Number(endingTotal) || 0);
+        const windowNetTotal = netValues.reduce((sum, value) => sum + (Number(value) || 0), 0);
+        let runningTotal = safeEndingTotal - windowNetTotal;
+
+        return netValues.map((value) => {
+            runningTotal += Number(value) || 0;
+            return Math.max(0, Math.round(runningTotal));
+        });
+    }
+
+    private getCurrentBasicSubscriptions(): number {
+        const basic = Number(this.userStats?.basic ?? 0);
+        return Math.max(0, basic);
+    }
+
+    private getCurrentProSubscriptions(): number {
+        const pro = Number(this.userStats?.pro ?? 0);
+        return Math.max(0, pro);
     }
 
     private resolveMaterialChartColor(tokenName: string, fallback: string): string {

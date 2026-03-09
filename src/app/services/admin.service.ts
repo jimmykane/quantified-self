@@ -68,6 +68,12 @@ export interface SubscriptionHistoryTrendBucket {
     newSubscriptions: number;
     plannedCancellations: number;
     net: number;
+    basicNewSubscriptions?: number;
+    basicPlannedCancellations?: number;
+    basicNet?: number;
+    proNewSubscriptions?: number;
+    proPlannedCancellations?: number;
+    proNet?: number;
 }
 
 export interface SubscriptionHistoryTrendResponse {
@@ -77,6 +83,12 @@ export interface SubscriptionHistoryTrendResponse {
         newSubscriptions: number;
         plannedCancellations: number;
         net: number;
+        basicNewSubscriptions?: number;
+        basicPlannedCancellations?: number;
+        basicNet?: number;
+        proNewSubscriptions?: number;
+        proPlannedCancellations?: number;
+        proNet?: number;
     };
 }
 

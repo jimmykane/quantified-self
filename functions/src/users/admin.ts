@@ -47,6 +47,9 @@ function toSafeNumber(value: unknown, fallback: number = 0): number {
 const DEFAULT_SUBSCRIPTION_HISTORY_MONTHS = 12;
 const MAX_SUBSCRIPTION_HISTORY_MONTHS = 24;
 const ACTIVE_SUBSCRIPTION_STATUSES = ['active', 'trialing', 'past_due'] as const;
+const ACTIVE_SUBSCRIPTION_STATUS_SET = new Set<string>(ACTIVE_SUBSCRIPTION_STATUSES);
+const SUBSCRIPTION_ROLE_BASIC = 'basic';
+const SUBSCRIPTION_ROLE_PRO = 'pro';
 
 interface GetSubscriptionHistoryTrendRequest {
     months?: number;
@@ -58,6 +61,12 @@ interface SubscriptionHistoryTrendBucket {
     newSubscriptions: number;
     plannedCancellations: number;
     net: number;
+    basicNewSubscriptions: number;
+    basicPlannedCancellations: number;
+    basicNet: number;
+    proNewSubscriptions: number;
+    proPlannedCancellations: number;
+    proNet: number;
 }
 
 interface SubscriptionHistoryTrendResponse {
@@ -67,6 +76,12 @@ interface SubscriptionHistoryTrendResponse {
         newSubscriptions: number;
         plannedCancellations: number;
         net: number;
+        basicNewSubscriptions: number;
+        basicPlannedCancellations: number;
+        basicNet: number;
+        proNewSubscriptions: number;
+        proPlannedCancellations: number;
+        proNet: number;
     };
 }
 
@@ -204,6 +219,27 @@ function buildMonthlyBucketWindows(months: number, now: Date): Array<{ key: stri
     }
 
     return windows;
+}
+
+function isMissingIndexError(error: unknown): boolean {
+    const firestoreError = error as {
+        code?: unknown;
+        message?: unknown;
+        details?: unknown;
+    };
+
+    const numericCode = Number(firestoreError.code);
+    if (Number.isFinite(numericCode) && numericCode === 9) {
+        return true;
+    }
+
+    const code = `${firestoreError.code || ''}`.toLowerCase();
+    const message = `${firestoreError.message || ''}`.toLowerCase();
+    const details = `${firestoreError.details || ''}`.toLowerCase();
+
+    return code.includes('failed-precondition')
+        || message.includes('requires an index')
+        || details.includes('requires an index');
 }
 
 interface ListUsersRequest {
@@ -632,7 +668,13 @@ export const getSubscriptionHistoryTrend = onAdminCall<GetSubscriptionHistoryTre
                 totals: {
                     newSubscriptions: 0,
                     plannedCancellations: 0,
-                    net: 0
+                    net: 0,
+                    basicNewSubscriptions: 0,
+                    basicPlannedCancellations: 0,
+                    basicNet: 0,
+                    proNewSubscriptions: 0,
+                    proPlannedCancellations: 0,
+                    proNet: 0
                 }
             };
         }
@@ -642,27 +684,50 @@ export const getSubscriptionHistoryTrend = onAdminCall<GetSubscriptionHistoryTre
         const rangeStartSeconds = Math.floor(rangeStartMs / 1000);
         const rangeEndSeconds = Math.floor(rangeEndMs / 1000);
 
-        const [newSubscriptionSnapshot, plannedCancellationSnapshot] = await Promise.all([
-            db.collectionGroup('subscriptions')
-                .where('created', '>=', rangeStartSeconds)
-                .where('created', '<', rangeEndSeconds)
-                .select('created')
-                .get(),
-            db.collectionGroup('subscriptions')
-                .where('cancel_at_period_end', '==', true)
-                .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
-                .where('current_period_end', '>=', rangeStartSeconds)
-                .where('current_period_end', '<', rangeEndSeconds)
-                .select('current_period_end')
-                .get()
-        ]);
+        let newSubscriptionSnapshot: admin.firestore.QuerySnapshot;
+        let plannedCancellationSnapshot: admin.firestore.QuerySnapshot;
+        try {
+            [newSubscriptionSnapshot, plannedCancellationSnapshot] = await Promise.all([
+                db.collectionGroup('subscriptions')
+                    .where('created', '>=', rangeStartSeconds)
+                    .where('created', '<', rangeEndSeconds)
+                    .select('created', 'role')
+                    .get(),
+                db.collectionGroup('subscriptions')
+                    .where('cancel_at_period_end', '==', true)
+                    .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
+                    .where('current_period_end', '>=', rangeStartSeconds)
+                    .where('current_period_end', '<', rangeEndSeconds)
+                    .select('current_period_end', 'cancel_at_period_end', 'status', 'role')
+                    .get()
+            ]);
+        } catch (queryError: unknown) {
+            if (!isMissingIndexError(queryError)) {
+                throw queryError;
+            }
+
+            logger.warn('[admin/getSubscriptionHistoryTrend] Missing index detected. Falling back to full subscription scan.', queryError);
+
+            const fallbackSnapshot = await db.collectionGroup('subscriptions')
+                .select('created', 'current_period_end', 'cancel_at_period_end', 'status', 'role')
+                .get();
+
+            newSubscriptionSnapshot = fallbackSnapshot;
+            plannedCancellationSnapshot = fallbackSnapshot;
+        }
 
         const buckets = bucketWindows.map((window) => ({
             key: window.key,
             label: window.label,
             newSubscriptions: 0,
             plannedCancellations: 0,
-            net: 0
+            net: 0,
+            basicNewSubscriptions: 0,
+            basicPlannedCancellations: 0,
+            basicNet: 0,
+            proNewSubscriptions: 0,
+            proPlannedCancellations: 0,
+            proNet: 0
         }));
         const bucketByKey = new Map<string, SubscriptionHistoryTrendBucket>();
         buckets.forEach(bucket => {
@@ -678,11 +743,21 @@ export const getSubscriptionHistoryTrend = onAdminCall<GetSubscriptionHistoryTre
             const bucket = bucketByKey.get(toUtcMonthKey(createdAtMillis));
             if (bucket) {
                 bucket.newSubscriptions += 1;
+                const role = `${subscription.role || ''}`.toLowerCase();
+                if (role === SUBSCRIPTION_ROLE_BASIC) {
+                    bucket.basicNewSubscriptions += 1;
+                } else if (role === SUBSCRIPTION_ROLE_PRO) {
+                    bucket.proNewSubscriptions += 1;
+                }
             }
         });
 
         plannedCancellationSnapshot.docs.forEach(doc => {
             const subscription = doc.data() as Record<string, unknown>;
+            const status = `${subscription.status || ''}`.toLowerCase();
+            if (subscription.cancel_at_period_end !== true || !ACTIVE_SUBSCRIPTION_STATUS_SET.has(status)) {
+                return;
+            }
             const periodEndMillis = toEpochMillis(subscription.current_period_end);
             if (periodEndMillis === null || periodEndMillis < rangeStartMs || periodEndMillis >= rangeEndMs) {
                 return;
@@ -690,15 +765,31 @@ export const getSubscriptionHistoryTrend = onAdminCall<GetSubscriptionHistoryTre
             const bucket = bucketByKey.get(toUtcMonthKey(periodEndMillis));
             if (bucket) {
                 bucket.plannedCancellations += 1;
+                const role = `${subscription.role || ''}`.toLowerCase();
+                if (role === SUBSCRIPTION_ROLE_BASIC) {
+                    bucket.basicPlannedCancellations += 1;
+                } else if (role === SUBSCRIPTION_ROLE_PRO) {
+                    bucket.proPlannedCancellations += 1;
+                }
             }
         });
 
         let totalNewSubscriptions = 0;
         let totalPlannedCancellations = 0;
+        let totalBasicNewSubscriptions = 0;
+        let totalBasicPlannedCancellations = 0;
+        let totalProNewSubscriptions = 0;
+        let totalProPlannedCancellations = 0;
         buckets.forEach(bucket => {
             bucket.net = bucket.newSubscriptions - bucket.plannedCancellations;
+            bucket.basicNet = bucket.basicNewSubscriptions - bucket.basicPlannedCancellations;
+            bucket.proNet = bucket.proNewSubscriptions - bucket.proPlannedCancellations;
             totalNewSubscriptions += bucket.newSubscriptions;
             totalPlannedCancellations += bucket.plannedCancellations;
+            totalBasicNewSubscriptions += bucket.basicNewSubscriptions;
+            totalBasicPlannedCancellations += bucket.basicPlannedCancellations;
+            totalProNewSubscriptions += bucket.proNewSubscriptions;
+            totalProPlannedCancellations += bucket.proPlannedCancellations;
         });
 
         return {
@@ -707,7 +798,13 @@ export const getSubscriptionHistoryTrend = onAdminCall<GetSubscriptionHistoryTre
             totals: {
                 newSubscriptions: totalNewSubscriptions,
                 plannedCancellations: totalPlannedCancellations,
-                net: totalNewSubscriptions - totalPlannedCancellations
+                net: totalNewSubscriptions - totalPlannedCancellations,
+                basicNewSubscriptions: totalBasicNewSubscriptions,
+                basicPlannedCancellations: totalBasicPlannedCancellations,
+                basicNet: totalBasicNewSubscriptions - totalBasicPlannedCancellations,
+                proNewSubscriptions: totalProNewSubscriptions,
+                proPlannedCancellations: totalProPlannedCancellations,
+                proNet: totalProNewSubscriptions - totalProPlannedCancellations
             }
         };
     } catch (error: unknown) {

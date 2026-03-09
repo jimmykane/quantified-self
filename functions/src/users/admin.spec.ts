@@ -1021,8 +1021,13 @@ describe('getSubscriptionHistoryTrend Cloud Function', () => {
             where: vi.fn().mockReturnThis(),
             select: vi.fn().mockReturnThis(),
             get: vi.fn().mockResolvedValue({
-                docs: createdValues.map((created) => ({
-                    data: () => ({ created })
+                docs: createdValues.map((createdEntry) => ({
+                    data: () => {
+                        if (createdEntry && typeof createdEntry === 'object') {
+                            return createdEntry as Record<string, unknown>;
+                        }
+                        return { created: createdEntry };
+                    }
                 }))
             })
         };
@@ -1030,8 +1035,17 @@ describe('getSubscriptionHistoryTrend Cloud Function', () => {
             where: vi.fn().mockReturnThis(),
             select: vi.fn().mockReturnThis(),
             get: vi.fn().mockResolvedValue({
-                docs: periodEndValues.map((current_period_end) => ({
-                    data: () => ({ current_period_end })
+                docs: periodEndValues.map((periodEndEntry) => ({
+                    data: () => {
+                        if (periodEndEntry && typeof periodEndEntry === 'object') {
+                            return periodEndEntry as Record<string, unknown>;
+                        }
+                        return {
+                            current_period_end: periodEndEntry,
+                            cancel_at_period_end: true,
+                            status: 'active'
+                        };
+                    }
                 }))
             })
         };
@@ -1073,13 +1087,13 @@ describe('getSubscriptionHistoryTrend Cloud Function', () => {
     it('should return 12 chronological buckets with net values', async () => {
         setupTrendCollectionMocks(
             [
-                toSeconds('2025-04-10T00:00:00Z'),
-                toSeconds('2025-06-05T00:00:00Z'),
-                toSeconds('2026-03-01T00:00:00Z')
+                { created: toSeconds('2025-04-10T00:00:00Z'), role: 'basic' },
+                { created: toSeconds('2025-06-05T00:00:00Z'), role: 'pro' },
+                { created: toSeconds('2026-03-01T00:00:00Z'), role: 'basic' }
             ],
             [
-                toSeconds('2025-06-20T00:00:00Z'),
-                toSeconds('2026-02-10T00:00:00Z')
+                { current_period_end: toSeconds('2025-06-20T00:00:00Z'), cancel_at_period_end: true, status: 'active', role: 'pro' },
+                { current_period_end: toSeconds('2026-02-10T00:00:00Z'), cancel_at_period_end: true, status: 'active', role: 'basic' }
             ]
         );
 
@@ -1096,29 +1110,43 @@ describe('getSubscriptionHistoryTrend Cloud Function', () => {
         expect(bucketByKey.get('2025-04')).toEqual(expect.objectContaining({
             newSubscriptions: 1,
             plannedCancellations: 0,
-            net: 1
+            net: 1,
+            basicNet: 1,
+            proNet: 0
         }));
         expect(bucketByKey.get('2025-06')).toEqual(expect.objectContaining({
             newSubscriptions: 1,
             plannedCancellations: 1,
-            net: 0
+            net: 0,
+            basicNet: 0,
+            proNet: 0
         }));
         expect(bucketByKey.get('2026-02')).toEqual(expect.objectContaining({
             newSubscriptions: 0,
             plannedCancellations: 1,
-            net: -1
+            net: -1,
+            basicNet: -1,
+            proNet: 0
         }));
         expect(bucketByKey.get('2026-03')).toEqual(expect.objectContaining({
             newSubscriptions: 1,
             plannedCancellations: 0,
-            net: 1
+            net: 1,
+            basicNet: 1,
+            proNet: 0
         }));
 
-        expect(result.totals).toEqual({
+        expect(result.totals).toEqual(expect.objectContaining({
             newSubscriptions: 3,
             plannedCancellations: 2,
-            net: 1
-        });
+            net: 1,
+            basicNewSubscriptions: 2,
+            basicPlannedCancellations: 1,
+            basicNet: 1,
+            proNewSubscriptions: 1,
+            proPlannedCancellations: 1,
+            proNet: 0
+        }));
     });
 
     it('should enforce default and max months bounds', async () => {
@@ -1131,6 +1159,70 @@ describe('getSubscriptionHistoryTrend Cloud Function', () => {
         const maxResult: any = await (getSubscriptionHistoryTrend as any)(getRequest({ months: 200 }));
         expect(maxResult.months).toBe(24);
         expect(maxResult.buckets).toHaveLength(24);
+    });
+
+    it('should fallback to full scan when index precondition fails', async () => {
+        const missingIndexError = Object.assign(new Error('The query requires an index.'), { code: 9 });
+        const failedQuery = {
+            where: vi.fn().mockReturnThis(),
+            select: vi.fn().mockReturnThis(),
+            get: vi.fn().mockRejectedValue(missingIndexError)
+        };
+
+        const fallbackGet = vi.fn().mockResolvedValue({
+            docs: [
+                {
+                    data: () => ({
+                        created: toSeconds('2026-03-01T00:00:00Z'),
+                        cancel_at_period_end: false,
+                        status: 'active'
+                    })
+                },
+                {
+                    data: () => ({
+                        current_period_end: toSeconds('2026-02-10T00:00:00Z'),
+                        cancel_at_period_end: true,
+                        status: 'active'
+                    })
+                }
+            ]
+        });
+
+        let subscriptionsCollectionCalls = 0;
+        mockCollection.mockImplementation((name: string) => {
+            if (name === 'subscriptions') {
+                subscriptionsCollectionCalls += 1;
+                if (subscriptionsCollectionCalls <= 2) {
+                    return {
+                        where: vi.fn().mockReturnValue(failedQuery)
+                    };
+                }
+
+                return {
+                    select: vi.fn().mockReturnValue({
+                        get: fallbackGet
+                    })
+                };
+            }
+
+            return {
+                where: vi.fn().mockReturnThis(),
+                count: vi.fn().mockReturnValue({
+                    get: vi.fn().mockResolvedValue({
+                        data: () => ({ count: 0 })
+                    })
+                }),
+                get: vi.fn().mockResolvedValue({ docs: [] })
+            };
+        });
+
+        const result: any = await (getSubscriptionHistoryTrend as any)(getRequest({ months: 12 }));
+        expect(fallbackGet).toHaveBeenCalledTimes(1);
+        expect(result.totals).toEqual(expect.objectContaining({
+            newSubscriptions: 1,
+            plannedCancellations: 1,
+            net: 0
+        }));
     });
 
     it('should throw "unauthenticated" if called without auth', async () => {

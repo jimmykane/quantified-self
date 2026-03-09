@@ -119,14 +119,56 @@ describe('AdminUserManagementComponent', () => {
     const mockTrend: SubscriptionHistoryTrendResponse = {
         months: 12,
         buckets: [
-            { key: '2026-01', label: 'Jan 2026', newSubscriptions: 5, plannedCancellations: 2, net: 3 },
-            { key: '2026-02', label: 'Feb 2026', newSubscriptions: 3, plannedCancellations: 4, net: -1 },
-            { key: '2026-03', label: 'Mar 2026', newSubscriptions: 6, plannedCancellations: 1, net: 5 }
+            {
+                key: '2026-01',
+                label: 'Jan 2026',
+                newSubscriptions: 5,
+                plannedCancellations: 2,
+                net: 3,
+                basicNewSubscriptions: 2,
+                basicPlannedCancellations: 1,
+                basicNet: 1,
+                proNewSubscriptions: 3,
+                proPlannedCancellations: 1,
+                proNet: 2
+            },
+            {
+                key: '2026-02',
+                label: 'Feb 2026',
+                newSubscriptions: 3,
+                plannedCancellations: 4,
+                net: -1,
+                basicNewSubscriptions: 1,
+                basicPlannedCancellations: 3,
+                basicNet: -2,
+                proNewSubscriptions: 2,
+                proPlannedCancellations: 1,
+                proNet: 1
+            },
+            {
+                key: '2026-03',
+                label: 'Mar 2026',
+                newSubscriptions: 6,
+                plannedCancellations: 1,
+                net: 5,
+                basicNewSubscriptions: 4,
+                basicPlannedCancellations: 1,
+                basicNet: 3,
+                proNewSubscriptions: 2,
+                proPlannedCancellations: 0,
+                proNet: 2
+            }
         ],
         totals: {
             newSubscriptions: 14,
             plannedCancellations: 7,
-            net: 7
+            net: 7,
+            basicNewSubscriptions: 7,
+            basicPlannedCancellations: 5,
+            basicNet: 2,
+            proNewSubscriptions: 7,
+            proPlannedCancellations: 2,
+            proNet: 5
         }
     };
 
@@ -285,16 +327,25 @@ describe('AdminUserManagementComponent', () => {
         expect(mockEchartsService.dispose.mock.calls.length).toBeGreaterThanOrEqual(2);
     });
 
-    it('should build subscription trend chart option with three series', () => {
-        const option = (component as any).buildSubscriptionTrendChartOption(mockTrend);
+    it('should build subscription trend chart option with three cumulative total series', () => {
+        const option = (component as any).buildSubscriptionTrendChartOption(mockTrend, 70, 30);
         const series = (option as any).series;
+        const graphic = (option as any).graphic;
 
         expect(series).toHaveLength(3);
         expect(series.map((entry: any) => entry.name)).toEqual([
-            'New Subscriptions',
-            'Planned Cancellations',
-            'Net'
+            'Basic Totals',
+            'Pro Totals',
+            'All Totals'
         ]);
+        expect(series[0].data).toEqual([69, 67, 70]);
+        expect(series[1].data).toEqual([27, 28, 30]);
+        expect(series[2].data).toEqual([96, 95, 100]);
+        expect(graphic).toBeTruthy();
+        expect(graphic[0].style.text).toContain('Current');
+        expect(graphic[0].style.text).toContain('Basic 70');
+        expect(graphic[0].style.text).toContain('Pro 30');
+        expect(graphic[0].style.text).toContain('All 100');
     });
 
     it('should handle null subscription trend data safely', () => {
