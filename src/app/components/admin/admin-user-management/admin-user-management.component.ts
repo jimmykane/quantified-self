@@ -1,4 +1,17 @@
-import { AfterViewInit, Component, ElementRef, LOCALE_ID, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
+import {
+    AfterViewInit,
+    Component,
+    ElementRef,
+    Injector,
+    LOCALE_ID,
+    OnDestroy,
+    OnInit,
+    ViewChild,
+    effect,
+    inject,
+    signal
+} from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterModule } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
@@ -14,8 +27,8 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatCardModule } from '@angular/material/card';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
-import { Subject } from 'rxjs';
-import { debounceTime, distinctUntilChanged, takeUntil } from 'rxjs/operators';
+import { Subject, of } from 'rxjs';
+import { catchError, debounceTime, distinctUntilChanged, takeUntil } from 'rxjs/operators';
 
 import { AdminService, AdminUser, ListUsersParams, SubscriptionHistoryTrendResponse, UserCountStats } from '../../../services/admin.service';
 import { AppThemeService } from '../../../services/app.theme.service';
@@ -78,6 +91,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     private logger = inject(LoggerService);
     private eChartsLoader = inject(EChartsLoaderService);
     private locale = inject(LOCALE_ID);
+    private injector = inject(Injector);
 
     // Data state
     users: AdminUser[] = [];
@@ -115,7 +129,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     });
     private isDark = false;
     private providerData: Record<string, number> | null = null;
-    private subscriptionHistoryTrend: SubscriptionHistoryTrendResponse | null = null;
+    private readonly subscriptionHistoryTrend = signal<SubscriptionHistoryTrendResponse | null>(null);
     private readonly dayjsLocale = this.normalizeDayjsLocale(this.locale);
     private readonly supportedSortFields = new Set([
         'email',
@@ -127,6 +141,12 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
         'status',
         'providerIds'
     ]);
+
+    constructor() {
+        effect(() => {
+            this.renderSubscriptionTrendChart(this.subscriptionHistoryTrend());
+        });
+    }
 
     async ngOnInit(): Promise<void> {
         // Handle search debounce
@@ -166,13 +186,21 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
                     this.updateAuthChart(stats.providers);
                 }
             });
-            this.adminService.getSubscriptionHistoryTrend(12).pipe(takeUntil(this.destroy$)).subscribe({
-                next: (trendData) => this.updateSubscriptionTrendChart(trendData),
-                error: (err) => {
-                    this.updateSubscriptionTrendChart(null);
-                    this.logger.error('AdminUserManagement subscription trend fallback error:', err);
+            const fallbackTrendSignal = toSignal(
+                this.adminService.getSubscriptionHistoryTrend(12).pipe(
+                    catchError((err) => {
+                        this.logger.error('AdminUserManagement subscription trend fallback error:', err);
+                        return of(null);
+                    })
+                ),
+                {
+                    initialValue: null,
+                    injector: this.injector
                 }
-            });
+            );
+            effect(() => {
+                this.subscriptionHistoryTrend.set(fallbackTrendSignal());
+            }, { injector: this.injector });
         }
     }
 
@@ -180,7 +208,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
         await this.initializeCharts();
         await this.updateChartTheme();
         this.updateAuthChart(this.providerData ?? {});
-        this.updateSubscriptionTrendChart(this.subscriptionHistoryTrend);
+        this.renderSubscriptionTrendChart();
     }
 
     ngOnDestroy(): void {
@@ -223,12 +251,11 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     }
 
     private updateSubscriptionTrendChart(trendData: SubscriptionHistoryTrendResponse | null): void {
-        this.subscriptionHistoryTrend = trendData;
-        this.renderSubscriptionTrendChart();
+        this.subscriptionHistoryTrend.set(trendData);
     }
 
     get hasSubscriptionTrendData(): boolean {
-        return !!this.subscriptionHistoryTrend?.buckets?.length;
+        return !!this.subscriptionHistoryTrend()?.buckets?.length;
     }
 
     onPageChange(event: PageEvent): void {
@@ -436,12 +463,12 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
         this.chartHost.scheduleResize();
     }
 
-    private renderSubscriptionTrendChart(): void {
+    private renderSubscriptionTrendChart(trendData: SubscriptionHistoryTrendResponse | null = this.subscriptionHistoryTrend()): void {
         if (!this.subscriptionTrendChartHost.getChart()) {
             return;
         }
 
-        if (!this.subscriptionHistoryTrend?.buckets?.length) {
+        if (!trendData?.buckets?.length) {
             this.subscriptionTrendChartHost.setOption({
                 xAxis: { type: 'category', data: [] },
                 yAxis: { type: 'value' },
@@ -452,7 +479,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
         }
 
         const option = this.buildSubscriptionTrendChartOption(
-            this.subscriptionHistoryTrend,
+            trendData,
             this.getCurrentBasicSubscriptions(),
             this.getCurrentProSubscriptions()
         );
