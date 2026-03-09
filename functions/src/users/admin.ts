@@ -660,20 +660,20 @@ export const getSubscriptionHistoryTrend = onAdminCall<GetSubscriptionHistoryTre
 
         const rangeStartMs = bucketWindows[0].startMs;
         const rangeEndMs = bucketWindows[bucketWindows.length - 1].endMs;
-        const rangeStartSeconds = Math.floor(rangeStartMs / 1000);
-        const rangeEndSeconds = Math.floor(rangeEndMs / 1000);
+        const rangeStartDate = new Date(rangeStartMs);
+        const rangeEndDate = new Date(rangeEndMs);
 
         const [newSubscriptionSnapshot, plannedCancellationSnapshot] = await Promise.all([
             db.collectionGroup('subscriptions')
-                .where('created', '>=', rangeStartSeconds)
-                .where('created', '<', rangeEndSeconds)
+                .where('created', '>=', rangeStartDate)
+                .where('created', '<', rangeEndDate)
                 .select('created', 'role')
                 .get(),
             db.collectionGroup('subscriptions')
                 .where('cancel_at_period_end', '==', true)
                 .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
-                .where('current_period_end', '>=', rangeStartSeconds)
-                .where('current_period_end', '<', rangeEndSeconds)
+                .where('current_period_end', '>=', rangeStartDate)
+                .where('current_period_end', '<', rangeEndDate)
                 .select('current_period_end', 'cancel_at_period_end', 'status', 'role')
                 .get()
         ]);
