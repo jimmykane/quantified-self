@@ -198,20 +198,25 @@
 .qs-filter-container {
     margin-bottom: 16px;
     padding: 16px;
-    display: flex;
-    align-items: center;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(180px, 220px);
+    align-items: start;
     gap: 16px;
-    flex-wrap: wrap;
+
+    @include bp.xsmall {
+        grid-template-columns: 1fr;
+    }
 }
 
 .qs-search-field {
-    flex: 1;
-    min-width: 200px;
+    min-width: 0;
+    width: 100%;
 }
 
 .qs-filter-field {
-    min-width: 150px;
-    max-width: 200px;
+    min-width: 0;
+    max-width: none;
+    width: 100%;
 }
 
 // Table Styles

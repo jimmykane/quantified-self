@@ -522,28 +522,28 @@ describe('AdminUserManagementComponent', () => {
             const user = { subscription: { status: 'active', cancel_at_period_end: false } } as any;
             expect(component.getSubscriptionHistoryState(user)).toBe('active');
             expect(component.getSubscriptionHistoryLabel(user)).toBe('Active');
-            expect(component.getSubscriptionHistoryDetails(user)).toBe('ACTIVE');
+            expect(component.getSubscriptionHistoryDetails(user)).toBeNull();
         });
 
         it('should return scheduled when cancellation is scheduled', () => {
             const user = { subscription: { status: 'active', cancel_at_period_end: true } } as any;
             expect(component.getSubscriptionHistoryState(user)).toBe('scheduled');
             expect(component.getSubscriptionHistoryLabel(user)).toBe('Cancel Scheduled');
-            expect(component.getSubscriptionHistoryDetails(user)).toBe('ACTIVE');
+            expect(component.getSubscriptionHistoryDetails(user)).toBe('Scheduled to end');
         });
 
         it('should return canceled when user has paid history but no active subscription', () => {
             const user = { hasSubscribedOnce: true } as any;
             expect(component.getSubscriptionHistoryState(user)).toBe('canceled');
             expect(component.getSubscriptionHistoryLabel(user)).toBe('Canceled');
-            expect(component.getSubscriptionHistoryDetails(user)).toBe('Had paid subscription before');
+            expect(component.getSubscriptionHistoryDetails(user)).toBeNull();
         });
 
         it('should return never when user has no paid history', () => {
             const user = { hasSubscribedOnce: false } as any;
             expect(component.getSubscriptionHistoryState(user)).toBe('never');
             expect(component.getSubscriptionHistoryLabel(user)).toBe('Never Subscribed');
-            expect(component.getSubscriptionHistoryDetails(user)).toBe('No paid subscription history');
+            expect(component.getSubscriptionHistoryDetails(user)).toBeNull();
         });
 
         it('should include end date detail when cancellation has current period end', () => {
@@ -555,6 +555,16 @@ describe('AdminUserManagementComponent', () => {
                 }
             } as any;
             expect(component.getSubscriptionHistoryDetails(user)).toContain('Ends');
+        });
+
+        it('should show specific details for trialing and past due subscriptions', () => {
+            expect(component.getSubscriptionHistoryDetails({
+                subscription: { status: 'trialing', cancel_at_period_end: false }
+            } as any)).toBe('Trialing');
+
+            expect(component.getSubscriptionHistoryDetails({
+                subscription: { status: 'past_due', cancel_at_period_end: false }
+            } as any)).toBe('Past Due');
         });
     });
 

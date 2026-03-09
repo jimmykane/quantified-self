@@ -325,26 +325,30 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
         return 'Never Subscribed';
     }
 
-    getSubscriptionHistoryDetails(user: AdminUser): string {
+    getSubscriptionHistoryDetails(user: AdminUser): string | null {
         const state = this.getSubscriptionHistoryState(user);
-        const rawStatus = user.subscription?.status?.toUpperCase();
+        const status = user.subscription?.status?.toLowerCase();
 
         if (state === 'scheduled') {
             if (user.subscription?.current_period_end) {
                 return `Ends ${this.formatDate(user.subscription.current_period_end)}`;
             }
-            return rawStatus || 'Cancellation scheduled';
+            return 'Scheduled to end';
         }
 
         if (state === 'active') {
-            return rawStatus || 'Active subscription';
+            if (status === 'trialing') {
+                return 'Trialing';
+            }
+
+            if (status === 'past_due') {
+                return 'Past Due';
+            }
+
+            return null;
         }
 
-        if (state === 'canceled') {
-            return 'Had paid subscription before';
-        }
-
-        return 'No paid subscription history';
+        return null;
     }
 
     private formatDate(timestamp: any): string {
