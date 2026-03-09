@@ -125,6 +125,21 @@
             </div>
         </mat-card>
 
+        <mat-card class="chart-card">
+            <h3 class="chart-header">
+                <mat-icon>show_chart</mat-icon>
+                Subscription Lifecycle (Monthly)
+            </h3>
+
+            <div class="chart-wrapper">
+                <div #subscriptionTrendChart class="echart-surface"></div>
+            </div>
+
+            <div *ngIf="!hasSubscriptionTrendData" class="empty-state chart-empty-state">
+                No subscription trend data available
+            </div>
+        </mat-card>
+
         <mat-card class="qs-filter-container">
             <mat-form-field appearance="outline" class="qs-search-field" subscriptSizing="dynamic">
                 <mat-label>Search users</mat-label>

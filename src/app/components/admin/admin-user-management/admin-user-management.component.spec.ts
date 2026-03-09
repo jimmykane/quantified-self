@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AdminUserManagementComponent } from './admin-user-management.component';
-import { AdminService, AdminUser, ListUsersResponse } from '../../../services/admin.service';
+import { AdminService, AdminUser, ListUsersResponse, SubscriptionHistoryTrendResponse } from '../../../services/admin.service';
 import { AppImpersonationService } from '../../../services/app.impersonation.service';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { LoggerService } from '../../../services/logger.service';
@@ -116,6 +116,20 @@ describe('AdminUserManagementComponent', () => {
         pageSize: 25
     };
 
+    const mockTrend: SubscriptionHistoryTrendResponse = {
+        months: 12,
+        buckets: [
+            { key: '2026-01', label: 'Jan 2026', newSubscriptions: 5, plannedCancellations: 2, net: 3 },
+            { key: '2026-02', label: 'Feb 2026', newSubscriptions: 3, plannedCancellations: 4, net: -1 },
+            { key: '2026-03', label: 'Mar 2026', newSubscriptions: 6, plannedCancellations: 1, net: 5 }
+        ],
+        totals: {
+            newSubscriptions: 14,
+            plannedCancellations: 7,
+            net: 7
+        }
+    };
+
     beforeEach(async () => {
         adminServiceSpy = {
             getUsers: vi.fn().mockReturnValue(of(mockResponse)),
@@ -129,6 +143,7 @@ describe('AdminUserManagementComponent', () => {
                 cancelScheduled: 8,
                 onboardingCompleted: 80
             })),
+            getSubscriptionHistoryTrend: vi.fn().mockReturnValue(of(mockTrend))
         };
 
         impersonationServiceSpy = {
@@ -207,7 +222,8 @@ describe('AdminUserManagementComponent', () => {
                                         canceled: 15,
                                         cancelScheduled: 8,
                                         onboardingCompleted: 80
-                                    }
+                                    },
+                                    subscriptionHistoryTrend: mockTrend
                                 }
                             }
                         }
@@ -253,6 +269,47 @@ describe('AdminUserManagementComponent', () => {
             cancelScheduled: 8,
             onboardingCompleted: 80
         });
+    });
+
+    it('should use resolved subscription trend data on init', () => {
+        expect(adminServiceSpy.getSubscriptionHistoryTrend).not.toHaveBeenCalled();
+        expect(component.hasSubscriptionTrendData).toBe(true);
+    });
+
+    it('should initialize and dispose both chart hosts', async () => {
+        await Promise.resolve();
+
+        expect(mockEchartsService.init.mock.calls.length).toBeGreaterThanOrEqual(2);
+
+        fixture.destroy();
+        expect(mockEchartsService.dispose.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('should build subscription trend chart option with three series', () => {
+        const option = (component as any).buildSubscriptionTrendChartOption(mockTrend);
+        const series = (option as any).series;
+
+        expect(series).toHaveLength(3);
+        expect(series.map((entry: any) => entry.name)).toEqual([
+            'New Subscriptions',
+            'Planned Cancellations',
+            'Net'
+        ]);
+    });
+
+    it('should handle null subscription trend data safely', () => {
+        expect(() => (component as any).updateSubscriptionTrendChart(null)).not.toThrow();
+        expect(component.hasSubscriptionTrendData).toBe(false);
+    });
+
+    it('should update both chart hosts when theme changes', async () => {
+        const beforeThemeChangeInitCalls = mockEchartsService.init.mock.calls.length;
+
+        themeSubject.next(AppThemes.Light);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(mockEchartsService.init.mock.calls.length).toBeGreaterThanOrEqual(beforeThemeChangeInitCalls + 2);
     });
 
     it('should handle errors when fetching users', () => {

@@ -102,4 +102,18 @@ describe('AdminService', () => {
         expect(functionsServiceMock.call).toHaveBeenCalledWith('impersonateUser', { uid });
         expect(result).toEqual(mockResponse);
     });
+
+    it('should call getSubscriptionHistoryTrend Cloud Function with bounded months', async () => {
+        const mockTrend = {
+            months: 24,
+            buckets: [{ key: '2026-01', label: 'Jan 2026', newSubscriptions: 3, plannedCancellations: 1, net: 2 }],
+            totals: { newSubscriptions: 3, plannedCancellations: 1, net: 2 }
+        };
+        functionsServiceMock.call.mockResolvedValue({ data: mockTrend });
+
+        const result = await firstValueFrom(service.getSubscriptionHistoryTrend(99));
+
+        expect(functionsServiceMock.call).toHaveBeenCalledWith('getSubscriptionHistoryTrend', { months: 24 });
+        expect(result).toEqual(mockTrend);
+    });
 });

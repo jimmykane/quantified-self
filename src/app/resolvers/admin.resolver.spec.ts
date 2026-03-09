@@ -14,7 +14,8 @@ describe('adminResolver', () => {
     beforeEach(() => {
         adminServiceSpy = {
             getUsers: vi.fn(),
-            getTotalUserCount: vi.fn()
+            getTotalUserCount: vi.fn(),
+            getSubscriptionHistoryTrend: vi.fn()
         };
 
         TestBed.configureTestingModule({
@@ -41,9 +42,15 @@ describe('adminResolver', () => {
             onboardingCompleted: 8,
             providers: {}
         };
+        const mockTrend = {
+            months: 12,
+            buckets: [{ key: '2026-03', label: 'Mar 2026', newSubscriptions: 2, plannedCancellations: 1, net: 1 }],
+            totals: { newSubscriptions: 2, plannedCancellations: 1, net: 1 }
+        };
 
         adminServiceSpy.getUsers.mockReturnValue(of(mockUsers));
         adminServiceSpy.getTotalUserCount.mockReturnValue(of(mockStats));
+        adminServiceSpy.getSubscriptionHistoryTrend.mockReturnValue(of(mockTrend));
 
         const route = new ActivatedRouteSnapshot();
         const state = {} as RouterStateSnapshot;
@@ -51,8 +58,10 @@ describe('adminResolver', () => {
         (executeResolver(route, state) as any).subscribe((result: AdminResolverData) => {
             expect(result.usersData).toEqual(mockUsers);
             expect(result.userStats).toEqual(mockStats);
+            expect(result.subscriptionHistoryTrend).toEqual(mockTrend);
             expect(adminServiceSpy.getUsers).toHaveBeenCalled();
             expect(adminServiceSpy.getTotalUserCount).toHaveBeenCalled();
+            expect(adminServiceSpy.getSubscriptionHistoryTrend).toHaveBeenCalledWith(12);
             done();
         });
     }));
@@ -60,6 +69,7 @@ describe('adminResolver', () => {
     it('should handle errors gracefully and return empty/null data', () => new Promise<void>(done => {
         adminServiceSpy.getUsers.mockReturnValue(throwError(() => new Error('Failed to fetch users')));
         adminServiceSpy.getTotalUserCount.mockReturnValue(throwError(() => new Error('Failed to fetch stats')));
+        adminServiceSpy.getSubscriptionHistoryTrend.mockReturnValue(throwError(() => new Error('Failed to fetch trend')));
 
         const route = new ActivatedRouteSnapshot();
         const state = {} as RouterStateSnapshot;
@@ -67,6 +77,7 @@ describe('adminResolver', () => {
         (executeResolver(route, state) as any).subscribe((result: AdminResolverData) => {
             expect(result.usersData).toEqual({ users: [], totalCount: 0 }); // Fallback value
             expect(result.userStats).toBeNull(); // Fallback value
+            expect(result.subscriptionHistoryTrend).toBeNull();
             done();
         });
     }));

@@ -44,6 +44,168 @@ function toSafeNumber(value: unknown, fallback: number = 0): number {
     return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+const DEFAULT_SUBSCRIPTION_HISTORY_MONTHS = 12;
+const MAX_SUBSCRIPTION_HISTORY_MONTHS = 24;
+const ACTIVE_SUBSCRIPTION_STATUSES = ['active', 'trialing', 'past_due'] as const;
+
+interface GetSubscriptionHistoryTrendRequest {
+    months?: number;
+}
+
+interface SubscriptionHistoryTrendBucket {
+    key: string;
+    label: string;
+    newSubscriptions: number;
+    plannedCancellations: number;
+    net: number;
+}
+
+interface SubscriptionHistoryTrendResponse {
+    months: number;
+    buckets: SubscriptionHistoryTrendBucket[];
+    totals: {
+        newSubscriptions: number;
+        plannedCancellations: number;
+        net: number;
+    };
+}
+
+function clampSubscriptionHistoryMonths(rawMonths: unknown): number {
+    const parsed = Number(rawMonths);
+    if (!Number.isFinite(parsed)) {
+        return DEFAULT_SUBSCRIPTION_HISTORY_MONTHS;
+    }
+    const normalized = Math.floor(parsed);
+    if (normalized < 1) {
+        return 1;
+    }
+    if (normalized > MAX_SUBSCRIPTION_HISTORY_MONTHS) {
+        return MAX_SUBSCRIPTION_HISTORY_MONTHS;
+    }
+    return normalized;
+}
+
+function normalizeEpochNumberToMillis(value: number): number | null {
+    if (!Number.isFinite(value) || value <= 0) {
+        return null;
+    }
+
+    if (value > 1e12) {
+        return Math.trunc(value);
+    }
+
+    if (value > 1e9) {
+        return Math.trunc(value * 1000);
+    }
+
+    return null;
+}
+
+function toEpochMillis(value: unknown): number | null {
+    if (value === null || value === undefined) {
+        return null;
+    }
+
+    if (typeof value === 'number') {
+        return normalizeEpochNumberToMillis(value);
+    }
+
+    if (typeof value === 'string') {
+        const numeric = Number(value);
+        if (Number.isFinite(numeric)) {
+            return normalizeEpochNumberToMillis(numeric);
+        }
+        const parsed = Date.parse(value);
+        return Number.isNaN(parsed) ? null : parsed;
+    }
+
+    if (value instanceof Date) {
+        const parsed = value.getTime();
+        return Number.isNaN(parsed) ? null : parsed;
+    }
+
+    if (typeof value === 'object') {
+        const timestamp = value as {
+            toMillis?: () => number;
+            toDate?: () => Date;
+            seconds?: unknown;
+            _seconds?: unknown;
+            nanoseconds?: unknown;
+            _nanoseconds?: unknown;
+        };
+
+        if (typeof timestamp.toMillis === 'function') {
+            const millis = timestamp.toMillis();
+            return Number.isFinite(millis) ? millis : null;
+        }
+
+        if (typeof timestamp.toDate === 'function') {
+            const date = timestamp.toDate();
+            const millis = date.getTime();
+            return Number.isFinite(millis) ? millis : null;
+        }
+
+        const rawSeconds = timestamp.seconds ?? timestamp._seconds;
+        if (rawSeconds !== undefined && rawSeconds !== null) {
+            const seconds = Number(rawSeconds);
+            if (!Number.isFinite(seconds)) {
+                return null;
+            }
+            const rawNanos = timestamp.nanoseconds ?? timestamp._nanoseconds;
+            const nanos = Number(rawNanos);
+            const extraMillis = Number.isFinite(nanos) ? Math.floor(nanos / 1_000_000) : 0;
+            return (seconds * 1000) + extraMillis;
+        }
+    }
+
+    return null;
+}
+
+function toUtcMonthKey(epochMillis: number): string {
+    const date = new Date(epochMillis);
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    return `${year}-${month}`;
+}
+
+function formatUtcMonthLabel(epochMillis: number): string {
+    return new Date(epochMillis).toLocaleDateString('en-US', {
+        month: 'short',
+        year: 'numeric',
+        timeZone: 'UTC'
+    });
+}
+
+function buildMonthlyBucketWindows(months: number, now: Date): Array<{ key: string; label: string; startMs: number; endMs: number }> {
+    const currentMonthStartMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0);
+    const firstMonthStartDate = new Date(currentMonthStartMs);
+    firstMonthStartDate.setUTCMonth(firstMonthStartDate.getUTCMonth() - (months - 1));
+
+    const windows: Array<{ key: string; label: string; startMs: number; endMs: number }> = [];
+
+    for (let index = 0; index < months; index++) {
+        const monthStartDate = new Date(Date.UTC(
+            firstMonthStartDate.getUTCFullYear(),
+            firstMonthStartDate.getUTCMonth() + index,
+            1
+        ));
+        const nextMonthStartDate = new Date(Date.UTC(
+            firstMonthStartDate.getUTCFullYear(),
+            firstMonthStartDate.getUTCMonth() + index + 1,
+            1
+        ));
+        const startMs = monthStartDate.getTime();
+        windows.push({
+            key: toUtcMonthKey(startMs),
+            label: formatUtcMonthLabel(startMs),
+            startMs,
+            endMs: nextMonthStartDate.getTime()
+        });
+    }
+
+    return windows;
+}
+
 interface ListUsersRequest {
     pageSize?: number;
     page?: number;
@@ -367,18 +529,17 @@ export const getUserCount = onAdminCall<void, any>({
 }, async () => {
     try {
         const db = admin.firestore();
-        const activeSubscriptionStatuses = ['active', 'trialing', 'past_due'];
 
         // 1. Get stats from Firestore (subscriptions)
         // Parallel efficient count queries
         const [totalSnapshot, proSnapshot, basicSnapshot, onboardedSnapshot, everPaidSnapshot, cancelScheduledSnapshot] = await Promise.all([
             db.collection('users').count().get(),
             db.collectionGroup('subscriptions')
-                .where('status', 'in', activeSubscriptionStatuses)
+                .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
                 .where('role', '==', 'pro')
                 .count().get(),
             db.collectionGroup('subscriptions')
-                .where('status', 'in', activeSubscriptionStatuses)
+                .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
                 .where('role', '==', 'basic')
                 .count().get(),
             db.collection('users')
@@ -388,7 +549,7 @@ export const getUserCount = onAdminCall<void, any>({
                 .where('hasSubscribedOnce', '==', true)
                 .count().get(),
             db.collectionGroup('subscriptions')
-                .where('status', 'in', activeSubscriptionStatuses)
+                .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
                 .where('cancel_at_period_end', '==', true)
                 .count().get()
         ]);
@@ -445,6 +606,113 @@ export const getUserCount = onAdminCall<void, any>({
     } catch (error: unknown) {
         logger.error('Error getting user count:', error);
         throw new HttpsError('internal', 'Failed to get user count');
+    }
+});
+
+/**
+ * Returns historical monthly subscription lifecycle buckets for Admin dashboards.
+ * Buckets are generated in UTC and include:
+ * - newSubscriptions: subscriptions created in each month
+ * - plannedCancellations: subscriptions with cancel_at_period_end=true whose current_period_end falls in month
+ * - net: newSubscriptions - plannedCancellations
+ */
+export const getSubscriptionHistoryTrend = onAdminCall<GetSubscriptionHistoryTrendRequest, SubscriptionHistoryTrendResponse>({
+    region: FUNCTIONS_MANIFEST.getSubscriptionHistoryTrend.region,
+    memory: '256MiB',
+}, async (request) => {
+    try {
+        const db = admin.firestore();
+        const months = clampSubscriptionHistoryMonths(request.data?.months);
+        const bucketWindows = buildMonthlyBucketWindows(months, new Date());
+
+        if (bucketWindows.length === 0) {
+            return {
+                months,
+                buckets: [],
+                totals: {
+                    newSubscriptions: 0,
+                    plannedCancellations: 0,
+                    net: 0
+                }
+            };
+        }
+
+        const rangeStartMs = bucketWindows[0].startMs;
+        const rangeEndMs = bucketWindows[bucketWindows.length - 1].endMs;
+        const rangeStartSeconds = Math.floor(rangeStartMs / 1000);
+        const rangeEndSeconds = Math.floor(rangeEndMs / 1000);
+
+        const [newSubscriptionSnapshot, plannedCancellationSnapshot] = await Promise.all([
+            db.collectionGroup('subscriptions')
+                .where('created', '>=', rangeStartSeconds)
+                .where('created', '<', rangeEndSeconds)
+                .select('created')
+                .get(),
+            db.collectionGroup('subscriptions')
+                .where('cancel_at_period_end', '==', true)
+                .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
+                .where('current_period_end', '>=', rangeStartSeconds)
+                .where('current_period_end', '<', rangeEndSeconds)
+                .select('current_period_end')
+                .get()
+        ]);
+
+        const buckets = bucketWindows.map((window) => ({
+            key: window.key,
+            label: window.label,
+            newSubscriptions: 0,
+            plannedCancellations: 0,
+            net: 0
+        }));
+        const bucketByKey = new Map<string, SubscriptionHistoryTrendBucket>();
+        buckets.forEach(bucket => {
+            bucketByKey.set(bucket.key, bucket);
+        });
+
+        newSubscriptionSnapshot.docs.forEach(doc => {
+            const subscription = doc.data() as Record<string, unknown>;
+            const createdAtMillis = toEpochMillis(subscription.created);
+            if (createdAtMillis === null || createdAtMillis < rangeStartMs || createdAtMillis >= rangeEndMs) {
+                return;
+            }
+            const bucket = bucketByKey.get(toUtcMonthKey(createdAtMillis));
+            if (bucket) {
+                bucket.newSubscriptions += 1;
+            }
+        });
+
+        plannedCancellationSnapshot.docs.forEach(doc => {
+            const subscription = doc.data() as Record<string, unknown>;
+            const periodEndMillis = toEpochMillis(subscription.current_period_end);
+            if (periodEndMillis === null || periodEndMillis < rangeStartMs || periodEndMillis >= rangeEndMs) {
+                return;
+            }
+            const bucket = bucketByKey.get(toUtcMonthKey(periodEndMillis));
+            if (bucket) {
+                bucket.plannedCancellations += 1;
+            }
+        });
+
+        let totalNewSubscriptions = 0;
+        let totalPlannedCancellations = 0;
+        buckets.forEach(bucket => {
+            bucket.net = bucket.newSubscriptions - bucket.plannedCancellations;
+            totalNewSubscriptions += bucket.newSubscriptions;
+            totalPlannedCancellations += bucket.plannedCancellations;
+        });
+
+        return {
+            months,
+            buckets,
+            totals: {
+                newSubscriptions: totalNewSubscriptions,
+                plannedCancellations: totalPlannedCancellations,
+                net: totalNewSubscriptions - totalPlannedCancellations
+            }
+        };
+    } catch (error: unknown) {
+        logger.error('Error getting subscription history trend:', error);
+        throw new HttpsError('internal', 'Failed to get subscription history trend');
     }
 });
 

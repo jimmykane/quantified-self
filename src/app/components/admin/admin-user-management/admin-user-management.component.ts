@@ -17,7 +17,7 @@ import { MatSnackBarModule } from '@angular/material/snack-bar';
 import { Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged, takeUntil } from 'rxjs/operators';
 
-import { AdminService, AdminUser, ListUsersParams, UserCountStats } from '../../../services/admin.service';
+import { AdminService, AdminUser, ListUsersParams, SubscriptionHistoryTrendResponse, UserCountStats } from '../../../services/admin.service';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { AppImpersonationService } from '../../../services/app.impersonation.service';
 import { LoggerService } from '../../../services/logger.service';
@@ -27,6 +27,7 @@ import { AppThemes } from '@sports-alliance/sports-lib';
 import type { EChartsType } from 'echarts/core';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import {
+    ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS,
     ECHARTS_SERIES_MERGE_UPDATE_SETTINGS,
     EChartsHostController
 } from '../../../helpers/echarts-host-controller';
@@ -66,6 +67,7 @@ type ChartOption = Parameters<EChartsType['setOption']>[0];
 export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterViewInit {
     @ViewChild(MatSort) sort!: MatSort;
     @ViewChild('authChart', { static: true }) authChartRef!: ElementRef<HTMLDivElement>;
+    @ViewChild('subscriptionTrendChart', { static: true }) subscriptionTrendChartRef!: ElementRef<HTMLDivElement>;
 
     // Injected services
     private adminService = inject(AdminService);
@@ -106,8 +108,14 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
         logger: this.logger,
         logPrefix: '[AdminUserManagementComponent]'
     });
+    private subscriptionTrendChartHost = new EChartsHostController({
+        eChartsLoader: this.eChartsLoader,
+        logger: this.logger,
+        logPrefix: '[AdminUserManagementComponent]'
+    });
     private isDark = false;
     private providerData: Record<string, number> | null = null;
+    private subscriptionHistoryTrend: SubscriptionHistoryTrendResponse | null = null;
     private readonly dayjsLocale = this.normalizeDayjsLocale(this.locale);
     private readonly supportedSortFields = new Set([
         'email',
@@ -144,6 +152,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
             this.users = resolvedData.usersData.users;
             this.totalCount = resolvedData.usersData.totalCount;
             this.userStats = resolvedData.userStats;
+            this.updateSubscriptionTrendChart(resolvedData.subscriptionHistoryTrend);
             this.isLoading = false;
             if (this.userStats?.providers) {
                 this.updateAuthChart(this.userStats.providers);
@@ -157,19 +166,28 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
                     this.updateAuthChart(stats.providers);
                 }
             });
+            this.adminService.getSubscriptionHistoryTrend(12).pipe(takeUntil(this.destroy$)).subscribe({
+                next: (trendData) => this.updateSubscriptionTrendChart(trendData),
+                error: (err) => {
+                    this.updateSubscriptionTrendChart(null);
+                    this.logger.error('AdminUserManagement subscription trend fallback error:', err);
+                }
+            });
         }
     }
 
     async ngAfterViewInit(): Promise<void> {
-        await this.initializeChart();
-        this.updateChartTheme();
+        await this.initializeCharts();
+        await this.updateChartTheme();
         this.updateAuthChart(this.providerData ?? {});
+        this.updateSubscriptionTrendChart(this.subscriptionHistoryTrend);
     }
 
     ngOnDestroy(): void {
         this.destroy$.next();
         this.destroy$.complete();
         this.chartHost.dispose();
+        this.subscriptionTrendChartHost.dispose();
     }
 
     fetchUsers(): void {
@@ -202,6 +220,15 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     private updateAuthChart(providers: Record<string, number>): void {
         this.providerData = providers;
         this.renderAuthChart();
+    }
+
+    private updateSubscriptionTrendChart(trendData: SubscriptionHistoryTrendResponse | null): void {
+        this.subscriptionHistoryTrend = trendData;
+        this.renderSubscriptionTrendChart();
+    }
+
+    get hasSubscriptionTrendData(): boolean {
+        return !!this.subscriptionHistoryTrend?.buckets?.length;
     }
 
     onPageChange(event: PageEvent): void {
@@ -380,11 +407,19 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
         return lowerLocale.split('-')[0];
     }
 
-    private async initializeChart(): Promise<void> {
-        if (!this.authChartRef?.nativeElement) {
-            return;
+    private async initializeCharts(): Promise<void> {
+        const themeName = resolveEChartsThemeName(this.isDark);
+        const initializations: Array<Promise<unknown>> = [];
+
+        if (this.authChartRef?.nativeElement) {
+            initializations.push(this.chartHost.init(this.authChartRef.nativeElement, themeName));
         }
-        await this.chartHost.init(this.authChartRef.nativeElement, resolveEChartsThemeName(this.isDark));
+
+        if (this.subscriptionTrendChartRef?.nativeElement) {
+            initializations.push(this.subscriptionTrendChartHost.init(this.subscriptionTrendChartRef.nativeElement, themeName));
+        }
+
+        await Promise.all(initializations);
     }
 
     private renderAuthChart(): void {
@@ -395,6 +430,26 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
         const option = this.buildAuthChartOption(this.providerData);
         this.chartHost.setOption(option, ECHARTS_SERIES_MERGE_UPDATE_SETTINGS);
         this.chartHost.scheduleResize();
+    }
+
+    private renderSubscriptionTrendChart(): void {
+        if (!this.subscriptionTrendChartHost.getChart()) {
+            return;
+        }
+
+        if (!this.subscriptionHistoryTrend?.buckets?.length) {
+            this.subscriptionTrendChartHost.setOption({
+                xAxis: { type: 'category', data: [] },
+                yAxis: { type: 'value' },
+                series: []
+            }, ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS);
+            this.subscriptionTrendChartHost.scheduleResize();
+            return;
+        }
+
+        const option = this.buildSubscriptionTrendChartOption(this.subscriptionHistoryTrend);
+        this.subscriptionTrendChartHost.setOption(option, ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS);
+        this.subscriptionTrendChartHost.scheduleResize();
     }
 
     private buildAuthChartOption(providers: Record<string, number>): ChartOption {
@@ -520,11 +575,144 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
         return option;
     }
 
-    private async updateChartTheme(): Promise<void> {
-        if (!this.authChartRef?.nativeElement) {
-            return;
+    private buildSubscriptionTrendChartOption(trendData: SubscriptionHistoryTrendResponse): ChartOption {
+        const buckets = trendData.buckets || [];
+        const labels = buckets.map(bucket => bucket.label);
+        const newSubscriptions = buckets.map(bucket => bucket.newSubscriptions || 0);
+        const plannedCancellations = buckets.map(bucket => bucket.plannedCancellations || 0);
+        const netValues = buckets.map(bucket => bucket.net || 0);
+
+        const themeTokens = buildOfficialEChartsThemeTokens(this.isDark);
+        const textColor = themeTokens.textSecondary;
+        const axisColor = themeTokens.axisLineColor;
+        const splitLineColor = themeTokens.splitLineColor;
+        const containerWidth = this.subscriptionTrendChartRef?.nativeElement?.clientWidth ?? 0;
+        const isMobileLayout = containerWidth > 0 && containerWidth < 680;
+
+        const primaryColor = this.resolveMaterialChartColor('--mat-sys-primary', '#1976d2');
+        const errorColor = this.resolveMaterialChartColor('--mat-sys-error', '#d32f2f');
+        const tertiaryColor = this.resolveMaterialChartColor('--mat-sys-tertiary', '#00796b');
+
+        const option: ChartOption = {
+            tooltip: {
+                trigger: 'axis',
+                axisPointer: { type: 'shadow' },
+                textStyle: {
+                    fontFamily: ECHARTS_GLOBAL_FONT_FAMILY
+                }
+            },
+            legend: {
+                top: 8,
+                textStyle: {
+                    color: textColor,
+                    fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+                    fontSize: isMobileLayout ? 11 : 12
+                }
+            },
+            grid: {
+                left: 18,
+                right: 18,
+                top: 44,
+                bottom: isMobileLayout ? 56 : 32,
+                containLabel: true
+            },
+            xAxis: {
+                type: 'category',
+                data: labels,
+                axisLabel: {
+                    color: textColor,
+                    rotate: isMobileLayout ? 40 : 0,
+                    fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+                    fontSize: isMobileLayout ? 10 : 11
+                },
+                axisLine: {
+                    lineStyle: {
+                        color: axisColor
+                    }
+                },
+                axisTick: {
+                    alignWithLabel: true
+                }
+            },
+            yAxis: {
+                type: 'value',
+                minInterval: 1,
+                axisLabel: {
+                    color: textColor,
+                    fontFamily: ECHARTS_GLOBAL_FONT_FAMILY
+                },
+                splitLine: {
+                    lineStyle: {
+                        color: splitLineColor
+                    }
+                }
+            },
+            series: [
+                {
+                    name: 'New Subscriptions',
+                    type: 'bar',
+                    data: newSubscriptions,
+                    barMaxWidth: 30,
+                    itemStyle: {
+                        color: primaryColor,
+                        borderRadius: [5, 5, 0, 0]
+                    }
+                },
+                {
+                    name: 'Planned Cancellations',
+                    type: 'bar',
+                    data: plannedCancellations,
+                    barMaxWidth: 30,
+                    itemStyle: {
+                        color: errorColor,
+                        borderRadius: [5, 5, 0, 0]
+                    }
+                },
+                {
+                    name: 'Net',
+                    type: 'line',
+                    data: netValues,
+                    smooth: true,
+                    symbol: 'circle',
+                    symbolSize: 7,
+                    lineStyle: {
+                        color: tertiaryColor,
+                        width: 2.5
+                    },
+                    itemStyle: {
+                        color: tertiaryColor
+                    }
+                }
+            ]
+        };
+
+        return option;
+    }
+
+    private resolveMaterialChartColor(tokenName: string, fallback: string): string {
+        const hostElement = this.subscriptionTrendChartRef?.nativeElement || this.authChartRef?.nativeElement;
+        if (!hostElement || typeof getComputedStyle !== 'function') {
+            return fallback;
         }
-        await this.chartHost.init(this.authChartRef.nativeElement, resolveEChartsThemeName(this.isDark));
+
+        const tokenValue = getComputedStyle(hostElement).getPropertyValue(tokenName).trim();
+        return tokenValue || fallback;
+    }
+
+    private async updateChartTheme(): Promise<void> {
+        const themeName = resolveEChartsThemeName(this.isDark);
+        const initializations: Array<Promise<unknown>> = [];
+
+        if (this.authChartRef?.nativeElement) {
+            initializations.push(this.chartHost.init(this.authChartRef.nativeElement, themeName));
+        }
+
+        if (this.subscriptionTrendChartRef?.nativeElement) {
+            initializations.push(this.subscriptionTrendChartHost.init(this.subscriptionTrendChartRef.nativeElement, themeName));
+        }
+
+        await Promise.all(initializations);
         this.renderAuthChart();
+        this.renderSubscriptionTrendChart();
     }
 }
