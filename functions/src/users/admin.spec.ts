@@ -1161,7 +1161,7 @@ describe('getSubscriptionHistoryTrend Cloud Function', () => {
         expect(maxResult.buckets).toHaveLength(24);
     });
 
-    it('should fallback to full scan when index precondition fails', async () => {
+    it('should fail when required query indexes are missing', async () => {
         const missingIndexError = Object.assign(new Error('The query requires an index.'), { code: 9 });
         const failedQuery = {
             where: vi.fn().mockReturnThis(),
@@ -1169,39 +1169,10 @@ describe('getSubscriptionHistoryTrend Cloud Function', () => {
             get: vi.fn().mockRejectedValue(missingIndexError)
         };
 
-        const fallbackGet = vi.fn().mockResolvedValue({
-            docs: [
-                {
-                    data: () => ({
-                        created: toSeconds('2026-03-01T00:00:00Z'),
-                        cancel_at_period_end: false,
-                        status: 'active'
-                    })
-                },
-                {
-                    data: () => ({
-                        current_period_end: toSeconds('2026-02-10T00:00:00Z'),
-                        cancel_at_period_end: true,
-                        status: 'active'
-                    })
-                }
-            ]
-        });
-
-        let subscriptionsCollectionCalls = 0;
         mockCollection.mockImplementation((name: string) => {
             if (name === 'subscriptions') {
-                subscriptionsCollectionCalls += 1;
-                if (subscriptionsCollectionCalls <= 2) {
-                    return {
-                        where: vi.fn().mockReturnValue(failedQuery)
-                    };
-                }
-
                 return {
-                    select: vi.fn().mockReturnValue({
-                        get: fallbackGet
-                    })
+                    where: vi.fn().mockReturnValue(failedQuery)
                 };
             }
 
@@ -1216,13 +1187,8 @@ describe('getSubscriptionHistoryTrend Cloud Function', () => {
             };
         });
 
-        const result: any = await (getSubscriptionHistoryTrend as any)(getRequest({ months: 12 }));
-        expect(fallbackGet).toHaveBeenCalledTimes(1);
-        expect(result.totals).toEqual(expect.objectContaining({
-            newSubscriptions: 1,
-            plannedCancellations: 1,
-            net: 0
-        }));
+        await expect((getSubscriptionHistoryTrend as any)(getRequest({ months: 12 })))
+            .rejects.toThrow('Failed to get subscription history trend');
     });
 
     it('should throw "unauthenticated" if called without auth', async () => {

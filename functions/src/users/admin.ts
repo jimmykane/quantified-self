@@ -221,27 +221,6 @@ function buildMonthlyBucketWindows(months: number, now: Date): Array<{ key: stri
     return windows;
 }
 
-function isMissingIndexError(error: unknown): boolean {
-    const firestoreError = error as {
-        code?: unknown;
-        message?: unknown;
-        details?: unknown;
-    };
-
-    const numericCode = Number(firestoreError.code);
-    if (Number.isFinite(numericCode) && numericCode === 9) {
-        return true;
-    }
-
-    const code = `${firestoreError.code || ''}`.toLowerCase();
-    const message = `${firestoreError.message || ''}`.toLowerCase();
-    const details = `${firestoreError.details || ''}`.toLowerCase();
-
-    return code.includes('failed-precondition')
-        || message.includes('requires an index')
-        || details.includes('requires an index');
-}
-
 interface ListUsersRequest {
     pageSize?: number;
     page?: number;
@@ -684,37 +663,20 @@ export const getSubscriptionHistoryTrend = onAdminCall<GetSubscriptionHistoryTre
         const rangeStartSeconds = Math.floor(rangeStartMs / 1000);
         const rangeEndSeconds = Math.floor(rangeEndMs / 1000);
 
-        let newSubscriptionSnapshot: admin.firestore.QuerySnapshot;
-        let plannedCancellationSnapshot: admin.firestore.QuerySnapshot;
-        try {
-            [newSubscriptionSnapshot, plannedCancellationSnapshot] = await Promise.all([
-                db.collectionGroup('subscriptions')
-                    .where('created', '>=', rangeStartSeconds)
-                    .where('created', '<', rangeEndSeconds)
-                    .select('created', 'role')
-                    .get(),
-                db.collectionGroup('subscriptions')
-                    .where('cancel_at_period_end', '==', true)
-                    .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
-                    .where('current_period_end', '>=', rangeStartSeconds)
-                    .where('current_period_end', '<', rangeEndSeconds)
-                    .select('current_period_end', 'cancel_at_period_end', 'status', 'role')
-                    .get()
-            ]);
-        } catch (queryError: unknown) {
-            if (!isMissingIndexError(queryError)) {
-                throw queryError;
-            }
-
-            logger.warn('[admin/getSubscriptionHistoryTrend] Missing index detected. Falling back to full subscription scan.', queryError);
-
-            const fallbackSnapshot = await db.collectionGroup('subscriptions')
-                .select('created', 'current_period_end', 'cancel_at_period_end', 'status', 'role')
-                .get();
-
-            newSubscriptionSnapshot = fallbackSnapshot;
-            plannedCancellationSnapshot = fallbackSnapshot;
-        }
+        const [newSubscriptionSnapshot, plannedCancellationSnapshot] = await Promise.all([
+            db.collectionGroup('subscriptions')
+                .where('created', '>=', rangeStartSeconds)
+                .where('created', '<', rangeEndSeconds)
+                .select('created', 'role')
+                .get(),
+            db.collectionGroup('subscriptions')
+                .where('cancel_at_period_end', '==', true)
+                .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
+                .where('current_period_end', '>=', rangeStartSeconds)
+                .where('current_period_end', '<', rangeEndSeconds)
+                .select('current_period_end', 'cancel_at_period_end', 'status', 'role')
+                .get()
+        ]);
 
         const buckets = bucketWindows.map((window) => ({
             key: window.key,
