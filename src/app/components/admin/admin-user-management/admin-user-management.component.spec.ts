@@ -230,6 +230,8 @@ describe('AdminUserManagementComponent', () => {
 
     it('should include uid in displayed columns', () => {
         expect(component.displayedColumns).toContain('uid');
+        expect(component.displayedColumns).toContain('subscriptionHistory');
+        expect(component.displayedColumns).not.toContain('subscription');
     });
 
     it('should use resolved users on init', () => {
@@ -310,6 +312,26 @@ describe('AdminUserManagementComponent', () => {
         });
     });
 
+    it('should fallback to created desc when sort field is unsupported', () => {
+        component.sortField = 'email';
+        component.sortDirection = 'asc';
+        vi.clearAllMocks();
+
+        const sortEvent: Sort = { active: 'subscription', direction: 'asc' };
+        component.onSortChange(sortEvent);
+
+        expect(component.sortField).toBe('created');
+        expect(component.sortDirection).toBe('desc');
+        expect(adminServiceSpy.getUsers).toHaveBeenCalledWith({
+            page: 0,
+            pageSize: 10,
+            searchTerm: undefined,
+            sortField: 'created',
+            sortDirection: 'desc',
+            filterService: undefined
+        });
+    });
+
     it('should return correct role', () => {
         expect(component.getRole(mockUsers[0])).toBe('pro');
         expect(component.getRole(mockUsers[1])).toBe('free');
@@ -375,18 +397,6 @@ describe('AdminUserManagementComponent', () => {
         });
     });
 
-    describe('getSubscriptionDetails', () => {
-        it('should return dash if no subscription', () => {
-            const user = {} as any;
-            expect(component.getSubscriptionDetails(user)).toBe('-');
-        });
-
-        it('should return status uppercase', () => {
-            const user = { subscription: { status: 'active' } } as any;
-            expect(component.getSubscriptionDetails(user)).toBe('ACTIVE');
-        });
-    });
-
     describe('getServiceLogo', () => {
         it('should return correct paths', () => {
             expect(component.getServiceLogo('garmin')).toBe('assets/logos/garmin.svg');
@@ -404,24 +414,39 @@ describe('AdminUserManagementComponent', () => {
             const user = { subscription: { status: 'active', cancel_at_period_end: false } } as any;
             expect(component.getSubscriptionHistoryState(user)).toBe('active');
             expect(component.getSubscriptionHistoryLabel(user)).toBe('Active');
+            expect(component.getSubscriptionHistoryDetails(user)).toBe('ACTIVE');
         });
 
         it('should return scheduled when cancellation is scheduled', () => {
             const user = { subscription: { status: 'active', cancel_at_period_end: true } } as any;
             expect(component.getSubscriptionHistoryState(user)).toBe('scheduled');
             expect(component.getSubscriptionHistoryLabel(user)).toBe('Cancel Scheduled');
+            expect(component.getSubscriptionHistoryDetails(user)).toBe('ACTIVE');
         });
 
         it('should return canceled when user has paid history but no active subscription', () => {
             const user = { hasSubscribedOnce: true } as any;
             expect(component.getSubscriptionHistoryState(user)).toBe('canceled');
             expect(component.getSubscriptionHistoryLabel(user)).toBe('Canceled');
+            expect(component.getSubscriptionHistoryDetails(user)).toBe('Had paid subscription before');
         });
 
         it('should return never when user has no paid history', () => {
             const user = { hasSubscribedOnce: false } as any;
             expect(component.getSubscriptionHistoryState(user)).toBe('never');
             expect(component.getSubscriptionHistoryLabel(user)).toBe('Never Subscribed');
+            expect(component.getSubscriptionHistoryDetails(user)).toBe('No paid subscription history');
+        });
+
+        it('should include end date detail when cancellation has current period end', () => {
+            const user = {
+                subscription: {
+                    status: 'active',
+                    cancel_at_period_end: true,
+                    current_period_end: '2026-01-15T00:00:00Z'
+                }
+            } as any;
+            expect(component.getSubscriptionHistoryDetails(user)).toContain('Ends');
         });
     });
 

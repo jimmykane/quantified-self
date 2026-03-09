@@ -94,7 +94,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     sortDirection: 'asc' | 'desc' = 'desc';
 
     displayedColumns: string[] = [
-        'photoURL', 'email', 'uid', 'providerIds', 'displayName', 'role', 'subscriptionHistory', 'subscription',
+        'photoURL', 'email', 'uid', 'providerIds', 'displayName', 'role', 'subscriptionHistory',
         'services', 'created', 'lastLogin', 'onboarding', 'status', 'actions'
     ];
 
@@ -109,6 +109,16 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     private isDark = false;
     private providerData: Record<string, number> | null = null;
     private readonly dayjsLocale = this.normalizeDayjsLocale(this.locale);
+    private readonly supportedSortFields = new Set([
+        'email',
+        'displayName',
+        'role',
+        'admin',
+        'created',
+        'lastLogin',
+        'status',
+        'providerIds'
+    ]);
 
     async ngOnInit(): Promise<void> {
         // Handle search debounce
@@ -201,8 +211,11 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     }
 
     onSortChange(sort: Sort): void {
-        this.sortField = sort.active || 'created';
-        this.sortDirection = (sort.direction as 'asc' | 'desc') || 'desc';
+        const requestedField = sort.active || 'created';
+        const requestedDirection = (sort.direction as 'asc' | 'desc') || 'desc';
+        const isSupportedField = this.supportedSortFields.has(requestedField);
+        this.sortField = isSupportedField ? requestedField : 'created';
+        this.sortDirection = isSupportedField ? requestedDirection : 'desc';
         this.currentPage = 0;
         this.fetchUsers();
     }
@@ -258,19 +271,6 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
         return user.customClaims?.admin === true;
     }
 
-    getSubscriptionDetails(user: AdminUser): string {
-        if (!user.subscription) return '-';
-
-        let details = user.subscription.status.toUpperCase();
-
-        if (user.subscription.cancel_at_period_end && user.subscription.current_period_end) {
-            const date = this.formatDate(user.subscription.current_period_end);
-            details += ` (Ends ${date})`;
-        }
-
-        return details;
-    }
-
     getSubscriptionHistoryState(user: AdminUser): SubscriptionHistoryState {
         const status = user.subscription?.status?.toLowerCase();
         const hasActiveSubscription = status === 'active' || status === 'trialing' || status === 'past_due';
@@ -296,6 +296,28 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
         if (state === 'active') return 'Active';
         if (state === 'canceled') return 'Canceled';
         return 'Never Subscribed';
+    }
+
+    getSubscriptionHistoryDetails(user: AdminUser): string {
+        const state = this.getSubscriptionHistoryState(user);
+        const rawStatus = user.subscription?.status?.toUpperCase();
+
+        if (state === 'scheduled') {
+            if (user.subscription?.current_period_end) {
+                return `Ends ${this.formatDate(user.subscription.current_period_end)}`;
+            }
+            return rawStatus || 'Cancellation scheduled';
+        }
+
+        if (state === 'active') {
+            return rawStatus || 'Active subscription';
+        }
+
+        if (state === 'canceled') {
+            return 'Had paid subscription before';
+        }
+
+        return 'No paid subscription history';
     }
 
     private formatDate(timestamp: any): string {

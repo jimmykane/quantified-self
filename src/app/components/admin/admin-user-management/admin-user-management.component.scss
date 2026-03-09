@@ -401,6 +401,17 @@ td.mat-cell {
     }
 }
 
+.subscription-history-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.subscription-history-detail {
+    font-size: 0.78rem;
+    color: var(--mat-sys-on-surface-variant);
+}
+
 @include bp.xsmall {
     .chart-wrapper .echart-surface {
         height: 320px;

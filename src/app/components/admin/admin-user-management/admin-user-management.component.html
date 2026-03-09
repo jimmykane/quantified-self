@@ -225,17 +225,12 @@
                     <ng-container matColumnDef="subscriptionHistory">
                         <th mat-header-cell *matHeaderCellDef> Subscription History </th>
                         <td mat-cell *matCellDef="let user">
-                            <span class="subscription-history-badge" [ngClass]="getSubscriptionHistoryState(user)">
-                                {{ getSubscriptionHistoryLabel(user) }}
-                            </span>
-                        </td>
-                    </ng-container>
-
-                    <!-- Subscription Column -->
-                    <ng-container matColumnDef="subscription">
-                        <th mat-header-cell *matHeaderCellDef mat-sort-header> Subscription </th>
-                        <td mat-cell *matCellDef="let user">
-                            {{ getSubscriptionDetails(user) }}
+                            <div class="subscription-history-cell">
+                                <span class="subscription-history-badge" [ngClass]="getSubscriptionHistoryState(user)">
+                                    {{ getSubscriptionHistoryLabel(user) }}
+                                </span>
+                                <span class="subscription-history-detail">{{ getSubscriptionHistoryDetails(user) }}</span>
+                            </div>
                             <a *ngIf="user.subscription?.stripeLink" [href]="user.subscription.stripeLink"
                                 target="_blank" mat-icon-button class="qs-mat-primary" matTooltip="View in Stripe">
                                 <mat-icon>open_in_new</mat-icon>
