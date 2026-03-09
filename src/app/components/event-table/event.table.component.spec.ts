@@ -12,6 +12,7 @@ import { AppEventColorService } from '../../services/color/app.event.color.servi
 import { AppFileService } from '../../services/app.file.service';
 import { AppProcessingService } from '../../services/app.processing.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { DatePipe } from '@angular/common';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { of, Subject, delay } from 'rxjs';
@@ -93,6 +94,7 @@ describe('EventTableComponent', () => {
     let mockProcessingService: any;
     let mockEventMergeService: any;
     let mockAnalyticsService: any;
+    let mockHapticsService: any;
 
     const mockUser = new User('testUser');
     mockUser.settings = {
@@ -186,6 +188,9 @@ describe('EventTableComponent', () => {
         mockAnalyticsService = {
             logEvent: vi.fn(),
         };
+        mockHapticsService = {
+            selection: vi.fn(),
+        };
 
         await TestBed.configureTestingModule({
             imports: [NoopAnimationsModule],
@@ -203,6 +208,7 @@ describe('EventTableComponent', () => {
                 { provide: AppEventColorService, useValue: mockColorService },
                 { provide: AppFileService, useValue: mockFileService },
                 { provide: AppProcessingService, useValue: mockProcessingService },
+                { provide: AppHapticsService, useValue: mockHapticsService },
                 DatePipe
             ],
             schemas: [NO_ERRORS_SCHEMA]
@@ -289,6 +295,23 @@ describe('EventTableComponent', () => {
     it('should initialize data source with events', () => {
         component.ngAfterViewInit();
         expect(component.data.data.length).toBe(3);
+    });
+
+    it('should trigger haptic feedback when a table row is clicked', () => {
+        const event = new MouseEvent('click');
+
+        component.onRowClick(event);
+
+        expect(mockHapticsService.selection).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not trigger haptic feedback when row click is already prevented', () => {
+        const event = new MouseEvent('click', { cancelable: true });
+        event.preventDefault();
+
+        component.onRowClick(event);
+
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
     });
 
     it('should support comma-separated search terms', () => {
