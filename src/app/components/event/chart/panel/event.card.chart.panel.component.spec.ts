@@ -23,10 +23,15 @@ describe('EventCardChartPanelComponent', () => {
   let originalExitFullscreenDescriptor: PropertyDescriptor | undefined;
   let originalFullscreenElementDescriptor: PropertyDescriptor | undefined;
   let originalMatchMedia: typeof window.matchMedia | undefined;
+  const zr = {
+    on: vi.fn(),
+    off: vi.fn(),
+  };
 
   const chart = {
     on: vi.fn(),
     off: vi.fn(),
+    getZr: vi.fn(() => zr),
     dispatchAction: vi.fn(),
     getOption: vi.fn().mockReturnValue({
       dataZoom: [
@@ -262,6 +267,63 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.tooltip?.appendTo).toBeUndefined();
     expect(option?.tooltip?.position).toBeUndefined();
     expect(option?.tooltip?.confine).toBe(true);
+  });
+
+  it('keeps mobile panel interactions disabled until first tap, then enables them', async () => {
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      writable: true,
+      value: vi.fn().mockImplementation(() => ({
+        matches: true,
+        media: '',
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+
+    component.showZoomBar = false;
+    await renderComponent();
+
+    const option = getRenderedOption();
+    expect(option?.tooltip?.triggerOn).toBe('none');
+    expect(option?.tooltip?.show).toBe(false);
+    expect(option?.dataZoom?.[0]?.disabled).toBe(true);
+
+    const tapHandler = zr.on.mock.calls.find(([eventName]) => eventName === 'click')?.[1] as ((event: unknown) => void);
+    expect(tapHandler).toBeTypeOf('function');
+
+    eChartsLoaderMock.setOption.mockClear();
+    chart.dispatchAction.mockClear();
+
+    tapHandler({});
+
+    expect(eChartsLoaderMock.setOption).toHaveBeenCalledWith(
+      chart,
+      {
+        tooltip: {
+          show: true,
+          triggerOn: 'click',
+        },
+        dataZoom: [
+          {
+            disabled: false,
+          }
+        ],
+      },
+      expect.objectContaining({ lazyUpdate: true, silent: true })
+    );
+    expect(chart.dispatchAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'takeGlobalCursor',
+        brushOption: expect.objectContaining({
+          brushType: 'lineX',
+        }),
+      })
+    );
   });
 
   it('shows a fullscreen toggle only for real data panels', async () => {
@@ -681,6 +743,48 @@ describe('EventCardChartPanelComponent', () => {
       })
     ]);
     expect(option?.dataZoom?.[0]?.labelFormatter(65)).toBe('01:05');
+  });
+
+  it('keeps mobile zoom-bar interactions disabled until first tap, then enables slider drag', async () => {
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      writable: true,
+      value: vi.fn().mockImplementation(() => ({
+        matches: true,
+        media: '',
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+
+    component.panel = null;
+    component.showZoomBar = true;
+    await renderComponent();
+
+    const option = eChartsLoaderMock.setOption.mock.calls.at(-1)?.[1] as any;
+    expect(option?.dataZoom?.[0]?.disabled).toBe(true);
+
+    const tapHandler = zr.on.mock.calls.find(([eventName]) => eventName === 'click')?.[1] as ((event: unknown) => void);
+    expect(tapHandler).toBeTypeOf('function');
+
+    eChartsLoaderMock.setOption.mockClear();
+    tapHandler({});
+
+    expect(eChartsLoaderMock.setOption).toHaveBeenCalledWith(
+      chart,
+      {
+        dataZoom: [
+          {
+            disabled: false,
+          }
+        ],
+      },
+      expect.objectContaining({ lazyUpdate: true, silent: true })
+    );
   });
 
   it('refreshes zoom-bar-only mode when overview data changes', async () => {
