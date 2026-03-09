@@ -160,7 +160,7 @@ vi.mock('../config', () => ({
     },
 }));
 
-import { listUsers, getQueueStats, getUserCount, getSubscriptionHistoryTrend, getMaintenanceStatus, setMaintenanceMode, impersonateUser, stopImpersonation, getFinancialStats } from './admin';
+import { listUsers, getQueueStats, getUserCount, getSubscriptionHistoryTrend, getUserGrowthTrend, getMaintenanceStatus, setMaintenanceMode, impersonateUser, stopImpersonation, getFinancialStats } from './admin';
 
 // Helper for authenticated admin requests
 const getAdminRequest = (data: any = {}) => ({
@@ -1203,6 +1203,143 @@ describe('getSubscriptionHistoryTrend Cloud Function', () => {
             data: {}
         } as unknown as CallableRequest<any>;
         await expect((getSubscriptionHistoryTrend as any)(request)).rejects.toThrow('Only admins can call this function.');
+    });
+});
+
+describe('getUserGrowthTrend Cloud Function', () => {
+    const toSeconds = (value: string): number => Math.floor(new Date(value).getTime() / 1000);
+    const getRequest = (data: Record<string, unknown> = {}) => ({
+        data,
+        auth: { uid: 'admin-uid', token: { admin: true } },
+        app: { appId: 'mock-app-id' }
+    } as unknown as CallableRequest<any>);
+
+    const setupUserGrowthCollectionMocks = (entries: unknown[]) => {
+        const usersQuery = {
+            where: vi.fn().mockReturnThis(),
+            select: vi.fn().mockReturnThis(),
+            get: vi.fn().mockResolvedValue({
+                docs: entries.map((entry) => ({
+                    data: () => entry as Record<string, unknown>
+                }))
+            })
+        };
+
+        mockCollection.mockImplementation((name: string) => {
+            if (name === 'users') {
+                return usersQuery;
+            }
+
+            return {
+                where: vi.fn().mockReturnThis(),
+                count: vi.fn().mockReturnValue({
+                    get: vi.fn().mockResolvedValue({
+                        data: () => ({ count: 0 })
+                    })
+                }),
+                get: vi.fn().mockResolvedValue({ docs: [] })
+            };
+        });
+    };
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-03-15T12:00:00Z'));
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('should return 12 chronological buckets with registered and onboarded values', async () => {
+        setupUserGrowthCollectionMocks([
+            { creationDate: toSeconds('2025-04-10T00:00:00Z'), onboardingCompleted: true },
+            { creationDate: toSeconds('2025-06-05T00:00:00Z'), onboardingCompleted: false },
+            { creationDate: toSeconds('2026-03-01T00:00:00Z'), onboardingCompleted: true },
+            { creationDate: toSeconds('2026-04-01T00:00:00Z'), onboardingCompleted: true }
+        ]);
+
+        const result: any = await (getUserGrowthTrend as any)(getRequest({ months: 12 }));
+        const bucketByKey = new Map(result.buckets.map((bucket: any) => [bucket.key, bucket]));
+        const keys = result.buckets.map((bucket: any) => bucket.key);
+
+        expect(result.months).toBe(12);
+        expect(result.buckets).toHaveLength(12);
+        expect(keys).toEqual([...keys].sort());
+        expect(result.buckets[0].key).toBe('2025-04');
+        expect(result.buckets[result.buckets.length - 1].key).toBe('2026-03');
+
+        expect(bucketByKey.get('2025-04')).toEqual(expect.objectContaining({
+            registeredUsers: 1,
+            onboardedUsers: 1
+        }));
+        expect(bucketByKey.get('2025-06')).toEqual(expect.objectContaining({
+            registeredUsers: 1,
+            onboardedUsers: 0
+        }));
+        expect(bucketByKey.get('2026-03')).toEqual(expect.objectContaining({
+            registeredUsers: 1,
+            onboardedUsers: 1
+        }));
+        expect(result.totals).toEqual({
+            registeredUsers: 3,
+            onboardedUsers: 2
+        });
+    });
+
+    it('should enforce default and max months bounds', async () => {
+        setupUserGrowthCollectionMocks([]);
+
+        const defaultResult: any = await (getUserGrowthTrend as any)(getRequest());
+        expect(defaultResult.months).toBe(12);
+        expect(defaultResult.buckets).toHaveLength(12);
+
+        const maxResult: any = await (getUserGrowthTrend as any)(getRequest({ months: 200 }));
+        expect(maxResult.months).toBe(24);
+        expect(maxResult.buckets).toHaveLength(24);
+    });
+
+    it('should fail when growth query errors', async () => {
+        const growthQueryError = new Error('growth query failed');
+        const failedQuery = {
+            where: vi.fn().mockReturnThis(),
+            select: vi.fn().mockReturnThis(),
+            get: vi.fn().mockRejectedValue(growthQueryError)
+        };
+
+        mockCollection.mockImplementation((name: string) => {
+            if (name === 'users') {
+                return failedQuery;
+            }
+
+            return {
+                where: vi.fn().mockReturnThis(),
+                count: vi.fn().mockReturnValue({
+                    get: vi.fn().mockResolvedValue({
+                        data: () => ({ count: 0 })
+                    })
+                }),
+                get: vi.fn().mockResolvedValue({ docs: [] })
+            };
+        });
+
+        await expect((getUserGrowthTrend as any)(getRequest({ months: 12 })))
+            .rejects.toThrow('Failed to get user growth trend');
+    });
+
+    it('should throw "unauthenticated" if called without auth', async () => {
+        const request = { auth: null } as unknown as CallableRequest<any>;
+        await expect((getUserGrowthTrend as any)(request)).rejects.toThrow('The function must be called while authenticated.');
+    });
+
+    it('should throw "permission-denied" if user is not an admin', async () => {
+        const request = {
+            auth: { uid: 'user1', token: { admin: false } },
+            app: { appId: 'mock-app-id' },
+            data: {}
+        } as unknown as CallableRequest<any>;
+        await expect((getUserGrowthTrend as any)(request)).rejects.toThrow('Only admins can call this function.');
     });
 });
 

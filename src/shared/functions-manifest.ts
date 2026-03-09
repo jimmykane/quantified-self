@@ -5,6 +5,7 @@ export const FUNCTIONS_MANIFEST = {
     getQueueStats: { name: 'getQueueStats', region: 'europe-west2' },
     getUserCount: { name: 'getUserCount', region: 'europe-west2' },
     getSubscriptionHistoryTrend: { name: 'getSubscriptionHistoryTrend', region: 'europe-west2' },
+    getUserGrowthTrend: { name: 'getUserGrowthTrend', region: 'europe-west2' },
     setMaintenanceMode: { name: 'setMaintenanceMode', region: 'europe-west2' },
     getMaintenanceStatus: { name: 'getMaintenanceStatus', region: 'europe-west2' },
     impersonateUser: { name: 'impersonateUser', region: 'europe-west2' },

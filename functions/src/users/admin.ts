@@ -85,6 +85,26 @@ interface SubscriptionHistoryTrendResponse {
     };
 }
 
+interface GetUserGrowthTrendRequest {
+    months?: number;
+}
+
+interface UserGrowthTrendBucket {
+    key: string;
+    label: string;
+    registeredUsers: number;
+    onboardedUsers: number;
+}
+
+interface UserGrowthTrendResponse {
+    months: number;
+    buckets: UserGrowthTrendBucket[];
+    totals: {
+        registeredUsers: number;
+        onboardedUsers: number;
+    };
+}
+
 function clampSubscriptionHistoryMonths(rawMonths: unknown): number {
     const parsed = Number(rawMonths);
     if (!Number.isFinite(parsed)) {
@@ -772,6 +792,95 @@ export const getSubscriptionHistoryTrend = onAdminCall<GetSubscriptionHistoryTre
     } catch (error: unknown) {
         logger.error('Error getting subscription history trend:', error);
         throw new HttpsError('internal', 'Failed to get subscription history trend');
+    }
+});
+
+/**
+ * Returns historical monthly user growth buckets for Admin dashboards.
+ * Buckets are generated in UTC and include:
+ * - registeredUsers: users created in each month
+ * - onboardedUsers: same users where onboardingCompleted === true
+ */
+export const getUserGrowthTrend = onAdminCall<GetUserGrowthTrendRequest, UserGrowthTrendResponse>({
+    region: FUNCTIONS_MANIFEST.getUserGrowthTrend.region,
+    memory: '256MiB',
+}, async (request) => {
+    try {
+        const db = admin.firestore();
+        const months = clampSubscriptionHistoryMonths(request.data?.months);
+        const bucketWindows = buildMonthlyBucketWindows(months, new Date());
+
+        if (bucketWindows.length === 0) {
+            return {
+                months,
+                buckets: [],
+                totals: {
+                    registeredUsers: 0,
+                    onboardedUsers: 0
+                }
+            };
+        }
+
+        const rangeStartMs = bucketWindows[0].startMs;
+        const rangeEndMs = bucketWindows[bucketWindows.length - 1].endMs;
+        const rangeStartDate = new Date(rangeStartMs);
+        const rangeEndDate = new Date(rangeEndMs);
+
+        const userSnapshot = await db.collection('users')
+            .where('creationDate', '>=', rangeStartDate)
+            .where('creationDate', '<', rangeEndDate)
+            .select('creationDate', 'onboardingCompleted')
+            .get();
+
+        const buckets = bucketWindows.map((window) => ({
+            key: window.key,
+            label: window.label,
+            registeredUsers: 0,
+            onboardedUsers: 0
+        }));
+        const bucketByKey = new Map<string, UserGrowthTrendBucket>();
+        buckets.forEach(bucket => {
+            bucketByKey.set(bucket.key, bucket);
+        });
+
+        userSnapshot.docs.forEach(doc => {
+            const user = doc.data() as Record<string, unknown>;
+            const creationDateMillis = toEpochMillis(user.creationDate);
+            if (creationDateMillis === null || creationDateMillis < rangeStartMs || creationDateMillis >= rangeEndMs) {
+                return;
+            }
+
+            const bucket = bucketByKey.get(toUtcMonthKey(creationDateMillis));
+            if (!bucket) {
+                return;
+            }
+
+            bucket.registeredUsers += 1;
+            if (user.onboardingCompleted === true) {
+                bucket.onboardedUsers += 1;
+            }
+        });
+
+        const totals = buckets.reduce(
+            (accu, bucket) => {
+                accu.registeredUsers += bucket.registeredUsers;
+                accu.onboardedUsers += bucket.onboardedUsers;
+                return accu;
+            },
+            {
+                registeredUsers: 0,
+                onboardedUsers: 0
+            }
+        );
+
+        return {
+            months,
+            buckets,
+            totals
+        };
+    } catch (error: unknown) {
+        logger.error('Error getting user growth trend:', error);
+        throw new HttpsError('internal', 'Failed to get user growth trend');
     }
 });
 

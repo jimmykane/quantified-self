@@ -128,15 +128,15 @@
         <mat-card class="chart-card">
             <h3 class="chart-header">
                 <mat-icon>show_chart</mat-icon>
-                Subscription Lifecycle (Monthly)
+                User &amp; Subscription Growth (Monthly)
             </h3>
 
             <div class="chart-wrapper">
-                <div #subscriptionTrendChart class="echart-surface"></div>
+                <div #userGrowthTrendChart class="echart-surface"></div>
             </div>
 
-            <div *ngIf="!hasSubscriptionTrendData" class="empty-state chart-empty-state">
-                No subscription trend data available
+            <div *ngIf="!hasUserGrowthTrendData" class="empty-state chart-empty-state">
+                No user or subscription trend data available
             </div>
         </mat-card>
 
@@ -244,7 +244,9 @@
                                 <span class="subscription-history-badge" [ngClass]="getSubscriptionHistoryState(user)">
                                     {{ getSubscriptionHistoryLabel(user) }}
                                 </span>
-                                <span *ngIf="getSubscriptionHistoryDetails(user) as details" class="subscription-history-detail">{{ details }}</span>
+                                @if (getSubscriptionHistoryDetails(user); as details) {
+                                    <span class="subscription-history-detail">{{ details }}</span>
+                                }
                             </div>
                             <a *ngIf="user.subscription?.stripeLink" [href]="user.subscription.stripeLink"
                                 target="_blank" mat-icon-button class="qs-mat-primary" matTooltip="View in Stripe">

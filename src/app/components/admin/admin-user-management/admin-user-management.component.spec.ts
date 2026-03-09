@@ -1,6 +1,12 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AdminUserManagementComponent } from './admin-user-management.component';
-import { AdminService, AdminUser, ListUsersResponse, SubscriptionHistoryTrendResponse } from '../../../services/admin.service';
+import {
+    AdminService,
+    AdminUser,
+    ListUsersResponse,
+    SubscriptionHistoryTrendResponse,
+    UserGrowthTrendResponse
+} from '../../../services/admin.service';
 import { AppImpersonationService } from '../../../services/app.impersonation.service';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { LoggerService } from '../../../services/logger.service';
@@ -116,59 +122,87 @@ describe('AdminUserManagementComponent', () => {
         pageSize: 25
     };
 
-    const mockTrend: SubscriptionHistoryTrendResponse = {
+    const mockTrend: UserGrowthTrendResponse = {
         months: 12,
         buckets: [
             {
                 key: '2026-01',
                 label: 'Jan 2026',
-                newSubscriptions: 5,
-                plannedCancellations: 2,
-                net: 3,
+                registeredUsers: 10,
+                onboardedUsers: 6
+            },
+            {
+                key: '2026-02',
+                label: 'Feb 2026',
+                registeredUsers: 15,
+                onboardedUsers: 10
+            },
+            {
+                key: '2026-03',
+                label: 'Mar 2026',
+                registeredUsers: 5,
+                onboardedUsers: 4
+            }
+        ],
+        totals: {
+            registeredUsers: 30,
+            onboardedUsers: 20
+        }
+    };
+
+    const mockSubscriptionTrend: SubscriptionHistoryTrendResponse = {
+        months: 12,
+        buckets: [
+            {
+                key: '2026-01',
+                label: 'Jan 2026',
+                newSubscriptions: 7,
+                plannedCancellations: 1,
+                net: 6,
                 basicNewSubscriptions: 2,
-                basicPlannedCancellations: 1,
-                basicNet: 1,
-                proNewSubscriptions: 3,
+                basicPlannedCancellations: 0,
+                basicNet: 2,
+                proNewSubscriptions: 5,
                 proPlannedCancellations: 1,
-                proNet: 2
+                proNet: 4
             },
             {
                 key: '2026-02',
                 label: 'Feb 2026',
                 newSubscriptions: 3,
-                plannedCancellations: 4,
-                net: -1,
-                basicNewSubscriptions: 1,
-                basicPlannedCancellations: 3,
-                basicNet: -2,
-                proNewSubscriptions: 2,
+                plannedCancellations: 2,
+                net: 1,
+                basicNewSubscriptions: 2,
+                basicPlannedCancellations: 1,
+                basicNet: 1,
+                proNewSubscriptions: 1,
                 proPlannedCancellations: 1,
-                proNet: 1
+                proNet: 0
             },
             {
                 key: '2026-03',
                 label: 'Mar 2026',
-                newSubscriptions: 6,
+                newSubscriptions: 4,
                 plannedCancellations: 1,
-                net: 5,
-                basicNewSubscriptions: 4,
-                basicPlannedCancellations: 1,
-                basicNet: 3,
-                proNewSubscriptions: 2,
-                proPlannedCancellations: 0,
+                net: 3,
+                basicNewSubscriptions: 1,
+                basicPlannedCancellations: 0,
+                basicNet: 1,
+                proNewSubscriptions: 3,
+                proPlannedCancellations: 1,
                 proNet: 2
             }
         ],
         totals: {
             newSubscriptions: 14,
-            plannedCancellations: 7,
-            net: 7,
-            basicNewSubscriptions: 7,
-            basicPlannedCancellations: 5,
-            basicNet: 2,
-            proNewSubscriptions: 7,
-            proPlannedCancellations: 2,
-            proNet: 5
+            plannedCancellations: 4,
+            net: 10,
+            basicNewSubscriptions: 5,
+            basicPlannedCancellations: 1,
+            basicNet: 4,
+            proNewSubscriptions: 9,
+            proPlannedCancellations: 3,
+            proNet: 6
         }
     };
 
@@ -185,7 +219,8 @@ describe('AdminUserManagementComponent', () => {
                 cancelScheduled: 8,
                 onboardingCompleted: 80
             })),
-            getSubscriptionHistoryTrend: vi.fn().mockReturnValue(of(mockTrend))
+            getUserGrowthTrend: vi.fn().mockReturnValue(of(mockTrend)),
+            getSubscriptionHistoryTrend: vi.fn().mockReturnValue(of(mockSubscriptionTrend))
         };
 
         impersonationServiceSpy = {
@@ -265,7 +300,8 @@ describe('AdminUserManagementComponent', () => {
                                         cancelScheduled: 8,
                                         onboardingCompleted: 80
                                     },
-                                    subscriptionHistoryTrend: mockTrend
+                                    userGrowthTrend: mockTrend,
+                                    subscriptionHistoryTrend: mockSubscriptionTrend
                                 }
                             }
                         }
@@ -313,9 +349,10 @@ describe('AdminUserManagementComponent', () => {
         });
     });
 
-    it('should use resolved subscription trend data on init', () => {
+    it('should use resolved user growth trend data on init', () => {
+        expect(adminServiceSpy.getUserGrowthTrend).not.toHaveBeenCalled();
         expect(adminServiceSpy.getSubscriptionHistoryTrend).not.toHaveBeenCalled();
-        expect(component.hasSubscriptionTrendData).toBe(true);
+        expect(component.hasUserGrowthTrendData).toBe(true);
     });
 
     it('should initialize and dispose both chart hosts', async () => {
@@ -327,30 +364,48 @@ describe('AdminUserManagementComponent', () => {
         expect(mockEchartsService.dispose.mock.calls.length).toBeGreaterThanOrEqual(2);
     });
 
-    it('should build subscription trend chart option with three cumulative total series', () => {
-        const option = (component as any).buildSubscriptionTrendChartOption(mockTrend, 70, 30);
+    it('should build user and subscription trend chart option with seven series', () => {
+        const option = (component as any).buildUserGrowthTrendChartOption(
+            mockTrend,
+            mockSubscriptionTrend,
+            100,
+            80,
+            70,
+            30
+        );
         const series = (option as any).series;
         const graphic = (option as any).graphic;
 
-        expect(series).toHaveLength(3);
+        expect(series).toHaveLength(7);
         expect(series.map((entry: any) => entry.name)).toEqual([
+            'Registered Users / month',
+            'Onboarded Users / month',
+            'Total Registered',
+            'Total Onboarded',
             'Basic Totals',
             'Pro Totals',
-            'All Totals'
+            'Totals (Pro+Basic)'
         ]);
-        expect(series[0].data).toEqual([69, 67, 70]);
-        expect(series[1].data).toEqual([27, 28, 30]);
-        expect(series[2].data).toEqual([96, 95, 100]);
+        expect(series[0].data).toEqual([10, 15, 5]);
+        expect(series[1].data).toEqual([6, 10, 4]);
+        expect(series[2].data).toEqual([80, 95, 100]);
+        expect(series[3].data).toEqual([66, 76, 80]);
+        expect(series[4].data).toEqual([68, 69, 70]);
+        expect(series[5].data).toEqual([28, 28, 30]);
+        expect(series[6].data).toEqual([96, 97, 100]);
         expect(graphic).toBeTruthy();
         expect(graphic[0].style.text).toContain('Current');
+        expect(graphic[0].style.text).toContain('Users 100');
+        expect(graphic[0].style.text).toContain('Onboarded 80');
+        expect(graphic[0].style.text).toContain('Totals (Pro+Basic) 100');
         expect(graphic[0].style.text).toContain('Basic 70');
         expect(graphic[0].style.text).toContain('Pro 30');
-        expect(graphic[0].style.text).toContain('All 100');
     });
 
-    it('should handle null subscription trend data safely', () => {
-        expect(() => (component as any).updateSubscriptionTrendChart(null)).not.toThrow();
-        expect(component.hasSubscriptionTrendData).toBe(false);
+    it('should handle null user growth trend data safely', () => {
+        expect(() => (component as any).updateUserGrowthTrendChart(null)).not.toThrow();
+        expect(() => (component as any).updateSubscriptionHistoryTrendChart(null)).not.toThrow();
+        expect(component.hasUserGrowthTrendData).toBe(false);
     });
 
     it('should update both chart hosts when theme changes', async () => {

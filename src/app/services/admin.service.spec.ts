@@ -116,4 +116,18 @@ describe('AdminService', () => {
         expect(functionsServiceMock.call).toHaveBeenCalledWith('getSubscriptionHistoryTrend', { months: 24 });
         expect(result).toEqual(mockTrend);
     });
+
+    it('should call getUserGrowthTrend Cloud Function with bounded months', async () => {
+        const mockTrend = {
+            months: 24,
+            buckets: [{ key: '2026-01', label: 'Jan 2026', registeredUsers: 8, onboardedUsers: 5 }],
+            totals: { registeredUsers: 8, onboardedUsers: 5 }
+        };
+        functionsServiceMock.call.mockResolvedValue({ data: mockTrend });
+
+        const result = await firstValueFrom(service.getUserGrowthTrend(99));
+
+        expect(functionsServiceMock.call).toHaveBeenCalledWith('getUserGrowthTrend', { months: 24 });
+        expect(result).toEqual(mockTrend);
+    });
 });
