@@ -59,6 +59,13 @@ describe('EventCardChartComponent', () => {
     setDataTypeIDsToShow: vi.fn(),
   };
 
+  const mockLogger = {
+    error: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
+    log: vi.fn(),
+  };
+
   const mockBreakpointObserver = {
     observe: vi.fn().mockReturnValue(of({ matches: false, breakpoints: {} })),
   };
@@ -68,6 +75,10 @@ describe('EventCardChartComponent', () => {
     mockActivityCursorService.setCursor.mockReset();
     mockChartSettingsStorage.getDataTypeIDsToShow.mockReturnValue([]);
     mockChartSettingsStorage.setDataTypeIDsToShow.mockReset();
+    mockLogger.error.mockReset();
+    mockLogger.warn.mockReset();
+    mockLogger.info.mockReset();
+    mockLogger.log.mockReset();
     mockBreakpointObserver.observe.mockReset();
     mockBreakpointObserver.observe.mockReturnValue(of({ matches: false, breakpoints: {} }));
 
@@ -84,7 +95,7 @@ describe('EventCardChartComponent', () => {
         { provide: AppActivityCursorService, useValue: mockActivityCursorService },
         { provide: AppEventColorService, useValue: mockEventColorService },
         { provide: AppChartSettingsLocalStorageService, useValue: mockChartSettingsStorage },
-        { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), log: vi.fn() } },
+        { provide: LoggerService, useValue: mockLogger },
       ],
       schemas: [CUSTOM_ELEMENTS_SCHEMA],
     }).compileComponents();

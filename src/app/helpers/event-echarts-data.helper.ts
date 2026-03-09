@@ -420,13 +420,72 @@ function getFilteredStreams(input: {
 }
 
 function dedupeByType(streams: StreamInterface[]): StreamInterface[] {
-  const streamsByType = new Map<string, StreamInterface>();
-  streams.forEach((stream) => {
-    if (!streamsByType.has(stream.type)) {
-      streamsByType.set(stream.type, stream);
+  // TODO(quantified-self): remove this fallback once sports-lib guarantees canonical stream emission per type
+  // (notably FIT vendor aliases for speed/distance fields) so the app never receives duplicate-type candidates.
+  const streamsByType = new Map<string, {
+    stream: StreamInterface;
+    finiteCount: number;
+    dataLength: number;
+    sourceIndex: number;
+  }>();
+
+  streams.forEach((stream, sourceIndex) => {
+    const streamType = `${stream?.type || ''}`;
+    if (!streamType) {
+      return;
+    }
+
+    const { finiteCount, dataLength } = getStreamQualityMetrics(stream);
+    const existing = streamsByType.get(streamType);
+    if (!existing) {
+      streamsByType.set(streamType, {
+        stream,
+        finiteCount,
+        dataLength,
+        sourceIndex,
+      });
+      return;
+    }
+
+    const hasBetterFiniteCoverage = finiteCount > existing.finiteCount;
+    const hasSameFiniteCoverageButMoreData = finiteCount === existing.finiteCount && dataLength > existing.dataLength;
+    const isTieButLaterSource = finiteCount === existing.finiteCount
+      && dataLength === existing.dataLength
+      && sourceIndex > existing.sourceIndex;
+
+    if (hasBetterFiniteCoverage || hasSameFiniteCoverageButMoreData || isTieButLaterSource) {
+      streamsByType.set(streamType, {
+        stream,
+        finiteCount,
+        dataLength,
+        sourceIndex,
+      });
     }
   });
-  return [...streamsByType.values()];
+
+  return [...streamsByType.values()]
+    .sort((left, right) => left.sourceIndex - right.sourceIndex)
+    .map((entry) => entry.stream);
+}
+
+function getStreamQualityMetrics(stream: StreamInterface): { finiteCount: number; dataLength: number } {
+  const rawData = stream?.getData?.();
+  if (!Array.isArray(rawData) || rawData.length === 0) {
+    return { finiteCount: 0, dataLength: 0 };
+  }
+
+  let finiteCount = 0;
+  for (let index = 0; index < rawData.length; index += 1) {
+    const numericValue = toNumericValueOrNaN(rawData[index] as unknown);
+    if (Number.isFinite(numericValue)) {
+      finiteCount += 1;
+    }
+  }
+
+  return {
+    finiteCount,
+    dataLength: rawData.length,
+  };
 }
 
 function canActivityRenderEventChart(activity: ActivityInterface, xAxisType: XAxisTypes): boolean {
@@ -637,17 +696,20 @@ function toNumericArray(data: unknown): number[] {
     return [];
   }
 
-  return data.map((value) => {
-    if (typeof value === 'number') {
-      return value;
-    }
+  return data.map((value) => toNumericValueOrNaN(value as unknown));
+}
 
-    if (typeof value === 'string' && value.trim().length > 0) {
-      return Number(value);
-    }
+function toNumericValueOrNaN(value: unknown): number {
+  if (typeof value === 'number') {
+    return value;
+  }
 
-    return Number.NaN;
-  });
+  if (typeof value === 'string') {
+    const trimmedValue = value.trim();
+    return trimmedValue.length > 0 ? Number(trimmedValue) : Number.NaN;
+  }
+
+  return Number.NaN;
 }
 
 function resolveLapAxisValue(

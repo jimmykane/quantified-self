@@ -515,34 +515,38 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const tooltipSurfaceConfig = this.buildTooltipSurfaceConfig();
     const tooltipTriggerOn = resolveEChartsTooltipTriggerOn(hoverTooltipEnabled && interactionArmed, this.isMobile);
 
-    const seriesOptions: ChartLineSeriesOption[] = panel.series.map((series) => ({
-      id: series.id,
-      name: series.activityName,
-      type: 'line',
-      smooth: false,
-      showSymbol: false,
-      symbolSize: 5,
-      progressive: series.points.length >= PROGRESSIVE_THRESHOLD ? PROGRESSIVE_STEP : 0,
-      progressiveThreshold: PROGRESSIVE_THRESHOLD,
-      progressiveChunkMode: 'mod',
-      animation: this.useAnimations === true,
-      lineStyle: {
-        width: seriesStrokeWidth,
-        color: series.color,
-      },
-      itemStyle: {
-        color: series.color,
-      },
-      areaStyle: {
-        color: series.color,
-        opacity: seriesFillOpacity,
-        origin: areaFillOrigin,
-      },
-      emphasis: {
-        disabled: true,
-      },
-      data: this.getSeriesLineData(series.points),
-    }));
+    const seriesOptions: ChartLineSeriesOption[] = panel.series.map((series) => {
+      const connectAcrossMissingValues = this.isBatteryStreamType(series.streamType);
+      return {
+        id: series.id,
+        name: series.activityName,
+        type: 'line',
+        smooth: false,
+        showSymbol: false,
+        symbolSize: 5,
+        connectNulls: connectAcrossMissingValues,
+        progressive: series.points.length >= PROGRESSIVE_THRESHOLD ? PROGRESSIVE_STEP : 0,
+        progressiveThreshold: PROGRESSIVE_THRESHOLD,
+        progressiveChunkMode: 'mod',
+        animation: this.useAnimations === true,
+        lineStyle: {
+          width: seriesStrokeWidth,
+          color: series.color,
+        },
+        itemStyle: {
+          color: series.color,
+        },
+        areaStyle: {
+          color: series.color,
+          opacity: seriesFillOpacity,
+          origin: areaFillOrigin,
+        },
+        emphasis: {
+          disabled: true,
+        },
+        data: this.getSeriesLineData(series.points),
+      };
+    });
 
     if (seriesOptions[0]) {
       seriesOptions[0].markLine = this.buildLapMarkLine(chartStyle);
@@ -1955,7 +1959,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const data = new Array<[number, number | null]>(points.length);
     for (let index = 0; index < points.length; index += 1) {
       const point = points[index];
-      data[index] = [point.x, point.y];
+      const y = point?.y;
+      data[index] = [point.x, typeof y === 'number' && Number.isFinite(y) ? y : null];
     }
 
     this.seriesDataCache.set(pointsRef, data);
@@ -1987,6 +1992,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   private buildTooltipSurfaceConfig(): EChartsTooltipSurfaceConfig {
     return resolveEChartsTooltipSurfaceConfig(this.isMobile);
+  }
+
+  private isBatteryStreamType(streamType: string): boolean {
+    return `${streamType || ''}`.toLowerCase().includes('battery');
   }
 
   private isInteractionArmed(): boolean {

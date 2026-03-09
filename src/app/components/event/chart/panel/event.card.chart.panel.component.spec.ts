@@ -269,6 +269,36 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.tooltip?.confine).toBe(true);
   });
 
+  it('connects sparse battery series across missing values and normalizes NaN points to null', async () => {
+    component.panel = {
+      ...(component.panel as any),
+      dataType: 'Battery Charge',
+      displayName: 'Battery Charge',
+      unit: '%',
+      series: [
+        {
+          ...(component.panel as any).series[0],
+          streamType: 'Battery Charge',
+          points: [
+            { x: 0, y: 40, time: 0 },
+            { x: 1, y: Number.NaN, time: 1 },
+            { x: 2, y: 41, time: 2 },
+          ],
+        }
+      ]
+    } as any;
+
+    await renderComponent();
+
+    const option = getRenderedOption();
+    expect(option?.series?.[0]?.connectNulls).toBe(true);
+    expect(option?.series?.[0]?.data).toEqual([
+      [0, 40],
+      [1, null],
+      [2, 41],
+    ]);
+  });
+
   it('keeps mobile panel interactions disabled until first tap, then enables them', async () => {
     Object.defineProperty(window, 'matchMedia', {
       configurable: true,
