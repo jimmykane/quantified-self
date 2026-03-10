@@ -190,6 +190,12 @@
     }
 }
 
+.chart-wrapper-tall {
+    .echart-surface {
+        height: 320px;
+    }
+}
+
 .chart-empty-state {
     padding: 0 24px 24px;
 }
@@ -420,6 +426,10 @@ td.mat-cell {
 @include bp.xsmall {
     .chart-wrapper .echart-surface {
         height: 320px;
+    }
+
+    .chart-wrapper-tall .echart-surface {
+        height: 380px;
     }
 
     .qs-filter-container {
