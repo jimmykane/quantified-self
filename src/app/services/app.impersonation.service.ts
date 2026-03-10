@@ -5,7 +5,6 @@ import { AppAuthService } from '../authentication/app.auth.service';
 import { AppUserInterface } from '../models/app-user.interface';
 import { AdminService } from './admin.service';
 import { AppFunctionsService } from './app.functions.service';
-import { AppHapticsService } from './app.haptics.service';
 import { AppUserService } from './app.user.service';
 import { AppWindowService } from './app.window.service';
 import { LoggerService } from './logger.service';
@@ -41,7 +40,6 @@ export class AppImpersonationService {
     private windowService = inject(AppWindowService);
     private snackBar = inject(MatSnackBar);
     private logger = inject(LoggerService);
-    private hapticsService = inject(AppHapticsService);
 
     private returningState = signal(false);
 
@@ -94,7 +92,6 @@ export class AppImpersonationService {
             throw error;
         }
 
-        this.hapticsService.selection();
         this.returningState.set(true);
 
         try {

@@ -15,7 +15,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { AppHapticsService } from './services/app.haptics.service';
 
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
-import { Router, RouterModule, ActivatedRoute, NavigationEnd } from '@angular/router';
+import { Router, RouterModule, ActivatedRoute, NavigationEnd, NavigationStart } from '@angular/router';
 import { DomSanitizer } from '@angular/platform-browser';
 import { of, Subject } from 'rxjs';
 import { MatTabsModule } from '@angular/material/tabs';
@@ -265,47 +265,35 @@ describe('AppComponent', () => {
     });
 
     it('should navigate to dashboard on logo click when authenticated', () => {
-        mockHapticsService.selection.mockClear();
         component.authState = true;
         component.onLogoClick();
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
-        expect(mockHapticsService.selection).toHaveBeenCalled();
     });
 
     it('should navigate home on logo click when unauthenticated', () => {
-        mockHapticsService.selection.mockClear();
         component.authState = false;
         component.onLogoClick();
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/']);
-        expect(mockHapticsService.selection).toHaveBeenCalled();
     });
 
     it('should toggle sidenav through side nav service', () => {
-        mockHapticsService.selection.mockClear();
         component.toggleSidenav();
         expect(mockAppSideNavService.toggle).toHaveBeenCalled();
-        expect(mockHapticsService.selection).toHaveBeenCalled();
     });
 
-    it('should navigate to dashboard with haptic feedback', () => {
-        mockHapticsService.selection.mockClear();
+    it('should navigate to dashboard', () => {
         component.navigateToDashboard();
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
-        expect(mockHapticsService.selection).toHaveBeenCalled();
     });
 
-    it('should navigate to admin with haptic feedback', () => {
-        mockHapticsService.selection.mockClear();
+    it('should navigate to admin', () => {
         component.navigateToAdmin();
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/admin']);
-        expect(mockHapticsService.selection).toHaveBeenCalled();
     });
 
-    it('should navigate to login with haptic feedback', () => {
-        mockHapticsService.selection.mockClear();
+    it('should navigate to login', () => {
         component.navigateToLogin();
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/login']);
-        expect(mockHapticsService.selection).toHaveBeenCalled();
     });
 
     it('should place the impersonation banner inside the main shell content', () => {
@@ -332,7 +320,6 @@ describe('AppComponent', () => {
     });
 
     it('should open whats new dialog with expected config', () => {
-        mockHapticsService.selection.mockClear();
         const dialog = TestBed.inject(MatDialog) as any;
         component.openWhatsNew();
         expect(dialog.open).toHaveBeenCalledWith(
@@ -343,7 +330,6 @@ describe('AppComponent', () => {
                 autoFocus: false
             })
         );
-        expect(mockHapticsService.selection).toHaveBeenCalled();
     });
 
     it('should apply and clear theme overlay during reveal animation', () => {
@@ -454,6 +440,27 @@ describe('AppComponent', () => {
             expect(shellScroller.scrollLeft).toBe(0);
         }
         expect(scrollSpy).toHaveBeenCalled();
+    });
+
+    it('should trigger haptics for imperative navigations after initial navigation', () => {
+        mockHapticsService.selection.mockClear();
+
+        (mockRouter.events as Subject<any>).next(new NavigationEnd(1, '/dashboard', '/dashboard'));
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+
+        (mockRouter.events as Subject<any>).next(new NavigationStart(2, '/help', 'imperative'));
+        (mockRouter.events as Subject<any>).next(new NavigationEnd(2, '/help', '/help'));
+        expect(mockHapticsService.selection).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not trigger haptics for popstate navigations', () => {
+        mockHapticsService.selection.mockClear();
+
+        (mockRouter.events as Subject<any>).next(new NavigationEnd(1, '/dashboard', '/dashboard'));
+        (mockRouter.events as Subject<any>).next(new NavigationStart(2, '/dashboard', 'popstate'));
+        (mockRouter.events as Subject<any>).next(new NavigationEnd(2, '/dashboard', '/dashboard'));
+
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
     });
 
     it('should persist hasSubscribedOnce and onboardingCompleted for paid users with accepted terms', () => {
