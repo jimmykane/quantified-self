@@ -567,7 +567,7 @@ export const getUserCount = onAdminCall<void, any>({
 
         // 1. Get stats from Firestore (subscriptions)
         // Parallel efficient count queries
-        const [totalSnapshot, proSnapshot, basicSnapshot, onboardedSnapshot, everPaidSnapshot, cancelScheduledSnapshot] = await Promise.all([
+        const [totalSnapshot, proSnapshot, basicSnapshot, onboardedSnapshot] = await Promise.all([
             db.collection('users').count().get(),
             db.collectionGroup('subscriptions')
                 .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
@@ -579,13 +579,6 @@ export const getUserCount = onAdminCall<void, any>({
                 .count().get(),
             db.collection('users')
                 .where('onboardingCompleted', '==', true)
-                .count().get(),
-            db.collection('users')
-                .where('hasSubscribedOnce', '==', true)
-                .count().get(),
-            db.collectionGroup('subscriptions')
-                .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
-                .where('cancel_at_period_end', '==', true)
                 .count().get()
         ]);
 
@@ -594,9 +587,6 @@ export const getUserCount = onAdminCall<void, any>({
         const basic = basicSnapshot.data().count;
         const activePaid = pro + basic;
         const onboardingCompleted = onboardedSnapshot.data().count;
-        const everPaid = everPaidSnapshot.data().count;
-        const cancelScheduled = cancelScheduledSnapshot.data().count;
-        const canceled = Math.max(0, everPaid - activePaid);
         const free = Math.max(0, total - activePaid); // Users with no active subscription
 
         // 2. Get provider breakdown from Firebase Auth
@@ -632,9 +622,6 @@ export const getUserCount = onAdminCall<void, any>({
             pro,
             basic,
             free,
-            everPaid,
-            canceled,
-            cancelScheduled,
             onboardingCompleted,
             providers: providerCounts
         };

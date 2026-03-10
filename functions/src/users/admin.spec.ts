@@ -944,9 +944,6 @@ describe('getUserCount Cloud Function', () => {
         const mockProCount = vi.fn().mockResolvedValue({
             data: () => ({ count: 50 })
         });
-        const mockEverPaidCount = vi.fn().mockResolvedValue({
-            data: () => ({ count: 120 })
-        });
         const mockOnboardingCount = vi.fn().mockResolvedValue({
             data: () => ({ count: 40 })
         });
@@ -961,22 +958,12 @@ describe('getUserCount Cloud Function', () => {
 
         mockCollection.mockImplementation((name) => {
             if (name === 'users') {
-                const usersWhere = vi.fn((field: string) => {
-                    if (field === 'hasSubscribedOnce') {
-                        return {
-                            count: vi.fn().mockReturnValue({
-                                get: mockEverPaidCount
-                            })
-                        };
-                    }
-                    return {
+                return {
+                    where: vi.fn().mockReturnValue({
                         count: vi.fn().mockReturnValue({
                             get: mockOnboardingCount
                         })
-                    };
-                });
-                return {
-                    where: usersWhere,
+                    }),
                     count: vi.fn().mockReturnValue({
                         get: mockTotalCount
                     })
@@ -997,9 +984,6 @@ describe('getUserCount Cloud Function', () => {
             pro: 50,
             basic: 50,
             free: 50,
-            everPaid: 120,
-            canceled: 20,
-            cancelScheduled: 50,
             onboardingCompleted: 40,
             providers: {}
         });
