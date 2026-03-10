@@ -173,6 +173,82 @@ describe('AppUserService', () => {
         expect(service.getUserChartDataTypesToUse(user)).toEqual(expectedOrderedDataTypes);
     });
 
+    describe('createOrUpdateUser policy flow', () => {
+        beforeEach(() => {
+            service = TestBed.inject(AppUserService);
+        });
+
+        it('should reject when required legal policies are not accepted', async () => {
+            const user = {
+                uid: 'u1',
+                acceptedPrivacyPolicy: false,
+                acceptedDataPolicy: true,
+            } as AppUserInterface;
+            const updateUserSpy = vi.spyOn(service, 'updateUser');
+
+            await expect(service.createOrUpdateUser(user)).rejects.toThrow('User has not accepted privacy or data policy');
+
+            expect(updateUserSpy).not.toHaveBeenCalled();
+            expect(setDoc).not.toHaveBeenCalled();
+        });
+
+        it('should write legal agreements before updating the main user profile', async () => {
+            const user = {
+                uid: 'u1',
+                acceptedPrivacyPolicy: true,
+                acceptedDataPolicy: true,
+            } as AppUserInterface;
+            const acceptPoliciesSpy = vi.spyOn(service, 'acceptPolicies');
+            const updateUserSpy = vi.spyOn(service, 'updateUser').mockResolvedValue(undefined as any);
+
+            await service.createOrUpdateUser(user);
+
+            expect(acceptPoliciesSpy).toHaveBeenCalledWith(user);
+            expect(updateUserSpy).toHaveBeenCalledWith(user);
+            const acceptOrder = (acceptPoliciesSpy as any).mock.invocationCallOrder[0];
+            const updateOrder = (updateUserSpy as any).mock.invocationCallOrder[0];
+            expect(acceptOrder).toBeLessThan(updateOrder);
+        });
+
+        it('acceptPolicies should persist only legal fields explicitly set to true', async () => {
+            const policies = {
+                uid: 'u1',
+                acceptedPrivacyPolicy: true,
+                acceptedDataPolicy: false,
+                acceptedTrackingPolicy: true,
+                acceptedMarketingPolicy: true,
+                acceptedDiagnosticsPolicy: true,
+                displayName: 'Should be ignored',
+            } as any;
+
+            await service.acceptPolicies(policies);
+
+            expect(setDoc).toHaveBeenCalledTimes(1);
+            expect((setDoc as any).mock.calls[0][1]).toEqual({
+                acceptedPrivacyPolicy: true,
+                acceptedTrackingPolicy: true,
+                acceptedMarketingPolicy: true,
+                acceptedDiagnosticsPolicy: true,
+            });
+            expect((setDoc as any).mock.calls[0][2]).toEqual({ merge: true });
+        });
+
+        it('should not call updateUser when legal agreement write fails', async () => {
+            const user = {
+                uid: 'u1',
+                acceptedPrivacyPolicy: true,
+                acceptedDataPolicy: true,
+            } as AppUserInterface;
+            const writeError = new Error('permission-denied');
+            const updateUserSpy = vi.spyOn(service, 'updateUser');
+            (setDoc as any).mockRejectedValueOnce(writeError);
+
+            await expect(service.createOrUpdateUser(user)).rejects.toThrow('permission-denied');
+
+            expect(updateUserSpy).not.toHaveBeenCalled();
+        });
+    });
+
     describe('role checks', () => {
 
 
