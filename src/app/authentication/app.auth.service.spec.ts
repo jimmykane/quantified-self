@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeEach, Mock } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach, Mock } from 'vitest';
 
 const { mockUserFunction } = vi.hoisted(() => {
     return {
@@ -42,6 +42,7 @@ import { EnvironmentInjector } from '@angular/core';
 import { of, BehaviorSubject } from 'rxjs';
 import { Privacy } from '@sports-alliance/sports-lib';
 import { APP_STORAGE } from '../services/storage/app.storage.token';
+import { environment } from '../../environments/environment';
 
 import { signal } from '@angular/core';
 
@@ -76,6 +77,7 @@ const mockLocalStorageService = {
 describe('AppAuthService', () => {
     let service: AppAuthService;
     let userSubject: BehaviorSubject<any>;
+    const originalLocalhost = environment.localhost;
 
     beforeEach(() => {
         vi.clearAllMocks();
@@ -98,6 +100,10 @@ describe('AppAuthService', () => {
             ]
         });
         service = TestBed.inject(AppAuthService);
+    });
+
+    afterEach(() => {
+        environment.localhost = originalLocalhost;
     });
 
     it('should be created', () => {
@@ -235,25 +241,46 @@ describe('AppAuthService', () => {
 
     describe('signInWithProvider branching logic', () => {
         it('should use signInWithPopup on localhost', async () => {
-            // Mock environment.localhost to true
-            vi.mock('../../environments/environment', async (importOriginal) => {
-                const actual = await importOriginal() as any;
-                return {
-                    ...actual,
-                    environment: { ...actual.environment, localhost: true }
-                };
-            });
-            const { signInWithPopup } = await import('@angular/fire/auth');
+            const { signInWithPopup, signInWithRedirect } = await import('@angular/fire/auth');
             const provider = new GoogleAuthProvider();
+            const popupResult = { user: { uid: 'popup-user' } };
+            environment.localhost = true;
+            (signInWithPopup as Mock).mockResolvedValueOnce(popupResult as any);
 
-            await (service as any).signInWithProvider(provider);
-            expect(signInWithPopup).toHaveBeenCalled();
+            const result = await service.signInWithProvider(provider);
+
+            expect(signInWithPopup).toHaveBeenCalledWith(mockAuth, provider);
+            expect(signInWithRedirect).not.toHaveBeenCalled();
+            expect(result).toEqual(popupResult);
         });
 
         it('should use signInWithRedirect on non-localhost', async () => {
-            // We need to re-mock or use a different approach since vitest mocks are module-wide
-            // For simplicity in this environment, I'll just verify the existing implementation 
-            // respects the environment variable which is already used in the code.
+            const { signInWithPopup, signInWithRedirect } = await import('@angular/fire/auth');
+            const provider = new GoogleAuthProvider();
+            const redirectResult = { redirected: true };
+            environment.localhost = false;
+            (signInWithRedirect as Mock).mockResolvedValueOnce(redirectResult as any);
+
+            const result = await service.signInWithProvider(provider);
+
+            expect(signInWithRedirect).toHaveBeenCalledWith(mockAuth, provider);
+            expect(signInWithPopup).not.toHaveBeenCalled();
+            expect(result).toEqual(redirectResult);
+        });
+
+        it('should log details and rethrow when provider sign-in fails', async () => {
+            const { signInWithPopup } = await import('@angular/fire/auth');
+            const provider = new GoogleAuthProvider();
+            const authError = { code: 'auth/popup-blocked', message: 'Popup blocked by browser' };
+            const loggerErrorSpy = vi.spyOn((service as any).logger, 'error').mockImplementation(() => { });
+            environment.localhost = true;
+            (signInWithPopup as Mock).mockRejectedValueOnce(authError);
+
+            await expect(service.signInWithProvider(provider)).rejects.toBe(authError);
+
+            expect(loggerErrorSpy).toHaveBeenNthCalledWith(1, '[Auth] signInWithProvider error:', authError);
+            expect(loggerErrorSpy).toHaveBeenNthCalledWith(2, '[Auth] Error code:', authError.code);
+            expect(loggerErrorSpy).toHaveBeenNthCalledWith(3, '[Auth] Error message:', authError.message);
         });
     });
 
