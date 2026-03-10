@@ -10,7 +10,7 @@
   background: #fff;
 }
 
-.dark-theme .qs-splash-loader {
+:host-context(.dark-theme) .qs-splash-loader {
   background: #000;
 }
 
@@ -25,7 +25,7 @@
   color: #000;
 }
 
-.dark-theme .qs-digit-grid {
+:host-context(.dark-theme) .qs-digit-grid {
   color: #fff;
 }
 
