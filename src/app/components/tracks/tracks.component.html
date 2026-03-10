@@ -60,7 +60,7 @@
     <app-peek-panel class="tracks-trips-peek" position="left" toggleLengthSize="small"
       [expanded]="detectedTripsPanelExpanded()"
       (expandedChange)="detectedTripsPanelExpanded.set($event)" [expandedSizePx]="300" [collapsedSizePx]="28"
-      ariaLabelExpand="Expand detected trips" ariaLabelCollapse="Collapse detected trips" title="Detected trips"
+      ariaLabelExpand="Expand trips" ariaLabelCollapse="Collapse trips" title="Trips"
       icon="route">
       <div peek-header-actions class="detected-trips-summary-row">
         <span class="detected-trips-badge">
@@ -70,9 +70,40 @@
       </div>
 
       <ul class="detected-trips-list qs-scrollbar">
+        @if (detectedHomeArea(); as homeArea) {
+        <li>
+          <button
+            type="button"
+            class="detected-trip-button detected-home-button"
+            [class.is-selected]="isHomeEntrySelected()"
+            [attr.aria-pressed]="isHomeEntrySelected()"
+            (pointerenter)="onDetectedHomeHovered()"
+            (pointerleave)="onDetectedHomeHoverEnded()"
+            (mouseenter)="onDetectedHomeHovered()"
+            (mouseleave)="onDetectedHomeHoverEnded()"
+            (focus)="onDetectedHomeHovered()"
+            (blur)="onDetectedHomeHoverEnded()"
+            (click)="onDetectedHomeSelected()">
+            <span class="trip-location">Home</span>
+            <span class="trip-dates">Home area</span>
+            <span class="trip-count">{{ homeArea.pointCount }} activities used</span>
+          </button>
+        </li>
+        }
         @for (trip of detectedTrips(); track trip.tripId) {
         <li>
-          <button type="button" class="detected-trip-button" (click)="onDetectedTripSelected(trip)">
+          <button
+            type="button"
+            class="detected-trip-button"
+            [class.is-selected]="selectedDetectedTripId() === trip.tripId"
+            [attr.aria-pressed]="selectedDetectedTripId() === trip.tripId"
+            (pointerenter)="onDetectedTripHovered(trip)"
+            (pointerleave)="onDetectedTripHoverEnded(trip)"
+            (mouseenter)="onDetectedTripHovered(trip)"
+            (mouseleave)="onDetectedTripHoverEnded(trip)"
+            (focus)="onDetectedTripHovered(trip)"
+            (blur)="onDetectedTripHoverEnded(trip)"
+            (click)="onDetectedTripSelected(trip)">
             <span class="trip-location">{{ trip.locationLabel || 'Trip' }}</span>
             <span class="trip-dates">{{ trip.startDate | date:'mediumDate' }} - {{ trip.endDate | date:'mediumDate'
               }}</span>

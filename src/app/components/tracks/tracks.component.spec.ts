@@ -84,6 +84,14 @@ const createDetectedTrip = (overrides: Record<string, unknown> = {}) => ({
   ...overrides
 });
 
+const createTripDetectionResult = (overrides: {
+  trips?: any[];
+  homeArea?: any | null;
+} = {}) => ({
+  trips: overrides.trips || [],
+  homeArea: overrides.homeArea ?? null,
+});
+
 describe('TracksComponent', () => {
   let component: TracksComponent;
   let fixture: ComponentFixture<TracksComponent>;
@@ -139,6 +147,9 @@ describe('TracksComponent', () => {
       queryRenderedFeatures: vi.fn().mockReturnValue([]),
       getCanvas: vi.fn().mockReturnValue({ style: { cursor: '' } }),
       project: vi.fn().mockReturnValue({ x: 100, y: 120 }),
+      getPitch: vi.fn().mockReturnValue(0),
+      getBearing: vi.fn().mockReturnValue(0),
+      fitBounds: vi.fn(),
       panTo: vi.fn(),
     };
 
@@ -206,11 +217,13 @@ describe('TracksComponent', () => {
     };
 
     mockTripDetectionService = {
-      detectTrips: vi.fn().mockReturnValue([])
+      detectTrips: vi.fn().mockReturnValue([]),
+      detectTripsWithContext: vi.fn().mockReturnValue(createTripDetectionResult())
     };
 
     mockTripLocationLabelService = {
       resolveTripLocation: vi.fn().mockResolvedValue(null),
+      resolveTripLocationFromCandidates: vi.fn().mockResolvedValue(null),
       resolveCountryName: vi.fn().mockResolvedValue(null),
     };
 
@@ -962,14 +975,19 @@ describe('TracksComponent', () => {
 
     it('should generate suggestions from activities in the selected range', async () => {
       const event = createMockEvent('trip-nepal-1', '2024-11-08T08:00:00Z', 27.7172, 85.3240);
-      mockEventService.getEventsBy.mockReturnValue(of([event]));
-      mockTripDetectionService.detectTrips.mockReturnValue([
-        {
+      const homeEvent = createMockEvent('home-athens-1', '2024-08-08T08:00:00Z', 37.9838, 23.7275);
+      const setHomeAreaSpy = vi.spyOn((component as any).tracksMapManager, 'setHomeArea');
+      mockEventService.getEventsBy
+        .mockReturnValueOnce(of([event]))
+        .mockReturnValueOnce(of([homeEvent]));
+      mockTripDetectionService.detectTripsWithContext.mockReturnValue(createTripDetectionResult({
+        trips: [{
           tripId: 'trip-nepal',
           destinationId: 'destination-nepal',
           destinationVisitIndex: 1,
           destinationVisitCount: 1,
           isRevisit: false,
+          eventIds: ['trip-nepal-1'],
           startDate: new Date('2024-11-08T08:00:00Z'),
           endDate: new Date('2024-11-16T08:00:00Z'),
           activityCount: 3,
@@ -981,9 +999,23 @@ describe('TracksComponent', () => {
             south: 27.60,
             north: 27.80,
           },
-        }
-      ]);
-      mockTripLocationLabelService.resolveTripLocation.mockResolvedValue({
+        }],
+        homeArea: {
+          destinationId: 'destination-home',
+          pointCount: 5,
+          pointShare: 0.62,
+          centroidLat: 37.9838,
+          centroidLng: 23.7275,
+          bounds: {
+            west: 23.71,
+            east: 23.74,
+            south: 37.97,
+            north: 38.0,
+          },
+          radiusKm: 3.2,
+        },
+      }));
+      mockTripLocationLabelService.resolveTripLocationFromCandidates.mockResolvedValue({
         city: 'Kathmandu',
         country: 'Nepal',
         label: 'Kathmandu, Nepal',
@@ -992,10 +1024,25 @@ describe('TracksComponent', () => {
       await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
       await waitForAsyncWork();
 
-      expect(mockTripDetectionService.detectTrips).toHaveBeenCalledTimes(1);
-      expect(mockTripDetectionService.detectTrips.mock.calls[0][0]).toEqual([
+      expect(mockTripDetectionService.detectTripsWithContext).toHaveBeenCalledTimes(1);
+      expect(mockTripDetectionService.detectTripsWithContext.mock.calls[0][0]).toEqual([
         expect.objectContaining({ eventId: 'trip-nepal-1' })
       ]);
+      expect(mockTripDetectionService.detectTripsWithContext.mock.calls[0][1]).toEqual({
+        homeInferenceInputs: [
+          expect.objectContaining({ eventId: 'home-athens-1' })
+        ]
+      });
+      expect(mockTripLocationLabelService.resolveTripLocationFromCandidates).toHaveBeenCalledWith([
+        { latitudeDegrees: 27.7172, longitudeDegrees: 85.3240 }
+      ]);
+      expect(mockTripLocationLabelService.resolveTripLocation).not.toHaveBeenCalled();
+      expect(setHomeAreaSpy).toHaveBeenCalledWith(expect.objectContaining({
+        destinationId: 'destination-home',
+        radiusKm: 3.2,
+      }));
+      expect(component.detectedTrips().length).toBe(1);
+      expect(component.detectedTripsPanelExpanded()).toBe(true);
       expect(component.detectedTrips()[0].locationLabel).toBe('Kathmandu, Nepal');
       expect(component.hasEvaluatedTripDetection()).toBe(true);
     });
@@ -1004,45 +1051,49 @@ describe('TracksComponent', () => {
       const firstVisitEvent = createMockEvent('trip-nepal-visit-1', '2024-11-08T08:00:00Z', 27.7172, 85.3240);
       const secondVisitEvent = createMockEvent('trip-nepal-visit-2', '2024-11-16T08:00:00Z', 27.7201, 85.3301);
       mockEventService.getEventsBy.mockReturnValue(of([firstVisitEvent, secondVisitEvent]));
-      mockTripDetectionService.detectTrips.mockReturnValue([
-        {
-          tripId: 'trip-nepal-1',
-          destinationId: 'destination-nepal',
-          destinationVisitIndex: 1,
-          destinationVisitCount: 2,
-          isRevisit: false,
-          startDate: new Date('2024-11-08T08:00:00Z'),
-          endDate: new Date('2024-11-09T10:00:00Z'),
-          activityCount: 2,
-          centroidLat: 27.7172,
-          centroidLng: 85.3240,
-          bounds: {
-            west: 85.20,
-            east: 85.40,
-            south: 27.60,
-            north: 27.80,
+      mockTripDetectionService.detectTripsWithContext.mockReturnValue(createTripDetectionResult({
+        trips: [
+          {
+            tripId: 'trip-nepal-1',
+            destinationId: 'destination-nepal',
+            destinationVisitIndex: 1,
+            destinationVisitCount: 2,
+            isRevisit: false,
+            eventIds: ['trip-nepal-visit-1'],
+            startDate: new Date('2024-11-08T08:00:00Z'),
+            endDate: new Date('2024-11-09T10:00:00Z'),
+            activityCount: 2,
+            centroidLat: 27.7172,
+            centroidLng: 85.3240,
+            bounds: {
+              west: 85.20,
+              east: 85.40,
+              south: 27.60,
+              north: 27.80,
+            },
           },
-        },
-        {
-          tripId: 'trip-nepal-2',
-          destinationId: 'destination-nepal',
-          destinationVisitIndex: 2,
-          destinationVisitCount: 2,
-          isRevisit: true,
-          startDate: new Date('2024-11-16T08:00:00Z'),
-          endDate: new Date('2024-11-17T10:00:00Z'),
-          activityCount: 2,
-          centroidLat: 27.7201,
-          centroidLng: 85.3301,
-          bounds: {
-            west: 85.22,
-            east: 85.45,
-            south: 27.61,
-            north: 27.82,
+          {
+            tripId: 'trip-nepal-2',
+            destinationId: 'destination-nepal',
+            destinationVisitIndex: 2,
+            destinationVisitCount: 2,
+            isRevisit: true,
+            eventIds: ['trip-nepal-visit-2'],
+            startDate: new Date('2024-11-16T08:00:00Z'),
+            endDate: new Date('2024-11-17T10:00:00Z'),
+            activityCount: 2,
+            centroidLat: 27.7201,
+            centroidLng: 85.3301,
+            bounds: {
+              west: 85.22,
+              east: 85.45,
+              south: 27.61,
+              north: 27.82,
+            },
           },
-        },
-      ]);
-      mockTripLocationLabelService.resolveTripLocation.mockResolvedValue({
+        ],
+      }));
+      mockTripLocationLabelService.resolveTripLocationFromCandidates.mockResolvedValue({
         city: 'Kathmandu',
         country: 'Nepal',
         label: 'Kathmandu, Nepal',
@@ -1051,7 +1102,12 @@ describe('TracksComponent', () => {
       await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
       await waitForAsyncWork();
 
-      expect(mockTripLocationLabelService.resolveTripLocation).toHaveBeenCalledTimes(2);
+      expect(mockTripLocationLabelService.resolveTripLocationFromCandidates).toHaveBeenCalledTimes(1);
+      expect(mockTripLocationLabelService.resolveTripLocationFromCandidates).toHaveBeenCalledWith([
+        { latitudeDegrees: 27.7172, longitudeDegrees: 85.3240 },
+        { latitudeDegrees: 27.7201, longitudeDegrees: 85.3301 },
+      ]);
+      expect(mockTripLocationLabelService.resolveTripLocation).not.toHaveBeenCalled();
       expect(component.detectedTrips().map((trip) => trip.locationLabel)).toEqual(['Kathmandu, Nepal', 'Kathmandu, Nepal']);
     });
 
@@ -1070,7 +1126,9 @@ describe('TracksComponent', () => {
 
       mockEventService.getEventsBy
         .mockReturnValueOnce(of([rangeAEvent]))
-        .mockReturnValueOnce(of([rangeBEvent]));
+        .mockReturnValueOnce(of([createMockEvent('range-a-home', '2024-01-20T08:00:00Z', 37.98, 23.72)]))
+        .mockReturnValueOnce(of([rangeBEvent]))
+        .mockReturnValueOnce(of([createMockEvent('range-b-home', '2024-03-20T08:00:00Z', 37.98, 23.72)]));
 
       await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisWeek, [ActivityTypes.Running]);
       await waitForAsyncWork();
@@ -1078,17 +1136,68 @@ describe('TracksComponent', () => {
       await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.lastMonth, [ActivityTypes.Running]);
       await waitForAsyncWork();
 
-      expect(mockTripDetectionService.detectTrips).toHaveBeenCalledTimes(2);
-      expect(mockTripDetectionService.detectTrips.mock.calls[0][0]).toEqual([
+      expect(mockTripDetectionService.detectTripsWithContext).toHaveBeenCalledTimes(2);
+      expect(mockTripDetectionService.detectTripsWithContext.mock.calls[0][0]).toEqual([
         expect.objectContaining({ eventId: 'range-a-event' })
       ]);
-      expect(mockTripDetectionService.detectTrips.mock.calls[1][0]).toEqual([
+      expect(mockTripDetectionService.detectTripsWithContext.mock.calls[0][1]).toEqual({
+        homeInferenceInputs: [
+          expect.objectContaining({ eventId: 'range-a-home' })
+        ]
+      });
+      expect(mockTripDetectionService.detectTripsWithContext.mock.calls[1][0]).toEqual([
         expect.objectContaining({ eventId: 'range-b-event' })
       ]);
+      expect(mockTripDetectionService.detectTripsWithContext.mock.calls[1][1]).toEqual({
+        homeInferenceInputs: [
+          expect.objectContaining({ eventId: 'range-b-home' })
+        ]
+      });
+    });
+
+    it('should reuse current candidates for home inference on DateRanges.all without an extra history query', async () => {
+      const event = createMockEvent('trip-all-1', '2024-11-08T08:00:00Z', 27.7172, 85.3240);
+      mockEventService.getEventsBy.mockReturnValue(of([event]));
+      mockTripDetectionService.detectTripsWithContext.mockReturnValue(createTripDetectionResult({
+        trips: [
+          {
+            tripId: 'trip-all',
+            destinationId: 'destination-all',
+            destinationVisitIndex: 1,
+            destinationVisitCount: 1,
+            isRevisit: false,
+            eventIds: ['trip-all-1'],
+            startDate: new Date('2024-11-08T08:00:00Z'),
+            endDate: new Date('2024-11-16T08:00:00Z'),
+            activityCount: 3,
+            centroidLat: 27.7172,
+            centroidLng: 85.3240,
+            bounds: {
+              west: 85.20,
+              east: 85.40,
+              south: 27.60,
+              north: 27.80,
+            },
+          }
+        ],
+      }));
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.all, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      expect(mockEventService.getEventsOnceBy).toHaveBeenCalledTimes(1);
+      expect(mockTripDetectionService.detectTripsWithContext).toHaveBeenCalledWith([
+        expect.objectContaining({ eventId: 'trip-all-1' })
+      ], {
+        homeInferenceInputs: [
+          expect.objectContaining({ eventId: 'trip-all-1' })
+        ]
+      });
     });
 
     it('should fit bounds when a detected trip is clicked without changing settings', () => {
       const fitBoundsSpy = vi.spyOn(component as any, 'fitBoundsToTracks');
+      const setTripAreaSpy = vi.spyOn((component as any).tracksMapManager, 'setTripArea');
       component.detectedTrips.set([createDetectedTrip() as any]);
       component.hasEvaluatedTripDetection.set(true);
       fixture.detectChanges();
@@ -1098,6 +1207,10 @@ describe('TracksComponent', () => {
       tripButton?.click();
 
       expect(fitBoundsSpy).toHaveBeenCalledWith([[84.9, 27.5], [85.6, 28]]);
+      expect(setTripAreaSpy).toHaveBeenCalledWith(expect.objectContaining({
+        tripId: 'trip-id',
+      }));
+      expect(component.selectedDetectedTripId()).toBe('trip-id');
       expect(mockUserSettingsQuery.updateMyTracksSettings.mock.calls.length).toBe(beforeCalls);
     });
 
@@ -1118,6 +1231,187 @@ describe('TracksComponent', () => {
         [85.3, 27.81],
         [85.5, 27.9],
       ]);
+    });
+
+    it('should render a home entry above the trip list when a home area exists', () => {
+      component.detectedTrips.set([createDetectedTrip() as any]);
+      component.detectedHomeArea.set({
+        destinationId: 'destination-home',
+        pointCount: 5,
+        pointShare: 0.6,
+        centroidLat: 37.9838,
+        centroidLng: 23.7275,
+        bounds: {
+          west: 23.71,
+          east: 23.74,
+          south: 37.97,
+          north: 38.0,
+        },
+        radiusKm: 3.2,
+      });
+      component.hasEvaluatedTripDetection.set(true);
+      fixture.detectChanges();
+
+      const tripButtons = fixture.nativeElement.querySelectorAll('.detected-trip-button') as NodeListOf<HTMLButtonElement>;
+      expect(tripButtons[0]?.textContent).toContain('Home');
+      expect(tripButtons[1]?.textContent).toContain('Nepal');
+    });
+
+    it('should select home from the peek card and clear the trip area overlay', () => {
+      const fitBoundsSpy = vi.spyOn(component as any, 'fitBoundsToTracks');
+      const setTripAreaSpy = vi.spyOn((component as any).tracksMapManager, 'setTripArea');
+      component.detectedTrips.set([createDetectedTrip() as any]);
+      component.detectedHomeArea.set({
+        destinationId: 'destination-home',
+        pointCount: 5,
+        pointShare: 0.6,
+        centroidLat: 37.9838,
+        centroidLng: 23.7275,
+        bounds: {
+          west: 23.71,
+          east: 23.74,
+          south: 37.97,
+          north: 38.0,
+        },
+        radiusKm: 3.2,
+      });
+      component.hasEvaluatedTripDetection.set(true);
+      fixture.detectChanges();
+
+      const tripButtons = fixture.debugElement.queryAll(By.css('.detected-trip-button'));
+      tripButtons[1]?.triggerEventHandler('click');
+      tripButtons[0]?.triggerEventHandler('click');
+      fixture.detectChanges();
+      const updatedTripButtons = fixture.nativeElement.querySelectorAll('.detected-trip-button') as NodeListOf<HTMLButtonElement>;
+
+      expect(fitBoundsSpy).toHaveBeenLastCalledWith([
+        [23.71, 37.97],
+        [23.74, 38.0],
+      ]);
+      expect(setTripAreaSpy).toHaveBeenLastCalledWith(null);
+      expect(component.isHomeEntrySelected()).toBe(true);
+      expect(updatedTripButtons[0]?.classList.contains('is-selected')).toBe(true);
+      expect(updatedTripButtons[1]?.classList.contains('is-selected')).toBe(false);
+    });
+
+    it('should temporarily clear the selected trip overlay when the home entry is hovered', () => {
+      const setTripAreaSpy = vi.spyOn((component as any).tracksMapManager, 'setTripArea');
+      component.detectedTrips.set([createDetectedTrip() as any]);
+      component.detectedHomeArea.set({
+        destinationId: 'destination-home',
+        pointCount: 5,
+        pointShare: 0.6,
+        centroidLat: 37.9838,
+        centroidLng: 23.7275,
+        bounds: {
+          west: 23.71,
+          east: 23.74,
+          south: 37.97,
+          north: 38.0,
+        },
+        radiusKm: 3.2,
+      });
+      component.hasEvaluatedTripDetection.set(true);
+      fixture.detectChanges();
+
+      const tripButtons = fixture.nativeElement.querySelectorAll('.detected-trip-button') as NodeListOf<HTMLButtonElement>;
+      tripButtons[1]?.click();
+      tripButtons[0]?.dispatchEvent(new Event('pointerenter'));
+      expect(setTripAreaSpy).toHaveBeenLastCalledWith(null);
+
+      tripButtons[0]?.dispatchEvent(new Event('pointerleave'));
+      expect(setTripAreaSpy).toHaveBeenLastCalledWith(expect.objectContaining({
+        tripId: 'trip-id',
+      }));
+    });
+
+    it('should highlight the hovered detected trip area from the peek card', () => {
+      const setTripAreaSpy = vi.spyOn((component as any).tracksMapManager, 'setTripArea');
+      component.detectedTrips.set([createDetectedTrip() as any]);
+      component.hasEvaluatedTripDetection.set(true);
+      fixture.detectChanges();
+
+      const tripButton = fixture.nativeElement.querySelector('.detected-trip-button') as HTMLButtonElement | null;
+      tripButton?.dispatchEvent(new Event('pointerenter'));
+
+      expect(component.hoveredDetectedTripId()).toBe('trip-id');
+      expect(setTripAreaSpy).toHaveBeenCalledWith(expect.objectContaining({
+        tripId: 'trip-id',
+        centroidLat: 27.7172,
+        centroidLng: 85.324,
+      }));
+    });
+
+    it('should clear the trip area highlight when hover ends and no trip is selected', () => {
+      const setTripAreaSpy = vi.spyOn((component as any).tracksMapManager, 'setTripArea');
+      component.detectedTrips.set([createDetectedTrip() as any]);
+      component.hasEvaluatedTripDetection.set(true);
+      fixture.detectChanges();
+
+      const tripButton = fixture.nativeElement.querySelector('.detected-trip-button') as HTMLButtonElement | null;
+      tripButton?.dispatchEvent(new Event('pointerenter'));
+      tripButton?.dispatchEvent(new Event('pointerleave'));
+
+      expect(component.hoveredDetectedTripId()).toBeNull();
+      expect(setTripAreaSpy).toHaveBeenLastCalledWith(null);
+    });
+
+    it('should keep the selected trip area visible after hover ends', () => {
+      const setTripAreaSpy = vi.spyOn((component as any).tracksMapManager, 'setTripArea');
+      component.detectedTrips.set([
+        createDetectedTrip({
+          tripId: 'trip-selected',
+          destinationId: 'destination-selected',
+          centroidLat: 27.7172,
+          centroidLng: 85.3240,
+          bounds: {
+            west: 85.20,
+            east: 85.40,
+            south: 27.60,
+            north: 27.80,
+          },
+        }) as any,
+        createDetectedTrip({
+          tripId: 'trip-hovered',
+          destinationId: 'destination-hovered',
+          centroidLat: 48.8566,
+          centroidLng: 2.3522,
+          bounds: {
+            west: 2.10,
+            east: 2.60,
+            south: 48.75,
+            north: 48.95,
+          },
+        }) as any,
+      ]);
+      component.hasEvaluatedTripDetection.set(true);
+      fixture.detectChanges();
+
+      const tripButtons = fixture.nativeElement.querySelectorAll('.detected-trip-button') as NodeListOf<HTMLButtonElement>;
+      tripButtons[0]?.click();
+      tripButtons[1]?.dispatchEvent(new Event('pointerenter'));
+      tripButtons[1]?.dispatchEvent(new Event('pointerleave'));
+
+      expect(component.selectedDetectedTripId()).toBe('trip-selected');
+      expect(component.hoveredDetectedTripId()).toBeNull();
+      expect(setTripAreaSpy).toHaveBeenLastCalledWith(expect.objectContaining({
+        tripId: 'trip-selected',
+        centroidLat: 27.7172,
+        centroidLng: 85.324,
+      }));
+    });
+
+    it('should mark the selected detected trip button', () => {
+      component.detectedTrips.set([createDetectedTrip() as any]);
+      component.hasEvaluatedTripDetection.set(true);
+      fixture.detectChanges();
+
+      const tripButton = fixture.debugElement.query(By.css('.detected-trip-button'));
+      tripButton.triggerEventHandler('click');
+      fixture.detectChanges();
+
+      expect(tripButton.nativeElement.classList.contains('is-selected')).toBe(true);
+      expect(tripButton.attributes['aria-pressed']).toBe('true');
     });
   });
 });

@@ -21,7 +21,7 @@
     gap: 1px;
     font-size: 1.8rem;
     font-weight: 300;
-    color: var(--mat-app-on-surface);
+    color: var(--mat-sys-on-surface);
     line-height: 1.1;
     font-family: 'Barlow Condensed', sans-serif;
 }
@@ -29,7 +29,7 @@
 .metric-item .sub-value {
     font-size: 1rem;
     font-weight: 300;
-    color: var(--mat-app-on-surface-variant);
+    color: var(--mat-sys-on-surface-variant);
     opacity: 0.75;
     font-family: 'Barlow Condensed', sans-serif;
 }
@@ -37,7 +37,7 @@
 .metric-item .unit {
     font-size: 0.75rem;
     text-transform: uppercase;
-    color: var(--mat-app-on-surface-variant);
+    color: var(--mat-sys-on-surface-variant);
     opacity: 0.8;
     letter-spacing: 0.05em;
     line-height: 1.1;
@@ -60,7 +60,7 @@
 
 .skeleton-block {
     display: block;
-    background: var(--mat-app-surface-container-high);
+    background: var(--mat-sys-surface-container-high);
     border-radius: 4px;
     animation: shimmer 1.4s ease-in-out infinite;
 }

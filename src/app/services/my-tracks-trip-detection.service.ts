@@ -8,7 +8,11 @@ export interface TripDetectionInput {
   longitudeDegrees: number;
 }
 
-interface TripBounds {
+export interface TripDetectionOptions {
+  homeInferenceInputs?: TripDetectionInput[];
+}
+
+export interface TripBounds {
   west: number;
   east: number;
   south: number;
@@ -28,6 +32,21 @@ export interface DetectedTrip {
   centroidLat: number;
   centroidLng: number;
   bounds: TripBounds;
+}
+
+export interface DetectedHomeArea {
+  destinationId: string;
+  pointCount: number;
+  pointShare: number;
+  centroidLat: number;
+  centroidLng: number;
+  bounds: TripBounds;
+  radiusKm: number;
+}
+
+export interface TripDetectionResult {
+  trips: DetectedTrip[];
+  homeArea: DetectedHomeArea | null;
 }
 
 interface NormalizedActivityStart {
@@ -89,18 +108,20 @@ interface RejoinResult {
   providedIn: 'root'
 })
 export class MyTracksTripDetectionService {
-  private static readonly DESTINATION_EPS_KM = 90;
-  private static readonly DESTINATION_MIN_POINTS = 1;
+  private static readonly DESTINATION_EPS_KM = 40;
+  private static readonly DESTINATION_MIN_POINTS = 2;
   private static readonly VISIT_SPLIT_GAP_MS = 72 * 60 * 60 * 1000;
   private static readonly MIN_VISIT_ACTIVITY_COUNT = 1;
   private static readonly MIN_VISIT_DURATION_MS = 0;
   private static readonly HOME_CLUSTER_MIN_SHARE = 0.5;
   private static readonly HOME_MIN_ACTIVITY_COUNT = 4;
   private static readonly HOME_MIN_DURATION_MS = 72 * 60 * 60 * 1000;
-  private static readonly SAME_DESTINATION_REJOIN_MAX_GAP_MS = 5 * 24 * 60 * 60 * 1000;
+  private static readonly SAME_DESTINATION_REJOIN_MAX_GAP_MS = 4 * 24 * 60 * 60 * 1000;
+  private static readonly HOME_AREA_MIN_RADIUS_KM = 2.5;
+  private static readonly HOME_AREA_MAX_RADIUS_KM = 25;
+  private static readonly HOME_AREA_PADDING_MULTIPLIER = 1.35;
   private static readonly DESTINATION_ID_ROUNDING_DECIMALS = 3;
   private static readonly ENABLE_LEGACY_COMPARISON_LOG = false;
-  private static readonly MIN_TRIP_COUNT_TO_REPORT = 2;
 
   private static readonly LEGACY_MAX_GAP_MS = 72 * 60 * 60 * 1000;
   private static readonly LEGACY_MAX_DISTANCE_KM = 180;
@@ -111,10 +132,17 @@ export class MyTracksTripDetectionService {
     private logger: LoggerService = new LoggerService(),
   ) { }
 
-  public detectTrips(inputs: TripDetectionInput[]): DetectedTrip[] {
+  public detectTrips(inputs: TripDetectionInput[], options: TripDetectionOptions = {}): DetectedTrip[] {
+    return this.detectTripsWithContext(inputs, options).trips;
+  }
+
+  public detectTripsWithContext(inputs: TripDetectionInput[], options: TripDetectionOptions = {}): TripDetectionResult {
     if (!inputs || inputs.length === 0) {
       this.logger.log('[MyTracksTripDetectionService] No inputs provided for trip detection.');
-      return [];
+      return {
+        trips: [],
+        homeArea: null,
+      };
     }
 
     const normalizationResult = this.normalize(inputs);
@@ -130,7 +158,10 @@ export class MyTracksTripDetectionService {
 
     if (normalized.length === 0) {
       this.logger.warn('[MyTracksTripDetectionService] No valid points remain after normalization.');
-      return [];
+      return {
+        trips: [],
+        homeArea: null,
+      };
     }
 
     this.logger.log('[MyTracksTripDetectionService] Activities payload for trip detection.', {
@@ -145,22 +176,21 @@ export class MyTracksTripDetectionService {
 
     const destinationClusters = this.clusterDestinations(normalized);
     const visitWindows = this.buildVisitWindows(destinationClusters, normalized);
-    const homeDestinationId = this.identifyHomeDestination(destinationClusters);
-    const qualificationResult = this.qualifyVisitWindows(visitWindows, homeDestinationId);
+    const rejoinResult = this.mergeAdjacentVisitWindows(visitWindows);
+    const homeCluster = this.resolveMatchedHomeCluster(destinationClusters, options.homeInferenceInputs ?? inputs);
+    const homeDestinationId = homeCluster?.destinationId ?? null;
+    const qualificationResult = this.qualifyVisitWindows(rejoinResult.visitWindows, homeDestinationId);
     this.logger.log('[MyTracksTripDetectionService] Visit window evaluations.', {
       visitWindowEvaluations: qualificationResult.visitWindowEvaluations,
     });
-    const rejoinResult = this.mergeNearbyVisitWindowsWithoutInterleavingDestinations(qualificationResult.qualifiedVisitWindows);
-    const detectedTrips = this.mapVisitWindowsToTrips(rejoinResult.visitWindows);
-    const reportableTrips = detectedTrips.length < MyTracksTripDetectionService.MIN_TRIP_COUNT_TO_REPORT
-      ? []
-      : detectedTrips;
+    const detectedTrips = this.mapVisitWindowsToTrips(qualificationResult.qualifiedVisitWindows);
+    const homeArea = homeCluster ? this.toDetectedHomeArea(homeCluster) : null;
 
     if (MyTracksTripDetectionService.ENABLE_LEGACY_COMPARISON_LOG) {
       const legacyCount = this.detectTripsLegacyCount(normalized);
       this.logger.log('[MyTracksTripDetectionService] Legacy vs V2 comparison.', {
         legacyCount,
-        v2Count: reportableTrips.length,
+        v2Count: detectedTrips.length,
       });
     }
 
@@ -170,8 +200,8 @@ export class MyTracksTripDetectionService {
       clusterCount: destinationClusters.filter((cluster) => !cluster.isNoise).length,
       visitWindowCount: visitWindows.length,
       rejoinedVisitCount: rejoinResult.rejoinedVisitCount,
-      qualifiedVisitCount: reportableTrips.length,
-      homeClusterDetected: !!homeDestinationId,
+      qualifiedVisitCount: detectedTrips.length,
+      homeClusterDetected: !!homeCluster,
       rejectionCounters: qualificationResult.rejectionCounters,
       thresholds: {
         destinationEpsKm: MyTracksTripDetectionService.DESTINATION_EPS_KM,
@@ -186,7 +216,10 @@ export class MyTracksTripDetectionService {
       }
     });
 
-    return reportableTrips;
+    return {
+      trips: detectedTrips,
+      homeArea,
+    };
   }
 
   private clusterDestinations(entries: NormalizedActivityStart[]): DestinationCluster[] {
@@ -403,7 +436,7 @@ export class MyTracksTripDetectionService {
     };
   }
 
-  private identifyHomeDestination(destinationClusters: DestinationCluster[]): string | null {
+  private identifyHomeCluster(destinationClusters: DestinationCluster[]): DestinationCluster | null {
     const nonNoiseClusters = destinationClusters.filter((cluster) => !cluster.isNoise);
     if (nonNoiseClusters.length === 0) {
       return null;
@@ -421,7 +454,41 @@ export class MyTracksTripDetectionService {
       return null;
     }
 
-    return strongestCluster.destinationId;
+    return strongestCluster;
+  }
+
+  private resolveMatchedHomeCluster(
+    currentDestinationClusters: DestinationCluster[],
+    homeInferenceInputs: TripDetectionInput[],
+  ): DestinationCluster | null {
+    if (!homeInferenceInputs || homeInferenceInputs.length === 0) {
+      return null;
+    }
+
+    const homeInferenceNormalizationResult = this.normalize(homeInferenceInputs);
+    const normalizedHomeInferenceEntries = homeInferenceNormalizationResult.entries;
+    if (normalizedHomeInferenceEntries.length === 0) {
+      return null;
+    }
+
+    const inferredHomeCluster = this.identifyHomeCluster(this.clusterDestinations(normalizedHomeInferenceEntries));
+    if (!inferredHomeCluster) {
+      return null;
+    }
+
+    const matchingCurrentClusters = currentDestinationClusters.filter((cluster) => (
+      !cluster.isNoise
+      && this.haversineDistanceKm(
+        cluster.centroidLat,
+        cluster.centroidLng,
+        inferredHomeCluster.centroidLat,
+        inferredHomeCluster.centroidLng,
+      ) <= MyTracksTripDetectionService.DESTINATION_EPS_KM
+    ));
+
+    return matchingCurrentClusters.length === 1
+      ? matchingCurrentClusters[0]
+      : null;
   }
 
   private qualifyVisitWindows(visitWindows: VisitWindow[], homeDestinationId: string | null): QualificationResult {
@@ -445,25 +512,7 @@ export class MyTracksTripDetectionService {
       const destinationVisitCount = visitWindowCountsByDestination.get(visitWindow.destinationId) || 1;
 
       if (isHomeWindow) {
-        const rejectedAsHomeNoise = activityCount < MyTracksTripDetectionService.HOME_MIN_ACTIVITY_COUNT
-          || durationMs < MyTracksTripDetectionService.HOME_MIN_DURATION_MS;
-
-        if (rejectedAsHomeNoise) {
-          rejectionCounters.rejected_as_home_noise += 1;
-          visitWindowEvaluations.push({
-            destinationId: visitWindow.destinationId,
-            startDateIso: new Date(visitWindow.startTimestamp).toISOString(),
-            endDateIso: new Date(visitWindow.endTimestamp).toISOString(),
-            activityCount,
-            durationHours,
-            isHomeWindow,
-            status: 'rejected',
-            rejectedReason: 'home_noise',
-          });
-          return;
-        }
-
-        qualifiedVisitWindows.push(visitWindow);
+        rejectionCounters.rejected_as_home_noise += 1;
         visitWindowEvaluations.push({
           destinationId: visitWindow.destinationId,
           startDateIso: new Date(visitWindow.startTimestamp).toISOString(),
@@ -471,8 +520,8 @@ export class MyTracksTripDetectionService {
           activityCount,
           durationHours,
           isHomeWindow,
-          status: 'qualified',
-          rejectedReason: null,
+          status: 'rejected',
+          rejectedReason: 'home_noise',
         });
         return;
       }
@@ -543,7 +592,7 @@ export class MyTracksTripDetectionService {
     };
   }
 
-  private mergeNearbyVisitWindowsWithoutInterleavingDestinations(visitWindows: VisitWindow[]): RejoinResult {
+  private mergeAdjacentVisitWindows(visitWindows: VisitWindow[]): RejoinResult {
     if (visitWindows.length <= 1) {
       return {
         visitWindows: [...visitWindows],
@@ -551,15 +600,12 @@ export class MyTracksTripDetectionService {
       };
     }
 
-    const sortedVisitWindows = [...visitWindows]
-      .sort((a, b) => a.startTimestamp - b.startTimestamp || a.destinationId.localeCompare(b.destinationId));
-
     const mergedVisitWindows: VisitWindow[] = [];
-    let currentWindow = sortedVisitWindows[0];
+    let currentWindow = visitWindows[0];
     let rejoinedVisitCount = 0;
 
-    for (let index = 1; index < sortedVisitWindows.length; index++) {
-      const nextWindow = sortedVisitWindows[index];
+    for (let index = 1; index < visitWindows.length; index++) {
+      const nextWindow = visitWindows[index];
       const gapMs = nextWindow.startTimestamp - currentWindow.endTimestamp;
       const isSameDestination = currentWindow.destinationId === nextWindow.destinationId;
       const hasShortGap = gapMs >= 0 && gapMs <= MyTracksTripDetectionService.SAME_DESTINATION_REJOIN_MAX_GAP_MS;
@@ -636,6 +682,39 @@ export class MyTracksTripDetectionService {
       centroidLng: summary.centroidLng,
       bounds: summary.bounds,
     };
+  }
+
+  private toDetectedHomeArea(cluster: DestinationCluster): DetectedHomeArea {
+    return {
+      destinationId: cluster.destinationId,
+      pointCount: cluster.points.length,
+      pointShare: cluster.pointShare,
+      centroidLat: cluster.centroidLat,
+      centroidLng: cluster.centroidLng,
+      bounds: cluster.bounds,
+      radiusKm: this.estimateHomeAreaRadiusKm(cluster),
+    };
+  }
+
+  private estimateHomeAreaRadiusKm(cluster: DestinationCluster): number {
+    const maxDistanceKm = cluster.points.reduce((currentMax, point) => (
+      Math.max(
+        currentMax,
+        this.haversineDistanceKm(
+          cluster.centroidLat,
+          cluster.centroidLng,
+          point.latitudeDegrees,
+          point.longitudeDegrees,
+        ),
+      )
+    ), 0);
+
+    const paddedRadiusKm = maxDistanceKm * MyTracksTripDetectionService.HOME_AREA_PADDING_MULTIPLIER;
+
+    return Math.min(
+      MyTracksTripDetectionService.HOME_AREA_MAX_RADIUS_KM,
+      Math.max(MyTracksTripDetectionService.HOME_AREA_MIN_RADIUS_KM, paddedRadiusKm),
+    );
   }
 
   private summarizePoints(points: NormalizedActivityStart[]): {
