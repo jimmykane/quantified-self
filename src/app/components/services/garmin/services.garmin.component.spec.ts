@@ -16,18 +16,41 @@ import { AppUserService } from '../../../services/app.user.service';
 import { AppWindowService } from '../../../services/app.window.service';
 import { AppDeepLinkService } from '../../../services/app.deeplink.service';
 import { LoggerService } from '../../../services/logger.service';
+import { AppAnalyticsService } from '../../../services/app.analytics.service';
+import { ActivatedRoute, Router } from '@angular/router';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
+import { of } from 'rxjs';
 
 describe('ServicesGarminComponent', () => {
     let component: ServicesGarminComponent;
     let fixture: ComponentFixture<ServicesGarminComponent>;
     let mockUserService: any;
+    let mockAnalyticsService: any;
+    let mockRouter: any;
+    let queryParams: Record<string, string | null>;
+    let mockActivatedRoute: any;
 
     beforeEach(async () => {
+        queryParams = {};
+        mockActivatedRoute = {
+            snapshot: {
+                queryParamMap: {
+                    get: vi.fn((key: string) => queryParams[key] ?? null)
+                }
+            }
+        };
+        mockRouter = {
+            navigate: vi.fn().mockResolvedValue(true)
+        };
+        mockAnalyticsService = {
+            logEvent: vi.fn()
+        };
         mockUserService = {
             isAdmin: vi.fn(),
-            requestAndSetCurrentUserGarminAccessToken: vi.fn(),
+            requestAndSetCurrentUserGarminAPIAccessToken: vi.fn(),
             getCurrentUserServiceTokenAndRedirectURI: vi.fn(),
+            getServiceToken: vi.fn().mockReturnValue(of([])),
+            getUserMetaForService: vi.fn().mockReturnValue(of(undefined)),
         };
 
         await TestBed.configureTestingModule({
@@ -48,7 +71,10 @@ describe('ServicesGarminComponent', () => {
                 { provide: AppUserService, useValue: mockUserService },
                 { provide: AppWindowService, useValue: { currentDomain: 'http://localhost', windowRef: { location: { href: '' } } } },
                 { provide: AppDeepLinkService, useValue: { openGarminConnectApp: vi.fn() } },
-                { provide: LoggerService, useValue: { error: vi.fn(), log: vi.fn() } }
+                { provide: LoggerService, useValue: { error: vi.fn(), log: vi.fn() } },
+                { provide: AppAnalyticsService, useValue: mockAnalyticsService },
+                { provide: ActivatedRoute, useValue: mockActivatedRoute },
+                { provide: Router, useValue: mockRouter }
             ],
             schemas: [CUSTOM_ELEMENTS_SCHEMA]
         }).compileComponents();
@@ -164,6 +190,119 @@ describe('ServicesGarminComponent', () => {
             // Verify connected list is NOT shown
             const accountIcon = fixture.nativeElement.querySelector('mat-icon[matListItemIcon]');
             expect(accountIcon).toBeFalsy();
+        });
+
+        it('ngOnChanges should auto-connect from query params and finalize success state', async () => {
+            const snackBar = TestBed.inject(MatSnackBar);
+            const snackBarSpy = vi.spyOn(snackBar, 'open');
+            const user = { uid: 'u1' } as any;
+            component.user = user;
+            queryParams = {
+                serviceName: component.serviceName,
+                connect: '1',
+                state: 'state-token',
+                code: 'auth-code'
+            };
+            mockUserService.getServiceToken.mockReturnValueOnce(of([{ accessToken: 'token-1' }]));
+            mockUserService.getUserMetaForService.mockReturnValueOnce(of({ didLastHistoryImport: 0 }));
+            mockUserService.requestAndSetCurrentUserGarminAPIAccessToken.mockResolvedValueOnce(undefined);
+
+            await component.ngOnChanges();
+            await new Promise(resolve => setTimeout(resolve, 0));
+
+            expect(mockUserService.getServiceToken).toHaveBeenCalledWith(user, component.serviceName);
+            expect(mockUserService.getUserMetaForService).toHaveBeenCalledWith(user, component.serviceName);
+            expect(mockUserService.requestAndSetCurrentUserGarminAPIAccessToken).toHaveBeenCalledWith('state-token', 'auth-code');
+            expect(mockAnalyticsService.logEvent).toHaveBeenCalledWith('connected_to_service', { serviceName: component.serviceName });
+            expect(snackBarSpy).toHaveBeenCalledWith(
+                `Successfully connected to ${component.serviceName}`,
+                undefined,
+                { duration: 10000 }
+            );
+            expect(mockRouter.navigate).toHaveBeenCalledWith(
+                ['services'],
+                {
+                    queryParams: { serviceName: component.serviceName },
+                    queryParamsHandling: ''
+                }
+            );
+            expect(component.forceConnected).toBe(true);
+            expect(component.isLoading).toBe(false);
+            expect(component.isConnecting).toBe(false);
+        });
+
+        it('ngOnChanges should map 502 during auto-connect to partner unavailable message', async () => {
+            const snackBar = TestBed.inject(MatSnackBar);
+            const snackBarSpy = vi.spyOn(snackBar, 'open');
+            const user = { uid: 'u1' } as any;
+            const error502 = { status: 502, message: 'Bad Gateway' };
+            component.user = user;
+            queryParams = {
+                serviceName: component.serviceName,
+                connect: '1',
+                state: 'state-token',
+                code: 'auth-code'
+            };
+            mockUserService.getServiceToken.mockReturnValueOnce(of([{ accessToken: 'token-1' }]));
+            mockUserService.getUserMetaForService.mockReturnValueOnce(of({ didLastHistoryImport: 0 }));
+            mockUserService.requestAndSetCurrentUserGarminAPIAccessToken.mockRejectedValueOnce(error502);
+
+            await component.ngOnChanges();
+            await new Promise(resolve => setTimeout(resolve, 0));
+
+            expect(snackBarSpy).toHaveBeenCalledWith(
+                'Garmin is temporarily unavailable. Please try again later.',
+                undefined,
+                { duration: 10000 }
+            );
+            expect(mockAnalyticsService.logEvent).not.toHaveBeenCalledWith('connected_to_service', expect.anything());
+            expect(mockRouter.navigate).toHaveBeenCalledWith(
+                ['services'],
+                {
+                    queryParams: { serviceName: component.serviceName },
+                    queryParamsHandling: ''
+                }
+            );
+            expect(component.forceConnected).toBe(false);
+            expect(component.isLoading).toBe(false);
+            expect(component.isConnecting).toBe(false);
+        });
+
+        it('ngOnChanges should map 403 Pro auto-connect errors to upgrade-required message', async () => {
+            const snackBar = TestBed.inject(MatSnackBar);
+            const snackBarSpy = vi.spyOn(snackBar, 'open');
+            const user = { uid: 'u1' } as any;
+            const error403 = { status: 403, error: 'Pro subscription required', message: 'Forbidden' };
+            component.user = user;
+            queryParams = {
+                serviceName: component.serviceName,
+                connect: '1',
+                state: 'state-token',
+                code: 'auth-code'
+            };
+            mockUserService.getServiceToken.mockReturnValueOnce(of([{ accessToken: 'token-1' }]));
+            mockUserService.getUserMetaForService.mockReturnValueOnce(of({ didLastHistoryImport: 0 }));
+            mockUserService.requestAndSetCurrentUserGarminAPIAccessToken.mockRejectedValueOnce(error403);
+
+            await component.ngOnChanges();
+            await new Promise(resolve => setTimeout(resolve, 0));
+
+            expect(snackBarSpy).toHaveBeenCalledWith(
+                'This feature requires a Pro subscription.',
+                undefined,
+                { duration: 10000 }
+            );
+            expect(mockAnalyticsService.logEvent).not.toHaveBeenCalledWith('connected_to_service', expect.anything());
+            expect(mockRouter.navigate).toHaveBeenCalledWith(
+                ['services'],
+                {
+                    queryParams: { serviceName: component.serviceName },
+                    queryParamsHandling: ''
+                }
+            );
+            expect(component.forceConnected).toBe(false);
+            expect(component.isLoading).toBe(false);
+            expect(component.isConnecting).toBe(false);
         });
     });
 });

@@ -1,16 +1,16 @@
 import { TestBed } from '@angular/core/testing';
 import { AppUserService } from './app.user.service';
 import { Auth, authState, user } from '@angular/fire/auth';
-import { Firestore, docData, setDoc, updateDoc } from '@angular/fire/firestore';
+import { Firestore, collection, collectionData, docData, setDoc, updateDoc } from '@angular/fire/firestore';
 
 import { HttpClient } from '@angular/common/http';
 import { AppEventService } from './app.event.service';
 import { AppWindowService } from './app.window.service';
 import { AppUserInterface } from '../models/app-user.interface';
 import { AppUserUtilities } from '../utils/app.user.utilities';
-import { of, firstValueFrom, take, from, filter } from 'rxjs';
+import { of, firstValueFrom, take, from, filter, throwError } from 'rxjs';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { DataAltitude, DataCadence, DataGradeAdjustedSpeed, DataHeartRate, DataPace, DataPower, DataSpeed, DynamicDataLoader } from '@sports-alliance/sports-lib';
+import { DataAltitude, DataCadence, DataGradeAdjustedSpeed, DataHeartRate, DataPace, DataPower, DataSpeed, DynamicDataLoader, ServiceNames } from '@sports-alliance/sports-lib';
 
 vi.mock('@angular/fire/auth', async (importOriginal) => {
     const actual: any = await importOriginal();
@@ -27,7 +27,9 @@ vi.mock('@angular/fire/firestore', async (importOriginal) => {
     return {
         ...actual,
         doc: vi.fn().mockReturnValue({}),
+        collection: vi.fn().mockReturnValue({}),
         docData: vi.fn().mockReturnValue(of({})),
+        collectionData: vi.fn().mockReturnValue(of([])),
         setDoc: vi.fn().mockResolvedValue(undefined),
         updateDoc: vi.fn().mockResolvedValue(undefined),
     };
@@ -378,6 +380,71 @@ describe('AppUserService', () => {
             expect((u as any).gracePeriodUntil).toBeDefined();
             expect(service.isProSignal()).toBe(true);
             expect(service.hasPaidAccessSignal()).toBe(true);
+        });
+    });
+
+    describe('service token routing', () => {
+        beforeEach(() => {
+            service = TestBed.inject(AppUserService);
+        });
+
+        it('getServiceToken should read Suunto tokens from suuntoAppAccessTokens collection', async () => {
+            const user = { uid: 'u1' } as any;
+            const tokens = [{ accessToken: 'suunto-token' }];
+            (collectionData as any).mockReturnValueOnce(of(tokens));
+
+            const result = await firstValueFrom(service.getServiceToken(user, ServiceNames.SuuntoApp));
+
+            expect(collection).toHaveBeenCalledWith(expect.anything(), 'suuntoAppAccessTokens', 'u1', 'tokens');
+            expect(result).toEqual(tokens);
+        });
+
+        it('getServiceToken should read COROS tokens from COROSAPIAccessTokens collection', async () => {
+            const user = { uid: 'u2' } as any;
+            const tokens = [{ accessToken: 'coros-token' }];
+            (collectionData as any).mockReturnValueOnce(of(tokens));
+
+            const result = await firstValueFrom(service.getServiceToken(user, ServiceNames.COROSAPI));
+
+            expect(collection).toHaveBeenCalledWith(expect.anything(), 'COROSAPIAccessTokens', 'u2', 'tokens');
+            expect(result).toEqual(tokens);
+        });
+
+        it('getServiceToken should read Garmin tokens from garminAPITokens collection', async () => {
+            const user = { uid: 'u3' } as any;
+            const tokens = [{ accessToken: 'garmin-token' }];
+            (collectionData as any).mockReturnValueOnce(of(tokens));
+
+            const result = await firstValueFrom(service.getServiceToken(user, ServiceNames.GarminAPI));
+
+            expect(collection).toHaveBeenCalledWith(expect.anything(), 'garminAPITokens', 'u3', 'tokens');
+            expect(result).toEqual(tokens);
+        });
+
+        it('getServiceToken should throw for unsupported service names', () => {
+            const user = { uid: 'u4' } as any;
+
+            expect(() => service.getServiceToken(user, 'Unsupported service' as any)).toThrow(
+                'Not implemented for service Unsupported service'
+            );
+        });
+
+        it('getServiceToken should recover with empty array when Suunto token query fails', async () => {
+            const user = { uid: 'u5' } as any;
+            (collectionData as any).mockReturnValueOnce(throwError(() => new Error('Suunto read failed')));
+
+            const result = await firstValueFrom(service.getServiceToken(user, ServiceNames.SuuntoApp));
+
+            expect(result).toEqual([]);
+        });
+
+        it('getServiceToken should recover with empty array when Garmin token query fails', async () => {
+            const user = { uid: 'u6' } as any;
+            (collectionData as any).mockReturnValueOnce(throwError(() => new Error('Garmin read failed')));
+
+            const result = await firstValueFrom(service.getServiceToken(user, ServiceNames.GarminAPI));
+
+            expect(result).toEqual([]);
         });
     });
 
