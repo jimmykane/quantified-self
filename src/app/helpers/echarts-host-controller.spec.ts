@@ -26,6 +26,7 @@ describe('EChartsHostController', () => {
     resize: vi.fn(),
     dispose: vi.fn(),
     subscribeToViewportResize: vi.fn(() => () => { }),
+    attachMobileSeriesTapFeedback: vi.fn(() => () => { }),
   });
 
   beforeEach(() => {
@@ -119,8 +120,22 @@ describe('EChartsHostController', () => {
     expect(resizeObserverRecords).toHaveLength(1);
     expect(resizeObserverRecords[0].observe).toHaveBeenCalledWith(container);
     expect(loader.subscribeToViewportResize).toHaveBeenCalledTimes(1);
+    expect(loader.attachMobileSeriesTapFeedback).toHaveBeenCalledTimes(1);
     expect(windowEventListeners.size).toBe(0);
     expect(visualViewportEventListeners.size).toBe(0);
+  });
+
+  it('should allow disabling mobile tap feedback attachment', async () => {
+    const loader = buildLoaderMock();
+    const controller = new EChartsHostController({
+      eChartsLoader: loader as any,
+      enableMobileTapFeedback: false,
+    });
+    const container = document.createElement('div');
+
+    await controller.init(container);
+
+    expect(loader.attachMobileSeriesTapFeedback).not.toHaveBeenCalled();
   });
 
   it('should reinitialize the chart when the requested theme changes', async () => {
@@ -250,6 +265,8 @@ describe('EChartsHostController', () => {
 
   it('should dispose chart and disconnect observers', async () => {
     const loader = buildLoaderMock();
+    const unsubscribeTapFeedback = vi.fn();
+    loader.attachMobileSeriesTapFeedback.mockReturnValue(unsubscribeTapFeedback);
     const controller = new EChartsHostController({
       eChartsLoader: loader as any,
     });
@@ -261,6 +278,7 @@ describe('EChartsHostController', () => {
     expect(resizeObserverRecords[0].disconnect).toHaveBeenCalledTimes(1);
     expect(loader.dispose).toHaveBeenCalledWith(chartMock);
     expect(loader.subscribeToViewportResize).toHaveBeenCalledTimes(1);
+    expect(unsubscribeTapFeedback).toHaveBeenCalledTimes(1);
   });
 
   it('should log initialization failures and return null', async () => {

@@ -3,6 +3,7 @@ import { NgZone, PLATFORM_ID } from '@angular/core';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { EChartsLoaderService } from './echarts-loader.service';
+import { AppHapticsService } from './app.haptics.service';
 
 const echartsCoreMock = vi.hoisted(() => ({
   use: vi.fn(),
@@ -69,6 +70,7 @@ vi.mock('echarts/renderers', () => ({
 describe('EChartsLoaderService', () => {
   let service: EChartsLoaderService;
   let zone: NgZone;
+  let hapticsMock: { selection: ReturnType<typeof vi.fn> };
   let originalRequestAnimationFrame: typeof requestAnimationFrame | undefined;
   let originalCancelAnimationFrame: typeof cancelAnimationFrame | undefined;
   let originalVisualViewport: VisualViewport | undefined;
@@ -118,11 +120,13 @@ describe('EChartsLoaderService', () => {
       providers: [
         EChartsLoaderService,
         { provide: PLATFORM_ID, useValue: 'browser' },
+        { provide: AppHapticsService, useValue: { selection: vi.fn() } },
       ],
     });
 
     service = TestBed.inject(EChartsLoaderService);
     zone = TestBed.inject(NgZone);
+    hapticsMock = TestBed.inject(AppHapticsService) as unknown as { selection: ReturnType<typeof vi.fn> };
   });
 
   afterEach(() => {
@@ -335,17 +339,70 @@ describe('EChartsLoaderService', () => {
     expect(secondListener).toHaveBeenCalledTimes(1);
   });
 
+  it('should trigger haptics only for series click events and detach on unsubscribe', () => {
+    const clickHandlers = new Map<string, (params: unknown) => void>();
+    const chart = {
+      on: vi.fn((eventName: string, handler: (params: unknown) => void) => {
+        clickHandlers.set(eventName, handler);
+      }),
+      off: vi.fn((eventName: string, handler: (params: unknown) => void) => {
+        if (clickHandlers.get(eventName) === handler) {
+          clickHandlers.delete(eventName);
+        }
+      }),
+    } as any;
+
+    const unsubscribe = service.attachMobileSeriesTapFeedback(chart);
+    const clickHandler = clickHandlers.get('click');
+
+    expect(chart.on).toHaveBeenCalledWith('click', expect.any(Function));
+    expect(clickHandler).toBeTypeOf('function');
+
+    clickHandler?.({ componentType: 'legend' });
+    expect(hapticsMock.selection).not.toHaveBeenCalled();
+
+    clickHandler?.({ componentType: 'series' });
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+    expect(chart.off).toHaveBeenCalledWith('click', clickHandler);
+  });
+
   it('should throw when loading in non-browser platform', async () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       providers: [
         EChartsLoaderService,
         { provide: PLATFORM_ID, useValue: 'server' },
+        { provide: AppHapticsService, useValue: { selection: vi.fn() } },
       ],
     });
 
     const serverService = TestBed.inject(EChartsLoaderService);
 
     await expect(serverService.load()).rejects.toThrow('ECharts can only be initialized in the browser.');
+  });
+
+  it('should no-op mobile tap feedback binding on server platform', () => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        EChartsLoaderService,
+        { provide: PLATFORM_ID, useValue: 'server' },
+        { provide: AppHapticsService, useValue: { selection: vi.fn() } },
+      ],
+    });
+
+    const serverService = TestBed.inject(EChartsLoaderService);
+    const chart = {
+      on: vi.fn(),
+      off: vi.fn(),
+    } as any;
+
+    const unsubscribe = serverService.attachMobileSeriesTapFeedback(chart);
+
+    expect(chart.on).not.toHaveBeenCalled();
+    unsubscribe();
+    expect(chart.off).not.toHaveBeenCalled();
   });
 });

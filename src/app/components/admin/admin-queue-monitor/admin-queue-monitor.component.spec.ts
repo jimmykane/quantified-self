@@ -70,7 +70,17 @@ describe('AdminQueueMonitorComponent', () => {
                 { provide: LoggerService, useValue: { error: vi.fn(), log: vi.fn() } },
                 { provide: ActivatedRoute, useValue: { snapshot: { data: routeData } } },
                 { provide: AppThemeService, useValue: { getAppTheme: vi.fn().mockReturnValue(of(AppThemes.Light)) } },
-                { provide: EChartsLoaderService, useValue: { init: vi.fn().mockResolvedValue(chartMock), setOption: vi.fn(), resize: vi.fn(), dispose: vi.fn() } }
+                {
+                    provide: EChartsLoaderService,
+                    useValue: {
+                        init: vi.fn().mockResolvedValue(chartMock),
+                        setOption: vi.fn(),
+                        resize: vi.fn(),
+                        dispose: vi.fn(),
+                        subscribeToViewportResize: vi.fn(() => () => { }),
+                        attachMobileSeriesTapFeedback: vi.fn(() => () => { })
+                    }
+                }
             ]
         }).compileComponents();
 

@@ -8,6 +8,8 @@ import { BrowserCompatibilityService } from './browser.compatibility.service';
 export class AppHapticsService {
   private readonly compatibilityService = inject(BrowserCompatibilityService);
   private readonly windowService = inject(AppWindowService);
+  private readonly minTriggerIntervalMs = 120;
+  private lastTriggerAtMs = 0;
 
   public selection(): boolean {
     return this.trigger(8);
@@ -29,6 +31,12 @@ export class AppHapticsService {
     if (!this.canTrigger()) {
       return false;
     }
+
+    const now = Date.now();
+    if (now - this.lastTriggerAtMs < this.minTriggerIntervalMs) {
+      return false;
+    }
+    this.lastTriggerAtMs = now;
 
     try {
       return this.windowService.windowRef.navigator.vibrate(pattern);

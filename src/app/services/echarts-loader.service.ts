@@ -1,6 +1,7 @@
 import { Inject, Injectable, NgZone, PLATFORM_ID } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import type { EChartsType } from 'echarts/core';
+import { AppHapticsService } from './app.haptics.service';
 
 type EChartsCoreModule = typeof import('echarts/core');
 type EChartsOption = Parameters<EChartsType['setOption']>[0];
@@ -40,7 +41,11 @@ export class EChartsLoaderService {
     });
   };
 
-  constructor(private zone: NgZone, @Inject(PLATFORM_ID) private platformId: object) { }
+  constructor(
+    private zone: NgZone,
+    @Inject(PLATFORM_ID) private platformId: object,
+    private hapticsService: AppHapticsService
+  ) { }
 
   private ensureBrowser(): void {
     if (!isPlatformBrowser(this.platformId)) {
@@ -145,6 +150,29 @@ export class EChartsLoaderService {
     };
   }
 
+  public attachMobileSeriesTapFeedback(chart: EChartsType): () => void {
+    if (!isPlatformBrowser(this.platformId)) {
+      return () => { };
+    }
+
+    const onChartClick = (params: unknown) => {
+      if (!this.isSeriesClickEvent(params)) {
+        return;
+      }
+      this.hapticsService.selection();
+    };
+
+    this.zone.runOutsideAngular(() => {
+      chart.on('click', onChartClick as never);
+    });
+
+    return () => {
+      this.zone.runOutsideAngular(() => {
+        chart.off('click', onChartClick as never);
+      });
+    };
+  }
+
   private resolveThemeName(theme?: string): string | undefined {
     const normalizedTheme = `${theme || ''}`.trim().toLowerCase();
     if (!normalizedTheme || normalizedTheme === 'light' || normalizedTheme.endsWith('light')) {
@@ -189,5 +217,14 @@ export class EChartsLoaderService {
     window.removeEventListener('orientationchange', this.handleViewportResize);
     window.visualViewport?.removeEventListener('resize', this.handleViewportResize);
     this.viewportListenersBound = false;
+  }
+
+  private isSeriesClickEvent(params: unknown): boolean {
+    if (!params || typeof params !== 'object') {
+      return false;
+    }
+
+    const clickParams = params as { componentType?: unknown };
+    return clickParams.componentType === 'series';
   }
 }
