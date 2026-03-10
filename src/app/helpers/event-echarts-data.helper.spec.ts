@@ -453,6 +453,56 @@ describe('event-echarts-data.helper', () => {
     expect(panels[0].series[0].points.map((point) => point.y)).toEqual([300, null, 340, null]);
   });
 
+  it('prefers the highest-quality duplicate stream per type', () => {
+    const convertedPowerStream = {
+      type: DataPower.type,
+      getData: () => [100, Number.NaN, 120, Number.NaN, 140, Number.NaN],
+    } as any;
+    vi.spyOn(ActivityUtilities, 'createUnitStreamsFromStreams').mockReturnValue([convertedPowerStream] as any);
+    vi.spyOn(DynamicDataLoader, 'getUnitBasedDataTypesFromDataTypes').mockImplementation((types: any) => types as any);
+    vi.spyOn(DynamicDataLoader, 'getUnitBasedDataTypesFromDataType').mockImplementation((type: any) => [type] as any);
+    vi.spyOn(DynamicDataLoader, 'getNonUnitBasedDataTypes').mockReturnValue([DataDistance.type]);
+    vi.spyOn(DynamicDataLoader, 'getDataClassFromDataType').mockReturnValue({
+      displayType: 'Power',
+      type: 'Power',
+      unit: 'W'
+    } as any);
+
+    const rawPowerStream = {
+      type: DataPower.type,
+      getData: () => [100, 110, 120, 130, 140, 150],
+    } as any;
+    const timeStream = {
+      type: XAxisTypes.Time,
+      getData: () => [0, 1, 2, 3, 4, 5],
+    } as any;
+
+    const activity = {
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      creator: { name: 'Garmin' },
+      type: 'Running',
+      getID: () => 'a-dedupe',
+      getAllStreams: () => [rawPowerStream],
+      getStream: (type: string) => (type === XAxisTypes.Time ? timeStream : null),
+    } as any;
+
+    const panels = buildEventChartPanels({
+      selectedActivities: [activity],
+      allActivities: [activity],
+      xAxisType: XAxisTypes.Duration,
+      showAllData: false,
+      dataTypesToUse: [DataPower.type],
+      userUnitSettings: {} as any,
+      eventColorService: {
+        getActivityColor: () => '#ff0000'
+      } as any,
+    });
+
+    expect(panels).toHaveLength(1);
+    expect(panels[0].series).toHaveLength(1);
+    expect(panels[0].series[0].points.map((point) => point.y)).toEqual([100, 110, 120, 130, 140, 150]);
+  });
+
   it('orders panels by canonical datatype order with event priority overrides', () => {
     vi.spyOn(ActivityUtilities, 'createUnitStreamsFromStreams').mockReturnValue([] as any);
     vi.spyOn(DynamicDataLoader, 'getUnitBasedDataTypesFromDataTypes').mockImplementation((types: any) => types as any);

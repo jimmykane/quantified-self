@@ -1,6 +1,12 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AdminUserManagementComponent } from './admin-user-management.component';
-import { AdminService, AdminUser, ListUsersResponse } from '../../../services/admin.service';
+import {
+    AdminService,
+    AdminUser,
+    ListUsersResponse,
+    SubscriptionHistoryTrendResponse,
+    UserGrowthTrendResponse
+} from '../../../services/admin.service';
 import { AppImpersonationService } from '../../../services/app.impersonation.service';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { LoggerService } from '../../../services/logger.service';
@@ -116,6 +122,90 @@ describe('AdminUserManagementComponent', () => {
         pageSize: 25
     };
 
+    const mockTrend: UserGrowthTrendResponse = {
+        months: 12,
+        buckets: [
+            {
+                key: '2026-01',
+                label: 'Jan 2026',
+                registeredUsers: 10,
+                onboardedUsers: 6
+            },
+            {
+                key: '2026-02',
+                label: 'Feb 2026',
+                registeredUsers: 15,
+                onboardedUsers: 10
+            },
+            {
+                key: '2026-03',
+                label: 'Mar 2026',
+                registeredUsers: 5,
+                onboardedUsers: 4
+            }
+        ],
+        totals: {
+            registeredUsers: 30,
+            onboardedUsers: 20
+        }
+    };
+
+    const mockSubscriptionTrend: SubscriptionHistoryTrendResponse = {
+        months: 12,
+        buckets: [
+            {
+                key: '2026-01',
+                label: 'Jan 2026',
+                newSubscriptions: 7,
+                plannedCancellations: 1,
+                net: 6,
+                basicNewSubscriptions: 2,
+                basicPlannedCancellations: 0,
+                basicNet: 2,
+                proNewSubscriptions: 5,
+                proPlannedCancellations: 1,
+                proNet: 4
+            },
+            {
+                key: '2026-02',
+                label: 'Feb 2026',
+                newSubscriptions: 3,
+                plannedCancellations: 2,
+                net: 1,
+                basicNewSubscriptions: 2,
+                basicPlannedCancellations: 1,
+                basicNet: 1,
+                proNewSubscriptions: 1,
+                proPlannedCancellations: 1,
+                proNet: 0
+            },
+            {
+                key: '2026-03',
+                label: 'Mar 2026',
+                newSubscriptions: 4,
+                plannedCancellations: 1,
+                net: 3,
+                basicNewSubscriptions: 1,
+                basicPlannedCancellations: 0,
+                basicNet: 1,
+                proNewSubscriptions: 3,
+                proPlannedCancellations: 1,
+                proNet: 2
+            }
+        ],
+        totals: {
+            newSubscriptions: 14,
+            plannedCancellations: 4,
+            net: 10,
+            basicNewSubscriptions: 5,
+            basicPlannedCancellations: 1,
+            basicNet: 4,
+            proNewSubscriptions: 9,
+            proPlannedCancellations: 3,
+            proNet: 6
+        }
+    };
+
     beforeEach(async () => {
         adminServiceSpy = {
             getUsers: vi.fn().mockReturnValue(of(mockResponse)),
@@ -129,6 +219,8 @@ describe('AdminUserManagementComponent', () => {
                 cancelScheduled: 8,
                 onboardingCompleted: 80
             })),
+            getUserGrowthTrend: vi.fn().mockReturnValue(of(mockTrend)),
+            getSubscriptionHistoryTrend: vi.fn().mockReturnValue(of(mockSubscriptionTrend))
         };
 
         impersonationServiceSpy = {
@@ -207,7 +299,9 @@ describe('AdminUserManagementComponent', () => {
                                         canceled: 15,
                                         cancelScheduled: 8,
                                         onboardingCompleted: 80
-                                    }
+                                    },
+                                    userGrowthTrend: mockTrend,
+                                    subscriptionHistoryTrend: mockSubscriptionTrend
                                 }
                             }
                         }
@@ -230,6 +324,8 @@ describe('AdminUserManagementComponent', () => {
 
     it('should include uid in displayed columns', () => {
         expect(component.displayedColumns).toContain('uid');
+        expect(component.displayedColumns).toContain('subscriptionHistory');
+        expect(component.displayedColumns).not.toContain('subscription');
     });
 
     it('should use resolved users on init', () => {
@@ -251,6 +347,75 @@ describe('AdminUserManagementComponent', () => {
             cancelScheduled: 8,
             onboardingCompleted: 80
         });
+    });
+
+    it('should use resolved user growth trend data on init', () => {
+        expect(adminServiceSpy.getUserGrowthTrend).not.toHaveBeenCalled();
+        expect(adminServiceSpy.getSubscriptionHistoryTrend).not.toHaveBeenCalled();
+        expect(component.hasUserGrowthTrendData).toBe(true);
+    });
+
+    it('should initialize and dispose both chart hosts', async () => {
+        await Promise.resolve();
+
+        expect(mockEchartsService.init.mock.calls.length).toBeGreaterThanOrEqual(2);
+
+        fixture.destroy();
+        expect(mockEchartsService.dispose.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('should build user and subscription trend chart option with seven series', () => {
+        const option = (component as any).buildUserGrowthTrendChartOption(
+            mockTrend,
+            mockSubscriptionTrend,
+            100,
+            80,
+            70,
+            30
+        );
+        const series = (option as any).series;
+        const graphic = (option as any).graphic;
+
+        expect(series).toHaveLength(7);
+        expect(series.map((entry: any) => entry.name)).toEqual([
+            'Registered Users / month',
+            'Onboarded Users / month',
+            'Total Registered',
+            'Total Onboarded',
+            'Basic Totals',
+            'Pro Totals',
+            'Totals (Pro+Basic)'
+        ]);
+        expect(series[0].data).toEqual([10, 15, 5]);
+        expect(series[1].data).toEqual([6, 10, 4]);
+        expect(series[2].data).toEqual([80, 95, 100]);
+        expect(series[3].data).toEqual([66, 76, 80]);
+        expect(series[4].data).toEqual([68, 69, 70]);
+        expect(series[5].data).toEqual([28, 28, 30]);
+        expect(series[6].data).toEqual([96, 97, 100]);
+        expect(graphic).toBeTruthy();
+        expect(graphic[0].style.text).toContain('Current');
+        expect(graphic[0].style.text).toContain('Users 100');
+        expect(graphic[0].style.text).toContain('Onboarded 80');
+        expect(graphic[0].style.text).toContain('Totals (Pro+Basic) 100');
+        expect(graphic[0].style.text).toContain('Basic 70');
+        expect(graphic[0].style.text).toContain('Pro 30');
+    });
+
+    it('should handle null user growth trend data safely', () => {
+        expect(() => (component as any).updateUserGrowthTrendChart(null)).not.toThrow();
+        expect(() => (component as any).updateSubscriptionHistoryTrendChart(null)).not.toThrow();
+        expect(component.hasUserGrowthTrendData).toBe(false);
+    });
+
+    it('should update both chart hosts when theme changes', async () => {
+        const beforeThemeChangeInitCalls = mockEchartsService.init.mock.calls.length;
+
+        themeSubject.next(AppThemes.Light);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(mockEchartsService.init.mock.calls.length).toBeGreaterThanOrEqual(beforeThemeChangeInitCalls + 2);
     });
 
     it('should handle errors when fetching users', () => {
@@ -296,6 +461,26 @@ describe('AdminUserManagementComponent', () => {
         vi.clearAllMocks();
 
         const sortEvent: Sort = { active: '', direction: '' };
+        component.onSortChange(sortEvent);
+
+        expect(component.sortField).toBe('created');
+        expect(component.sortDirection).toBe('desc');
+        expect(adminServiceSpy.getUsers).toHaveBeenCalledWith({
+            page: 0,
+            pageSize: 10,
+            searchTerm: undefined,
+            sortField: 'created',
+            sortDirection: 'desc',
+            filterService: undefined
+        });
+    });
+
+    it('should fallback to created desc when sort field is unsupported', () => {
+        component.sortField = 'email';
+        component.sortDirection = 'asc';
+        vi.clearAllMocks();
+
+        const sortEvent: Sort = { active: 'subscription', direction: 'asc' };
         component.onSortChange(sortEvent);
 
         expect(component.sortField).toBe('created');
@@ -375,18 +560,6 @@ describe('AdminUserManagementComponent', () => {
         });
     });
 
-    describe('getSubscriptionDetails', () => {
-        it('should return dash if no subscription', () => {
-            const user = {} as any;
-            expect(component.getSubscriptionDetails(user)).toBe('-');
-        });
-
-        it('should return status uppercase', () => {
-            const user = { subscription: { status: 'active' } } as any;
-            expect(component.getSubscriptionDetails(user)).toBe('ACTIVE');
-        });
-    });
-
     describe('getServiceLogo', () => {
         it('should return correct paths', () => {
             expect(component.getServiceLogo('garmin')).toBe('assets/logos/garmin.svg');
@@ -404,24 +577,49 @@ describe('AdminUserManagementComponent', () => {
             const user = { subscription: { status: 'active', cancel_at_period_end: false } } as any;
             expect(component.getSubscriptionHistoryState(user)).toBe('active');
             expect(component.getSubscriptionHistoryLabel(user)).toBe('Active');
+            expect(component.getSubscriptionHistoryDetails(user)).toBeNull();
         });
 
         it('should return scheduled when cancellation is scheduled', () => {
             const user = { subscription: { status: 'active', cancel_at_period_end: true } } as any;
             expect(component.getSubscriptionHistoryState(user)).toBe('scheduled');
             expect(component.getSubscriptionHistoryLabel(user)).toBe('Cancel Scheduled');
+            expect(component.getSubscriptionHistoryDetails(user)).toBe('Scheduled to end');
         });
 
         it('should return canceled when user has paid history but no active subscription', () => {
             const user = { hasSubscribedOnce: true } as any;
             expect(component.getSubscriptionHistoryState(user)).toBe('canceled');
             expect(component.getSubscriptionHistoryLabel(user)).toBe('Canceled');
+            expect(component.getSubscriptionHistoryDetails(user)).toBeNull();
         });
 
         it('should return never when user has no paid history', () => {
             const user = { hasSubscribedOnce: false } as any;
             expect(component.getSubscriptionHistoryState(user)).toBe('never');
             expect(component.getSubscriptionHistoryLabel(user)).toBe('Never Subscribed');
+            expect(component.getSubscriptionHistoryDetails(user)).toBeNull();
+        });
+
+        it('should include end date detail when cancellation has current period end', () => {
+            const user = {
+                subscription: {
+                    status: 'active',
+                    cancel_at_period_end: true,
+                    current_period_end: '2026-01-15T00:00:00Z'
+                }
+            } as any;
+            expect(component.getSubscriptionHistoryDetails(user)).toContain('Ends');
+        });
+
+        it('should show specific details for trialing and past due subscriptions', () => {
+            expect(component.getSubscriptionHistoryDetails({
+                subscription: { status: 'trialing', cancel_at_period_end: false }
+            } as any)).toBe('Trialing');
+
+            expect(component.getSubscriptionHistoryDetails({
+                subscription: { status: 'past_due', cancel_at_period_end: false }
+            } as any)).toBe('Past Due');
         });
     });
 

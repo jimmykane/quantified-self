@@ -62,6 +62,52 @@ export interface UserCountStats {
     providers: Record<string, number>;
 }
 
+export interface SubscriptionHistoryTrendBucket {
+    key: string;
+    label: string;
+    newSubscriptions: number;
+    plannedCancellations: number;
+    net: number;
+    basicNewSubscriptions?: number;
+    basicPlannedCancellations?: number;
+    basicNet?: number;
+    proNewSubscriptions?: number;
+    proPlannedCancellations?: number;
+    proNet?: number;
+}
+
+export interface SubscriptionHistoryTrendResponse {
+    months: number;
+    buckets: SubscriptionHistoryTrendBucket[];
+    totals: {
+        newSubscriptions: number;
+        plannedCancellations: number;
+        net: number;
+        basicNewSubscriptions?: number;
+        basicPlannedCancellations?: number;
+        basicNet?: number;
+        proNewSubscriptions?: number;
+        proPlannedCancellations?: number;
+        proNet?: number;
+    };
+}
+
+export interface UserGrowthTrendBucket {
+    key: string;
+    label: string;
+    registeredUsers: number;
+    onboardedUsers: number;
+}
+
+export interface UserGrowthTrendResponse {
+    months: number;
+    buckets: UserGrowthTrendBucket[];
+    totals: {
+        registeredUsers: number;
+        onboardedUsers: number;
+    };
+}
+
 export interface DLQStats {
     total: number;
     byContext: { context: string; count: number }[];
@@ -207,6 +253,32 @@ export class AdminService {
                 onboardingCompleted: result.data.onboardingCompleted ?? 0,
                 providers: result.data.providers || {}
             }))
+        );
+    }
+
+    getSubscriptionHistoryTrend(months = 12): Observable<SubscriptionHistoryTrendResponse> {
+        const parsedMonths = Number(months);
+        const boundedMonths = Number.isFinite(parsedMonths)
+            ? Math.min(24, Math.max(1, Math.floor(parsedMonths)))
+            : 12;
+
+        return from(this.functionsService.call<{ months: number }, SubscriptionHistoryTrendResponse>('getSubscriptionHistoryTrend', {
+            months: boundedMonths
+        })).pipe(
+            map(result => result.data)
+        );
+    }
+
+    getUserGrowthTrend(months = 12): Observable<UserGrowthTrendResponse> {
+        const parsedMonths = Number(months);
+        const boundedMonths = Number.isFinite(parsedMonths)
+            ? Math.min(24, Math.max(1, Math.floor(parsedMonths)))
+            : 12;
+
+        return from(this.functionsService.call<{ months: number }, UserGrowthTrendResponse>('getUserGrowthTrend', {
+            months: boundedMonths
+        })).pipe(
+            map(result => result.data)
         );
     }
 

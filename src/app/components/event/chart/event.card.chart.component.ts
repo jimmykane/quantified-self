@@ -23,7 +23,6 @@ import {
   ChartCursorBehaviours,
   DataDistance,
   DataStrydDistance,
-  DynamicDataLoader,
   EventInterface,
   LapTypes,
   User,
@@ -471,7 +470,6 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
           userUnitSettings: this.userUnitSettings,
           eventColorService: this.eventColorService,
         });
-        this.logDataTypeOrdering(source, this.allChartPanels);
         this.lastPanelRebuildKey = panelRebuildKey;
 
         this.syncVisibleDataTypes(this.allChartPanels);
@@ -499,10 +497,6 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
         : this.normalizeZoomRange(this.zoomRange, globalDomain);
       this.updateZoomBarOverviewData(globalDomain);
       this.showDateOnTimeAxis = this.resolveShowDateOnTimeAxis(globalDomain, effectiveXAxisType);
-
-      if (source === 'ngOnChanges' && this.chartPanels.length === 0) {
-        this.logger.info('[EventCardChart] No panels to render for current selection');
-      }
     } catch (error) {
       this.logger.error('[EventCardChart] Failed to rebuild chart panels', error);
       this.allChartPanels = [];
@@ -678,28 +672,6 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     ].join('|');
   }
 
-  private logDataTypeOrdering(source: string, panels: EventChartPanelModel[]): void {
-    const userUnitSettings = this.userUnitSettings;
-    const selectedDataTypes = [...(this.dataTypesToUse || [])];
-    const unitDerivedVariants = selectedDataTypes.map((dataType) => ({
-      dataType,
-      variants: DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(
-        [dataType],
-        userUnitSettings,
-        { includeDerivedTypes: true }
-      ),
-    }));
-
-    this.logger.info('[EventCardChart] Data type ordering', {
-      source,
-      selectedDataTypes,
-      unitDerivedVariants,
-      chartPanelOrder: panels.map((panel) => ({
-        dataType: panel.dataType,
-        displayName: panel.displayName,
-      })),
-    });
-  }
 
   private buildLapMarkersRebuildKey(
     selectedActivities: ActivityInterface[],

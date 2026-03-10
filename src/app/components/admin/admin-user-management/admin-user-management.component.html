@@ -57,33 +57,6 @@
                 </div>
             </mat-card>
 
-            <!-- Ever Paid -->
-            <mat-card class="app-stat-card status-success">
-                <div class="app-stat-header">
-                    <mat-icon>credit_card</mat-icon>
-                    <span>Ever Paid</span>
-                </div>
-                <div class="app-stat-value" *ngIf="userStats">{{ userStats.everPaid }}</div>
-                <div class="app-spinner-mini" *ngIf="!userStats">
-                    <mat-spinner diameter="24"></mat-spinner>
-                </div>
-            </mat-card>
-
-            <!-- Canceled Subscriptions -->
-            <mat-card class="app-stat-card status-warn">
-                <div class="app-stat-header">
-                    <mat-icon>person_off</mat-icon>
-                    <span>Canceled Subs</span>
-                </div>
-                <div class="app-stat-value" *ngIf="userStats">{{ userStats.canceled }}</div>
-                <div class="app-stat-footnote" *ngIf="userStats && userStats.everPaid > 0">
-                    {{ (userStats.canceled / userStats.everPaid) * 100 | number:'1.0-1' }}% of ever-paid users
-                </div>
-                <div class="app-spinner-mini" *ngIf="!userStats">
-                    <mat-spinner diameter="24"></mat-spinner>
-                </div>
-            </mat-card>
-
             <!-- Free Users -->
             <mat-card class="app-stat-card">
                 <div class="app-stat-header">
@@ -122,6 +95,21 @@
 
             <div *ngIf="!userStats?.providers" class="empty-state chart-empty-state">
                 No provider data available
+            </div>
+        </mat-card>
+
+        <mat-card class="chart-card">
+            <h3 class="chart-header">
+                <mat-icon>show_chart</mat-icon>
+                User &amp; Subscription Growth (Monthly)
+            </h3>
+
+            <div class="chart-wrapper">
+                <div #userGrowthTrendChart class="echart-surface"></div>
+            </div>
+
+            <div *ngIf="!hasUserGrowthTrendData" class="empty-state chart-empty-state">
+                No user or subscription trend data available
             </div>
         </mat-card>
 
@@ -221,21 +209,18 @@
                         </td>
                     </ng-container>
 
-                    <!-- Subscription History Column -->
-                    <ng-container matColumnDef="subscriptionHistory">
-                        <th mat-header-cell *matHeaderCellDef> Subscription History </th>
-                        <td mat-cell *matCellDef="let user">
-                            <span class="subscription-history-badge" [ngClass]="getSubscriptionHistoryState(user)">
-                                {{ getSubscriptionHistoryLabel(user) }}
-                            </span>
-                        </td>
-                    </ng-container>
-
                     <!-- Subscription Column -->
-                    <ng-container matColumnDef="subscription">
-                        <th mat-header-cell *matHeaderCellDef mat-sort-header> Subscription </th>
+                    <ng-container matColumnDef="subscriptionHistory">
+                        <th mat-header-cell *matHeaderCellDef> Subscription </th>
                         <td mat-cell *matCellDef="let user">
-                            {{ getSubscriptionDetails(user) }}
+                            <div class="subscription-history-cell">
+                                <span class="subscription-history-badge" [ngClass]="getSubscriptionHistoryState(user)">
+                                    {{ getSubscriptionHistoryLabel(user) }}
+                                </span>
+                                @if (getSubscriptionHistoryDetails(user); as details) {
+                                    <span class="subscription-history-detail">{{ details }}</span>
+                                }
+                            </div>
                             <a *ngIf="user.subscription?.stripeLink" [href]="user.subscription.stripeLink"
                                 target="_blank" mat-icon-button class="qs-mat-primary" matTooltip="View in Stripe">
                                 <mat-icon>open_in_new</mat-icon>

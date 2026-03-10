@@ -23,7 +23,10 @@ describe('stat-label.helper', () => {
 
   it('should use fallback label to disambiguate overlapping unit-derived variants', () => {
     expect(normalizeUnitDerivedTypeLabel('Distance in miles', 'Jump Distance')).toBe('Jump Distance');
-    expect(normalizeUnitDerivedTypeLabel('Distance in miles', 'GNSS Distance')).toBe('GNSS Distance');
+  });
+
+  it('should normalize GNSS-specific imperial type without fallback disambiguation', () => {
+    expect(normalizeUnitDerivedTypeLabel('GNSS Distance in miles')).toBe('GNSS Distance');
   });
 
   it('should leave non-unit-derived labels unchanged', () => {

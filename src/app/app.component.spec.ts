@@ -406,6 +406,16 @@ describe('AppComponent', () => {
         }
     });
 
+    it('should render metric loader component while initial loader is visible', () => {
+        component.authState = true;
+        component.showInitialLoader = true;
+        fixture.detectChanges();
+
+        const overlay = fixture.nativeElement.querySelector('.qs-loader-overlay') as HTMLElement | null;
+        expect(overlay).toBeTruthy();
+        expect(overlay?.querySelector('app-metric-loader')).toBeTruthy();
+    });
+
     it('should no-op when hideInitialLoader is called while already hidden', () => {
         component.showInitialLoader = false;
         const detectSpy = vi.spyOn((component as any).changeDetectorRef, 'detectChanges');

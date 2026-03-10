@@ -44,6 +44,203 @@ function toSafeNumber(value: unknown, fallback: number = 0): number {
     return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+const DEFAULT_SUBSCRIPTION_HISTORY_MONTHS = 12;
+const MAX_SUBSCRIPTION_HISTORY_MONTHS = 24;
+const ACTIVE_SUBSCRIPTION_STATUSES = ['active', 'trialing', 'past_due'] as const;
+const ACTIVE_SUBSCRIPTION_STATUS_SET = new Set<string>(ACTIVE_SUBSCRIPTION_STATUSES);
+const SUBSCRIPTION_ROLE_BASIC = 'basic';
+const SUBSCRIPTION_ROLE_PRO = 'pro';
+
+interface GetSubscriptionHistoryTrendRequest {
+    months?: number;
+}
+
+interface SubscriptionHistoryTrendBucket {
+    key: string;
+    label: string;
+    newSubscriptions: number;
+    plannedCancellations: number;
+    net: number;
+    basicNewSubscriptions: number;
+    basicPlannedCancellations: number;
+    basicNet: number;
+    proNewSubscriptions: number;
+    proPlannedCancellations: number;
+    proNet: number;
+}
+
+interface SubscriptionHistoryTrendResponse {
+    months: number;
+    buckets: SubscriptionHistoryTrendBucket[];
+    totals: {
+        newSubscriptions: number;
+        plannedCancellations: number;
+        net: number;
+        basicNewSubscriptions: number;
+        basicPlannedCancellations: number;
+        basicNet: number;
+        proNewSubscriptions: number;
+        proPlannedCancellations: number;
+        proNet: number;
+    };
+}
+
+interface GetUserGrowthTrendRequest {
+    months?: number;
+}
+
+interface UserGrowthTrendBucket {
+    key: string;
+    label: string;
+    registeredUsers: number;
+    onboardedUsers: number;
+}
+
+interface UserGrowthTrendResponse {
+    months: number;
+    buckets: UserGrowthTrendBucket[];
+    totals: {
+        registeredUsers: number;
+        onboardedUsers: number;
+    };
+}
+
+function clampSubscriptionHistoryMonths(rawMonths: unknown): number {
+    const parsed = Number(rawMonths);
+    if (!Number.isFinite(parsed)) {
+        return DEFAULT_SUBSCRIPTION_HISTORY_MONTHS;
+    }
+    const normalized = Math.floor(parsed);
+    if (normalized < 1) {
+        return 1;
+    }
+    if (normalized > MAX_SUBSCRIPTION_HISTORY_MONTHS) {
+        return MAX_SUBSCRIPTION_HISTORY_MONTHS;
+    }
+    return normalized;
+}
+
+function normalizeEpochNumberToMillis(value: number): number | null {
+    if (!Number.isFinite(value) || value <= 0) {
+        return null;
+    }
+
+    if (value > 1e12) {
+        return Math.trunc(value);
+    }
+
+    if (value > 1e9) {
+        return Math.trunc(value * 1000);
+    }
+
+    return null;
+}
+
+function toEpochMillis(value: unknown): number | null {
+    if (value === null || value === undefined) {
+        return null;
+    }
+
+    if (typeof value === 'number') {
+        return normalizeEpochNumberToMillis(value);
+    }
+
+    if (typeof value === 'string') {
+        const numeric = Number(value);
+        if (Number.isFinite(numeric)) {
+            return normalizeEpochNumberToMillis(numeric);
+        }
+        const parsed = Date.parse(value);
+        return Number.isNaN(parsed) ? null : parsed;
+    }
+
+    if (value instanceof Date) {
+        const parsed = value.getTime();
+        return Number.isNaN(parsed) ? null : parsed;
+    }
+
+    if (typeof value === 'object') {
+        const timestamp = value as {
+            toMillis?: () => number;
+            toDate?: () => Date;
+            seconds?: unknown;
+            _seconds?: unknown;
+            nanoseconds?: unknown;
+            _nanoseconds?: unknown;
+        };
+
+        if (typeof timestamp.toMillis === 'function') {
+            const millis = timestamp.toMillis();
+            return Number.isFinite(millis) ? millis : null;
+        }
+
+        if (typeof timestamp.toDate === 'function') {
+            const date = timestamp.toDate();
+            const millis = date.getTime();
+            return Number.isFinite(millis) ? millis : null;
+        }
+
+        const rawSeconds = timestamp.seconds ?? timestamp._seconds;
+        if (rawSeconds !== undefined && rawSeconds !== null) {
+            const seconds = Number(rawSeconds);
+            if (!Number.isFinite(seconds)) {
+                return null;
+            }
+            const rawNanos = timestamp.nanoseconds ?? timestamp._nanoseconds;
+            const nanos = Number(rawNanos);
+            const extraMillis = Number.isFinite(nanos) ? Math.floor(nanos / 1_000_000) : 0;
+            return (seconds * 1000) + extraMillis;
+        }
+    }
+
+    return null;
+}
+
+function toUtcMonthKey(epochMillis: number): string {
+    const date = new Date(epochMillis);
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    return `${year}-${month}`;
+}
+
+function formatUtcMonthLabel(epochMillis: number): string {
+    return new Date(epochMillis).toLocaleDateString('en-US', {
+        month: 'short',
+        year: 'numeric',
+        timeZone: 'UTC'
+    });
+}
+
+function buildMonthlyBucketWindows(months: number, now: Date): Array<{ key: string; label: string; startMs: number; endMs: number }> {
+    const currentMonthStartMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0);
+    const firstMonthStartDate = new Date(currentMonthStartMs);
+    firstMonthStartDate.setUTCMonth(firstMonthStartDate.getUTCMonth() - (months - 1));
+
+    const windows: Array<{ key: string; label: string; startMs: number; endMs: number }> = [];
+
+    for (let index = 0; index < months; index++) {
+        const monthStartDate = new Date(Date.UTC(
+            firstMonthStartDate.getUTCFullYear(),
+            firstMonthStartDate.getUTCMonth() + index,
+            1
+        ));
+        const nextMonthStartDate = new Date(Date.UTC(
+            firstMonthStartDate.getUTCFullYear(),
+            firstMonthStartDate.getUTCMonth() + index + 1,
+            1
+        ));
+        const startMs = monthStartDate.getTime();
+        windows.push({
+            key: toUtcMonthKey(startMs),
+            label: formatUtcMonthLabel(startMs),
+            startMs,
+            endMs: nextMonthStartDate.getTime()
+        });
+    }
+
+    return windows;
+}
+
 interface ListUsersRequest {
     pageSize?: number;
     page?: number;
@@ -367,29 +564,21 @@ export const getUserCount = onAdminCall<void, any>({
 }, async () => {
     try {
         const db = admin.firestore();
-        const activeSubscriptionStatuses = ['active', 'trialing', 'past_due'];
 
         // 1. Get stats from Firestore (subscriptions)
         // Parallel efficient count queries
-        const [totalSnapshot, proSnapshot, basicSnapshot, onboardedSnapshot, everPaidSnapshot, cancelScheduledSnapshot] = await Promise.all([
+        const [totalSnapshot, proSnapshot, basicSnapshot, onboardedSnapshot] = await Promise.all([
             db.collection('users').count().get(),
             db.collectionGroup('subscriptions')
-                .where('status', 'in', activeSubscriptionStatuses)
+                .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
                 .where('role', '==', 'pro')
                 .count().get(),
             db.collectionGroup('subscriptions')
-                .where('status', 'in', activeSubscriptionStatuses)
+                .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
                 .where('role', '==', 'basic')
                 .count().get(),
             db.collection('users')
                 .where('onboardingCompleted', '==', true)
-                .count().get(),
-            db.collection('users')
-                .where('hasSubscribedOnce', '==', true)
-                .count().get(),
-            db.collectionGroup('subscriptions')
-                .where('status', 'in', activeSubscriptionStatuses)
-                .where('cancel_at_period_end', '==', true)
                 .count().get()
         ]);
 
@@ -398,9 +587,6 @@ export const getUserCount = onAdminCall<void, any>({
         const basic = basicSnapshot.data().count;
         const activePaid = pro + basic;
         const onboardingCompleted = onboardedSnapshot.data().count;
-        const everPaid = everPaidSnapshot.data().count;
-        const cancelScheduled = cancelScheduledSnapshot.data().count;
-        const canceled = Math.max(0, everPaid - activePaid);
         const free = Math.max(0, total - activePaid); // Users with no active subscription
 
         // 2. Get provider breakdown from Firebase Auth
@@ -436,15 +622,252 @@ export const getUserCount = onAdminCall<void, any>({
             pro,
             basic,
             free,
-            everPaid,
-            canceled,
-            cancelScheduled,
             onboardingCompleted,
             providers: providerCounts
         };
     } catch (error: unknown) {
         logger.error('Error getting user count:', error);
         throw new HttpsError('internal', 'Failed to get user count');
+    }
+});
+
+/**
+ * Returns historical monthly subscription lifecycle buckets for Admin dashboards.
+ * Buckets are generated in UTC and include:
+ * - newSubscriptions: subscriptions created in each month
+ * - plannedCancellations: subscriptions with cancel_at_period_end=true whose current_period_end falls in month
+ * - net: newSubscriptions - plannedCancellations
+ */
+export const getSubscriptionHistoryTrend = onAdminCall<GetSubscriptionHistoryTrendRequest, SubscriptionHistoryTrendResponse>({
+    region: FUNCTIONS_MANIFEST.getSubscriptionHistoryTrend.region,
+    memory: '256MiB',
+}, async (request) => {
+    try {
+        const db = admin.firestore();
+        const months = clampSubscriptionHistoryMonths(request.data?.months);
+        const bucketWindows = buildMonthlyBucketWindows(months, new Date());
+
+        if (bucketWindows.length === 0) {
+            return {
+                months,
+                buckets: [],
+                totals: {
+                    newSubscriptions: 0,
+                    plannedCancellations: 0,
+                    net: 0,
+                    basicNewSubscriptions: 0,
+                    basicPlannedCancellations: 0,
+                    basicNet: 0,
+                    proNewSubscriptions: 0,
+                    proPlannedCancellations: 0,
+                    proNet: 0
+                }
+            };
+        }
+
+        const rangeStartMs = bucketWindows[0].startMs;
+        const rangeEndMs = bucketWindows[bucketWindows.length - 1].endMs;
+        const rangeStartDate = new Date(rangeStartMs);
+        const rangeEndDate = new Date(rangeEndMs);
+
+        const [newSubscriptionSnapshot, plannedCancellationSnapshot] = await Promise.all([
+            db.collectionGroup('subscriptions')
+                .where('created', '>=', rangeStartDate)
+                .where('created', '<', rangeEndDate)
+                .select('created', 'role')
+                .get(),
+            db.collectionGroup('subscriptions')
+                .where('cancel_at_period_end', '==', true)
+                .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
+                .where('current_period_end', '>=', rangeStartDate)
+                .where('current_period_end', '<', rangeEndDate)
+                .select('current_period_end', 'cancel_at_period_end', 'status', 'role')
+                .get()
+        ]);
+
+        const buckets = bucketWindows.map((window) => ({
+            key: window.key,
+            label: window.label,
+            newSubscriptions: 0,
+            plannedCancellations: 0,
+            net: 0,
+            basicNewSubscriptions: 0,
+            basicPlannedCancellations: 0,
+            basicNet: 0,
+            proNewSubscriptions: 0,
+            proPlannedCancellations: 0,
+            proNet: 0
+        }));
+        const bucketByKey = new Map<string, SubscriptionHistoryTrendBucket>();
+        buckets.forEach(bucket => {
+            bucketByKey.set(bucket.key, bucket);
+        });
+
+        newSubscriptionSnapshot.docs.forEach(doc => {
+            const subscription = doc.data() as Record<string, unknown>;
+            const createdAtMillis = toEpochMillis(subscription.created);
+            if (createdAtMillis === null || createdAtMillis < rangeStartMs || createdAtMillis >= rangeEndMs) {
+                return;
+            }
+            const bucket = bucketByKey.get(toUtcMonthKey(createdAtMillis));
+            if (bucket) {
+                bucket.newSubscriptions += 1;
+                const role = `${subscription.role || ''}`.toLowerCase();
+                if (role === SUBSCRIPTION_ROLE_BASIC) {
+                    bucket.basicNewSubscriptions += 1;
+                } else if (role === SUBSCRIPTION_ROLE_PRO) {
+                    bucket.proNewSubscriptions += 1;
+                }
+            }
+        });
+
+        plannedCancellationSnapshot.docs.forEach(doc => {
+            const subscription = doc.data() as Record<string, unknown>;
+            const status = `${subscription.status || ''}`.toLowerCase();
+            if (subscription.cancel_at_period_end !== true || !ACTIVE_SUBSCRIPTION_STATUS_SET.has(status)) {
+                return;
+            }
+            const periodEndMillis = toEpochMillis(subscription.current_period_end);
+            if (periodEndMillis === null || periodEndMillis < rangeStartMs || periodEndMillis >= rangeEndMs) {
+                return;
+            }
+            const bucket = bucketByKey.get(toUtcMonthKey(periodEndMillis));
+            if (bucket) {
+                bucket.plannedCancellations += 1;
+                const role = `${subscription.role || ''}`.toLowerCase();
+                if (role === SUBSCRIPTION_ROLE_BASIC) {
+                    bucket.basicPlannedCancellations += 1;
+                } else if (role === SUBSCRIPTION_ROLE_PRO) {
+                    bucket.proPlannedCancellations += 1;
+                }
+            }
+        });
+
+        let totalNewSubscriptions = 0;
+        let totalPlannedCancellations = 0;
+        let totalBasicNewSubscriptions = 0;
+        let totalBasicPlannedCancellations = 0;
+        let totalProNewSubscriptions = 0;
+        let totalProPlannedCancellations = 0;
+        buckets.forEach(bucket => {
+            bucket.net = bucket.newSubscriptions - bucket.plannedCancellations;
+            bucket.basicNet = bucket.basicNewSubscriptions - bucket.basicPlannedCancellations;
+            bucket.proNet = bucket.proNewSubscriptions - bucket.proPlannedCancellations;
+            totalNewSubscriptions += bucket.newSubscriptions;
+            totalPlannedCancellations += bucket.plannedCancellations;
+            totalBasicNewSubscriptions += bucket.basicNewSubscriptions;
+            totalBasicPlannedCancellations += bucket.basicPlannedCancellations;
+            totalProNewSubscriptions += bucket.proNewSubscriptions;
+            totalProPlannedCancellations += bucket.proPlannedCancellations;
+        });
+
+        return {
+            months,
+            buckets,
+            totals: {
+                newSubscriptions: totalNewSubscriptions,
+                plannedCancellations: totalPlannedCancellations,
+                net: totalNewSubscriptions - totalPlannedCancellations,
+                basicNewSubscriptions: totalBasicNewSubscriptions,
+                basicPlannedCancellations: totalBasicPlannedCancellations,
+                basicNet: totalBasicNewSubscriptions - totalBasicPlannedCancellations,
+                proNewSubscriptions: totalProNewSubscriptions,
+                proPlannedCancellations: totalProPlannedCancellations,
+                proNet: totalProNewSubscriptions - totalProPlannedCancellations
+            }
+        };
+    } catch (error: unknown) {
+        logger.error('Error getting subscription history trend:', error);
+        throw new HttpsError('internal', 'Failed to get subscription history trend');
+    }
+});
+
+/**
+ * Returns historical monthly user growth buckets for Admin dashboards.
+ * Buckets are generated in UTC and include:
+ * - registeredUsers: users created in each month
+ * - onboardedUsers: same users where onboardingCompleted === true
+ */
+export const getUserGrowthTrend = onAdminCall<GetUserGrowthTrendRequest, UserGrowthTrendResponse>({
+    region: FUNCTIONS_MANIFEST.getUserGrowthTrend.region,
+    memory: '256MiB',
+}, async (request) => {
+    try {
+        const db = admin.firestore();
+        const months = clampSubscriptionHistoryMonths(request.data?.months);
+        const bucketWindows = buildMonthlyBucketWindows(months, new Date());
+
+        if (bucketWindows.length === 0) {
+            return {
+                months,
+                buckets: [],
+                totals: {
+                    registeredUsers: 0,
+                    onboardedUsers: 0
+                }
+            };
+        }
+
+        const rangeStartMs = bucketWindows[0].startMs;
+        const rangeEndMs = bucketWindows[bucketWindows.length - 1].endMs;
+        const rangeStartDate = new Date(rangeStartMs);
+        const rangeEndDate = new Date(rangeEndMs);
+
+        const userSnapshot = await db.collection('users')
+            .where('creationDate', '>=', rangeStartDate)
+            .where('creationDate', '<', rangeEndDate)
+            .select('creationDate', 'onboardingCompleted')
+            .get();
+
+        const buckets = bucketWindows.map((window) => ({
+            key: window.key,
+            label: window.label,
+            registeredUsers: 0,
+            onboardedUsers: 0
+        }));
+        const bucketByKey = new Map<string, UserGrowthTrendBucket>();
+        buckets.forEach(bucket => {
+            bucketByKey.set(bucket.key, bucket);
+        });
+
+        userSnapshot.docs.forEach(doc => {
+            const user = doc.data() as Record<string, unknown>;
+            const creationDateMillis = toEpochMillis(user.creationDate);
+            if (creationDateMillis === null || creationDateMillis < rangeStartMs || creationDateMillis >= rangeEndMs) {
+                return;
+            }
+
+            const bucket = bucketByKey.get(toUtcMonthKey(creationDateMillis));
+            if (!bucket) {
+                return;
+            }
+
+            bucket.registeredUsers += 1;
+            if (user.onboardingCompleted === true) {
+                bucket.onboardedUsers += 1;
+            }
+        });
+
+        const totals = buckets.reduce(
+            (accu, bucket) => {
+                accu.registeredUsers += bucket.registeredUsers;
+                accu.onboardedUsers += bucket.onboardedUsers;
+                return accu;
+            },
+            {
+                registeredUsers: 0,
+                onboardedUsers: 0
+            }
+        );
+
+        return {
+            months,
+            buckets,
+            totals
+        };
+    } catch (error: unknown) {
+        logger.error('Error getting user growth trend:', error);
+        throw new HttpsError('internal', 'Failed to get user growth trend');
     }
 });
 

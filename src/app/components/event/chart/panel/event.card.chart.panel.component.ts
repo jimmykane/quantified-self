@@ -168,14 +168,19 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private applyingSharedSelectionRange = false;
   private applyingSharedZoomRange = false;
   private selectionBrushActive = false;
+  private mobileInteractionsArmed = false;
   private chartRefreshSequence: Promise<void> = Promise.resolve();
   private pendingAxisScaleFrame: number | null = null;
   private axisPointerCursorBoundChart: EChartsType | null = null;
+  private mobileArmBoundChart: EChartsType | null = null;
   private readonly axisPointerCursorHandler = (params: AxisPointerEvent) => {
     const value = Number(params?.axesInfo?.[0]?.value);
     if (Number.isFinite(value)) {
       this.cursorPositionChange.emit(value);
     }
+  };
+  private readonly mobileArmClickHandler = () => {
+    this.armMobileInteractions();
   };
   private readonly fullscreenChangeHandler = () => {
     this.syncFullscreenState();
@@ -391,6 +396,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.unbindFullscreenEvents();
     this.teardownViewportObserver();
     this.unbindWheelPassThrough();
+    this.unbindMobileInteractionArm();
     this.unbindAxisPointerCursorEmit();
     this.chartHost.dispose();
   }
@@ -482,6 +488,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private buildOption(): ChartOption {
     const panel = this.panel as EventChartPanelModel;
     const hoverTooltipEnabled = this.isHoverTooltipEnabled();
+    const interactionArmed = this.isInteractionArmed();
     const chartStyle = buildEventEChartsVisualTokens(this.darkTheme, this.isMobile);
     const textColor = chartStyle.textColor;
     const axisLabelColor = textColor;
@@ -506,36 +513,40 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       : AppUserUtilities.getDefaultChartFillOpacity();
     const areaFillOrigin: 'start' | 'end' = yAxisConfig.inverse ? 'end' : 'start';
     const tooltipSurfaceConfig = this.buildTooltipSurfaceConfig();
-    const tooltipTriggerOn = resolveEChartsTooltipTriggerOn(hoverTooltipEnabled, this.isMobile);
+    const tooltipTriggerOn = resolveEChartsTooltipTriggerOn(hoverTooltipEnabled && interactionArmed, this.isMobile);
 
-    const seriesOptions: ChartLineSeriesOption[] = panel.series.map((series) => ({
-      id: series.id,
-      name: series.activityName,
-      type: 'line',
-      smooth: false,
-      showSymbol: false,
-      symbolSize: 5,
-      progressive: series.points.length >= PROGRESSIVE_THRESHOLD ? PROGRESSIVE_STEP : 0,
-      progressiveThreshold: PROGRESSIVE_THRESHOLD,
-      progressiveChunkMode: 'mod',
-      animation: this.useAnimations === true,
-      lineStyle: {
-        width: seriesStrokeWidth,
-        color: series.color,
-      },
-      itemStyle: {
-        color: series.color,
-      },
-      areaStyle: {
-        color: series.color,
-        opacity: seriesFillOpacity,
-        origin: areaFillOrigin,
-      },
-      emphasis: {
-        disabled: true,
-      },
-      data: this.getSeriesLineData(series.points),
-    }));
+    const seriesOptions: ChartLineSeriesOption[] = panel.series.map((series) => {
+      const connectAcrossMissingValues = this.isBatteryStreamType(series.streamType);
+      return {
+        id: series.id,
+        name: series.activityName,
+        type: 'line',
+        smooth: false,
+        showSymbol: false,
+        symbolSize: 5,
+        connectNulls: connectAcrossMissingValues,
+        progressive: series.points.length >= PROGRESSIVE_THRESHOLD ? PROGRESSIVE_STEP : 0,
+        progressiveThreshold: PROGRESSIVE_THRESHOLD,
+        progressiveChunkMode: 'mod',
+        animation: this.useAnimations === true,
+        lineStyle: {
+          width: seriesStrokeWidth,
+          color: series.color,
+        },
+        itemStyle: {
+          color: series.color,
+        },
+        areaStyle: {
+          color: series.color,
+          opacity: seriesFillOpacity,
+          origin: areaFillOrigin,
+        },
+        emphasis: {
+          disabled: true,
+        },
+        data: this.getSeriesLineData(series.points),
+      };
+    });
 
     if (seriesOptions[0]) {
       seriesOptions[0].markLine = this.buildLapMarkLine(chartStyle);
@@ -558,7 +569,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       },
       tooltip: {
         trigger: 'axis',
-        show: this.tooltipVisibleForViewport && hoverTooltipEnabled,
+        show: this.tooltipVisibleForViewport && hoverTooltipEnabled && interactionArmed,
         triggerOn: tooltipTriggerOn,
         renderMode: 'html',
         ...tooltipSurfaceConfig,
@@ -646,7 +657,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         {
           type: 'inside',
           xAxisIndex: 0,
-          disabled: this.cursorBehaviour === ChartCursorBehaviours.SelectX,
+          disabled: !interactionArmed || this.cursorBehaviour === ChartCursorBehaviours.SelectX,
           filterMode: 'filter',
           throttle: DATA_ZOOM_THROTTLE_MS,
           zoomOnMouseWheel: false,
@@ -761,6 +772,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     if (!chart || this.eventsBound || (!this.panel && !this.showZoomBar)) {
       return;
     }
+
+    this.bindMobileInteractionArm(chart);
 
     if (this.panel) {
       chart.on('mousemove', (params: ECElementEvent) => {
@@ -947,7 +960,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     this.chartHost.setOption({
       tooltip: {
-        show: isVisible,
+        show: isVisible && this.isHoverTooltipEnabled() && this.isInteractionArmed(),
       },
     }, {
       notMerge: false,
@@ -1012,6 +1025,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   private buildZoomBarOnlyOption(): ChartOption {
     const chartStyle = buildEventEChartsVisualTokens(this.darkTheme, this.isMobile);
+    const interactionArmed = this.isInteractionArmed();
     const axisColor = chartStyle.axisColor;
     const sliderTrackColor = chartStyle.dataZoomTrackColor;
     const sliderSelectionColor = chartStyle.dataZoomSelectionColor;
@@ -1067,6 +1081,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
             { includeDateForTime: this.showDateOnTimeAxis }
           ),
           handleSize: ZOOM_BAR_HANDLE_SIZE,
+          disabled: !interactionArmed,
           borderColor: axisColor,
           backgroundColor: sliderTrackColor,
           fillerColor: sliderSelectionColor,
@@ -1458,18 +1473,19 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     const selectModeActive = this.cursorBehaviour === ChartCursorBehaviours.SelectX;
+    const interactionArmed = this.isInteractionArmed();
     if (!selectModeActive) {
       this.updateSelectionBrushState(false);
     }
 
     this.chartHost.setOption({
       tooltip: {
-        show: this.tooltipVisibleForViewport && this.isHoverTooltipEnabled(),
-        triggerOn: resolveEChartsTooltipTriggerOn(this.isHoverTooltipEnabled(), this.isMobile),
+        show: this.tooltipVisibleForViewport && this.isHoverTooltipEnabled() && interactionArmed,
+        triggerOn: resolveEChartsTooltipTriggerOn(this.isHoverTooltipEnabled() && interactionArmed, this.isMobile),
       },
       dataZoom: [
         {
-          disabled: selectModeActive,
+          disabled: !interactionArmed || selectModeActive,
         }
       ],
     }, {
@@ -1482,7 +1498,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       type: 'takeGlobalCursor',
       key: 'brush',
       brushOption: {
-        brushType: 'lineX',
+        brushType: interactionArmed ? 'lineX' : false,
         brushMode: 'single',
         removeOnClick: true,
       },
@@ -1499,7 +1515,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   private handleBrushEvent(params: BrushEventParams): void {
-    if (this.showZoomBar || this.cursorBehaviour !== ChartCursorBehaviours.SelectX) {
+    if (this.showZoomBar || !this.isInteractionArmed() || this.cursorBehaviour !== ChartCursorBehaviours.SelectX) {
       return;
     }
 
@@ -1526,7 +1542,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   private handleBrushEnd(params: BrushEventParams): void {
-    if (this.showZoomBar) {
+    if (this.showZoomBar || !this.isInteractionArmed()) {
       return;
     }
 
@@ -1872,10 +1888,11 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       this.safeHideTip(chart);
     }
 
+    const interactionArmed = this.isInteractionArmed();
     this.chartHost.setOption({
       tooltip: {
-        show: this.tooltipVisibleForViewport && this.isHoverTooltipEnabled(),
-        triggerOn: resolveEChartsTooltipTriggerOn(this.isHoverTooltipEnabled(), this.isMobile),
+        show: this.tooltipVisibleForViewport && this.isHoverTooltipEnabled() && interactionArmed,
+        triggerOn: resolveEChartsTooltipTriggerOn(this.isHoverTooltipEnabled() && interactionArmed, this.isMobile),
       },
     }, {
       notMerge: false,
@@ -1942,7 +1959,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const data = new Array<[number, number | null]>(points.length);
     for (let index = 0; index < points.length; index += 1) {
       const point = points[index];
-      data[index] = [point.x, point.y];
+      const y = point?.y;
+      data[index] = [point.x, typeof y === 'number' && Number.isFinite(y) ? y : null];
     }
 
     this.seriesDataCache.set(pointsRef, data);
@@ -1974,5 +1992,74 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   private buildTooltipSurfaceConfig(): EChartsTooltipSurfaceConfig {
     return resolveEChartsTooltipSurfaceConfig(this.isMobile);
+  }
+
+  private isBatteryStreamType(streamType: string): boolean {
+    return `${streamType || ''}`.toLowerCase().includes('battery');
+  }
+
+  private isInteractionArmed(): boolean {
+    return !this.isMobile || this.mobileInteractionsArmed;
+  }
+
+  private bindMobileInteractionArm(chart: EChartsType): void {
+    if (!this.isMobile) {
+      this.unbindMobileInteractionArm();
+      return;
+    }
+
+    if (this.mobileArmBoundChart === chart) {
+      return;
+    }
+
+    this.unbindMobileInteractionArm();
+    const zr = chart.getZr?.();
+    if (!zr || typeof zr.on !== 'function') {
+      return;
+    }
+
+    zr.on('click', this.mobileArmClickHandler);
+    this.mobileArmBoundChart = chart;
+  }
+
+  private unbindMobileInteractionArm(): void {
+    if (!this.mobileArmBoundChart) {
+      return;
+    }
+
+    const zr = this.mobileArmBoundChart.getZr?.();
+    if (zr && typeof zr.off === 'function') {
+      zr.off('click', this.mobileArmClickHandler);
+    }
+    this.mobileArmBoundChart = null;
+  }
+
+  private armMobileInteractions(): void {
+    if (!this.isMobile || this.mobileInteractionsArmed) {
+      return;
+    }
+
+    this.mobileInteractionsArmed = true;
+    const chart = this.chartHost.getChart();
+    if (!chart) {
+      return;
+    }
+
+    if (this.showZoomBar) {
+      this.chartHost.setOption({
+        dataZoom: [
+          {
+            disabled: false,
+          }
+        ]
+      }, {
+        notMerge: false,
+        lazyUpdate: true,
+        silent: true,
+      });
+      return;
+    }
+
+    this.syncInteractionMode();
   }
 }

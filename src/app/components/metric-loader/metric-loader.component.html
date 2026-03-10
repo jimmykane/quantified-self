@@ -1,0 +1,56 @@
+<div class="qs-splash-loader" role="status" aria-live="polite" aria-label="Loading Quantified Self">
+  <div class="qs-digit-grid" aria-hidden="true">
+    <div class="qs-digit-tile qs-digit-a">
+      <span class="qs-digit-label">DISTANCE</span>
+      <span class="qs-digit-value">
+        <span class="qs-digit-counter">
+          @for (digit of loaderDigits.distance; track loaderDigitTrack('distance', $index, digit)) {
+          <span class="qs-live-digit" [class.qs-live-digit--separator]="digit.char === '.'">
+            <span class="qs-live-digit-char">{{ digit.char }}</span>
+          </span>
+          }
+        </span>
+        <span class="qs-digit-unit">km</span>
+      </span>
+    </div>
+    <div class="qs-digit-tile qs-digit-b">
+      <span class="qs-digit-label">HEART RATE</span>
+      <span class="qs-digit-value">
+        <span class="qs-digit-counter">
+          @for (digit of loaderDigits.heartRate; track loaderDigitTrack('heartRate', $index, digit)) {
+          <span class="qs-live-digit">
+            <span class="qs-live-digit-char">{{ digit.char }}</span>
+          </span>
+          }
+        </span>
+        <span class="qs-digit-unit">bpm</span>
+      </span>
+    </div>
+    <div class="qs-digit-tile qs-digit-c">
+      <span class="qs-digit-label">ASCENT</span>
+      <span class="qs-digit-value">
+        <span class="qs-digit-counter">
+          @for (digit of loaderDigits.ascent; track loaderDigitTrack('ascent', $index, digit)) {
+          <span class="qs-live-digit">
+            <span class="qs-live-digit-char">{{ digit.char }}</span>
+          </span>
+          }
+        </span>
+        <span class="qs-digit-unit">m</span>
+      </span>
+    </div>
+    <div class="qs-digit-tile qs-digit-d">
+      <span class="qs-digit-label">DESCENT</span>
+      <span class="qs-digit-value">
+        <span class="qs-digit-counter">
+          @for (digit of loaderDigits.descent; track loaderDigitTrack('descent', $index, digit)) {
+          <span class="qs-live-digit">
+            <span class="qs-live-digit-char">{{ digit.char }}</span>
+          </span>
+          }
+        </span>
+        <span class="qs-digit-unit">m</span>
+      </span>
+    </div>
+  </div>
+</div>

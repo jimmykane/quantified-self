@@ -198,20 +198,25 @@
 .qs-filter-container {
     margin-bottom: 16px;
     padding: 16px;
-    display: flex;
-    align-items: center;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(180px, 220px);
+    align-items: start;
     gap: 16px;
-    flex-wrap: wrap;
+
+    @include bp.xsmall {
+        grid-template-columns: 1fr;
+    }
 }
 
 .qs-search-field {
-    flex: 1;
-    min-width: 200px;
+    min-width: 0;
+    width: 100%;
 }
 
 .qs-filter-field {
-    min-width: 150px;
-    max-width: 200px;
+    min-width: 0;
+    max-width: none;
+    width: 100%;
 }
 
 // Table Styles
@@ -399,6 +404,17 @@ td.mat-cell {
         background: rgba(var(--mat-sys-on-surface-rgb), 0.12);
         color: var(--mat-sys-on-surface-variant);
     }
+}
+
+.subscription-history-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.subscription-history-detail {
+    font-size: 0.78rem;
+    color: var(--mat-sys-on-surface-variant);
 }
 
 @include bp.xsmall {

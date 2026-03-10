@@ -1,5 +1,11 @@
 /* Main App Layout */
 /* Note: margin-top is set dynamically via [style.margin-top.px] binding */
+.qs-loader-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+}
+
 mat-sidenav-container {
   height: calc(100vh - var(--qs-layout-top-offset, 0px));
 }

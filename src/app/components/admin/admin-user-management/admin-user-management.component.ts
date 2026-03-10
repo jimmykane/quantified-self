@@ -1,4 +1,17 @@
-import { AfterViewInit, Component, ElementRef, LOCALE_ID, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
+import {
+    AfterViewInit,
+    Component,
+    ElementRef,
+    Injector,
+    LOCALE_ID,
+    OnDestroy,
+    OnInit,
+    ViewChild,
+    effect,
+    inject,
+    signal
+} from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterModule } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
@@ -14,10 +27,17 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatCardModule } from '@angular/material/card';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
-import { Subject } from 'rxjs';
-import { debounceTime, distinctUntilChanged, takeUntil } from 'rxjs/operators';
+import { Subject, of } from 'rxjs';
+import { catchError, debounceTime, distinctUntilChanged, takeUntil } from 'rxjs/operators';
 
-import { AdminService, AdminUser, ListUsersParams, UserCountStats } from '../../../services/admin.service';
+import {
+    AdminService,
+    AdminUser,
+    ListUsersParams,
+    SubscriptionHistoryTrendResponse,
+    UserCountStats,
+    UserGrowthTrendResponse
+} from '../../../services/admin.service';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { AppImpersonationService } from '../../../services/app.impersonation.service';
 import { LoggerService } from '../../../services/logger.service';
@@ -27,6 +47,7 @@ import { AppThemes } from '@sports-alliance/sports-lib';
 import type { EChartsType } from 'echarts/core';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import {
+    ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS,
     ECHARTS_SERIES_MERGE_UPDATE_SETTINGS,
     EChartsHostController
 } from '../../../helpers/echarts-host-controller';
@@ -66,6 +87,7 @@ type ChartOption = Parameters<EChartsType['setOption']>[0];
 export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterViewInit {
     @ViewChild(MatSort) sort!: MatSort;
     @ViewChild('authChart', { static: true }) authChartRef!: ElementRef<HTMLDivElement>;
+    @ViewChild('userGrowthTrendChart', { static: true }) userGrowthTrendChartRef!: ElementRef<HTMLDivElement>;
 
     // Injected services
     private adminService = inject(AdminService);
@@ -76,6 +98,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     private logger = inject(LoggerService);
     private eChartsLoader = inject(EChartsLoaderService);
     private locale = inject(LOCALE_ID);
+    private injector = inject(Injector);
 
     // Data state
     users: AdminUser[] = [];
@@ -94,7 +117,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     sortDirection: 'asc' | 'desc' = 'desc';
 
     displayedColumns: string[] = [
-        'photoURL', 'email', 'uid', 'providerIds', 'displayName', 'role', 'subscriptionHistory', 'subscription',
+        'photoURL', 'email', 'uid', 'providerIds', 'displayName', 'role', 'subscriptionHistory',
         'services', 'created', 'lastLogin', 'onboarding', 'status', 'actions'
     ];
 
@@ -106,9 +129,32 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
         logger: this.logger,
         logPrefix: '[AdminUserManagementComponent]'
     });
+    private userGrowthTrendChartHost = new EChartsHostController({
+        eChartsLoader: this.eChartsLoader,
+        logger: this.logger,
+        logPrefix: '[AdminUserManagementComponent]'
+    });
     private isDark = false;
     private providerData: Record<string, number> | null = null;
+    private readonly userGrowthTrend = signal<UserGrowthTrendResponse | null>(null);
+    private readonly subscriptionHistoryTrend = signal<SubscriptionHistoryTrendResponse | null>(null);
     private readonly dayjsLocale = this.normalizeDayjsLocale(this.locale);
+    private readonly supportedSortFields = new Set([
+        'email',
+        'displayName',
+        'role',
+        'admin',
+        'created',
+        'lastLogin',
+        'status',
+        'providerIds'
+    ]);
+
+    constructor() {
+        effect(() => {
+            this.renderUserGrowthTrendChart();
+        });
+    }
 
     async ngOnInit(): Promise<void> {
         // Handle search debounce
@@ -134,6 +180,8 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
             this.users = resolvedData.usersData.users;
             this.totalCount = resolvedData.usersData.totalCount;
             this.userStats = resolvedData.userStats;
+            this.updateUserGrowthTrendChart(resolvedData.userGrowthTrend);
+            this.updateSubscriptionHistoryTrendChart(resolvedData.subscriptionHistoryTrend);
             this.isLoading = false;
             if (this.userStats?.providers) {
                 this.updateAuthChart(this.userStats.providers);
@@ -147,19 +195,52 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
                     this.updateAuthChart(stats.providers);
                 }
             });
+            const fallbackTrendSignal = toSignal(
+                this.adminService.getUserGrowthTrend(12).pipe(
+                    catchError((err) => {
+                        this.logger.error('AdminUserManagement user growth trend fallback error:', err);
+                        return of(null);
+                    })
+                ),
+                {
+                    initialValue: null,
+                    injector: this.injector
+                }
+            );
+            effect(() => {
+                this.userGrowthTrend.set(fallbackTrendSignal());
+            }, { injector: this.injector });
+
+            const fallbackSubscriptionTrendSignal = toSignal(
+                this.adminService.getSubscriptionHistoryTrend(12).pipe(
+                    catchError((err) => {
+                        this.logger.error('AdminUserManagement subscription trend fallback error:', err);
+                        return of(null);
+                    })
+                ),
+                {
+                    initialValue: null,
+                    injector: this.injector
+                }
+            );
+            effect(() => {
+                this.subscriptionHistoryTrend.set(fallbackSubscriptionTrendSignal());
+            }, { injector: this.injector });
         }
     }
 
     async ngAfterViewInit(): Promise<void> {
-        await this.initializeChart();
-        this.updateChartTheme();
+        await this.initializeCharts();
+        await this.updateChartTheme();
         this.updateAuthChart(this.providerData ?? {});
+        this.renderUserGrowthTrendChart();
     }
 
     ngOnDestroy(): void {
         this.destroy$.next();
         this.destroy$.complete();
         this.chartHost.dispose();
+        this.userGrowthTrendChartHost.dispose();
     }
 
     fetchUsers(): void {
@@ -194,6 +275,18 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
         this.renderAuthChart();
     }
 
+    private updateUserGrowthTrendChart(trendData: UserGrowthTrendResponse | null): void {
+        this.userGrowthTrend.set(trendData);
+    }
+
+    private updateSubscriptionHistoryTrendChart(trendData: SubscriptionHistoryTrendResponse | null): void {
+        this.subscriptionHistoryTrend.set(trendData);
+    }
+
+    get hasUserGrowthTrendData(): boolean {
+        return !!this.userGrowthTrend()?.buckets?.length || !!this.subscriptionHistoryTrend()?.buckets?.length;
+    }
+
     onPageChange(event: PageEvent): void {
         this.currentPage = event.pageIndex;
         this.pageSize = event.pageSize;
@@ -201,8 +294,11 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     }
 
     onSortChange(sort: Sort): void {
-        this.sortField = sort.active || 'created';
-        this.sortDirection = (sort.direction as 'asc' | 'desc') || 'desc';
+        const requestedField = sort.active || 'created';
+        const requestedDirection = (sort.direction as 'asc' | 'desc') || 'desc';
+        const isSupportedField = this.supportedSortFields.has(requestedField);
+        this.sortField = isSupportedField ? requestedField : 'created';
+        this.sortDirection = isSupportedField ? requestedDirection : 'desc';
         this.currentPage = 0;
         this.fetchUsers();
     }
@@ -258,19 +354,6 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
         return user.customClaims?.admin === true;
     }
 
-    getSubscriptionDetails(user: AdminUser): string {
-        if (!user.subscription) return '-';
-
-        let details = user.subscription.status.toUpperCase();
-
-        if (user.subscription.cancel_at_period_end && user.subscription.current_period_end) {
-            const date = this.formatDate(user.subscription.current_period_end);
-            details += ` (Ends ${date})`;
-        }
-
-        return details;
-    }
-
     getSubscriptionHistoryState(user: AdminUser): SubscriptionHistoryState {
         const status = user.subscription?.status?.toLowerCase();
         const hasActiveSubscription = status === 'active' || status === 'trialing' || status === 'past_due';
@@ -296,6 +379,32 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
         if (state === 'active') return 'Active';
         if (state === 'canceled') return 'Canceled';
         return 'Never Subscribed';
+    }
+
+    getSubscriptionHistoryDetails(user: AdminUser): string | null {
+        const state = this.getSubscriptionHistoryState(user);
+        const status = user.subscription?.status?.toLowerCase();
+
+        if (state === 'scheduled') {
+            if (user.subscription?.current_period_end) {
+                return `Ends ${this.formatDate(user.subscription.current_period_end)}`;
+            }
+            return 'Scheduled to end';
+        }
+
+        if (state === 'active') {
+            if (status === 'trialing') {
+                return 'Trialing';
+            }
+
+            if (status === 'past_due') {
+                return 'Past Due';
+            }
+
+            return null;
+        }
+
+        return null;
     }
 
     private formatDate(timestamp: any): string {
@@ -358,11 +467,19 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
         return lowerLocale.split('-')[0];
     }
 
-    private async initializeChart(): Promise<void> {
-        if (!this.authChartRef?.nativeElement) {
-            return;
+    private async initializeCharts(): Promise<void> {
+        const themeName = resolveEChartsThemeName(this.isDark);
+        const initializations: Array<Promise<unknown>> = [];
+
+        if (this.authChartRef?.nativeElement) {
+            initializations.push(this.chartHost.init(this.authChartRef.nativeElement, themeName));
         }
-        await this.chartHost.init(this.authChartRef.nativeElement, resolveEChartsThemeName(this.isDark));
+
+        if (this.userGrowthTrendChartRef?.nativeElement) {
+            initializations.push(this.userGrowthTrendChartHost.init(this.userGrowthTrendChartRef.nativeElement, themeName));
+        }
+
+        await Promise.all(initializations);
     }
 
     private renderAuthChart(): void {
@@ -373,6 +490,38 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
         const option = this.buildAuthChartOption(this.providerData);
         this.chartHost.setOption(option, ECHARTS_SERIES_MERGE_UPDATE_SETTINGS);
         this.chartHost.scheduleResize();
+    }
+
+    private renderUserGrowthTrendChart(): void {
+        if (!this.userGrowthTrendChartHost.getChart()) {
+            return;
+        }
+
+        const userGrowthTrend = this.userGrowthTrend();
+        const subscriptionHistoryTrend = this.subscriptionHistoryTrend();
+        const hasUserGrowthData = !!userGrowthTrend?.buckets?.length;
+        const hasSubscriptionData = !!subscriptionHistoryTrend?.buckets?.length;
+
+        if (!hasUserGrowthData && !hasSubscriptionData) {
+            this.userGrowthTrendChartHost.setOption({
+                xAxis: { type: 'category', data: [] },
+                yAxis: { type: 'value' },
+                series: []
+            }, ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS);
+            this.userGrowthTrendChartHost.scheduleResize();
+            return;
+        }
+
+        const option = this.buildUserGrowthTrendChartOption(
+            userGrowthTrend,
+            subscriptionHistoryTrend,
+            this.getCurrentRegisteredUsers(),
+            this.getCurrentOnboardedUsers(),
+            this.getCurrentBasicSubscriptions(),
+            this.getCurrentProSubscriptions()
+        );
+        this.userGrowthTrendChartHost.setOption(option, ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS);
+        this.userGrowthTrendChartHost.scheduleResize();
     }
 
     private buildAuthChartOption(providers: Record<string, number>): ChartOption {
@@ -498,11 +647,345 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
         return option;
     }
 
-    private async updateChartTheme(): Promise<void> {
-        if (!this.authChartRef?.nativeElement) {
-            return;
+    private buildUserGrowthTrendChartOption(
+        userGrowthTrend: UserGrowthTrendResponse | null,
+        subscriptionHistoryTrend: SubscriptionHistoryTrendResponse | null,
+        currentRegisteredUsers: number,
+        currentOnboardedUsers: number,
+        currentBasicSubscriptions: number,
+        currentProSubscriptions: number
+    ): ChartOption {
+        const userBuckets = userGrowthTrend?.buckets || [];
+        const subscriptionBuckets = subscriptionHistoryTrend?.buckets || [];
+        const monthKeys = [...new Set([
+            ...userBuckets.map(bucket => bucket.key),
+            ...subscriptionBuckets.map(bucket => bucket.key)
+        ])].sort();
+        const userBucketsByKey = new Map(userBuckets.map(bucket => [bucket.key, bucket]));
+        const subscriptionBucketsByKey = new Map(subscriptionBuckets.map(bucket => [bucket.key, bucket]));
+
+        const labels = monthKeys.map((key) => {
+            const userBucket = userBucketsByKey.get(key);
+            const subscriptionBucket = subscriptionBucketsByKey.get(key);
+            return userBucket?.label || subscriptionBucket?.label || key;
+        });
+        const registeredUsersPerMonth = monthKeys.map((key) => Number(userBucketsByKey.get(key)?.registeredUsers ?? 0));
+        const onboardedUsersPerMonth = monthKeys.map((key) => Number(userBucketsByKey.get(key)?.onboardedUsers ?? 0));
+        const basicSubscriptionNetPerMonth = monthKeys.map((key) => Number(subscriptionBucketsByKey.get(key)?.basicNet ?? 0));
+        const proSubscriptionNetPerMonth = monthKeys.map((key) => Number(subscriptionBucketsByKey.get(key)?.proNet ?? 0));
+
+        const endingRegisteredUsers = Math.max(0, Number(currentRegisteredUsers) || 0);
+        const endingOnboardedUsers = Math.max(0, Number(currentOnboardedUsers) || 0);
+        const endingBasicSubscriptions = Math.max(0, Number(currentBasicSubscriptions) || 0);
+        const endingProSubscriptions = Math.max(0, Number(currentProSubscriptions) || 0);
+        const endingAllSubscriptions = endingBasicSubscriptions + endingProSubscriptions;
+
+        const cumulativeRegisteredUsers = this.buildCumulativeSeriesFromEndingTotal(
+            registeredUsersPerMonth,
+            endingRegisteredUsers
+        );
+        const cumulativeOnboardedUsers = this.buildCumulativeSeriesFromEndingTotal(
+            onboardedUsersPerMonth,
+            endingOnboardedUsers
+        );
+        const cumulativeBasicSubscriptions = this.buildCumulativeSeriesFromEndingTotal(
+            basicSubscriptionNetPerMonth,
+            endingBasicSubscriptions
+        );
+        const cumulativeProSubscriptions = this.buildCumulativeSeriesFromEndingTotal(
+            proSubscriptionNetPerMonth,
+            endingProSubscriptions
+        );
+        const cumulativeAllSubscriptions = cumulativeBasicSubscriptions.map(
+            (value, index) => value + (cumulativeProSubscriptions[index] || 0)
+        );
+
+        const themeTokens = buildOfficialEChartsThemeTokens(this.isDark);
+        const textColor = themeTokens.textSecondary;
+        const axisColor = themeTokens.axisLineColor;
+        const splitLineColor = themeTokens.splitLineColor;
+        const containerWidth = this.userGrowthTrendChartRef?.nativeElement?.clientWidth ?? 0;
+        const isMobileLayout = containerWidth > 0 && containerWidth < 680;
+
+        const primaryColor = this.resolveMaterialChartColor('--mat-sys-primary', '#1f8fff');
+        const tertiaryColor = this.resolveMaterialChartColor('--mat-sys-tertiary', '#00a16a');
+        const secondaryColor = this.resolveMaterialChartColor('--mat-sys-secondary', '#5f6abf');
+        const warningColor = this.resolveMaterialChartColor('--mat-sys-warning', '#b45309');
+        const neutralColor = this.resolveMaterialChartColor('--mat-sys-outline', '#7a8898');
+        const hasUserGrowthData = userBuckets.length > 0;
+        const hasSubscriptionData = subscriptionBuckets.length > 0;
+        const summaryParts: string[] = [];
+        if (hasUserGrowthData) {
+            summaryParts.push(`Users ${endingRegisteredUsers} | Onboarded ${endingOnboardedUsers}`);
         }
-        await this.chartHost.init(this.authChartRef.nativeElement, resolveEChartsThemeName(this.isDark));
+        if (hasSubscriptionData) {
+            summaryParts.push(`Totals (Pro+Basic) ${endingAllSubscriptions} (Basic ${endingBasicSubscriptions} | Pro ${endingProSubscriptions})`);
+        }
+        const totalsSummary = `Current  ${summaryParts.join('  ||  ')}`;
+        const legendTop = isMobileLayout ? 8 : 34;
+        const gridTop = isMobileLayout ? 56 : 86;
+
+        const series: any[] = [];
+        if (hasUserGrowthData) {
+            series.push(
+                {
+                    name: 'Registered Users / month',
+                    type: 'bar',
+                    data: registeredUsersPerMonth,
+                    barMaxWidth: 22,
+                    itemStyle: {
+                        color: primaryColor,
+                        borderRadius: [4, 4, 0, 0]
+                    },
+                    emphasis: {
+                        focus: 'series'
+                    }
+                },
+                {
+                    name: 'Onboarded Users / month',
+                    type: 'bar',
+                    data: onboardedUsersPerMonth,
+                    barMaxWidth: 22,
+                    itemStyle: {
+                        color: tertiaryColor,
+                        borderRadius: [4, 4, 0, 0]
+                    },
+                    emphasis: {
+                        focus: 'series'
+                    }
+                },
+                {
+                    name: 'Total Registered',
+                    type: 'line',
+                    data: cumulativeRegisteredUsers,
+                    smooth: true,
+                    symbol: 'circle',
+                    symbolSize: 6,
+                    lineStyle: {
+                        color: secondaryColor,
+                        width: 2.2
+                    },
+                    itemStyle: {
+                        color: secondaryColor
+                    },
+                    emphasis: {
+                        focus: 'series'
+                    }
+                },
+                {
+                    name: 'Total Onboarded',
+                    type: 'line',
+                    data: cumulativeOnboardedUsers,
+                    smooth: true,
+                    symbol: 'circle',
+                    symbolSize: 6,
+                    lineStyle: {
+                        color: this.resolveMaterialChartColor('--mat-sys-on-tertiary-container', '#7a4d00'),
+                        width: 2.2
+                    },
+                    itemStyle: {
+                        color: this.resolveMaterialChartColor('--mat-sys-on-tertiary-container', '#7a4d00')
+                    },
+                    emphasis: {
+                        focus: 'series'
+                    }
+                }
+            );
+        }
+
+        if (hasSubscriptionData) {
+            series.push(
+                {
+                    name: 'Basic Totals',
+                    type: 'line',
+                    data: cumulativeBasicSubscriptions,
+                    smooth: true,
+                    symbol: 'circle',
+                    symbolSize: 6,
+                    lineStyle: {
+                        color: neutralColor,
+                        width: 2.2
+                    },
+                    itemStyle: {
+                        color: neutralColor
+                    },
+                    emphasis: {
+                        focus: 'series'
+                    }
+                },
+                {
+                    name: 'Pro Totals',
+                    type: 'line',
+                    data: cumulativeProSubscriptions,
+                    smooth: true,
+                    symbol: 'circle',
+                    symbolSize: 6,
+                    lineStyle: {
+                        color: warningColor,
+                        width: 2.2
+                    },
+                    itemStyle: {
+                        color: warningColor
+                    },
+                    emphasis: {
+                        focus: 'series'
+                    }
+                },
+                {
+                    name: 'Totals (Pro+Basic)',
+                    type: 'line',
+                    data: cumulativeAllSubscriptions,
+                    smooth: true,
+                    symbol: 'circle',
+                    symbolSize: 6,
+                    lineStyle: {
+                        color: this.resolveMaterialChartColor('--mat-sys-primary-fixed-dim', '#4f46e5'),
+                        width: 2.2
+                    },
+                    itemStyle: {
+                        color: this.resolveMaterialChartColor('--mat-sys-primary-fixed-dim', '#4f46e5')
+                    },
+                    emphasis: {
+                        focus: 'series'
+                    }
+                }
+            );
+        }
+
+        const option: ChartOption = {
+            tooltip: {
+                trigger: 'axis',
+                axisPointer: { type: 'shadow' },
+                textStyle: {
+                    fontFamily: ECHARTS_GLOBAL_FONT_FAMILY
+                }
+            },
+            legend: {
+                top: legendTop,
+                textStyle: {
+                    color: textColor,
+                    fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+                    fontSize: isMobileLayout ? 11 : 12
+                }
+            },
+            grid: {
+                left: 18,
+                right: 18,
+                top: gridTop,
+                bottom: isMobileLayout ? 56 : 32,
+                containLabel: true
+            },
+            xAxis: {
+                type: 'category',
+                data: labels,
+                axisLabel: {
+                    color: textColor,
+                    rotate: isMobileLayout ? 40 : 0,
+                    fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+                    fontSize: isMobileLayout ? 10 : 11
+                },
+                axisLine: {
+                    lineStyle: {
+                        color: axisColor
+                    }
+                },
+                axisTick: {
+                    alignWithLabel: true
+                }
+            },
+            yAxis: {
+                type: 'value',
+                minInterval: 1,
+                axisLabel: {
+                    color: textColor,
+                    fontFamily: ECHARTS_GLOBAL_FONT_FAMILY
+                },
+                splitLine: {
+                    lineStyle: {
+                        color: splitLineColor
+                    }
+                }
+            },
+            series,
+            graphic: isMobileLayout
+                ? undefined
+                : [
+                    {
+                        type: 'text',
+                        left: 'center',
+                        top: 2,
+                        z: 10,
+                        style: {
+                            text: totalsSummary,
+                            fill: textColor,
+                            opacity: 0.9,
+                            fontSize: 11,
+                            fontWeight: 500,
+                            fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+                            textAlign: 'center'
+                        }
+                    }
+                ]
+        };
+
+        return option;
+    }
+
+    private buildCumulativeSeriesFromEndingTotal(netValues: number[], endingTotal: number): number[] {
+        const safeEndingTotal = Math.max(0, Number(endingTotal) || 0);
+        const windowNetTotal = netValues.reduce((sum, value) => sum + (Number(value) || 0), 0);
+        let runningTotal = safeEndingTotal - windowNetTotal;
+
+        return netValues.map((value) => {
+            runningTotal += Number(value) || 0;
+            return Math.max(0, Math.round(runningTotal));
+        });
+    }
+
+    private getCurrentRegisteredUsers(): number {
+        const totalUsers = Number(this.userStats?.total ?? 0);
+        return Math.max(0, totalUsers);
+    }
+
+    private getCurrentOnboardedUsers(): number {
+        const onboardedUsers = Number(this.userStats?.onboardingCompleted ?? 0);
+        return Math.max(0, onboardedUsers);
+    }
+
+    private getCurrentBasicSubscriptions(): number {
+        const basicSubscriptions = Number(this.userStats?.basic ?? 0);
+        return Math.max(0, basicSubscriptions);
+    }
+
+    private getCurrentProSubscriptions(): number {
+        const proSubscriptions = Number(this.userStats?.pro ?? 0);
+        return Math.max(0, proSubscriptions);
+    }
+
+    private resolveMaterialChartColor(tokenName: string, fallback: string): string {
+        const hostElement = this.userGrowthTrendChartRef?.nativeElement || this.authChartRef?.nativeElement;
+        if (!hostElement || typeof getComputedStyle !== 'function') {
+            return fallback;
+        }
+
+        const tokenValue = getComputedStyle(hostElement).getPropertyValue(tokenName).trim();
+        return tokenValue || fallback;
+    }
+
+    private async updateChartTheme(): Promise<void> {
+        const themeName = resolveEChartsThemeName(this.isDark);
+        const initializations: Array<Promise<unknown>> = [];
+
+        if (this.authChartRef?.nativeElement) {
+            initializations.push(this.chartHost.init(this.authChartRef.nativeElement, themeName));
+        }
+
+        if (this.userGrowthTrendChartRef?.nativeElement) {
+            initializations.push(this.userGrowthTrendChartHost.init(this.userGrowthTrendChartRef.nativeElement, themeName));
+        }
+
+        await Promise.all(initializations);
         this.renderAuthChart();
+        this.renderUserGrowthTrendChart();
     }
 }

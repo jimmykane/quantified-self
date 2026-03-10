@@ -135,7 +135,7 @@ export { checkSubscriptionNotifications } from './schedule/notifications';
 export { scheduleSportsLibReparseScan } from './schedule/sports-lib-reparse';
 export { cleanupUserAccounts } from './users/cleanup';
 export { deleteSelf } from './user/user';
-export { listUsers, getQueueStats, getUserCount, setMaintenanceMode, getMaintenanceStatus, impersonateUser, stopImpersonation, getFinancialStats } from './users/admin';
+export { listUsers, getQueueStats, getUserCount, getSubscriptionHistoryTrend, getUserGrowthTrend, setMaintenanceMode, getMaintenanceStatus, impersonateUser, stopImpersonation, getFinancialStats } from './users/admin';
 
 // Tasks
 export { processWorkoutTask } from './tasks/workout-processor';
