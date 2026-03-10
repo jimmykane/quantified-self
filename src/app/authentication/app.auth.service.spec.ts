@@ -17,6 +17,8 @@ vi.mock('@angular/fire/auth', async () => {
         signInWithRedirect: vi.fn(),
         signInWithCustomToken: vi.fn(),
         getRedirectResult: vi.fn(),
+        sendSignInLinkToEmail: vi.fn(),
+        signInWithEmailLink: vi.fn(),
         signOut: vi.fn(),
     };
 });
@@ -281,6 +283,84 @@ describe('AppAuthService', () => {
             expect(loggerErrorSpy).toHaveBeenNthCalledWith(1, '[Auth] signInWithProvider error:', authError);
             expect(loggerErrorSpy).toHaveBeenNthCalledWith(2, '[Auth] Error code:', authError.code);
             expect(loggerErrorSpy).toHaveBeenNthCalledWith(3, '[Auth] Error message:', authError.message);
+        });
+    });
+
+    describe('email link auth', () => {
+        it('sendEmailLink should persist email and show success snackbar', async () => {
+            const { sendSignInLinkToEmail } = await import('@angular/fire/auth');
+            const email = 'test@example.com';
+            (sendSignInLinkToEmail as Mock).mockResolvedValueOnce(undefined);
+
+            const result = await service.sendEmailLink(email);
+
+            expect(result).toBe(true);
+            expect(sendSignInLinkToEmail).toHaveBeenCalledWith(
+                mockAuth,
+                email,
+                expect.objectContaining({
+                    url: `${window.location.origin}/login`,
+                    handleCodeInApp: true,
+                })
+            );
+            expect(mockLocalStorageService.setItem).toHaveBeenCalledWith('emailForSignIn', email);
+            expect(mockSnackBar.open).toHaveBeenCalledWith(
+                `Magic link sent to ${email} `,
+                'Close',
+                { duration: 5000 }
+            );
+        });
+
+        it('sendEmailLink should return false and show error snackbar when send fails', async () => {
+            const { sendSignInLinkToEmail } = await import('@angular/fire/auth');
+            const email = 'test@example.com';
+            const authError = new Error('send failed');
+            const loggerErrorSpy = vi.spyOn((service as any).logger, 'error').mockImplementation(() => { });
+            (sendSignInLinkToEmail as Mock).mockRejectedValueOnce(authError);
+
+            const result = await service.sendEmailLink(email);
+
+            expect(result).toBe(false);
+            expect(mockLocalStorageService.setItem).not.toHaveBeenCalled();
+            expect(loggerErrorSpy).toHaveBeenCalledWith(authError);
+            expect(mockSnackBar.open).toHaveBeenCalledWith(
+                'Could not login due to error send failed ',
+                undefined,
+                { duration: 2000 }
+            );
+        });
+
+        it('signInWithEmailLink should remove cached email after successful sign-in', async () => {
+            const { signInWithEmailLink: signInWithEmailLinkFn } = await import('@angular/fire/auth');
+            const email = 'test@example.com';
+            const link = 'https://quantified-self.io/login?mode=signIn&code=test';
+            const authResult = { user: { uid: 'email-link-user' } };
+            (signInWithEmailLinkFn as Mock).mockResolvedValueOnce(authResult as any);
+
+            const result = await service.signInWithEmailLink(email, link);
+
+            expect(result).toEqual(authResult);
+            expect(signInWithEmailLinkFn).toHaveBeenCalledWith(mockAuth, email, link);
+            expect(mockLocalStorageService.removeItem).toHaveBeenCalledWith('emailForSignIn');
+        });
+
+        it('signInWithEmailLink should surface error and rethrow when sign-in fails', async () => {
+            const { signInWithEmailLink: signInWithEmailLinkFn } = await import('@angular/fire/auth');
+            const email = 'test@example.com';
+            const link = 'https://quantified-self.io/login?mode=signIn&code=test';
+            const authError = new Error('invalid-action-code');
+            const loggerErrorSpy = vi.spyOn((service as any).logger, 'error').mockImplementation(() => { });
+            (signInWithEmailLinkFn as Mock).mockRejectedValueOnce(authError);
+
+            await expect(service.signInWithEmailLink(email, link)).rejects.toBe(authError);
+
+            expect(mockLocalStorageService.removeItem).not.toHaveBeenCalled();
+            expect(loggerErrorSpy).toHaveBeenCalledWith(authError);
+            expect(mockSnackBar.open).toHaveBeenCalledWith(
+                'Could not login due to error invalid-action-code ',
+                undefined,
+                { duration: 2000 }
+            );
         });
     });
 
