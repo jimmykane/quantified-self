@@ -156,7 +156,19 @@ export class EChartsLoaderService {
     }
 
     const onChartClick = (params: unknown) => {
-      if (!this.isSeriesClickEvent(params)) {
+      if (!this.isHapticEligibleClickEvent(params)) {
+        return;
+      }
+      this.hapticsService.selection();
+    };
+    const onDataZoom = (params: unknown) => {
+      if (!this.isHapticEligibleDataZoomEvent(params)) {
+        return;
+      }
+      this.hapticsService.selection();
+    };
+    const onBrushEnd = (params: unknown) => {
+      if (!this.isHapticEligibleBrushEndEvent(params)) {
         return;
       }
       this.hapticsService.selection();
@@ -164,11 +176,15 @@ export class EChartsLoaderService {
 
     this.zone.runOutsideAngular(() => {
       chart.on('click', onChartClick as never);
+      chart.on('datazoom', onDataZoom as never);
+      chart.on('brushEnd', onBrushEnd as never);
     });
 
     return () => {
       this.zone.runOutsideAngular(() => {
         chart.off('click', onChartClick as never);
+        chart.off('datazoom', onDataZoom as never);
+        chart.off('brushEnd', onBrushEnd as never);
       });
     };
   }
@@ -219,12 +235,44 @@ export class EChartsLoaderService {
     this.viewportListenersBound = false;
   }
 
-  private isSeriesClickEvent(params: unknown): boolean {
+  private isHapticEligibleClickEvent(params: unknown): boolean {
     if (!params || typeof params !== 'object') {
       return false;
     }
 
     const clickParams = params as { componentType?: unknown };
-    return clickParams.componentType === 'series';
+    return clickParams.componentType === 'series'
+      || clickParams.componentType === 'xAxis'
+      || clickParams.componentType === 'yAxis';
+  }
+
+  private isHapticEligibleDataZoomEvent(params: unknown): boolean {
+    return !this.isEventFromActionSource(params);
+  }
+
+  private isHapticEligibleBrushEndEvent(params: unknown): boolean {
+    if (this.isEventFromActionSource(params)) {
+      return false;
+    }
+
+    if (!params || typeof params !== 'object') {
+      return true;
+    }
+
+    const brushParams = params as { areas?: unknown };
+    if (!Array.isArray(brushParams.areas)) {
+      return true;
+    }
+
+    return brushParams.areas.length > 0;
+  }
+
+  private isEventFromActionSource(params: unknown): boolean {
+    if (!params || typeof params !== 'object') {
+      return false;
+    }
+
+    const eventParams = params as { $from?: unknown };
+    return typeof eventParams.$from === 'string' && eventParams.$from.trim().length > 0;
   }
 }

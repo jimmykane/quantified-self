@@ -106,6 +106,8 @@ const ZOOM_BAR_SLIDER_HEIGHT = 24;
 const ZOOM_BAR_HANDLE_SIZE = 24;
 const ZOOM_BAR_GRID_BOTTOM = Math.max(0, ZOOM_BAR_PANEL_HEIGHT - (ZOOM_BAR_SLIDER_TOP + ZOOM_BAR_SLIDER_HEIGHT));
 const SELECTION_BRUSH_SOURCE = 'event-chart-selection-sync';
+const SHARED_ZOOM_DATAZOOM_SOURCE = 'event-chart-zoom-sync';
+const BRUSH_ZOOM_DATAZOOM_SOURCE = 'event-chart-brush-zoom';
 export const ENABLE_LIVE_SELECTION_SYNC = false;
 export const ENABLE_LIVE_SELECTION_PREVIEW_STATS = false;
 const TOOLTIP_MAX_DURATION_DISTANCE_SECONDS = 120;
@@ -1578,6 +1580,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       type: 'dataZoom',
       startValue: nextRange.start,
       endValue: nextRange.end,
+      $from: BRUSH_ZOOM_DATAZOOM_SOURCE,
     };
 
     chart.dispatchAction(dataZoomAction);
@@ -1941,6 +1944,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         type: 'dataZoom',
         startValue: targetRange.start,
         endValue: targetRange.end,
+        $from: SHARED_ZOOM_DATAZOOM_SOURCE,
       };
 
       chart.dispatchAction(syncZoomAction);

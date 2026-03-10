@@ -339,24 +339,30 @@ describe('EChartsLoaderService', () => {
     expect(secondListener).toHaveBeenCalledTimes(1);
   });
 
-  it('should trigger haptics only for series click events and detach on unsubscribe', () => {
-    const clickHandlers = new Map<string, (params: unknown) => void>();
+  it('should trigger haptics for eligible chart interactions and detach on unsubscribe', () => {
+    const handlers = new Map<string, (params: unknown) => void>();
     const chart = {
       on: vi.fn((eventName: string, handler: (params: unknown) => void) => {
-        clickHandlers.set(eventName, handler);
+        handlers.set(eventName, handler);
       }),
       off: vi.fn((eventName: string, handler: (params: unknown) => void) => {
-        if (clickHandlers.get(eventName) === handler) {
-          clickHandlers.delete(eventName);
+        if (handlers.get(eventName) === handler) {
+          handlers.delete(eventName);
         }
       }),
     } as any;
 
     const unsubscribe = service.attachMobileSeriesTapFeedback(chart);
-    const clickHandler = clickHandlers.get('click');
+    const clickHandler = handlers.get('click');
+    const dataZoomHandler = handlers.get('datazoom');
+    const brushEndHandler = handlers.get('brushEnd');
 
     expect(chart.on).toHaveBeenCalledWith('click', expect.any(Function));
+    expect(chart.on).toHaveBeenCalledWith('datazoom', expect.any(Function));
+    expect(chart.on).toHaveBeenCalledWith('brushEnd', expect.any(Function));
     expect(clickHandler).toBeTypeOf('function');
+    expect(dataZoomHandler).toBeTypeOf('function');
+    expect(brushEndHandler).toBeTypeOf('function');
 
     clickHandler?.({ componentType: 'legend' });
     expect(hapticsMock.selection).not.toHaveBeenCalled();
@@ -364,8 +370,31 @@ describe('EChartsLoaderService', () => {
     clickHandler?.({ componentType: 'series' });
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
 
+    clickHandler?.({ componentType: 'xAxis' });
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(2);
+
+    clickHandler?.({ componentType: 'yAxis' });
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(3);
+
+    dataZoomHandler?.({});
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(4);
+
+    dataZoomHandler?.({ $from: 'event-chart-zoom-sync' });
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(4);
+
+    brushEndHandler?.({ areas: [{ coordRange: [10, 20] }] });
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(5);
+
+    brushEndHandler?.({ areas: [] });
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(5);
+
+    brushEndHandler?.({ $from: 'event-chart-selection-sync', areas: [{ coordRange: [10, 20] }] });
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(5);
+
     unsubscribe();
     expect(chart.off).toHaveBeenCalledWith('click', clickHandler);
+    expect(chart.off).toHaveBeenCalledWith('datazoom', dataZoomHandler);
+    expect(chart.off).toHaveBeenCalledWith('brushEnd', brushEndHandler);
   });
 
   it('should throw when loading in non-browser platform', async () => {
