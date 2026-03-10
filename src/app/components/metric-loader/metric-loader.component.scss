@@ -1,0 +1,188 @@
+.qs-splash-loader {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #fff;
+}
+
+.dark-theme .qs-splash-loader {
+  background: #000;
+}
+
+.qs-digit-grid {
+  --tile-size: min(196px, 76vw);
+  --grid-gap: clamp(8px, 2vw, 12px);
+  --cell-size: calc((var(--tile-size) - var(--grid-gap)) / 2);
+  --step: calc(var(--cell-size) + var(--grid-gap));
+  width: var(--tile-size);
+  height: var(--tile-size);
+  position: relative;
+  color: #000;
+}
+
+.dark-theme .qs-digit-grid {
+  color: #fff;
+}
+
+.qs-digit-tile {
+  position: absolute;
+  width: var(--cell-size);
+  height: var(--cell-size);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(3px, 1vw, 6px);
+  min-width: 0;
+  min-height: 0;
+}
+
+.qs-digit-a {
+  left: 0;
+  top: 0;
+}
+
+.qs-digit-b {
+  left: var(--step);
+  top: 0;
+}
+
+.qs-digit-c {
+  left: 0;
+  top: var(--step);
+}
+
+.qs-digit-d {
+  left: var(--step);
+  top: var(--step);
+}
+
+.qs-digit-label {
+  font-family: "Roboto Mono", "Barlow Condensed", monospace;
+  font-size: clamp(9px, 1vw, 11px);
+  font-weight: 500;
+  letter-spacing: 0.09em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+  opacity: 0.72;
+}
+
+.qs-digit-value {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: clamp(3px, 0.8vw, 6px);
+}
+
+.qs-digit-counter {
+  --digit-height: 1.2em;
+  --digit-width: 1.08ch;
+  display: inline-flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: clamp(0.16em, 0.36vw, 0.28em);
+  min-width: max-content;
+  font-family: "Roboto Mono", "Barlow Condensed", monospace;
+  font-size: clamp(17px, 3.7vw, 28px);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.qs-live-digit {
+  width: var(--digit-width);
+  height: var(--digit-height);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.qs-live-digit--separator {
+  width: 0.56ch;
+}
+
+.qs-digit-unit {
+  font-family: "Roboto Mono", "Barlow Condensed", monospace;
+  font-size: clamp(10px, 1.7vw, 13px);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  text-transform: lowercase;
+  opacity: 0.66;
+  white-space: nowrap;
+}
+
+.qs-live-digit-char {
+  display: block;
+  min-width: var(--digit-width);
+  line-height: var(--digit-height);
+  text-align: center;
+  animation: qs-digit-shift 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes qs-digit-shift {
+  0% {
+    opacity: 0.55;
+    transform: translateY(0.28em);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 480px) {
+  .qs-digit-grid {
+    --tile-size: min(166px, 72vw);
+    --grid-gap: clamp(6px, 2.4vw, 8px);
+  }
+
+  .qs-digit-label {
+    font-size: clamp(8px, 2.8vw, 10px);
+  }
+
+  .qs-digit-counter {
+    font-size: clamp(14px, 5.8vw, 21px);
+    letter-spacing: 0.02em;
+    gap: clamp(0.12em, 0.35vw, 0.2em);
+  }
+
+  .qs-digit-unit {
+    font-size: clamp(9px, 3.2vw, 11px);
+  }
+}
+
+@media (max-width: 360px) {
+  .qs-digit-grid {
+    --tile-size: min(152px, 70vw);
+  }
+
+  .qs-digit-label {
+    font-size: clamp(8px, 2.9vw, 9px);
+  }
+
+  .qs-digit-counter {
+    font-size: clamp(13px, 6vw, 19px);
+  }
+
+  .qs-digit-unit {
+    font-size: clamp(8px, 3.3vw, 10px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qs-live-digit-char {
+    animation: none !important;
+  }
+}

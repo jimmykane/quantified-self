@@ -37,6 +37,7 @@ import { GracePeriodBannerComponent } from './components/grace-period-banner/gra
 import { RouteLoaderComponent } from './components/route-loader/route-loader.component';
 import { ProcessingIndicatorComponent } from './components/notifications/processing-indicator/processing-indicator.component';
 import { ImpersonationBannerComponent } from './components/impersonation-banner/impersonation-banner.component';
+import { MetricLoaderComponent } from './components/metric-loader/metric-loader.component';
 import { AppRemoteConfigService } from './services/app.remote-config.service';
 import { firstValueFrom } from 'rxjs';
 
@@ -62,6 +63,7 @@ const enableAppCheck = environment.production || environment.beta || environment
     ProcessingIndicatorComponent,
     GracePeriodBannerComponent,
     RouteLoaderComponent,
+    MetricLoaderComponent,
   ],
   bootstrap: [AppComponent],
   imports: [
