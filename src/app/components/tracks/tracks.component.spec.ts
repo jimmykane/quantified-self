@@ -23,6 +23,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Overlay } from '@angular/cdk/overlay';
 import { MaterialModule } from '../../modules/material.module';
 import { MyTracksTripDetectionService } from '../../services/my-tracks-trip-detection.service';
+import { MyTracksPolylineCacheService } from '../../services/my-tracks-polyline-cache.service';
 import { TripLocationLabelService } from '../../services/trip-location-label.service';
 import { PeekPanelComponent } from '../shared/peek-panel/peek-panel.component';
 import { MapboxAutoResizeService } from '../../services/map/mapbox-auto-resize.service';
@@ -106,6 +107,7 @@ describe('TracksComponent', () => {
   let mockTripDetectionService: any;
   let mockTripLocationLabelService: any;
   let mockPolylineSimplificationService: any;
+  let mockMyTracksPolylineCacheService: any;
 
   const mockUser = {
     uid: 'user-1',
@@ -183,6 +185,7 @@ describe('TracksComponent', () => {
       getEventsOnceBy: vi.fn().mockImplementation((...args: any[]) => mockEventService.getEventsBy(...args)),
       getActivities: vi.fn().mockReturnValue(of([])),
       getActivitiesOnceByEvent: vi.fn().mockImplementation((...args: any[]) => mockEventService.getActivities(...args)),
+      getActivitiesOnceByEventWithOptions: vi.fn().mockImplementation((...args: any[]) => mockEventService.getActivities(...args)),
       attachStreamsToEventWithActivities: vi.fn().mockImplementation((_user: unknown, event: any) => of(event))
     };
 
@@ -236,6 +239,40 @@ describe('TracksComponent', () => {
       }))
     };
 
+    mockMyTracksPolylineCacheService = {
+      resolveEventCacheKey: vi.fn().mockResolvedValue(null),
+      getEventPolylines: vi.fn().mockResolvedValue(undefined),
+      setEventPolylines: vi.fn().mockResolvedValue(undefined),
+      extractTrackPolylines: vi.fn().mockImplementation((activities: any[]) => ({
+        activityCount: activities?.length || 0,
+        trackActivities: (activities || []).reduce((acc: any[], activity: any, activityIndex: number) => {
+          if (!activity?.hasPositionData?.()) {
+            return acc;
+          }
+          const coordinates = (activity.getPositionData?.() || []).map((position: any) => [
+            position.longitudeDegrees,
+            position.latitudeDegrees,
+          ]);
+          if (coordinates.length <= 1) {
+            return acc;
+          }
+          acc.push({
+            activityId: activity.getID?.() || null,
+            activityIndex,
+            coordinates,
+          });
+          return acc;
+        }, []),
+      })),
+      resolveTrackPolylines: vi.fn().mockImplementation((activities: any[], cached: any) => (
+        (cached?.trackActivities || []).map((trackActivity: any) => ({
+          activity: activities[trackActivity.activityIndex],
+          activityIndex: trackActivity.activityIndex,
+          coordinates: trackActivity.coordinates,
+        }))
+      )),
+    };
+
     await TestBed.configureTestingModule({
       declarations: [TracksComponent, PeekPanelComponent, MapLayersActionsComponent],
       imports: [MaterialModule],
@@ -262,6 +299,7 @@ describe('TracksComponent', () => {
         { provide: MyTracksTripDetectionService, useValue: mockTripDetectionService },
         { provide: TripLocationLabelService, useValue: mockTripLocationLabelService },
         { provide: PolylineSimplificationService, useValue: mockPolylineSimplificationService },
+        { provide: MyTracksPolylineCacheService, useValue: mockMyTracksPolylineCacheService },
         { provide: MapboxAutoResizeService, useValue: { bind: vi.fn(), unbind: vi.fn() } },
       ],
       schemas: [NO_ERRORS_SCHEMA]
@@ -319,10 +357,20 @@ describe('TracksComponent', () => {
     it('should use one-hour metadata cache TTL when hydrating streams for myTracks', async () => {
       const event = createMockEvent('hydration-cache-event', '2024-11-08T08:00:00Z', 40.64, 22.94);
       mockEventService.getEventsBy.mockReturnValue(of([event]));
+      mockMyTracksPolylineCacheService.resolveEventCacheKey.mockResolvedValue('event-cache-key');
 
       await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
       await waitForAsyncWork();
 
+      expect(mockEventService.getActivitiesOnceByEventWithOptions).toHaveBeenCalledWith(
+        mockUser,
+        'hydration-cache-event',
+        { preferCache: true, warmServer: false },
+      );
+      expect(mockMyTracksPolylineCacheService.resolveEventCacheKey).toHaveBeenCalledWith(
+        expect.anything(),
+        { metadataCacheTtlMs: 60 * 60 * 1000 },
+      );
       expect(mockEventService.attachStreamsToEventWithActivities).toHaveBeenCalledWith(
         mockUser,
         expect.anything(),
@@ -332,6 +380,109 @@ describe('TracksComponent', () => {
         'attach_streams_only',
         { metadataCacheTtlMs: 60 * 60 * 1000 },
       );
+    });
+
+    it('should reuse cached track polylines and skip stream hydration on cache hit', async () => {
+      const cachedActivity = {
+        getID: () => 'activity-1',
+        type: ActivityTypes.Running,
+        hasPositionData: () => false,
+        getPositionData: () => [],
+      };
+      const event = createMockEvent('cached-track-event', '2024-11-08T08:00:00Z', 40.64, 22.94);
+      (event as any).getActivities = () => [cachedActivity];
+      mockEventService.getEventsBy.mockReturnValue(of([event]));
+      mockEventService.getActivities.mockReturnValue(of([cachedActivity]));
+      mockMyTracksPolylineCacheService.resolveEventCacheKey.mockResolvedValue('event-cache-key');
+      mockMyTracksPolylineCacheService.getEventPolylines.mockResolvedValue({
+        activityCount: 1,
+        trackActivities: [
+          {
+            activityId: 'activity-1',
+            activityIndex: 0,
+            coordinates: [[22.94, 40.64], [22.95, 40.65]],
+          },
+        ],
+      });
+      mockMyTracksPolylineCacheService.resolveTrackPolylines.mockReturnValue([
+        {
+          activity: cachedActivity,
+          activityIndex: 0,
+          coordinates: [[22.94, 40.64], [22.95, 40.65]],
+        },
+      ]);
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      expect(mockEventService.attachStreamsToEventWithActivities).not.toHaveBeenCalled();
+      expect(mockPolylineSimplificationService.simplifyVisvalingamWhyatt).toHaveBeenCalledWith(
+        [[22.94, 40.64], [22.95, 40.65]],
+        expect.anything(),
+      );
+    });
+
+    it('should persist derived track polylines after hydrating a cache miss', async () => {
+      const hydratedActivity = {
+        getID: () => 'hydrated-activity-1',
+        type: ActivityTypes.Running,
+        hasPositionData: () => true,
+        getPositionData: () => [
+          { latitudeDegrees: 40.64, longitudeDegrees: 22.94 },
+          { latitudeDegrees: 40.65, longitudeDegrees: 22.95 },
+        ],
+      };
+      const sourceActivity = {
+        getID: () => 'hydrated-activity-1',
+        type: ActivityTypes.Running,
+        hasPositionData: () => false,
+        getPositionData: () => [],
+      };
+      const event = createMockEvent('cache-miss-event', '2024-11-08T08:00:00Z', 40.64, 22.94);
+      (event as any).getActivities = () => [sourceActivity];
+      const hydratedEvent = {
+        ...event,
+        getActivities: () => [hydratedActivity],
+      };
+
+      mockEventService.getEventsBy.mockReturnValue(of([event]));
+      mockEventService.getActivities.mockReturnValue(of([sourceActivity]));
+      mockEventService.attachStreamsToEventWithActivities.mockReturnValue(of(hydratedEvent));
+      mockMyTracksPolylineCacheService.resolveEventCacheKey.mockResolvedValue('event-cache-key');
+      mockMyTracksPolylineCacheService.getEventPolylines.mockResolvedValue(undefined);
+      mockMyTracksPolylineCacheService.extractTrackPolylines.mockReturnValue({
+        activityCount: 1,
+        trackActivities: [
+          {
+            activityId: 'hydrated-activity-1',
+            activityIndex: 0,
+            coordinates: [[22.94, 40.64], [22.95, 40.65]],
+          },
+        ],
+      });
+      mockMyTracksPolylineCacheService.resolveTrackPolylines.mockReturnValue([
+        {
+          activity: hydratedActivity,
+          activityIndex: 0,
+          coordinates: [[22.94, 40.64], [22.95, 40.65]],
+        },
+      ]);
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      expect(mockEventService.attachStreamsToEventWithActivities).toHaveBeenCalledTimes(1);
+      expect(mockMyTracksPolylineCacheService.extractTrackPolylines).toHaveBeenCalledWith([hydratedActivity]);
+      expect(mockMyTracksPolylineCacheService.setEventPolylines).toHaveBeenCalledWith('event-cache-key', {
+        activityCount: 1,
+        trackActivities: [
+          {
+            activityId: 'hydrated-activity-1',
+            activityIndex: 0,
+            coordinates: [[22.94, 40.64], [22.95, 40.65]],
+          },
+        ],
+      });
     });
 
     it('should add mapbox-dem source before setting terrain', async () => {

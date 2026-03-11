@@ -15,7 +15,6 @@ import { getDatesForDateRange } from '../../helpers/date-range-helper';
 import { AppFileService } from '../../services/app.file.service';
 import { DataLatitudeDegrees } from '@sports-alliance/sports-lib';
 import { DataLongitudeDegrees } from '@sports-alliance/sports-lib';
-import { GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES } from '@sports-alliance/sports-lib';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MyTracksProgressComponent } from './progress/tracks.progress';
 import { Overlay } from '@angular/cdk/overlay';
@@ -50,6 +49,11 @@ import {
   PolylineSimplificationOptions,
   PolylineSimplificationService
 } from '../../services/polyline-simplification.service';
+import {
+  CachedMyTracksEventPolylines,
+  MyTracksPolylineCacheService,
+  ResolvedMyTracksActivityPolyline
+} from '../../services/my-tracks-polyline-cache.service';
 import { resolvePrimaryUnitAwareDisplayStat } from '../../helpers/summary-display.helper';
 import {
   resolvePreferredSpeedDerivedAverageTypeForActivity,
@@ -150,6 +154,7 @@ export class TracksComponent implements OnInit, OnDestroy {
   private logger = inject(LoggerService);
   private tripDetectionService = inject(MyTracksTripDetectionService);
   private tripLocationLabelService = inject(TripLocationLabelService);
+  private myTracksPolylineCacheService = inject(MyTracksPolylineCacheService);
 
   public isLoading: WritableSignal<boolean> = signal(false);
   public detectedTrips: WritableSignal<DetectedTripViewModel[]> = signal([]);
@@ -478,6 +483,8 @@ export class TracksComponent implements OnInit, OnDestroy {
     let simplificationDurationMs = 0;
     let mapCommitDurationMs = 0;
     let tripDetectionDurationMs = 0;
+    let polylineCacheHitCount = 0;
+    let polylineCacheMissCount = 0;
     const perEventPerformance: Array<{
       eventId: string;
       totalMs: number;
@@ -618,36 +625,24 @@ export class TracksComponent implements OnInit, OnDestroy {
 
           this.logger.log(`[TracksComponent] Fetching activities for event: ${event.getID()}, promiseTime: ${promiseTime}`);
           const eventActivitiesFetchStartedAt = performance.now();
-          event.addActivities(await firstValueFrom(this.eventService.getActivitiesOnceByEvent(user, event.getID())));
+          event.addActivities(await firstValueFrom(this.eventService.getActivitiesOnceByEventWithOptions(
+            user,
+            event.getID(),
+            { preferCache: true, warmServer: false },
+          )));
           eventActivitiesFetchDurationMs = performance.now() - eventActivitiesFetchStartedAt;
           activitiesFetchDurationMs += eventActivitiesFetchDurationMs;
 
-          let fullEvent = event;
           const eventHydrationStartedAt = performance.now();
-          try {
-            // Hydrate lat/long streams from original files without replacing activity objects.
-            const hydratedEvent = await firstValueFrom(this.eventService.attachStreamsToEventWithActivities(
-              user,
-              event,
-              [
-                DataLatitudeDegrees.type,
-                DataLongitudeDegrees.type,
-              ],
-              true,
-              false,
-              'attach_streams_only',
-              { metadataCacheTtlMs: TracksComponent.MY_TRACKS_METADATA_CACHE_TTL_MS },
-            ).pipe(take(1)));
-            fullEvent = hydratedEvent || event;
-          } catch (error) {
-            this.logger.warn('[TracksComponent] Failed to hydrate activity streams from original files. Falling back to existing activities.', {
-              eventId: event.getID?.(),
-              error
-            });
-          } finally {
-            eventHydrationDurationMs = performance.now() - eventHydrationStartedAt;
-            streamsHydrationDurationMs += eventHydrationDurationMs;
+          const resolvedTrackData = await this.resolveTrackDataForEvent(user, event);
+          const fullEvent = resolvedTrackData.fullEvent;
+          if (resolvedTrackData.usedCache) {
+            polylineCacheHitCount += 1;
+          } else {
+            polylineCacheMissCount += 1;
           }
+          eventHydrationDurationMs = performance.now() - eventHydrationStartedAt;
+          streamsHydrationDurationMs += eventHydrationDurationMs;
           this.logger.log(`[TracksComponent] Activities and streams ready for event: ${event.getID()}, promiseTime: ${promiseTime}`);
           if (!this.isCurrentLoad(promiseTime)) {
             return;
@@ -659,40 +654,26 @@ export class TracksComponent implements OnInit, OnDestroy {
           }
           let hasVisibleTrackForEvent = false;
           const eventCoordinates: number[][] = [];
-          const activities = typeof fullEvent?.getActivities === 'function' ? fullEvent.getActivities() : [];
+          const activities = this.getEventActivities(fullEvent);
           eventActivityCount = activities.length;
-          activities
-            .filter((activity: any) => activity.hasPositionData())
-            .filter((activity: any) => !activityTypes || activityTypes.length === 0 || activityTypes.includes(activity.type))
-            .forEach((activity: any) => {
+          resolvedTrackData.trackPolylines
+            .filter(({ activity }) => !activityTypes || activityTypes.length === 0 || activityTypes.includes(activity.type))
+            .forEach(({ activity, coordinates }) => {
               const jumpStats = this.collectJumpHeatPointsFromActivity(activity, jumpHeatPoints);
               jumpsWithCoordinates += jumpStats.jumpsWithCoordinates;
               jumpsWithWeightMetrics += jumpStats.jumpsWithWeightMetrics;
 
               const coordinateExtractionStartedAt = performance.now();
-              const coordinates = activity.getPositionData()
-                .filter((position: any) => position)
-                .map((position: any) => {
-                  // Mapbox uses [lng, lat]
-                  const lng = Math.round(position.longitudeDegrees * Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)) / Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES);
-                  const lat = Math.round(position.latitudeDegrees * Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)) / Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES);
-                  return [lng, lat];
-                })
-                .filter((coordinate: number[]) =>
-                  Number.isFinite(coordinate[0])
-                  && Number.isFinite(coordinate[1])
-                  && Math.abs(coordinate[0]) <= 180
-                  && Math.abs(coordinate[1]) <= 90
-                );
+              const normalizedCoordinates = coordinates;
               const coordinateExtractionMs = performance.now() - coordinateExtractionStartedAt;
               coordinateExtractionDurationMs += coordinateExtractionMs;
               eventCoordinateExtractionDurationMs += coordinateExtractionMs;
 
-              if (coordinates.length > 1) {
+              if (normalizedCoordinates.length > 1) {
                 const simplificationStartedAt = performance.now();
                 const simplificationResult = this.polylineSimplificationService.simplifyVisvalingamWhyatt(
-                  coordinates,
-                  this.resolveMyTracksSimplificationOptions(coordinates.length, events.length)
+                  normalizedCoordinates,
+                  this.resolveMyTracksSimplificationOptions(normalizedCoordinates.length, events.length)
                 );
                 const simplificationMs = performance.now() - simplificationStartedAt;
                 simplificationDurationMs += simplificationMs;
@@ -861,6 +842,8 @@ export class TracksComponent implements OnInit, OnDestroy {
         simplificationDurationMs: roundMs(simplificationDurationMs),
         mapCommitDurationMs: roundMs(mapCommitDurationMs),
         tripDetectionDurationMs: roundMs(tripDetectionDurationMs),
+        polylineCacheHitCount,
+        polylineCacheMissCount,
         topSlowEvents,
       });
       if (totalLoadDurationMs > 3000) {
@@ -869,6 +852,8 @@ export class TracksComponent implements OnInit, OnDestroy {
           totalLoadDurationMs: roundMs(totalLoadDurationMs),
           eventCount: events.length,
           tracksProcessed,
+          polylineCacheHitCount,
+          polylineCacheMissCount,
           topSlowEvents,
         });
       }
@@ -879,6 +864,84 @@ export class TracksComponent implements OnInit, OnDestroy {
         this.clearProgressAndCloseBottomSheet();
       }
     }
+  }
+
+  private async resolveTrackDataForEvent(
+    user: AppUserInterface,
+    event: any,
+  ): Promise<{ fullEvent: any; trackPolylines: ResolvedMyTracksActivityPolyline[]; usedCache: boolean }> {
+    const cacheOptions = { metadataCacheTtlMs: TracksComponent.MY_TRACKS_METADATA_CACHE_TTL_MS };
+    const initialActivities = this.getEventActivities(event);
+    const cacheKey = await this.myTracksPolylineCacheService.resolveEventCacheKey(event, cacheOptions);
+    const cachedPolylines = cacheKey
+      ? await this.myTracksPolylineCacheService.getEventPolylines(cacheKey)
+      : undefined;
+
+    if (this.isValidCachedTrackData(cachedPolylines, initialActivities.length)) {
+      return {
+        fullEvent: event,
+        trackPolylines: this.myTracksPolylineCacheService.resolveTrackPolylines(initialActivities, cachedPolylines),
+        usedCache: true,
+      };
+    }
+
+    const fullEvent = await this.hydrateTrackStreamsForEvent(user, event);
+    const resolvedActivities = this.getEventActivities(fullEvent);
+    const extractedPolylines = this.myTracksPolylineCacheService.extractTrackPolylines(resolvedActivities);
+    if (cacheKey && this.shouldPersistTrackData(fullEvent, event, resolvedActivities)) {
+      await this.myTracksPolylineCacheService.setEventPolylines(cacheKey, extractedPolylines);
+    }
+
+    return {
+      fullEvent,
+      trackPolylines: this.myTracksPolylineCacheService.resolveTrackPolylines(resolvedActivities, extractedPolylines),
+      usedCache: false,
+    };
+  }
+
+  private async hydrateTrackStreamsForEvent(user: AppUserInterface, event: any): Promise<any> {
+    try {
+      const hydratedEvent = await firstValueFrom(this.eventService.attachStreamsToEventWithActivities(
+        user,
+        event,
+        [
+          DataLatitudeDegrees.type,
+          DataLongitudeDegrees.type,
+        ],
+        true,
+        false,
+        'attach_streams_only',
+        { metadataCacheTtlMs: TracksComponent.MY_TRACKS_METADATA_CACHE_TTL_MS },
+      ).pipe(take(1)));
+      return hydratedEvent || event;
+    } catch (error) {
+      this.logger.warn('[TracksComponent] Failed to hydrate activity streams from original files. Falling back to existing activities.', {
+        eventId: event.getID?.(),
+        error
+      });
+      return event;
+    }
+  }
+
+  private getEventActivities(event: any): any[] {
+    return typeof event?.getActivities === 'function'
+      ? event.getActivities() || []
+      : [];
+  }
+
+  private isValidCachedTrackData(
+    cachedPolylines: CachedMyTracksEventPolylines | undefined,
+    currentActivityCount: number,
+  ): cachedPolylines is CachedMyTracksEventPolylines {
+    return !!cachedPolylines && cachedPolylines.activityCount === currentActivityCount;
+  }
+
+  private shouldPersistTrackData(fullEvent: any, sourceEvent: any, activities: any[]): boolean {
+    if (fullEvent !== sourceEvent) {
+      return true;
+    }
+
+    return activities.some((activity) => activity?.hasPositionData?.());
   }
 
   private resolveMyTracksSimplificationOptions(inputPointCount: number, eventCount: number): PolylineSimplificationOptions {

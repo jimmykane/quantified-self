@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { AppEventService } from './app.event.service';
-import { Firestore, doc, docData, collection, collectionData, deleteDoc, updateDoc, writeBatch, query, where, getDocs } from '@angular/fire/firestore';
+import { Firestore, doc, docData, collection, collectionData, deleteDoc, updateDoc, writeBatch, query, where, getDocs, getDocsFromCache } from '@angular/fire/firestore';
 import { Storage } from '@angular/fire/storage';
 import { Auth } from '@angular/fire/auth';
 import { AppAnalyticsService } from './app.analytics.service';
@@ -68,6 +68,7 @@ vi.mock('@angular/fire/firestore', async (importOriginal) => {
         query: vi.fn(),
         where: vi.fn(),
         getDocs: vi.fn(),
+        getDocsFromCache: vi.fn(),
         deleteDoc: vi.fn(),
         updateDoc: vi.fn(),
         writeBatch: vi.fn(() => ({
@@ -413,6 +414,97 @@ describe('AppEventService', () => {
             '[perf] app_event_service_get_activities_once_get_docs',
             expect.objectContaining({
                 snapshots: 1,
+                userID: userId,
+                eventID: eventId,
+            }),
+        );
+    });
+
+    it('should return cached one-shot activities when preferCache is enabled and cache has data', async () => {
+        const userId = 'user1';
+        const eventId = 'event-cached';
+        const user = { uid: userId } as any;
+        const activityId = 'activity-cache-1';
+        const mockActivityData = { id: activityId, eventID: eventId, type: 'Run' };
+
+        (collection as Mock).mockReturnValue({});
+        (query as Mock).mockReturnValue({});
+        (getDocsFromCache as Mock).mockResolvedValue({
+            docs: [
+                {
+                    id: activityId,
+                    data: () => mockActivityData,
+                }
+            ],
+            size: 1,
+            metadata: {
+                fromCache: true,
+                hasPendingWrites: false,
+            },
+        });
+
+        const activities = await firstValueFrom(service.getActivitiesOnceByEventWithOptions(user, eventId, {
+            preferCache: true,
+            warmServer: false,
+        }));
+
+        expect(getDocsFromCache).toHaveBeenCalledTimes(1);
+        expect(getDocs).not.toHaveBeenCalled();
+        expect(activities.length).toBe(1);
+        expect(mockLogger.info).toHaveBeenCalledWith(
+            '[perf] app_event_service_get_activities_once_cache_first_hit',
+            expect.objectContaining({
+                snapshots: 1,
+                fromCache: true,
+                userID: userId,
+                eventID: eventId,
+            }),
+        );
+    });
+
+    it('should fall back to server one-shot activities when preferCache is enabled but cache is empty', async () => {
+        const userId = 'user1';
+        const eventId = 'event-cache-fallback';
+        const user = { uid: userId } as any;
+        const activityId = 'activity-server-1';
+        const mockActivityData = { id: activityId, eventID: eventId, type: 'Ride' };
+
+        (collection as Mock).mockReturnValue({});
+        (query as Mock).mockReturnValue({});
+        (getDocsFromCache as Mock).mockResolvedValue({
+            docs: [],
+            size: 0,
+            metadata: {
+                fromCache: true,
+                hasPendingWrites: false,
+            },
+        });
+        (getDocs as Mock).mockResolvedValue({
+            docs: [
+                {
+                    id: activityId,
+                    data: () => mockActivityData,
+                }
+            ],
+            size: 1,
+            metadata: {
+                fromCache: false,
+                hasPendingWrites: false,
+            },
+        });
+
+        const activities = await firstValueFrom(service.getActivitiesOnceByEventWithOptions(user, eventId, {
+            preferCache: true,
+            warmServer: false,
+        }));
+
+        expect(getDocsFromCache).toHaveBeenCalledTimes(1);
+        expect(getDocs).toHaveBeenCalledTimes(1);
+        expect(activities.length).toBe(1);
+        expect(mockLogger.info).toHaveBeenCalledWith(
+            '[perf] app_event_service_get_activities_once_cache_first_fallback',
+            expect.objectContaining({
+                reason: 'empty_cache',
                 userID: userId,
                 eventID: eventId,
             }),

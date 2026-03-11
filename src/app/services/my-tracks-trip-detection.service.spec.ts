@@ -93,6 +93,38 @@ describe('MyTracksTripDetectionService', () => {
     expect(detectionResult.homeArea).not.toBeNull();
   });
 
+  it('suppresses multiple local clusters around home instead of surfacing them as trips', () => {
+    const detectionResult = service.detectTripsWithContext([
+      input('local-west-1', '2024-06-01T08:00:00Z', 37.9800, 23.3000),
+      input('local-west-2', '2024-06-02T09:00:00Z', 37.9810, 23.3010),
+      input('local-east-1', '2024-06-03T08:00:00Z', 37.9800, 24.1400),
+      input('local-east-2', '2024-06-04T09:00:00Z', 37.9810, 24.1410),
+      input('rome-1', '2024-06-06T08:00:00Z', 41.9028, 12.4964),
+      input('rome-2', '2024-06-07T09:00:00Z', 41.9010, 12.4990),
+    ], homeHistory('home-a', 'home-b'));
+
+    expect(detectionResult.trips).toHaveLength(1);
+    expect(detectionResult.trips[0].eventIds).toEqual(['rome-1', 'rome-2']);
+    expect(detectionResult.homeArea).toEqual(expect.objectContaining({
+      pointCount: 4,
+      destinationId: expect.any(String),
+    }));
+  });
+
+  it('treats current clusters within the wider home suppression radius as home', () => {
+    const detectionResult = service.detectTripsWithContext([
+      input('home-edge-1', '2024-06-01T08:00:00Z', 37.9800, 24.3000),
+      input('home-edge-2', '2024-06-02T09:00:00Z', 37.9810, 24.3010),
+      input('rome-1', '2024-06-06T08:00:00Z', 41.9028, 12.4964),
+      input('rome-2', '2024-06-07T09:00:00Z', 41.9010, 12.4990),
+    ], homeHistory('home-a', 'home-b'));
+
+    expect(detectionResult.trips).toHaveLength(1);
+    expect(detectionResult.trips[0].eventIds).toEqual(['rome-1', 'rome-2']);
+    expect(detectionResult.homeArea).not.toBeNull();
+    expect(detectionResult.homeArea?.pointCount).toBe(2);
+  });
+
   it('does not suppress a dominant current-range trip when history-derived home does not match a current destination', () => {
     const detectedTrips = service.detectTrips([
       input('rome-1', '2024-05-07T06:00:00Z', 41.9028, 12.4964),

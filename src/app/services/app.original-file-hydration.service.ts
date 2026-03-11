@@ -83,6 +83,11 @@ export class AppOriginalFileHydrationService {
     }
   }
 
+  public async getFileGeneration(path: string, options?: DownloadFileOptions): Promise<string> {
+    const fileRef = runInInjectionContext(this.injector, () => ref(this.storage, path));
+    return this.getGeneration(path, fileRef, this.getMetadataCacheTtlMs(options));
+  }
+
   private getMetadataCacheTtlMs(options?: DownloadFileOptions): number {
     const metadataCacheTtlMs = options?.metadataCacheTtlMs;
     if (metadataCacheTtlMs === undefined || metadataCacheTtlMs === null || !Number.isFinite(metadataCacheTtlMs)) {

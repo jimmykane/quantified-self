@@ -269,6 +269,21 @@ describe('AppOriginalFileHydrationService', () => {
     expect(result).toBe(cachedBuffer);
   });
 
+  it('getFileGeneration should expose the current source-file generation using the same metadata TTL rules', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
+
+    const path = 'users/u/events/e/original.fit';
+
+    const firstGeneration = await service.getFileGeneration(path, { metadataCacheTtlMs: 120000 });
+    vi.setSystemTime(new Date('2025-01-01T00:01:00.000Z'));
+    const secondGeneration = await service.getFileGeneration(path, { metadataCacheTtlMs: 120000 });
+
+    expect(firstGeneration).toBe('gen-1');
+    expect(secondGeneration).toBe('gen-1');
+    expect(storageMocks.getMetadata).toHaveBeenCalledTimes(1);
+  });
+
   it('downloadFile should download and cache buffer when cache is missing', async () => {
     const downloadedBuffer = new ArrayBuffer(20);
     cacheServiceMock.getFile.mockResolvedValue(undefined);

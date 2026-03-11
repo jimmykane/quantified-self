@@ -607,30 +607,26 @@ export class AppEventService implements OnDestroy {
    * One-shot activities fetch for flows that do not require realtime updates.
    */
   public getActivitiesOnceByEvent(user: User, eventID: string): Observable<ActivityInterface[]> {
+    return this.getActivitiesOnceByEventWithOptions(user, eventID);
+  }
+
+  public getActivitiesOnceByEventWithOptions(
+    user: User,
+    eventID: string,
+    options: GetEventsOnceOptions = {},
+  ): Observable<ActivityInterface[]> {
     this.logger.log(`[AppEventService] getActivitiesOnceByEvent called for event: ${eventID}`);
     const activitiesCollection = runInInjectionContext(this.injector, () => collection(this.firestore, 'users', user.uid, 'activities'));
     const q = runInInjectionContext(this.injector, () => query(activitiesCollection, where('eventID', '==', eventID)));
     const queryStart = performance.now();
+    const preferCache = options.preferCache === true;
+    const warmServer = options.warmServer === true;
 
-    return from(runInInjectionContext(this.injector, () => getDocs(q))).pipe(
-      tap((querySnapshot) => {
-        this.logger.info('[perf] app_event_service_get_activities_once_get_docs', {
-          durationMs: Number((performance.now() - queryStart).toFixed(2)),
-          snapshots: querySnapshot?.size || 0,
-          fromCache: querySnapshot?.metadata?.fromCache,
-          hasPendingWrites: querySnapshot?.metadata?.hasPendingWrites,
-          userID: user.uid,
-          eventID,
-        });
-      }),
-      map((querySnapshot) => {
-        const activitySnapshots = querySnapshot.docs.map((queryDocumentSnapshot) => ({
-          ...(queryDocumentSnapshot.data() as Record<string, unknown>),
-          id: queryDocumentSnapshot.id,
-        }));
-        return this.parseActivitiesFromSnapshots(eventID, activitySnapshots);
-      }),
-    );
+    if (!preferCache) {
+      return from(this.fetchActivitiesOnceFromServer(q, user.uid, eventID, queryStart));
+    }
+
+    return from(this.fetchActivitiesOnceCacheFirst(q, user.uid, eventID, queryStart, warmServer));
   }
 
   public getEventMetaData(user: User, eventID: string, serviceName: ServiceNames): Observable<EventMetaDataInterface> {
@@ -1268,6 +1264,97 @@ export class AppEventService implements OnDestroy {
         message: error?.message,
       });
     });
+  }
+
+  private async fetchActivitiesOnceCacheFirst(
+    q: any,
+    userID: string,
+    eventID: string,
+    queryStart: number,
+    warmServer: boolean,
+  ): Promise<ActivityInterface[]> {
+    const cacheStart = performance.now();
+    try {
+      const cacheSnapshot = await runInInjectionContext(this.injector, () => getDocsFromCache(q));
+      const cacheActivities = this.parseActivitiesFromQueryDocs(eventID, cacheSnapshot.docs);
+      this.logger.info('[perf] app_event_service_get_activities_once_cache_first_hit', {
+        durationMs: Number((performance.now() - cacheStart).toFixed(2)),
+        snapshots: cacheSnapshot?.size || 0,
+        fromCache: cacheSnapshot?.metadata?.fromCache,
+        hasPendingWrites: cacheSnapshot?.metadata?.hasPendingWrites,
+        userID,
+        eventID,
+      });
+      if ((cacheSnapshot?.size || 0) > 0) {
+        if (warmServer) {
+          this.warmActivitiesOnceServerQuery(q, userID, eventID);
+        }
+        return cacheActivities;
+      }
+      this.logger.info('[perf] app_event_service_get_activities_once_cache_first_fallback', {
+        reason: 'empty_cache',
+        userID,
+        eventID,
+      });
+    } catch (error: any) {
+      this.logger.warn('[perf] app_event_service_get_activities_once_cache_first_failed', {
+        durationMs: Number((performance.now() - cacheStart).toFixed(2)),
+        userID,
+        eventID,
+        code: error?.code,
+        message: error?.message,
+      });
+    }
+
+    return this.fetchActivitiesOnceFromServer(q, userID, eventID, queryStart);
+  }
+
+  private async fetchActivitiesOnceFromServer(
+    q: any,
+    userID: string,
+    eventID: string,
+    queryStart: number,
+  ): Promise<ActivityInterface[]> {
+    const querySnapshot = await runInInjectionContext(this.injector, () => getDocs(q));
+    this.logger.info('[perf] app_event_service_get_activities_once_get_docs', {
+      durationMs: Number((performance.now() - queryStart).toFixed(2)),
+      snapshots: querySnapshot?.size || 0,
+      fromCache: querySnapshot?.metadata?.fromCache,
+      hasPendingWrites: querySnapshot?.metadata?.hasPendingWrites,
+      userID,
+      eventID,
+    });
+    return this.parseActivitiesFromQueryDocs(eventID, querySnapshot.docs);
+  }
+
+  private warmActivitiesOnceServerQuery(q: any, userID: string, eventID: string): void {
+    const warmStart = performance.now();
+    void runInInjectionContext(this.injector, () => getDocs(q)).then((snapshot) => {
+      this.logger.info('[perf] app_event_service_get_activities_once_warm_server', {
+        durationMs: Number((performance.now() - warmStart).toFixed(2)),
+        snapshots: snapshot?.size || 0,
+        fromCache: snapshot?.metadata?.fromCache,
+        hasPendingWrites: snapshot?.metadata?.hasPendingWrites,
+        userID,
+        eventID,
+      });
+    }).catch((error: any) => {
+      this.logger.warn('[perf] app_event_service_get_activities_once_warm_server_failed', {
+        durationMs: Number((performance.now() - warmStart).toFixed(2)),
+        userID,
+        eventID,
+        code: error?.code,
+        message: error?.message,
+      });
+    });
+  }
+
+  private parseActivitiesFromQueryDocs(eventID: string, docs: QueryDocumentSnapshot[]): ActivityInterface[] {
+    const activitySnapshots = docs.map((queryDocumentSnapshot) => ({
+      ...(queryDocumentSnapshot.data() as Record<string, unknown>),
+      id: queryDocumentSnapshot.id,
+    }));
+    return this.parseActivitiesFromSnapshots(eventID, activitySnapshots);
   }
 
   private deserializeEventsFromQueryDocs(
