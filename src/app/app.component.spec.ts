@@ -212,6 +212,41 @@ describe('AppComponent', () => {
         expect(wrapper?.style.getPropertyValue('--qs-banner-height')).toBe('0px');
     });
 
+    it('should hide header after scrolling beyond threshold', () => {
+        component.onboardingCompleted = true;
+        component.bannerHeight = 24;
+        component.headerHidden = false;
+        (component as any).lastShellScrollTop = 0;
+
+        (component as any).updateHeaderVisibilityFromScroll(90);
+
+        expect(component.headerHidden).toBe(true);
+        expect(component.layoutTopOffsetPx).toBe(24);
+    });
+
+    it('should reveal header again near the top of the page', () => {
+        component.onboardingCompleted = true;
+        component.headerHidden = true;
+        (component as any).lastShellScrollTop = 90;
+
+        (component as any).updateHeaderVisibilityFromScroll(24);
+
+        expect(component.headerHidden).toBe(false);
+        expect(component.layoutTopOffsetPx).toBe(64);
+    });
+
+    it('should react to small scroll deltas once threshold is crossed', () => {
+        component.onboardingCompleted = true;
+        component.headerHidden = false;
+        (component as any).lastShellScrollTop = 60;
+
+        (component as any).updateHeaderVisibilityFromScroll(61);
+        expect(component.headerHidden).toBe(true);
+
+        (component as any).updateHeaderVisibilityFromScroll(60);
+        expect(component.headerHidden).toBe(false);
+    });
+
     it('should return true for isDashboardRoute when url includes dashboard', () => {
         mockRouter.url = '/dashboard';
         expect(component.isDashboardRoute).toBe(true);
@@ -428,6 +463,7 @@ describe('AppComponent', () => {
     it('should reset scroll to top on NavigationEnd', () => {
         const scrollSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => { });
         fixture.detectChanges();
+        component.headerHidden = true;
 
         const shellScroller = fixture.nativeElement.querySelector('.mat-drawer-content') as HTMLElement | null;
         if (shellScroller) {
@@ -441,6 +477,7 @@ describe('AppComponent', () => {
             expect(shellScroller.scrollTop).toBe(0);
             expect(shellScroller.scrollLeft).toBe(0);
         }
+        expect(component.headerHidden).toBe(false);
         expect(scrollSpy).toHaveBeenCalled();
     });
 

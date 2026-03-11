@@ -56,6 +56,12 @@ mat-sidenav {
   z-index: 1001;
   /* Above sidenav backdrop (z-index: 1000) */
   overflow: visible !important;
+  transition: transform 180ms ease;
+  will-change: transform;
+}
+
+.custom-header.custom-header--hidden {
+  transform: translateY(calc(-100% - var(--qs-banner-height, 0px)));
 }
 
 /* Navigation Items */

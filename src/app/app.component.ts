@@ -9,7 +9,7 @@ import {
   inject,
 } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
-import { MatSidenav } from '@angular/material/sidenav';
+import { MatSidenav, MatSidenavContainer } from '@angular/material/sidenav';
 import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
 import { Observable, Subscription } from 'rxjs';
 import { map } from 'rxjs/operators';
@@ -52,6 +52,24 @@ import { AppUserUtilities } from './utils/app.user.utilities';
 })
 
 export class AppComponent implements OnInit, OnDestroy {
+  @ViewChild(MatSidenavContainer) set sidenavContainer(container: MatSidenavContainer | undefined) {
+    if (!container) {
+      this.currentSidenavContainer = null;
+      if (this.shellScrollSubscription) {
+        this.shellScrollSubscription.unsubscribe();
+        this.shellScrollSubscription = null;
+      }
+      return;
+    }
+
+    if (this.currentSidenavContainer === container) {
+      return;
+    }
+
+    this.currentSidenavContainer = container;
+    this.bindShellScrollTracking(container);
+  }
+
   @ViewChild('sidenav') set sidenav(sidenav: MatSidenav) {
     if (sidenav) {
       this.sideNavService.setSidenav(sidenav);
@@ -75,6 +93,7 @@ export class AppComponent implements OnInit, OnDestroy {
   public currentUser: AppUserInterface | null = null;
   public isAdminUser = false;
   public currentTheme$: Observable<any>;
+  public headerHidden = false;
 
   // Circular reveal animation state
   public themeOverlayActive = false;
@@ -92,9 +111,18 @@ export class AppComponent implements OnInit, OnDestroy {
   private hapticsService = inject(AppHapticsService);
   private hasCompletedInitialNavigation = false;
   private shouldTriggerNavigationHaptics = false;
+  private currentSidenavContainer: MatSidenavContainer | null = null;
+  private shellScrollSubscription: Subscription | null = null;
+  private globalScrollListener: ((event: Event) => void) | null = null;
+  private lastShellScrollTop = 0;
+  private readonly hideHeaderScrollThresholdPx = 48;
 
   get layoutTopOffsetPx(): number {
-    return this.showNavigation ? this.bannerHeight + 64 : 0;
+    if (!this.showNavigation) {
+      return 0;
+    }
+
+    return this.bannerHeight + (this.headerHidden ? 0 : 64);
   }
 
   constructor(
@@ -181,6 +209,8 @@ export class AppComponent implements OnInit, OnDestroy {
           this.triggerThemeReveal(change.x, change.y, change.theme);
         }
       });
+
+    this.bindGlobalScrollTracking();
   }
 
   get isDashboardRoute(): boolean {
@@ -247,6 +277,10 @@ export class AppComponent implements OnInit, OnDestroy {
     if (hasStateChanged) {
       this.changeDetectorRef.detectChanges();
     }
+
+    if (!this.showNavigation) {
+      this.setHeaderHidden(false);
+    }
   }
 
   get showNavigation(): boolean {
@@ -305,7 +339,93 @@ export class AppComponent implements OnInit, OnDestroy {
     this.changeDetectorRef.detectChanges();
   }
 
+  private bindShellScrollTracking(container: MatSidenavContainer): void {
+    if (this.shellScrollSubscription) {
+      this.shellScrollSubscription.unsubscribe();
+      this.shellScrollSubscription = null;
+    }
+
+    const shellScroller = container.scrollable.getElementRef().nativeElement as HTMLElement;
+    this.lastShellScrollTop = Math.max(0, shellScroller.scrollTop);
+
+    this.shellScrollSubscription = container.scrollable.elementScrolled().subscribe(() => {
+      this.updateHeaderVisibilityFromScroll(shellScroller.scrollTop);
+    });
+  }
+
+  private bindGlobalScrollTracking(): void {
+    if (typeof document === 'undefined' || this.globalScrollListener) {
+      return;
+    }
+
+    this.globalScrollListener = (event: Event) => {
+      const target = event.target;
+
+      if (target instanceof HTMLElement) {
+        const inShell = !!target.closest('.app-sidenav-container');
+        if (!inShell) {
+          return;
+        }
+
+        this.updateHeaderVisibilityFromScroll(target.scrollTop);
+        return;
+      }
+
+      if (target === document) {
+        this.updateHeaderVisibilityFromScroll(window.scrollY || 0);
+      }
+    };
+
+    document.addEventListener('scroll', this.globalScrollListener, true);
+  }
+
+  private unbindGlobalScrollTracking(): void {
+    if (typeof document === 'undefined' || !this.globalScrollListener) {
+      return;
+    }
+
+    document.removeEventListener('scroll', this.globalScrollListener, true);
+    this.globalScrollListener = null;
+  }
+
+  private updateHeaderVisibilityFromScroll(scrollTop: number): void {
+    const nextScrollTop = Math.max(0, scrollTop);
+
+    if (!this.showNavigation) {
+      this.lastShellScrollTop = nextScrollTop;
+      this.setHeaderHidden(false);
+      return;
+    }
+
+    if (nextScrollTop <= this.hideHeaderScrollThresholdPx) {
+      this.lastShellScrollTop = nextScrollTop;
+      this.setHeaderHidden(false);
+      return;
+    }
+
+    const delta = nextScrollTop - this.lastShellScrollTop;
+    this.lastShellScrollTop = nextScrollTop;
+
+    if (delta === 0) {
+      return;
+    }
+
+    this.setHeaderHidden(delta > 0);
+  }
+
+  private setHeaderHidden(hidden: boolean): void {
+    if (this.headerHidden === hidden) {
+      return;
+    }
+
+    this.headerHidden = hidden;
+    this.changeDetectorRef.detectChanges();
+  }
+
   private scrollToTopAfterNavigation(): void {
+    this.lastShellScrollTop = 0;
+    this.setHeaderHidden(false);
+
     if (typeof document === 'undefined' || typeof window === 'undefined') {
       return;
     }
@@ -408,6 +528,11 @@ export class AppComponent implements OnInit, OnDestroy {
       clearTimeout(this.initialLoaderTimeout);
       this.initialLoaderTimeout = null;
     }
+    if (this.shellScrollSubscription) {
+      this.shellScrollSubscription.unsubscribe();
+      this.shellScrollSubscription = null;
+    }
+    this.unbindGlobalScrollTracking();
     if (this.actionButtonsSubscription) {
       this.actionButtonsSubscription.unsubscribe();
     }

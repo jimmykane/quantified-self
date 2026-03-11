@@ -25,7 +25,7 @@
   } @else {
   <!-- New Header Layout -->
   @if (showNavigation) {
-  <nav class="custom-header mat-typography" [style.top.px]="bannerHeight">
+  <nav class="custom-header mat-typography" [style.top.px]="bannerHeight" [class.custom-header--hidden]="headerHidden">
     <button mat-icon-button (click)="toggleSidenav()" class="hamburger-link">
       <mat-icon class="larger_icon">menu</mat-icon>
     </button>
