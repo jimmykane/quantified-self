@@ -8,6 +8,7 @@ import {
   afterNextRender,
   inject,
 } from '@angular/core';
+import { DOCUMENT } from '@angular/common';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { MatSidenav, MatSidenavContainer } from '@angular/material/sidenav';
 import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
@@ -99,6 +100,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private breakpointObserver = inject(BreakpointObserver);
   public isHandset = toSignal(this.breakpointObserver.observe([Breakpoints.XSmall, Breakpoints.Small]).pipe(map(result => result.matches)), { initialValue: false });
   private hapticsService = inject(AppHapticsService);
+  private documentRef = inject(DOCUMENT);
   private currentSidenavContainer: MatSidenavContainer | null = null;
   private shellScrollSubscription: Subscription | null = null;
   private globalScrollListener: ((event: Event) => void) | null = null;
@@ -327,7 +329,8 @@ export class AppShellComponent implements OnInit, OnDestroy {
   }
 
   private bindGlobalScrollTracking(): void {
-    if (typeof document === 'undefined' || this.globalScrollListener) {
+    const doc = this.documentRef;
+    if (!doc || this.globalScrollListener) {
       return;
     }
 
@@ -342,20 +345,21 @@ export class AppShellComponent implements OnInit, OnDestroy {
         return;
       }
 
-      if (target === document && !shellScroller) {
-        this.updateHeaderVisibilityFromScroll(window.scrollY || 0);
+      if (target === doc && !shellScroller) {
+        this.updateHeaderVisibilityFromScroll(doc.defaultView?.scrollY || 0);
       }
     };
 
-    document.addEventListener('scroll', this.globalScrollListener, true);
+    doc.addEventListener('scroll', this.globalScrollListener, true);
   }
 
   private unbindGlobalScrollTracking(): void {
-    if (typeof document === 'undefined' || !this.globalScrollListener) {
+    const doc = this.documentRef;
+    if (!doc || !this.globalScrollListener) {
       return;
     }
 
-    document.removeEventListener('scroll', this.globalScrollListener, true);
+    doc.removeEventListener('scroll', this.globalScrollListener, true);
     this.globalScrollListener = null;
   }
 
@@ -391,8 +395,9 @@ export class AppShellComponent implements OnInit, OnDestroy {
       return;
     }
 
-    if (typeof window !== 'undefined') {
-      this.updateHeaderVisibilityFromScroll(window.scrollY || 0);
+    const windowRef = this.documentRef?.defaultView;
+    if (windowRef) {
+      this.updateHeaderVisibilityFromScroll(windowRef.scrollY || 0);
       return;
     }
 
