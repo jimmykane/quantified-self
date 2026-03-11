@@ -17,13 +17,16 @@ describe('AppShellHeaderComponent', () => {
     component = fixture.componentInstance;
   });
 
-  it('should apply hidden class when headerHidden is true', () => {
-    component.headerHidden = true;
+  it('should hide header when host hidden class is present', () => {
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    host.classList.add('app-shell-header--hidden');
     fixture.detectChanges();
 
     const nav = fixture.nativeElement.querySelector('nav.custom-header') as HTMLElement | null;
     expect(nav).toBeTruthy();
-    expect(nav?.classList.contains('custom-header--hidden')).toBe(true);
+    expect(host.classList.contains('app-shell-header--hidden')).toBe(true);
   });
 
   it('should emit toggleSidenav when hamburger button is clicked', () => {

@@ -1,3 +1,7 @@
+:host {
+  display: block;
+}
+
 /* Top Navigation Bar Styling */
 .custom-header {
   display: flex !important;
@@ -20,7 +24,7 @@
   will-change: transform;
 }
 
-.custom-header.custom-header--hidden {
+:host(.app-shell-header--hidden) .custom-header {
   transform: translateY(calc(-100% - var(--qs-banner-height, 0px)));
 }
 

@@ -19,8 +19,6 @@ import { AppUserService } from './services/app.user.service';
 import { AppSideNavService } from './services/side-nav/app-side-nav.service';
 import { AppRemoteConfigService } from './services/app.remote-config.service';
 import { slideInAnimation } from './animations/animations';
-
-
 import { LoggerService } from './services/logger.service';
 import { AppAnalyticsService } from './services/app.analytics.service';
 import { SeoService } from './services/seo.service';
@@ -35,13 +33,13 @@ import { AppUserInterface } from './models/app-user.interface';
 import { AppUserUtilities } from './utils/app.user.utilities';
 import { ShellNavigationEffectsService } from './services/shell-navigation-effects.service';
 
+export const APP_SHELL_HEADER_HEIGHT_PX = 64;
+
 @Component({
   selector: 'app-shell',
   templateUrl: './app-shell.component.html',
   styleUrls: ['./app-shell.component.scss'],
-  animations: [slideInAnimation]
-  // changeDetection: ChangeDetectionStrategy.OnPush,
-  ,
+  animations: [slideInAnimation],
   standalone: false
 })
 
@@ -71,7 +69,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
   }
   public bannerHeight = 0;
   public hasBanner = false;
-  private actionButtonsSubscription!: Subscription;
   public authState: boolean | null = null;
   public showInitialLoader = true;
   public isOnboardingRoute = false;
@@ -92,7 +89,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
   // Circular reveal animation state
   public themeOverlayActive = false;
   public themeOverlayClass = '';
-  public themeOverlayStyle: { [key: string]: string } = {};
   private themeOverlayApplyTimeout: ReturnType<typeof setTimeout> | null = null;
   private themeOverlayResetTimeout: ReturnType<typeof setTimeout> | null = null;
   private initialLoaderTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -114,7 +110,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
       return 0;
     }
 
-    return this.bannerHeight + (this.headerHidden ? 0 : 64);
+    return this.bannerHeight + (this.headerHidden ? 0 : APP_SHELL_HEADER_HEIGHT_PX);
   }
 
   constructor(
@@ -143,7 +139,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
   }
 
   async ngOnInit() {
-    this.seoService.init(); // Initialize SEO service
     this.seoService.init(); // Initialize SEO service
 
     this.authService.user$
@@ -176,8 +171,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
         this.updateOnboardingState();
-        this.lastShellScrollTop = 0;
-        this.setHeaderHidden(false);
+        this.syncHeaderVisibilityFromCurrentScrollPosition();
       });
 
     // Subscribe to theme changes for circular reveal animation
@@ -185,7 +179,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(change => {
         if (change) {
-          this.triggerThemeReveal(change.x, change.y, change.theme);
+          this.triggerThemeReveal(change.theme);
         }
       });
 
@@ -339,18 +333,16 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
     this.globalScrollListener = (event: Event) => {
       const target = event.target;
+      const shellScroller = this.currentSidenavContainer?.scrollable.getElementRef().nativeElement as HTMLElement | undefined;
 
       if (target instanceof HTMLElement) {
-        const inShell = !!target.closest('.app-sidenav-container');
-        if (!inShell) {
-          return;
+        if (shellScroller && target === shellScroller) {
+          this.updateHeaderVisibilityFromScroll(shellScroller.scrollTop);
         }
-
-        this.updateHeaderVisibilityFromScroll(target.scrollTop);
         return;
       }
 
-      if (target === document) {
+      if (target === document && !shellScroller) {
         this.updateHeaderVisibilityFromScroll(window.scrollY || 0);
       }
     };
@@ -392,6 +384,21 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.setHeaderHidden(delta > 0);
   }
 
+  private syncHeaderVisibilityFromCurrentScrollPosition(): void {
+    const shellScroller = this.currentSidenavContainer?.scrollable.getElementRef().nativeElement as HTMLElement | undefined;
+    if (shellScroller) {
+      this.updateHeaderVisibilityFromScroll(shellScroller.scrollTop);
+      return;
+    }
+
+    if (typeof window !== 'undefined') {
+      this.updateHeaderVisibilityFromScroll(window.scrollY || 0);
+      return;
+    }
+
+    this.updateHeaderVisibilityFromScroll(0);
+  }
+
   private setHeaderHidden(hidden: boolean): void {
     if (this.headerHidden === hidden) {
       return;
@@ -401,11 +408,10 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.changeDetectorRef.detectChanges();
   }
 
-  private triggerThemeReveal(x: number, y: number, theme: AppThemes) {
+  private triggerThemeReveal(theme: AppThemes) {
     this.clearThemeOverlayTimeouts();
 
     this.themeOverlayClass = theme === AppThemes.Dark ? 'dark-theme' : '';
-    this.themeOverlayStyle = {};
 
     // Activate overlay immediately
     this.themeOverlayActive = true;
@@ -489,8 +495,5 @@ export class AppShellComponent implements OnInit, OnDestroy {
       this.shellScrollSubscription = null;
     }
     this.unbindGlobalScrollTracking();
-    if (this.actionButtonsSubscription) {
-      this.actionButtonsSubscription.unsubscribe();
-    }
   }
 }

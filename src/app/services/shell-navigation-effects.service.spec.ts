@@ -83,7 +83,7 @@ describe('ShellNavigationEffectsService', () => {
     expect(hapticsMock.selection).not.toHaveBeenCalled();
   });
 
-  it('resets shell scroller and window scroll on navigation end', () => {
+  it('does not reset shell scroller or window scroll on initial navigation end', () => {
     const scrollSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     shellContainer = document.createElement('div');
     shellContainer.className = 'app-sidenav-container';
@@ -94,6 +94,25 @@ describe('ShellNavigationEffectsService', () => {
     shellContainer.appendChild(drawerContent);
     document.body.appendChild(shellContainer);
 
+    events$.next(new NavigationEnd(1, '/dashboard', '/dashboard'));
+
+    expect(drawerContent.scrollTop).toBe(120);
+    expect(drawerContent.scrollLeft).toBe(30);
+    expect(scrollSpy).not.toHaveBeenCalled();
+  });
+
+  it('resets shell scroller and window scroll on navigation end after initial navigation', () => {
+    const scrollSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    shellContainer = document.createElement('div');
+    shellContainer.className = 'app-sidenav-container';
+    const drawerContent = document.createElement('div');
+    drawerContent.className = 'mat-drawer-content';
+    drawerContent.scrollTop = 120;
+    drawerContent.scrollLeft = 30;
+    shellContainer.appendChild(drawerContent);
+    document.body.appendChild(shellContainer);
+
+    events$.next(new NavigationEnd(1, '/dashboard', '/dashboard'));
     events$.next(new NavigationEnd(1, '/dashboard', '/dashboard'));
 
     expect(drawerContent.scrollTop).toBe(0);
@@ -108,6 +127,7 @@ describe('ShellNavigationEffectsService', () => {
       }
     });
 
+    events$.next(new NavigationEnd(1, '/dashboard', '/dashboard'));
     events$.next(new NavigationEnd(1, '/dashboard', '/dashboard'));
 
     expect(scrollSpy).toHaveBeenCalledWith(0, 0);

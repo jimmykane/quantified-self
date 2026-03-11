@@ -1,7 +1,7 @@
 @if (authState !== null) {
 <!-- Circular Reveal Theme Overlay -->
 @if (themeOverlayActive) {
-<div class="theme-reveal-overlay" [ngClass]="themeOverlayClass" [ngStyle]="themeOverlayStyle">
+<div class="theme-reveal-overlay" [ngClass]="themeOverlayClass">
 </div>
 }
 @if (showInitialLoader) {
@@ -25,7 +25,7 @@
   } @else {
   <!-- New Header Layout -->
   @if (showNavigation) {
-  <app-shell-header [bannerHeight]="bannerHeight" [headerHidden]="headerHidden"
+  <app-shell-header [bannerHeight]="bannerHeight" [class.app-shell-header--hidden]="headerHidden"
     [authState]="authState" [isDashboardRoute]="isDashboardRoute" [isLoginRoute]="isLoginRoute"
     [isAdminRoute]="isAdminRoute" [isHandset]="isHandset()"
     [showUploadActivities]="showUploadActivities" [isAdminUser]="isAdminUser"

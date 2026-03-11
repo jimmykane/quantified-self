@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { AppShellComponent } from './app-shell.component';
+import { APP_SHELL_HEADER_HEIGHT_PX, AppShellComponent } from './app-shell.component';
 import { AppAuthService } from './authentication/app.auth.service';
 import { AppSideNavService } from './services/side-nav/app-side-nav.service';
 import { AppUserService } from './services/app.user.service';
@@ -14,8 +14,7 @@ import { AppWhatsNewService } from './services/app.whats-new.service';
 import { MatDialog } from '@angular/material/dialog';
 import { AppHapticsService } from './services/app.haptics.service';
 
-import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
-import { Router, RouterModule, ActivatedRoute, NavigationEnd, NavigationStart } from '@angular/router';
+import { Router, ActivatedRoute, NavigationEnd, NavigationStart } from '@angular/router';
 import { DomSanitizer } from '@angular/platform-browser';
 import { of, Subject } from 'rxjs';
 import { MatTabsModule } from '@angular/material/tabs';
@@ -23,6 +22,7 @@ import { MatSidenavModule } from '@angular/material/sidenav';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { ChangeDetectorRef, CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
+import { RouterTestingModule } from '@angular/router/testing';
 
 // ... (existing imports)
 
@@ -57,10 +57,6 @@ describe('AppShellComponent', () => {
 
     const mockDomSanitizer = {
         bypassSecurityTrustResourceUrl: vi.fn()
-    };
-
-    const mockTitleService = {
-        setTitle: vi.fn()
     };
 
     const mockRemoteConfigService = {
@@ -100,7 +96,7 @@ describe('AppShellComponent', () => {
                 MatTabsModule,
                 MatTooltipModule,
                 NoopAnimationsModule,
-                RouterModule
+                RouterTestingModule
             ],
             providers: [
                 { provide: AppAuthService, useValue: mockAppAuthService },
@@ -109,7 +105,6 @@ describe('AppShellComponent', () => {
                 { provide: AppSideNavService, useValue: mockAppSideNavService },
                 { provide: AppIconService, useValue: mockAppIconService },
                 { provide: DomSanitizer, useValue: mockDomSanitizer },
-                // { provide: Title, useValue: mockTitleService }, // Removed
                 { provide: AppRemoteConfigService, useValue: mockRemoteConfigService },
                 { provide: AppAnalyticsService, useValue: mockAnalyticsService },
                 { provide: SeoService, useValue: mockSeoService },
@@ -197,10 +192,12 @@ describe('AppShellComponent', () => {
         component.onBannerHeightChanged(36);
         fixture.detectChanges();
 
+        const expectedTopOffsetPx = `${component.bannerHeight + APP_SHELL_HEADER_HEIGHT_PX}px`;
         const wrapper = fixture.nativeElement.querySelector('.app-layout-wrapper') as HTMLElement | null;
         expect(wrapper).toBeTruthy();
-        expect(wrapper?.style.getPropertyValue('--qs-layout-top-offset')).toBe('100px');
-        expect(wrapper?.style.getPropertyValue('--qs-effective-top-offset')).toBe('100px');
+        expect(component.layoutTopOffsetPx).toBe(component.bannerHeight + APP_SHELL_HEADER_HEIGHT_PX);
+        expect(wrapper?.style.getPropertyValue('--qs-layout-top-offset')).toBe(expectedTopOffsetPx);
+        expect(wrapper?.style.getPropertyValue('--qs-effective-top-offset')).toBe(expectedTopOffsetPx);
         expect(wrapper?.style.getPropertyValue('--qs-banner-height')).toBe('36px');
     });
 
@@ -236,7 +233,7 @@ describe('AppShellComponent', () => {
         (component as any).updateHeaderVisibilityFromScroll(24);
 
         expect(component.headerHidden).toBe(false);
-        expect(component.layoutTopOffsetPx).toBe(64);
+        expect(component.layoutTopOffsetPx).toBe(APP_SHELL_HEADER_HEIGHT_PX);
     });
 
     it('should react to small scroll deltas once threshold is crossed', () => {
@@ -248,6 +245,25 @@ describe('AppShellComponent', () => {
         expect(component.headerHidden).toBe(true);
 
         (component as any).updateHeaderVisibilityFromScroll(60);
+        expect(component.headerHidden).toBe(false);
+    });
+
+    it('should ignore nested scroll containers when tracking header visibility globally', () => {
+        component.onboardingCompleted = true;
+        component.headerHidden = false;
+        (component as any).lastShellScrollTop = 0;
+        fixture.detectChanges();
+
+        const shellScroller = fixture.nativeElement.querySelector('.app-sidenav-container .mat-drawer-content') as HTMLElement | null;
+        expect(shellScroller).toBeTruthy();
+
+        const nestedPanel = document.createElement('div');
+        nestedPanel.className = 'nested-scroll-panel';
+        nestedPanel.scrollTop = 120;
+        shellScroller?.appendChild(nestedPanel);
+
+        nestedPanel.dispatchEvent(new Event('scroll', { bubbles: true }));
+
         expect(component.headerHidden).toBe(false);
     });
 
@@ -378,7 +394,7 @@ describe('AppShellComponent', () => {
         const detectSpy = vi.spyOn((component as any).changeDetectorRef, 'detectChanges');
         mockThemeService.setAppTheme.mockClear();
 
-        (component as any).triggerThemeReveal(10, 20, 'Dark');
+        (component as any).triggerThemeReveal('Dark');
         expect(component.themeOverlayActive).toBe(true);
         expect(component.themeOverlayClass).toBe('dark-theme');
         expect(detectSpy).toHaveBeenCalled();
@@ -389,7 +405,7 @@ describe('AppShellComponent', () => {
         vi.advanceTimersByTime(300);
         expect(component.themeOverlayActive).toBe(false);
 
-        (component as any).triggerThemeReveal(10, 20, 'Light');
+        (component as any).triggerThemeReveal('Light');
         vi.advanceTimersByTime(300);
         expect(mockThemeService.setAppTheme).toHaveBeenCalledWith('Light', false);
 
@@ -464,6 +480,7 @@ describe('AppShellComponent', () => {
             shellScroller.scrollLeft = 20;
         }
 
+        (mockRouter.events as Subject<any>).next(new NavigationEnd(1, '/dashboard', '/dashboard'));
         (mockRouter.events as Subject<any>).next(new NavigationEnd(1, '/dashboard', '/dashboard'));
 
         if (shellScroller) {
@@ -541,15 +558,6 @@ describe('AppShellComponent', () => {
         );
     });
 
-    it('should unsubscribe action buttons subscription on destroy when present', () => {
-        const actionButtonsSubscription = { unsubscribe: vi.fn() } as any;
-        (component as any).actionButtonsSubscription = actionButtonsSubscription;
-
-        component.ngOnDestroy();
-
-        expect(actionButtonsSubscription.unsubscribe).toHaveBeenCalled();
-    });
-
     it('should clear pending initial loader timeout on destroy', () => {
         vi.useFakeTimers();
         try {
@@ -567,11 +575,5 @@ describe('AppShellComponent', () => {
         } finally {
             vi.useRealTimers();
         }
-    });
-
-    it('should handle missing actionButtonsSubscription on destroy', () => {
-        (component as any).actionButtonsSubscription = undefined;
-
-        expect(() => component.ngOnDestroy()).not.toThrow();
     });
 });

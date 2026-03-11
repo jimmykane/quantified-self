@@ -53,21 +53,24 @@ export class ShellNavigationEffectsService {
 
         this.shouldTriggerNavigationHaptics = false;
         this.hasCompletedInitialNavigation = true;
-        this.updateAnimationState();
-        this.resetScrollPosition();
+        const isInitialNavigationEnd = this.updateAnimationState();
+        if (!isInitialNavigationEnd) {
+          this.resetScrollPosition();
+        }
         this.navigationEndSubject.next();
       });
   }
 
-  private updateAnimationState(): void {
+  private updateAnimationState(): boolean {
     if (!this.hasSeenInitialNavigationEnd) {
       this.hasSeenInitialNavigationEnd = true;
       // Suppress the initial route transition animation.
       this.animationStateSignal.set(null);
-      return;
+      return true;
     }
 
     this.animationStateSignal.set(this.readCurrentAnimationFromSnapshot());
+    return false;
   }
 
   private readCurrentAnimationFromSnapshot(): string | null {

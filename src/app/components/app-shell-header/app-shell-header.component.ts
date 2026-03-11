@@ -8,7 +8,6 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
 })
 export class AppShellHeaderComponent {
   @Input() bannerHeight = 0;
-  @Input() headerHidden = false;
   @Input() authState: boolean | null = null;
   @Input() isDashboardRoute = false;
   @Input() isLoginRoute = false;
