@@ -12,6 +12,7 @@ import { AppWindowService } from '../../services/app.window.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserService } from '../../services/app.user.service';
 import { AppWhatsNewService } from '../../services/app.whats-new.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { environment } from '../../../environments/environment';
 import { AppThemePreference, SYSTEM_THEME_PREFERENCE } from '../../models/app-theme-preference.type';
 
@@ -31,6 +32,7 @@ export class SideNavComponent {
   public readonly systemThemePreference = SYSTEM_THEME_PREFERENCE;
   public themePreference = toSignal(this.themeService.getThemePreference(), { initialValue: SYSTEM_THEME_PREFERENCE });
   private analyticsService = inject(AppAnalyticsService);
+  private hapticsService = inject(AppHapticsService);
 
   constructor(
     public authService: AppAuthService,
@@ -61,6 +63,7 @@ export class SideNavComponent {
 
   async donate() {
     this.analyticsService.logEvent('donate_click', { method: 'PayPal' });
+    this.hapticsService.selection();
     window.open('https://paypal.me/DKanellopoulos');
   }
 
@@ -70,11 +73,13 @@ export class SideNavComponent {
 
   async gitHubStar() {
     this.analyticsService.logEvent('github_star');
+    this.hapticsService.selection();
     window.open('https://github.com/jimmykane/quantified-self/');
   }
 
   async logout() {
     this.analyticsService.logEvent('logout', {});
+    this.hapticsService.selection();
     try {
       await this.router.navigate(['/']);
       await this.authService.signOut();
@@ -91,10 +96,12 @@ export class SideNavComponent {
   }
 
   public async setTheme(theme: AppThemePreference, event?: MouseEvent) {
+    this.hapticsService.selection();
     await this.themeService.setPreferredTheme(theme, event);
   }
 
   public closeSideNav(): void {
+    this.hapticsService.selection();
     this.sideNav.close();
   }
 

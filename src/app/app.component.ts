@@ -274,6 +274,7 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   public toggleSidenav() {
+    this.hapticsService.selection();
     this.sideNavService.toggle();
   }
 

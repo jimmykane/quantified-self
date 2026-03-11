@@ -277,7 +277,9 @@ describe('AppComponent', () => {
     });
 
     it('should toggle sidenav through side nav service', () => {
+        mockHapticsService.selection.mockClear();
         component.toggleSidenav();
+        expect(mockHapticsService.selection).toHaveBeenCalledTimes(1);
         expect(mockAppSideNavService.toggle).toHaveBeenCalled();
     });
 
