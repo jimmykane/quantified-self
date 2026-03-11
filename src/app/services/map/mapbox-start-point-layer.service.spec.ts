@@ -129,6 +129,71 @@ describe('MapboxStartPointLayerService', () => {
     expect(mockMap.addSource).toHaveBeenCalled();
   });
 
+  it('should replace a deferred render with the latest points for the same layer key', () => {
+    mockMap.isStyleLoaded.mockReturnValue(false);
+
+    service.renderStartPoints(mockMap, {
+      sourceId: 'track-start-source',
+      layerId: 'track-start-layer',
+      hitLayerId: 'track-start-hit-layer',
+      points: [{ lng: 20, lat: 40, properties: { pointId: 'old-point' } }]
+    });
+
+    service.renderStartPoints(mockMap, {
+      sourceId: 'track-start-source',
+      layerId: 'track-start-layer',
+      hitLayerId: 'track-start-hit-layer',
+      points: [{ lng: 30, lat: 50, properties: { pointId: 'new-point' } }]
+    });
+
+    const styleLoadHandlers = mockMap.on.mock.calls.filter(
+      (call: any[]) => call[0] === 'style.load' && typeof call[1] === 'function'
+    );
+    expect(styleLoadHandlers).toHaveLength(1);
+
+    mockMap.isStyleLoaded.mockReturnValue(true);
+    const styleLoadHandler = styleLoadHandlers[0][1];
+    styleLoadHandler();
+
+    expect(mockMap.addSource).toHaveBeenCalledTimes(1);
+    const sourceData = mockMap.addSource.mock.calls[0][1]?.data;
+    expect(sourceData?.features).toEqual([
+      expect.objectContaining({
+        properties: { pointId: 'new-point' },
+        geometry: expect.objectContaining({
+          coordinates: [30, 50],
+        }),
+      }),
+    ]);
+  });
+
+  it('should cancel deferred renders when the layer is cleared', () => {
+    mockMap.isStyleLoaded.mockReturnValue(false);
+
+    service.renderStartPoints(mockMap, {
+      sourceId: 'track-start-source',
+      layerId: 'track-start-layer',
+      hitLayerId: 'track-start-hit-layer',
+      points: [{ lng: 20, lat: 40, properties: { pointId: 'p1' } }]
+    });
+
+    const styleLoadHandler = mockMap.on.mock.calls.find(
+      (call: any[]) => call[0] === 'style.load' && typeof call[1] === 'function'
+    )?.[1];
+
+    service.clear(mockMap, {
+      sourceId: 'track-start-source',
+      layerId: 'track-start-layer',
+      hitLayerId: 'track-start-hit-layer'
+    });
+
+    mockMap.isStyleLoaded.mockReturnValue(true);
+    styleLoadHandler?.();
+
+    expect(mockMap.addSource).not.toHaveBeenCalled();
+    expect(mockMap.off).toHaveBeenCalledWith('style.load', expect.any(Function));
+  });
+
   it('should refresh paint on existing layers', () => {
     mockMap.getSource.mockReturnValue({ setData: vi.fn() });
     mockMap.getLayer.mockImplementation((id: string) => id === 'track-start-layer' || id === 'track-start-hit-layer');
