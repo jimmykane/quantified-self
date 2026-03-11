@@ -39,6 +39,73 @@ const createStat = (value: number) => ({
   getValue: () => value
 });
 
+const buildActivityIdentitySignature = (activities: any[]) => (
+  (activities || []).map((activity: any, activityIndex: number) => {
+    const activityId = activity?.getID?.();
+    if (activityId) {
+      return `id:${activityId}`;
+    }
+
+    const activityType = typeof activity?.type === 'string' && activity.type.trim().length > 0
+      ? activity.type
+      : 'unknown';
+    return `idx:${activityIndex}:type:${activityType}`;
+  })
+);
+
+const createCompleteCachedTrackActivity = (overrides: Record<string, unknown> = {}) => ({
+  activityId: 'activity-1',
+  activityIndex: 0,
+  coordinates: [[22.94, 40.64], [22.95, 40.65]],
+  activityTypeValue: ActivityTypes.Running,
+  activityTypeLabel: 'Running',
+  durationValue: 3600,
+  distanceValue: 10000,
+  durationLabel: '01:00:00',
+  distanceLabel: '10.0 km',
+  effortLabel: 'Pace',
+  effortDisplayLabel: '5:10 min/km',
+  effortStatType: DataPaceAvg.type,
+  jumpHeatPoints: [],
+  ...overrides,
+});
+
+const createCachedEventPolylines = (
+  trackActivities: any[],
+  overrides: Record<string, unknown> = {},
+) => ({
+  activityCount: trackActivities.length,
+  activityIdentitySignature: trackActivities.map((trackActivity: any, index: number) => (
+    trackActivity.activityId
+      ? `id:${trackActivity.activityId}`
+      : `idx:${index}:type:${trackActivity.activityTypeValue ?? 'unknown'}`
+  )),
+  trackActivities,
+  ...overrides,
+});
+
+const isCompleteCachedTrackActivity = (activity: any) => (
+  !!activity
+  && typeof activity.activityId === 'string'
+  && activity.activityId.length > 0
+  && Array.isArray(activity.coordinates)
+  && activity.coordinates.length > 1
+  && activity.coordinates.every((coordinate: number[]) =>
+    Array.isArray(coordinate)
+    && coordinate.length >= 2
+    && Number.isFinite(coordinate[0])
+    && Number.isFinite(coordinate[1])
+  )
+  && (typeof activity.activityTypeValue === 'string' || typeof activity.activityTypeValue === 'number')
+  && typeof activity.activityTypeLabel === 'string'
+  && typeof activity.durationLabel === 'string'
+  && typeof activity.distanceLabel === 'string'
+  && typeof activity.effortLabel === 'string'
+  && typeof activity.effortDisplayLabel === 'string'
+  && typeof activity.effortStatType === 'string'
+  && Array.isArray(activity.jumpHeatPoints)
+);
+
 const createMockEvent = (eventId: string, startDateIso: string, latitudeDegrees: number, longitudeDegrees: number, activityType = ActivityTypes.Running) => {
   const startPositionStat = {
     getValue: () => ({ latitudeDegrees, longitudeDegrees })
@@ -243,41 +310,31 @@ describe('TracksComponent', () => {
       resolveEventCacheKey: vi.fn().mockResolvedValue(null),
       getEventPolylines: vi.fn().mockResolvedValue(undefined),
       setEventPolylines: vi.fn().mockResolvedValue(undefined),
-      hasMatchingActivityIdentity: vi.fn().mockImplementation((activities: any[], cached: any) => {
+      deleteEventPolylines: vi.fn().mockResolvedValue(undefined),
+      hasMatchingActivityIdentity: vi.fn().mockImplementation((activities: any[], cached: any, allowUnknownIdentity = false) => {
         if (!cached) {
           return false;
         }
 
-        const signature = (activities || []).map((activity: any, activityIndex: number) => {
-          const activityId = activity?.getID?.();
-          if (activityId) {
-            return `id:${activityId}`;
-          }
-
-          const activityType = typeof activity?.type === 'string' && activity.type.trim().length > 0
-            ? activity.type
-            : 'unknown';
-          return `idx:${activityIndex}:type:${activityType}`;
-        });
+        const signature = buildActivityIdentitySignature(activities || []);
+        if (allowUnknownIdentity && signature.length === 0 && cached.activityCount > 0) {
+          return true;
+        }
 
         return cached.activityCount === signature.length
           && Array.isArray(cached.activityIdentitySignature)
           && cached.activityIdentitySignature.length === signature.length
           && cached.activityIdentitySignature.every((entry: string, index: number) => entry === signature[index]);
       }),
+      hasCompleteTrackMetadata: vi.fn().mockImplementation((cached: any) => (
+        Array.isArray(cached?.trackActivities)
+        && Array.isArray(cached?.activityIdentitySignature)
+        && cached.activityIdentitySignature.length === cached.activityCount
+        && cached.trackActivities.every((trackActivity: any) => isCompleteCachedTrackActivity(trackActivity))
+      )),
       extractTrackPolylines: vi.fn().mockImplementation((activities: any[]) => ({
         activityCount: activities?.length || 0,
-        activityIdentitySignature: (activities || []).map((activity: any, activityIndex: number) => {
-          const activityId = activity?.getID?.();
-          if (activityId) {
-            return `id:${activityId}`;
-          }
-
-          const activityType = typeof activity?.type === 'string' && activity.type.trim().length > 0
-            ? activity.type
-            : 'unknown';
-          return `idx:${activityIndex}:type:${activityType}`;
-        }),
+        activityIdentitySignature: buildActivityIdentitySignature(activities || []),
         trackActivities: (activities || []).reduce((acc: any[], activity: any, activityIndex: number) => {
           if (!activity?.hasPositionData?.()) {
             return acc;
@@ -293,17 +350,47 @@ describe('TracksComponent', () => {
             activityId: activity.getID?.() || null,
             activityIndex,
             coordinates,
+            activityTypeValue: activity?.type ?? null,
+            activityTypeLabel: typeof activity?.type === 'string' ? activity.type : 'Activity',
+            durationValue: null,
+            distanceValue: null,
+            durationLabel: '-',
+            distanceLabel: '-',
+            effortLabel: null,
+            effortDisplayLabel: '-',
+            effortStatType: null,
+            jumpHeatPoints: [],
           });
           return acc;
         }, []),
       })),
-      resolveTrackPolylines: vi.fn().mockImplementation((activities: any[], cached: any) => (
+      resolveTrackPolylinesFromCache: vi.fn().mockImplementation((cached: any) => (
         (cached?.trackActivities || []).map((trackActivity: any) => ({
-          activity: activities[trackActivity.activityIndex],
+          activity: {
+            getID: () => trackActivity.activityId,
+            type: trackActivity.activityTypeValue,
+          },
           activityIndex: trackActivity.activityIndex,
           coordinates: trackActivity.coordinates,
+          cachedActivity: trackActivity,
         }))
       )),
+      resolveTrackPolylines: vi.fn().mockImplementation((activities: any[], cached: any) => {
+        const normalizedActivities = activities || [];
+        return (cached?.trackActivities || []).map((trackActivity: any) => {
+          const matchedActivityIndex = normalizedActivities.findIndex((activity: any) => activity?.getID?.() === trackActivity.activityId);
+          const resolvedActivityIndex = matchedActivityIndex >= 0 ? matchedActivityIndex : trackActivity.activityIndex;
+          return {
+            activity: normalizedActivities[resolvedActivityIndex] || {
+              getID: () => trackActivity.activityId,
+              type: trackActivity.activityTypeValue,
+            },
+            activityIndex: resolvedActivityIndex,
+            coordinates: trackActivity.coordinates,
+            cachedActivity: trackActivity,
+          };
+        });
+      }),
     };
 
     await TestBed.configureTestingModule({
@@ -427,22 +514,25 @@ describe('TracksComponent', () => {
       mockEventService.getEventsBy.mockReturnValue(of([event]));
       mockEventService.getActivities.mockReturnValue(of([cachedActivity]));
       mockMyTracksPolylineCacheService.resolveEventCacheKey.mockResolvedValue('event-cache-key');
-      mockMyTracksPolylineCacheService.getEventPolylines.mockResolvedValue({
-        activityCount: 1,
-        activityIdentitySignature: ['id:activity-1'],
-        trackActivities: [
-          {
-            activityId: 'activity-1',
-            activityIndex: 0,
-            coordinates: [[22.94, 40.64], [22.95, 40.65]],
-          },
-        ],
-      });
+      mockMyTracksPolylineCacheService.getEventPolylines.mockResolvedValue(createCachedEventPolylines([
+        createCompleteCachedTrackActivity({
+          activityId: 'activity-1',
+          activityIndex: 0,
+          coordinates: [[22.94, 40.64], [22.95, 40.65]],
+          activityTypeValue: ActivityTypes.Running,
+        }),
+      ]));
       mockMyTracksPolylineCacheService.resolveTrackPolylines.mockReturnValue([
         {
           activity: cachedActivity,
           activityIndex: 0,
           coordinates: [[22.94, 40.64], [22.95, 40.65]],
+          cachedActivity: createCompleteCachedTrackActivity({
+            activityId: 'activity-1',
+            activityIndex: 0,
+            coordinates: [[22.94, 40.64], [22.95, 40.65]],
+            activityTypeValue: ActivityTypes.Running,
+          }),
         },
       ]);
 
@@ -492,6 +582,16 @@ describe('TracksComponent', () => {
             activityId: 'hydrated-activity-1',
             activityIndex: 0,
             coordinates: [[22.94, 40.64], [22.95, 40.65]],
+            activityTypeValue: hydratedActivity.type,
+            activityTypeLabel: 'Running',
+            durationValue: null,
+            distanceValue: null,
+            durationLabel: '-',
+            distanceLabel: '-',
+            effortLabel: null,
+            effortDisplayLabel: '-',
+            effortStatType: null,
+            jumpHeatPoints: [],
           },
         ],
       });
@@ -512,11 +612,17 @@ describe('TracksComponent', () => {
         activityCount: 1,
         activityIdentitySignature: ['id:hydrated-activity-1'],
         trackActivities: [
-          {
+          expect.objectContaining({
             activityId: 'hydrated-activity-1',
             activityIndex: 0,
             coordinates: [[22.94, 40.64], [22.95, 40.65]],
-          },
+            activityTypeLabel: 'Running',
+            activityTypeValue: hydratedActivity.type,
+            effortLabel: 'Pace',
+            effortDisplayLabel: '-',
+            effortStatType: DataPaceAvg.type,
+            jumpHeatPoints: [],
+          }),
         ],
       });
     });
@@ -548,17 +654,16 @@ describe('TracksComponent', () => {
       mockEventService.getActivities.mockReturnValue(of([currentActivity]));
       mockEventService.attachStreamsToEventWithActivities.mockReturnValue(of(hydratedEvent));
       mockMyTracksPolylineCacheService.resolveEventCacheKey.mockResolvedValue('event-cache-key');
-      mockMyTracksPolylineCacheService.getEventPolylines.mockResolvedValue({
-        activityCount: 1,
+      mockMyTracksPolylineCacheService.getEventPolylines.mockResolvedValue(createCachedEventPolylines([
+        createCompleteCachedTrackActivity({
+          activityId: 'activity-stale',
+          activityIndex: 0,
+          coordinates: [[22.9, 40.6], [22.95, 40.65]],
+          activityTypeValue: ActivityTypes.Running,
+        }),
+      ], {
         activityIdentitySignature: ['id:activity-stale'],
-        trackActivities: [
-          {
-            activityId: 'activity-stale',
-            activityIndex: 0,
-            coordinates: [[22.9, 40.6], [22.95, 40.65]],
-          },
-        ],
-      });
+      }));
 
       await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
       await waitForAsyncWork();
@@ -568,11 +673,274 @@ describe('TracksComponent', () => {
         expect.objectContaining({
           activityIdentitySignature: ['id:activity-stale'],
         }),
+        false,
       );
       expect(mockEventService.attachStreamsToEventWithActivities).toHaveBeenCalledTimes(1);
       expect(mockMyTracksPolylineCacheService.setEventPolylines).toHaveBeenCalledWith('event-cache-key', expect.objectContaining({
         activityIdentitySignature: ['id:activity-current'],
       }));
+    });
+
+    it('should skip blocking activity fetch when a complete cache hit exists without embedded activities', async () => {
+      const event = createMockEvent('cache-first-event', '2024-11-08T08:00:00Z', 40.64, 22.94);
+      (event as any).getActivities = () => [];
+      const cachedPolylines = createCachedEventPolylines([
+        createCompleteCachedTrackActivity({
+          activityId: 'activity-cache-hit',
+          activityTypeValue: ActivityTypes.Running,
+        }),
+      ], {
+        activityIdentitySignature: ['id:activity-cache-hit'],
+      });
+
+      mockEventService.getEventsBy.mockReturnValue(of([event]));
+      mockEventService.getActivitiesOnceByEventWithOptions.mockImplementation((_user: unknown, _eventId: string, options: any) => {
+        if (options?.preferCache === false) {
+          return of([{ getID: () => 'activity-cache-hit', type: ActivityTypes.Running }]);
+        }
+        return of([]);
+      });
+      mockMyTracksPolylineCacheService.resolveEventCacheKey.mockResolvedValue('event-cache-key');
+      mockMyTracksPolylineCacheService.getEventPolylines.mockResolvedValue(cachedPolylines);
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      expect(mockEventService.getActivitiesOnceByEventWithOptions).not.toHaveBeenCalledWith(
+        mockUser,
+        'cache-first-event',
+        { preferCache: true, warmServer: false },
+      );
+      expect(mockEventService.getActivitiesOnceByEventWithOptions).toHaveBeenCalledWith(
+        mockUser,
+        'cache-first-event',
+        { preferCache: false },
+      );
+      expect(mockMyTracksPolylineCacheService.resolveTrackPolylinesFromCache).toHaveBeenCalledWith(cachedPolylines);
+      expect(mockEventService.attachStreamsToEventWithActivities).not.toHaveBeenCalled();
+    });
+
+    it('should fall back to the miss path for metadata-incomplete cached entries', async () => {
+      const sourceActivity = {
+        getID: () => 'activity-incomplete-cache',
+        type: ActivityTypes.Running,
+        hasPositionData: () => false,
+        getPositionData: () => [],
+      };
+      const hydratedActivity = {
+        getID: () => 'activity-incomplete-cache',
+        type: ActivityTypes.Running,
+        hasPositionData: () => true,
+        getPositionData: () => [
+          { latitudeDegrees: 40.64, longitudeDegrees: 22.94 },
+          { latitudeDegrees: 40.65, longitudeDegrees: 22.95 },
+        ],
+        getDuration: () => ({ getDisplayValue: () => '00:50:00' }),
+        getDistance: () => ({ getDisplayValue: () => '8.0', getDisplayUnit: () => 'km' }),
+        getStat: (type: string) => type === DataPaceAvg.type
+          ? {
+            getDisplayValue: () => '6:15',
+            getDisplayUnit: () => 'min/km',
+            getType: () => DataPaceAvg.type,
+          }
+          : null,
+        getAllEvents: () => [],
+      };
+      const event = createMockEvent('legacy-cache-event', '2024-11-08T08:00:00Z', 40.64, 22.94);
+      (event as any).getActivities = () => [];
+      const hydratedEvent = {
+        ...event,
+        getActivities: () => [hydratedActivity],
+      };
+      const incompleteCachedPolylines = createCachedEventPolylines([
+        createCompleteCachedTrackActivity({
+          activityId: 'activity-incomplete-cache',
+          effortLabel: null,
+        }),
+      ], {
+        activityIdentitySignature: ['id:activity-incomplete-cache'],
+      });
+
+      mockEventService.getEventsBy.mockReturnValue(of([event]));
+      mockEventService.getActivitiesOnceByEventWithOptions.mockImplementation((_user: unknown, _eventId: string, options: any) => (
+        options?.preferCache === true
+          ? of([sourceActivity])
+          : of([])
+      ));
+      mockEventService.attachStreamsToEventWithActivities.mockReturnValue(of(hydratedEvent));
+      mockMyTracksPolylineCacheService.resolveEventCacheKey.mockResolvedValue('event-cache-key');
+      mockMyTracksPolylineCacheService.getEventPolylines.mockResolvedValue(incompleteCachedPolylines);
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      expect(mockEventService.getActivitiesOnceByEventWithOptions).toHaveBeenCalledWith(
+        mockUser,
+        'legacy-cache-event',
+        { preferCache: true, warmServer: false },
+      );
+      expect(mockEventService.attachStreamsToEventWithActivities).toHaveBeenCalledTimes(1);
+      expect(mockMyTracksPolylineCacheService.setEventPolylines).toHaveBeenCalledWith('event-cache-key', expect.objectContaining({
+        activityIdentitySignature: ['id:activity-incomplete-cache'],
+      }));
+    });
+
+    it('should refresh cached metadata in the background without blocking map commit', async () => {
+      const trackManager = (component as any).tracksMapManager;
+      const setTracksFromPreparedSpy = vi.spyOn(trackManager, 'setTracksFromPrepared');
+      const refreshSubject = new Subject<any[]>();
+      const event = createMockEvent('background-refresh-event', '2024-11-08T08:00:00Z', 40.64, 22.94);
+      (event as any).getActivities = () => [];
+      const cachedPolylines = createCachedEventPolylines([
+        createCompleteCachedTrackActivity({
+          activityId: 'activity-background-refresh',
+          coordinates: [[22.94, 40.64], [22.95, 40.65]],
+          durationLabel: '01:00:00',
+          distanceLabel: '10.0 km',
+        }),
+      ], {
+        activityIdentitySignature: ['id:activity-background-refresh'],
+      });
+
+      mockEventService.getEventsBy.mockReturnValue(of([event]));
+      mockEventService.getActivitiesOnceByEventWithOptions.mockImplementation((_user: unknown, _eventId: string, options: any) => (
+        options?.preferCache === false ? refreshSubject.asObservable() : of([])
+      ));
+      mockMyTracksPolylineCacheService.resolveEventCacheKey.mockResolvedValue('event-cache-key');
+      mockMyTracksPolylineCacheService.getEventPolylines.mockResolvedValue(cachedPolylines);
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      expect(setTracksFromPreparedSpy).toHaveBeenCalled();
+      expect(mockMyTracksPolylineCacheService.setEventPolylines).not.toHaveBeenCalled();
+
+      refreshSubject.next([{
+        getID: () => 'activity-background-refresh',
+        type: ActivityTypes.Running,
+        getDuration: () => ({ getValue: () => 2520, getDisplayValue: () => '00:42:00' }),
+        getDistance: () => ({ getValue: () => 7100, getDisplayValue: () => '7.1', getDisplayUnit: () => 'km' }),
+        getStat: (type: string) => type === DataPaceAvg.type
+          ? {
+            getDisplayValue: () => '5:55',
+            getDisplayUnit: () => 'min/km',
+            getType: () => DataPaceAvg.type,
+          }
+          : null,
+        getAllEvents: () => [],
+      }]);
+      refreshSubject.complete();
+      await waitForAsyncWork();
+
+      expect(mockMyTracksPolylineCacheService.setEventPolylines).toHaveBeenCalledWith('event-cache-key', expect.objectContaining({
+        trackActivities: [
+          expect.objectContaining({
+            coordinates: [[22.94, 40.64], [22.95, 40.65]],
+            durationLabel: '00:42:00',
+            distanceLabel: '7.1 km',
+            effortDisplayLabel: '5:55 min/km',
+          }),
+        ],
+      }));
+    });
+
+    it('should invalidate cached tracks when background refresh identities change', async () => {
+      const event = createMockEvent('background-invalidate-event', '2024-11-08T08:00:00Z', 40.64, 22.94);
+      (event as any).getActivities = () => [];
+      mockEventService.getEventsBy.mockReturnValue(of([event]));
+      mockEventService.getActivitiesOnceByEventWithOptions.mockImplementation((_user: unknown, _eventId: string, options: any) => (
+        options?.preferCache === false
+          ? of([{ getID: () => 'activity-background-changed', type: ActivityTypes.Running }])
+          : of([])
+      ));
+      mockMyTracksPolylineCacheService.resolveEventCacheKey.mockResolvedValue('event-cache-key');
+      mockMyTracksPolylineCacheService.getEventPolylines.mockResolvedValue(createCachedEventPolylines([
+        createCompleteCachedTrackActivity({
+          activityId: 'activity-background-original',
+        }),
+      ], {
+        activityIdentitySignature: ['id:activity-background-original'],
+      }));
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      expect(mockMyTracksPolylineCacheService.deleteEventPolylines).toHaveBeenCalledWith('event-cache-key');
+    });
+
+    it('should dedupe background refresh requests by event id within the load cycle', async () => {
+      const refreshSubject = new Subject<any[]>();
+      mockEventService.getActivitiesOnceByEventWithOptions.mockReturnValue(refreshSubject.asObservable());
+      const cachedPolylines = createCachedEventPolylines([
+        createCompleteCachedTrackActivity({
+          activityId: 'activity-dedupe',
+        }),
+      ], {
+        activityIdentitySignature: ['id:activity-dedupe'],
+      });
+
+      (component as any).enqueueBackgroundActivityRefresh(mockUser, 'dedupe-event', 'cache-key', cachedPolylines);
+      (component as any).enqueueBackgroundActivityRefresh(mockUser, 'dedupe-event', 'cache-key', cachedPolylines);
+      await waitForAsyncWork();
+
+      expect(mockEventService.getActivitiesOnceByEventWithOptions).toHaveBeenCalledTimes(1);
+
+      refreshSubject.next([{ getID: () => 'activity-dedupe', type: ActivityTypes.Running }]);
+      refreshSubject.complete();
+      await waitForAsyncWork();
+    });
+
+    it('should cap background refresh concurrency at four', async () => {
+      const refreshSubjects = new Map<string, Subject<any[]>>();
+      let activeRefreshes = 0;
+      let maxActiveRefreshes = 0;
+
+      mockEventService.getActivitiesOnceByEventWithOptions.mockImplementation((_user: unknown, eventId: string) => {
+        activeRefreshes++;
+        maxActiveRefreshes = Math.max(maxActiveRefreshes, activeRefreshes);
+        const subject = new Subject<any[]>();
+        refreshSubjects.set(eventId, subject);
+        subject.subscribe({
+          complete: () => {
+            activeRefreshes--;
+          },
+        });
+        return subject.asObservable();
+      });
+
+      for (let index = 0; index < 5; index++) {
+        (component as any).enqueueBackgroundActivityRefresh(
+          mockUser,
+          `concurrency-event-${index}`,
+          `cache-key-${index}`,
+          createCachedEventPolylines([
+            createCompleteCachedTrackActivity({
+              activityId: `activity-concurrency-${index}`,
+            }),
+          ], {
+            activityIdentitySignature: [`id:activity-concurrency-${index}`],
+          }),
+        );
+      }
+      await waitForAsyncWork();
+
+      expect(maxActiveRefreshes).toBe(4);
+      expect(mockEventService.getActivitiesOnceByEventWithOptions).toHaveBeenCalledTimes(4);
+
+      refreshSubjects.get('concurrency-event-0')?.next([{ getID: () => 'activity-concurrency-0', type: ActivityTypes.Running }]);
+      refreshSubjects.get('concurrency-event-0')?.complete();
+      await waitForAsyncWork();
+
+      expect(mockEventService.getActivitiesOnceByEventWithOptions).toHaveBeenCalledTimes(5);
+
+      Array.from(refreshSubjects.values()).forEach((subject, index) => {
+        if (index === 0) {
+          return;
+        }
+        subject.next([{ getID: () => `activity-concurrency-${index}`, type: ActivityTypes.Running }]);
+        subject.complete();
+      });
+      await waitForAsyncWork();
     });
 
     it('should add mapbox-dem source before setting terrain', async () => {

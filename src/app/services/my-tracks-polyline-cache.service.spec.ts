@@ -4,14 +4,35 @@ import * as idb from 'idb-keyval';
 import { AppOriginalFileHydrationService } from './app.original-file-hydration.service';
 import { LoggerService } from './logger.service';
 import {
+  CachedMyTracksActivityPolyline,
   CachedMyTracksEventPolylines,
   MyTracksPolylineCacheService,
 } from './my-tracks-polyline-cache.service';
 
 vi.mock('idb-keyval', () => ({
+  del: vi.fn(),
   get: vi.fn(),
   set: vi.fn(),
 }));
+
+const createCompleteCachedTrackActivity = (
+  overrides: Partial<CachedMyTracksActivityPolyline> = {},
+): CachedMyTracksActivityPolyline => ({
+  activityId: 'activity-1',
+  activityIndex: 0,
+  coordinates: [[22.94, 40.63], [22.95, 40.64]],
+  activityTypeValue: 'running',
+  activityTypeLabel: 'Running',
+  durationValue: 3600,
+  distanceValue: 10000,
+  durationLabel: '01:00:00',
+  distanceLabel: '10 km',
+  effortLabel: 'Pace',
+  effortDisplayLabel: '6:00 min/km',
+  effortStatType: 'Average Pace',
+  jumpHeatPoints: [],
+  ...overrides,
+});
 
 describe('MyTracksPolylineCacheService', () => {
   let service: MyTracksPolylineCacheService;
@@ -50,7 +71,7 @@ describe('MyTracksPolylineCacheService', () => {
     });
 
     expect(cacheKey).toBe(
-      'my-tracks-polyline:v1:event-1:users/u/events/e/file-a.fit@gen-a|users/u/events/e/file-b.fit@gen-b'
+      'my-tracks-polyline:v3:event-1:users/u/events/e/file-a.fit@gen-a|users/u/events/e/file-b.fit@gen-b'
     );
     expect(hydrationServiceMock.getFileGeneration).toHaveBeenNthCalledWith(
       1,
@@ -70,7 +91,7 @@ describe('MyTracksPolylineCacheService', () => {
       originalFile: { path: 'users/u/events/e/original.fit' },
     } as any);
 
-    expect(cacheKey).toBe('my-tracks-polyline:v1:legacy-event:users/u/events/e/original.fit@gen-1');
+    expect(cacheKey).toBe('my-tracks-polyline:v3:legacy-event:users/u/events/e/original.fit@gen-1');
   });
 
   it('should extract raw track polylines from activities with valid coordinates', () => {
@@ -101,6 +122,16 @@ describe('MyTracksPolylineCacheService', () => {
             [22.9447971, 40.6338438],
             [22.944685, 40.63426],
           ],
+          activityTypeValue: null,
+          activityTypeLabel: 'Activity',
+          durationValue: null,
+          distanceValue: null,
+          durationLabel: '-',
+          distanceLabel: '-',
+          effortLabel: null,
+          effortDisplayLabel: '-',
+          effortStatType: null,
+          jumpHeatPoints: [],
         },
       ],
     });
@@ -111,16 +142,16 @@ describe('MyTracksPolylineCacheService', () => {
       activityCount: 2,
       activityIdentitySignature: ['id:activity-a', 'id:activity-b'],
       trackActivities: [
-        {
+        createCompleteCachedTrackActivity({
           activityId: 'activity-b',
           activityIndex: 0,
           coordinates: [[22.94, 40.63], [22.95, 40.64]],
-        },
-        {
-          activityId: null,
+        }),
+        createCompleteCachedTrackActivity({
+          activityId: 'activity-fallback',
           activityIndex: 1,
           coordinates: [[20.85, 39.66], [20.86, 39.67]],
-        },
+        }),
       ],
     };
 
@@ -134,11 +165,13 @@ describe('MyTracksPolylineCacheService', () => {
         activity: expect.objectContaining({ getID: expect.any(Function) }),
         activityIndex: 1,
         coordinates: [[22.94, 40.63], [22.95, 40.64]],
+        cachedActivity: expect.objectContaining({ activityId: 'activity-b' }),
       },
       {
         activity: expect.objectContaining({ getID: expect.any(Function) }),
         activityIndex: 1,
         coordinates: [[20.85, 39.66], [20.86, 39.67]],
+        cachedActivity: expect.objectContaining({ activityId: 'activity-fallback' }),
       },
     ]);
   });
@@ -182,11 +215,7 @@ describe('MyTracksPolylineCacheService', () => {
       activityCount: 1,
       activityIdentitySignature: ['id:activity-1'],
       trackActivities: [
-        {
-          activityId: 'activity-1',
-          activityIndex: 0,
-          coordinates: [[22.94, 40.63], [22.95, 40.64]],
-        },
+        createCompleteCachedTrackActivity(),
       ],
     };
     vi.mocked(idb.get).mockResolvedValue(cachedValue);
@@ -197,5 +226,52 @@ describe('MyTracksPolylineCacheService', () => {
     expect(idb.set).toHaveBeenCalledWith('cache-key', cachedValue);
     expect(idb.get).toHaveBeenCalledWith('cache-key');
     expect(result).toEqual(cachedValue);
+  });
+
+  it('should reject metadata-incomplete cached entries', () => {
+    const incomplete: CachedMyTracksEventPolylines = {
+      activityCount: 1,
+      activityIdentitySignature: ['id:activity-1'],
+      trackActivities: [
+        createCompleteCachedTrackActivity({
+          effortLabel: null,
+        }),
+      ],
+    };
+
+    expect(service.hasCompleteTrackMetadata(incomplete)).toBe(false);
+  });
+
+  it('should resolve runtime tracks directly from cache entries', () => {
+    const cached: CachedMyTracksEventPolylines = {
+      activityCount: 1,
+      activityIdentitySignature: ['id:activity-1'],
+      trackActivities: [
+        createCompleteCachedTrackActivity({
+          activityId: 'activity-1',
+          activityTypeValue: 'running',
+        }),
+      ],
+    };
+
+    const resolved = service.resolveTrackPolylinesFromCache(cached);
+
+    expect(resolved).toEqual([
+      {
+        activity: expect.objectContaining({
+          getID: expect.any(Function),
+          type: 'running',
+        }),
+        activityIndex: 0,
+        coordinates: [[22.94, 40.63], [22.95, 40.64]],
+        cachedActivity: expect.objectContaining({ activityId: 'activity-1' }),
+      },
+    ]);
+  });
+
+  it('should delete cached event polylines through IndexedDB', async () => {
+    await service.deleteEventPolylines('cache-key');
+
+    expect(idb.del).toHaveBeenCalledWith('cache-key');
   });
 });
