@@ -82,10 +82,38 @@ function makeStripeApiList(data: Stripe.Subscription[]): Stripe.ApiList<Stripe.S
     } as Stripe.ApiList<Stripe.Subscription>;
 }
 
+function makeProduct(overrides: Partial<Stripe.Product> = {}): Stripe.Product {
+    return {
+        id: 'prod_basic',
+        object: 'product',
+        active: true,
+        attributes: [],
+        created: 0,
+        default_price: null,
+        description: null,
+        images: [],
+        livemode: false,
+        marketing_features: [],
+        metadata: {},
+        name: 'Basic',
+        package_dimensions: null,
+        shippable: null,
+        statement_descriptor: null,
+        tax_code: null,
+        type: 'service',
+        unit_label: null,
+        updated: 0,
+        url: null,
+        ...overrides,
+    } as Stripe.Product;
+}
+
 describe('replace-stripe-price script', () => {
     const mockPricesRetrieve = vi.fn();
     const mockPricesCreate = vi.fn();
     const mockPricesUpdate = vi.fn();
+    const mockProductsRetrieve = vi.fn();
+    const mockProductsUpdate = vi.fn();
     const mockSubscriptionsList = vi.fn();
     const mockSubscriptionsUpdate = vi.fn();
 
@@ -99,7 +127,11 @@ describe('replace-stripe-price script', () => {
             list: mockSubscriptionsList,
             update: mockSubscriptionsUpdate,
         },
-    } as unknown as Pick<Stripe, 'prices' | 'subscriptions'>;
+        products: {
+            retrieve: mockProductsRetrieve,
+            update: mockProductsUpdate,
+        },
+    } as unknown as Pick<Stripe, 'prices' | 'subscriptions' | 'products'>;
 
     const getStripeClient = vi.fn(async () => mockStripe);
 
@@ -108,6 +140,8 @@ describe('replace-stripe-price script', () => {
         mockPricesRetrieve.mockResolvedValue(makeRecurringPrice());
         mockPricesCreate.mockResolvedValue(makeRecurringPrice({ id: 'price_new', unit_amount: 199 }));
         mockPricesUpdate.mockResolvedValue(makeRecurringPrice({ id: 'price_old', active: false }));
+        mockProductsRetrieve.mockResolvedValue(makeProduct());
+        mockProductsUpdate.mockResolvedValue(makeProduct({ default_price: 'price_new' }));
         mockSubscriptionsList.mockResolvedValue(makeStripeApiList([]));
         mockSubscriptionsUpdate.mockResolvedValue({ id: 'sub_1' } as Stripe.Subscription);
     });
@@ -285,6 +319,39 @@ describe('replace-stripe-price script', () => {
         expect(mockPricesUpdate.mock.invocationCallOrder[0]).toBeGreaterThan(
             mockSubscriptionsUpdate.mock.invocationCallOrder[0],
         );
+    });
+
+    it('should update product default_price before deactivating an old default price', async () => {
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        mockProductsRetrieve.mockResolvedValue(makeProduct({
+            default_price: 'price_old',
+        }));
+        mockSubscriptionsList.mockResolvedValue(
+            makeStripeApiList([
+                makeSubscription({
+                    id: 'sub_default',
+                    status: 'active',
+                    oldPriceId: 'price_old',
+                    itemId: 'si_default',
+                    quantity: 1,
+                }),
+            ]),
+        );
+
+        await runReplaceStripePriceScript(
+            ['--old-price', 'price_old', '--new-unit-amount', '199', '--execute'],
+            { getStripeClient },
+        );
+
+        expect(mockProductsUpdate).toHaveBeenCalledWith('prod_basic', { default_price: 'price_new' });
+        expect(mockPricesUpdate).toHaveBeenCalledWith('price_old', { active: false });
+        expect(mockProductsUpdate.mock.invocationCallOrder[0]).toBeLessThan(
+            mockPricesUpdate.mock.invocationCallOrder[0],
+        );
+        expect(warnSpy).toHaveBeenCalledWith(
+            '[replace-stripe-price] Product prod_basic default_price was updated from price_old to price_new before old-price deactivation.',
+        );
+        warnSpy.mockRestore();
     });
 
     it('should skip old price deactivation when any migration fails', async () => {

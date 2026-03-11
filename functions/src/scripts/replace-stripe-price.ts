@@ -56,7 +56,7 @@ interface ScriptDependencies {
     getStripeClient: () => Promise<StripeClient>;
 }
 
-type StripeClient = Pick<Stripe, 'prices' | 'subscriptions'>;
+type StripeClient = Pick<Stripe, 'prices' | 'subscriptions' | 'products'>;
 
 function readArgValue(argv: string[], key: string): string | undefined {
     const equalsPrefix = `${key}=`;
@@ -176,6 +176,13 @@ export function parseReplaceStripePriceScriptOptions(argv: string[]): ReplaceStr
 
 function resolveProductId(product: string | Stripe.Product | Stripe.DeletedProduct): string {
     return typeof product === 'string' ? product : product.id;
+}
+
+function resolveDefaultPriceId(defaultPrice: string | Stripe.Price | null | undefined): string | null {
+    if (!defaultPrice) {
+        return null;
+    }
+    return typeof defaultPrice === 'string' ? defaultPrice : defaultPrice.id;
 }
 
 function buildRecurringCreateParams(recurring: Stripe.Price.Recurring): Stripe.PriceCreateParams.Recurring {
@@ -357,6 +364,28 @@ async function migrateSubscriptionsToNewPrice(
     return { migratedCount, failedSubscriptionIds };
 }
 
+async function reassignProductDefaultPriceIfNeeded(
+    stripe: StripeClient,
+    productId: string,
+    oldPriceId: string,
+    newPriceId: string,
+): Promise<void> {
+    const product = await stripe.products.retrieve(productId);
+    if ('deleted' in product && product.deleted) {
+        return;
+    }
+
+    const currentDefaultPriceId = resolveDefaultPriceId(product.default_price);
+    if (currentDefaultPriceId !== oldPriceId) {
+        return;
+    }
+
+    await stripe.products.update(product.id, { default_price: newPriceId });
+    console.warn(
+        `[replace-stripe-price] Product ${product.id} default_price was updated from ${oldPriceId} to ${newPriceId} before old-price deactivation.`,
+    );
+}
+
 function printPreflightSummary(
     options: ReplaceStripePriceScriptOptions,
     oldPrice: Stripe.Price,
@@ -450,6 +479,7 @@ export async function runReplaceStripePriceScript(
                     `[replace-stripe-price] Skipping old price deactivation because ${failedSubscriptionIds.length} subscription migrations failed.`,
                 );
             } else {
+                await reassignProductDefaultPriceIfNeeded(stripe, resolveProductId(oldPrice.product), oldPrice.id, newPriceId);
                 await stripe.prices.update(oldPrice.id, { active: false });
                 oldPriceDeactivated = true;
             }
