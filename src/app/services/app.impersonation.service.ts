@@ -126,13 +126,26 @@ export class AppImpersonationService {
             return;
         }
 
-        await authUser.getIdToken(true);
-        const refreshedTokenResult = await authUser.getIdTokenResult();
-        if (refreshedTokenResult.claims['admin'] === true) {
-            return;
+        const maxRefreshAttempts = 3;
+        for (let attempt = 1; attempt <= maxRefreshAttempts; attempt += 1) {
+            await authUser.getIdToken(true);
+            const refreshedTokenResult = await authUser.getIdTokenResult();
+            if (refreshedTokenResult.claims['admin'] === true) {
+                return;
+            }
+
+            if (attempt < maxRefreshAttempts) {
+                await this.waitForAdminClaimRetry();
+            }
         }
 
         throw new Error('Admin permissions are not ready yet. Please try again.');
+    }
+
+    private waitForAdminClaimRetry(): Promise<void> {
+        return new Promise((resolve) => {
+            setTimeout(resolve, 1000);
+        });
     }
 
     private buildStartErrorMessage(error: unknown): string {
