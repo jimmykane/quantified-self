@@ -279,15 +279,33 @@
     }
   }
 
-  .current-plan-chip {
-    width: 100%;
-    display: flex;
+  .current-plan-button {
+    display: inline-flex;
+    align-items: center;
     justify-content: center;
+    gap: 8px;
     margin-bottom: 8px;
+    font-weight: 400;
 
-    .current-plan-indicator {
-      font-weight: 400;
+    .mat-icon {
+      margin: 0;
+      color: inherit;
     }
+  }
+
+  .current-plan-button.mat-mdc-outlined-button:disabled,
+  .current-plan-button.mat-mdc-outlined-button.mat-mdc-button-disabled {
+    opacity: 1;
+    color: var(--mat-sys-on-primary-container);
+    border-color: color-mix(in srgb, var(--mat-sys-primary) 24%, transparent);
+    background-color: var(--mat-sys-primary-container);
+  }
+
+  .current-plan-button.current-plan-button-free.mat-mdc-outlined-button:disabled,
+  .current-plan-button.current-plan-button-free.mat-mdc-outlined-button.mat-mdc-button-disabled {
+    color: var(--mat-sys-on-surface);
+    border-color: var(--mat-sys-outline-variant);
+    background-color: var(--mat-sys-surface-container-high);
   }
 
   .manage-subscription-container .product-card {
