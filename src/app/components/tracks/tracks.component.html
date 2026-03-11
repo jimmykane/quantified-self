@@ -79,8 +79,6 @@
             [attr.aria-pressed]="isHomeEntrySelected()"
             (pointerenter)="onDetectedHomeHovered()"
             (pointerleave)="onDetectedHomeHoverEnded()"
-            (mouseenter)="onDetectedHomeHovered()"
-            (mouseleave)="onDetectedHomeHoverEnded()"
             (focus)="onDetectedHomeHovered()"
             (blur)="onDetectedHomeHoverEnded()"
             (click)="onDetectedHomeSelected()">
@@ -99,8 +97,6 @@
             [attr.aria-pressed]="selectedDetectedTripId() === trip.tripId"
             (pointerenter)="onDetectedTripHovered(trip)"
             (pointerleave)="onDetectedTripHoverEnded(trip)"
-            (mouseenter)="onDetectedTripHovered(trip)"
-            (mouseleave)="onDetectedTripHoverEnded(trip)"
             (focus)="onDetectedTripHovered(trip)"
             (blur)="onDetectedTripHoverEnded(trip)"
             (click)="onDetectedTripSelected(trip)">
