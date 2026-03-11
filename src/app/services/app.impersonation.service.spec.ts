@@ -7,7 +7,6 @@ import { AppAuthService } from '../authentication/app.auth.service';
 import { AppImpersonationService } from './app.impersonation.service';
 import { AdminService } from './admin.service';
 import { AppFunctionsService } from './app.functions.service';
-import { AppHapticsService } from './app.haptics.service';
 import { AppUserService } from './app.user.service';
 import { AppWindowService } from './app.window.service';
 import { LoggerService } from './logger.service';
@@ -37,9 +36,6 @@ describe('AppImpersonationService', () => {
     const loggerMock = {
         error: vi.fn()
     };
-    const hapticsMock = {
-        selection: vi.fn()
-    };
 
     let service: AppImpersonationService;
 
@@ -65,7 +61,6 @@ describe('AppImpersonationService', () => {
                 { provide: AppWindowService, useValue: windowServiceMock },
                 { provide: MatSnackBar, useValue: snackBarMock },
                 { provide: LoggerService, useValue: loggerMock },
-                { provide: AppHapticsService, useValue: hapticsMock }
             ]
         });
 
@@ -167,7 +162,6 @@ describe('AppImpersonationService', () => {
 
         await service.returnToAdmin();
 
-        expect(hapticsMock.selection).toHaveBeenCalled();
         expect(functionsServiceMock.call).toHaveBeenCalledWith('stopImpersonation');
         expect(authServiceMock.loginWithCustomToken).toHaveBeenCalledWith('admin-token');
         expect(windowServiceMock.windowRef.location.assign).toHaveBeenCalledWith('/admin');

@@ -33,6 +33,7 @@ describe('EventPowerCurveComponent', () => {
     resize: ReturnType<typeof vi.fn>;
     dispose: ReturnType<typeof vi.fn>;
     subscribeToViewportResize: ReturnType<typeof vi.fn>;
+    attachMobileSeriesTapFeedback: ReturnType<typeof vi.fn>;
   };
 
   let mockColorService: {
@@ -94,6 +95,7 @@ describe('EventPowerCurveComponent', () => {
       resize: vi.fn(),
       dispose: vi.fn(),
       subscribeToViewportResize: vi.fn(() => () => { }),
+      attachMobileSeriesTapFeedback: vi.fn(() => () => { }),
     };
 
     mockColorService = {

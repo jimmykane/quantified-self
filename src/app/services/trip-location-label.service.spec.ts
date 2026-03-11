@@ -72,7 +72,7 @@ describe('TripLocationLabelService', () => {
     expect(resolved).toEqual({
       city: null,
       country: 'Turkey',
-      label: 'Turkey',
+      label: 'Ankara Region, Turkey',
     });
   });
 
@@ -96,7 +96,7 @@ describe('TripLocationLabelService', () => {
     const resolved = await service.resolveTripLocation(27.70, 85.32);
 
     expect(resolved).toEqual({
-      city: 'Kathmandu District',
+      city: null,
       country: 'Nepal',
       label: 'Kathmandu District, Nepal',
     });
@@ -128,6 +128,41 @@ describe('TripLocationLabelService', () => {
     });
   });
 
+  it('prefers a containing place context over locality labels for Thessaloniki-area points', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        features: [
+          {
+            text: 'Kalamaria',
+            place_type: ['locality'],
+            context: [
+              { id: 'place.1234', text: 'Thessaloniki' },
+              { id: 'region.5678', text: 'Central Macedonia' },
+              { id: 'country.9012', text: 'Greece' }
+            ]
+          },
+          {
+            text: 'Central Macedonia',
+            place_type: ['region']
+          },
+          {
+            text: 'Greece',
+            place_type: ['country']
+          }
+        ]
+      })
+    } as unknown as Response);
+
+    const resolved = await service.resolveTripLocation(40.5829, 22.9509);
+
+    expect(resolved).toEqual({
+      city: 'Thessaloniki',
+      country: 'Greece',
+      label: 'Thessaloniki, Greece',
+    });
+  });
+
   it('uses cache for repeated centroid lookups', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
@@ -151,6 +186,281 @@ describe('TripLocationLabelService', () => {
     expect(first?.label).toBe('Ankara, Turkey');
     expect(second?.label).toBe('Ankara, Turkey');
     expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('votes across candidate coordinates to keep the dominant city label', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          features: [
+            {
+              text: 'Kathmandu',
+              place_type: ['place']
+            },
+            {
+              text: 'Nepal',
+              place_type: ['country']
+            }
+          ]
+        })
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          features: [
+            {
+              text: 'Kathmandu',
+              place_type: ['place']
+            },
+            {
+              text: 'Nepal',
+              place_type: ['country']
+            }
+          ]
+        })
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          features: [
+            {
+              text: 'Nepal',
+              place_type: ['country']
+            }
+          ]
+        })
+      } as unknown as Response);
+
+    const resolved = await service.resolveTripLocationFromCandidates([
+      { latitudeDegrees: 27.71, longitudeDegrees: 85.31 },
+      { latitudeDegrees: 27.72, longitudeDegrees: 85.32 },
+      { latitudeDegrees: 27.73, longitudeDegrees: 85.33 },
+    ]);
+
+    expect(resolved).toEqual({
+      city: 'Kathmandu',
+      country: 'Nepal',
+      label: 'Kathmandu, Nepal',
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+  });
+
+  it('keeps a shared containing place when sampled Greek locality labels differ', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          features: [
+            {
+              text: 'Kalamaria',
+              place_type: ['locality'],
+              context: [
+                { id: 'place.1234', text: 'Thessaloniki' },
+                { id: 'region.5678', text: 'Central Macedonia' },
+                { id: 'country.9012', text: 'Greece' }
+              ]
+            },
+            {
+              text: 'Greece',
+              place_type: ['country']
+            }
+          ]
+        })
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          features: [
+            {
+              text: 'Pylaia',
+              place_type: ['locality'],
+              context: [
+                { id: 'place.1234', text: 'Thessaloniki' },
+                { id: 'region.5678', text: 'Central Macedonia' },
+                { id: 'country.9012', text: 'Greece' }
+              ]
+            },
+            {
+              text: 'Greece',
+              place_type: ['country']
+            }
+          ]
+        })
+      } as unknown as Response);
+
+    const resolved = await service.resolveTripLocationFromCandidates([
+      { latitudeDegrees: 40.5829, longitudeDegrees: 22.9509 },
+      { latitudeDegrees: 40.5999, longitudeDegrees: 22.9866 },
+    ]);
+
+    expect(resolved).toEqual({
+      city: 'Thessaloniki',
+      country: 'Greece',
+      label: 'Thessaloniki, Greece',
+    });
+  });
+
+  it('keeps a single shared city when other sampled points fall back to country-only', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          features: [
+            {
+              text: 'Kalamaria',
+              place_type: ['locality'],
+              context: [
+                { id: 'place.1234', text: 'Thessaloniki' },
+                { id: 'region.5678', text: 'Central Macedonia' },
+                { id: 'country.9012', text: 'Greece' }
+              ]
+            }
+          ]
+        })
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          features: [
+            {
+              text: 'Greece',
+              place_type: ['country']
+            }
+          ]
+        })
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          features: [
+            {
+              text: 'Greece',
+              place_type: ['country']
+            }
+          ]
+        })
+      } as unknown as Response);
+
+    const resolved = await service.resolveTripLocationFromCandidates([
+      { latitudeDegrees: 40.5829, longitudeDegrees: 22.9509 },
+      { latitudeDegrees: 40.6401, longitudeDegrees: 22.9444 },
+      { latitudeDegrees: 40.6532, longitudeDegrees: 22.9391 },
+    ]);
+
+    expect(resolved).toEqual({
+      city: 'Thessaloniki',
+      country: 'Greece',
+      label: 'Thessaloniki, Greece',
+    });
+  });
+
+  it('preserves repeated rounded coordinates so Thessaloniki wins over a single suburb vote', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          features: [
+            {
+              text: 'Kalamaria',
+              place_type: ['place'],
+              context: [
+                { id: 'region.5678', text: 'Central Macedonia' },
+                { id: 'country.9012', text: 'Greece' }
+              ]
+            },
+            {
+              text: 'Central Macedonia',
+              place_type: ['region']
+            },
+            {
+              text: 'Greece',
+              place_type: ['country']
+            }
+          ]
+        })
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          features: [
+            {
+              text: 'Thessaloniki',
+              place_type: ['place'],
+              context: [
+                { id: 'region.5678', text: 'Central Macedonia' },
+                { id: 'country.9012', text: 'Greece' }
+              ]
+            },
+            {
+              text: 'Central Macedonia',
+              place_type: ['region']
+            },
+            {
+              text: 'Greece',
+              place_type: ['country']
+            }
+          ]
+        })
+      } as unknown as Response);
+
+    const resolved = await service.resolveTripLocationFromCandidates([
+      { latitudeDegrees: 40.58765645138919, longitudeDegrees: 22.966713001951575 },
+      { latitudeDegrees: 40.63384383916855, longitudeDegrees: 22.944797091186047 },
+      { latitudeDegrees: 40.63426, longitudeDegrees: 22.944685 },
+    ]);
+
+    expect(resolved).toEqual({
+      city: 'Thessaloniki',
+      country: 'Greece',
+      label: 'Thessaloniki, Greece',
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('falls back to the shared country when sampled city labels disagree', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          features: [
+            {
+              text: 'Kathmandu',
+              place_type: ['place']
+            },
+            {
+              text: 'Nepal',
+              place_type: ['country']
+            }
+          ]
+        })
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          features: [
+            {
+              text: 'Lalitpur',
+              place_type: ['place']
+            },
+            {
+              text: 'Nepal',
+              place_type: ['country']
+            }
+          ]
+        })
+      } as unknown as Response);
+
+    const resolved = await service.resolveTripLocationFromCandidates([
+      { latitudeDegrees: 27.71, longitudeDegrees: 85.31 },
+      { latitudeDegrees: 27.79, longitudeDegrees: 85.35 },
+    ]);
+
+    expect(resolved).toEqual({
+      city: null,
+      country: 'Nepal',
+      label: 'Nepal',
+    });
   });
 
   it('returns null when geocoding fails', async () => {

@@ -14,7 +14,10 @@ import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
 import { Observable, Subscription } from 'rxjs';
 import { map } from 'rxjs/operators';
 import {
+  NavigationCancel,
   NavigationEnd,
+  NavigationError,
+  NavigationStart,
   Router,
 } from '@angular/router';
 import { AppAuthService } from './authentication/app.auth.service';
@@ -87,6 +90,8 @@ export class AppComponent implements OnInit, OnDestroy {
   private breakpointObserver = inject(BreakpointObserver);
   public isHandset = toSignal(this.breakpointObserver.observe([Breakpoints.XSmall, Breakpoints.Small]).pipe(map(result => result.matches)), { initialValue: false });
   private hapticsService = inject(AppHapticsService);
+  private hasCompletedInitialNavigation = false;
+  private shouldTriggerNavigationHaptics = false;
 
   get layoutTopOffsetPx(): number {
     return this.showNavigation ? this.bannerHeight + 64 : 0;
@@ -149,7 +154,20 @@ export class AppComponent implements OnInit, OnDestroy {
     this.router.events
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((event) => {
+        if (event instanceof NavigationStart) {
+          this.shouldTriggerNavigationHaptics = this.hasCompletedInitialNavigation && event.navigationTrigger === 'imperative';
+          return;
+        }
+        if (event instanceof NavigationCancel || event instanceof NavigationError) {
+          this.shouldTriggerNavigationHaptics = false;
+          return;
+        }
         if (event instanceof NavigationEnd) {
+          if (this.shouldTriggerNavigationHaptics) {
+            this.hapticsService.selection();
+          }
+          this.shouldTriggerNavigationHaptics = false;
+          this.hasCompletedInitialNavigation = true;
           this.updateOnboardingState();
           this.scrollToTopAfterNavigation();
         }
@@ -248,7 +266,6 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   public onLogoClick() {
-    this.hapticsService.selection();
     if (this.authState) {
       this.router.navigate(['/dashboard']);
     } else {
@@ -262,17 +279,14 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   public navigateToDashboard() {
-    this.hapticsService.selection();
     this.router.navigate(['/dashboard']);
   }
 
   public navigateToAdmin() {
-    this.hapticsService.selection();
     this.router.navigate(['/admin']);
   }
 
   public navigateToLogin() {
-    this.hapticsService.selection();
     this.router.navigate(['/login']);
   }
 
@@ -376,7 +390,6 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   public openWhatsNew() {
-    this.hapticsService.selection();
     this.dialog.open(WhatsNewDialogComponent, {
       width: '860px',
       maxWidth: '96vw',

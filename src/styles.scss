@@ -108,7 +108,7 @@ body {
 }
 
 body {
-  background-color: var(--mat-app-background, var(--mat-sys-background));
+  background-color: var(--mat-sys-background);
   color: var(--mat-sys-on-surface);
   font-family: 'Noto Sans', sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -150,7 +150,7 @@ body.app-hydrated mat-icon {
 
 .dark-theme {
   color-scheme: dark;
-  background-color: var(--mat-app-background, var(--mat-sys-background));
+  background-color: var(--mat-sys-background);
   color: var(--mat-sys-on-surface);
 }
 
@@ -297,7 +297,7 @@ section.component-container {
   background-size: cover;
 }
 
-/* App aliases over official Material M3 system tokens. */
+/* Material M3 system tokens with app-level defaults. */
 :root {
   --qs-theme-primary: #2196f3;
   --qs-theme-on-primary: #ffffff;
@@ -312,24 +312,10 @@ section.component-container {
   --mat-sys-surface-container: rgba(0, 0, 0, 0.05);
   --mat-sys-surface-container-high: rgba(0, 0, 0, 0.08);
   --mat-sys-surface-container-highest: rgba(0, 0, 0, 0.12);
-  --mat-app-background: #fafafa;
-  --mat-app-surface: rgba(255, 255, 255, 0.90);
-  --mat-app-on-surface: var(--mat-sys-on-surface);
-  --mat-app-on-surface-variant: var(--mat-sys-on-surface-variant);
-  --mat-app-surface-container-lowest: #ffffff;
-  --mat-app-surface-container-low: rgba(0, 0, 0, 0.03);
-  --mat-app-surface-container-high: rgba(0, 0, 0, 0.08);
-  --mat-app-surface-container-highest: rgba(0, 0, 0, 0.12);
-  --mat-app-outline-variant: rgba(0, 0, 0, 0.10);
-  --mat-app-primary: var(--qs-theme-primary);
-  --mat-app-primary-container: var(--mat-sys-primary-container);
-  --mat-app-on-primary-container: var(--mat-sys-on-primary-container);
-  --mat-app-secondary-container: var(--mat-sys-secondary-container);
-  --mat-app-on-secondary-container: var(--mat-sys-on-secondary-container);
-  --mat-app-tertiary-container: var(--mat-sys-tertiary-container);
-  --mat-app-on-tertiary-container: var(--mat-sys-on-tertiary-container);
-  --mat-sidenav-content-background-color: var(--mat-app-background);
-  --mat-sidenav-container-background-color: var(--mat-app-surface-container-lowest);
+  --mat-sys-outline-variant: rgba(0, 0, 0, 0.10);
+  --mat-sys-primary: var(--qs-theme-primary);
+  --mat-sidenav-content-background-color: var(--mat-sys-background);
+  --mat-sidenav-container-background-color: var(--mat-sys-surface-container-lowest);
 }
 
 .dark-theme {
@@ -346,24 +332,10 @@ section.component-container {
   --mat-sys-surface-container: rgba(255, 255, 255, 0.08);
   --mat-sys-surface-container-high: rgba(255, 255, 255, 0.12);
   --mat-sys-surface-container-highest: rgba(255, 255, 255, 0.16);
-  --mat-app-background: #121212;
-  --mat-app-surface: rgba(30, 30, 30, 0.80);
-  --mat-app-on-surface: var(--mat-sys-on-surface);
-  --mat-app-on-surface-variant: var(--mat-sys-on-surface-variant);
-  --mat-app-surface-container-lowest: rgba(18, 18, 18, 0.96);
-  --mat-app-surface-container-low: rgba(255, 255, 255, 0.05);
-  --mat-app-surface-container-high: rgba(255, 255, 255, 0.12);
-  --mat-app-surface-container-highest: rgba(255, 255, 255, 0.16);
-  --mat-app-outline-variant: rgba(255, 255, 255, 0.10);
-  --mat-app-primary: var(--qs-theme-primary);
-  --mat-app-primary-container: var(--mat-sys-primary-container);
-  --mat-app-on-primary-container: var(--mat-sys-on-primary-container);
-  --mat-app-secondary-container: var(--mat-sys-secondary-container);
-  --mat-app-on-secondary-container: var(--mat-sys-on-secondary-container);
-  --mat-app-tertiary-container: var(--mat-sys-tertiary-container);
-  --mat-app-on-tertiary-container: var(--mat-sys-on-tertiary-container);
-  --mat-sidenav-content-background-color: var(--mat-app-background);
-  --mat-sidenav-container-background-color: var(--mat-app-surface-container-lowest);
+  --mat-sys-outline-variant: rgba(255, 255, 255, 0.10);
+  --mat-sys-primary: var(--qs-theme-primary);
+  --mat-sidenav-content-background-color: var(--mat-sys-background);
+  --mat-sidenav-container-background-color: var(--mat-sys-surface-container-lowest);
 }
 
 
@@ -424,10 +396,10 @@ mat-table {
   align-items: center;
   justify-content: space-between;
   padding: 24px 40px;
-  background: var(--mat-app-surface);
+  background: var(--mat-sys-surface);
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
-  border: 1px solid var(--mat-app-outline-variant);
+  border: 1px solid var(--mat-sys-outline-variant);
   gap: 24px;
   margin-bottom: 24px;
   position: relative;
@@ -467,7 +439,7 @@ mat-table {
     p {
       margin: 4px 0 0 0;
       font-size: 0.95rem;
-      color: var(--mat-app-on-surface-variant);
+      color: var(--mat-sys-on-surface-variant);
       opacity: 0.8;
     }
   }
@@ -482,7 +454,7 @@ mat-table {
 
 /* Dark Theme specific overrides for header card */
 .dark-theme .app-header-card {
-  background: var(--mat-app-surface) !important;
+  background: var(--mat-sys-surface) !important;
   /* Ensure it stays surface color */
   border-color: rgba(255, 255, 255, 0.1);
 }
@@ -756,7 +728,7 @@ mat-table {
   --qs-glass-panel-blur: 16px;
   --mat-bottom-sheet-container-background-color: transparent;
   --mat-bottom-sheet-container-shape: 20px;
-  background: var(--mat-app-surface) !important;
+  background: var(--mat-sys-surface) !important;
   /* Keep only the top corners rounded; bottom edge stays flush with viewport */
   border-radius: 20px 20px 0 0 !important;
   border: 1px solid rgba(255, 255, 255, 0.15);
@@ -783,11 +755,11 @@ mat-table {
   overflow: auto;
 
   &::-webkit-scrollbar-track {
-    background: var(--mat-app-surface);
+    background: var(--mat-sys-surface);
   }
 
   &::-webkit-scrollbar-corner {
-    background: var(--mat-app-surface);
+    background: var(--mat-sys-surface);
   }
 }
 
@@ -821,7 +793,7 @@ mat-table {
   .mat-mdc-dialog-surface {
     @extend .qs-glass-card-panel;
     --qs-glass-panel-blur: 16px;
-    background: var(--mat-app-surface) !important;
+    background: var(--mat-sys-surface) !important;
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 16px !important;
     box-shadow:
@@ -893,7 +865,7 @@ mat-table {
 .qs-bottom-sheet-container,
 .qs-whats-new-dialog,
 .qs-whats-new-page {
-  --qs-overlay-section-bg: var(--mat-app-surface-container-high);
+  --qs-overlay-section-bg: var(--mat-sys-surface-container-high);
   --qs-overlay-section-border: var(--mat-sys-outline-variant);
   --qs-overlay-section-shadow: none;
   --qs-overlay-section-radius: 12px;
@@ -981,7 +953,7 @@ tr.mat-row:focus,
 .mat-mdc-menu-panel.qs-menu-panel {
   @extend .qs-glass-card-panel;
   @include qs-scrollbar-skin;
-  background: var(--mat-app-surface) !important;
+  background: var(--mat-sys-surface) !important;
   min-width: 180px !important;
   max-width: min(360px, calc(100vw - 24px)) !important;
   overflow: hidden !important;
@@ -1024,14 +996,14 @@ tr.mat-row:focus,
 
 .qs-app-badge {
   position: relative;
-  --mat-badge-background-color: var(--mat-app-primary);
+  --mat-badge-background-color: var(--mat-sys-primary);
   --mat-badge-text-color: var(--mat-sys-on-primary);
-  --mat-badge-disabled-state-background-color: color-mix(in srgb, var(--mat-app-primary) 38%, transparent);
+  --mat-badge-disabled-state-background-color: color-mix(in srgb, var(--mat-sys-primary) 38%, transparent);
   --mat-badge-disabled-state-text-color: var(--mat-sys-on-primary);
 }
 
 .qs-app-badge ::ng-deep .mat-badge-content {
-  background-color: var(--mat-app-primary);
+  background-color: var(--mat-sys-primary);
   color: var(--mat-sys-on-primary);
   font-weight: 500;
   border-radius: 999px;
@@ -1255,7 +1227,7 @@ tr.mat-row:focus,
 
 .mat-mdc-select-panel.qs-config-submenu {
   @extend .qs-glass-card-panel;
-  background: var(--mat-app-surface) !important;
+  background: var(--mat-sys-surface) !important;
   border-radius: 12px !important;
   padding: 4px 0 !important;
   max-width: min(320px, calc(100vw - 24px)) !important;

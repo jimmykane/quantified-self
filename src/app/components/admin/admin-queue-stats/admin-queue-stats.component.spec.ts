@@ -35,7 +35,8 @@ describe('AdminQueueStatsComponent', () => {
             setOption: vi.fn(),
             resize: vi.fn(),
             dispose: vi.fn(),
-            subscribeToViewportResize: vi.fn(() => () => { })
+            subscribeToViewportResize: vi.fn(() => () => { }),
+            attachMobileSeriesTapFeedback: vi.fn(() => () => { }),
         };
 
         await TestBed.configureTestingModule({

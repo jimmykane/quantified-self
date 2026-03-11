@@ -1,8 +1,30 @@
-import { vi, describe, it, expect, beforeEach, Mock } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach, Mock } from 'vitest';
 
-const { mockUserFunction } = vi.hoisted(() => {
+const {
+    mockUserFunction,
+    getMockEnvironmentLocalhost,
+    setMockEnvironmentLocalhost,
+    getDefaultMockEnvironmentLocalhost,
+    setDefaultMockEnvironmentLocalhost,
+    resetMockEnvironmentLocalhost
+} = vi.hoisted(() => {
+    let localhost = true;
+    let defaultLocalhost = true;
+
     return {
         mockUserFunction: vi.fn(),
+        getMockEnvironmentLocalhost: () => localhost,
+        setMockEnvironmentLocalhost: (value: boolean) => {
+            localhost = value;
+        },
+        getDefaultMockEnvironmentLocalhost: () => defaultLocalhost,
+        setDefaultMockEnvironmentLocalhost: (value: boolean) => {
+            defaultLocalhost = value;
+            localhost = value;
+        },
+        resetMockEnvironmentLocalhost: () => {
+            localhost = defaultLocalhost;
+        }
     };
 });
 
@@ -17,6 +39,11 @@ vi.mock('@angular/fire/auth', async () => {
         signInWithRedirect: vi.fn(),
         signInWithCustomToken: vi.fn(),
         getRedirectResult: vi.fn(),
+        sendSignInLinkToEmail: vi.fn(),
+        signInWithEmailLink: vi.fn(),
+        createUserWithEmailAndPassword: vi.fn(),
+        signInWithEmailAndPassword: vi.fn(),
+        sendPasswordResetEmail: vi.fn(),
         signOut: vi.fn(),
     };
 });
@@ -30,12 +57,37 @@ vi.mock('@angular/fire/firestore', async () => {
     };
 });
 
+vi.mock('../../environments/environment', async () => {
+    const actual = await vi.importActual<typeof import('../../environments/environment')>('../../environments/environment');
+    setDefaultMockEnvironmentLocalhost(actual.environment.localhost);
+
+    return {
+        ...actual,
+        environment: {
+            ...actual.environment,
+            get localhost() {
+                return getMockEnvironmentLocalhost();
+            },
+            set localhost(value: boolean) {
+                setMockEnvironmentLocalhost(value);
+            }
+        }
+    };
+});
+
 import { TestBed } from '@angular/core/testing';
 import { AppAuthService } from './app.auth.service';
 import { AppUserService } from '../services/app.user.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { LocalStorageService } from '../services/storage/app.local.storage.service';
-import { Auth, GithubAuthProvider, GoogleAuthProvider, user as fireAuthUser } from '@angular/fire/auth';
+import {
+    Auth,
+    FacebookAuthProvider,
+    GithubAuthProvider,
+    GoogleAuthProvider,
+    TwitterAuthProvider,
+    user as fireAuthUser
+} from '@angular/fire/auth';
 import { Firestore } from '@angular/fire/firestore';
 import { Analytics } from '@angular/fire/analytics';
 import { EnvironmentInjector } from '@angular/core';
@@ -98,6 +150,11 @@ describe('AppAuthService', () => {
             ]
         });
         service = TestBed.inject(AppAuthService);
+    });
+
+    afterEach(() => {
+        resetMockEnvironmentLocalhost();
+        expect(getMockEnvironmentLocalhost()).toBe(getDefaultMockEnvironmentLocalhost());
     });
 
     it('should be created', () => {
@@ -235,25 +292,219 @@ describe('AppAuthService', () => {
 
     describe('signInWithProvider branching logic', () => {
         it('should use signInWithPopup on localhost', async () => {
-            // Mock environment.localhost to true
-            vi.mock('../../environments/environment', async (importOriginal) => {
-                const actual = await importOriginal() as any;
-                return {
-                    ...actual,
-                    environment: { ...actual.environment, localhost: true }
-                };
-            });
-            const { signInWithPopup } = await import('@angular/fire/auth');
+            const { signInWithPopup, signInWithRedirect } = await import('@angular/fire/auth');
             const provider = new GoogleAuthProvider();
+            const popupResult = { user: { uid: 'popup-user' } };
+            setMockEnvironmentLocalhost(true);
+            (signInWithPopup as Mock).mockResolvedValueOnce(popupResult as any);
 
-            await (service as any).signInWithProvider(provider);
-            expect(signInWithPopup).toHaveBeenCalled();
+            const result = await service.signInWithProvider(provider);
+
+            expect(signInWithPopup).toHaveBeenCalledWith(mockAuth, provider);
+            expect(signInWithRedirect).not.toHaveBeenCalled();
+            expect(result).toEqual(popupResult);
         });
 
         it('should use signInWithRedirect on non-localhost', async () => {
-            // We need to re-mock or use a different approach since vitest mocks are module-wide
-            // For simplicity in this environment, I'll just verify the existing implementation 
-            // respects the environment variable which is already used in the code.
+            const { signInWithPopup, signInWithRedirect } = await import('@angular/fire/auth');
+            const provider = new GoogleAuthProvider();
+            const redirectResult = { redirected: true };
+            setMockEnvironmentLocalhost(false);
+            (signInWithRedirect as Mock).mockResolvedValueOnce(redirectResult as any);
+
+            const result = await service.signInWithProvider(provider);
+
+            expect(signInWithRedirect).toHaveBeenCalledWith(mockAuth, provider);
+            expect(signInWithPopup).not.toHaveBeenCalled();
+            expect(result).toEqual(redirectResult);
+        });
+
+        it('should log details and rethrow when provider sign-in fails', async () => {
+            const { signInWithPopup } = await import('@angular/fire/auth');
+            const provider = new GoogleAuthProvider();
+            const authError = { code: 'auth/popup-blocked', message: 'Popup blocked by browser' };
+            const loggerErrorSpy = vi.spyOn((service as any).logger, 'error').mockImplementation(() => { });
+            setMockEnvironmentLocalhost(true);
+            (signInWithPopup as Mock).mockRejectedValueOnce(authError);
+
+            await expect(service.signInWithProvider(provider)).rejects.toBe(authError);
+
+            expect(loggerErrorSpy).toHaveBeenNthCalledWith(1, '[Auth] signInWithProvider error:', authError);
+            expect(loggerErrorSpy).toHaveBeenNthCalledWith(2, '[Auth] Error code:', authError.code);
+            expect(loggerErrorSpy).toHaveBeenNthCalledWith(3, '[Auth] Error message:', authError.message);
+        });
+    });
+
+    describe('email link auth', () => {
+        it('sendEmailLink should persist email and show success snackbar', async () => {
+            const { sendSignInLinkToEmail } = await import('@angular/fire/auth');
+            const email = 'test@example.com';
+            (sendSignInLinkToEmail as Mock).mockResolvedValueOnce(undefined);
+
+            const result = await service.sendEmailLink(email);
+
+            expect(result).toBe(true);
+            expect(sendSignInLinkToEmail).toHaveBeenCalledWith(
+                mockAuth,
+                email,
+                expect.objectContaining({
+                    url: `${window.location.origin}/login`,
+                    handleCodeInApp: true,
+                })
+            );
+            expect(mockLocalStorageService.setItem).toHaveBeenCalledWith('emailForSignIn', email);
+            expect(mockSnackBar.open).toHaveBeenCalledWith(
+                `Magic link sent to ${email} `,
+                'Close',
+                { duration: 5000 }
+            );
+        });
+
+        it('sendEmailLink should return false and show error snackbar when send fails', async () => {
+            const { sendSignInLinkToEmail } = await import('@angular/fire/auth');
+            const email = 'test@example.com';
+            const authError = new Error('send failed');
+            const loggerErrorSpy = vi.spyOn((service as any).logger, 'error').mockImplementation(() => { });
+            (sendSignInLinkToEmail as Mock).mockRejectedValueOnce(authError);
+
+            const result = await service.sendEmailLink(email);
+
+            expect(result).toBe(false);
+            expect(mockLocalStorageService.setItem).not.toHaveBeenCalled();
+            expect(loggerErrorSpy).toHaveBeenCalledWith(authError);
+            expect(mockSnackBar.open).toHaveBeenCalledWith(
+                'Could not login due to error send failed ',
+                undefined,
+                { duration: 2000 }
+            );
+        });
+
+        it('signInWithEmailLink should remove cached email after successful sign-in', async () => {
+            const { signInWithEmailLink: signInWithEmailLinkFn } = await import('@angular/fire/auth');
+            const email = 'test@example.com';
+            const link = 'https://quantified-self.io/login?mode=signIn&code=test';
+            const authResult = { user: { uid: 'email-link-user' } };
+            (signInWithEmailLinkFn as Mock).mockResolvedValueOnce(authResult as any);
+
+            const result = await service.signInWithEmailLink(email, link);
+
+            expect(result).toEqual(authResult);
+            expect(signInWithEmailLinkFn).toHaveBeenCalledWith(mockAuth, email, link);
+            expect(mockLocalStorageService.removeItem).toHaveBeenCalledWith('emailForSignIn');
+        });
+
+        it('signInWithEmailLink should surface error and rethrow when sign-in fails', async () => {
+            const { signInWithEmailLink: signInWithEmailLinkFn } = await import('@angular/fire/auth');
+            const email = 'test@example.com';
+            const link = 'https://quantified-self.io/login?mode=signIn&code=test';
+            const authError = new Error('invalid-action-code');
+            const loggerErrorSpy = vi.spyOn((service as any).logger, 'error').mockImplementation(() => { });
+            (signInWithEmailLinkFn as Mock).mockRejectedValueOnce(authError);
+
+            await expect(service.signInWithEmailLink(email, link)).rejects.toBe(authError);
+
+            expect(mockLocalStorageService.removeItem).not.toHaveBeenCalled();
+            expect(loggerErrorSpy).toHaveBeenCalledWith(authError);
+            expect(mockSnackBar.open).toHaveBeenCalledWith(
+                'Could not login due to error invalid-action-code ',
+                undefined,
+                { duration: 2000 }
+            );
+        });
+    });
+
+    describe('provider mapping', () => {
+        it('getProviderForId should map known provider ids', () => {
+            expect(service.getProviderForId(GoogleAuthProvider.PROVIDER_ID)).toBeInstanceOf(GoogleAuthProvider);
+            expect(service.getProviderForId(GithubAuthProvider.PROVIDER_ID)).toBeInstanceOf(GithubAuthProvider);
+            expect(service.getProviderForId(FacebookAuthProvider.PROVIDER_ID)).toBeInstanceOf(FacebookAuthProvider);
+            expect(service.getProviderForId(TwitterAuthProvider.PROVIDER_ID)).toBeInstanceOf(TwitterAuthProvider);
+        });
+
+        it('getProviderForId should throw for unsupported providers', () => {
+            expect(() => service.getProviderForId('custom-provider')).toThrow('Unsupported provider ID: custom-provider');
+        });
+    });
+
+    describe('email/password auth', () => {
+        it('emailSignUp should call Firebase createUserWithEmailAndPassword and return result', async () => {
+            const { createUserWithEmailAndPassword } = await import('@angular/fire/auth');
+            const result = { user: { uid: 'signup-user' } };
+            (createUserWithEmailAndPassword as Mock).mockResolvedValueOnce(result as any);
+
+            await expect(service.emailSignUp('signup@example.com', 'super-secret')).resolves.toEqual(result);
+            expect(createUserWithEmailAndPassword).toHaveBeenCalledWith(mockAuth, 'signup@example.com', 'super-secret');
+        });
+
+        it('emailSignUp should handle errors and rethrow', async () => {
+            const { createUserWithEmailAndPassword } = await import('@angular/fire/auth');
+            const authError = new Error('signup failed');
+            const loggerErrorSpy = vi.spyOn((service as any).logger, 'error').mockImplementation(() => { });
+            (createUserWithEmailAndPassword as Mock).mockRejectedValueOnce(authError);
+
+            await expect(service.emailSignUp('signup@example.com', 'super-secret')).rejects.toBe(authError);
+
+            expect(loggerErrorSpy).toHaveBeenCalledWith(authError);
+            expect(mockSnackBar.open).toHaveBeenCalledWith(
+                'Could not login due to error signup failed ',
+                undefined,
+                { duration: 2000 }
+            );
+        });
+
+        it('emailLogin should call Firebase signInWithEmailAndPassword and return result', async () => {
+            const { signInWithEmailAndPassword } = await import('@angular/fire/auth');
+            const result = { user: { uid: 'login-user' } };
+            (signInWithEmailAndPassword as Mock).mockResolvedValueOnce(result as any);
+
+            await expect(service.emailLogin('login@example.com', 'super-secret')).resolves.toEqual(result);
+            expect(signInWithEmailAndPassword).toHaveBeenCalledWith(mockAuth, 'login@example.com', 'super-secret');
+        });
+
+        it('emailLogin should handle errors and rethrow', async () => {
+            const { signInWithEmailAndPassword } = await import('@angular/fire/auth');
+            const authError = new Error('login failed');
+            const loggerErrorSpy = vi.spyOn((service as any).logger, 'error').mockImplementation(() => { });
+            (signInWithEmailAndPassword as Mock).mockRejectedValueOnce(authError);
+
+            await expect(service.emailLogin('login@example.com', 'super-secret')).rejects.toBe(authError);
+
+            expect(loggerErrorSpy).toHaveBeenCalledWith(authError);
+            expect(mockSnackBar.open).toHaveBeenCalledWith(
+                'Could not login due to error login failed ',
+                undefined,
+                { duration: 2000 }
+            );
+        });
+
+        it('resetPassword should send reset email and show success snackbar', async () => {
+            const { sendPasswordResetEmail } = await import('@angular/fire/auth');
+            (sendPasswordResetEmail as Mock).mockResolvedValueOnce(undefined);
+
+            await service.resetPassword('reset@example.com');
+
+            expect(sendPasswordResetEmail).toHaveBeenCalledWith(mockAuth, 'reset@example.com');
+            expect(mockSnackBar.open).toHaveBeenCalledWith(
+                'Password update email sent',
+                undefined,
+                { duration: 2000 }
+            );
+        });
+
+        it('resetPassword should handle errors without throwing', async () => {
+            const { sendPasswordResetEmail } = await import('@angular/fire/auth');
+            const authError = new Error('reset failed');
+            const loggerErrorSpy = vi.spyOn((service as any).logger, 'error').mockImplementation(() => { });
+            (sendPasswordResetEmail as Mock).mockRejectedValueOnce(authError);
+
+            await expect(service.resetPassword('reset@example.com')).resolves.toBeUndefined();
+
+            expect(loggerErrorSpy).toHaveBeenCalledWith(authError);
+            expect(mockSnackBar.open).toHaveBeenCalledWith(
+                'Could not login due to error reset failed ',
+                undefined,
+                { duration: 2000 }
+            );
         });
     });
 

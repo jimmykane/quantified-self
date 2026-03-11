@@ -28,7 +28,6 @@ section[mat-menu-item] {
 
 /* Delete Button Section */
 section.delete-section {
-  margin-top: 12px;
   padding-bottom: 12px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;

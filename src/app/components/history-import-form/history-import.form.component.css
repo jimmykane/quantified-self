@@ -198,22 +198,22 @@ mat-checkbox {
   display: inline-flex !important;
   align-items: center;
   /* Use app theme primary color */
-  --mdc-checkbox-selected-icon-color: var(--mat-app-primary, #3f51b5) !important;
-  --mdc-checkbox-unselected-outline-color: var(--mat-app-primary, #3f51b5) !important;
-  --mat-checkbox-selected-container-color: var(--mat-app-primary, #3f51b5) !important;
+  --mdc-checkbox-selected-icon-color: var(--mat-sys-primary, #3f51b5) !important;
+  --mdc-checkbox-unselected-outline-color: var(--mat-sys-primary, #3f51b5) !important;
+  --mat-checkbox-selected-container-color: var(--mat-sys-primary, #3f51b5) !important;
 }
 
 /* Ensure the box itself has a clear border in all states */
 ::ng-deep .mdc-checkbox__background {
-  border: 2px solid var(--mat-app-primary, #3f51b5) !important;
+  border: 2px solid var(--mat-sys-primary, #3f51b5) !important;
   border-radius: 4px !important;
   transition: background-color 0.2s, border-color 0.2s !important;
 }
 
 /* Filled background when checked */
 ::ng-deep .mat-mdc-checkbox-checked .mdc-checkbox__background {
-  background-color: var(--mat-app-primary, #3f51b5) !important;
-  border-color: var(--mat-app-primary, #3f51b5) !important;
+  background-color: var(--mat-sys-primary, #3f51b5) !important;
+  border-color: var(--mat-sys-primary, #3f51b5) !important;
 }
 
 /* Clear background when NOT checked */
@@ -259,6 +259,6 @@ mat-checkbox {
 }
 
 :host-context(.dark-theme) ::ng-deep .mat-mdc-checkbox-checked .mdc-checkbox__background {
-  border-color: var(--mat-app-primary, #90caf9) !important;
-  background-color: var(--mat-app-primary, #90caf9) !important;
+  border-color: var(--mat-sys-primary, #90caf9) !important;
+  background-color: var(--mat-sys-primary, #90caf9) !important;
 }

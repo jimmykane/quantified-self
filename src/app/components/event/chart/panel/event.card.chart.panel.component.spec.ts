@@ -53,6 +53,7 @@ describe('EventCardChartPanelComponent', () => {
     resize: vi.fn(),
     dispose: vi.fn(),
     subscribeToViewportResize: vi.fn(() => () => { }),
+    attachMobileSeriesTapFeedback: vi.fn(() => () => { }),
   };
 
   beforeEach(async () => {

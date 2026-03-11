@@ -48,7 +48,6 @@ import { AppEventUtilities } from '../../utils/app.event.utilities';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 import { MergeOptionsDialogComponent } from './merge-options-dialog/merge-options-dialog.component';
 import { AppEventMergeService, MergeType } from '../../services/app.event-merge.service';
-import { AppHapticsService } from '../../services/app.haptics.service';
 
 @Component({
   selector: 'app-event-table',
@@ -91,7 +90,6 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   private searchSubject: Subject<string> = new Subject();
   private analyticsService = inject(AppAnalyticsService);
-  private hapticsService = inject(AppHapticsService);
 
   constructor(private snackBar: MatSnackBar,
     private eventService: AppEventService,
@@ -288,13 +286,6 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       event.stopPropagation();
       this.checkBoxClick(row);
     }
-  }
-
-  public onRowClick(event: Event): void {
-    if (event.defaultPrevented) {
-      return;
-    }
-    this.hapticsService.selection();
   }
 
   trackByEventId = (index: number, row: StatRowElement): string | number => {

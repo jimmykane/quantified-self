@@ -4,8 +4,8 @@
    ========================================================================== */
 
 :root {
-  --qs-glass-panel-bg: var(--mat-app-surface, var(--mat-sys-surface));
-  --qs-glass-panel-border: var(--mat-app-outline-variant);
+  --qs-glass-panel-bg: var(--mat-sys-surface);
+  --qs-glass-panel-border: var(--mat-sys-outline-variant);
   --qs-glass-panel-radius: 20px;
   --qs-glass-panel-blur: 12px;
   --qs-glass-panel-shadow:
@@ -45,7 +45,7 @@
 }
 
 .dark-theme {
-  --qs-glass-panel-bg: var(--mat-app-surface, rgba(30, 30, 30, 0.8));
+  --qs-glass-panel-bg: var(--mat-sys-surface, rgba(30, 30, 30, 0.8));
 
   .mat-mdc-card:not(.qs-card-plain):not(.qs-overlay-flat):not(.mat-mdc-dialog-surface):not(.mat-mdc-dialog-container) {
     --mat-card-elevated-container-color: var(--qs-glass-panel-bg);

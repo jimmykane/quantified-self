@@ -29,6 +29,7 @@ import {
     runWhenStyleReady
 } from '../../services/map/mapbox-style-ready.utils';
 import { resolveThemedActivityColor } from '../../services/map/map-activity-color.utils';
+import { DetectedHomeArea, TripBounds } from '../../services/my-tracks-trip-detection.service';
 
 type TrackStyleMode = 'dark-glow' | 'light-contrast';
 type TrackLayerRole = 'glow' | 'casing' | 'main';
@@ -62,9 +63,22 @@ interface TrackStartPointWithId extends TrackStartPoint {
     pointId: string;
 }
 
+export interface TripAreaOverlay {
+    tripId: string;
+    centroidLat: number;
+    centroidLng: number;
+    bounds: TripBounds;
+}
+
 export class TracksMapManager {
     private static readonly JUMP_HEAT_SOURCE_ID = 'jump-heat-source';
     private static readonly JUMP_HEAT_LAYER_ID = 'jump-heat-layer';
+    private static readonly HOME_AREA_SOURCE_ID = 'home-area-source';
+    private static readonly HOME_AREA_FILL_LAYER_ID = 'home-area-fill-layer';
+    private static readonly HOME_AREA_OUTLINE_LAYER_ID = 'home-area-outline-layer';
+    private static readonly TRIP_AREA_SOURCE_ID = 'trip-area-source';
+    private static readonly TRIP_AREA_FILL_LAYER_ID = 'trip-area-fill-layer';
+    private static readonly TRIP_AREA_OUTLINE_LAYER_ID = 'trip-area-outline-layer';
     private static readonly TRACK_START_SOURCE_ID = 'track-start-source';
     private static readonly TRACK_START_LAYER_ID = 'track-start-layer';
     private static readonly TRACK_START_HIT_LAYER_ID = 'track-start-hit-layer';
@@ -90,6 +104,8 @@ export class TracksMapManager {
     private trackLayerBaseColors = new Map<string, string>();
     private jumpHeatPoints: JumpHeatPointInput[] = [];
     private jumpHeatmapVisible = true;
+    private homeArea: DetectedHomeArea | null = null;
+    private tripArea: TripAreaOverlay | null = null;
     private trackStartPoints: TrackStartPointWithId[] = [];
     private trackStartPointsById = new Map<string, TrackStartPointWithId>();
     private startSelectionHandler: ((selection: TrackStartSelection | null) => void) | null = null;
@@ -120,6 +136,16 @@ export class TracksMapManager {
         } else {
             this.updateJumpHeatmapVisibility();
         }
+        if (this.homeArea) {
+            this.renderHomeArea();
+        } else {
+            this.removeHomeAreaLayerAndSource();
+        }
+        if (this.tripArea) {
+            this.renderTripArea();
+        } else {
+            this.removeTripAreaLayerAndSource();
+        }
         if (this.trackStartPoints.length > 0) {
             this.renderTrackStartPoints();
         } else {
@@ -130,6 +156,12 @@ export class TracksMapManager {
 
     public setIsDarkTheme(isDark: boolean) {
         this.isDarkTheme = isDark;
+        if (this.map && this.homeArea) {
+            this.renderHomeArea();
+        }
+        if (this.map && this.tripArea) {
+            this.renderTripArea();
+        }
         if (this.map && this.trackStartPoints.length > 0) {
             this.renderTrackStartPoints();
         }
@@ -137,6 +169,12 @@ export class TracksMapManager {
 
     public setMapStyle(mapStyle: MapStyleName) {
         this.mapStyle = mapStyle ?? 'default';
+        if (this.map && this.homeArea) {
+            this.renderHomeArea();
+        }
+        if (this.map && this.tripArea) {
+            this.renderTripArea();
+        }
         if (this.map && this.trackStartPoints.length > 0) {
             this.renderTrackStartPoints();
         }
@@ -190,6 +228,48 @@ export class TracksMapManager {
     public clearJumpHeatmap(): void {
         this.jumpHeatPoints = [];
         this.removeJumpHeatmapLayerAndSource();
+    }
+
+    public setHomeArea(homeArea: DetectedHomeArea | null): void {
+        this.homeArea = homeArea
+            ? {
+                ...homeArea,
+                bounds: { ...homeArea.bounds }
+            }
+            : null;
+
+        if (!this.homeArea) {
+            this.removeHomeAreaLayerAndSource();
+            return;
+        }
+
+        this.renderHomeArea();
+    }
+
+    public clearHomeArea(): void {
+        this.homeArea = null;
+        this.removeHomeAreaLayerAndSource();
+    }
+
+    public setTripArea(tripArea: TripAreaOverlay | null): void {
+        this.tripArea = tripArea
+            ? {
+                ...tripArea,
+                bounds: { ...tripArea.bounds }
+            }
+            : null;
+
+        if (!this.tripArea) {
+            this.removeTripAreaLayerAndSource();
+            return;
+        }
+
+        this.renderTripArea();
+    }
+
+    public clearTripArea(): void {
+        this.tripArea = null;
+        this.removeTripAreaLayerAndSource();
     }
 
     public setStartMarkerSelectionHandler(handler: ((selection: TrackStartSelection | null) => void) | null): void {
@@ -513,6 +593,8 @@ export class TracksMapManager {
         }
         this.trackLayerBaseColors.clear();
         this.tracksByActivityId.clear();
+        this.clearHomeArea();
+        this.clearTripArea();
         this.clearActivityStartPoints();
     }
 
@@ -623,10 +705,12 @@ export class TracksMapManager {
     }
 
     private restoreTracksAfterStyleReload() {
-        if (!this.map || (this.tracksByActivityId.size === 0 && this.jumpHeatPoints.length === 0 && this.trackStartPoints.length === 0)) return;
+        if (!this.map || (this.tracksByActivityId.size === 0 && this.jumpHeatPoints.length === 0 && this.trackStartPoints.length === 0 && !this.homeArea && !this.tripArea)) return;
 
         this.zone.runOutsideAngular(() => {
             this.renderJumpHeatmap();
+            this.renderHomeArea();
+            this.renderTripArea();
             if (this.batchRenderingEnabled) {
                 const preparedTracks = Array.from(this.tracksByActivityId.values()).map(({ activity, coordinates }) => ({
                     activity,
@@ -730,10 +814,205 @@ export class TracksMapManager {
         });
     }
 
+    private renderHomeArea(): void {
+        if (!this.map || !this.homeArea) return;
+
+        const sourceData = this.buildHomeAreaFeatureCollection(this.homeArea);
+        const beforeLayerId = this.getFirstTrackLayerId();
+        const fillPaint = this.buildHomeAreaFillPaint();
+        const outlinePaint = this.buildHomeAreaOutlinePaint();
+
+        this.zone.runOutsideAngular(() => {
+            upsertGeoJsonSource(this.map, TracksMapManager.HOME_AREA_SOURCE_ID, sourceData);
+
+            ensureLayer(this.map, {
+                id: TracksMapManager.HOME_AREA_FILL_LAYER_ID,
+                type: 'fill',
+                source: TracksMapManager.HOME_AREA_SOURCE_ID,
+                paint: fillPaint,
+            }, beforeLayerId);
+
+            ensureLayer(this.map, {
+                id: TracksMapManager.HOME_AREA_OUTLINE_LAYER_ID,
+                type: 'line',
+                source: TracksMapManager.HOME_AREA_SOURCE_ID,
+                paint: outlinePaint,
+            }, beforeLayerId);
+
+            setPaintIfLayerExists(this.map, TracksMapManager.HOME_AREA_FILL_LAYER_ID, fillPaint);
+            setPaintIfLayerExists(this.map, TracksMapManager.HOME_AREA_OUTLINE_LAYER_ID, outlinePaint);
+        });
+    }
+
+    private removeHomeAreaLayerAndSource(): void {
+        if (!this.map) return;
+
+        this.zone.runOutsideAngular(() => {
+            removeLayerIfExists(this.map, TracksMapManager.HOME_AREA_OUTLINE_LAYER_ID);
+            removeLayerIfExists(this.map, TracksMapManager.HOME_AREA_FILL_LAYER_ID);
+            removeSourceIfExists(this.map, TracksMapManager.HOME_AREA_SOURCE_ID);
+        });
+    }
+
+    private renderTripArea(): void {
+        if (!this.map || !this.tripArea) return;
+
+        const sourceData = this.buildTripAreaFeatureCollection(this.tripArea);
+        const beforeLayerId = this.getTripAreaBeforeLayerId();
+        const fillPaint = this.buildTripAreaFillPaint();
+        const outlinePaint = this.buildTripAreaOutlinePaint();
+
+        this.zone.runOutsideAngular(() => {
+            upsertGeoJsonSource(this.map, TracksMapManager.TRIP_AREA_SOURCE_ID, sourceData);
+
+            ensureLayer(this.map, {
+                id: TracksMapManager.TRIP_AREA_FILL_LAYER_ID,
+                type: 'fill',
+                source: TracksMapManager.TRIP_AREA_SOURCE_ID,
+                paint: fillPaint,
+            }, beforeLayerId);
+
+            ensureLayer(this.map, {
+                id: TracksMapManager.TRIP_AREA_OUTLINE_LAYER_ID,
+                type: 'line',
+                source: TracksMapManager.TRIP_AREA_SOURCE_ID,
+                paint: outlinePaint,
+            }, beforeLayerId);
+
+            setPaintIfLayerExists(this.map, TracksMapManager.TRIP_AREA_FILL_LAYER_ID, fillPaint);
+            setPaintIfLayerExists(this.map, TracksMapManager.TRIP_AREA_OUTLINE_LAYER_ID, outlinePaint);
+        });
+    }
+
+    private removeTripAreaLayerAndSource(): void {
+        if (!this.map) return;
+
+        this.zone.runOutsideAngular(() => {
+            removeLayerIfExists(this.map, TracksMapManager.TRIP_AREA_OUTLINE_LAYER_ID);
+            removeLayerIfExists(this.map, TracksMapManager.TRIP_AREA_FILL_LAYER_ID);
+            removeSourceIfExists(this.map, TracksMapManager.TRIP_AREA_SOURCE_ID);
+        });
+    }
+
     private getFirstTrackLayerId(): string | undefined {
         const layers = this.map?.getStyle?.()?.layers;
         if (!Array.isArray(layers)) return undefined;
         return layers.find((layer: any) => typeof layer?.id === 'string' && layer.id.startsWith('track-layer-'))?.id;
+    }
+
+    private getTripAreaBeforeLayerId(): string | undefined {
+        if (this.map?.getLayer?.(TracksMapManager.TRACK_START_LAYER_ID)) {
+            return TracksMapManager.TRACK_START_LAYER_ID;
+        }
+
+        if (this.map?.getLayer?.(TracksMapManager.TRACK_START_HIT_LAYER_ID)) {
+            return TracksMapManager.TRACK_START_HIT_LAYER_ID;
+        }
+
+        return undefined;
+    }
+
+    private buildHomeAreaFeatureCollection(homeArea: DetectedHomeArea): any {
+        return {
+            type: 'FeatureCollection',
+            features: [{
+                type: 'Feature',
+                properties: {
+                    destinationId: homeArea.destinationId,
+                    radiusKm: homeArea.radiusKm,
+                    pointCount: homeArea.pointCount,
+                    pointShare: homeArea.pointShare,
+                },
+                geometry: {
+                    type: 'Polygon',
+                    coordinates: [this.buildGeodesicCircleCoordinates(
+                        homeArea.centroidLng,
+                        homeArea.centroidLat,
+                        homeArea.radiusKm,
+                    )],
+                },
+            }],
+        };
+    }
+
+    private buildTripAreaFeatureCollection(tripArea: TripAreaOverlay): any {
+        return {
+            type: 'FeatureCollection',
+            features: [{
+                type: 'Feature',
+                properties: {
+                    tripId: tripArea.tripId,
+                    centroidLat: tripArea.centroidLat,
+                    centroidLng: tripArea.centroidLng,
+                },
+                geometry: {
+                    type: 'Polygon',
+                    coordinates: [this.buildGeodesicCircleCoordinates(
+                        tripArea.centroidLng,
+                        tripArea.centroidLat,
+                        this.estimateTripAreaRadiusKm(tripArea),
+                    )],
+                },
+            }],
+        };
+    }
+
+    private buildGeodesicCircleCoordinates(centerLng: number, centerLat: number, radiusKm: number, steps: number = 48): number[][] {
+        const earthRadiusKm = 6371.0088;
+        const angularDistance = radiusKm / earthRadiusKm;
+        const centerLatRad = this.toRadians(centerLat);
+        const centerLngRad = this.toRadians(centerLng);
+        const coordinates: number[][] = [];
+
+        for (let step = 0; step <= steps; step++) {
+            const bearing = (2 * Math.PI * step) / steps;
+            const latitudeRad = Math.asin(
+                Math.sin(centerLatRad) * Math.cos(angularDistance)
+                + Math.cos(centerLatRad) * Math.sin(angularDistance) * Math.cos(bearing)
+            );
+            const longitudeRad = centerLngRad + Math.atan2(
+                Math.sin(bearing) * Math.sin(angularDistance) * Math.cos(centerLatRad),
+                Math.cos(angularDistance) - Math.sin(centerLatRad) * Math.sin(latitudeRad)
+            );
+
+            coordinates.push([
+                this.normalizeLongitude(this.toDegrees(longitudeRad)),
+                this.toDegrees(latitudeRad),
+            ]);
+        }
+
+        return coordinates;
+    }
+
+    private buildHomeAreaFillPaint(): Record<string, any> {
+        return {
+            'fill-color': '#22c55e',
+            'fill-opacity': this.isBusyMapStyle() || this.isDarkTheme ? 0.14 : 0.1,
+        };
+    }
+
+    private buildHomeAreaOutlinePaint(): Record<string, any> {
+        return {
+            'line-color': this.isBusyMapStyle() || this.isDarkTheme ? '#dcfce7' : '#15803d',
+            'line-width': this.isBusyMapStyle() ? 2.2 : 1.8,
+            'line-opacity': this.isBusyMapStyle() || this.isDarkTheme ? 0.88 : 0.72,
+            'line-dasharray': [2.2, 1.4],
+        };
+    }
+
+    private buildTripAreaFillPaint(): Record<string, any> {
+        return {
+            'fill-color': this.resolveMaterialColor('--mat-sys-secondary-container', this.isDarkTheme ? '#25445b' : '#cfe8f5'),
+            'fill-opacity': this.isBusyMapStyle() || this.isDarkTheme ? 0.3 : 0.24,
+        };
+    }
+
+    private buildTripAreaOutlinePaint(): Record<string, any> {
+        return {
+            'line-color': this.resolveMaterialColor('--mat-sys-secondary', '#2b6f8f'),
+            'line-width': this.isBusyMapStyle() ? 3.0 : 2.5,
+            'line-opacity': this.isBusyMapStyle() || this.isDarkTheme ? 0.98 : 0.9,
+        };
     }
 
     private renderTrackStartPoints(): void {
@@ -1151,6 +1430,58 @@ export class TracksMapManager {
 
     private isBusyMapStyle(): boolean {
         return this.mapStyle === 'satellite' || this.mapStyle === 'outdoors';
+    }
+
+    private estimateTripAreaRadiusKm(tripArea: TripAreaOverlay): number {
+        const corners: number[][] = [
+            [tripArea.bounds.west, tripArea.bounds.south],
+            [tripArea.bounds.west, tripArea.bounds.north],
+            [tripArea.bounds.east, tripArea.bounds.south],
+            [tripArea.bounds.east, tripArea.bounds.north],
+        ];
+
+        const maxCornerDistanceKm = corners.reduce((currentMax, [lng, lat]) => (
+            Math.max(
+                currentMax,
+                this.haversineDistanceKm(tripArea.centroidLat, tripArea.centroidLng, lat, lng),
+            )
+        ), 0);
+
+        return Math.min(80, Math.max(1.2, maxCornerDistanceKm * 1.12));
+    }
+
+    private haversineDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+        const earthRadiusKm = 6371;
+        const dLat = this.toRadians(lat2 - lat1);
+        const dLon = this.toRadians(lon2 - lon1);
+        const startLat = this.toRadians(lat1);
+        const endLat = this.toRadians(lat2);
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+            + Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(startLat) * Math.cos(endLat);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return earthRadiusKm * c;
+    }
+
+    private toRadians(value: number): number {
+        return (value * Math.PI) / 180;
+    }
+
+    private toDegrees(value: number): number {
+        return (value * 180) / Math.PI;
+    }
+
+    private normalizeLongitude(value: number): number {
+        return ((((value + 540) % 360) + 360) % 360) - 180;
+    }
+
+    private resolveMaterialColor(cssVariable: string, fallback: string): string {
+        const body = globalThis?.document?.body;
+        if (!body || typeof globalThis.getComputedStyle !== 'function') {
+            return fallback;
+        }
+
+        const value = globalThis.getComputedStyle(body).getPropertyValue(cssVariable).trim();
+        return value.length > 0 ? value : fallback;
     }
 
     private resolveLayerRole(layerId: string): TrackLayerRole {

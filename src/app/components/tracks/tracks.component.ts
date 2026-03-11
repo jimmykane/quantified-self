@@ -15,7 +15,6 @@ import { getDatesForDateRange } from '../../helpers/date-range-helper';
 import { AppFileService } from '../../services/app.file.service';
 import { DataLatitudeDegrees } from '@sports-alliance/sports-lib';
 import { DataLongitudeDegrees } from '@sports-alliance/sports-lib';
-import { GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES } from '@sports-alliance/sports-lib';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MyTracksProgressComponent } from './progress/tracks.progress';
 import { Overlay } from '@angular/cdk/overlay';
@@ -28,7 +27,7 @@ import { AppUserSettingsQueryService } from '../../services/app.user-settings-qu
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppMapSettingsInterface, AppMyTracksSettings } from '../../models/app-user.interface';
 import { LoggerService } from '../../services/logger.service';
-import { TrackStartPoint, TrackStartSelection, TracksMapManager } from './tracks-map.manager'; // Imported Manager
+import { TrackStartPoint, TrackStartSelection, TracksMapManager, TripAreaOverlay } from './tracks-map.manager'; // Imported Manager
 import { MapStyleService } from '../../services/map-style.service';
 import { MapboxStyleSynchronizer } from '../../services/map/mapbox-style-synchronizer';
 import { MapStyleName } from '../../services/map/map-style.types';
@@ -40,11 +39,21 @@ import { Search } from '../event-search/event-search.component';
 import { MyTracksTripDetectionService } from '../../services/my-tracks-trip-detection.service';
 import { TripDetectionInput } from '../../services/my-tracks-trip-detection.service';
 import { DetectedTrip } from '../../services/my-tracks-trip-detection.service';
-import { TripLocationLabelService } from '../../services/trip-location-label.service';
+import { DetectedHomeArea } from '../../services/my-tracks-trip-detection.service';
+import {
+  ResolvedTripLocationLabel,
+  TripLocationCoordinateCandidate,
+  TripLocationLabelService
+} from '../../services/trip-location-label.service';
 import {
   PolylineSimplificationOptions,
   PolylineSimplificationService
 } from '../../services/polyline-simplification.service';
+import {
+  CachedMyTracksEventPolylines,
+  MyTracksPolylineCacheService,
+  ResolvedMyTracksActivityPolyline
+} from '../../services/my-tracks-polyline-cache.service';
 import { resolvePrimaryUnitAwareDisplayStat } from '../../helpers/summary-display.helper';
 import {
   resolvePreferredSpeedDerivedAverageTypeForActivity,
@@ -88,6 +97,8 @@ interface PreparedTrackPolyline {
 })
 export class TracksComponent implements OnInit, OnDestroy {
   private static readonly MY_TRACKS_METADATA_CACHE_TTL_MS = 60 * 60 * 1000;
+  private static readonly TRIP_HOME_INFERENCE_LOOKBACK_MS = 365 * 24 * 60 * 60 * 1000;
+  private static readonly HOME_PANEL_ENTRY_ID = '__home_panel_entry__';
   private static readonly START_POINT_POPUP_MARGIN_PX = 10;
   private static readonly START_POINT_POPUP_OFFSET_PX = 10;
   private static readonly START_POINT_POPUP_WIDTH_ESTIMATE_PX = 340;
@@ -143,11 +154,15 @@ export class TracksComponent implements OnInit, OnDestroy {
   private logger = inject(LoggerService);
   private tripDetectionService = inject(MyTracksTripDetectionService);
   private tripLocationLabelService = inject(TripLocationLabelService);
+  private myTracksPolylineCacheService = inject(MyTracksPolylineCacheService);
 
   public isLoading: WritableSignal<boolean> = signal(false);
   public detectedTrips: WritableSignal<DetectedTripViewModel[]> = signal([]);
+  public detectedHomeArea: WritableSignal<DetectedHomeArea | null> = signal(null);
   public hasEvaluatedTripDetection: WritableSignal<boolean> = signal(false);
   public detectedTripsPanelExpanded: WritableSignal<boolean> = signal(false);
+  public selectedDetectedTripId: WritableSignal<string | null> = signal(null);
+  public hoveredDetectedTripId: WritableSignal<string | null> = signal(null);
   public searchPeekDefaultExpanded: WritableSignal<boolean> = signal(true);
   public searchPeekExpanded: WritableSignal<boolean> = signal(true);
   public hasDetectedJumps: WritableSignal<boolean> = signal(false);
@@ -442,6 +457,18 @@ export class TracksComponent implements OnInit, OnDestroy {
     return events || [];
   }
 
+  private async getEventsForHomeInference(
+    user: AppUserInterface,
+    where: { fieldPath: string | any, opStr: WhereFilterOp, value: any }[],
+    promiseTime: number
+  ): Promise<any[]> {
+    const events = await firstValueFrom(
+      this.eventService.getEventsOnceBy(user, where, 'startDate', true, 0, { preferCache: false })
+    );
+    this.logger.log(`[TracksComponent] Home inference event query returned ${events?.length || 0} events for promiseTime: ${promiseTime}`);
+    return events || [];
+  }
+
   private async loadTracksMapForUserByDateRange(user: AppUserInterface | undefined, dateRange: DateRanges, activityTypes?: ActivityTypes[]) {
     if (!user) {
       this.logger.warn('[TracksComponent] Skipping track load because user is undefined.');
@@ -456,6 +483,8 @@ export class TracksComponent implements OnInit, OnDestroy {
     let simplificationDurationMs = 0;
     let mapCommitDurationMs = 0;
     let tripDetectionDurationMs = 0;
+    let polylineCacheHitCount = 0;
+    let polylineCacheMissCount = 0;
     const perEventPerformance: Array<{
       eventId: string;
       totalMs: number;
@@ -478,7 +507,10 @@ export class TracksComponent implements OnInit, OnDestroy {
     const promiseTime = ++this.promiseTime;
     this.hasEvaluatedTripDetection.set(false);
     this.detectedTrips.set([]);
+    this.detectedHomeArea.set(null);
     this.detectedTripsPanelExpanded.set(false);
+    this.selectedDetectedTripId.set(null);
+    this.hoveredDetectedTripId.set(null);
     this.hasDetectedJumps.set(false);
     this.trackCoordinatesByEventId = new Map<string, number[][]>();
     this.eventsById = new Map<string, any>();
@@ -487,21 +519,10 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.tracksMapManager.clearJumpHeatmap();
     this.clearProgressAndOpenBottomSheet();
     const dates = getDatesForDateRange(dateRange, user.settings?.unitSettings?.startOfTheWeek || 1);
-    const where: { fieldPath: string | any, opStr: WhereFilterOp, value: any }[] = [];
-    if (dates.startDate) {
-      where.push({
-        fieldPath: 'startDate',
-        opStr: <WhereFilterOp>'>=',
-        value: dates.startDate.getTime()
-      });
-    }
-    if (dates.endDate) {
-      where.push({
-        fieldPath: 'startDate',
-        opStr: <WhereFilterOp>'<=', // Should remove mins from date
-        value: dates.endDate.getTime()
-      })
-    }
+    const where = this.buildStartDateWhereClauses(
+      dates.startDate?.getTime() ?? null,
+      dates.endDate?.getTime() ?? null,
+    );
 
     this.logger.log(`[TracksComponent] Initializing fetch from event service for dateRange: ${DateRanges[dateRange]}, activityTypes: ${activityTypes?.[0] || 'all'}, promiseTime: ${promiseTime}`);
 
@@ -537,6 +558,20 @@ export class TracksComponent implements OnInit, OnDestroy {
           mapCommitDurationMs: 0,
           tripDetectionDurationMs: 0,
         });
+        return;
+      }
+
+      const historicalHomeInferenceCandidates = dateRange === DateRanges.all
+        ? []
+        : await this.getHomeInferenceCandidatesForCurrentLoad(
+          user,
+          dateRange,
+          dates.endDate ?? null,
+          events,
+          promiseTime,
+        );
+
+      if (!this.isCurrentLoad(promiseTime)) {
         return;
       }
 
@@ -590,36 +625,24 @@ export class TracksComponent implements OnInit, OnDestroy {
 
           this.logger.log(`[TracksComponent] Fetching activities for event: ${event.getID()}, promiseTime: ${promiseTime}`);
           const eventActivitiesFetchStartedAt = performance.now();
-          event.addActivities(await firstValueFrom(this.eventService.getActivitiesOnceByEvent(user, event.getID())));
+          event.addActivities(await firstValueFrom(this.eventService.getActivitiesOnceByEventWithOptions(
+            user,
+            event.getID(),
+            { preferCache: true, warmServer: false },
+          )));
           eventActivitiesFetchDurationMs = performance.now() - eventActivitiesFetchStartedAt;
           activitiesFetchDurationMs += eventActivitiesFetchDurationMs;
 
-          let fullEvent = event;
           const eventHydrationStartedAt = performance.now();
-          try {
-            // Hydrate lat/long streams from original files without replacing activity objects.
-            const hydratedEvent = await firstValueFrom(this.eventService.attachStreamsToEventWithActivities(
-              user,
-              event,
-              [
-                DataLatitudeDegrees.type,
-                DataLongitudeDegrees.type,
-              ],
-              true,
-              false,
-              'attach_streams_only',
-              { metadataCacheTtlMs: TracksComponent.MY_TRACKS_METADATA_CACHE_TTL_MS },
-            ).pipe(take(1)));
-            fullEvent = hydratedEvent || event;
-          } catch (error) {
-            this.logger.warn('[TracksComponent] Failed to hydrate activity streams from original files. Falling back to existing activities.', {
-              eventId: event.getID?.(),
-              error
-            });
-          } finally {
-            eventHydrationDurationMs = performance.now() - eventHydrationStartedAt;
-            streamsHydrationDurationMs += eventHydrationDurationMs;
+          const resolvedTrackData = await this.resolveTrackDataForEvent(user, event);
+          const fullEvent = resolvedTrackData.fullEvent;
+          if (resolvedTrackData.usedCache) {
+            polylineCacheHitCount += 1;
+          } else {
+            polylineCacheMissCount += 1;
           }
+          eventHydrationDurationMs = performance.now() - eventHydrationStartedAt;
+          streamsHydrationDurationMs += eventHydrationDurationMs;
           this.logger.log(`[TracksComponent] Activities and streams ready for event: ${event.getID()}, promiseTime: ${promiseTime}`);
           if (!this.isCurrentLoad(promiseTime)) {
             return;
@@ -631,40 +654,26 @@ export class TracksComponent implements OnInit, OnDestroy {
           }
           let hasVisibleTrackForEvent = false;
           const eventCoordinates: number[][] = [];
-          const activities = typeof fullEvent?.getActivities === 'function' ? fullEvent.getActivities() : [];
+          const activities = this.getEventActivities(fullEvent);
           eventActivityCount = activities.length;
-          activities
-            .filter((activity: any) => activity.hasPositionData())
-            .filter((activity: any) => !activityTypes || activityTypes.length === 0 || activityTypes.includes(activity.type))
-            .forEach((activity: any) => {
+          resolvedTrackData.trackPolylines
+            .filter(({ activity }) => !activityTypes || activityTypes.length === 0 || activityTypes.includes(activity.type))
+            .forEach(({ activity, coordinates }) => {
               const jumpStats = this.collectJumpHeatPointsFromActivity(activity, jumpHeatPoints);
               jumpsWithCoordinates += jumpStats.jumpsWithCoordinates;
               jumpsWithWeightMetrics += jumpStats.jumpsWithWeightMetrics;
 
               const coordinateExtractionStartedAt = performance.now();
-              const coordinates = activity.getPositionData()
-                .filter((position: any) => position)
-                .map((position: any) => {
-                  // Mapbox uses [lng, lat]
-                  const lng = Math.round(position.longitudeDegrees * Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)) / Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES);
-                  const lat = Math.round(position.latitudeDegrees * Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)) / Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES);
-                  return [lng, lat];
-                })
-                .filter((coordinate: number[]) =>
-                  Number.isFinite(coordinate[0])
-                  && Number.isFinite(coordinate[1])
-                  && Math.abs(coordinate[0]) <= 180
-                  && Math.abs(coordinate[1]) <= 90
-                );
+              const normalizedCoordinates = coordinates;
               const coordinateExtractionMs = performance.now() - coordinateExtractionStartedAt;
               coordinateExtractionDurationMs += coordinateExtractionMs;
               eventCoordinateExtractionDurationMs += coordinateExtractionMs;
 
-              if (coordinates.length > 1) {
+              if (normalizedCoordinates.length > 1) {
                 const simplificationStartedAt = performance.now();
                 const simplificationResult = this.polylineSimplificationService.simplifyVisvalingamWhyatt(
-                  coordinates,
-                  this.resolveMyTracksSimplificationOptions(coordinates.length, events.length)
+                  normalizedCoordinates,
+                  this.resolveMyTracksSimplificationOptions(normalizedCoordinates.length, events.length)
                 );
                 const simplificationMs = performance.now() - simplificationStartedAt;
                 simplificationDurationMs += simplificationMs;
@@ -779,12 +788,20 @@ export class TracksComponent implements OnInit, OnDestroy {
         renderableHeatPoints: jumpHeatPoints.length,
         promiseTime
       });
+      const homeInferenceCandidates = dateRange === DateRanges.all
+        ? Array.from(detectionCandidatesByEvent.values())
+        : historicalHomeInferenceCandidates;
       this.logger.log('[TracksComponent] Prepared trip detection candidates.', {
         candidateCount: detectionCandidatesByEvent.size,
+        homeInferenceCandidateCount: homeInferenceCandidates.length,
         promiseTime
       });
       const tripDetectionStartedAt = performance.now();
-      await this.updateDetectedTripsForCurrentLoad(Array.from(detectionCandidatesByEvent.values()), promiseTime);
+      await this.updateDetectedTripsForCurrentLoad(
+        Array.from(detectionCandidatesByEvent.values()),
+        homeInferenceCandidates,
+        promiseTime,
+      );
       tripDetectionDurationMs = performance.now() - tripDetectionStartedAt;
 
       const totalLoadDurationMs = performance.now() - loadStartedAt;
@@ -825,6 +842,8 @@ export class TracksComponent implements OnInit, OnDestroy {
         simplificationDurationMs: roundMs(simplificationDurationMs),
         mapCommitDurationMs: roundMs(mapCommitDurationMs),
         tripDetectionDurationMs: roundMs(tripDetectionDurationMs),
+        polylineCacheHitCount,
+        polylineCacheMissCount,
         topSlowEvents,
       });
       if (totalLoadDurationMs > 3000) {
@@ -833,6 +852,8 @@ export class TracksComponent implements OnInit, OnDestroy {
           totalLoadDurationMs: roundMs(totalLoadDurationMs),
           eventCount: events.length,
           tracksProcessed,
+          polylineCacheHitCount,
+          polylineCacheMissCount,
           topSlowEvents,
         });
       }
@@ -843,6 +864,84 @@ export class TracksComponent implements OnInit, OnDestroy {
         this.clearProgressAndCloseBottomSheet();
       }
     }
+  }
+
+  private async resolveTrackDataForEvent(
+    user: AppUserInterface,
+    event: any,
+  ): Promise<{ fullEvent: any; trackPolylines: ResolvedMyTracksActivityPolyline[]; usedCache: boolean }> {
+    const cacheOptions = { metadataCacheTtlMs: TracksComponent.MY_TRACKS_METADATA_CACHE_TTL_MS };
+    const initialActivities = this.getEventActivities(event);
+    const cacheKey = await this.myTracksPolylineCacheService.resolveEventCacheKey(event, cacheOptions);
+    const cachedPolylines = cacheKey
+      ? await this.myTracksPolylineCacheService.getEventPolylines(cacheKey)
+      : undefined;
+
+    if (this.isValidCachedTrackData(initialActivities, cachedPolylines)) {
+      return {
+        fullEvent: event,
+        trackPolylines: this.myTracksPolylineCacheService.resolveTrackPolylines(initialActivities, cachedPolylines),
+        usedCache: true,
+      };
+    }
+
+    const fullEvent = await this.hydrateTrackStreamsForEvent(user, event);
+    const resolvedActivities = this.getEventActivities(fullEvent);
+    const extractedPolylines = this.myTracksPolylineCacheService.extractTrackPolylines(resolvedActivities);
+    if (cacheKey && this.shouldPersistTrackData(fullEvent, event, resolvedActivities)) {
+      await this.myTracksPolylineCacheService.setEventPolylines(cacheKey, extractedPolylines);
+    }
+
+    return {
+      fullEvent,
+      trackPolylines: this.myTracksPolylineCacheService.resolveTrackPolylines(resolvedActivities, extractedPolylines),
+      usedCache: false,
+    };
+  }
+
+  private async hydrateTrackStreamsForEvent(user: AppUserInterface, event: any): Promise<any> {
+    try {
+      const hydratedEvent = await firstValueFrom(this.eventService.attachStreamsToEventWithActivities(
+        user,
+        event,
+        [
+          DataLatitudeDegrees.type,
+          DataLongitudeDegrees.type,
+        ],
+        true,
+        false,
+        'attach_streams_only',
+        { metadataCacheTtlMs: TracksComponent.MY_TRACKS_METADATA_CACHE_TTL_MS },
+      ).pipe(take(1)));
+      return hydratedEvent || event;
+    } catch (error) {
+      this.logger.warn('[TracksComponent] Failed to hydrate activity streams from original files. Falling back to existing activities.', {
+        eventId: event.getID?.(),
+        error
+      });
+      return event;
+    }
+  }
+
+  private getEventActivities(event: any): any[] {
+    return typeof event?.getActivities === 'function'
+      ? event.getActivities() || []
+      : [];
+  }
+
+  private isValidCachedTrackData(
+    activities: any[],
+    cachedPolylines: CachedMyTracksEventPolylines | undefined,
+  ): cachedPolylines is CachedMyTracksEventPolylines {
+    return this.myTracksPolylineCacheService.hasMatchingActivityIdentity(activities, cachedPolylines);
+  }
+
+  private shouldPersistTrackData(fullEvent: any, sourceEvent: any, activities: any[]): boolean {
+    if (fullEvent !== sourceEvent) {
+      return true;
+    }
+
+    return activities.some((activity) => activity?.hasPositionData?.());
   }
 
   private resolveMyTracksSimplificationOptions(inputPointCount: number, eventCount: number): PolylineSimplificationOptions {
@@ -920,6 +1019,9 @@ export class TracksComponent implements OnInit, OnDestroy {
   }
 
   public onDetectedTripSelected(trip: DetectedTripViewModel): void {
+    this.selectedDetectedTripId.set(trip.tripId);
+    this.applyActiveDetectedTripAreaOverlay();
+
     const eventBasedCoordinates = (trip.eventIds || [])
       .flatMap((eventId) => this.trackCoordinatesByEventId.get(eventId) || []);
 
@@ -932,6 +1034,52 @@ export class TracksComponent implements OnInit, OnDestroy {
       [trip.bounds.west, trip.bounds.south],
       [trip.bounds.east, trip.bounds.north],
     ]);
+  }
+
+  public onDetectedHomeSelected(): void {
+    const homeArea = this.detectedHomeArea();
+    if (!homeArea) {
+      return;
+    }
+
+    this.selectedDetectedTripId.set(TracksComponent.HOME_PANEL_ENTRY_ID);
+    this.applyActiveDetectedTripAreaOverlay();
+    this.fitBoundsToTracks([
+      [homeArea.bounds.west, homeArea.bounds.south],
+      [homeArea.bounds.east, homeArea.bounds.north],
+    ]);
+  }
+
+  public onDetectedTripHovered(trip: DetectedTripViewModel): void {
+    this.hoveredDetectedTripId.set(trip.tripId);
+    this.applyActiveDetectedTripAreaOverlay();
+  }
+
+  public onDetectedHomeHovered(): void {
+    if (!this.detectedHomeArea()) {
+      return;
+    }
+
+    this.hoveredDetectedTripId.set(TracksComponent.HOME_PANEL_ENTRY_ID);
+    this.applyActiveDetectedTripAreaOverlay();
+  }
+
+  public onDetectedTripHoverEnded(trip: DetectedTripViewModel): void {
+    if (this.hoveredDetectedTripId() !== trip.tripId) {
+      return;
+    }
+
+    this.hoveredDetectedTripId.set(null);
+    this.applyActiveDetectedTripAreaOverlay();
+  }
+
+  public onDetectedHomeHoverEnded(): void {
+    if (this.hoveredDetectedTripId() !== TracksComponent.HOME_PANEL_ENTRY_ID) {
+      return;
+    }
+
+    this.hoveredDetectedTripId.set(null);
+    this.applyActiveDetectedTripAreaOverlay();
   }
 
   public closeSelectedStartPointPopup(): void {
@@ -993,20 +1141,141 @@ export class TracksComponent implements OnInit, OnDestroy {
     };
   }
 
-  private async updateDetectedTripsForCurrentLoad(candidates: TripDetectionInput[], promiseTime: number): Promise<void> {
+  private buildStartDateWhereClauses(
+    startTimestamp: number | null,
+    endTimestamp: number | null,
+  ): { fieldPath: string | any, opStr: WhereFilterOp, value: any }[] {
+    const where: { fieldPath: string | any, opStr: WhereFilterOp, value: any }[] = [];
+
+    if (Number.isFinite(startTimestamp)) {
+      where.push({
+        fieldPath: 'startDate',
+        opStr: <WhereFilterOp>'>=',
+        value: startTimestamp,
+      });
+    }
+
+    if (Number.isFinite(endTimestamp)) {
+      where.push({
+        fieldPath: 'startDate',
+        opStr: <WhereFilterOp>'<=',
+        value: endTimestamp,
+      });
+    }
+
+    return where;
+  }
+
+  private async getHomeInferenceCandidatesForCurrentLoad(
+    user: AppUserInterface,
+    dateRange: DateRanges,
+    selectedRangeEndDate: Date | null,
+    currentRangeEvents: any[],
+    promiseTime: number,
+  ): Promise<TripDetectionInput[]> {
+    const anchorTimestamp = this.resolveHomeInferenceAnchorTimestamp(selectedRangeEndDate, currentRangeEvents);
+    if (anchorTimestamp === null) {
+      return [];
+    }
+
+    const historyEvents = await this.getEventsForHomeInference(
+      user,
+      this.buildStartDateWhereClauses(
+        anchorTimestamp - TracksComponent.TRIP_HOME_INFERENCE_LOOKBACK_MS,
+        anchorTimestamp,
+      ),
+      promiseTime,
+    );
+
+    return this.collectTripDetectionInputsFromEvents(historyEvents);
+  }
+
+  private collectTripDetectionInputsFromEvents(events: any[]): TripDetectionInput[] {
+    const detectionCandidatesByEvent = new Map<string, TripDetectionInput>();
+
+    (events || [])
+      .filter((event) => !event?.isMerge)
+      .forEach((event) => {
+        const detectionInput = this.getTripDetectionInputFromEvent(event);
+        if (!detectionInput) {
+          return;
+        }
+
+        detectionCandidatesByEvent.set(detectionInput.eventId, detectionInput);
+      });
+
+    return Array.from(detectionCandidatesByEvent.values());
+  }
+
+  private resolveHomeInferenceAnchorTimestamp(selectedRangeEndDate: Date | null, currentRangeEvents: any[]): number | null {
+    if (selectedRangeEndDate && Number.isFinite(selectedRangeEndDate.getTime())) {
+      return selectedRangeEndDate.getTime();
+    }
+
+    const latestStartTimestamp = (currentRangeEvents || []).reduce((latestTimestamp, event) => {
+      const startTimestamp = this.toTimestamp(event?.startDate);
+      return startTimestamp !== null
+        ? Math.max(latestTimestamp, startTimestamp)
+        : latestTimestamp;
+    }, Number.NEGATIVE_INFINITY);
+
+    return Number.isFinite(latestStartTimestamp)
+      ? latestStartTimestamp
+      : null;
+  }
+
+  private toTimestamp(value: Date | number | string | undefined): number | null {
+    if (value instanceof Date) {
+      const timestamp = value.getTime();
+      return Number.isFinite(timestamp) ? timestamp : null;
+    }
+
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : null;
+    }
+
+    if (typeof value === 'string') {
+      const timestamp = Date.parse(value);
+      return Number.isFinite(timestamp) ? timestamp : null;
+    }
+
+    return null;
+  }
+
+  private async updateDetectedTripsForCurrentLoad(
+    candidates: TripDetectionInput[],
+    homeInferenceCandidates: TripDetectionInput[],
+    promiseTime: number,
+  ): Promise<void> {
     this.logger.log('[TracksComponent] Running trip detection update.', {
       candidateCount: candidates.length,
+      homeInferenceCandidateCount: homeInferenceCandidates.length,
       promiseTime,
       currentPromiseTime: this.promiseTime
     });
-    const detectedTrips = this.tripDetectionService.detectTrips(candidates);
+    const detectionResult = this.tripDetectionService.detectTripsWithContext(candidates, {
+      homeInferenceInputs: homeInferenceCandidates,
+    });
+    const detectedTrips = detectionResult.trips;
+    const detectedHomeArea: DetectedHomeArea | null = detectionResult.homeArea;
+    const locationCandidatesByDestinationId = this.buildTripLocationCandidatesByDestination(detectedTrips);
+    const locationLookupByDestinationId = new Map<string, Promise<ResolvedTripLocationLabel | null>>();
     const viewModels = await Promise.all(detectedTrips.map(async (trip) => {
-      const location = await this.tripLocationLabelService.resolveTripLocation(trip.centroidLat, trip.centroidLng);
+      let locationLookup = locationLookupByDestinationId.get(trip.destinationId);
+      const coordinateCandidates = locationCandidatesByDestinationId.get(trip.destinationId) || [];
+      if (!locationLookup) {
+        locationLookup = coordinateCandidates.length > 0
+          ? this.tripLocationLabelService.resolveTripLocationFromCandidates(coordinateCandidates)
+          : this.tripLocationLabelService.resolveTripLocation(trip.centroidLat, trip.centroidLng);
+        locationLookupByDestinationId.set(trip.destinationId, locationLookup);
+      }
+
+      const location = await locationLookup;
 
       return {
         ...trip,
         locationLabel: location?.label || null,
-      } satisfies DetectedTripViewModel;
+      };
     }));
 
     if (this.promiseTime !== promiseTime) {
@@ -1019,12 +1288,115 @@ export class TracksComponent implements OnInit, OnDestroy {
     }
 
     this.detectedTrips.set(viewModels);
+    this.detectedHomeArea.set(detectedHomeArea);
+    this.tracksMapManager.setHomeArea(detectedHomeArea);
+    this.applyActiveDetectedTripAreaOverlay();
     this.detectedTripsPanelExpanded.set(viewModels.length > 0);
     this.hasEvaluatedTripDetection.set(true);
+    this.logger.info('[debug] my_tracks_trip_detection_ui_models', {
+      trips: viewModels.map((trip) => ({
+        tripId: trip.tripId,
+        destinationId: trip.destinationId,
+        locationLabel: trip.locationLabel,
+        activityCount: trip.activityCount,
+        startDateIso: trip.startDate.toISOString(),
+        endDateIso: trip.endDate.toISOString(),
+        eventIds: trip.eventIds,
+      })),
+      homeArea: detectedHomeArea ? {
+        destinationId: detectedHomeArea.destinationId,
+        pointCount: detectedHomeArea.pointCount,
+        pointShare: detectedHomeArea.pointShare,
+        centroidLat: detectedHomeArea.centroidLat,
+        centroidLng: detectedHomeArea.centroidLng,
+        radiusKm: detectedHomeArea.radiusKm,
+      } : null,
+    });
     this.logger.log('[TracksComponent] Detected trips committed to UI state.', {
       detectedTripCount: viewModels.length,
-      panelExpanded: this.detectedTripsPanelExpanded()
+      panelExpanded: this.detectedTripsPanelExpanded(),
+      hasHomeArea: !!detectedHomeArea,
     });
+  }
+
+  private buildTripLocationCandidatesByDestination(
+    detectedTrips: DetectedTrip[],
+  ): Map<string, TripLocationCoordinateCandidate[]> {
+    return detectedTrips.reduce((accumulator, trip) => {
+      const existingCandidates = accumulator.get(trip.destinationId) || [];
+      accumulator.set(trip.destinationId, [
+        ...existingCandidates,
+        ...this.collectTripLocationCandidates(trip),
+      ]);
+      return accumulator;
+    }, new Map<string, TripLocationCoordinateCandidate[]>());
+  }
+
+  private collectTripLocationCandidates(trip: DetectedTrip): TripLocationCoordinateCandidate[] {
+    const candidates: TripLocationCoordinateCandidate[] = [];
+
+    trip.eventIds.forEach((eventId) => {
+      const event = this.eventsById.get(eventId);
+      if (!event) {
+        return;
+      }
+
+      const tripDetectionInput = this.getTripDetectionInputFromEvent(event);
+      if (!tripDetectionInput) {
+        return;
+      }
+
+      candidates.push({
+        latitudeDegrees: tripDetectionInput.latitudeDegrees,
+        longitudeDegrees: tripDetectionInput.longitudeDegrees,
+      });
+    });
+
+    return candidates;
+  }
+
+  private applyActiveDetectedTripAreaOverlay(): void {
+    const activeTrip = this.resolveActiveDetectedTrip();
+    this.tracksMapManager.setTripArea(activeTrip ? this.toTripAreaOverlay(activeTrip) : null);
+  }
+
+  private resolveActiveDetectedTrip(): DetectedTripViewModel | null {
+    const detectedTrips = this.detectedTrips();
+    const hoveredTripId = this.hoveredDetectedTripId();
+    if (hoveredTripId === TracksComponent.HOME_PANEL_ENTRY_ID) {
+      return null;
+    }
+
+    if (hoveredTripId) {
+      const hoveredTrip = detectedTrips.find((trip) => trip.tripId === hoveredTripId);
+      if (hoveredTrip) {
+        return hoveredTrip;
+      }
+    }
+
+    const selectedTripId = this.selectedDetectedTripId();
+    if (selectedTripId === TracksComponent.HOME_PANEL_ENTRY_ID) {
+      return null;
+    }
+
+    if (!selectedTripId) {
+      return null;
+    }
+
+    return detectedTrips.find((trip) => trip.tripId === selectedTripId) || null;
+  }
+
+  public isHomeEntrySelected(): boolean {
+    return this.selectedDetectedTripId() === TracksComponent.HOME_PANEL_ENTRY_ID;
+  }
+
+  private toTripAreaOverlay(trip: DetectedTripViewModel): TripAreaOverlay {
+    return {
+      tripId: trip.tripId,
+      centroidLat: trip.centroidLat,
+      centroidLng: trip.centroidLng,
+      bounds: { ...trip.bounds },
+    };
   }
 
   private markScrolled(map: any) {

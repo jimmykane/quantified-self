@@ -14,7 +14,7 @@
 }
 
 .privacy-mini-wrapper {
-  background: var(--mat-app-surface);
+  background: var(--mat-sys-surface);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -32,7 +32,7 @@
 }
 
 .feeling-chip {
-  background: var(--mat-app-surface-container-low);
+  background: var(--mat-sys-surface-container-low);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -48,8 +48,8 @@
 }
 
 .rpe-chip {
-  background: var(--mat-app-tertiary-container);
-  color: var(--mat-app-on-tertiary-container);
+  background: var(--mat-sys-tertiary-container);
+  color: var(--mat-sys-on-tertiary-container);
   cursor: help;
 }
 
@@ -88,7 +88,7 @@
   flex-direction: column;
   padding: 24px;
   gap: 16px;
-  border-top: 1px solid var(--mat-app-outline-variant);
+  border-top: 1px solid var(--mat-sys-outline-variant);
   width: 100%;
   box-sizing: border-box;
 }
@@ -110,7 +110,7 @@
   width: 100%;
   padding: 16px 40px;
   box-sizing: border-box;
-  border-top: 1px solid var(--mat-app-outline-variant);
+  border-top: 1px solid var(--mat-sys-outline-variant);
 }
 
 @include bp.xsmall {
@@ -125,9 +125,9 @@
 }
 
 .summary-stats-action-button {
-  color: var(--mat-app-on-surface-variant);
+  color: var(--mat-sys-on-surface-variant);
 }
 
 .summary-stats-action-button:hover {
-  color: var(--mat-app-primary);
+  color: var(--mat-sys-primary);
 }

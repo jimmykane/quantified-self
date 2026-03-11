@@ -269,6 +269,171 @@ describe('TracksMapManager', () => {
         });
     });
 
+    describe('home area', () => {
+        it('should render a home area source with fill and outline layers', () => {
+            mockMap.getSource.mockReturnValue(null);
+            mockMap.getLayer.mockReturnValue(null);
+            mockMap.getStyle.mockReturnValue({ layers: [{ id: 'track-layer-glow-123' }] });
+
+            manager.setHomeArea({
+                destinationId: 'destination-home',
+                pointCount: 6,
+                pointShare: 0.58,
+                centroidLat: 37.9838,
+                centroidLng: 23.7275,
+                bounds: {
+                    west: 23.71,
+                    east: 23.74,
+                    south: 37.97,
+                    north: 38.0,
+                },
+                radiusKm: 3.5,
+            });
+
+            const sourceCall = mockMap.addSource.mock.calls.find((call) => call[0] === 'home-area-source');
+            expect(sourceCall).toBeDefined();
+            expect(sourceCall?.[1]?.data?.features?.[0]?.geometry?.type).toBe('Polygon');
+            expect(mockMap.addLayer.mock.calls.some((call) => call[0]?.id === 'home-area-fill-layer')).toBe(true);
+            expect(mockMap.addLayer.mock.calls.some((call) => call[0]?.id === 'home-area-outline-layer')).toBe(true);
+
+            const outlineLayerCall = mockMap.addLayer.mock.calls.find((call) => call[0]?.id === 'home-area-outline-layer');
+            expect(outlineLayerCall?.[1]).toBe('track-layer-glow-123');
+        });
+
+        it('should clear the home area source and layers', () => {
+            mockMap.getSource.mockReturnValue(null);
+            mockMap.getLayer.mockReturnValue(null);
+
+            manager.setHomeArea({
+                destinationId: 'destination-home',
+                pointCount: 4,
+                pointShare: 0.6,
+                centroidLat: 37.98,
+                centroidLng: 23.72,
+                bounds: {
+                    west: 23.71,
+                    east: 23.73,
+                    south: 37.97,
+                    north: 37.99,
+                },
+                radiusKm: 3,
+            });
+
+            mockMap.getLayer.mockImplementation((id: string) => id === 'home-area-fill-layer' || id === 'home-area-outline-layer');
+            mockMap.getSource.mockImplementation((id: string) => id === 'home-area-source');
+
+            manager.clearHomeArea();
+
+            expect(mockMap.removeLayer).toHaveBeenCalledWith('home-area-outline-layer');
+            expect(mockMap.removeLayer).toHaveBeenCalledWith('home-area-fill-layer');
+            expect(mockMap.removeSource).toHaveBeenCalledWith('home-area-source');
+        });
+
+        it('should restore the home area after style reload', () => {
+            mockMap.getSource.mockReturnValue(null);
+            mockMap.getLayer.mockReturnValue(null);
+
+            manager.setHomeArea({
+                destinationId: 'destination-home',
+                pointCount: 5,
+                pointShare: 0.55,
+                centroidLat: 37.98,
+                centroidLng: 23.72,
+                bounds: {
+                    west: 23.71,
+                    east: 23.73,
+                    south: 37.97,
+                    north: 37.99,
+                },
+                radiusKm: 2.8,
+            });
+            const beforeStyleReload = mockMap.addLayer.mock.calls.filter((call) => call[0]?.id === 'home-area-fill-layer').length;
+
+            emitMapEvent('style.load');
+
+            const afterStyleReload = mockMap.addLayer.mock.calls.filter((call) => call[0]?.id === 'home-area-fill-layer').length;
+            expect(afterStyleReload).toBeGreaterThan(beforeStyleReload);
+        });
+    });
+
+    describe('trip area', () => {
+        it('should render a trip area source with fill and outline layers', () => {
+            mockMap.getSource.mockReturnValue(null);
+            mockMap.getLayer.mockImplementation((id: string) => id === 'track-start-layer');
+            mockMap.getStyle.mockReturnValue({ layers: [{ id: 'track-layer-glow-123' }, { id: 'track-start-layer' }] });
+
+            manager.setTripArea({
+                tripId: 'trip-athens',
+                centroidLat: 37.9838,
+                centroidLng: 23.7275,
+                bounds: {
+                    west: 23.70,
+                    east: 23.76,
+                    south: 37.95,
+                    north: 38.01,
+                },
+            });
+
+            const sourceCall = mockMap.addSource.mock.calls.find((call) => call[0] === 'trip-area-source');
+            expect(sourceCall).toBeDefined();
+            expect(sourceCall?.[1]?.data?.features?.[0]?.geometry?.type).toBe('Polygon');
+            expect(mockMap.addLayer.mock.calls.some((call) => call[0]?.id === 'trip-area-fill-layer')).toBe(true);
+            expect(mockMap.addLayer.mock.calls.some((call) => call[0]?.id === 'trip-area-outline-layer')).toBe(true);
+
+            const fillLayerCall = mockMap.addLayer.mock.calls.find((call) => call[0]?.id === 'trip-area-fill-layer');
+            expect(fillLayerCall?.[1]).toBe('track-start-layer');
+        });
+
+        it('should clear the trip area source and layers', () => {
+            mockMap.getSource.mockReturnValue(null);
+            mockMap.getLayer.mockReturnValue(null);
+
+            manager.setTripArea({
+                tripId: 'trip-athens',
+                centroidLat: 37.9838,
+                centroidLng: 23.7275,
+                bounds: {
+                    west: 23.70,
+                    east: 23.76,
+                    south: 37.95,
+                    north: 38.01,
+                },
+            });
+
+            mockMap.getLayer.mockImplementation((id: string) => id === 'trip-area-fill-layer' || id === 'trip-area-outline-layer');
+            mockMap.getSource.mockImplementation((id: string) => id === 'trip-area-source');
+
+            manager.clearTripArea();
+
+            expect(mockMap.removeLayer).toHaveBeenCalledWith('trip-area-outline-layer');
+            expect(mockMap.removeLayer).toHaveBeenCalledWith('trip-area-fill-layer');
+            expect(mockMap.removeSource).toHaveBeenCalledWith('trip-area-source');
+        });
+
+        it('should restore the trip area after style reload', () => {
+            mockMap.getSource.mockReturnValue(null);
+            mockMap.getLayer.mockReturnValue(null);
+
+            manager.setTripArea({
+                tripId: 'trip-athens',
+                centroidLat: 37.9838,
+                centroidLng: 23.7275,
+                bounds: {
+                    west: 23.70,
+                    east: 23.76,
+                    south: 37.95,
+                    north: 38.01,
+                },
+            });
+            const beforeStyleReload = mockMap.addLayer.mock.calls.filter((call) => call[0]?.id === 'trip-area-fill-layer').length;
+
+            emitMapEvent('style.load');
+
+            const afterStyleReload = mockMap.addLayer.mock.calls.filter((call) => call[0]?.id === 'trip-area-fill-layer').length;
+            expect(afterStyleReload).toBeGreaterThan(beforeStyleReload);
+        });
+    });
+
     describe('activity start points', () => {
         it('should create start-point source and layers', () => {
             mockMap.getSource.mockReturnValue(null);

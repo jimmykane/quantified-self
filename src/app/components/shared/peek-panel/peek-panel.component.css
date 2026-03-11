@@ -21,7 +21,7 @@
 }
 
 .peek-panel.border-mode-content .peek-main {
-  border: 1px solid var(--mat-sys-outline-variant, var(--mat-app-outline-variant));
+  border: 1px solid var(--mat-sys-outline-variant);
   border-radius: inherit;
 }
 
@@ -94,8 +94,8 @@
 
 .peek-toggle {
   border: 0;
-  background: color-mix(in srgb, var(--mat-sys-surface, var(--mat-app-surface)) 12%, transparent);
-  color: var(--mat-sys-on-surface-variant, var(--mat-app-on-surface-variant));
+  background: color-mix(in srgb, var(--mat-sys-surface) 12%, transparent);
+  color: var(--mat-sys-on-surface-variant);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -115,32 +115,32 @@
 }
 
 .peek-panel.position-left .peek-toggle {
-  border-right: 1px solid var(--mat-sys-outline-variant, var(--mat-app-outline-variant));
+  border-right: 1px solid var(--mat-sys-outline-variant);
 }
 
 .peek-panel.position-right .peek-toggle {
-  border-left: 1px solid var(--mat-sys-outline-variant, var(--mat-app-outline-variant));
+  border-left: 1px solid var(--mat-sys-outline-variant);
 }
 
 .peek-panel.position-top .peek-toggle {
   width: 100%;
   min-height: var(--peek-collapsed-size);
   align-self: stretch;
-  border-bottom: 1px solid var(--mat-sys-outline-variant, var(--mat-app-outline-variant));
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
 }
 
 .peek-toggle:hover {
-  background: color-mix(in srgb, var(--mat-sys-surface, var(--mat-app-surface)) 20%, transparent);
+  background: color-mix(in srgb, var(--mat-sys-surface) 20%, transparent);
 }
 
 .peek-toggle:active {
-  background: color-mix(in srgb, var(--mat-sys-surface, var(--mat-app-surface)) 28%, transparent);
+  background: color-mix(in srgb, var(--mat-sys-surface) 28%, transparent);
 }
 
 .peek-panel.position-left.collapsed .peek-toggle,
 .peek-panel.position-right.collapsed .peek-toggle,
 .peek-panel.position-top.collapsed .peek-toggle {
-  background: color-mix(in srgb, var(--mat-sys-surface, var(--mat-app-surface)) 6%, transparent);
+  background: color-mix(in srgb, var(--mat-sys-surface) 6%, transparent);
 }
 
 .peek-panel.position-left.collapsed .peek-toggle {
@@ -156,7 +156,7 @@
 }
 
 .peek-panel.position-top .peek-toggle:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--mat-sys-primary, var(--mat-app-primary)) 48%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--mat-sys-primary) 48%, transparent);
   outline-offset: -2px;
 }
 
@@ -278,7 +278,7 @@
 
 .peek-header-wrapper {
   display: block;
-  border-bottom: 1px solid var(--mat-app-outline-variant);
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
 }
 
 /* Target the inner component styles */

@@ -14,9 +14,9 @@
 .user-profile-header {
     border-radius: 16px !important;
     background: linear-gradient(135deg,
-            color-mix(in srgb, var(--mat-app-primary) 8%, transparent),
-            color-mix(in srgb, var(--mat-app-primary) 3%, transparent)) !important;
-    border: 1px solid color-mix(in srgb, var(--mat-app-primary) 10%, transparent) !important;
+            color-mix(in srgb, var(--mat-sys-primary) 8%, transparent),
+            color-mix(in srgb, var(--mat-sys-primary) 3%, transparent)) !important;
+    border: 1px solid color-mix(in srgb, var(--mat-sys-primary) 10%, transparent) !important;
     transition: transform 0.2s ease, box-shadow 0.2s ease !important;
     cursor: default;
 
@@ -77,9 +77,9 @@
 
 :host-context(.dark-theme) .user-profile-header {
     background: linear-gradient(135deg,
-            color-mix(in srgb, var(--mat-app-primary) 10%, transparent),
-            color-mix(in srgb, var(--mat-app-primary) 3%, transparent)) !important;
-    border-color: color-mix(in srgb, var(--mat-app-primary) 15%, transparent) !important;
+            color-mix(in srgb, var(--mat-sys-primary) 10%, transparent),
+            color-mix(in srgb, var(--mat-sys-primary) 3%, transparent)) !important;
+    border-color: color-mix(in srgb, var(--mat-sys-primary) 15%, transparent) !important;
 
     &:hover {
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4) !important;
@@ -262,13 +262,13 @@
         width: 100%;
         height: auto;
         border-right: none;
-        border-bottom: 1px solid var(--mat-app-outline-variant);
+        border-bottom: 1px solid var(--mat-sys-outline-variant);
         position: relative;
         padding: 12px 0;
     }
 
     :host-context(.dark-theme) .settings-sidebar {
-        border-bottom: 1px solid var(--mat-app-outline-variant);
+        border-bottom: 1px solid var(--mat-sys-outline-variant);
     }
 
     .settings-nav {
@@ -295,13 +295,13 @@
     left: 0;
     right: 0;
     padding: 16px;
-    background: var(--mat-app-surface-container-lowest);
+    background: var(--mat-sys-surface-container-lowest);
     box-shadow: 0 -4px 20px color-mix(in srgb, var(--mat-sys-on-surface) 10%, transparent);
     z-index: 100;
 }
 
 :host-context(.dark-theme) .mobile-save-bar {
-    background: var(--mat-app-surface-container-lowest);
+    background: var(--mat-sys-surface-container-lowest);
     box-shadow: 0 -4px 20px color-mix(in srgb, black 50%, transparent);
 }
 

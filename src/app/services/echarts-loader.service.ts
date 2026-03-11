@@ -1,12 +1,16 @@
 import { Inject, Injectable, NgZone, PLATFORM_ID } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import type { EChartsType } from 'echarts/core';
+import { AppHapticsService } from './app.haptics.service';
 
 type EChartsCoreModule = typeof import('echarts/core');
 type EChartsOption = Parameters<EChartsType['setOption']>[0];
 type EChartsSetOptionSettings = Parameters<EChartsType['setOption']>[1];
 type EChartsResizeOptions = NonNullable<Parameters<EChartsType['resize']>[0]>;
 type EChartsInitOptions = Parameters<EChartsCoreModule['init']>[2];
+const SUPPRESSED_HAPTIC_EVENT_SOURCES = new Set([
+  'event-chart-brush-zoom',
+]);
 
 export { ECHARTS_GLOBAL_FONT_FAMILY } from '../helpers/echarts-theme.helper';
 
@@ -40,7 +44,11 @@ export class EChartsLoaderService {
     });
   };
 
-  constructor(private zone: NgZone, @Inject(PLATFORM_ID) private platformId: object) { }
+  constructor(
+    private zone: NgZone,
+    @Inject(PLATFORM_ID) private platformId: object,
+    private hapticsService: AppHapticsService
+  ) { }
 
   private ensureBrowser(): void {
     if (!isPlatformBrowser(this.platformId)) {
@@ -145,6 +153,45 @@ export class EChartsLoaderService {
     };
   }
 
+  public attachMobileSeriesTapFeedback(chart: EChartsType): () => void {
+    if (!isPlatformBrowser(this.platformId)) {
+      return () => { };
+    }
+
+    const onChartClick = (params: unknown) => {
+      if (!this.isHapticEligibleClickEvent(params)) {
+        return;
+      }
+      this.hapticsService.selection();
+    };
+    const onDataZoom = (params: unknown) => {
+      if (!this.isHapticEligibleDataZoomEvent(params)) {
+        return;
+      }
+      this.hapticsService.selection();
+    };
+    const onBrushEnd = (params: unknown) => {
+      if (!this.isHapticEligibleBrushEndEvent(params)) {
+        return;
+      }
+      this.hapticsService.selection();
+    };
+
+    this.zone.runOutsideAngular(() => {
+      chart.on('click', onChartClick as never);
+      chart.on('datazoom', onDataZoom as never);
+      chart.on('brushEnd', onBrushEnd as never);
+    });
+
+    return () => {
+      this.zone.runOutsideAngular(() => {
+        chart.off('click', onChartClick as never);
+        chart.off('datazoom', onDataZoom as never);
+        chart.off('brushEnd', onBrushEnd as never);
+      });
+    };
+  }
+
   private resolveThemeName(theme?: string): string | undefined {
     const normalizedTheme = `${theme || ''}`.trim().toLowerCase();
     if (!normalizedTheme || normalizedTheme === 'light' || normalizedTheme.endsWith('light')) {
@@ -189,5 +236,55 @@ export class EChartsLoaderService {
     window.removeEventListener('orientationchange', this.handleViewportResize);
     window.visualViewport?.removeEventListener('resize', this.handleViewportResize);
     this.viewportListenersBound = false;
+  }
+
+  private isHapticEligibleClickEvent(params: unknown): boolean {
+    if (!params || typeof params !== 'object') {
+      return false;
+    }
+
+    const clickParams = params as { componentType?: unknown };
+    return clickParams.componentType === 'series'
+      || clickParams.componentType === 'xAxis'
+      || clickParams.componentType === 'yAxis';
+  }
+
+  private isHapticEligibleDataZoomEvent(params: unknown): boolean {
+    return !this.isSuppressedHapticSource(params);
+  }
+
+  private isHapticEligibleBrushEndEvent(params: unknown): boolean {
+    if (this.isSuppressedHapticSource(params)) {
+      return false;
+    }
+
+    if (!params || typeof params !== 'object') {
+      return true;
+    }
+
+    const brushParams = params as { areas?: unknown };
+    if (!Array.isArray(brushParams.areas)) {
+      return true;
+    }
+
+    return brushParams.areas.length > 0;
+  }
+
+  private isSuppressedHapticSource(params: unknown): boolean {
+    if (!params || typeof params !== 'object') {
+      return false;
+    }
+
+    const eventParams = params as { $from?: unknown };
+    if (typeof eventParams.$from !== 'string') {
+      return false;
+    }
+
+    const source = eventParams.$from.trim();
+    if (!source) {
+      return false;
+    }
+
+    return source.endsWith('-sync') || SUPPRESSED_HAPTIC_EVENT_SOURCES.has(source);
   }
 }

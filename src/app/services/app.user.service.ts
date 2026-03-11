@@ -681,13 +681,13 @@ export class AppUserService implements OnDestroy {
       [ServiceNames.COROSAPI]: 'COROSAPIAccessTokens'
     };
     const collectionName = serviceNamesToCollectionName[serviceName];
-    if (!collectionName) return from([]);
+    if (!collectionName) return of([]);
 
     return runInInjectionContext(this.injector, () => {
       const collectionRef = collection(this.firestore, collectionName, user.uid, 'tokens');
       return collectionData(collectionRef).pipe(
         catchError(() => {
-          return [];
+          return of([]);
         })
       );
     });
@@ -699,7 +699,7 @@ export class AppUserService implements OnDestroy {
       const collectionRef = collection(this.firestore, 'garminAPITokens', user.uid, 'tokens');
       return collectionData(collectionRef).pipe(
         catchError(() => {
-          return [];
+          return of([]);
         })
       );
     });

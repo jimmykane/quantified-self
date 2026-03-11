@@ -24,9 +24,9 @@ section.grid {
   min-width: 0;
   box-sizing: border-box;
   align-self: stretch;
-  border: 1px solid var(--mat-app-outline-variant);
+  border: 1px solid var(--mat-sys-outline-variant);
   border-radius: 12px;
-  background-color: var(--mat-app-surface-container-low);
+  background-color: var(--mat-sys-surface-container-low);
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   text-align: left;
   text-align: left;
@@ -37,7 +37,7 @@ section.grid {
   font-size: 16px;
   width: 16px;
   height: 16px;
-  color: var(--mat-app-on-surface-variant);
+  color: var(--mat-sys-on-surface-variant);
   opacity: 0.5;
   margin-left: auto;
   /* Push to the right */
@@ -49,8 +49,8 @@ section.grid {
 }
 
 .stat-item:hover {
-  background-color: var(--mat-app-surface-container-high);
-  border-color: var(--mat-app-primary);
+  background-color: var(--mat-sys-surface-container-high);
+  border-color: var(--mat-sys-primary);
 }
 
 /* Icon / Avatar Area */
@@ -78,7 +78,7 @@ section.grid {
   font-weight: 400;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--mat-app-on-surface-variant);
+  color: var(--mat-sys-on-surface-variant);
   opacity: 0.8;
   line-height: 1.1;
   white-space: nowrap;
@@ -90,7 +90,7 @@ section.grid {
 .stat-value-grid {
   font-size: 1.14rem;
   font-weight: 400;
-  color: var(--mat-app-on-surface);
+  color: var(--mat-sys-on-surface);
   line-height: 1.2;
   white-space: nowrap;
   font-family: 'Barlow Condensed', sans-serif;
@@ -110,7 +110,7 @@ section.grid {
 }
 
 .stat-diff-value {
-  color: var(--mat-app-on-surface-variant);
+  color: var(--mat-sys-on-surface-variant);
   flex: 1 1 auto;
   min-width: 0;
 }
@@ -132,7 +132,7 @@ section.grid {
   font-size: 0.52rem;
   font-weight: 600;
   letter-spacing: 0.06em;
-  color: var(--mat-app-on-surface-variant);
+  color: var(--mat-sys-on-surface-variant);
   opacity: 0.9;
   text-align: left;
 }
@@ -158,7 +158,7 @@ section.grid {
   font-family: 'Barlow Condensed', sans-serif;
   font-size: 1rem;
   line-height: 1.12;
-  color: var(--mat-app-on-surface);
+  color: var(--mat-sys-on-surface);
   position: relative;
 }
 
@@ -178,7 +178,7 @@ section.grid {
   line-height: 1;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--mat-app-on-surface-variant);
+  color: var(--mat-sys-on-surface-variant);
   opacity: 0.85;
 }
 
@@ -190,7 +190,7 @@ section.grid {
 .stat-item--composite .stat-values-unit-prefix {
   font-size: 0.58rem;
   font-weight: 600;
-  color: var(--mat-app-on-surface);
+  color: var(--mat-sys-on-surface);
   opacity: 1;
 }
 
@@ -231,7 +231,7 @@ section.grid {
   font-size: 0.5rem;
   line-height: 1;
   letter-spacing: 0.04em;
-  color: var(--mat-app-on-surface-variant);
+  color: var(--mat-sys-on-surface-variant);
   opacity: 0.9;
 }
 
@@ -266,8 +266,8 @@ section.condensed {
 /* Chip Styles */
 .stat-chip {
   --mdc-chip-elevated-container-color: transparent !important;
-  --mdc-chip-label-text-color: var(--mat-app-on-surface);
-  border: 1px solid var(--mat-app-outline-variant);
+  --mdc-chip-label-text-color: var(--mat-sys-on-surface);
+  border: 1px solid var(--mat-sys-outline-variant);
   font-weight: 400;
 }
 

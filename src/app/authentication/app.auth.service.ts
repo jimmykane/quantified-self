@@ -157,7 +157,7 @@ export class AppAuthService {
 
   async emailSignUp(email: string, password: string) {
     try {
-      return runInInjectionContext(this.injector, () => createUserWithEmailAndPassword(this.auth, email, password));
+      return await runInInjectionContext(this.injector, () => createUserWithEmailAndPassword(this.auth, email, password));
     } catch (e: any) {
       this.handleError(e);
       throw e;
@@ -166,7 +166,7 @@ export class AppAuthService {
 
   async emailLogin(email: string, password: string) {
     try {
-      return runInInjectionContext(this.injector, () => signInWithEmailAndPassword(this.auth, email, password));
+      return await runInInjectionContext(this.injector, () => signInWithEmailAndPassword(this.auth, email, password));
     } catch (e: any) {
       this.handleError(e);
       throw e;

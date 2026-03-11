@@ -30,6 +30,7 @@ export interface EChartsHostControllerConfig {
   };
   logPrefix?: string;
   initOptions?: ChartInitSettings;
+  enableMobileTapFeedback?: boolean;
 }
 
 export class EChartsHostController {
@@ -39,6 +40,7 @@ export class EChartsHostController {
   private initPromise: Promise<EChartsType | null> | null = null;
   private observedContainer: HTMLElement | null = null;
   private unsubscribeViewportResize: (() => void) | null = null;
+  private unsubscribeTapFeedback: (() => void) | null = null;
   private currentTheme: string | undefined;
 
   constructor(private readonly config: EChartsHostControllerConfig) { }
@@ -68,6 +70,7 @@ export class EChartsHostController {
         this.currentTheme = requestedTheme;
         this.observeContainer(container);
         this.subscribeToViewportResize();
+        this.subscribeToTapFeedback();
         return this.chart;
       } catch (error) {
         this.chart = null;
@@ -129,6 +132,8 @@ export class EChartsHostController {
     this.observedContainer = null;
     this.unsubscribeViewportResize?.();
     this.unsubscribeViewportResize = null;
+    this.unsubscribeTapFeedback?.();
+    this.unsubscribeTapFeedback = null;
 
     if (this.resizeFrameId !== null && typeof cancelAnimationFrame !== 'undefined') {
       cancelAnimationFrame(this.resizeFrameId);
@@ -197,5 +202,13 @@ export class EChartsHostController {
     this.unsubscribeViewportResize = this.config.eChartsLoader.subscribeToViewportResize(() => {
       this.scheduleResize();
     });
+  }
+
+  private subscribeToTapFeedback(): void {
+    if (!this.chart || this.unsubscribeTapFeedback || this.config.enableMobileTapFeedback === false) {
+      return;
+    }
+
+    this.unsubscribeTapFeedback = this.config.eChartsLoader.attachMobileSeriesTapFeedback(this.chart);
   }
 }

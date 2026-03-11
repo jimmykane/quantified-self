@@ -99,4 +99,18 @@ describe('AppHapticsService', () => {
         service.error();
         expect(vibrate).toHaveBeenCalledWith([30, 40, 30, 40, 40]);
     });
+
+    it('should throttle rapid consecutive trigger calls', () => {
+        const nowSpy = vi.spyOn(Date, 'now')
+            .mockReturnValueOnce(1_000)
+            .mockReturnValueOnce(1_050)
+            .mockReturnValueOnce(1_200);
+
+        expect(service.selection()).toBe(true);
+        expect(service.selection()).toBe(false);
+        expect(service.selection()).toBe(true);
+        expect(vibrate).toHaveBeenCalledTimes(2);
+
+        nowSpy.mockRestore();
+    });
 });

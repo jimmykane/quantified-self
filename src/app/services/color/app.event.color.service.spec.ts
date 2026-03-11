@@ -145,8 +145,8 @@ describe('AppEventColorService', () => {
 
       expect(mountainGradient).toBe(enduroGradient);
       expect(mountainGradient).toBe(downhillGradient);
-      expect(mountainGradient).toContain('#9CCC65');
-      expect(mountainGradient).toContain('#33691E');
+      expect(mountainGradient).toContain('#FF9800');
+      expect(mountainGradient).toContain('#43A047');
     });
   });
 
