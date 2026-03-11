@@ -92,6 +92,7 @@ describe('MyTracksPolylineCacheService', () => {
 
     expect(result).toEqual({
       activityCount: 2,
+      activityIdentitySignature: ['id:activity-1', 'id:activity-2'],
       trackActivities: [
         {
           activityId: 'activity-1',
@@ -108,6 +109,7 @@ describe('MyTracksPolylineCacheService', () => {
   it('should match cached track polylines by activity id and fall back to index', () => {
     const cached: CachedMyTracksEventPolylines = {
       activityCount: 2,
+      activityIdentitySignature: ['id:activity-a', 'id:activity-b'],
       trackActivities: [
         {
           activityId: 'activity-b',
@@ -141,9 +143,44 @@ describe('MyTracksPolylineCacheService', () => {
     ]);
   });
 
+  it('should validate cached polylines against ordered activity identities', () => {
+    const cached: CachedMyTracksEventPolylines = {
+      activityCount: 2,
+      activityIdentitySignature: ['id:activity-a', 'id:activity-b'],
+      trackActivities: [],
+    };
+
+    expect(service.hasMatchingActivityIdentity([
+      { getID: () => 'activity-a', type: 'running' },
+      { getID: () => 'activity-b', type: 'running' },
+    ] as any, cached)).toBe(true);
+
+    expect(service.hasMatchingActivityIdentity([
+      { getID: () => 'activity-a', type: 'running' },
+      { getID: () => 'activity-c', type: 'running' },
+    ] as any, cached)).toBe(false);
+  });
+
+  it('should build a fallback identity signature for activities without ids', () => {
+    const result = service.extractTrackPolylines([
+      {
+        getID: () => null,
+        type: 'running',
+        hasPositionData: () => true,
+        getPositionData: () => [
+          { latitudeDegrees: 40.63384383916855, longitudeDegrees: 22.944797091186047 },
+          { latitudeDegrees: 40.63426, longitudeDegrees: 22.944685 },
+        ],
+      },
+    ] as any);
+
+    expect(result.activityIdentitySignature).toEqual(['idx:0:type:running']);
+  });
+
   it('should persist and read cached event polylines through IndexedDB', async () => {
     const cachedValue: CachedMyTracksEventPolylines = {
       activityCount: 1,
+      activityIdentitySignature: ['id:activity-1'],
       trackActivities: [
         {
           activityId: 'activity-1',

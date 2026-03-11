@@ -877,7 +877,7 @@ export class TracksComponent implements OnInit, OnDestroy {
       ? await this.myTracksPolylineCacheService.getEventPolylines(cacheKey)
       : undefined;
 
-    if (this.isValidCachedTrackData(cachedPolylines, initialActivities.length)) {
+    if (this.isValidCachedTrackData(initialActivities, cachedPolylines)) {
       return {
         fullEvent: event,
         trackPolylines: this.myTracksPolylineCacheService.resolveTrackPolylines(initialActivities, cachedPolylines),
@@ -930,10 +930,10 @@ export class TracksComponent implements OnInit, OnDestroy {
   }
 
   private isValidCachedTrackData(
+    activities: any[],
     cachedPolylines: CachedMyTracksEventPolylines | undefined,
-    currentActivityCount: number,
   ): cachedPolylines is CachedMyTracksEventPolylines {
-    return !!cachedPolylines && cachedPolylines.activityCount === currentActivityCount;
+    return this.myTracksPolylineCacheService.hasMatchingActivityIdentity(activities, cachedPolylines);
   }
 
   private shouldPersistTrackData(fullEvent: any, sourceEvent: any, activities: any[]): boolean {

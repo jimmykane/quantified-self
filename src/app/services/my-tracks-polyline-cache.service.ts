@@ -13,6 +13,7 @@ export interface CachedMyTracksActivityPolyline {
 
 export interface CachedMyTracksEventPolylines {
   activityCount: number;
+  activityIdentitySignature: string[];
   trackActivities: CachedMyTracksActivityPolyline[];
 }
 
@@ -87,9 +88,11 @@ export class MyTracksPolylineCacheService {
   }
 
   public extractTrackPolylines(activities: ActivityInterface[]): CachedMyTracksEventPolylines {
+    const normalizedActivities = activities || [];
     return {
-      activityCount: activities?.length || 0,
-      trackActivities: (activities || []).reduce<CachedMyTracksActivityPolyline[]>((accumulator, activity, activityIndex) => {
+      activityCount: normalizedActivities.length,
+      activityIdentitySignature: this.buildActivityIdentitySignature(normalizedActivities),
+      trackActivities: normalizedActivities.reduce<CachedMyTracksActivityPolyline[]>((accumulator, activity, activityIndex) => {
         const coordinates = this.extractCoordinatesFromActivity(activity);
         if (coordinates.length <= 1) {
           return accumulator;
@@ -103,6 +106,30 @@ export class MyTracksPolylineCacheService {
         return accumulator;
       }, []),
     };
+  }
+
+  public hasMatchingActivityIdentity(
+    activities: ActivityInterface[],
+    cachedPolylines: CachedMyTracksEventPolylines | undefined,
+  ): cachedPolylines is CachedMyTracksEventPolylines {
+    if (!cachedPolylines) {
+      return false;
+    }
+
+    const signature = this.buildActivityIdentitySignature(activities || []);
+    if (cachedPolylines.activityCount !== signature.length) {
+      return false;
+    }
+
+    if (!Array.isArray(cachedPolylines.activityIdentitySignature)) {
+      return false;
+    }
+
+    if (cachedPolylines.activityIdentitySignature.length !== signature.length) {
+      return false;
+    }
+
+    return signature.every((identity, index) => cachedPolylines.activityIdentitySignature[index] === identity);
   }
 
   public resolveTrackPolylines(
@@ -168,6 +195,20 @@ export class MyTracksPolylineCacheService {
     return typeof activityId === 'string' && activityId.trim().length > 0
       ? activityId
       : null;
+  }
+
+  private buildActivityIdentitySignature(activities: ActivityInterface[]): string[] {
+    return (activities || []).map((activity, activityIndex) => {
+      const activityId = this.getActivityId(activity);
+      if (activityId) {
+        return `id:${activityId}`;
+      }
+
+      const activityType = typeof activity?.type === 'string' && activity.type.trim().length > 0
+        ? activity.type
+        : 'unknown';
+      return `idx:${activityIndex}:type:${activityType}`;
+    });
   }
 
   private getSourceFilePaths(event: AppEventInterface): string[] {
