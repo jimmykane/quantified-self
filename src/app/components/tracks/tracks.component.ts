@@ -1258,19 +1258,13 @@ export class TracksComponent implements OnInit, OnDestroy {
     });
     const detectedTrips = detectionResult.trips;
     const detectedHomeArea: DetectedHomeArea | null = detectionResult.homeArea;
-    const locationCandidatesByDestinationId = this.buildTripLocationCandidatesByDestination(detectedTrips);
-    const locationLookupByDestinationId = new Map<string, Promise<ResolvedTripLocationLabel | null>>();
     const viewModels = await Promise.all(detectedTrips.map(async (trip) => {
-      let locationLookup = locationLookupByDestinationId.get(trip.destinationId);
-      const coordinateCandidates = locationCandidatesByDestinationId.get(trip.destinationId) || [];
-      if (!locationLookup) {
-        locationLookup = coordinateCandidates.length > 0
+      const coordinateCandidates = this.collectTripLocationCandidates(trip);
+      const location = await (
+        coordinateCandidates.length > 0
           ? this.tripLocationLabelService.resolveTripLocationFromCandidates(coordinateCandidates)
-          : this.tripLocationLabelService.resolveTripLocation(trip.centroidLat, trip.centroidLng);
-        locationLookupByDestinationId.set(trip.destinationId, locationLookup);
-      }
-
-      const location = await locationLookup;
+          : this.tripLocationLabelService.resolveTripLocation(trip.centroidLat, trip.centroidLng)
+      );
 
       return {
         ...trip,
@@ -1317,19 +1311,6 @@ export class TracksComponent implements OnInit, OnDestroy {
       panelExpanded: this.detectedTripsPanelExpanded(),
       hasHomeArea: !!detectedHomeArea,
     });
-  }
-
-  private buildTripLocationCandidatesByDestination(
-    detectedTrips: DetectedTrip[],
-  ): Map<string, TripLocationCoordinateCandidate[]> {
-    return detectedTrips.reduce((accumulator, trip) => {
-      const existingCandidates = accumulator.get(trip.destinationId) || [];
-      accumulator.set(trip.destinationId, [
-        ...existingCandidates,
-        ...this.collectTripLocationCandidates(trip),
-      ]);
-      return accumulator;
-    }, new Map<string, TripLocationCoordinateCandidate[]>());
   }
 
   private collectTripLocationCandidates(trip: DetectedTrip): TripLocationCoordinateCandidate[] {

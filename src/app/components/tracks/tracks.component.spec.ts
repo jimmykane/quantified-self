@@ -1316,7 +1316,7 @@ describe('TracksComponent', () => {
       expect(component.hasEvaluatedTripDetection()).toBe(true);
     });
 
-    it('memoizes location labels by destination id for revisits', async () => {
+    it('resolves location labels per trip for revisits that share a destination id', async () => {
       const firstVisitEvent = createMockEvent('trip-nepal-visit-1', '2024-11-08T08:00:00Z', 27.7172, 85.3240);
       const secondVisitEvent = createMockEvent('trip-nepal-visit-2', '2024-11-16T08:00:00Z', 27.7201, 85.3301);
       mockEventService.getEventsBy.mockReturnValue(of([firstVisitEvent, secondVisitEvent]));
@@ -1362,22 +1362,30 @@ describe('TracksComponent', () => {
           },
         ],
       }));
-      mockTripLocationLabelService.resolveTripLocationFromCandidates.mockResolvedValue({
-        city: 'Kathmandu',
-        country: 'Nepal',
-        label: 'Kathmandu, Nepal',
-      });
+      mockTripLocationLabelService.resolveTripLocationFromCandidates
+        .mockResolvedValueOnce({
+          city: 'Ano Chora',
+          country: 'Greece',
+          label: 'Ano Chora, Greece',
+        })
+        .mockResolvedValueOnce({
+          city: 'Patras',
+          country: 'Greece',
+          label: 'Patras, Greece',
+        });
 
       await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
       await waitForAsyncWork();
 
-      expect(mockTripLocationLabelService.resolveTripLocationFromCandidates).toHaveBeenCalledTimes(1);
-      expect(mockTripLocationLabelService.resolveTripLocationFromCandidates).toHaveBeenCalledWith([
+      expect(mockTripLocationLabelService.resolveTripLocationFromCandidates).toHaveBeenCalledTimes(2);
+      expect(mockTripLocationLabelService.resolveTripLocationFromCandidates).toHaveBeenNthCalledWith(1, [
         { latitudeDegrees: 27.7172, longitudeDegrees: 85.3240 },
+      ]);
+      expect(mockTripLocationLabelService.resolveTripLocationFromCandidates).toHaveBeenNthCalledWith(2, [
         { latitudeDegrees: 27.7201, longitudeDegrees: 85.3301 },
       ]);
       expect(mockTripLocationLabelService.resolveTripLocation).not.toHaveBeenCalled();
-      expect(component.detectedTrips().map((trip) => trip.locationLabel)).toEqual(['Kathmandu, Nepal', 'Kathmandu, Nepal']);
+      expect(component.detectedTrips().map((trip) => trip.locationLabel)).toEqual(['Ano Chora, Greece', 'Patras, Greece']);
     });
 
     it('falls back to "Trip" when location label resolution returns null', () => {
