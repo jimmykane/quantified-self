@@ -109,6 +109,13 @@ interface HomeMatchContext {
   homeArea: DetectedHomeArea | null;
 }
 
+interface HomeClusterCandidate {
+  cluster: DestinationCluster;
+  visitWindowCount: number;
+  activeMonthCount: number;
+  spanDays: number;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -120,6 +127,9 @@ export class MyTracksTripDetectionService {
   private static readonly MIN_VISIT_ACTIVITY_COUNT = 1;
   private static readonly MIN_VISIT_DURATION_MS = 0;
   private static readonly HOME_CLUSTER_MIN_SHARE = 0.5;
+  private static readonly HOME_CLUSTER_RECURRING_MIN_SHARE = 0.35;
+  private static readonly HOME_CLUSTER_RECURRING_MIN_VISITS = 4;
+  private static readonly HOME_CLUSTER_RECURRING_MIN_MONTHS = 3;
   private static readonly HOME_MIN_ACTIVITY_COUNT = 4;
   private static readonly HOME_MIN_DURATION_MS = 72 * 60 * 60 * 1000;
   private static readonly SAME_DESTINATION_REJOIN_MAX_GAP_MS = 4 * 24 * 60 * 60 * 1000;
@@ -181,8 +191,18 @@ export class MyTracksTripDetectionService {
     });
 
     const destinationClusters = this.clusterDestinations(normalized);
+    this.logger.info('[debug] my_tracks_trip_detection_clusters', {
+      clusters: destinationClusters.map((cluster) => this.summarizeDestinationCluster(cluster)),
+    });
     const visitWindows = this.buildVisitWindows(destinationClusters, normalized);
+    this.logger.info('[debug] my_tracks_trip_detection_visit_windows_raw', {
+      visitWindows: visitWindows.map((visitWindow) => this.summarizeVisitWindow(visitWindow)),
+    });
     const rejoinResult = this.mergeAdjacentVisitWindows(visitWindows);
+    this.logger.info('[debug] my_tracks_trip_detection_visit_windows_rejoined', {
+      rejoinedVisitCount: rejoinResult.rejoinedVisitCount,
+      visitWindows: rejoinResult.visitWindows.map((visitWindow) => this.summarizeVisitWindow(visitWindow)),
+    });
     const homeMatchContext = this.resolveHomeMatchContext(destinationClusters, options.homeInferenceInputs ?? inputs);
     const qualificationResult = this.qualifyVisitWindows(rejoinResult.visitWindows, homeMatchContext.matchedDestinationIds);
     this.logger.log('[MyTracksTripDetectionService] Visit window evaluations.', {
@@ -190,6 +210,10 @@ export class MyTracksTripDetectionService {
     });
     const detectedTrips = this.mapVisitWindowsToTrips(qualificationResult.qualifiedVisitWindows);
     const homeArea = homeMatchContext.homeArea;
+    this.logger.info('[debug] my_tracks_trip_detection_result', {
+      detectedTrips: detectedTrips.map((trip) => this.summarizeDetectedTrip(trip)),
+      homeArea: homeArea ? this.summarizeHomeArea(homeArea) : null,
+    });
 
     if (MyTracksTripDetectionService.ENABLE_LEGACY_COMPARISON_LOG) {
       const legacyCount = this.detectTripsLegacyCount(normalized);
@@ -217,6 +241,9 @@ export class MyTracksTripDetectionService {
         nonHomeMinActivityCount: MyTracksTripDetectionService.MIN_VISIT_ACTIVITY_COUNT,
         nonHomeMinDurationHours: MyTracksTripDetectionService.MIN_VISIT_DURATION_MS / (60 * 60 * 1000),
         homeClusterMinShare: MyTracksTripDetectionService.HOME_CLUSTER_MIN_SHARE,
+        homeClusterRecurringMinShare: MyTracksTripDetectionService.HOME_CLUSTER_RECURRING_MIN_SHARE,
+        homeClusterRecurringMinVisits: MyTracksTripDetectionService.HOME_CLUSTER_RECURRING_MIN_VISITS,
+        homeClusterRecurringMinMonths: MyTracksTripDetectionService.HOME_CLUSTER_RECURRING_MIN_MONTHS,
         homeMinActivityCount: MyTracksTripDetectionService.HOME_MIN_ACTIVITY_COUNT,
         homeMinDurationHours: MyTracksTripDetectionService.HOME_MIN_DURATION_MS / (60 * 60 * 1000),
         sameDestinationRejoinGapHours: MyTracksTripDetectionService.SAME_DESTINATION_REJOIN_MAX_GAP_MS / (60 * 60 * 1000),
@@ -443,21 +470,44 @@ export class MyTracksTripDetectionService {
     };
   }
 
-  private identifyHomeCluster(destinationClusters: DestinationCluster[]): DestinationCluster | null {
+  private identifyHomeCluster(
+    destinationClusters: DestinationCluster[],
+    timelinePoints: NormalizedActivityStart[],
+  ): DestinationCluster | null {
     const nonNoiseClusters = destinationClusters.filter((cluster) => !cluster.isNoise);
     if (nonNoiseClusters.length === 0) {
       return null;
     }
 
-    const sortedByShare = [...nonNoiseClusters].sort((a, b) => {
-      if (b.pointShare !== a.pointShare) {
-        return b.pointShare - a.pointShare;
+    const homeCandidates = this.buildHomeClusterCandidates(nonNoiseClusters, timelinePoints);
+    const sortedCandidates = [...homeCandidates].sort((left, right) => {
+      if (right.activeMonthCount !== left.activeMonthCount) {
+        return right.activeMonthCount - left.activeMonthCount;
       }
-      return a.destinationId.localeCompare(b.destinationId);
+      if (right.visitWindowCount !== left.visitWindowCount) {
+        return right.visitWindowCount - left.visitWindowCount;
+      }
+      if (right.cluster.pointShare !== left.cluster.pointShare) {
+        return right.cluster.pointShare - left.cluster.pointShare;
+      }
+      if (right.cluster.points.length !== left.cluster.points.length) {
+        return right.cluster.points.length - left.cluster.points.length;
+      }
+      return left.cluster.destinationId.localeCompare(right.cluster.destinationId);
     });
 
-    const strongestCluster = sortedByShare[0];
-    if (strongestCluster.pointShare < MyTracksTripDetectionService.HOME_CLUSTER_MIN_SHARE) {
+    const strongestCandidate = sortedCandidates[0];
+    if (!strongestCandidate) {
+      return null;
+    }
+
+    const strongestCluster = strongestCandidate.cluster;
+    const qualifiesByShare = strongestCluster.pointShare >= MyTracksTripDetectionService.HOME_CLUSTER_MIN_SHARE;
+    const qualifiesByRecurrence = strongestCluster.pointShare >= MyTracksTripDetectionService.HOME_CLUSTER_RECURRING_MIN_SHARE
+      && strongestCandidate.visitWindowCount >= MyTracksTripDetectionService.HOME_CLUSTER_RECURRING_MIN_VISITS
+      && strongestCandidate.activeMonthCount >= MyTracksTripDetectionService.HOME_CLUSTER_RECURRING_MIN_MONTHS;
+
+    if (!qualifiesByShare && !qualifiesByRecurrence) {
       return null;
     }
 
@@ -469,6 +519,13 @@ export class MyTracksTripDetectionService {
     homeInferenceInputs: TripDetectionInput[],
   ): HomeMatchContext {
     if (!homeInferenceInputs || homeInferenceInputs.length === 0) {
+      this.logger.info('[debug] my_tracks_trip_detection_home_match', {
+        reason: 'no_home_inference_inputs',
+        homeInferenceInputCount: 0,
+        currentClusters: currentDestinationClusters
+          .filter((cluster) => !cluster.isNoise)
+          .map((cluster) => this.summarizeDestinationCluster(cluster)),
+      });
       return {
         matchedDestinationIds: new Set<string>(),
         homeArea: null,
@@ -478,35 +535,95 @@ export class MyTracksTripDetectionService {
     const homeInferenceNormalizationResult = this.normalize(homeInferenceInputs);
     const normalizedHomeInferenceEntries = homeInferenceNormalizationResult.entries;
     if (normalizedHomeInferenceEntries.length === 0) {
+      this.logger.info('[debug] my_tracks_trip_detection_home_match', {
+        reason: 'no_valid_home_inference_inputs',
+        homeInferenceInputCount: homeInferenceInputs.length,
+        normalizedHomeInferenceCount: 0,
+        normalizationDrops: {
+          missingEventId: homeInferenceNormalizationResult.droppedMissingEventId,
+          invalidTimestamp: homeInferenceNormalizationResult.droppedInvalidTimestamp,
+          invalidCoordinates: homeInferenceNormalizationResult.droppedInvalidCoordinates,
+        },
+      });
       return {
         matchedDestinationIds: new Set<string>(),
         homeArea: null,
       };
     }
 
-    const inferredHomeCluster = this.identifyHomeCluster(this.clusterDestinations(normalizedHomeInferenceEntries));
+    const inferredHomeClusters = this.clusterDestinations(normalizedHomeInferenceEntries);
+    const inferredHomeCandidates = this.buildHomeClusterCandidates(
+      inferredHomeClusters.filter((cluster) => !cluster.isNoise),
+      normalizedHomeInferenceEntries,
+    );
+    const inferredHomeCluster = this.identifyHomeCluster(inferredHomeClusters, normalizedHomeInferenceEntries);
     if (!inferredHomeCluster) {
+      this.logger.info('[debug] my_tracks_trip_detection_home_match', {
+        reason: 'no_dominant_home_cluster',
+        homeInferenceInputCount: homeInferenceInputs.length,
+        normalizedHomeInferenceCount: normalizedHomeInferenceEntries.length,
+        normalizationDrops: {
+          missingEventId: homeInferenceNormalizationResult.droppedMissingEventId,
+          invalidTimestamp: homeInferenceNormalizationResult.droppedInvalidTimestamp,
+          invalidCoordinates: homeInferenceNormalizationResult.droppedInvalidCoordinates,
+        },
+        inferredHomeClusters: inferredHomeClusters.map((cluster) => this.summarizeDestinationCluster(cluster)),
+        inferredHomeCandidates: inferredHomeCandidates.map((candidate) => this.summarizeHomeClusterCandidate(candidate)),
+      });
       return {
         matchedDestinationIds: new Set<string>(),
         homeArea: null,
       };
     }
 
+    const currentClusterDistances = currentDestinationClusters
+      .filter((cluster) => !cluster.isNoise)
+      .map((cluster) => ({
+        ...this.summarizeDestinationCluster(cluster),
+        distanceToInferredHomeKm: this.roundMetric(this.haversineDistanceKm(
+          cluster.centroidLat,
+          cluster.centroidLng,
+          inferredHomeCluster.centroidLat,
+          inferredHomeCluster.centroidLng,
+        )),
+        withinHomeSuppressionRadius: this.isWithinHomeSuppressionDistance(cluster, inferredHomeCluster),
+      }));
     const matchingCurrentClusters = currentDestinationClusters.filter((cluster) => (
       !cluster.isNoise
       && this.isWithinHomeSuppressionDistance(cluster, inferredHomeCluster)
     ));
 
     if (matchingCurrentClusters.length === 0) {
+      this.logger.info('[debug] my_tracks_trip_detection_home_match', {
+        reason: 'no_current_cluster_match',
+        inferredHomeCluster: this.summarizeDestinationCluster(inferredHomeCluster),
+        inferredHomeCandidate: inferredHomeCandidates
+          .map((candidate) => this.summarizeHomeClusterCandidate(candidate))
+          .find((candidate) => candidate.destinationId === inferredHomeCluster.destinationId) || null,
+        homeSuppressionRadiusKm: MyTracksTripDetectionService.HOME_SUPPRESSION_RADIUS_KM,
+        currentClusters: currentClusterDistances,
+      });
       return {
         matchedDestinationIds: new Set<string>(),
         homeArea: null,
       };
     }
 
+    const combinedHomeArea = this.toDetectedHomeArea(this.combineHomeClusters(matchingCurrentClusters));
+    this.logger.info('[debug] my_tracks_trip_detection_home_match', {
+      reason: 'matched_current_clusters',
+      inferredHomeCluster: this.summarizeDestinationCluster(inferredHomeCluster),
+      inferredHomeCandidate: inferredHomeCandidates
+        .map((candidate) => this.summarizeHomeClusterCandidate(candidate))
+        .find((candidate) => candidate.destinationId === inferredHomeCluster.destinationId) || null,
+      homeSuppressionRadiusKm: MyTracksTripDetectionService.HOME_SUPPRESSION_RADIUS_KM,
+      currentClusters: currentClusterDistances,
+      matchedDestinationIds: matchingCurrentClusters.map((cluster) => cluster.destinationId),
+      homeArea: this.summarizeHomeArea(combinedHomeArea),
+    });
     return {
       matchedDestinationIds: new Set(matchingCurrentClusters.map((cluster) => cluster.destinationId)),
-      homeArea: this.toDetectedHomeArea(this.combineHomeClusters(matchingCurrentClusters)),
+      homeArea: combinedHomeArea,
     };
   }
 
@@ -750,6 +867,92 @@ export class MyTracksTripDetectionService {
     };
   }
 
+  private summarizeDestinationCluster(cluster: DestinationCluster): Record<string, unknown> {
+    return {
+      destinationId: cluster.destinationId,
+      pointCount: cluster.points.length,
+      pointShare: this.roundMetric(cluster.pointShare),
+      centroidLat: this.roundCoordinate(cluster.centroidLat),
+      centroidLng: this.roundCoordinate(cluster.centroidLng),
+      bounds: this.roundBounds(cluster.bounds),
+      isNoise: cluster.isNoise,
+      startDateIso: new Date(cluster.points[0].timestamp).toISOString(),
+      endDateIso: new Date(cluster.points[cluster.points.length - 1].timestamp).toISOString(),
+      eventIds: Array.from(new Set(cluster.points.map((point) => point.eventId))),
+    };
+  }
+
+  private summarizeVisitWindow(visitWindow: VisitWindow): Record<string, unknown> {
+    return {
+      destinationId: visitWindow.destinationId,
+      activityCount: visitWindow.points.length,
+      startDateIso: new Date(visitWindow.startTimestamp).toISOString(),
+      endDateIso: new Date(visitWindow.endTimestamp).toISOString(),
+      durationHours: this.roundMetric((visitWindow.endTimestamp - visitWindow.startTimestamp) / (60 * 60 * 1000)),
+      centroid: this.summarizePoints(visitWindow.points),
+      eventIds: visitWindow.points.map((point) => point.eventId),
+    };
+  }
+
+  private summarizeDetectedTrip(trip: DetectedTrip): Record<string, unknown> {
+    return {
+      tripId: trip.tripId,
+      destinationId: trip.destinationId,
+      destinationVisitIndex: trip.destinationVisitIndex,
+      destinationVisitCount: trip.destinationVisitCount,
+      isRevisit: trip.isRevisit,
+      activityCount: trip.activityCount,
+      startDateIso: trip.startDate.toISOString(),
+      endDateIso: trip.endDate.toISOString(),
+      centroidLat: this.roundCoordinate(trip.centroidLat),
+      centroidLng: this.roundCoordinate(trip.centroidLng),
+      bounds: this.roundBounds(trip.bounds),
+      eventIds: trip.eventIds,
+    };
+  }
+
+  private summarizeHomeArea(homeArea: DetectedHomeArea): Record<string, unknown> {
+    return {
+      destinationId: homeArea.destinationId,
+      pointCount: homeArea.pointCount,
+      pointShare: this.roundMetric(homeArea.pointShare),
+      centroidLat: this.roundCoordinate(homeArea.centroidLat),
+      centroidLng: this.roundCoordinate(homeArea.centroidLng),
+      radiusKm: this.roundMetric(homeArea.radiusKm),
+      bounds: this.roundBounds(homeArea.bounds),
+    };
+  }
+
+  private summarizeHomeClusterCandidate(candidate: HomeClusterCandidate): Record<string, unknown> {
+    return {
+      destinationId: candidate.cluster.destinationId,
+      pointCount: candidate.cluster.points.length,
+      pointShare: this.roundMetric(candidate.cluster.pointShare),
+      visitWindowCount: candidate.visitWindowCount,
+      activeMonthCount: candidate.activeMonthCount,
+      spanDays: this.roundMetric(candidate.spanDays),
+      centroidLat: this.roundCoordinate(candidate.cluster.centroidLat),
+      centroidLng: this.roundCoordinate(candidate.cluster.centroidLng),
+    };
+  }
+
+  private roundBounds(bounds: TripBounds): TripBounds {
+    return {
+      west: this.roundCoordinate(bounds.west),
+      east: this.roundCoordinate(bounds.east),
+      south: this.roundCoordinate(bounds.south),
+      north: this.roundCoordinate(bounds.north),
+    };
+  }
+
+  private roundCoordinate(value: number): number {
+    return Number(value.toFixed(5));
+  }
+
+  private roundMetric(value: number): number {
+    return Number(value.toFixed(2));
+  }
+
   private estimateHomeAreaRadiusKm(cluster: DestinationCluster): number {
     const maxDistanceKm = cluster.points.reduce((currentMax, point) => (
       Math.max(
@@ -800,6 +1003,38 @@ export class MyTracksTripDetectionService {
       centroidLng: centroid.lng / points.length,
       bounds,
     };
+  }
+
+  private buildHomeClusterCandidates(
+    destinationClusters: DestinationCluster[],
+    timelinePoints: NormalizedActivityStart[],
+  ): HomeClusterCandidate[] {
+    if (destinationClusters.length === 0 || timelinePoints.length === 0) {
+      return [];
+    }
+
+    const visitWindows = this.buildVisitWindows(destinationClusters, timelinePoints);
+    const visitWindowCountByDestination = visitWindows.reduce((accumulator, visitWindow) => {
+      accumulator.set(visitWindow.destinationId, (accumulator.get(visitWindow.destinationId) || 0) + 1);
+      return accumulator;
+    }, new Map<string, number>());
+
+    return destinationClusters.map((cluster) => {
+      const activeMonths = new Set(cluster.points.map((point) => this.toUtcMonthKey(point.timestamp)));
+      const firstTimestamp = cluster.points[0]?.timestamp ?? 0;
+      const lastTimestamp = cluster.points[cluster.points.length - 1]?.timestamp ?? firstTimestamp;
+      return {
+        cluster,
+        visitWindowCount: visitWindowCountByDestination.get(cluster.destinationId) || 0,
+        activeMonthCount: activeMonths.size,
+        spanDays: (lastTimestamp - firstTimestamp) / (24 * 60 * 60 * 1000),
+      };
+    });
+  }
+
+  private toUtcMonthKey(timestamp: number): string {
+    const date = new Date(timestamp);
+    return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
   }
 
   private createDestinationId(centroidLat: number, centroidLng: number, clusterIndex: number): string {

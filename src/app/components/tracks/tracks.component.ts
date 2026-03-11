@@ -1293,6 +1293,25 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.applyActiveDetectedTripAreaOverlay();
     this.detectedTripsPanelExpanded.set(viewModels.length > 0);
     this.hasEvaluatedTripDetection.set(true);
+    this.logger.info('[debug] my_tracks_trip_detection_ui_models', {
+      trips: viewModels.map((trip) => ({
+        tripId: trip.tripId,
+        destinationId: trip.destinationId,
+        locationLabel: trip.locationLabel,
+        activityCount: trip.activityCount,
+        startDateIso: trip.startDate.toISOString(),
+        endDateIso: trip.endDate.toISOString(),
+        eventIds: trip.eventIds,
+      })),
+      homeArea: detectedHomeArea ? {
+        destinationId: detectedHomeArea.destinationId,
+        pointCount: detectedHomeArea.pointCount,
+        pointShare: detectedHomeArea.pointShare,
+        centroidLat: detectedHomeArea.centroidLat,
+        centroidLng: detectedHomeArea.centroidLng,
+        radiusKm: detectedHomeArea.radiusKm,
+      } : null,
+    });
     this.logger.log('[TracksComponent] Detected trips committed to UI state.', {
       detectedTripCount: viewModels.length,
       panelExpanded: this.detectedTripsPanelExpanded(),

@@ -5,6 +5,7 @@ import {
   TripDetectionInput,
   TripDetectionOptions,
 } from './my-tracks-trip-detection.service';
+import { LoggerService } from './logger.service';
 
 const input = (eventId: string, startDate: string, latitudeDegrees: number, longitudeDegrees: number): TripDetectionInput => ({
   eventId,
@@ -34,7 +35,13 @@ const remoteHomeHistory = (...prefixes: string[]): TripDetectionOptions => ({
 });
 
 describe('MyTracksTripDetectionService', () => {
-  const service = new MyTracksTripDetectionService();
+  const logger = {
+    log: () => undefined,
+    info: () => undefined,
+    warn: () => undefined,
+    error: () => undefined,
+  } as unknown as LoggerService;
+  const service = new MyTracksTripDetectionService(logger);
 
   it('detects non-consecutive revisits with same destination id (A-B-A) when home is inferred elsewhere', () => {
     const detectedTrips = service.detectTrips([
@@ -263,6 +270,57 @@ describe('MyTracksTripDetectionService', () => {
     ], homeHistory('home-a', 'home-b'));
 
     expect(detectionResult.trips).toHaveLength(1);
+    expect(detectionResult.homeArea).toBeNull();
+  });
+
+  it('infers recurrent home clusters even when point share drops below fifty percent', () => {
+    const detectionResult = service.detectTripsWithContext([
+      input('io-1', '2025-01-03T08:00:00Z', 39.6790, 20.8780),
+      input('io-2', '2025-01-04T08:00:00Z', 39.6800, 20.8790),
+      input('io-3', '2025-03-03T08:00:00Z', 39.6780, 20.8770),
+      input('io-4', '2025-03-04T08:00:00Z', 39.6795, 20.8785),
+      input('io-5', '2025-05-03T08:00:00Z', 39.6792, 20.8778),
+      input('io-6', '2025-05-04T08:00:00Z', 39.6802, 20.8788),
+      input('io-7', '2025-07-03T08:00:00Z', 39.6788, 20.8776),
+      input('io-8', '2025-07-04T08:00:00Z', 39.6798, 20.8786),
+      input('bor-1', '2025-08-10T08:00:00Z', 42.2560, 23.6060),
+      input('bor-2', '2025-08-11T08:00:00Z', 42.2570, 23.6070),
+      input('bor-3', '2025-08-12T08:00:00Z', 42.2580, 23.6080),
+      input('bor-4', '2025-08-13T08:00:00Z', 42.2590, 23.6090),
+      input('bor-5', '2025-08-14T08:00:00Z', 42.2600, 23.6100),
+      input('bor-6', '2025-08-15T08:00:00Z', 42.2610, 23.6110),
+      input('bor-7', '2025-08-16T08:00:00Z', 42.2620, 23.6120),
+      input('bor-8', '2025-08-17T08:00:00Z', 42.2630, 23.6130),
+      input('bor-9', '2025-08-18T08:00:00Z', 42.2640, 23.6140),
+      input('bor-10', '2025-08-19T08:00:00Z', 42.2650, 23.6150),
+      input('ano-1', '2025-06-07T08:00:00Z', 38.5410, 21.9460),
+      input('ano-2', '2025-06-08T08:00:00Z', 38.5420, 21.9470),
+      input('ano-3', '2025-07-10T08:00:00Z', 38.5430, 21.9480),
+      input('ano-4', '2025-07-11T08:00:00Z', 38.5440, 21.9490),
+    ]);
+
+    expect(detectionResult.homeArea).toEqual(expect.objectContaining({
+      destinationId: expect.stringContaining('39.679'),
+      pointCount: 8,
+    }));
+    expect(detectionResult.trips.some((trip) => trip.destinationId === detectionResult.homeArea?.destinationId)).toBe(false);
+  });
+
+  it('does not infer home from a sub-fifty-percent cluster when it lacks recurrence across time', () => {
+    const detectionResult = service.detectTripsWithContext([
+      input('rome-1', '2025-05-01T08:00:00Z', 41.9028, 12.4964),
+      input('rome-2', '2025-05-02T08:00:00Z', 41.9038, 12.4974),
+      input('rome-3', '2025-05-03T08:00:00Z', 41.9048, 12.4984),
+      input('rome-4', '2025-05-04T08:00:00Z', 41.9058, 12.4994),
+      input('rome-5', '2025-05-05T08:00:00Z', 41.9068, 12.5004),
+      input('athens-1', '2025-06-01T08:00:00Z', 37.9800, 23.7200),
+      input('athens-2', '2025-06-02T08:00:00Z', 37.9810, 23.7210),
+      input('athens-3', '2025-06-03T08:00:00Z', 37.9820, 23.7220),
+      input('athens-4', '2025-06-04T08:00:00Z', 37.9830, 23.7230),
+      input('thess-1', '2025-07-01T08:00:00Z', 40.6401, 22.9444),
+      input('thess-2', '2025-07-02T08:00:00Z', 40.6420, 22.9500),
+    ]);
+
     expect(detectionResult.homeArea).toBeNull();
   });
 });
