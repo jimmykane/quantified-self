@@ -44,7 +44,13 @@ describe('AppImpersonationService', () => {
         userSignal.set(null);
         authServiceMock.currentUser = null;
         adminServiceMock.impersonateUser.mockReturnValue(of({ token: 'custom-token' }));
-        authServiceMock.loginWithCustomToken.mockResolvedValue(undefined);
+        authServiceMock.loginWithCustomToken.mockImplementation(async () => {
+            const restoredAdminUser = createAuthUser('admin-uid', { admin: true });
+            authServiceMock.currentUser = restoredAdminUser;
+            return {
+                user: restoredAdminUser
+            };
+        });
         functionsServiceMock.call.mockResolvedValue({
             data: {
                 token: 'admin-token'
@@ -256,5 +262,13 @@ function createDeferred<T>() {
         promise,
         resolve,
         reject
+    };
+}
+
+function createAuthUser(uid: string, claims: Record<string, unknown>) {
+    return {
+        uid,
+        getIdTokenResult: vi.fn().mockResolvedValue({ claims }),
+        getIdToken: vi.fn().mockResolvedValue('id-token')
     };
 }
