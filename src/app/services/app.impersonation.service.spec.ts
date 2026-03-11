@@ -196,6 +196,35 @@ describe('AppImpersonationService', () => {
         expect(windowServiceMock.windowRef.location.assign).toHaveBeenCalledWith('/admin');
     });
 
+    it('should re-read current auth user between admin-claim retries', async () => {
+        const firstRestoredAdminUser = createAuthUser('admin-uid', [{}, {}]);
+        const secondRestoredAdminUser = createAuthUser('admin-uid', [{ admin: true }]);
+
+        authServiceMock.loginWithCustomToken.mockImplementation(async () => {
+            authServiceMock.currentUser = firstRestoredAdminUser;
+            return {
+                user: firstRestoredAdminUser
+            };
+        });
+
+        const waitForRetrySpy = vi.spyOn(service as any, 'waitForAdminClaimRetry').mockImplementation(async () => {
+            authServiceMock.currentUser = secondRestoredAdminUser;
+        });
+
+        authServiceMock.currentUser = { uid: 'impersonated-user' };
+        userSignal.set({
+            uid: 'user-1',
+            impersonatedBy: 'admin-uid'
+        });
+
+        await service.returnToAdmin();
+
+        expect(waitForRetrySpy).toHaveBeenCalledTimes(1);
+        expect(firstRestoredAdminUser.getIdToken).toHaveBeenCalledTimes(1);
+        expect(secondRestoredAdminUser.getIdToken).toHaveBeenCalledTimes(1);
+        expect(windowServiceMock.windowRef.location.assign).toHaveBeenCalledWith('/admin');
+    });
+
     it('should fail return-to-admin when admin claim retries are exhausted', async () => {
         const restoredAdminUser = createAuthUser('admin-uid', [{}, {}, {}, {}]);
         authServiceMock.loginWithCustomToken.mockImplementation(async () => {

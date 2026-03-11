@@ -116,10 +116,7 @@ export class AppImpersonationService {
     }
 
     private async ensureAdminClaimIsReady(): Promise<void> {
-        const authUser = this.authService.currentUser;
-        if (!authUser) {
-            throw new Error('Admin session restoration did not complete. Please try again.');
-        }
+        let authUser = this.resolveCurrentAuthUserOrThrow();
 
         const tokenResult = await authUser.getIdTokenResult();
         if (tokenResult.claims['admin'] === true) {
@@ -128,6 +125,7 @@ export class AppImpersonationService {
 
         const maxRefreshAttempts = 3;
         for (let attempt = 1; attempt <= maxRefreshAttempts; attempt += 1) {
+            authUser = this.resolveCurrentAuthUserOrThrow();
             await authUser.getIdToken(true);
             const refreshedTokenResult = await authUser.getIdTokenResult();
             if (refreshedTokenResult.claims['admin'] === true) {
@@ -140,6 +138,15 @@ export class AppImpersonationService {
         }
 
         throw new Error('Admin permissions are not ready yet. Please try again.');
+    }
+
+    private resolveCurrentAuthUserOrThrow() {
+        const authUser = this.authService.currentUser;
+        if (!authUser) {
+            throw new Error('Admin session restoration did not complete. Please try again.');
+        }
+
+        return authUser;
     }
 
     private waitForAdminClaimRetry(): Promise<void> {
