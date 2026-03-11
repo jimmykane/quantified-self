@@ -89,6 +89,10 @@ describe('AppShellComponent', () => {
 
 
     beforeEach(async () => {
+        mockRouter.events = new Subject();
+        mockThemeService.themeChange$ = new Subject();
+        mockAppAuthService.user$ = of(null);
+
         await TestBed.configureTestingModule({
             declarations: [AppShellComponent],
             imports: [
@@ -447,17 +451,6 @@ describe('AppShellComponent', () => {
 
         expect(component.showInitialLoader).toBe(false);
         expect(detectSpy).not.toHaveBeenCalled();
-    });
-
-    it('should use fallback scroll call when scrollTo options throw', () => {
-        const scrollSpy = vi.spyOn(window, 'scrollTo' as any).mockImplementation((...args: any[]) => {
-            if (typeof args[0] === 'object') {
-                throw new Error('not supported');
-            }
-        });
-
-        (component as any).scrollToTopAfterNavigation();
-        expect(scrollSpy).toHaveBeenCalledWith(0, 0);
     });
 
     it('should reset scroll to top on NavigationEnd', () => {

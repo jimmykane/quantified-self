@@ -13,13 +13,7 @@ import { MatSidenav, MatSidenavContainer } from '@angular/material/sidenav';
 import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
 import { Observable, Subscription } from 'rxjs';
 import { map } from 'rxjs/operators';
-import {
-  NavigationCancel,
-  NavigationEnd,
-  NavigationError,
-  NavigationStart,
-  Router,
-} from '@angular/router';
+import { Router } from '@angular/router';
 import { AppAuthService } from './authentication/app.auth.service';
 import { AppUserService } from './services/app.user.service';
 import { AppSideNavService } from './services/side-nav/app-side-nav.service';
@@ -35,11 +29,11 @@ import { AppThemeService } from './services/app.theme.service';
 import { AppWhatsNewService } from './services/app.whats-new.service';
 import { MatDialog } from '@angular/material/dialog';
 import { WhatsNewDialogComponent } from './components/whats-new/whats-new-dialog.component';
-import { RouteAnimationStateService } from './services/route-animation-state.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppHapticsService } from './services/app.haptics.service';
 import { AppUserInterface } from './models/app-user.interface';
 import { AppUserUtilities } from './utils/app.user.utilities';
+import { ShellNavigationEffectsService } from './services/shell-navigation-effects.service';
 
 @Component({
   selector: 'app-shell',
@@ -82,8 +76,8 @@ export class AppShellComponent implements OnInit, OnDestroy {
   public showInitialLoader = true;
   public isOnboardingRoute = false;
   private destroyRef = inject(DestroyRef);
-  private routeAnimationStateService = inject(RouteAnimationStateService);
-  public routeAnimationState = this.routeAnimationStateService.animationState;
+  private shellNavigationEffectsService = inject(ShellNavigationEffectsService);
+  public routeAnimationState = this.shellNavigationEffectsService.animationState;
   public onboardingCompleted = true; // Default to true to avoid hiding chrome of non-authenticated users prematurely
   private remoteConfigService = inject(AppRemoteConfigService);
   public maintenanceMode = this.remoteConfigService.maintenanceMode;
@@ -109,8 +103,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private breakpointObserver = inject(BreakpointObserver);
   public isHandset = toSignal(this.breakpointObserver.observe([Breakpoints.XSmall, Breakpoints.Small]).pipe(map(result => result.matches)), { initialValue: false });
   private hapticsService = inject(AppHapticsService);
-  private hasCompletedInitialNavigation = false;
-  private shouldTriggerNavigationHaptics = false;
   private currentSidenavContainer: MatSidenavContainer | null = null;
   private shellScrollSubscription: Subscription | null = null;
   private globalScrollListener: ((event: Event) => void) | null = null;
@@ -179,26 +171,13 @@ export class AppShellComponent implements OnInit, OnDestroy {
           this.scheduleInitialLoaderHide();
         }
       });
-    this.router.events
+
+    this.shellNavigationEffectsService.navigationEnd$
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((event) => {
-        if (event instanceof NavigationStart) {
-          this.shouldTriggerNavigationHaptics = this.hasCompletedInitialNavigation && event.navigationTrigger === 'imperative';
-          return;
-        }
-        if (event instanceof NavigationCancel || event instanceof NavigationError) {
-          this.shouldTriggerNavigationHaptics = false;
-          return;
-        }
-        if (event instanceof NavigationEnd) {
-          if (this.shouldTriggerNavigationHaptics) {
-            this.hapticsService.selection();
-          }
-          this.shouldTriggerNavigationHaptics = false;
-          this.hasCompletedInitialNavigation = true;
-          this.updateOnboardingState();
-          this.scrollToTopAfterNavigation();
-        }
+      .subscribe(() => {
+        this.updateOnboardingState();
+        this.lastShellScrollTop = 0;
+        this.setHeaderHidden(false);
       });
 
     // Subscribe to theme changes for circular reveal animation
@@ -420,29 +399,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
     this.headerHidden = hidden;
     this.changeDetectorRef.detectChanges();
-  }
-
-  private scrollToTopAfterNavigation(): void {
-    this.lastShellScrollTop = 0;
-    this.setHeaderHidden(false);
-
-    if (typeof document === 'undefined' || typeof window === 'undefined') {
-      return;
-    }
-
-    // Reset the shell scroller used by mat-sidenav layouts.
-    const shellScroller = document.querySelector('.app-sidenav-container .mat-drawer-content') as HTMLElement | null;
-    if (shellScroller) {
-      shellScroller.scrollTop = 0;
-      shellScroller.scrollLeft = 0;
-    }
-
-    // Keep default window restoration behavior aligned as a fallback.
-    try {
-      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-    } catch {
-      window.scrollTo(0, 0);
-    }
   }
 
   private triggerThemeReveal(x: number, y: number, theme: AppThemes) {
