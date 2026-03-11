@@ -297,7 +297,10 @@ section.component-container {
   background-size: cover;
 }
 
-/* App aliases over official Material M3 system tokens. */
+/* App aliases over official Material M3 system tokens.
+ * Keep this compatibility layer while migrating legacy component styles.
+ * New/updated component styles should use `--mat-sys-*` tokens directly.
+ */
 :root {
   --qs-theme-primary: #2196f3;
   --qs-theme-on-primary: #ffffff;

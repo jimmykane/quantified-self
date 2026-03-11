@@ -1481,7 +1481,7 @@ export class TracksMapManager {
         }
 
         const value = globalThis.getComputedStyle(body).getPropertyValue(cssVariable).trim();
-        return value || fallback;
+        return value.length > 0 ? value : fallback;
     }
 
     private resolveLayerRole(layerId: string): TrackLayerRole {
