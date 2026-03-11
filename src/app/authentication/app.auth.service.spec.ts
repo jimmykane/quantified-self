@@ -1,8 +1,30 @@
 import { vi, describe, it, expect, beforeEach, afterEach, Mock } from 'vitest';
 
-const { mockUserFunction } = vi.hoisted(() => {
+const {
+    mockUserFunction,
+    getMockEnvironmentLocalhost,
+    setMockEnvironmentLocalhost,
+    getDefaultMockEnvironmentLocalhost,
+    setDefaultMockEnvironmentLocalhost,
+    resetMockEnvironmentLocalhost
+} = vi.hoisted(() => {
+    let localhost = true;
+    let defaultLocalhost = true;
+
     return {
         mockUserFunction: vi.fn(),
+        getMockEnvironmentLocalhost: () => localhost,
+        setMockEnvironmentLocalhost: (value: boolean) => {
+            localhost = value;
+        },
+        getDefaultMockEnvironmentLocalhost: () => defaultLocalhost,
+        setDefaultMockEnvironmentLocalhost: (value: boolean) => {
+            defaultLocalhost = value;
+            localhost = value;
+        },
+        resetMockEnvironmentLocalhost: () => {
+            localhost = defaultLocalhost;
+        }
     };
 });
 
@@ -35,6 +57,24 @@ vi.mock('@angular/fire/firestore', async () => {
     };
 });
 
+vi.mock('../../environments/environment', async () => {
+    const actual = await vi.importActual<typeof import('../../environments/environment')>('../../environments/environment');
+    setDefaultMockEnvironmentLocalhost(actual.environment.localhost);
+
+    return {
+        ...actual,
+        environment: {
+            ...actual.environment,
+            get localhost() {
+                return getMockEnvironmentLocalhost();
+            },
+            set localhost(value: boolean) {
+                setMockEnvironmentLocalhost(value);
+            }
+        }
+    };
+});
+
 import { TestBed } from '@angular/core/testing';
 import { AppAuthService } from './app.auth.service';
 import { AppUserService } from '../services/app.user.service';
@@ -54,7 +94,6 @@ import { EnvironmentInjector } from '@angular/core';
 import { of, BehaviorSubject } from 'rxjs';
 import { Privacy } from '@sports-alliance/sports-lib';
 import { APP_STORAGE } from '../services/storage/app.storage.token';
-import { environment } from '../../environments/environment';
 
 import { signal } from '@angular/core';
 
@@ -89,7 +128,6 @@ const mockLocalStorageService = {
 describe('AppAuthService', () => {
     let service: AppAuthService;
     let userSubject: BehaviorSubject<any>;
-    const originalLocalhost = environment.localhost;
 
     beforeEach(() => {
         vi.clearAllMocks();
@@ -115,7 +153,8 @@ describe('AppAuthService', () => {
     });
 
     afterEach(() => {
-        environment.localhost = originalLocalhost;
+        resetMockEnvironmentLocalhost();
+        expect(getMockEnvironmentLocalhost()).toBe(getDefaultMockEnvironmentLocalhost());
     });
 
     it('should be created', () => {
@@ -256,7 +295,7 @@ describe('AppAuthService', () => {
             const { signInWithPopup, signInWithRedirect } = await import('@angular/fire/auth');
             const provider = new GoogleAuthProvider();
             const popupResult = { user: { uid: 'popup-user' } };
-            environment.localhost = true;
+            setMockEnvironmentLocalhost(true);
             (signInWithPopup as Mock).mockResolvedValueOnce(popupResult as any);
 
             const result = await service.signInWithProvider(provider);
@@ -270,7 +309,7 @@ describe('AppAuthService', () => {
             const { signInWithPopup, signInWithRedirect } = await import('@angular/fire/auth');
             const provider = new GoogleAuthProvider();
             const redirectResult = { redirected: true };
-            environment.localhost = false;
+            setMockEnvironmentLocalhost(false);
             (signInWithRedirect as Mock).mockResolvedValueOnce(redirectResult as any);
 
             const result = await service.signInWithProvider(provider);
@@ -285,7 +324,7 @@ describe('AppAuthService', () => {
             const provider = new GoogleAuthProvider();
             const authError = { code: 'auth/popup-blocked', message: 'Popup blocked by browser' };
             const loggerErrorSpy = vi.spyOn((service as any).logger, 'error').mockImplementation(() => { });
-            environment.localhost = true;
+            setMockEnvironmentLocalhost(true);
             (signInWithPopup as Mock).mockRejectedValueOnce(authError);
 
             await expect(service.signInWithProvider(provider)).rejects.toBe(authError);
