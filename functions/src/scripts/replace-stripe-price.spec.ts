@@ -178,6 +178,7 @@ describe('replace-stripe-price script', () => {
     });
 
     it('execute should transfer lookup key when source price has one', async () => {
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
         mockPricesRetrieve.mockResolvedValue(makeRecurringPrice({
             lookup_key: 'basic_monthly',
         }));
@@ -202,6 +203,10 @@ describe('replace-stripe-price script', () => {
             lookup_key: 'basic_monthly',
             transfer_lookup_key: true,
         }));
+        expect(warnSpy).toHaveBeenCalledWith(
+            "[replace-stripe-price] lookup_key 'basic_monthly' was transferred to new price price_new at creation time. This cannot be rolled back automatically if later migration steps fail.",
+        );
+        warnSpy.mockRestore();
     });
 
     it('execute should preserve tax_behavior when it is explicitly unspecified', async () => {
@@ -283,6 +288,7 @@ describe('replace-stripe-price script', () => {
     });
 
     it('should skip old price deactivation when any migration fails', async () => {
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
         mockSubscriptionsList.mockResolvedValue(
             makeStripeApiList([
                 makeSubscription({
@@ -303,7 +309,12 @@ describe('replace-stripe-price script', () => {
 
         expect(summary.failedSubscriptionIds).toEqual(['sub_failed']);
         expect(summary.oldPriceDeactivated).toBe(false);
+        expect(summary.orphanedNewPriceId).toBe('price_new');
         expect(mockPricesUpdate).not.toHaveBeenCalled();
+        expect(warnSpy).toHaveBeenCalledWith(
+            '[replace-stripe-price] All eligible subscription migrations failed. New price price_new remains active with no migrated subscriptions. Review and deactivate/delete it manually if needed.',
+        );
+        warnSpy.mockRestore();
     });
 
     it('should no-op in execute mode when there are no eligible migration candidates', async () => {
@@ -317,6 +328,7 @@ describe('replace-stripe-price script', () => {
         expect(summary.dryRun).toBe(false);
         expect(summary.eligibleMigrationCount).toBe(0);
         expect(summary.newPriceId).toBeNull();
+        expect(summary.orphanedNewPriceId).toBeNull();
         expect(summary.oldPriceDeactivated).toBe(false);
         expect(mockPricesCreate).not.toHaveBeenCalled();
         expect(mockSubscriptionsUpdate).not.toHaveBeenCalled();
@@ -387,6 +399,18 @@ describe('replace-stripe-price script', () => {
             '--new-unit-amount',
             '0',
         ])).toThrow("Invalid value for --new-unit-amount: '0'. Expected a positive integer (minor units).");
+        expect(() => parseReplaceStripePriceScriptOptions([
+            '--old-price',
+            '',
+            '--new-unit-amount',
+            '199',
+        ])).toThrow('Invalid value for --old-price: empty string.');
+        expect(() => parseReplaceStripePriceScriptOptions([
+            '--old-price',
+            'price_old',
+            '--new-unit-amount',
+            '',
+        ])).toThrow('Invalid value for --new-unit-amount: empty string.');
     });
 
     it('parseReplaceStripePriceScriptOptions should support space-separated --deactivate-old value', () => {
@@ -404,5 +428,29 @@ describe('replace-stripe-price script', () => {
         expect(options.deactivateOld).toBe(false);
         expect(options.oldPriceId).toBe('price_old');
         expect(options.newUnitAmount).toBe(199);
+    });
+
+    it('dry-run preflight should surface deactivate-old override metadata', async () => {
+        const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+        mockSubscriptionsList.mockResolvedValue(
+            makeStripeApiList([
+                makeSubscription({
+                    id: 'sub_preflight',
+                    status: 'active',
+                    oldPriceId: 'price_old',
+                    itemId: 'si_preflight',
+                    quantity: 1,
+                }),
+            ]),
+        );
+
+        await runReplaceStripePriceScript(
+            ['--old-price', 'price_old', '--new-unit-amount', '199', '--deactivate-old=true'],
+            { getStripeClient },
+        );
+
+        expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('"deactivateOldRequested": true'));
+        expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('"deactivateOldOverriddenToDryRun": true'));
+        logSpy.mockRestore();
     });
 });

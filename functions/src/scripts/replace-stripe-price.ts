@@ -15,6 +15,8 @@ interface ReplaceStripePriceScriptOptions {
     oldPriceId: string;
     newUnitAmount: number;
     execute: boolean;
+    deactivateOldRequested: boolean | undefined;
+    deactivateOldOverriddenToDryRun: boolean;
     deactivateOld: boolean;
 }
 
@@ -22,6 +24,7 @@ export interface ReplaceStripePriceSummary {
     dryRun: boolean;
     oldPriceId: string;
     newPriceId: string | null;
+    orphanedNewPriceId: string | null;
     oldUnitAmount: number;
     newUnitAmount: number;
     currency: string;
@@ -68,7 +71,7 @@ function readArgValue(argv: string[], key: string): string | undefined {
         }
 
         const nextToken = argv[i + 1];
-        if (!nextToken || nextToken.startsWith('--')) {
+        if (nextToken === undefined || nextToken.startsWith('--')) {
             return undefined;
         }
         return nextToken;
@@ -122,20 +125,31 @@ function parseOptionalBooleanFlag(argv: string[], key: string): boolean | undefi
 }
 
 function parseRequiredStringArg(argv: string[], key: string): string {
-    const value = readArgValue(argv, key)?.trim();
-    if (!value) {
+    const raw = readArgValue(argv, key);
+    if (raw === undefined) {
         throw new Error(`Missing required argument: ${key}`);
     }
+
+    const value = raw.trim();
+    if (!value) {
+        throw new Error(`Invalid value for ${key}: empty string.`);
+    }
+
     return value;
 }
 
 function parsePositiveIntegerArg(argv: string[], key: string): number {
     const raw = readArgValue(argv, key);
-    if (!raw) {
+    if (raw === undefined) {
         throw new Error(`Missing required argument: ${key}`);
     }
 
-    const parsed = Number(raw);
+    const normalizedRaw = raw.trim();
+    if (!normalizedRaw) {
+        throw new Error(`Invalid value for ${key}: empty string.`);
+    }
+
+    const parsed = Number(normalizedRaw);
     if (!Number.isInteger(parsed) || parsed <= 0) {
         throw new Error(`Invalid value for ${key}: '${raw}'. Expected a positive integer (minor units).`);
     }
@@ -146,12 +160,16 @@ function parsePositiveIntegerArg(argv: string[], key: string): number {
 export function parseReplaceStripePriceScriptOptions(argv: string[]): ReplaceStripePriceScriptOptions {
     const execute = argv.includes('--execute');
     const deactivateOldArg = parseOptionalBooleanFlag(argv, '--deactivate-old');
+    const deactivateOldRequested = deactivateOldArg;
+    const deactivateOldOverriddenToDryRun = !execute && deactivateOldRequested === true;
     const deactivateOld = execute ? (deactivateOldArg ?? true) : false;
 
     return {
         oldPriceId: parseRequiredStringArg(argv, '--old-price'),
         newUnitAmount: parsePositiveIntegerArg(argv, '--new-unit-amount'),
         execute,
+        deactivateOldRequested,
+        deactivateOldOverriddenToDryRun,
         deactivateOld,
     };
 }
@@ -359,6 +377,8 @@ function printPreflightSummary(
         subscriptionsScanned: analysis.subscriptionsScanned,
         eligibleMigrationCount: analysis.candidates.length,
         skippedCount: analysis.skippedCount,
+        deactivateOldRequested: options.deactivateOldRequested ?? null,
+        deactivateOldOverriddenToDryRun: options.deactivateOldOverriddenToDryRun,
         deactivateOldPrice: options.deactivateOld,
         prorationBehavior: 'none',
     };
@@ -382,6 +402,9 @@ export async function runReplaceStripePriceScript(
 
     const stripe = await deps.getStripeClient();
     const oldPrice = await stripe.prices.retrieve(options.oldPriceId);
+    // Race-window note: Stripe state is not atomic across calls. A concurrent actor could
+    // deactivate this price immediately after retrieve() but before subsequent list/update
+    // operations. We still validate active here to fail fast on known-inactive inputs.
     validateSourcePrice(oldPrice, options.newUnitAmount);
 
     const subscriptions = await listSubscriptionsByPrice(stripe, oldPrice.id);
@@ -389,6 +412,7 @@ export async function runReplaceStripePriceScript(
     printPreflightSummary(options, oldPrice, analysis);
 
     let newPriceId: string | null = null;
+    let orphanedNewPriceId: string | null = null;
     let migratedCount = 0;
     let failedSubscriptionIds: string[] = [];
     let oldPriceDeactivated = false;
@@ -403,10 +427,22 @@ export async function runReplaceStripePriceScript(
     if (options.execute && hasEligibleCandidates) {
         const createdPrice = await stripe.prices.create(buildPriceCreateParams(oldPrice, options.newUnitAmount));
         newPriceId = createdPrice.id;
+        if (oldPrice.lookup_key) {
+            console.warn(
+                `[replace-stripe-price] lookup_key '${oldPrice.lookup_key}' was transferred to new price ${newPriceId} at creation time. This cannot be rolled back automatically if later migration steps fail.`,
+            );
+        }
 
         const migrationResult = await migrateSubscriptionsToNewPrice(stripe, analysis.candidates, newPriceId);
         migratedCount = migrationResult.migratedCount;
         failedSubscriptionIds = migrationResult.failedSubscriptionIds;
+
+        if (migratedCount === 0 && failedSubscriptionIds.length > 0) {
+            orphanedNewPriceId = newPriceId;
+            console.warn(
+                `[replace-stripe-price] All eligible subscription migrations failed. New price ${newPriceId} remains active with no migrated subscriptions. Review and deactivate/delete it manually if needed.`,
+            );
+        }
 
         if (options.deactivateOld) {
             if (failedSubscriptionIds.length > 0) {
@@ -424,6 +460,7 @@ export async function runReplaceStripePriceScript(
         dryRun: !options.execute,
         oldPriceId: oldPrice.id,
         newPriceId,
+        orphanedNewPriceId,
         oldUnitAmount: oldPrice.unit_amount as number,
         newUnitAmount: options.newUnitAmount,
         currency: oldPrice.currency,
