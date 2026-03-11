@@ -8,6 +8,9 @@ type EChartsOption = Parameters<EChartsType['setOption']>[0];
 type EChartsSetOptionSettings = Parameters<EChartsType['setOption']>[1];
 type EChartsResizeOptions = NonNullable<Parameters<EChartsType['resize']>[0]>;
 type EChartsInitOptions = Parameters<EChartsCoreModule['init']>[2];
+const SUPPRESSED_HAPTIC_EVENT_SOURCES = new Set([
+  'event-chart-brush-zoom',
+]);
 
 export { ECHARTS_GLOBAL_FONT_FAMILY } from '../helpers/echarts-theme.helper';
 
@@ -247,11 +250,11 @@ export class EChartsLoaderService {
   }
 
   private isHapticEligibleDataZoomEvent(params: unknown): boolean {
-    return !this.isEventFromActionSource(params);
+    return !this.isSuppressedHapticSource(params);
   }
 
   private isHapticEligibleBrushEndEvent(params: unknown): boolean {
-    if (this.isEventFromActionSource(params)) {
+    if (this.isSuppressedHapticSource(params)) {
       return false;
     }
 
@@ -267,12 +270,21 @@ export class EChartsLoaderService {
     return brushParams.areas.length > 0;
   }
 
-  private isEventFromActionSource(params: unknown): boolean {
+  private isSuppressedHapticSource(params: unknown): boolean {
     if (!params || typeof params !== 'object') {
       return false;
     }
 
     const eventParams = params as { $from?: unknown };
-    return typeof eventParams.$from === 'string' && eventParams.$from.trim().length > 0;
+    if (typeof eventParams.$from !== 'string') {
+      return false;
+    }
+
+    const source = eventParams.$from.trim();
+    if (!source) {
+      return false;
+    }
+
+    return source.endsWith('-sync') || SUPPRESSED_HAPTIC_EVENT_SOURCES.has(source);
   }
 }

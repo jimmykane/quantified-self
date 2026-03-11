@@ -382,14 +382,23 @@ describe('EChartsLoaderService', () => {
     dataZoomHandler?.({ $from: 'event-chart-zoom-sync' });
     expect(hapticsMock.selection).toHaveBeenCalledTimes(4);
 
-    brushEndHandler?.({ areas: [{ coordRange: [10, 20] }] });
+    dataZoomHandler?.({ $from: 'view-component-inside' });
     expect(hapticsMock.selection).toHaveBeenCalledTimes(5);
+
+    brushEndHandler?.({ areas: [{ coordRange: [10, 20] }] });
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(6);
 
     brushEndHandler?.({ areas: [] });
-    expect(hapticsMock.selection).toHaveBeenCalledTimes(5);
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(6);
+
+    brushEndHandler?.({ $from: 'view-component-brush', areas: [{ coordRange: [10, 20] }] });
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(7);
 
     brushEndHandler?.({ $from: 'event-chart-selection-sync', areas: [{ coordRange: [10, 20] }] });
-    expect(hapticsMock.selection).toHaveBeenCalledTimes(5);
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(7);
+
+    brushEndHandler?.({ $from: 'event-chart-brush-zoom', areas: [{ coordRange: [10, 20] }] });
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(7);
 
     unsubscribe();
     expect(chart.off).toHaveBeenCalledWith('click', clickHandler);
