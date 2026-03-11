@@ -2,7 +2,7 @@ import { Injectable, inject, Injector, runInInjectionContext } from '@angular/co
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../components/confirmation-dialog/confirmation-dialog.component';
 import { environment } from '../../environments/environment';
-import { Firestore, collection, collectionData, addDoc, doc, docData, getDoc, getDocs, limit, query, where } from '@angular/fire/firestore';
+import { Firestore, collection, collectionData, addDoc, doc, docData, getDoc, getDocs, getDocsFromServer, limit, query, where } from '@angular/fire/firestore';
 
 // ... (other imports)
 
@@ -96,99 +96,99 @@ export class AppPaymentService {
      * Transforms Single-Product-Multi-Price model into Virtual Multi-Products for UI.
      */
     getProducts(): Observable<StripeProduct[]> {
+        return from(this.getProductsFromServer());
+    }
+
+    private async getProductsFromServer(): Promise<StripeProduct[]> {
         const productsRef = collection(this.firestore, 'products');
         const activeProductsQuery = query(productsRef, where('active', '==', true));
+        const productsSnapshot = await runInInjectionContext(this.injector, () => getDocsFromServer(activeProductsQuery));
+        const products = productsSnapshot.docs.map((productDoc) => ({
+            id: productDoc.id,
+            ...(productDoc.data() as Omit<StripeProduct, 'id'>)
+        } as StripeProduct));
 
-        return runInInjectionContext(this.injector, () => collectionData(activeProductsQuery, { idField: 'id' })).pipe(
-            map(docs => docs as StripeProduct[]),
-            switchMap((products: StripeProduct[]) => {
-                // Fetch prices for each product
-                const productsWithPrices$ = products.map(async product => {
-                    const p = await this.getProductWithPrices(product);
-                    return p;
-                });
-                return from(Promise.all(productsWithPrices$));
-            }),
-            map((products: StripeProduct[]) => {
-                const virtualProducts: StripeProduct[] = [];
-
-                this.logger.log('getProducts raw input:', products);
-
-                // Flatten/Split logic
-                for (const product of products) {
-                    this.logger.log(`Processing product ${product.id}`, product);
-
-                    // Check if this product has prices with 'firebaseRole' metadata
-                    const getRole = (p: StripePrice) => p.metadata?.firebaseRole?.toLowerCase();
-
-                    const basicPrices = product.prices?.filter(p => getRole(p) === 'basic');
-                    const proPrices = product.prices?.filter(p => getRole(p) === 'pro');
-
-                    this.logger.log(`Product ${product.id} prices split:`, { basicPrices, proPrices });
-
-                    if ((basicPrices && basicPrices.length > 0) || (proPrices && proPrices.length > 0)) {
-                        // Split this product into virtual products per price/role
-
-                        if (basicPrices && basicPrices.length > 0) {
-                            virtualProducts.push({
-                                ...product,
-                                id: `${product.id}_basic`, // Virtual ID
-                                name: 'Basic', // Override name
-                                description: 'Essential features for everyday users.',
-                                role: 'basic',
-                                metadata: { ...product.metadata, role: 'basic' },
-                                prices: basicPrices
-                            });
-                        }
-
-                        if (proPrices && proPrices.length > 0) {
-                            virtualProducts.push({
-                                ...product,
-                                id: `${product.id}_pro`, // Virtual ID
-                                name: 'Pro', // Override name
-                                description: 'Advanced tools for power users.',
-                                role: 'pro',
-                                metadata: { ...product.metadata, role: 'pro' },
-                                prices: proPrices
-                            });
-                        }
-                    } else {
-                        // Legacy/Fallback behavior: Use product-level metadata
-                        if (!product.metadata?.role && product.metadata?.firebaseRole) {
-                            product.metadata.role = product.metadata.firebaseRole;
-                        }
-
-                        // Ignore strictly free products if we are killing the free tier? 
-                        // User said "We wont have a free tier anymore". 
-                        // So let's filter out anything that resolves to 'free' role.
-                        if (product.metadata?.role !== 'free') {
-                            virtualProducts.push(product);
-                        }
-                    }
-                }
-
-                this.logger.log('getProducts virtual output:', virtualProducts);
-
-                // Sort: Basic first, then Pro
-                const roleOrder: Record<string, number> = { 'basic': 1, 'pro': 2 };
-                return virtualProducts.sort((a, b) => {
-                    const rA = (a.role || a.metadata?.role || '') as string;
-                    const rB = (b.role || b.metadata?.role || '') as string;
-                    return (roleOrder[rA] || 99) - (roleOrder[rB] || 99);
-                });
-            })
-        );
+        const productsWithPrices = await Promise.all(products.map(async product => this.getProductWithPrices(product)));
+        return this.transformProductsForPricing(productsWithPrices);
     }
 
     private async getProductWithPrices(product: StripeProduct): Promise<StripeProduct> {
         const pricesRef = collection(this.firestore, `products/${product.id}/prices`);
         const activePricesQuery = query(pricesRef, where('active', '==', true));
 
-        const prices = await firstValueFrom(
-            runInInjectionContext(this.injector, () => collectionData(activePricesQuery, { idField: 'id' })).pipe(take(1))
-        );
+        const pricesSnapshot = await runInInjectionContext(this.injector, () => getDocsFromServer(activePricesQuery));
+        const prices = pricesSnapshot.docs.map((priceDoc) => ({
+            id: priceDoc.id,
+            ...(priceDoc.data() as Omit<StripePrice, 'id'>)
+        } as StripePrice));
 
-        return { ...product, prices: prices as StripePrice[] };
+        return { ...product, prices };
+    }
+
+    private transformProductsForPricing(products: StripeProduct[]): StripeProduct[] {
+        const virtualProducts: StripeProduct[] = [];
+
+        this.logger.log('getProducts raw input:', products);
+
+        // Flatten/Split logic
+        for (const product of products) {
+            this.logger.log(`Processing product ${product.id}`, product);
+
+            // Check if this product has prices with 'firebaseRole' metadata
+            const getRole = (p: StripePrice) => p.metadata?.firebaseRole?.toLowerCase();
+
+            const basicPrices = product.prices?.filter(p => getRole(p) === 'basic');
+            const proPrices = product.prices?.filter(p => getRole(p) === 'pro');
+
+            this.logger.log(`Product ${product.id} prices split:`, { basicPrices, proPrices });
+
+            if ((basicPrices && basicPrices.length > 0) || (proPrices && proPrices.length > 0)) {
+                // Split this product into virtual products per price/role
+                if (basicPrices && basicPrices.length > 0) {
+                    virtualProducts.push({
+                        ...product,
+                        id: `${product.id}_basic`, // Virtual ID
+                        name: 'Basic', // Override name
+                        description: 'Essential features for everyday users.',
+                        role: 'basic',
+                        metadata: { ...product.metadata, role: 'basic' },
+                        prices: basicPrices
+                    });
+                }
+
+                if (proPrices && proPrices.length > 0) {
+                    virtualProducts.push({
+                        ...product,
+                        id: `${product.id}_pro`, // Virtual ID
+                        name: 'Pro', // Override name
+                        description: 'Advanced tools for power users.',
+                        role: 'pro',
+                        metadata: { ...product.metadata, role: 'pro' },
+                        prices: proPrices
+                    });
+                }
+            } else {
+                // Legacy/Fallback behavior: Use product-level metadata
+                if (!product.metadata?.role && product.metadata?.firebaseRole) {
+                    product.metadata.role = product.metadata.firebaseRole;
+                }
+
+                // Ignore strictly free products if we are killing the free tier?
+                if (product.metadata?.role !== 'free') {
+                    virtualProducts.push(product);
+                }
+            }
+        }
+
+        this.logger.log('getProducts virtual output:', virtualProducts);
+
+        // Sort: Basic first, then Pro
+        const roleOrder: Record<string, number> = { 'basic': 1, 'pro': 2 };
+        return virtualProducts.sort((a, b) => {
+            const rA = (a.role || a.metadata?.role || '') as string;
+            const rB = (b.role || b.metadata?.role || '') as string;
+            return (roleOrder[rA] || 99) - (roleOrder[rB] || 99);
+        });
     }
 
     /**

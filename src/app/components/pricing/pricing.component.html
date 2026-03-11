@@ -143,7 +143,7 @@
             @if (price.unit_amount === 0) {
             $0
             } @else {
-            {{ (price.unit_amount || 0) / 100 | currency: price.currency.toUpperCase() : 'symbol' : '1.0-0' }}
+            {{ (price.unit_amount || 0) / 100 | currency: price.currency.toUpperCase() : 'symbol' : ((price.unit_amount || 0) % 100 === 0 ? '1.0-0' : '1.2-2') }}
             }
             <span *ngIf="price.recurring" class="interval">/ {{ price.recurring?.interval }}</span>
           </h3>
