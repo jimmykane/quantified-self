@@ -1189,14 +1189,42 @@ describe('TracksComponent', () => {
       expect(tripsPanel).not.toBeNull();
     });
 
-    it('hides trips peek panel when no trips are detected', () => {
+    it('hides trips peek panel when no trips and no home area are detected', () => {
       component.user = mockUser as any;
       component.detectedTrips.set([]);
+      component.detectedHomeArea.set(null);
       component.hasEvaluatedTripDetection.set(true);
       fixture.detectChanges();
 
       const tripsPanel = fixture.nativeElement.querySelector('app-peek-panel.tracks-trips-peek');
       expect(tripsPanel).toBeNull();
+    });
+
+    it('renders trips peek panel when only a home area is detected', () => {
+      component.user = mockUser as any;
+      component.detectedTrips.set([]);
+      component.detectedHomeArea.set({
+        destinationId: 'destination-home',
+        pointCount: 5,
+        pointShare: 0.6,
+        centroidLat: 37.9838,
+        centroidLng: 23.7275,
+        bounds: {
+          west: 23.71,
+          east: 23.74,
+          south: 37.97,
+          north: 38.0,
+        },
+        radiusKm: 3.2,
+      });
+      component.hasEvaluatedTripDetection.set(true);
+      fixture.detectChanges();
+
+      const tripsPanel = fixture.nativeElement.querySelector('app-peek-panel.tracks-trips-peek');
+      const tripButtons = fixture.nativeElement.querySelectorAll('.detected-trip-button') as NodeListOf<HTMLButtonElement>;
+      expect(tripsPanel).not.toBeNull();
+      expect(tripButtons.length).toBe(1);
+      expect(tripButtons[0]?.textContent).toContain('Home');
     });
 
     it('toggles detected-trips panel state without changing settings', () => {

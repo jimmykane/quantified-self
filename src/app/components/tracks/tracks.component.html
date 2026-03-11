@@ -55,7 +55,7 @@
     </app-map-layers-actions>
   </div>
 
-  @if (hasEvaluatedTripDetection() && detectedTrips().length > 0) {
+  @if (hasEvaluatedTripDetection() && (detectedTrips().length > 0 || !!detectedHomeArea())) {
   <div class="tracks-trips-peek-anchor">
     <app-peek-panel class="tracks-trips-peek" position="left" toggleLengthSize="small"
       [expanded]="detectedTripsPanelExpanded()"
