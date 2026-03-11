@@ -1,0 +1,408 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type Stripe from 'stripe';
+import {
+    parseReplaceStripePriceScriptOptions,
+    runReplaceStripePriceScript,
+} from './replace-stripe-price';
+
+function makeRecurringPrice(overrides: Partial<Stripe.Price> = {}): Stripe.Price {
+    return {
+        id: 'price_old',
+        object: 'price',
+        active: true,
+        billing_scheme: 'per_unit',
+        created: 0,
+        currency: 'eur',
+        custom_unit_amount: null,
+        livemode: false,
+        lookup_key: null,
+        metadata: {
+            firebaseRole: 'basic',
+            promotion_code_id: 'promo_123',
+        },
+        nickname: 'Basic Monthly',
+        product: 'prod_basic',
+        recurring: {
+            interval: 'month',
+            interval_count: 1,
+            meter: null,
+            trial_period_days: 7,
+            usage_type: 'licensed',
+        },
+        tax_behavior: 'exclusive',
+        tiers_mode: null,
+        transform_quantity: null,
+        type: 'recurring',
+        unit_amount: 200,
+        unit_amount_decimal: '200',
+        ...overrides,
+    } as Stripe.Price;
+}
+
+function makeSubscription(params: {
+    id: string;
+    status: Stripe.Subscription.Status;
+    oldPriceId: string;
+    itemId?: string;
+    quantity?: number | null;
+}): Stripe.Subscription {
+    return {
+        id: params.id,
+        status: params.status,
+        items: {
+            object: 'list',
+            data: [
+                {
+                    id: params.itemId || `si_${params.id}`,
+                    object: 'subscription_item',
+                    created: 0,
+                    deleted: undefined,
+                    metadata: {},
+                    quantity: params.quantity ?? null,
+                    subscription: params.id,
+                    tax_rates: [],
+                    price: {
+                        id: params.oldPriceId,
+                    } as Stripe.Price,
+                } as Stripe.SubscriptionItem,
+            ],
+            has_more: false,
+            total_count: 1,
+            url: `/v1/subscription_items?subscription=${params.id}`,
+        },
+    } as Stripe.Subscription;
+}
+
+function makeStripeApiList(data: Stripe.Subscription[]): Stripe.ApiList<Stripe.Subscription> {
+    return {
+        object: 'list',
+        data,
+        has_more: false,
+        url: '/v1/subscriptions',
+    } as Stripe.ApiList<Stripe.Subscription>;
+}
+
+describe('replace-stripe-price script', () => {
+    const mockPricesRetrieve = vi.fn();
+    const mockPricesCreate = vi.fn();
+    const mockPricesUpdate = vi.fn();
+    const mockSubscriptionsList = vi.fn();
+    const mockSubscriptionsUpdate = vi.fn();
+
+    const mockStripe = {
+        prices: {
+            retrieve: mockPricesRetrieve,
+            create: mockPricesCreate,
+            update: mockPricesUpdate,
+        },
+        subscriptions: {
+            list: mockSubscriptionsList,
+            update: mockSubscriptionsUpdate,
+        },
+    } as unknown as Pick<Stripe, 'prices' | 'subscriptions'>;
+
+    const getStripeClient = vi.fn(async () => mockStripe);
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockPricesRetrieve.mockResolvedValue(makeRecurringPrice());
+        mockPricesCreate.mockResolvedValue(makeRecurringPrice({ id: 'price_new', unit_amount: 199 }));
+        mockPricesUpdate.mockResolvedValue(makeRecurringPrice({ id: 'price_old', active: false }));
+        mockSubscriptionsList.mockResolvedValue(makeStripeApiList([]));
+        mockSubscriptionsUpdate.mockResolvedValue({ id: 'sub_1' } as Stripe.Subscription);
+    });
+
+    it('dry-run should not mutate Stripe resources', async () => {
+        mockSubscriptionsList.mockResolvedValue(
+            makeStripeApiList([
+                makeSubscription({
+                    id: 'sub_1',
+                    status: 'active',
+                    oldPriceId: 'price_old',
+                    quantity: 2,
+                }),
+            ]),
+        );
+
+        const summary = await runReplaceStripePriceScript(
+            ['--old-price', 'price_old', '--new-unit-amount', '199'],
+            { getStripeClient },
+        );
+
+        expect(summary.dryRun).toBe(true);
+        expect(summary.newPriceId).toBeNull();
+        expect(summary.eligibleMigrationCount).toBe(1);
+        expect(summary.migratedCount).toBe(0);
+        expect(mockPricesCreate).not.toHaveBeenCalled();
+        expect(mockSubscriptionsUpdate).not.toHaveBeenCalled();
+        expect(mockPricesUpdate).not.toHaveBeenCalled();
+    });
+
+    it('execute should create replacement price preserving metadata and recurring config', async () => {
+        mockSubscriptionsList.mockResolvedValue(
+            makeStripeApiList([
+                makeSubscription({
+                    id: 'sub_create',
+                    status: 'active',
+                    oldPriceId: 'price_old',
+                    itemId: 'si_create',
+                    quantity: 1,
+                }),
+            ]),
+        );
+
+        await runReplaceStripePriceScript(
+            ['--old-price', 'price_old', '--new-unit-amount', '199', '--execute'],
+            { getStripeClient },
+        );
+
+        expect(mockPricesCreate).toHaveBeenCalledTimes(1);
+        expect(mockPricesCreate).toHaveBeenCalledWith(expect.objectContaining({
+            product: 'prod_basic',
+            currency: 'eur',
+            unit_amount: 199,
+            billing_scheme: 'per_unit',
+            tax_behavior: 'exclusive',
+            nickname: 'Basic Monthly',
+            metadata: {
+                firebaseRole: 'basic',
+                promotion_code_id: 'promo_123',
+            },
+            recurring: expect.objectContaining({
+                interval: 'month',
+                interval_count: 1,
+                trial_period_days: 7,
+                usage_type: 'licensed',
+            }),
+        }));
+    });
+
+    it('execute should transfer lookup key when source price has one', async () => {
+        mockPricesRetrieve.mockResolvedValue(makeRecurringPrice({
+            lookup_key: 'basic_monthly',
+        }));
+        mockSubscriptionsList.mockResolvedValue(
+            makeStripeApiList([
+                makeSubscription({
+                    id: 'sub_lookup',
+                    status: 'active',
+                    oldPriceId: 'price_old',
+                    itemId: 'si_lookup',
+                    quantity: 1,
+                }),
+            ]),
+        );
+
+        await runReplaceStripePriceScript(
+            ['--old-price', 'price_old', '--new-unit-amount', '199', '--execute'],
+            { getStripeClient },
+        );
+
+        expect(mockPricesCreate).toHaveBeenCalledWith(expect.objectContaining({
+            lookup_key: 'basic_monthly',
+            transfer_lookup_key: true,
+        }));
+    });
+
+    it('execute should preserve tax_behavior when it is explicitly unspecified', async () => {
+        mockPricesRetrieve.mockResolvedValue(makeRecurringPrice({
+            tax_behavior: 'unspecified',
+        }));
+        mockSubscriptionsList.mockResolvedValue(
+            makeStripeApiList([
+                makeSubscription({
+                    id: 'sub_tax',
+                    status: 'active',
+                    oldPriceId: 'price_old',
+                    itemId: 'si_tax',
+                    quantity: 1,
+                }),
+            ]),
+        );
+
+        await runReplaceStripePriceScript(
+            ['--old-price', 'price_old', '--new-unit-amount', '199', '--execute'],
+            { getStripeClient },
+        );
+
+        expect(mockPricesCreate).toHaveBeenCalledWith(expect.objectContaining({
+            tax_behavior: 'unspecified',
+        }));
+    });
+
+    it('execute should migrate subscription items with no proration and preserve quantity', async () => {
+        mockSubscriptionsList.mockResolvedValue(
+            makeStripeApiList([
+                makeSubscription({
+                    id: 'sub_123',
+                    status: 'active',
+                    oldPriceId: 'price_old',
+                    itemId: 'si_old',
+                    quantity: 3,
+                }),
+            ]),
+        );
+        mockPricesCreate.mockResolvedValue(makeRecurringPrice({ id: 'price_new', unit_amount: 199 }));
+
+        const summary = await runReplaceStripePriceScript(
+            ['--old-price', 'price_old', '--new-unit-amount', '199', '--execute'],
+            { getStripeClient },
+        );
+
+        expect(summary.migratedCount).toBe(1);
+        expect(mockSubscriptionsUpdate).toHaveBeenCalledTimes(1);
+        expect(mockSubscriptionsUpdate).toHaveBeenCalledWith('sub_123', {
+            items: [{ id: 'si_old', price: 'price_new', quantity: 3 }],
+            proration_behavior: 'none',
+        });
+    });
+
+    it('should deactivate old price only after migration phase is complete', async () => {
+        mockSubscriptionsList.mockResolvedValue(
+            makeStripeApiList([
+                makeSubscription({
+                    id: 'sub_1',
+                    status: 'active',
+                    oldPriceId: 'price_old',
+                    itemId: 'si_old',
+                    quantity: 1,
+                }),
+            ]),
+        );
+
+        await runReplaceStripePriceScript(
+            ['--old-price', 'price_old', '--new-unit-amount', '199', '--execute'],
+            { getStripeClient },
+        );
+
+        expect(mockPricesUpdate).toHaveBeenCalledWith('price_old', { active: false });
+        expect(mockSubscriptionsUpdate).toHaveBeenCalledTimes(1);
+        expect(mockPricesUpdate.mock.invocationCallOrder[0]).toBeGreaterThan(
+            mockSubscriptionsUpdate.mock.invocationCallOrder[0],
+        );
+    });
+
+    it('should skip old price deactivation when any migration fails', async () => {
+        mockSubscriptionsList.mockResolvedValue(
+            makeStripeApiList([
+                makeSubscription({
+                    id: 'sub_failed',
+                    status: 'active',
+                    oldPriceId: 'price_old',
+                    itemId: 'si_failed',
+                    quantity: 1,
+                }),
+            ]),
+        );
+        mockSubscriptionsUpdate.mockRejectedValue(new Error('Stripe update failed'));
+
+        const summary = await runReplaceStripePriceScript(
+            ['--old-price', 'price_old', '--new-unit-amount', '199', '--execute'],
+            { getStripeClient },
+        );
+
+        expect(summary.failedSubscriptionIds).toEqual(['sub_failed']);
+        expect(summary.oldPriceDeactivated).toBe(false);
+        expect(mockPricesUpdate).not.toHaveBeenCalled();
+    });
+
+    it('should no-op in execute mode when there are no eligible migration candidates', async () => {
+        mockSubscriptionsList.mockResolvedValue(makeStripeApiList([]));
+
+        const summary = await runReplaceStripePriceScript(
+            ['--old-price', 'price_old', '--new-unit-amount', '199', '--execute'],
+            { getStripeClient },
+        );
+
+        expect(summary.dryRun).toBe(false);
+        expect(summary.eligibleMigrationCount).toBe(0);
+        expect(summary.newPriceId).toBeNull();
+        expect(summary.oldPriceDeactivated).toBe(false);
+        expect(mockPricesCreate).not.toHaveBeenCalled();
+        expect(mockSubscriptionsUpdate).not.toHaveBeenCalled();
+        expect(mockPricesUpdate).not.toHaveBeenCalled();
+    });
+
+    it('should warn when a listed subscription contains no matching old-price item', async () => {
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        mockSubscriptionsList.mockResolvedValue(
+            makeStripeApiList([
+                {
+                    ...makeSubscription({
+                        id: 'sub_anomalous',
+                        status: 'active',
+                        oldPriceId: 'price_old',
+                        itemId: 'si_anomalous',
+                        quantity: 1,
+                    }),
+                    items: {
+                        object: 'list',
+                        data: [
+                            {
+                                id: 'si_anomalous',
+                                object: 'subscription_item',
+                                created: 0,
+                                metadata: {},
+                                quantity: 1,
+                                subscription: 'sub_anomalous',
+                                tax_rates: [],
+                            } as Stripe.SubscriptionItem,
+                        ],
+                        has_more: false,
+                        total_count: 1,
+                        url: '/v1/subscription_items?subscription=sub_anomalous',
+                    },
+                } as Stripe.Subscription,
+            ]),
+        );
+
+        const summary = await runReplaceStripePriceScript(
+            ['--old-price', 'price_old', '--new-unit-amount', '199'],
+            { getStripeClient },
+        );
+
+        expect(summary.eligibleMigrationCount).toBe(0);
+        expect(summary.skippedCount).toBe(1);
+        expect(warnSpy).toHaveBeenCalledWith(
+            '[replace-stripe-price] Subscription sub_anomalous was returned for price price_old but no matching subscription item was found.',
+            { observedPriceIds: [null], status: 'active' },
+        );
+        warnSpy.mockRestore();
+    });
+
+    it('parseReplaceStripePriceScriptOptions should reject missing or invalid args', () => {
+        expect(() => parseReplaceStripePriceScriptOptions([])).toThrow('Missing required argument: --old-price');
+        expect(() => parseReplaceStripePriceScriptOptions(['--old-price', 'price_old'])).toThrow(
+            'Missing required argument: --new-unit-amount',
+        );
+        expect(() => parseReplaceStripePriceScriptOptions([
+            '--old-price',
+            'price_old',
+            '--new-unit-amount',
+            '1.99',
+        ])).toThrow("Invalid value for --new-unit-amount: '1.99'. Expected a positive integer (minor units).");
+        expect(() => parseReplaceStripePriceScriptOptions([
+            '--old-price',
+            'price_old',
+            '--new-unit-amount',
+            '0',
+        ])).toThrow("Invalid value for --new-unit-amount: '0'. Expected a positive integer (minor units).");
+    });
+
+    it('parseReplaceStripePriceScriptOptions should support space-separated --deactivate-old value', () => {
+        const options = parseReplaceStripePriceScriptOptions([
+            '--old-price',
+            'price_old',
+            '--new-unit-amount',
+            '199',
+            '--deactivate-old',
+            'false',
+            '--execute',
+        ]);
+
+        expect(options.execute).toBe(true);
+        expect(options.deactivateOld).toBe(false);
+        expect(options.oldPriceId).toBe('price_old');
+        expect(options.newUnitAmount).toBe(199);
+    });
+});
