@@ -7,9 +7,9 @@
   justify-content: space-between;
   gap: 16px;
   padding: 12px 16px;
-  background: color-mix(in srgb, var(--mat-sys-secondary-container) 92%, var(--mat-app-surface-container-lowest));
+  background: color-mix(in srgb, var(--mat-sys-secondary-container) 92%, var(--mat-sys-surface-container-lowest));
   color: var(--mat-sys-on-secondary-container);
-  border-bottom: 1px solid var(--mat-app-outline-variant);
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
   box-shadow: 0 1px 0 color-mix(in srgb, var(--mat-sys-on-surface) 6%, transparent);
 
   &__copy {

@@ -21,7 +21,7 @@
   --mdc-chip-label-text-color: currentColor;
   --mdc-chip-with-icon-icon-size: 0;
   --mdc-chip-graphic-selected-width: 0;
-  color: var(--mat-app-on-surface);
+  color: var(--mat-sys-on-surface);
   border-radius: 10px !important;
   height: auto !important;
   padding: 4px 12px !important;
@@ -31,7 +31,7 @@
 
 .activity-chip.mat-mdc-chip-selected {
   --mdc-chip-elevated-container-color: transparent;
-  border: 2px solid var(--chip-accent-color, var(--mat-app-primary)) !important;
+  border: 2px solid var(--chip-accent-color, var(--mat-sys-primary)) !important;
 }
 
 /* Remove checkmark graphic completely */
@@ -81,7 +81,7 @@
 }
 
 .activity-chip:not(.mat-mdc-chip-selected) {
-  border: 1px solid var(--mat-app-outline-variant) !important;
+  border: 1px solid var(--mat-sys-outline-variant) !important;
   opacity: 1;
 }
 
@@ -108,18 +108,18 @@
   font-weight: 400;
   font-size: 0.95rem;
   line-height: 1.2;
-  color: var(--mat-app-on-surface);
+  color: var(--mat-sys-on-surface);
 }
 
 .chip-stats {
   font-size: 0.8rem;
-  color: var(--mat-app-on-surface-variant);
+  color: var(--mat-sys-on-surface-variant);
   font-weight: 400;
 }
 
 .chip-device {
   font-size: 0.7rem;
-  color: var(--mat-app-on-surface-variant);
+  color: var(--mat-sys-on-surface-variant);
   opacity: 0.8;
   font-style: italic;
   margin-top: 2px;
@@ -144,7 +144,7 @@
   --mat-icon-button-state-layer-size: 20px !important;
   --mat-icon-button-touch-target-display: none;
   overflow: visible;
-  color: var(--mat-app-on-surface-variant);
+  color: var(--mat-sys-on-surface-variant);
 }
 
 .chip-device-edit-button mat-icon {

@@ -59,10 +59,10 @@ mat-icon.app-icon {
   padding: 20px 16px;
   margin: 8px 12px 16px 12px;
   background: linear-gradient(135deg,
-      color-mix(in srgb, var(--mat-app-primary) 8%, transparent),
-      color-mix(in srgb, var(--mat-app-primary) 3%, transparent));
+      color-mix(in srgb, var(--mat-sys-primary) 8%, transparent),
+      color-mix(in srgb, var(--mat-sys-primary) 3%, transparent));
   border-radius: 16px;
-  border: 1px solid color-mix(in srgb, var(--mat-app-primary) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mat-sys-primary) 10%, transparent);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -73,9 +73,9 @@ mat-icon.app-icon {
 
 :host-context(.dark-theme) .sidenav-profile {
   background: linear-gradient(135deg,
-      color-mix(in srgb, var(--mat-app-primary) 10%, transparent),
-      color-mix(in srgb, var(--mat-app-primary) 3%, transparent));
-  border-color: color-mix(in srgb, var(--mat-app-primary) 15%, transparent);
+      color-mix(in srgb, var(--mat-sys-primary) 10%, transparent),
+      color-mix(in srgb, var(--mat-sys-primary) 3%, transparent));
+  border-color: color-mix(in srgb, var(--mat-sys-primary) 15%, transparent);
 }
 
 :host-context(.dark-theme) .sidenav-profile:hover {
@@ -214,29 +214,29 @@ mat-list-item:not(.theme-toggle-item):hover {
 .active {
   font-weight: 500 !important;
   background: linear-gradient(90deg,
-      color-mix(in srgb, var(--mat-app-primary) 12%, transparent),
-      color-mix(in srgb, var(--mat-app-primary) 4%, transparent)) !important;
-  border-left: 3px solid var(--mat-app-primary) !important;
+      color-mix(in srgb, var(--mat-sys-primary) 12%, transparent),
+      color-mix(in srgb, var(--mat-sys-primary) 4%, transparent)) !important;
+  border-left: 3px solid var(--mat-sys-primary) !important;
 }
 
 /* Ensure active state styles persist on hover */
 mat-list-item.active:hover {
   background: linear-gradient(90deg,
-      color-mix(in srgb, var(--mat-app-primary) 15%, transparent),
-      color-mix(in srgb, var(--mat-app-primary) 7%, transparent)) !important;
+      color-mix(in srgb, var(--mat-sys-primary) 15%, transparent),
+      color-mix(in srgb, var(--mat-sys-primary) 7%, transparent)) !important;
 }
 
 :host-context(.dark-theme) .active {
   background: linear-gradient(90deg,
-      color-mix(in srgb, var(--mat-app-primary) 15%, transparent),
-      color-mix(in srgb, var(--mat-app-primary) 5%, transparent)) !important;
-  border-left: 3px solid var(--mat-app-primary) !important;
+      color-mix(in srgb, var(--mat-sys-primary) 15%, transparent),
+      color-mix(in srgb, var(--mat-sys-primary) 5%, transparent)) !important;
+  border-left: 3px solid var(--mat-sys-primary) !important;
 }
 
 :host-context(.dark-theme) mat-list-item.active:hover {
   background: linear-gradient(90deg,
-      color-mix(in srgb, var(--mat-app-primary) 18%, transparent),
-      color-mix(in srgb, var(--mat-app-primary) 8%, transparent)) !important;
+      color-mix(in srgb, var(--mat-sys-primary) 18%, transparent),
+      color-mix(in srgb, var(--mat-sys-primary) 8%, transparent)) !important;
 }
 
 /* Icon Styling */
@@ -264,11 +264,11 @@ mat-list-item:not(.theme-toggle-item):hover mat-icon {
 
 .active mat-icon {
   opacity: 1;
-  color: var(--mat-app-primary);
+  color: var(--mat-sys-primary);
 }
 
 :host-context(.dark-theme) .active mat-icon {
-  color: var(--mat-app-primary);
+  color: var(--mat-sys-primary);
 }
 
 /* Icon Container (for special icons) */

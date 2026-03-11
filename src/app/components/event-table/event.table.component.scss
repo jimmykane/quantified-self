@@ -27,8 +27,8 @@
   align-items: center;
   gap: 12px;
   padding: 12px 16px 8px;
-  border-bottom: 1px solid var(--mat-app-outline-variant);
-  background: color-mix(in srgb, var(--mat-app-surface-container-low), transparent 12%);
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+  background: color-mix(in srgb, var(--mat-sys-surface-container-low), transparent 12%);
 }
 
 .table-toolbar .qs-search-field {
@@ -109,7 +109,7 @@
 .mat-mdc-cell {
   white-space: nowrap !important;
   padding: 0 16px !important;
-  border-bottom-color: var(--mat-app-outline-variant) !important;
+  border-bottom-color: var(--mat-sys-outline-variant) !important;
 }
 
 .mat-mdc-header-cell {
@@ -129,7 +129,7 @@
 }
 
 .mat-mdc-row:hover {
-  background-color: var(--mat-app-surface-container-low) !important;
+  background-color: var(--mat-sys-surface-container-low) !important;
 }
 
 
@@ -229,8 +229,8 @@ mat-icon {
 .table-container {
   border-radius: 12px;
   backdrop-filter: blur(10px);
-  background: var(--mat-app-surface-container-low);
-  border: 1px solid var(--mat-app-outline-variant);
+  background: var(--mat-sys-surface-container-low);
+  border: 1px solid var(--mat-sys-outline-variant);
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
   overflow: hidden;
   width: 100%;

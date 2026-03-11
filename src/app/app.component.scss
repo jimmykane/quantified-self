@@ -20,8 +20,8 @@ mat-sidenav {
   width: 300px;
   min-width: 300px;
   max-width: 360px;
-  background: var(--mat-app-surface-container-lowest);
-  border-right: 1px solid var(--mat-app-outline-variant);
+  background: var(--mat-sys-surface-container-lowest);
+  border-right: 1px solid var(--mat-sys-outline-variant);
 
   // Hide scrollbar completely - sidenav should fit content
   .mat-drawer-inner-container {
@@ -46,7 +46,7 @@ mat-sidenav {
   height: 64px;
   /* Standard toolbar height */
   padding: 0 16px;
-  background-color: var(--mat-app-surface-container-lowest);
+  background-color: var(--mat-sys-surface-container-lowest);
   box-shadow: 0 2px 4px color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
   /* Subtle shadow for depth */
   position: fixed;
@@ -216,8 +216,8 @@ mat-progress-bar {
 /* Dark Theme Overrides */
 :host-context(.dark-theme) {
   .custom-header {
-    background-color: var(--mat-app-surface-container-lowest);
-    border-bottom: 1px solid var(--mat-app-outline-variant);
+    background-color: var(--mat-sys-surface-container-lowest);
+    border-bottom: 1px solid var(--mat-sys-outline-variant);
     box-shadow: 0 2px 4px color-mix(in srgb, black 20%, transparent);
   }
 
@@ -230,7 +230,7 @@ mat-progress-bar {
   }
 
   mat-sidenav {
-    border-right: 1px solid var(--mat-app-outline-variant);
+    border-right: 1px solid var(--mat-sys-outline-variant);
   }
 }
 
