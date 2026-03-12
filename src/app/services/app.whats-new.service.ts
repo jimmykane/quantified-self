@@ -58,8 +58,41 @@ export class AppWhatsNewService {
     private readonly user = toSignal(this.authService.user$, { initialValue: null });
     private _localStorageTrigger = signal(0);
 
+    private coerceToDate(value: unknown): Date | null {
+        if (!value) {
+            return null;
+        }
+
+        if (value instanceof Timestamp) {
+            return value.toDate();
+        }
+
+        if (value instanceof Date) {
+            return Number.isNaN(value.getTime()) ? null : value;
+        }
+
+        if (typeof value === 'string' || typeof value === 'number') {
+            const parsed = new Date(value);
+            return Number.isNaN(parsed.getTime()) ? null : parsed;
+        }
+
+        if (typeof value === 'object') {
+            if ('toDate' in value && typeof value.toDate === 'function') {
+                const parsed = value.toDate();
+                return parsed instanceof Date && !Number.isNaN(parsed.getTime()) ? parsed : null;
+            }
+
+            if ('seconds' in value && typeof value.seconds === 'number') {
+                const parsed = new Date(value.seconds * 1000);
+                return Number.isNaN(parsed.getTime()) ? null : parsed;
+            }
+        }
+
+        return null;
+    }
+
     // Get the current user's last seen date from appSettings
-    // defaulting to a very old date if not set
+    // defaulting to account creation for first-time users
     private userLastSeenDate = computed(() => {
         // Trigger dependency on local storage updates
         this._localStorageTrigger();
@@ -74,13 +107,15 @@ export class AppWhatsNewService {
         // Check nested generic settings first, if we move it there as per plan
         const settings = user.settings?.appSettings;
         if (settings && settings.lastSeenChangelogDate) {
-            // It might be a Firestore Timestamp or a serialized date string/object
-            // Safe handle:
-            const val = settings.lastSeenChangelogDate;
-            if (val instanceof Timestamp) return val.toDate();
-            if (typeof val === 'string') return new Date(val);
-            if (val instanceof Date) return val;
-            if (val && typeof val.seconds === 'number') return new Date(val.seconds * 1000);
+            const lastSeenDate = this.coerceToDate(settings.lastSeenChangelogDate);
+            if (lastSeenDate) {
+                return lastSeenDate;
+            }
+        }
+
+        const creationDate = this.coerceToDate((user as { creationDate?: unknown }).creationDate);
+        if (creationDate) {
+            return creationDate;
         }
 
         return new Date(0); // Never seen
