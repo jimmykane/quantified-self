@@ -116,6 +116,7 @@ describe('replace-stripe-price script', () => {
     const mockProductsUpdate = vi.fn();
     const mockSubscriptionsList = vi.fn();
     const mockSubscriptionsUpdate = vi.fn();
+    const sleep = vi.fn(async () => undefined);
 
     const mockStripe = {
         prices: {
@@ -160,7 +161,7 @@ describe('replace-stripe-price script', () => {
 
         const summary = await runReplaceStripePriceScript(
             ['--old-price', 'price_old', '--new-unit-amount', '199'],
-            { getStripeClient },
+            { getStripeClient, sleep },
         );
 
         expect(summary.dryRun).toBe(true);
@@ -187,7 +188,7 @@ describe('replace-stripe-price script', () => {
 
         await runReplaceStripePriceScript(
             ['--old-price', 'price_old', '--new-unit-amount', '199', '--execute'],
-            { getStripeClient },
+            { getStripeClient, sleep },
         );
 
         expect(mockPricesCreate).toHaveBeenCalledTimes(1);
@@ -230,7 +231,7 @@ describe('replace-stripe-price script', () => {
 
         await runReplaceStripePriceScript(
             ['--old-price', 'price_old', '--new-unit-amount', '199', '--execute'],
-            { getStripeClient },
+            { getStripeClient, sleep },
         );
 
         expect(mockPricesCreate).toHaveBeenCalledWith(expect.objectContaining({
@@ -261,7 +262,7 @@ describe('replace-stripe-price script', () => {
 
         await runReplaceStripePriceScript(
             ['--old-price', 'price_old', '--new-unit-amount', '199', '--execute'],
-            { getStripeClient },
+            { getStripeClient, sleep },
         );
 
         expect(mockPricesCreate).toHaveBeenCalledWith(expect.objectContaining({
@@ -285,7 +286,7 @@ describe('replace-stripe-price script', () => {
 
         const summary = await runReplaceStripePriceScript(
             ['--old-price', 'price_old', '--new-unit-amount', '199', '--execute'],
-            { getStripeClient },
+            { getStripeClient, sleep },
         );
 
         expect(summary.migratedCount).toBe(1);
@@ -311,7 +312,7 @@ describe('replace-stripe-price script', () => {
 
         await runReplaceStripePriceScript(
             ['--old-price', 'price_old', '--new-unit-amount', '199', '--execute'],
-            { getStripeClient },
+            { getStripeClient, sleep },
         );
 
         expect(mockPricesUpdate).toHaveBeenCalledWith('price_old', { active: false });
@@ -340,7 +341,7 @@ describe('replace-stripe-price script', () => {
 
         await runReplaceStripePriceScript(
             ['--old-price', 'price_old', '--new-unit-amount', '199', '--execute'],
-            { getStripeClient },
+            { getStripeClient, sleep },
         );
 
         expect(mockProductsUpdate).toHaveBeenCalledWith('prod_basic', { default_price: 'price_new' });
@@ -371,7 +372,7 @@ describe('replace-stripe-price script', () => {
 
         const summary = await runReplaceStripePriceScript(
             ['--old-price', 'price_old', '--new-unit-amount', '199', '--execute'],
-            { getStripeClient },
+            { getStripeClient, sleep },
         );
 
         expect(summary.failedSubscriptionIds).toEqual(['sub_failed']);
@@ -389,7 +390,7 @@ describe('replace-stripe-price script', () => {
 
         const summary = await runReplaceStripePriceScript(
             ['--old-price', 'price_old', '--new-unit-amount', '199', '--execute'],
-            { getStripeClient },
+            { getStripeClient, sleep },
         );
 
         expect(summary.dryRun).toBe(false);
@@ -437,7 +438,7 @@ describe('replace-stripe-price script', () => {
 
         const summary = await runReplaceStripePriceScript(
             ['--old-price', 'price_old', '--new-unit-amount', '199'],
-            { getStripeClient },
+            { getStripeClient, sleep },
         );
 
         expect(summary.eligibleMigrationCount).toBe(0);
@@ -513,11 +514,43 @@ describe('replace-stripe-price script', () => {
 
         await runReplaceStripePriceScript(
             ['--old-price', 'price_old', '--new-unit-amount', '199', '--deactivate-old=true'],
-            { getStripeClient },
+            { getStripeClient, sleep },
         );
 
         expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('"deactivateOldRequested": true'));
         expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('"deactivateOldOverriddenToDryRun": true'));
         logSpy.mockRestore();
+    });
+
+    it('should retry subscription migration on Stripe rate limit errors', async () => {
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        mockSubscriptionsList.mockResolvedValue(
+            makeStripeApiList([
+                makeSubscription({
+                    id: 'sub_retry',
+                    status: 'active',
+                    oldPriceId: 'price_old',
+                    itemId: 'si_retry',
+                    quantity: 1,
+                }),
+            ]),
+        );
+        mockSubscriptionsUpdate
+            .mockRejectedValueOnce(Object.assign(new Error('Too many requests'), { statusCode: 429 }))
+            .mockResolvedValueOnce({ id: 'sub_retry' } as Stripe.Subscription);
+
+        const summary = await runReplaceStripePriceScript(
+            ['--old-price', 'price_old', '--new-unit-amount', '199', '--execute'],
+            { getStripeClient, sleep },
+        );
+
+        expect(summary.migratedCount).toBe(1);
+        expect(summary.failedSubscriptionIds).toEqual([]);
+        expect(mockSubscriptionsUpdate).toHaveBeenCalledTimes(2);
+        expect(sleep).toHaveBeenCalledWith(500);
+        expect(warnSpy).toHaveBeenCalledWith(
+            '[replace-stripe-price] Rate limited updating subscription sub_retry. Retrying in 500ms (attempt 1/3).',
+        );
+        warnSpy.mockRestore();
     });
 });

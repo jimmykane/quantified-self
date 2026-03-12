@@ -2,6 +2,8 @@ import type Stripe from 'stripe';
 import { getStripe } from '../stripe/client';
 
 const MAX_LIST_LIMIT = 100;
+const MAX_SUBSCRIPTION_UPDATE_RETRIES = 3;
+const BASE_RATE_LIMIT_BACKOFF_MS = 500;
 const MIGRATABLE_SUBSCRIPTION_STATUSES = new Set<Stripe.Subscription.Status>([
     'active',
     'trialing',
@@ -54,6 +56,7 @@ interface MigrationResult {
 
 interface ScriptDependencies {
     getStripeClient: () => Promise<StripeClient>;
+    sleep: (ms: number) => Promise<void>;
 }
 
 type StripeClient = Pick<Stripe, 'prices' | 'subscriptions' | 'products'>;
@@ -338,6 +341,7 @@ async function migrateSubscriptionsToNewPrice(
     stripe: StripeClient,
     candidates: SubscriptionMigrationCandidate[],
     newPriceId: string,
+    sleep: ScriptDependencies['sleep'],
 ): Promise<MigrationResult> {
     let migratedCount = 0;
     const failedSubscriptionIds: string[] = [];
@@ -349,10 +353,15 @@ async function migrateSubscriptionsToNewPrice(
         }));
 
         try {
-            await stripe.subscriptions.update(candidate.subscriptionId, {
-                items: updateItems,
-                proration_behavior: 'none',
-            });
+            await updateSubscriptionWithRateLimitRetry(
+                stripe,
+                candidate.subscriptionId,
+                {
+                    items: updateItems,
+                    proration_behavior: 'none',
+                },
+                sleep,
+            );
             migratedCount++;
         } catch (error) {
             const errorMessage = (error as Error)?.message || `${error}`;
@@ -362,6 +371,74 @@ async function migrateSubscriptionsToNewPrice(
     }
 
     return { migratedCount, failedSubscriptionIds };
+}
+
+function isStripeRateLimitError(error: unknown): boolean {
+    if (!error || typeof error !== 'object') {
+        return false;
+    }
+
+    const maybeStripeError = error as {
+        statusCode?: number;
+        code?: string;
+        type?: string;
+    };
+
+    return maybeStripeError.statusCode === 429
+        || maybeStripeError.code === 'rate_limit'
+        || maybeStripeError.type === 'StripeRateLimitError';
+}
+
+function readRetryAfterMs(error: unknown): number | null {
+    if (!error || typeof error !== 'object') {
+        return null;
+    }
+
+    const maybeStripeError = error as {
+        headers?: Record<string, string | string[] | undefined>;
+    };
+
+    const retryAfterHeader = maybeStripeError.headers?.['retry-after'];
+    const retryAfterValue = Array.isArray(retryAfterHeader) ? retryAfterHeader[0] : retryAfterHeader;
+    if (!retryAfterValue) {
+        return null;
+    }
+
+    const retryAfterSeconds = Number(retryAfterValue);
+    if (!Number.isFinite(retryAfterSeconds) || retryAfterSeconds < 0) {
+        return null;
+    }
+
+    return Math.ceil(retryAfterSeconds * 1000);
+}
+
+function buildRateLimitBackoffMs(error: unknown, retryIndex: number): number {
+    return readRetryAfterMs(error) ?? (BASE_RATE_LIMIT_BACKOFF_MS * (2 ** retryIndex));
+}
+
+async function updateSubscriptionWithRateLimitRetry(
+    stripe: StripeClient,
+    subscriptionId: string,
+    params: Stripe.SubscriptionUpdateParams,
+    sleep: ScriptDependencies['sleep'],
+): Promise<void> {
+    for (let retryIndex = 0; retryIndex <= MAX_SUBSCRIPTION_UPDATE_RETRIES; retryIndex++) {
+        try {
+            await stripe.subscriptions.update(subscriptionId, params);
+            return;
+        } catch (error) {
+            const shouldRetry = isStripeRateLimitError(error) && retryIndex < MAX_SUBSCRIPTION_UPDATE_RETRIES;
+            if (!shouldRetry) {
+                throw error;
+            }
+
+            const delayMs = buildRateLimitBackoffMs(error, retryIndex);
+            console.warn(
+                `[replace-stripe-price] Rate limited updating subscription ${subscriptionId}. Retrying in ${delayMs}ms (attempt ${retryIndex + 1}/${MAX_SUBSCRIPTION_UPDATE_RETRIES}).`,
+            );
+            await sleep(delayMs);
+        }
+    }
 }
 
 async function reassignProductDefaultPriceIfNeeded(
@@ -417,6 +494,7 @@ function printPreflightSummary(
 
 const DEFAULT_DEPENDENCIES: ScriptDependencies = {
     getStripeClient: async () => (await getStripe()) as unknown as StripeClient,
+    sleep: async (ms: number) => new Promise((resolve) => setTimeout(resolve, ms)),
 };
 
 export async function runReplaceStripePriceScript(
@@ -461,7 +539,7 @@ export async function runReplaceStripePriceScript(
                 `[replace-stripe-price] No eligible subscriptions found for old price ${oldPrice.id}. Skipping migration step; new price ${newPriceId} will be used for future sign-ups.`,
             );
         } else {
-            const migrationResult = await migrateSubscriptionsToNewPrice(stripe, analysis.candidates, newPriceId);
+            const migrationResult = await migrateSubscriptionsToNewPrice(stripe, analysis.candidates, newPriceId, deps.sleep);
             migratedCount = migrationResult.migratedCount;
             failedSubscriptionIds = migrationResult.failedSubscriptionIds;
         }
