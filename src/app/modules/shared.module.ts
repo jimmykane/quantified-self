@@ -30,6 +30,7 @@ import { HeroMetricsComponent } from '../components/shared/hero-metrics/hero-met
 import { MapActivityPopupComponent } from '../components/shared/map-activity-popup/map-activity-popup.component';
 import { MapLayersActionsComponent } from '../components/map/map-layers-actions/map-layers-actions.component';
 import { MyTracksMapLayersControlComponent } from '../components/map/my-tracks-map-layers-control/my-tracks-map-layers-control.component';
+import { MapLayersMenuPanelComponent } from '../components/map/shared/map-layers-menu-panel.component';
 import { EventIntensityZonesComponent } from '../components/event/intensity-zones/event.intensity-zones.component';
 import { MenuRadioListComponent } from '../components/shared/menu-radio-list/menu-radio-list.component';
 
@@ -66,6 +67,7 @@ import { MenuRadioListComponent } from '../components/shared/menu-radio-list/men
         MapActivityPopupComponent,
         MapLayersActionsComponent,
         MyTracksMapLayersControlComponent,
+        MapLayersMenuPanelComponent,
         EventIntensityZonesComponent,
         MenuRadioListComponent,
     ],

@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppAnalyticsService } from '../app.analytics.service';
 import { MapStyleService } from '../map-style.service';
 import { MyTracksMapLayersControlComponent } from '../../components/map/my-tracks-map-layers-control/my-tracks-map-layers-control.component';
+import { MapLayersMenuPanelComponent } from '../../components/map/shared/map-layers-menu-panel.component';
 import { MenuRadioListComponent } from '../../components/shared/menu-radio-list/menu-radio-list.component';
 import { MapboxLayersControlService } from './mapbox-layers-control.service';
 
@@ -40,7 +41,7 @@ describe('MapboxLayersControlService', () => {
         MatTooltipModule,
         MatDividerModule,
       ],
-      declarations: [MyTracksMapLayersControlComponent, MenuRadioListComponent],
+      declarations: [MyTracksMapLayersControlComponent, MapLayersMenuPanelComponent, MenuRadioListComponent],
       providers: [
         MapboxLayersControlService,
         { provide: MapStyleService, useValue: mapStyleServiceMock },
@@ -94,9 +95,9 @@ describe('MapboxLayersControlService', () => {
       },
     });
 
-    handle.instance.onMapStyleSelect('satellite');
-    handle.instance.onShow3DToggle(true);
-    handle.instance.onShowJumpHeatmapToggle(true);
+    handle.instance.mapStyleChange.emit('satellite');
+    handle.instance.is3DChange.emit(true);
+    handle.instance.showJumpHeatmapChange.emit(true);
 
     expect(mapStyleChange).toHaveBeenCalledWith('satellite');
     expect(is3DChange).toHaveBeenCalledWith(true);
