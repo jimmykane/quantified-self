@@ -12,6 +12,7 @@ import {
 import { Timestamp } from '@angular/fire/firestore';
 import { StripeRole } from './stripe-role.model';
 import { AppThemePreference } from './app-theme-preference.type';
+import { AppDateValue } from './app-date-value.type';
 
 export type AppMapStyleName = 'default' | 'satellite' | 'outdoors';
 
@@ -38,7 +39,7 @@ export interface AppChartSettingsInterface extends Omit<UserChartSettingsInterfa
 }
 
 export interface AppAppSettingsInterface extends UserAppSettingsInterface {
-    lastSeenChangelogDate?: { seconds: number, nanoseconds: number } | Date;
+    lastSeenChangelogDate?: AppDateValue;
     themePreference?: AppThemePreference;
 }
 

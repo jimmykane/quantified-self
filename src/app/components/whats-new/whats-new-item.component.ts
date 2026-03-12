@@ -1,6 +1,6 @@
-import { Component, input, output } from '@angular/core';
+import { Component, computed, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ChangelogPost } from '../../services/app.whats-new.service';
+import { ChangelogPost, coerceChangelogPostDate } from '../../services/app.whats-new.service';
 import { MaterialModule } from '../../modules/material.module';
 import { MarkdownPipe } from '../../helpers/markdown.pipe';
 
@@ -18,6 +18,7 @@ export class WhatsNewItemComponent {
     public expanded = input<boolean>(false);
 
     public postClick = output<void>();
+    public readonly displayDate = computed(() => coerceChangelogPostDate(this.post().date));
 
     public onCardClick() {
         if (this.displayMode() === 'compact') {

@@ -120,6 +120,28 @@ describe('AppUserService', () => {
         expect(mergedUser.impersonatedBy).toBeUndefined();
     });
 
+    it('should merge auth metadata dates onto existing database users', async () => {
+        const creationTime = '2026-02-01T12:00:00.000Z';
+        const lastSignInTime = '2026-03-01T13:30:00.000Z';
+
+        mockAuth.currentUser.metadata = {
+            creationTime,
+            lastSignInTime
+        };
+        (docData as any)
+            .mockReturnValueOnce(of({ acceptedPrivacyPolicy: true }))
+            .mockReturnValueOnce(of({}))
+            .mockReturnValueOnce(of({}))
+            .mockReturnValueOnce(of({}));
+
+        service = TestBed.inject(AppUserService);
+        const mergedUser = await firstValueFrom(service.user$.pipe(filter((user): user is AppUserInterface => !!user), take(1)));
+
+        expect(mergedUser.acceptedPrivacyPolicy).toBe(true);
+        expect(mergedUser.creationDate).toEqual(new Date(creationTime));
+        expect(mergedUser.lastSignInDate).toEqual(new Date(lastSignInTime));
+    });
+
     it('returns enabled chart data types in canonical order with event chart priority overrides', () => {
         service = TestBed.inject(AppUserService);
         const user = {

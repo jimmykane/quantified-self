@@ -16,6 +16,7 @@ These are baseline rules that apply across the repository unless a deeper `AGENT
 
 ## Reactivity and Naming
 - Prefer Angular Signals for local and service state.
+- For Angular templates, do not call component methods for derived signal/input state; expose a `computed()` signal, field, or pure pipe instead.
 - Use RxJS when stream semantics are required.
 - Observables must use `$` suffix; Signals must not.
 
