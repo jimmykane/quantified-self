@@ -1,19 +1,24 @@
 import { Injectable, Injector, computed, inject, runInInjectionContext, signal } from '@angular/core';
-import { Firestore, collection, collectionData, query, orderBy, where, Timestamp, addDoc, doc, updateDoc, deleteDoc, QueryConstraint } from '@angular/fire/firestore';
+import { Firestore, collection, collectionData, query, orderBy, where, Timestamp, addDoc, doc, updateDoc, deleteDoc } from '@angular/fire/firestore';
 import { AppWhatsNewLocalStorageService } from './storage/app.whats-new.local.storage.service';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { map, shareReplay, switchMap } from 'rxjs/operators';
 import { AppUserService } from './app.user.service';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { LoggerService } from './logger.service';
-import { BehaviorSubject } from 'rxjs';
-import { AppUserInterface } from '../models/app-user.interface';
+
+export interface FirestoreTimestampLike {
+    seconds: number;
+    nanoseconds?: number;
+}
+
+export type ChangelogPostDate = Timestamp | Date | string | number | FirestoreTimestampLike | { toDate: () => Date };
 
 export interface ChangelogPost {
     id: string;
     title: string;
     description: string;
-    date: Timestamp;
+    date: ChangelogPostDate;
     published: boolean;
     image?: string;
     version?: string;
@@ -59,7 +64,7 @@ export class AppWhatsNewService {
     private _localStorageTrigger = signal(0);
 
     private coerceToDate(value: unknown): Date | null {
-        if (!value) {
+        if (value === null || value === undefined) {
             return null;
         }
 
@@ -83,7 +88,10 @@ export class AppWhatsNewService {
             }
 
             if ('seconds' in value && typeof value.seconds === 'number') {
-                const parsed = new Date(value.seconds * 1000);
+                const nanoseconds = 'nanoseconds' in value && typeof value.nanoseconds === 'number'
+                    ? value.nanoseconds
+                    : 0;
+                const parsed = new Date((value.seconds * 1000) + Math.floor(nanoseconds / 1_000_000));
                 return Number.isNaN(parsed.getTime()) ? null : parsed;
             }
         }
@@ -101,7 +109,7 @@ export class AppWhatsNewService {
         if (!user) {
             // Fallback for guest users
             const local = this.localStorage.getItem('whats_new_last_seen');
-            return local ? new Date(local) : new Date(0);
+            return this.coerceToDate(local) ?? new Date(0);
         }
 
         // Check nested generic settings first, if we move it there as per plan
@@ -113,7 +121,7 @@ export class AppWhatsNewService {
             }
         }
 
-        const creationDate = this.coerceToDate((user as { creationDate?: unknown }).creationDate);
+        const creationDate = this.coerceToDate(user.creationDate);
         if (creationDate) {
             return creationDate;
         }
@@ -123,7 +131,10 @@ export class AppWhatsNewService {
 
     public isUnread(log: ChangelogPost): boolean {
         const lastSeen = this.userLastSeenDate();
-        const logDate = log.date instanceof Timestamp ? log.date.toDate() : new Date(log.date);
+        const logDate = this.coerceToDate(log.date);
+        if (!logDate) {
+            return false;
+        }
         return logDate > lastSeen;
     }
 
@@ -137,7 +148,10 @@ export class AppWhatsNewService {
         const lastSeen = this.userLastSeenDate();
 
         return logs.filter(log => {
-            const logDate = log.date instanceof Timestamp ? log.date.toDate() : new Date(log.date);
+            const logDate = this.coerceToDate(log.date);
+            if (!logDate) {
+                return false;
+            }
             return logDate > lastSeen;
         }).length;
     });

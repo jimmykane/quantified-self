@@ -13,8 +13,14 @@ import { AppWhatsNewLocalStorageService } from './storage/app.whats-new.local.st
 vi.mock('@angular/fire/firestore', () => {
     class MockFirestore { }
     class MockTimestamp {
-        seconds = 0;
-        toDate() { return new Date(); }
+        constructor(
+            public seconds = 0,
+            public nanoseconds = 0
+        ) { }
+
+        toDate() {
+            return new Date((this.seconds * 1000) + Math.floor(this.nanoseconds / 1_000_000));
+        }
     }
     return {
         collection: vi.fn(),
@@ -37,10 +43,6 @@ describe('AppWhatsNewService', () => {
 
     const userSubject = new BehaviorSubject<any>(null);
     const collectionDataMock = vi.mocked(collectionData);
-    const flushSignals = async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-    };
 
     beforeEach(() => {
         userSubject.next(null);
@@ -129,7 +131,7 @@ describe('AppWhatsNewService', () => {
         expect(service.unreadCount()).toBe(0);
     });
 
-    it('should not mark changelogs before account creation as unread for first-time users', async () => {
+    it('should not mark changelogs before account creation as unread for first-time users', () => {
         const mockPost = {
             id: '1',
             title: 'Release 1.0',
@@ -146,12 +148,12 @@ describe('AppWhatsNewService', () => {
             creationDate: new Date('2026-02-01T00:00:00Z'),
             settings: { appSettings: {} }
         });
-        await flushSignals();
+        TestBed.flushEffects();
 
         expect(service.isUnread(mockPost)).toBe(false);
     });
 
-    it('should still mark changelogs after account creation as unread for first-time users', async () => {
+    it('should still mark changelogs after account creation as unread for first-time users', () => {
         const mockPost = {
             id: '1',
             title: 'Release 1.1',
@@ -168,12 +170,12 @@ describe('AppWhatsNewService', () => {
             creationDate: new Date('2026-02-01T00:00:00Z'),
             settings: { appSettings: {} }
         });
-        await flushSignals();
+        TestBed.flushEffects();
 
         expect(service.isUnread(mockPost)).toBe(true);
     });
 
-    it('should prefer an explicit lastSeenChangelogDate over creationDate', async () => {
+    it('should prefer an explicit lastSeenChangelogDate over creationDate', () => {
         const olderPost = {
             id: '1',
             title: 'Release 1.1',
@@ -202,13 +204,13 @@ describe('AppWhatsNewService', () => {
                 }
             }
         });
-        await flushSignals();
+        TestBed.flushEffects();
 
         expect(service.isUnread(olderPost)).toBe(false);
         expect(service.isUnread(newerPost)).toBe(true);
     });
 
-    it('should fall back to creationDate when stored lastSeenChangelogDate is invalid', async () => {
+    it('should fall back to creationDate when stored lastSeenChangelogDate is invalid', () => {
         const beforeCreationPost = {
             id: '1',
             title: 'Release 1.0',
@@ -237,13 +239,44 @@ describe('AppWhatsNewService', () => {
                 }
             }
         });
-        await flushSignals();
+        TestBed.flushEffects();
 
         expect(service.isUnread(beforeCreationPost)).toBe(false);
         expect(service.isUnread(afterCreationPost)).toBe(true);
     });
 
-    it('should evaluate multiple changelogs consistently against the explicit lastSeenChangelogDate', async () => {
+    it('should fall back to a Firestore Timestamp creationDate when no lastSeenChangelogDate exists', () => {
+        const beforeCreationPost = {
+            id: '1',
+            title: 'Release 1.0',
+            description: 'Before signup',
+            date: new Date('2026-01-15T00:00:00Z'),
+            published: true,
+            type: 'minor'
+        } as ChangelogPost;
+        const afterCreationPost = {
+            id: '2',
+            title: 'Release 1.1',
+            description: 'After signup',
+            date: new Date('2026-02-15T00:00:00Z'),
+            published: true,
+            type: 'minor'
+        } as ChangelogPost;
+
+        service = TestBed.inject(AppWhatsNewService);
+
+        userSubject.next({
+            uid: '123',
+            creationDate: new Timestamp(Date.parse('2026-02-01T00:00:00Z') / 1000, 0),
+            settings: { appSettings: {} }
+        });
+        TestBed.flushEffects();
+
+        expect(service.isUnread(beforeCreationPost)).toBe(false);
+        expect(service.isUnread(afterCreationPost)).toBe(true);
+    });
+
+    it('should evaluate multiple changelogs consistently against the explicit lastSeenChangelogDate', () => {
         const seenPost = {
             id: '1',
             title: 'Release 1.0',
@@ -280,10 +313,91 @@ describe('AppWhatsNewService', () => {
                 }
             }
         });
-        await flushSignals();
+        TestBed.flushEffects();
 
         expect(service.isUnread(seenPost)).toBe(false);
         expect(service.isUnread(firstUnreadPost)).toBe(true);
         expect(service.isUnread(secondUnreadPost)).toBe(true);
+    });
+
+    it('should treat plain Firestore timestamp-like changelog dates as unread when newer than last seen', () => {
+        const timestampLikePost = {
+            id: '1',
+            title: 'Release 1.3',
+            description: 'Timestamp-like payload',
+            date: {
+                seconds: Date.parse('2026-03-01T12:00:00Z') / 1000,
+                nanoseconds: 0
+            },
+            published: true,
+            type: 'minor'
+        } as ChangelogPost;
+
+        service = TestBed.inject(AppWhatsNewService);
+
+        userSubject.next({
+            uid: '123',
+            creationDate: new Date('2026-01-01T00:00:00Z'),
+            settings: {
+                appSettings: {
+                    lastSeenChangelogDate: '2026-02-15T00:00:00Z'
+                }
+            }
+        });
+        TestBed.flushEffects();
+
+        expect(service.isUnread(timestampLikePost)).toBe(true);
+    });
+
+    it('unreadCount should count plain Firestore timestamp-like changelog dates as unread', () => {
+        const seenPost: ChangelogPost = {
+            id: '1',
+            title: 'Release 1.0',
+            description: 'Seen',
+            date: {
+                seconds: Date.parse('2026-02-01T00:00:00Z') / 1000,
+                nanoseconds: 0
+            },
+            published: true,
+            type: 'minor'
+        };
+        const unreadPost: ChangelogPost = {
+            id: '2',
+            title: 'Release 1.1',
+            description: 'Unread',
+            date: {
+                seconds: Date.parse('2026-03-01T00:00:00Z') / 1000,
+                nanoseconds: 0
+            },
+            published: true,
+            type: 'minor'
+        };
+
+        service = TestBed.inject(AppWhatsNewService);
+
+        Object.defineProperty(service as any, 'user', {
+            configurable: true,
+            value: () => ({
+                uid: '123',
+                creationDate: new Date('2026-01-01T00:00:00Z'),
+                settings: {
+                    appSettings: {
+                        lastSeenChangelogDate: '2026-02-15T00:00:00Z'
+                    }
+                }
+            })
+        });
+        Object.defineProperty(service as any, 'changelogs', {
+            configurable: true,
+            value: () => [seenPost, unreadPost]
+        });
+
+        expect(service.unreadCount()).toBe(1);
+    });
+
+    it('should coerce numeric zero to the Unix epoch', () => {
+        service = TestBed.inject(AppWhatsNewService);
+
+        expect((service as any).coerceToDate(0)).toEqual(new Date(0));
     });
 });

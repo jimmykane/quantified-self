@@ -129,12 +129,12 @@ export class AppUserService implements OnDestroy {
     const isAdmin = claims['admin'] === true;
     const impersonatedBy = claims['impersonatedBy'];
 
-    const creationDate = firebaseUser.metadata?.creationTime
+    const authCreationDate = firebaseUser.metadata?.creationTime
       ? new Date(firebaseUser.metadata.creationTime)
-      : new Date();
-    const lastSignInDate = firebaseUser.metadata?.lastSignInTime
+      : null;
+    const authLastSignInDate = firebaseUser.metadata?.lastSignInTime
       ? new Date(firebaseUser.metadata.lastSignInTime)
-      : creationDate;
+      : authCreationDate;
 
     // Use current DB user or create a synthetic one for new accounts/loading states
     const identity: AppUserInterface = dbUser ? { ...dbUser } : {
@@ -150,12 +150,18 @@ export class AppUserService implements OnDestroy {
       acceptedDiagnosticsPolicy: true,
       privacy: Privacy.Private,
       isAnonymous: false,
-      creationDate,
-      lastSignInDate
+      creationDate: authCreationDate ?? new Date(),
+      lastSignInDate: authLastSignInDate ?? authCreationDate ?? new Date()
     } as any;
 
     // Prioritize Claims for role and grace period, but fallback to DB data if claims are missing
     identity.uid = firebaseUser.uid;
+    if (authCreationDate) {
+      identity.creationDate = authCreationDate;
+    }
+    if (authLastSignInDate) {
+      identity.lastSignInDate = authLastSignInDate;
+    }
     if (stripeRole) {
       identity.stripeRole = stripeRole;
     }
