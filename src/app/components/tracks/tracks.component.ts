@@ -35,6 +35,11 @@ import { MapboxHeatmapLayerService } from '../../services/map/mapbox-heatmap-lay
 import { JumpHeatmapWeightingService } from '../../services/map/jump-heatmap-weighting.service';
 import { MapboxStartPointLayerService } from '../../services/map/mapbox-start-point-layer.service';
 import { MapboxAutoResizeService } from '../../services/map/mapbox-auto-resize.service';
+import {
+  MapboxLayersControlHandle,
+  MapboxLayersControlInputs,
+  MapboxLayersControlService,
+} from '../../services/map/mapbox-layers-control.service';
 import { Search } from '../event-search/event-search.component';
 import { MyTracksTripDetectionService } from '../../services/my-tracks-trip-detection.service';
 import { TripDetectionInput } from '../../services/my-tracks-trip-detection.service';
@@ -155,6 +160,7 @@ export class TracksComponent implements OnInit, OnDestroy {
   private platformId!: object;
   private startPointPopupRepositionHandler: (() => void) | null = null;
   private pendingStartPointPopupCorrectionRaf: number | null = null;
+  private mapLayersControlHandle: MapboxLayersControlHandle | null = null;
   private panPerformanceModeStartHandler: (() => void) | null = null;
   private panPerformanceModeEndHandler: (() => void) | null = null;
   private panPerformanceModeResetTimer: ReturnType<typeof setTimeout> | null = null;
@@ -206,6 +212,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     private jumpHeatmapWeightingService: JumpHeatmapWeightingService,
     private mapboxStartPointLayerService: MapboxStartPointLayerService,
     private mapboxAutoResizeService: MapboxAutoResizeService,
+    private mapboxLayersControlService: MapboxLayersControlService,
     private polylineSimplificationService: PolylineSimplificationService,
     private popupContentService: MapEventPopupContentService,
   ) {
@@ -276,6 +283,31 @@ export class TracksComponent implements OnInit, OnDestroy {
           .catch(err => this.logger.error('Error loading tracks', err))
           .finally(() => this.isLoading.set(false));
       }
+    });
+
+    effect(() => {
+      const map = this.mapSignal();
+      const user = this.userSignal();
+      const mapSettings = this.userSettingsQuery.mapSettings() as AppMapSettingsInterface;
+      const myTracksSettings = this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings;
+      const loading = this.isLoading();
+
+      if (!map || !mapSettings || !myTracksSettings) {
+        return;
+      }
+
+      this.syncMapLayersControlInputs({
+        user,
+        disabled: loading,
+        mapStyle: this.mapStyleService.normalizeStyle(mapSettings.mapStyle),
+        is3D: !!mapSettings.is3D,
+        showJumpHeatmap: myTracksSettings.showJumpHeatmap !== false,
+        enableJumpHeatmapToggle: true,
+        enable3DToggle: true,
+        enableLapsToggle: false,
+        enableArrowsToggle: false,
+        analyticsEventName: 'my_tracks_map_settings_change',
+      });
     });
   }
 
@@ -349,6 +381,7 @@ export class TracksComponent implements OnInit, OnDestroy {
           showZoom: true
         });
         mapInstance.addControl(navControl, 'bottom-right');
+        this.zone.run(() => this.attachMapLayersControl(mapInstance));
 
         this.centerMapToStartingLocation(mapInstance);
         this.eventsSubscription.add(
@@ -419,9 +452,60 @@ export class TracksComponent implements OnInit, OnDestroy {
       this.pendingStartPointPopupCorrectionRaf = null;
     }
     this.mapboxAutoResizeService.unbind(this.tracksMapManager.getMap());
+    this.destroyMapLayersControl();
     if (this.mapSignal()) {
       this.mapSignal().remove();
     }
+  }
+
+  private attachMapLayersControl(map: any): void {
+    if (this.mapLayersControlHandle) {
+      this.syncMapLayersControlInputs();
+      return;
+    }
+
+    this.mapLayersControlHandle = this.mapboxLayersControlService.create({
+      outputs: {
+        mapStyleChange: (style) => this.setMapStyle(style as MapStyleName),
+        is3DChange: (value) => this.onMyTracks3DToggle(value),
+        showJumpHeatmapChange: (value) => this.onShowJumpHeatmapToggle(value),
+      },
+    });
+
+    map.addControl(this.mapLayersControlHandle.control, 'bottom-right');
+    this.syncMapLayersControlInputs();
+  }
+
+  private syncMapLayersControlInputs(overrideInputs: Partial<MapboxLayersControlInputs> = {}): void {
+    if (!this.mapLayersControlHandle) {
+      return;
+    }
+
+    const mapSettings = this.userSettingsQuery.mapSettings() as AppMapSettingsInterface;
+    const myTracksSettings = this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings;
+
+    this.mapLayersControlHandle.updateInputs({
+      user: this.userSignal(),
+      disabled: this.isLoading(),
+      mapStyle: this.mapStyleService.normalizeStyle(mapSettings?.mapStyle),
+      is3D: !!mapSettings?.is3D,
+      showJumpHeatmap: myTracksSettings?.showJumpHeatmap !== false,
+      enableJumpHeatmapToggle: true,
+      enable3DToggle: true,
+      enableLapsToggle: false,
+      enableArrowsToggle: false,
+      analyticsEventName: 'my_tracks_map_settings_change',
+      ...overrideInputs,
+    });
+  }
+
+  private destroyMapLayersControl(): void {
+    if (!this.mapLayersControlHandle) {
+      return;
+    }
+
+    this.mapLayersControlHandle.destroy();
+    this.mapLayersControlHandle = null;
   }
 
   private unsubscribeFromAll() {

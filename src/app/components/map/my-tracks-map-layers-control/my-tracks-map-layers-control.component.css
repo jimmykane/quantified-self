@@ -1,0 +1,25 @@
+:host {
+  display: block;
+}
+
+:host button.my-tracks-map-layers-control__button {
+  display: block;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+:host button.my-tracks-map-layers-control__button:hover:not(:disabled),
+:host button.my-tracks-map-layers-control__button:focus-visible,
+:host button.my-tracks-map-layers-control__button[aria-expanded='true'] {
+  border-radius: 4px;
+}
+
+.my-tracks-map-layers-control__icon {
+  display: block;
+  width: 100%;
+  height: 100%;
+  line-height: 32px;
+  font-size: 18px;
+  text-align: center;
+  color: #333;
+}

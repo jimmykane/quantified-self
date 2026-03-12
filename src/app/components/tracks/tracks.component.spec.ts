@@ -27,7 +27,7 @@ import { MyTracksPolylineCacheService } from '../../services/my-tracks-polyline-
 import { TripLocationLabelService } from '../../services/trip-location-label.service';
 import { PeekPanelComponent } from '../shared/peek-panel/peek-panel.component';
 import { MapboxAutoResizeService } from '../../services/map/mapbox-auto-resize.service';
-import { MapLayersActionsComponent } from '../map/map-layers-actions/map-layers-actions.component';
+import { MapboxLayersControlService } from '../../services/map/mapbox-layers-control.service';
 import { By } from '@angular/platform-browser';
 
 const waitForAsyncWork = async () => {
@@ -175,6 +175,8 @@ describe('TracksComponent', () => {
   let mockTripLocationLabelService: any;
   let mockPolylineSimplificationService: any;
   let mockMyTracksPolylineCacheService: any;
+  let mockMapboxLayersControlService: any;
+  let mockMapLayersControlHandle: any;
 
   const mockUser = {
     uid: 'user-1',
@@ -393,8 +395,19 @@ describe('TracksComponent', () => {
       }),
     };
 
+    mockMapLayersControlHandle = {
+      control: { onAdd: vi.fn(), onRemove: vi.fn() },
+      instance: {},
+      updateInputs: vi.fn(),
+      destroy: vi.fn(),
+    };
+
+    mockMapboxLayersControlService = {
+      create: vi.fn().mockReturnValue(mockMapLayersControlHandle),
+    };
+
     await TestBed.configureTestingModule({
-      declarations: [TracksComponent, PeekPanelComponent, MapLayersActionsComponent],
+      declarations: [TracksComponent, PeekPanelComponent],
       imports: [MaterialModule],
       providers: [
         { provide: AppAuthService, useValue: mockAuthService },
@@ -421,6 +434,7 @@ describe('TracksComponent', () => {
         { provide: PolylineSimplificationService, useValue: mockPolylineSimplificationService },
         { provide: MyTracksPolylineCacheService, useValue: mockMyTracksPolylineCacheService },
         { provide: MapboxAutoResizeService, useValue: { bind: vi.fn(), unbind: vi.fn() } },
+        { provide: MapboxLayersControlService, useValue: mockMapboxLayersControlService },
       ],
       schemas: [NO_ERRORS_SCHEMA]
     }).compileComponents();
@@ -431,6 +445,13 @@ describe('TracksComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('should add the map layers control through the mapbox control api', async () => {
+    await component.ngOnInit();
+
+    expect(mockMapboxLayersControlService.create).toHaveBeenCalledTimes(1);
+    expect(mockMap.addControl).toHaveBeenCalledWith(mockMapLayersControlHandle.control, 'bottom-right');
   });
 
   describe('Initialization robustness', () => {
@@ -1013,16 +1034,23 @@ describe('TracksComponent', () => {
       expect(mockUserSettingsQuery.updateMyTracksSettings).toHaveBeenCalledWith({ showJumpHeatmap: false });
     });
 
-    it('should always expose jump heatmap toggle in layers menu', () => {
-      let layersActions = fixture.debugElement.query(By.directive(MapLayersActionsComponent)).componentInstance as MapLayersActionsComponent;
+    it('should always expose jump heatmap toggle in map layers control updates', async () => {
+      await component.ngOnInit();
+      mockMapLayersControlHandle.updateInputs.mockClear();
+
       component.hasDetectedJumps.set(false);
-      fixture.detectChanges();
-      expect(layersActions.enableJumpHeatmapToggle).toBe(true);
+      (component as any).syncMapLayersControlInputs();
+
+      expect(mockMapLayersControlHandle.updateInputs).toHaveBeenLastCalledWith(expect.objectContaining({
+        enableJumpHeatmapToggle: true,
+      }));
 
       component.hasDetectedJumps.set(true);
-      fixture.detectChanges();
-      layersActions = fixture.debugElement.query(By.directive(MapLayersActionsComponent)).componentInstance as MapLayersActionsComponent;
-      expect(layersActions.enableJumpHeatmapToggle).toBe(true);
+      (component as any).syncMapLayersControlInputs();
+
+      expect(mockMapLayersControlHandle.updateInputs).toHaveBeenLastCalledWith(expect.objectContaining({
+        enableJumpHeatmapToggle: true,
+      }));
     });
 
     it('should collect jump heat points from loaded activities', async () => {

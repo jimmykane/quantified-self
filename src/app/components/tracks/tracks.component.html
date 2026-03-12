@@ -37,23 +37,6 @@
   }
   }
   }
-  <div class="map-layers-controls">
-    <app-map-layers-actions
-      [user]="user"
-      [disabled]="isLoading()"
-      [mapStyle]="(user?.settings?.mapSettings?.mapStyle || 'default')"
-      [is3D]="!!user?.settings?.mapSettings?.is3D"
-      [showJumpHeatmap]="isJumpHeatmapEnabled()"
-      [enableJumpHeatmapToggle]="true"
-      [enable3DToggle]="true"
-      [enableLapsToggle]="false"
-      [enableArrowsToggle]="false"
-      [analyticsEventName]="'my_tracks_map_settings_change'"
-      (mapStyleChange)="setMapStyle($event)"
-      (is3DChange)="onMyTracks3DToggle($event)"
-      (showJumpHeatmapChange)="onShowJumpHeatmapToggle($event)">
-    </app-map-layers-actions>
-  </div>
 
   @if (hasEvaluatedTripDetection() && (detectedTrips().length > 0 || !!detectedHomeArea())) {
   <div class="tracks-trips-peek-anchor">
