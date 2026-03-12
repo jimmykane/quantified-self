@@ -4,7 +4,7 @@ import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivityInterface, User } from '@sports-alliance/sports-lib';
-import { AppEventInterface, BenchmarkOptions, BenchmarkResult, getBenchmarkPairKey } from '../../../functions/src/shared/app-event.interface';
+import { AppEventInterface, BenchmarkOptions, BenchmarkResult, getBenchmarkPairKey } from '@shared/app-event.interface';
 import { AppBenchmarkService } from './app.benchmark.service';
 import { AppEventService } from './app.event.service';
 import { LoggerService } from './logger.service';

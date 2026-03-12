@@ -8,7 +8,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
-import { BenchmarkResult } from '../../../../functions/src/shared/app-event.interface';
+import { BenchmarkResult } from '@shared/app-event.interface';
 import { Component, Input } from '@angular/core';
 import { EventInterface, UserSummariesSettingsInterface, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { BottomSheetHeaderComponent } from '../shared/bottom-sheet-header/bottom-sheet-header.component';

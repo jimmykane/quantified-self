@@ -6,7 +6,7 @@ import { AppEventService } from '../../../services/app.event.service';
 import { AppFitUploadService } from '../../../services/app.fit-upload.service';
 import { UploadAbstractDirective } from '../upload-abstract.directive';
 import { FileInterface } from '../file.interface';
-import { USAGE_LIMITS } from '../../../../../functions/src/shared/limits';
+import { USAGE_LIMITS } from '@shared/limits';
 import { BrowserCompatibilityService } from '../../../services/browser.compatibility.service';
 
 const SUPPORTED_UPLOAD_EXTENSIONS = new Set(['fit', 'gpx', 'tcx', 'json', 'sml']);

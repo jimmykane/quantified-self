@@ -15,7 +15,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 import { UPLOAD_STATUS } from '../upload-status/upload.status';
-import { USAGE_LIMITS } from '../../../../../functions/src/shared/limits';
+import { USAGE_LIMITS } from '@shared/limits';
 
 describe('UploadActivitiesComponent', () => {
   let component: UploadActivitiesComponent;
