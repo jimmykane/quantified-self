@@ -21,14 +21,20 @@ import { MatTabsModule } from '@angular/material/tabs';
 import { MatSidenavModule } from '@angular/material/sidenav';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
-import { ChangeDetectorRef, CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
+import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { RouterTestingModule } from '@angular/router/testing';
+import { AppThemes } from '@sports-alliance/sports-lib';
 
 // ... (existing imports)
 
 describe('AppShellComponent', () => {
     let component: AppShellComponent;
     let fixture: ComponentFixture<AppShellComponent>;
+
+    const syncRoute = (url: string) => {
+        mockRouter.url = url;
+        (component as any).syncCurrentRouteState();
+    };
 
     const mockAppAuthService = {
         user$: of(null)
@@ -74,7 +80,7 @@ describe('AppShellComponent', () => {
         setAnalyticsCollectionEnabled: vi.fn()
     };
     const mockThemeService = {
-        getAppTheme: vi.fn().mockReturnValue(of('Normal')),
+        getAppTheme: vi.fn().mockReturnValue(of(AppThemes.Normal)),
         applyBodyTheme: vi.fn(),
         setAppTheme: vi.fn(),
         themeChange$: new Subject()
@@ -129,8 +135,7 @@ describe('AppShellComponent', () => {
                         open: vi.fn()
                     }
                 },
-                { provide: AppHapticsService, useValue: mockHapticsService },
-                ChangeDetectorRef
+                { provide: AppHapticsService, useValue: mockHapticsService }
             ],
             schemas: [CUSTOM_ELEMENTS_SCHEMA]
         }).compileComponents();
@@ -267,47 +272,97 @@ describe('AppShellComponent', () => {
         expect(component.headerHidden).toBe(false);
     });
 
+    it('should use window scroll as a fallback when no shell scroller is registered', () => {
+        const originalScrollY = window.scrollY;
+
+        component.onboardingCompleted = true;
+        component.headerHidden = false;
+        (component as any).lastShellScrollTop = 0;
+        (component as any).currentSidenavContainer = null;
+
+        Object.defineProperty(window, 'scrollY', {
+            configurable: true,
+            value: 120
+        });
+
+        window.dispatchEvent(new Event('scroll'));
+
+        expect(component.headerHidden).toBe(true);
+
+        Object.defineProperty(window, 'scrollY', {
+            configurable: true,
+            value: originalScrollY
+        });
+    });
+
+    it('should reveal the header when navigating to onboarding even if the shell scroller is still offset', () => {
+        component['currentUser'] = {
+            uid: 'u1',
+            acceptedPrivacyPolicy: true,
+            acceptedDataPolicy: true,
+            acceptedTos: true,
+            stripeRole: 'pro',
+            onboardingCompleted: true
+        };
+        component.headerHidden = true;
+        (component as any).lastShellScrollTop = 120;
+        fixture.detectChanges();
+
+        const shellScroller = fixture.nativeElement.querySelector('.app-sidenav-container .mat-drawer-content') as HTMLElement | null;
+        expect(shellScroller).toBeTruthy();
+        if (shellScroller) {
+            shellScroller.scrollTop = 120;
+        }
+
+        syncRoute('/onboarding/profile');
+        (mockRouter.events as Subject<any>).next(new NavigationEnd(1, '/onboarding/profile', '/onboarding/profile'));
+
+        expect(component.isOnboardingRoute).toBe(true);
+        expect(component.showNavigation).toBe(true);
+        expect(component.headerHidden).toBe(false);
+    });
+
     it('should return true for isDashboardRoute when url includes dashboard', () => {
-        mockRouter.url = '/dashboard';
+        syncRoute('/dashboard');
         expect(component.isDashboardRoute).toBe(true);
     });
 
     it('should return true for isLoginRoute when url includes login', () => {
-        mockRouter.url = '/login';
+        syncRoute('/login');
         expect(component.isLoginRoute).toBe(true);
     });
 
     it('should return true for isAdminRoute when url includes admin', () => {
-        mockRouter.url = '/admin';
+        syncRoute('/admin');
         expect(component.isAdminRoute).toBe(true);
     });
 
     it('should return true for isHomeRoute when url is /', () => {
-        mockRouter.url = '/';
+        syncRoute('/');
         expect(component.isHomeRoute).toBe(true);
     });
 
     it('should return true for isHomeRoute when url is /?param=value', () => {
-        mockRouter.url = '/?param=value';
+        syncRoute('/?param=value');
         expect(component.isHomeRoute).toBe(true);
     });
 
     it('should return false for isHomeRoute when url is /dashboard', () => {
-        mockRouter.url = '/dashboard';
+        syncRoute('/dashboard');
         expect(component.isHomeRoute).toBe(false);
     });
 
     it('should expose showUploadActivities only on dashboard with user', () => {
-        mockRouter.url = '/dashboard';
+        syncRoute('/dashboard');
         component['currentUser'] = { uid: 'u1' };
         expect(component.showUploadActivities).toBe(true);
 
-        mockRouter.url = '/subscriptions';
+        syncRoute('/subscriptions');
         expect(component.showUploadActivities).toBe(false);
     });
 
     it('should place the impersonation banner inside the maintenance branch', () => {
-        mockRouter.url = '/dashboard';
+        syncRoute('/dashboard');
         mockRemoteConfigService.maintenanceMode.set(true);
         fixture.detectChanges();
 
@@ -363,9 +418,13 @@ describe('AppShellComponent', () => {
     });
 
     it('should no-op banner updates when height and state are unchanged', () => {
-        const detectSpy = vi.spyOn((component as any).changeDetectorRef, 'detectChanges');
+        component.bannerHeight = 0;
+        component.hasBanner = false;
+
         component.onBannerHeightChanged(0);
-        expect(detectSpy).not.toHaveBeenCalled();
+
+        expect(component.bannerHeight).toBe(0);
+        expect(component.hasBanner).toBe(false);
     });
 
     it('should reset banner fields when dismissing grace period banner', () => {
@@ -379,6 +438,8 @@ describe('AppShellComponent', () => {
     it('should open whats new dialog with expected config', () => {
         const dialog = TestBed.inject(MatDialog) as any;
         component.openWhatsNew();
+        const [, config] = dialog.open.mock.calls.at(-1);
+
         expect(dialog.open).toHaveBeenCalledWith(
             expect.any(Function),
             expect.objectContaining({
@@ -387,17 +448,16 @@ describe('AppShellComponent', () => {
                 autoFocus: false
             })
         );
+        expect(config.panelClass).toBeUndefined();
     });
 
     it('should apply and clear theme overlay during reveal animation', () => {
         vi.useFakeTimers();
-        const detectSpy = vi.spyOn((component as any).changeDetectorRef, 'detectChanges');
         mockThemeService.setAppTheme.mockClear();
 
         (component as any).triggerThemeReveal('Dark');
         expect(component.themeOverlayActive).toBe(true);
         expect(component.themeOverlayClass).toBe('dark-theme');
-        expect(detectSpy).toHaveBeenCalled();
 
         vi.advanceTimersByTime(300);
         expect(mockThemeService.setAppTheme).toHaveBeenCalledWith('Dark', false);
@@ -414,7 +474,6 @@ describe('AppShellComponent', () => {
 
     it('should hide initial loader immediately when minimum duration has elapsed', () => {
         component.showInitialLoader = true;
-        const detectSpy = vi.spyOn((component as any).changeDetectorRef, 'detectChanges');
         (component as any).initialLoaderStartedAt = Date.now() - 1500;
         (component as any).minimumLoaderDurationMs = 950;
 
@@ -422,7 +481,6 @@ describe('AppShellComponent', () => {
 
         expect(component.showInitialLoader).toBe(false);
         expect((component as any).initialLoaderTimeout).toBeNull();
-        expect(detectSpy).toHaveBeenCalled();
     });
 
     it('should keep initial loader visible until minimum duration is reached', () => {
@@ -461,12 +519,10 @@ describe('AppShellComponent', () => {
 
     it('should no-op when hideInitialLoader is called while already hidden', () => {
         component.showInitialLoader = false;
-        const detectSpy = vi.spyOn((component as any).changeDetectorRef, 'detectChanges');
 
         (component as any).hideInitialLoader();
 
         expect(component.showInitialLoader).toBe(false);
-        expect(detectSpy).not.toHaveBeenCalled();
     });
 
     it('should reset scroll to top on NavigationEnd', () => {

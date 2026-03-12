@@ -121,8 +121,8 @@ nav button.admin-button {
   width: 40px;
   height: 40px;
   min-width: 40px;
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-  color: white;
+  background: linear-gradient(135deg, var(--mat-sys-primary) 0%, var(--mat-sys-secondary) 100%);
+  color: var(--mat-sys-on-primary);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   display: flex !important;
   align-items: center;
@@ -130,11 +130,11 @@ nav button.admin-button {
 
   &:hover {
     transform: scale(1.05);
-    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4) !important;
+    box-shadow: 0 4px 12px color-mix(in srgb, var(--mat-sys-primary) 30%, transparent) !important;
   }
 
   mat-icon {
-    color: white;
+    color: var(--mat-sys-on-primary);
     font-size: 22px;
     width: 22px;
     height: 22px;
@@ -175,7 +175,7 @@ nav button.hamburger-link {
   .custom-header {
     background-color: var(--mat-sys-surface-container-lowest);
     border-bottom: 1px solid var(--mat-sys-outline-variant);
-    box-shadow: 0 2px 4px color-mix(in srgb, black 20%, transparent);
+    box-shadow: 0 2px 4px color-mix(in srgb, var(--mat-sys-shadow) 20%, transparent);
   }
 
   .mat-tab-link mat-icon {

@@ -747,21 +747,12 @@ mat-table {
   }
 }
 
-.qs-whats-new-dialog {
-  .mat-mdc-dialog-content {
-    padding: 0 !important;
-    overflow: auto !important;
-    scrollbar-gutter: stable;
-  }
-}
-
 /* Shared overlay surface system.
    One global overlay theme, with semantic content variants for components rendered inside
    dialog/bottom-sheet shells. Use --flat only for report/feed style content that should not
    stack a second surface inside an already styled overlay shell. */
 .qs-dialog-container,
 .qs-bottom-sheet-container,
-.qs-whats-new-dialog,
 .qs-whats-new-page {
   --qs-overlay-section-bg: var(--mat-sys-surface-container-high);
   --qs-overlay-section-border: var(--mat-sys-outline-variant);
@@ -781,7 +772,6 @@ mat-table {
    .qs-overlay-section. */
 .qs-dialog-container :is(.mat-mdc-card, .mat-expansion-panel, .qs-glass-card-panel):not(.qs-overlay-flat):not(.mat-mdc-dialog-container):not(.mat-mdc-dialog-surface),
 .qs-bottom-sheet-container :is(.mat-mdc-card, .mat-expansion-panel, .qs-glass-card-panel):not(.qs-overlay-flat):not(.mat-bottom-sheet-container),
-.qs-whats-new-dialog :is(.mat-mdc-card, .mat-expansion-panel, .qs-glass-card-panel):not(.qs-overlay-flat):not(.mat-mdc-dialog-container):not(.mat-mdc-dialog-surface),
 .qs-whats-new-page :is(.mat-mdc-card, .mat-expansion-panel, .qs-glass-card-panel):not(.qs-overlay-flat) {
   background: var(--qs-overlay-section-bg) !important;
   border: 1px solid var(--qs-overlay-section-border);

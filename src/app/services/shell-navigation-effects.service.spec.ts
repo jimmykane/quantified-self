@@ -4,7 +4,7 @@ import {
   NavigationStart,
   Router,
 } from '@angular/router';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Subject } from 'rxjs';
 import { AppHapticsService } from './app.haptics.service';
 import { ShellNavigationEffectsService } from './shell-navigation-effects.service';
@@ -14,7 +14,6 @@ describe('ShellNavigationEffectsService', () => {
   let mockRouter: Router;
   let hapticsMock: { selection: ReturnType<typeof vi.fn> };
   let service: ShellNavigationEffectsService;
-  let shellContainer: HTMLDivElement | null = null;
 
   beforeEach(() => {
     events$ = new Subject<unknown>();
@@ -43,13 +42,6 @@ describe('ShellNavigationEffectsService', () => {
     });
 
     service = TestBed.inject(ShellNavigationEffectsService);
-  });
-
-  afterEach(() => {
-    if (shellContainer) {
-      shellContainer.remove();
-      shellContainer = null;
-    }
   });
 
   it('starts with null animation state', () => {
@@ -85,14 +77,10 @@ describe('ShellNavigationEffectsService', () => {
 
   it('does not reset shell scroller or window scroll on initial navigation end', () => {
     const scrollSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
-    shellContainer = document.createElement('div');
-    shellContainer.className = 'app-sidenav-container';
     const drawerContent = document.createElement('div');
-    drawerContent.className = 'mat-drawer-content';
     drawerContent.scrollTop = 120;
     drawerContent.scrollLeft = 30;
-    shellContainer.appendChild(drawerContent);
-    document.body.appendChild(shellContainer);
+    service.setShellScroller(drawerContent);
 
     events$.next(new NavigationEnd(1, '/dashboard', '/dashboard'));
 
@@ -103,14 +91,10 @@ describe('ShellNavigationEffectsService', () => {
 
   it('resets shell scroller and window scroll on navigation end after initial navigation', () => {
     const scrollSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
-    shellContainer = document.createElement('div');
-    shellContainer.className = 'app-sidenav-container';
     const drawerContent = document.createElement('div');
-    drawerContent.className = 'mat-drawer-content';
     drawerContent.scrollTop = 120;
     drawerContent.scrollLeft = 30;
-    shellContainer.appendChild(drawerContent);
-    document.body.appendChild(shellContainer);
+    service.setShellScroller(drawerContent);
 
     events$.next(new NavigationEnd(1, '/dashboard', '/dashboard'));
     events$.next(new NavigationEnd(1, '/dashboard', '/dashboard'));

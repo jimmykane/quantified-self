@@ -64,8 +64,8 @@ mat-progress-bar {
   z-index: 99999;
   pointer-events: none;
   background: linear-gradient(90deg,
-      #ffffff 0%,
-      #ffffff 50%,
+      var(--mat-sys-surface) 0%,
+      var(--mat-sys-surface) 50%,
       transparent 50%,
       transparent 100%);
   background-size: 200% 100%;
@@ -74,8 +74,8 @@ mat-progress-bar {
 
   &.dark-theme {
     background: linear-gradient(90deg,
-        #121212 0%,
-        #121212 50%,
+        var(--mat-sys-surface) 0%,
+        var(--mat-sys-surface) 50%,
         transparent 50%,
         transparent 100%);
     background-size: 200% 100%;

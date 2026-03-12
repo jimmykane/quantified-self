@@ -1,12 +1,13 @@
 import {
-  ChangeDetectorRef,
   Component,
+  computed,
   DestroyRef,
   OnDestroy,
   OnInit,
   ViewChild,
   afterNextRender,
   inject,
+  signal,
 } from '@angular/core';
 import { DOCUMENT } from '@angular/common';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
@@ -48,6 +49,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   @ViewChild(MatSidenavContainer) set sidenavContainer(container: MatSidenavContainer | undefined) {
     if (!container) {
       this.currentSidenavContainer = null;
+      this.shellNavigationEffectsService.setShellScroller(null);
       if (this.shellScrollSubscription) {
         this.shellScrollSubscription.unsubscribe();
         this.shellScrollSubscription = null;
@@ -68,28 +70,47 @@ export class AppShellComponent implements OnInit, OnDestroy {
       this.sideNavService.setSidenav(sidenav);
     }
   }
-  public bannerHeight = 0;
-  public hasBanner = false;
+  private readonly bannerHeightSignal = signal(0);
+  private readonly hasBannerSignal = signal(false);
   public authState: boolean | null = null;
-  public showInitialLoader = true;
-  public isOnboardingRoute = false;
+  private readonly showInitialLoaderSignal = signal(true);
+  private readonly currentUrlSignal = signal('');
+  private readonly isOnboardingRouteComputed = computed(() => this.currentUrlSignal().includes('onboarding'));
+  private readonly isDashboardRouteComputed = computed(() => this.currentUrlSignal().includes('/dashboard'));
+  private readonly isLoginRouteComputed = computed(() => this.currentUrlSignal().includes('/login'));
+  private readonly isAdminRouteComputed = computed(() => this.currentUrlSignal().includes('/admin'));
+  private readonly isHomeRouteComputed = computed(() => {
+    const currentUrl = this.currentUrlSignal();
+    return currentUrl === '/' || currentUrl.split('?')[0] === '/';
+  });
   private destroyRef = inject(DestroyRef);
   private shellNavigationEffectsService = inject(ShellNavigationEffectsService);
   public routeAnimationState = this.shellNavigationEffectsService.animationState;
-  public onboardingCompleted = true; // Default to true to avoid hiding chrome of non-authenticated users prematurely
+  private readonly onboardingCompletedSignal = signal(true); // Default to true to avoid hiding chrome of non-authenticated users prematurely
+  public authService = inject(AppAuthService);
+  private userService = inject(AppUserService);
+  public router = inject(Router);
+  public sideNavService = inject(AppSideNavService);
   private remoteConfigService = inject(AppRemoteConfigService);
+  private logger = inject(LoggerService);
+  private analyticsService = inject(AppAnalyticsService);
+  private seoService = inject(SeoService);
+  private iconService = inject(AppIconService);
+  private themeService = inject(AppThemeService);
+  private whatsNewService = inject(AppWhatsNewService);
+  public dialog = inject(MatDialog);
   public maintenanceMode = this.remoteConfigService.maintenanceMode;
   public maintenanceMessage = this.remoteConfigService.maintenanceMessage;
   public maintenanceLoading = this.remoteConfigService.isLoading;
   public configLoaded = this.remoteConfigService.configLoaded;
   public currentUser: AppUserInterface | null = null;
   public isAdminUser = false;
-  public currentTheme$: Observable<any>;
-  public headerHidden = false;
+  public currentTheme$: Observable<AppThemes> = this.themeService.getAppTheme();
+  private readonly headerHiddenSignal = signal(false);
 
   // Circular reveal animation state
-  public themeOverlayActive = false;
-  public themeOverlayClass = '';
+  private readonly themeOverlayActiveSignal = signal(false);
+  private readonly themeOverlayClassSignal = signal('');
   private themeOverlayApplyTimeout: ReturnType<typeof setTimeout> | null = null;
   private themeOverlayResetTimeout: ReturnType<typeof setTimeout> | null = null;
   private initialLoaderTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -107,6 +128,66 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private lastShellScrollTop = 0;
   private readonly hideHeaderScrollThresholdPx = 48;
 
+  get bannerHeight(): number {
+    return this.bannerHeightSignal();
+  }
+
+  set bannerHeight(value: number) {
+    this.bannerHeightSignal.set(value);
+  }
+
+  get hasBanner(): boolean {
+    return this.hasBannerSignal();
+  }
+
+  set hasBanner(value: boolean) {
+    this.hasBannerSignal.set(value);
+  }
+
+  get showInitialLoader(): boolean {
+    return this.showInitialLoaderSignal();
+  }
+
+  set showInitialLoader(value: boolean) {
+    this.showInitialLoaderSignal.set(value);
+  }
+
+  get isOnboardingRoute(): boolean {
+    return this.isOnboardingRouteComputed();
+  }
+
+  get onboardingCompleted(): boolean {
+    return this.onboardingCompletedSignal();
+  }
+
+  set onboardingCompleted(value: boolean) {
+    this.onboardingCompletedSignal.set(value);
+  }
+
+  get headerHidden(): boolean {
+    return this.headerHiddenSignal();
+  }
+
+  set headerHidden(value: boolean) {
+    this.headerHiddenSignal.set(value);
+  }
+
+  get themeOverlayActive(): boolean {
+    return this.themeOverlayActiveSignal();
+  }
+
+  set themeOverlayActive(value: boolean) {
+    this.themeOverlayActiveSignal.set(value);
+  }
+
+  get themeOverlayClass(): string {
+    return this.themeOverlayClassSignal();
+  }
+
+  set themeOverlayClass(value: string) {
+    this.themeOverlayClassSignal.set(value);
+  }
+
   get layoutTopOffsetPx(): number {
     if (!this.showNavigation) {
       return 0;
@@ -115,24 +196,9 @@ export class AppShellComponent implements OnInit, OnDestroy {
     return this.bannerHeight + (this.headerHidden ? 0 : APP_SHELL_HEADER_HEIGHT_PX);
   }
 
-  constructor(
-    public authService: AppAuthService,
-    private userService: AppUserService,
-    public router: Router,
-    private changeDetectorRef: ChangeDetectorRef,
-    public sideNavService: AppSideNavService,
-    private logger: LoggerService,
-    private analyticsService: AppAnalyticsService,
-    private seoService: SeoService,
-    private iconService: AppIconService,
-    private themeService: AppThemeService,
-    private whatsNewService: AppWhatsNewService,
-    public dialog: MatDialog
-  ) {
+  constructor() {
     // this.afa.setAnalyticsCollectionEnabled(true)
     this.iconService.registerIcons();
-
-    this.currentTheme$ = this.themeService.getAppTheme();
 
     // Mark app as hydrated after Angular takes over (reveals SVG icons)
     afterNextRender(() => {
@@ -142,6 +208,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   async ngOnInit() {
     this.seoService.init(); // Initialize SEO service
+    this.syncCurrentRouteState();
 
     this.authService.user$
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -173,6 +240,11 @@ export class AppShellComponent implements OnInit, OnDestroy {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
         this.updateOnboardingState();
+        if (this.shouldForceVisibleHeader()) {
+          this.lastShellScrollTop = 0;
+          this.setHeaderHidden(false);
+          return;
+        }
         this.syncHeaderVisibilityFromCurrentScrollPosition();
       });
 
@@ -189,19 +261,19 @@ export class AppShellComponent implements OnInit, OnDestroy {
   }
 
   get isDashboardRoute(): boolean {
-    return this.router.url.includes('/dashboard');
+    return this.isDashboardRouteComputed();
   }
 
   get isLoginRoute(): boolean {
-    return this.router.url.includes('/login');
+    return this.isLoginRouteComputed();
   }
 
   get isAdminRoute(): boolean {
-    return this.router.url.includes('/admin');
+    return this.isAdminRouteComputed();
   }
 
   get isHomeRoute(): boolean {
-    return this.router.url === '/' || this.router.url.split('?')[0] === '/';
+    return this.isHomeRouteComputed();
   }
 
   get showUploadActivities(): boolean {
@@ -209,24 +281,21 @@ export class AppShellComponent implements OnInit, OnDestroy {
   }
 
   private updateOnboardingState() {
-    const previousOnboardingRoute = this.isOnboardingRoute;
-    const previousOnboardingCompleted = this.onboardingCompleted;
+    this.syncCurrentRouteState();
     const user = this.currentUser;
-    const url = this.router.url;
-    this.isOnboardingRoute = url.includes('onboarding');
 
     if (user) {
       const termsAccepted = user.acceptedPrivacyPolicy === true &&
         user.acceptedDataPolicy === true &&
-        (user as any).acceptedTos === true;
+        user.acceptedTos === true;
 
-      const hasSubscribedOnce = (user as any).hasSubscribedOnce === true;
+      const hasSubscribedOnce = user.hasSubscribedOnce === true;
       const hasPaidAccess = AppUserUtilities.hasPaidAccessUser(user);
 
-      const explicitOnboardingComplete = (user as any).onboardingCompleted === true;
+      const explicitOnboardingComplete = user.onboardingCompleted === true;
       this.onboardingCompleted = termsAccepted && (hasPaidAccess || hasSubscribedOnce || explicitOnboardingComplete);
 
-      const onboardingPatch: Record<string, boolean> = {};
+      const onboardingPatch: Partial<Pick<AppUserInterface, 'hasSubscribedOnce' | 'onboardingCompleted'>> = {};
 
       // If user has paid access now, persist the historical marker for future downgrades.
       if (hasPaidAccess && !hasSubscribedOnce) {
@@ -245,17 +314,23 @@ export class AppShellComponent implements OnInit, OnDestroy {
       // Not logged in - show chrome (login/landing page)
       this.onboardingCompleted = true;
     }
-    const hasStateChanged =
-      previousOnboardingRoute !== this.isOnboardingRoute ||
-      previousOnboardingCompleted !== this.onboardingCompleted;
 
-    if (hasStateChanged) {
-      this.changeDetectorRef.detectChanges();
-    }
-
-    if (!this.showNavigation) {
+    if (this.shouldForceVisibleHeader()) {
       this.setHeaderHidden(false);
     }
+  }
+
+  private shouldForceVisibleHeader(): boolean {
+    return this.isOnboardingRoute || !this.showNavigation;
+  }
+
+  private syncCurrentRouteState(): void {
+    const currentUrl = this.router.url;
+    if (this.currentUrlSignal() === currentUrl) {
+      return;
+    }
+
+    this.currentUrlSignal.set(currentUrl);
   }
 
   get showNavigation(): boolean {
@@ -311,7 +386,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
     }
     this.bannerHeight = height;
     this.hasBanner = nextHasBanner;
-    this.changeDetectorRef.detectChanges();
   }
 
   private bindShellScrollTracking(container: MatSidenavContainer): void {
@@ -321,6 +395,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     }
 
     const shellScroller = container.scrollable.getElementRef().nativeElement as HTMLElement;
+    this.shellNavigationEffectsService.setShellScroller(shellScroller);
     this.lastShellScrollTop = Math.max(0, shellScroller.scrollTop);
 
     this.shellScrollSubscription = container.scrollable.elementScrolled().subscribe(() => {
@@ -330,36 +405,29 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   private bindGlobalScrollTracking(): void {
     const doc = this.documentRef;
-    if (!doc || this.globalScrollListener) {
+    const windowRef = doc?.defaultView;
+    if (!windowRef || this.globalScrollListener) {
       return;
     }
 
-    this.globalScrollListener = (event: Event) => {
-      const target = event.target;
+    this.globalScrollListener = () => {
       const shellScroller = this.currentSidenavContainer?.scrollable.getElementRef().nativeElement as HTMLElement | undefined;
-
-      if (target instanceof HTMLElement) {
-        if (shellScroller && target === shellScroller) {
-          this.updateHeaderVisibilityFromScroll(shellScroller.scrollTop);
-        }
-        return;
-      }
-
-      if (target === doc && !shellScroller) {
-        this.updateHeaderVisibilityFromScroll(doc.defaultView?.scrollY || 0);
+      if (!shellScroller) {
+        this.updateHeaderVisibilityFromScroll(windowRef.scrollY || 0);
       }
     };
 
-    doc.addEventListener('scroll', this.globalScrollListener, true);
+    windowRef.addEventListener('scroll', this.globalScrollListener);
   }
 
   private unbindGlobalScrollTracking(): void {
     const doc = this.documentRef;
-    if (!doc || !this.globalScrollListener) {
+    const windowRef = doc?.defaultView;
+    if (!windowRef || !this.globalScrollListener) {
       return;
     }
 
-    doc.removeEventListener('scroll', this.globalScrollListener, true);
+    windowRef.removeEventListener('scroll', this.globalScrollListener);
     this.globalScrollListener = null;
   }
 
@@ -410,7 +478,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
     }
 
     this.headerHidden = hidden;
-    this.changeDetectorRef.detectChanges();
   }
 
   private triggerThemeReveal(theme: AppThemes) {
@@ -420,7 +487,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
     // Activate overlay immediately
     this.themeOverlayActive = true;
-    this.changeDetectorRef.detectChanges();
 
     this.themeOverlayApplyTimeout = setTimeout(() => {
       this.themeService.setAppTheme(theme, false);
@@ -428,7 +494,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
     this.themeOverlayResetTimeout = setTimeout(() => {
       this.themeOverlayActive = false;
-      this.changeDetectorRef.detectChanges();
     }, 600); // Match animation duration
   }
 
@@ -465,7 +530,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
     }
 
     this.showInitialLoader = false;
-    this.changeDetectorRef.detectChanges();
   }
 
   private resolveMinimumLoaderDuration(): number {
@@ -480,8 +544,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.dialog.open(WhatsNewDialogComponent, {
       width: '860px',
       maxWidth: '96vw',
-      autoFocus: false,
-      panelClass: ['qs-dialog-container', 'qs-whats-new-dialog']
+      autoFocus: false
     });
   }
 
@@ -499,6 +562,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
       this.shellScrollSubscription.unsubscribe();
       this.shellScrollSubscription = null;
     }
+    this.shellNavigationEffectsService.setShellScroller(null);
     this.unbindGlobalScrollTracking();
   }
 }

@@ -1,4 +1,6 @@
-import { Injectable, inject, signal } from '@angular/core';
+import { DOCUMENT } from '@angular/common';
+import { DestroyRef, Injectable, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   NavigationCancel,
   NavigationEnd,
@@ -12,6 +14,8 @@ import { AppHapticsService } from './app.haptics.service';
 
 @Injectable({ providedIn: 'root' })
 export class ShellNavigationEffectsService {
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly documentRef = inject(DOCUMENT);
   private readonly router = inject(Router);
   private readonly hapticsService = inject(AppHapticsService);
 
@@ -24,10 +28,16 @@ export class ShellNavigationEffectsService {
   private hasSeenInitialNavigationEnd = false;
   private hasCompletedInitialNavigation = false;
   private shouldTriggerNavigationHaptics = false;
+  private shellScroller: HTMLElement | null = null;
+
+  setShellScroller(shellScroller: HTMLElement | null): void {
+    this.shellScroller = shellScroller;
+  }
 
   constructor() {
     this.router.events
       .pipe(
+        takeUntilDestroyed(this.destroyRef),
         filter((event): event is NavigationStart | NavigationCancel | NavigationError | NavigationEnd =>
           event instanceof NavigationStart ||
           event instanceof NavigationCancel ||
@@ -88,20 +98,21 @@ export class ShellNavigationEffectsService {
   }
 
   private resetScrollPosition(): void {
-    if (typeof document === 'undefined' || typeof window === 'undefined') {
+    const windowRef = this.documentRef.defaultView;
+    if (!windowRef) {
       return;
     }
 
-    const shellScroller = document.querySelector('.app-sidenav-container .mat-drawer-content') as HTMLElement | null;
+    const shellScroller = this.shellScroller;
     if (shellScroller) {
       shellScroller.scrollTop = 0;
       shellScroller.scrollLeft = 0;
     }
 
     try {
-      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+      windowRef.scrollTo({ top: 0, left: 0, behavior: 'auto' });
     } catch {
-      window.scrollTo(0, 0);
+      windowRef.scrollTo(0, 0);
     }
   }
 }
