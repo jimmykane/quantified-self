@@ -6,13 +6,9 @@ import { map, shareReplay, switchMap } from 'rxjs/operators';
 import { AppUserService } from './app.user.service';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { LoggerService } from './logger.service';
+import { AppDateValue } from '../models/app-date-value.type';
 
-export interface FirestoreTimestampLike {
-    seconds: number;
-    nanoseconds?: number;
-}
-
-export type ChangelogPostDate = Timestamp | Date | string | number | FirestoreTimestampLike | { toDate: () => Date };
+export type ChangelogPostDate = AppDateValue;
 
 export function coerceChangelogPostDate(value: unknown): Date | null {
     if (value === null || value === undefined) {
