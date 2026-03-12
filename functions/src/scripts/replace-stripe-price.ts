@@ -447,13 +447,7 @@ export async function runReplaceStripePriceScript(
     let oldPriceDeactivated = false;
     const hasEligibleCandidates = analysis.candidates.length > 0;
 
-    if (options.execute && !hasEligibleCandidates) {
-        console.warn(
-            `[replace-stripe-price] No eligible subscriptions found for old price ${oldPrice.id}. Skipping create/migrate/deactivate in execute mode.`,
-        );
-    }
-
-    if (options.execute && hasEligibleCandidates) {
+    if (options.execute) {
         const createdPrice = await stripe.prices.create(buildPriceCreateParams(oldPrice, options.newUnitAmount));
         newPriceId = createdPrice.id;
         if (oldPrice.lookup_key) {
@@ -462,9 +456,15 @@ export async function runReplaceStripePriceScript(
             );
         }
 
-        const migrationResult = await migrateSubscriptionsToNewPrice(stripe, analysis.candidates, newPriceId);
-        migratedCount = migrationResult.migratedCount;
-        failedSubscriptionIds = migrationResult.failedSubscriptionIds;
+        if (!hasEligibleCandidates) {
+            console.warn(
+                `[replace-stripe-price] No eligible subscriptions found for old price ${oldPrice.id}. Skipping migration step; new price ${newPriceId} will be used for future sign-ups.`,
+            );
+        } else {
+            const migrationResult = await migrateSubscriptionsToNewPrice(stripe, analysis.candidates, newPriceId);
+            migratedCount = migrationResult.migratedCount;
+            failedSubscriptionIds = migrationResult.failedSubscriptionIds;
+        }
 
         if (migratedCount === 0 && failedSubscriptionIds.length > 0) {
             orphanedNewPriceId = newPriceId;

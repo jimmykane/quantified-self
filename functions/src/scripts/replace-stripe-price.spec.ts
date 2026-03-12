@@ -384,7 +384,7 @@ describe('replace-stripe-price script', () => {
         warnSpy.mockRestore();
     });
 
-    it('should no-op in execute mode when there are no eligible migration candidates', async () => {
+    it('should still create a new price and deactivate the old price when execute mode has no eligible migration candidates', async () => {
         mockSubscriptionsList.mockResolvedValue(makeStripeApiList([]));
 
         const summary = await runReplaceStripePriceScript(
@@ -394,12 +394,12 @@ describe('replace-stripe-price script', () => {
 
         expect(summary.dryRun).toBe(false);
         expect(summary.eligibleMigrationCount).toBe(0);
-        expect(summary.newPriceId).toBeNull();
+        expect(summary.newPriceId).toBe('price_new');
         expect(summary.orphanedNewPriceId).toBeNull();
-        expect(summary.oldPriceDeactivated).toBe(false);
-        expect(mockPricesCreate).not.toHaveBeenCalled();
+        expect(summary.oldPriceDeactivated).toBe(true);
+        expect(mockPricesCreate).toHaveBeenCalledTimes(1);
         expect(mockSubscriptionsUpdate).not.toHaveBeenCalled();
-        expect(mockPricesUpdate).not.toHaveBeenCalled();
+        expect(mockPricesUpdate).toHaveBeenCalledWith('price_old', { active: false });
     });
 
     it('should warn when a listed subscription contains no matching old-price item', async () => {
