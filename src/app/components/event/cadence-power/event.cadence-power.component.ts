@@ -145,6 +145,7 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
     if (cadencePowerSeries.length === 0) {
       return {
         animation: this.useAnimations === true,
+        backgroundColor: 'transparent',
         legend: { show: false },
         xAxis: [],
         yAxis: [],
@@ -196,6 +197,7 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
 
     return {
       animation: this.useAnimations === true,
+      backgroundColor: 'transparent',
       textStyle: {
         color: textColor,
         fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,

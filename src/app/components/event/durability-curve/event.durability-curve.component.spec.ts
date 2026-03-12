@@ -306,6 +306,7 @@ describe('EventDurabilityCurveComponent', () => {
     await waitForChartStabilization();
 
     const option = getLastOption();
+    expect(option.backgroundColor).toBe('transparent');
     expect(option.tooltip.backgroundColor).toBe('rgba(58,62,68,1)');
   });
 
