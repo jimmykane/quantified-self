@@ -149,6 +149,18 @@ describe('OnboardingComponent', () => {
         expect(pricingComponent?.isOnboarding).toBe(true);
     });
 
+    it('should disable step 2 footer actions while pricing is loading', () => {
+        component.onPricingLoadingChange(true);
+        fixture.detectChanges();
+
+        const buttons = Array.from(fixture.nativeElement.querySelectorAll('.onboarding-actions button')) as HTMLButtonElement[];
+        const backButton = buttons.find(button => button.textContent?.includes('Back')) ?? null;
+        const continueButton = buttons.find(button => button.textContent?.includes('Continue to')) ?? null;
+
+        expect(backButton?.disabled).toBe(true);
+        expect(continueButton?.disabled).toBe(true);
+    });
+
     it('should keep consent controls unchecked by default', () => {
         expect(component.termsFormGroup.get('acceptPrivacyPolicy')?.value).toBe(false);
         expect(component.termsFormGroup.get('acceptDataPolicy')?.value).toBe(false);
@@ -577,6 +589,16 @@ describe('OnboardingComponent', () => {
 
         expect(component.canFinish).toBe(true);
         expect(finishSpy).toHaveBeenCalled();
+    });
+
+    it('should not trigger finishOnboarding again when planSelected arrives during loading', () => {
+        component.isLoading = true;
+        const finishSpy = vi.spyOn(component as any, 'finishOnboarding').mockResolvedValue(undefined);
+
+        component.onPlanSelected();
+
+        expect(component.canFinish).toBe(true);
+        expect(finishSpy).not.toHaveBeenCalled();
     });
 
     it('should set isPro in checkProStatus', async () => {

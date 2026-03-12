@@ -74,11 +74,14 @@
             <!-- Step 2: Pricing -->
             <mat-step label="Plan">
                 <div class="step-content pricing-step">
-                    <app-pricing [isOnboarding]="true" (planSelected)="onPlanSelected()"></app-pricing>
+                    <app-pricing
+                        [isOnboarding]="true"
+                        (loadingStateChange)="onPricingLoadingChange($event)"
+                        (planSelected)="onPlanSelected()"></app-pricing>
 
                     <div class="qs-form-actions onboarding-actions">
-                        <button mat-stroked-button type="button" class="qs-mat-primary" matStepperPrevious [disabled]="isLoading">Back</button>
-                        <button mat-flat-button type="button" class="qs-mat-primary" [disabled]="isLoading" (click)="finishOnboarding()">Continue to
+                        <button mat-stroked-button type="button" class="qs-mat-primary" matStepperPrevious [disabled]="isLoading || isPricingLoading">Back</button>
+                        <button mat-flat-button type="button" class="qs-mat-primary" [disabled]="isLoading || isPricingLoading" (click)="finishOnboarding()">Continue to
                             Dashboard</button>
                     </div>
                 </div>

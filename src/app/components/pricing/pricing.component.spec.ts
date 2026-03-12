@@ -276,6 +276,33 @@ describe('PricingComponent', () => {
         expect(component.isLoading).toBe(false);
     });
 
+    it('should stay on onboarding and skip free-tier selection when required legal policies are missing in onboarding mode', async () => {
+        const userService = TestBed.inject(AppUserService);
+        const router = TestBed.inject(Router);
+        const navigateSpy = vi.spyOn(router, 'navigate');
+        const setFreeTierSpy = vi.spyOn(userService, 'setFreeTier');
+        const analyticsService = TestBed.inject(AppAnalyticsService);
+        const selectFreeTierSpy = vi.spyOn(analyticsService, 'logSelectFreeTier');
+
+        component.isOnboarding = true;
+        authServiceMock.user$ = of({
+            uid: 'test-uid',
+            acceptedPrivacyPolicy: false,
+            acceptedDataPolicy: true,
+            acceptedTos: true
+        } as any);
+
+        await component.selectFreeTier();
+
+        expect(navigateSpy).not.toHaveBeenCalledWith(
+            ['/onboarding'],
+            { queryParams: { returnUrl: '/subscriptions' } }
+        );
+        expect(setFreeTierSpy).not.toHaveBeenCalled();
+        expect(selectFreeTierSpy).not.toHaveBeenCalled();
+        expect(component.isLoading).toBe(false);
+    });
+
     it('should reset loading state when document becomes visible', () => {
         // Set component to loading state
         component.isLoading = true;
@@ -319,6 +346,37 @@ describe('PricingComponent', () => {
 
         expect(logSpy).toHaveBeenCalled();
         expect(setFreeTierSpy).toHaveBeenCalled();
+    });
+
+    it('should emit loading state changes while selectFreeTier is running', async () => {
+        const userService = TestBed.inject(AppUserService);
+        vi.spyOn(userService, 'setFreeTier').mockResolvedValue(undefined);
+        authServiceMock.user$ = of(acceptedPoliciesUser as any);
+        const loadingStateSpy = vi.fn();
+        component.loadingStateChange.subscribe(loadingStateSpy);
+
+        await component.selectFreeTier();
+
+        expect(loadingStateSpy).toHaveBeenNthCalledWith(1, true);
+        expect(loadingStateSpy).toHaveBeenLastCalledWith(false);
+    });
+
+    it('should show an alert and avoid planSelected when selectFreeTier fails', async () => {
+        const analyticsService = TestBed.inject(AppAnalyticsService);
+        const logSpy = vi.spyOn(analyticsService, 'logSelectFreeTier');
+        const userService = TestBed.inject(AppUserService);
+        vi.spyOn(userService, 'setFreeTier').mockRejectedValue(new Error('free-tier failed'));
+        const planSelectedSpy = vi.spyOn(component.planSelected, 'emit');
+        const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+
+        authServiceMock.user$ = of(acceptedPoliciesUser as any);
+
+        await component.selectFreeTier();
+
+        expect(logSpy).toHaveBeenCalled();
+        expect(planSelectedSpy).not.toHaveBeenCalled();
+        expect(alertSpy).toHaveBeenCalledWith('Failed to select free tier. Please try again.');
+        expect(component.isLoading).toBe(false);
     });
 
     it('should log manage_subscription event on manageSubscription', async () => {
@@ -538,6 +596,96 @@ describe('PricingComponent', () => {
         expect(continueForFreeButton).toBeTruthy();
         expect(continueForFreeButton?.disabled).toBe(false);
         expect(fixture.nativeElement.textContent).not.toContain('Current Plan');
+    });
+
+    it('should render the onboarding Continue for Free CTA only once even when the free product has multiple prices', () => {
+        const freeProductWithMultiplePrices = {
+            id: 'free_tier',
+            active: true,
+            name: 'Free Forever',
+            description: 'The essentials to get started',
+            role: 'free',
+            images: [],
+            metadata: { role: 'free' },
+            prices: [
+                {
+                    id: 'free_monthly',
+                    active: true,
+                    currency: 'usd',
+                    unit_amount: 0,
+                    description: 'Monthly free',
+                    type: 'recurring',
+                    interval: 'month',
+                    interval_count: 1,
+                    trial_period_days: null,
+                    recurring: { interval: 'month' }
+                },
+                {
+                    id: 'free_yearly',
+                    active: true,
+                    currency: 'usd',
+                    unit_amount: 0,
+                    description: 'Yearly free',
+                    type: 'recurring',
+                    interval: 'year',
+                    interval_count: 1,
+                    trial_period_days: null,
+                    recurring: { interval: 'year' }
+                }
+            ]
+        } as StripeProduct;
+
+        component.isOnboarding = true;
+        component.currentRole = null;
+        component.isLoadingRole = false;
+        component.products$ = of([freeProductWithMultiplePrices]);
+
+        fixture.detectChanges();
+
+        const continueForFreeButtons = fixture.debugElement
+            .queryAll(By.css('button.continue-free-button'))
+            .map(button => button.nativeElement as HTMLButtonElement);
+
+        expect(continueForFreeButtons.length).toBe(1);
+    });
+
+    it('should show a spinner inside the onboarding Continue for Free CTA while loading', () => {
+        const freeProduct = {
+            id: 'free_tier',
+            active: true,
+            name: 'Free Forever',
+            description: 'The essentials to get started',
+            role: 'free',
+            images: [],
+            metadata: { role: 'free' },
+            prices: [{
+                id: 'free_price',
+                active: true,
+                currency: 'usd',
+                unit_amount: 0,
+                description: 'Free forever',
+                type: 'recurring',
+                interval: 'year',
+                interval_count: 1,
+                trial_period_days: null,
+                recurring: { interval: 'forever' }
+            }]
+        } as StripeProduct;
+
+        component.isOnboarding = true;
+        component.currentRole = null;
+        component.isLoadingRole = false;
+        component.isLoading = true;
+        component.products$ = of([freeProduct]);
+
+        fixture.detectChanges();
+
+        const continueForFreeButton = fixture.nativeElement.querySelector('button.continue-free-button') as HTMLButtonElement | null;
+
+        expect(continueForFreeButton).toBeTruthy();
+        expect(continueForFreeButton?.disabled).toBe(true);
+        expect(continueForFreeButton?.querySelector('mat-spinner')).toBeTruthy();
+        expect(continueForFreeButton?.textContent).not.toContain('Continue for Free');
     });
 
     it('should call selectFreeTier when the onboarding Continue for Free CTA is clicked', async () => {

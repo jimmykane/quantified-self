@@ -125,6 +125,7 @@ export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
     }
 
     canFinish = false;
+    isPricingLoading = false;
     expandedPolicyId: string | null = null;
 
     private async checkAndAdvance() {
@@ -274,9 +275,17 @@ export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
         }
     }
 
+    onPricingLoadingChange(isLoading: boolean) {
+        this.isPricingLoading = isLoading;
+    }
+
     onPlanSelected() {
         this.logger.log('[OnboardingComponent] Plan selected event received from child component.');
         this.canFinish = true;
+        if (this.isLoading) {
+            this.logger.log('[OnboardingComponent] Ignoring plan selected event because onboarding completion is already in progress.');
+            return;
+        }
         // Attempt to finish immediately if on the right step
         this.finishOnboarding();
     }
