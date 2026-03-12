@@ -35,6 +35,11 @@ import { MapboxHeatmapLayerService } from '../../services/map/mapbox-heatmap-lay
 import { JumpHeatmapWeightingService } from '../../services/map/jump-heatmap-weighting.service';
 import { MapboxStartPointLayerService } from '../../services/map/mapbox-start-point-layer.service';
 import { MapboxAutoResizeService } from '../../services/map/mapbox-auto-resize.service';
+import {
+  MapboxLayersControlHandle,
+  MapboxLayersControlInputs,
+  MapboxLayersControlService,
+} from '../../services/map/mapbox-layers-control.service';
 import { Search } from '../event-search/event-search.component';
 import { MyTracksTripDetectionService } from '../../services/my-tracks-trip-detection.service';
 import { TripDetectionInput } from '../../services/my-tracks-trip-detection.service';
@@ -50,7 +55,9 @@ import {
   PolylineSimplificationService
 } from '../../services/polyline-simplification.service';
 import {
+  CachedMyTracksActivityPolyline,
   CachedMyTracksEventPolylines,
+  CachedMyTracksJumpHeatPoint,
   MyTracksPolylineCacheService,
   ResolvedMyTracksActivityPolyline
 } from '../../services/my-tracks-polyline-cache.service';
@@ -89,6 +96,14 @@ interface PreparedTrackPolyline {
   coordinates: number[][];
 }
 
+interface ResolvedTrackDataForEventResult {
+  fullEvent: any;
+  trackPolylines: ResolvedMyTracksActivityPolyline[];
+  usedCache: boolean;
+  activityFetchDurationMs: number;
+  activityCount: number;
+}
+
 @Component({
   selector: 'app-tracks',
   templateUrl: './tracks.component.html',
@@ -105,6 +120,7 @@ export class TracksComponent implements OnInit, OnDestroy {
   private static readonly START_POINT_POPUP_HEIGHT_ESTIMATE_PX = 240;
   private static readonly MY_TRACKS_SIMPLIFICATION_MIN_KEEP_RATIO = 0.08;
   private static readonly MY_TRACKS_SIMPLIFICATION_MAX_POINTS_PER_TRACK = 900;
+  private static readonly MY_TRACKS_BACKGROUND_REFRESH_CONCURRENCY = 4;
   private static readonly MY_TRACKS_SIMPLIFICATION_OPTIONS: Readonly<PolylineSimplificationOptions> = Object.freeze({
     keepRatio: 0.25,
     minInputPoints: 120,
@@ -144,9 +160,13 @@ export class TracksComponent implements OnInit, OnDestroy {
   private platformId!: object;
   private startPointPopupRepositionHandler: (() => void) | null = null;
   private pendingStartPointPopupCorrectionRaf: number | null = null;
+  private mapLayersControlHandle: MapboxLayersControlHandle | null = null;
   private panPerformanceModeStartHandler: (() => void) | null = null;
   private panPerformanceModeEndHandler: (() => void) | null = null;
   private panPerformanceModeResetTimer: ReturnType<typeof setTimeout> | null = null;
+  private backgroundActivityRefreshQueue: Array<() => Promise<void>> = [];
+  private backgroundActivityRefreshActiveCount = 0;
+  private backgroundActivityRefreshEventIds = new Set<string>();
 
   private promiseTime = 0;
   private analyticsService = inject(AppAnalyticsService);
@@ -192,6 +212,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     private jumpHeatmapWeightingService: JumpHeatmapWeightingService,
     private mapboxStartPointLayerService: MapboxStartPointLayerService,
     private mapboxAutoResizeService: MapboxAutoResizeService,
+    private mapboxLayersControlService: MapboxLayersControlService,
     private polylineSimplificationService: PolylineSimplificationService,
     private popupContentService: MapEventPopupContentService,
   ) {
@@ -262,6 +283,31 @@ export class TracksComponent implements OnInit, OnDestroy {
           .catch(err => this.logger.error('Error loading tracks', err))
           .finally(() => this.isLoading.set(false));
       }
+    });
+
+    effect(() => {
+      const map = this.mapSignal();
+      const user = this.userSignal();
+      const mapSettings = this.userSettingsQuery.mapSettings() as AppMapSettingsInterface;
+      const myTracksSettings = this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings;
+      const loading = this.isLoading();
+
+      if (!map || !mapSettings || !myTracksSettings) {
+        return;
+      }
+
+      this.syncMapLayersControlInputs({
+        user,
+        disabled: loading,
+        mapStyle: this.mapStyleService.normalizeStyle(mapSettings.mapStyle),
+        is3D: !!mapSettings.is3D,
+        showJumpHeatmap: myTracksSettings.showJumpHeatmap !== false,
+        enableJumpHeatmapToggle: true,
+        enable3DToggle: true,
+        enableLapsToggle: false,
+        enableArrowsToggle: false,
+        analyticsEventName: 'my_tracks_map_settings_change',
+      });
     });
   }
 
@@ -335,6 +381,7 @@ export class TracksComponent implements OnInit, OnDestroy {
           showZoom: true
         });
         mapInstance.addControl(navControl, 'bottom-right');
+        this.zone.run(() => this.attachMapLayersControl(mapInstance));
 
         this.centerMapToStartingLocation(mapInstance);
         this.eventsSubscription.add(
@@ -405,9 +452,60 @@ export class TracksComponent implements OnInit, OnDestroy {
       this.pendingStartPointPopupCorrectionRaf = null;
     }
     this.mapboxAutoResizeService.unbind(this.tracksMapManager.getMap());
+    this.destroyMapLayersControl();
     if (this.mapSignal()) {
       this.mapSignal().remove();
     }
+  }
+
+  private attachMapLayersControl(map: any): void {
+    if (this.mapLayersControlHandle) {
+      this.syncMapLayersControlInputs();
+      return;
+    }
+
+    this.mapLayersControlHandle = this.mapboxLayersControlService.create({
+      outputs: {
+        mapStyleChange: (style) => this.setMapStyle(style as MapStyleName),
+        is3DChange: (value) => this.onMyTracks3DToggle(value),
+        showJumpHeatmapChange: (value) => this.onShowJumpHeatmapToggle(value),
+      },
+    });
+
+    map.addControl(this.mapLayersControlHandle.control, 'bottom-right');
+    this.syncMapLayersControlInputs();
+  }
+
+  private syncMapLayersControlInputs(overrideInputs: Partial<MapboxLayersControlInputs> = {}): void {
+    if (!this.mapLayersControlHandle) {
+      return;
+    }
+
+    const mapSettings = this.userSettingsQuery.mapSettings() as AppMapSettingsInterface;
+    const myTracksSettings = this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings;
+
+    this.mapLayersControlHandle.updateInputs({
+      user: this.userSignal(),
+      disabled: this.isLoading(),
+      mapStyle: this.mapStyleService.normalizeStyle(mapSettings?.mapStyle),
+      is3D: !!mapSettings?.is3D,
+      showJumpHeatmap: myTracksSettings?.showJumpHeatmap !== false,
+      enableJumpHeatmapToggle: true,
+      enable3DToggle: true,
+      enableLapsToggle: false,
+      enableArrowsToggle: false,
+      analyticsEventName: 'my_tracks_map_settings_change',
+      ...overrideInputs,
+    });
+  }
+
+  private destroyMapLayersControl(): void {
+    if (!this.mapLayersControlHandle) {
+      return;
+    }
+
+    this.mapLayersControlHandle.destroy();
+    this.mapLayersControlHandle = null;
   }
 
   private unsubscribeFromAll() {
@@ -505,6 +603,8 @@ export class TracksComponent implements OnInit, OnDestroy {
     });
     this.hasTrackBoundsBeenApplied = true;
     const promiseTime = ++this.promiseTime;
+    this.backgroundActivityRefreshQueue = [];
+    this.backgroundActivityRefreshEventIds.clear();
     this.hasEvaluatedTripDetection.set(false);
     this.detectedTrips.set([]);
     this.detectedHomeArea.set(null);
@@ -623,18 +723,10 @@ export class TracksComponent implements OnInit, OnDestroy {
           let eventActivityCount = 0;
           let eventVisibleTrackCount = 0;
 
-          this.logger.log(`[TracksComponent] Fetching activities for event: ${event.getID()}, promiseTime: ${promiseTime}`);
-          const eventActivitiesFetchStartedAt = performance.now();
-          event.addActivities(await firstValueFrom(this.eventService.getActivitiesOnceByEventWithOptions(
-            user,
-            event.getID(),
-            { preferCache: true, warmServer: false },
-          )));
-          eventActivitiesFetchDurationMs = performance.now() - eventActivitiesFetchStartedAt;
-          activitiesFetchDurationMs += eventActivitiesFetchDurationMs;
-
           const eventHydrationStartedAt = performance.now();
           const resolvedTrackData = await this.resolveTrackDataForEvent(user, event);
+          eventActivitiesFetchDurationMs = resolvedTrackData.activityFetchDurationMs;
+          activitiesFetchDurationMs += eventActivitiesFetchDurationMs;
           const fullEvent = resolvedTrackData.fullEvent;
           if (resolvedTrackData.usedCache) {
             polylineCacheHitCount += 1;
@@ -654,12 +746,13 @@ export class TracksComponent implements OnInit, OnDestroy {
           }
           let hasVisibleTrackForEvent = false;
           const eventCoordinates: number[][] = [];
-          const activities = this.getEventActivities(fullEvent);
-          eventActivityCount = activities.length;
+          eventActivityCount = resolvedTrackData.activityCount;
           resolvedTrackData.trackPolylines
             .filter(({ activity }) => !activityTypes || activityTypes.length === 0 || activityTypes.includes(activity.type))
-            .forEach(({ activity, coordinates }) => {
-              const jumpStats = this.collectJumpHeatPointsFromActivity(activity, jumpHeatPoints);
+            .forEach(({ activity, coordinates, cachedActivity }) => {
+              const jumpStats = resolvedTrackData.usedCache && this.isCachedActivityMetadataComplete(cachedActivity)
+                ? this.collectJumpHeatPointsFromCachedActivity(cachedActivity, jumpHeatPoints)
+                : this.collectJumpHeatPointsFromActivity(activity, jumpHeatPoints);
               jumpsWithCoordinates += jumpStats.jumpsWithCoordinates;
               jumpsWithWeightMetrics += jumpStats.jumpsWithWeightMetrics;
 
@@ -688,12 +781,19 @@ export class TracksComponent implements OnInit, OnDestroy {
                   tracksSimplified++;
                 }
 
-                const startPoint = this.buildTrackStartPoint(
-                  activity,
-                  eventId,
-                  simplifiedCoordinates[0],
-                  fullEvent?.startDate ?? event?.startDate
-                );
+                const startPoint = resolvedTrackData.usedCache && this.isCachedActivityMetadataComplete(cachedActivity)
+                  ? this.buildTrackStartPointFromCached(
+                    cachedActivity,
+                    eventId,
+                    simplifiedCoordinates[0],
+                    fullEvent?.startDate ?? event?.startDate
+                  )
+                  : this.buildTrackStartPoint(
+                    activity,
+                    eventId,
+                    simplifiedCoordinates[0],
+                    fullEvent?.startDate ?? event?.startDate
+                  );
                 if (startPoint) {
                   trackStartPoints.push(startPoint);
                 }
@@ -869,25 +969,45 @@ export class TracksComponent implements OnInit, OnDestroy {
   private async resolveTrackDataForEvent(
     user: AppUserInterface,
     event: any,
-  ): Promise<{ fullEvent: any; trackPolylines: ResolvedMyTracksActivityPolyline[]; usedCache: boolean }> {
+  ): Promise<ResolvedTrackDataForEventResult> {
     const cacheOptions = { metadataCacheTtlMs: TracksComponent.MY_TRACKS_METADATA_CACHE_TTL_MS };
     const initialActivities = this.getEventActivities(event);
+    const eventId = event?.getID?.();
     const cacheKey = await this.myTracksPolylineCacheService.resolveEventCacheKey(event, cacheOptions);
     const cachedPolylines = cacheKey
       ? await this.myTracksPolylineCacheService.getEventPolylines(cacheKey)
       : undefined;
 
     if (this.isValidCachedTrackData(initialActivities, cachedPolylines)) {
+      if (cacheKey && eventId) {
+        this.enqueueBackgroundActivityRefresh(user, eventId, cacheKey, cachedPolylines);
+      }
       return {
         fullEvent: event,
-        trackPolylines: this.myTracksPolylineCacheService.resolveTrackPolylines(initialActivities, cachedPolylines),
+        trackPolylines: initialActivities.length > 0
+          ? this.myTracksPolylineCacheService.resolveTrackPolylines(initialActivities, cachedPolylines)
+          : this.myTracksPolylineCacheService.resolveTrackPolylinesFromCache(cachedPolylines),
         usedCache: true,
+        activityFetchDurationMs: 0,
+        activityCount: cachedPolylines.activityCount,
       };
     }
 
+    this.logger.log(`[TracksComponent] Fetching activities for event: ${eventId}, promiseTime: ${this.promiseTime}`);
+    const eventActivitiesFetchStartedAt = performance.now();
+    event.addActivities(await firstValueFrom(this.eventService.getActivitiesOnceByEventWithOptions(
+      user,
+      eventId,
+      { preferCache: true, warmServer: false },
+    )));
+    const activityFetchDurationMs = performance.now() - eventActivitiesFetchStartedAt;
+
     const fullEvent = await this.hydrateTrackStreamsForEvent(user, event);
     const resolvedActivities = this.getEventActivities(fullEvent);
-    const extractedPolylines = this.myTracksPolylineCacheService.extractTrackPolylines(resolvedActivities);
+    const extractedPolylines = this.buildCachedTrackPolylinesWithMetadata(
+      this.myTracksPolylineCacheService.extractTrackPolylines(resolvedActivities),
+      resolvedActivities,
+    );
     if (cacheKey && this.shouldPersistTrackData(fullEvent, event, resolvedActivities)) {
       await this.myTracksPolylineCacheService.setEventPolylines(cacheKey, extractedPolylines);
     }
@@ -896,6 +1016,8 @@ export class TracksComponent implements OnInit, OnDestroy {
       fullEvent,
       trackPolylines: this.myTracksPolylineCacheService.resolveTrackPolylines(resolvedActivities, extractedPolylines),
       usedCache: false,
+      activityFetchDurationMs,
+      activityCount: resolvedActivities.length,
     };
   }
 
@@ -933,7 +1055,9 @@ export class TracksComponent implements OnInit, OnDestroy {
     activities: any[],
     cachedPolylines: CachedMyTracksEventPolylines | undefined,
   ): cachedPolylines is CachedMyTracksEventPolylines {
-    return this.myTracksPolylineCacheService.hasMatchingActivityIdentity(activities, cachedPolylines);
+    const allowUnknownIdentity = activities.length === 0;
+    return this.myTracksPolylineCacheService.hasMatchingActivityIdentity(activities, cachedPolylines, allowUnknownIdentity)
+      && this.myTracksPolylineCacheService.hasCompleteTrackMetadata(cachedPolylines);
   }
 
   private shouldPersistTrackData(fullEvent: any, sourceEvent: any, activities: any[]): boolean {
@@ -942,6 +1066,121 @@ export class TracksComponent implements OnInit, OnDestroy {
     }
 
     return activities.some((activity) => activity?.hasPositionData?.());
+  }
+
+  private buildCachedTrackPolylinesWithMetadata(
+    basePolylines: CachedMyTracksEventPolylines,
+    activities: any[],
+  ): CachedMyTracksEventPolylines {
+    const resolvedTrackPolylines = this.myTracksPolylineCacheService.resolveTrackPolylines(activities, basePolylines);
+    const trackActivities = resolvedTrackPolylines.reduce<CachedMyTracksActivityPolyline[]>((accumulator, resolvedTrackPolyline) => {
+      const { activity, activityIndex, coordinates, cachedActivity } = resolvedTrackPolyline;
+      const activityId = activity?.getID?.();
+      accumulator.push({
+        activityId: typeof activityId === 'string' && activityId.trim().length > 0
+          ? activityId
+          : cachedActivity?.activityId || null,
+        activityIndex,
+        coordinates,
+        activityTypeValue: this.getActivityTypeValue(activity),
+        activityTypeLabel: this.resolveActivityTypeLabel(activity),
+        durationValue: this.getNumericActivityStatValue(activity?.getDuration?.()),
+        distanceValue: this.getNumericActivityStatValue(activity?.getDistance?.()),
+        durationLabel: this.formatActivityDurationLabel(activity),
+        distanceLabel: this.formatActivityDistanceLabel(activity),
+        effortLabel: this.resolveActivityEffortMetric(activity).effortLabel || null,
+        effortDisplayLabel: this.resolveActivityEffortMetric(activity).effortDisplayLabel || '-',
+        effortStatType: this.resolveActivityEffortMetric(activity).effortStatType || null,
+        jumpHeatPoints: this.extractCachedJumpHeatPointsFromActivity(activity),
+      });
+      return accumulator;
+    }, []);
+
+    return {
+      activityCount: basePolylines.activityCount,
+      activityIdentitySignature: [...(basePolylines.activityIdentitySignature || [])],
+      trackActivities,
+    };
+  }
+
+  private isCachedActivityMetadataComplete(cachedActivity: CachedMyTracksActivityPolyline | undefined): cachedActivity is CachedMyTracksActivityPolyline {
+    return !!cachedActivity
+      && typeof cachedActivity.activityId === 'string'
+      && cachedActivity.activityId.trim().length > 0
+      && this.hasValidCoordinates(cachedActivity.coordinates)
+      && this.hasValidActivityTypeValue(cachedActivity.activityTypeValue)
+      && typeof cachedActivity.activityTypeLabel === 'string'
+      && cachedActivity.activityTypeLabel.trim().length > 0
+      && this.isNullableNonNegativeNumber(cachedActivity.durationValue)
+      && this.isNullableNonNegativeNumber(cachedActivity.distanceValue)
+      && typeof cachedActivity.durationLabel === 'string'
+      && cachedActivity.durationLabel.length > 0
+      && typeof cachedActivity.distanceLabel === 'string'
+      && cachedActivity.distanceLabel.length > 0
+      && typeof cachedActivity.effortLabel === 'string'
+      && cachedActivity.effortLabel.length > 0
+      && typeof cachedActivity.effortDisplayLabel === 'string'
+      && cachedActivity.effortDisplayLabel.length > 0
+      && typeof cachedActivity.effortStatType === 'string'
+      && cachedActivity.effortStatType.length > 0
+      && Array.isArray(cachedActivity.jumpHeatPoints)
+      && cachedActivity.jumpHeatPoints.every((point) => this.isValidCachedJumpHeatPoint(point));
+  }
+
+  private enqueueBackgroundActivityRefresh(
+    user: AppUserInterface,
+    eventId: string,
+    cacheKey: string,
+    cachedPolylines: CachedMyTracksEventPolylines,
+  ): void {
+    if (!eventId || !cacheKey || this.backgroundActivityRefreshEventIds.has(eventId)) {
+      return;
+    }
+
+    this.backgroundActivityRefreshEventIds.add(eventId);
+    this.backgroundActivityRefreshQueue.push(async () => {
+      try {
+        const refreshedActivities = await firstValueFrom(this.eventService.getActivitiesOnceByEventWithOptions(
+          user,
+          eventId,
+          { preferCache: false },
+        ));
+
+        if (!this.myTracksPolylineCacheService.hasMatchingActivityIdentity(refreshedActivities, cachedPolylines)) {
+          await this.myTracksPolylineCacheService.deleteEventPolylines(cacheKey);
+          return;
+        }
+
+        const refreshedPolylines = this.buildCachedTrackPolylinesWithMetadata(cachedPolylines, refreshedActivities);
+        await this.myTracksPolylineCacheService.setEventPolylines(cacheKey, refreshedPolylines);
+      } catch (error) {
+        this.logger.warn('[TracksComponent] Background my-tracks activity refresh failed.', {
+          eventId,
+          cacheKey,
+          error,
+        });
+      }
+    });
+
+    this.processBackgroundActivityRefreshQueue();
+  }
+
+  private processBackgroundActivityRefreshQueue(): void {
+    while (
+      this.backgroundActivityRefreshActiveCount < TracksComponent.MY_TRACKS_BACKGROUND_REFRESH_CONCURRENCY
+      && this.backgroundActivityRefreshQueue.length > 0
+    ) {
+      const nextRefresh = this.backgroundActivityRefreshQueue.shift();
+      if (!nextRefresh) {
+        return;
+      }
+
+      this.backgroundActivityRefreshActiveCount += 1;
+      void nextRefresh().finally(() => {
+        this.backgroundActivityRefreshActiveCount = Math.max(0, this.backgroundActivityRefreshActiveCount - 1);
+        this.processBackgroundActivityRefreshQueue();
+      });
+    }
   }
 
   private resolveMyTracksSimplificationOptions(inputPointCount: number, eventCount: number): PolylineSimplificationOptions {
@@ -1258,19 +1497,13 @@ export class TracksComponent implements OnInit, OnDestroy {
     });
     const detectedTrips = detectionResult.trips;
     const detectedHomeArea: DetectedHomeArea | null = detectionResult.homeArea;
-    const locationCandidatesByDestinationId = this.buildTripLocationCandidatesByDestination(detectedTrips);
-    const locationLookupByDestinationId = new Map<string, Promise<ResolvedTripLocationLabel | null>>();
     const viewModels = await Promise.all(detectedTrips.map(async (trip) => {
-      let locationLookup = locationLookupByDestinationId.get(trip.destinationId);
-      const coordinateCandidates = locationCandidatesByDestinationId.get(trip.destinationId) || [];
-      if (!locationLookup) {
-        locationLookup = coordinateCandidates.length > 0
+      const coordinateCandidates = this.collectTripLocationCandidates(trip);
+      const location = await (
+        coordinateCandidates.length > 0
           ? this.tripLocationLabelService.resolveTripLocationFromCandidates(coordinateCandidates)
-          : this.tripLocationLabelService.resolveTripLocation(trip.centroidLat, trip.centroidLng);
-        locationLookupByDestinationId.set(trip.destinationId, locationLookup);
-      }
-
-      const location = await locationLookup;
+          : this.tripLocationLabelService.resolveTripLocation(trip.centroidLat, trip.centroidLng)
+      );
 
       return {
         ...trip,
@@ -1317,19 +1550,6 @@ export class TracksComponent implements OnInit, OnDestroy {
       panelExpanded: this.detectedTripsPanelExpanded(),
       hasHomeArea: !!detectedHomeArea,
     });
-  }
-
-  private buildTripLocationCandidatesByDestination(
-    detectedTrips: DetectedTrip[],
-  ): Map<string, TripLocationCoordinateCandidate[]> {
-    return detectedTrips.reduce((accumulator, trip) => {
-      const existingCandidates = accumulator.get(trip.destinationId) || [];
-      accumulator.set(trip.destinationId, [
-        ...existingCandidates,
-        ...this.collectTripLocationCandidates(trip),
-      ]);
-      return accumulator;
-    }, new Map<string, TripLocationCoordinateCandidate[]>());
   }
 
   private collectTripLocationCandidates(trip: DetectedTrip): TripLocationCoordinateCandidate[] {
@@ -1423,8 +1643,52 @@ export class TracksComponent implements OnInit, OnDestroy {
   }
 
   private collectJumpHeatPointsFromActivity(activity: any, jumpHeatPoints: JumpHeatPoint[]): JumpHeatCollectionStats {
+    return this.collectJumpHeatPoints(
+      this.extractCachedJumpHeatPointsFromActivity(activity),
+      jumpHeatPoints,
+    );
+  }
+
+  private collectJumpHeatPointsFromCachedActivity(
+    cachedActivity: CachedMyTracksActivityPolyline,
+    jumpHeatPoints: JumpHeatPoint[],
+  ): JumpHeatCollectionStats {
+    return this.collectJumpHeatPoints(cachedActivity?.jumpHeatPoints || [], jumpHeatPoints);
+  }
+
+  private collectJumpHeatPoints(
+    cachedJumpHeatPoints: CachedMyTracksJumpHeatPoint[],
+    jumpHeatPoints: JumpHeatPoint[],
+  ): JumpHeatCollectionStats {
     let jumpsWithCoordinates = 0;
     let jumpsWithWeightMetrics = 0;
+    (cachedJumpHeatPoints || []).forEach((point) => {
+      if (!this.isValidCachedJumpHeatPoint(point)) {
+        return;
+      }
+
+      jumpsWithCoordinates++;
+      if (point.hangTime === null && point.distance === null) {
+        return;
+      }
+
+      jumpsWithWeightMetrics++;
+      jumpHeatPoints.push({
+        lng: point.lng,
+        lat: point.lat,
+        hangTime: point.hangTime,
+        distance: point.distance,
+      });
+    });
+
+    return {
+      jumpsWithCoordinates,
+      jumpsWithWeightMetrics
+    };
+  }
+
+  private extractCachedJumpHeatPointsFromActivity(activity: any): CachedMyTracksJumpHeatPoint[] {
+    const cachedJumpHeatPoints: CachedMyTracksJumpHeatPoint[] = [];
     const activityEvents = typeof activity?.getAllEvents === 'function' ? activity.getAllEvents() : [];
     (activityEvents || []).forEach((activityEvent: any) => {
       const jumpData = activityEvent instanceof DataJumpEvent ? activityEvent.jumpData : activityEvent?.jumpData;
@@ -1436,25 +1700,14 @@ export class TracksComponent implements OnInit, OnDestroy {
       if (Math.abs(lat) > 90 || Math.abs(lng) > 180) {
         return;
       }
-      jumpsWithCoordinates++;
-
-      const hangTime = this.getNumericJumpStatValue(jumpData?.hang_time);
-      const distance = this.getNumericJumpStatValue(jumpData?.distance);
-      if (hangTime === null && distance === null) {
-        return;
-      }
-      jumpsWithWeightMetrics++;
-      jumpHeatPoints.push({
+      cachedJumpHeatPoints.push({
         lng,
         lat,
-        hangTime,
-        distance
+        hangTime: this.getNumericJumpStatValue(jumpData?.hang_time),
+        distance: this.getNumericJumpStatValue(jumpData?.distance),
       });
     });
-    return {
-      jumpsWithCoordinates,
-      jumpsWithWeightMetrics
-    };
+    return cachedJumpHeatPoints;
   }
 
   private getNumericJumpStatValue(stat: any): number | null {
@@ -1491,7 +1744,7 @@ export class TracksComponent implements OnInit, OnDestroy {
       eventId: String(eventId),
       activityId: String(activityId),
       activityType: this.resolveActivityTypeLabel(activity),
-      activityTypeValue: activity?.type ?? null,
+      activityTypeValue: this.getActivityTypeValue(activity),
       durationValue: this.getNumericActivityStatValue(activity?.getDuration?.()),
       distanceValue: this.getNumericActivityStatValue(activity?.getDistance?.()),
       startDate,
@@ -1503,8 +1756,56 @@ export class TracksComponent implements OnInit, OnDestroy {
     };
   }
 
-  private resolveActivityTypeLabel(activity: any): string {
+  private buildTrackStartPointFromCached(
+    cachedActivity: CachedMyTracksActivityPolyline,
+    eventId: string,
+    startCoordinate: number[],
+    startDateInput: number | Date | null | undefined,
+  ): TrackStartPoint | null {
+    if (!this.isCachedActivityMetadataComplete(cachedActivity)) {
+      return null;
+    }
+
+    if (!Array.isArray(startCoordinate) || startCoordinate.length < 2) return null;
+    const lng = Number(startCoordinate[0]);
+    const lat = Number(startCoordinate[1]);
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
+    if (Math.abs(lng) > 180 || Math.abs(lat) > 90) return null;
+
+    let startDate: number | null = null;
+    if (typeof startDateInput === 'number' && Number.isFinite(startDateInput)) {
+      startDate = startDateInput;
+    } else if (startDateInput instanceof Date && Number.isFinite(startDateInput.getTime())) {
+      startDate = startDateInput.getTime();
+    }
+
+    return {
+      eventId: String(eventId),
+      activityId: cachedActivity.activityId,
+      activityType: cachedActivity.activityTypeLabel,
+      activityTypeValue: cachedActivity.activityTypeValue,
+      durationValue: cachedActivity.durationValue,
+      distanceValue: cachedActivity.distanceValue,
+      startDate,
+      durationLabel: cachedActivity.durationLabel,
+      distanceLabel: cachedActivity.distanceLabel,
+      effortLabel: cachedActivity.effortLabel || undefined,
+      effortDisplayLabel: cachedActivity.effortDisplayLabel,
+      effortStatType: cachedActivity.effortStatType || undefined,
+      lng,
+      lat,
+    };
+  }
+
+  private getActivityTypeValue(activity: any): ActivityTypes | string | number | null {
     const rawType = activity?.type;
+    if (typeof rawType === 'string' && rawType.length > 0) return rawType;
+    if (typeof rawType === 'number' && Number.isFinite(rawType)) return rawType;
+    return null;
+  }
+
+  private resolveActivityTypeLabel(activity: any): string {
+    const rawType = this.getActivityTypeValue(activity);
     if (typeof rawType === 'string' && rawType.length > 0) return rawType;
     if (typeof rawType === 'number' && ActivityTypes[rawType]) return String(ActivityTypes[rawType]);
     return 'Activity';
@@ -1579,6 +1880,38 @@ export class TracksComponent implements OnInit, OnDestroy {
       effortDisplayLabel: '-',
       effortStatType: fallbackType,
     };
+  }
+
+  private hasValidCoordinates(coordinates: number[][] | undefined): boolean {
+    return Array.isArray(coordinates)
+      && coordinates.length > 1
+      && coordinates.every((coordinate) =>
+        Array.isArray(coordinate)
+        && coordinate.length >= 2
+        && Number.isFinite(coordinate[0])
+        && Number.isFinite(coordinate[1])
+        && Math.abs(coordinate[0]) <= 180
+        && Math.abs(coordinate[1]) <= 90
+      );
+  }
+
+  private hasValidActivityTypeValue(value: string | number | null): boolean {
+    return (typeof value === 'string' && value.trim().length > 0)
+      || (typeof value === 'number' && Number.isFinite(value));
+  }
+
+  private isNullableNonNegativeNumber(value: number | null): boolean {
+    return value === null || (typeof value === 'number' && Number.isFinite(value) && value >= 0);
+  }
+
+  private isValidCachedJumpHeatPoint(point: CachedMyTracksJumpHeatPoint | undefined): boolean {
+    return !!point
+      && Number.isFinite(point.lng)
+      && Number.isFinite(point.lat)
+      && Math.abs(point.lng) <= 180
+      && Math.abs(point.lat) <= 90
+      && this.isNullableNonNegativeNumber(point.hangTime)
+      && this.isNullableNonNegativeNumber(point.distance);
   }
 
   private isPaceDerivedStatType(statType: string | null | undefined): boolean {

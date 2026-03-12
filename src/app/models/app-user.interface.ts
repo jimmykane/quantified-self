@@ -54,7 +54,10 @@ export interface AppUserInterface extends User {
     displayName?: string | null;
     photoURL?: string | null;
     emailVerified?: boolean;
+    acceptedTos?: boolean;
     acceptedMarketingPolicy?: boolean;
+    hasSubscribedOnce?: boolean;
+    onboardingCompleted?: boolean;
     claimsUpdatedAt?: Timestamp | null;
     settings?: AppUserSettingsInterface;
     stripeRole?: StripeRole | null;

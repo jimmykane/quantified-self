@@ -42,19 +42,6 @@ app-peek-panel.tracks-search-peek app-event-search {
 }
 
 
-
-.map-layers-controls {
-  position: absolute;
-  bottom: 30px;
-  left: 10px;
-  z-index: 1000;
-  background: transparent;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-}
-
 .tracks-trips-peek-anchor {
   position: absolute;
   left: 0;

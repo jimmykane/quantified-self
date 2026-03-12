@@ -1,14 +1,31 @@
 import { Injectable, inject } from '@angular/core';
-import { ActivityInterface, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES } from '@sports-alliance/sports-lib';
-import { get, set } from 'idb-keyval';
+import { ActivityInterface, ActivityTypes, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES } from '@sports-alliance/sports-lib';
+import { del, get, set } from 'idb-keyval';
 import { AppEventInterface } from '../../../functions/src/shared/app-event.interface';
 import { AppOriginalFileHydrationService, DownloadFileOptions } from './app.original-file-hydration.service';
 import { LoggerService } from './logger.service';
+
+export interface CachedMyTracksJumpHeatPoint {
+  lng: number;
+  lat: number;
+  hangTime: number | null;
+  distance: number | null;
+}
 
 export interface CachedMyTracksActivityPolyline {
   activityId: string | null;
   activityIndex: number;
   coordinates: number[][];
+  activityTypeValue: string | number | null;
+  activityTypeLabel: string;
+  durationValue: number | null;
+  distanceValue: number | null;
+  durationLabel: string;
+  distanceLabel: string;
+  effortLabel: string | null;
+  effortDisplayLabel: string;
+  effortStatType: string | null;
+  jumpHeatPoints: CachedMyTracksJumpHeatPoint[];
 }
 
 export interface CachedMyTracksEventPolylines {
@@ -21,6 +38,7 @@ export interface ResolvedMyTracksActivityPolyline {
   activity: ActivityInterface;
   activityIndex: number;
   coordinates: number[][];
+  cachedActivity?: CachedMyTracksActivityPolyline;
 }
 
 interface SourceFileGeneration {
@@ -32,7 +50,7 @@ interface SourceFileGeneration {
   providedIn: 'root',
 })
 export class MyTracksPolylineCacheService {
-  private static readonly CACHE_KEY_PREFIX = 'my-tracks-polyline:v1';
+  private static readonly CACHE_KEY_PREFIX = 'my-tracks-polyline:v3';
 
   private logger = inject(LoggerService);
   private originalFileHydrationService = inject(AppOriginalFileHydrationService);
@@ -87,6 +105,17 @@ export class MyTracksPolylineCacheService {
     }
   }
 
+  public async deleteEventPolylines(cacheKey: string): Promise<void> {
+    try {
+      await del(cacheKey);
+    } catch (error) {
+      this.logger.warn('[MyTracksPolylineCacheService] Failed to delete event polylines from cache.', {
+        cacheKey,
+        error,
+      });
+    }
+  }
+
   public extractTrackPolylines(activities: ActivityInterface[]): CachedMyTracksEventPolylines {
     const normalizedActivities = activities || [];
     return {
@@ -102,6 +131,16 @@ export class MyTracksPolylineCacheService {
           activityId: this.getActivityId(activity),
           activityIndex,
           coordinates,
+          activityTypeValue: this.getActivityTypeValue(activity),
+          activityTypeLabel: this.resolveActivityTypeLabel(activity),
+          durationValue: null,
+          distanceValue: null,
+          durationLabel: '-',
+          distanceLabel: '-',
+          effortLabel: null,
+          effortDisplayLabel: '-',
+          effortStatType: null,
+          jumpHeatPoints: [],
         });
         return accumulator;
       }, []),
@@ -111,12 +150,17 @@ export class MyTracksPolylineCacheService {
   public hasMatchingActivityIdentity(
     activities: ActivityInterface[],
     cachedPolylines: CachedMyTracksEventPolylines | undefined,
+    allowUnknownIdentity: boolean = false,
   ): cachedPolylines is CachedMyTracksEventPolylines {
     if (!cachedPolylines) {
       return false;
     }
 
     const signature = this.buildActivityIdentitySignature(activities || []);
+    if (allowUnknownIdentity && signature.length === 0 && cachedPolylines.activityCount > 0) {
+      return true;
+    }
+
     if (cachedPolylines.activityCount !== signature.length) {
       return false;
     }
@@ -132,12 +176,56 @@ export class MyTracksPolylineCacheService {
     return signature.every((identity, index) => cachedPolylines.activityIdentitySignature[index] === identity);
   }
 
+  public hasCompleteTrackMetadata(cachedPolylines: CachedMyTracksEventPolylines | undefined): cachedPolylines is CachedMyTracksEventPolylines {
+    if (!cachedPolylines) {
+      return false;
+    }
+
+    if (
+      !Number.isFinite(cachedPolylines.activityCount)
+      || cachedPolylines.activityCount < 0
+      || !Array.isArray(cachedPolylines.activityIdentitySignature)
+      || cachedPolylines.activityIdentitySignature.length !== cachedPolylines.activityCount
+      || !Array.isArray(cachedPolylines.trackActivities)
+    ) {
+      return false;
+    }
+
+    return cachedPolylines.trackActivities.every((activity) => this.hasCompleteTrackActivityMetadata(activity));
+  }
+
+  public resolveTrackPolylinesFromCache(
+    cachedPolylines: CachedMyTracksEventPolylines,
+  ): ResolvedMyTracksActivityPolyline[] {
+    if (!cachedPolylines?.trackActivities?.length) {
+      return [];
+    }
+
+    return cachedPolylines.trackActivities.reduce<ResolvedMyTracksActivityPolyline[]>((accumulator, cachedActivity) => {
+      if (!this.hasValidCoordinates(cachedActivity?.coordinates)) {
+        return accumulator;
+      }
+
+      accumulator.push({
+        activity: this.buildSyntheticActivityFromCached(cachedActivity),
+        activityIndex: cachedActivity.activityIndex,
+        coordinates: cachedActivity.coordinates,
+        cachedActivity,
+      });
+      return accumulator;
+    }, []);
+  }
+
   public resolveTrackPolylines(
     activities: ActivityInterface[],
     cachedPolylines: CachedMyTracksEventPolylines,
   ): ResolvedMyTracksActivityPolyline[] {
-    if (!activities || activities.length === 0 || !cachedPolylines?.trackActivities?.length) {
+    if (!cachedPolylines?.trackActivities?.length) {
       return [];
+    }
+
+    if (!activities || activities.length === 0) {
+      return this.resolveTrackPolylinesFromCache(cachedPolylines);
     }
 
     const activitiesById = new Map<string, { activity: ActivityInterface; activityIndex: number }>();
@@ -156,7 +244,7 @@ export class MyTracksPolylineCacheService {
       const resolvedActivity = activityMatch?.activity || fallbackActivity;
       const resolvedActivityIndex = activityMatch?.activityIndex ?? cachedActivity.activityIndex;
 
-      if (!resolvedActivity || !Array.isArray(cachedActivity.coordinates) || cachedActivity.coordinates.length <= 1) {
+      if (!resolvedActivity || !this.hasValidCoordinates(cachedActivity.coordinates)) {
         return accumulator;
       }
 
@@ -164,6 +252,7 @@ export class MyTracksPolylineCacheService {
         activity: resolvedActivity,
         activityIndex: resolvedActivityIndex,
         coordinates: cachedActivity.coordinates,
+        cachedActivity,
       });
       return accumulator;
     }, []);
@@ -197,6 +286,37 @@ export class MyTracksPolylineCacheService {
       : null;
   }
 
+  private getActivityTypeValue(activity: ActivityInterface): string | number | null {
+    const rawType = (activity as any)?.type;
+    if (typeof rawType === 'string' && rawType.length > 0) {
+      return rawType;
+    }
+    if (typeof rawType === 'number' && Number.isFinite(rawType)) {
+      return rawType;
+    }
+    return null;
+  }
+
+  private resolveActivityTypeLabel(activity: ActivityInterface): string {
+    const rawType = this.getActivityTypeValue(activity);
+    if (rawType === null || rawType === undefined) {
+      return 'Activity';
+    }
+    if (typeof rawType === 'number' && ActivityTypes[rawType]) {
+      return String(ActivityTypes[rawType]);
+    }
+    return String(rawType);
+  }
+
+  private buildSyntheticActivityFromCached(cachedActivity: CachedMyTracksActivityPolyline): ActivityInterface {
+    const activityId = cachedActivity.activityId;
+    const typeValue = cachedActivity.activityTypeValue;
+    return {
+      type: typeValue ?? undefined,
+      getID: () => activityId,
+    } as ActivityInterface;
+  }
+
   private buildActivityIdentitySignature(activities: ActivityInterface[]): string[] {
     return (activities || []).map((activity, activityIndex) => {
       const activityId = this.getActivityId(activity);
@@ -209,6 +329,62 @@ export class MyTracksPolylineCacheService {
         : 'unknown';
       return `idx:${activityIndex}:type:${activityType}`;
     });
+  }
+
+  private hasCompleteTrackActivityMetadata(activity: CachedMyTracksActivityPolyline | undefined): boolean {
+    return !!activity
+      && typeof activity.activityId === 'string'
+      && activity.activityId.trim().length > 0
+      && this.hasValidCoordinates(activity.coordinates)
+      && this.hasValidActivityTypeValue(activity.activityTypeValue)
+      && typeof activity.activityTypeLabel === 'string'
+      && activity.activityTypeLabel.trim().length > 0
+      && this.isNullableNonNegativeNumber(activity.durationValue)
+      && this.isNullableNonNegativeNumber(activity.distanceValue)
+      && typeof activity.durationLabel === 'string'
+      && activity.durationLabel.length > 0
+      && typeof activity.distanceLabel === 'string'
+      && activity.distanceLabel.length > 0
+      && typeof activity.effortLabel === 'string'
+      && activity.effortLabel.length > 0
+      && typeof activity.effortDisplayLabel === 'string'
+      && activity.effortDisplayLabel.length > 0
+      && typeof activity.effortStatType === 'string'
+      && activity.effortStatType.length > 0
+      && Array.isArray(activity.jumpHeatPoints)
+      && activity.jumpHeatPoints.every((point) => this.isValidJumpHeatPoint(point));
+  }
+
+  private hasValidCoordinates(coordinates: number[][] | undefined): boolean {
+    return Array.isArray(coordinates)
+      && coordinates.length > 1
+      && coordinates.every((coordinate) =>
+        Array.isArray(coordinate)
+        && coordinate.length >= 2
+        && Number.isFinite(coordinate[0])
+        && Number.isFinite(coordinate[1])
+        && Math.abs(coordinate[0]) <= 180
+        && Math.abs(coordinate[1]) <= 90
+      );
+  }
+
+  private hasValidActivityTypeValue(value: string | number | null): boolean {
+    return (typeof value === 'string' && value.trim().length > 0)
+      || (typeof value === 'number' && Number.isFinite(value));
+  }
+
+  private isNullableNonNegativeNumber(value: number | null): boolean {
+    return value === null || (typeof value === 'number' && Number.isFinite(value) && value >= 0);
+  }
+
+  private isValidJumpHeatPoint(point: CachedMyTracksJumpHeatPoint | undefined): boolean {
+    return !!point
+      && Number.isFinite(point.lng)
+      && Number.isFinite(point.lat)
+      && Math.abs(point.lng) <= 180
+      && Math.abs(point.lat) <= 90
+      && this.isNullableNonNegativeNumber(point.hangTime)
+      && this.isNullableNonNegativeNumber(point.distance);
   }
 
   private getSourceFilePaths(event: AppEventInterface): string[] {

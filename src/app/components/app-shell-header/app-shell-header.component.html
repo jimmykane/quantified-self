@@ -1,0 +1,61 @@
+<nav class="custom-header mat-typography" [style.top.px]="bannerHeight">
+  <button mat-icon-button (click)="toggleSidenav.emit()" class="hamburger-link">
+    <mat-icon class="larger_icon">menu</mat-icon>
+  </button>
+
+  <mat-icon class="app-icon header-logo" svgIcon="logo" (click)="logoClick.emit()"></mat-icon>
+
+  <span class="fill-space"></span>
+
+  @if (authState === null && !isDashboardRoute && !isLoginRoute) {
+  <button mat-flat-button class="right qs-mat-accent" disabled>
+    Loading
+  </button>
+  }
+  <app-processing-indicator class="right"></app-processing-indicator>
+
+  @if (authState !== null) {
+  <button mat-icon-button class="right" (click)="whatsNewClick.emit()" matTooltip="What's New"
+    aria-label="View recent updates">
+    <mat-icon class="qs-app-badge qs-app-badge--small"
+      [matBadge]="unreadWhatsNewCount" [matBadgeHidden]="unreadWhatsNewCount === 0"
+      aria-hidden="false">campaign</mat-icon>
+  </button>
+  }
+
+  @if (authState === true && !isDashboardRoute) {
+  <button mat-flat-button class="right qs-mat-accent" (click)="dashboardClick.emit()"
+    [matTooltip]="isHandset ? 'Dashboard' : ''" [class.icon-only]="isHandset">
+    @if (isHandset) {
+    <mat-icon>dashboard</mat-icon>
+    }
+    @if (!isHandset) {
+    <span>Dashboard</span>
+    }
+  </button>
+  }
+
+  @if (showUploadActivities) {
+  <app-upload-activities class="right" [isHandset]="isHandset">
+  </app-upload-activities>
+  }
+
+  @if (isAdminUser && !isAdminRoute) {
+  <button mat-icon-button class="right admin-button" matTooltip="Admin Dashboard"
+    (click)="adminClick.emit()">
+    <mat-icon>admin_panel_settings</mat-icon>
+  </button>
+  }
+
+  @if (authState === false && !isLoginRoute) {
+  <button mat-flat-button class="right qs-mat-accent" (click)="loginClick.emit()"
+    [matTooltip]="isHandset ? 'Login or Register' : ''" [class.icon-only]="isHandset">
+    @if (isHandset) {
+    <mat-icon>login</mat-icon>
+    }
+    @if (!isHandset) {
+    <span>Login or Register</span>
+    }
+  </button>
+  }
+</nav>

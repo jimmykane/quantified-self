@@ -458,6 +458,46 @@ describe('PricingComponent', () => {
         expect(content).not.toContain('your first month is free for new members');
     });
 
+    it('should render the current free plan state as a disabled button', async () => {
+        const paymentService = TestBed.inject(AppPaymentService);
+        const userService = TestBed.inject(AppUserService);
+        const recurringPaidProduct: StripeProduct = {
+            id: 'prod_basic',
+            active: true,
+            name: 'Basic',
+            description: 'Basic plan',
+            role: 'basic',
+            images: [],
+            metadata: { role: 'basic' },
+            prices: [{
+                id: 'price_basic',
+                active: true,
+                currency: 'usd',
+                unit_amount: 1000,
+                description: 'Monthly basic',
+                type: 'recurring',
+                interval: 'month',
+                interval_count: 1,
+                trial_period_days: null,
+                recurring: { interval: 'month' }
+            }]
+        };
+
+        vi.spyOn(userService, 'getSubscriptionRole').mockResolvedValue('free');
+        vi.spyOn(paymentService, 'getProducts').mockReturnValue(of([recurringPaidProduct]));
+        vi.spyOn(paymentService, 'hasPaidSubscriptionHistory').mockResolvedValue(false);
+
+        await component.ngOnInit();
+        fixture.detectChanges();
+
+        const currentPlanButton = fixture.nativeElement.querySelector('button.current-plan-button') as HTMLButtonElement | null;
+
+        expect(currentPlanButton).toBeTruthy();
+        expect(currentPlanButton?.disabled).toBe(true);
+        expect(currentPlanButton?.textContent).toContain('Current Plan');
+        expect(fixture.nativeElement.querySelector('.current-plan-chip')).toBeNull();
+    });
+
     it('should render pro subscription details inside manage container', async () => {
         const paymentService = TestBed.inject(AppPaymentService);
         const userService = TestBed.inject(AppUserService);

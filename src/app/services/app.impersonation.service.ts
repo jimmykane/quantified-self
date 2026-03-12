@@ -97,6 +97,7 @@ export class AppImpersonationService {
         try {
             const result = await this.functionsService.call<void, { token: string }>('stopImpersonation');
             await this.authService.loginWithCustomToken(result.data.token);
+            await this.ensureAdminClaimIsReady();
             this.redirectTo('/admin');
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : 'Unknown error';
@@ -112,6 +113,46 @@ export class AppImpersonationService {
 
     private redirectTo(path: string): void {
         this.windowService.windowRef.location.assign(path);
+    }
+
+    private async ensureAdminClaimIsReady(): Promise<void> {
+        let authUser = this.resolveCurrentAuthUserOrThrow();
+
+        const tokenResult = await authUser.getIdTokenResult();
+        if (tokenResult.claims['admin'] === true) {
+            return;
+        }
+
+        const maxRefreshAttempts = 3;
+        for (let attempt = 1; attempt <= maxRefreshAttempts; attempt += 1) {
+            authUser = this.resolveCurrentAuthUserOrThrow();
+            await authUser.getIdToken(true);
+            const refreshedTokenResult = await authUser.getIdTokenResult();
+            if (refreshedTokenResult.claims['admin'] === true) {
+                return;
+            }
+
+            if (attempt < maxRefreshAttempts) {
+                await this.waitForAdminClaimRetry();
+            }
+        }
+
+        throw new Error('Admin permissions are not ready yet. Please try again.');
+    }
+
+    private resolveCurrentAuthUserOrThrow() {
+        const authUser = this.authService.currentUser;
+        if (!authUser) {
+            throw new Error('Admin session restoration did not complete. Please try again.');
+        }
+
+        return authUser;
+    }
+
+    private waitForAdminClaimRetry(): Promise<void> {
+        return new Promise((resolve) => {
+            setTimeout(resolve, 1000);
+        });
     }
 
     private buildStartErrorMessage(error: unknown): string {

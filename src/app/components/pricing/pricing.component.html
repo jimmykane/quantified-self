@@ -157,14 +157,15 @@
           <!-- Current Plan Indicator -->
           @if ((product.metadata['role'] === 'free' && (!currentRole || currentRole === 'free')) || (currentRole &&
           product.metadata['role'] === currentRole)) {
-          <div class="current-plan-chip">
-            <mat-chip-row highlighted class="current-plan-indicator pricing-chip-primary"
-              [style.backgroundColor]="product.metadata['role'] === 'free' ? 'grey' : null"
-              [style.color]="product.metadata['role'] === 'free' ? 'white' : null">
-              <mat-icon matChipAvatar>check_circle</mat-icon>
-              Current Plan
-            </mat-chip-row>
-          </div>
+          <button
+            mat-stroked-button
+            type="button"
+            class="current-plan-button"
+            [class.current-plan-button-free]="product.metadata['role'] === 'free'"
+            disabled>
+            <mat-icon>check_circle</mat-icon>
+            Current Plan
+          </button>
           }
 
 

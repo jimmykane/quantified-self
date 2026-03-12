@@ -1,13 +1,11 @@
-<section class="map-actions">
-  <span [matTooltip]="user ? 'Map layers' : 'Sign in to use this'">
-    <button mat-icon-button type="button"
-      class="qs-action-menu-icon-button map-actions__icon-button"
-      [matMenuTriggerFor]="menuPanel.menu" [disabled]="!user || disabled"
-      aria-label="Map layers">
-      <mat-icon>layers</mat-icon>
-    </button>
-  </span>
-</section>
+<button type="button"
+  class="my-tracks-map-layers-control__button"
+  [matMenuTriggerFor]="menuPanel.menu"
+  [disabled]="!user || disabled"
+  [matTooltip]="user ? 'Map layers' : 'Sign in to use this'"
+  aria-label="Map layers">
+  <mat-icon class="mapboxgl-ctrl-icon my-tracks-map-layers-control__icon" aria-hidden="true">layers</mat-icon>
+</button>
 <app-map-layers-menu-panel #menuPanel
   [user]="user"
   [disabled]="disabled"

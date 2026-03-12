@@ -44,11 +44,16 @@ interface BoundInteractionHandlers {
   onMouseLeave: () => void;
 }
 
+interface DeferredRenderRegistration {
+  callback: () => void;
+  tryRun: () => void;
+}
+
 @Injectable({
   providedIn: 'root'
 })
 export class MapboxStartPointLayerService {
-  private pendingRenderKeysByMap = new WeakMap<any, Set<string>>();
+  private pendingRendersByMap = new WeakMap<any, Map<string, DeferredRenderRegistration>>();
   private interactionHandlersByMap = new WeakMap<any, BoundInteractionHandlers>();
 
   constructor(private logger: LoggerService) { }
@@ -214,6 +219,7 @@ export class MapboxStartPointLayerService {
     ids: Pick<MapboxStartPointLayerRenderConfig, 'sourceId' | 'layerId' | 'hitLayerId'>
   ): void {
     if (!map || !ids) return;
+    this.cancelDeferredRender(map, `${ids.sourceId}:${ids.layerId}:${ids.hitLayerId}`);
     this.unbindInteraction(map);
 
     if (map.getLayer?.(ids.hitLayerId)) {
@@ -268,36 +274,61 @@ export class MapboxStartPointLayerService {
 
   private deferRender(map: any, key: string, callback: () => void): void {
     if (!map?.on || !key) return;
-    const pendingKeys = this.getPendingKeySet(map);
-    if (pendingKeys.has(key)) return;
-    pendingKeys.add(key);
+    const pendingRenders = this.getPendingRenderMap(map);
+    const existingRegistration = pendingRenders.get(key);
+    if (existingRegistration) {
+      existingRegistration.callback = callback;
+      return;
+    }
 
-    const tryRun = () => {
-      if (!this.isStyleReady(map)) return;
-      pendingKeys.delete(key);
-      if (map?.off) {
-        map.off('style.load', tryRun);
-        map.off('styledata', tryRun);
-        map.off('load', tryRun);
-        map.off('idle', tryRun);
+    const registration: DeferredRenderRegistration = {
+      callback,
+      tryRun: () => {
+        if (!this.isStyleReady(map)) return;
+        const activeRegistration = this.getPendingRenderMap(map).get(key);
+        if (activeRegistration !== registration) {
+          return;
+        }
+        this.detachDeferredRenderListeners(map, registration.tryRun);
+        this.getPendingRenderMap(map).delete(key);
+        registration.callback();
       }
-      callback();
     };
+    pendingRenders.set(key, registration);
 
-    map.on('style.load', tryRun);
-    map.on('styledata', tryRun);
-    map.on('load', tryRun);
-    map.on('idle', tryRun);
-    tryRun();
+    map.on('style.load', registration.tryRun);
+    map.on('styledata', registration.tryRun);
+    map.on('load', registration.tryRun);
+    map.on('idle', registration.tryRun);
+    registration.tryRun();
   }
 
-  private getPendingKeySet(map: any): Set<string> {
-    let keySet = this.pendingRenderKeysByMap.get(map);
-    if (!keySet) {
-      keySet = new Set<string>();
-      this.pendingRenderKeysByMap.set(map, keySet);
+  private cancelDeferredRender(map: any, key: string): void {
+    if (!map || !key) return;
+    const pendingRenders = this.pendingRendersByMap.get(map);
+    const registration = pendingRenders?.get(key);
+    if (!registration) {
+      return;
     }
-    return keySet;
+    this.detachDeferredRenderListeners(map, registration.tryRun);
+    pendingRenders?.delete(key);
+  }
+
+  private detachDeferredRenderListeners(map: any, tryRun: () => void): void {
+    if (!map?.off) return;
+    map.off('style.load', tryRun);
+    map.off('styledata', tryRun);
+    map.off('load', tryRun);
+    map.off('idle', tryRun);
+  }
+
+  private getPendingRenderMap(map: any): Map<string, DeferredRenderRegistration> {
+    let renderMap = this.pendingRendersByMap.get(map);
+    if (!renderMap) {
+      renderMap = new Map<string, DeferredRenderRegistration>();
+      this.pendingRendersByMap.set(map, renderMap);
+    }
+    return renderMap;
   }
 
   private normalizeMinZoom(minzoom: number | undefined): number {

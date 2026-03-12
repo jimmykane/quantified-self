@@ -180,108 +180,8 @@ section.component-container {
   flex: 1 1 auto;
 }
 
-/**
- Styles for the main page spinner (legacy cube loader used in-app)
-  */
-.spinner-container {
-  display: flex;
-  width: 100vw;
-  height: 100vh;
-}
-
-.sk-cube-grid {
-  margin: auto;
-  width: 40px;
-  height: 40px;
-  position: relative;
-}
-
-.sk-cube-grid .sk-cube {
-  width: 33%;
-  height: 33%;
-  background-color: #333;
-  float: left;
-  -webkit-animation: sk-cubeGridScaleDelay 1.3s infinite ease-in-out;
-  animation: sk-cubeGridScaleDelay 1.3s infinite ease-in-out;
-}
-
 .dark-theme .sk-cube-grid .sk-cube {
   background-color: #eee;
-}
-
-.sk-cube-grid .sk-cube1 {
-  -webkit-animation-delay: 0.2s;
-  animation-delay: 0.2s;
-}
-
-.sk-cube-grid .sk-cube2 {
-  -webkit-animation-delay: 0.3s;
-  animation-delay: 0.3s;
-}
-
-.sk-cube-grid .sk-cube3 {
-  -webkit-animation-delay: 0.4s;
-  animation-delay: 0.4s;
-}
-
-.sk-cube-grid .sk-cube4 {
-  -webkit-animation-delay: 0.1s;
-  animation-delay: 0.1s;
-}
-
-.sk-cube-grid .sk-cube5 {
-  -webkit-animation-delay: 0.2s;
-  animation-delay: 0.2s;
-}
-
-.sk-cube-grid .sk-cube6 {
-  -webkit-animation-delay: 0.3s;
-  animation-delay: 0.3s;
-}
-
-.sk-cube-grid .sk-cube7 {
-  -webkit-animation-delay: 0s;
-  animation-delay: 0s;
-}
-
-.sk-cube-grid .sk-cube8 {
-  -webkit-animation-delay: 0.1s;
-  animation-delay: 0.1s;
-}
-
-.sk-cube-grid .sk-cube9 {
-  -webkit-animation-delay: 0.2s;
-  animation-delay: 0.2s;
-}
-
-@-webkit-keyframes sk-cubeGridScaleDelay {
-
-  0%,
-  70%,
-  100% {
-    -webkit-transform: scale3D(1, 1, 1);
-    transform: scale3D(1, 1, 1);
-  }
-
-  35% {
-    -webkit-transform: scale3D(0, 0, 1);
-    transform: scale3D(0, 0, 1);
-  }
-}
-
-@keyframes sk-cubeGridScaleDelay {
-
-  0%,
-  70%,
-  100% {
-    -webkit-transform: scale3D(1, 1, 1);
-    transform: scale3D(1, 1, 1);
-  }
-
-  35% {
-    -webkit-transform: scale3D(0, 0, 1);
-    transform: scale3D(0, 0, 1);
-  }
 }
 
 
@@ -289,8 +189,6 @@ section.component-container {
   position: relative;
   // background: white; // Removed to allow theme inheritance
 }
-
-
 
 
 .avatar {
@@ -849,21 +747,12 @@ mat-table {
   }
 }
 
-.qs-whats-new-dialog {
-  .mat-mdc-dialog-content {
-    padding: 0 !important;
-    overflow: auto !important;
-    scrollbar-gutter: stable;
-  }
-}
-
 /* Shared overlay surface system.
    One global overlay theme, with semantic content variants for components rendered inside
    dialog/bottom-sheet shells. Use --flat only for report/feed style content that should not
    stack a second surface inside an already styled overlay shell. */
 .qs-dialog-container,
 .qs-bottom-sheet-container,
-.qs-whats-new-dialog,
 .qs-whats-new-page {
   --qs-overlay-section-bg: var(--mat-sys-surface-container-high);
   --qs-overlay-section-border: var(--mat-sys-outline-variant);
@@ -883,7 +772,6 @@ mat-table {
    .qs-overlay-section. */
 .qs-dialog-container :is(.mat-mdc-card, .mat-expansion-panel, .qs-glass-card-panel):not(.qs-overlay-flat):not(.mat-mdc-dialog-container):not(.mat-mdc-dialog-surface),
 .qs-bottom-sheet-container :is(.mat-mdc-card, .mat-expansion-panel, .qs-glass-card-panel):not(.qs-overlay-flat):not(.mat-bottom-sheet-container),
-.qs-whats-new-dialog :is(.mat-mdc-card, .mat-expansion-panel, .qs-glass-card-panel):not(.qs-overlay-flat):not(.mat-mdc-dialog-container):not(.mat-mdc-dialog-surface),
 .qs-whats-new-page :is(.mat-mdc-card, .mat-expansion-panel, .qs-glass-card-panel):not(.qs-overlay-flat) {
   background: var(--qs-overlay-section-bg) !important;
   border: 1px solid var(--qs-overlay-section-border);

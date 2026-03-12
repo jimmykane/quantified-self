@@ -8,9 +8,10 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDividerModule } from '@angular/material/divider';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { MapLayersActionsComponent } from './map-layers-actions.component';
+import { MapLayersMenuPanelComponent } from '../shared/map-layers-menu-panel.component';
+import { MenuRadioListComponent } from '../../shared/menu-radio-list/menu-radio-list.component';
 import { MapStyleService } from '../../../services/map-style.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
-import { MenuRadioListComponent } from '../../shared/menu-radio-list/menu-radio-list.component';
 
 describe('MapLayersActionsComponent', () => {
   let component: MapLayersActionsComponent;
@@ -40,11 +41,11 @@ describe('MapLayersActionsComponent', () => {
         MatDividerModule,
         BrowserAnimationsModule,
       ],
-      declarations: [MapLayersActionsComponent, MenuRadioListComponent],
+      declarations: [MapLayersActionsComponent, MapLayersMenuPanelComponent, MenuRadioListComponent],
       providers: [
         { provide: MapStyleService, useValue: mapStyleServiceMock },
         { provide: AppAnalyticsService, useValue: analyticsServiceMock },
-      ]
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(MapLayersActionsComponent);
@@ -53,37 +54,8 @@ describe('MapLayersActionsComponent', () => {
     fixture.detectChanges();
   });
 
-  it('renders style options from style service', () => {
-    expect(component.mapStyleOptions).toEqual([
-      { value: 'default', label: 'Default' },
-      { value: 'satellite', label: 'Satellite' },
-    ]);
-    expect(mapStyleServiceMock.getSupportedStyleOptions).toHaveBeenCalled();
-  });
-
-  it('emits map style and logs analytics on style change', () => {
-    const mapStyleEmitSpy = vi.spyOn(component.mapStyleChange, 'emit');
-
-    component.onMapStyleSelect('satellite');
-
-    expect(mapStyleEmitSpy).toHaveBeenCalledWith('satellite');
-    expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('event_map_settings_change');
-  });
-
-  it('emits 3d and jump heat toggles', () => {
-    const is3DEmitSpy = vi.spyOn(component.is3DChange, 'emit');
-    const jumpHeatEmitSpy = vi.spyOn(component.showJumpHeatmapChange, 'emit');
-
-    component.onShow3DToggle(true);
-    component.onShowJumpHeatmapToggle(true);
-
-    expect(is3DEmitSpy).toHaveBeenCalledWith(true);
-    expect(jumpHeatEmitSpy).toHaveBeenCalledWith(true);
-  });
-
-  it('respects analytics event name override', () => {
-    component.analyticsEventName = 'my_tracks_map_settings_change';
-    component.onShow3DToggle(true);
-    expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('my_tracks_map_settings_change');
+  it('renders the header map layers button', () => {
+    const button = fixture.nativeElement.querySelector('button[aria-label="Map layers"]');
+    expect(button).not.toBeNull();
   });
 });

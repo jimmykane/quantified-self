@@ -44,7 +44,13 @@ describe('AppImpersonationService', () => {
         userSignal.set(null);
         authServiceMock.currentUser = null;
         adminServiceMock.impersonateUser.mockReturnValue(of({ token: 'custom-token' }));
-        authServiceMock.loginWithCustomToken.mockResolvedValue(undefined);
+        authServiceMock.loginWithCustomToken.mockImplementation(async () => {
+            const restoredAdminUser = createAuthUser('admin-uid', { admin: true });
+            authServiceMock.currentUser = restoredAdminUser;
+            return {
+                user: restoredAdminUser
+            };
+        });
         functionsServiceMock.call.mockResolvedValue({
             data: {
                 token: 'admin-token'
@@ -168,6 +174,84 @@ describe('AppImpersonationService', () => {
         expect(service.isReturning()).toBe(false);
     });
 
+    it('should retry admin-claim refresh before redirecting to admin', async () => {
+        const restoredAdminUser = createAuthUser('admin-uid', [{}, {}, { admin: true }]);
+        authServiceMock.loginWithCustomToken.mockImplementation(async () => {
+            authServiceMock.currentUser = restoredAdminUser;
+            return {
+                user: restoredAdminUser
+            };
+        });
+        const waitForRetrySpy = vi.spyOn(service as any, 'waitForAdminClaimRetry').mockResolvedValue(undefined);
+        authServiceMock.currentUser = { uid: 'impersonated-user' };
+        userSignal.set({
+            uid: 'user-1',
+            impersonatedBy: 'admin-uid'
+        });
+
+        await service.returnToAdmin();
+
+        expect(restoredAdminUser.getIdToken).toHaveBeenCalledTimes(2);
+        expect(waitForRetrySpy).toHaveBeenCalledTimes(1);
+        expect(windowServiceMock.windowRef.location.assign).toHaveBeenCalledWith('/admin');
+    });
+
+    it('should re-read current auth user between admin-claim retries', async () => {
+        const firstRestoredAdminUser = createAuthUser('admin-uid', [{}, {}]);
+        const secondRestoredAdminUser = createAuthUser('admin-uid', [{ admin: true }]);
+
+        authServiceMock.loginWithCustomToken.mockImplementation(async () => {
+            authServiceMock.currentUser = firstRestoredAdminUser;
+            return {
+                user: firstRestoredAdminUser
+            };
+        });
+
+        const waitForRetrySpy = vi.spyOn(service as any, 'waitForAdminClaimRetry').mockImplementation(async () => {
+            authServiceMock.currentUser = secondRestoredAdminUser;
+        });
+
+        authServiceMock.currentUser = { uid: 'impersonated-user' };
+        userSignal.set({
+            uid: 'user-1',
+            impersonatedBy: 'admin-uid'
+        });
+
+        await service.returnToAdmin();
+
+        expect(waitForRetrySpy).toHaveBeenCalledTimes(1);
+        expect(firstRestoredAdminUser.getIdToken).toHaveBeenCalledTimes(1);
+        expect(secondRestoredAdminUser.getIdToken).toHaveBeenCalledTimes(1);
+        expect(windowServiceMock.windowRef.location.assign).toHaveBeenCalledWith('/admin');
+    });
+
+    it('should fail return-to-admin when admin claim retries are exhausted', async () => {
+        const restoredAdminUser = createAuthUser('admin-uid', [{}, {}, {}, {}]);
+        authServiceMock.loginWithCustomToken.mockImplementation(async () => {
+            authServiceMock.currentUser = restoredAdminUser;
+            return {
+                user: restoredAdminUser
+            };
+        });
+        const waitForRetrySpy = vi.spyOn(service as any, 'waitForAdminClaimRetry').mockResolvedValue(undefined);
+        authServiceMock.currentUser = { uid: 'impersonated-user' };
+        userSignal.set({
+            uid: 'user-1',
+            impersonatedBy: 'admin-uid'
+        });
+
+        await expect(service.returnToAdmin()).rejects.toThrow('Admin permissions are not ready yet. Please try again.');
+
+        expect(restoredAdminUser.getIdToken).toHaveBeenCalledTimes(3);
+        expect(waitForRetrySpy).toHaveBeenCalledTimes(2);
+        expect(windowServiceMock.windowRef.location.assign).not.toHaveBeenCalledWith('/admin');
+        expect(snackBarMock.open).toHaveBeenCalledWith(
+            'Could not return to admin: Admin permissions are not ready yet. Please try again.',
+            'Close',
+            { duration: 4000 }
+        );
+    });
+
     it('should reject return-to-admin when there is no authenticated user', async () => {
         userSignal.set({
             uid: 'user-1',
@@ -256,5 +340,25 @@ function createDeferred<T>() {
         promise,
         resolve,
         reject
+    };
+}
+
+function createAuthUser(
+    uid: string,
+    claims: Record<string, unknown> | Array<Record<string, unknown>>
+) {
+    const claimsSequence = Array.isArray(claims) ? claims : [claims];
+    let claimsReadCount = 0;
+
+    return {
+        uid,
+        getIdTokenResult: vi.fn().mockImplementation(async () => {
+            const claimIndex = Math.min(claimsReadCount, claimsSequence.length - 1);
+            claimsReadCount += 1;
+            return {
+                claims: claimsSequence[claimIndex]
+            };
+        }),
+        getIdToken: vi.fn().mockResolvedValue('id-token')
     };
 }
