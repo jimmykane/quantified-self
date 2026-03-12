@@ -13,7 +13,7 @@
 <div [class.has-banner]="hasBanner" class="app-layout-wrapper"
   [style.--qs-layout-top-offset]="layoutTopOffsetPx + 'px'"
   [style.--qs-effective-top-offset]="layoutTopOffsetPx + 'px'"
-  [style.--qs-banner-height]="(showNavigation ? bannerHeight : 0) + 'px'">
+  [style.--qs-banner-height]="(showNavigation() ? bannerHeight : 0) + 'px'">
   <app-grace-period-banner (heightChanged)="onBannerHeightChanged($event)"></app-grace-period-banner>
 
   <app-route-loader></app-route-loader>
@@ -24,11 +24,11 @@
   <app-maintenance [message]="maintenanceMessage()"></app-maintenance>
   } @else {
   <!-- New Header Layout -->
-  @if (showNavigation) {
+  @if (showNavigation()) {
   <app-shell-header [bannerHeight]="bannerHeight" [class.app-shell-header--hidden]="headerHidden"
     [authState]="authState" [isDashboardRoute]="isDashboardRoute" [isLoginRoute]="isLoginRoute"
     [isAdminRoute]="isAdminRoute" [isHandset]="isHandset()"
-    [showUploadActivities]="showUploadActivities" [isAdminUser]="isAdminUser"
+    [showUploadActivities]="showUploadActivities()" [isAdminUser]="isAdminUser"
     [unreadWhatsNewCount]="unreadWhatsNewCount"
     (toggleSidenav)="toggleSidenav()" (logoClick)="onLogoClick()"
     (whatsNewClick)="openWhatsNew()" (dashboardClick)="navigateToDashboard()"
@@ -37,7 +37,7 @@
   }
 
   <mat-sidenav-container class="app-sidenav-container" [style.margin-top.px]="layoutTopOffsetPx">
-    @if (showNavigation) {
+    @if (showNavigation()) {
     <mat-sidenav #sidenav [mode]="'over'" [fixedInViewport]="true" [fixedTopGap]="layoutTopOffsetPx"
       [autoFocus]="false">
       <app-sidenav></app-sidenav>

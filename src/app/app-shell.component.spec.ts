@@ -161,7 +161,7 @@ describe('AppShellComponent', () => {
         // Mock router URL
         mockRouter.url = '/subscriptions';
 
-        expect(component.showNavigation).toBe(true);
+        expect(component.showNavigation()).toBe(true);
     });
 
     it('should show navigation for free users on dashboard', () => {
@@ -172,7 +172,7 @@ describe('AppShellComponent', () => {
         // Mock router URL
         mockRouter.url = '/dashboard';
 
-        expect(component.showNavigation).toBe(true);
+        expect(component.showNavigation()).toBe(true);
     });
 
     it('should show navigation for basic users on subscriptions page', () => {
@@ -183,7 +183,7 @@ describe('AppShellComponent', () => {
         // Mock router URL
         mockRouter.url = '/subscriptions';
 
-        expect(component.showNavigation).toBe(true);
+        expect(component.showNavigation()).toBe(true);
     });
 
     it('should include grace period banner component', () => {
@@ -318,7 +318,7 @@ describe('AppShellComponent', () => {
         (mockRouter.events as Subject<any>).next(new NavigationEnd(1, '/onboarding/profile', '/onboarding/profile'));
 
         expect(component.isOnboardingRoute).toBe(true);
-        expect(component.showNavigation).toBe(true);
+        expect(component.showNavigation()).toBe(true);
         expect(component.headerHidden).toBe(false);
     });
 
@@ -355,10 +355,10 @@ describe('AppShellComponent', () => {
     it('should expose showUploadActivities only on dashboard with user', () => {
         syncRoute('/dashboard');
         component['currentUser'] = { uid: 'u1' };
-        expect(component.showUploadActivities).toBe(true);
+        expect(component.showUploadActivities()).toBe(true);
 
         syncRoute('/subscriptions');
-        expect(component.showUploadActivities).toBe(false);
+        expect(component.showUploadActivities()).toBe(false);
     });
 
     it('should place the impersonation banner inside the maintenance branch', () => {

@@ -87,6 +87,23 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private shellNavigationEffectsService = inject(ShellNavigationEffectsService);
   public routeAnimationState = this.shellNavigationEffectsService.animationState;
   private readonly onboardingCompletedSignal = signal(true); // Default to true to avoid hiding chrome of non-authenticated users prematurely
+  private readonly currentUserSignal = signal<AppUserInterface | null>(null);
+  public readonly showNavigation = computed(() => {
+    if (!this.onboardingCompletedSignal()) {
+      return false;
+    }
+    // Requirement: Hide sidenav/toolbar if user has NO product (undefined role) AND is on pricing page
+    // If they have 'free', 'basic', or 'pro', they are good.
+    // Constraint removed: Free tier users (no role) should still see nav on pricing page
+    // if (this.currentUserSignal() && this.currentUrlSignal().includes('pricing')) {
+    //   const stripeRole = this.currentUserSignal()?.stripeRole;
+    //   if (!stripeRole) {
+    //     return false;
+    //   }
+    // }
+    return true;
+  });
+  public readonly showUploadActivities = computed(() => this.isDashboardRouteComputed() && !!this.currentUserSignal());
   public authService = inject(AppAuthService);
   private userService = inject(AppUserService);
   public router = inject(Router);
@@ -103,7 +120,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
   public maintenanceMessage = this.remoteConfigService.maintenanceMessage;
   public maintenanceLoading = this.remoteConfigService.isLoading;
   public configLoaded = this.remoteConfigService.configLoaded;
-  public currentUser: AppUserInterface | null = null;
   public isAdminUser = false;
   public currentTheme$: Observable<AppThemes> = this.themeService.getAppTheme();
   private readonly headerHiddenSignal = signal(false);
@@ -188,8 +204,16 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.themeOverlayClassSignal.set(value);
   }
 
+  get currentUser(): AppUserInterface | null {
+    return this.currentUserSignal();
+  }
+
+  set currentUser(value: AppUserInterface | null) {
+    this.currentUserSignal.set(value);
+  }
+
   get layoutTopOffsetPx(): number {
-    if (!this.showNavigation) {
+    if (!this.showNavigation()) {
       return 0;
     }
 
@@ -276,10 +300,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
     return this.isHomeRouteComputed();
   }
 
-  get showUploadActivities(): boolean {
-    return this.isDashboardRoute && !!this.currentUser;
-  }
-
   private updateOnboardingState() {
     this.syncCurrentRouteState();
     const user = this.currentUser;
@@ -321,7 +341,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   }
 
   private shouldForceVisibleHeader(): boolean {
-    return this.isOnboardingRoute || !this.showNavigation;
+    return this.isOnboardingRoute || !this.showNavigation();
   }
 
   private syncCurrentRouteState(): void {
@@ -331,22 +351,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
     }
 
     this.currentUrlSignal.set(currentUrl);
-  }
-
-  get showNavigation(): boolean {
-    if (!this.onboardingCompleted) {
-      return false;
-    }
-    // Requirement: Hide sidenav/toolbar if user has NO product (undefined role) AND is on pricing page
-    // If they have 'free', 'basic', or 'pro', they are good.
-    // Constraint removed: Free tier users (no role) should still see nav on pricing page
-    // if (this.currentUser && this.router.url.includes('pricing')) {
-    //   const stripeRole = (this.currentUser as any).stripeRole;
-    //   if (!stripeRole) {
-    //     return false;
-    //   }
-    // }
-    return true;
   }
 
   public onLogoClick() {
@@ -434,7 +438,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private updateHeaderVisibilityFromScroll(scrollTop: number): void {
     const nextScrollTop = Math.max(0, scrollTop);
 
-    if (!this.showNavigation) {
+    if (!this.showNavigation()) {
       this.lastShellScrollTop = nextScrollTop;
       this.setHeaderHidden(false);
       return;
