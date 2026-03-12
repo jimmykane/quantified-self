@@ -60,6 +60,12 @@ dayjs.extend(localizedFormat);
 type SubscriptionHistoryState = 'active' | 'scheduled' | 'canceled' | 'never';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
+type ChartSetOptionSettings = Parameters<EChartsType['setOption']>[1];
+
+const EMPTY_CHART_UPDATE_SETTINGS: ChartSetOptionSettings = {
+    notMerge: true,
+    lazyUpdate: false
+};
 
 @Component({
     selector: 'app-admin-user-management',
@@ -483,7 +489,19 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     }
 
     private renderAuthChart(): void {
-        if (!this.chartHost.getChart() || !this.providerData || Object.keys(this.providerData).length === 0) {
+        if (!this.chartHost.getChart()) {
+            return;
+        }
+
+        if (!this.providerData || Object.keys(this.providerData).length === 0) {
+            this.chartHost.setOption({
+                backgroundColor: 'transparent',
+                tooltip: { show: false },
+                legend: { show: false },
+                series: [],
+                graphic: []
+            }, EMPTY_CHART_UPDATE_SETTINGS);
+            this.chartHost.scheduleResize();
             return;
         }
 
@@ -504,10 +522,14 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
 
         if (!hasUserGrowthData && !hasSubscriptionData) {
             this.userGrowthTrendChartHost.setOption({
+                backgroundColor: 'transparent',
+                tooltip: { show: false },
+                legend: { show: false },
                 xAxis: { type: 'category', data: [] },
                 yAxis: { type: 'value' },
-                series: []
-            }, ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS);
+                series: [],
+                graphic: []
+            }, EMPTY_CHART_UPDATE_SETTINGS);
             this.userGrowthTrendChartHost.scheduleResize();
             return;
         }
@@ -559,6 +581,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
         const centerSubtitle = topProvider ? `${providerLabels[topProvider] || topProvider}` : 'No data';
 
         const option: ChartOption = {
+            backgroundColor: 'transparent',
             tooltip: {
                 trigger: 'item',
                 formatter: '{b}: {c} ({d}%)'
@@ -853,6 +876,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
         }
 
         const option: ChartOption = {
+            backgroundColor: 'transparent',
             tooltip: {
                 trigger: 'axis',
                 axisPointer: { type: 'shadow' },
