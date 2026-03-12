@@ -19,6 +19,15 @@
     max-width: 800px;
     width: 100%;
     margin-bottom: 2rem;
+    --mat-stepper-header-hover-state-layer-color: transparent;
+    --mat-stepper-header-focus-state-layer-color: transparent;
+    --mat-stepper-header-selected-state-label-text-size: var(--mat-stepper-header-label-text-size);
+}
+
+.onboarding-form {
+    margin: 0;
+    max-width: none;
+    gap: 0;
 }
 
 .step-content {
@@ -26,12 +35,16 @@
     display: flex;
     flex-direction: column;
     gap: 1rem;
+    width: 100%;
+    max-width: 600px;
+    margin: 0 auto;
 }
 
 .step-intro {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+    text-align: center;
 }
 
 .step-title {
@@ -121,23 +134,25 @@
     padding: 1rem;
 }
 
-.qs-form-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 1rem;
-    margin-top: 1rem;
-}
-
-.pricing-step {
-    padding-top: 1rem;
-}
-
-.pricing-step .actions {
+.onboarding-actions {
     display: flex;
     justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+    width: 100%;
     margin-top: 2rem;
     padding-top: 1rem;
     border-top: 1px solid var(--mat-sys-outline-variant);
+}
+
+.onboarding-actions button {
+    min-width: 9rem;
+}
+
+.pricing-step {
+    max-width: none;
+    padding-top: 1rem;
 }
 
 .policy-required-label {
@@ -164,8 +179,12 @@
         padding-bottom: 0;
     }
 
-    .qs-form-actions {
+    .onboarding-actions {
         flex-direction: column-reverse;
         align-items: stretch;
+    }
+
+    .onboarding-actions button {
+        width: 100%;
     }
 }

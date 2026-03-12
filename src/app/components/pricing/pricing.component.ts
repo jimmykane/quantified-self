@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, inject, Output, EventEmitter, PLATFORM_ID } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, Output, EventEmitter, PLATFORM_ID, Input } from '@angular/core';
 import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -39,6 +39,7 @@ interface SubscriptionSummary {
     styleUrls: ['./pricing.component.scss']
 })
 export class PricingComponent implements OnInit, OnDestroy {
+    @Input() isOnboarding = false;
     @Output() planSelected = new EventEmitter<void>();
 
     products$: Observable<StripeProduct[]> | null = null;
@@ -160,6 +161,10 @@ export class PricingComponent implements OnInit, OnDestroy {
         }
 
         return !this.currentRole || this.currentRole === 'free';
+    }
+
+    shouldShowOnboardingFreeContinue(product: StripeProduct): boolean {
+        return this.isOnboarding && product.metadata?.['role'] === 'free' && this.currentRole === null;
     }
 
     getActivityLimitLabel(role: string | null | undefined): string {

@@ -7,6 +7,7 @@ import { of } from 'rxjs';
 import { Auth } from '@angular/fire/auth';
 import { Analytics } from '@angular/fire/analytics';
 import { Router } from '@angular/router';
+import { By } from '@angular/platform-browser';
 
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { USAGE_LIMITS } from '../../../../functions/src/shared/limits';
@@ -496,6 +497,133 @@ describe('PricingComponent', () => {
         expect(currentPlanButton?.disabled).toBe(true);
         expect(currentPlanButton?.textContent).toContain('Current Plan');
         expect(fixture.nativeElement.querySelector('.current-plan-chip')).toBeNull();
+    });
+
+    it('should render an enabled Continue for Free CTA in onboarding when the role is still null', async () => {
+        const paymentService = TestBed.inject(AppPaymentService);
+        const userService = TestBed.inject(AppUserService);
+        const recurringPaidProduct: StripeProduct = {
+            id: 'prod_basic',
+            active: true,
+            name: 'Basic',
+            description: 'Basic plan',
+            role: 'basic',
+            images: [],
+            metadata: { role: 'basic' },
+            prices: [{
+                id: 'price_basic',
+                active: true,
+                currency: 'usd',
+                unit_amount: 1000,
+                description: 'Monthly basic',
+                type: 'recurring',
+                interval: 'month',
+                interval_count: 1,
+                trial_period_days: null,
+                recurring: { interval: 'month' }
+            }]
+        };
+
+        component.isOnboarding = true;
+        vi.spyOn(userService, 'getSubscriptionRole').mockResolvedValue(null);
+        vi.spyOn(paymentService, 'getProducts').mockReturnValue(of([recurringPaidProduct]));
+        vi.spyOn(paymentService, 'hasPaidSubscriptionHistory').mockResolvedValue(false);
+
+        await component.ngOnInit();
+        fixture.detectChanges();
+
+        const buttons = Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[];
+        const continueForFreeButton = buttons.find(button => button.textContent?.includes('Continue for Free')) ?? null;
+
+        expect(continueForFreeButton).toBeTruthy();
+        expect(continueForFreeButton?.disabled).toBe(false);
+        expect(fixture.nativeElement.textContent).not.toContain('Current Plan');
+    });
+
+    it('should call selectFreeTier when the onboarding Continue for Free CTA is clicked', async () => {
+        const paymentService = TestBed.inject(AppPaymentService);
+        const userService = TestBed.inject(AppUserService);
+        const recurringPaidProduct: StripeProduct = {
+            id: 'prod_basic',
+            active: true,
+            name: 'Basic',
+            description: 'Basic plan',
+            role: 'basic',
+            images: [],
+            metadata: { role: 'basic' },
+            prices: [{
+                id: 'price_basic',
+                active: true,
+                currency: 'usd',
+                unit_amount: 1000,
+                description: 'Monthly basic',
+                type: 'recurring',
+                interval: 'month',
+                interval_count: 1,
+                trial_period_days: null,
+                recurring: { interval: 'month' }
+            }]
+        };
+
+        component.isOnboarding = true;
+        vi.spyOn(userService, 'getSubscriptionRole').mockResolvedValue(null);
+        vi.spyOn(paymentService, 'getProducts').mockReturnValue(of([recurringPaidProduct]));
+        vi.spyOn(paymentService, 'hasPaidSubscriptionHistory').mockResolvedValue(false);
+        const selectFreeTierSpy = vi.spyOn(component, 'selectFreeTier').mockResolvedValue(undefined);
+
+        await component.ngOnInit();
+        fixture.detectChanges();
+
+        const continueForFreeButton = fixture.debugElement
+            .queryAll(By.css('button'))
+            .map(button => button.nativeElement as HTMLButtonElement)
+            .find(button => button.textContent?.includes('Continue for Free'));
+
+        continueForFreeButton?.click();
+        await fixture.whenStable();
+
+        expect(selectFreeTierSpy).toHaveBeenCalled();
+    });
+
+    it('should keep showing the disabled Current Plan button outside onboarding when the role is null', async () => {
+        const paymentService = TestBed.inject(AppPaymentService);
+        const userService = TestBed.inject(AppUserService);
+        const recurringPaidProduct: StripeProduct = {
+            id: 'prod_basic',
+            active: true,
+            name: 'Basic',
+            description: 'Basic plan',
+            role: 'basic',
+            images: [],
+            metadata: { role: 'basic' },
+            prices: [{
+                id: 'price_basic',
+                active: true,
+                currency: 'usd',
+                unit_amount: 1000,
+                description: 'Monthly basic',
+                type: 'recurring',
+                interval: 'month',
+                interval_count: 1,
+                trial_period_days: null,
+                recurring: { interval: 'month' }
+            }]
+        };
+
+        component.isOnboarding = false;
+        vi.spyOn(userService, 'getSubscriptionRole').mockResolvedValue(null);
+        vi.spyOn(paymentService, 'getProducts').mockReturnValue(of([recurringPaidProduct]));
+        vi.spyOn(paymentService, 'hasPaidSubscriptionHistory').mockResolvedValue(false);
+
+        await component.ngOnInit();
+        fixture.detectChanges();
+
+        const currentPlanButton = fixture.nativeElement.querySelector('button.current-plan-button') as HTMLButtonElement | null;
+
+        expect(currentPlanButton).toBeTruthy();
+        expect(currentPlanButton?.disabled).toBe(true);
+        expect(currentPlanButton?.textContent).toContain('Current Plan');
+        expect(fixture.nativeElement.textContent).not.toContain('Continue for Free');
     });
 
     it('should render pro subscription details inside manage container', async () => {

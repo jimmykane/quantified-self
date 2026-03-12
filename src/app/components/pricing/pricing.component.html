@@ -154,8 +154,15 @@
           </p>
           }
 
+          <!-- Onboarding-only free CTA -->
+          @if (shouldShowOnboardingFreeContinue(product)) {
+          <button mat-stroked-button type="button" (click)="selectFreeTier()" [disabled]="isLoading">
+            Continue for Free
+          </button>
+          }
+
           <!-- Current Plan Indicator -->
-          @if ((product.metadata['role'] === 'free' && (!currentRole || currentRole === 'free')) || (currentRole &&
+          @else if ((product.metadata['role'] === 'free' && (!currentRole || currentRole === 'free')) || (currentRole &&
           product.metadata['role'] === currentRole)) {
           <button
             mat-stroked-button
