@@ -155,8 +155,7 @@
           }
 
           <!-- Current Plan Indicator -->
-          @if ((product.metadata['role'] === 'free' && (!currentRole || currentRole === 'free')) || (currentRole &&
-          product.metadata['role'] === currentRole)) {
+          @if (!shouldShowOnboardingFreeContinue(product) && isCurrentPlan(product)) {
           <button
             mat-stroked-button
             type="button"
@@ -176,7 +175,7 @@
           @if (currentRole) {
           <!-- Paid user looking at free -->
           <button mat-stroked-button disabled>Included</button>
-          } @else {
+          } @else if (!shouldShowOnboardingFreeContinue(product)) {
           <!-- New User (Role is null) choosing Free -->
           <button mat-stroked-button (click)="selectFreeTier()" [disabled]="isLoading">
             Start Free
@@ -196,6 +195,18 @@
           }
 
         </div>
+
+        @if (shouldShowOnboardingFreeContinue(product)) {
+        <div class="price-section">
+          <button mat-stroked-button type="button" class="continue-free-button" (click)="selectFreeTier()" [disabled]="isLoading">
+            @if (isLoading) {
+            <mat-spinner diameter="20"></mat-spinner>
+            } @else {
+            Continue for Free
+            }
+          </button>
+        </div>
+        }
       </mat-card-content>
     </mat-card>
     }

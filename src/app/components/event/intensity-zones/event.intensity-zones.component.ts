@@ -232,6 +232,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
 
     const option: ChartOption = {
       animation: this.useAnimations === true,
+      backgroundColor: 'transparent',
       textStyle: {
         color: textColor,
         fontFamily: ECHARTS_GLOBAL_FONT_FAMILY

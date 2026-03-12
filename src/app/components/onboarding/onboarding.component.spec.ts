@@ -14,6 +14,8 @@ import { Firestore } from '@angular/fire/firestore';
 import { Functions } from '@angular/fire/functions';
 import { AppPaymentService } from '../../services/app.payment.service';
 import { MatDialog } from '@angular/material/dialog';
+import { By } from '@angular/platform-browser';
+import { PricingComponent } from '../pricing/pricing.component';
 
 describe('OnboardingComponent', () => {
     let component: OnboardingComponent;
@@ -124,6 +126,39 @@ describe('OnboardingComponent', () => {
         expect(component.termsFormGroup.get('acceptTrackingPolicy')).toBeTruthy();
         expect(component.termsFormGroup.get('acceptTos')).toBeTruthy();
         expect(component.termsFormGroup.get('acceptMarketingPolicy')).toBeTruthy();
+    });
+
+    it('should disable stepper ripples on the onboarding stepper', () => {
+        expect(component.stepper.disableRipple).toBe(true);
+    });
+
+    it('should render the legal consent form inside the centered onboarding form shell', () => {
+        const onboardingForm = fixture.nativeElement.querySelector('form.onboarding-form');
+        expect(onboardingForm).toBeTruthy();
+    });
+
+    it('should render the shared onboarding action bar for both steps', () => {
+        const actionBars = fixture.nativeElement.querySelectorAll('.onboarding-actions');
+        expect(actionBars.length).toBe(2);
+    });
+
+    it('should render pricing in onboarding mode for step 2', () => {
+        const pricingComponent = fixture.debugElement.query(By.directive(PricingComponent))?.componentInstance as PricingComponent | undefined;
+
+        expect(pricingComponent).toBeTruthy();
+        expect(pricingComponent?.isOnboarding).toBe(true);
+    });
+
+    it('should disable step 2 footer actions while pricing is loading', () => {
+        component.onPricingLoadingChange(true);
+        fixture.detectChanges();
+
+        const buttons = Array.from(fixture.nativeElement.querySelectorAll('.onboarding-actions button')) as HTMLButtonElement[];
+        const backButton = buttons.find(button => button.textContent?.includes('Back')) ?? null;
+        const continueButton = buttons.find(button => button.textContent?.includes('Continue to')) ?? null;
+
+        expect(backButton?.disabled).toBe(true);
+        expect(continueButton?.disabled).toBe(true);
     });
 
     it('should keep consent controls unchecked by default', () => {
@@ -554,6 +589,16 @@ describe('OnboardingComponent', () => {
 
         expect(component.canFinish).toBe(true);
         expect(finishSpy).toHaveBeenCalled();
+    });
+
+    it('should not trigger finishOnboarding again when planSelected arrives during loading', () => {
+        component.isLoading = true;
+        const finishSpy = vi.spyOn(component as any, 'finishOnboarding').mockResolvedValue(undefined);
+
+        component.onPlanSelected();
+
+        expect(component.canFinish).toBe(true);
+        expect(finishSpy).not.toHaveBeenCalled();
     });
 
     it('should set isPro in checkProStatus', async () => {

@@ -207,6 +207,7 @@ describe('EventCadencePowerComponent', () => {
     fixture.detectChanges();
     await waitForChartStabilization();
 
+    expect(getLastOption().backgroundColor).toBe('transparent');
     expect(getLastOption().tooltip.backgroundColor).toBe('rgba(58,62,68,1)');
   });
 

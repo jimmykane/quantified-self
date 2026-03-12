@@ -148,6 +148,7 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
     if (powerSeries.length === 0) {
       return {
         animation: this.useAnimations === true,
+        backgroundColor: 'transparent',
         legend: { show: false },
         xAxis: [],
         yAxis: [],
@@ -233,6 +234,7 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
 
     return {
       animation: this.useAnimations === true,
+      backgroundColor: 'transparent',
       textStyle: {
         color: textColor,
         fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,

@@ -159,6 +159,7 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
     if (durabilitySeries.length === 0) {
       return {
         animation: this.useAnimations === true,
+        backgroundColor: 'transparent',
         legend: { show: false },
         xAxis: [],
         yAxis: [],
@@ -259,6 +260,7 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
 
     return {
       animation: this.useAnimations === true,
+      backgroundColor: 'transparent',
       textStyle: {
         color: textColor,
         fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,

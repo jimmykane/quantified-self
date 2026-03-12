@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, inject, Output, EventEmitter, PLATFORM_ID } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, Output, EventEmitter, PLATFORM_ID, Input } from '@angular/core';
 import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -39,7 +39,9 @@ interface SubscriptionSummary {
     styleUrls: ['./pricing.component.scss']
 })
 export class PricingComponent implements OnInit, OnDestroy {
+    @Input() isOnboarding = false;
     @Output() planSelected = new EventEmitter<void>();
+    @Output() loadingStateChange = new EventEmitter<boolean>();
 
     products$: Observable<StripeProduct[]> | null = null;
     currentRole: StripeRole | null = null;
@@ -140,10 +142,15 @@ export class PricingComponent implements OnInit, OnDestroy {
     private handleVisibilityChange = () => {
         if (isPlatformBrowser(this.platformId) && !document.hidden) {
             this.logger.log('Page became visible, resetting loading state');
-            this.isLoading = false;
+            this.setLoadingState(false);
             this.loadingPriceId = null;
         }
     };
+
+    private setLoadingState(isLoading: boolean): void {
+        this.isLoading = isLoading;
+        this.loadingStateChange.emit(isLoading);
+    }
 
     shouldShowFirstMonthFreeCopy(product: StripeProduct, price: StripePrice): boolean {
         if (this.hasPaidSubscriptionHistory !== false) {
@@ -160,6 +167,15 @@ export class PricingComponent implements OnInit, OnDestroy {
         }
 
         return !this.currentRole || this.currentRole === 'free';
+    }
+
+    shouldShowOnboardingFreeContinue(product: StripeProduct): boolean {
+        return this.isOnboarding && product.metadata?.['role'] === 'free' && this.currentRole === null;
+    }
+
+    isCurrentPlan(product: StripeProduct): boolean {
+        return (product.metadata?.['role'] === 'free' && (!this.currentRole || this.currentRole === 'free'))
+            || (!!this.currentRole && product.metadata?.['role'] === this.currentRole);
     }
 
     getActivityLimitLabel(role: string | null | undefined): string {
@@ -201,7 +217,7 @@ export class PricingComponent implements OnInit, OnDestroy {
         }
 
         this.loadingPriceId = priceId;
-        this.isLoading = true;
+        this.setLoadingState(true);
 
         try {
             this.analyticsService.logBeginCheckout(
@@ -221,7 +237,7 @@ export class PricingComponent implements OnInit, OnDestroy {
                 this.logger.error('Error starting checkout:', error);
                 alert('Failed to start checkout. Please try again.');
             }
-            this.isLoading = false;
+            this.setLoadingState(false);
             this.loadingPriceId = null;
         }
     }
@@ -250,13 +266,13 @@ export class PricingComponent implements OnInit, OnDestroy {
         }
 
         this.analyticsService.logManageSubscription();
-        this.isLoading = true;
+        this.setLoadingState(true);
         try {
             await this.paymentService.manageSubscriptions();
         } catch (error) {
             this.logger.error('Error managing subscription:', error);
             alert('Failed to redirect to subscription management. Please try again.');
-            this.isLoading = false;
+            this.setLoadingState(false);
         }
     }
 
@@ -282,13 +298,13 @@ export class PricingComponent implements OnInit, OnDestroy {
         }
 
         this.analyticsService.logManageSubscription();
-        this.isLoading = true;
+        this.setLoadingState(true);
         try {
             await this.paymentService.manageSubscriptions();
         } catch (error) {
             this.logger.error('Error redirecting to upgrade flow:', error);
             alert('Failed to open billing portal. Please try again.');
-            this.isLoading = false;
+            this.setLoadingState(false);
         }
     }
 
@@ -303,7 +319,7 @@ export class PricingComponent implements OnInit, OnDestroy {
             return;
         }
 
-        this.isLoading = true;
+        this.setLoadingState(true);
         try {
             this.analyticsService.logSelectFreeTier();
             await this.userService.setFreeTier(userWithRequiredPolicies);
@@ -311,8 +327,9 @@ export class PricingComponent implements OnInit, OnDestroy {
             this.planSelected.emit();
         } catch (error) {
             this.logger.error('Error selecting free tier:', error);
+            alert('Failed to select free tier. Please try again.');
         } finally {
-            this.isLoading = false;
+            this.setLoadingState(false);
         }
     }
 
@@ -323,7 +340,7 @@ export class PricingComponent implements OnInit, OnDestroy {
         }
 
         this.analyticsService.logRestorePurchases('initiated');
-        this.isLoading = true;
+        this.setLoadingState(true);
         try {
             const role = await this.paymentService.restorePurchases();
             this.analyticsService.logRestorePurchases('success', role);
@@ -340,7 +357,7 @@ export class PricingComponent implements OnInit, OnDestroy {
                 }
             });
         } finally {
-            this.isLoading = false;
+            this.setLoadingState(false);
         }
     }
 
@@ -362,6 +379,10 @@ export class PricingComponent implements OnInit, OnDestroy {
     private async getUserWithRequiredPolicies() {
         const user = await this.getCurrentAppUser();
         if (!user) {
+            if (this.isOnboarding) {
+                this.logger.log('[PricingComponent] App user is unavailable during onboarding. Staying on onboarding.');
+                return null;
+            }
             this.router.navigate(['/onboarding'], { queryParams: { returnUrl: '/subscriptions' } });
             return null;
         }
@@ -373,6 +394,11 @@ export class PricingComponent implements OnInit, OnDestroy {
 
         if (termsAccepted) {
             return user;
+        }
+
+        if (this.isOnboarding) {
+            this.logger.log('[PricingComponent] Required legal policies are missing during onboarding. Staying on onboarding.');
+            return null;
         }
 
         this.logger.log('[PricingComponent] Required legal policies are missing. Redirecting to onboarding.');

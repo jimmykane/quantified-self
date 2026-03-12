@@ -331,6 +331,7 @@ describe('EventPowerCurveComponent', () => {
 
     const option = getLastOption();
 
+    expect(option.backgroundColor).toBe('transparent');
     expect(option.tooltip.backgroundColor).toBe('rgba(58,62,68,1)');
     expect(option.legend.textStyle.color).toBe('rgba(223,223,225,1)');
   });
