@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { AppWhatsNewService, ChangelogPost } from './app.whats-new.service';
+import { AppWhatsNewService, ChangelogPost, coerceChangelogPostDate } from './app.whats-new.service';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { AppUserService } from './app.user.service';
 import { Firestore, collectionData, Timestamp } from '@angular/fire/firestore';
@@ -396,8 +396,6 @@ describe('AppWhatsNewService', () => {
     });
 
     it('should coerce numeric zero to the Unix epoch', () => {
-        service = TestBed.inject(AppWhatsNewService);
-
-        expect((service as any).coerceToDate(0)).toEqual(new Date(0));
+        expect(coerceChangelogPostDate(0)).toEqual(new Date(0));
     });
 });

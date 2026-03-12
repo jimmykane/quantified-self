@@ -14,6 +14,42 @@ export interface FirestoreTimestampLike {
 
 export type ChangelogPostDate = Timestamp | Date | string | number | FirestoreTimestampLike | { toDate: () => Date };
 
+export function coerceChangelogPostDate(value: unknown): Date | null {
+    if (value === null || value === undefined) {
+        return null;
+    }
+
+    if (value instanceof Timestamp) {
+        return value.toDate();
+    }
+
+    if (value instanceof Date) {
+        return Number.isNaN(value.getTime()) ? null : value;
+    }
+
+    if (typeof value === 'string' || typeof value === 'number') {
+        const parsed = new Date(value);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+
+    if (typeof value === 'object') {
+        if ('toDate' in value && typeof value.toDate === 'function') {
+            const parsed = value.toDate();
+            return parsed instanceof Date && !Number.isNaN(parsed.getTime()) ? parsed : null;
+        }
+
+        if ('seconds' in value && typeof value.seconds === 'number') {
+            const nanoseconds = 'nanoseconds' in value && typeof value.nanoseconds === 'number'
+                ? value.nanoseconds
+                : 0;
+            const parsed = new Date((value.seconds * 1000) + Math.floor(nanoseconds / 1_000_000));
+            return Number.isNaN(parsed.getTime()) ? null : parsed;
+        }
+    }
+
+    return null;
+}
+
 export interface ChangelogPost {
     id: string;
     title: string;
@@ -63,42 +99,6 @@ export class AppWhatsNewService {
     private readonly user = toSignal(this.authService.user$, { initialValue: null });
     private _localStorageTrigger = signal(0);
 
-    private coerceToDate(value: unknown): Date | null {
-        if (value === null || value === undefined) {
-            return null;
-        }
-
-        if (value instanceof Timestamp) {
-            return value.toDate();
-        }
-
-        if (value instanceof Date) {
-            return Number.isNaN(value.getTime()) ? null : value;
-        }
-
-        if (typeof value === 'string' || typeof value === 'number') {
-            const parsed = new Date(value);
-            return Number.isNaN(parsed.getTime()) ? null : parsed;
-        }
-
-        if (typeof value === 'object') {
-            if ('toDate' in value && typeof value.toDate === 'function') {
-                const parsed = value.toDate();
-                return parsed instanceof Date && !Number.isNaN(parsed.getTime()) ? parsed : null;
-            }
-
-            if ('seconds' in value && typeof value.seconds === 'number') {
-                const nanoseconds = 'nanoseconds' in value && typeof value.nanoseconds === 'number'
-                    ? value.nanoseconds
-                    : 0;
-                const parsed = new Date((value.seconds * 1000) + Math.floor(nanoseconds / 1_000_000));
-                return Number.isNaN(parsed.getTime()) ? null : parsed;
-            }
-        }
-
-        return null;
-    }
-
     // Get the current user's last seen date from appSettings
     // defaulting to account creation for first-time users
     private userLastSeenDate = computed(() => {
@@ -109,19 +109,19 @@ export class AppWhatsNewService {
         if (!user) {
             // Fallback for guest users
             const local = this.localStorage.getItem('whats_new_last_seen');
-            return this.coerceToDate(local) ?? new Date(0);
+            return coerceChangelogPostDate(local) ?? new Date(0);
         }
 
         // Check nested generic settings first, if we move it there as per plan
         const settings = user.settings?.appSettings;
         if (settings && settings.lastSeenChangelogDate) {
-            const lastSeenDate = this.coerceToDate(settings.lastSeenChangelogDate);
+            const lastSeenDate = coerceChangelogPostDate(settings.lastSeenChangelogDate);
             if (lastSeenDate) {
                 return lastSeenDate;
             }
         }
 
-        const creationDate = this.coerceToDate(user.creationDate);
+        const creationDate = coerceChangelogPostDate(user.creationDate);
         if (creationDate) {
             return creationDate;
         }
@@ -131,7 +131,7 @@ export class AppWhatsNewService {
 
     public isUnread(log: ChangelogPost): boolean {
         const lastSeen = this.userLastSeenDate();
-        const logDate = this.coerceToDate(log.date);
+        const logDate = coerceChangelogPostDate(log.date);
         if (!logDate) {
             return false;
         }
@@ -148,7 +148,7 @@ export class AppWhatsNewService {
         const lastSeen = this.userLastSeenDate();
 
         return logs.filter(log => {
-            const logDate = this.coerceToDate(log.date);
+            const logDate = coerceChangelogPostDate(log.date);
             if (!logDate) {
                 return false;
             }

@@ -72,4 +72,17 @@ describe('WhatsNewItemComponent', () => {
         expect(draftTag).toBeTruthy();
         expect(draftTag.nativeElement.textContent).toContain('Draft');
     });
+
+    it('should normalize timestamp-like post dates for display', () => {
+        fixture.componentRef.setInput('post', {
+            ...mockPost,
+            date: {
+                seconds: Date.parse('2026-03-01T00:00:00Z') / 1000,
+                nanoseconds: 0
+            }
+        });
+        fixture.detectChanges();
+
+        expect(component.displayDate()).toEqual(new Date('2026-03-01T00:00:00Z'));
+    });
 });

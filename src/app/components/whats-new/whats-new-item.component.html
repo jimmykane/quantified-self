@@ -5,7 +5,7 @@
 
 <ng-template #metadata let-includeDate="includeDate">
     <span *ngIf="post().version" class="version-tag">{{ post().version }}</span>
-    <span *ngIf="includeDate" class="header-date">{{ post().date.toDate() | date:'mediumDate' }}</span>
+    <span *ngIf="includeDate" class="header-date">{{ displayDate() | date:'mediumDate' }}</span>
     <span class="unpublished-tag" *ngIf="!post().published">Draft</span>
 </ng-template>
 
@@ -17,7 +17,7 @@
                 <ng-container *ngTemplateOutlet="statusDot"></ng-container>
                 <span class="post-title">{{ post().title }}</span>
                 <span class="header-separator">-</span>
-                <span class="header-date">{{ post().date.toDate() | date:'mediumDate' }}</span>
+                <span class="header-date">{{ displayDate() | date:'mediumDate' }}</span>
             </div>
             <div class="header-right">
                 <ng-container *ngTemplateOutlet="metadata; context: { includeDate: false }"></ng-container>
