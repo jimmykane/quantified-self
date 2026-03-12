@@ -85,4 +85,22 @@ describe('WhatsNewItemComponent', () => {
 
         expect(component.displayDate()).toEqual(new Date('2026-03-01T00:00:00Z'));
     });
+
+    it('should recompute the display date when the post input changes', () => {
+        fixture.componentRef.setInput('post', {
+            ...mockPost,
+            date: new Date('2026-03-01T00:00:00Z')
+        });
+        fixture.detectChanges();
+
+        expect(component.displayDate()).toEqual(new Date('2026-03-01T00:00:00Z'));
+
+        fixture.componentRef.setInput('post', {
+            ...mockPost,
+            date: new Date('2026-04-01T00:00:00Z')
+        });
+        fixture.detectChanges();
+
+        expect(component.displayDate()).toEqual(new Date('2026-04-01T00:00:00Z'));
+    });
 });

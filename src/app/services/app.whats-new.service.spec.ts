@@ -6,6 +6,8 @@ import { Firestore, collectionData, Timestamp } from '@angular/fire/firestore';
 import { LoggerService } from './logger.service';
 import { of, BehaviorSubject } from 'rxjs';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { Privacy } from '@sports-alliance/sports-lib';
+import { AppUserInterface } from '../models/app-user.interface';
 
 import { AppWhatsNewLocalStorageService } from './storage/app.whats-new.local.storage.service';
 
@@ -373,24 +375,25 @@ describe('AppWhatsNewService', () => {
             type: 'minor'
         };
 
-        service = TestBed.inject(AppWhatsNewService);
-
-        Object.defineProperty(service as any, 'user', {
-            configurable: true,
-            value: () => ({
-                uid: '123',
-                creationDate: new Date('2026-01-01T00:00:00Z'),
-                settings: {
-                    appSettings: {
-                        lastSeenChangelogDate: '2026-02-15T00:00:00Z'
-                    }
+        collectionDataMock.mockReturnValue(of([seenPost, unreadPost]));
+        const user: AppUserInterface = {
+            uid: '123',
+            privacy: Privacy.Private,
+            acceptedDataPolicy: true,
+            acceptedPrivacyPolicy: true,
+            acceptedTrackingPolicy: true,
+            acceptedDiagnosticsPolicy: true,
+            creationDate: new Date('2026-01-01T00:00:00Z'),
+            settings: {
+                appSettings: {
+                    lastSeenChangelogDate: '2026-02-15T00:00:00Z'
                 }
-            })
-        });
-        Object.defineProperty(service as any, 'changelogs', {
-            configurable: true,
-            value: () => [seenPost, unreadPost]
-        });
+            }
+        };
+
+        userSubject.next(user);
+        service = TestBed.inject(AppWhatsNewService);
+        TestBed.flushEffects();
 
         expect(service.unreadCount()).toBe(1);
     });
