@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BenchmarkReportComponent } from './benchmark-report.component';
-import { BenchmarkResult } from '../../../../functions/src/shared/app-event.interface';
+import { BenchmarkResult } from '@shared/app-event.interface';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MatIconModule } from '@angular/material/icon';
 

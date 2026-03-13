@@ -19,7 +19,7 @@ import { User } from '@sports-alliance/sports-lib';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { COROS_HISTORY_IMPORT_LIMIT_MONTHS, GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS, HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT, HISTORY_IMPORT_PROCESSING_CAPACITY_PER_DAY_PER_USER_ESTIMATE } from '../../../../functions/src/shared/history-import.constants';
+import { COROS_HISTORY_IMPORT_LIMIT_MONTHS, GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS, HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT, HISTORY_IMPORT_PROCESSING_CAPACITY_PER_DAY_PER_USER_ESTIMATE } from '@shared/history-import.constants';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { AppAuthService } from '../../authentication/app.auth.service';
@@ -324,4 +324,3 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     return `Estimated to finish ${completionDate.fromNow()} (${completionDate.format('dddd')}).`;
   }
 }
-

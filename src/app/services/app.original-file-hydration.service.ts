@@ -14,8 +14,8 @@ import { LoggerService } from './logger.service';
 import { AppEventUtilities } from '../utils/app.event.utilities';
 import { AppCacheService } from './app.cache.service';
 import { EventJSONSanitizer } from '../utils/event-json-sanitizer';
-import { AppEventInterface, OriginalFileMetaData } from '../../../functions/src/shared/app-event.interface';
-import { createParsingOptions } from '../../../functions/src/shared/parsing-options';
+import { AppEventInterface, OriginalFileMetaData } from '@shared/app-event.interface';
+import { createParsingOptions } from '@shared/parsing-options';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
 
 export interface ParseOptions {

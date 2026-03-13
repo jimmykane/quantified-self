@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { AppEventInterface, BenchmarkResult } from '../../../functions/src/shared/app-event.interface';
+import { AppEventInterface, BenchmarkResult } from '@shared/app-event.interface';
 
 @Injectable({
   providedIn: 'root'

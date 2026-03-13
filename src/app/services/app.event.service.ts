@@ -18,8 +18,8 @@ import {
 } from '@sports-alliance/sports-lib';
 import { EventExporterGPX } from '@sports-alliance/sports-lib';
 
-import { sanitizeActivityFirestoreWritePayload, sanitizeEventFirestoreWritePayload } from '../../../functions/src/shared/firestore-write-sanitizer';
-import { createParsingOptions } from '../../../functions/src/shared/parsing-options';
+import { sanitizeActivityFirestoreWritePayload, sanitizeEventFirestoreWritePayload } from '@shared/firestore-write-sanitizer';
+import { createParsingOptions } from '@shared/parsing-options';
 import { EventImporterSuuntoJSON } from '@sports-alliance/sports-lib';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { EventImporterTCX } from '@sports-alliance/sports-lib';
@@ -31,7 +31,7 @@ import { EventUtilities } from '@sports-alliance/sports-lib';
 import { EventJSONSanitizer } from '../utils/event-json-sanitizer';
 import type { EventJSONSanitizerIssue } from '../utils/event-json-sanitizer';
 
-import { AppEventInterface } from '../../../functions/src/shared/app-event.interface'; // Import Shared Interface
+import { AppEventInterface } from '@shared/app-event.interface';
 import { AppEventUtilities } from '../utils/app.event.utilities';
 import { LoggerService } from './logger.service';
 import { AppFileService } from './app.file.service';

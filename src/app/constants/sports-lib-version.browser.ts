@@ -1,4 +1,4 @@
-import { getSportsLibVersion } from '../../../functions/src/shared/get-sports-lib-version';
+import { getSportsLibVersion } from '@shared/get-sports-lib-version';
 
 declare function require(moduleName: string): any;
 

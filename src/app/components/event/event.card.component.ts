@@ -13,7 +13,7 @@ import { debounceTime } from 'rxjs/operators';
 import { firstValueFrom, Subscription } from 'rxjs';
 
 import { ActivityInterface } from '@sports-alliance/sports-lib';
-import { AppEventInterface } from '../../../../functions/src/shared/app-event.interface';
+import { AppEventInterface } from '@shared/app-event.interface';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppAuthService } from '../../authentication/app.auth.service';

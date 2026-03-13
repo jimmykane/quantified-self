@@ -1,0 +1,24 @@
+.container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 80vh;
+  padding: 20px;
+}
+
+.cancel-card {
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+  padding: 20px;
+}
+
+.cancel-card-actions {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.cancel-card-actions__spacer {
+  flex: 1 1 auto;
+}

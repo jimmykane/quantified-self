@@ -33,6 +33,9 @@ jobs:
         run: |
           curl "https://firebasestorage.googleapis.com/v0/b/quantified-self-io.appspot.com/o/assets%2Flicenses.json?alt=media&token=470a21d4-571d-432d-a6f6-95df7a24de33" --create-dirs -o licenses.json
 
+      - name: Install dependencies
+        run: npm ci
+
       - name: Build functions
         run: |
           cd functions
@@ -45,9 +48,8 @@ jobs:
           sed -i 's/"name": "Quantified Self"/"name": "Quantified Self Beta"/g' src/manifest.json
           sed -i 's/"short_name": "Quantified Self"/"short_name": "QS Beta"/g' src/manifest.json
 
-      - name: Install, clean and build
+      - name: Clean and build
         run: |
-          npm ci
           npm run build-beta
 
       - name: Create SA key

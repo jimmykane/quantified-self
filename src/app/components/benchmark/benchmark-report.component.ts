@@ -12,7 +12,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { buildDiffMapForStats, buildStatDisplayList } from '../../helpers/stats-diff.helper';
-import { BenchmarkQualityIssue, BenchmarkResult } from '../../../../functions/src/shared/app-event.interface';
+import { BenchmarkQualityIssue, BenchmarkResult } from '@shared/app-event.interface';
 
 // Grade thresholds for GNSS accuracy (CEP50 in meters)
 const GNSS_THRESHOLDS = {

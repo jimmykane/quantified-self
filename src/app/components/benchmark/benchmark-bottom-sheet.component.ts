@@ -2,7 +2,7 @@ import { Component, ElementRef, Inject, ViewChild, inject } from '@angular/core'
 import { DatePipe } from '@angular/common';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { BenchmarkResult } from '../../../../functions/src/shared/app-event.interface';
+import { BenchmarkResult } from '@shared/app-event.interface';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { AppBreakpoints } from '../../constants/breakpoints';
 import { EventInterface, UserSummariesSettingsInterface, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';

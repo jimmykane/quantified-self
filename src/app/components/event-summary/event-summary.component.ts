@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges, ChangeDetectorRef } from '@angular/core';
-import { AppEventInterface, BenchmarkOptions, getBenchmarkPairKey } from '../../../../functions/src/shared/app-event.interface';
+import { AppEventInterface, BenchmarkOptions, getBenchmarkPairKey } from '@shared/app-event.interface';
 import {
   User,
   ActivityInterface,
@@ -42,7 +42,7 @@ export class EventSummaryComponent implements OnChanges {
   @Input() statsToShow: string[] = [];
 
   // Local state for on-demand generated benchmark
-  benchmarkResult: import('../../../../functions/src/shared/app-event.interface').BenchmarkResult | null = null;
+  benchmarkResult: import('@shared/app-event.interface').BenchmarkResult | null = null;
 
   private heroStatLookup = new Map<string, { value: string; unit: string }>();
   private hasDevicesValue = false;

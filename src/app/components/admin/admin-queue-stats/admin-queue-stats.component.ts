@@ -144,6 +144,7 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
         const gridColor = themeTokens.splitLineColor;
 
         const option = {
+            backgroundColor: 'transparent',
             tooltip: {
                 trigger: 'axis',
                 axisPointer: { type: 'shadow' },

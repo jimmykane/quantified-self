@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { ActivityInterface, ActivityTypes, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES } from '@sports-alliance/sports-lib';
 import { del, get, set } from 'idb-keyval';
-import { AppEventInterface } from '../../../functions/src/shared/app-event.interface';
+import { AppEventInterface } from '@shared/app-event.interface';
 import { AppOriginalFileHydrationService, DownloadFileOptions } from './app.original-file-hydration.service';
 import { LoggerService } from './logger.service';
 

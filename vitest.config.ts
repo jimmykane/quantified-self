@@ -6,6 +6,11 @@ export default defineConfig({
     plugins: [angular({
         tsconfig: './src/tsconfig.spec.json',
     })],
+    resolve: {
+        alias: {
+            '@shared': resolve(__dirname, 'src/shared'),
+        }
+    },
     test: {
         server: {
             deps: {
