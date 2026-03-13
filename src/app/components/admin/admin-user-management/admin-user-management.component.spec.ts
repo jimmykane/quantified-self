@@ -412,6 +412,8 @@ describe('AdminUserManagementComponent', () => {
         });
 
         expect((option as any).backgroundColor).toBe('transparent');
+        expect((option as any).tooltip.show).toBe(true);
+        expect((option as any).legend.show).toBe(true);
         expect((option as any).series[0].data).toHaveLength(2);
     });
 
@@ -441,6 +443,38 @@ describe('AdminUserManagementComponent', () => {
         expect(option.backgroundColor).toBe('transparent');
         expect(option.series).toEqual([]);
         expect(option.graphic).toEqual([]);
+    });
+
+    it('should restore auth chart tooltip and legend visibility after empty-state render', async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        mockEchartsService.setOption.mockClear();
+
+        (component as any).updateAuthChart({});
+        (component as any).updateAuthChart({ 'google.com': 3, 'password': 1 });
+
+        const option = mockEchartsService.setOption.mock.calls.at(-1)?.[1];
+        expect(option.tooltip.show).toBe(true);
+        expect(option.legend.show).toBe(true);
+        expect(option.series[0].data).toHaveLength(2);
+    });
+
+    it('should restore growth chart tooltip and legend visibility after empty-state render', async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        mockEchartsService.setOption.mockClear();
+
+        (component as any).updateUserGrowthTrendChart(null);
+        (component as any).updateSubscriptionHistoryTrendChart(null);
+        (component as any).renderUserGrowthTrendChart();
+        (component as any).updateUserGrowthTrendChart(mockTrend);
+        (component as any).updateSubscriptionHistoryTrendChart(mockSubscriptionTrend);
+        (component as any).renderUserGrowthTrendChart();
+
+        const option = mockEchartsService.setOption.mock.calls.at(-1)?.[1];
+        expect(option.tooltip.show).toBe(true);
+        expect(option.legend.show).toBe(true);
+        expect(option.series).toHaveLength(7);
     });
 
     it('should handle null user growth trend data safely', () => {

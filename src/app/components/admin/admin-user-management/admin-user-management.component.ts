@@ -583,10 +583,12 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
         const option: ChartOption = {
             backgroundColor: 'transparent',
             tooltip: {
+                show: true,
                 trigger: 'item',
                 formatter: '{b}: {c} ({d}%)'
             },
             legend: {
+                show: true,
                 orient: isMobileLayout ? 'horizontal' : 'vertical',
                 left: isMobileLayout ? 'center' : undefined,
                 right: isMobileLayout ? undefined : 10,
@@ -878,6 +880,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
         const option: ChartOption = {
             backgroundColor: 'transparent',
             tooltip: {
+                show: true,
                 trigger: 'axis',
                 axisPointer: { type: 'shadow' },
                 textStyle: {
@@ -885,6 +888,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
                 }
             },
             legend: {
+                show: true,
                 top: legendTop,
                 textStyle: {
                     color: textColor,
