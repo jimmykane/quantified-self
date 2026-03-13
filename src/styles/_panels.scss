@@ -45,7 +45,7 @@
 }
 
 .dark-theme {
-  --qs-glass-panel-bg: var(--mat-sys-surface, #121212);
+  --qs-glass-panel-bg: var(--mat-sys-surface, rgba(30, 30, 30, 0.8));
 
   .mat-mdc-card:not(.qs-card-plain):not(.qs-overlay-flat):not(.mat-mdc-dialog-surface):not(.mat-mdc-dialog-container) {
     --mat-card-elevated-container-color: var(--qs-glass-panel-bg);
