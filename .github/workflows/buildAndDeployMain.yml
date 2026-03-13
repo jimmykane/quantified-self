@@ -32,6 +32,9 @@ jobs:
         run: |
           curl "https://firebasestorage.googleapis.com/v0/b/quantified-self-io.appspot.com/o/assets%2Flicenses.json?alt=media&token=470a21d4-571d-432d-a6f6-95df7a24de33" --create-dirs -o licenses.json
 
+      - name: Install dependencies
+        run: npm ci
+
       - name: Build functions
         run: |
           cd functions
@@ -39,9 +42,8 @@ jobs:
           npm run build
           cd ..
 
-      - name: Install, clean and build
+      - name: Clean and build
         run: |
-          npm ci
           npm run clean
           npm run build-production
 
