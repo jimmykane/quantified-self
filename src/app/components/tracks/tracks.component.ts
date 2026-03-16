@@ -161,9 +161,6 @@ export class TracksComponent implements OnInit, OnDestroy {
   private startPointPopupRepositionHandler: (() => void) | null = null;
   private pendingStartPointPopupCorrectionRaf: number | null = null;
   private mapLayersControlHandle: MapboxLayersControlHandle | null = null;
-  private panPerformanceModeStartHandler: (() => void) | null = null;
-  private panPerformanceModeEndHandler: (() => void) | null = null;
-  private panPerformanceModeResetTimer: ReturnType<typeof setTimeout> | null = null;
   private backgroundActivityRefreshQueue: Array<() => Promise<void>> = [];
   private backgroundActivityRefreshActiveCount = 0;
   private backgroundActivityRefreshEventIds = new Set<string>();
@@ -363,7 +360,6 @@ export class TracksComponent implements OnInit, OnDestroy {
           });
         });
         this.bindStartPointPopupMapListeners(mapInstance);
-        this.bindPanPerformanceModeListeners(mapInstance);
         this.mapboxAutoResizeService.bind(mapInstance, {
           container: this.mapDiv?.nativeElement,
           onResize: () => {
@@ -445,7 +441,6 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.unsubscribeFromAll()
     this.bottomSheet.dismiss();
     this.tracksMapManager.setStartMarkerSelectionHandler(null);
-    this.unbindPanPerformanceModeListeners();
     this.unbindStartPointPopupMapListeners();
     if (this.pendingStartPointPopupCorrectionRaf !== null && typeof cancelAnimationFrame === 'function') {
       cancelAnimationFrame(this.pendingStartPointPopupCorrectionRaf);
@@ -1931,36 +1926,6 @@ export class TracksComponent implements OnInit, OnDestroy {
     });
   }
 
-  private bindPanPerformanceModeListeners(map: any): void {
-    this.unbindPanPerformanceModeListeners();
-    if (!map?.on) return;
-
-    this.panPerformanceModeStartHandler = () => {
-      if (this.panPerformanceModeResetTimer !== null) {
-        clearTimeout(this.panPerformanceModeResetTimer);
-        this.panPerformanceModeResetTimer = null;
-      }
-      this.tracksMapManager.setPanPerformanceMode(true);
-    };
-
-    this.panPerformanceModeEndHandler = () => {
-      if (this.panPerformanceModeResetTimer !== null) {
-        clearTimeout(this.panPerformanceModeResetTimer);
-      }
-      this.panPerformanceModeResetTimer = setTimeout(() => {
-        this.panPerformanceModeResetTimer = null;
-        this.tracksMapManager.setPanPerformanceMode(false);
-      }, 90);
-    };
-
-    ['movestart', 'zoomstart', 'rotatestart', 'pitchstart'].forEach((eventName) => {
-      map.on(eventName, this.panPerformanceModeStartHandler);
-    });
-    ['moveend', 'zoomend', 'rotateend', 'pitchend'].forEach((eventName) => {
-      map.on(eventName, this.panPerformanceModeEndHandler);
-    });
-  }
-
   private unbindStartPointPopupMapListeners(): void {
     if (!this.startPointPopupRepositionHandler) return;
     const map = this.tracksMapManager.getMap();
@@ -1970,29 +1935,6 @@ export class TracksComponent implements OnInit, OnDestroy {
       });
     }
     this.startPointPopupRepositionHandler = null;
-  }
-
-  private unbindPanPerformanceModeListeners(): void {
-    if (this.panPerformanceModeResetTimer !== null) {
-      clearTimeout(this.panPerformanceModeResetTimer);
-      this.panPerformanceModeResetTimer = null;
-    }
-    const map = this.tracksMapManager.getMap();
-    if (map?.off) {
-      if (this.panPerformanceModeStartHandler) {
-        ['movestart', 'zoomstart', 'rotatestart', 'pitchstart'].forEach((eventName) => {
-          map.off(eventName, this.panPerformanceModeStartHandler);
-        });
-      }
-      if (this.panPerformanceModeEndHandler) {
-        ['moveend', 'zoomend', 'rotateend', 'pitchend'].forEach((eventName) => {
-          map.off(eventName, this.panPerformanceModeEndHandler);
-        });
-      }
-    }
-    this.panPerformanceModeStartHandler = null;
-    this.panPerformanceModeEndHandler = null;
-    this.tracksMapManager.setPanPerformanceMode(false);
   }
 
   private updateSelectedStartPointScreenPosition(): void {

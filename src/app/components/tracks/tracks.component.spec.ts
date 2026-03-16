@@ -454,6 +454,20 @@ describe('TracksComponent', () => {
     expect(mockMap.addControl).toHaveBeenCalledWith(mockMapLayersControlHandle.control, 'bottom-right');
   });
 
+  it('should not bind transient pan-performance listeners during map initialization', async () => {
+    await component.ngOnInit();
+
+    const registeredEvents = mockMap.on.mock.calls.map((call: any[]) => call[0]);
+
+    expect(registeredEvents).not.toContain('zoomstart');
+    expect(registeredEvents).not.toContain('moveend');
+    expect(registeredEvents).not.toContain('zoomend');
+    expect(registeredEvents).not.toContain('rotatestart');
+    expect(registeredEvents).not.toContain('rotateend');
+    expect(registeredEvents).not.toContain('pitchstart');
+    expect(registeredEvents).not.toContain('pitchend');
+  });
+
   describe('Initialization robustness', () => {
     it('should skip geolocation flyTo when track bounds were already applied', () => {
       const originalGeolocation = navigator.geolocation;
