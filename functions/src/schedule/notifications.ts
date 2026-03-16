@@ -2,7 +2,7 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
-import { USAGE_LIMITS } from '../shared/limits';
+import { USAGE_LIMITS } from '../../../shared/limits';
 
 // Reusing the same ROLE_DISPLAY_NAMES map or importing simple map if needed
 const ROLE_DISPLAY_NAMES: { [key: string]: string } = {

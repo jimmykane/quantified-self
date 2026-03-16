@@ -1,5 +1,5 @@
-import { AppEventInterface, FirestoreActivityJSON, FirestoreEventJSON } from './app-event.interface';
-import { sanitizeActivityFirestoreWritePayload, sanitizeEventFirestoreWritePayload } from './firestore-write-sanitizer';
+import { AppEventInterface, FirestoreActivityJSON, FirestoreEventJSON } from '../../../shared/app-event.interface';
+import { sanitizeActivityFirestoreWritePayload, sanitizeEventFirestoreWritePayload } from '../../../shared/firestore-write-sanitizer';
 
 /**
  * Logger adapter interface for cross-environment compatibility.

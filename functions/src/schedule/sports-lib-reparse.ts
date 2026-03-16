@@ -20,7 +20,7 @@ import {
 } from '../reparse/sports-lib-reparse.service';
 import { enqueueSportsLibReparseTask } from '../shared/cloud-tasks';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
-import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
+import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 
 const SPORTS_LIB_REPARSE_SCAN_CONCURRENCY = 25;
 const SPORTS_LIB_REPARSE_ENQUEUE_SPREAD_SECONDS = 10 * 60;

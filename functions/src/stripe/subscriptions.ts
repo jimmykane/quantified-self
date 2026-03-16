@@ -41,7 +41,7 @@ import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import { reconcileClaims } from './claims';
 import { checkAndSendSubscriptionEmails } from './email-triggers';
-import { GRACE_PERIOD_DAYS } from '../shared/limits';
+import { GRACE_PERIOD_DAYS } from '../../../shared/limits';
 
 /**
  * Firestore Trigger: onSubscriptionUpdated

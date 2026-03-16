@@ -8,7 +8,7 @@ import { reconcileClaims } from '../stripe/claims';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../suunto/constants';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../coros/constants';
 import { GARMIN_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
-import { GRACE_PERIOD_DAYS, getUsageLimitForRole } from '../shared/limits';
+import { GRACE_PERIOD_DAYS, getUsageLimitForRole } from '../../../shared/limits';
 
 const EVENT_PRUNE_BATCH_SIZE = 250;
 const USER_PROCESS_BATCH_SIZE = 10;

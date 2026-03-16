@@ -3,7 +3,7 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { AppFunctionsService } from './app.functions.service';
 import { Functions, getFunctions, httpsCallable } from '@angular/fire/functions';
 import { FirebaseApp } from '@angular/fire/app';
-import { FUNCTIONS_MANIFEST } from '../../shared/functions-manifest';
+import { FUNCTIONS_MANIFEST } from '@shared/functions-manifest';
 
 const mocks = vi.hoisted(() => {
     const callableSpy = vi.fn().mockResolvedValue({ data: 'success' });
@@ -22,7 +22,7 @@ vi.mock('@angular/fire/functions', () => ({
 }));
 
 // Mock the manifest
-vi.mock('../../shared/functions-manifest', () => ({
+vi.mock('@shared/functions-manifest', () => ({
     FUNCTIONS_MANIFEST: {
         'defaultRegionFunc': { name: 'func1', region: 'europe-west2' },
         'otherRegionFunc': { name: 'func2', region: 'europe-west3' }

@@ -86,7 +86,7 @@ vi.mock('../debug-utils', () => ({
     uploadDebugFile: mockUploadDebugFile,
 }));
 
-vi.mock('../shared/parsing-options', () => ({
+vi.mock('../../../shared/parsing-options', () => ({
     createParsingOptions: mockCreateParsingOptions,
 }));
 

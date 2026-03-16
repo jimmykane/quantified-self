@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { UsageLimitExceededError, checkEventUsageLimit, hasBasicAccess, hasProAccess, getUserRoleAndGracePeriod, setEvent, determineRedirectURI, setAccessControlHeadersOnResponse } from './utils';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { SPORTS_LIB_VERSION } from './shared/sports-lib-version.node';
-import { USAGE_LIMITS } from './shared/limits';
+import { USAGE_LIMITS } from '../../shared/limits';
 
 // Hoisted shared/id-generator mock
 vi.mock('./shared/id-generator', () => ({

@@ -14,7 +14,7 @@ import { config } from '../config';
  * Uploads a route to the Suunto app
  */
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
+import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
 
 /**

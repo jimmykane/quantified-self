@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { FirebaseApp } from '@angular/fire/app';
 import { Functions, httpsCallable, getFunctions } from '@angular/fire/functions';
-import { FunctionName, FUNCTIONS_MANIFEST } from '../../shared/functions-manifest';
+import { FunctionName, FUNCTIONS_MANIFEST } from '@shared/functions-manifest';
 
 @Injectable({
     providedIn: 'root'

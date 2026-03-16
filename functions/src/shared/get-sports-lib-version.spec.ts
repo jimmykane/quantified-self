@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { getSportsLibVersion } from './get-sports-lib-version';
+import { getSportsLibVersion } from '../../../shared/get-sports-lib-version';
 
 describe('getSportsLibVersion', () => {
     it('returns the version from the loader', () => {

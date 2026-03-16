@@ -10,7 +10,7 @@ import {
   validateOAuth2State,
 } from '../../OAuth2';
 import { SERVICE_NAME } from '../constants';
-import { FUNCTIONS_MANIFEST } from '../../../../src/shared/functions-manifest';
+import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
 
 
 interface GetAuthRedirectURIRequest {

@@ -10,7 +10,7 @@ import {
   getServiceOAuth2CodeRedirectAndSaveStateToUser,
   validateOAuth2State,
 } from '../../OAuth2';
-import { FUNCTIONS_MANIFEST } from '../../../../src/shared/functions-manifest';
+import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
 
 const SERVICE_NAME = ServiceNames.SuuntoApp;
 

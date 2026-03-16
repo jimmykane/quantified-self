@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { getSportsLibVersion } from './get-sports-lib-version';
+import { getSportsLibVersion } from '../../../shared/get-sports-lib-version';
 
 const nodeRequire = createRequire(__filename);
 const mainPath = nodeRequire.resolve('@sports-alliance/sports-lib');

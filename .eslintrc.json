@@ -6,7 +6,7 @@
     "overrides": [
         {
             "files": [
-                "*.ts"
+                "**/*.ts"
             ],
             "extends": [
                 "eslint:recommended",
@@ -45,12 +45,48 @@
                 "@typescript-eslint/ban-ts-comment": "warn",
                 "no-console": "off",
                 "prefer-const": "warn",
-                "no-case-declarations": "warn"
+                "no-case-declarations": "warn",
+                "no-restricted-imports": [
+                    "error",
+                    {
+                        "patterns": [
+                            "functions/*",
+                            "../functions/*",
+                            "../../functions/*",
+                            "../../../functions/*"
+                        ]
+                    }
+                ]
             }
         },
         {
             "files": [
-                "*.html"
+                "shared/**/*.ts"
+            ],
+            "rules": {
+                "no-restricted-imports": [
+                    "error",
+                    {
+                        "patterns": [
+                            "src/*",
+                            "../src/*",
+                            "../../src/*",
+                            "functions/*",
+                            "../functions/*",
+                            "../../functions/*",
+                            "@angular/*",
+                            "@angular/fire",
+                            "@sentry/angular",
+                            "firebase-functions",
+                            "firebase-admin"
+                        ]
+                    }
+                ]
+            }
+        },
+        {
+            "files": [
+                "**/*.html"
             ],
             "extends": [
                 "plugin:@angular-eslint/template/recommended"

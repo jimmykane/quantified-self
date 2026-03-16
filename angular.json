@@ -156,7 +156,8 @@
           "options": {
             "lintFilePatterns": [
               "src/**/*.ts",
-              "src/**/*.html"
+              "src/**/*.html",
+              "shared/**/*.ts"
             ]
           }
         }

@@ -1,7 +1,7 @@
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
-import { HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT } from './shared/history-import.constants';
+import { HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT } from '../../shared/history-import.constants';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { getTokenData } from './tokens';
 import * as requestPromise from './request-helper';

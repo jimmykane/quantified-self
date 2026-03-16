@@ -5,7 +5,7 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
     return actual;
 });
 import { ActivityParsingOptions } from '@sports-alliance/sports-lib';
-import { createParsingOptions } from './parsing-options';
+import { createParsingOptions } from '../../../shared/parsing-options';
 
 describe('createParsingOptions', () => {
     it('returns parser-compatible options with the expected defaults', () => {

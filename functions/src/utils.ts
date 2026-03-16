@@ -331,7 +331,7 @@ export class UserNotFoundError extends Error {
   }
 }
 
-import { getUsageLimitForRole } from './shared/limits';
+import { getUsageLimitForRole } from '../../shared/limits';
 
 export async function checkEventUsageLimit(userID: string, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number, gracePeriodUntil?: number }>>, pendingWrites?: Map<string, number>): Promise<void> {
   const { role, gracePeriodUntil } = await getUserRoleAndGracePeriod(userID);

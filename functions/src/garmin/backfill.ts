@@ -6,7 +6,7 @@ import * as requestPromise from '../request-helper';
 import * as admin from 'firebase-admin';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
-import { GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS } from '../shared/history-import.constants';
+import { GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS } from '../../../shared/history-import.constants';
 import { getTokenData } from '../tokens';
 import { GARMIN_API_TOKENS_COLLECTION_NAME } from './constants';
 import { GarminAPIAuth2ServiceTokenInterface } from './auth/adapter';
@@ -20,7 +20,7 @@ interface BackfillRequest {
   endDate: string;
 }
 
-import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
+import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 
 export const backfillGarminAPIActivities = functions.region(FUNCTIONS_MANIFEST.backfillGarminAPIActivities.region).runWith({
   timeoutSeconds: TIMEOUT_IN_SECONDS,
@@ -174,4 +174,3 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
     // noop all is sent to garmin
   }
 }
-

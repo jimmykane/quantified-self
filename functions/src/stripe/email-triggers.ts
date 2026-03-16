@@ -34,7 +34,7 @@
 
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
-import { getUsageLimitForRole, USAGE_LIMITS } from '../shared/limits';
+import { getUsageLimitForRole, USAGE_LIMITS } from '../../../shared/limits';
 import { ROLE_HIERARCHY, ROLE_DISPLAY_NAMES } from '../shared/pricing';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 import { DocumentData } from 'firebase-admin/firestore';

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { USAGE_LIMITS } from './shared/limits';
+import { USAGE_LIMITS } from '../../shared/limits';
 import {
     generateIDFromParts,
     generateIDFromPartsOld,

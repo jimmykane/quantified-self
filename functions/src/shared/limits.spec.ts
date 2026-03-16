@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getUsageLimitForRole, USAGE_LIMITS } from './limits';
+import { getUsageLimitForRole, USAGE_LIMITS } from '../../../shared/limits';
 
 describe('USAGE_LIMITS', () => {
     it('should define positive increasing limits for limited roles', () => {

@@ -15,14 +15,14 @@ import { gunzipSync } from 'node:zlib';
 import * as xmldom from 'xmldom';
 
 import { ALLOWED_CORS_ORIGINS, ENFORCE_APP_CHECK, hasBasicAccess, hasProAccess } from '../utils';
-import { createParsingOptions } from '../shared/parsing-options';
+import { createParsingOptions } from '../../../shared/parsing-options';
 import { EventWriter, FirestoreAdapter, StorageAdapter, OriginalFile } from '../shared/event-writer';
 import { generateActivityID } from '../shared/id-generator';
 import { ProcessingMetaData } from '../shared/processing-metadata.interface';
 import { SPORTS_LIB_VERSION } from '../shared/sports-lib-version.node';
 import { sportsLibVersionToCode } from '../reparse/sports-lib-reparse.service';
-import { USAGE_LIMITS } from '../shared/limits';
-import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
+import { USAGE_LIMITS } from '../../../shared/limits';
+import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 // Protect against gzip zip-bombs: input is capped at 10MB, but decompressed output
