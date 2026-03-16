@@ -51,6 +51,11 @@ export interface GetEventsOnceResult {
   source: EventsOnceSource;
 }
 
+interface EventQuerySeed {
+  eventsById: Map<string, AppEventInterface>;
+  fingerprintsById: Map<string, string>;
+}
+
 /**
  * Controls how parsed data from original files is applied to an existing event.
  * - `attach_streams_only` keeps existing activities and updates their streams.
@@ -75,6 +80,8 @@ export class AppEventService implements OnDestroy {
   private appEventUtilities = inject(AppEventUtilities);
   private benchmarkAdapter = inject(BenchmarkEventAdapter);
   private originalFileHydrationService = inject(AppOriginalFileHydrationService);
+  // Resolver one-shot loads can hand off parsed events to the first matching live query.
+  private eventQuerySeeds = new Map<string, EventQuerySeed>();
   private static readonly DEDUPE_TTL_MS = 6 * 60 * 60 * 1000;
   private static readonly SANITIZER_EVENT_TTL_MS = 30 * 60 * 1000;
   private static readonly DEDUPE_UNKNOWN_TYPES_MAX = 500;
@@ -145,6 +152,33 @@ export class AppEventService implements OnDestroy {
     } catch {
       return `${snapshot}`;
     }
+  }
+
+  private buildEventQueryKey(
+    userID: string,
+    whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [],
+    orderByField: string = 'startDate',
+    asc: boolean = false,
+    limitCount: number = 10,
+  ): string {
+    return this.buildSnapshotFingerprint({
+      userID,
+      whereClauses: whereClauses.map((clause) => ({
+        fieldPath: `${clause?.fieldPath ?? ''}`,
+        opStr: `${clause?.opStr ?? ''}`,
+        value: clause?.value ?? null,
+      })),
+      orderByField,
+      asc,
+      limitCount,
+    });
+  }
+
+  private buildEventDocFingerprint(docID: string, snapshot: unknown): string {
+    return this.buildSnapshotFingerprint({
+      docID,
+      snapshot,
+    });
   }
 
   private getActivityIDsForDebug(activities: Array<Partial<ActivityInterface> | any> | null | undefined): string[] {
@@ -542,12 +576,13 @@ export class AppEventService implements OnDestroy {
     const queryStart = performance.now();
     const preferCache = options.preferCache === true;
     const warmServer = options.warmServer === true;
+    const queryKey = this.buildEventQueryKey(user.uid, whereClauses, orderByField, asc, limitCount);
 
     if (!preferCache) {
-      return from(this.fetchEventsOnceFromServer(q, user.uid, queryStart));
+      return from(this.fetchEventsOnceFromServer(q, user.uid, queryStart, queryKey));
     }
 
-    return from(this.fetchEventsOnceCacheFirst(q, user.uid, queryStart, warmServer));
+    return from(this.fetchEventsOnceCacheFirst(q, user.uid, queryStart, warmServer, queryKey));
   }
 
   /**
@@ -1100,53 +1135,83 @@ export class AppEventService implements OnDestroy {
     this.logger.log('[AppEventService] _getEvents fetching. user:', user.uid, 'where:', JSON.stringify(whereClauses));
     const q = this.getEventQueryForUser(user, whereClauses, orderByField, asc, limitCount, startAfterDoc, endBeforeDoc) as Query<DocumentData>;
     const queryStart = performance.now();
+    const queryKey = (!startAfterDoc && !endBeforeDoc)
+      ? this.buildEventQueryKey(user.uid, whereClauses, orderByField, asc, limitCount)
+      : null;
 
-    return this.listenToEventQueryData(q, user.uid, queryStart).pipe(
-      map((eventSnapshots: any[]) => {
-        const deserializeStart = performance.now();
-        this.logger.log(`[AppEventService] _getEvents emitted ${eventSnapshots?.length || 0} event snapshots for user: ${user.uid}`);
-        const events = eventSnapshots.map((eventSnapshot) => {
-          const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
-          if (unknownTypes.length > 0) {
-            const newUnknownTypes = unknownTypes.filter(type => AppEventService.shouldReportKey(
-              AppEventService.reportedUnknownTypes,
-              type,
-              AppEventService.DEDUPE_TTL_MS,
-              AppEventService.DEDUPE_UNKNOWN_TYPES_MAX
-            ));
-            if (newUnknownTypes.length > 0) {
-              this.logger.captureMessage('Unknown Data Types in _getEvents', { extra: { types: newUnknownTypes, eventID: eventSnapshot.id } });
-            }
-          }
-          const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventSnapshot.id) as AppEventInterface;
-
-          // Hydrate with original file(s) info if present
-          const rawData = eventSnapshot as any;
-
-          if (rawData.originalFiles) {
-            event.originalFiles = rawData.originalFiles;
-          }
-          if (rawData.originalFile) {
-            event.originalFile = rawData.originalFile;
-          }
-
-          this.benchmarkAdapter.applyBenchmarkFieldsFromFirestore(event, rawData);
-
-          return event;
-        });
-        this.logger.log('[perf] app_event_service_get_events_deserialize', {
-          durationMs: Number((performance.now() - deserializeStart).toFixed(2)),
-          snapshots: eventSnapshots?.length || 0,
-          userID: user.uid,
-        });
-        return events;
-      }));
+    return this.listenToEventQueryData(q, user.uid, queryStart, queryKey).pipe(
+      tap((events: AppEventInterface[]) => {
+        this.logger.log(`[AppEventService] _getEvents emitted ${events?.length || 0} event snapshots for user: ${user.uid}`);
+      })
+    );
   }
 
-  private listenToEventQueryData(q: Query<DocumentData>, userID: string, queryStart: number): Observable<any[]> {
-    return new Observable<any[]>((subscriber) => {
+  private listenToEventQueryData(
+    q: Query<DocumentData>,
+    userID: string,
+    queryStart: number,
+    queryKey: string | null,
+  ): Observable<AppEventInterface[]> {
+    return new Observable<AppEventInterface[]>((subscriber) => {
       let emissionCount = 0;
       let hasEmitted = false;
+      const initialSeed = this.consumeEventQuerySeed(queryKey);
+      const seedEventsById = initialSeed?.eventsById ?? new Map<string, AppEventInterface>();
+      const seedFingerprintsById = initialSeed?.fingerprintsById ?? new Map<string, string>();
+      const eventsById = new Map<string, AppEventInterface>();
+      let orderedIds: string[] = [];
+
+      const hydrateEventForDoc = (
+        doc: QueryDocumentSnapshot<DocumentData>,
+      ): { event: AppEventInterface; reusedSeed: boolean } => {
+        const seedEvent = seedEventsById.get(doc.id);
+        const docFingerprint = this.buildEventDocFingerprint(doc.id, doc.data());
+        if (seedEvent && seedFingerprintsById.get(doc.id) === docFingerprint) {
+          return { event: seedEvent, reusedSeed: true };
+        }
+        return {
+          event: this.deserializeEventFromDoc(doc, 'Unknown Data Types in _getEvents'),
+          reusedSeed: false,
+        };
+      };
+
+      const removeIdFromOrder = (id: string, expectedIndex?: number): void => {
+        if (typeof expectedIndex === 'number' && expectedIndex >= 0 && orderedIds[expectedIndex] === id) {
+          orderedIds.splice(expectedIndex, 1);
+          return;
+        }
+        const index = orderedIds.indexOf(id);
+        if (index >= 0) {
+          orderedIds.splice(index, 1);
+        }
+      };
+
+      const resyncOrderIfNeeded = (
+        querySnapshot: QuerySnapshot<DocumentData>,
+        updateCount: { changedDocs: number; reusedSeedDocs: number },
+      ): void => {
+        if (orderedIds.length === querySnapshot.size) {
+          return;
+        }
+        orderedIds = querySnapshot.docs.map((doc) => doc.id);
+        const nextIds = new Set(orderedIds);
+        for (const id of eventsById.keys()) {
+          if (!nextIds.has(id)) {
+            eventsById.delete(id);
+          }
+        }
+        for (const doc of querySnapshot.docs) {
+          if (!eventsById.has(doc.id)) {
+            const { event, reusedSeed } = hydrateEventForDoc(doc);
+            eventsById.set(doc.id, event);
+            if (reusedSeed) {
+              updateCount.reusedSeedDocs += 1;
+            } else {
+              updateCount.changedDocs += 1;
+            }
+          }
+        }
+      };
 
       const unsubscribe = runInInjectionContext(this.injector, () => onSnapshot(
         q,
@@ -1175,12 +1240,44 @@ export class AppEventService implements OnDestroy {
             userID,
           });
 
-          const eventSnapshots = querySnapshot.docs.map((queryDocumentSnapshot) => ({
-            ...(queryDocumentSnapshot.data() as Record<string, unknown>),
-            id: queryDocumentSnapshot.id,
-          }));
+          const deserializeStart = performance.now();
+          const updateCount = { changedDocs: 0, reusedSeedDocs: 0 };
 
-          subscriber.next(eventSnapshots);
+          for (const change of docChanges) {
+            const docId = change.doc.id;
+            if (change.type === 'removed') {
+              eventsById.delete(docId);
+              removeIdFromOrder(docId, change.oldIndex);
+              continue;
+            }
+
+            const { event, reusedSeed } = hydrateEventForDoc(change.doc);
+            eventsById.set(docId, event);
+            if (reusedSeed) {
+              updateCount.reusedSeedDocs += 1;
+            } else {
+              updateCount.changedDocs += 1;
+            }
+            removeIdFromOrder(docId, change.oldIndex);
+            const insertIndex = change.newIndex >= 0 ? change.newIndex : orderedIds.length;
+            orderedIds.splice(insertIndex, 0, docId);
+          }
+
+          resyncOrderIfNeeded(querySnapshot, updateCount);
+
+          const events = orderedIds
+            .map((id) => eventsById.get(id))
+            .filter((event): event is AppEventInterface => !!event);
+
+          this.logger.log('[perf] app_event_service_get_events_deserialize', {
+            durationMs: Number((performance.now() - deserializeStart).toFixed(2)),
+            snapshots: querySnapshot?.size || 0,
+            changedDocs: updateCount.changedDocs,
+            reusedSeedDocs: updateCount.reusedSeedDocs,
+            userID,
+          });
+
+          subscriber.next(events);
         },
         (error) => subscriber.error(error)
       ));
@@ -1193,7 +1290,8 @@ export class AppEventService implements OnDestroy {
     q: any,
     userID: string,
     queryStart: number,
-    warmServer: boolean
+    warmServer: boolean,
+    queryKey: string,
   ): Promise<GetEventsOnceResult> {
     const cacheStart = performance.now();
     try {
@@ -1207,6 +1305,7 @@ export class AppEventService implements OnDestroy {
         userID,
       });
       if ((cacheSnapshot?.size || 0) > 0) {
+        this.storeEventQuerySeed(queryKey, cacheSnapshot.docs, cacheEvents);
         if (warmServer) {
           this.warmEventsOnceServerQuery(q, userID);
         }
@@ -1228,10 +1327,15 @@ export class AppEventService implements OnDestroy {
       });
     }
 
-    return this.fetchEventsOnceFromServer(q, userID, queryStart);
+    return this.fetchEventsOnceFromServer(q, userID, queryStart, queryKey);
   }
 
-  private async fetchEventsOnceFromServer(q: any, userID: string, queryStart: number): Promise<GetEventsOnceResult> {
+  private async fetchEventsOnceFromServer(
+    q: any,
+    userID: string,
+    queryStart: number,
+    queryKey: string,
+  ): Promise<GetEventsOnceResult> {
     const querySnapshot = await runInInjectionContext(this.injector, () => getDocs(q));
     this.logger.info('[perf] app_event_service_get_events_once_get_docs', {
       durationMs: Number((performance.now() - queryStart).toFixed(2)),
@@ -1240,8 +1344,10 @@ export class AppEventService implements OnDestroy {
       hasPendingWrites: querySnapshot?.metadata?.hasPendingWrites,
       userID,
     });
+    const events = this.deserializeEventsFromQueryDocs(querySnapshot.docs, userID, 'app_event_service_get_events_once_deserialize', querySnapshot.size);
+    this.storeEventQuerySeed(queryKey, querySnapshot.docs, events);
     return {
-      events: this.deserializeEventsFromQueryDocs(querySnapshot.docs, userID, 'app_event_service_get_events_once_deserialize', querySnapshot.size),
+      events,
       source: 'server',
     };
   }
@@ -1357,47 +1463,100 @@ export class AppEventService implements OnDestroy {
     return this.parseActivitiesFromSnapshots(eventID, activitySnapshots);
   }
 
+  private deserializeEventFromDoc(
+    queryDocumentSnapshot: QueryDocumentSnapshot,
+    unknownTypesMessage: string
+  ): AppEventInterface {
+    const eventSnapshot = queryDocumentSnapshot.data();
+    const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
+    if (unknownTypes.length > 0) {
+      const newUnknownTypes = unknownTypes.filter(type => AppEventService.shouldReportKey(
+        AppEventService.reportedUnknownTypes,
+        type,
+        AppEventService.DEDUPE_TTL_MS,
+        AppEventService.DEDUPE_UNKNOWN_TYPES_MAX
+      ));
+      if (newUnknownTypes.length > 0) {
+        this.logger.captureMessage(unknownTypesMessage, { extra: { types: newUnknownTypes, eventID: queryDocumentSnapshot.id } });
+      }
+    }
+    const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(queryDocumentSnapshot.id) as AppEventInterface;
+
+    // Hydrate with original file(s) info if present
+    const rawData = eventSnapshot as any;
+    if (rawData.originalFiles) {
+      event.originalFiles = rawData.originalFiles;
+    }
+    if (rawData.originalFile) {
+      event.originalFile = rawData.originalFile;
+    }
+
+    this.benchmarkAdapter.applyBenchmarkFieldsFromFirestore(event, rawData);
+    return event;
+  }
+
   private deserializeEventsFromQueryDocs(
     docs: QueryDocumentSnapshot[],
     userID: string,
     perfEventName: string,
     snapshotsCount?: number
-  ): EventInterface[] {
+  ): AppEventInterface[] {
     const deserializeStart = performance.now();
-    const events = docs.map((queryDocumentSnapshot) => {
-      const eventSnapshot = queryDocumentSnapshot.data();
-      const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
-      if (unknownTypes.length > 0) {
-        const newUnknownTypes = unknownTypes.filter(type => AppEventService.shouldReportKey(
-          AppEventService.reportedUnknownTypes,
-          type,
-          AppEventService.DEDUPE_TTL_MS,
-          AppEventService.DEDUPE_UNKNOWN_TYPES_MAX
-        ));
-        if (newUnknownTypes.length > 0) {
-          this.logger.captureMessage('Unknown Data Types in getEventsOnceBy', { extra: { types: newUnknownTypes, eventID: queryDocumentSnapshot.id } });
-        }
-      }
-      const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(queryDocumentSnapshot.id) as AppEventInterface;
-
-      // Hydrate with original file(s) info if present
-      const rawData = eventSnapshot as any;
-      if (rawData.originalFiles) {
-        event.originalFiles = rawData.originalFiles;
-      }
-      if (rawData.originalFile) {
-        event.originalFile = rawData.originalFile;
-      }
-
-      this.benchmarkAdapter.applyBenchmarkFieldsFromFirestore(event, rawData);
-      return event;
-    });
+    const events = docs.map((queryDocumentSnapshot) => (
+      this.deserializeEventFromDoc(queryDocumentSnapshot, 'Unknown Data Types in getEventsOnceBy')
+    ));
     this.logger.info(`[perf] ${perfEventName}`, {
       durationMs: Number((performance.now() - deserializeStart).toFixed(2)),
       snapshots: snapshotsCount ?? docs.length,
       userID,
     });
     return events;
+  }
+
+  private storeEventQuerySeed(
+    queryKey: string,
+    docs: QueryDocumentSnapshot[],
+    events: AppEventInterface[],
+  ): void {
+    if (!docs.length || !events.length) {
+      this.eventQuerySeeds.delete(queryKey);
+      return;
+    }
+
+    const eventsById = new Map<string, AppEventInterface>();
+    const fingerprintsById = new Map<string, string>();
+    let storedCount = 0;
+
+    docs.forEach((doc, index) => {
+      const event = events[index];
+      if (!event) {
+        return;
+      }
+      eventsById.set(doc.id, event);
+      fingerprintsById.set(doc.id, this.buildEventDocFingerprint(doc.id, doc.data()));
+      storedCount += 1;
+    });
+
+    if (!storedCount) {
+      this.eventQuerySeeds.delete(queryKey);
+      return;
+    }
+
+    this.eventQuerySeeds.set(queryKey, {
+      eventsById,
+      fingerprintsById,
+    });
+  }
+
+  private consumeEventQuerySeed(queryKey: string | null): EventQuerySeed | null {
+    if (!queryKey) {
+      return null;
+    }
+    const seed = this.eventQuerySeeds.get(queryKey) || null;
+    if (seed) {
+      this.eventQuerySeeds.delete(queryKey);
+    }
+    return seed;
   }
 
   private _getEventsAndActivities(user: User, whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [], orderByField: string = 'startDate', asc: boolean = false, limitCount: number = 10, startAfterDoc?: any, endBeforeDoc?: any): Observable<EventInterface[]> {

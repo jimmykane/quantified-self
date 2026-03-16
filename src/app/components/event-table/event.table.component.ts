@@ -49,6 +49,12 @@ import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.servi
 import { MergeOptionsDialogComponent } from './merge-options-dialog/merge-options-dialog.component';
 import { AppEventMergeService, MergeType } from '../../services/app.event-merge.service';
 
+interface EventTableRowCacheEntry {
+  event: EventInterface;
+  renderContextKey: string;
+  row: StatRowElement;
+}
+
 @Component({
   selector: 'app-event-table',
   templateUrl: './event.table.component.html',
@@ -86,6 +92,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   private isHandset = false;
   private readonly defaultSelectedColumns = AppUserUtilities.getDefaultSelectedTableColumns();
   private readonly nonSearchableRowKeys = new Set(['Color', 'Gradient', 'Event']);
+  private rowCache = new Map<string, EventTableRowCacheEntry>();
 
 
   private searchSubject: Subject<string> = new Subject();
@@ -111,6 +118,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   ngOnChanges(simpleChanges: SimpleChanges): void {
     this.isLoading ? this.loading() : this.loaded();
     if (!this.events) {
+      this.rowCache.clear();
       this.loading();
       return;
     }
@@ -573,6 +581,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   async saveEventDescription(description: string, event: EventInterface) {
     event.description = description;
+    this.invalidateRowCacheForEvent(event);
     await this.eventService.updateEventProperties(this.user, event.getID(), {
       description: event.description,
     });
@@ -583,6 +592,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   async saveEventName(name: string, event: EventInterface) {
     event.name = name;
+    this.invalidateRowCacheForEvent(event);
     await this.eventService.updateEventProperties(this.user, event.getID(), {
       name: event.name,
     });
@@ -638,6 +648,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     if (this.breakpointSubscription) {
       this.breakpointSubscription.unsubscribe();
     }
+    this.rowCache.clear();
   }
 
   isSticky(column: string) {
@@ -656,7 +667,11 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     const dateFormat = this.isHandset ? 'd MMM yy' : 'EEEEEE d MMM yy HH:mm';
     const removedAscentTypes = new Set((this.user.settings.summariesSettings?.removeAscentForEventTypes || []) as ActivityTypes[]);
     const removedDescentTypes = new Set((((this.user.settings.summariesSettings as any)?.removeDescentForEventTypes || [])) as ActivityTypes[]);
+    const renderContextKey = this.buildRowRenderContextKey(dateFormat);
+    const nextRowCache = new Map<string, EventTableRowCacheEntry>();
     const rows: StatRowElement[] = [];
+    let reusedRows = 0;
+    let rebuiltRows = 0;
 
     this.selection.clear();
     for (const event of this.events) {
@@ -664,64 +679,137 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         continue;
       }
 
-      const activityTypesStat = <DataActivityTypes>event.getStat(DataActivityTypes.type);
-      const statRowElement = this.getStatsRowElement(
-        event.getStatsAsArray(),
-        activityTypesStat ? activityTypesStat.getValue() : [ActivityTypes.unknown],
-        this.user.settings.unitSettings,
-        event.isMerge
+      const eventID = this.getEventID(event);
+      const cachedEntry = eventID ? this.rowCache.get(eventID) : null;
+      if (cachedEntry && eventID && cachedEntry.event === event && cachedEntry.renderContextKey === renderContextKey) {
+        rows.push(cachedEntry.row);
+        nextRowCache.set(eventID, cachedEntry);
+        reusedRows += 1;
+        continue;
+      }
+
+      const statRowElement = this.buildRowElement(
+        event,
+        dateFormat,
+        removedAscentTypes,
+        removedDescentTypes,
       );
-      const activityTypes = event.getActivityTypesAsArray();
-      const primaryActivityType = activityTypes.length > 1
-        ? ActivityTypes.Multisport
-        : (ActivityTypes[activityTypes[0] as keyof typeof ActivityTypes] || ActivityTypes.unknown);
-
-      statRowElement['Privacy'] = event.privacy;
-      statRowElement['Name'] = event.name;
-      statRowElement['Start Date'] = (event.startDate instanceof Date && !isNaN(+event.startDate)) ? this.datePipe.transform(event.startDate, dateFormat) : 'None?';
-      statRowElement['Activity Types'] = event.getActivityTypesAsString();
-      statRowElement['Merged Event'] = event.isMerge;
-      statRowElement['Description'] = event.description;
-      statRowElement['Device Names'] = event.getDeviceNamesAsString();
-      statRowElement['Color'] = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(
-        primaryActivityType
-      );
-      statRowElement['Gradient'] = this.eventColorService.getGradientForActivityTypeGroup(
-        primaryActivityType
-      );
-      statRowElement['Event'] = event;
-
-      statRowElement.isAscentExcluded = activityTypes.some(type =>
-        AppEventUtilities.shouldExcludeAscent(type as ActivityTypes) ||
-        removedAscentTypes.has(type as any)
-      );
-
-      statRowElement.isDescentExcluded = activityTypes.some(type =>
-        AppEventUtilities.shouldExcludeDescent(type as ActivityTypes) ||
-        removedDescentTypes.has(type as any)
-      );
-
-      statRowElement['Has Benchmark'] = (event as any).benchmarkResult || ((event as any).benchmarkResults && Object.keys((event as any).benchmarkResults).length > 0);
-
-      // Add the sorts
-      statRowElement['sort.Start Date'] = event.startDate.getTime();
-      statRowElement['sort.Activity Types'] = statRowElement['Activity Types'];
-      statRowElement['sort.Description'] = statRowElement['Description'];
-      statRowElement['sort.Device Names'] = statRowElement['Device Names'];
-
       rows.push(statRowElement);
+
+      if (eventID) {
+        nextRowCache.set(eventID, {
+          event,
+          renderContextKey,
+          row: statRowElement,
+        });
+      }
+      rebuiltRows += 1;
     }
+    this.rowCache = nextRowCache;
     this.data.data = rows;
     this.logger.info('[perf] event_table_process_changes', {
       durationMs: Number((performance.now() - processStart).toFixed(2)),
       trigger,
       inputEvents: this.events.length,
       outputRows: this.data.data.length,
+      reusedRows,
+      rebuiltRows,
       isHandset: this.isHandset,
       pageSize: this.paginator?.pageSize || this.user.settings?.dashboardSettings?.tableSettings?.eventsPerPage || 0,
     });
     this.loaded();
 
+  }
+
+  private buildRowElement(
+    event: EventInterface,
+    dateFormat: string,
+    removedAscentTypes: Set<ActivityTypes>,
+    removedDescentTypes: Set<ActivityTypes>,
+  ): StatRowElement {
+    const activityTypesStat = <DataActivityTypes>event.getStat(DataActivityTypes.type);
+    const statRowElement = this.getStatsRowElement(
+      event.getStatsAsArray(),
+      activityTypesStat ? activityTypesStat.getValue() : [ActivityTypes.unknown],
+      this.user.settings.unitSettings,
+      event.isMerge
+    );
+    const activityTypes = event.getActivityTypesAsArray();
+    const primaryActivityType = activityTypes.length > 1
+      ? ActivityTypes.Multisport
+      : (ActivityTypes[activityTypes[0] as keyof typeof ActivityTypes] || ActivityTypes.unknown);
+    const startDate = event.startDate instanceof Date && !isNaN(+event.startDate)
+      ? event.startDate
+      : null;
+
+    statRowElement['Privacy'] = event.privacy;
+    statRowElement['Name'] = event.name;
+    statRowElement['Start Date'] = startDate ? this.datePipe.transform(startDate, dateFormat) : 'None?';
+    statRowElement['Activity Types'] = event.getActivityTypesAsString();
+    statRowElement['Merged Event'] = event.isMerge;
+    statRowElement['Description'] = event.description;
+    statRowElement['Device Names'] = event.getDeviceNamesAsString();
+    statRowElement['Color'] = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(
+      primaryActivityType
+    );
+    statRowElement['Gradient'] = this.eventColorService.getGradientForActivityTypeGroup(
+      primaryActivityType
+    );
+    statRowElement['Event'] = event;
+
+    statRowElement.isAscentExcluded = activityTypes.some(type =>
+      AppEventUtilities.shouldExcludeAscent(type as ActivityTypes) ||
+      removedAscentTypes.has(type as any)
+    );
+
+    statRowElement.isDescentExcluded = activityTypes.some(type =>
+      AppEventUtilities.shouldExcludeDescent(type as ActivityTypes) ||
+      removedDescentTypes.has(type as any)
+    );
+
+    statRowElement['Has Benchmark'] = (event as any).benchmarkResult || ((event as any).benchmarkResults && Object.keys((event as any).benchmarkResults).length > 0);
+
+    statRowElement['sort.Start Date'] = startDate ? startDate.getTime() : 0;
+    statRowElement['sort.Activity Types'] = statRowElement['Activity Types'];
+    statRowElement['sort.Description'] = statRowElement['Description'];
+    statRowElement['sort.Device Names'] = statRowElement['Device Names'];
+
+    return statRowElement;
+  }
+
+  private buildRowRenderContextKey(dateFormat: string): string {
+    const summariesSettings = this.user?.settings?.summariesSettings as {
+      removeAscentForEventTypes?: ActivityTypes[];
+      removeDescentForEventTypes?: ActivityTypes[];
+    } | undefined;
+
+    return JSON.stringify({
+      dateFormat,
+      unitSettings: this.user?.settings?.unitSettings ?? null,
+      removeAscentForEventTypes: [...(summariesSettings?.removeAscentForEventTypes || [])].sort(),
+      removeDescentForEventTypes: [...(summariesSettings?.removeDescentForEventTypes || [])].sort(),
+    });
+  }
+
+  private getEventID(event: EventInterface | undefined): string | null {
+    if (!event) {
+      return null;
+    }
+
+    const eventWithID = event as EventInterface & { id?: string };
+    if (typeof eventWithID.getID === 'function') {
+      return eventWithID.getID() || null;
+    }
+
+    return eventWithID.id || null;
+  }
+
+  private invalidateRowCacheForEvent(event: EventInterface | undefined): void {
+    const eventID = this.getEventID(event);
+    if (!eventID) {
+      return;
+    }
+    this.rowCache.delete(eventID);
   }
 
   private unsubscribeFromAll() {

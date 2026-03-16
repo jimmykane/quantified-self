@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { AppEventService } from './app.event.service';
-import { Firestore, doc, docData, collection, collectionData, deleteDoc, updateDoc, writeBatch, query, where, getDocs, getDocsFromCache } from '@angular/fire/firestore';
+import { Firestore, doc, docData, collection, collectionData, deleteDoc, updateDoc, writeBatch, query, where, getDocs, getDocsFromCache, onSnapshot } from '@angular/fire/firestore';
 import { Storage } from '@angular/fire/storage';
 import { Auth } from '@angular/fire/auth';
 import { AppAnalyticsService } from './app.analytics.service';
@@ -56,6 +56,50 @@ function hasStreamsKey(value: unknown): boolean {
     return Object.values(record).some(hasStreamsKey);
 }
 
+function createQueryDoc(id: string, data: Record<string, unknown>) {
+    return {
+        id,
+        data: () => data,
+    };
+}
+
+function createQuerySnapshot(
+    docs: Array<{ id: string; data: () => Record<string, unknown> }>,
+    docChanges: Array<{ type: 'added' | 'modified' | 'removed'; doc: { id: string; data: () => Record<string, unknown> }; oldIndex: number; newIndex: number }>
+) {
+    return {
+        docs,
+        size: docs.length,
+        metadata: {
+            fromCache: false,
+            hasPendingWrites: false,
+        },
+        docChanges: vi.fn(() => docChanges),
+    };
+}
+
+function createMockEvent(json: Record<string, unknown>) {
+    return {
+        ...json,
+        id: null as string | null,
+        clearActivities: vi.fn(),
+        addActivities: vi.fn(),
+        setID(id: string) {
+            this.id = id;
+            return this;
+        },
+        getID() {
+            return this.id;
+        },
+        getActivities() {
+            return [];
+        },
+        toJSON() {
+            return { ...json, id: this.id };
+        },
+    };
+}
+
 // Mock @angular/fire/firestore
 vi.mock('@angular/fire/firestore', async (importOriginal) => {
     const actual = await importOriginal<typeof import('@angular/fire/firestore')>();
@@ -69,6 +113,7 @@ vi.mock('@angular/fire/firestore', async (importOriginal) => {
         where: vi.fn(),
         getDocs: vi.fn(),
         getDocsFromCache: vi.fn(),
+        onSnapshot: vi.fn(),
         deleteDoc: vi.fn(),
         updateDoc: vi.fn(),
         writeBatch: vi.fn(() => ({
@@ -202,6 +247,101 @@ describe('AppEventService', () => {
 
     it('should be created', () => {
         expect(service).toBeTruthy();
+    });
+
+    it('should reuse one-shot event parsing for an identical initial live snapshot', async () => {
+        const user = { uid: 'user-seeded' } as any;
+        const eventDoc = createQueryDoc('event-1', {
+            name: 'Seeded Event',
+            startDate: 1710000000000,
+        });
+
+        (collection as Mock).mockReturnValue({});
+        (query as Mock).mockReturnValue({});
+        (getDocs as Mock).mockResolvedValue({
+            docs: [eventDoc],
+            size: 1,
+            metadata: {
+                fromCache: false,
+                hasPendingWrites: false,
+            },
+        });
+        (onSnapshot as Mock).mockImplementation((_queryRef, _options, next) => {
+            next(createQuerySnapshot(
+                [eventDoc],
+                [{ type: 'added', doc: eventDoc, oldIndex: -1, newIndex: 0 }]
+            ) as any);
+            return vi.fn();
+        });
+        mocks.getEventFromJSON.mockImplementation((json: Record<string, unknown>) => createMockEvent(json));
+
+        const onceResult = await firstValueFrom(service.getEventsOnceByWithMeta(user, [], 'startDate', false, 0));
+        const liveEvents = await firstValueFrom(service.getEventsBy(user, [], 'startDate', false, 0));
+
+        expect(mocks.getEventFromJSON).toHaveBeenCalledTimes(1);
+        expect(liveEvents[0]).toBe(onceResult.events[0]);
+        expect(mockLogger.log).toHaveBeenCalledWith(
+            '[perf] app_event_service_get_events_deserialize',
+            expect.objectContaining({
+                changedDocs: 0,
+                reusedSeedDocs: 1,
+                userID: user.uid,
+            }),
+        );
+    });
+
+    it('should deserialize only changed docs when a seeded live snapshot differs', async () => {
+        const user = { uid: 'user-partial-seed' } as any;
+        const firstDoc = createQueryDoc('event-1', {
+            name: 'First Event',
+            startDate: 1710000000000,
+        });
+        const secondDoc = createQueryDoc('event-2', {
+            name: 'Second Event',
+            startDate: 1710003600000,
+        });
+        const updatedSecondDoc = createQueryDoc('event-2', {
+            name: 'Second Event Updated',
+            startDate: 1710003600000,
+        });
+
+        (collection as Mock).mockReturnValue({});
+        (query as Mock).mockReturnValue({});
+        (getDocs as Mock).mockResolvedValue({
+            docs: [firstDoc, secondDoc],
+            size: 2,
+            metadata: {
+                fromCache: false,
+                hasPendingWrites: false,
+            },
+        });
+        (onSnapshot as Mock).mockImplementation((_queryRef, _options, next) => {
+            next(createQuerySnapshot(
+                [firstDoc, updatedSecondDoc],
+                [
+                    { type: 'added', doc: firstDoc, oldIndex: -1, newIndex: 0 },
+                    { type: 'added', doc: updatedSecondDoc, oldIndex: -1, newIndex: 1 },
+                ]
+            ) as any);
+            return vi.fn();
+        });
+        mocks.getEventFromJSON.mockImplementation((json: Record<string, unknown>) => createMockEvent(json));
+
+        const onceResult = await firstValueFrom(service.getEventsOnceByWithMeta(user, [], 'startDate', false, 0));
+        const liveEvents = await firstValueFrom(service.getEventsBy(user, [], 'startDate', false, 0));
+
+        expect(mocks.getEventFromJSON).toHaveBeenCalledTimes(3);
+        expect(liveEvents[0]).toBe(onceResult.events[0]);
+        expect(liveEvents[1]).not.toBe(onceResult.events[1]);
+        expect((liveEvents[1] as any).name).toBe('Second Event Updated');
+        expect(mockLogger.log).toHaveBeenCalledWith(
+            '[perf] app_event_service_get_events_deserialize',
+            expect.objectContaining({
+                changedDocs: 1,
+                reusedSeedDocs: 1,
+                userID: user.uid,
+            }),
+        );
     });
 
     it('should get event and activities correctly', async () => {

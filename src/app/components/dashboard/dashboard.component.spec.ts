@@ -15,6 +15,7 @@ import { Analytics } from '@angular/fire/analytics';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { BehaviorSubject } from 'rxjs';
 import { EventInterface } from '@sports-alliance/sports-lib';
+import { LoggerService } from '../../services/logger.service';
 
 describe('DashboardComponent', () => {
     let component: DashboardComponent;
@@ -27,6 +28,7 @@ describe('DashboardComponent', () => {
     let mockActivatedRoute: any;
     let mockDialog: any;
     let mockSnackBar: any;
+    let mockLogger: any;
 
     const mockUser = new User('testUser') as AppUserInterface;
     mockUser.settings = {
@@ -74,6 +76,7 @@ describe('DashboardComponent', () => {
 
         mockDialog = { open: vi.fn() };
         mockSnackBar = { open: vi.fn() };
+        mockLogger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), log: vi.fn() };
 
         await TestBed.configureTestingModule({
             declarations: [DashboardComponent],
@@ -85,7 +88,8 @@ describe('DashboardComponent', () => {
                 { provide: ActivatedRoute, useValue: mockActivatedRoute },
                 { provide: MatDialog, useValue: mockDialog },
                 { provide: MatSnackBar, useValue: mockSnackBar },
-                { provide: Analytics, useValue: null }
+                { provide: Analytics, useValue: null },
+                { provide: LoggerService, useValue: mockLogger }
             ],
             schemas: [NO_ERRORS_SCHEMA]
         })
@@ -182,6 +186,25 @@ describe('DashboardComponent', () => {
         // Should update
         expect(component.events.length).toBe(2);
         expect((component.events[1] as any).id).toBe('event2');
+    });
+
+    it('should measure events listener emit timing from emission handling, not listener setup', () => {
+        const performanceNowSpy = vi.spyOn(performance, 'now')
+            .mockReturnValueOnce(100)
+            .mockReturnValueOnce(105);
+
+        (component as any).trackEventsListenerEmission([{ id: 'event1', isMerge: true }] as any);
+
+        expect(component.hasMergedEvents).toBe(true);
+        expect(mockLogger.info).toHaveBeenCalledWith(
+            '[perf] dashboard_events_listener_emit',
+            expect.objectContaining({
+                durationMs: 5,
+                incomingEvents: 1,
+            }),
+        );
+
+        performanceNowSpy.mockRestore();
     });
 
     it('should not re-query events when only table settings change', async () => {
