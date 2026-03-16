@@ -425,6 +425,63 @@ describe('AppEventService', () => {
         }
     });
 
+    it('should apply sequential reorder docChanges into the final Firestore order', () => {
+        const user = { uid: 'user-reordered-live' } as any;
+        const firstDoc = createQueryDoc('event-a', {
+            name: 'Event A',
+            startDate: 1710000000000,
+        });
+        const secondDoc = createQueryDoc('event-b', {
+            name: 'Event B',
+            startDate: 1710003600000,
+        });
+        const thirdDoc = createQueryDoc('event-c', {
+            name: 'Event C',
+            startDate: 1710007200000,
+        });
+        const reorderedFirstDoc = createQueryDoc('event-a', {
+            name: 'Event A moved',
+            startDate: 1710005400000,
+        });
+        const reorderedSecondDoc = createQueryDoc('event-b', {
+            name: 'Event B moved',
+            startDate: 1710001800000,
+        });
+
+        (collection as Mock).mockReturnValue({});
+        (query as Mock).mockReturnValue({});
+        (onSnapshot as Mock).mockImplementation((_queryRef, _options, next) => {
+            next(createQuerySnapshot(
+                [firstDoc, secondDoc, thirdDoc],
+                [
+                    { type: 'added', doc: firstDoc, oldIndex: -1, newIndex: 0 },
+                    { type: 'added', doc: secondDoc, oldIndex: -1, newIndex: 1 },
+                    { type: 'added', doc: thirdDoc, oldIndex: -1, newIndex: 2 },
+                ]
+            ) as any);
+            next(createQuerySnapshot(
+                [reorderedSecondDoc, reorderedFirstDoc, thirdDoc],
+                [
+                    { type: 'modified', doc: reorderedFirstDoc, oldIndex: 0, newIndex: 1 },
+                    { type: 'modified', doc: reorderedSecondDoc, oldIndex: 0, newIndex: 0 },
+                ]
+            ) as any);
+            return vi.fn();
+        });
+        mocks.getEventFromJSON.mockImplementation((json: Record<string, unknown>) => createMockEvent(json));
+
+        const emissions: any[][] = [];
+        const subscription = service.getEventsBy(user, [], 'startDate', false, 0)
+            .subscribe(events => emissions.push(events));
+
+        expect(emissions).toHaveLength(2);
+        expect(emissions[1].map(event => event.getID())).toEqual(['event-b', 'event-a', 'event-c']);
+        expect((emissions[1][0] as any).name).toBe('Event B moved');
+        expect((emissions[1][1] as any).name).toBe('Event A moved');
+
+        subscription.unsubscribe();
+    });
+
     it('should get event and activities correctly', async () => {
         const userId = 'user1';
         const eventId = 'event1';

@@ -79,6 +79,7 @@ describe('dashboardResolver', () => {
                 0,
                 {
                     preferCache: true,
+                    seedLiveQuery: true,
                     warmServer: false
                 }
             );
