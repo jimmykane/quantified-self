@@ -185,6 +185,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.armMobileInteractions();
   };
   private readonly fullscreenChangeHandler = () => {
+    this.syncViewportObserver();
     this.syncFullscreenState();
   };
 
@@ -847,11 +848,19 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     if (!this.shouldObserveViewportVisibility()) {
+      const shouldRestoreViewportState = !this.viewportVisible
+        || !this.tooltipVisibleForViewport
+        || !this.zoomBarVisibleForViewport
+        || !this.zoomSyncVisibleForViewport;
+
       this.teardownViewportObserver();
-      this.viewportVisible = true;
-      this.tooltipVisibleForViewport = true;
-      this.zoomBarVisibleForViewport = true;
-      this.zoomSyncVisibleForViewport = true;
+      if (shouldRestoreViewportState) {
+        this.viewportVisible = true;
+        this.applyTooltipVisibilityForViewport(true);
+        this.applyZoomBarVisibilityForViewport(true);
+        this.applyZoomSyncVisibilityForViewport(true);
+        this.applyViewportAnimationMode(true);
+      }
       return;
     }
 
@@ -878,6 +887,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   private shouldObserveViewportVisibility(): boolean {
+    if (this.isPanelFullscreen()) {
+      return false;
+    }
+
     if (this.showZoomBar) {
       return true;
     }
@@ -1768,8 +1781,23 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     this.isFullscreen = nextFullscreenState;
-    this.chartHost.scheduleResize();
+    this.recreateChartForFullscreenState();
     this.cdr.markForCheck();
+  }
+
+  private recreateChartForFullscreenState(): void {
+    const chart = this.chartHost.getChart();
+    if (!chart) {
+      return;
+    }
+
+    this.hideLocalLapTooltip();
+    this.cancelPendingFrame('axisScale');
+    this.unbindMobileInteractionArm();
+    this.unbindAxisPointerCursorEmit();
+    this.eventsBound = false;
+    this.chartHost.dispose();
+    this.queueChartRefresh('fullscreenchange');
   }
 
   private isPanelFullscreen(): boolean {
@@ -1995,6 +2023,12 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   private buildTooltipSurfaceConfig(): EChartsTooltipSurfaceConfig {
+    if (this.isFullscreen) {
+      return {
+        confine: true,
+      };
+    }
+
     return resolveEChartsTooltipSurfaceConfig(this.isMobile);
   }
 

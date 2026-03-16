@@ -154,6 +154,8 @@ describe('EventCardChartPanelComponent', () => {
   });
 
   afterEach(() => {
+    document.getElementById('qs-echarts-tooltip-host')?.remove();
+
     if (originalIntersectionObserver) {
       globalThis.IntersectionObserver = originalIntersectionObserver;
     } else {
@@ -401,6 +403,55 @@ describe('EventCardChartPanelComponent', () => {
     document.dispatchEvent(new Event('fullscreenchange'));
 
     expect(component.isFullscreen).toBe(false);
+  });
+
+  it('restores chart tooltips when the panel enters fullscreen after being marked offscreen', async () => {
+    await renderComponent();
+
+    expect(intersectionObserverCallbacks).toHaveLength(1);
+    intersectionObserverCallbacks[0]([
+      { isIntersecting: false, intersectionRatio: 0 } as IntersectionObserverEntry
+    ], {} as IntersectionObserver);
+
+    eChartsLoaderMock.setOption.mockClear();
+    const panelElement = component.panelRoot.nativeElement;
+    Object.defineProperty(document, 'fullscreenElement', {
+      configurable: true,
+      writable: true,
+      value: panelElement,
+    });
+
+    document.dispatchEvent(new Event('fullscreenchange'));
+
+    expect(intersectionObserverDisconnectSpies[0]).toHaveBeenCalled();
+    expect(eChartsLoaderMock.setOption).toHaveBeenCalledWith(
+      chart,
+      { tooltip: { show: true } },
+      expect.objectContaining({ lazyUpdate: true, silent: true })
+    );
+  });
+
+  it('recreates the chart with confined tooltip placement when the panel enters fullscreen', async () => {
+    await renderComponent();
+
+    const initCallsBeforeFullscreen = eChartsLoaderMock.init.mock.calls.length;
+    const panelElement = component.panelRoot.nativeElement;
+    Object.defineProperty(document, 'fullscreenElement', {
+      configurable: true,
+      writable: true,
+      value: panelElement,
+    });
+
+    document.dispatchEvent(new Event('fullscreenchange'));
+    await waitForChartStabilization();
+
+    expect(eChartsLoaderMock.dispose).toHaveBeenCalled();
+    expect(eChartsLoaderMock.init.mock.calls.length).toBeGreaterThan(initCallsBeforeFullscreen);
+
+    const option = getRenderedOption();
+    expect(option?.tooltip?.confine).toBe(true);
+    expect(option?.tooltip?.appendTo).toBeUndefined();
+    expect(option?.tooltip?.position).toBeUndefined();
   });
 
   it('renders a merge-only series legend under the chart title', async () => {

@@ -1,3 +1,4 @@
+import { FullscreenOverlayContainer, OverlayContainer } from '@angular/cdk/overlay';
 import { MAT_MENU_DEFAULT_OPTIONS } from '@angular/material/menu';
 import { describe, expect, it } from 'vitest';
 import { AppModule, QS_MENU_DEFAULT_OPTIONS } from './app.module';
@@ -20,5 +21,13 @@ describe('AppModule menu defaults', () => {
 
     expect(menuProvider).toBeTruthy();
     expect(menuProvider.useValue).toEqual(QS_MENU_DEFAULT_OPTIONS);
+  });
+
+  it('registers the fullscreen-aware overlay container in AppModule providers', () => {
+    const providers = ((AppModule as any).ɵinj?.providers ?? []) as Array<any>;
+    const overlayProvider = providers.find((provider) => provider?.provide === OverlayContainer);
+
+    expect(overlayProvider).toBeTruthy();
+    expect(overlayProvider.useClass).toBe(FullscreenOverlayContainer);
   });
 });
