@@ -275,7 +275,9 @@ describe('AppEventService', () => {
         });
         mocks.getEventFromJSON.mockImplementation((json: Record<string, unknown>) => createMockEvent(json));
 
-        const onceResult = await firstValueFrom(service.getEventsOnceByWithMeta(user, [], 'startDate', false, 0));
+        const onceResult = await firstValueFrom(service.getEventsOnceByWithMeta(user, [], 'startDate', false, 0, {
+            seedLiveQuery: true,
+        }));
         const liveEvents = await firstValueFrom(service.getEventsBy(user, [], 'startDate', false, 0));
 
         expect(mocks.getEventFromJSON).toHaveBeenCalledTimes(1);
@@ -327,7 +329,9 @@ describe('AppEventService', () => {
         });
         mocks.getEventFromJSON.mockImplementation((json: Record<string, unknown>) => createMockEvent(json));
 
-        const onceResult = await firstValueFrom(service.getEventsOnceByWithMeta(user, [], 'startDate', false, 0));
+        const onceResult = await firstValueFrom(service.getEventsOnceByWithMeta(user, [], 'startDate', false, 0, {
+            seedLiveQuery: true,
+        }));
         const liveEvents = await firstValueFrom(service.getEventsBy(user, [], 'startDate', false, 0));
 
         expect(mocks.getEventFromJSON).toHaveBeenCalledTimes(3);
@@ -342,6 +346,83 @@ describe('AppEventService', () => {
                 userID: user.uid,
             }),
         );
+    });
+
+    it('should not seed a later live query unless explicitly requested', async () => {
+        const user = { uid: 'user-unseeded' } as any;
+        const eventDoc = createQueryDoc('event-1', {
+            name: 'Unseeded Event',
+            startDate: 1710000000000,
+        });
+
+        (collection as Mock).mockReturnValue({});
+        (query as Mock).mockReturnValue({});
+        (getDocs as Mock).mockResolvedValue({
+            docs: [eventDoc],
+            size: 1,
+            metadata: {
+                fromCache: false,
+                hasPendingWrites: false,
+            },
+        });
+        (onSnapshot as Mock).mockImplementation((_queryRef, _options, next) => {
+            next(createQuerySnapshot(
+                [eventDoc],
+                [{ type: 'added', doc: eventDoc, oldIndex: -1, newIndex: 0 }]
+            ) as any);
+            return vi.fn();
+        });
+        mocks.getEventFromJSON.mockImplementation((json: Record<string, unknown>) => createMockEvent(json));
+
+        const onceResult = await firstValueFrom(service.getEventsOnceByWithMeta(user, [], 'startDate', false, 0));
+        const liveEvents = await firstValueFrom(service.getEventsBy(user, [], 'startDate', false, 0));
+
+        expect(mocks.getEventFromJSON).toHaveBeenCalledTimes(2);
+        expect(liveEvents[0]).not.toBe(onceResult.events[0]);
+        expect(mockLogger.log).toHaveBeenCalledWith(
+            '[perf] app_event_service_get_events_deserialize',
+            expect.objectContaining({
+                changedDocs: 1,
+                reusedSeedDocs: 0,
+                userID: user.uid,
+            }),
+        );
+    });
+
+    it('should expire unused live-query seeds automatically', async () => {
+        vi.useFakeTimers();
+        try {
+            const user = { uid: 'user-expiring-seed' } as any;
+            const eventDoc = createQueryDoc('event-1', {
+                name: 'Expiring Event',
+                startDate: 1710000000000,
+            });
+
+            (collection as Mock).mockReturnValue({});
+            (query as Mock).mockReturnValue({});
+            (getDocs as Mock).mockResolvedValue({
+                docs: [eventDoc],
+                size: 1,
+                metadata: {
+                    fromCache: false,
+                    hasPendingWrites: false,
+                },
+            });
+            mocks.getEventFromJSON.mockImplementation((json: Record<string, unknown>) => createMockEvent(json));
+
+            await firstValueFrom(service.getEventsOnceByWithMeta(user, [], 'startDate', false, 0, {
+                seedLiveQuery: true,
+            }));
+
+            expect((service as any).eventQuerySeeds.size).toBe(1);
+
+            vi.advanceTimersByTime((AppEventService as any).EVENT_QUERY_SEED_TTL_MS);
+
+            expect((service as any).eventQuerySeeds.size).toBe(0);
+            expect((service as any).eventQuerySeedCleanupTimers.size).toBe(0);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('should get event and activities correctly', async () => {

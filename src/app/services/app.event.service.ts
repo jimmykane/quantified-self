@@ -42,6 +42,7 @@ import { AppOriginalFileHydrationService, DownloadFileOptions } from './app.orig
 export interface GetEventsOnceOptions {
   preferCache?: boolean;
   warmServer?: boolean;
+  seedLiveQuery?: boolean;
 }
 
 export type EventsOnceSource = 'cache' | 'server';
@@ -54,6 +55,7 @@ export interface GetEventsOnceResult {
 interface EventQuerySeed {
   eventsById: Map<string, AppEventInterface>;
   fingerprintsById: Map<string, string>;
+  expiresAt: number;
 }
 
 /**
@@ -80,10 +82,12 @@ export class AppEventService implements OnDestroy {
   private appEventUtilities = inject(AppEventUtilities);
   private benchmarkAdapter = inject(BenchmarkEventAdapter);
   private originalFileHydrationService = inject(AppOriginalFileHydrationService);
-  // Resolver one-shot loads can hand off parsed events to the first matching live query.
+  // Short-lived handoff from a one-shot load to the first matching live query.
   private eventQuerySeeds = new Map<string, EventQuerySeed>();
+  private eventQuerySeedCleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private static readonly DEDUPE_TTL_MS = 6 * 60 * 60 * 1000;
   private static readonly SANITIZER_EVENT_TTL_MS = 30 * 60 * 1000;
+  private static readonly EVENT_QUERY_SEED_TTL_MS = 30 * 1000;
   private static readonly DEDUPE_UNKNOWN_TYPES_MAX = 500;
   private static readonly DEDUPE_SANITIZER_ISSUES_MAX = 5000;
   private static readonly DEDUPE_SANITIZER_EVENTS_MAX = 1000;
@@ -576,13 +580,14 @@ export class AppEventService implements OnDestroy {
     const queryStart = performance.now();
     const preferCache = options.preferCache === true;
     const warmServer = options.warmServer === true;
+    const seedLiveQuery = options.seedLiveQuery === true;
     const queryKey = this.buildEventQueryKey(user.uid, whereClauses, orderByField, asc, limitCount);
 
     if (!preferCache) {
-      return from(this.fetchEventsOnceFromServer(q, user.uid, queryStart, queryKey));
+      return from(this.fetchEventsOnceFromServer(q, user.uid, queryStart, queryKey, seedLiveQuery));
     }
 
-    return from(this.fetchEventsOnceCacheFirst(q, user.uid, queryStart, warmServer, queryKey));
+    return from(this.fetchEventsOnceCacheFirst(q, user.uid, queryStart, warmServer, queryKey, seedLiveQuery));
   }
 
   /**
@@ -793,7 +798,7 @@ export class AppEventService implements OnDestroy {
   }
 
   public ngOnDestroy() {
-    return;
+    this.clearEventQuerySeeds();
   }
 
   /**
@@ -1292,6 +1297,7 @@ export class AppEventService implements OnDestroy {
     queryStart: number,
     warmServer: boolean,
     queryKey: string,
+    seedLiveQuery: boolean,
   ): Promise<GetEventsOnceResult> {
     const cacheStart = performance.now();
     try {
@@ -1305,7 +1311,9 @@ export class AppEventService implements OnDestroy {
         userID,
       });
       if ((cacheSnapshot?.size || 0) > 0) {
-        this.storeEventQuerySeed(queryKey, cacheSnapshot.docs, cacheEvents);
+        if (seedLiveQuery) {
+          this.storeEventQuerySeed(queryKey, cacheSnapshot.docs, cacheEvents);
+        }
         if (warmServer) {
           this.warmEventsOnceServerQuery(q, userID);
         }
@@ -1327,7 +1335,7 @@ export class AppEventService implements OnDestroy {
       });
     }
 
-    return this.fetchEventsOnceFromServer(q, userID, queryStart, queryKey);
+    return this.fetchEventsOnceFromServer(q, userID, queryStart, queryKey, seedLiveQuery);
   }
 
   private async fetchEventsOnceFromServer(
@@ -1335,6 +1343,7 @@ export class AppEventService implements OnDestroy {
     userID: string,
     queryStart: number,
     queryKey: string,
+    seedLiveQuery: boolean,
   ): Promise<GetEventsOnceResult> {
     const querySnapshot = await runInInjectionContext(this.injector, () => getDocs(q));
     this.logger.info('[perf] app_event_service_get_events_once_get_docs', {
@@ -1345,7 +1354,9 @@ export class AppEventService implements OnDestroy {
       userID,
     });
     const events = this.deserializeEventsFromQueryDocs(querySnapshot.docs, userID, 'app_event_service_get_events_once_deserialize', querySnapshot.size);
-    this.storeEventQuerySeed(queryKey, querySnapshot.docs, events);
+    if (seedLiveQuery) {
+      this.storeEventQuerySeed(queryKey, querySnapshot.docs, events);
+    }
     return {
       events,
       source: 'server',
@@ -1518,8 +1529,8 @@ export class AppEventService implements OnDestroy {
     docs: QueryDocumentSnapshot[],
     events: AppEventInterface[],
   ): void {
+    this.deleteEventQuerySeed(queryKey);
     if (!docs.length || !events.length) {
-      this.eventQuerySeeds.delete(queryKey);
       return;
     }
 
@@ -1538,14 +1549,19 @@ export class AppEventService implements OnDestroy {
     });
 
     if (!storedCount) {
-      this.eventQuerySeeds.delete(queryKey);
       return;
     }
 
+    const expiresAt = Date.now() + AppEventService.EVENT_QUERY_SEED_TTL_MS;
     this.eventQuerySeeds.set(queryKey, {
       eventsById,
       fingerprintsById,
+      expiresAt,
     });
+    const cleanupTimer = setTimeout(() => {
+      this.deleteEventQuerySeed(queryKey);
+    }, AppEventService.EVENT_QUERY_SEED_TTL_MS);
+    this.eventQuerySeedCleanupTimers.set(queryKey, cleanupTimer);
   }
 
   private consumeEventQuerySeed(queryKey: string | null): EventQuerySeed | null {
@@ -1553,10 +1569,32 @@ export class AppEventService implements OnDestroy {
       return null;
     }
     const seed = this.eventQuerySeeds.get(queryKey) || null;
-    if (seed) {
-      this.eventQuerySeeds.delete(queryKey);
+    if (!seed) {
+      return null;
     }
+    if (seed.expiresAt <= Date.now()) {
+      this.deleteEventQuerySeed(queryKey);
+      return null;
+    }
+    this.deleteEventQuerySeed(queryKey);
     return seed;
+  }
+
+  private deleteEventQuerySeed(queryKey: string): void {
+    const cleanupTimer = this.eventQuerySeedCleanupTimers.get(queryKey);
+    if (cleanupTimer) {
+      clearTimeout(cleanupTimer);
+      this.eventQuerySeedCleanupTimers.delete(queryKey);
+    }
+    this.eventQuerySeeds.delete(queryKey);
+  }
+
+  private clearEventQuerySeeds(): void {
+    for (const cleanupTimer of this.eventQuerySeedCleanupTimers.values()) {
+      clearTimeout(cleanupTimer);
+    }
+    this.eventQuerySeedCleanupTimers.clear();
+    this.eventQuerySeeds.clear();
   }
 
   private _getEventsAndActivities(user: User, whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [], orderByField: string = 'startDate', asc: boolean = false, limitCount: number = 10, startAfterDoc?: any, endBeforeDoc?: any): Observable<EventInterface[]> {
