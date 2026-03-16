@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DetectedHomeArea,
   MyTracksTripDetectionService,
@@ -36,12 +36,16 @@ const remoteHomeHistory = (...prefixes: string[]): TripDetectionOptions => ({
 
 describe('MyTracksTripDetectionService', () => {
   const logger = {
-    log: () => undefined,
-    info: () => undefined,
-    warn: () => undefined,
-    error: () => undefined,
+    log: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   } as unknown as LoggerService;
   const service = new MyTracksTripDetectionService(logger);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   it('detects non-consecutive revisits with same destination id (A-B-A) when home is inferred elsewhere', () => {
     const detectedTrips = service.detectTrips([
@@ -144,6 +148,33 @@ describe('MyTracksTripDetectionService', () => {
 
     expect(detectedTrips).toHaveLength(2);
     expect(detectedTrips.filter((trip) => Math.abs(trip.centroidLat - 41.903) < 0.2)).toHaveLength(1);
+  });
+
+  it('does not warn about missing destination assignments for isolated home-inference noise points', () => {
+    service.detectTripsWithContext(
+      [
+        input('rome-1', '2024-06-06T08:00:00Z', 41.9028, 12.4964),
+        input('rome-2', '2024-06-07T09:00:00Z', 41.9010, 12.4990),
+      ],
+      {
+        homeInferenceInputs: [
+          input('home-1', '2024-01-01T08:00:00Z', 37.9800, 23.7200),
+          input('home-2', '2024-01-10T08:00:00Z', 37.9810, 23.7210),
+          input('home-3', '2024-02-01T08:00:00Z', 37.9820, 23.7220),
+          input('home-4', '2024-02-10T08:00:00Z', 37.9830, 23.7230),
+          input('isolated-noise', '2025-11-16T07:04:23Z', 52.5200, 13.4050),
+        ],
+      },
+    );
+
+    expect((logger.warn as any).mock.calls).not.toEqual(
+      expect.arrayContaining([
+        [
+          '[MyTracksTripDetectionService] Missing destination assignment for timeline point.',
+          expect.anything(),
+        ],
+      ]),
+    );
   });
 
   it('keeps 90km-apart destinations separate', () => {
