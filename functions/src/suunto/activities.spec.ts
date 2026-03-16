@@ -116,6 +116,12 @@ function createMockRequest(overrides: Partial<{
     };
 }
 
+function createStatusCodeError(message: string, statusCode: number) {
+    const error: any = new Error(message);
+    error.statusCode = statusCode;
+    return error;
+}
+
 describe('importActivityToSuuntoApp', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -213,8 +219,7 @@ describe('importActivityToSuuntoApp', () => {
     }, 30000);
 
     it('should retry initialization on transient 504 and then succeed', async () => {
-        const transientError: any = new Error('Gateway Timeout');
-        transientError.statusCode = 504;
+        const transientError = createStatusCodeError('Gateway Timeout', 504);
 
         requestMocks.post
             .mockRejectedValueOnce(transientError)
@@ -239,6 +244,85 @@ describe('importActivityToSuuntoApp', () => {
             status: 'success',
             workoutKey: 'retry-workout-key'
         }));
+    }, 30000);
+
+    it('should retry blob upload on transient 500 and then succeed', async () => {
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+
+        requestMocks.post.mockResolvedValue({
+            id: 'blob-retry-upload-id',
+            url: 'https://storage.suunto.com/blob-upload-url',
+            headers: { 'x-ms-blob-type': 'BlockBlob' }
+        });
+
+        requestMocks.put
+            .mockRejectedValueOnce(createStatusCodeError('Internal Server Error', 500))
+            .mockResolvedValueOnce({});
+
+        requestMocks.get.mockResolvedValue({ status: 'PROCESSED', workoutKey: 'blob-retry-workout-key' });
+
+        const fileContent = Buffer.from('blob-retry-data');
+        const request = createMockRequest({
+            data: { file: fileContent.toString('base64') }
+        });
+
+        const result = await importActivityToSuuntoApp(request as any);
+
+        expect(requestMocks.put).toHaveBeenCalledTimes(2);
+        expect(result).toEqual(expect.objectContaining({
+            status: 'success',
+            workoutKey: 'blob-retry-workout-key'
+        }));
+    }, 30000);
+
+    it('should continue polling after transient status 500 and then succeed', async () => {
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+
+        requestMocks.post.mockResolvedValue({
+            id: 'status-retry-upload-id',
+            url: 'https://storage.suunto.com/status-retry-upload-url',
+            headers: {}
+        });
+
+        requestMocks.put.mockResolvedValue({});
+
+        requestMocks.get
+            .mockRejectedValueOnce(createStatusCodeError('Internal Server Error', 500))
+            .mockRejectedValueOnce(createStatusCodeError('Internal Server Error', 500))
+            .mockRejectedValueOnce(createStatusCodeError('Internal Server Error', 500))
+            .mockResolvedValueOnce({ status: 'PROCESSED', workoutKey: 'status-retry-workout-key' });
+
+        const fileContent = Buffer.from('status-retry-data');
+        const request = createMockRequest({
+            data: { file: fileContent.toString('base64') }
+        });
+
+        const result = await importActivityToSuuntoApp(request as any);
+
+        expect(requestMocks.get).toHaveBeenCalledTimes(4);
+        expect(result).toEqual(expect.objectContaining({
+            status: 'success',
+            workoutKey: 'status-retry-workout-key'
+        }));
+    }, 30000);
+
+    it('should surface persistent upstream 500s as unavailable', async () => {
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+
+        requestMocks.post
+            .mockRejectedValueOnce(createStatusCodeError('Internal Server Error', 500))
+            .mockRejectedValueOnce(createStatusCodeError('Internal Server Error', 500))
+            .mockRejectedValueOnce(createStatusCodeError('Internal Server Error', 500));
+
+        const fileContent = Buffer.from('provider-down');
+        const request = createMockRequest({
+            data: { file: fileContent.toString('base64') }
+        });
+
+        await expect(importActivityToSuuntoApp(request as any)).rejects.toMatchObject({
+            code: 'unavailable',
+            message: 'Suunto activity upload is temporarily unavailable. Please retry.'
+        });
     }, 30000);
 
     it('should throw internal error if initialization response is missing url or id', async () => {

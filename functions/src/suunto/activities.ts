@@ -17,7 +17,7 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
 
-const SUUNTO_TRANSIENT_STATUS_CODES = new Set([503, 504]);
+const SUUNTO_TRANSIENT_STATUS_CODES = new Set([500, 502, 503, 504]);
 const SUUNTO_MAX_TRANSIENT_RETRIES = 2;
 const SUUNTO_TRANSIENT_BACKOFF_MS = 1000;
 
@@ -28,6 +28,10 @@ function getStatusCode(error: unknown): number | undefined {
 function isRetryableSuuntoTransientError(error: unknown): boolean {
   const statusCode = getStatusCode(error);
   return statusCode !== undefined && SUUNTO_TRANSIENT_STATUS_CODES.has(statusCode);
+}
+
+function isSuuntoUpstreamFailure(statusCode: number | undefined): boolean {
+  return statusCode !== undefined && statusCode >= 500 && statusCode < 600;
 }
 
 async function sleep(ms: number): Promise<void> {
@@ -148,12 +152,15 @@ export const importActivityToSuuntoApp = onCall({
           try {
             // Perform the binary upload to the Azure Blob Storage URL provided by Suunto
             // We must use the headers provided by the init-upload response to match the signed URL signature
-            result = await requestPromise.put({
-              headers: result.headers || {},
-              json: false,
-              url,
-              body: fileBuffer,
-            });
+            result = await withSuuntoTransientRetry(
+              `Upload activity blob for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`,
+              async () => requestPromise.put({
+                headers: result.headers || {},
+                json: false,
+                url,
+                body: fileBuffer,
+              })
+            );
             logger.info(`PUT response for user ${userID}: ${JSON.stringify(result)}`);
           } catch (e: any) {
             logger.error(`Could not upload activity for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, e);
@@ -216,6 +223,13 @@ export const importActivityToSuuntoApp = onCall({
                 continue;
               }
             } catch (e: unknown) {
+              if (isRetryableSuuntoTransientError(e) && attempts < maxAttempts) {
+                logger.warn(`Transient upload status error for ${uploadId} for user ${userID} (attempt ${attempts}/${maxAttempts}). Continuing polling.`, {
+                  statusCode: getStatusCode(e),
+                });
+                continue;
+              }
+
               const errorMessage = e instanceof Error ? e.message : String(e);
               logger.error(`Could not check upload status for ${uploadId} for user ${userID} (attempt ${attempts})`, errorMessage);
               throw e;
@@ -259,6 +273,14 @@ export const importActivityToSuuntoApp = onCall({
 
       if (isHttpsError) {
         throw e;
+      }
+
+      if (statusCode === 401) {
+        throw new HttpsError('unauthenticated', 'Authentication failed. Please re-connect your Suunto account.');
+      }
+
+      if (isSuuntoUpstreamFailure(statusCode)) {
+        throw new HttpsError('unavailable', 'Suunto activity upload is temporarily unavailable. Please retry.');
       }
 
       throw new HttpsError('internal', message);
