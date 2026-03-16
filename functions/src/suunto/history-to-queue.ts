@@ -24,7 +24,7 @@ interface HistoryToQueueResponse {
 export const addSuuntoAppHistoryToQueue = onCall({
   region: FUNCTIONS_MANIFEST.addSuuntoAppHistoryToQueue.region,
   cors: ALLOWED_CORS_ORIGINS,
-  memory: '256MiB',
+  memory: '512MiB',
   maxInstances: 10
 }, async (request): Promise<HistoryToQueueResponse> => {
   // App Check verification
