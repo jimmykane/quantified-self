@@ -40,6 +40,8 @@ import {
 } from '../../../helpers/echarts-tooltip-interaction.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
 import {
+  formatDashboardDataDisplay,
+  formatDashboardNumericValue,
   getDashboardAggregateData,
   getDashboardChartSortComparator,
   getDashboardDataInstanceOrNull,
@@ -204,9 +206,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
     const centerLabel = aggregateData
       ? normalizeUnitDerivedTypeLabel(aggregateData.getType(), aggregateData.getDisplayType())
       : (this.chartDataValueType || 'Value');
-    const centerValue = aggregateData
-      ? `${aggregateData.getDisplayValue()}${aggregateData.getDisplayUnit()}`
-      : '--';
+    const centerValue = formatDashboardDataDisplay(aggregateData);
     const centerSubLabel = getDashboardSummaryMetaLabel(
       this.chartDataCategoryType,
       this.chartDataValueType,
@@ -237,10 +237,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
           if (!entry) {
             return '';
           }
-          const valueDataInstance = getDashboardDataInstanceOrNull(this.chartDataType, entry.value, this.logger);
-          const valueText = valueDataInstance
-            ? `${valueDataInstance.getDisplayValue()}${valueDataInstance.getDisplayUnit()}`
-            : Number(entry.value || 0).toLocaleString();
+          const valueText = formatDashboardNumericValue(this.chartDataType, entry.value, this.logger);
           const percent = Number(entry.percent || 0).toFixed(1);
           const activitiesCountLabel = entry.count > 0 ? `<br/>${entry.count} Activities` : '';
 

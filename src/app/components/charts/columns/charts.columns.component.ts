@@ -33,8 +33,9 @@ import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-ech
 import { buildDashboardValueAxisConfig } from '../../../helpers/dashboard-echarts-yaxis.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
 import {
+  formatDashboardDataDisplay,
+  formatDashboardNumericValue,
   getDashboardAggregateData,
-  getDashboardDataInstanceOrNull,
   getDashboardSummaryMetaLabel
 } from '../../../helpers/dashboard-chart-data.helper';
 import {
@@ -236,9 +237,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     const summaryLabel = aggregate
       ? normalizeUnitDerivedTypeLabel(aggregate.getType(), aggregate.getDisplayType())
       : (this.chartDataValueType || 'Value');
-    const summaryValue = aggregate
-      ? `${aggregate.getDisplayValue()}${aggregate.getDisplayUnit()}`
-      : '--';
+    const summaryValue = formatDashboardDataDisplay(aggregate);
     const summaryMeta = getDashboardSummaryMetaLabel(
       this.chartDataCategoryType,
       this.chartDataValueType,
@@ -650,14 +649,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
   }
 
   private formatValue(value: number | null): string {
-    if (!Number.isFinite(value)) {
-      return '--';
-    }
-    const data = getDashboardDataInstanceOrNull(this.chartDataType, value, this.logger);
-    if (!data) {
-      return Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
-    }
-    return `${data.getDisplayValue()}${data.getDisplayUnit()}`;
+    return formatDashboardNumericValue(this.chartDataType, value, this.logger);
   }
 
   private formatTooltip(points: DashboardCartesianPoint[], dataIndex: number): string {

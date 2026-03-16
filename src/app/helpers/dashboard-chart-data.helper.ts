@@ -1,6 +1,7 @@
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
+  DataDuration,
   DataInterface,
   DynamicDataLoader,
   TimeIntervals
@@ -12,6 +13,8 @@ import { getBrowserLocale } from '../shared/adapters/date-locale.config';
 type WarnLogger = {
   warn?: (...args: unknown[]) => void;
 };
+
+const SECONDS_PER_DAY = 24 * 60 * 60;
 
 function toFiniteNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === '') {
@@ -155,6 +158,37 @@ export function getDashboardAggregateData(
     default:
       return null;
   }
+}
+
+export function formatDashboardDataDisplay(data: DataInterface | null | undefined): string {
+  if (!data) {
+    return '--';
+  }
+
+  const rawValue = toFiniteNumber(typeof data.getValue === 'function' ? data.getValue() : null);
+  if (data instanceof DataDuration && rawValue !== null && rawValue >= SECONDS_PER_DAY) {
+    return data.getDisplayValue(true, false).trim();
+  }
+
+  return `${data.getDisplayValue()}${data.getDisplayUnit()}`.trim();
+}
+
+export function formatDashboardNumericValue(
+  chartDataType: string | undefined,
+  value: unknown,
+  logger?: WarnLogger
+): string {
+  const numericValue = toFiniteNumber(value);
+  if (numericValue === null) {
+    return '--';
+  }
+
+  const data = getDashboardDataInstanceOrNull(chartDataType, numericValue, logger);
+  if (!data) {
+    return Number(numericValue).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  }
+
+  return formatDashboardDataDisplay(data);
 }
 
 export function getDashboardChartSortComparator(
