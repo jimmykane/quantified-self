@@ -9,6 +9,7 @@
 
     <!-- Optional Shade -->
     <app-shade *ngIf="showShade" [isActive]="isLoading" [hasError]="hasError"
+        [allowErrorPassthrough]="allowErrorPassthrough"
         [errorMessage]="errorMessage" [hint]="errorHint" [icon]="errorIcon" [showProgressBar]="false"></app-shade>
 
     <!-- Transcluded Content -->

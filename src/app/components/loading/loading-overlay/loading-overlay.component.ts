@@ -9,6 +9,7 @@ import { Component, Input } from '@angular/core';
 export class AppLoadingOverlayComponent {
     @Input() isLoading: boolean = false;
     @Input() hasError: boolean = false;
+    @Input() allowErrorPassthrough: boolean = false;
     @Input() errorMessage: string = '';
     @Input() mode: 'determinate' | 'indeterminate' | 'buffer' | 'query' = 'indeterminate';
     @Input() height: string = '100%';

@@ -22,6 +22,10 @@
   pointer-events: auto;
 }
 
+.loading-shade.pass-through {
+  pointer-events: none;
+}
+
 .error {
   color: #ffffff;
   max-width: min(38rem, 92%);
