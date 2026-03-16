@@ -18,6 +18,7 @@ describe('EChartsHostController', () => {
 
   const chartMock = {
     isDisposed: vi.fn().mockReturnValue(false),
+    dispatchAction: vi.fn(),
   };
 
   const buildLoaderMock = () => ({
@@ -200,6 +201,20 @@ describe('EChartsHostController', () => {
     expect(loader.resize).toHaveBeenCalledWith(chartMock, {
       silent: true,
     });
+  });
+
+  it('should hide the active tooltip after initialization', async () => {
+    const loader = buildLoaderMock();
+    const controller = new EChartsHostController({
+      eChartsLoader: loader as any,
+    });
+    const container = document.createElement('div');
+
+    await controller.init(container);
+    const didHide = controller.hideTooltip();
+
+    expect(didHide).toBe(true);
+    expect(chartMock.dispatchAction).toHaveBeenCalledWith({ type: 'hideTip' });
   });
 
   it('should resize from resize observer callback using raf throttling', async () => {

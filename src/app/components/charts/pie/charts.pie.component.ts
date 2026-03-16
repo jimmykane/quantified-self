@@ -29,7 +29,7 @@ import {
   getDashboardPieSliceDisplayLabel
 } from '../../../helpers/dashboard-pie-chart-data.helper';
 import {
-  ECHARTS_SERIES_MERGE_UPDATE_SETTINGS,
+  ECHARTS_SERIES_IMMEDIATE_UPDATE_SETTINGS,
   EChartsHostController
 } from '../../../helpers/echarts-host-controller';
 import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
@@ -153,10 +153,11 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
       this.logger
     );
     const option = this.buildChartOption(pieData, aggregate);
+    this.chartHost.hideTooltip();
     this.chartHost.setOption(
       option,
       seriesHasData(pieData)
-        ? ECHARTS_SERIES_MERGE_UPDATE_SETTINGS
+        ? ECHARTS_SERIES_IMMEDIATE_UPDATE_SETTINGS
         : ChartsPieComponent.EMPTY_DATA_UPDATE_SETTINGS
     );
     this.chartHost.scheduleResize();

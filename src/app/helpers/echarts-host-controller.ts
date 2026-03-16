@@ -3,19 +3,25 @@ import { EChartsLoaderService } from '../services/echarts-loader.service';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type ChartSetOptionSettings = Parameters<EChartsType['setOption']>[1];
+type ChartActionPayload = Parameters<EChartsType['dispatchAction']>[0];
 type ChartInitSettings = NonNullable<Parameters<EChartsLoaderService['init']>[2]>;
 type ChartMainType = 'series' | 'xAxis' | 'yAxis' | 'dataZoom';
 
-function buildMergeUpdateSettings(replaceMerge: readonly ChartMainType[]): ChartSetOptionSettings {
+function buildMergeUpdateSettings(
+  replaceMerge: readonly ChartMainType[],
+  lazyUpdate = true
+): ChartSetOptionSettings {
   return {
     notMerge: false,
-    lazyUpdate: true,
+    lazyUpdate,
     replaceMerge: [...replaceMerge]
   };
 }
 
 export const ECHARTS_SERIES_MERGE_UPDATE_SETTINGS = buildMergeUpdateSettings(['series']);
 export const ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS = buildMergeUpdateSettings(['series', 'xAxis', 'yAxis']);
+export const ECHARTS_SERIES_IMMEDIATE_UPDATE_SETTINGS = buildMergeUpdateSettings(['series'], false);
+export const ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS = buildMergeUpdateSettings(['series', 'xAxis', 'yAxis'], false);
 export const ECHARTS_INTERACTIVE_CARTESIAN_MERGE_UPDATE_SETTINGS = buildMergeUpdateSettings([
   'series',
   'xAxis',
@@ -98,6 +104,10 @@ export class EChartsHostController {
     }
     this.config.eChartsLoader.setOption(this.chart, option, settings);
     return true;
+  }
+
+  public hideTooltip(): boolean {
+    return this.dispatchAction({ type: 'hideTip' });
   }
 
   public scheduleResize(): void {
@@ -210,5 +220,14 @@ export class EChartsHostController {
     }
 
     this.unsubscribeTapFeedback = this.config.eChartsLoader.attachMobileSeriesTapFeedback(this.chart);
+  }
+
+  private dispatchAction(payload: ChartActionPayload): boolean {
+    if (!this.chart || this.chart.isDisposed()) {
+      return false;
+    }
+
+    this.chart.dispatchAction(payload);
+    return true;
   }
 }

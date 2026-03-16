@@ -30,6 +30,7 @@ describe('ChartsXYComponent', () => {
 
   const mockChart = {
     isDisposed: vi.fn().mockReturnValue(false),
+    dispatchAction: vi.fn(),
   };
 
   let mockLoader: {
@@ -152,6 +153,12 @@ describe('ChartsXYComponent', () => {
     expect(option.series[0].connectNulls).toBe(true);
     expect(option.xAxis.type).toBe('category');
     expect(option.yAxis.type).toBe('value');
+    expect(mockChart.dispatchAction).toHaveBeenCalledWith({ type: 'hideTip' });
+    expect(mockLoader.setOption.mock.calls.at(-1)?.[2]).toEqual({
+      notMerge: false,
+      lazyUpdate: false,
+      replaceMerge: ['series', 'xAxis', 'yAxis']
+    });
   });
 
   it('should include dashed regression line for date category', async () => {

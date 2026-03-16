@@ -21,7 +21,7 @@ import { AppEventColorService } from '../../../services/color/app.event.color.se
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
 import {
-  ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS,
+  ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS,
   EChartsHostController
 } from '../../../helpers/echarts-host-controller';
 import {
@@ -154,7 +154,8 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
       this.logger
     );
     const option = this.buildChartOption(points, aggregate);
-    this.chartHost.setOption(option, ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS);
+    this.chartHost.hideTooltip();
+    this.chartHost.setOption(option, ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
     this.chartHost.scheduleResize();
   }
 
