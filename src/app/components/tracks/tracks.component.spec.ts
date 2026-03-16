@@ -1070,6 +1070,7 @@ describe('TracksComponent', () => {
     it('should collect jump heat points from loaded activities', async () => {
       const trackManager = (component as any).tracksMapManager;
       const setJumpHeatPointsSpy = vi.spyOn(trackManager, 'setJumpHeatPoints');
+      const setTracksFromPreparedSpy = vi.spyOn(trackManager, 'setTracksFromPrepared');
 
       const activity = {
         type: ActivityTypes.Running,
@@ -1096,8 +1097,8 @@ describe('TracksComponent', () => {
       await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
       await waitForAsyncWork();
 
-      expect(setJumpHeatPointsSpy).toHaveBeenCalledTimes(1);
-      expect(setJumpHeatPointsSpy).toHaveBeenCalledWith([
+      expect(setJumpHeatPointsSpy).toHaveBeenCalledTimes(2);
+      expect(setJumpHeatPointsSpy).toHaveBeenNthCalledWith(1, [
         expect.objectContaining({
           lng: 22.945,
           lat: 40.645,
@@ -1105,6 +1106,15 @@ describe('TracksComponent', () => {
           distance: 4.2
         })
       ]);
+      expect(setJumpHeatPointsSpy).toHaveBeenLastCalledWith([
+        expect.objectContaining({
+          lng: 22.945,
+          lat: 40.645,
+          hangTime: 1.7,
+          distance: 4.2
+        })
+      ]);
+      expect(setJumpHeatPointsSpy.mock.invocationCallOrder[0]).toBeLessThan(setTracksFromPreparedSpy.mock.invocationCallOrder[0]);
     });
 
     it('should collect activity start points from loaded activities', async () => {
@@ -1159,6 +1169,197 @@ describe('TracksComponent', () => {
           lat: 40.64
         })
       ]);
+    });
+
+    it('should show cache-backed activity start points before committing polylines', async () => {
+      const trackManager = (component as any).tracksMapManager;
+      const setActivityStartPointsSpy = vi.spyOn(trackManager, 'setActivityStartPoints');
+      const setTracksFromPreparedSpy = vi.spyOn(trackManager, 'setTracksFromPrepared');
+      const event = createMockEvent('cache-start-event', '2024-11-08T08:00:00Z', 40.64, 22.94);
+      (event as any).getActivities = () => [];
+      const cachedPolylines = createCachedEventPolylines([
+        createCompleteCachedTrackActivity({
+          activityId: 'activity-cache-start',
+          coordinates: [[22.94, 40.64], [22.95, 40.65]],
+          activityTypeValue: ActivityTypes.Running,
+        }),
+      ], {
+        activityIdentitySignature: ['id:activity-cache-start'],
+      });
+
+      mockEventService.getEventsBy.mockReturnValue(of([event]));
+      mockEventService.getActivitiesOnceByEventWithOptions.mockImplementation((_user: unknown, _eventId: string, options: any) => (
+        options?.preferCache === false ? of([]) : of([])
+      ));
+      mockMyTracksPolylineCacheService.resolveEventCacheKey.mockResolvedValue('cache-start-key');
+      mockMyTracksPolylineCacheService.getEventPolylines.mockResolvedValue(cachedPolylines);
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      expect(setActivityStartPointsSpy).toHaveBeenCalledTimes(2);
+      expect(setActivityStartPointsSpy).toHaveBeenNthCalledWith(1, [
+        expect.objectContaining({
+          eventId: 'cache-start-event',
+          activityId: 'activity-cache-start',
+          lng: 22.94,
+          lat: 40.64,
+        })
+      ]);
+      expect(setActivityStartPointsSpy.mock.invocationCallOrder[0]).toBeLessThan(setTracksFromPreparedSpy.mock.invocationCallOrder[0]);
+    });
+
+    it('should avoid approximate early start points until exact coordinates are available', async () => {
+      const trackManager = (component as any).tracksMapManager;
+      const setActivityStartPointsSpy = vi.spyOn(trackManager, 'setActivityStartPoints');
+      const setTracksFromPreparedSpy = vi.spyOn(trackManager, 'setTracksFromPrepared');
+      const hydrationSubject = new Subject<any>();
+      const lightweightActivity = {
+        getID: () => 'activity-exact-only',
+        type: ActivityTypes.Running,
+        hasPositionData: () => false,
+        getPositionData: () => [],
+        getDuration: () => ({ getDisplayValue: () => '00:40:00' }),
+        getDistance: () => ({ getDisplayValue: () => '7.0', getDisplayUnit: () => 'km' }),
+        getStat: () => null,
+        getAllEvents: () => [],
+      };
+      const hydratedActivity = {
+        ...lightweightActivity,
+        hasPositionData: () => true,
+        getPositionData: () => [
+          { latitudeDegrees: 40.64, longitudeDegrees: 22.94 },
+          { latitudeDegrees: 40.65, longitudeDegrees: 22.95 },
+        ],
+      };
+      const event = createMockEvent('exact-only-event', '2024-11-08T08:00:00Z', 10, 20);
+      (event as any).getActivities = () => [];
+      const hydratedEvent = {
+        ...event,
+        getActivities: () => [hydratedActivity],
+      };
+
+      mockEventService.getEventsBy.mockReturnValue(of([event]));
+      mockEventService.getActivitiesOnceByEventWithOptions.mockReturnValue(of([lightweightActivity]));
+      mockEventService.attachStreamsToEventWithActivities.mockReturnValue(hydrationSubject.asObservable());
+
+      const loadPromise = (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      expect(setActivityStartPointsSpy).not.toHaveBeenCalled();
+      expect(setTracksFromPreparedSpy).not.toHaveBeenCalled();
+
+      hydrationSubject.next(hydratedEvent);
+      hydrationSubject.complete();
+      await loadPromise;
+      await waitForAsyncWork();
+
+      expect(setActivityStartPointsSpy).toHaveBeenCalledTimes(1);
+      const committedStartPoints = setActivityStartPointsSpy.mock.calls[0]?.[0] || [];
+      expect(committedStartPoints).toHaveLength(1);
+      expect(committedStartPoints[0]).toEqual(expect.objectContaining({
+        eventId: 'exact-only-event',
+        activityId: 'activity-exact-only',
+        lng: 22.94,
+        lat: 40.64,
+      }));
+      expect(committedStartPoints[0]?.lng).not.toBe(20);
+      expect(committedStartPoints[0]?.lat).not.toBe(10);
+    });
+
+    it('should stage lightweight jump heat before the final polyline commit', async () => {
+      const trackManager = (component as any).tracksMapManager;
+      const setJumpHeatPointsSpy = vi.spyOn(trackManager, 'setJumpHeatPoints');
+      const setTracksFromPreparedSpy = vi.spyOn(trackManager, 'setTracksFromPrepared');
+      const hydrationSubject = new Subject<any>();
+      const lightweightActivity = {
+        getID: () => 'activity-lightweight-jump',
+        type: ActivityTypes.Running,
+        hasPositionData: () => false,
+        getPositionData: () => [],
+        getDuration: () => ({ getDisplayValue: () => '00:35:00' }),
+        getDistance: () => ({ getDisplayValue: () => '6.0', getDisplayUnit: () => 'km' }),
+        getStat: () => null,
+        getAllEvents: () => [{
+          jumpData: {
+            position_lat: createStat(40.645),
+            position_long: createStat(22.945),
+            hang_time: createStat(1.7),
+            distance: createStat(4.2),
+          }
+        }],
+      };
+      const hydratedActivity = {
+        ...lightweightActivity,
+        hasPositionData: () => true,
+        getPositionData: () => [
+          { latitudeDegrees: 40.64, longitudeDegrees: 22.94 },
+          { latitudeDegrees: 40.65, longitudeDegrees: 22.95 },
+        ],
+      };
+      const event = createMockEvent('lightweight-jump-event', '2024-11-08T08:00:00Z', 40.64, 22.94);
+      (event as any).getActivities = () => [];
+      const hydratedEvent = {
+        ...event,
+        getActivities: () => [hydratedActivity],
+      };
+
+      mockEventService.getEventsBy.mockReturnValue(of([event]));
+      mockEventService.getActivitiesOnceByEventWithOptions.mockReturnValue(of([lightweightActivity]));
+      mockEventService.attachStreamsToEventWithActivities.mockReturnValue(hydrationSubject.asObservable());
+
+      const loadPromise = (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      expect(setJumpHeatPointsSpy).toHaveBeenCalledTimes(1);
+      expect(setTracksFromPreparedSpy).not.toHaveBeenCalled();
+
+      hydrationSubject.next(hydratedEvent);
+      hydrationSubject.complete();
+      await loadPromise;
+      await waitForAsyncWork();
+
+      expect(setJumpHeatPointsSpy).toHaveBeenCalledTimes(2);
+      expect(setTracksFromPreparedSpy).toHaveBeenCalled();
+      expect(setJumpHeatPointsSpy.mock.invocationCallOrder[0]).toBeLessThan(setTracksFromPreparedSpy.mock.invocationCallOrder[0]);
+    });
+
+    it('should reuse phase-two activity fetch results when phase three still needs hydration', async () => {
+      const lightweightActivity = {
+        getID: () => 'activity-phase-two-reuse',
+        type: ActivityTypes.Running,
+        hasPositionData: () => false,
+        getPositionData: () => [],
+        getDuration: () => ({ getDisplayValue: () => '00:45:00' }),
+        getDistance: () => ({ getDisplayValue: () => '8.0', getDisplayUnit: () => 'km' }),
+        getStat: () => null,
+        getAllEvents: () => [],
+      };
+      const hydratedActivity = {
+        ...lightweightActivity,
+        hasPositionData: () => true,
+        getPositionData: () => [
+          { latitudeDegrees: 40.64, longitudeDegrees: 22.94 },
+          { latitudeDegrees: 40.65, longitudeDegrees: 22.95 },
+        ],
+      };
+      const event = createMockEvent('phase-two-reuse-event', '2024-11-08T08:00:00Z', 40.64, 22.94);
+      (event as any).getActivities = () => [];
+      const hydratedEvent = {
+        ...event,
+        getActivities: () => [hydratedActivity],
+      };
+
+      mockEventService.getEventsBy.mockReturnValue(of([event]));
+      mockEventService.getActivitiesOnceByEventWithOptions.mockReturnValue(of([lightweightActivity]));
+      mockEventService.attachStreamsToEventWithActivities.mockReturnValue(of(hydratedEvent));
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      expect(mockEventService.getActivitiesOnceByEventWithOptions).toHaveBeenCalledTimes(1);
+      expect(mockEventService.attachStreamsToEventWithActivities).toHaveBeenCalledTimes(1);
+      expect(event.addActivities).toHaveBeenCalledWith([lightweightActivity]);
     });
 
     it('should use simplified coordinates for track rendering when simplification service returns reduced output', async () => {
@@ -1426,12 +1627,14 @@ describe('TracksComponent', () => {
       expect(clearJumpHeatmapSpy).toHaveBeenCalled();
     });
 
-    it('should not apply stale jump heatmap data when a newer load starts', async () => {
+    it('should block stale lightweight overlay commits when a newer load starts before metadata resolves', async () => {
       const trackManager = (component as any).tracksMapManager;
+      const setActivityStartPointsSpy = vi.spyOn(trackManager, 'setActivityStartPoints');
       const setJumpHeatPointsSpy = vi.spyOn(trackManager, 'setJumpHeatPoints');
-
-      const slowHydrationSubject = new Subject<any>();
-      const eventAActivity = {
+      const setTracksFromPreparedSpy = vi.spyOn(trackManager, 'setTracksFromPrepared');
+      const slowActivitiesSubject = new Subject<any[]>();
+      const delayedActivity = {
+        getID: () => 'delayed-activity-a',
         type: ActivityTypes.Running,
         hasPositionData: () => true,
         getPositionData: () => [
@@ -1448,10 +1651,78 @@ describe('TracksComponent', () => {
         }],
         getDuration: () => ({ getDisplayValue: () => '00:40:00' }),
         getDistance: () => ({ getDisplayValue: () => '7.0', getDisplayUnit: () => 'km' }),
-        getID: () => 'activity-a'
+        getStat: () => null,
+      };
+      const eventA = createMockEvent('stale-metadata-event-a', '2024-11-08T08:00:00Z', 40.64, 22.94);
+      (eventA as any).getActivities = () => [];
+      const eventB = createMockEvent('stale-metadata-event-b', '2024-11-09T08:00:00Z', 40.66, 22.96);
+      (eventB as any).getActivities = () => [];
+
+      let eventsCallCount = 0;
+      mockEventService.getEventsBy.mockImplementation(() => {
+        eventsCallCount += 1;
+        return of(eventsCallCount === 1 ? [eventA] : [eventB]);
+      });
+      mockEventService.getActivitiesOnceByEventWithOptions.mockImplementation((_user: unknown, eventId: string, options: any) => {
+        if (eventId === 'stale-metadata-event-a' && options?.preferCache === true) {
+          return slowActivitiesSubject.asObservable();
+        }
+        return of([]);
+      });
+
+      const firstLoad = (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.lastMonth, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      slowActivitiesSubject.next([delayedActivity]);
+      slowActivitiesSubject.complete();
+      await firstLoad;
+      await waitForAsyncWork();
+
+      expect(setActivityStartPointsSpy).not.toHaveBeenCalled();
+      expect(setJumpHeatPointsSpy).not.toHaveBeenCalled();
+      expect(setTracksFromPreparedSpy).not.toHaveBeenCalled();
+    });
+
+    it('should not apply stale jump heatmap or polyline commits when hydration finishes after a newer load starts', async () => {
+      const trackManager = (component as any).tracksMapManager;
+      const setJumpHeatPointsSpy = vi.spyOn(trackManager, 'setJumpHeatPoints');
+      const setTracksFromPreparedSpy = vi.spyOn(trackManager, 'setTracksFromPrepared');
+
+      const slowHydrationSubject = new Subject<any>();
+      const eventAActivity = {
+        type: ActivityTypes.Running,
+        getID: () => 'activity-a',
+        hasPositionData: () => false,
+        getPositionData: () => [],
+        getAllEvents: () => [{
+          jumpData: {
+            position_lat: createStat(40.645),
+            position_long: createStat(22.945),
+            hang_time: createStat(1.7),
+            distance: createStat(4.2),
+          }
+        }],
+        getDuration: () => ({ getDisplayValue: () => '00:40:00' }),
+        getDistance: () => ({ getDisplayValue: () => '7.0', getDisplayUnit: () => 'km' }),
+        getStat: () => null,
+      };
+      const hydratedEventAActivity = {
+        ...eventAActivity,
+        hasPositionData: () => true,
+        getPositionData: () => [
+          { latitudeDegrees: 40.64, longitudeDegrees: 22.94 },
+          { latitudeDegrees: 40.65, longitudeDegrees: 22.95 },
+        ],
       };
       const eventA = createMockEvent('event-a', '2024-11-08T08:00:00Z', 40.64, 22.94);
-      (eventA as any).getActivities = () => [eventAActivity];
+      (eventA as any).getActivities = () => [];
+      const hydratedEventA = {
+        ...eventA,
+        getActivities: () => [hydratedEventAActivity],
+      };
 
       const eventB = createMockEvent('event-b', '2024-11-09T08:00:00Z', 40.66, 22.96);
       (eventB as any).getActivities = () => [];
@@ -1465,8 +1736,8 @@ describe('TracksComponent', () => {
         return of([eventB]);
       });
 
-      mockEventService.getActivities.mockImplementation((_user: any, eventId: string) => {
-        if (eventId === 'event-a') return of([eventAActivity]);
+      mockEventService.getActivitiesOnceByEventWithOptions.mockImplementation((_user: any, eventId: string, options: any) => {
+        if (eventId === 'event-a' && options?.preferCache === true) return of([eventAActivity]);
         return of([]);
       });
 
@@ -1480,15 +1751,52 @@ describe('TracksComponent', () => {
       const firstLoad = (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
       await waitForAsyncWork();
 
+      expect(setJumpHeatPointsSpy).toHaveBeenCalledTimes(1);
+      expect(setTracksFromPreparedSpy).not.toHaveBeenCalled();
+
       await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.lastMonth, [ActivityTypes.Running]);
       await waitForAsyncWork();
 
-      slowHydrationSubject.next(eventA as any);
+      slowHydrationSubject.next(hydratedEventA as any);
       slowHydrationSubject.complete();
       await firstLoad;
       await waitForAsyncWork();
 
-      expect(setJumpHeatPointsSpy).toHaveBeenCalledTimes(0);
+      expect(setJumpHeatPointsSpy).toHaveBeenCalledTimes(1);
+      expect(setTracksFromPreparedSpy).not.toHaveBeenCalled();
+    });
+
+    it('should fit bounds only after the final polyline commit', async () => {
+      const trackManager = (component as any).tracksMapManager;
+      const setTracksFromPreparedSpy = vi.spyOn(trackManager, 'setTracksFromPrepared');
+      const fitBoundsSpy = vi.spyOn(component as any, 'fitBoundsToTracks');
+      const activity = {
+        type: ActivityTypes.Running,
+        getID: () => 'activity-fit-bounds',
+        hasPositionData: () => true,
+        getPositionData: () => [
+          { latitudeDegrees: 40.64, longitudeDegrees: 22.94 },
+          { latitudeDegrees: 40.65, longitudeDegrees: 22.95 },
+        ],
+        getDuration: () => ({ getDisplayValue: () => '00:30:00' }),
+        getDistance: () => ({ getDisplayValue: () => '5.0', getDisplayUnit: () => 'km' }),
+        getStat: () => null,
+        getAllEvents: () => [],
+      };
+      const event = createMockEvent('fit-bounds-event', '2024-11-08T08:00:00Z', 40.64, 22.94);
+      (event as any).getActivities = () => [activity];
+
+      mockEventService.getEventsBy.mockReturnValue(of([event]));
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      expect(setTracksFromPreparedSpy).toHaveBeenCalled();
+      expect(fitBoundsSpy).toHaveBeenCalledWith([
+        [22.94, 40.64],
+        [22.95, 40.65],
+      ]);
+      expect(setTracksFromPreparedSpy.mock.invocationCallOrder[0]).toBeLessThan(fitBoundsSpy.mock.invocationCallOrder[0]);
     });
 
     it('should update popup state from start marker selection handler', async () => {
@@ -1724,6 +2032,79 @@ describe('TracksComponent', () => {
       expect(component.detectedTripsPanelExpanded()).toBe(true);
       expect(component.detectedTrips()[0].locationLabel).toBe('Kathmandu, Nepal');
       expect(component.hasEvaluatedTripDetection()).toBe(true);
+    });
+
+    it('should detect and commit trips before the final polyline render', async () => {
+      const trackManager = (component as any).tracksMapManager;
+      const setHomeAreaSpy = vi.spyOn(trackManager, 'setHomeArea');
+      const setTracksFromPreparedSpy = vi.spyOn(trackManager, 'setTracksFromPrepared');
+      const event = createMockEvent('trip-stage-event', '2024-11-08T08:00:00Z', 27.7172, 85.3240);
+      mockEventService.getEventsBy.mockReturnValue(of([event]));
+      mockTripDetectionService.detectTripsWithContext.mockReturnValue(createTripDetectionResult({
+        trips: [{
+          tripId: 'trip-stage',
+          destinationId: 'destination-stage',
+          destinationVisitIndex: 1,
+          destinationVisitCount: 1,
+          isRevisit: false,
+          eventIds: ['trip-stage-event'],
+          startDate: new Date('2024-11-08T08:00:00Z'),
+          endDate: new Date('2024-11-09T08:00:00Z'),
+          activityCount: 1,
+          centroidLat: 27.7172,
+          centroidLng: 85.3240,
+          bounds: {
+            west: 85.20,
+            east: 85.40,
+            south: 27.60,
+            north: 27.80,
+          },
+        }],
+        homeArea: {
+          destinationId: 'destination-home',
+          pointCount: 3,
+          pointShare: 0.5,
+          centroidLat: 37.9838,
+          centroidLng: 23.7275,
+          bounds: {
+            west: 23.71,
+            east: 23.74,
+            south: 37.97,
+            north: 38.0,
+          },
+          radiusKm: 3.2,
+        },
+      }));
+      mockTripLocationLabelService.resolveTripLocationFromCandidates.mockResolvedValue({
+        city: 'Kathmandu',
+        country: 'Nepal',
+        label: 'Kathmandu, Nepal',
+      });
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.all, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      expect(setHomeAreaSpy).toHaveBeenCalled();
+      expect(setTracksFromPreparedSpy).toHaveBeenCalled();
+      expect(setHomeAreaSpy.mock.invocationCallOrder[0]).toBeLessThan(setTracksFromPreparedSpy.mock.invocationCallOrder[0]);
+    });
+
+    it('should apply requested activity-type filters during the early trip detection phase', async () => {
+      const runningEvent = createMockEvent('trip-running-event', '2024-11-08T08:00:00Z', 40.64, 22.94, ActivityTypes.Running);
+      const cyclingEvent = createMockEvent('trip-cycling-event', '2024-11-09T08:00:00Z', 40.66, 22.96, ActivityTypes.Cycling);
+      mockEventService.getEventsBy.mockReturnValue(of([runningEvent, cyclingEvent]));
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.all, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      expect(mockTripDetectionService.detectTripsWithContext).toHaveBeenCalledTimes(1);
+      expect(mockTripDetectionService.detectTripsWithContext).toHaveBeenCalledWith([
+        expect.objectContaining({ eventId: 'trip-running-event' })
+      ], {
+        homeInferenceInputs: [
+          expect.objectContaining({ eventId: 'trip-running-event' })
+        ]
+      });
     });
 
     it('resolves location labels per trip for revisits that share a destination id', async () => {

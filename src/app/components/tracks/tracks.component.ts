@@ -104,6 +104,40 @@ interface ResolvedTrackDataForEventResult {
   activityCount: number;
 }
 
+interface ResolvedMyTracksEventContext {
+  sourceEvent: any;
+  currentEvent: any;
+  eventId: string;
+  cacheKey: string | null;
+  cachedPolylines?: CachedMyTracksEventPolylines;
+  lightweightActivities: any[];
+  lightweightCachedPolylines?: CachedMyTracksEventPolylines;
+  lightweightTrackPolylines: ResolvedMyTracksActivityPolyline[];
+  activityFetchDurationMs: number;
+  usedCompleteCache: boolean;
+  needsHydrationForPolylines: boolean;
+  earlyStartPoints: TrackStartPoint[];
+  earlyJumpHeatPoints: JumpHeatPoint[];
+  earlyJumpsWithCoordinates: number;
+  earlyJumpsWithWeightMetrics: number;
+}
+
+interface CollectedTrackRenderData {
+  preparedTracks: PreparedTrackPolyline[];
+  eventCoordinates: number[][];
+  startPoints: TrackStartPoint[];
+  jumpHeatPoints: JumpHeatPoint[];
+  jumpsWithCoordinates: number;
+  jumpsWithWeightMetrics: number;
+  tracksProcessed: number;
+  tracksSimplified: number;
+  inputPointsTotal: number;
+  outputPointsTotal: number;
+  coordinateExtractionDurationMs: number;
+  simplificationDurationMs: number;
+  visibleTrackCount: number;
+}
+
 @Component({
   selector: 'app-tracks',
   templateUrl: './tracks.component.html',
@@ -631,6 +665,7 @@ export class TracksComponent implements OnInit, OnDestroy {
       }
 
       events = (events || []).filter((event) => !event.isMerge).filter((event) => event.getStat(DataStartPosition.type));
+      this.eventsById = this.buildEventsByIdMap(events);
       if (!events || !events.length) {
         if (!this.isCurrentLoad(promiseTime)) {
           return;
@@ -670,17 +705,103 @@ export class TracksComponent implements OnInit, OnDestroy {
         return;
       }
 
-      const chunkedEvents: any[][] = events.reduce((all: any[][], one: any, i: number) => {
-        const ch = Math.floor(i / 15);
-        all[ch] = ([] as any[]).concat((all[ch] || []), one);
-        return all
-      }, [])
-
       this.updateBufferProgress(100);
 
       if (!this.isCurrentLoad(promiseTime)) {
         return;
       }
+      const earlyTripCandidates = this.collectTripDetectionInputsForCurrentRange(events, activityTypes);
+      const earlyHomeInferenceCandidates = dateRange === DateRanges.all
+        ? earlyTripCandidates
+        : historicalHomeInferenceCandidates;
+      const earlyTripDetectionStartedAt = performance.now();
+      await this.updateDetectedTripsForCurrentLoad(
+        earlyTripCandidates,
+        earlyHomeInferenceCandidates,
+        promiseTime,
+      );
+      tripDetectionDurationMs += performance.now() - earlyTripDetectionStartedAt;
+
+      if (!this.isCurrentLoad(promiseTime)) {
+        return;
+      }
+
+      const chunkedEvents = this.chunkItems(events, 15);
+      const lightweightContexts: ResolvedMyTracksEventContext[] = [];
+      const earlyStartPoints: TrackStartPoint[] = [];
+      const earlyJumpHeatPoints: JumpHeatPoint[] = [];
+      let earlyJumpsWithCoordinates = 0;
+      let earlyJumpsWithWeightMetrics = 0;
+
+      for (const eventsChunk of chunkedEvents) {
+        if (!this.isCurrentLoad(promiseTime)) {
+          return;
+        }
+
+        const chunkContexts = await Promise.all(eventsChunk.map(async (event: any) => {
+          const context = await this.resolveLightweightEventContext(user, event, activityTypes);
+          activitiesFetchDurationMs += context.activityFetchDurationMs;
+          if (context.usedCompleteCache) {
+            polylineCacheHitCount += 1;
+          } else {
+            polylineCacheMissCount += 1;
+          }
+          return context;
+        }));
+
+        if (!this.isCurrentLoad(promiseTime)) {
+          return;
+        }
+
+        chunkContexts.forEach((context) => {
+          lightweightContexts.push(context);
+          earlyStartPoints.push(...context.earlyStartPoints);
+          earlyJumpHeatPoints.push(...context.earlyJumpHeatPoints);
+          earlyJumpsWithCoordinates += context.earlyJumpsWithCoordinates;
+          earlyJumpsWithWeightMetrics += context.earlyJumpsWithWeightMetrics;
+        });
+      }
+
+      if (!this.isCurrentLoad(promiseTime)) {
+        return;
+      }
+
+      const mergedEarlyStartPoints = this.mergeTrackStartPoints(earlyStartPoints);
+      const mergedEarlyJumpHeatPoints = this.mergeJumpHeatPoints(earlyJumpHeatPoints);
+
+      this.eventsById = this.buildEventsByIdMap(lightweightContexts.map((context) => context.currentEvent));
+      if (mergedEarlyStartPoints.length > 0) {
+        this.tracksMapManager.setActivityStartPoints(mergedEarlyStartPoints);
+      } else {
+        this.tracksMapManager.clearActivityStartPoints();
+      }
+
+      if (mergedEarlyJumpHeatPoints.length > 0) {
+        this.hasDetectedJumps.set(true);
+        this.tracksMapManager.setJumpHeatPoints(mergedEarlyJumpHeatPoints);
+      } else {
+        this.hasDetectedJumps.set(false);
+        this.tracksMapManager.clearJumpHeatmap();
+      }
+
+      const correctedTripCandidates = this.collectTripDetectionInputsFromContexts(lightweightContexts, activityTypes);
+      if (this.haveTripCandidatesChanged(earlyTripCandidates, correctedTripCandidates)) {
+        const correctedHomeInferenceCandidates = dateRange === DateRanges.all
+          ? correctedTripCandidates
+          : historicalHomeInferenceCandidates;
+        const correctedTripDetectionStartedAt = performance.now();
+        await this.updateDetectedTripsForCurrentLoad(
+          correctedTripCandidates,
+          correctedHomeInferenceCandidates,
+          promiseTime,
+        );
+        tripDetectionDurationMs += performance.now() - correctedTripDetectionStartedAt;
+      }
+
+      if (!this.isCurrentLoad(promiseTime)) {
+        return;
+      }
+
       let count = 0;
       let addedTrackCount = 0;
       const allCoordinates: number[][] = [];
@@ -688,145 +809,88 @@ export class TracksComponent implements OnInit, OnDestroy {
       const trackStartPoints: TrackStartPoint[] = [];
       const preparedTracks: PreparedTrackPolyline[] = [];
       const stagedTrackCoordinatesByEventId = new Map<string, number[][]>();
-      const stagedEventsById = new Map<string, any>();
+      const stagedEventsById = this.buildEventsByIdMap(lightweightContexts.map((context) => context.currentEvent));
       let jumpsWithCoordinates = 0;
       let jumpsWithWeightMetrics = 0;
       let tracksProcessed = 0;
       let tracksSimplified = 0;
       let inputPointsTotal = 0;
       let outputPointsTotal = 0;
-      const detectionCandidatesByEvent = new Map<string, TripDetectionInput>();
+      const contextChunks = this.chunkItems(lightweightContexts, 15);
 
-      for (const eventsChunk of chunkedEvents) {
+      for (const contextsChunk of contextChunks) {
         if (!this.isCurrentLoad(promiseTime)) {
           return;
         }
 
-        await Promise.all(eventsChunk.map(async (event: any) => {
+        await Promise.all(contextsChunk.map(async (context) => {
           if (!this.isCurrentLoad(promiseTime)) {
             return;
           }
 
           const eventProcessingStartedAt = performance.now();
-          const sourceEventId = event?.getID?.() || 'unknown-event';
-          let eventActivitiesFetchDurationMs = 0;
+          const sourceEventId = context.eventId || 'unknown-event';
           let eventHydrationDurationMs = 0;
-          let eventCoordinateExtractionDurationMs = 0;
-          let eventSimplificationDurationMs = 0;
-          let eventInputPoints = 0;
-          let eventOutputPoints = 0;
-          let eventActivityCount = 0;
-          let eventVisibleTrackCount = 0;
-
           const eventHydrationStartedAt = performance.now();
-          const resolvedTrackData = await this.resolveTrackDataForEvent(user, event);
-          eventActivitiesFetchDurationMs = resolvedTrackData.activityFetchDurationMs;
-          activitiesFetchDurationMs += eventActivitiesFetchDurationMs;
-          const fullEvent = resolvedTrackData.fullEvent;
-          if (resolvedTrackData.usedCache) {
-            polylineCacheHitCount += 1;
-          } else {
-            polylineCacheMissCount += 1;
+          const resolvedTrackData = await this.resolveTrackDataForEventContext(user, context);
+          if (context.needsHydrationForPolylines) {
+            eventHydrationDurationMs = performance.now() - eventHydrationStartedAt;
+            streamsHydrationDurationMs += eventHydrationDurationMs;
           }
-          eventHydrationDurationMs = performance.now() - eventHydrationStartedAt;
-          streamsHydrationDurationMs += eventHydrationDurationMs;
-          this.logger.log(`[TracksComponent] Activities and streams ready for event: ${event.getID()}, promiseTime: ${promiseTime}`);
+
+          this.logger.log(`[TracksComponent] Track data ready for event: ${context.eventId}, promiseTime: ${promiseTime}`);
           if (!this.isCurrentLoad(promiseTime)) {
             return;
           }
 
-          const eventId = fullEvent?.getID?.() || sourceEventId;
+          const eventId = resolvedTrackData.fullEvent?.getID?.() || sourceEventId;
           if (eventId) {
-            stagedEventsById.set(eventId, fullEvent || event);
+            stagedEventsById.set(eventId, resolvedTrackData.fullEvent || context.currentEvent);
           }
-          let hasVisibleTrackForEvent = false;
-          const eventCoordinates: number[][] = [];
-          eventActivityCount = resolvedTrackData.activityCount;
-          resolvedTrackData.trackPolylines
-            .filter(({ activity }) => !activityTypes || activityTypes.length === 0 || activityTypes.includes(activity.type))
-            .forEach(({ activity, coordinates, cachedActivity }) => {
-              const jumpStats = resolvedTrackData.usedCache && this.isCachedActivityMetadataComplete(cachedActivity)
-                ? this.collectJumpHeatPointsFromCachedActivity(cachedActivity, jumpHeatPoints)
-                : this.collectJumpHeatPointsFromActivity(activity, jumpHeatPoints);
-              jumpsWithCoordinates += jumpStats.jumpsWithCoordinates;
-              jumpsWithWeightMetrics += jumpStats.jumpsWithWeightMetrics;
 
-              const coordinateExtractionStartedAt = performance.now();
-              const normalizedCoordinates = coordinates;
-              const coordinateExtractionMs = performance.now() - coordinateExtractionStartedAt;
-              coordinateExtractionDurationMs += coordinateExtractionMs;
-              eventCoordinateExtractionDurationMs += coordinateExtractionMs;
+          const collectedTrackData = this.collectTrackRenderDataFromResolvedTrackData(
+            resolvedTrackData,
+            context.sourceEvent,
+            activityTypes,
+            events.length,
+          );
 
-              if (normalizedCoordinates.length > 1) {
-                const simplificationStartedAt = performance.now();
-                const simplificationResult = this.polylineSimplificationService.simplifyVisvalingamWhyatt(
-                  normalizedCoordinates,
-                  this.resolveMyTracksSimplificationOptions(normalizedCoordinates.length, events.length)
-                );
-                const simplificationMs = performance.now() - simplificationStartedAt;
-                simplificationDurationMs += simplificationMs;
-                eventSimplificationDurationMs += simplificationMs;
-                const simplifiedCoordinates = simplificationResult.coordinates;
-                tracksProcessed++;
-                inputPointsTotal += simplificationResult.inputPointCount;
-                outputPointsTotal += simplificationResult.outputPointCount;
-                eventInputPoints += simplificationResult.inputPointCount;
-                eventOutputPoints += simplificationResult.outputPointCount;
-                if (simplificationResult.simplified) {
-                  tracksSimplified++;
-                }
+          coordinateExtractionDurationMs += collectedTrackData.coordinateExtractionDurationMs;
+          simplificationDurationMs += collectedTrackData.simplificationDurationMs;
+          jumpsWithCoordinates += collectedTrackData.jumpsWithCoordinates;
+          jumpsWithWeightMetrics += collectedTrackData.jumpsWithWeightMetrics;
+          tracksProcessed += collectedTrackData.tracksProcessed;
+          tracksSimplified += collectedTrackData.tracksSimplified;
+          inputPointsTotal += collectedTrackData.inputPointsTotal;
+          outputPointsTotal += collectedTrackData.outputPointsTotal;
+          trackStartPoints.push(...collectedTrackData.startPoints);
+          jumpHeatPoints.push(...collectedTrackData.jumpHeatPoints);
+          preparedTracks.push(...collectedTrackData.preparedTracks);
+          addedTrackCount += collectedTrackData.visibleTrackCount;
 
-                const startPoint = resolvedTrackData.usedCache && this.isCachedActivityMetadataComplete(cachedActivity)
-                  ? this.buildTrackStartPointFromCached(
-                    cachedActivity,
-                    eventId,
-                    simplifiedCoordinates[0],
-                    fullEvent?.startDate ?? event?.startDate
-                  )
-                  : this.buildTrackStartPoint(
-                    activity,
-                    eventId,
-                    simplifiedCoordinates[0],
-                    fullEvent?.startDate ?? event?.startDate
-                  );
-                if (startPoint) {
-                  trackStartPoints.push(startPoint);
-                }
-                preparedTracks.push({ activity, coordinates: simplifiedCoordinates });
-                addedTrackCount++;
-                eventVisibleTrackCount++;
-                hasVisibleTrackForEvent = true;
-                simplifiedCoordinates.forEach((coordinate: number[]) => {
-                  allCoordinates.push(coordinate);
-                  eventCoordinates.push(coordinate);
-                });
-              }
+          if (collectedTrackData.eventCoordinates.length > 0 && eventId) {
+            stagedTrackCoordinatesByEventId.set(eventId, collectedTrackData.eventCoordinates);
+            collectedTrackData.eventCoordinates.forEach((coordinate: number[]) => {
+              allCoordinates.push(coordinate);
             });
-
-          if (hasVisibleTrackForEvent && eventId) {
-            stagedTrackCoordinatesByEventId.set(eventId, eventCoordinates);
-            const detectionInput = this.getTripDetectionInputFromEvent(fullEvent || event);
-            if (detectionInput) {
-              detectionCandidatesByEvent.set(detectionInput.eventId, detectionInput);
-            }
           }
 
           const eventTotalMs = performance.now() - eventProcessingStartedAt;
           perEventPerformance.push({
             eventId,
             totalMs: eventTotalMs,
-            activitiesFetchMs: eventActivitiesFetchDurationMs,
+            activitiesFetchMs: context.activityFetchDurationMs,
             hydrationMs: eventHydrationDurationMs,
-            coordinateExtractionMs: eventCoordinateExtractionDurationMs,
-            simplificationMs: eventSimplificationDurationMs,
-            activityCount: eventActivityCount,
-            visibleTrackCount: eventVisibleTrackCount,
-            inputPoints: eventInputPoints,
-            outputPoints: eventOutputPoints,
+            coordinateExtractionMs: collectedTrackData.coordinateExtractionDurationMs,
+            simplificationMs: collectedTrackData.simplificationDurationMs,
+            activityCount: resolvedTrackData.activityCount,
+            visibleTrackCount: collectedTrackData.visibleTrackCount,
+            inputPoints: collectedTrackData.inputPointsTotal,
+            outputPoints: collectedTrackData.outputPointsTotal,
           });
 
           count++;
-          this.updateTotalProgress(Math.ceil((count / events.length) * 100));
+          this.updateTotalProgress(Math.ceil((count / lightweightContexts.length) * 100));
         }));
       }
 
@@ -843,24 +907,27 @@ export class TracksComponent implements OnInit, OnDestroy {
       this.trackCoordinatesByEventId = stagedTrackCoordinatesByEventId;
       this.eventsById = stagedEventsById;
 
-      this.tracksMapManager.clearAllTracks();
+      this.tracksMapManager.clearTrackLayers();
       if (addedTrackCount > 0) {
         this.tracksMapManager.setTracksFromPrepared(preparedTracks);
-        if (trackStartPoints.length > 0) {
-          this.tracksMapManager.setActivityStartPoints(trackStartPoints);
-          await this.waitForStartPointLayerReady();
-        } else {
-          this.tracksMapManager.clearActivityStartPoints();
-        }
+      }
+
+      const mergedTrackStartPoints = this.mergeTrackStartPoints(mergedEarlyStartPoints, trackStartPoints);
+      if (mergedTrackStartPoints.length > 0) {
+        this.tracksMapManager.setActivityStartPoints(mergedTrackStartPoints);
+        await this.waitForStartPointLayerReady();
+      } else {
+        this.tracksMapManager.clearActivityStartPoints();
       }
 
       if (allCoordinates.length > 0) {
         await this.waitForMapRenderTick();
         this.fitBoundsToTracks(allCoordinates);
       }
-      if (jumpHeatPoints.length > 0) {
+      const mergedJumpHeatPoints = this.mergeJumpHeatPoints(mergedEarlyJumpHeatPoints, jumpHeatPoints);
+      if (mergedJumpHeatPoints.length > 0) {
         this.hasDetectedJumps.set(true);
-        this.tracksMapManager.setJumpHeatPoints(jumpHeatPoints);
+        this.tracksMapManager.setJumpHeatPoints(mergedJumpHeatPoints);
       } else {
         this.hasDetectedJumps.set(false);
         this.tracksMapManager.clearJumpHeatmap();
@@ -878,26 +945,18 @@ export class TracksComponent implements OnInit, OnDestroy {
         promiseTime
       });
       this.logger.log('[TracksComponent] Jump heatmap collection summary.', {
-        jumpsWithCoordinates,
-        jumpsWithWeightMetrics,
-        renderableHeatPoints: jumpHeatPoints.length,
+        jumpsWithCoordinates: jumpsWithCoordinates + earlyJumpsWithCoordinates,
+        jumpsWithWeightMetrics: jumpsWithWeightMetrics + earlyJumpsWithWeightMetrics,
+        renderableHeatPoints: mergedJumpHeatPoints.length,
         promiseTime
       });
-      const homeInferenceCandidates = dateRange === DateRanges.all
-        ? Array.from(detectionCandidatesByEvent.values())
-        : historicalHomeInferenceCandidates;
       this.logger.log('[TracksComponent] Prepared trip detection candidates.', {
-        candidateCount: detectionCandidatesByEvent.size,
-        homeInferenceCandidateCount: homeInferenceCandidates.length,
+        candidateCount: correctedTripCandidates.length,
+        homeInferenceCandidateCount: (dateRange === DateRanges.all
+          ? correctedTripCandidates
+          : historicalHomeInferenceCandidates).length,
         promiseTime
       });
-      const tripDetectionStartedAt = performance.now();
-      await this.updateDetectedTripsForCurrentLoad(
-        Array.from(detectionCandidatesByEvent.values()),
-        homeInferenceCandidates,
-        promiseTime,
-      );
-      tripDetectionDurationMs = performance.now() - tripDetectionStartedAt;
 
       const totalLoadDurationMs = performance.now() - loadStartedAt;
       const topSlowEvents = perEventPerformance
@@ -961,10 +1020,11 @@ export class TracksComponent implements OnInit, OnDestroy {
     }
   }
 
-  private async resolveTrackDataForEvent(
+  private async resolveLightweightEventContext(
     user: AppUserInterface,
     event: any,
-  ): Promise<ResolvedTrackDataForEventResult> {
+    activityTypes?: ActivityTypes[],
+  ): Promise<ResolvedMyTracksEventContext> {
     const cacheOptions = { metadataCacheTtlMs: TracksComponent.MY_TRACKS_METADATA_CACHE_TTL_MS };
     const initialActivities = this.getEventActivities(event);
     const eventId = event?.getID?.();
@@ -977,41 +1037,128 @@ export class TracksComponent implements OnInit, OnDestroy {
       if (cacheKey && eventId) {
         this.enqueueBackgroundActivityRefresh(user, eventId, cacheKey, cachedPolylines);
       }
-      return {
-        fullEvent: event,
-        trackPolylines: initialActivities.length > 0
+      const lightweightTrackPolylines = initialActivities.length > 0
           ? this.myTracksPolylineCacheService.resolveTrackPolylines(initialActivities, cachedPolylines)
-          : this.myTracksPolylineCacheService.resolveTrackPolylinesFromCache(cachedPolylines),
-        usedCache: true,
+          : this.myTracksPolylineCacheService.resolveTrackPolylinesFromCache(cachedPolylines);
+      const earlyOverlayData = this.collectOverlayDataFromResolvedTrackPolylines(
+        lightweightTrackPolylines,
+        event,
+        activityTypes,
+        initialActivities,
+      );
+
+      return {
+        sourceEvent: event,
+        currentEvent: event,
+        eventId: eventId || 'unknown-event',
+        cacheKey,
+        cachedPolylines,
+        lightweightActivities: initialActivities,
+        lightweightCachedPolylines: cachedPolylines,
+        lightweightTrackPolylines,
         activityFetchDurationMs: 0,
-        activityCount: cachedPolylines.activityCount,
+        usedCompleteCache: true,
+        needsHydrationForPolylines: false,
+        earlyStartPoints: earlyOverlayData.earlyStartPoints,
+        earlyJumpHeatPoints: earlyOverlayData.earlyJumpHeatPoints,
+        earlyJumpsWithCoordinates: earlyOverlayData.earlyJumpsWithCoordinates,
+        earlyJumpsWithWeightMetrics: earlyOverlayData.earlyJumpsWithWeightMetrics,
       };
     }
 
     this.logger.log(`[TracksComponent] Fetching activities for event: ${eventId}, promiseTime: ${this.promiseTime}`);
     const eventActivitiesFetchStartedAt = performance.now();
-    event.addActivities(await firstValueFrom(this.eventService.getActivitiesOnceByEventWithOptions(
-      user,
-      eventId,
-      { preferCache: true, warmServer: false },
-    )));
+    const fetchedActivities = eventId
+      ? await firstValueFrom(this.eventService.getActivitiesOnceByEventWithOptions(
+        user,
+        eventId,
+        { preferCache: true, warmServer: false },
+      ))
+      : [];
     const activityFetchDurationMs = performance.now() - eventActivitiesFetchStartedAt;
+    if (fetchedActivities.length > 0 && typeof event?.addActivities === 'function') {
+      if (typeof event?.clearActivities === 'function') {
+        event.clearActivities();
+      }
+      event.addActivities(fetchedActivities);
+    }
 
-    const fullEvent = await this.hydrateTrackStreamsForEvent(user, event);
+    const lightweightActivities = fetchedActivities.length > 0
+      ? fetchedActivities
+      : initialActivities;
+    const lightweightCachedPolylines = this.buildCachedTrackPolylinesWithMetadata(
+      this.myTracksPolylineCacheService.extractTrackPolylines(lightweightActivities),
+      lightweightActivities,
+    );
+    const lightweightTrackPolylines = lightweightActivities.length > 0
+      ? this.myTracksPolylineCacheService.resolveTrackPolylines(lightweightActivities, lightweightCachedPolylines)
+      : [];
+    const earlyOverlayData = this.collectOverlayDataFromResolvedTrackPolylines(
+      lightweightTrackPolylines,
+      event,
+      activityTypes,
+      lightweightActivities,
+    );
+
+    return {
+      sourceEvent: event,
+      currentEvent: event,
+      eventId: eventId || 'unknown-event',
+      cacheKey,
+      cachedPolylines,
+      lightweightActivities,
+      lightweightCachedPolylines,
+      lightweightTrackPolylines,
+      activityFetchDurationMs,
+      usedCompleteCache: false,
+      needsHydrationForPolylines: this.shouldHydrateTrackDataForActivities(lightweightActivities, activityTypes),
+      earlyStartPoints: earlyOverlayData.earlyStartPoints,
+      earlyJumpHeatPoints: earlyOverlayData.earlyJumpHeatPoints,
+      earlyJumpsWithCoordinates: earlyOverlayData.earlyJumpsWithCoordinates,
+      earlyJumpsWithWeightMetrics: earlyOverlayData.earlyJumpsWithWeightMetrics,
+    };
+  }
+
+  private async resolveTrackDataForEventContext(
+    user: AppUserInterface,
+    context: ResolvedMyTracksEventContext,
+  ): Promise<ResolvedTrackDataForEventResult> {
+    if (!context.needsHydrationForPolylines) {
+      if (
+        !context.usedCompleteCache
+        && context.cacheKey
+        && context.lightweightCachedPolylines
+        && this.shouldPersistTrackData(context.currentEvent, context.sourceEvent, context.lightweightActivities)
+      ) {
+        await this.myTracksPolylineCacheService.setEventPolylines(context.cacheKey, context.lightweightCachedPolylines);
+      }
+
+      return {
+        fullEvent: context.currentEvent,
+        trackPolylines: context.lightweightTrackPolylines,
+        usedCache: context.usedCompleteCache,
+        activityFetchDurationMs: context.activityFetchDurationMs,
+        activityCount: context.usedCompleteCache
+          ? context.cachedPolylines?.activityCount || context.lightweightTrackPolylines.length
+          : context.lightweightActivities.length,
+      };
+    }
+
+    const fullEvent = await this.hydrateTrackStreamsForEvent(user, context.currentEvent);
     const resolvedActivities = this.getEventActivities(fullEvent);
     const extractedPolylines = this.buildCachedTrackPolylinesWithMetadata(
       this.myTracksPolylineCacheService.extractTrackPolylines(resolvedActivities),
       resolvedActivities,
     );
-    if (cacheKey && this.shouldPersistTrackData(fullEvent, event, resolvedActivities)) {
-      await this.myTracksPolylineCacheService.setEventPolylines(cacheKey, extractedPolylines);
+    if (context.cacheKey && this.shouldPersistTrackData(fullEvent, context.sourceEvent, resolvedActivities)) {
+      await this.myTracksPolylineCacheService.setEventPolylines(context.cacheKey, extractedPolylines);
     }
 
     return {
       fullEvent,
       trackPolylines: this.myTracksPolylineCacheService.resolveTrackPolylines(resolvedActivities, extractedPolylines),
       usedCache: false,
-      activityFetchDurationMs,
+      activityFetchDurationMs: context.activityFetchDurationMs,
       activityCount: resolvedActivities.length,
     };
   }
@@ -1096,6 +1243,387 @@ export class TracksComponent implements OnInit, OnDestroy {
       activityIdentitySignature: [...(basePolylines.activityIdentitySignature || [])],
       trackActivities,
     };
+  }
+
+  private buildEventsByIdMap(events: any[]): Map<string, any> {
+    return (events || []).reduce((accumulator, event) => {
+      const eventId = event?.getID?.();
+      if (eventId) {
+        accumulator.set(eventId, event);
+      }
+      return accumulator;
+    }, new Map<string, any>());
+  }
+
+  private chunkItems<T>(items: T[], chunkSize: number): T[][] {
+    if (!Array.isArray(items) || items.length === 0) {
+      return [];
+    }
+
+    if (!Number.isFinite(chunkSize) || chunkSize <= 0) {
+      return [items];
+    }
+
+    return items.reduce((all: T[][], one: T, index: number) => {
+      const chunkIndex = Math.floor(index / chunkSize);
+      all[chunkIndex] = ([] as T[]).concat((all[chunkIndex] || []), one);
+      return all;
+    }, []);
+  }
+
+  private collectTripDetectionInputsForCurrentRange(events: any[], activityTypes?: ActivityTypes[]): TripDetectionInput[] {
+    const detectionCandidatesByEvent = new Map<string, TripDetectionInput>();
+
+    (events || []).forEach((event) => {
+      if (this.eventMatchesRequestedActivityTypes(event, activityTypes) !== true) {
+        return;
+      }
+
+      const detectionInput = this.getTripDetectionInputFromEvent(event);
+      if (detectionInput) {
+        detectionCandidatesByEvent.set(detectionInput.eventId, detectionInput);
+      }
+    });
+
+    return Array.from(detectionCandidatesByEvent.values());
+  }
+
+  private collectTripDetectionInputsFromContexts(
+    contexts: ResolvedMyTracksEventContext[],
+    activityTypes?: ActivityTypes[],
+  ): TripDetectionInput[] {
+    const detectionCandidatesByEvent = new Map<string, TripDetectionInput>();
+
+    (contexts || []).forEach((context) => {
+      if (!this.contextMatchesRequestedActivityTypes(context, activityTypes)) {
+        return;
+      }
+
+      const detectionInput = this.getTripDetectionInputFromEvent(context.currentEvent || context.sourceEvent);
+      if (detectionInput) {
+        detectionCandidatesByEvent.set(detectionInput.eventId, detectionInput);
+      }
+    });
+
+    return Array.from(detectionCandidatesByEvent.values());
+  }
+
+  private haveTripCandidatesChanged(
+    previousCandidates: TripDetectionInput[],
+    nextCandidates: TripDetectionInput[],
+  ): boolean {
+    const previousIds = [...new Set((previousCandidates || []).map((candidate) => candidate.eventId).filter(Boolean))]
+      .sort();
+    const nextIds = [...new Set((nextCandidates || []).map((candidate) => candidate.eventId).filter(Boolean))]
+      .sort();
+
+    if (previousIds.length !== nextIds.length) {
+      return true;
+    }
+
+    return previousIds.some((eventId, index) => eventId !== nextIds[index]);
+  }
+
+  private collectOverlayDataFromResolvedTrackPolylines(
+    trackPolylines: ResolvedMyTracksActivityPolyline[],
+    event: any,
+    activityTypes?: ActivityTypes[],
+    activities: any[] = [],
+  ): Pick<ResolvedMyTracksEventContext, 'earlyStartPoints' | 'earlyJumpHeatPoints' | 'earlyJumpsWithCoordinates' | 'earlyJumpsWithWeightMetrics'> {
+    const eventId = event?.getID?.();
+    const startDateInput = event?.startDate;
+    const startPoints: TrackStartPoint[] = [];
+    const jumpHeatPoints: JumpHeatPoint[] = [];
+    const representedActivityKeys = new Set<string>();
+    let jumpsWithCoordinates = 0;
+    let jumpsWithWeightMetrics = 0;
+
+    this.filterResolvedTrackPolylinesByActivityTypes(trackPolylines, activityTypes)
+      .forEach(({ activity, activityIndex, coordinates, cachedActivity }) => {
+        const hasCompleteCachedMetadata = this.isCachedActivityMetadataComplete(cachedActivity);
+        representedActivityKeys.add(this.buildActivityOverlayKey(activity, activityIndex, cachedActivity));
+
+        const jumpStats = hasCompleteCachedMetadata
+          ? this.collectJumpHeatPointsFromCachedActivity(cachedActivity, jumpHeatPoints)
+          : this.collectJumpHeatPointsFromActivity(activity, jumpHeatPoints);
+        jumpsWithCoordinates += jumpStats.jumpsWithCoordinates;
+        jumpsWithWeightMetrics += jumpStats.jumpsWithWeightMetrics;
+
+        if (!Array.isArray(coordinates) || coordinates.length <= 1 || !eventId) {
+          return;
+        }
+
+        const startPoint = hasCompleteCachedMetadata
+          ? this.buildTrackStartPointFromCached(cachedActivity, eventId, coordinates[0], startDateInput)
+          : this.buildTrackStartPoint(activity, eventId, coordinates[0], startDateInput);
+        if (startPoint) {
+          startPoints.push(startPoint);
+        }
+      });
+
+    (activities || [])
+      .filter((activity, activityIndex) => (
+        this.activityMatchesRequestedActivityTypes(activity, activityTypes)
+        && !representedActivityKeys.has(this.buildActivityOverlayKey(activity, activityIndex))
+      ))
+      .forEach((activity) => {
+        const jumpStats = this.collectJumpHeatPointsFromActivity(activity, jumpHeatPoints);
+        jumpsWithCoordinates += jumpStats.jumpsWithCoordinates;
+        jumpsWithWeightMetrics += jumpStats.jumpsWithWeightMetrics;
+      });
+
+    return {
+      earlyStartPoints: startPoints,
+      earlyJumpHeatPoints: jumpHeatPoints,
+      earlyJumpsWithCoordinates: jumpsWithCoordinates,
+      earlyJumpsWithWeightMetrics: jumpsWithWeightMetrics,
+    };
+  }
+
+  private collectTrackRenderDataFromResolvedTrackData(
+    resolvedTrackData: ResolvedTrackDataForEventResult,
+    sourceEvent: any,
+    activityTypes: ActivityTypes[] | undefined,
+    totalEventCount: number,
+  ): CollectedTrackRenderData {
+    const eventId = resolvedTrackData.fullEvent?.getID?.() || sourceEvent?.getID?.();
+    const startDateInput = resolvedTrackData.fullEvent?.startDate ?? sourceEvent?.startDate;
+    const renderData: CollectedTrackRenderData = {
+      preparedTracks: [],
+      eventCoordinates: [],
+      startPoints: [],
+      jumpHeatPoints: [],
+      jumpsWithCoordinates: 0,
+      jumpsWithWeightMetrics: 0,
+      tracksProcessed: 0,
+      tracksSimplified: 0,
+      inputPointsTotal: 0,
+      outputPointsTotal: 0,
+      coordinateExtractionDurationMs: 0,
+      simplificationDurationMs: 0,
+      visibleTrackCount: 0,
+    };
+
+    this.filterResolvedTrackPolylinesByActivityTypes(resolvedTrackData.trackPolylines, activityTypes)
+      .forEach(({ activity, coordinates, cachedActivity }) => {
+        const hasCompleteCachedMetadata = this.isCachedActivityMetadataComplete(cachedActivity);
+        const jumpStats = hasCompleteCachedMetadata
+          ? this.collectJumpHeatPointsFromCachedActivity(cachedActivity, renderData.jumpHeatPoints)
+          : this.collectJumpHeatPointsFromActivity(activity, renderData.jumpHeatPoints);
+        renderData.jumpsWithCoordinates += jumpStats.jumpsWithCoordinates;
+        renderData.jumpsWithWeightMetrics += jumpStats.jumpsWithWeightMetrics;
+
+        const coordinateExtractionStartedAt = performance.now();
+        const normalizedCoordinates = coordinates;
+        renderData.coordinateExtractionDurationMs += performance.now() - coordinateExtractionStartedAt;
+
+        if (!Array.isArray(normalizedCoordinates) || normalizedCoordinates.length <= 1) {
+          return;
+        }
+
+        const simplificationStartedAt = performance.now();
+        const simplificationResult = this.polylineSimplificationService.simplifyVisvalingamWhyatt(
+          normalizedCoordinates,
+          this.resolveMyTracksSimplificationOptions(normalizedCoordinates.length, totalEventCount)
+        );
+        renderData.simplificationDurationMs += performance.now() - simplificationStartedAt;
+
+        renderData.tracksProcessed += 1;
+        renderData.inputPointsTotal += simplificationResult.inputPointCount;
+        renderData.outputPointsTotal += simplificationResult.outputPointCount;
+        if (simplificationResult.simplified) {
+          renderData.tracksSimplified += 1;
+        }
+
+        if (eventId) {
+          const startPoint = hasCompleteCachedMetadata
+            ? this.buildTrackStartPointFromCached(cachedActivity, eventId, normalizedCoordinates[0], startDateInput)
+            : this.buildTrackStartPoint(activity, eventId, normalizedCoordinates[0], startDateInput);
+          if (startPoint) {
+            renderData.startPoints.push(startPoint);
+          }
+        }
+
+        renderData.preparedTracks.push({ activity, coordinates: simplificationResult.coordinates });
+        renderData.visibleTrackCount += 1;
+        simplificationResult.coordinates.forEach((coordinate: number[]) => {
+          renderData.eventCoordinates.push(coordinate);
+        });
+      });
+
+    return renderData;
+  }
+
+  private eventMatchesRequestedActivityTypes(event: any, activityTypes?: ActivityTypes[]): boolean | null {
+    return this.matchesRequestedActivityTypes(this.getEventActivityTypeValues(event), activityTypes);
+  }
+
+  private contextMatchesRequestedActivityTypes(
+    context: ResolvedMyTracksEventContext,
+    activityTypes?: ActivityTypes[],
+  ): boolean {
+    if (!activityTypes || activityTypes.length === 0) {
+      return true;
+    }
+
+    const cachedActivityTypes = context.usedCompleteCache
+      ? (context.cachedPolylines?.trackActivities || []).map((trackActivity) => trackActivity.activityTypeValue)
+      : context.lightweightActivities.map((activity) => this.getActivityTypeValue(activity));
+
+    return this.matchesRequestedActivityTypes(cachedActivityTypes, activityTypes) === true;
+  }
+
+  private filterResolvedTrackPolylinesByActivityTypes(
+    trackPolylines: ResolvedMyTracksActivityPolyline[],
+    activityTypes?: ActivityTypes[],
+  ): ResolvedMyTracksActivityPolyline[] {
+    if (!activityTypes || activityTypes.length === 0) {
+      return trackPolylines || [];
+    }
+
+    return (trackPolylines || []).filter(({ activity, cachedActivity }) => (
+      this.matchesRequestedActivityTypes(
+        [this.getActivityTypeValue(activity), cachedActivity?.activityTypeValue],
+        activityTypes,
+      ) === true
+    ));
+  }
+
+  private shouldHydrateTrackDataForActivities(activities: any[], activityTypes?: ActivityTypes[]): boolean {
+    const matchingActivities = (activities || []).filter((activity) => this.activityMatchesRequestedActivityTypes(activity, activityTypes));
+    if (matchingActivities.length === 0) {
+      return false;
+    }
+
+    return matchingActivities.some((activity) => {
+      const activityId = activity?.getID?.();
+      const exactCoordinates = this.getExactCoordinatesFromActivity(activity);
+      return !(typeof activityId === 'string' && activityId.trim().length > 0 && exactCoordinates.length > 1);
+    });
+  }
+
+  private activityMatchesRequestedActivityTypes(activity: any, activityTypes?: ActivityTypes[]): boolean {
+    return this.matchesRequestedActivityTypes([this.getActivityTypeValue(activity)], activityTypes) === true;
+  }
+
+  private getEventActivityTypeValues(event: any): Array<ActivityTypes | string | number> {
+    const eventActivityTypes = typeof event?.getActivityTypesAsArray === 'function'
+      ? event.getActivityTypesAsArray()
+      : [];
+
+    if (Array.isArray(eventActivityTypes) && eventActivityTypes.length > 0) {
+      return eventActivityTypes;
+    }
+
+    return this.getEventActivities(event)
+      .map((activity) => this.getActivityTypeValue(activity))
+      .filter((value): value is ActivityTypes | string | number => value !== null);
+  }
+
+  private matchesRequestedActivityTypes(
+    candidateTypes: Array<ActivityTypes | string | number | null | undefined>,
+    activityTypes?: ActivityTypes[],
+  ): boolean | null {
+    if (!activityTypes || activityTypes.length === 0) {
+      return true;
+    }
+
+    const requestedTypes = new Set(
+      activityTypes
+        .map((activityType) => this.normalizeActivityTypeFilterValue(activityType))
+        .filter((activityType): activityType is string => !!activityType)
+    );
+    const normalizedCandidateTypes = (candidateTypes || [])
+      .map((activityType) => this.normalizeActivityTypeFilterValue(activityType))
+      .filter((activityType): activityType is string => !!activityType);
+
+    if (requestedTypes.size === 0 || normalizedCandidateTypes.length === 0) {
+      return null;
+    }
+
+    return normalizedCandidateTypes.some((activityType) => requestedTypes.has(activityType));
+  }
+
+  private normalizeActivityTypeFilterValue(
+    value: ActivityTypes | string | number | null | undefined,
+  ): string | null {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      const enumValue = (ActivityTypes as any)[value];
+      if (typeof enumValue === 'string' && enumValue.trim().length > 0) {
+        return enumValue.trim().toLowerCase();
+      }
+      return `${value}`;
+    }
+
+    if (typeof value === 'string') {
+      const normalized = value.trim();
+      if (normalized.length === 0) {
+        return null;
+      }
+
+      const enumValue = (ActivityTypes as any)[normalized];
+      if (typeof enumValue === 'string' && enumValue.trim().length > 0) {
+        return enumValue.trim().toLowerCase();
+      }
+
+      return normalized.toLowerCase();
+    }
+
+    return null;
+  }
+
+  private getExactCoordinatesFromActivity(activity: any): number[][] {
+    const positionData = typeof activity?.getPositionData === 'function'
+      ? activity.getPositionData() || []
+      : [];
+
+    return (positionData || [])
+      .map((position: any) => [position?.longitudeDegrees, position?.latitudeDegrees])
+      .filter((coordinate: number[]) =>
+        Array.isArray(coordinate)
+        && coordinate.length >= 2
+        && Number.isFinite(coordinate[0])
+        && Number.isFinite(coordinate[1])
+        && Math.abs(coordinate[0]) <= 180
+        && Math.abs(coordinate[1]) <= 90
+      );
+  }
+
+  private mergeTrackStartPoints(...collections: TrackStartPoint[][]): TrackStartPoint[] {
+    const merged = new Map<string, TrackStartPoint>();
+
+    collections.flat().forEach((startPoint) => {
+      if (!startPoint?.eventId || !startPoint?.activityId) {
+        return;
+      }
+
+      merged.set(`${startPoint.eventId}|${startPoint.activityId}`, startPoint);
+    });
+
+    return Array.from(merged.values());
+  }
+
+  private mergeJumpHeatPoints(...collections: JumpHeatPoint[][]): JumpHeatPoint[] {
+    const merged = new Map<string, JumpHeatPoint>();
+
+    collections.flat().forEach((point) => {
+      if (!point || !Number.isFinite(point.lng) || !Number.isFinite(point.lat)) {
+        return;
+      }
+
+      const key = [
+        point.lng.toFixed(6),
+        point.lat.toFixed(6),
+        point.hangTime === null ? 'null' : point.hangTime,
+        point.distance === null ? 'null' : point.distance,
+      ].join('|');
+
+      if (!merged.has(key)) {
+        merged.set(key, point);
+      }
+    });
+
+    return Array.from(merged.values());
   }
 
   private isCachedActivityMetadataComplete(cachedActivity: CachedMyTracksActivityPolyline | undefined): cachedActivity is CachedMyTracksActivityPolyline {
@@ -1220,6 +1748,23 @@ export class TracksComponent implements OnInit, OnDestroy {
       keepRatio: adaptiveKeepRatio,
       minPointsToKeep: effectiveMinPointsToKeep,
     };
+  }
+
+  private buildActivityOverlayKey(
+    activity: any,
+    activityIndex: number,
+    cachedActivity?: CachedMyTracksActivityPolyline,
+  ): string {
+    const activityId = activity?.getID?.();
+    if (typeof activityId === 'string' && activityId.trim().length > 0) {
+      return `id:${activityId}`;
+    }
+
+    if (cachedActivity?.activityId) {
+      return `id:${cachedActivity.activityId}`;
+    }
+
+    return `idx:${activityIndex}`;
   }
 
   private clearAllPolylines() {

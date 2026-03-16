@@ -558,7 +558,7 @@ export class TracksMapManager {
         });
     }
 
-    public clearAllTracks() {
+    public clearTrackLayers(): void {
         this.trackRenderEpoch += 1;
         this.batchRenderingEnabled = false;
 
@@ -582,6 +582,10 @@ export class TracksMapManager {
         }
         this.trackLayerBaseColors.clear();
         this.tracksByActivityId.clear();
+    }
+
+    public clearAllTracks() {
+        this.clearTrackLayers();
         this.clearHomeArea();
         this.clearTripArea();
         this.clearActivityStartPoints();
