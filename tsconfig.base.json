@@ -3,6 +3,11 @@
   "compilerOptions": {
     "outDir": "./dist/out-tsc",
     "baseUrl": "src",
+    "paths": {
+      "@shared/*": [
+        "../shared/*"
+      ]
+    },
     "sourceMap": true,
     "declaration": false,
     "module": "esnext",

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { BenchmarkEventAdapter } from './benchmark-event.adapter';
-import { AppEventInterface, BenchmarkResult } from '../../../functions/src/shared/app-event.interface';
+import { AppEventInterface, BenchmarkResult } from '@shared/app-event.interface';
 
 describe('BenchmarkEventAdapter', () => {
   const adapter = new BenchmarkEventAdapter();

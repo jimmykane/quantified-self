@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { USAGE_LIMITS } from '../shared/limits';
+import { USAGE_LIMITS } from '../../../shared/limits';
 
 const hoisted = vi.hoisted(() => {
   const state = {
@@ -246,7 +246,7 @@ vi.mock('../reparse/sports-lib-reparse.service', () => ({
   sportsLibVersionToCode: (...args: unknown[]) => hoisted.mockSportsLibVersionToCode(...args),
 }));
 
-vi.mock('../../../src/shared/functions-manifest', () => ({
+vi.mock('../../../shared/functions-manifest', () => ({
   FUNCTIONS_MANIFEST: {
     mergeEvents: { name: 'mergeEvents', region: 'europe-west2' },
   },

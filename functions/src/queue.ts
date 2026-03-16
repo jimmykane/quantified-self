@@ -26,7 +26,7 @@ import { getTokenData } from './tokens';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { COROSAPIEventMetaData, SuuntoAppEventMetaData } from '@sports-alliance/sports-lib';
 import { uploadDebugFile } from './debug-utils';
-import { createParsingOptions } from './shared/parsing-options';
+import { createParsingOptions } from '../../shared/parsing-options';
 
 
 

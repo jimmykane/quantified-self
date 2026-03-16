@@ -22,7 +22,7 @@ import { environment } from '../../../environments/environment';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { POLICY_CONTENT } from '../../shared/policies.content';
-import { getUsageLimitForRole } from '../../../../functions/src/shared/limits';
+import { getUsageLimitForRole } from '@shared/limits';
 
 interface SubscriptionSummary {
     status: StripeSubscription['status'];

@@ -12,7 +12,7 @@ import {
   validateOAuth2State
 } from '../../OAuth2';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { FUNCTIONS_MANIFEST } from '../../../../src/shared/functions-manifest';
+import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
 import * as admin from 'firebase-admin';
 
 const SERVICE_NAME = ServiceNames.GarminAPI;

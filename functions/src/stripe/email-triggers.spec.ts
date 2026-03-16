@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as admin from 'firebase-admin';
 import { checkAndSendSubscriptionEmails } from './email-triggers';
-import { USAGE_LIMITS } from '../shared/limits';
+import { USAGE_LIMITS } from '../../../shared/limits';
 
 // Mock pricing
 vi.mock('../shared/pricing', () => ({

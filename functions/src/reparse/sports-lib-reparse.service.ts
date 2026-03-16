@@ -14,8 +14,8 @@ import {
     EventInterface,
     EventUtilities,
 } from '@sports-alliance/sports-lib';
-import { FirestoreEventJSON, OriginalFileMetaData } from '../shared/app-event.interface';
-import { createParsingOptions } from '../shared/parsing-options';
+import { FirestoreEventJSON, OriginalFileMetaData } from '../../../shared/app-event.interface';
+import { createParsingOptions } from '../../../shared/parsing-options';
 import { FirestoreAdapter, LogAdapter, EventWriter } from '../shared/event-writer';
 import { ProcessingMetaData } from '../shared/processing-metadata.interface';
 import { SPORTS_LIB_REPARSE_TARGET_VERSION } from './sports-lib-reparse.config';

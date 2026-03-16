@@ -172,6 +172,7 @@ describe('AdminQueueStatsComponent', () => {
 
             expect(mockEchartsService.setOption).toHaveBeenCalled();
             const optionArg = mockEchartsService.setOption.mock.calls[0][1];
+            expect(optionArg.backgroundColor).toBe('transparent');
             expect(optionArg.series[0].data).toEqual([5, 3, 2]);
         });
     });

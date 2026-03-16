@@ -112,7 +112,6 @@ export class TracksMapManager {
     private selectedTrackStartPointId: string | null = null;
     private hoveredTrackStartPointId: string | null = null;
     private trackRenderEpoch = 0;
-    private panPerformanceModeEnabled = false;
     private batchRenderingEnabled = false;
 
     constructor(
@@ -151,7 +150,6 @@ export class TracksMapManager {
         } else {
             this.clearTrackStartPointsLayerAndInteraction();
         }
-        this.applyPanPerformanceMode();
     }
 
     public setIsDarkTheme(isDark: boolean) {
@@ -178,13 +176,6 @@ export class TracksMapManager {
         if (this.map && this.trackStartPoints.length > 0) {
             this.renderTrackStartPoints();
         }
-    }
-
-    public setPanPerformanceMode(enabled: boolean): void {
-        const nextEnabled = enabled === true;
-        if (this.panPerformanceModeEnabled === nextEnabled) return;
-        this.panPerformanceModeEnabled = nextEnabled;
-        this.applyPanPerformanceMode();
     }
 
     public getMap(): any {
@@ -452,7 +443,6 @@ export class TracksMapManager {
                 this.trackLayerBaseColors.set(casingLayerId, colorInfo.baseColor);
                 this.trackLayerBaseColors.set(layerId, colorInfo.baseColor);
                 this.applyTrackHighlightState();
-                this.applyPanPerformanceModeToActivity(activityId);
 
             } catch (error: any) {
                 if (error?.message?.includes('Style is not done loading')) {
@@ -553,7 +543,6 @@ export class TracksMapManager {
                 this.trackLayerBaseColors.delete(TracksMapManager.TRACK_BATCH_CASING_LAYER_ID);
                 this.trackLayerBaseColors.delete(TracksMapManager.TRACK_BATCH_LAYER_ID);
                 this.applyTrackHighlightState();
-                this.applyPanPerformanceMode();
             } catch (error: any) {
                 if (error?.message?.includes('Style is not done loading')) {
                     this.map.once('style.load', () => {
@@ -569,7 +558,7 @@ export class TracksMapManager {
         });
     }
 
-    public clearAllTracks() {
+    public clearTrackLayers(): void {
         this.trackRenderEpoch += 1;
         this.batchRenderingEnabled = false;
 
@@ -593,6 +582,10 @@ export class TracksMapManager {
         }
         this.trackLayerBaseColors.clear();
         this.tracksByActivityId.clear();
+    }
+
+    public clearAllTracks() {
+        this.clearTrackLayers();
         this.clearHomeArea();
         this.clearTripArea();
         this.clearActivityStartPoints();
@@ -1118,9 +1111,6 @@ export class TracksMapManager {
 
     private applyTrackHighlightState(): void {
         if (!this.map || !this.tracksByActivityId.size) return;
-        if (this.panPerformanceModeEnabled) {
-            return;
-        }
         const highlightedActivityIds = new Set<string>();
         const selectedPoint = this.selectedTrackStartPointId ? this.trackStartPointsById.get(this.selectedTrackStartPointId) : null;
         const hoveredPoint = this.hoveredTrackStartPointId ? this.trackStartPointsById.get(this.hoveredTrackStartPointId) : null;
@@ -1162,95 +1152,6 @@ export class TracksMapManager {
                 this.applyPaintProperties(layerId, paint);
             });
         });
-    }
-
-    private applyPanPerformanceMode(): void {
-        if (!this.map) return;
-
-        this.zone.runOutsideAngular(() => {
-            this.applyPanPerformanceModeToAllTracks();
-            const markerVisibility = this.panPerformanceModeEnabled ? 'none' : 'visible';
-            this.setLayerVisibilityIfExists(TracksMapManager.TRACK_START_LAYER_ID, markerVisibility);
-            this.setLayerVisibilityIfExists(TracksMapManager.TRACK_START_HIT_LAYER_ID, markerVisibility);
-            if (this.panPerformanceModeEnabled) {
-                this.setLayerVisibilityIfExists(TracksMapManager.JUMP_HEAT_LAYER_ID, 'none');
-            } else {
-                this.updateJumpHeatmapVisibility();
-                if (this.trackStartPoints.length > 0) {
-                    this.refreshTrackStartPointsForSelectionState();
-                }
-                this.applyTrackHighlightState();
-            }
-        });
-    }
-
-    private applyPanPerformanceModeToAllTracks(): void {
-        if (this.batchRenderingEnabled) {
-            if (this.panPerformanceModeEnabled) {
-                this.applyPaintProperties(TracksMapManager.TRACK_BATCH_GLOW_LAYER_ID, {
-                    'line-opacity': 0,
-                    'line-width': 0,
-                    'line-blur': 0,
-                    'line-emissive-strength': 0
-                });
-                this.applyPaintProperties(TracksMapManager.TRACK_BATCH_CASING_LAYER_ID, {
-                    'line-opacity': 0,
-                    'line-width': 0,
-                    'line-blur': 0,
-                    'line-emissive-strength': 0
-                });
-                this.applyPaintProperties(TracksMapManager.TRACK_BATCH_LAYER_ID, {
-                    'line-color': ['coalesce', ['get', 'baseColor'], '#2ca3ff'],
-                    'line-opacity': 0.55,
-                    'line-width': 1.4,
-                    'line-blur': 0,
-                    'line-emissive-strength': 0
-                });
-            } else {
-                this.applyTrackHighlightState();
-            }
-            return;
-        }
-        this.tracksByActivityId.forEach((_track, activityId) => this.applyPanPerformanceModeToActivity(activityId));
-    }
-
-    private applyPanPerformanceModeToActivity(activityId: string): void {
-        if (!this.map?.getLayer || !this.map?.setPaintProperty) return;
-        const glowLayerId = `track-layer-glow-${activityId}`;
-        const casingLayerId = `track-layer-casing-${activityId}`;
-        const mainLayerId = `track-layer-${activityId}`;
-        if (this.panPerformanceModeEnabled) {
-            this.applyPaintProperties(glowLayerId, {
-                'line-opacity': 0,
-                'line-width': 0,
-                'line-blur': 0,
-                'line-emissive-strength': 0
-            });
-            this.applyPaintProperties(casingLayerId, {
-                'line-opacity': 0,
-                'line-width': 0,
-                'line-blur': 0,
-                'line-emissive-strength': 0
-            });
-            this.applyPaintProperties(mainLayerId, {
-                'line-opacity': 0.55,
-                'line-width': 1.4,
-                'line-blur': 0,
-                'line-emissive-strength': 0
-            });
-            return;
-        }
-
-        const baseColor = this.trackLayerBaseColors.get(mainLayerId) || this.trackLayerBaseColors.get(casingLayerId) || this.trackLayerBaseColors.get(glowLayerId);
-        if (!baseColor) return;
-        this.applyPaintProperties(glowLayerId, this.buildLayerPaint('glow', baseColor));
-        this.applyPaintProperties(casingLayerId, this.buildLayerPaint('casing', baseColor));
-        this.applyPaintProperties(mainLayerId, this.buildLayerPaint('main', baseColor));
-    }
-
-    private setLayerVisibilityIfExists(layerId: string, visibility: 'visible' | 'none'): void {
-        if (!this.map?.getLayer?.(layerId) || !this.map?.setLayoutProperty) return;
-        this.map.setLayoutProperty(layerId, 'visibility', visibility);
     }
 
     private buildBatchLayerPaint(role: TrackLayerRole, highlightedActivityIds: Set<string>): Record<string, any> {

@@ -20,7 +20,7 @@ import {
   GarminAPIEventMetaData,
 } from '@sports-alliance/sports-lib';
 import { uploadDebugFile } from '../debug-utils';
-import { createParsingOptions } from '../shared/parsing-options';
+import { createParsingOptions } from '../../../shared/parsing-options';
 
 interface RequestError extends Error {
   statusCode?: number;

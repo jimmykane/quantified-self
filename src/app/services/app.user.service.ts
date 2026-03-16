@@ -84,7 +84,7 @@ import { DataAerobicTrainingEffect } from '@sports-alliance/sports-lib';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib';
 import { Firestore, doc, docData, collection, collectionData, setDoc, updateDoc } from '@angular/fire/firestore';
 import { AppFunctionsService } from './app.functions.service';
-import { FunctionName } from '../../shared/functions-manifest';
+import { FunctionName } from '@shared/functions-manifest';
 
 
 /**

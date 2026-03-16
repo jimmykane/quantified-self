@@ -65,15 +65,10 @@
   }
 
   @if (user) {
-  <mat-list-item routerLinkActive="active" [routerLink]="hasPaidAccess ? '/mytracks' : '/subscriptions'"
-    (click)="closeSideNav()">
+  <mat-list-item routerLinkActive="active" routerLink="/mytracks" (click)="closeSideNav()">
     <mat-icon>layers</mat-icon>
     <span>My Tracks <span class="mat-small">(Beta)</span></span>
     <span class="fill-space"></span>
-    @if (!hasPaidAccess) {
-    <mat-icon class="lock-icon">lock</mat-icon>
-    <span class="pro-badge">BASIC</span>
-    }
   </mat-list-item>
   }
 

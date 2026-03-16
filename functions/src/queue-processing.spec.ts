@@ -119,7 +119,7 @@ vi.mock('./queue-utils', () => ({
     }
 }));
 
-vi.mock('./shared/parsing-options', () => ({
+vi.mock('../../shared/parsing-options', () => ({
     createParsingOptions: mockCreateParsingOptions,
 }));
 

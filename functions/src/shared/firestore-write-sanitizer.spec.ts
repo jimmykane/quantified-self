@@ -3,7 +3,7 @@ import {
   sanitizeActivityFirestoreWritePayload,
   sanitizeEventFirestoreWritePayload,
   stripStreamsRecursivelyInPlace,
-} from './firestore-write-sanitizer';
+} from '../../../shared/firestore-write-sanitizer';
 
 function hasStreamsKey(value: unknown): boolean {
   if (value === null || value === undefined) {

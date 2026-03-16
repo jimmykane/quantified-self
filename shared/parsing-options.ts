@@ -1,10 +1,8 @@
 import { ActivityParsingOptions } from '@sports-alliance/sports-lib';
 
 /**
- * Centralized parsing defaults for Firebase Functions.
- * Keep this helper as the single source of truth for queue/import parsing options.
+ * Centralized parsing defaults shared by frontend upload/reprocess flows and Firebase Functions.
  */
-
 export function createParsingOptions(
   overrides: Partial<ActivityParsingOptions> = {},
   streamTypes?: string[],

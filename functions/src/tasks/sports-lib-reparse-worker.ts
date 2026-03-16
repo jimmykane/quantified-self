@@ -10,7 +10,7 @@ import {
     writeReparseStatus,
 } from '../reparse/sports-lib-reparse.service';
 import { CLOUD_TASK_RETRY_CONFIG } from '../shared/queue-config';
-import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
+import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 
 interface SportsLibReparseTaskPayload {
     jobId: string;

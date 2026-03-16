@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import pLimit from 'p-limit';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
-import { USAGE_LIMITS } from '../shared/limits';
+import { USAGE_LIMITS } from '../../../shared/limits';
 
 // Initialize Firebase Admin
 if (admin.apps.length === 0) {

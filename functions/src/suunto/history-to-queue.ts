@@ -5,7 +5,7 @@ import * as logger from 'firebase-functions/logger';
 import { hasProAccess, PRO_REQUIRED_MESSAGE, enforceAppCheck } from '../utils';
 import { SERVICE_NAME } from './constants';
 import { HistoryImportResult, addHistoryToQueue, getNextAllowedHistoryImportDate } from '../history';
-import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
+import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { ALLOWED_CORS_ORIGINS } from '../utils';
 
 interface HistoryToQueueRequest {

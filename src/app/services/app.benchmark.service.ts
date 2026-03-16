@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
 import { DataPositionInterface } from '@sports-alliance/sports-lib';
-import { BenchmarkResult, BenchmarkOptions, BenchmarkQualityIssue } from '../../../functions/src/shared/app-event.interface';
+import { BenchmarkResult, BenchmarkOptions, BenchmarkQualityIssue } from '@shared/app-event.interface';
 import {
     DataLatitudeDegrees,
     DataLongitudeDegrees,

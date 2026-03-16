@@ -75,7 +75,7 @@ import * as Claims from '../stripe/claims';
 
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { GARMIN_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
-import { USAGE_LIMITS } from '../shared/limits';
+import { USAGE_LIMITS } from '../../../shared/limits';
 
 describe('enforceSubscriptionLimits', () => {
     let deauthorizeServiceSpy: any;

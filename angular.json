@@ -36,9 +36,6 @@
             "sourceMap": true,
             "optimization": false,
             "namedChunks": true,
-            "externalDependencies": [
-              "jsdom"
-            ],
             "allowedCommonJsDependencies": [
               "@amcharts/amcharts4/core",
               "@amcharts/amcharts4/charts",
@@ -159,7 +156,8 @@
           "options": {
             "lintFilePatterns": [
               "src/**/*.ts",
-              "src/**/*.html"
+              "src/**/*.html",
+              "shared/**/*.ts"
             ]
           }
         }

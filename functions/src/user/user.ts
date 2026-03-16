@@ -4,7 +4,7 @@ import * as admin from 'firebase-admin';
 
 
 import { isCorsAllowed } from '../utils';
-import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
+import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 
 export const deleteSelf = functions
     .runWith({
@@ -46,4 +46,3 @@ export const deleteSelf = functions
             throw new functions.https.HttpsError('internal', 'Unable to delete user', error);
         }
     });
-

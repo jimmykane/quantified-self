@@ -10,7 +10,7 @@ import { Router } from '@angular/router';
 import { By } from '@angular/platform-browser';
 
 import { AppAnalyticsService } from '../../services/app.analytics.service';
-import { USAGE_LIMITS } from '../../../../functions/src/shared/limits';
+import { USAGE_LIMITS } from '@shared/limits';
 
 class MockAppPaymentService {
     getProducts() {

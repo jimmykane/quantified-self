@@ -22,7 +22,7 @@ import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
 import { getStripe } from './client';
-import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
+import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 
 /**
  * Cloud Function: cleanupStripeCustomer

@@ -19,7 +19,7 @@
   "include": [
     "src",
     "src/**/*.json",
-    "../src/shared/**/*"
+    "../shared/**/*"
   ],
   "exclude": [
     "node_modules",

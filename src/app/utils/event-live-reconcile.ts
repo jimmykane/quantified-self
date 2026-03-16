@@ -1,4 +1,4 @@
-import { AppEventInterface } from '../../../functions/src/shared/app-event.interface';
+import { AppEventInterface } from '@shared/app-event.interface';
 
 type EventActivity = NonNullable<ReturnType<AppEventInterface['getActivities']>>[number];
 

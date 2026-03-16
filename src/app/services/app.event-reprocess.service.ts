@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { EventUtilities, User } from '@sports-alliance/sports-lib';
-import { AppEventInterface } from '../../../functions/src/shared/app-event.interface';
+import { AppEventInterface } from '@shared/app-event.interface';
 import { AppEventService } from './app.event.service';
 import { AppFunctionsService } from './app.functions.service';
 

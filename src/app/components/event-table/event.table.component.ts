@@ -21,7 +21,7 @@ import { MatCard } from '@angular/material/card';
 import { MatPaginator, MatPaginatorIntl, PageEvent } from '@angular/material/paginator';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatSort } from '@angular/material/sort';
-import { AppEventInterface, BenchmarkResult } from '../../../../functions/src/shared/app-event.interface';
+import { AppEventInterface, BenchmarkResult } from '@shared/app-event.interface';
 import { MatTableDataSource } from '@angular/material/table';
 import { SelectionModel } from '@angular/cdk/collections';
 import { DatePipe } from '@angular/common';

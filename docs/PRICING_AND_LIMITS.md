@@ -23,7 +23,7 @@ The application defines three primary user roles based on subscription status:
 *   **Role Key:** `pro`
 
 > **Note:** Exact pricing amounts are configured in the Stripe Dashboard and populated dynamically in the UI.
-> Activity-count limits are defined in `functions/src/shared/limits.ts` and reused by backend enforcement and frontend plan messaging.
+> Activity-count limits are defined in `shared/limits.ts` and reused by backend enforcement and frontend plan messaging.
 
 ---
 
@@ -72,7 +72,7 @@ The application provides visibility into the grace period status to keep the use
 
 ## Technical Source of Truth
 
-*   **Limits Definition:** `functions/src/shared/limits.ts`
+*   **Limits Definition:** `shared/limits.ts`
 *   **Enforcement Logic:** `functions/src/schedule/enforce-subscription-limits.ts`
 *   **Subscription Handling:** `functions/src/stripe/subscriptions.ts`
 *   **Frontend Banner Logic:** `src/app/app.component.ts` (and template)

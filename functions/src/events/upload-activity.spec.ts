@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import type { Response } from 'express';
 import type { Request } from 'firebase-functions/v2/https';
-import { USAGE_LIMITS } from '../shared/limits';
+import { USAGE_LIMITS } from '../../../shared/limits';
 
 const hoisted = vi.hoisted(() => {
   const capturedOnRequestOptions = { value: undefined as unknown };
@@ -156,7 +156,7 @@ vi.mock('../reparse/sports-lib-reparse.service', () => ({
   sportsLibVersionToCode: (...args: unknown[]) => hoisted.mockSportsLibVersionToCode(...args),
 }));
 
-vi.mock('../../../src/shared/functions-manifest', () => ({
+vi.mock('../../../shared/functions-manifest', () => ({
   FUNCTIONS_MANIFEST: {
     uploadActivity: { name: 'uploadActivity', region: 'europe-west2' },
   },

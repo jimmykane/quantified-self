@@ -1,4 +1,3 @@
-
 export const FUNCTIONS_MANIFEST = {
     // Admin Functions (europe-west2)
     listUsers: { name: 'listUsers', region: 'europe-west2' },

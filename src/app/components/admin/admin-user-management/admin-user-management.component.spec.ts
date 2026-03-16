@@ -378,6 +378,7 @@ describe('AdminUserManagementComponent', () => {
         const series = (option as any).series;
         const graphic = (option as any).graphic;
 
+        expect((option as any).backgroundColor).toBe('transparent');
         expect(series).toHaveLength(7);
         expect(series.map((entry: any) => entry.name)).toEqual([
             'Registered Users / month',
@@ -402,6 +403,78 @@ describe('AdminUserManagementComponent', () => {
         expect(graphic[0].style.text).toContain('Totals (Pro+Basic) 100');
         expect(graphic[0].style.text).toContain('Basic 70');
         expect(graphic[0].style.text).toContain('Pro 30');
+    });
+
+    it('should build auth chart option with transparent background', () => {
+        const option = (component as any).buildAuthChartOption({
+            'google.com': 12,
+            'password': 4
+        });
+
+        expect((option as any).backgroundColor).toBe('transparent');
+        expect((option as any).tooltip.show).toBe(true);
+        expect((option as any).legend.show).toBe(true);
+        expect((option as any).series[0].data).toHaveLength(2);
+    });
+
+    it('should clear auth chart with a transparent empty state when provider data is missing', async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        mockEchartsService.setOption.mockClear();
+
+        (component as any).updateAuthChart({});
+
+        const option = mockEchartsService.setOption.mock.calls.at(-1)?.[1];
+        expect(option.backgroundColor).toBe('transparent');
+        expect(option.series).toEqual([]);
+        expect(option.graphic).toEqual([]);
+    });
+
+    it('should clear the growth trend chart with a transparent empty state when trend data is missing', async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        mockEchartsService.setOption.mockClear();
+
+        (component as any).updateUserGrowthTrendChart(null);
+        (component as any).updateSubscriptionHistoryTrendChart(null);
+        (component as any).renderUserGrowthTrendChart();
+
+        const option = mockEchartsService.setOption.mock.calls.at(-1)?.[1];
+        expect(option.backgroundColor).toBe('transparent');
+        expect(option.series).toEqual([]);
+        expect(option.graphic).toEqual([]);
+    });
+
+    it('should restore auth chart tooltip and legend visibility after empty-state render', async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        mockEchartsService.setOption.mockClear();
+
+        (component as any).updateAuthChart({});
+        (component as any).updateAuthChart({ 'google.com': 3, 'password': 1 });
+
+        const option = mockEchartsService.setOption.mock.calls.at(-1)?.[1];
+        expect(option.tooltip.show).toBe(true);
+        expect(option.legend.show).toBe(true);
+        expect(option.series[0].data).toHaveLength(2);
+    });
+
+    it('should restore growth chart tooltip and legend visibility after empty-state render', async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        mockEchartsService.setOption.mockClear();
+
+        (component as any).updateUserGrowthTrendChart(null);
+        (component as any).updateSubscriptionHistoryTrendChart(null);
+        (component as any).renderUserGrowthTrendChart();
+        (component as any).updateUserGrowthTrendChart(mockTrend);
+        (component as any).updateSubscriptionHistoryTrendChart(mockSubscriptionTrend);
+        (component as any).renderUserGrowthTrendChart();
+
+        const option = mockEchartsService.setOption.mock.calls.at(-1)?.[1];
+        expect(option.tooltip.show).toBe(true);
+        expect(option.legend.show).toBe(true);
+        expect(option.series).toHaveLength(7);
     });
 
     it('should handle null user growth trend data safely', () => {

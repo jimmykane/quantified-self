@@ -3,12 +3,6 @@
  *
  * This helper must be used for every event/activity write path so stream
  * payloads never get persisted in Firestore documents.
- *
- * Policy:
- * - Activity/event payloads written to Firestore must not contain `streams`.
- * - Event documents written to Firestore must not contain top-level `activities`.
- * - Do not duplicate ad-hoc `delete payload.streams` / `delete payload.activities`;
- *   always use these helper exports at the final write boundary.
  */
 type JsonObject = Record<string, unknown>;
 
@@ -44,7 +38,6 @@ function cloneWithoutStreams(value: unknown, visited: WeakMap<object, unknown>):
   }
 
   if (!isPlainObject(value)) {
-    // Preserve class instances / SDK sentinels as-is.
     return value;
   }
 

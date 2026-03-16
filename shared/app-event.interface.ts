@@ -9,19 +9,10 @@ export interface OriginalFileMetaData {
 
 /**
  * Extended event interface that includes original file metadata.
- * 
- * ## Dual-Field Strategy for Original Files
- * 
+ *
  * Events store original file references using two fields for backwards compatibility:
- * 
- * - **`originalFiles`**: Canonical field. Always an array, even for single-file uploads.
- *   Supports merged events (multiple source files) and provides consistent data structure.
- * 
- * - **`originalFile`**: Legacy/convenience field. Points to the first file in the array.
- *   Maintained for backwards compatibility with older code paths.
- * 
- * Both fields are written together by `EventWriter.writeAllEventData()`.
- * Readers should check `originalFiles` first, then fall back to `originalFile`.
+ * - `originalFiles`: canonical field. Always an array, even for single-file uploads.
+ * - `originalFile`: legacy/convenience field. Points to the first file in the array.
  */
 export interface AppEventInterface extends EventInterface {
     /** @deprecated Use originalFiles[0] instead. Kept for backwards compatibility. */
@@ -44,7 +35,7 @@ export interface AppEventInterface extends EventInterface {
 
 /**
  * Generate a benchmark pair key from reference and test activity IDs.
- * Order matters: Garmin(ref) vs Suunto(test) ≠ Suunto(ref) vs Garmin(test)
+ * Order matters: Garmin(ref) vs Suunto(test) !== Suunto(ref) vs Garmin(test)
  */
 export function getBenchmarkPairKey(referenceId: string, testId: string): string {
     return `${referenceId}_${testId}`;
@@ -65,12 +56,12 @@ export interface BenchmarkResult {
     referenceName?: string;
     /** Device/watch name for the test activity */
     testName?: string;
-    sourceEventId?: string; // ID of the event containing the source activities
+    sourceEventId?: string;
     timestamp: Date;
     metrics: {
         gnss: {
-            cep50: number; // Circular Error Probable 50%
-            cep95: number; // Circular Error Probable 95%
+            cep50: number;
+            cep95: number;
             maxDeviation: number;
             rmse: number;
             totalDistanceDifference: number;
@@ -85,8 +76,6 @@ export interface BenchmarkResult {
     alignmentApplied?: boolean;
     /** Detected data quality issues */
     qualityIssues?: BenchmarkQualityIssue[];
-    // diffStreams removed for Firestore optimization.
-    // Charts will rely on on-the-fly calculation if needed, or simply summary stats.
 }
 
 export interface BenchmarkQualityIssue {
@@ -105,7 +94,6 @@ export interface BenchmarkQualityIssue {
 
 export interface BenchmarkOptions {
     autoAlignTime: boolean;
-    // Future options can go here (e.g. maxOffset)
 }
 
 /**
