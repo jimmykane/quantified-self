@@ -105,6 +105,15 @@ const ZOOM_BAR_SLIDER_TOP = 8;
 const ZOOM_BAR_SLIDER_HEIGHT = 24;
 const ZOOM_BAR_HANDLE_SIZE = 24;
 const ZOOM_BAR_GRID_BOTTOM = Math.max(0, ZOOM_BAR_PANEL_HEIGHT - (ZOOM_BAR_SLIDER_TOP + ZOOM_BAR_SLIDER_HEIGHT));
+const NON_PRIMARY_MOUSE_GUARD_EVENT_TYPES = [
+  'pointerdown',
+  'pointerup',
+  'mousedown',
+  'mouseup',
+  'click',
+  'auxclick',
+  'contextmenu',
+] as const;
 const SELECTION_BRUSH_SOURCE = 'event-chart-selection-sync';
 const SHARED_ZOOM_DATAZOOM_SOURCE = 'event-chart-zoom-sync';
 const BRUSH_ZOOM_DATAZOOM_SOURCE = 'event-chart-brush-zoom';
@@ -158,6 +167,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private readonly chartHost: EChartsHostController;
   private eventsBound = false;
   private wheelPassThroughListener: ((event: Event) => void) | null = null;
+  private nonPrimaryMouseButtonGuardBound = false;
   private viewportObserver: IntersectionObserver | null = null;
   private viewportVisible = true;
   private tooltipVisibleForViewport = true;
@@ -185,6 +195,17 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   };
   private readonly mobileArmClickHandler = () => {
     this.armMobileInteractions();
+  };
+  private readonly nonPrimaryMouseButtonGuard = (event: Event) => {
+    if (!this.isNonPrimaryMouseButtonEvent(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof (event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation === 'function') {
+      (event as Event & { stopImmediatePropagation: () => void }).stopImmediatePropagation();
+    }
   };
   private readonly fullscreenChangeHandler = () => {
     this.syncViewportObserver();
@@ -341,6 +362,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.bindFullscreenEvents();
     this.syncFullscreenState();
     this.bindWheelPassThrough();
+    this.bindNonPrimaryMouseButtonGuard();
     this.bindChartEvents();
     this.queueChartRefresh('ngAfterViewInit');
   }
@@ -401,6 +423,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.unbindFullscreenEvents();
     this.teardownViewportObserver();
     this.unbindWheelPassThrough();
+    this.unbindNonPrimaryMouseButtonGuard();
     this.unbindMobileInteractionArm();
     this.unbindAxisPointerCursorEmit();
     this.chartHost.dispose();
@@ -1761,6 +1784,30 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.wheelPassThroughListener = null;
   }
 
+  private bindNonPrimaryMouseButtonGuard(): void {
+    const container = this.chartDiv?.nativeElement;
+    if (!container || this.nonPrimaryMouseButtonGuardBound) {
+      return;
+    }
+
+    for (const eventType of NON_PRIMARY_MOUSE_GUARD_EVENT_TYPES) {
+      container.addEventListener(eventType, this.nonPrimaryMouseButtonGuard, { capture: true });
+    }
+    this.nonPrimaryMouseButtonGuardBound = true;
+  }
+
+  private unbindNonPrimaryMouseButtonGuard(): void {
+    const container = this.chartDiv?.nativeElement;
+    if (!container || !this.nonPrimaryMouseButtonGuardBound) {
+      return;
+    }
+
+    for (const eventType of NON_PRIMARY_MOUSE_GUARD_EVENT_TYPES) {
+      container.removeEventListener(eventType, this.nonPrimaryMouseButtonGuard, { capture: true });
+    }
+    this.nonPrimaryMouseButtonGuardBound = false;
+  }
+
   private bindFullscreenEvents(): void {
     if (typeof document === 'undefined') {
       return;
@@ -2072,6 +2119,12 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   private isBatteryStreamType(streamType: string): boolean {
     return `${streamType || ''}`.toLowerCase().includes('battery');
+  }
+
+  private isNonPrimaryMouseButtonEvent(event: Event): boolean {
+    const eventWithButton = event as Event & { button?: unknown };
+    const button = Number(eventWithButton.button);
+    return Number.isFinite(button) && button !== 0;
   }
 
   private isInteractionArmed(): boolean {
