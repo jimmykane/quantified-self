@@ -275,6 +275,48 @@ describe('importActivityToSuuntoApp', () => {
         }));
     }, 30000);
 
+    it('should retry blob upload with a stable copy of the init headers', async () => {
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+
+        requestMocks.post.mockResolvedValue({
+            id: 'blob-header-retry-upload-id',
+            url: 'https://storage.suunto.com/blob-header-retry-upload-url',
+            headers: { 'x-ms-blob-type': 'BlockBlob', 'Custom-Header': 'Value' }
+        });
+
+        let putAttempts = 0;
+        requestMocks.put.mockImplementation(async (options: any) => {
+            putAttempts++;
+
+            if (putAttempts === 1) {
+                options.headers['Custom-Header'] = 'mutated';
+                throw createStatusCodeError('Internal Server Error', 500);
+            }
+
+            expect(options.headers).toEqual({
+                'x-ms-blob-type': 'BlockBlob',
+                'Custom-Header': 'Value'
+            });
+
+            return {};
+        });
+
+        requestMocks.get.mockResolvedValue({ status: 'PROCESSED', workoutKey: 'blob-header-retry-workout-key' });
+
+        const fileContent = Buffer.from('blob-header-retry-data');
+        const request = createMockRequest({
+            data: { file: fileContent.toString('base64') }
+        });
+
+        const result = await importActivityToSuuntoApp(request as any);
+
+        expect(putAttempts).toBe(2);
+        expect(result).toEqual(expect.objectContaining({
+            status: 'success',
+            workoutKey: 'blob-header-retry-workout-key'
+        }));
+    }, 30000);
+
     it('should continue polling after transient status 500 and then succeed', async () => {
         tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
 
@@ -304,6 +346,57 @@ describe('importActivityToSuuntoApp', () => {
             status: 'success',
             workoutKey: 'status-retry-workout-key'
         }));
+    }, 30000);
+
+    it('should cap transient status polling retries by actual request budget', async () => {
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+
+        requestMocks.post.mockResolvedValue({
+            id: 'status-budget-upload-id',
+            url: 'https://storage.suunto.com/status-budget-upload-url',
+            headers: {}
+        });
+
+        requestMocks.put.mockResolvedValue({});
+        requestMocks.get.mockRejectedValue(createStatusCodeError('Internal Server Error', 500));
+
+        const fileContent = Buffer.from('status-budget-data');
+        const request = createMockRequest({
+            data: { file: fileContent.toString('base64') }
+        });
+
+        await expect(importActivityToSuuntoApp(request as any)).rejects.toMatchObject({
+            code: 'unavailable',
+            message: 'Suunto activity upload is temporarily unavailable. Please retry.'
+        });
+        expect(requestMocks.get).toHaveBeenCalledTimes(10);
+    }, 30000);
+
+    it('should not retry permanent-looking Suunto 500 payload errors', async () => {
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+
+        requestMocks.post.mockResolvedValue({
+            id: 'status-permanent-error-upload-id',
+            url: 'https://storage.suunto.com/status-permanent-error-upload-url',
+            headers: {}
+        });
+
+        requestMocks.put.mockResolvedValue({});
+
+        const permanentError = createStatusCodeError('Internal Server Error', 500);
+        permanentError.error = { message: 'Unsupported FIT file format' };
+        requestMocks.get.mockRejectedValue(permanentError);
+
+        const fileContent = Buffer.from('status-permanent-error-data');
+        const request = createMockRequest({
+            data: { file: fileContent.toString('base64') }
+        });
+
+        await expect(importActivityToSuuntoApp(request as any)).rejects.toMatchObject({
+            code: 'internal',
+            message: 'Unsupported FIT file format'
+        });
+        expect(requestMocks.get).toHaveBeenCalledTimes(1);
     }, 30000);
 
     it('should surface persistent upstream 500s as unavailable', async () => {

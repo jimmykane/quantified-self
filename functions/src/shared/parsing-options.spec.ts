@@ -4,11 +4,16 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
     const actual: any = await importOriginal();
     return actual;
 });
+import { ActivityParsingOptions } from '@sports-alliance/sports-lib';
 import { createParsingOptions } from './parsing-options';
 
 describe('createParsingOptions', () => {
     it('returns parser-compatible options with the expected defaults', () => {
         const options = createParsingOptions();
+        const prototype = Object.getPrototypeOf(options);
+        expect(prototype).not.toBeNull();
+        expect(prototype).not.toBe(Object.prototype);
+        expect(prototype.constructor.name).toBe(ActivityParsingOptions.name);
         expect(options).toEqual(expect.objectContaining({
             generateUnitStreams: false,
             deviceInfoMode: 'changes',
