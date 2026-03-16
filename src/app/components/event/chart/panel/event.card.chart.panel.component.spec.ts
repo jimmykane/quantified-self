@@ -422,13 +422,11 @@ describe('EventCardChartPanelComponent', () => {
     });
 
     document.dispatchEvent(new Event('fullscreenchange'));
+    await waitForChartStabilization();
 
     expect(intersectionObserverDisconnectSpies[0]).toHaveBeenCalled();
-    expect(eChartsLoaderMock.setOption).toHaveBeenCalledWith(
-      chart,
-      { tooltip: { show: true } },
-      expect.objectContaining({ lazyUpdate: true, silent: true })
-    );
+    const option = getRenderedOption();
+    expect(option?.tooltip?.confine).toBe(true);
   });
 
   it('recreates the chart with confined tooltip placement when the panel enters fullscreen', async () => {
@@ -452,6 +450,52 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.tooltip?.confine).toBe(true);
     expect(option?.tooltip?.appendTo).toBeUndefined();
     expect(option?.tooltip?.position).toBeUndefined();
+  });
+
+  it('preserves the current zoom range when exiting fullscreen before shared zoom input catches up', async () => {
+    chart.getOption.mockReturnValue({
+      dataZoom: [
+        {
+          startValue: 0,
+          endValue: 120,
+        }
+      ]
+    });
+
+    await renderComponent();
+
+    const panelElement = component.panelRoot.nativeElement;
+    Object.defineProperty(document, 'fullscreenElement', {
+      configurable: true,
+      writable: true,
+      value: panelElement,
+    });
+    document.dispatchEvent(new Event('fullscreenchange'));
+    await waitForChartStabilization();
+
+    chart.getOption.mockReturnValue({
+      dataZoom: [
+        {
+          startValue: 24,
+          endValue: 60,
+        }
+      ]
+    });
+    (component as any).emitVisibleZoomRange();
+
+    Object.defineProperty(document, 'fullscreenElement', {
+      configurable: true,
+      writable: true,
+      value: null,
+    });
+    document.dispatchEvent(new Event('fullscreenchange'));
+    await waitForChartStabilization();
+
+    const option = getRenderedOption();
+    expect(option?.dataZoom?.[0]?.startValue).toBe(24);
+    expect(option?.dataZoom?.[0]?.endValue).toBe(60);
+    expect(option?.dataZoom?.[1]?.startValue).toBe(24);
+    expect(option?.dataZoom?.[1]?.endValue).toBe(60);
   });
 
   it('renders a merge-only series legend under the chart title', async () => {
