@@ -12,6 +12,7 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import { of } from 'rxjs';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { By } from '@angular/platform-browser';
 
 import { AppWhatsNewService } from '../../services/app.whats-new.service';
 import { signal } from '@angular/core';
@@ -202,5 +203,29 @@ describe('SideNavComponent', () => {
     it('hasPaidAccess should be false for free role', () => {
         mockUserService.hasPaidAccessSignal = vi.fn().mockReturnValue(false);
         expect(component.hasPaidAccess).toBe(false);
+    });
+
+    it('should link My Tracks directly for logged-in free users', () => {
+        mockUserService.user = vi.fn().mockReturnValue({
+            uid: 'user-1',
+            displayName: 'Free User',
+            email: 'free@example.com'
+        });
+        mockUserService.hasPaidAccessSignal = vi.fn().mockReturnValue(false);
+        mockUserService.isProSignal = vi.fn().mockReturnValue(false);
+        mockUserService.isBasicSignal = vi.fn().mockReturnValue(false);
+
+        fixture.detectChanges();
+
+        const myTracksItem = fixture.debugElement
+            .queryAll(By.css('mat-list-item'))
+            .find(item => item.nativeElement.textContent.includes('My Tracks'));
+
+        expect(myTracksItem).toBeTruthy();
+        expect(
+            myTracksItem?.nativeElement.getAttribute('routerlink')
+            ?? myTracksItem?.nativeElement.getAttribute('routerLink')
+        ).toBe('/mytracks');
+        expect(myTracksItem?.nativeElement.textContent).not.toContain('BASIC');
     });
 });

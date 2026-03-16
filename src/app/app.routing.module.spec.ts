@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { routes } from './app.routing.module';
+import { authGuard } from './authentication/app.auth.guard';
+import { onboardingGuard } from './authentication/onboarding.guard';
 
 describe('AppRoutingModule routes', () => {
   it('should define a public help route with help metadata', () => {
@@ -22,5 +24,12 @@ describe('AppRoutingModule routes', () => {
         inLanguage: 'en',
       },
     });
+  });
+
+  it('should allow any authenticated onboarded user to access mytracks', () => {
+    const myTracksRoute = routes.find(route => route.path === 'mytracks');
+
+    expect(myTracksRoute).toBeTruthy();
+    expect(myTracksRoute?.canMatch).toEqual([authGuard, onboardingGuard]);
   });
 });

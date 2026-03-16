@@ -2,7 +2,7 @@ import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
 import { NetworkAwarePreloadingStrategy } from './resolvers/network-aware-preloading.strategy';
 import { authGuard } from './authentication/app.auth.guard';
-import { paidGuard, proGuard } from './authentication/pro.guard';
+import { proGuard } from './authentication/pro.guard';
 import { onboardingGuard } from './authentication/onboarding.guard';
 import { adminGuard } from './authentication/admin.guard';
 import { loggedInGuard } from './authentication/logged-in.guard';
@@ -134,7 +134,7 @@ export const routes: Routes = [
     path: 'mytracks',
     loadChildren: () => import('./modules/my-tracks.module').then(module => module.MyTracksModule),
     data: { title: 'MyTracks', animation: 'MyTracks', preload: true },
-    canMatch: [authGuard, onboardingGuard, paidGuard]
+    canMatch: [authGuard, onboardingGuard]
   },
   {
     path: 'settings',
