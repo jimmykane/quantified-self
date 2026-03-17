@@ -94,6 +94,7 @@ import { EnvironmentInjector } from '@angular/core';
 import { of, BehaviorSubject } from 'rxjs';
 import { Privacy } from '@sports-alliance/sports-lib';
 import { APP_STORAGE } from '../services/storage/app.storage.token';
+import { environment } from '../../environments/environment';
 
 import { signal } from '@angular/core';
 
@@ -348,7 +349,7 @@ describe('AppAuthService', () => {
                 mockAuth,
                 email,
                 expect.objectContaining({
-                    url: `${window.location.origin}/login`,
+                    url: `${environment.appUrl}/login`,
                     handleCodeInApp: true,
                 })
             );
@@ -483,7 +484,13 @@ describe('AppAuthService', () => {
 
             await service.resetPassword('reset@example.com');
 
-            expect(sendPasswordResetEmail).toHaveBeenCalledWith(mockAuth, 'reset@example.com');
+            expect(sendPasswordResetEmail).toHaveBeenCalledWith(
+                mockAuth,
+                'reset@example.com',
+                expect.objectContaining({
+                    url: `${environment.appUrl}/login`,
+                })
+            );
             expect(mockSnackBar.open).toHaveBeenCalledWith(
                 'Password update email sent',
                 undefined,

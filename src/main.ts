@@ -12,6 +12,8 @@ import { SYSTEM_THEME_PREFERENCE } from './app/models/app-theme-preference.type'
 // Register locales immediately
 registerAppLocales();
 
+redirectFromFirebaseHostingAlias();
+
 
 // Only initialize Sentry in non-localhost environments
 if (!environment.localhost) {
@@ -51,3 +53,32 @@ import('./app/app.module')
   .then(x => platformBrowserDynamic().bootstrapModule(x.AppModule))
   .catch(err => console.error(err));
 // platformBrowserDynamic().bootstrapModule(AppModule);
+
+function redirectFromFirebaseHostingAlias(): void {
+  if (environment.localhost) {
+    return;
+  }
+
+  const currentHost = window.location.hostname.toLowerCase();
+  if (!currentHost.endsWith('.firebaseapp.com')) {
+    return;
+  }
+
+  if (window.location.pathname.startsWith('/__/auth/')) {
+    return;
+  }
+
+  let targetOrigin: string;
+  try {
+    targetOrigin = new URL(environment.appUrl).origin;
+  } catch {
+    return;
+  }
+
+  if (!targetOrigin || targetOrigin === window.location.origin) {
+    return;
+  }
+
+  const redirectUrl = `${targetOrigin}${window.location.pathname}${window.location.search}${window.location.hash}`;
+  window.location.replace(redirectUrl);
+}

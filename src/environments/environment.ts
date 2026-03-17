@@ -18,7 +18,7 @@ export const environment = {
   useAuthEmulator: false, // Use Firebase Auth Emulator in local development
   firebase: {
     apiKey: 'AIzaSyBdR4jbTKmm_P4L7t26IFAgFn6Eoo02aU0',
-    authDomain: 'quantified-self-io.firebaseapp.com',
+    authDomain: 'quantified-self.io',
     databaseURL: 'https://quantified-self-io.firebaseio.com',
     projectId: 'quantified-self-io',
     storageBucket: 'quantified-self-io',

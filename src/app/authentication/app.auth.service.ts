@@ -121,7 +121,7 @@ export class AppAuthService {
     const actionCodeSettings = {
       // URL you want to redirect back to. The domain (www.example.com) for this
       // URL must be in the authorized domains list in the Firebase Console.
-      url: window.location.origin + '/login',
+      url: this.getLoginActionUrl(),
       handleCodeInApp: true
     };
 
@@ -184,8 +184,12 @@ export class AppAuthService {
 
   // Sends email allowing user to reset password
   async resetPassword(email: string) {
+    const actionCodeSettings = {
+      url: this.getLoginActionUrl()
+    };
+
     try {
-      await runInInjectionContext(this.injector, () => sendPasswordResetEmail(this.auth, email));
+      await runInInjectionContext(this.injector, () => sendPasswordResetEmail(this.auth, email, actionCodeSettings));
       this.snackBar.open(`Password update email sent`, undefined, {
         duration: 2000
       });
@@ -239,5 +243,19 @@ export class AppAuthService {
 
   private redirectToLogin(): void {
     window.location.href = '/login';
+  }
+
+  private getLoginActionUrl(): string {
+    const baseUrl = this.normalizeAppUrl(environment.appUrl) || window.location.origin;
+    return `${baseUrl}/login`;
+  }
+
+  private normalizeAppUrl(appUrl: string | undefined): string | null {
+    if (!appUrl) {
+      return null;
+    }
+
+    const normalized = appUrl.trim().replace(/\/+$/, '');
+    return normalized.length > 0 ? normalized : null;
   }
 }
