@@ -142,6 +142,31 @@ describe('AppUserService', () => {
         expect(mergedUser.lastSignInDate).toEqual(new Date(lastSignInTime));
     });
 
+    it('should fall back to a synthetic user when the profile read is permission-denied after retry', async () => {
+        const permissionDeniedError = Object.assign(new Error('Missing or insufficient permissions.'), {
+            code: 'permission-denied'
+        });
+        let docDataCallCount = 0;
+
+        (docData as any).mockImplementation(() => {
+            docDataCallCount += 1;
+            if (docDataCallCount === 1 || docDataCallCount === 5) {
+                return throwError(() => permissionDeniedError);
+            }
+
+            return of({});
+        });
+
+        service = TestBed.inject(AppUserService);
+        const mergedUser = await firstValueFrom(service.user$.pipe(filter((user): user is AppUserInterface => !!user), take(1)));
+
+        expect(mockAuth.currentUser.getIdToken).toHaveBeenCalledWith(true);
+        expect(mergedUser.uid).toBe('u1');
+        expect(mergedUser.emailVerified).toBe(true);
+        expect(mergedUser.email).toBe('test@example.com');
+        expect(mergedUser.acceptedPrivacyPolicy).toBe(false);
+    });
+
     it('returns enabled chart data types in canonical order with event chart priority overrides', () => {
         service = TestBed.inject(AppUserService);
         const user = {
@@ -481,10 +506,12 @@ describe('AppUserService', () => {
         it('should return null if no grace period is set', async () => {
             (authState as any).mockReturnValue(of({
                 uid: 'u1',
+                getIdToken: vi.fn().mockResolvedValue('test-token'),
                 getIdTokenResult: vi.fn().mockResolvedValue({ claims: {} })
             }));
             (user as any).mockReturnValue(of({
                 uid: 'u1',
+                getIdToken: vi.fn().mockResolvedValue('test-token'),
                 getIdTokenResult: vi.fn().mockResolvedValue({ claims: {} })
             }));
             (docData as any).mockReturnValue(of({}));
@@ -496,10 +523,12 @@ describe('AppUserService', () => {
             const mockDate = new Date();
             (authState as any).mockReturnValue(of({
                 uid: 'u1',
+                getIdToken: vi.fn().mockResolvedValue('test-token'),
                 getIdTokenResult: vi.fn().mockResolvedValue({ claims: {} })
             }));
             (user as any).mockReturnValue(of({
                 uid: 'u1',
+                getIdToken: vi.fn().mockResolvedValue('test-token'),
                 getIdTokenResult: vi.fn().mockResolvedValue({ claims: {} })
             }));
             (docData as any).mockReturnValue(of({
