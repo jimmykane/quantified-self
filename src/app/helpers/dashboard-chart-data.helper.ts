@@ -7,7 +7,7 @@ import {
   TimeIntervals
 } from '@sports-alliance/sports-lib';
 import * as weeknumber from 'weeknumber';
-import { SummariesChartDataInterface } from '../components/summaries/summaries.component';
+import type { AggregatedChartRow } from './aggregated-chart-row.helper';
 import { getBrowserLocale } from '../shared/adapters/date-locale.config';
 
 type WarnLogger = {
@@ -194,8 +194,8 @@ export function formatDashboardNumericValue(
 export function getDashboardChartSortComparator(
   chartDataCategoryType: ChartDataCategoryTypes | undefined,
   chartDataValueType: ChartDataValueTypes | undefined
-): (itemA: SummariesChartDataInterface, itemB: SummariesChartDataInterface) => number {
-  return (itemA: SummariesChartDataInterface, itemB: SummariesChartDataInterface): number => {
+): (itemA: AggregatedChartRow, itemB: AggregatedChartRow) => number {
+  return (itemA: AggregatedChartRow, itemB: AggregatedChartRow): number => {
     if (chartDataCategoryType === ChartDataCategoryTypes.ActivityType) {
       if (!chartDataValueType) {
         return 0;
