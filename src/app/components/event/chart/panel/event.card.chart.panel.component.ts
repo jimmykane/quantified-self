@@ -337,25 +337,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
   }
 
-  public getRangeStatEntries(stat: EventPanelRangeStat): Array<{ label: string; value: string }> {
-    const entries = [
-      { label: 'Min', value: `${stat.min.value}${stat.min.unit}` },
-      { label: 'Avg', value: `${stat.avg.value}${stat.avg.unit}` },
-      { label: 'Max', value: `${stat.max.value}${stat.max.unit}` },
-    ];
-
-    if (stat.gain) {
-      entries.push({ label: 'Gain', value: `${stat.gain.value}${stat.gain.unit}` });
-    }
-    if (stat.loss) {
-      entries.push({ label: 'Loss', value: `${stat.loss.value}${stat.loss.unit}` });
-    }
-    if (stat.slope) {
-      entries.push({ label: 'Slope', value: stat.slope });
-    }
-
-    return entries;
-  }
 
   async ngAfterViewInit(): Promise<void> {
     await this.chartHost.init(this.chartDiv?.nativeElement, resolveEChartsThemeName(this.darkTheme));

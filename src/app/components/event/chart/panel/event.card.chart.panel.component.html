@@ -64,7 +64,7 @@
         }
 
         <div class="event-chart-panel__stats-values">
-          @for (entry of getRangeStatEntries(stat); track entry.label) {
+          @for (entry of stat.entries; track entry.label) {
           <div class="event-chart-panel__stats-chip">
             <span class="event-chart-panel__stats-chip-label">{{ entry.label }}</span>
             <span class="event-chart-panel__stats-chip-value">{{ entry.value }}</span>
