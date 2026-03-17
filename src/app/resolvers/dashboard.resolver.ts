@@ -44,10 +44,10 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
         targetUserID: targetUserID || null,
     });
 
-    return authService.user$.pipe(
+    return authService.authState$.pipe(
         take(1),
-        switchMap((user: AppUserInterface | null) => runInInjectionContext(injector, async () => {
-            if (!user) {
+        switchMap((authUser) => runInInjectionContext(injector, async () => {
+            if (!authUser) {
                 // If user is not authenticated, redirect to login and return empty data
                 router.navigate(['login']);
                 logger.info('[perf] dashboard_resolver_unauthenticated', {
@@ -56,6 +56,21 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
                 });
                 return { events: [], user: null, targetUser: null, hasMergedEvents: false };
             }
+
+            const user = await firstValueFrom(
+                authService.user$.pipe(
+                    switchMap((candidate) => {
+                        if (!candidate) {
+                            return EMPTY;
+                        }
+                        if (candidate.uid !== authUser.uid) {
+                            return EMPTY;
+                        }
+                        return of(candidate);
+                    }),
+                    take(1)
+                )
+            );
 
             let targetUser: AppUserInterface | undefined = undefined;
             if (targetUserID) {

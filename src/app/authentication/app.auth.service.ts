@@ -128,9 +128,6 @@ export class AppAuthService {
     try {
       await runInInjectionContext(this.injector, () => sendSignInLinkToEmail(this.auth, email, actionCodeSettings));
       this.localStorageService.setItem('emailForSignIn', email);
-      this.snackBar.open(`Magic link sent to ${email} `, 'Close', {
-        duration: 5000
-      });
       return true;
     } catch (error: any) {
       this.handleError(error);
@@ -244,7 +241,15 @@ export class AppAuthService {
   }
 
   private getLoginActionUrl(): string {
-    const baseUrl = normalizeUrlOrHost(environment.appUrl) || window.location.origin;
+    const configuredAppUrl = normalizeUrlOrHost(environment.appUrl);
+    const runtimeOrigin = normalizeUrlOrHost(window.location.origin);
+    const preferredBaseUrl = environment.localhost ? runtimeOrigin : configuredAppUrl;
+    const baseUrl = preferredBaseUrl || configuredAppUrl || runtimeOrigin;
+
+    if (!baseUrl) {
+      return APP_LOGIN_PATH;
+    }
+
     return `${baseUrl}${APP_LOGIN_PATH}`;
   }
 

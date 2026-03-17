@@ -308,34 +308,70 @@ export class AppUserService implements OnDestroy {
       const systemDoc = doc(this.firestore, `users/${userID}/system/status`) as any;
       const settingsDoc = doc(this.firestore, `users/${userID}/config/settings`) as any;
 
-      return combineLatest({
-        user: (docData(userDoc) as Observable<AppUserInterface | null>).pipe(
-          catchError((err) => this.handleUserDocReadError(userID, err))
-        ),
-        legal: (docData(legalDoc) as Observable<any>).pipe(catchError((err) => { this.logger.error('Error fetching legal:', err); return of({}); })),
-        system: (docData(systemDoc) as Observable<any>).pipe(catchError((err) => { this.logger.error('Error fetching system:', err); return of({}); })),
-        settings: (docData(settingsDoc) as Observable<any>).pipe(catchError((err) => { this.logger.error('Error fetching settings:', err); return of({}); }))
-      }).pipe(
-        distinctUntilChanged((prev, curr) => JSON.stringify(prev) === JSON.stringify(curr)),
-        map(({ user, legal, system, settings }) => {
+      return this.readUserDocOrFallback(userDoc, userID).pipe(
+        switchMap((user) => {
           if (!user) {
-            return null;
+            return of(null);
           }
 
-          // Merge all sources
-          // Merge order: Main Doc -> Legal -> System (System overrides if overlap)
-          const u = { ...user, ...(legal || {}), ...(system || {}) } as AppUserInterface;
+          return combineLatest({
+            legal: this.readUserSubDocOrEmpty(legalDoc, userID, 'legal/agreements', 'legal'),
+            system: this.readUserSubDocOrEmpty(systemDoc, userID, 'system/status', 'system'),
+            settings: this.readUserSubDocOrEmpty(settingsDoc, userID, 'config/settings', 'settings')
+          }).pipe(
+            map(({ legal, system, settings }) => {
+              // Merge order: Main Doc -> Legal -> System (System overrides if overlap)
+              const mergedUser = { ...user, ...(legal || {}), ...(system || {}) } as AppUserInterface;
 
-          // Settings is a special case (nested object)
-          if (settings && Object.keys(settings).length > 0) {
-            u.settings = settings as any;
-          }
+              // Settings is a special case (nested object)
+              if (settings && Object.keys(settings).length > 0) {
+                mergedUser.settings = settings as any;
+              }
 
-          u.settings = AppUserUtilities.fillMissingAppSettings(u);
+              mergedUser.settings = AppUserUtilities.fillMissingAppSettings(mergedUser);
 
-          return u;
-        }));
+              return mergedUser;
+            })
+          );
+        }),
+        distinctUntilChanged((prev, curr) => JSON.stringify(prev) === JSON.stringify(curr))
+      );
     });
+  }
+
+  private readUserDocOrFallback(
+    userDoc: any,
+    userID: string
+  ): Observable<AppUserInterface | null> {
+    return this.observeDocDataInContext<AppUserInterface | null>(userDoc).pipe(
+      catchError((err) => this.handleUserDocReadError(userID, err))
+    );
+  }
+
+  private readUserSubDocOrEmpty(
+    docRef: any,
+    userID: string,
+    subPath: string,
+    label: 'legal' | 'system' | 'settings'
+  ): Observable<any> {
+    return this.observeDocDataInContext<any>(docRef).pipe(
+      catchError((err) => {
+        if (this.isPermissionDeniedError(err)) {
+          this.logger.warn(
+            `[AppUserService] Permission denied reading users/${userID}/${subPath}. Using default ${label} data.`,
+            err
+          );
+          return of({});
+        }
+
+        this.logger.error(`Error fetching ${label}:`, err);
+        return of({});
+      })
+    );
+  }
+
+  private observeDocDataInContext<T>(docRef: any): Observable<T> {
+    return runInInjectionContext(this.injector, () => docData(docRef) as Observable<T>);
   }
 
   private handleUserDocReadError(userID: string, err: any): Observable<AppUserInterface | null> {

@@ -337,7 +337,7 @@ describe('AppAuthService', () => {
     });
 
     describe('email link auth', () => {
-        it('sendEmailLink should persist email and show success snackbar', async () => {
+        it('sendEmailLink should persist email without showing success snackbar', async () => {
             const { sendSignInLinkToEmail } = await import('@angular/fire/auth');
             const email = 'test@example.com';
             (sendSignInLinkToEmail as Mock).mockResolvedValueOnce(undefined);
@@ -349,16 +349,12 @@ describe('AppAuthService', () => {
                 mockAuth,
                 email,
                 expect.objectContaining({
-                    url: `${environment.appUrl}/login`,
+                    url: `${window.location.origin}/login`,
                     handleCodeInApp: true,
                 })
             );
             expect(mockLocalStorageService.setItem).toHaveBeenCalledWith('emailForSignIn', email);
-            expect(mockSnackBar.open).toHaveBeenCalledWith(
-                `Magic link sent to ${email} `,
-                'Close',
-                { duration: 5000 }
-            );
+            expect(mockSnackBar.open).not.toHaveBeenCalled();
         });
 
         it('sendEmailLink should return false and show error snackbar when send fails', async () => {
@@ -508,7 +504,7 @@ describe('AppAuthService', () => {
                 mockAuth,
                 'reset@example.com',
                 expect.objectContaining({
-                    url: `${environment.appUrl}/login`,
+                    url: `${window.location.origin}/login`,
                 })
             );
             expect(mockSnackBar.open).toHaveBeenCalledWith(

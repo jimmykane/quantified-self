@@ -150,9 +150,7 @@ describe('AppUserService', () => {
 
         (docData as any)
             .mockReturnValueOnce(throwError(() => permissionError))
-            .mockReturnValueOnce(of({}))
-            .mockReturnValueOnce(of({}))
-            .mockReturnValueOnce(of({}));
+            .mockReturnValueOnce(throwError(() => permissionError));
 
         service = TestBed.inject(AppUserService);
         const mergedUser = await firstValueFrom(service.user$.pipe(filter((user): user is AppUserInterface => !!user), take(1)));
