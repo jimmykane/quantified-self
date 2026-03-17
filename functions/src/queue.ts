@@ -305,8 +305,8 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
         lastError = e;
         continue;
       } else if (e.statusCode === 500) {
-        logger.error(new Error(`Could not get workout for ${queueItem.id} due to 500 increasing retry by 20`));
-        retryIncrement = 20;
+        logger.warn(`Partner service internal error (500) for ${queueItem.id}, will retry soon.`);
+        retryIncrement = 1;
         lastError = e;
         continue;
       } else if (e.statusCode === 502) {

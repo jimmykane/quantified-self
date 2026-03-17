@@ -886,5 +886,19 @@ describe('queue', () => {
                 context: 'MAX_RETRY_REACHED'
             }));
         });
+
+        it('should handle 500 Internal Server Error by retrying instead of immediate DLQ', async () => {
+            vi.mocked(requestHelper.get).mockRejectedValue({ statusCode: 500 });
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.RetryIncremented);
+            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                retryCount: 1,
+            }));
+            expect(mockBatch.set).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+                context: 'MAX_RETRY_REACHED'
+            }));
+        });
     });
 });
