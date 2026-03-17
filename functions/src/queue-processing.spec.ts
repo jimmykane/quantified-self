@@ -87,13 +87,14 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
 // Import after hoisting but before other mocks that depend on imports
 import { parseWorkoutQueueItemForServiceName } from './queue';
 
-vi.mock('./queue', async (importOriginal) => {
-    const actual: any = await importOriginal();
-    return {
-        ...actual,
-        getWorkoutForService: mockGetWorkoutForService,
-    };
-});
+vi.mock('./request-helper', () => ({
+    default: {
+        get: mockGetWorkoutForService,
+        post: vi.fn(),
+    },
+    get: mockGetWorkoutForService,
+    post: vi.fn(),
+}));
 
 vi.mock('./utils', async (importOriginal) => {
     const actual: any = await importOriginal();
