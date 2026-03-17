@@ -57,24 +57,19 @@ export class LoginComponent implements OnInit, OnDestroy {
 
   async ngOnInit() {
     this.isLoading = true;
-    this.logger.log('[Login] ngOnInit start', { href: window.location.href });
 
     // Check for email link sign-in
     if (this.authService.isSignInWithEmailLink(window.location.href)) {
-      this.logger.log('[Login] Detected email-link sign-in URL');
       let email = this.authService.localStorageService.getItem('emailForSignIn');
       if (!email) {
         // User opened the link on a different device. To prevent session fixation, ask the user to provide the associated email again.
         email = window.prompt('Please provide your email for confirmation') || '';
-        this.logger.log('[Login] Email requested via prompt for email-link sign-in', { hasEmail: !!email });
       }
 
       if (email) {
         this.isLoading = true;
-        this.logger.log('[Login] Calling signInWithEmailLink', { email });
         this.authService.signInWithEmailLink(email, window.location.href)
           .then(async (result) => {
-            this.logger.log('[Login] signInWithEmailLink resolved', { uid: result?.user?.uid ?? 'none' });
             // Check for pending link intent (Scenario: User clicked "Send Magic Link" to link this email to an existing GitHub/Google account)
             // Wait, logic is reverse: User was on "Login" page, tried to sign in with GitHub, failed (collision), chose "Send Magic Link".
             // So now they are signed in with Email. We need to link GitHub.
@@ -95,7 +90,6 @@ export class LoginComponent implements OnInit, OnDestroy {
           })
           .catch((error) => {
             this.isLoading = false;
-            this.logger.warn('[Login] signInWithEmailLink failed', { code: error?.code, message: error?.message });
             // Handle collision (Scenario: User tries to sign in with Email Link, but account exists with GitHub)
             if (error.code === 'auth/credential-already-in-use' || error.code === 'auth/account-exists-with-different-credential' || error.code === 'auth/email-already-in-use') {
               // For email link, the email is known.
@@ -114,7 +108,6 @@ export class LoginComponent implements OnInit, OnDestroy {
     }
 
     this.userSubscription = this.authService.authState$.subscribe((firebaseUser) => {
-      this.logger.log('[Login] authState$ emission', { uid: firebaseUser?.uid ?? 'none' });
       if (firebaseUser) {
         void this.navigateToDashboardOnce();
       }
@@ -331,10 +324,6 @@ export class LoginComponent implements OnInit, OnDestroy {
 
   private async redirectOrShowDataPrivacyDialog(loginServiceUser: any) {
     this.isLoading = true;
-    this.logger.log('[Login] redirectOrShowDataPrivacyDialog start', {
-      uid: loginServiceUser?.user?.uid ?? 'none',
-      hasCredential: !!loginServiceUser?.credential
-    });
     try {
       // Wait for Firebase Auth state only. Firestore profile reads can lag or fail
       // transiently and should not block successful authentication navigation.
@@ -343,7 +332,6 @@ export class LoginComponent implements OnInit, OnDestroy {
           filter(u => !!u), // Wait for a non-null auth user
           take(1)
         ).toPromise();
-      this.logger.log('[Login] authState confirmed, navigating to dashboard');
 
       this.analyticsService.logEvent('login', { method: loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Guest' });
       await this.navigateToDashboardOnce();
@@ -355,22 +343,13 @@ export class LoginComponent implements OnInit, OnDestroy {
 
   private async navigateToDashboardOnce() {
     if (this.hasNavigatedToDashboard || this.dashboardNavigationInFlight) {
-      this.logger.log('[Login] Skipping dashboard navigation', {
-        hasNavigatedToDashboard: this.hasNavigatedToDashboard,
-        dashboardNavigationInFlight: this.dashboardNavigationInFlight
-      });
       return;
     }
 
     this.dashboardNavigationInFlight = true;
     try {
-      this.logger.log('[Login] Attempting router navigation to /dashboard');
       const didNavigate = await this.router.navigate(['/dashboard']);
       this.hasNavigatedToDashboard = didNavigate === true;
-      this.logger.log('[Login] Router navigation to /dashboard completed', {
-        didNavigate,
-        hasNavigatedToDashboard: this.hasNavigatedToDashboard
-      });
     } catch (error) {
       this.hasNavigatedToDashboard = false;
       this.logger.error('Dashboard navigation failed', error);

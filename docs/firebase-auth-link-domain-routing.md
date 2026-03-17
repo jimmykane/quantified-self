@@ -2,7 +2,7 @@
 
 ## What We Do
 
-1. We build email sign-in action links from `environment.appUrl`, except on localhost where we always use the runtime origin so local HTTPS links stay HTTPS.
+1. We always build email sign-in action links from `environment.appUrl` (fallback to runtime origin only when needed).
 2. We only set Firebase `ActionCodeSettings.linkDomain` when `authDomain` is a custom domain, never when it is `localhost`, `*.firebaseapp.com`, or `*.web.app`.
 3. On app bootstrap, if the app is opened on a Firebase default hosting alias (`*.firebaseapp.com` or `*.web.app`), we redirect to the canonical app origin, except for Firebase Auth handler paths (`/__/auth/*`).
 

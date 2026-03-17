@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { ResolveFn, Router, ActivatedRouteSnapshot, RouterStateSnapshot } from '@angular/router';
 import { EventInterface, User, DateRanges, DaysOfTheWeek, ActivityTypes } from '@sports-alliance/sports-lib';
 import { AppUserInterface } from '../models/app-user.interface';
-import { of, throwError, BehaviorSubject } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppEventService } from '../services/app.event.service';
 import { AppUserService } from '../services/app.user.service';
@@ -21,7 +21,6 @@ describe('dashboardResolver', () => {
     let routerSpy: any;
     let snackBarSpy: any;
     let loggerSpy: any;
-    let userSubject: BehaviorSubject<AppUserInterface | null>;
 
     const mockUser = new User('testUser') as AppUserInterface;
     mockUser.settings = {
@@ -38,8 +37,7 @@ describe('dashboardResolver', () => {
     beforeEach(() => {
         eventServiceSpy = { getEventsBy: vi.fn(), getEventsOnceByWithMeta: vi.fn() };
         userServiceSpy = { getUserByID: vi.fn() };
-        userSubject = new BehaviorSubject<AppUserInterface | null>(mockUser);
-        authServiceSpy = { user$: userSubject, authState$: of({ uid: mockUser.uid }) };
+        authServiceSpy = { user$: of(mockUser) };
         routerSpy = { navigate: vi.fn() };
         snackBarSpy = { open: vi.fn() };
         loggerSpy = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), log: vi.fn() };
@@ -148,42 +146,5 @@ describe('dashboardResolver', () => {
             expect(routerSpy.navigate).toHaveBeenCalledWith(['dashboard']);
             done();
         });
-    }));
-
-    it('should redirect to login when authState is unauthenticated', () => new Promise<void>(done => {
-        authServiceSpy.authState$ = of(null);
-
-        const route = new ActivatedRouteSnapshot();
-        vi.spyOn(route.paramMap, 'get').mockReturnValue(null);
-
-        const state = {} as RouterStateSnapshot;
-
-        (executeResolver(route, state) as any).subscribe((result: DashboardResolverData) => {
-            expect(routerSpy.navigate).toHaveBeenCalledWith(['login']);
-            expect(result.user).toBeNull();
-            expect(result.events).toEqual([]);
-            done();
-        });
-    }));
-
-    it('should wait for matching user$ value after authState to avoid stale null race', () => new Promise<void>(done => {
-        authServiceSpy.authState$ = of({ uid: mockUser.uid });
-        userSubject.next(null);
-        eventServiceSpy.getEventsOnceByWithMeta.mockReturnValue(of({ events: [], source: 'cache' }));
-
-        const route = new ActivatedRouteSnapshot();
-        vi.spyOn(route.paramMap, 'get').mockReturnValue(null);
-        const state = {} as RouterStateSnapshot;
-
-        (executeResolver(route, state) as any).subscribe((result: DashboardResolverData) => {
-            expect(routerSpy.navigate).not.toHaveBeenCalledWith(['login']);
-            expect(result.user?.uid).toBe(mockUser.uid);
-            expect(result.events).toEqual([]);
-            done();
-        });
-
-        setTimeout(() => {
-            userSubject.next(mockUser);
-        }, 0);
     }));
 });

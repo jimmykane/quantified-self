@@ -3,7 +3,6 @@ import { Router } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { authGuard } from './app.auth.guard';
 import { AppAuthService } from './app.auth.service';
-import { LoggerService } from '../services/logger.service';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { of, Observable } from 'rxjs';
 import { firstValueFrom } from 'rxjs';
@@ -15,7 +14,7 @@ describe('authGuard', () => {
 
     beforeEach(() => {
         authServiceStub = {
-            authState$: of(null),
+            user$: of(null),
             redirectUrl: null
         };
 
@@ -30,31 +29,19 @@ describe('authGuard', () => {
             open: vi.fn()
         };
 
-        const loggerSpy = {
-            log: vi.fn(),
-            info: vi.fn(),
-            warn: vi.fn(),
-            error: vi.fn(),
-            captureException: vi.fn(),
-            captureMessage: vi.fn(),
-            setUser: vi.fn(),
-            setTag: vi.fn()
-        };
-
         TestBed.configureTestingModule({
             providers: [
                 { provide: AppAuthService, useValue: authServiceStub },
                 { provide: Router, useValue: routerSpy },
-                { provide: MatSnackBar, useValue: snackBarSpy },
-                { provide: LoggerService, useValue: loggerSpy }
+                { provide: MatSnackBar, useValue: snackBarSpy }
             ]
         });
 
         router = TestBed.inject(Router);
     });
 
-    const runGuard = async (authUser: any) => {
-        authServiceStub.authState$ = of(authUser);
+    const runGuard = async (user: any) => {
+        authServiceStub.user$ = of(user);
         const result = TestBed.runInInjectionContext(() => authGuard({} as any, [{ path: 'test' }] as any) as Observable<boolean>);
         return await firstValueFrom(result);
     };

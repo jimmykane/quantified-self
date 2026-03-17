@@ -112,14 +112,6 @@ describe('LoginComponent', () => {
         expect(component).toBeTruthy();
     });
 
-    it('sendEmailLink should show a single success snackbar after successful send', async () => {
-        await component.sendEmailLink('test@example.com');
-
-        expect(mockAuthService.sendEmailLink).toHaveBeenCalledWith('test@example.com');
-        expect(mockSnackBar.open).toHaveBeenCalledTimes(1);
-        expect(mockSnackBar.open).toHaveBeenCalledWith('Magic link sent! Check your inbox.', 'Close', { duration: 5000 });
-    });
-
     it('should call githubLogin when github provider is selected', () => {
         component.signInWithProvider(SignInProviders.GitHub);
         expect(mockAuthService.githubLogin).toHaveBeenCalled();

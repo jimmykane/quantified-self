@@ -1,6 +1,6 @@
 import { inject } from '@angular/core';
 import { Router, CanMatchFn } from '@angular/router';
-import { map, take } from 'rxjs/operators';
+import { map, take, tap } from 'rxjs/operators';
 import { AppAuthService } from './app.auth.service';
 
 /**
@@ -11,10 +11,10 @@ export const loggedInGuard: CanMatchFn = (route, segments) => {
     const authService = inject(AppAuthService);
     const router = inject(Router);
 
-    return authService.authState$.pipe(
+    return authService.user$.pipe(
         take(1),
-        map(authUser => {
-            if (authUser) {
+        map(user => {
+            if (user) {
                 // User is logged in, redirect to dashboard
                 // Return a UrlTree to cancel current navigation and redirect
                 return router.createUrlTree(['/dashboard']);
