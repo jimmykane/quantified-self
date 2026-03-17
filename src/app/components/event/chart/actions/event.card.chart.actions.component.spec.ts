@@ -149,13 +149,13 @@ describe('EventCardChartActionsComponent', () => {
     expect(emitSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('should emit reset zoom requests and log analytics', () => {
-    const emitSpy = vi.spyOn(component.resetZoom, 'emit');
+  it('should emit reset chart state requests and log analytics', () => {
+    const emitSpy = vi.spyOn(component.resetChartState, 'emit');
 
-    component.onResetZoom();
+    component.onResetChartState();
 
     expect(emitSpy).toHaveBeenCalledTimes(1);
-    expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('event_chart_settings_change', { property: 'resetZoom' });
+    expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('event_chart_settings_change', { property: 'resetChartState' });
   });
 
   it('should expose a visible/total badge label for the series trigger', () => {

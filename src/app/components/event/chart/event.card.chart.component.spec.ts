@@ -547,12 +547,27 @@ describe('EventCardChartComponent', () => {
     expect(component.hasActiveZoomRange).toBe(true);
   });
 
-  it('clears active zoom range when reset is requested', () => {
-    component.zoomRange = { start: 10, end: 50 };
+  it('exposes resettable chart state for either zoom or selection', () => {
+    component.zoomRange = null;
+    component.previewSelectedRange = null;
+    component.selectedRange = null;
+    expect(component.hasResettableChartState).toBe(false);
 
-    component.onResetZoomRequested();
+    component.selectedRange = { start: 15, end: 30 };
+    expect(component.hasActiveSelectionRange).toBe(true);
+    expect(component.hasResettableChartState).toBe(true);
+  });
+
+  it('clears active zoom and selected range when reset is requested', () => {
+    component.zoomRange = { start: 10, end: 50 };
+    component.previewSelectedRange = { start: 20, end: 40 };
+    component.selectedRange = { start: 20, end: 40 };
+
+    component.onResetChartStateRequested();
 
     expect(component.zoomRange).toBeNull();
+    expect(component.previewSelectedRange).toBeNull();
+    expect(component.selectedRange).toBeNull();
   });
 
   it('exposes branded watermark text when provided', () => {
