@@ -30,6 +30,12 @@ import { createParsingOptions } from '../../shared/parsing-options';
 import { normalizeDownloadedFitPayload } from './shared/fit-payload';
 
 
+function toArrayBuffer(payload: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(payload.byteLength);
+  copy.set(payload);
+  return copy.buffer;
+}
+
 
 export async function dispatchQueueItemTasks(serviceName: ServiceNames) {
   // Check queue depth
@@ -280,14 +286,15 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
 
     logger.info(`Found user id ${parentID} for queue item ${queueItem.id}`);
 
-    let result;
+    let result: Buffer | undefined;
     try {
       logger.info(`Downloading ${serviceName} workoutID: ${(queueItem as any).workoutID} for queue item ${queueItem.id}`);
       logger.info('Starting timer: DownloadFit');
-      result = await getWorkoutForService(serviceName, queueItem, serviceToken as any);
-      const normalizedPayload = normalizeDownloadedFitPayload(result);
+      const downloadedPayload = await getWorkoutForService(serviceName, queueItem, serviceToken as any);
+      const normalizedPayload = normalizeDownloadedFitPayload(downloadedPayload);
       if (normalizedPayload.normalizedFromMultipart) {
-        logger.warn(`[Queue] Unwrapped multipart payload for ${queueItem.id} (offset=${normalizedPayload.fitOffset}, size=${result.length || result.byteLength} -> ${normalizedPayload.data.length})`);
+        const downloadedSize = typeof downloadedPayload?.length === 'number' ? downloadedPayload.length : downloadedPayload?.byteLength;
+        logger.warn(`[Queue] Unwrapped multipart payload for ${queueItem.id} (offset=${normalizedPayload.fitOffset}, size=${downloadedSize || normalizedPayload.data.length} -> ${normalizedPayload.data.length})`);
       }
       result = normalizedPayload.data;
       logger.info(`Downloaded FIT file for ${queueItem.id}`);
@@ -298,10 +305,11 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
         try {
           // Force refresh token and save
           serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName, true);
-          result = await getWorkoutForService(serviceName, queueItem, serviceToken as any);
-          const normalizedPayload = normalizeDownloadedFitPayload(result);
+          const downloadedPayload = await getWorkoutForService(serviceName, queueItem, serviceToken as any);
+          const normalizedPayload = normalizeDownloadedFitPayload(downloadedPayload);
           if (normalizedPayload.normalizedFromMultipart) {
-            logger.warn(`[Queue] Unwrapped multipart payload for ${queueItem.id} (offset=${normalizedPayload.fitOffset}, size=${result.length || result.byteLength} -> ${normalizedPayload.data.length})`);
+            const downloadedSize = typeof downloadedPayload?.length === 'number' ? downloadedPayload.length : downloadedPayload?.byteLength;
+            logger.warn(`[Queue] Unwrapped multipart payload for ${queueItem.id} (offset=${normalizedPayload.fitOffset}, size=${downloadedSize || normalizedPayload.data.length} -> ${normalizedPayload.data.length})`);
           }
           result = normalizedPayload.data;
         } catch (retryError: any) {
@@ -331,11 +339,15 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
       }
 
     }
+    if (!result) {
+      logger.error(new Error(`No FIT payload downloaded for ${queueItem.id}; skipping token.`));
+      continue;
+    }
     logger.info('Ending timer: DownloadFit');
     logger.info(`File size: ${result.byteLength || result.length} bytes for queue item ${queueItem.id}`);
     try {
       logger.info('Starting timer: CreateEvent');
-      const event = await EventImporterFIT.getFromArrayBuffer(result, createParsingOptions());
+      const event = await EventImporterFIT.getFromArrayBuffer(toArrayBuffer(result), createParsingOptions());
       logger.info('Ending timer: CreateEvent');
       event.name = event.startDate.toJSON(); // @todo improve
       logger.info(`Created Event from FIT file of ${queueItem.id}`);

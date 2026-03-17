@@ -929,11 +929,12 @@ describe('queue', () => {
 
             const importerCalls = vi.mocked(EventImporterFIT.getFromArrayBuffer).mock.calls;
             expect(importerCalls.length).toBeGreaterThan(0);
-            const parsedPayload = importerCalls[0][0] as Buffer;
+            const parsedPayload = importerCalls[0][0] as ArrayBuffer;
+            const parsedPayloadBuffer = Buffer.from(parsedPayload);
 
-            expect(Buffer.isBuffer(parsedPayload)).toBe(true);
-            expect(parsedPayload.readUInt8(0)).toBe(14);
-            expect(parsedPayload.subarray(8, 12).toString('ascii')).toBe('.FIT');
+            expect(parsedPayload).toBeInstanceOf(ArrayBuffer);
+            expect(parsedPayloadBuffer.readUInt8(0)).toBe(14);
+            expect(parsedPayloadBuffer.subarray(8, 12).toString('ascii')).toBe('.FIT');
         });
     });
 });
