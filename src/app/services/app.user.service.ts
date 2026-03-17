@@ -7,7 +7,7 @@ import { StripeRole } from '../models/stripe-role.model';
 import { User } from '@sports-alliance/sports-lib';
 import { Privacy } from '@sports-alliance/sports-lib';
 import { AppEventService } from './app.event.service';
-import { catchError, map, take, switchMap, shareReplay, tap } from 'rxjs/operators';
+import { catchError, map, take, switchMap, shareReplay } from 'rxjs/operators';
 import {
   AppThemes,
   UserAppSettingsInterface
@@ -107,50 +107,13 @@ export class AppUserService implements OnDestroy {
   private windowService = inject(AppWindowService);
 
   public readonly user$ = runInInjectionContext(this.injector, () => user(this.auth).pipe(
-    tap((firebaseUser) => {
-      if (firebaseUser) {
-        this.logger.log('[AppUserService] Firebase auth user emitted', {
-          uid: firebaseUser.uid,
-          emailVerified: firebaseUser.emailVerified,
-          isAnonymous: firebaseUser.isAnonymous
-        });
-      } else {
-        this.logger.log('[AppUserService] Firebase auth user cleared');
-      }
-    }),
     switchMap(u => {
       if (!u) {
         return of(null);
       }
 
-      this.logger.log('[AppUserService] Loading Firestore profile for authenticated user', {
-        uid: u.uid
-      });
-
       return this.getUserProfileWithAuthRetry(u).pipe(
-        tap((dbUser) => {
-          this.logger.log('[AppUserService] Firestore profile read completed', {
-            uid: u.uid,
-            hasProfile: !!dbUser
-          });
-        }),
-        switchMap(dbUser => from(this.mergeClaims(u, dbUser)).pipe(
-          tap((mergedUser) => {
-            this.logger.log('[AppUserService] Auth claims merged with Firestore profile', {
-              uid: u.uid,
-              hasMergedUser: !!mergedUser,
-              acceptedPrivacyPolicy: mergedUser?.acceptedPrivacyPolicy ?? null
-            });
-          }),
-          catchError((error) => {
-            this.logger.error('[AppUserService] Failed to merge auth claims with Firestore profile', {
-              uid: u.uid,
-              code: error?.code ?? null,
-              message: error?.message ?? null
-            }, error);
-            return throwError(() => error);
-          })
-        ))
+        switchMap(dbUser => from(this.mergeClaims(u, dbUser)))
       );
     }),
     distinctUntilChanged((p, c) => JSON.stringify(p) === JSON.stringify(c)),
@@ -248,40 +211,18 @@ export class AppUserService implements OnDestroy {
     const loadUserProfile = () => this.getUserByID(firebaseUser.uid);
 
     return from(firebaseUser.getIdToken()).pipe(
-      tap(() => {
-        this.logger.log('[AppUserService] Firebase ID token resolved before Firestore profile read', {
-          uid: firebaseUser.uid
-        });
-      }),
       switchMap(() => loadUserProfile()),
       catchError((error) => {
         if (!this.isFirestorePermissionDenied(error)) {
           return throwError(() => error);
         }
 
-        this.logger.warn('[AppUserService] Firestore profile read denied after initial auth token. Retrying after token refresh.', {
-          uid: firebaseUser.uid,
-          code: error?.code ?? null,
-          message: error?.message ?? null
-        });
-
         return from(firebaseUser.getIdToken(true)).pipe(
-          tap(() => {
-            this.logger.log('[AppUserService] Firebase ID token refreshed for Firestore profile retry', {
-              uid: firebaseUser.uid
-            });
-          }),
           switchMap(() => loadUserProfile()),
           catchError((retryError) => {
             if (!this.isFirestorePermissionDenied(retryError)) {
               return throwError(() => retryError);
             }
-
-            this.logger.warn('[AppUserService] Firestore profile read still denied after token refresh. Falling back to synthetic user.', {
-              uid: firebaseUser.uid,
-              code: retryError?.code ?? null,
-              message: retryError?.message ?? null
-            });
 
             return of(null);
           })
@@ -373,11 +314,6 @@ export class AppUserService implements OnDestroy {
 
   constructor() {
     authState(this.auth).subscribe((user) => {
-      this.logger.log('[AppUserService] authState changed', {
-        uid: user?.uid ?? null,
-        emailVerified: user?.emailVerified ?? null,
-        isAnonymous: user?.isAnonymous ?? null
-      });
       if (user) {
         this.logger.setUser({ id: user.uid, email: user.email || undefined });
         void user.getIdTokenResult()
@@ -406,21 +342,7 @@ export class AppUserService implements OnDestroy {
 
       return combineLatest({
         user: (docData(userDoc) as Observable<AppUserInterface | null>).pipe(
-          tap((userProfile) => {
-            this.logger.log('[AppUserService] Main user profile doc read completed', {
-              userID,
-              exists: !!userProfile
-            });
-          }),
-          catchError((err) => {
-            this.logger.error('[AppUserService] Error fetching main user profile doc', {
-              userID,
-              path: `users/${userID}`,
-              code: err?.code ?? null,
-              message: err?.message ?? null
-            }, err);
-            return throwError(() => err);
-          })
+          catchError((err) => throwError(() => err))
         ),
         legal: (docData(legalDoc) as Observable<any>).pipe(catchError((err) => {
           this.logger.error('[AppUserService] Error fetching legal doc', {
@@ -453,9 +375,6 @@ export class AppUserService implements OnDestroy {
         distinctUntilChanged((prev, curr) => JSON.stringify(prev) === JSON.stringify(curr)),
         map(({ user, legal, system, settings }) => {
           if (!user) {
-            this.logger.warn('[AppUserService] No main user profile document found', {
-              userID
-            });
             return null;
           }
 
