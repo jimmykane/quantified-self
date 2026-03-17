@@ -9,6 +9,11 @@ import { AppUserService } from '../services/app.user.service';
 import { LocalStorageService } from '../services/storage/app.local.storage.service';
 import { LoggerService } from '../services/logger.service';
 import { environment } from '../../environments/environment';
+import {
+  APP_LOGIN_PATH,
+  canUseCustomAuthLinkDomain,
+  normalizeUrlOrHost
+} from '../shared/adapters/firebase-auth-link.constants';
 
 import { AppUserInterface } from '../models/app-user.interface';
 
@@ -235,12 +240,12 @@ export class AppAuthService {
   }
 
   private redirectToLogin(): void {
-    window.location.href = '/login';
+    window.location.href = APP_LOGIN_PATH;
   }
 
   private getLoginActionUrl(): string {
-    const baseUrl = this.normalizeAppUrl(environment.appUrl) || window.location.origin;
-    return `${baseUrl}/login`;
+    const baseUrl = normalizeUrlOrHost(environment.appUrl) || window.location.origin;
+    return `${baseUrl}${APP_LOGIN_PATH}`;
   }
 
   private buildActionCodeSettings(handleCodeInApp: boolean): { url: string; handleCodeInApp?: boolean; linkDomain?: string } {
@@ -265,25 +270,15 @@ export class AppAuthService {
       return undefined;
     }
 
-    const authDomain = this.normalizeAppUrl(environment.firebase?.authDomain);
+    const authDomain = normalizeUrlOrHost(environment.firebase?.authDomain);
     if (!authDomain) {
       return undefined;
     }
 
-    const normalized = authDomain.toLowerCase();
-    if (normalized === 'localhost' || normalized.endsWith('.firebaseapp.com') || normalized.endsWith('.web.app')) {
+    if (!canUseCustomAuthLinkDomain(authDomain)) {
       return undefined;
     }
 
     return authDomain;
-  }
-
-  private normalizeAppUrl(appUrl: string | undefined): string | null {
-    if (!appUrl) {
-      return null;
-    }
-
-    const normalized = appUrl.trim().replace(/\/+$/, '');
-    return normalized.length > 0 ? normalized : null;
   }
 }

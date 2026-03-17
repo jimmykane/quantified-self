@@ -7,12 +7,13 @@ import { environment } from './environments/environment';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import * as Sentry from '@sentry/angular';
 import { registerAppLocales } from './app/shared/adapters/date-locale.config';
+import { redirectFromFirebaseHostingAlias } from './app/shared/adapters/firebase-hosting-redirect';
 import { SYSTEM_THEME_PREFERENCE } from './app/models/app-theme-preference.type';
 
 // Register locales immediately
 registerAppLocales();
 
-redirectFromFirebaseHostingAlias();
+redirectFromFirebaseHostingAlias(environment.localhost, environment.appUrl);
 
 
 // Only initialize Sentry in non-localhost environments
@@ -53,32 +54,3 @@ import('./app/app.module')
   .then(x => platformBrowserDynamic().bootstrapModule(x.AppModule))
   .catch(err => console.error(err));
 // platformBrowserDynamic().bootstrapModule(AppModule);
-
-function redirectFromFirebaseHostingAlias(): void {
-  if (environment.localhost) {
-    return;
-  }
-
-  const currentHost = window.location.hostname.toLowerCase();
-  if (!currentHost.endsWith('.firebaseapp.com')) {
-    return;
-  }
-
-  if (window.location.pathname.startsWith('/__/auth/')) {
-    return;
-  }
-
-  let targetOrigin: string;
-  try {
-    targetOrigin = new URL(environment.appUrl).origin;
-  } catch {
-    return;
-  }
-
-  if (!targetOrigin || targetOrigin === window.location.origin) {
-    return;
-  }
-
-  const redirectUrl = `${targetOrigin}${window.location.pathname}${window.location.search}${window.location.hash}`;
-  window.location.replace(redirectUrl);
-}
