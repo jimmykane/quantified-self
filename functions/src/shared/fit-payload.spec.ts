@@ -45,6 +45,27 @@ describe('normalizeDownloadedFitPayload', () => {
         expect(normalized.data.equals(fitPayload)).toBe(true);
     });
 
+    it('unwraps multipart wrapper when headers are mixed-case and content-type has parameters', () => {
+        const fitPayload = createSyntheticFitPayload(Buffer.from([0x01, 0x02, 0x03, 0x04]));
+        const boundary = '------WebKitFormBoundaryCaseInsensitive';
+        const multipartPayload = Buffer.concat([
+            Buffer.from(
+                `${boundary}\r\n` +
+                'cOnTeNt-dIsPoSiTiOn: FORM-DATA; name="file"; FILENAME="sample.fit"\r\n' +
+                'CONTENT-TYPE: application/octet-stream; charset=binary\r\n\r\n',
+                'latin1'
+            ),
+            fitPayload,
+            Buffer.from(`\r\n${boundary}--\r\n`, 'latin1'),
+        ]);
+
+        const normalized = normalizeDownloadedFitPayload(multipartPayload);
+
+        expect(normalized.normalizedFromMultipart).toBe(true);
+        expect(normalized.fitOffset).toBeGreaterThan(0);
+        expect(normalized.data.equals(fitPayload)).toBe(true);
+    });
+
     it('passes unknown payload through unchanged', () => {
         const payload = Buffer.from('not-a-fit-payload', 'utf8');
         const normalized = normalizeDownloadedFitPayload(payload);
@@ -54,4 +75,3 @@ describe('normalizeDownloadedFitPayload', () => {
         expect(normalized.data.equals(payload)).toBe(true);
     });
 });
-

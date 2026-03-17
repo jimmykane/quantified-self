@@ -43,11 +43,18 @@ function readFitHeaderAt(buffer: Buffer, start: number): { totalLength: number }
 }
 
 function hasMultipartPrefix(prefix: Buffer): boolean {
-    const prefixText = prefix.toString('latin1');
-    return prefixText.includes('Content-Disposition: form-data') &&
-        prefixText.includes('filename=') &&
-        prefixText.includes('Content-Type: application/octet-stream') &&
-        prefixText.startsWith('--');
+    const normalizedPrefix = prefix.toString('latin1').toLowerCase();
+    const hasBoundaryPrefix = normalizedPrefix.startsWith('--');
+    const hasContentDisposition = /content-disposition\s*:\s*form-data\b/.test(normalizedPrefix);
+    const hasFilename = /filename\s*=/.test(normalizedPrefix);
+    const contentTypeMatch = normalizedPrefix.match(/content-type\s*:\s*([^\r\n]+)/);
+    const hasOctetStreamContentType = contentTypeMatch !== null &&
+        contentTypeMatch[1].trim().startsWith('application/octet-stream');
+
+    return hasBoundaryPrefix &&
+        hasContentDisposition &&
+        hasFilename &&
+        hasOctetStreamContentType;
 }
 
 export function normalizeDownloadedFitPayload(payload: Buffer | ArrayBuffer | Uint8Array): NormalizedFitPayload {
@@ -97,4 +104,3 @@ export function normalizeDownloadedFitPayload(payload: Buffer | ArrayBuffer | Ui
         fitOffset: 0,
     };
 }
-

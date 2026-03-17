@@ -51,6 +51,7 @@ import { AppEventMergeService, MergeType } from '../../services/app.event-merge.
 
 interface EventTableRowCacheEntry {
   event: EventInterface;
+  eventRowContentKey: string;
   renderContextKey: string;
   row: StatRowElement;
 }
@@ -681,7 +682,14 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
       const eventID = this.getEventID(event);
       const cachedEntry = eventID ? this.rowCache.get(eventID) : null;
-      if (cachedEntry && eventID && cachedEntry.event === event && cachedEntry.renderContextKey === renderContextKey) {
+      const eventRowContentKey = this.buildEventRowContentKey(event);
+      if (
+        cachedEntry &&
+        eventID &&
+        cachedEntry.event === event &&
+        cachedEntry.renderContextKey === renderContextKey &&
+        cachedEntry.eventRowContentKey === eventRowContentKey
+      ) {
         rows.push(cachedEntry.row);
         nextRowCache.set(eventID, cachedEntry);
         reusedRows += 1;
@@ -699,6 +707,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       if (eventID) {
         nextRowCache.set(eventID, {
           event,
+          eventRowContentKey,
           renderContextKey,
           row: statRowElement,
         });
@@ -789,6 +798,82 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       removeAscentForEventTypes: [...(summariesSettings?.removeAscentForEventTypes || [])].sort(),
       removeDescentForEventTypes: [...(summariesSettings?.removeDescentForEventTypes || [])].sort(),
     });
+  }
+
+  private buildEventRowContentKey(event: EventInterface): string {
+    const stats = this.readStatsForCacheKey(event);
+    const benchmarkResults = (event as any).benchmarkResults;
+    const startDate = event.startDate instanceof Date && !isNaN(+event.startDate)
+      ? event.startDate.getTime()
+      : null;
+
+    return JSON.stringify({
+      name: event.name ?? null,
+      description: event.description ?? null,
+      privacy: event.privacy ?? null,
+      isMerge: event.isMerge ?? false,
+      startDate,
+      activityTypesAsString: this.safeCallForCacheKey(() => event.getActivityTypesAsString(), ''),
+      activityTypesAsArray: this.safeCallForCacheKey(() => event.getActivityTypesAsArray(), []),
+      deviceNamesAsString: this.safeCallForCacheKey(() => event.getDeviceNamesAsString(), ''),
+      benchmarkResult: this.normalizeCacheValue((event as any).benchmarkResult),
+      benchmarkResults: this.normalizeCacheValue(benchmarkResults),
+      benchmarkResultKeys: benchmarkResults && typeof benchmarkResults === 'object'
+        ? Object.keys(benchmarkResults).sort()
+        : [],
+      stats,
+    });
+  }
+
+  private readStatsForCacheKey(event: EventInterface): unknown[] {
+    const stats = this.safeCallForCacheKey(() => event.getStatsAsArray(), []);
+    if (!Array.isArray(stats)) {
+      return [];
+    }
+
+    return stats.map((stat: any) => ({
+      type: this.safeCallForCacheKey(() => stat?.getType?.(), null),
+      value: this.normalizeCacheValue(this.safeCallForCacheKey(() => stat?.getValue?.(), null)),
+      displayValue: this.safeCallForCacheKey(() => stat?.getDisplayValue?.(), null),
+      displayUnit: this.safeCallForCacheKey(() => stat?.getDisplayUnit?.(), null),
+    }));
+  }
+
+  private safeCallForCacheKey<T>(read: () => T, fallback: T): T {
+    try {
+      return read();
+    } catch {
+      return fallback;
+    }
+  }
+
+  private normalizeCacheValue(value: any, depth: number = 0, seen?: WeakSet<object>): unknown {
+    if (value == null || typeof value === 'number' || typeof value === 'string' || typeof value === 'boolean') {
+      return value;
+    }
+    if (value instanceof Date) {
+      return value.getTime();
+    }
+    if (depth >= 2) {
+      return String(value);
+    }
+    if (Array.isArray(value)) {
+      return value.map(item => this.normalizeCacheValue(item, depth + 1, seen));
+    }
+    if (typeof value === 'object') {
+      const cacheSeen = seen || new WeakSet<object>();
+      if (cacheSeen.has(value)) {
+        return '[Circular]';
+      }
+      cacheSeen.add(value);
+      const normalized: Record<string, unknown> = {};
+      for (const key of Object.keys(value).sort()) {
+        normalized[key] = this.normalizeCacheValue(value[key], depth + 1, cacheSeen);
+      }
+      return normalized;
+    }
+
+    return String(value);
   }
 
   private getEventID(event: EventInterface | undefined): string | null {

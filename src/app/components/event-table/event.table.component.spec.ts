@@ -327,6 +327,25 @@ describe('EventTableComponent', () => {
         expect((component.data.data[1] as any).Name).toBe('Updated Event 2');
     });
 
+    it('should rebuild a cached row when the same event instance is mutated in place', () => {
+        const initialRows = [...component.data.data];
+        const getStatsRowElementSpy = vi.spyOn(component, 'getStatsRowElement');
+        const mutatedEvent = component.events[1] as any;
+        mutatedEvent.name = 'Mutated Event 2';
+        mutatedEvent.privacy = 'private';
+        mutatedEvent.benchmarkResult = { score: 42 };
+
+        (component as any).processChanges('spec_in_place_mutation');
+
+        expect(getStatsRowElementSpy).toHaveBeenCalledTimes(1);
+        expect(component.data.data[0]).toBe(initialRows[0]);
+        expect(component.data.data[1]).not.toBe(initialRows[1]);
+        expect(component.data.data[2]).toBe(initialRows[2]);
+        expect((component.data.data[1] as any).Name).toBe('Mutated Event 2');
+        expect((component.data.data[1] as any).Privacy).toBe('private');
+        expect((component.data.data[1] as any)['Has Benchmark']).toBeTruthy();
+    });
+
     it('should support comma-separated search terms', () => {
         component.ngAfterViewInit();
         const row = component.data.data[0] as any;
