@@ -142,6 +142,25 @@ describe('AppUserService', () => {
         expect(mergedUser.lastSignInDate).toEqual(new Date(lastSignInTime));
     });
 
+    it('should fall back to a synthetic user when Firestore user doc read is permission denied', async () => {
+        const permissionError = {
+            code: 'permission-denied',
+            message: 'Missing or insufficient permissions.'
+        };
+
+        (docData as any)
+            .mockReturnValueOnce(throwError(() => permissionError))
+            .mockReturnValueOnce(of({}))
+            .mockReturnValueOnce(of({}))
+            .mockReturnValueOnce(of({}));
+
+        service = TestBed.inject(AppUserService);
+        const mergedUser = await firstValueFrom(service.user$.pipe(filter((user): user is AppUserInterface => !!user), take(1)));
+
+        expect(mergedUser.uid).toBe('u1');
+        expect(mergedUser.email).toBe('test@example.com');
+    });
+
     it('returns enabled chart data types in canonical order with event chart priority overrides', () => {
         service = TestBed.inject(AppUserService);
         const user = {

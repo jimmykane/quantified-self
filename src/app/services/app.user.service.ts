@@ -2,7 +2,7 @@ import { inject, Injectable, OnDestroy, EnvironmentInjector, runInInjectionConte
 import { toSignal } from '@angular/core/rxjs-interop';
 
 
-import { Observable, from, firstValueFrom, of, combineLatest, distinctUntilChanged } from 'rxjs';
+import { Observable, from, firstValueFrom, of, combineLatest, distinctUntilChanged, throwError } from 'rxjs';
 import { StripeRole } from '../models/stripe-role.model';
 import { User } from '@sports-alliance/sports-lib';
 import { Privacy } from '@sports-alliance/sports-lib';
@@ -309,7 +309,9 @@ export class AppUserService implements OnDestroy {
       const settingsDoc = doc(this.firestore, `users/${userID}/config/settings`) as any;
 
       return combineLatest({
-        user: docData(userDoc) as Observable<AppUserInterface | null>,
+        user: (docData(userDoc) as Observable<AppUserInterface | null>).pipe(
+          catchError((err) => this.handleUserDocReadError(userID, err))
+        ),
         legal: (docData(legalDoc) as Observable<any>).pipe(catchError((err) => { this.logger.error('Error fetching legal:', err); return of({}); })),
         system: (docData(systemDoc) as Observable<any>).pipe(catchError((err) => { this.logger.error('Error fetching system:', err); return of({}); })),
         settings: (docData(settingsDoc) as Observable<any>).pipe(catchError((err) => { this.logger.error('Error fetching settings:', err); return of({}); }))
@@ -334,6 +336,25 @@ export class AppUserService implements OnDestroy {
           return u;
         }));
     });
+  }
+
+  private handleUserDocReadError(userID: string, err: any): Observable<AppUserInterface | null> {
+    if (!this.isPermissionDeniedError(err)) {
+      return throwError(() => err);
+    }
+
+    const currentAuthUid = this.auth.currentUser?.uid ?? 'none';
+    this.logger.warn(
+      `[AppUserService] Permission denied reading users/${userID} (auth uid: ${currentAuthUid}). Falling back to synthetic user profile.`,
+      err
+    );
+    return of(null);
+  }
+
+  private isPermissionDeniedError(err: any): boolean {
+    const code = typeof err?.code === 'string' ? err.code.toLowerCase() : '';
+    const message = typeof err?.message === 'string' ? err.message.toLowerCase() : '';
+    return code.includes('permission-denied') || message.includes('missing or insufficient permissions');
   }
 
   public async createOrUpdateUser(user: AppUserInterface) {

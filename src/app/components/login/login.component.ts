@@ -107,8 +107,8 @@ export class LoginComponent implements OnInit, OnDestroy {
       }
     }
 
-    this.userSubscription = this.authService.user$.subscribe((user) => {
-      if (user) {
+    this.userSubscription = this.authService.authState$.subscribe((firebaseUser) => {
+      if (firebaseUser) {
         void this.navigateToDashboardOnce();
       }
     });
@@ -325,12 +325,11 @@ export class LoginComponent implements OnInit, OnDestroy {
   private async redirectOrShowDataPrivacyDialog(loginServiceUser: any) {
     this.isLoading = true;
     try {
-      // Wait for the global auth state to acknowledge the user.
-      // This prevents the auth guard from seeing 'null' and kicking us back to login
-      // if we navigate too fast.
-      const databaseUser = await this.authService.user$
+      // Wait for Firebase Auth state only. Firestore profile reads can lag or fail
+      // transiently and should not block successful authentication navigation.
+      await this.authService.authState$
         .pipe(
-          filter(u => !!u), // Wait for a non-null user
+          filter(u => !!u), // Wait for a non-null auth user
           take(1)
         ).toPromise();
 
