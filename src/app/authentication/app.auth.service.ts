@@ -118,12 +118,7 @@ export class AppAuthService {
   //// Email Link Auth ////
 
   async sendEmailLink(email: string) {
-    const actionCodeSettings = {
-      // URL you want to redirect back to. The domain (www.example.com) for this
-      // URL must be in the authorized domains list in the Firebase Console.
-      url: this.getLoginActionUrl(),
-      handleCodeInApp: true
-    };
+    const actionCodeSettings = this.buildActionCodeSettings(true);
 
     try {
       await runInInjectionContext(this.injector, () => sendSignInLinkToEmail(this.auth, email, actionCodeSettings));
@@ -184,9 +179,7 @@ export class AppAuthService {
 
   // Sends email allowing user to reset password
   async resetPassword(email: string) {
-    const actionCodeSettings = {
-      url: this.getLoginActionUrl()
-    };
+    const actionCodeSettings = this.buildActionCodeSettings(false);
 
     try {
       await runInInjectionContext(this.injector, () => sendPasswordResetEmail(this.auth, email, actionCodeSettings));
@@ -248,6 +241,41 @@ export class AppAuthService {
   private getLoginActionUrl(): string {
     const baseUrl = this.normalizeAppUrl(environment.appUrl) || window.location.origin;
     return `${baseUrl}/login`;
+  }
+
+  private buildActionCodeSettings(handleCodeInApp: boolean): { url: string; handleCodeInApp?: boolean; linkDomain?: string } {
+    const actionCodeSettings: { url: string; handleCodeInApp?: boolean; linkDomain?: string } = {
+      url: this.getLoginActionUrl()
+    };
+
+    if (handleCodeInApp) {
+      actionCodeSettings.handleCodeInApp = true;
+    }
+
+    const linkDomain = this.getHostingLinkDomain();
+    if (linkDomain) {
+      actionCodeSettings.linkDomain = linkDomain;
+    }
+
+    return actionCodeSettings;
+  }
+
+  private getHostingLinkDomain(): string | undefined {
+    if (environment.localhost) {
+      return undefined;
+    }
+
+    const authDomain = this.normalizeAppUrl(environment.firebase?.authDomain);
+    if (!authDomain) {
+      return undefined;
+    }
+
+    const normalized = authDomain.toLowerCase();
+    if (normalized === 'localhost' || normalized.endsWith('.firebaseapp.com') || normalized.endsWith('.web.app')) {
+      return undefined;
+    }
+
+    return authDomain;
   }
 
   private normalizeAppUrl(appUrl: string | undefined): string | null {

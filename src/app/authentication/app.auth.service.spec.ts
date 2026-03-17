@@ -380,6 +380,26 @@ describe('AppAuthService', () => {
             );
         });
 
+        it('sendEmailLink should include linkDomain outside localhost', async () => {
+            const { sendSignInLinkToEmail } = await import('@angular/fire/auth');
+            const email = 'prod-like@example.com';
+            setMockEnvironmentLocalhost(false);
+            (sendSignInLinkToEmail as Mock).mockResolvedValueOnce(undefined);
+
+            const result = await service.sendEmailLink(email);
+
+            expect(result).toBe(true);
+            expect(sendSignInLinkToEmail).toHaveBeenCalledWith(
+                mockAuth,
+                email,
+                expect.objectContaining({
+                    url: `${environment.appUrl}/login`,
+                    handleCodeInApp: true,
+                    linkDomain: environment.firebase.authDomain,
+                })
+            );
+        });
+
         it('signInWithEmailLink should remove cached email after successful sign-in', async () => {
             const { signInWithEmailLink: signInWithEmailLinkFn } = await import('@angular/fire/auth');
             const email = 'test@example.com';
@@ -511,6 +531,23 @@ describe('AppAuthService', () => {
                 'Could not login due to error reset failed ',
                 undefined,
                 { duration: 2000 }
+            );
+        });
+
+        it('resetPassword should include linkDomain outside localhost', async () => {
+            const { sendPasswordResetEmail } = await import('@angular/fire/auth');
+            setMockEnvironmentLocalhost(false);
+            (sendPasswordResetEmail as Mock).mockResolvedValueOnce(undefined);
+
+            await service.resetPassword('reset-prod-like@example.com');
+
+            expect(sendPasswordResetEmail).toHaveBeenCalledWith(
+                mockAuth,
+                'reset-prod-like@example.com',
+                expect.objectContaining({
+                    url: `${environment.appUrl}/login`,
+                    linkDomain: environment.firebase.authDomain,
+                })
             );
         });
     });
