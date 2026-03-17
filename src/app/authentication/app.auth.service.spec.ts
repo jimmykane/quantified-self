@@ -349,7 +349,7 @@ describe('AppAuthService', () => {
                 mockAuth,
                 email,
                 expect.objectContaining({
-                    url: `${environment.appUrl}/login`,
+                    url: 'https://localhost:4200/login',
                     handleCodeInApp: true,
                 })
             );
@@ -508,7 +508,7 @@ describe('AppAuthService', () => {
                 mockAuth,
                 'reset@example.com',
                 expect.objectContaining({
-                    url: `${environment.appUrl}/login`,
+                    url: 'https://localhost:4200/login',
                 })
             );
             expect(mockSnackBar.open).toHaveBeenCalledWith(

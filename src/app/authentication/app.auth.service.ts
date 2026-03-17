@@ -11,6 +11,7 @@ import { LoggerService } from '../services/logger.service';
 import { environment } from '../../environments/environment';
 import {
   APP_LOGIN_PATH,
+  buildAppUrl,
   canUseCustomAuthLinkDomain,
   normalizeUrlOrHost
 } from '../shared/adapters/firebase-auth-link.constants';
@@ -245,7 +246,9 @@ export class AppAuthService {
 
   private getLoginActionUrl(): string {
     const baseUrl = normalizeUrlOrHost(environment.appUrl) || window.location.origin;
-    return `${baseUrl}${APP_LOGIN_PATH}`;
+    return buildAppUrl(baseUrl, APP_LOGIN_PATH, {
+      preferHttpsForLocalhost: environment.localhost
+    });
   }
 
   private buildActionCodeSettings(handleCodeInApp: boolean): { url: string; handleCodeInApp?: boolean; linkDomain?: string } {

@@ -26,3 +26,21 @@ export function canUseCustomAuthLinkDomain(domain: string): boolean {
   const normalized = domain.toLowerCase();
   return normalized !== LOCALHOST_DOMAIN && !isFirebaseDefaultHostingDomain(normalized);
 }
+
+export function buildAppUrl(
+  baseUrl: string,
+  pathname: string,
+  options: { preferHttpsForLocalhost?: boolean } = {}
+): string {
+  const parsedBaseUrl = new URL(baseUrl);
+
+  if (options.preferHttpsForLocalhost && parsedBaseUrl.hostname.toLowerCase() === LOCALHOST_DOMAIN) {
+    parsedBaseUrl.protocol = 'https:';
+  }
+
+  const normalizedPathname = pathname.startsWith('/') ? pathname.slice(1) : pathname;
+  const resolvedBaseUrl = parsedBaseUrl.toString();
+  const baseWithTrailingSlash = resolvedBaseUrl.endsWith('/') ? resolvedBaseUrl : `${resolvedBaseUrl}/`;
+
+  return new URL(normalizedPathname, baseWithTrailingSlash).toString();
+}
