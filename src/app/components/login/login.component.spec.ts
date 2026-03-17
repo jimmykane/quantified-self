@@ -32,7 +32,6 @@ describe('LoginComponent', () => {
     let component: LoginComponent;
 
     let mockAuthService: any;
-    let authStateSubject: BehaviorSubject<any>;
 
     const mockUserService = {
         getUserByID: vi.fn().mockReturnValue(of({ displayName: 'Test User' }))
@@ -65,11 +64,10 @@ describe('LoginComponent', () => {
     beforeEach(() => {
         vi.clearAllMocks(); // Clear spies to prevent accumulation
         (mockRouter.navigate as any).mockResolvedValue(true);
-        authStateSubject = new BehaviorSubject<any>(null);
 
         mockAuthService = {
             user$: new BehaviorSubject(null),
-            authState$: authStateSubject,
+            authState$: of(null),
             isSignInWithEmailLink: () => false,
             googleLogin: vi.fn().mockResolvedValue({ user: { uid: '123' } }),
             githubLogin: vi.fn().mockResolvedValue({ user: { uid: '123' } }),
@@ -80,7 +78,6 @@ describe('LoginComponent', () => {
             linkWithPopup: vi.fn().mockResolvedValue({}),
             signInWithPopup: vi.fn().mockResolvedValue({ user: { uid: '123' } }),
             getRedirectResult: vi.fn().mockResolvedValue(null),
-            getUser: vi.fn().mockResolvedValue(null),
             localStorageService: {
                 getItem: vi.fn().mockReturnValue(null),
                 setItem: vi.fn(),
@@ -153,7 +150,7 @@ describe('LoginComponent', () => {
         await new Promise(resolve => setTimeout(resolve, 0));
 
         // Emit user to allow navigation to proceed
-        authStateSubject.next({ uid: '123' });
+        (mockAuthService.user$ as any).next({ uid: '123' });
         await new Promise(resolve => setTimeout(resolve, 0));
 
         expect(mockAuthService.fetchSignInMethods).toHaveBeenCalledWith('test@example.com');
@@ -351,7 +348,7 @@ describe('LoginComponent', () => {
         // But we want to trigger emission.
 
         await new Promise(resolve => setTimeout(resolve, 0));
-        authStateSubject.next({ uid: 'redirect-user' });
+        (mockAuthService.user$ as any).next({ uid: 'redirect-user' });
         await new Promise(resolve => setTimeout(resolve, 0));
 
         expect(mockAuthService.getRedirectResult).toHaveBeenCalled();
@@ -359,12 +356,12 @@ describe('LoginComponent', () => {
         expect(mockRouter.navigate).toHaveBeenCalledTimes(1);
     });
 
-    it('should not navigate to dashboard until authState$ emits after redirect result (race regression)', async () => {
+    it('should not navigate to dashboard until user$ emits after redirect result (race regression)', async () => {
         const mockRedirectResult = { user: { uid: 'redirect-user' }, credential: { signInMethod: 'google.com' } };
         (mockAuthService.getRedirectResult as any).mockResolvedValue(mockRedirectResult);
 
-        // Keep auth state unresolved for one tick to simulate the race window.
-        authStateSubject.next(null);
+        // Keep auth user stream unresolved for one tick to simulate the race window.
+        (mockAuthService.user$ as BehaviorSubject<any>).next(null);
 
         component.ngOnInit();
         await new Promise(resolve => setTimeout(resolve, 0));
@@ -373,8 +370,8 @@ describe('LoginComponent', () => {
         expect(mockRouter.navigate).not.toHaveBeenCalledWith(['/dashboard']);
         expect(mockRouter.navigate).not.toHaveBeenCalled();
 
-        // Once auth state is populated, navigation is allowed.
-        authStateSubject.next({ uid: 'redirect-user' });
+        // Once user$ is populated, navigation is allowed.
+        (mockAuthService.user$ as BehaviorSubject<any>).next({ uid: 'redirect-user' });
         await new Promise(resolve => setTimeout(resolve, 0));
 
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
@@ -389,8 +386,8 @@ describe('LoginComponent', () => {
         await new Promise(resolve => setTimeout(resolve, 0));
 
         // Emit the user multiple times, similar to auth stream + claim refresh emissions.
-        authStateSubject.next({ uid: 'redirect-user' });
-        authStateSubject.next({ uid: 'redirect-user' });
+        (mockAuthService.user$ as BehaviorSubject<any>).next({ uid: 'redirect-user' });
+        (mockAuthService.user$ as BehaviorSubject<any>).next({ uid: 'redirect-user' });
         await new Promise(resolve => setTimeout(resolve, 0));
 
         expect(mockRouter.navigate).toHaveBeenCalledTimes(1);
@@ -407,9 +404,9 @@ describe('LoginComponent', () => {
         component.ngOnInit();
         await new Promise(resolve => setTimeout(resolve, 0));
 
-        authStateSubject.next({ uid: 'retry-user' });
+        (mockAuthService.user$ as BehaviorSubject<any>).next({ uid: 'retry-user' });
         await new Promise(resolve => setTimeout(resolve, 0));
-        authStateSubject.next({ uid: 'retry-user' });
+        (mockAuthService.user$ as BehaviorSubject<any>).next({ uid: 'retry-user' });
         await new Promise(resolve => setTimeout(resolve, 0));
 
         expect(mockRouter.navigate).toHaveBeenCalledTimes(2);
