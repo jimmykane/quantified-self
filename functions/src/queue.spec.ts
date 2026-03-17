@@ -900,5 +900,40 @@ describe('queue', () => {
                 context: 'MAX_RETRY_REACHED'
             }));
         });
+
+        it('should unwrap multipart FIT payload before parsing', async () => {
+            const fitPayload = Buffer.alloc(14 + 3 + 2); // header + data + crc
+            fitPayload.writeUInt8(14, 0);
+            fitPayload.writeUInt32LE(3, 4);
+            fitPayload.write('.FIT', 8, 'ascii');
+            fitPayload.writeUInt8(0x01, 14);
+            fitPayload.writeUInt8(0x02, 15);
+            fitPayload.writeUInt8(0x03, 16);
+
+            const boundary = '------WebKitFormBoundaryQueueSpec';
+            const multipart = Buffer.concat([
+                Buffer.from(
+                    `${boundary}\r\n` +
+                    'Content-Disposition: form-data; name="file"; filename="example.fit"\r\n' +
+                    'Content-Type: application/octet-stream\r\n\r\n',
+                    'latin1'
+                ),
+                fitPayload,
+                Buffer.from(`\r\n${boundary}--\r\n`, 'latin1'),
+            ]);
+
+            vi.mocked(requestHelper.get).mockResolvedValue(multipart);
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+            expect(result).toBe(QueueResult.Processed);
+
+            const importerCalls = vi.mocked(EventImporterFIT.getFromArrayBuffer).mock.calls;
+            expect(importerCalls.length).toBeGreaterThan(0);
+            const parsedPayload = importerCalls[0][0] as Buffer;
+
+            expect(Buffer.isBuffer(parsedPayload)).toBe(true);
+            expect(parsedPayload.readUInt8(0)).toBe(14);
+            expect(parsedPayload.subarray(8, 12).toString('ascii')).toBe('.FIT');
+        });
     });
 });

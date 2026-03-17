@@ -27,6 +27,7 @@ import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { COROSAPIEventMetaData, SuuntoAppEventMetaData } from '@sports-alliance/sports-lib';
 import { uploadDebugFile } from './debug-utils';
 import { createParsingOptions } from '../../shared/parsing-options';
+import { normalizeDownloadedFitPayload } from './shared/fit-payload';
 
 
 
@@ -284,6 +285,11 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
       logger.info(`Downloading ${serviceName} workoutID: ${(queueItem as any).workoutID} for queue item ${queueItem.id}`);
       logger.info('Starting timer: DownloadFit');
       result = await getWorkoutForService(serviceName, queueItem, serviceToken as any);
+      const normalizedPayload = normalizeDownloadedFitPayload(result);
+      if (normalizedPayload.normalizedFromMultipart) {
+        logger.warn(`[Queue] Unwrapped multipart payload for ${queueItem.id} (offset=${normalizedPayload.fitOffset}, size=${result.length || result.byteLength} -> ${normalizedPayload.data.length})`);
+      }
+      result = normalizedPayload.data;
       logger.info(`Downloaded FIT file for ${queueItem.id}`);
     } catch (e: any) {
       logger.info('Ending timer: DownloadFit');
@@ -293,6 +299,11 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
           // Force refresh token and save
           serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName, true);
           result = await getWorkoutForService(serviceName, queueItem, serviceToken as any);
+          const normalizedPayload = normalizeDownloadedFitPayload(result);
+          if (normalizedPayload.normalizedFromMultipart) {
+            logger.warn(`[Queue] Unwrapped multipart payload for ${queueItem.id} (offset=${normalizedPayload.fitOffset}, size=${result.length || result.byteLength} -> ${normalizedPayload.data.length})`);
+          }
+          result = normalizedPayload.data;
         } catch (retryError: any) {
           logger.error(new Error(`Could not get workout for ${queueItem.id} even after force refresh: ${retryError.message}`));
           // Continue to next token
