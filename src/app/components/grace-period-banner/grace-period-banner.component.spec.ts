@@ -6,6 +6,7 @@ import { of } from 'rxjs';
 import { signal } from '@angular/core';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { RouterTestingModule } from '@angular/router/testing';
+import { USAGE_LIMITS } from '@shared/limits';
 
 describe('GracePeriodBannerComponent', () => {
     let component: GracePeriodBannerComponent;
@@ -50,6 +51,7 @@ describe('GracePeriodBannerComponent', () => {
         const banner = fixture.nativeElement.querySelector('.grace-period-banner');
         expect(banner).toBeTruthy();
         expect(banner.textContent).toContain('Your Pro plan has ended');
+        expect(banner.textContent).toContain(`reduced to ${USAGE_LIMITS.free}`);
     });
 
     it('should hide banner when grace period date is null', () => {
