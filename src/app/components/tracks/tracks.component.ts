@@ -1573,9 +1573,26 @@ export class TracksComponent implements OnInit, OnDestroy {
   }
 
   private getExactCoordinatesFromActivity(activity: any): number[][] {
-    const positionData = typeof activity?.getPositionData === 'function'
-      ? activity.getPositionData() || []
-      : [];
+    if (typeof activity?.hasPositionData === 'function') {
+      try {
+        if (activity.hasPositionData() !== true) {
+          return [];
+        }
+      } catch {
+        return [];
+      }
+    }
+
+    if (typeof activity?.getPositionData !== 'function') {
+      return [];
+    }
+
+    let positionData: any[] = [];
+    try {
+      positionData = activity.getPositionData() || [];
+    } catch {
+      return [];
+    }
 
     return (positionData || [])
       .map((position: any) => [position?.longitudeDegrees, position?.latitudeDegrees])

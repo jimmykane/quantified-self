@@ -291,6 +291,61 @@ describe('EventTableComponent', () => {
         expect(component.data.data.length).toBe(3);
     });
 
+    it('should reuse cached row models when the next event list contains the same event instances', () => {
+        const initialRows = [...component.data.data];
+        const getStatsRowElementSpy = vi.spyOn(component, 'getStatsRowElement');
+
+        component.events = [...component.events];
+
+        (component as any).processChanges('spec_cached_rows');
+
+        expect(getStatsRowElementSpy).not.toHaveBeenCalled();
+        expect(component.data.data).toHaveLength(initialRows.length);
+        expect(component.data.data[0]).toBe(initialRows[0]);
+        expect(component.data.data[1]).toBe(initialRows[1]);
+        expect(component.data.data[2]).toBe(initialRows[2]);
+    });
+
+    it('should rebuild only rows whose event identity changed', () => {
+        const initialRows = [...component.data.data];
+        const updatedEvent = new MockEvent('event2') as any;
+        updatedEvent.name = 'Updated Event 2';
+        const getStatsRowElementSpy = vi.spyOn(component, 'getStatsRowElement');
+
+        component.events = [
+            component.events[0],
+            updatedEvent,
+            component.events[2],
+        ];
+
+        (component as any).processChanges('spec_partial_row_rebuild');
+
+        expect(getStatsRowElementSpy).toHaveBeenCalledTimes(1);
+        expect(component.data.data[0]).toBe(initialRows[0]);
+        expect(component.data.data[1]).not.toBe(initialRows[1]);
+        expect(component.data.data[2]).toBe(initialRows[2]);
+        expect((component.data.data[1] as any).Name).toBe('Updated Event 2');
+    });
+
+    it('should rebuild a cached row when the same event instance is mutated in place', () => {
+        const initialRows = [...component.data.data];
+        const getStatsRowElementSpy = vi.spyOn(component, 'getStatsRowElement');
+        const mutatedEvent = component.events[1] as any;
+        mutatedEvent.name = 'Mutated Event 2';
+        mutatedEvent.privacy = 'private';
+        mutatedEvent.benchmarkResult = { score: 42 };
+
+        (component as any).processChanges('spec_in_place_mutation');
+
+        expect(getStatsRowElementSpy).toHaveBeenCalledTimes(1);
+        expect(component.data.data[0]).toBe(initialRows[0]);
+        expect(component.data.data[1]).not.toBe(initialRows[1]);
+        expect(component.data.data[2]).toBe(initialRows[2]);
+        expect((component.data.data[1] as any).Name).toBe('Mutated Event 2');
+        expect((component.data.data[1] as any).Privacy).toBe('private');
+        expect((component.data.data[1] as any)['Has Benchmark']).toBeTruthy();
+    });
+
     it('should support comma-separated search terms', () => {
         component.ngAfterViewInit();
         const row = component.data.data[0] as any;

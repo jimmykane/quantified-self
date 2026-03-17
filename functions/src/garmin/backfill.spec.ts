@@ -160,7 +160,7 @@ describe('Garmin Backfill', () => {
             didLastHistoryImport: expect.any(Number),
             lastHistoryImportStartDate: expect.any(Number),
             lastHistoryImportEndDate: expect.any(Number),
-        }));
+        }), { merge: true });
     });
 
     it('should throw failed-precondition if app is undefined', async () => {

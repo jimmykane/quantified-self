@@ -1627,6 +1627,26 @@ describe('TracksComponent', () => {
       expect(clearJumpHeatmapSpy).toHaveBeenCalled();
     });
 
+    it('should treat missing position streams as requiring hydration instead of throwing', () => {
+      const activity = {
+        type: ActivityTypes.Running,
+        getID: () => 'activity-missing-position-streams',
+        hasPositionData: () => false,
+        getPositionData: () => {
+          throw new Error('No stream found with type Latitude');
+        },
+      };
+
+      expect(() => (component as any).shouldHydrateTrackDataForActivities(
+        [activity],
+        [ActivityTypes.Running],
+      )).not.toThrow();
+      expect((component as any).shouldHydrateTrackDataForActivities(
+        [activity],
+        [ActivityTypes.Running],
+      )).toBe(true);
+    });
+
     it('should block stale lightweight overlay commits when a newer load starts before metadata resolves', async () => {
       const trackManager = (component as any).tracksMapManager;
       const setActivityStartPointsSpy = vi.spyOn(trackManager, 'setActivityStartPoints');

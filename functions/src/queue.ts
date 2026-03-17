@@ -27,7 +27,14 @@ import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { COROSAPIEventMetaData, SuuntoAppEventMetaData } from '@sports-alliance/sports-lib';
 import { uploadDebugFile } from './debug-utils';
 import { createParsingOptions } from '../../shared/parsing-options';
+import { normalizeDownloadedFitPayload } from './shared/fit-payload';
 
+
+function toArrayBuffer(payload: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(payload.byteLength);
+  copy.set(payload);
+  return copy.buffer;
+}
 
 
 export async function dispatchQueueItemTasks(serviceName: ServiceNames) {
@@ -279,11 +286,17 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
 
     logger.info(`Found user id ${parentID} for queue item ${queueItem.id}`);
 
-    let result;
+    let result: Buffer | undefined;
     try {
       logger.info(`Downloading ${serviceName} workoutID: ${(queueItem as any).workoutID} for queue item ${queueItem.id}`);
       logger.info('Starting timer: DownloadFit');
-      result = await getWorkoutForService(serviceName, queueItem, serviceToken as any);
+      const downloadedPayload = await getWorkoutForService(serviceName, queueItem, serviceToken as any);
+      const normalizedPayload = normalizeDownloadedFitPayload(downloadedPayload);
+      if (normalizedPayload.normalizedFromMultipart) {
+        const downloadedSize = typeof downloadedPayload?.length === 'number' ? downloadedPayload.length : downloadedPayload?.byteLength;
+        logger.warn(`[Queue] Unwrapped multipart payload for ${queueItem.id} (offset=${normalizedPayload.fitOffset}, size=${downloadedSize || normalizedPayload.data.length} -> ${normalizedPayload.data.length})`);
+      }
+      result = normalizedPayload.data;
       logger.info(`Downloaded FIT file for ${queueItem.id}`);
     } catch (e: any) {
       logger.info('Ending timer: DownloadFit');
@@ -292,7 +305,13 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
         try {
           // Force refresh token and save
           serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName, true);
-          result = await getWorkoutForService(serviceName, queueItem, serviceToken as any);
+          const downloadedPayload = await getWorkoutForService(serviceName, queueItem, serviceToken as any);
+          const normalizedPayload = normalizeDownloadedFitPayload(downloadedPayload);
+          if (normalizedPayload.normalizedFromMultipart) {
+            const downloadedSize = typeof downloadedPayload?.length === 'number' ? downloadedPayload.length : downloadedPayload?.byteLength;
+            logger.warn(`[Queue] Unwrapped multipart payload for ${queueItem.id} (offset=${normalizedPayload.fitOffset}, size=${downloadedSize || normalizedPayload.data.length} -> ${normalizedPayload.data.length})`);
+          }
+          result = normalizedPayload.data;
         } catch (retryError: any) {
           logger.error(new Error(`Could not get workout for ${queueItem.id} even after force refresh: ${retryError.message}`));
           // Continue to next token
@@ -305,8 +324,8 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
         lastError = e;
         continue;
       } else if (e.statusCode === 500) {
-        logger.error(new Error(`Could not get workout for ${queueItem.id} due to 500 increasing retry by 20`));
-        retryIncrement = 20;
+        logger.warn(`Partner service internal error (500) for ${queueItem.id}, will retry soon.`);
+        retryIncrement = 1;
         lastError = e;
         continue;
       } else if (e.statusCode === 502) {
@@ -320,11 +339,15 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
       }
 
     }
+    if (!result) {
+      logger.error(new Error(`No FIT payload downloaded for ${queueItem.id}; skipping token.`));
+      continue;
+    }
     logger.info('Ending timer: DownloadFit');
     logger.info(`File size: ${result.byteLength || result.length} bytes for queue item ${queueItem.id}`);
     try {
       logger.info('Starting timer: CreateEvent');
-      const event = await EventImporterFIT.getFromArrayBuffer(result, createParsingOptions());
+      const event = await EventImporterFIT.getFromArrayBuffer(toArrayBuffer(result), createParsingOptions());
       logger.info('Ending timer: CreateEvent');
       event.name = event.startDate.toJSON(); // @todo improve
       logger.info(`Created Event from FIT file of ${queueItem.id}`);

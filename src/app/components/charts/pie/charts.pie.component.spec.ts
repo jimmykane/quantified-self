@@ -29,6 +29,7 @@ describe('ChartsPieComponent', () => {
 
   const mockChart = {
     isDisposed: vi.fn().mockReturnValue(false),
+    dispatchAction: vi.fn(),
   };
 
   let mockLoader: {
@@ -138,6 +139,12 @@ describe('ChartsPieComponent', () => {
     expect(option.tooltip.position).toBe(getViewportConstrainedTooltipPosition);
     expect(option.series[0].type).toBe('pie');
     expect(option.series[0].data).toHaveLength(2);
+    expect(mockChart.dispatchAction).toHaveBeenCalledWith({ type: 'hideTip' });
+    expect(mockLoader.setOption.mock.calls.at(-1)?.[2]).toEqual({
+      notMerge: false,
+      lazyUpdate: false,
+      replaceMerge: ['series']
+    });
   });
 
   it('should keep activity-type slices ungrouped', async () => {

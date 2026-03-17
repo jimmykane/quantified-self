@@ -143,7 +143,8 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
                 limit,
                 {
                     preferCache: true,
-                    warmServer: false
+                    warmServer: false,
+                    seedLiveQuery: true,
                 }
             ));
             logger.info('[perf] dashboard_resolver_events_fetch', {

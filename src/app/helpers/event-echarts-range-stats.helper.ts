@@ -18,6 +18,7 @@ export interface EventPanelRangeStat {
   gain?: { value: string; unit: string };
   loss?: { value: string; unit: string };
   slope?: string;
+  entries: Array<{ label: string; value: string }>;
 }
 
 export interface ComputeEventPanelRangeStatsInput {
@@ -55,6 +56,7 @@ export function computeEventPanelRangeStats(input: ComputeEventPanelRangeStatsIn
       min: formatDataTypeValue(series.streamType, aggregates.min),
       avg: formatDataTypeValue(series.streamType, aggregates.sum / aggregates.count),
       max: formatDataTypeValue(series.streamType, aggregates.max),
+      entries: [],
     };
 
     if (aggregates.gain !== undefined && aggregates.loss !== undefined) {
@@ -76,7 +78,23 @@ export function computeEventPanelRangeStats(input: ComputeEventPanelRangeStatsIn
       }
     }
 
-    stats.push(stat);
+    const entries = [
+      { label: 'Min', value: `${stat.min.value}${stat.min.unit}` },
+      { label: 'Avg', value: `${stat.avg.value}${stat.avg.unit}` },
+      { label: 'Max', value: `${stat.max.value}${stat.max.unit}` },
+    ];
+    if (stat.gain) {
+      entries.push({ label: 'Gain', value: `${stat.gain.value}${stat.gain.unit}` });
+    }
+    if (stat.loss) {
+      entries.push({ label: 'Loss', value: `${stat.loss.value}${stat.loss.unit}` });
+    }
+    if (stat.slope) {
+      entries.push({ label: 'Slope', value: stat.slope });
+    }
+    stat.entries = entries;
+
+    stats.push(stat as EventPanelRangeStat);
     return stats;
   }, []);
 }

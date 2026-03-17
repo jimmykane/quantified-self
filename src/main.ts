@@ -7,10 +7,13 @@ import { environment } from './environments/environment';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import * as Sentry from '@sentry/angular';
 import { registerAppLocales } from './app/shared/adapters/date-locale.config';
+import { redirectFromFirebaseHostingAlias } from './app/shared/adapters/firebase-hosting-redirect';
 import { SYSTEM_THEME_PREFERENCE } from './app/models/app-theme-preference.type';
 
 // Register locales immediately
 registerAppLocales();
+
+redirectFromFirebaseHostingAlias(environment.localhost, environment.appUrl);
 
 
 // Only initialize Sentry in non-localhost environments

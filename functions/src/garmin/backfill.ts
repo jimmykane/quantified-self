@@ -168,7 +168,7 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
         didLastHistoryImport: (new Date()).getTime(),
         lastHistoryImportStartDate: startDate.getTime(),
         lastHistoryImportEndDate: endDate.getTime(),
-      });
+      }, { merge: true });
   } catch (e: any) {
     logger.error(e);
     // noop all is sent to garmin

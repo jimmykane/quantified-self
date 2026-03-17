@@ -94,6 +94,7 @@ import { EnvironmentInjector } from '@angular/core';
 import { of, BehaviorSubject } from 'rxjs';
 import { Privacy } from '@sports-alliance/sports-lib';
 import { APP_STORAGE } from '../services/storage/app.storage.token';
+import { environment } from '../../environments/environment';
 
 import { signal } from '@angular/core';
 
@@ -348,7 +349,7 @@ describe('AppAuthService', () => {
                 mockAuth,
                 email,
                 expect.objectContaining({
-                    url: `${window.location.origin}/login`,
+                    url: 'https://localhost:4200/login',
                     handleCodeInApp: true,
                 })
             );
@@ -376,6 +377,26 @@ describe('AppAuthService', () => {
                 'Could not login due to error send failed ',
                 undefined,
                 { duration: 2000 }
+            );
+        });
+
+        it('sendEmailLink should include linkDomain outside localhost', async () => {
+            const { sendSignInLinkToEmail } = await import('@angular/fire/auth');
+            const email = 'prod-like@example.com';
+            setMockEnvironmentLocalhost(false);
+            (sendSignInLinkToEmail as Mock).mockResolvedValueOnce(undefined);
+
+            const result = await service.sendEmailLink(email);
+
+            expect(result).toBe(true);
+            expect(sendSignInLinkToEmail).toHaveBeenCalledWith(
+                mockAuth,
+                email,
+                expect.objectContaining({
+                    url: `${environment.appUrl}/login`,
+                    handleCodeInApp: true,
+                    linkDomain: environment.firebase.authDomain,
+                })
             );
         });
 
@@ -483,7 +504,13 @@ describe('AppAuthService', () => {
 
             await service.resetPassword('reset@example.com');
 
-            expect(sendPasswordResetEmail).toHaveBeenCalledWith(mockAuth, 'reset@example.com');
+            expect(sendPasswordResetEmail).toHaveBeenCalledWith(
+                mockAuth,
+                'reset@example.com',
+                expect.objectContaining({
+                    url: 'https://localhost:4200/login',
+                })
+            );
             expect(mockSnackBar.open).toHaveBeenCalledWith(
                 'Password update email sent',
                 undefined,
@@ -504,6 +531,23 @@ describe('AppAuthService', () => {
                 'Could not login due to error reset failed ',
                 undefined,
                 { duration: 2000 }
+            );
+        });
+
+        it('resetPassword should include linkDomain outside localhost', async () => {
+            const { sendPasswordResetEmail } = await import('@angular/fire/auth');
+            setMockEnvironmentLocalhost(false);
+            (sendPasswordResetEmail as Mock).mockResolvedValueOnce(undefined);
+
+            await service.resetPassword('reset-prod-like@example.com');
+
+            expect(sendPasswordResetEmail).toHaveBeenCalledWith(
+                mockAuth,
+                'reset-prod-like@example.com',
+                expect.objectContaining({
+                    url: `${environment.appUrl}/login`,
+                    linkDomain: environment.firebase.authDomain,
+                })
             );
         });
     });

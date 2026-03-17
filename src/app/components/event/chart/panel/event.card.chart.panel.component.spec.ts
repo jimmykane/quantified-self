@@ -1778,4 +1778,22 @@ describe('EventCardChartPanelComponent', () => {
 
     expect(bubbleWheelSpy).not.toHaveBeenCalled();
   });
+
+  it('suppresses non-primary mouse buttons on the chart surface while preserving left click', async () => {
+    await renderComponent();
+
+    const chartDiv = component.chartDiv.nativeElement;
+    const rightMouseDown = new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 2 });
+    const middleClick = new MouseEvent('click', { bubbles: true, cancelable: true, button: 1 });
+    const leftMouseDown = new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 });
+
+    expect(chartDiv.dispatchEvent(rightMouseDown)).toBe(false);
+    expect(rightMouseDown.defaultPrevented).toBe(true);
+
+    expect(chartDiv.dispatchEvent(middleClick)).toBe(false);
+    expect(middleClick.defaultPrevented).toBe(true);
+
+    expect(chartDiv.dispatchEvent(leftMouseDown)).toBe(true);
+    expect(leftMouseDown.defaultPrevented).toBe(false);
+  });
 });

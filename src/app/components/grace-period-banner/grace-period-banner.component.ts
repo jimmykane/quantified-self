@@ -1,5 +1,6 @@
 import { Component, OnInit, Output, EventEmitter, ViewChild, ElementRef, AfterViewInit, OnDestroy, effect, inject } from '@angular/core';
 import { Observable, Subscription } from 'rxjs';
+import { USAGE_LIMITS } from '@shared/limits';
 import { AppUserService } from '../../services/app.user.service';
 import { LoggerService } from '../../services/logger.service';
 
@@ -33,6 +34,7 @@ export class GracePeriodBannerComponent implements OnInit, AfterViewInit, OnDest
     private logger = inject(LoggerService);
 
     gracePeriodUntil = this.userService.gracePeriodUntil;
+    freeActivityLimit = USAGE_LIMITS.free;
     isDismissed = false;
     private subscription: Subscription | null = null;
     private resizeObserver: ResizeObserver | null = null;

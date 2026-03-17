@@ -57,41 +57,77 @@ export class LoginComponent implements OnInit, OnDestroy {
 
   async ngOnInit() {
     this.isLoading = true;
+    this.logger.log('[Login] ngOnInit:start');
 
     // Check for email link sign-in
     if (this.authService.isSignInWithEmailLink(window.location.href)) {
+      this.logger.log('[Login][EmailLink] Detected email link callback');
       let email = this.authService.localStorageService.getItem('emailForSignIn');
+      this.logger.log('[Login][EmailLink] Cached email lookup completed', {
+        cachedEmailPresent: !!email,
+        email: this.maskEmailForLogs(email)
+      });
       if (!email) {
+        this.logger.warn('[Login][EmailLink] Missing cached email. Prompting for confirmation.');
         // User opened the link on a different device. To prevent session fixation, ask the user to provide the associated email again.
         email = window.prompt('Please provide your email for confirmation') || '';
+        this.logger.log('[Login][EmailLink] Email confirmation prompt resolved', {
+          providedEmail: !!email,
+          email: this.maskEmailForLogs(email)
+        });
       }
 
       if (email) {
         this.isLoading = true;
+        this.logger.log('[Login][EmailLink] Starting sign-in with email link', {
+          email: this.maskEmailForLogs(email)
+        });
         this.authService.signInWithEmailLink(email, window.location.href)
           .then(async (result) => {
+            this.logger.log('[Login][EmailLink] Email link sign-in succeeded', {
+              uid: result?.user?.uid ?? null,
+              emailVerified: result?.user?.emailVerified ?? null
+            });
             // Check for pending link intent (Scenario: User clicked "Send Magic Link" to link this email to an existing GitHub/Google account)
             // Wait, logic is reverse: User was on "Login" page, tried to sign in with GitHub, failed (collision), chose "Send Magic Link".
             // So now they are signed in with Email. We need to link GitHub.
             const pendingLinkProvider = this.authService.localStorageService.getItem('pendingLinkProvider');
             if (pendingLinkProvider) {
+              this.logger.log('[Login][EmailLink] Pending provider link detected', {
+                pendingLinkProvider
+              });
               this.isLoading = false;
               const confirmLink = window.confirm(
                 `You are now signed in with your email.Please sign in with ${pendingLinkProvider} to finish linking your accounts.`
               );
+              this.logger.log('[Login][EmailLink] Pending provider link confirmation resolved', {
+                pendingLinkProvider,
+                confirmed: confirmLink
+              });
 
               if (confirmLink) {
                 this.authService.localStorageService.removeItem('pendingLinkProvider');
+                this.logger.log('[Login][EmailLink] Starting pending provider link flow', {
+                  pendingLinkProvider,
+                  uid: result?.user?.uid ?? null
+                });
                 await this.linkPendingProvider(pendingLinkProvider, result.user);
                 return; // linkPendingProvider handles redirect/dialog
               }
             }
+            this.logger.log('[Login][EmailLink] Proceeding to post-login redirect/privacy flow', {
+              uid: result?.user?.uid ?? null
+            });
             this.redirectOrShowDataPrivacyDialog(result);
           })
           .catch((error) => {
             this.isLoading = false;
             // Handle collision (Scenario: User tries to sign in with Email Link, but account exists with GitHub)
             if (error.code === 'auth/credential-already-in-use' || error.code === 'auth/account-exists-with-different-credential' || error.code === 'auth/email-already-in-use') {
+              this.logger.warn('[Login][EmailLink] Account collision during email link sign-in', {
+                code: error?.code ?? null,
+                email: this.maskEmailForLogs(email)
+              });
               // For email link, the email is known.
               // We need to trigger the collision flow.
               // However, error object might not provide everything cleanly for email link flow.
@@ -101,9 +137,15 @@ export class LoginComponent implements OnInit, OnDestroy {
               return;
             }
 
-            this.logger.error('Error signing in with email link', error);
+            this.logger.error('[Login][EmailLink] Sign-in failed', {
+              code: error?.code ?? null,
+              message: error?.message ?? null,
+              email: this.maskEmailForLogs(email)
+            }, error);
             this.snackBar.open('Error signing in. The link might be invalid or expired.', 'Close');
           });
+      } else {
+        this.logger.warn('[Login][EmailLink] No email available to complete email link sign-in.');
       }
     }
 
@@ -156,12 +198,20 @@ export class LoginComponent implements OnInit, OnDestroy {
 
   async sendEmailLink(email: string) {
     if (!email) {
+      this.logger.warn('[Login][EmailLink] sendEmailLink called without an email address');
       this.snackBar.open('Please enter a valid email address.', 'Close', { duration: 3000 });
       return;
     }
+    this.logger.log('[Login][EmailLink] Sending email link', {
+      email: this.maskEmailForLogs(email)
+    });
     this.isLoading = true;
     const success = await this.authService.sendEmailLink(email);
     this.isLoading = false;
+    this.logger.log('[Login][EmailLink] sendEmailLink completed', {
+      email: this.maskEmailForLogs(email),
+      success
+    });
     if (success) {
       this.snackBar.open('Magic link sent! Check your inbox.', 'Close', { duration: 5000 });
     }
@@ -206,6 +256,23 @@ export class LoginComponent implements OnInit, OnDestroy {
           .catch(handleError);
         break;
     }
+  }
+
+  private maskEmailForLogs(email: string | null | undefined): string {
+    if (!email) {
+      return '(missing)';
+    }
+
+    const [localPart, domainPart] = email.split('@');
+    if (!domainPart) {
+      return `${email.slice(0, 2)}***`;
+    }
+
+    const maskedLocalPart = localPart.length <= 2
+      ? `${localPart.charAt(0)}*`
+      : `${localPart.slice(0, 2)}***`;
+
+    return `${maskedLocalPart}@${domainPart}`;
   }
 
   // Refactored collision handling

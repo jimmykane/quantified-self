@@ -29,7 +29,7 @@ import {
   getDashboardPieSliceDisplayLabel
 } from '../../../helpers/dashboard-pie-chart-data.helper';
 import {
-  ECHARTS_SERIES_MERGE_UPDATE_SETTINGS,
+  ECHARTS_SERIES_IMMEDIATE_UPDATE_SETTINGS,
   EChartsHostController
 } from '../../../helpers/echarts-host-controller';
 import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
@@ -40,6 +40,8 @@ import {
 } from '../../../helpers/echarts-tooltip-interaction.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
 import {
+  formatDashboardDataDisplay,
+  formatDashboardNumericValue,
   getDashboardAggregateData,
   getDashboardChartSortComparator,
   getDashboardDataInstanceOrNull,
@@ -151,10 +153,11 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
       this.logger
     );
     const option = this.buildChartOption(pieData, aggregate);
+    this.chartHost.hideTooltip();
     this.chartHost.setOption(
       option,
       seriesHasData(pieData)
-        ? ECHARTS_SERIES_MERGE_UPDATE_SETTINGS
+        ? ECHARTS_SERIES_IMMEDIATE_UPDATE_SETTINGS
         : ChartsPieComponent.EMPTY_DATA_UPDATE_SETTINGS
     );
     this.chartHost.scheduleResize();
@@ -204,9 +207,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
     const centerLabel = aggregateData
       ? normalizeUnitDerivedTypeLabel(aggregateData.getType(), aggregateData.getDisplayType())
       : (this.chartDataValueType || 'Value');
-    const centerValue = aggregateData
-      ? `${aggregateData.getDisplayValue()}${aggregateData.getDisplayUnit()}`
-      : '--';
+    const centerValue = formatDashboardDataDisplay(aggregateData);
     const centerSubLabel = getDashboardSummaryMetaLabel(
       this.chartDataCategoryType,
       this.chartDataValueType,
@@ -237,10 +238,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
           if (!entry) {
             return '';
           }
-          const valueDataInstance = getDashboardDataInstanceOrNull(this.chartDataType, entry.value, this.logger);
-          const valueText = valueDataInstance
-            ? `${valueDataInstance.getDisplayValue()}${valueDataInstance.getDisplayUnit()}`
-            : Number(entry.value || 0).toLocaleString();
+          const valueText = formatDashboardNumericValue(this.chartDataType, entry.value, this.logger);
           const percent = Number(entry.percent || 0).toFixed(1);
           const activitiesCountLabel = entry.count > 0 ? `<br/>${entry.count} Activities` : '';
 

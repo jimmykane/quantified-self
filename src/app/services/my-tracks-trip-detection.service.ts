@@ -1013,7 +1013,15 @@ export class MyTracksTripDetectionService {
       return [];
     }
 
-    const visitWindows = this.buildVisitWindows(destinationClusters, timelinePoints);
+    const clusteredPoints = new Set<NormalizedActivityStart>();
+    destinationClusters.forEach((cluster) => {
+      cluster.points.forEach((point) => {
+        clusteredPoints.add(point);
+      });
+    });
+
+    const candidateTimelinePoints = timelinePoints.filter((point) => clusteredPoints.has(point));
+    const visitWindows = this.buildVisitWindows(destinationClusters, candidateTimelinePoints);
     const visitWindowCountByDestination = visitWindows.reduce((accumulator, visitWindow) => {
       accumulator.set(visitWindow.destinationId, (accumulator.get(visitWindow.destinationId) || 0) + 1);
       return accumulator;

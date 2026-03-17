@@ -46,6 +46,7 @@ import { resolveEventSeriesColor } from '../../../helpers/event-echarts-style.he
 import {
   clampEventRange,
   EventChartRange,
+  normalizeEventRange,
   resolveEventChartXAxisType,
 } from '../../../helpers/event-echarts-xaxis.helper';
 import { isMergeOrBenchmarkEvent } from '../../../helpers/event-visibility.helper';
@@ -235,6 +236,14 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     return this.zoomRange !== null;
   }
 
+  public get hasActiveSelectionRange(): boolean {
+    return normalizeEventRange(this.previewSelectedRange ?? this.selectedRange) !== null;
+  }
+
+  public get hasResettableChartState(): boolean {
+    return this.hasActiveZoomRange || this.hasActiveSelectionRange;
+  }
+
   public get hasWaterMark(): boolean {
     return this.waterMarkText.length > 0;
   }
@@ -401,11 +410,14 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     this.cdr.markForCheck();
   }
 
-  public onResetZoomRequested(): void {
-    if (this.zoomRange === null) {
+  public onResetChartStateRequested(): void {
+    if (this.zoomRange === null && this.previewSelectedRange === null && this.selectedRange === null) {
       return;
     }
+
     this.zoomRange = null;
+    this.previewSelectedRange = null;
+    this.selectedRange = null;
     this.cdr.markForCheck();
   }
 

@@ -127,8 +127,6 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       )),
       map(({ user }) => user),
       switchMap((user: AppUserInterface | null) => {
-      const userEmissionStart = performance.now();
-
       if (this.shouldSearch || !this.isInitialized) {
         this.isLoading = true;
       }
@@ -231,8 +229,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
             if (skipInitialStateUpdate) {
               return;
             }
-            this.logPerf('events_listener_emit', userEmissionStart, { incomingEvents: eventsArray?.length || 0 });
-            this.hasMergedEvents = eventsArray.some(event => event.isMerge);
+            this.trackEventsListenerEmission(eventsArray);
           }),
           map(({ eventsArray, skipInitialStateUpdate }) => {
             if (skipInitialStateUpdate) {
@@ -349,6 +346,12 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       durationMs: Number((performance.now() - start).toFixed(2)),
       ...(meta || {}),
     });
+  }
+
+  private trackEventsListenerEmission(eventsArray: EventInterface[]): void {
+    const emitStart = performance.now();
+    this.hasMergedEvents = eventsArray.some(event => event.isMerge);
+    this.logPerf('events_listener_emit', emitStart, { incomingEvents: eventsArray?.length || 0 });
   }
 
   private areEventsEquivalentByIdentity(previousEvents: EventInterface[] = [], currentEvents: EventInterface[] = []): boolean {

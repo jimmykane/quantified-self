@@ -1,5 +1,6 @@
 @if (isActive || hasError) {
-  <div class="loading-shade" [class.error-state]="hasError && !isActive">
+  <div class="loading-shade" [class.error-state]="hasError && !isActive"
+    [class.pass-through]="allowErrorPassthrough && hasError && !isActive">
     @if (isActive && showProgressBar) {
       <mat-progress-bar [mode]="mode"></mat-progress-bar>
     }

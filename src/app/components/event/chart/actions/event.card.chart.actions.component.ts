@@ -33,7 +33,7 @@ export class EventCardChartActionsComponent implements OnChanges {
   @Input() showSeriesMenu = false;
   @Input() seriesMenuSummary = '';
   @Input() seriesMenuItems: ChartSeriesMenuItem[] = [];
-  @Input() showResetZoom = false;
+  @Input() showResetChartState = false;
   @Output() showAllDataChange: EventEmitter<boolean> = new EventEmitter<boolean>();
   @Output() showLapsChange: EventEmitter<boolean> = new EventEmitter<boolean>();
   @Output() xAxisTypeChange: EventEmitter<XAxisTypes> = new EventEmitter<XAxisTypes>();
@@ -42,7 +42,7 @@ export class EventCardChartActionsComponent implements OnChanges {
   @Output() syncChartHoverToMapChange = new EventEmitter<boolean>();
   @Output() seriesVisibilityToggle = new EventEmitter<{ dataType: string; visible: boolean }>();
   @Output() showAllSeries = new EventEmitter<void>();
-  @Output() resetZoom = new EventEmitter<void>();
+  @Output() resetChartState = new EventEmitter<void>();
 
   public xAxisTypes = XAxisTypes;
   private analyticsService = inject(AppAnalyticsService);
@@ -83,6 +83,10 @@ export class EventCardChartActionsComponent implements OnChanges {
       : 'Zoom mode active. Click to switch to selection mode.';
   }
 
+  public get resetChartStateTooltip(): string {
+    return 'Reset zoom or selection';
+  }
+
   constructor() {
   }
 
@@ -114,9 +118,9 @@ export class EventCardChartActionsComponent implements OnChanges {
     );
   }
 
-  onResetZoom(): void {
-    this.resetZoom.emit();
-    this.analyticsService.logEvent('event_chart_settings_change', { property: 'resetZoom' });
+  onResetChartState(): void {
+    this.resetChartState.emit();
+    this.analyticsService.logEvent('event_chart_settings_change', { property: 'resetChartState' });
   }
 
   async onFillOpacityChange(value: number | null) {

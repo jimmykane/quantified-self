@@ -80,4 +80,13 @@ describe('AppLoadingOverlayComponent', () => {
         const shade = fixture.debugElement.query(By.directive(ShadeComponent));
         expect(shade).toBeFalsy();
     });
+
+    it('should forward error passthrough to the shade', () => {
+        component.hasError = true;
+        component.allowErrorPassthrough = true;
+        fixture.detectChanges();
+
+        const shade = fixture.debugElement.query(By.directive(ShadeComponent));
+        expect((shade.componentInstance as ShadeComponent).allowErrorPassthrough).toBe(true);
+    });
 });

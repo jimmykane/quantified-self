@@ -30,7 +30,7 @@
   }
 
   @if (chartType === chartTypes.IntensityZones) {
-  <app-loading-overlay [isLoading]="isLoading || isTileActionSaving" [hasError]="data?.length === 0" [errorMessage]="'No data yet'"
+  <app-loading-overlay [isLoading]="isLoading || isTileActionSaving" [hasError]="data?.length === 0" [allowErrorPassthrough]="true" [errorMessage]="'No data yet'"
     [errorHint]="'Needs activities with heart rate or power data'" [errorIcon]="'favorite'" [showSkeleton]="false"
     height="100%" [style.height.%]="100">
     <app-event-intensity-zones [activities]="data" [darkTheme]="darkTheme" [orientation]="'vertical'"

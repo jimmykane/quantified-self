@@ -2,12 +2,12 @@ import { inject, Injectable, OnDestroy, EnvironmentInjector, runInInjectionConte
 import { toSignal } from '@angular/core/rxjs-interop';
 
 
-import { Observable, from, firstValueFrom, of, combineLatest, distinctUntilChanged } from 'rxjs';
+import { Observable, from, firstValueFrom, of, combineLatest, distinctUntilChanged, throwError } from 'rxjs';
 import { StripeRole } from '../models/stripe-role.model';
 import { User } from '@sports-alliance/sports-lib';
 import { Privacy } from '@sports-alliance/sports-lib';
 import { AppEventService } from './app.event.service';
-import { catchError, map, take, switchMap, shareReplay } from 'rxjs/operators';
+import { catchError, map, take, switchMap, shareReplay, tap } from 'rxjs/operators';
 import {
   AppThemes,
   UserAppSettingsInterface
@@ -107,10 +107,50 @@ export class AppUserService implements OnDestroy {
   private windowService = inject(AppWindowService);
 
   public readonly user$ = runInInjectionContext(this.injector, () => user(this.auth).pipe(
+    tap((firebaseUser) => {
+      if (firebaseUser) {
+        this.logger.log('[AppUserService] Firebase auth user emitted', {
+          uid: firebaseUser.uid,
+          emailVerified: firebaseUser.emailVerified,
+          isAnonymous: firebaseUser.isAnonymous
+        });
+      } else {
+        this.logger.log('[AppUserService] Firebase auth user cleared');
+      }
+    }),
     switchMap(u => {
-      if (!u) return of(null);
-      return this.getUserByID(u.uid).pipe(
-        switchMap(dbUser => from(this.mergeClaims(u, dbUser)))
+      if (!u) {
+        return of(null);
+      }
+
+      this.logger.log('[AppUserService] Loading Firestore profile for authenticated user', {
+        uid: u.uid
+      });
+
+      return this.getUserProfileWithAuthRetry(u).pipe(
+        tap((dbUser) => {
+          this.logger.log('[AppUserService] Firestore profile read completed', {
+            uid: u.uid,
+            hasProfile: !!dbUser
+          });
+        }),
+        switchMap(dbUser => from(this.mergeClaims(u, dbUser)).pipe(
+          tap((mergedUser) => {
+            this.logger.log('[AppUserService] Auth claims merged with Firestore profile', {
+              uid: u.uid,
+              hasMergedUser: !!mergedUser,
+              acceptedPrivacyPolicy: mergedUser?.acceptedPrivacyPolicy ?? null
+            });
+          }),
+          catchError((error) => {
+            this.logger.error('[AppUserService] Failed to merge auth claims with Firestore profile', {
+              uid: u.uid,
+              code: error?.code ?? null,
+              message: error?.message ?? null
+            }, error);
+            return throwError(() => error);
+          })
+        ))
       );
     }),
     distinctUntilChanged((p, c) => JSON.stringify(p) === JSON.stringify(c)),
@@ -204,6 +244,57 @@ export class AppUserService implements OnDestroy {
     return identity;
   }
 
+  private getUserProfileWithAuthRetry(firebaseUser: any): Observable<AppUserInterface | null> {
+    const loadUserProfile = () => this.getUserByID(firebaseUser.uid);
+
+    return from(firebaseUser.getIdToken()).pipe(
+      tap(() => {
+        this.logger.log('[AppUserService] Firebase ID token resolved before Firestore profile read', {
+          uid: firebaseUser.uid
+        });
+      }),
+      switchMap(() => loadUserProfile()),
+      catchError((error) => {
+        if (!this.isFirestorePermissionDenied(error)) {
+          return throwError(() => error);
+        }
+
+        this.logger.warn('[AppUserService] Firestore profile read denied after initial auth token. Retrying after token refresh.', {
+          uid: firebaseUser.uid,
+          code: error?.code ?? null,
+          message: error?.message ?? null
+        });
+
+        return from(firebaseUser.getIdToken(true)).pipe(
+          tap(() => {
+            this.logger.log('[AppUserService] Firebase ID token refreshed for Firestore profile retry', {
+              uid: firebaseUser.uid
+            });
+          }),
+          switchMap(() => loadUserProfile()),
+          catchError((retryError) => {
+            if (!this.isFirestorePermissionDenied(retryError)) {
+              return throwError(() => retryError);
+            }
+
+            this.logger.warn('[AppUserService] Firestore profile read still denied after token refresh. Falling back to synthetic user.', {
+              uid: firebaseUser.uid,
+              code: retryError?.code ?? null,
+              message: retryError?.message ?? null
+            });
+
+            return of(null);
+          })
+        );
+      })
+    );
+  }
+
+  private isFirestorePermissionDenied(error: unknown): boolean {
+    const code = (error as { code?: string } | null)?.code;
+    return code === 'permission-denied' || code === 'firestore/permission-denied';
+  }
+
   public readonly user = toSignal(this.user$,
     { initialValue: null, injector: this.injector }
   );
@@ -282,6 +373,11 @@ export class AppUserService implements OnDestroy {
 
   constructor() {
     authState(this.auth).subscribe((user) => {
+      this.logger.log('[AppUserService] authState changed', {
+        uid: user?.uid ?? null,
+        emailVerified: user?.emailVerified ?? null,
+        isAnonymous: user?.isAnonymous ?? null
+      });
       if (user) {
         this.logger.setUser({ id: user.uid, email: user.email || undefined });
         void user.getIdTokenResult()
@@ -309,14 +405,57 @@ export class AppUserService implements OnDestroy {
       const settingsDoc = doc(this.firestore, `users/${userID}/config/settings`) as any;
 
       return combineLatest({
-        user: docData(userDoc) as Observable<AppUserInterface | null>,
-        legal: (docData(legalDoc) as Observable<any>).pipe(catchError((err) => { this.logger.error('Error fetching legal:', err); return of({}); })),
-        system: (docData(systemDoc) as Observable<any>).pipe(catchError((err) => { this.logger.error('Error fetching system:', err); return of({}); })),
-        settings: (docData(settingsDoc) as Observable<any>).pipe(catchError((err) => { this.logger.error('Error fetching settings:', err); return of({}); }))
+        user: (docData(userDoc) as Observable<AppUserInterface | null>).pipe(
+          tap((userProfile) => {
+            this.logger.log('[AppUserService] Main user profile doc read completed', {
+              userID,
+              exists: !!userProfile
+            });
+          }),
+          catchError((err) => {
+            this.logger.error('[AppUserService] Error fetching main user profile doc', {
+              userID,
+              path: `users/${userID}`,
+              code: err?.code ?? null,
+              message: err?.message ?? null
+            }, err);
+            return throwError(() => err);
+          })
+        ),
+        legal: (docData(legalDoc) as Observable<any>).pipe(catchError((err) => {
+          this.logger.error('[AppUserService] Error fetching legal doc', {
+            userID,
+            path: `users/${userID}/legal/agreements`,
+            code: err?.code ?? null,
+            message: err?.message ?? null
+          }, err);
+          return of({});
+        })),
+        system: (docData(systemDoc) as Observable<any>).pipe(catchError((err) => {
+          this.logger.error('[AppUserService] Error fetching system doc', {
+            userID,
+            path: `users/${userID}/system/status`,
+            code: err?.code ?? null,
+            message: err?.message ?? null
+          }, err);
+          return of({});
+        })),
+        settings: (docData(settingsDoc) as Observable<any>).pipe(catchError((err) => {
+          this.logger.error('[AppUserService] Error fetching settings doc', {
+            userID,
+            path: `users/${userID}/config/settings`,
+            code: err?.code ?? null,
+            message: err?.message ?? null
+          }, err);
+          return of({});
+        }))
       }).pipe(
         distinctUntilChanged((prev, curr) => JSON.stringify(prev) === JSON.stringify(curr)),
         map(({ user, legal, system, settings }) => {
           if (!user) {
+            this.logger.warn('[AppUserService] No main user profile document found', {
+              userID
+            });
             return null;
           }
 
