@@ -180,6 +180,59 @@ describe('summarizeAiInsightResult', () => {
     expect(narrative).not.toContain('422.3478623928474');
   });
 
+  it('formats bounded narrative date ranges using the client locale and query timezone', async () => {
+    setSummarizeInsightDependenciesForTesting({
+      generateNarrative: async () => {
+        throw new Error('generation failed');
+      },
+    });
+
+    const narrative = await summarizeAiInsightResult({
+      ...paceInput,
+      metricLabel: 'highest heart rate',
+      clientLocale: 'en-US',
+      query: {
+        ...paceInput.query,
+        dataType: 'Maximum Heart Rate',
+        valueType: ChartDataValueTypes.Maximum,
+        dateRange: {
+          kind: 'bounded',
+          startDate: '2026-02-16T22:00:00.000Z',
+          endDate: '2026-03-18T21:59:59.999Z',
+          timezone: 'Europe/Helsinki',
+          source: 'prompt',
+        },
+      },
+      summary: {
+        ...paceSummary,
+        overallAggregateValue: 140,
+      },
+    });
+
+    expect(narrative).toContain('from Feb 17, 2026 to Mar 18, 2026');
+    expect(narrative).not.toContain('2026-02-17');
+    expect(narrative).not.toContain('2026-03-18');
+  });
+
+  it('builds localized dateRangeLabel facts for model generation', () => {
+    const facts = buildNarrativeFacts({
+      ...paceInput,
+      clientLocale: 'en-GB',
+      query: {
+        ...paceInput.query,
+        dateRange: {
+          kind: 'bounded',
+          startDate: '2026-02-16T22:00:00.000Z',
+          endDate: '2026-03-18T21:59:59.999Z',
+          timezone: 'Europe/Helsinki',
+          source: 'prompt',
+        },
+      },
+    }) as { dateRangeLabel: string };
+
+    expect(facts.dateRangeLabel).toBe('17 Feb 2026 to 18 Mar 2026');
+  });
+
   it('uses all-time wording in the fallback narrative for explicit all-time queries', async () => {
     setSummarizeInsightDependenciesForTesting({
       generateNarrative: async () => {

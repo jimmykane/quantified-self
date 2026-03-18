@@ -277,10 +277,26 @@ function buildDefaultedRangeResponse(): AiInsightsOkResponse {
       ...buildOkResponse().query,
       dateRange: {
         kind: 'bounded',
-        startDate: '2025-12-19T00:00:00.000Z',
-        endDate: '2026-03-18T23:59:59.999Z',
+        startDate: '2025-12-18T22:00:00.000Z',
+        endDate: '2026-03-18T21:59:59.999Z',
         timezone: 'Europe/Helsinki',
         source: 'default',
+      },
+    },
+  };
+}
+
+function buildPacificRangeResponse(): AiInsightsOkResponse {
+  return {
+    ...buildOkResponse(),
+    query: {
+      ...buildOkResponse().query,
+      dateRange: {
+        kind: 'bounded',
+        startDate: '2025-12-19T08:00:00.000Z',
+        endDate: '2026-03-19T06:59:59.999Z',
+        timezone: 'America/Los_Angeles',
+        source: 'prompt',
       },
     },
   };
@@ -690,8 +706,8 @@ describe('AiInsightsPageComponent', () => {
 
     const subtitle = fixture.debugElement.query(By.css('.result-subtitle'))?.nativeElement as HTMLElement | undefined;
 
-    expect(subtitle?.textContent).toContain('Dec 19, 2025 to Mar 19, 2026');
-    expect(subtitle?.textContent).not.toContain('2025-12-19');
+    expect(subtitle?.textContent).toContain('Dec 19, 2025 to Mar 18, 2026');
+    expect(subtitle?.textContent).not.toContain('2025-12-18T22:00:00.000Z');
   });
 
   it('should render bounded subtitles using the injected en-GB locale order', async () => {
@@ -703,7 +719,18 @@ describe('AiInsightsPageComponent', () => {
 
     const subtitle = fixture.debugElement.query(By.css('.result-subtitle'))?.nativeElement as HTMLElement | undefined;
 
-    expect(subtitle?.textContent).toContain('19 Dec 2025 to 19 Mar 2026');
+    expect(subtitle?.textContent).toContain('19 Dec 2025 to 18 Mar 2026');
+  });
+
+  it('should format bounded subtitles in the query timezone instead of the browser timezone', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue(buildPacificRangeResponse());
+
+    await component.applySuggestedPrompt('Show my average cadence for cycling');
+    fixture.detectChanges();
+
+    const subtitle = fixture.debugElement.query(By.css('.result-subtitle'))?.nativeElement as HTMLElement | undefined;
+
+    expect(subtitle?.textContent).toContain('Dec 19, 2025 to Mar 18, 2026');
   });
 
   it('should render all-time responses without a raw date span', async () => {

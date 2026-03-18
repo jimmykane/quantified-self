@@ -49,12 +49,33 @@ const SummarizeInsightResultOutputSchema = z.object({
   narrative: z.string().min(1),
 });
 
-function formatRangeForFallback(query: NormalizedInsightQuery): string {
+function formatSemanticDate(
+  value: string,
+  locale: string | undefined,
+  timeZone: string,
+): string {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat(locale || 'en-US', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    timeZone,
+  }).format(date);
+}
+
+function formatLocalizedDateRange(
+  query: NormalizedInsightQuery,
+  locale: string | undefined,
+): string {
   if (query.dateRange.kind === 'all_time') {
     return 'all time';
   }
 
-  return `${query.dateRange.startDate.slice(0, 10)} to ${query.dateRange.endDate.slice(0, 10)}`;
+  return `${formatSemanticDate(query.dateRange.startDate, locale, query.dateRange.timezone)} to ${formatSemanticDate(query.dateRange.endDate, locale, query.dateRange.timezone)}`;
 }
 
 function formatActivityFilter(query: NormalizedInsightQuery): string {
@@ -140,7 +161,7 @@ export function buildInsightSummaryFacts(input: SummarizeInsightResultInput): {
 }
 
 function buildNarrativeFallback(input: SummarizeInsightResultInput): string {
-  const dateRangeText = formatRangeForFallback(input.query);
+  const dateRangeText = formatLocalizedDateRange(input.query, input.clientLocale);
   const activityText = formatActivityFilter(input.query);
   const summary = buildInsightSummaryFacts(input);
   const isAllTime = input.query.dateRange.kind === 'all_time';
@@ -148,7 +169,7 @@ function buildNarrativeFallback(input: SummarizeInsightResultInput): string {
   if (input.status === 'empty') {
     return isAllTime
       ? `I could not find matching ${activityText} events with ${input.metricLabel} data across all recorded history.`
-      : `I could not find matching ${activityText} events with ${input.metricLabel} data between ${dateRangeText}.`;
+      : `I could not find matching ${activityText} events with ${input.metricLabel} data from ${dateRangeText}.`;
   }
 
   if (
@@ -159,7 +180,7 @@ function buildNarrativeFallback(input: SummarizeInsightResultInput): string {
     const activityNoun = summary.matchedEventCount === 1 ? 'activity' : 'activities';
     return isAllTime
       ? `Your ${input.metricLabel} for ${activityText} across all recorded history was ${summary.overallAggregateDisplayValue}. This was calculated from ${summary.matchedEventCount} ${activityNoun}.`
-      : `Your ${input.metricLabel} for ${activityText} between ${dateRangeText} was ${summary.overallAggregateDisplayValue}. This was calculated from ${summary.matchedEventCount} ${activityNoun}.`;
+      : `Your ${input.metricLabel} for ${activityText} from ${dateRangeText} was ${summary.overallAggregateDisplayValue}. This was calculated from ${summary.matchedEventCount} ${activityNoun}.`;
   }
 
   if (!summary.highestValueBucket || !summary.latestBucket) {
@@ -186,7 +207,7 @@ export function buildNarrativeFacts(input: SummarizeInsightResultInput): Record<
     valueType: input.query.valueType,
     activityTypes: input.query.activityTypes,
     dateRange: input.query.dateRange,
-    dateRangeLabel: formatRangeForFallback(input.query),
+    dateRangeLabel: formatLocalizedDateRange(input.query, input.clientLocale),
     bucketCount: input.aggregation.buckets.length,
     summary,
     buckets: input.aggregation.buckets.slice(0, 24).map(bucket => ({

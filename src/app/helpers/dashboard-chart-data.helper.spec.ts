@@ -71,12 +71,31 @@ describe('dashboard-chart-data.helper', () => {
     expect(american).toBe('Mar 02, 2024 to Mar 09, 2024');
   });
 
+  it('should format bounded date ranges using an explicit query timezone when provided', () => {
+    const start = '2025-12-19T08:00:00.000Z';
+    const end = '2026-03-19T06:59:59.999Z';
+
+    const british = formatDashboardDateRange(start, end, 'en-GB', 'America/Los_Angeles');
+    const american = formatDashboardDateRange(start, end, 'en-US', 'America/Los_Angeles');
+
+    expect(british).toBe('19 Dec 2025 to 18 Mar 2026');
+    expect(american).toBe('Dec 19, 2025 to Mar 18, 2026');
+  });
+
   it('should format bucket dates by interval using the shared dashboard rules', () => {
     const timestamp = Date.UTC(2024, 2, 2, 15, 4, 0);
 
     expect(formatDashboardBucketDateByInterval(timestamp, TimeIntervals.BiWeekly, 'en-GB')).toContain('Week');
     expect(formatDashboardBucketDateByInterval(timestamp, TimeIntervals.BiWeekly, 'en-GB')).toContain('02 Mar 2024');
     expect(formatDashboardBucketDateByInterval(timestamp, TimeIntervals.Quarterly, 'en-GB')).toBe('Mar 2024');
+  });
+
+  it('should format bucket dates using an explicit query timezone when provided', () => {
+    const timestamp = '2026-03-19T06:59:59.999Z';
+
+    expect(
+      formatDashboardBucketDateByInterval(timestamp, TimeIntervals.Daily, 'en-GB', 'America/Los_Angeles'),
+    ).toBe('18 Mar 2026');
   });
 
   it('should format long duration aggregates using days once they cross 24 hours', () => {

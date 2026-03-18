@@ -222,6 +222,37 @@ describe('normalizeInsightQuery', () => {
     });
   });
 
+  it('resolves bounded default ranges to the query timezone instead of UTC calendar boundaries', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'distance',
+        aggregation: 'total',
+        category: 'date',
+        requestedTimeInterval: 'auto',
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'show my distance',
+      clientTimezone: 'Europe/Helsinki',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
+      startDate: '2025-12-18T22:00:00.000Z',
+      endDate: '2026-03-18T21:59:59.999Z',
+      timezone: 'Europe/Helsinki',
+      source: 'default',
+    });
+  });
+
   it('treats explicit all-time prompts as an all-time range even when the model omits a range', async () => {
     setNormalizeQueryDependenciesForTesting({
       now: () => new Date('2026-03-18T12:00:00.000Z'),

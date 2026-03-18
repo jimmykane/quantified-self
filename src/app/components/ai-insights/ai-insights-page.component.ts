@@ -46,7 +46,12 @@ function formatDateRange(dateRange: NormalizedInsightDateRange, locale: string):
     return 'All time';
   }
 
-  return formatDashboardDateRange(dateRange.startDate, dateRange.endDate, locale);
+  return formatDashboardDateRange(
+    dateRange.startDate,
+    dateRange.endDate,
+    locale,
+    dateRange.timezone,
+  );
 }
 
 function formatDateRangeNote(dateRange: NormalizedInsightDateRange): string | null {
@@ -70,6 +75,7 @@ function formatBucketMeta(
       bucket.time as number,
       response.aggregation.resolvedTimeInterval,
       locale,
+      response.query.dateRange.timezone,
     );
   }
 

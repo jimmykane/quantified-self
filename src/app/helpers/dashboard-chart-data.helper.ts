@@ -18,6 +18,11 @@ type WarnLogger = {
 
 const SECONDS_PER_DAY = 24 * 60 * 60;
 
+type DashboardDateFormatOptions = {
+  locale: string;
+  timeZone?: string;
+};
+
 function toFiniteNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === '') {
     return null;
@@ -32,6 +37,80 @@ function toValidDate(value: number | Date | string): Date | null {
     return null;
   }
   return date;
+}
+
+function withOptionalTimeZone<T extends Intl.DateTimeFormatOptions>(
+  options: T,
+  timeZone?: string,
+): T & Intl.DateTimeFormatOptions {
+  return timeZone ? { ...options, timeZone } : options;
+}
+
+function getZonedCalendarDate(date: Date, timeZone?: string): Date {
+  if (!timeZone) {
+    return date;
+  }
+
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+
+  const year = Number(parts.find(part => part.type === 'year')?.value);
+  const month = Number(parts.find(part => part.type === 'month')?.value);
+  const day = Number(parts.find(part => part.type === 'day')?.value);
+
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+    return date;
+  }
+
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function formatDashboardDateByIntervalWithOptions(
+  value: number | Date,
+  timeInterval: TimeIntervals,
+  options: DashboardDateFormatOptions,
+): string {
+  const date = toValidDate(value);
+  if (!date) {
+    return '';
+  }
+
+  switch (timeInterval) {
+    case TimeIntervals.Yearly:
+      return date.toLocaleDateString(options.locale, withOptionalTimeZone({ year: 'numeric' }, options.timeZone));
+    case TimeIntervals.Monthly:
+      return date.toLocaleDateString(options.locale, withOptionalTimeZone({ month: 'short', year: 'numeric' }, options.timeZone));
+    case TimeIntervals.Weekly: {
+      const week = weeknumber.weekNumber(getZonedCalendarDate(date, options.timeZone));
+      const dateLabel = date.toLocaleDateString(
+        options.locale,
+        withOptionalTimeZone({ day: '2-digit', month: 'short', year: 'numeric' }, options.timeZone),
+      );
+      return `Week ${week} ${dateLabel}`;
+    }
+    case TimeIntervals.Daily:
+      return date.toLocaleDateString(
+        options.locale,
+        withOptionalTimeZone({ day: '2-digit', month: 'short', year: 'numeric' }, options.timeZone),
+      );
+    case TimeIntervals.Hourly: {
+      const timeLabel = date.toLocaleTimeString(
+        options.locale,
+        withOptionalTimeZone({ hour: '2-digit', minute: '2-digit', hour12: false }, options.timeZone),
+      );
+      const dateLabel = date.toLocaleDateString(
+        options.locale,
+        withOptionalTimeZone({ day: '2-digit', month: 'short', year: 'numeric' }, options.timeZone),
+      );
+      return `${timeLabel} ${dateLabel}`;
+    }
+    default:
+      throw new Error(`Not implemented for ${timeInterval}`);
+  }
 }
 
 export function getDashboardChartDateFormat(timeInterval: TimeIntervals): string {
@@ -68,38 +147,23 @@ export function getDashboardAxisDateFormat(timeInterval: TimeIntervals): string 
   }
 }
 
-export function formatDashboardDateByInterval(value: number | Date, timeInterval: TimeIntervals, locale = getBrowserLocale()): string {
-  const date = toValidDate(value);
-  if (!date) {
-    return '';
-  }
-
-  switch (timeInterval) {
-    case TimeIntervals.Yearly:
-      return `${date.getFullYear()}`;
-    case TimeIntervals.Monthly:
-      return date.toLocaleDateString(locale, { month: 'short', year: 'numeric' });
-    case TimeIntervals.Weekly: {
-      const week = weeknumber.weekNumber(date);
-      const dateLabel = date.toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' });
-      return `Week ${week} ${dateLabel}`;
-    }
-    case TimeIntervals.Daily:
-      return date.toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' });
-    case TimeIntervals.Hourly: {
-      const timeLabel = date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', hour12: false });
-      const dateLabel = date.toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' });
-      return `${timeLabel} ${dateLabel}`;
-    }
-    default:
-      throw new Error(`Not implemented for ${timeInterval}`);
-  }
+export function formatDashboardDateByInterval(
+  value: number | Date,
+  timeInterval: TimeIntervals,
+  locale = getBrowserLocale(),
+  timeZone?: string,
+): string {
+  return formatDashboardDateByIntervalWithOptions(value, timeInterval, {
+    locale,
+    timeZone,
+  });
 }
 
 export function formatDashboardDateRange(
   startValue: number | Date | string,
   endValue: number | Date | string,
   locale = getBrowserLocale(),
+  timeZone?: string,
 ): string {
   const startDate = toValidDate(startValue);
   const endDate = toValidDate(endValue);
@@ -107,22 +171,23 @@ export function formatDashboardDateRange(
     return '';
   }
 
-  return `${formatDashboardDateByInterval(startDate, TimeIntervals.Daily, locale)} to ${formatDashboardDateByInterval(endDate, TimeIntervals.Daily, locale)}`;
+  return `${formatDashboardDateByInterval(startDate, TimeIntervals.Daily, locale, timeZone)} to ${formatDashboardDateByInterval(endDate, TimeIntervals.Daily, locale, timeZone)}`;
 }
 
 export function formatDashboardBucketDateByInterval(
   value: number | Date,
   timeInterval: TimeIntervals,
   locale = getBrowserLocale(),
+  timeZone?: string,
 ): string {
   switch (timeInterval) {
     case TimeIntervals.BiWeekly:
-      return formatDashboardDateByInterval(value, TimeIntervals.Weekly, locale);
+      return formatDashboardDateByInterval(value, TimeIntervals.Weekly, locale, timeZone);
     case TimeIntervals.Quarterly:
     case TimeIntervals.Semesterly:
-      return formatDashboardDateByInterval(value, TimeIntervals.Monthly, locale);
+      return formatDashboardDateByInterval(value, TimeIntervals.Monthly, locale, timeZone);
     default:
-      return formatDashboardDateByInterval(value, timeInterval, locale);
+      return formatDashboardDateByInterval(value, timeInterval, locale, timeZone);
   }
 }
 
