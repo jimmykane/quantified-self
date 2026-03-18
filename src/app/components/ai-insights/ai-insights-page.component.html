@@ -81,6 +81,8 @@
                 </span>
               </div>
             </div>
+
+            <p class="mat-body-small prompt-support-note">{{ latestSnapshotSupportNote() }}</p>
           </form>
 
           <mat-menu #suggestedPromptsMenu="matMenu" xPosition="before" yPosition="below" class="qs-menu-panel">
@@ -108,6 +110,17 @@
         </mat-card-header>
 
         <mat-card-content class="card-content">
+          @if (resultNotes().length) {
+            <div class="result-note-list">
+              @for (note of resultNotes(); track note.message) {
+                <div class="result-note">
+                  <mat-icon>{{ note.icon }}</mat-icon>
+                  <p class="mat-body-small">{{ note.message }}</p>
+                </div>
+              }
+            </div>
+          }
+
           @if (isSubmitting()) {
             <div class="state-panel">
               <mat-progress-bar mode="indeterminate"></mat-progress-bar>

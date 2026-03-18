@@ -1,9 +1,10 @@
 import { CommonModule } from '@angular/common';
-import { Component, input, signal } from '@angular/core';
+import { Component, LOCALE_ID, input, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
+import { BehaviorSubject } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ActivityTypeGroups,
@@ -17,13 +18,16 @@ import {
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
 import type {
+  AiInsightsLatestSnapshot,
   AiInsightsEmptyResponse,
   AiInsightsOkResponse,
   AiInsightsResponse,
   AiInsightsUnsupportedResponse,
 } from '@shared/ai-insights.types';
 import { formatUnitAwareDataValue, normalizeUserUnitSettings } from '@shared/unit-aware-display';
+import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { AiInsightsLatestSnapshotService } from '../../services/ai-insights-latest-snapshot.service';
 import { AiInsightsService } from '../../services/ai-insights.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
@@ -363,10 +367,79 @@ function buildGroupResponse(): AiInsightsOkResponse {
   };
 }
 
+function buildDailyResponse(): AiInsightsOkResponse {
+  return {
+    ...buildOkResponse(),
+    query: {
+      ...buildOkResponse().query,
+      requestedTimeInterval: TimeIntervals.Daily,
+      dateRange: {
+        kind: 'bounded',
+        startDate: '2026-03-01T00:00:00.000Z',
+        endDate: '2026-03-18T23:59:59.999Z',
+        timezone: 'Europe/Helsinki',
+        source: 'prompt',
+      },
+    },
+    aggregation: {
+      ...buildOkResponse().aggregation,
+      resolvedTimeInterval: TimeIntervals.Daily,
+      buckets: [
+        {
+          bucketKey: '2026-03-02',
+          time: Date.UTC(2026, 2, 2),
+          totalCount: 2,
+          aggregateValue: 84,
+          seriesValues: { Cycling: 84 },
+          seriesCounts: { Cycling: 2 },
+        },
+      ],
+    },
+    summary: {
+      ...buildOkResponse().summary,
+      peakBucket: {
+        bucketKey: '2026-03-02',
+        time: Date.UTC(2026, 2, 2),
+        aggregateValue: 84,
+        totalCount: 2,
+      },
+      lowestBucket: {
+        bucketKey: '2026-03-02',
+        time: Date.UTC(2026, 2, 2),
+        aggregateValue: 84,
+        totalCount: 2,
+      },
+      latestBucket: {
+        bucketKey: '2026-03-02',
+        time: Date.UTC(2026, 2, 2),
+        aggregateValue: 84,
+        totalCount: 2,
+      },
+      trend: {
+        previousBucket: {
+          bucketKey: '2026-03-01',
+          time: Date.UTC(2026, 2, 1),
+          aggregateValue: 81,
+          totalCount: 1,
+        },
+        deltaAggregateValue: 3,
+      },
+    },
+  };
+}
+
 describe('AiInsightsPageComponent', () => {
+  const authUserSubject = new BehaviorSubject<any>({ uid: 'user-1' });
+  const authServiceMock = {
+    user$: authUserSubject.asObservable(),
+  };
   const aiInsightsServiceMock = {
     runInsight: vi.fn<() => Promise<AiInsightsResponse>>(),
     getErrorMessage: vi.fn((error: unknown) => error instanceof Error ? error.message : 'Could not generate AI insights.'),
+  };
+  const aiInsightsLatestSnapshotServiceMock = {
+    loadLatest: vi.fn<() => Promise<AiInsightsLatestSnapshot | null>>(),
+    saveLatest: vi.fn<() => Promise<'saved' | 'skipped_too_large' | 'failed'>>(),
   };
   const themeServiceMock = {
     appTheme: signal(AppThemes.Normal),
@@ -382,11 +455,8 @@ describe('AiInsightsPageComponent', () => {
   let fixture: ComponentFixture<AiInsightsPageComponent>;
   let component: AiInsightsPageComponent;
 
-  beforeEach(async () => {
-    aiInsightsServiceMock.runInsight.mockReset();
-    aiInsightsServiceMock.getErrorMessage.mockClear();
-    analyticsServiceMock.logEvent.mockReset();
-
+  async function createComponent(locale = 'en-US'): Promise<void> {
+    TestBed.resetTestingModule();
     await TestBed.configureTestingModule({
       imports: [
         AiInsightsPageComponent,
@@ -394,7 +464,10 @@ describe('AiInsightsPageComponent', () => {
         NoopAnimationsModule,
       ],
       providers: [
+        { provide: LOCALE_ID, useValue: locale },
+        { provide: AppAuthService, useValue: authServiceMock },
         { provide: AppAnalyticsService, useValue: analyticsServiceMock },
+        { provide: AiInsightsLatestSnapshotService, useValue: aiInsightsLatestSnapshotServiceMock },
         { provide: AiInsightsService, useValue: aiInsightsServiceMock },
         { provide: AppThemeService, useValue: themeServiceMock },
         { provide: AppUserSettingsQueryService, useValue: userSettingsQueryServiceMock },
@@ -413,17 +486,33 @@ describe('AiInsightsPageComponent', () => {
     fixture = TestBed.createComponent(AiInsightsPageComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  }
+
+  beforeEach(async () => {
+    authUserSubject.next({ uid: 'user-1' });
+    aiInsightsServiceMock.runInsight.mockReset();
+    aiInsightsServiceMock.getErrorMessage.mockClear();
+    aiInsightsLatestSnapshotServiceMock.loadLatest.mockReset();
+    aiInsightsLatestSnapshotServiceMock.saveLatest.mockReset();
+    analyticsServiceMock.logEvent.mockReset();
+    aiInsightsLatestSnapshotServiceMock.loadLatest.mockResolvedValue(null);
+    aiInsightsLatestSnapshotServiceMock.saveLatest.mockResolvedValue('saved');
+    await createComponent();
   });
 
   it('should render the hero title and default suggested prompts', () => {
     const title = fixture.debugElement.query(By.css('.hero-title'))?.nativeElement as HTMLElement | undefined;
     const suggestionTrigger = fixture.debugElement.query(By.css('.suggestion-menu-trigger'))?.nativeElement as HTMLButtonElement | undefined;
     const heroPromptRotator = fixture.debugElement.query(By.css('.hero-prompt-rotator'))?.nativeElement as HTMLButtonElement | undefined;
+    const supportNote = fixture.debugElement.query(By.css('.prompt-support-note'))?.nativeElement as HTMLElement | undefined;
 
     expect(title?.textContent).toContain('Ask a focused question about your training data.');
     expect(suggestionTrigger?.getAttribute('aria-label')).toBe('Suggested prompts');
     expect(component.suggestedPrompts()).toEqual([...AI_INSIGHTS_SUGGESTED_PROMPTS]);
     expect(heroPromptRotator?.getAttribute('aria-label')).toContain(AI_INSIGHTS_SUGGESTED_PROMPTS[0]);
+    expect(supportNote?.textContent).toContain('Latest completed insights are temporarily restored from your account.');
   });
 
   it('should submit the active hero prompt when clicked', async () => {
@@ -479,6 +568,11 @@ describe('AiInsightsPageComponent', () => {
 
     expect(submitEvent.preventDefault).toHaveBeenCalledTimes(1);
     expect(aiInsightsServiceMock.runInsight).toHaveBeenCalledTimes(1);
+    expect(aiInsightsLatestSnapshotServiceMock.saveLatest).toHaveBeenCalledWith(
+      'user-1',
+      'Tell me my avg cadence for cycling the last 3 months',
+      buildOkResponse(),
+    );
     expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('ai_insights_action', {
       method: 'ask_button_click',
       prompt_length: 'Tell me my avg cadence for cycling the last 3 months'.length,
@@ -486,6 +580,7 @@ describe('AiInsightsPageComponent', () => {
     expect(aiInsightsServiceMock.runInsight.mock.calls[0][0]).toMatchObject({
       prompt: 'Tell me my avg cadence for cycling the last 3 months',
       clientTimezone: expect.any(String),
+      clientLocale: 'en-US',
     });
 
     const narrative = fixture.debugElement.query(By.css('.narrative'))?.nativeElement as HTMLElement | undefined;
@@ -534,6 +629,29 @@ describe('AiInsightsPageComponent', () => {
     expect(component.suggestedPrompts()).toContain('Show my total distance by activity type this year');
   });
 
+  it('should restore the latest completed response from Firestore when the signed-in user changes', async () => {
+    const restoredSnapshot: AiInsightsLatestSnapshot = {
+      version: 1,
+      savedAt: '2026-03-18T12:00:00.000Z',
+      prompt: 'Show my total distance all time',
+      response: buildAllTimeResponse(),
+    };
+    aiInsightsLatestSnapshotServiceMock.loadLatest.mockResolvedValueOnce(restoredSnapshot);
+
+    authUserSubject.next({ uid: 'user-2' });
+    TestBed.flushEffects();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const subtitle = fixture.debugElement.query(By.css('.result-subtitle'))?.nativeElement as HTMLElement | undefined;
+    const resultNotes = fixture.debugElement.queryAll(By.css('.result-note'));
+
+    expect(aiInsightsLatestSnapshotServiceMock.loadLatest).toHaveBeenLastCalledWith('user-2');
+    expect(component.promptControl.getRawValue()).toBe('Show my total distance all time');
+    expect(subtitle?.textContent).toContain('All time');
+    expect(resultNotes.some((note) => note.nativeElement.textContent.includes('Restored the latest completed insight from your account.'))).toBe(true);
+  });
+
   it('should use pace-specific summary labels for inverse metrics', async () => {
     aiInsightsServiceMock.runInsight.mockResolvedValue(buildPaceResponse());
 
@@ -564,6 +682,30 @@ describe('AiInsightsPageComponent', () => {
     expect(note?.textContent).toContain('Used the last 90 days because no time range was found in your prompt.');
   });
 
+  it('should render bounded subtitles using the injected en-US locale instead of raw ISO dates', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue(buildDefaultedRangeResponse());
+
+    await component.applySuggestedPrompt('Show my average cadence');
+    fixture.detectChanges();
+
+    const subtitle = fixture.debugElement.query(By.css('.result-subtitle'))?.nativeElement as HTMLElement | undefined;
+
+    expect(subtitle?.textContent).toContain('Dec 19, 2025 to Mar 19, 2026');
+    expect(subtitle?.textContent).not.toContain('2025-12-19');
+  });
+
+  it('should render bounded subtitles using the injected en-GB locale order', async () => {
+    await createComponent('en-GB');
+    aiInsightsServiceMock.runInsight.mockResolvedValue(buildDefaultedRangeResponse());
+
+    await component.applySuggestedPrompt('Show my average cadence');
+    fixture.detectChanges();
+
+    const subtitle = fixture.debugElement.query(By.css('.result-subtitle'))?.nativeElement as HTMLElement | undefined;
+
+    expect(subtitle?.textContent).toContain('19 Dec 2025 to 19 Mar 2026');
+  });
+
   it('should render all-time responses without a raw date span', async () => {
     aiInsightsServiceMock.runInsight.mockResolvedValue(buildAllTimeResponse());
 
@@ -576,6 +718,31 @@ describe('AiInsightsPageComponent', () => {
     expect(subtitle?.textContent).toContain('All time');
     expect(subtitle?.textContent).not.toContain('to');
     expect(note).toBeNull();
+  });
+
+  it('should show a non-blocking note when a result is too large to save to Firestore', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue(buildOkResponse());
+    aiInsightsLatestSnapshotServiceMock.saveLatest.mockResolvedValue('skipped_too_large');
+
+    await component.applySuggestedPrompt('Show my total distance by activity type this year');
+    fixture.detectChanges();
+
+    const resultNotes = fixture.debugElement.queryAll(By.css('.result-note'));
+
+    expect(resultNotes.some((note) => note.nativeElement.textContent.includes('This result is too large to save to your account yet'))).toBe(true);
+  });
+
+  it('should format date bucket meta using the injected locale and shared dashboard date helpers', async () => {
+    await createComponent('en-GB');
+    aiInsightsServiceMock.runInsight.mockResolvedValue(buildDailyResponse());
+
+    await component.applySuggestedPrompt('Show my average cadence for cycling this month');
+    fixture.detectChanges();
+
+    const summaryCards = fixture.debugElement.queryAll(By.css('.summary-card'));
+
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('02 Mar 2026'))).toBe(true);
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('01 Mar 2026'))).toBe(true);
   });
 
   it('should render activity type groups with a compact member summary in the subtitle', async () => {
@@ -626,5 +793,6 @@ describe('AiInsightsPageComponent', () => {
 
     expect(errorTitle?.textContent).toContain('Could not generate this insight');
     expect(errorCopy?.textContent).toContain('Could not generate AI insights.');
+    expect(aiInsightsLatestSnapshotServiceMock.saveLatest).not.toHaveBeenCalled();
   });
 });

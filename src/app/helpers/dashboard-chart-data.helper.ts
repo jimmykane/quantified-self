@@ -26,7 +26,7 @@ function toFiniteNumber(value: unknown): number | null {
   return Number.isFinite(numericValue) ? numericValue : null;
 }
 
-function toValidDate(value: number | Date): Date | null {
+function toValidDate(value: number | Date | string): Date | null {
   const date = value instanceof Date ? value : new Date(value);
   if (!Number.isFinite(date.getTime())) {
     return null;
@@ -93,6 +93,36 @@ export function formatDashboardDateByInterval(value: number | Date, timeInterval
     }
     default:
       throw new Error(`Not implemented for ${timeInterval}`);
+  }
+}
+
+export function formatDashboardDateRange(
+  startValue: number | Date | string,
+  endValue: number | Date | string,
+  locale = getBrowserLocale(),
+): string {
+  const startDate = toValidDate(startValue);
+  const endDate = toValidDate(endValue);
+  if (!startDate || !endDate) {
+    return '';
+  }
+
+  return `${formatDashboardDateByInterval(startDate, TimeIntervals.Daily, locale)} to ${formatDashboardDateByInterval(endDate, TimeIntervals.Daily, locale)}`;
+}
+
+export function formatDashboardBucketDateByInterval(
+  value: number | Date,
+  timeInterval: TimeIntervals,
+  locale = getBrowserLocale(),
+): string {
+  switch (timeInterval) {
+    case TimeIntervals.BiWeekly:
+      return formatDashboardDateByInterval(value, TimeIntervals.Weekly, locale);
+    case TimeIntervals.Quarterly:
+    case TimeIntervals.Semesterly:
+      return formatDashboardDateByInterval(value, TimeIntervals.Monthly, locale);
+    default:
+      return formatDashboardDateByInterval(value, timeInterval, locale);
   }
 }
 

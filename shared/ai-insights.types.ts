@@ -125,3 +125,10 @@ export type AiInsightsResponse =
   | AiInsightsOkResponse
   | AiInsightsEmptyResponse
   | AiInsightsUnsupportedResponse;
+
+export interface AiInsightsLatestSnapshot {
+  version: number;
+  savedAt: string;
+  prompt: string;
+  response: AiInsightsResponse;
+}

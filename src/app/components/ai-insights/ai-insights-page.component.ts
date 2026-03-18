@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, NgZone, computed, effect, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, LOCALE_ID, NgZone, computed, effect, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterModule } from '@angular/router';
@@ -21,11 +21,14 @@ import type {
 import { resolveAiInsightsActivityFilterSummary } from '@shared/ai-insights-activity-filter';
 import { resolveMetricSemantics, resolveMetricSummarySemantics } from '@shared/metric-semantics';
 import { formatUnitAwareDataValue, normalizeUserUnitSettings } from '@shared/unit-aware-display';
+import { AppAuthService } from '../../authentication/app.auth.service';
 import { MaterialModule } from '../../modules/material.module';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { AiInsightsLatestSnapshotService } from '../../services/ai-insights-latest-snapshot.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { AiInsightsService } from '../../services/ai-insights.service';
+import { formatDashboardBucketDateByInterval, formatDashboardDateRange } from '../../helpers/dashboard-chart-data.helper';
 import { AiInsightsChartComponent } from './ai-insights-chart.component';
 import { AI_INSIGHTS_SUGGESTED_PROMPTS } from './ai-insights.prompts';
 
@@ -38,20 +41,12 @@ function getClientTimeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 }
 
-function getClientLocale(): string | undefined {
-  if (typeof navigator === 'undefined') {
-    return undefined;
-  }
-
-  return navigator.languages?.[0] || navigator.language || undefined;
-}
-
-function formatDateRange(dateRange: NormalizedInsightDateRange): string {
+function formatDateRange(dateRange: NormalizedInsightDateRange, locale: string): string {
   if (dateRange.kind === 'all_time') {
     return 'All time';
   }
 
-  return `${dateRange.startDate.slice(0, 10)} to ${dateRange.endDate.slice(0, 10)}`;
+  return formatDashboardDateRange(dateRange.startDate, dateRange.endDate, locale);
 }
 
 function formatDateRangeNote(dateRange: NormalizedInsightDateRange): string | null {
@@ -71,14 +66,11 @@ function formatBucketMeta(
     response.query.categoryType === ChartDataCategoryTypes.DateType
     && Number.isFinite(bucket.time)
   ) {
-    const date = new Date(bucket.time as number);
-    const hasDayGranularity = response.aggregation.resolvedTimeInterval === TimeIntervals.Daily
-      || response.aggregation.resolvedTimeInterval === TimeIntervals.Weekly
-      || response.aggregation.resolvedTimeInterval === TimeIntervals.BiWeekly;
-
-    return new Intl.DateTimeFormat(locale || undefined, hasDayGranularity
-      ? { year: 'numeric', month: 'short', day: 'numeric' }
-      : { year: 'numeric', month: 'short' }).format(date);
+    return formatDashboardBucketDateByInterval(
+      bucket.time as number,
+      response.aggregation.resolvedTimeInterval,
+      locale,
+    );
   }
 
   return `${bucket.bucketKey}`;
@@ -207,6 +199,11 @@ interface InsightSummaryCard {
   helpText?: string;
 }
 
+interface ResultNote {
+  icon: 'info' | 'history';
+  message: string;
+}
+
 @Component({
   selector: 'app-ai-insights-page',
   standalone: true,
@@ -222,11 +219,14 @@ interface InsightSummaryCard {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AiInsightsPageComponent {
+  private readonly authService = inject(AppAuthService);
   private readonly analyticsService = inject(AppAnalyticsService);
   private readonly aiInsightsService = inject(AiInsightsService);
+  private readonly aiInsightsLatestSnapshotService = inject(AiInsightsLatestSnapshotService);
   private readonly themeService = inject(AppThemeService);
   private readonly userSettingsQueryService = inject(AppUserSettingsQueryService);
   private readonly ngZone = inject(NgZone);
+  private readonly locale = inject(LOCALE_ID);
 
   readonly promptControl = new FormControl('', {
     nonNullable: true,
@@ -238,11 +238,15 @@ export class AiInsightsPageComponent {
   readonly isSubmitting = signal(false);
   readonly response = signal<AiInsightsResponse | null>(null);
   readonly errorMessage = signal<string | null>(null);
+  readonly latestSnapshotRestored = signal(false);
+  readonly latestSnapshotPersistenceNotice = signal<string | null>(null);
   readonly appTheme = this.themeService.appTheme;
+  readonly user = toSignal(this.authService.user$, { initialValue: null });
   readonly chartSettings = this.userSettingsQueryService.chartSettings;
   readonly userUnitSettings = computed(() =>
     normalizeUserUnitSettings(this.userSettingsQueryService.unitSettings())
   );
+  readonly currentUserID = computed(() => this.user()?.uid ?? null);
   readonly isDarkTheme = computed(() => this.appTheme() === AppThemes.Dark);
   readonly useAnimations = computed(() => this.chartSettings().useAnimations ?? false);
   readonly canSubmit = computed(() => !this.isSubmitting() && this.promptValue().trim().length > 0);
@@ -257,6 +261,35 @@ export class AiInsightsPageComponent {
   readonly unsupportedResponse = computed<AiInsightsUnsupportedResponse | null>(() => {
     const response = this.response();
     return response?.status === 'unsupported' ? response : null;
+  });
+  readonly hasCompletedResponse = computed(() => {
+    const response = this.response();
+    return response?.status === 'ok'
+      || response?.status === 'empty'
+      || response?.status === 'unsupported';
+  });
+  readonly latestSnapshotSupportNote = computed(() =>
+    'Latest completed insights are temporarily restored from your account. Proper saved insights/history will come later.'
+  );
+  readonly resultNotes = computed<ResultNote[]>(() => {
+    if (!this.hasCompletedResponse()) {
+      return [];
+    }
+
+    const notes: ResultNote[] = [];
+    if (this.latestSnapshotRestored()) {
+      notes.push({
+        icon: 'history',
+        message: 'Restored the latest completed insight from your account.',
+      });
+    }
+    if (this.latestSnapshotPersistenceNotice()) {
+      notes.push({
+        icon: 'info',
+        message: this.latestSnapshotPersistenceNotice() as string,
+      });
+    }
+    return notes;
   });
   readonly activeHeroPrompt = signal(AI_INSIGHTS_SUGGESTED_PROMPTS[0] ?? '');
   readonly typedHeroPrompt = signal((AI_INSIGHTS_SUGGESTED_PROMPTS[0] ?? '').slice(0, 1));
@@ -333,13 +366,42 @@ export class AiInsightsPageComponent {
       }
     });
   });
+  private readonly latestSnapshotRestoreEffect = effect((onCleanup) => {
+    const userID = this.currentUserID();
+    let cancelled = false;
+
+    this.latestSnapshotRestored.set(false);
+    this.latestSnapshotPersistenceNotice.set(null);
+    this.errorMessage.set(null);
+    this.response.set(null);
+    this.promptControl.setValue('');
+
+    if (!userID) {
+      return;
+    }
+
+    void (async () => {
+      const latestSnapshot = await this.aiInsightsLatestSnapshotService.loadLatest(userID);
+      if (cancelled || !latestSnapshot) {
+        return;
+      }
+
+      this.promptControl.setValue(latestSnapshot.prompt);
+      this.response.set(latestSnapshot.response);
+      this.latestSnapshotRestored.set(true);
+    })();
+
+    onCleanup(() => {
+      cancelled = true;
+    });
+  });
   readonly resultSubtitle = computed(() => {
     const response = this.okResponse() || this.emptyResponse();
     if (!response) {
       return '';
     }
 
-    return `${formatDateRange(response.query.dateRange)} • ${resolveAiInsightsActivityFilterSummary(response.query)}`;
+    return `${formatDateRange(response.query.dateRange, this.locale)} • ${resolveAiInsightsActivityFilterSummary(response.query)}`;
   });
   readonly resultDateRangeNote = computed(() => {
     const response = this.okResponse() || this.emptyResponse();
@@ -357,7 +419,7 @@ export class AiInsightsPageComponent {
     }
 
     const unitSettings = this.userUnitSettings();
-    const locale = getClientLocale();
+    const locale = this.locale;
     const summarySemantics = resolveMetricSummarySemantics(
       response.query.dataType,
       response.query.categoryType,
@@ -474,12 +536,23 @@ export class AiInsightsPageComponent {
     }
 
     this.isSubmitting.set(true);
+    this.latestSnapshotRestored.set(false);
+    this.latestSnapshotPersistenceNotice.set(null);
     this.errorMessage.set(null);
     this.response.set(null);
 
     try {
       const response = await this.aiInsightsService.runInsight(this.buildInsightRequest(prompt));
       this.response.set(response);
+      const userID = this.currentUserID();
+      if (userID) {
+        const saveResult = await this.aiInsightsLatestSnapshotService.saveLatest(userID, prompt, response);
+        if (saveResult === 'skipped_too_large') {
+          this.latestSnapshotPersistenceNotice.set(
+            'This result is too large to save to your account yet, so a refresh will lose it.',
+          );
+        }
+      }
     } catch (error) {
       this.errorMessage.set(this.aiInsightsService.getErrorMessage(error));
     } finally {
@@ -562,7 +635,7 @@ export class AiInsightsPageComponent {
     return {
       prompt,
       clientTimezone: getClientTimeZone(),
-      clientLocale: getClientLocale(),
+      clientLocale: this.locale,
     };
   }
 }

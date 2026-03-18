@@ -901,7 +901,8 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
                 right: 18,
                 top: gridTop,
                 bottom: isMobileLayout ? 56 : 32,
-                containLabel: true
+                outerBoundsMode: 'same',
+                outerBoundsContain: 'axisLabel'
             },
             xAxis: {
                 type: 'category',

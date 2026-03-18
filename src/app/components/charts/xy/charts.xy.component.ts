@@ -286,7 +286,8 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
         right: 8,
         top: 62,
         bottom: isCompactLayout ? 16 : 10,
-        containLabel: true
+        outerBoundsMode: 'same',
+        outerBoundsContain: 'axisLabel'
       },
       tooltip: {
         trigger: 'item',

@@ -255,7 +255,8 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
         right: 0,
         top: singleActivity ? 0 : 18,
         bottom: this.isMobile ? 14 : 8,
-        containLabel: true,
+        outerBoundsMode: 'same',
+        outerBoundsContain: 'axisLabel',
       },
       xAxis: {
         type: 'category',

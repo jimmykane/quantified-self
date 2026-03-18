@@ -302,7 +302,8 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
         right: 8,
         top: 62,
         bottom: this.vertical ? (isCompactLayout ? 16 : 10) : 8,
-        containLabel: true
+        outerBoundsMode: 'same',
+        outerBoundsContain: 'axisLabel'
       },
       tooltip: {
         trigger: useDateActivitySegmentation ? 'axis' : 'item',

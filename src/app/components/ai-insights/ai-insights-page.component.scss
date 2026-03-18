@@ -301,6 +301,12 @@
   align-items: center;
 }
 
+.prompt-support-note {
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+  line-height: 1.45;
+}
+
 .suggestion-menu-trigger {
   flex-shrink: 0;
 }
@@ -321,6 +327,33 @@
 
 .warning-chips {
   margin-top: -4px;
+}
+
+.result-note-list {
+  display: grid;
+  gap: 10px;
+}
+
+.result-note {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 48rem;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.result-note mat-icon {
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  font-size: 16px;
+  color: var(--mat-sys-primary);
+  flex-shrink: 0;
+}
+
+.result-note p {
+  margin: 0;
+  line-height: 1.45;
 }
 
 .summary-grid {

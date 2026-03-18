@@ -12,8 +12,10 @@ import {
 } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import {
+  formatDashboardBucketDateByInterval,
   formatDashboardDataDisplay,
   formatDashboardDateByInterval,
+  formatDashboardDateRange,
   formatDashboardNumericValue,
   getDashboardChartSortComparator,
   getDashboardSummaryMetaLabel
@@ -56,6 +58,25 @@ describe('dashboard-chart-data.helper', () => {
     expect(british).not.toBe(american);
     expect(british).toContain('02 Mar 2024');
     expect(american).toContain('Mar 02, 2024');
+  });
+
+  it('should format bounded date ranges using the provided locale', () => {
+    const start = Date.UTC(2024, 2, 2);
+    const end = Date.UTC(2024, 2, 9);
+
+    const british = formatDashboardDateRange(start, end, 'en-GB');
+    const american = formatDashboardDateRange(start, end, 'en-US');
+
+    expect(british).toBe('02 Mar 2024 to 09 Mar 2024');
+    expect(american).toBe('Mar 02, 2024 to Mar 09, 2024');
+  });
+
+  it('should format bucket dates by interval using the shared dashboard rules', () => {
+    const timestamp = Date.UTC(2024, 2, 2, 15, 4, 0);
+
+    expect(formatDashboardBucketDateByInterval(timestamp, TimeIntervals.BiWeekly, 'en-GB')).toContain('Week');
+    expect(formatDashboardBucketDateByInterval(timestamp, TimeIntervals.BiWeekly, 'en-GB')).toContain('02 Mar 2024');
+    expect(formatDashboardBucketDateByInterval(timestamp, TimeIntervals.Quarterly, 'en-GB')).toBe('Mar 2024');
   });
 
   it('should format long duration aggregates using days once they cross 24 hours', () => {
