@@ -26,8 +26,16 @@ interface ExecuteQueryDependencies {
     startDate: Date;
     endDate: Date;
   }) => Promise<FirestoreEventDocumentLike[]>;
+  fetchDebugEventSnapshot: (userID: string) => Promise<{
+    totalEventsCount: number | null;
+    recentEventsSample: Array<{
+      id: string;
+      startDateRaw: unknown;
+      startDateType: string;
+    }>;
+  }>;
   importEvent: (eventJSON: EventJSONInterface, eventID: string) => EventInterface;
-  logger: Pick<typeof logger, 'warn' | 'error'>;
+  logger: Pick<typeof logger, 'info' | 'warn' | 'error'>;
 }
 
 export interface AiInsightsExecutionResult {
@@ -37,16 +45,61 @@ export interface AiInsightsExecutionResult {
 
 const defaultExecuteQueryDependencies: ExecuteQueryDependencies = {
   fetchEventDocs: async ({ userID, startDate, endDate }) => {
-    const snapshot = await admin.firestore()
+    const eventsCollection = admin.firestore()
       .collection('users')
       .doc(userID)
-      .collection('events')
-      .where('startDate', '>=', startDate)
-      .where('startDate', '<=', endDate)
-      .orderBy('startDate', 'asc')
-      .get();
+      .collection('events');
 
-    return snapshot.docs;
+    const [dateSnapshot, millisSnapshot] = await Promise.all([
+      eventsCollection
+        .where('startDate', '>=', startDate)
+        .where('startDate', '<=', endDate)
+        .orderBy('startDate', 'asc')
+        .get(),
+      eventsCollection
+        .where('startDate', '>=', startDate.getTime())
+        .where('startDate', '<=', endDate.getTime())
+        .orderBy('startDate', 'asc')
+        .get(),
+    ]);
+
+    const docsByID = new Map<string, FirestoreEventDocumentLike>();
+    for (const doc of dateSnapshot.docs) {
+      docsByID.set(doc.id, doc);
+    }
+    for (const doc of millisSnapshot.docs) {
+      docsByID.set(doc.id, doc);
+    }
+
+    return [...docsByID.values()];
+  },
+  fetchDebugEventSnapshot: async (userID) => {
+    const eventsCollection = admin.firestore()
+      .collection('users')
+      .doc(userID)
+      .collection('events');
+
+    const [countSnapshot, recentSnapshot] = await Promise.all([
+      eventsCollection.count().get().catch(() => null),
+      eventsCollection.orderBy('startDate', 'desc').limit(5).get().catch(() => null),
+    ]);
+
+    return {
+      totalEventsCount: countSnapshot?.data().count ?? null,
+      recentEventsSample: recentSnapshot?.docs.map(doc => {
+        const rawData = doc.data() as Record<string, unknown> | undefined;
+        const startDateRaw = rawData?.startDate;
+        return {
+          id: doc.id,
+          startDateRaw,
+          startDateType: startDateRaw === null
+            ? 'null'
+            : Array.isArray(startDateRaw)
+              ? 'array'
+              : typeof startDateRaw,
+        };
+      }) ?? [],
+    };
   },
   importEvent: (eventJSON, eventID) => EventImporterJSON.getEventFromJSON(eventJSON).setID(eventID),
   logger,
@@ -66,15 +119,15 @@ function isMergedEventDocument(rawEventData: Record<string, unknown>): boolean {
   return Array.isArray(rawEventData.originalFiles) && rawEventData.originalFiles.length > 1;
 }
 
-function toDate(value: unknown): Date | null {
+function toFirestoreTimestampDate(value: unknown): Date | null {
   if (value instanceof Date) {
     return Number.isNaN(value.getTime()) ? null : value;
   }
   if (typeof (value as { toDate?: unknown })?.toDate === 'function') {
-    return toDate((value as { toDate: () => Date }).toDate());
+    return toFirestoreTimestampDate((value as { toDate: () => Date }).toDate());
   }
   if (typeof (value as { toMillis?: unknown })?.toMillis === 'function') {
-    return toDate(new Date((value as { toMillis: () => number }).toMillis()));
+    return toFirestoreTimestampDate(new Date((value as { toMillis: () => number }).toMillis()));
   }
   if (typeof value === 'object' && value !== null && 'seconds' in (value as Record<string, unknown>)) {
     const seconds = Number((value as Record<string, unknown>).seconds);
@@ -84,6 +137,14 @@ function toDate(value: unknown): Date | null {
     }
     return new Date((seconds * 1000) + Math.floor(nanoseconds / 1000000));
   }
+  return null;
+}
+
+function toEventDate(value: unknown): Date | null {
+  const firestoreTimestampDate = toFirestoreTimestampDate(value);
+  if (firestoreTimestampDate) {
+    return firestoreTimestampDate;
+  }
   if (typeof value === 'string' || typeof value === 'number') {
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? null : date;
@@ -92,7 +153,7 @@ function toDate(value: unknown): Date | null {
 }
 
 export function normalizeFirestoreValue(value: unknown): unknown {
-  const date = toDate(value);
+  const date = toFirestoreTimestampDate(value);
   if (date) {
     return date;
   }
@@ -128,6 +189,50 @@ function eventMatchesActivitySelection(
   return eventActivityTypes.some(activityType => selectedActivityTypes.includes(activityType));
 }
 
+function hasRequestedStat(event: EventInterface, dataType: string): boolean {
+  const stat = event.getStat?.(dataType);
+  const rawValue = stat?.getValue?.();
+  return typeof rawValue === 'number' && Number.isFinite(rawValue);
+}
+
+function summarizeError(error: unknown): {
+  errorName?: string;
+  errorMessage?: string;
+  errorStackTop?: string;
+  errorString?: string;
+} {
+  if (error instanceof Error) {
+    return {
+      errorName: error.name,
+      errorMessage: error.message,
+      errorStackTop: error.stack?.split('\n').slice(0, 3).join('\n'),
+    };
+  }
+
+  return {
+    errorString: typeof error === 'string' ? error : JSON.stringify(error),
+  };
+}
+
+function summarizeEventShape(rawEventData: Record<string, unknown>, normalized: Record<string, unknown>): Record<string, unknown> {
+  const rawStartDate = rawEventData.startDate;
+  const rawStats = rawEventData.stats as Record<string, unknown> | undefined;
+  const rawStreams = rawEventData.streams;
+  const rawEvents = rawEventData.events;
+  const rawActivities = rawEventData.activities;
+
+  return {
+    topLevelKeys: Object.keys(rawEventData).sort(),
+    rawStartDateType: rawStartDate === null ? 'null' : Array.isArray(rawStartDate) ? 'array' : typeof rawStartDate,
+    rawStartDatePreview: rawStartDate,
+    normalizedStartDateISO: normalized.startDate instanceof Date ? normalized.startDate.toISOString() : normalized.startDate,
+    statsKeysSample: rawStats ? Object.keys(rawStats).sort().slice(0, 20) : [],
+    streamsShape: Array.isArray(rawStreams) ? `array:${rawStreams.length}` : typeof rawStreams,
+    eventsShape: Array.isArray(rawEvents) ? `array:${rawEvents.length}` : typeof rawEvents,
+    activitiesShape: Array.isArray(rawActivities) ? `array:${rawActivities.length}` : typeof rawActivities,
+  };
+}
+
 export function rehydrateAiInsightsEvent(
   eventID: string,
   rawEventData: FirestoreEventJSON | Record<string, unknown> | undefined,
@@ -139,7 +244,7 @@ export function rehydrateAiInsightsEvent(
   }
 
   const normalized = normalizeFirestoreValue(rawEventData) as EventJSONInterface & Record<string, unknown>;
-  const normalizedStartDate = toDate(normalized.startDate);
+  const normalizedStartDate = toEventDate(normalized.startDate);
   if (!normalizedStartDate) {
     log.warn('[aiInsights] Skipping event with invalid startDate', { eventID });
     return null;
@@ -160,7 +265,11 @@ export function rehydrateAiInsightsEvent(
 
     return event;
   } catch (error) {
-    log.warn('[aiInsights] Failed to rehydrate event snapshot', { eventID, error });
+    log.warn('[aiInsights] Failed to rehydrate event snapshot', {
+      eventID,
+      ...summarizeError(error),
+      ...summarizeEventShape(rawEventData, normalized),
+    });
     return null;
   }
 }
@@ -176,25 +285,55 @@ export function setExecuteQueryDependenciesForTesting(
 export async function executeAiInsightsQuery(
   userID: string,
   query: NormalizedInsightQuery,
+  prompt?: string,
 ): Promise<AiInsightsExecutionResult> {
   const dependencies = executeQueryDependencies;
   const startDate = new Date(query.dateRange.startDate);
   const endDate = new Date(query.dateRange.endDate);
   const docs = await dependencies.fetchEventDocs({ userID, startDate, endDate });
 
-  const events = docs
+  const rehydratedEvents = docs
     .map(doc => rehydrateAiInsightsEvent(doc.id, doc.data(), dependencies.importEvent, dependencies.logger))
-    .filter((event): event is EventInterface => event !== null)
-    .filter(event => (event as { isMerge?: boolean }).isMerge !== true)
+    .filter((event): event is EventInterface => event !== null);
+  const nonMergedEvents = rehydratedEvents
+    .filter(event => (event as { isMerge?: boolean }).isMerge !== true);
+  const matchedEvents = nonMergedEvents
     .filter(event => eventMatchesActivitySelection(event, query.activityTypes));
+  const eventsWithRequestedStat = matchedEvents
+    .filter(event => hasRequestedStat(event, query.dataType));
+  const firestoreEmulatorHost = process.env.FIRESTORE_EMULATOR_HOST || null;
+  const debugEventSnapshot = docs.length === 0
+    ? await dependencies.fetchDebugEventSnapshot(userID)
+    : null;
+
+  dependencies.logger.info('[aiInsights] Query execution summary', {
+    prompt: prompt || null,
+    userID,
+    dataType: query.dataType,
+    valueType: query.valueType,
+    categoryType: query.categoryType,
+    activityTypes: query.activityTypes,
+    dateRange: query.dateRange,
+    fetchedDocsCount: docs.length,
+    rehydratedEventsCount: rehydratedEvents.length,
+    mergedEventsExcludedCount: rehydratedEvents.length - nonMergedEvents.length,
+    activityFilteredOutCount: nonMergedEvents.length - matchedEvents.length,
+    matchedEventsCount: matchedEvents.length,
+    eventsWithRequestedStatCount: eventsWithRequestedStat.length,
+    matchedEventIDsSample: matchedEvents.slice(0, 10).map(event => event.getID?.()),
+    firestoreTarget: firestoreEmulatorHost ? 'emulator' : 'default',
+    firestoreEmulatorHost,
+    debugTotalEventsCount: debugEventSnapshot?.totalEventsCount ?? null,
+    debugRecentEventsSample: debugEventSnapshot?.recentEventsSample ?? [],
+  });
 
   return {
-    aggregation: buildEventStatAggregation(events, {
+    aggregation: buildEventStatAggregation(matchedEvents, {
       dataType: query.dataType,
       valueType: query.valueType,
       categoryType: query.categoryType,
       requestedTimeInterval: query.requestedTimeInterval,
     }, dependencies.logger),
-    matchedEventsCount: events.length,
+    matchedEventsCount: matchedEvents.length,
   };
 }

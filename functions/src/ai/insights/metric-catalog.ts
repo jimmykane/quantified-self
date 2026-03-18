@@ -10,6 +10,7 @@ import {
   DataPaceAvg,
   DataPowerAvg,
   DataSpeedAvg,
+  DynamicDataLoader,
 } from '@sports-alliance/sports-lib';
 
 export type InsightMetricKey =
@@ -32,6 +33,7 @@ export interface InsightMetricDefinition {
   defaultValueType: ChartDataValueTypes;
   allowedValueTypes: ChartDataValueTypes[];
   suggestedPrompt: string;
+  familyType?: string;
 }
 
 function normalizeMetricText(value: string): string {
@@ -104,7 +106,18 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
     key: 'cadence',
     dataType: DataCadenceAvg.type,
     label: 'cadence',
-    aliases: ['cadence', 'average cadence', 'avg cadence', 'rpm'],
+    aliases: [
+      'cadence',
+      'average cadence',
+      'avg cadence',
+      'minimum cadence',
+      'min cadence',
+      'maximum cadence',
+      'max cadence',
+      'highest cadence',
+      'lowest cadence',
+      'rpm',
+    ],
     defaultValueType: ChartDataValueTypes.Average,
     allowedValueTypes: [
       ChartDataValueTypes.Average,
@@ -112,12 +125,24 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
       ChartDataValueTypes.Maximum,
     ],
     suggestedPrompt: 'Tell me my average cadence for cycling over the last 3 months.',
+    familyType: 'Cadence',
   },
   {
     key: 'power',
     dataType: DataPowerAvg.type,
     label: 'power',
-    aliases: ['power', 'average power', 'avg power', 'watts'],
+    aliases: [
+      'power',
+      'average power',
+      'avg power',
+      'minimum power',
+      'min power',
+      'maximum power',
+      'max power',
+      'highest power',
+      'lowest power',
+      'watts',
+    ],
     defaultValueType: ChartDataValueTypes.Average,
     allowedValueTypes: [
       ChartDataValueTypes.Average,
@@ -125,12 +150,25 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
       ChartDataValueTypes.Maximum,
     ],
     suggestedPrompt: 'Show my average power over time for cycling in the last 90 days.',
+    familyType: 'Power',
   },
   {
     key: 'heart_rate',
     dataType: DataHeartRateAvg.type,
     label: 'heart rate',
-    aliases: ['heart rate', 'average heart rate', 'avg heart rate', 'hr', 'pulse'],
+    aliases: [
+      'heart rate',
+      'average heart rate',
+      'avg heart rate',
+      'minimum heart rate',
+      'min heart rate',
+      'maximum heart rate',
+      'max heart rate',
+      'highest heart rate',
+      'lowest heart rate',
+      'hr',
+      'pulse',
+    ],
     defaultValueType: ChartDataValueTypes.Average,
     allowedValueTypes: [
       ChartDataValueTypes.Average,
@@ -138,12 +176,23 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
       ChartDataValueTypes.Maximum,
     ],
     suggestedPrompt: 'Show my average heart rate over time for running in the last 90 days.',
+    familyType: 'Heart Rate',
   },
   {
     key: 'speed',
     dataType: DataSpeedAvg.type,
     label: 'speed',
-    aliases: ['speed', 'average speed', 'avg speed'],
+    aliases: [
+      'speed',
+      'average speed',
+      'avg speed',
+      'minimum speed',
+      'min speed',
+      'maximum speed',
+      'max speed',
+      'highest speed',
+      'lowest speed',
+    ],
     defaultValueType: ChartDataValueTypes.Average,
     allowedValueTypes: [
       ChartDataValueTypes.Average,
@@ -151,12 +200,23 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
       ChartDataValueTypes.Maximum,
     ],
     suggestedPrompt: 'Show my average speed over time for cycling in the last 3 months.',
+    familyType: 'Speed',
   },
   {
     key: 'pace',
     dataType: DataPaceAvg.type,
     label: 'pace',
-    aliases: ['pace', 'average pace', 'avg pace'],
+    aliases: [
+      'pace',
+      'average pace',
+      'avg pace',
+      'minimum pace',
+      'min pace',
+      'maximum pace',
+      'max pace',
+      'fastest pace',
+      'slowest pace',
+    ],
     defaultValueType: ChartDataValueTypes.Average,
     allowedValueTypes: [
       ChartDataValueTypes.Average,
@@ -164,6 +224,7 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
       ChartDataValueTypes.Maximum,
     ],
     suggestedPrompt: 'Show my average pace over time for running in the last 3 months.',
+    familyType: 'Pace',
   },
   {
     key: 'calories',
@@ -194,17 +255,68 @@ const METRIC_INDEX = new Map<string, InsightMetricDefinition>(
   }),
 );
 
+function resolveExplicitVariantValueType(metricText: string): ChartDataValueTypes | null {
+  const normalized = normalizeMetricText(metricText);
+  if (!normalized) {
+    return null;
+  }
+
+  if (/\b(max|maximum|highest|peak|top)\b/.test(normalized)) {
+    return ChartDataValueTypes.Maximum;
+  }
+  if (/\b(min|minimum|lowest|bottom)\b/.test(normalized)) {
+    return ChartDataValueTypes.Minimum;
+  }
+  if (/\b(avg|average|mean)\b/.test(normalized)) {
+    return ChartDataValueTypes.Average;
+  }
+
+  return null;
+}
+
+function resolveFamilyVariantDataType(
+  metric: InsightMetricDefinition,
+  valueType: ChartDataValueTypes,
+  explicitVariantValueType: ChartDataValueTypes | null,
+): string {
+  if (!metric.familyType) {
+    return metric.dataType;
+  }
+
+  const resolvedValueType = explicitVariantValueType || valueType;
+  switch (resolvedValueType) {
+    case ChartDataValueTypes.Minimum:
+      return DynamicDataLoader.dataTypeMinDataType?.[metric.familyType] || metric.dataType;
+    case ChartDataValueTypes.Maximum:
+      return DynamicDataLoader.dataTypeMaxDataType?.[metric.familyType] || metric.dataType;
+    case ChartDataValueTypes.Average:
+    default:
+      return DynamicDataLoader.dataTypeAvgDataType?.[metric.familyType] || metric.dataType;
+  }
+}
+
 export function getInsightMetricDefinition(metricKey: InsightMetricKey): InsightMetricDefinition | undefined {
   return SUPPORTED_INSIGHT_METRICS.find(metric => metric.key === metricKey);
 }
 
-export function resolveInsightMetric(metricOrAlias: string): InsightMetricDefinition | null {
+export function resolveInsightMetric(
+  metricOrAlias: string,
+  valueType?: ChartDataValueTypes,
+): InsightMetricDefinition | null {
   const normalized = normalizeMetricText(metricOrAlias);
   if (!normalized) {
     return null;
   }
 
-  return METRIC_INDEX.get(normalized) || null;
+  const metric = METRIC_INDEX.get(normalized) || null;
+  if (!metric || valueType === undefined) {
+    return metric;
+  }
+
+  return {
+    ...metric,
+    dataType: resolveFamilyVariantDataType(metric, valueType, resolveExplicitVariantValueType(metricOrAlias)),
+  };
 }
 
 export function isAggregationAllowedForMetric(

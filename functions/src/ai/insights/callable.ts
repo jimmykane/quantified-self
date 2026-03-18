@@ -146,7 +146,7 @@ export async function runAiInsights(
     return buildUnsupportedResponse('unsupported_metric');
   }
 
-  const executionResult = await executeAiInsightsQuery(context.auth.uid, normalizeResult.query);
+  const executionResult = await executeAiInsightsQuery(context.auth.uid, normalizeResult.query, prompt);
   const presentation = buildInsightPresentation(normalizeResult.query, metric.label);
   const isEmpty = executionResult.aggregation.buckets.length === 0;
   const emptyPresentation = {

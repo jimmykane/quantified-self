@@ -15,6 +15,11 @@ describe('metric-catalog', () => {
     expect(resolveInsightMetric('mileage')?.key).toBe('distance');
   });
 
+  it('resolves family metrics to the correct concrete max data type', () => {
+    expect(resolveInsightMetric('heart rate', ChartDataValueTypes.Maximum)?.dataType).toBe('Maximum Heart Rate');
+    expect(resolveInsightMetric('max heart rate', ChartDataValueTypes.Average)?.dataType).toBe('Maximum Heart Rate');
+  });
+
   it('returns null for unsupported metrics', () => {
     expect(resolveInsightMetric('ground contact time')).toBeNull();
   });

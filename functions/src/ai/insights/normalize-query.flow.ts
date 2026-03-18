@@ -55,13 +55,13 @@ export type NormalizeInsightQueryResult =
   | NormalizeInsightQueryUnsupportedResult;
 
 type RelativeDateRangeIntent = {
-  kind: 'last_n';
+  kind: 'last_n' | 'last';
   amount: number;
   unit: ModelDateRangeUnit;
 };
 
 type CurrentPeriodDateRangeIntent = {
-  kind: 'current_period';
+  kind: 'current_period' | 'this';
   unit: 'week' | 'month' | 'year';
 };
 
@@ -111,14 +111,14 @@ const UNSUPPORTED_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
   /\breparse\b/i,
 ];
 
-const ModelDateRangeSchema = z.discriminatedUnion('kind', [
+const ModelDateRangeSchema = z.union([
   z.object({
-    kind: z.literal('last_n'),
+    kind: z.enum(['last_n', 'last']),
     amount: z.number().int().positive().max(3650),
     unit: z.enum(['day', 'week', 'month', 'year']),
   }),
   z.object({
-    kind: z.literal('current_period'),
+    kind: z.enum(['current_period', 'this']),
     unit: z.enum(['week', 'month', 'year']),
   }),
   z.object({
@@ -200,6 +200,8 @@ const defaultNormalizeQueryDependencies: NormalizeQueryDependencies = {
         'If the user does not explicitly ask for a grouping by activity type or sport, default category to "date".',
         'If the user does not explicitly ask for a time interval granularity, use requestedTimeInterval "auto".',
         'If the user omits a date range, omit dateRange. The application will apply a last-90-days default.',
+        'For relative date ranges, use dateRange.kind "last_n" rather than "last".',
+        'For current periods like this week, this month, or this year, use dateRange.kind "current_period" rather than "this".',
         'Use canonical activity labels when possible.',
       ].join(' '),
       prompt: [
@@ -377,7 +379,7 @@ function resolveDateRange(
   let start = addDays(today, -89);
   const end = today;
 
-  if (dateRangeIntent?.kind === 'last_n') {
+  if (dateRangeIntent?.kind === 'last_n' || dateRangeIntent?.kind === 'last') {
     switch (dateRangeIntent.unit) {
       case 'day':
         start = addDays(today, -(dateRangeIntent.amount - 1));
@@ -394,7 +396,7 @@ function resolveDateRange(
       default:
         break;
     }
-  } else if (dateRangeIntent?.kind === 'current_period') {
+  } else if (dateRangeIntent?.kind === 'current_period' || dateRangeIntent?.kind === 'this') {
     switch (dateRangeIntent.unit) {
       case 'week': {
         const weekday = getWeekday(today);
@@ -485,12 +487,44 @@ function toValueType(
 function toRequestedTimeInterval(
   categoryType: ChartDataCategoryTypes,
   interval: ModelTimeIntervalCode | undefined,
+  dateRangeIntent: DateRangeIntent | undefined,
 ): TimeIntervals | undefined {
   if (categoryType === ChartDataCategoryTypes.ActivityType) {
     return undefined;
   }
 
-  return TIME_INTERVAL_MAP[interval || 'auto'];
+  if (interval && interval !== 'auto') {
+    return TIME_INTERVAL_MAP[interval];
+  }
+
+  if (dateRangeIntent?.kind === 'last_n' || dateRangeIntent?.kind === 'last') {
+    switch (dateRangeIntent.unit) {
+      case 'day':
+        return TimeIntervals.Daily;
+      case 'week':
+        return dateRangeIntent.amount > 1 ? TimeIntervals.Weekly : TimeIntervals.Daily;
+      case 'month':
+        return dateRangeIntent.amount > 1 ? TimeIntervals.Monthly : TimeIntervals.Daily;
+      case 'year':
+        return dateRangeIntent.amount > 1 ? TimeIntervals.Yearly : TimeIntervals.Monthly;
+      default:
+        break;
+    }
+  }
+
+  if (dateRangeIntent?.kind === 'current_period' || dateRangeIntent?.kind === 'this') {
+    switch (dateRangeIntent.unit) {
+      case 'week':
+      case 'month':
+        return TimeIntervals.Daily;
+      case 'year':
+        return TimeIntervals.Monthly;
+      default:
+        break;
+    }
+  }
+
+  return TIME_INTERVAL_MAP.auto;
 }
 
 function detectUnsupportedCapability(prompt: string): boolean {
@@ -527,12 +561,14 @@ export async function normalizeInsightQuery(
     return buildUnsupportedResult(intent.unsupportedReasonCode || 'unsupported_metric');
   }
 
-  const metric = resolveInsightMetric(intent.metric || '');
-  if (!metric) {
+  const baseMetric = resolveInsightMetric(intent.metric || '');
+  if (!baseMetric) {
     return buildUnsupportedResult('unsupported_metric');
   }
 
-  const valueType = toValueType(intent.aggregation, metric.defaultValueType);
+  const valueType = toValueType(intent.aggregation, baseMetric.defaultValueType);
+  const metric = resolveInsightMetric(intent.metric || '', valueType) || baseMetric;
+
   if (!isAggregationAllowedForMetric(metric.key, valueType)) {
     return buildUnsupportedResult('ambiguous_metric');
   }
@@ -543,7 +579,7 @@ export async function normalizeInsightQuery(
     return buildUnsupportedResult('invalid_prompt');
   }
 
-  const requestedTimeInterval = toRequestedTimeInterval(categoryType, intent.requestedTimeInterval);
+  const requestedTimeInterval = toRequestedTimeInterval(categoryType, intent.requestedTimeInterval, intent.dateRange);
   const dateRange = resolveDateRange(intent.dateRange, input.clientTimezone, dependencies.now());
 
   return {
