@@ -24,11 +24,20 @@ export const AiInsightsRequestSchema = z.object({
   clientLocale: z.string().min(1).max(100).optional(),
 });
 
-export const NormalizedInsightDateRangeSchema = z.object({
-  startDate: z.string().datetime(),
-  endDate: z.string().datetime(),
-  timezone: z.string().min(1),
-});
+export const NormalizedInsightDateRangeSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('bounded'),
+    startDate: z.string().datetime(),
+    endDate: z.string().datetime(),
+    timezone: z.string().min(1),
+    source: z.enum(['prompt', 'default']),
+  }),
+  z.object({
+    kind: z.literal('all_time'),
+    timezone: z.string().min(1),
+    source: z.literal('prompt'),
+  }),
+]);
 
 export const NormalizedInsightQuerySchema: z.ZodType<NormalizedInsightQuery> = z.object({
   dataType: z.string().min(1),

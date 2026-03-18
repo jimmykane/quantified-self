@@ -83,10 +83,15 @@ type AbsoluteDateRangeIntent = {
   endDate: string;
 };
 
+type AllTimeDateRangeIntent = {
+  kind: 'all_time';
+};
+
 type DateRangeIntent =
   | RelativeDateRangeIntent
   | CurrentPeriodDateRangeIntent
-  | AbsoluteDateRangeIntent;
+  | AbsoluteDateRangeIntent
+  | AllTimeDateRangeIntent;
 
 interface ModelInsightIntent {
   status: 'supported' | 'unsupported';
@@ -125,6 +130,15 @@ const UNSUPPORTED_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
   /\breparse\b/i,
 ];
 
+const EXPLICIT_ALL_TIME_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
+  /\ball[\s-]*time\b/i,
+  /\bentire history\b/i,
+  /\bfull history\b/i,
+  /\bwhole history\b/i,
+  /\ball recorded\b/i,
+  /\bever\b/i,
+];
+
 const ModelDateRangeSchema = z.union([
   z.object({
     kind: z.enum(['last_n', 'last']),
@@ -139,6 +153,9 @@ const ModelDateRangeSchema = z.union([
     kind: z.literal('absolute'),
     startDate: z.string(),
     endDate: z.string(),
+  }),
+  z.object({
+    kind: z.literal('all_time'),
   }),
 ]);
 
@@ -215,6 +232,7 @@ const defaultNormalizeQueryDependencies: NormalizeQueryDependencies = {
         'If the user does not explicitly ask for a grouping by activity type or sport, default category to "date".',
         'If the user does not explicitly ask for a time interval granularity, use requestedTimeInterval "auto".',
         'If the user omits a date range, omit dateRange. The application will apply a last-90-days default.',
+        'If the user explicitly asks for all time, all history, full history, or ever, use dateRange.kind "all_time".',
         'For relative date ranges, use dateRange.kind "last_n" rather than "last".',
         'For current periods like this week, this month, or this year, use dateRange.kind "current_period" rather than "this".',
         'Use activityTypeGroups only for genuinely broad group requests.',
@@ -398,8 +416,10 @@ function resolveDateRange(
   const today = getZonedDateParts(now, timeZone);
   let start = addDays(today, -89);
   const end = today;
+  let source: 'prompt' | 'default' = 'default';
 
   if (dateRangeIntent?.kind === 'last_n' || dateRangeIntent?.kind === 'last') {
+    source = 'prompt';
     switch (dateRangeIntent.unit) {
       case 'day':
         start = addDays(today, -(dateRangeIntent.amount - 1));
@@ -417,6 +437,7 @@ function resolveDateRange(
         break;
     }
   } else if (dateRangeIntent?.kind === 'current_period' || dateRangeIntent?.kind === 'this') {
+    source = 'prompt';
     switch (dateRangeIntent.unit) {
       case 'week': {
         const weekday = getWeekday(today);
@@ -433,7 +454,14 @@ function resolveDateRange(
       default:
         break;
     }
+  } else if (dateRangeIntent?.kind === 'all_time') {
+    return {
+      kind: 'all_time',
+      timezone: timeZone,
+      source: 'prompt',
+    };
   } else if (dateRangeIntent?.kind === 'absolute') {
+    source = 'prompt';
     const parsedStart = parseAbsoluteDateString(dateRangeIntent.startDate);
     const parsedEnd = parseAbsoluteDateString(dateRangeIntent.endDate);
     if (!parsedStart || !parsedEnd) {
@@ -446,16 +474,20 @@ function resolveDateRange(
     }
 
     return {
+      kind: 'bounded',
       startDate: startDate.toISOString(),
       endDate: endDate.toISOString(),
       timezone: timeZone,
+      source,
     };
   }
 
   return {
+    kind: 'bounded',
     startDate: zonedDateTimeToUtcDate(start, timeZone, 0, 0, 0, 0).toISOString(),
     endDate: zonedDateTimeToUtcDate(end, timeZone, 23, 59, 59, 999).toISOString(),
     timezone: timeZone,
+    source,
   };
 }
 
@@ -619,6 +651,10 @@ function detectUnsupportedCapability(prompt: string): boolean {
   return UNSUPPORTED_PROMPT_PATTERNS.some(pattern => pattern.test(prompt));
 }
 
+function promptImpliesAllTime(prompt: string): boolean {
+  return EXPLICIT_ALL_TIME_PROMPT_PATTERNS.some(pattern => pattern.test(prompt));
+}
+
 export function setNormalizeQueryDependenciesForTesting(
   dependencies?: Partial<NormalizeQueryDependencies>,
 ): void {
@@ -685,10 +721,17 @@ export async function normalizeInsightQuery(
     ? activityTypes
     : expandedActivityTypes.length > 0
       ? expandedActivityTypes
-      : [...SUPPORTED_ACTIVITY_TYPES];
+      : [];
 
-  const requestedTimeInterval = toRequestedTimeInterval(categoryType, intent.requestedTimeInterval, intent.dateRange);
-  const dateRange = resolveDateRange(intent.dateRange, input.clientTimezone, dependencies.now());
+  const resolvedDateRangeIntent = intent.dateRange ?? (promptImpliesAllTime(prompt)
+    ? { kind: 'all_time' as const }
+    : undefined);
+  const requestedTimeInterval = toRequestedTimeInterval(
+    categoryType,
+    intent.requestedTimeInterval,
+    resolvedDateRangeIntent,
+  );
+  const dateRange = resolveDateRange(resolvedDateRangeIntent, input.clientTimezone, dependencies.now());
 
   return {
     status: 'ok',

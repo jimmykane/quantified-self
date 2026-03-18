@@ -179,6 +179,10 @@ function resolveTotalBucketCount(
   dateRange: NormalizedInsightQuery['dateRange'],
   timeInterval: TimeIntervals,
 ): number {
+  if (dateRange.kind !== 'bounded') {
+    return 0;
+  }
+
   const startDate = new Date(dateRange.startDate);
   const endDate = new Date(dateRange.endDate);
   if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || startDate.getTime() > endDate.getTime()) {
@@ -219,7 +223,7 @@ function buildBucketCoverage(
     buckets: Array<unknown>;
   },
 ): AiInsightSummary['bucketCoverage'] {
-  if (query.categoryType !== ChartDataCategoryTypes.DateType) {
+  if (query.categoryType !== ChartDataCategoryTypes.DateType || query.dateRange.kind !== 'bounded') {
     return null;
   }
 
@@ -489,6 +493,7 @@ export const aiInsights = onCallGenkit({
   region: FUNCTIONS_MANIFEST.aiInsights.region,
   cors: ALLOWED_CORS_ORIGINS,
   enforceAppCheck: true,
-  timeoutSeconds: 60,
+  memory: '2GiB',
+  timeoutSeconds: 180,
   maxInstances: 10,
 }, aiInsightsFlow);

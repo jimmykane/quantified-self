@@ -47,7 +47,19 @@ function getClientLocale(): string | undefined {
 }
 
 function formatDateRange(dateRange: NormalizedInsightDateRange): string {
+  if (dateRange.kind === 'all_time') {
+    return 'All time';
+  }
+
   return `${dateRange.startDate.slice(0, 10)} to ${dateRange.endDate.slice(0, 10)}`;
+}
+
+function formatDateRangeNote(dateRange: NormalizedInsightDateRange): string | null {
+  if (dateRange.kind !== 'bounded' || dateRange.source !== 'default') {
+    return null;
+  }
+
+  return 'Used the last 90 days because no time range was found in your prompt.';
 }
 
 function formatBucketMeta(
@@ -293,7 +305,7 @@ export class AiInsightsPageComponent {
         return;
       }
 
-      if (charIndex > 0) {
+      if (charIndex > 1) {
         applyPromptFrame(promptIndex, charIndex - 1);
         schedule(HERO_PROMPT_DELETING_DELAY_MS);
         return;
@@ -321,6 +333,14 @@ export class AiInsightsPageComponent {
     }
 
     return `${formatDateRange(response.query.dateRange)} • ${resolveAiInsightsActivityFilterSummary(response.query)}`;
+  });
+  readonly resultDateRangeNote = computed(() => {
+    const response = this.okResponse() || this.emptyResponse();
+    if (!response) {
+      return null;
+    }
+
+    return formatDateRangeNote(response.query.dateRange);
   });
   readonly resultWarnings = computed(() => this.okResponse()?.presentation.warnings ?? []);
   readonly resultSummaryCards = computed<InsightSummaryCard[]>(() => {
@@ -486,6 +506,16 @@ export class AiInsightsPageComponent {
       promptLength: prompt.length,
     });
     await this.applySuggestedPrompt(prompt, { logAnalytics: false });
+  }
+
+  clearPrompt(): void {
+    if (this.isSubmitting()) {
+      return;
+    }
+
+    this.promptControl.setValue('');
+    this.promptControl.markAsPristine();
+    this.promptControl.markAsUntouched();
   }
 
   private logAiInsightsAction(

@@ -14,11 +14,23 @@ export interface AiInsightsRequest {
   clientLocale?: string;
 }
 
-export interface NormalizedInsightDateRange {
+export interface NormalizedInsightBoundedDateRange {
+  kind: 'bounded';
   startDate: string;
   endDate: string;
   timezone: string;
+  source: 'prompt' | 'default';
 }
+
+export interface NormalizedInsightAllTimeDateRange {
+  kind: 'all_time';
+  timezone: string;
+  source: 'prompt';
+}
+
+export type NormalizedInsightDateRange =
+  | NormalizedInsightBoundedDateRange
+  | NormalizedInsightAllTimeDateRange;
 
 export interface NormalizedInsightQuery {
   dataType: string;

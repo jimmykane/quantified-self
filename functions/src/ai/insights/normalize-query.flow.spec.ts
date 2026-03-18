@@ -64,9 +64,11 @@ describe('normalizeInsightQuery', () => {
         activityTypeGroups: [],
         activityTypes: [ActivityTypes.Cycling],
         dateRange: {
+          kind: 'bounded',
           startDate: '2025-12-18T00:00:00.000Z',
           endDate: '2026-03-18T23:59:59.999Z',
           timezone: 'UTC',
+          source: 'prompt',
         },
         chartType: ChartTypes.LinesVertical,
       },
@@ -138,9 +140,11 @@ describe('normalizeInsightQuery', () => {
         activityTypeGroups: [],
         activityTypes: [ActivityTypes.Cycling],
         dateRange: {
+          kind: 'bounded',
           startDate: '2025-12-18T00:00:00.000Z',
           endDate: '2026-03-18T23:59:59.999Z',
           timezone: 'UTC',
+          source: 'prompt',
         },
         chartType: ChartTypes.LinesVertical,
       },
@@ -179,9 +183,11 @@ describe('normalizeInsightQuery', () => {
     expect(result.query.chartType).toBe(ChartTypes.ColumnsHorizontal);
     expect(result.query.activityTypeGroups).toEqual([]);
     expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
       startDate: '2026-01-01T00:00:00.000Z',
       endDate: '2026-03-18T23:59:59.999Z',
       timezone: 'UTC',
+      source: 'prompt',
     });
   });
 
@@ -208,9 +214,40 @@ describe('normalizeInsightQuery', () => {
     }
 
     expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
       startDate: '2025-12-19T00:00:00.000Z',
       endDate: '2026-03-18T23:59:59.999Z',
       timezone: 'UTC',
+      source: 'default',
+    });
+  });
+
+  it('treats explicit all-time prompts as an all-time range even when the model omits a range', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'distance',
+        aggregation: 'total',
+        category: 'date',
+        requestedTimeInterval: 'auto',
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'show my total distance all time',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.dateRange).toEqual({
+      kind: 'all_time',
+      timezone: 'UTC',
+      source: 'prompt',
     });
   });
 
@@ -243,9 +280,11 @@ describe('normalizeInsightQuery', () => {
     expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Monthly);
     expect(result.query.activityTypeGroups).toEqual([]);
     expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
       startDate: '2026-01-01T00:00:00.000Z',
       endDate: '2026-03-18T23:59:59.999Z',
       timezone: 'UTC',
+      source: 'prompt',
     });
   });
 
@@ -346,9 +385,11 @@ describe('normalizeInsightQuery', () => {
     expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Monthly);
     expect(result.query.activityTypeGroups).toEqual([]);
     expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
       startDate: '2026-01-01T00:00:00.000Z',
       endDate: '2026-03-18T23:59:59.999Z',
       timezone: 'UTC',
+      source: 'prompt',
     });
   });
 

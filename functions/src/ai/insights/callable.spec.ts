@@ -86,9 +86,11 @@ const normalizedQuery = {
   activityTypeGroups: [],
   activityTypes: [ActivityTypes.Cycling],
   dateRange: {
+    kind: 'bounded',
     startDate: '2026-01-01T00:00:00.000Z',
     endDate: '2026-03-31T23:59:59.999Z',
     timezone: 'UTC',
+    source: 'prompt',
   },
   chartType: ChartTypes.ColumnsVertical,
 };

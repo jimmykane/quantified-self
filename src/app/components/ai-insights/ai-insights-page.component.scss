@@ -107,6 +107,7 @@
   align-items: center;
   gap: 3px;
   min-width: 0;
+  min-height: calc(0.95rem * 1.45);
   overflow: hidden;
 }
 
@@ -271,6 +272,28 @@
 .narrative {
   font-size: 0.92rem;
   line-height: 1.58;
+}
+
+.result-date-range-note {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 48rem;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.result-date-range-note mat-icon {
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  font-size: 16px;
+  color: var(--mat-sys-primary);
+  flex-shrink: 0;
+}
+
+.result-date-range-note p {
+  margin: 0;
+  line-height: 1.45;
 }
 
 .suggestion-actions {

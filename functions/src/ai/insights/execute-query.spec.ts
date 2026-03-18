@@ -51,9 +51,11 @@ function createQuery(overrides: Partial<NormalizedInsightQuery> = {}): Normalize
     activityTypeGroups: [],
     activityTypes: [ActivityTypes.Cycling],
     dateRange: {
+      kind: 'bounded',
       startDate: '2026-01-01T00:00:00.000Z',
       endDate: '2026-03-31T23:59:59.999Z',
       timezone: 'UTC',
+      source: 'prompt',
     },
     chartType: ChartTypes.ColumnsVertical,
     ...overrides,
@@ -222,6 +224,48 @@ describe('execute-query', () => {
     expect(fetchEventDocs).toHaveBeenCalledTimes(1);
     expect(result.matchedEventsCount).toBe(1);
     expect(result.aggregation.buckets[0]?.aggregateValue).toBe(40);
+  });
+
+  it('skips date filters for explicit all-time queries', async () => {
+    const fetchEventDocs = vi.fn(async ({ startDate, endDate }) => {
+      expect(startDate).toBeUndefined();
+      expect(endDate).toBeUndefined();
+      return [
+        { id: 'e1', data: () => ({ startDate: new Date('2026-01-10T12:00:00.000Z') }) },
+      ];
+    });
+
+    const importEvent = vi.fn(() => createMockEvent({
+      id: 'e1',
+      startDate: new Date('2026-01-10T12:00:00.000Z'),
+      activityTypes: [ActivityTypes.Cycling],
+      stats: { [DataDistance.type]: 40 },
+    }));
+
+    setExecuteQueryDependenciesForTesting({
+      fetchEventDocs,
+      fetchDebugEventSnapshot: vi.fn(async () => ({
+        totalEventsCount: 1,
+        recentEventsSample: [],
+      })),
+      importEvent,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+    });
+
+    const result = await executeAiInsightsQuery('user-1', createQuery({
+      dateRange: {
+        kind: 'all_time',
+        timezone: 'UTC',
+        source: 'prompt',
+      },
+    }), 'show my cycling distance all time');
+
+    expect(fetchEventDocs).toHaveBeenCalledWith({
+      userID: 'user-1',
+      startDate: undefined,
+      endDate: undefined,
+    });
+    expect(result.matchedEventsCount).toBe(1);
   });
 
   it('returns an empty aggregation when no events match', async () => {

@@ -56,9 +56,11 @@ function buildOkResponse(): AiInsightsOkResponse {
       activityTypeGroups: [],
       activityTypes: [ActivityTypes.Cycling],
       dateRange: {
+        kind: 'bounded',
         startDate: '2025-12-01',
         endDate: '2026-03-01',
         timezone: 'Europe/Helsinki',
+        source: 'prompt',
       },
       chartType: ChartTypes.LinesVertical,
     },
@@ -139,9 +141,11 @@ function buildEmptyResponse(): AiInsightsEmptyResponse {
       activityTypeGroups: [],
       activityTypes: [ActivityTypes.Cycling],
       dateRange: {
+        kind: 'bounded',
         startDate: '2025-12-01',
         endDate: '2026-03-01',
         timezone: 'Europe/Helsinki',
+        source: 'prompt',
       },
       chartType: ChartTypes.LinesVertical,
     },
@@ -182,9 +186,11 @@ function buildPaceResponse(): AiInsightsOkResponse {
       activityTypeGroups: [],
       activityTypes: [ActivityTypes.Running],
       dateRange: {
+        kind: 'bounded',
         startDate: '2024-03-17T00:00:00.000Z',
         endDate: '2026-03-18T23:59:59.999Z',
         timezone: 'Europe/Helsinki',
+        source: 'prompt',
       },
       chartType: ChartTypes.LinesVertical,
     },
@@ -260,6 +266,40 @@ function buildPaceResponse(): AiInsightsOkResponse {
   };
 }
 
+function buildDefaultedRangeResponse(): AiInsightsOkResponse {
+  return {
+    ...buildOkResponse(),
+    query: {
+      ...buildOkResponse().query,
+      dateRange: {
+        kind: 'bounded',
+        startDate: '2025-12-19T00:00:00.000Z',
+        endDate: '2026-03-18T23:59:59.999Z',
+        timezone: 'Europe/Helsinki',
+        source: 'default',
+      },
+    },
+  };
+}
+
+function buildAllTimeResponse(): AiInsightsOkResponse {
+  return {
+    ...buildOkResponse(),
+    query: {
+      ...buildOkResponse().query,
+      dateRange: {
+        kind: 'all_time',
+        timezone: 'Europe/Helsinki',
+        source: 'prompt',
+      },
+    },
+    presentation: {
+      ...buildOkResponse().presentation,
+      title: 'Total distance over time for All activities',
+    },
+  };
+}
+
 function buildUnsupportedResponse(): AiInsightsUnsupportedResponse {
   return {
     status: 'unsupported',
@@ -284,9 +324,11 @@ function buildGroupResponse(): AiInsightsOkResponse {
       activityTypeGroups: [ActivityTypeGroups.WaterSportsGroup],
       activityTypes: [ActivityTypes.Rowing, ActivityTypes.Kayaking, ActivityTypes.Sailing, ActivityTypes.Surfing],
       dateRange: {
+        kind: 'bounded',
         startDate: '2025-09-17T00:00:00.000Z',
         endDate: '2026-03-18T23:59:59.999Z',
         timezone: 'Europe/Helsinki',
+        source: 'prompt',
       },
       chartType: ChartTypes.LinesVertical,
     },
@@ -409,6 +451,21 @@ describe('AiInsightsPageComponent', () => {
     });
   });
 
+  it('should render a Material suffix clear button and clear the prompt input', () => {
+    component.promptControl.setValue('Show my total distance all time');
+    fixture.detectChanges();
+
+    const clearButton = fixture.debugElement.query(By.css('button[aria-label="Clear prompt"]'))?.nativeElement as HTMLButtonElement | undefined;
+
+    expect(clearButton).toBeTruthy();
+
+    clearButton?.click();
+    fixture.detectChanges();
+
+    expect(component.promptControl.getRawValue()).toBe('');
+    expect(fixture.debugElement.query(By.css('button[aria-label="Clear prompt"]'))).toBeNull();
+  });
+
   it('should submit the prompt and render the result narrative and chart', async () => {
     aiInsightsServiceMock.runInsight.mockResolvedValue(buildOkResponse());
     component.promptControl.setValue('Tell me my avg cadence for cycling the last 3 months');
@@ -494,6 +551,31 @@ describe('AiInsightsPageComponent', () => {
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('02:37 min/km faster'))).toBe(true);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Peak period'))).toBe(false);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Lowest period'))).toBe(false);
+  });
+
+  it('should explain when the backend defaulted the query to the last 90 days', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue(buildDefaultedRangeResponse());
+
+    await component.applySuggestedPrompt('Show my average cadence');
+    fixture.detectChanges();
+
+    const note = fixture.debugElement.query(By.css('.result-date-range-note'))?.nativeElement as HTMLElement | undefined;
+
+    expect(note?.textContent).toContain('Used the last 90 days because no time range was found in your prompt.');
+  });
+
+  it('should render all-time responses without a raw date span', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue(buildAllTimeResponse());
+
+    await component.applySuggestedPrompt('Show my total distance all time');
+    fixture.detectChanges();
+
+    const subtitle = fixture.debugElement.query(By.css('.result-subtitle'))?.nativeElement as HTMLElement | undefined;
+    const note = fixture.debugElement.query(By.css('.result-date-range-note'));
+
+    expect(subtitle?.textContent).toContain('All time');
+    expect(subtitle?.textContent).not.toContain('to');
+    expect(note).toBeNull();
   });
 
   it('should render activity type groups with a compact member summary in the subtitle', async () => {

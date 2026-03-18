@@ -9,7 +9,7 @@
       </div>
       <h1 class="hero-title">Ask a focused question about your training data.</h1>
       <p class="hero-subtitle">
-        Describe the metric, activity type, and time range you want. AI Insights returns one narrative summary and one chart from your persisted event stats.
+        Describe the metric, activity type, and time range you want. If you want your full history, say all time. AI Insights returns one narrative summary and one chart from your persisted event stats.
       </p>
       @if (activeHeroPrompt()) {
         <button
@@ -46,7 +46,18 @@
                 type="text"
                 [formControl]="promptControl"
                 placeholder="Tell me my avg cadence for cycling the last 3 months" />
-              <mat-hint>Be explicit about the metric, activity type, and time range.</mat-hint>
+              @if (promptValue().trim().length > 0) {
+                <button
+                  mat-icon-button
+                  matSuffix
+                  type="button"
+                  [disabled]="isSubmitting()"
+                  (click)="clearPrompt()"
+                  aria-label="Clear prompt">
+                  <mat-icon>close</mat-icon>
+                </button>
+              }
+              <mat-hint>If you omit a time range, AI Insights uses the last 90 days. Say all time for your full history.</mat-hint>
             </mat-form-field>
 
             <div class="prompt-toolbar">
@@ -124,6 +135,12 @@
               <div class="result-header">
                 <p class="result-title">{{ empty.presentation.title }}</p>
                 <p class="result-subtitle">{{ resultSubtitle() }}</p>
+                @if (resultDateRangeNote(); as dateRangeNote) {
+                  <div class="result-date-range-note">
+                    <mat-icon>info</mat-icon>
+                    <p class="mat-body-small">{{ dateRangeNote }}</p>
+                  </div>
+                }
               </div>
 
               <p class="narrative">{{ empty.narrative }}</p>
@@ -143,6 +160,12 @@
               <div class="result-header">
                 <p class="result-title">{{ result.presentation.title }}</p>
                 <p class="result-subtitle">{{ resultSubtitle() }}</p>
+                @if (resultDateRangeNote(); as dateRangeNote) {
+                  <div class="result-date-range-note">
+                    <mat-icon>info</mat-icon>
+                    <p class="mat-body-small">{{ dateRangeNote }}</p>
+                  </div>
+                }
               </div>
 
               <p class="narrative">{{ result.narrative }}</p>

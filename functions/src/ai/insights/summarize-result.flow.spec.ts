@@ -72,9 +72,11 @@ const paceInput = {
     activityTypeGroups: [],
     activityTypes: [ActivityTypes.TrailRunning],
     dateRange: {
+      kind: 'bounded',
       startDate: '2025-09-17T21:00:00.000Z',
       endDate: '2026-03-18T21:59:59.999Z',
       timezone: 'Europe/Helsinki',
+      source: 'prompt',
     },
     chartType: ChartTypes.LinesVertical,
   },
@@ -176,5 +178,28 @@ describe('summarizeAiInsightResult', () => {
     expect(narrative).toContain('07:02 min/km');
     expect(narrative).toContain('5 activities');
     expect(narrative).not.toContain('422.3478623928474');
+  });
+
+  it('uses all-time wording in the fallback narrative for explicit all-time queries', async () => {
+    setSummarizeInsightDependenciesForTesting({
+      generateNarrative: async () => {
+        throw new Error('generation failed');
+      },
+    });
+
+    const narrative = await summarizeAiInsightResult({
+      ...paceInput,
+      query: {
+        ...paceInput.query,
+        dateRange: {
+          kind: 'all_time',
+          timezone: 'Europe/Helsinki',
+          source: 'prompt',
+        },
+      },
+    });
+
+    expect(narrative).toContain('across all recorded history');
+    expect(narrative).not.toContain('between');
   });
 });

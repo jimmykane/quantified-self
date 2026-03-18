@@ -30,9 +30,11 @@ describe('AiInsightsService', () => {
       activityTypeGroups: [],
       activityTypes: [ActivityTypes.Cycling],
       dateRange: {
+        kind: 'bounded',
         startDate: '2025-12-01',
         endDate: '2026-03-01',
         timezone: 'Europe/Helsinki',
+        source: 'prompt',
       },
       chartType: ChartTypes.LinesVertical,
     },

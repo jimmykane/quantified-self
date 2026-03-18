@@ -26,8 +26,8 @@ interface FirestoreEventDocumentLike {
 interface ExecuteQueryDependencies {
   fetchEventDocs: (params: {
     userID: string;
-    startDate: Date;
-    endDate: Date;
+    startDate?: Date;
+    endDate?: Date;
   }) => Promise<FirestoreEventDocumentLike[]>;
   fetchDebugEventSnapshot: (userID: string) => Promise<{
     totalEventsCount: number | null;
@@ -56,6 +56,11 @@ const defaultExecuteQueryDependencies: ExecuteQueryDependencies = {
       .collection('users')
       .doc(userID)
       .collection('events');
+
+    if (!startDate || !endDate) {
+      const snapshot = await eventsCollection.get();
+      return snapshot.docs;
+    }
 
     const [dateSnapshot, millisSnapshot] = await Promise.all([
       eventsCollection
@@ -324,8 +329,12 @@ export async function executeAiInsightsQuery(
   prompt?: string,
 ): Promise<AiInsightsExecutionResult> {
   const dependencies = executeQueryDependencies;
-  const startDate = new Date(query.dateRange.startDate);
-  const endDate = new Date(query.dateRange.endDate);
+  const startDate = query.dateRange.kind === 'bounded'
+    ? new Date(query.dateRange.startDate)
+    : undefined;
+  const endDate = query.dateRange.kind === 'bounded'
+    ? new Date(query.dateRange.endDate)
+    : undefined;
   const docs = await dependencies.fetchEventDocs({ userID, startDate, endDate });
 
   const rehydratedEvents = docs
@@ -363,13 +372,26 @@ export async function executeAiInsightsQuery(
     debugRecentEventsSample: debugEventSnapshot?.recentEventsSample ?? [],
   });
 
+  const aggregation = buildEventStatAggregation(matchedEvents, {
+    dataType: query.dataType,
+    valueType: query.valueType,
+    categoryType: query.categoryType,
+    requestedTimeInterval: query.requestedTimeInterval,
+  }, dependencies.logger);
+
+  dependencies.logger.info('[aiInsights] Aggregation summary', {
+    prompt: prompt || null,
+    userID,
+    dataType: query.dataType,
+    valueType: query.valueType,
+    categoryType: query.categoryType,
+    requestedTimeInterval: query.requestedTimeInterval,
+    resolvedTimeInterval: aggregation.resolvedTimeInterval,
+    bucketCount: aggregation.buckets.length,
+  });
+
   return {
-    aggregation: buildEventStatAggregation(matchedEvents, {
-      dataType: query.dataType,
-      valueType: query.valueType,
-      categoryType: query.categoryType,
-      requestedTimeInterval: query.requestedTimeInterval,
-    }, dependencies.logger),
+    aggregation,
     matchedEventsCount: matchedEvents.length,
     matchedActivityTypeCounts: buildMatchedActivityTypeCounts(matchedEvents, dependencies.logger),
   };

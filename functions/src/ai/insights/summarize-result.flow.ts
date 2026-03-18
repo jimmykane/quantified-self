@@ -50,6 +50,10 @@ const SummarizeInsightResultOutputSchema = z.object({
 });
 
 function formatRangeForFallback(query: NormalizedInsightQuery): string {
+  if (query.dateRange.kind === 'all_time') {
+    return 'all time';
+  }
+
   return `${query.dateRange.startDate.slice(0, 10)} to ${query.dateRange.endDate.slice(0, 10)}`;
 }
 
@@ -139,9 +143,12 @@ function buildNarrativeFallback(input: SummarizeInsightResultInput): string {
   const dateRangeText = formatRangeForFallback(input.query);
   const activityText = formatActivityFilter(input.query);
   const summary = buildInsightSummaryFacts(input);
+  const isAllTime = input.query.dateRange.kind === 'all_time';
 
   if (input.status === 'empty') {
-    return `I could not find matching ${activityText} events with ${input.metricLabel} data between ${dateRangeText}.`;
+    return isAllTime
+      ? `I could not find matching ${activityText} events with ${input.metricLabel} data across all recorded history.`
+      : `I could not find matching ${activityText} events with ${input.metricLabel} data between ${dateRangeText}.`;
   }
 
   if (
@@ -150,7 +157,9 @@ function buildNarrativeFallback(input: SummarizeInsightResultInput): string {
     && summary.matchedEventCount > 0
   ) {
     const activityNoun = summary.matchedEventCount === 1 ? 'activity' : 'activities';
-    return `Your ${input.metricLabel} for ${activityText} between ${dateRangeText} was ${summary.overallAggregateDisplayValue}. This was calculated from ${summary.matchedEventCount} ${activityNoun}.`;
+    return isAllTime
+      ? `Your ${input.metricLabel} for ${activityText} across all recorded history was ${summary.overallAggregateDisplayValue}. This was calculated from ${summary.matchedEventCount} ${activityNoun}.`
+      : `Your ${input.metricLabel} for ${activityText} between ${dateRangeText} was ${summary.overallAggregateDisplayValue}. This was calculated from ${summary.matchedEventCount} ${activityNoun}.`;
   }
 
   if (!summary.highestValueBucket || !summary.latestBucket) {
@@ -177,6 +186,7 @@ export function buildNarrativeFacts(input: SummarizeInsightResultInput): Record<
     valueType: input.query.valueType,
     activityTypes: input.query.activityTypes,
     dateRange: input.query.dateRange,
+    dateRangeLabel: formatRangeForFallback(input.query),
     bucketCount: input.aggregation.buckets.length,
     summary,
     buckets: input.aggregation.buckets.slice(0, 24).map(bucket => ({
