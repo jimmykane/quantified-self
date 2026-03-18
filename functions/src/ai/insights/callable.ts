@@ -13,6 +13,7 @@ import type {
   AiInsightsUnsupportedReasonCode,
   NormalizedInsightQuery,
 } from '../../../../shared/ai-insights.types';
+import { resolveAiInsightsActivityFilterLabel } from '../../../../shared/ai-insights-activity-filter';
 import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
 import { ALLOWED_CORS_ORIGINS, hasProAccess } from '../../utils';
 import { aiInsightsGenkit } from './genkit';
@@ -43,9 +44,10 @@ function assertValidTimeZone(timeZone: string): void {
 }
 
 function resolveInsightTitle(query: NormalizedInsightQuery, metricLabel: string): string {
-  const activityLabel = query.activityTypes.length === 1
-    ? ` for ${query.activityTypes[0]}`
-    : '';
+  const activityFilterLabel = resolveAiInsightsActivityFilterLabel(query);
+  const activityLabel = activityFilterLabel === 'All activities'
+    ? ''
+    : ` for ${activityFilterLabel}`;
 
   if (query.categoryType === ChartDataCategoryTypes.ActivityType) {
     return `${query.valueType} ${metricLabel} by activity type${activityLabel}`;
@@ -57,6 +59,7 @@ function resolveInsightTitle(query: NormalizedInsightQuery, metricLabel: string)
 function resolvePresentationWarnings(query: NormalizedInsightQuery): string[] | undefined {
   if (
     query.categoryType === ChartDataCategoryTypes.ActivityType
+    && query.activityTypeGroups.length === 0
     && query.activityTypes.length === 1
   ) {
     return ['This compares a single selected activity type, so the chart will contain one bar.'];

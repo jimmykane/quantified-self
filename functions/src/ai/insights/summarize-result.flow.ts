@@ -5,6 +5,7 @@ import {
 } from '@sports-alliance/sports-lib';
 
 import type { AiInsightPresentation, AiInsightSummary, NormalizedInsightQuery } from '../../../../shared/ai-insights.types';
+import { resolveAiInsightsActivityFilterLabel } from '../../../../shared/ai-insights-activity-filter';
 import type { EventStatAggregationResult } from '../../../../shared/event-stat-aggregation.types';
 import { resolveMetricSemantics, resolveMetricSummarySemantics } from '../../../../shared/metric-semantics';
 import { formatUnitAwareDataValue } from '../../../../shared/unit-aware-display';
@@ -53,13 +54,7 @@ function formatRangeForFallback(query: NormalizedInsightQuery): string {
 }
 
 function formatActivityFilter(query: NormalizedInsightQuery): string {
-  if (query.activityTypes.length === 0) {
-    return 'all activities';
-  }
-  if (query.activityTypes.length === 1) {
-    return query.activityTypes[0];
-  }
-  return `${query.activityTypes.length} activity types`;
+  return resolveAiInsightsActivityFilterLabel(query).toLowerCase();
 }
 
 function formatNumber(value: number): string {

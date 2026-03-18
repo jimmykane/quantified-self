@@ -48,6 +48,7 @@ function createQuery(overrides: Partial<NormalizedInsightQuery> = {}): Normalize
     valueType: ChartDataValueTypes.Total,
     categoryType: ChartDataCategoryTypes.DateType,
     requestedTimeInterval: TimeIntervals.Daily,
+    activityTypeGroups: [],
     activityTypes: [ActivityTypes.Cycling],
     dateRange: {
       startDate: '2026-01-01T00:00:00.000Z',

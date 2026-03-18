@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  ActivityTypeGroups,
   ActivityTypes,
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -55,6 +56,7 @@ describe('normalizeInsightQuery', () => {
         valueType: ChartDataValueTypes.Average,
         categoryType: ChartDataCategoryTypes.DateType,
         requestedTimeInterval: TimeIntervals.Monthly,
+        activityTypeGroups: [],
         activityTypes: [ActivityTypes.Cycling],
         dateRange: {
           startDate: '2025-12-18T00:00:00.000Z',
@@ -128,6 +130,7 @@ describe('normalizeInsightQuery', () => {
         valueType: ChartDataValueTypes.Average,
         categoryType: ChartDataCategoryTypes.DateType,
         requestedTimeInterval: TimeIntervals.Monthly,
+        activityTypeGroups: [],
         activityTypes: [ActivityTypes.Cycling],
         dateRange: {
           startDate: '2025-12-18T00:00:00.000Z',
@@ -169,6 +172,7 @@ describe('normalizeInsightQuery', () => {
     expect(result.query.categoryType).toBe(ChartDataCategoryTypes.ActivityType);
     expect(result.query.valueType).toBe(ChartDataValueTypes.Total);
     expect(result.query.chartType).toBe(ChartTypes.ColumnsHorizontal);
+    expect(result.query.activityTypeGroups).toEqual([]);
     expect(result.query.dateRange).toEqual({
       startDate: '2026-01-01T00:00:00.000Z',
       endDate: '2026-03-18T23:59:59.999Z',
@@ -232,6 +236,7 @@ describe('normalizeInsightQuery', () => {
     }
 
     expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Monthly);
+    expect(result.query.activityTypeGroups).toEqual([]);
     expect(result.query.dateRange).toEqual({
       startDate: '2026-01-01T00:00:00.000Z',
       endDate: '2026-03-18T23:59:59.999Z',
@@ -269,6 +274,7 @@ describe('normalizeInsightQuery', () => {
     expect(result.query.dataType).toBe(DataHeartRateMax.type);
     expect(result.query.valueType).toBe(ChartDataValueTypes.Maximum);
     expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Daily);
+    expect(result.query.activityTypeGroups).toEqual([]);
   });
 
   it('keeps the average heart rate data type for highest average heart rate prompts', async () => {
@@ -301,6 +307,7 @@ describe('normalizeInsightQuery', () => {
     expect(result.query.dataType).toBe(DataHeartRateAvg.type);
     expect(result.query.valueType).toBe(ChartDataValueTypes.Maximum);
     expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Daily);
+    expect(result.query.activityTypeGroups).toEqual([]);
   });
 
   it('accepts the model returning the legacy "this" current-period kind', async () => {
@@ -332,6 +339,7 @@ describe('normalizeInsightQuery', () => {
     expect(result.query.dataType).toBe(DataHeartRateMax.type);
     expect(result.query.valueType).toBe(ChartDataValueTypes.Maximum);
     expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Monthly);
+    expect(result.query.activityTypeGroups).toEqual([]);
     expect(result.query.dateRange).toEqual({
       startDate: '2026-01-01T00:00:00.000Z',
       endDate: '2026-03-18T23:59:59.999Z',
@@ -368,6 +376,7 @@ describe('normalizeInsightQuery', () => {
 
     expect(result.metricKey).toBe('grade_adjusted_pace');
     expect(result.query.dataType).toBe(DataGradeAdjustedPaceAvg.type);
+    expect(result.query.activityTypeGroups).toEqual([]);
   });
 
   it('prefers the prompt alias for effort pace families', async () => {
@@ -399,6 +408,7 @@ describe('normalizeInsightQuery', () => {
 
     expect(result.metricKey).toBe('effort_pace');
     expect(result.query.dataType).toBe(DataEffortPaceAvg.type);
+    expect(result.query.activityTypeGroups).toEqual([]);
   });
 
   it('prefers the prompt alias for swim pace families', async () => {
@@ -430,6 +440,148 @@ describe('normalizeInsightQuery', () => {
 
     expect(result.metricKey).toBe('swim_pace');
     expect(result.query.dataType).toBe(DataSwimPaceAvg.type);
+    expect(result.query.activityTypeGroups).toEqual([]);
+  });
+
+  it('uses activity type groups for non-ambiguous broad group prompts', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'pace',
+        aggregation: 'average',
+        category: 'date',
+        requestedTimeInterval: 'auto',
+        activityTypeGroups: ['water sports'],
+        dateRange: {
+          kind: 'last_n',
+          amount: 6,
+          unit: 'month',
+        },
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show my average pace for water sports over the last 6 months',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.activityTypeGroups).toEqual([ActivityTypeGroups.WaterSportsGroup]);
+    expect(result.query.activityTypes).toEqual(
+      expect.arrayContaining([
+        ActivityTypes.Rowing,
+        ActivityTypes.Kayaking,
+        ActivityTypes.Sailing,
+      ]),
+    );
+  });
+
+  it('keeps ambiguous activity labels as exact activities by default', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'pace',
+        aggregation: 'average',
+        category: 'date',
+        requestedTimeInterval: 'auto',
+        activityTypes: ['Running'],
+        dateRange: {
+          kind: 'last_n',
+          amount: 3,
+          unit: 'month',
+        },
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show my average pace for running over the last 3 months',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.activityTypeGroups).toEqual([]);
+    expect(result.query.activityTypes).toEqual([ActivityTypes.Running]);
+  });
+
+  it('uses a group when an ambiguous label is made explicit with group wording', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'pace',
+        aggregation: 'average',
+        category: 'date',
+        requestedTimeInterval: 'auto',
+        activityTypeGroups: ['running group'],
+        dateRange: {
+          kind: 'last_n',
+          amount: 3,
+          unit: 'month',
+        },
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show my average pace for the running group over the last 3 months',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.activityTypeGroups).toEqual([ActivityTypeGroups.RunningGroup]);
+    expect(result.query.activityTypes).toEqual(
+      expect.arrayContaining([
+        ActivityTypes.Running,
+        ActivityTypes.Treadmill,
+        ActivityTypes.IndoorRunning,
+      ]),
+    );
+  });
+
+  it('prefers exact activities when a prompt mixes a group and an exact activity', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'pace',
+        aggregation: 'average',
+        category: 'date',
+        requestedTimeInterval: 'auto',
+        activityTypeGroups: ['running group'],
+        activityTypes: ['Trail Running'],
+        dateRange: {
+          kind: 'last_n',
+          amount: 3,
+          unit: 'month',
+        },
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show my average pace for running group and trail running over the last 3 months',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.activityTypeGroups).toEqual([]);
+    expect(result.query.activityTypes).toEqual([ActivityTypes.TrailRunning]);
   });
 
   it('rejects unsupported split prompts before calling the model', async () => {

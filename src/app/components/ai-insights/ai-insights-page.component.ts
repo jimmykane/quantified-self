@@ -7,7 +7,6 @@ import {
   AppThemes,
   ChartDataCategoryTypes,
   TimeIntervals,
-  type ActivityTypes,
   type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
 import type {
@@ -19,6 +18,7 @@ import type {
   AiInsightsUnsupportedResponse,
   NormalizedInsightDateRange,
 } from '@shared/ai-insights.types';
+import { resolveAiInsightsActivityFilterSummary } from '@shared/ai-insights-activity-filter';
 import { resolveMetricSummarySemantics } from '@shared/metric-semantics';
 import { formatUnitAwareDataValue, normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { MaterialModule } from '../../modules/material.module';
@@ -48,18 +48,6 @@ function getClientLocale(): string | undefined {
 
 function formatDateRange(dateRange: NormalizedInsightDateRange): string {
   return `${dateRange.startDate.slice(0, 10)} to ${dateRange.endDate.slice(0, 10)}`;
-}
-
-function formatActivitySummary(activityTypes: ActivityTypes[]): string {
-  if (!activityTypes.length) {
-    return 'All activities';
-  }
-
-  if (activityTypes.length === 1) {
-    return activityTypes[0];
-  }
-
-  return `${activityTypes.length} activity types`;
 }
 
 function formatBucketMeta(
@@ -167,7 +155,7 @@ export class AiInsightsPageComponent {
       return '';
     }
 
-    return `${formatDateRange(response.query.dateRange)} • ${formatActivitySummary(response.query.activityTypes)}`;
+    return `${formatDateRange(response.query.dateRange)} • ${resolveAiInsightsActivityFilterSummary(response.query)}`;
   });
   readonly resultWarnings = computed(() => this.okResponse()?.presentation.warnings ?? []);
   readonly resultSummaryCards = computed<InsightSummaryCard[]>(() => {

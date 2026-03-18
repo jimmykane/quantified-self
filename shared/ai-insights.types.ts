@@ -1,4 +1,5 @@
 import {
+  type ActivityTypeGroup,
   ActivityTypes,
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -24,6 +25,7 @@ export interface NormalizedInsightQuery {
   valueType: ChartDataValueTypes;
   categoryType: ChartDataCategoryTypes;
   requestedTimeInterval?: TimeIntervals;
+  activityTypeGroups: ActivityTypeGroup[];
   activityTypes: ActivityTypes[];
   dateRange: NormalizedInsightDateRange;
   chartType: ChartTypes;

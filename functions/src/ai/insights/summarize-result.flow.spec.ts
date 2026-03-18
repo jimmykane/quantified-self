@@ -55,6 +55,7 @@ const paceInput = {
     valueType: ChartDataValueTypes.Average,
     categoryType: ChartDataCategoryTypes.DateType,
     requestedTimeInterval: TimeIntervals.Monthly,
+    activityTypeGroups: [],
     activityTypes: [ActivityTypes.TrailRunning],
     dateRange: {
       startDate: '2025-09-17T21:00:00.000Z',

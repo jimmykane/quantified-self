@@ -1,17 +1,17 @@
-import { ActivityTypeGroups } from '@sports-alliance/sports-lib';
+import { ActivityTypeGroups, type ActivityTypeGroup } from '@sports-alliance/sports-lib';
 
-export const AppActivityTypeGroupIcons: { [key in ActivityTypeGroups]: string } = {
-    [ActivityTypeGroups.Running]: 'directions_run',
-    [ActivityTypeGroups.TrailRunning]: 'directions_run',
-    [ActivityTypeGroups.Cycling]: 'directions_bike',
-    [ActivityTypeGroups.MountainBiking]: 'terrain',
-    [ActivityTypeGroups.Swimming]: 'pool',
-    [ActivityTypeGroups.Performance]: 'workspace_premium',
-    [ActivityTypeGroups.IndoorSports]: 'fitness_center',
-    [ActivityTypeGroups.OutdoorAdventures]: 'hiking',
-    [ActivityTypeGroups.WinterSports]: 'downhill_skiing',
-    [ActivityTypeGroups.WaterSports]: 'waves',
-    [ActivityTypeGroups.Diving]: 'scuba_diving',
-    [ActivityTypeGroups.TeamRacket]: 'sports_soccer',
-    [ActivityTypeGroups.Unspecified]: 'category',
+export const AppActivityTypeGroupIcons: Record<ActivityTypeGroup, string> = {
+    [ActivityTypeGroups.RunningGroup]: 'directions_run',
+    [ActivityTypeGroups.TrailRunningGroup]: 'directions_run',
+    [ActivityTypeGroups.CyclingGroup]: 'directions_bike',
+    [ActivityTypeGroups.MountainBikingGroup]: 'terrain',
+    [ActivityTypeGroups.SwimmingGroup]: 'pool',
+    [ActivityTypeGroups.PerformanceGroup]: 'workspace_premium',
+    [ActivityTypeGroups.IndoorSportsGroup]: 'fitness_center',
+    [ActivityTypeGroups.OutdoorAdventuresGroup]: 'hiking',
+    [ActivityTypeGroups.WinterSportsGroup]: 'downhill_skiing',
+    [ActivityTypeGroups.WaterSportsGroup]: 'waves',
+    [ActivityTypeGroups.DivingGroup]: 'scuba_diving',
+    [ActivityTypeGroups.TeamRacketGroup]: 'sports_soccer',
+    [ActivityTypeGroups.UnspecifiedGroup]: 'category',
 };

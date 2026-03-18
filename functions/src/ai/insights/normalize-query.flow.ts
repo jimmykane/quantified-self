@@ -1,6 +1,8 @@
 import { z } from 'genkit';
 import {
+  type ActivityTypeGroup,
   ActivityTypes,
+  ActivityTypesHelper,
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   ChartTypes,
@@ -13,8 +15,17 @@ import type {
   NormalizedInsightDateRange,
   NormalizedInsightQuery,
 } from '../../../../shared/ai-insights.types';
+import {
+  getActivityTypeGroupMetadata,
+  isAmbiguousActivityTypeGroup,
+} from '../../../../shared/activity-type-group.metadata';
 import { aiInsightsGenkit } from './genkit';
 import { CANONICAL_ACTIVITY_TYPES, resolveCanonicalActivityType } from './canonical-activity-types';
+import {
+  buildSupportedActivityTypeGroupsPromptText,
+  CANONICAL_ACTIVITY_TYPE_GROUPS,
+  resolveCanonicalActivityTypeGroup,
+} from './canonical-activity-type-groups';
 import {
   buildMetricCatalogPromptText,
   findInsightMetricAliasMatch,
@@ -83,6 +94,7 @@ interface ModelInsightIntent {
   aggregation?: ModelAggregationCode;
   category?: ModelCategoryCode;
   requestedTimeInterval?: ModelTimeIntervalCode;
+  activityTypeGroups?: string[];
   activityTypes?: string[];
   dateRange?: DateRangeIntent;
   unsupportedReasonCode?: AiInsightsUnsupportedReasonCode;
@@ -101,6 +113,7 @@ interface ZonedDateParts {
 
 const ABSOLUTE_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const SUPPORTED_ACTIVITY_TYPES = [...CANONICAL_ACTIVITY_TYPES];
+const SUPPORTED_ACTIVITY_TYPE_GROUPS = [...CANONICAL_ACTIVITY_TYPE_GROUPS];
 
 const UNSUPPORTED_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
   /\bsplits?\b/i,
@@ -145,6 +158,7 @@ const ModelInsightIntentSchema = z.object({
     'semesterly',
     'yearly',
   ]).optional(),
+  activityTypeGroups: z.array(z.string()).optional(),
   activityTypes: z.array(z.string()).optional(),
   dateRange: ModelDateRangeSchema.optional(),
   unsupportedReasonCode: AiInsightsUnsupportedReasonCodeSchema.optional(),
@@ -203,6 +217,9 @@ const defaultNormalizeQueryDependencies: NormalizeQueryDependencies = {
         'If the user omits a date range, omit dateRange. The application will apply a last-90-days default.',
         'For relative date ranges, use dateRange.kind "last_n" rather than "last".',
         'For current periods like this week, this month, or this year, use dateRange.kind "current_period" rather than "this".',
+        'Use activityTypeGroups only for genuinely broad group requests.',
+        'For ambiguous labels like running, trail running, cycling, mountain biking, swimming, and diving, prefer exact activityTypes unless the user explicitly says group, family, or all activities.',
+        'If you populate activityTypeGroups for a broad request, omit activityTypes unless the user explicitly listed exact activities too.',
         'Use canonical activity labels when possible.',
       ].join(' '),
       prompt: [
@@ -210,6 +227,8 @@ const defaultNormalizeQueryDependencies: NormalizeQueryDependencies = {
         `Client timezone: ${input.clientTimezone}`,
         `Current local date in the client timezone: ${today}`,
         `Supported canonical activity types: ${SUPPORTED_ACTIVITY_TYPES.join(', ')}`,
+        'Supported activity type groups:',
+        buildSupportedActivityTypeGroupsPromptText(),
         'Supported metrics:',
         buildMetricCatalogPromptText(),
       ].join('\n'),
@@ -457,7 +476,7 @@ function resolveChartType(
 
 function normalizeActivityTypes(activityTypes: string[] | undefined): ActivityTypes[] | null {
   if (!activityTypes?.length) {
-    return [...SUPPORTED_ACTIVITY_TYPES];
+    return [];
   }
 
   const resolved: ActivityTypes[] = [];
@@ -471,7 +490,75 @@ function normalizeActivityTypes(activityTypes: string[] | undefined): ActivityTy
     }
   }
 
-  return resolved.length > 0 ? resolved : [...SUPPORTED_ACTIVITY_TYPES];
+  return resolved;
+}
+
+function normalizeActivityTypeGroups(activityTypeGroups: string[] | undefined): ActivityTypeGroup[] | null {
+  if (!activityTypeGroups?.length) {
+    return [];
+  }
+
+  const resolved: ActivityTypeGroup[] = [];
+  for (const rawValue of activityTypeGroups) {
+    const activityTypeGroup = resolveCanonicalActivityTypeGroup(rawValue);
+    if (!activityTypeGroup) {
+      return null;
+    }
+    if (!resolved.includes(activityTypeGroup)) {
+      resolved.push(activityTypeGroup);
+    }
+  }
+
+  return resolved;
+}
+
+function normalizePromptSearchText(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/[^\w\s]+/g, ' ')
+    .replace(/\s+/g, ' ');
+}
+
+function resolvePromptActivityTypeGroups(prompt: string): ActivityTypeGroup[] {
+  const normalizedPrompt = normalizePromptSearchText(prompt);
+  if (!normalizedPrompt) {
+    return [];
+  }
+
+  return SUPPORTED_ACTIVITY_TYPE_GROUPS.filter((activityTypeGroup) => {
+    const metadata = getActivityTypeGroupMetadata(activityTypeGroup);
+    const searchTerms = [metadata.label, ...metadata.aliases]
+      .map(alias => normalizePromptSearchText(alias))
+      .filter(Boolean);
+
+    if (isAmbiguousActivityTypeGroup(activityTypeGroup)) {
+      return searchTerms.some((term) => [
+        `${term} group`,
+        `${term} family`,
+        `${term} activities`,
+        `all ${term} activities`,
+        `all ${term} activity types`,
+        `all ${term}`,
+      ].some(trigger => normalizedPrompt.includes(trigger)));
+    }
+
+    return searchTerms.some(term => normalizedPrompt.includes(term));
+  });
+}
+
+function expandActivityTypeGroups(activityTypeGroups: ActivityTypeGroup[]): ActivityTypes[] {
+  const expanded: ActivityTypes[] = [];
+  for (const activityTypeGroup of activityTypeGroups) {
+    for (const activityType of ActivityTypesHelper.getActivityTypesForActivityGroup(activityTypeGroup)) {
+      if (!expanded.includes(activityType)) {
+        expanded.push(activityType);
+      }
+    }
+  }
+
+  return expanded;
 }
 
 function toCategoryType(category: ModelCategoryCode | undefined): ChartDataCategoryTypes {
@@ -581,9 +668,24 @@ export async function normalizeInsightQuery(
 
   const categoryType = toCategoryType(intent.category);
   const activityTypes = normalizeActivityTypes(intent.activityTypes);
-  if (!activityTypes) {
+  const activityTypeGroups = normalizeActivityTypeGroups(intent.activityTypeGroups);
+  if (!activityTypes || !activityTypeGroups) {
     return buildUnsupportedResult('invalid_prompt');
   }
+
+  const promptActivityTypeGroups = resolvePromptActivityTypeGroups(prompt);
+  const resolvedActivityTypeGroups = activityTypeGroups.length > 0
+    ? activityTypeGroups
+    : promptActivityTypeGroups;
+  const finalActivityTypeGroups = activityTypes.length > 0 ? [] : resolvedActivityTypeGroups;
+  const expandedActivityTypes = finalActivityTypeGroups.length > 0
+    ? expandActivityTypeGroups(finalActivityTypeGroups)
+    : [];
+  const finalActivityTypes = activityTypes.length > 0
+    ? activityTypes
+    : expandedActivityTypes.length > 0
+      ? expandedActivityTypes
+      : [...SUPPORTED_ACTIVITY_TYPES];
 
   const requestedTimeInterval = toRequestedTimeInterval(categoryType, intent.requestedTimeInterval, intent.dateRange);
   const dateRange = resolveDateRange(intent.dateRange, input.clientTimezone, dependencies.now());
@@ -596,7 +698,8 @@ export async function normalizeInsightQuery(
       valueType,
       categoryType,
       requestedTimeInterval,
-      activityTypes,
+      activityTypeGroups: finalActivityTypeGroups,
+      activityTypes: finalActivityTypes,
       dateRange,
       chartType: resolveChartType(categoryType, valueType),
     },

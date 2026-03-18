@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  ActivityTypeGroups,
   ActivityTypes,
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -82,6 +83,7 @@ const normalizedQuery = {
   valueType: ChartDataValueTypes.Total,
   categoryType: ChartDataCategoryTypes.DateType,
   requestedTimeInterval: TimeIntervals.Auto,
+  activityTypeGroups: [],
   activityTypes: [ActivityTypes.Cycling],
   dateRange: {
     startDate: '2026-01-01T00:00:00.000Z',
@@ -322,6 +324,30 @@ describe('aiInsights callable', () => {
       narrative: 'I can only answer questions from persisted event-level stats right now, so streams, splits, laps, routes, and original-file reprocessing are out of scope.',
       reasonCode: 'unsupported_capability',
       suggestedPrompts: expect.any(Array),
+    });
+  });
+
+  it('uses the activity group label in the title when a broad group filter is present', async () => {
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'ok',
+      metricKey: 'distance',
+      query: {
+        ...normalizedQuery,
+        activityTypeGroups: [ActivityTypeGroups.WaterSportsGroup],
+        activityTypes: [ActivityTypes.Rowing, ActivityTypes.Kayaking, ActivityTypes.Sailing],
+      },
+    });
+
+    const result = await aiInsights({
+      prompt: 'show distance for water sports',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(result).toMatchObject({
+      status: 'ok',
+      presentation: expect.objectContaining({
+        title: 'Total distance over time for Water Sports',
+      }),
     });
   });
 });

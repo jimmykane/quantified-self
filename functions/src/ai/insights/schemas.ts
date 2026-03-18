@@ -1,5 +1,6 @@
 import { z } from 'genkit';
 import {
+  ActivityTypeGroups,
   ActivityTypes,
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -34,6 +35,7 @@ export const NormalizedInsightQuerySchema: z.ZodType<NormalizedInsightQuery> = z
   valueType: z.nativeEnum(ChartDataValueTypes),
   categoryType: z.nativeEnum(ChartDataCategoryTypes),
   requestedTimeInterval: z.nativeEnum(TimeIntervals).optional(),
+  activityTypeGroups: z.array(z.nativeEnum(ActivityTypeGroups)),
   activityTypes: z.array(
     CanonicalActivityTypeSchema as unknown as z.ZodType<ActivityTypes>
   ),

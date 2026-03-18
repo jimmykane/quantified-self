@@ -6,6 +6,7 @@ import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  ActivityTypeGroups,
   ActivityTypes,
   AppThemes,
   ChartDataCategoryTypes,
@@ -50,6 +51,7 @@ function buildOkResponse(): AiInsightsOkResponse {
       valueType: ChartDataValueTypes.Average,
       categoryType: ChartDataCategoryTypes.DateType,
       requestedTimeInterval: TimeIntervals.Monthly,
+      activityTypeGroups: [],
       activityTypes: [ActivityTypes.Cycling],
       dateRange: {
         startDate: '2025-12-01',
@@ -113,6 +115,7 @@ function buildEmptyResponse(): AiInsightsEmptyResponse {
       valueType: ChartDataValueTypes.Average,
       categoryType: ChartDataCategoryTypes.DateType,
       requestedTimeInterval: TimeIntervals.Monthly,
+      activityTypeGroups: [],
       activityTypes: [ActivityTypes.Cycling],
       dateRange: {
         startDate: '2025-12-01',
@@ -152,6 +155,7 @@ function buildPaceResponse(): AiInsightsOkResponse {
       valueType: ChartDataValueTypes.Average,
       categoryType: ChartDataCategoryTypes.DateType,
       requestedTimeInterval: TimeIntervals.Monthly,
+      activityTypeGroups: [],
       activityTypes: [ActivityTypes.Running],
       dateRange: {
         startDate: '2024-03-17T00:00:00.000Z',
@@ -222,6 +226,45 @@ function buildUnsupportedResponse(): AiInsightsUnsupportedResponse {
       'Show my total distance by activity type this year',
       'Tell me my avg cadence for cycling the last 3 months',
     ],
+  };
+}
+
+function buildGroupResponse(): AiInsightsOkResponse {
+  return {
+    status: 'ok',
+    narrative: 'Your average pace across water sports has improved.',
+    query: {
+      dataType: DataPaceAvg.type,
+      valueType: ChartDataValueTypes.Average,
+      categoryType: ChartDataCategoryTypes.DateType,
+      requestedTimeInterval: TimeIntervals.Monthly,
+      activityTypeGroups: [ActivityTypeGroups.WaterSportsGroup],
+      activityTypes: [ActivityTypes.Rowing, ActivityTypes.Kayaking, ActivityTypes.Sailing, ActivityTypes.Surfing],
+      dateRange: {
+        startDate: '2025-09-17T00:00:00.000Z',
+        endDate: '2026-03-18T23:59:59.999Z',
+        timezone: 'Europe/Helsinki',
+      },
+      chartType: ChartTypes.LinesVertical,
+    },
+    aggregation: {
+      dataType: DataPaceAvg.type,
+      valueType: ChartDataValueTypes.Average,
+      categoryType: ChartDataCategoryTypes.DateType,
+      resolvedTimeInterval: TimeIntervals.Monthly,
+      buckets: [],
+    },
+    summary: {
+      matchedEventCount: 12,
+      overallAggregateValue: 520,
+      peakBucket: null,
+      lowestBucket: null,
+      latestBucket: null,
+    },
+    presentation: {
+      title: 'Average pace over time for Water Sports',
+      chartType: ChartTypes.LinesVertical,
+    },
   };
 }
 
@@ -349,6 +392,21 @@ describe('AiInsightsPageComponent', () => {
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Latest period with data'))).toBe(true);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Peak period'))).toBe(false);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Lowest period'))).toBe(false);
+  });
+
+  it('should render activity type groups with a compact member summary in the subtitle', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue(buildGroupResponse());
+
+    await component.applySuggestedPrompt('Show my average pace for water sports over the last 6 months');
+    fixture.detectChanges();
+
+    const subtitle = fixture.debugElement.query(By.css('.result-subtitle'))?.nativeElement as HTMLElement | undefined;
+
+    expect(subtitle?.textContent).toContain('Water Sports');
+    expect(subtitle?.textContent).toContain('Rowing');
+    expect(subtitle?.textContent).toContain('Surfing');
+    expect(subtitle?.textContent).toContain('Kitesurfing');
+    expect(subtitle?.textContent).toContain('+6 more');
   });
 
   it('should render the empty state without the chart', async () => {

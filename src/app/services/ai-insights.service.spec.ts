@@ -27,6 +27,7 @@ describe('AiInsightsService', () => {
       valueType: ChartDataValueTypes.Average,
       categoryType: ChartDataCategoryTypes.DateType,
       requestedTimeInterval: TimeIntervals.Monthly,
+      activityTypeGroups: [],
       activityTypes: [ActivityTypes.Cycling],
       dateRange: {
         startDate: '2025-12-01',
@@ -46,6 +47,7 @@ describe('AiInsightsService', () => {
       matchedEventCount: 0,
       overallAggregateValue: null,
       peakBucket: null,
+      lowestBucket: null,
       latestBucket: null,
     },
     presentation: {

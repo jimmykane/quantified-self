@@ -74,6 +74,7 @@ function buildResponse(chartType: ChartTypes, categoryType = ChartDataCategoryTy
       valueType: ChartDataValueTypes.Average,
       categoryType,
       requestedTimeInterval: TimeIntervals.Monthly,
+      activityTypeGroups: [],
       activityTypes: [ActivityTypes.Cycling],
       dateRange: {
         startDate: '2025-12-01',
