@@ -106,7 +106,10 @@
             <mat-icon>insights</mat-icon>
           </div>
           <mat-card-title>Result</mat-card-title>
-          <mat-card-subtitle>One answer, one chart, no hidden dashboard filters.</mat-card-subtitle>
+          <mat-card-subtitle class="result-card-subtitle">{{ resultCardSubtitle() }}</mat-card-subtitle>
+          @if (resultCardMetaText(); as resultCardMetaText) {
+            <mat-card-subtitle class="result-card-meta">{{ resultCardMetaText }}</mat-card-subtitle>
+          }
         </mat-card-header>
 
         <mat-card-content class="card-content">
@@ -154,6 +157,19 @@
                     <p class="mat-body-small">{{ dateRangeNote }}</p>
                   </div>
                 }
+                @if (canRefreshResult()) {
+                  <div class="result-actions">
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      class="result-refresh-button"
+                      [disabled]="isSubmitting()"
+                      (click)="refreshCurrentResult()">
+                      <mat-icon>refresh</mat-icon>
+                      <span>Refresh with latest data &amp; dates</span>
+                    </button>
+                  </div>
+                }
               </div>
 
               <p class="narrative">{{ empty.narrative }}</p>
@@ -177,6 +193,19 @@
                   <div class="result-date-range-note">
                     <mat-icon>info</mat-icon>
                     <p class="mat-body-small">{{ dateRangeNote }}</p>
+                  </div>
+                }
+                @if (canRefreshResult()) {
+                  <div class="result-actions">
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      class="result-refresh-button"
+                      [disabled]="isSubmitting()"
+                      (click)="refreshCurrentResult()">
+                      <mat-icon>refresh</mat-icon>
+                      <span>Refresh with latest data &amp; dates</span>
+                    </button>
                   </div>
                 }
               </div>

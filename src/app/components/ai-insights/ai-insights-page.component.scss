@@ -171,6 +171,12 @@
   line-height: 1.4;
 }
 
+.result-card-meta {
+  font-size: 0.76rem;
+  color: var(--mat-sys-on-surface-variant);
+  line-height: 1.35;
+}
+
 .card-content {
   padding: 24px !important;
   display: grid;
@@ -294,6 +300,17 @@
 .result-date-range-note p {
   margin: 0;
   line-height: 1.45;
+}
+
+.result-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.result-refresh-button {
+  width: fit-content;
+  max-width: 100%;
 }
 
 .suggestion-actions {

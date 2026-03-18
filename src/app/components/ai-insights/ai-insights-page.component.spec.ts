@@ -602,6 +602,8 @@ describe('AiInsightsPageComponent', () => {
     const narrative = fixture.debugElement.query(By.css('.narrative'))?.nativeElement as HTMLElement | undefined;
     const chart = fixture.debugElement.query(By.css('.chart-stub'))?.nativeElement as HTMLElement | undefined;
     const chartComponent = fixture.debugElement.query(By.directive(MockAiInsightsChartComponent))?.componentInstance as MockAiInsightsChartComponent | undefined;
+    const resultCardSubtitle = fixture.debugElement.query(By.css('.result-card-subtitle'))?.nativeElement as HTMLElement | undefined;
+    const resultCardMeta = fixture.debugElement.query(By.css('.result-card-meta'))?.nativeElement as HTMLElement | undefined;
     const summaryCards = fixture.debugElement.queryAll(By.css('.summary-card'));
     const summaryHelpButtons = fixture.debugElement.queryAll(By.css('.summary-help-button'));
     const expectedOverall = formatUnitAwareDataValue(
@@ -614,6 +616,8 @@ describe('AiInsightsPageComponent', () => {
     expect(narrative?.textContent).toContain('trended up');
     expect(chart?.textContent).toContain('Average cadence over time for Cycling');
     expect(chartComponent?.userUnitSettings()).toEqual(userSettingsQueryServiceMock.unitSettings());
+    expect(resultCardSubtitle?.textContent).toContain('Insight summary and chart for this prompt.');
+    expect(resultCardMeta?.textContent).toContain('Saved');
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Overall'))).toBe(true);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Highest period'))).toBe(true);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Lowest period'))).toBe(true);
@@ -626,6 +630,35 @@ describe('AiInsightsPageComponent', () => {
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Latest bucket'))).toBe(false);
     expect(summaryHelpButtons).toHaveLength(5);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes(expectedOverall ?? ''))).toBe(true);
+  });
+
+  it('should refresh the visible result with the same prompt even if the input was edited', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue(buildOkResponse());
+    component.promptControl.setValue('Tell me my avg cadence for cycling the last 3 months');
+
+    const submitEvent = {
+      preventDefault: vi.fn(),
+    };
+    fixture.debugElement.query(By.css('form')).triggerEventHandler('submit', submitEvent);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    component.promptControl.setValue('A different prompt in the input');
+    fixture.detectChanges();
+
+    const refreshButton = fixture.debugElement.query(By.css('.result-refresh-button'))?.nativeElement as HTMLButtonElement | undefined;
+
+    refreshButton?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(aiInsightsServiceMock.runInsight).toHaveBeenLastCalledWith(expect.objectContaining({
+      prompt: 'Tell me my avg cadence for cycling the last 3 months',
+    }));
+    expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('ai_insights_action', {
+      method: 'refresh_result_click',
+      prompt_length: 'Tell me my avg cadence for cycling the last 3 months'.length,
+    });
   });
 
   it('should render unsupported responses and swap in backend suggestions', async () => {
@@ -660,12 +693,17 @@ describe('AiInsightsPageComponent', () => {
     fixture.detectChanges();
 
     const subtitle = fixture.debugElement.query(By.css('.result-subtitle'))?.nativeElement as HTMLElement | undefined;
+    const resultCardSubtitle = fixture.debugElement.query(By.css('.result-card-subtitle'))?.nativeElement as HTMLElement | undefined;
+    const resultCardMeta = fixture.debugElement.query(By.css('.result-card-meta'))?.nativeElement as HTMLElement | undefined;
     const resultNotes = fixture.debugElement.queryAll(By.css('.result-note'));
 
     expect(aiInsightsLatestSnapshotServiceMock.loadLatest).toHaveBeenLastCalledWith('user-2');
     expect(component.promptControl.getRawValue()).toBe('Show my total distance all time');
     expect(subtitle?.textContent).toContain('All time');
-    expect(resultNotes.some((note) => note.nativeElement.textContent.includes('Restored the latest completed insight from your account.'))).toBe(true);
+    expect(resultCardSubtitle?.textContent).toContain('Insight summary and chart for this prompt.');
+    expect(resultCardMeta?.textContent).toContain('Restored');
+    expect(resultCardMeta?.textContent).toContain('Saved Mar 18, 2026');
+    expect(resultNotes).toHaveLength(0);
   });
 
   it('should use pace-specific summary labels for inverse metrics', async () => {

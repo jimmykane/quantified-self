@@ -62,6 +62,26 @@ function formatDateRangeNote(dateRange: NormalizedInsightDateRange): string | nu
   return 'Used the last 90 days because no time range was found in your prompt.';
 }
 
+function formatSavedInsightDate(
+  value: string | null,
+  locale: string,
+): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) {
+    return null;
+  }
+
+  return date.toLocaleDateString(locale, {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
 function formatBucketMeta(
   response: AiInsightsOkResponse,
   bucket: AiInsightSummaryBucket,
@@ -246,6 +266,8 @@ export class AiInsightsPageComponent {
   readonly errorMessage = signal<string | null>(null);
   readonly latestSnapshotRestored = signal(false);
   readonly latestSnapshotPersistenceNotice = signal<string | null>(null);
+  readonly latestSnapshotSavedAt = signal<string | null>(null);
+  readonly resultPrompt = signal('');
   readonly appTheme = this.themeService.appTheme;
   readonly user = toSignal(this.authService.user$, { initialValue: null });
   readonly chartSettings = this.userSettingsQueryService.chartSettings;
@@ -274,21 +296,35 @@ export class AiInsightsPageComponent {
       || response?.status === 'empty'
       || response?.status === 'unsupported';
   });
+  readonly canRefreshResult = computed(() => {
+    if (this.isSubmitting()) {
+      return false;
+    }
+
+    const response = this.response();
+    const hasRefreshableResult = response?.status === 'ok' || response?.status === 'empty';
+    return hasRefreshableResult && this.resultPrompt().trim().length > 0;
+  });
   readonly latestSnapshotSupportNote = computed(() =>
     'Latest completed insights are temporarily restored from your account. Proper saved insights/history will come later.'
   );
+  readonly resultCardSubtitle = computed(() => 'Insight summary and chart for this prompt.');
+  readonly resultCardMetaText = computed(() => {
+    const savedAtLabel = formatSavedInsightDate(this.latestSnapshotSavedAt(), this.locale);
+    if (!savedAtLabel) {
+      return this.latestSnapshotRestored() ? 'Restored' : null;
+    }
+
+    return this.latestSnapshotRestored()
+      ? `Restored • Saved ${savedAtLabel}`
+      : `Saved ${savedAtLabel}`;
+  });
   readonly resultNotes = computed<ResultNote[]>(() => {
     if (!this.hasCompletedResponse()) {
       return [];
     }
 
     const notes: ResultNote[] = [];
-    if (this.latestSnapshotRestored()) {
-      notes.push({
-        icon: 'history',
-        message: 'Restored the latest completed insight from your account.',
-      });
-    }
     if (this.latestSnapshotPersistenceNotice()) {
       notes.push({
         icon: 'info',
@@ -378,8 +414,10 @@ export class AiInsightsPageComponent {
 
     this.latestSnapshotRestored.set(false);
     this.latestSnapshotPersistenceNotice.set(null);
+    this.latestSnapshotSavedAt.set(null);
     this.errorMessage.set(null);
     this.response.set(null);
+    this.resultPrompt.set('');
     this.promptControl.setValue('');
 
     if (!userID) {
@@ -394,6 +432,8 @@ export class AiInsightsPageComponent {
 
       this.promptControl.setValue(latestSnapshot.prompt);
       this.response.set(latestSnapshot.response);
+      this.resultPrompt.set(latestSnapshot.prompt);
+      this.latestSnapshotSavedAt.set(latestSnapshot.savedAt);
       this.latestSnapshotRestored.set(true);
     })();
 
@@ -544,16 +584,20 @@ export class AiInsightsPageComponent {
     this.isSubmitting.set(true);
     this.latestSnapshotRestored.set(false);
     this.latestSnapshotPersistenceNotice.set(null);
+    this.latestSnapshotSavedAt.set(null);
     this.errorMessage.set(null);
     this.response.set(null);
 
     try {
       const response = await this.aiInsightsService.runInsight(this.buildInsightRequest(prompt));
       this.response.set(response);
+      this.resultPrompt.set(prompt);
       const userID = this.currentUserID();
       if (userID) {
         const saveResult = await this.aiInsightsLatestSnapshotService.saveLatest(userID, prompt, response);
-        if (saveResult === 'skipped_too_large') {
+        if (saveResult === 'saved') {
+          this.latestSnapshotSavedAt.set(new Date().toISOString());
+        } else if (saveResult === 'skipped_too_large') {
           this.latestSnapshotPersistenceNotice.set(
             'This result is too large to save to your account yet, so a refresh will lose it.',
           );
@@ -592,6 +636,18 @@ export class AiInsightsPageComponent {
       promptLength: prompt.length,
     });
     await this.applySuggestedPrompt(prompt, { logAnalytics: false });
+  }
+
+  async refreshCurrentResult(): Promise<void> {
+    const prompt = this.resultPrompt().trim();
+    if (!prompt || this.isSubmitting()) {
+      return;
+    }
+
+    this.logAiInsightsAction('refresh_result_click', {
+      promptLength: prompt.length,
+    });
+    await this.submitPrompt(prompt);
   }
 
   clearPrompt(): void {
