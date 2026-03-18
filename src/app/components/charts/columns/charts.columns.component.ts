@@ -292,6 +292,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
 
     return {
       animation: this.useAnimations === true,
+      backgroundColor: 'transparent',
       textStyle: {
         color: textColor,
         fontFamily: ECHARTS_GLOBAL_FONT_FAMILY

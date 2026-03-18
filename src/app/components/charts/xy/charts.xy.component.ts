@@ -276,6 +276,7 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
 
     return {
       animation: this.useAnimations === true,
+      backgroundColor: 'transparent',
       textStyle: {
         color: textColor,
         fontFamily: ECHARTS_GLOBAL_FONT_FAMILY

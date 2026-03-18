@@ -356,6 +356,35 @@
   font-size: 0.8rem;
 }
 
+.summary-detail-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.summary-detail-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.summary-detail-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--mat-sys-on-surface);
+}
+
+.summary-detail-value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--mat-sys-on-surface-variant);
+}
+
 .summary-help-button {
   width: 28px;
   height: 28px;

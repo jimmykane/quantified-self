@@ -98,30 +98,32 @@ function formatSummaryValue(
   });
 }
 
-function formatActivityMixSummary(
+function buildActivityMixDetails(
   response: AiInsightsOkResponse,
   locale: string | undefined,
-): string | null {
+): Pick<InsightSummaryCard, 'detailRows' | 'metaFooter'> {
   const activityMix = response.summary.activityMix;
   if (!activityMix?.topActivityTypes.length) {
-    return null;
+    return {};
   }
 
   const shouldShowMix = response.query.activityTypeGroups.length > 0
     || response.query.activityTypes.length !== 1
     || activityMix.topActivityTypes.length > 1;
   if (!shouldShowMix) {
-    return null;
+    return {};
   }
 
   const numberFormat = new Intl.NumberFormat(locale || undefined);
-  const topTypesText = activityMix.topActivityTypes
-    .map(entry => `${entry.activityType} ${numberFormat.format(entry.eventCount)}`)
-    .join(' • ');
-
-  return activityMix.remainingActivityTypeCount > 0
-    ? `${topTypesText} • +${numberFormat.format(activityMix.remainingActivityTypeCount)} more`
-    : topTypesText;
+  return {
+    detailRows: activityMix.topActivityTypes.map(entry => ({
+      label: entry.activityType,
+      value: numberFormat.format(entry.eventCount),
+    })),
+    metaFooter: activityMix.remainingActivityTypeCount > 0
+      ? `+${numberFormat.format(activityMix.remainingActivityTypeCount)} more`
+      : undefined,
+  };
 }
 
 function resolveCoveragePeriodLabel(timeInterval: TimeIntervals, count: number): string {
@@ -197,6 +199,11 @@ interface InsightSummaryCard {
   label: string;
   value: string;
   meta?: string;
+  detailRows?: Array<{
+    label: string;
+    value: string;
+  }>;
+  metaFooter?: string;
   helpText?: string;
 }
 
@@ -359,7 +366,7 @@ export class AiInsightsPageComponent {
       {
         label: 'Activities',
         value: new Intl.NumberFormat(locale || undefined).format(response.summary.matchedEventCount),
-        meta: formatActivityMixSummary(response, locale) || undefined,
+        ...buildActivityMixDetails(response, locale),
       },
     ];
 

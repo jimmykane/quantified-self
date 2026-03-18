@@ -203,6 +203,19 @@
                         }
                       </div>
                       <p class="summary-value">{{ summaryCard.value }}</p>
+                      @if (summaryCard.detailRows?.length) {
+                        <div class="summary-detail-list">
+                          @for (detailRow of summaryCard.detailRows; track detailRow.label) {
+                            <div class="summary-detail-row">
+                              <span class="summary-detail-label">{{ detailRow.label }}</span>
+                              <span class="summary-detail-value">{{ detailRow.value }}</span>
+                            </div>
+                          }
+                        </div>
+                      }
+                      @if (summaryCard.metaFooter) {
+                        <p class="summary-meta">{{ summaryCard.metaFooter }}</p>
+                      }
                       @if (summaryCard.meta) {
                         <p class="summary-meta">{{ summaryCard.meta }}</p>
                       }

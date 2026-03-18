@@ -220,6 +220,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
 
     return {
       animation: this.useAnimations === true,
+      backgroundColor: 'transparent',
       textStyle: {
         color: textColor,
         fontFamily: "'Barlow Condensed', sans-serif"

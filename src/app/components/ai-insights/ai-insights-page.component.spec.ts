@@ -593,9 +593,12 @@ describe('AiInsightsPageComponent', () => {
     expect(subtitle?.textContent).toContain('Surfing');
     expect(subtitle?.textContent).toContain('Kitesurfing');
     expect(subtitle?.textContent).toContain('+6 more');
-    expect(activitiesCard?.textContent).toContain('Rowing 5');
-    expect(activitiesCard?.textContent).toContain('Surfing 4');
-    expect(activitiesCard?.textContent).toContain('Kitesurfing 2');
+    expect(activitiesCard?.textContent).toContain('Rowing');
+    expect(activitiesCard?.textContent).toContain('5');
+    expect(activitiesCard?.textContent).toContain('Surfing');
+    expect(activitiesCard?.textContent).toContain('4');
+    expect(activitiesCard?.textContent).toContain('Kitesurfing');
+    expect(activitiesCard?.textContent).toContain('2');
     expect(activitiesCard?.textContent).toContain('+1 more');
   });
 
