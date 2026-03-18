@@ -2,16 +2,19 @@ import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import {
   ActivityTypes,
+  ChartDataCategoryTypes,
   ActivityTypesHelper,
   EventImporterJSON,
   EventJSONInterface,
   EventInterface,
+  TimeIntervals,
 } from '@sports-alliance/sports-lib';
 
 import type { NormalizedInsightQuery } from '../../../../shared/ai-insights.types';
 import type { FirestoreEventJSON } from '../../../../shared/app-event.interface';
 import {
   buildEventStatAggregation,
+  resolveAggregationCategoryKey,
 } from '../../../../shared/event-stat-aggregation';
 import type { EventStatAggregationResult } from '../../../../shared/event-stat-aggregation.types';
 
@@ -41,6 +44,10 @@ interface ExecuteQueryDependencies {
 export interface AiInsightsExecutionResult {
   aggregation: EventStatAggregationResult;
   matchedEventsCount: number;
+  matchedActivityTypeCounts: Array<{
+    activityType: string;
+    eventCount: number;
+  }>;
 }
 
 const defaultExecuteQueryDependencies: ExecuteQueryDependencies = {
@@ -195,6 +202,35 @@ function hasRequestedStat(event: EventInterface, dataType: string): boolean {
   return typeof rawValue === 'number' && Number.isFinite(rawValue);
 }
 
+function buildMatchedActivityTypeCounts(
+  events: EventInterface[],
+  log: ExecuteQueryDependencies['logger'],
+): Array<{ activityType: string; eventCount: number }> {
+  const counts = new Map<string, number>();
+
+  for (const event of events) {
+    const activityKey = resolveAggregationCategoryKey(
+      event,
+      ChartDataCategoryTypes.ActivityType,
+      TimeIntervals.Daily,
+      log,
+    );
+
+    if (typeof activityKey !== 'string' || !activityKey.trim()) {
+      continue;
+    }
+
+    counts.set(activityKey, (counts.get(activityKey) || 0) + 1);
+  }
+
+  return [...counts.entries()]
+    .map(([activityType, eventCount]) => ({ activityType, eventCount }))
+    .sort((left, right) => (
+      right.eventCount - left.eventCount
+      || left.activityType.localeCompare(right.activityType)
+    ));
+}
+
 function summarizeError(error: unknown): {
   errorName?: string;
   errorMessage?: string;
@@ -335,5 +371,6 @@ export async function executeAiInsightsQuery(
       requestedTimeInterval: query.requestedTimeInterval,
     }, dependencies.logger),
     matchedEventsCount: matchedEvents.length,
+    matchedActivityTypeCounts: buildMatchedActivityTypeCounts(matchedEvents, dependencies.logger),
   };
 }

@@ -114,6 +114,20 @@ const summary = {
     aggregateValue: 123,
     totalCount: 2,
   },
+  activityMix: {
+    topActivityTypes: [
+      {
+        activityType: ActivityTypes.Cycling,
+        eventCount: 2,
+      },
+    ],
+    remainingActivityTypeCount: 0,
+  },
+  bucketCoverage: {
+    nonEmptyBucketCount: 1,
+    totalBucketCount: 3,
+  },
+  trend: null,
 };
 
 describe('aiInsights callable', () => {
@@ -133,6 +147,12 @@ describe('aiInsights callable', () => {
     });
     hoisted.executeAiInsightsQuery.mockResolvedValue({
       matchedEventsCount: 2,
+      matchedActivityTypeCounts: [
+        {
+          activityType: ActivityTypes.Cycling,
+          eventCount: 2,
+        },
+      ],
       aggregation: {
         dataType: 'Distance',
         valueType: ChartDataValueTypes.Total,
@@ -222,6 +242,7 @@ describe('aiInsights callable', () => {
   it('returns an empty response when no aggregation buckets exist', async () => {
     hoisted.executeAiInsightsQuery.mockResolvedValue({
       matchedEventsCount: 0,
+      matchedActivityTypeCounts: [],
       aggregation: {
         dataType: 'Distance',
         valueType: ChartDataValueTypes.Total,
@@ -249,6 +270,12 @@ describe('aiInsights callable', () => {
         peakBucket: null,
         lowestBucket: null,
         latestBucket: null,
+        activityMix: null,
+        bucketCoverage: {
+          nonEmptyBucketCount: 0,
+          totalBucketCount: 90,
+        },
+        trend: null,
       },
       presentation: expect.objectContaining({
         emptyState: 'No matching events were found for this insight in the requested range.',
@@ -259,6 +286,12 @@ describe('aiInsights callable', () => {
   it('derives the lowest bucket from aggregation results', async () => {
     hoisted.executeAiInsightsQuery.mockResolvedValue({
       matchedEventsCount: 3,
+      matchedActivityTypeCounts: [
+        {
+          activityType: ActivityTypes.Cycling,
+          eventCount: 3,
+        },
+      ],
       aggregation: {
         dataType: 'Distance',
         valueType: ChartDataValueTypes.Total,

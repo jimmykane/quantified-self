@@ -74,12 +74,35 @@ export const AiInsightSummaryBucketSchema = z.object({
   totalCount: z.number().int().nonnegative(),
 });
 
+export const AiInsightSummaryActivityTypeCountSchema = z.object({
+  activityType: z.string().min(1),
+  eventCount: z.number().int().nonnegative(),
+});
+
+export const AiInsightSummaryActivityMixSchema = z.object({
+  topActivityTypes: z.array(AiInsightSummaryActivityTypeCountSchema),
+  remainingActivityTypeCount: z.number().int().nonnegative(),
+});
+
+export const AiInsightSummaryCoverageSchema = z.object({
+  nonEmptyBucketCount: z.number().int().nonnegative(),
+  totalBucketCount: z.number().int().nonnegative(),
+});
+
+export const AiInsightSummaryTrendSchema = z.object({
+  previousBucket: AiInsightSummaryBucketSchema,
+  deltaAggregateValue: z.number(),
+});
+
 export const AiInsightSummarySchema: z.ZodType<AiInsightSummary> = z.object({
   matchedEventCount: z.number().int().nonnegative(),
   overallAggregateValue: z.number().nullable(),
   peakBucket: AiInsightSummaryBucketSchema.nullable(),
   lowestBucket: AiInsightSummaryBucketSchema.nullable(),
   latestBucket: AiInsightSummaryBucketSchema.nullable(),
+  activityMix: AiInsightSummaryActivityMixSchema.nullable(),
+  bucketCoverage: AiInsightSummaryCoverageSchema.nullable(),
+  trend: AiInsightSummaryTrendSchema.nullable(),
 });
 
 export const AiInsightsUnsupportedReasonCodeSchema = z.enum([

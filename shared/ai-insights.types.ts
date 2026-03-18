@@ -45,12 +45,35 @@ export interface AiInsightSummaryBucket {
   totalCount: number;
 }
 
+export interface AiInsightSummaryActivityTypeCount {
+  activityType: string;
+  eventCount: number;
+}
+
+export interface AiInsightSummaryActivityMix {
+  topActivityTypes: AiInsightSummaryActivityTypeCount[];
+  remainingActivityTypeCount: number;
+}
+
+export interface AiInsightSummaryCoverage {
+  nonEmptyBucketCount: number;
+  totalBucketCount: number;
+}
+
+export interface AiInsightSummaryTrend {
+  previousBucket: AiInsightSummaryBucket;
+  deltaAggregateValue: number;
+}
+
 export interface AiInsightSummary {
   matchedEventCount: number;
   overallAggregateValue: number | null;
   peakBucket: AiInsightSummaryBucket | null;
   lowestBucket: AiInsightSummaryBucket | null;
   latestBucket: AiInsightSummaryBucket | null;
+  activityMix: AiInsightSummaryActivityMix | null;
+  bucketCoverage: AiInsightSummaryCoverage | null;
+  trend: AiInsightSummaryTrend | null;
 }
 
 export type AiInsightsUnsupportedReasonCode =

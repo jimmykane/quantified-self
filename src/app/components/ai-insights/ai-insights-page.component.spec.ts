@@ -23,11 +23,13 @@ import type {
   AiInsightsUnsupportedResponse,
 } from '@shared/ai-insights.types';
 import { formatUnitAwareDataValue, normalizeUserUnitSettings } from '@shared/unit-aware-display';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AiInsightsService } from '../../services/ai-insights.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { AiInsightsChartComponent } from './ai-insights-chart.component';
 import { AiInsightsPageComponent } from './ai-insights-page.component';
+import { AI_INSIGHTS_SUGGESTED_PROMPTS } from './ai-insights.prompts';
 
 @Component({
   selector: 'app-ai-insights-chart',
@@ -97,6 +99,25 @@ function buildOkResponse(): AiInsightsOkResponse {
         aggregateValue: 86,
         totalCount: 4,
       },
+      activityMix: {
+        topActivityTypes: [
+          { activityType: ActivityTypes.Cycling, eventCount: 4 },
+        ],
+        remainingActivityTypeCount: 0,
+      },
+      bucketCoverage: {
+        nonEmptyBucketCount: 1,
+        totalBucketCount: 4,
+      },
+      trend: {
+        previousBucket: {
+          bucketKey: '2025-12',
+          time: Date.UTC(2025, 11, 1),
+          aggregateValue: 79,
+          totalCount: 2,
+        },
+        deltaAggregateValue: 7,
+      },
     },
     presentation: {
       title: 'Average cadence over time for Cycling',
@@ -137,6 +158,9 @@ function buildEmptyResponse(): AiInsightsEmptyResponse {
       peakBucket: null,
       lowestBucket: null,
       latestBucket: null,
+      activityMix: null,
+      bucketCoverage: null,
+      trend: null,
     },
     presentation: {
       title: 'Average cadence over time for Cycling',
@@ -209,6 +233,25 @@ function buildPaceResponse(): AiInsightsOkResponse {
         aggregateValue: 473,
         totalCount: 8,
       },
+      activityMix: {
+        topActivityTypes: [
+          { activityType: ActivityTypes.Running, eventCount: 18 },
+        ],
+        remainingActivityTypeCount: 0,
+      },
+      bucketCoverage: {
+        nonEmptyBucketCount: 2,
+        totalBucketCount: 25,
+      },
+      trend: {
+        previousBucket: {
+          bucketKey: '2024-01',
+          time: Date.UTC(2024, 0, 1),
+          aggregateValue: 630,
+          totalCount: 10,
+        },
+        deltaAggregateValue: -157,
+      },
     },
     presentation: {
       title: 'Average pace over time for Running',
@@ -260,6 +303,16 @@ function buildGroupResponse(): AiInsightsOkResponse {
       peakBucket: null,
       lowestBucket: null,
       latestBucket: null,
+      activityMix: {
+        topActivityTypes: [
+          { activityType: ActivityTypes.Rowing, eventCount: 5 },
+          { activityType: ActivityTypes.Surfing, eventCount: 4 },
+          { activityType: ActivityTypes.Kitesurfing, eventCount: 2 },
+        ],
+        remainingActivityTypeCount: 1,
+      },
+      bucketCoverage: null,
+      trend: null,
     },
     presentation: {
       title: 'Average pace over time for Water Sports',
@@ -276,6 +329,9 @@ describe('AiInsightsPageComponent', () => {
   const themeServiceMock = {
     appTheme: signal(AppThemes.Normal),
   };
+  const analyticsServiceMock = {
+    logEvent: vi.fn(),
+  };
   const userSettingsQueryServiceMock = {
     chartSettings: signal({ useAnimations: true }),
     unitSettings: signal(normalizeUserUnitSettings({})),
@@ -287,6 +343,7 @@ describe('AiInsightsPageComponent', () => {
   beforeEach(async () => {
     aiInsightsServiceMock.runInsight.mockReset();
     aiInsightsServiceMock.getErrorMessage.mockClear();
+    analyticsServiceMock.logEvent.mockReset();
 
     await TestBed.configureTestingModule({
       imports: [
@@ -295,6 +352,7 @@ describe('AiInsightsPageComponent', () => {
         NoopAnimationsModule,
       ],
       providers: [
+        { provide: AppAnalyticsService, useValue: analyticsServiceMock },
         { provide: AiInsightsService, useValue: aiInsightsServiceMock },
         { provide: AppThemeService, useValue: themeServiceMock },
         { provide: AppUserSettingsQueryService, useValue: userSettingsQueryServiceMock },
@@ -317,10 +375,38 @@ describe('AiInsightsPageComponent', () => {
 
   it('should render the hero title and default suggested prompts', () => {
     const title = fixture.debugElement.query(By.css('.hero-title'))?.nativeElement as HTMLElement | undefined;
-    const suggestionButtons = fixture.debugElement.queryAll(By.css('.suggestion-button'));
+    const suggestionTrigger = fixture.debugElement.query(By.css('.suggestion-menu-trigger'))?.nativeElement as HTMLButtonElement | undefined;
+    const heroPromptRotator = fixture.debugElement.query(By.css('.hero-prompt-rotator'))?.nativeElement as HTMLButtonElement | undefined;
 
     expect(title?.textContent).toContain('Ask a focused question about your training data.');
-    expect(suggestionButtons.length).toBeGreaterThanOrEqual(4);
+    expect(suggestionTrigger?.getAttribute('aria-label')).toBe('Suggested prompts');
+    expect(component.suggestedPrompts()).toEqual([...AI_INSIGHTS_SUGGESTED_PROMPTS]);
+    expect(heroPromptRotator?.getAttribute('aria-label')).toContain(AI_INSIGHTS_SUGGESTED_PROMPTS[0]);
+  });
+
+  it('should submit the active hero prompt when clicked', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue(buildOkResponse());
+    const heroPrompt = 'Show my total distance by activity type this year';
+    component.activeHeroPrompt.set(heroPrompt);
+    component.typedHeroPrompt.set(heroPrompt);
+    fixture.detectChanges();
+
+    const heroPromptRotator = fixture.debugElement.query(By.css('.hero-prompt-rotator'))?.nativeElement as HTMLButtonElement | undefined;
+
+    heroPromptRotator?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(component.promptControl.getRawValue()).toBe(heroPrompt);
+    expect(aiInsightsServiceMock.runInsight).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: heroPrompt,
+    }));
+    expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('ai_insights_action', {
+      method: 'hero_prompt_click',
+      prompt_index: 1,
+      prompt_length: heroPrompt.length,
+      prompt_source: 'default',
+    });
   });
 
   it('should submit the prompt and render the result narrative and chart', async () => {
@@ -336,6 +422,10 @@ describe('AiInsightsPageComponent', () => {
 
     expect(submitEvent.preventDefault).toHaveBeenCalledTimes(1);
     expect(aiInsightsServiceMock.runInsight).toHaveBeenCalledTimes(1);
+    expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('ai_insights_action', {
+      method: 'ask_button_click',
+      prompt_length: 'Tell me my avg cadence for cycling the last 3 months'.length,
+    });
     expect(aiInsightsServiceMock.runInsight.mock.calls[0][0]).toMatchObject({
       prompt: 'Tell me my avg cadence for cycling the last 3 months',
       clientTimezone: expect.any(String),
@@ -360,9 +450,13 @@ describe('AiInsightsPageComponent', () => {
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Highest period'))).toBe(true);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Lowest period'))).toBe(true);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Latest period with data'))).toBe(true);
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Coverage'))).toBe(true);
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('1 of 4 months'))).toBe(true);
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Trend'))).toBe(true);
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('+7 rpm'))).toBe(true);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Peak bucket'))).toBe(false);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Latest bucket'))).toBe(false);
-    expect(summaryHelpButtons).toHaveLength(3);
+    expect(summaryHelpButtons).toHaveLength(5);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes(expectedOverall ?? ''))).toBe(true);
   });
 
@@ -373,10 +467,14 @@ describe('AiInsightsPageComponent', () => {
     fixture.detectChanges();
 
     const unsupportedTitle = fixture.debugElement.query(By.css('.state-panel-warning .state-title'))?.nativeElement as HTMLElement | undefined;
-    const suggestionButtons = fixture.debugElement.queryAll(By.css('.suggestion-button'));
 
     expect(unsupportedTitle?.textContent).toContain('Unsupported request');
-    expect(suggestionButtons.some(node => node.nativeElement.textContent.includes('Show my total distance by activity type this year'))).toBe(true);
+    expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('ai_insights_action', {
+      method: 'suggested_prompt_select',
+      prompt_length: 'Show cadence splits for cycling'.length,
+      prompt_source: 'default',
+    });
+    expect(component.suggestedPrompts()).toContain('Show my total distance by activity type this year');
   });
 
   it('should use pace-specific summary labels for inverse metrics', async () => {
@@ -390,6 +488,10 @@ describe('AiInsightsPageComponent', () => {
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Slowest period'))).toBe(true);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Fastest period'))).toBe(true);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Latest period with data'))).toBe(true);
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Coverage'))).toBe(true);
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('2 of 25 months'))).toBe(true);
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Trend'))).toBe(true);
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('02:37 min/km faster'))).toBe(true);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Peak period'))).toBe(false);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Lowest period'))).toBe(false);
   });
@@ -401,12 +503,18 @@ describe('AiInsightsPageComponent', () => {
     fixture.detectChanges();
 
     const subtitle = fixture.debugElement.query(By.css('.result-subtitle'))?.nativeElement as HTMLElement | undefined;
+    const summaryCards = fixture.debugElement.queryAll(By.css('.summary-card'));
+    const activitiesCard = summaryCards.find((card) => card.nativeElement.textContent.includes('Activities'))?.nativeElement as HTMLElement | undefined;
 
     expect(subtitle?.textContent).toContain('Water Sports');
     expect(subtitle?.textContent).toContain('Rowing');
     expect(subtitle?.textContent).toContain('Surfing');
     expect(subtitle?.textContent).toContain('Kitesurfing');
     expect(subtitle?.textContent).toContain('+6 more');
+    expect(activitiesCard?.textContent).toContain('Rowing 5');
+    expect(activitiesCard?.textContent).toContain('Surfing 4');
+    expect(activitiesCard?.textContent).toContain('Kitesurfing 2');
+    expect(activitiesCard?.textContent).toContain('+1 more');
   });
 
   it('should render the empty state without the chart', async () => {

@@ -18,6 +18,16 @@ describe('metric-catalog', () => {
     expect(resolveInsightMetric('gap')?.key).toBe('grade_adjusted_pace');
     expect(resolveInsightMetric('effort pace')?.key).toBe('effort_pace');
     expect(resolveInsightMetric('swim pace')?.key).toBe('swim_pace');
+    expect(resolveInsightMetric('tss')?.key).toBe('training_stress_score');
+    expect(resolveInsightMetric('normalized power')?.key).toBe('normalized_power');
+    expect(resolveInsightMetric('intensity factor')?.key).toBe('intensity_factor');
+    expect(resolveInsightMetric('power work')?.key).toBe('power_work');
+    expect(resolveInsightMetric('vo2 max')?.key).toBe('vo2_max');
+    expect(resolveInsightMetric('epoc')?.key).toBe('epoc');
+    expect(resolveInsightMetric('avg vam')?.key).toBe('avg_vam');
+    expect(resolveInsightMetric('aerobic training effect')?.key).toBe('aerobic_training_effect');
+    expect(resolveInsightMetric('anaerobic training effect')?.key).toBe('anaerobic_training_effect');
+    expect(resolveInsightMetric('recovery time')?.key).toBe('recovery_time');
   });
 
   it('resolves family metrics to the correct concrete max data type', () => {
@@ -68,11 +78,20 @@ describe('metric-catalog', () => {
         metric: expect.objectContaining({ key: 'swim_pace' }),
       }),
     );
+    expect(findInsightMetricAliasMatch('Show my average anaerobic training effect this month')).toEqual(
+      expect.objectContaining({
+        alias: 'average anaerobic training effect',
+        metric: expect.objectContaining({ key: 'anaerobic_training_effect' }),
+      }),
+    );
   });
 
   it('exposes the supported aggregation set for each metric', () => {
     expect(isAggregationAllowedForMetric('distance', ChartDataValueTypes.Total)).toBe(true);
     expect(isAggregationAllowedForMetric('cadence', ChartDataValueTypes.Total)).toBe(false);
+    expect(isAggregationAllowedForMetric('training_stress_score', ChartDataValueTypes.Total)).toBe(true);
+    expect(isAggregationAllowedForMetric('normalized_power', ChartDataValueTypes.Total)).toBe(false);
+    expect(isAggregationAllowedForMetric('recovery_time', ChartDataValueTypes.Maximum)).toBe(true);
   });
 
   it('can retrieve canonical metric definitions by key', () => {

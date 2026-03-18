@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, NgZone, computed, effect, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterModule } from '@angular/router';
@@ -19,20 +19,20 @@ import type {
   NormalizedInsightDateRange,
 } from '@shared/ai-insights.types';
 import { resolveAiInsightsActivityFilterSummary } from '@shared/ai-insights-activity-filter';
-import { resolveMetricSummarySemantics } from '@shared/metric-semantics';
+import { resolveMetricSemantics, resolveMetricSummarySemantics } from '@shared/metric-semantics';
 import { formatUnitAwareDataValue, normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { MaterialModule } from '../../modules/material.module';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { AiInsightsService } from '../../services/ai-insights.service';
 import { AiInsightsChartComponent } from './ai-insights-chart.component';
+import { AI_INSIGHTS_SUGGESTED_PROMPTS } from './ai-insights.prompts';
 
-const DEFAULT_SUGGESTED_PROMPTS = [
-  'Tell me my avg cadence for cycling the last 3 months',
-  'Show my total distance by activity type this year',
-  'What was my highest average heart rate last month',
-  'Show my average pace for running over the last 90 days',
-];
+const HERO_PROMPT_TYPING_DELAY_MS = 38;
+const HERO_PROMPT_DELETING_DELAY_MS = 20;
+const HERO_PROMPT_HOLD_DELAY_MS = 1900;
+const HERO_PROMPT_BETWEEN_PROMPTS_DELAY_MS = 280;
 
 function getClientTimeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
@@ -86,6 +86,101 @@ function formatSummaryValue(
   });
 }
 
+function formatActivityMixSummary(
+  response: AiInsightsOkResponse,
+  locale: string | undefined,
+): string | null {
+  const activityMix = response.summary.activityMix;
+  if (!activityMix?.topActivityTypes.length) {
+    return null;
+  }
+
+  const shouldShowMix = response.query.activityTypeGroups.length > 0
+    || response.query.activityTypes.length !== 1
+    || activityMix.topActivityTypes.length > 1;
+  if (!shouldShowMix) {
+    return null;
+  }
+
+  const numberFormat = new Intl.NumberFormat(locale || undefined);
+  const topTypesText = activityMix.topActivityTypes
+    .map(entry => `${entry.activityType} ${numberFormat.format(entry.eventCount)}`)
+    .join(' • ');
+
+  return activityMix.remainingActivityTypeCount > 0
+    ? `${topTypesText} • +${numberFormat.format(activityMix.remainingActivityTypeCount)} more`
+    : topTypesText;
+}
+
+function resolveCoveragePeriodLabel(timeInterval: TimeIntervals, count: number): string {
+  const singularLabel = (() => {
+    switch (timeInterval) {
+      case TimeIntervals.Hourly:
+        return 'hour';
+      case TimeIntervals.Daily:
+        return 'day';
+      case TimeIntervals.Weekly:
+      case TimeIntervals.BiWeekly:
+        return 'week';
+      case TimeIntervals.Monthly:
+        return 'month';
+      case TimeIntervals.Quarterly:
+        return 'quarter';
+      case TimeIntervals.Semesterly:
+        return 'semester';
+      case TimeIntervals.Yearly:
+        return 'year';
+      default:
+        return 'period';
+    }
+  })();
+
+  return count === 1 ? singularLabel : `${singularLabel}s`;
+}
+
+function formatCoverageValue(response: AiInsightsOkResponse): string | null {
+  const coverage = response.summary.bucketCoverage;
+  if (!coverage) {
+    return null;
+  }
+
+  const periodLabel = resolveCoveragePeriodLabel(
+    response.aggregation.resolvedTimeInterval,
+    coverage.totalBucketCount,
+  );
+  return `${coverage.nonEmptyBucketCount} of ${coverage.totalBucketCount} ${periodLabel}`;
+}
+
+function formatTrendValue(
+  response: AiInsightsOkResponse,
+  unitSettings: UserUnitSettingsInterface,
+): string | null {
+  const trend = response.summary.trend;
+  if (!trend || !Number.isFinite(trend.deltaAggregateValue)) {
+    return null;
+  }
+
+  if (trend.deltaAggregateValue === 0) {
+    return 'No change';
+  }
+
+  const absoluteDisplayValue = formatSummaryValue(
+    response.query.dataType,
+    Math.abs(trend.deltaAggregateValue),
+    unitSettings,
+  );
+  if (!absoluteDisplayValue) {
+    return null;
+  }
+
+  const semantics = resolveMetricSemantics(response.query.dataType);
+  if (semantics.direction === 'inverse') {
+    return `${absoluteDisplayValue} ${trend.deltaAggregateValue < 0 ? 'faster' : 'slower'}`;
+  }
+
+  return `${trend.deltaAggregateValue > 0 ? '+' : '-'}${absoluteDisplayValue}`;
+}
+
 interface InsightSummaryCard {
   label: string;
   value: string;
@@ -108,9 +203,11 @@ interface InsightSummaryCard {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AiInsightsPageComponent {
+  private readonly analyticsService = inject(AppAnalyticsService);
   private readonly aiInsightsService = inject(AiInsightsService);
   private readonly themeService = inject(AppThemeService);
   private readonly userSettingsQueryService = inject(AppUserSettingsQueryService);
+  private readonly ngZone = inject(NgZone);
 
   readonly promptControl = new FormControl('', {
     nonNullable: true,
@@ -142,12 +239,80 @@ export class AiInsightsPageComponent {
     const response = this.response();
     return response?.status === 'unsupported' ? response : null;
   });
+  readonly activeHeroPrompt = signal(AI_INSIGHTS_SUGGESTED_PROMPTS[0] ?? '');
+  readonly typedHeroPrompt = signal((AI_INSIGHTS_SUGGESTED_PROMPTS[0] ?? '').slice(0, 1));
   readonly suggestedPrompts = computed(() => {
     const unsupportedResponse = this.unsupportedResponse();
     if (unsupportedResponse?.suggestedPrompts?.length) {
       return unsupportedResponse.suggestedPrompts;
     }
-    return DEFAULT_SUGGESTED_PROMPTS;
+    return AI_INSIGHTS_SUGGESTED_PROMPTS;
+  });
+  private readonly heroPromptAnimation = effect((onCleanup) => {
+    const prompts = this.suggestedPrompts().filter(prompt => prompt.trim().length > 0);
+    if (!prompts.length) {
+      this.activeHeroPrompt.set('');
+      this.typedHeroPrompt.set('');
+      return;
+    }
+
+    let promptIndex = 0;
+    let charIndex = Math.min(1, prompts[0].length);
+    let deleting = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const applyPromptFrame = (nextPromptIndex: number, nextCharIndex: number): void => {
+      const prompt = prompts[nextPromptIndex] ?? '';
+      promptIndex = nextPromptIndex;
+      charIndex = nextCharIndex;
+      this.activeHeroPrompt.set(prompt);
+      this.typedHeroPrompt.set(prompt.slice(0, nextCharIndex));
+    };
+
+    const schedule = (delay: number): void => {
+      this.ngZone.runOutsideAngular(() => {
+        timer = setTimeout(tick, delay);
+      });
+    };
+
+    const tick = (): void => {
+      const prompt = prompts[promptIndex] ?? '';
+      if (!prompt) {
+        return;
+      }
+
+      if (!deleting) {
+        if (charIndex < prompt.length) {
+          applyPromptFrame(promptIndex, charIndex + 1);
+          schedule(HERO_PROMPT_TYPING_DELAY_MS);
+          return;
+        }
+
+        deleting = true;
+        schedule(HERO_PROMPT_HOLD_DELAY_MS);
+        return;
+      }
+
+      if (charIndex > 0) {
+        applyPromptFrame(promptIndex, charIndex - 1);
+        schedule(HERO_PROMPT_DELETING_DELAY_MS);
+        return;
+      }
+
+      deleting = false;
+      const nextPromptIndex = (promptIndex + 1) % prompts.length;
+      applyPromptFrame(nextPromptIndex, Math.min(1, prompts[nextPromptIndex]?.length ?? 0));
+      schedule(HERO_PROMPT_BETWEEN_PROMPTS_DELAY_MS);
+    };
+
+    applyPromptFrame(0, charIndex);
+    schedule(HERO_PROMPT_TYPING_DELAY_MS);
+
+    onCleanup(() => {
+      if (timer !== null) {
+        clearTimeout(timer);
+      }
+    });
   });
   readonly resultSubtitle = computed(() => {
     const response = this.okResponse() || this.emptyResponse();
@@ -174,6 +339,7 @@ export class AiInsightsPageComponent {
       {
         label: 'Activities',
         value: new Intl.NumberFormat(locale || undefined).format(response.summary.matchedEventCount),
+        meta: formatActivityMixSummary(response, locale) || undefined,
       },
     ];
 
@@ -237,11 +403,35 @@ export class AiInsightsPageComponent {
       }
     }
 
+    const coverageValue = formatCoverageValue(response);
+    if (coverageValue) {
+      cards.push({
+        label: 'Coverage',
+        value: coverageValue,
+        helpText: 'How many chart periods in the requested range contained matching data.',
+      });
+    }
+
+    const trendValue = formatTrendValue(response, unitSettings);
+    if (trendValue && response.summary.trend) {
+      cards.push({
+        label: 'Trend',
+        value: trendValue,
+        meta: formatBucketMeta(response, response.summary.trend.previousBucket, locale)
+          ? `vs ${formatBucketMeta(response, response.summary.trend.previousBucket, locale)}`
+          : undefined,
+        helpText: 'Difference between the latest period with data and the previous period with data.',
+      });
+    }
+
     return cards;
   });
 
   onFormSubmit(event: SubmitEvent | Event): void {
     event.preventDefault();
+    this.logAiInsightsAction('ask_button_click', {
+      promptLength: this.promptControl.getRawValue().trim().length,
+    });
     void this.submitPrompt();
   }
 
@@ -270,9 +460,65 @@ export class AiInsightsPageComponent {
     }
   }
 
-  async applySuggestedPrompt(prompt: string): Promise<void> {
+  async applySuggestedPrompt(prompt: string, options: { logAnalytics?: boolean } = {}): Promise<void> {
+    if (options.logAnalytics !== false) {
+      const promptAnalytics = this.resolvePromptAnalytics(prompt);
+      this.logAiInsightsAction('suggested_prompt_select', {
+        promptIndex: promptAnalytics.promptIndex,
+        promptSource: promptAnalytics.promptSource,
+        promptLength: prompt.trim().length,
+      });
+    }
     this.promptControl.setValue(prompt);
     await this.submitPrompt(prompt);
+  }
+
+  async onHeroPromptClick(): Promise<void> {
+    const prompt = this.activeHeroPrompt().trim();
+    if (!prompt || this.isSubmitting()) {
+      return;
+    }
+
+    const promptAnalytics = this.resolvePromptAnalytics(prompt);
+    this.logAiInsightsAction('hero_prompt_click', {
+      promptIndex: promptAnalytics.promptIndex,
+      promptSource: promptAnalytics.promptSource,
+      promptLength: prompt.length,
+    });
+    await this.applySuggestedPrompt(prompt, { logAnalytics: false });
+  }
+
+  private logAiInsightsAction(
+    method: string,
+    params: {
+      promptIndex?: number;
+      promptLength?: number;
+      promptSource?: 'default' | 'unsupported';
+    } = {},
+  ): void {
+    const eventParams = Object.fromEntries(
+      Object.entries({
+        method,
+        prompt_index: params.promptIndex,
+        prompt_length: params.promptLength,
+        prompt_source: params.promptSource,
+      }).filter(([, value]) => value !== undefined),
+    );
+
+    this.analyticsService.logEvent('ai_insights_action', eventParams);
+  }
+
+  private resolvePromptAnalytics(prompt: string): {
+    promptIndex: number | undefined;
+    promptSource: 'default' | 'unsupported';
+  } {
+    const prompts = [...this.suggestedPrompts()] as string[];
+    const promptIndex = prompts.indexOf(prompt);
+
+    return {
+      promptIndex: promptIndex >= 0 ? promptIndex : undefined,
+      promptSource: this.unsupportedResponse()?.suggestedPrompts?.length ? 'unsupported' : 'default',
+    };
   }
 
   private buildInsightRequest(prompt: string): AiInsightsRequest {

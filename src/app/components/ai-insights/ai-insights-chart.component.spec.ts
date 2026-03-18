@@ -120,6 +120,19 @@ function buildResponse(chartType: ChartTypes, categoryType = ChartDataCategoryTy
         aggregateValue: 84.5,
         totalCount: 3,
       },
+      activityMix: {
+        topActivityTypes: [
+          { activityType: ActivityTypes.Cycling, eventCount: 3 },
+        ],
+        remainingActivityTypeCount: 0,
+      },
+      bucketCoverage: categoryType === ChartDataCategoryTypes.DateType
+        ? {
+          nonEmptyBucketCount: 1,
+          totalBucketCount: 4,
+        }
+        : null,
+      trend: null,
     },
     presentation: {
       title: 'Average cadence over time for Cycling',

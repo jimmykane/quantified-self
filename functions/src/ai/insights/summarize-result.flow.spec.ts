@@ -44,6 +44,20 @@ const paceSummary = {
     aggregateValue: 422.3478623928474,
     totalCount: 5,
   },
+  activityMix: null,
+  bucketCoverage: {
+    nonEmptyBucketCount: 1,
+    totalBucketCount: 6,
+  },
+  trend: {
+    previousBucket: {
+      bucketKey: '2026-02',
+      time: Date.parse('2026-02-01T00:00:00.000Z'),
+      aggregateValue: 415,
+      totalCount: 4,
+    },
+    deltaAggregateValue: 7.347862392847379,
+  },
 };
 
 const paceInput = {

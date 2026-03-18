@@ -49,6 +49,9 @@ describe('AiInsightsService', () => {
       peakBucket: null,
       lowestBucket: null,
       latestBucket: null,
+      activityMix: null,
+      bucketCoverage: null,
+      trend: null,
     },
     presentation: {
       title: 'Average cadence over time for Cycling',

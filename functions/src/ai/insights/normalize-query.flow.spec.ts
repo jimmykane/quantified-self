@@ -5,12 +5,17 @@ import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   ChartTypes,
+  DataAerobicTrainingEffect,
+  DataAnaerobicTrainingEffect,
   DataCadenceAvg,
   DataDistance,
   DataEffortPaceAvg,
   DataGradeAdjustedPaceAvg,
   DataHeartRateAvg,
   DataHeartRateMax,
+  DataPowerNormalized,
+  DataPowerTrainingStressScore,
+  DataRecoveryTime,
   DataSwimPaceAvg,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
@@ -441,6 +446,135 @@ describe('normalizeInsightQuery', () => {
     expect(result.metricKey).toBe('swim_pace');
     expect(result.query.dataType).toBe(DataSwimPaceAvg.type);
     expect(result.query.activityTypeGroups).toEqual([]);
+  });
+
+  it('normalizes total TSS over time for cycling this year', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'training stress score',
+        aggregation: 'total',
+        category: 'date',
+        requestedTimeInterval: 'auto',
+        activityTypes: ['Cycling'],
+        dateRange: {
+          kind: 'current_period',
+          unit: 'year',
+        },
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show my total TSS over time for cycling this year',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('training_stress_score');
+    expect(result.query.dataType).toBe(DataPowerTrainingStressScore.type);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Total);
+    expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Monthly);
+    expect(result.query.activityTypes).toEqual([ActivityTypes.Cycling]);
+  });
+
+  it('normalizes average normalized power for cycling this month', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'normalized power',
+        aggregation: 'average',
+        category: 'date',
+        requestedTimeInterval: 'auto',
+        activityTypes: ['Cycling'],
+        dateRange: {
+          kind: 'current_period',
+          unit: 'month',
+        },
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show my average normalized power for cycling this month',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('normalized_power');
+    expect(result.query.dataType).toBe(DataPowerNormalized.type);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Average);
+    expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Daily);
+    expect(result.query.activityTypes).toEqual([ActivityTypes.Cycling]);
+  });
+
+  it('keeps aerobic and anaerobic training effect metrics distinct', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'anaerobic training effect',
+        aggregation: 'maximum',
+        category: 'date',
+        requestedTimeInterval: 'auto',
+        activityTypes: ['Cycling'],
+        dateRange: {
+          kind: 'current_period',
+          unit: 'month',
+        },
+      }),
+    });
+
+    const anaerobicResult = await normalizeInsightQuery({
+      prompt: 'Show my highest anaerobic training effect for cycling this month',
+      clientTimezone: 'UTC',
+    });
+
+    expect(anaerobicResult.status).toBe('ok');
+    if (anaerobicResult.status !== 'ok') {
+      return;
+    }
+
+    expect(anaerobicResult.metricKey).toBe('anaerobic_training_effect');
+    expect(anaerobicResult.query.dataType).toBe(DataAnaerobicTrainingEffect.type);
+
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'recovery time',
+        aggregation: 'maximum',
+        category: 'date',
+        requestedTimeInterval: 'auto',
+        activityTypes: ['Running'],
+        dateRange: {
+          kind: 'current_period',
+          unit: 'month',
+        },
+      }),
+    });
+
+    const recoveryResult = await normalizeInsightQuery({
+      prompt: 'Show my highest recovery time for running this month',
+      clientTimezone: 'UTC',
+    });
+
+    expect(recoveryResult.status).toBe('ok');
+    if (recoveryResult.status !== 'ok') {
+      return;
+    }
+
+    expect(recoveryResult.metricKey).toBe('recovery_time');
+    expect(recoveryResult.query.dataType).toBe(DataRecoveryTime.type);
+    expect(recoveryResult.query.valueType).toBe(ChartDataValueTypes.Maximum);
   });
 
   it('uses activity type groups for non-ambiguous broad group prompts', async () => {

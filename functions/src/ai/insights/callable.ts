@@ -4,8 +4,10 @@ import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   ChartTypes,
+  TimeIntervals,
 } from '@sports-alliance/sports-lib';
 import type {
+  AiInsightSummaryActivityMix,
   AiInsightSummary,
   AiInsightPresentation,
   AiInsightsRequest,
@@ -84,6 +86,186 @@ function buildInsightPresentation(
   };
 }
 
+function startOfDay(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+function startOfWeek(date: Date): Date {
+  const weekStart = startOfDay(date);
+  const day = weekStart.getUTCDay() || 7;
+  weekStart.setUTCDate(weekStart.getUTCDate() - day + 1);
+  return weekStart;
+}
+
+function startOfMonth(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+}
+
+function startOfQuarter(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), Math.floor(date.getUTCMonth() / 3) * 3, 1));
+}
+
+function startOfSemester(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() < 6 ? 0 : 6, 1));
+}
+
+function startOfYear(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+}
+
+function alignDateToBucketStart(date: Date, timeInterval: TimeIntervals): Date {
+  switch (timeInterval) {
+    case TimeIntervals.Hourly:
+      return new Date(Date.UTC(
+        date.getUTCFullYear(),
+        date.getUTCMonth(),
+        date.getUTCDate(),
+        date.getUTCHours(),
+        0,
+        0,
+        0,
+      ));
+    case TimeIntervals.Daily:
+      return startOfDay(date);
+    case TimeIntervals.Weekly:
+      return startOfWeek(date);
+    case TimeIntervals.BiWeekly:
+      return startOfWeek(date);
+    case TimeIntervals.Monthly:
+      return startOfMonth(date);
+    case TimeIntervals.Quarterly:
+      return startOfQuarter(date);
+    case TimeIntervals.Semesterly:
+      return startOfSemester(date);
+    case TimeIntervals.Yearly:
+      return startOfYear(date);
+    default:
+      return new Date(date.getTime());
+  }
+}
+
+function addBucketInterval(date: Date, timeInterval: TimeIntervals): Date {
+  switch (timeInterval) {
+    case TimeIntervals.Hourly:
+      return new Date(Date.UTC(
+        date.getUTCFullYear(),
+        date.getUTCMonth(),
+        date.getUTCDate(),
+        date.getUTCHours() + 1,
+        0,
+        0,
+        0,
+      ));
+    case TimeIntervals.Daily:
+      return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1));
+    case TimeIntervals.Weekly:
+      return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 7));
+    case TimeIntervals.BiWeekly:
+      return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 14));
+    case TimeIntervals.Monthly:
+      return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1));
+    case TimeIntervals.Quarterly:
+      return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 3, 1));
+    case TimeIntervals.Semesterly:
+      return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 6, 1));
+    case TimeIntervals.Yearly:
+      return new Date(Date.UTC(date.getUTCFullYear() + 1, 0, 1));
+    default:
+      return new Date(date.getTime());
+  }
+}
+
+function resolveTotalBucketCount(
+  dateRange: NormalizedInsightQuery['dateRange'],
+  timeInterval: TimeIntervals,
+): number {
+  const startDate = new Date(dateRange.startDate);
+  const endDate = new Date(dateRange.endDate);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || startDate.getTime() > endDate.getTime()) {
+    return 0;
+  }
+
+  let cursor = alignDateToBucketStart(startDate, timeInterval);
+  let totalBucketCount = 0;
+  while (cursor.getTime() <= endDate.getTime()) {
+    totalBucketCount += 1;
+    const nextCursor = addBucketInterval(cursor, timeInterval);
+    if (nextCursor.getTime() <= cursor.getTime()) {
+      break;
+    }
+    cursor = nextCursor;
+  }
+
+  return totalBucketCount;
+}
+
+function buildActivityMix(
+  matchedActivityTypeCounts: Array<{ activityType: string; eventCount: number }>,
+): AiInsightSummaryActivityMix | null {
+  if (!matchedActivityTypeCounts.length) {
+    return null;
+  }
+
+  return {
+    topActivityTypes: matchedActivityTypeCounts.slice(0, 3),
+    remainingActivityTypeCount: Math.max(0, matchedActivityTypeCounts.length - 3),
+  };
+}
+
+function buildBucketCoverage(
+  query: NormalizedInsightQuery,
+  aggregation: {
+    resolvedTimeInterval: TimeIntervals;
+    buckets: Array<unknown>;
+  },
+): AiInsightSummary['bucketCoverage'] {
+  if (query.categoryType !== ChartDataCategoryTypes.DateType) {
+    return null;
+  }
+
+  const totalBucketCount = resolveTotalBucketCount(query.dateRange, aggregation.resolvedTimeInterval);
+  if (totalBucketCount <= 0) {
+    return null;
+  }
+
+  return {
+    nonEmptyBucketCount: aggregation.buckets.length,
+    totalBucketCount,
+  };
+}
+
+function buildTrend(
+  query: NormalizedInsightQuery,
+  aggregation: {
+    buckets: Array<{
+      bucketKey: string | number;
+      time?: number;
+      aggregateValue: number;
+      totalCount: number;
+    }>;
+  },
+): AiInsightSummary['trend'] {
+  if (query.categoryType !== ChartDataCategoryTypes.DateType || aggregation.buckets.length < 2) {
+    return null;
+  }
+
+  const previousBucket = aggregation.buckets[aggregation.buckets.length - 2] ?? null;
+  const latestBucket = aggregation.buckets[aggregation.buckets.length - 1] ?? null;
+  if (!previousBucket || !latestBucket) {
+    return null;
+  }
+
+  return {
+    previousBucket: {
+      bucketKey: previousBucket.bucketKey,
+      time: previousBucket.time,
+      aggregateValue: previousBucket.aggregateValue,
+      totalCount: previousBucket.totalCount,
+    },
+    deltaAggregateValue: latestBucket.aggregateValue - previousBucket.aggregateValue,
+  };
+}
+
 function buildUnsupportedNarrative(reasonCode: AiInsightsUnsupportedReasonCode): string {
   switch (reasonCode) {
     case 'unsupported_capability':
@@ -94,7 +276,7 @@ function buildUnsupportedNarrative(reasonCode: AiInsightsUnsupportedReasonCode):
       return 'I could not turn that request into a valid insight query.';
     case 'unsupported_metric':
     default:
-      return 'I can only answer a limited set of event-level metrics right now, such as distance, duration, ascent, descent, cadence, power, heart rate, speed, pace, and calories.';
+      return 'I can answer a curated set of event-level metrics right now, such as distance, duration, ascent, descent, cadence, power, heart rate, speed, pace, calories, and selected performance metrics like TSS, normalized power, intensity factor, VO2 max, EPOC, training effect, and recovery time.';
   }
 }
 
@@ -147,6 +329,7 @@ function resolveOverallAggregateValue(
 function buildInsightSummary(
   query: NormalizedInsightQuery,
   aggregation: {
+    resolvedTimeInterval: TimeIntervals;
     buckets: Array<{
       bucketKey: string | number;
       time?: number;
@@ -155,6 +338,7 @@ function buildInsightSummary(
     }>;
   },
   matchedEventCount: number,
+  matchedActivityTypeCounts: Array<{ activityType: string; eventCount: number }>,
 ): AiInsightSummary {
   const peakBucket = [...aggregation.buckets].sort((left, right) => right.aggregateValue - left.aggregateValue)[0] ?? null;
   const lowestBucket = [...aggregation.buckets].sort((left, right) => left.aggregateValue - right.aggregateValue)[0] ?? null;
@@ -187,6 +371,9 @@ function buildInsightSummary(
         totalCount: latestBucket.totalCount,
       }
       : null,
+    activityMix: buildActivityMix(matchedActivityTypeCounts),
+    bucketCoverage: buildBucketCoverage(query, aggregation),
+    trend: buildTrend(query, aggregation),
   };
 }
 
@@ -238,6 +425,7 @@ export async function runAiInsights(
     normalizeResult.query,
     executionResult.aggregation,
     executionResult.matchedEventsCount,
+    executionResult.matchedActivityTypeCounts,
   );
   const presentation = buildInsightPresentation(normalizeResult.query, metric.label);
   const isEmpty = executionResult.aggregation.buckets.length === 0;
