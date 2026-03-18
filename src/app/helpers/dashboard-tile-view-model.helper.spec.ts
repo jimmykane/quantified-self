@@ -4,6 +4,7 @@ import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   ChartTypes,
+  DataAscent,
   DataDistance,
   TileTypes,
   TimeIntervals,
@@ -205,5 +206,74 @@ describe('dashboard-tile-view-model.helper', () => {
     expect(viewModels.map(tile => tile.order)).toEqual([0, 1]);
     expect(viewModels[0].size).toEqual({ columns: 2, rows: 1 });
     expect((viewModels[0] as any).events.map((event: any) => event.getID())).toEqual(['earlier', 'later']);
+  });
+
+  it('should apply aggregation preferences when building chart tile data', () => {
+    const viewModels = buildDashboardTileViewModels({
+      tiles: [{
+        type: TileTypes.Chart,
+        order: 0,
+        chartType: ChartTypes.ColumnsHorizontal,
+        dataType: DataAscent.type,
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.ActivityType,
+        size: { columns: 1, rows: 1 },
+      } as any],
+      events: [
+        makeEvent({
+          id: 'run',
+          startDate: '2024-01-01T10:00:00.000Z',
+          activityTypes: [ActivityTypes.Running],
+          stats: { [DataAscent.type]: 120 },
+        }),
+        makeEvent({
+          id: 'ride',
+          startDate: '2024-01-02T10:00:00.000Z',
+          activityTypes: [ActivityTypes.Cycling],
+          stats: { [DataAscent.type]: 300 },
+        }),
+      ],
+      preferences: {
+        removeAscentForEventTypes: [ActivityTypes.Running],
+      },
+    });
+
+    const rows = (viewModels[0] as any).data;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].type).toBe(ActivityTypes.Cycling);
+    expect(rows[0].Total).toBe(300);
+  });
+
+  it('should not mutate the caller event array while normalizing tile events', () => {
+    const first = makeEvent({
+      id: 'later',
+      startDate: '2024-01-03T10:00:00.000Z',
+      activityTypes: [ActivityTypes.Running],
+      stats: { [DataDistance.type]: 10 },
+    });
+    const second = makeEvent({
+      id: 'earlier',
+      startDate: '2024-01-01T10:00:00.000Z',
+      activityTypes: [ActivityTypes.Running],
+      stats: { [DataDistance.type]: 5 },
+    });
+    const events = [first, second];
+
+    buildDashboardTileViewModels({
+      tiles: [{
+        type: TileTypes.Chart,
+        order: 0,
+        chartType: ChartTypes.ColumnsVertical,
+        dataType: DataDistance.type,
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        dataTimeInterval: TimeIntervals.Daily,
+        size: { columns: 1, rows: 1 },
+      } as any],
+      events,
+    });
+
+    expect(events[0]).toBe(first);
+    expect(events[1]).toBe(second);
   });
 });

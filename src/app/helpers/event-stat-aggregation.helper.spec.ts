@@ -5,6 +5,7 @@ import {
   ChartDataValueTypes,
   DataActivityTypes,
   DataAscent,
+  DataDescent,
   DataDistance,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
@@ -31,7 +32,9 @@ function createActivityTypeStat(displayValue: string, activityTypes: ActivityTyp
 }
 
 function makeEvent(options: MockEventOptions): any {
-  const displayActivityType = options.displayActivityType || `${options.activityTypes[0] || ''}`;
+  const displayActivityType = options.displayActivityType !== undefined
+    ? options.displayActivityType
+    : `${options.activityTypes[0] || ''}`;
   const activityTypeStat = createActivityTypeStat(displayActivityType, options.activityTypes);
   const stats = options.stats || {};
 
@@ -92,6 +95,19 @@ describe('event-stat-aggregation shared core', () => {
         activityTypes: [ActivityTypes.Running],
       }),
     ])).toBe(TimeIntervals.Yearly);
+  });
+
+  it('should resolve monthly auto interval for cross-month ranges beyond thirty one days', () => {
+    expect(resolveAutoAggregationTimeInterval([
+      makeEvent({
+        startDate: new Date('2024-01-01T10:00:00.000Z'),
+        activityTypes: [ActivityTypes.Running],
+      }),
+      makeEvent({
+        startDate: new Date('2024-03-10T10:00:00.000Z'),
+        activityTypes: [ActivityTypes.Running],
+      }),
+    ])).toBe(TimeIntervals.Monthly);
   });
 
   it('should resolve known, unknown and multisport activity category keys', () => {
@@ -156,6 +172,27 @@ describe('event-stat-aggregation shared core', () => {
       { removeAscentForEventTypes: [ActivityTypes.Running] },
     );
     expect(manuallyFiltered).toEqual([]);
+  });
+
+  it('should filter descent exclusions using manual preferences', () => {
+    const runningEvent = makeEvent({
+      startDate: new Date('2024-01-02T10:00:00.000Z'),
+      activityTypes: [ActivityTypes.Running],
+      stats: { [DataDescent.type]: 150 },
+    });
+    const cyclingEvent = makeEvent({
+      startDate: new Date('2024-01-03T10:00:00.000Z'),
+      activityTypes: [ActivityTypes.Cycling],
+      stats: { [DataDescent.type]: 250 },
+    });
+
+    const manuallyFiltered = filterEventStatsForAggregation(
+      [runningEvent, cyclingEvent],
+      DataDescent.type,
+      { removeDescentForEventTypes: [ActivityTypes.Running] },
+    );
+
+    expect(manuallyFiltered).toEqual([cyclingEvent]);
   });
 
   it('should return empty buckets for zero totals and non-finite aggregates', () => {
@@ -248,6 +285,83 @@ describe('event-stat-aggregation shared core', () => {
       requestedTimeInterval: TimeIntervals.Daily,
     });
     expect(maximum.buckets[0].aggregateValue).toBe(15);
+  });
+
+  it('should honor an explicitly requested non-auto interval', () => {
+    const aggregation = buildEventStatAggregation([
+      makeEvent({
+        startDate: new Date('2024-01-01T10:00:00.000Z'),
+        activityTypes: [ActivityTypes.Running],
+        stats: { [DataDistance.type]: 5 },
+      }),
+      makeEvent({
+        startDate: new Date('2024-01-01T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Running],
+        stats: { [DataDistance.type]: 10 },
+      }),
+    ], {
+      dataType: DataDistance.type,
+      valueType: ChartDataValueTypes.Total,
+      categoryType: ChartDataCategoryTypes.DateType,
+      requestedTimeInterval: TimeIntervals.Daily,
+    });
+
+    expect(aggregation.resolvedTimeInterval).toBe(TimeIntervals.Daily);
+    expect(aggregation.buckets).toHaveLength(1);
+    expect(aggregation.buckets[0].aggregateValue).toBe(15);
+  });
+
+  it('should warn and skip invalid date buckets when aggregating by date', () => {
+    const logger = { warn: vi.fn() };
+    const invalidDateEvent = {
+      startDate: undefined,
+      getID: () => 'invalid-date',
+      getActivityTypesAsArray: () => [ActivityTypes.Running],
+      getStat: (type: string) => {
+        if (type === DataActivityTypes.type) {
+          return createActivityTypeStat('Running', [ActivityTypes.Running]);
+        }
+
+        if (type === DataDistance.type) {
+          return {
+            getValue: () => 12,
+          };
+        }
+
+        return null;
+      },
+    } as any;
+
+    const aggregation = buildEventStatAggregation([invalidDateEvent], {
+      dataType: DataDistance.type,
+      valueType: ChartDataValueTypes.Total,
+      categoryType: ChartDataCategoryTypes.DateType,
+      requestedTimeInterval: TimeIntervals.Daily,
+    }, logger);
+
+    expect(aggregation.buckets).toEqual([]);
+    expect(logger.warn).toHaveBeenCalledOnce();
+  });
+
+  it('should log and bucket missing activity display values as unknown', () => {
+    const logger = { error: vi.fn() };
+
+    const aggregation = buildEventStatAggregation([
+      makeEvent({
+        startDate: new Date('2024-01-01T10:00:00.000Z'),
+        activityTypes: [ActivityTypes.Running],
+        displayActivityType: '',
+        stats: { [DataDistance.type]: 8 },
+      }),
+    ], {
+      dataType: DataDistance.type,
+      valueType: ChartDataValueTypes.Total,
+      categoryType: ChartDataCategoryTypes.ActivityType,
+    }, logger);
+
+    expect(aggregation.buckets).toHaveLength(1);
+    expect(aggregation.buckets[0].bucketKey).toBe('??');
+    expect(logger.error).toHaveBeenCalled();
   });
 
   it('should not mutate the caller event array while normalizing chronologically', () => {

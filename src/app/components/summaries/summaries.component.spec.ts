@@ -169,4 +169,161 @@ describe('SummariesComponent', () => {
     expect(buildDashboardTileViewModelsSpy).toHaveBeenCalledTimes(2);
     expect((component.tiles[0] as any).chartType).toBe(ChartTypes.ColumnsVertical);
   });
+
+  it('should not rebuild tiles during ngDoCheck when the tile snapshot is unchanged', async () => {
+    const builtTiles = [{
+      type: TileTypes.Chart,
+      order: 0,
+      chartType: ChartTypes.ColumnsVertical,
+      data: [],
+      timeInterval: TimeIntervals.Daily,
+      size: { columns: 1, rows: 1 },
+    }] as any[];
+    buildDashboardTileViewModelsSpy.mockReturnValue(builtTiles as any);
+
+    component.user = {
+      settings: {
+        dashboardSettings: {
+          tiles: [{
+            type: TileTypes.Chart,
+            order: 0,
+            chartType: ChartTypes.ColumnsVertical,
+            dataType: DataAscent.type,
+            dataValueType: ChartDataValueTypes.Total,
+            dataCategoryType: ChartDataCategoryTypes.ActivityType,
+            size: { columns: 1, rows: 1 },
+          }],
+        },
+      },
+    } as any;
+    component.events = [];
+
+    await component.ngOnChanges({
+      user: {
+        currentValue: component.user,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+      events: {
+        currentValue: component.events,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+    });
+
+    component.ngDoCheck();
+
+    expect(buildDashboardTileViewModelsSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('should remove tiles that are no longer returned by the tile builder', async () => {
+    const initialTiles = [{
+      type: TileTypes.Chart,
+      order: 0,
+      chartType: ChartTypes.ColumnsVertical,
+      data: [],
+      timeInterval: TimeIntervals.Daily,
+      size: { columns: 1, rows: 1 },
+    }, {
+      type: TileTypes.Chart,
+      order: 1,
+      chartType: ChartTypes.ColumnsHorizontal,
+      data: [],
+      timeInterval: TimeIntervals.Daily,
+      size: { columns: 1, rows: 1 },
+    }] as any[];
+    const updatedTiles = [initialTiles[0]];
+
+    buildDashboardTileViewModelsSpy
+      .mockReturnValueOnce(initialTiles as any)
+      .mockReturnValueOnce(updatedTiles as any);
+
+    component.user = {
+      settings: {
+        dashboardSettings: {
+          tiles: [
+            {
+              type: TileTypes.Chart,
+              order: 0,
+              chartType: ChartTypes.ColumnsVertical,
+              dataType: DataAscent.type,
+              dataValueType: ChartDataValueTypes.Total,
+              dataCategoryType: ChartDataCategoryTypes.ActivityType,
+              size: { columns: 1, rows: 1 },
+            },
+            {
+              type: TileTypes.Chart,
+              order: 1,
+              chartType: ChartTypes.ColumnsHorizontal,
+              dataType: DataAscent.type,
+              dataValueType: ChartDataValueTypes.Total,
+              dataCategoryType: ChartDataCategoryTypes.ActivityType,
+              size: { columns: 1, rows: 1 },
+            },
+          ],
+        },
+      },
+    } as any;
+    component.events = [];
+
+    await component.ngOnChanges({
+      user: {
+        currentValue: component.user,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+      events: {
+        currentValue: component.events,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+    });
+
+    component.user.settings.dashboardSettings.tiles.pop();
+    component.ngDoCheck();
+
+    expect(component.tiles).toHaveLength(1);
+    expect((component.tiles[0] as any).order).toBe(0);
+  });
+
+  it('should build stable trackBy keys for chart and map tiles', () => {
+    const chartKey = component.trackByTile(0, {
+      type: TileTypes.Chart,
+      order: 2,
+      name: 'Distance',
+      chartType: ChartTypes.ColumnsVertical,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataValueType: ChartDataValueTypes.Total,
+      timeInterval: TimeIntervals.Monthly,
+      data: [],
+      size: { columns: 1, rows: 1 },
+    } as any);
+    const mapKey = component.trackByTile(1, {
+      type: TileTypes.Map,
+      order: 3,
+      name: 'Map',
+      clusterMarkers: true,
+      mapTheme: 'normal',
+      mapStyle: 'streets',
+      showHeatMap: false,
+      events: [],
+      size: { columns: 2, rows: 1 },
+    } as any);
+
+    expect(chartKey).toBe(`${ChartTypes.ColumnsVertical}${ChartDataCategoryTypes.DateType}${ChartDataValueTypes.Total}Distance2${TimeIntervals.Monthly}`);
+    expect(mapKey).toBe('truenormalstreetsMap3false');
+  });
+
+  it('should unsubscribe from the theme subscription on destroy', () => {
+    const unsubscribe = vi.fn();
+    (component as any).appThemeSubscription = { unsubscribe };
+
+    component.ngOnDestroy();
+
+    expect(unsubscribe).toHaveBeenCalledOnce();
+  });
 });

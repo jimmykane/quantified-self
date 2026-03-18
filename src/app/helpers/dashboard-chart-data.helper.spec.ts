@@ -9,6 +9,7 @@ import {
   formatDashboardDataDisplay,
   formatDashboardDateByInterval,
   formatDashboardNumericValue,
+  getDashboardChartSortComparator,
   getDashboardSummaryMetaLabel
 } from './dashboard-chart-data.helper';
 
@@ -60,5 +61,49 @@ describe('dashboard-chart-data.helper', () => {
     const value = formatDashboardNumericValue(DataDuration.type, (2 * 60 * 60) + (15 * 60) + 30);
 
     expect(value).toBe('02h 15m 30s');
+  });
+
+  it('should sort activity rows by their selected aggregate value', () => {
+    const comparator = getDashboardChartSortComparator(
+      ChartDataCategoryTypes.ActivityType,
+      ChartDataValueTypes.Total,
+    );
+
+    const rows = [
+      { type: 'Cycling', count: 1, Total: 30 },
+      { type: 'Running', count: 1, Total: 10 },
+      { type: 'Swimming', count: 1, Total: 20 },
+    ];
+
+    expect([...rows].sort(comparator).map(row => row.type)).toEqual([
+      'Running',
+      'Swimming',
+      'Cycling',
+    ]);
+  });
+
+  it('should sort date rows in chronological order using time', () => {
+    const comparator = getDashboardChartSortComparator(
+      ChartDataCategoryTypes.DateType,
+      ChartDataValueTypes.Total,
+    );
+
+    const rows = [
+      { type: 'oldest', count: 1, time: Date.UTC(2024, 0, 1), Total: 10 },
+      { type: 'newest', count: 1, time: Date.UTC(2024, 0, 3), Total: 20 },
+      { type: 'middle', count: 1, time: Date.UTC(2024, 0, 2), Total: 15 },
+    ];
+
+    expect([...rows].sort(comparator).map(row => row.type)).toEqual([
+      'oldest',
+      'middle',
+      'newest',
+    ]);
+  });
+
+  it('should fall back to a numeric string when no data instance can be created', () => {
+    const value = formatDashboardNumericValue(undefined, 1234.567);
+
+    expect(value).toBe('1,234.57');
   });
 });
