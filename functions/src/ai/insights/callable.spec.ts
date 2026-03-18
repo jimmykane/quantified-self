@@ -100,6 +100,12 @@ const summary = {
     aggregateValue: 123,
     totalCount: 2,
   },
+  lowestBucket: {
+    bucketKey: 1,
+    time: 1,
+    aggregateValue: 123,
+    totalCount: 2,
+  },
   latestBucket: {
     bucketKey: 1,
     time: 1,
@@ -239,11 +245,61 @@ describe('aiInsights callable', () => {
         matchedEventCount: 0,
         overallAggregateValue: null,
         peakBucket: null,
+        lowestBucket: null,
         latestBucket: null,
       },
       presentation: expect.objectContaining({
         emptyState: 'No matching events were found for this insight in the requested range.',
       }),
+    });
+  });
+
+  it('derives the lowest bucket from aggregation results', async () => {
+    hoisted.executeAiInsightsQuery.mockResolvedValue({
+      matchedEventsCount: 3,
+      aggregation: {
+        dataType: 'Distance',
+        valueType: ChartDataValueTypes.Total,
+        categoryType: ChartDataCategoryTypes.DateType,
+        resolvedTimeInterval: TimeIntervals.Monthly,
+        buckets: [
+          {
+            bucketKey: 1,
+            time: 1,
+            totalCount: 1,
+            aggregateValue: 123,
+            seriesValues: { Cycling: 123 },
+            seriesCounts: { Cycling: 1 },
+          },
+          {
+            bucketKey: 2,
+            time: 2,
+            totalCount: 2,
+            aggregateValue: 45,
+            seriesValues: { Cycling: 45 },
+            seriesCounts: { Cycling: 2 },
+          },
+        ],
+      },
+    });
+
+    const result = await aiInsights({
+      prompt: 'show distance',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(result).toMatchObject({
+      status: 'ok',
+      summary: {
+        peakBucket: expect.objectContaining({
+          bucketKey: 1,
+          aggregateValue: 123,
+        }),
+        lowestBucket: expect.objectContaining({
+          bucketKey: 2,
+          aggregateValue: 45,
+        }),
+      },
     });
   });
 

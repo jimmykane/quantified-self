@@ -47,6 +47,7 @@ export interface AiInsightSummary {
   matchedEventCount: number;
   overallAggregateValue: number | null;
   peakBucket: AiInsightSummaryBucket | null;
+  lowestBucket: AiInsightSummaryBucket | null;
   latestBucket: AiInsightSummaryBucket | null;
 }
 

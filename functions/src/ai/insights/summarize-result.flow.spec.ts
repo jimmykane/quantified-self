@@ -32,6 +32,12 @@ const paceSummary = {
     aggregateValue: 422.3478623928474,
     totalCount: 5,
   },
+  lowestBucket: {
+    bucketKey: '2026-02',
+    time: Date.parse('2026-02-01T00:00:00.000Z'),
+    aggregateValue: 415,
+    totalCount: 4,
+  },
   latestBucket: {
     bucketKey: '2026-03',
     time: Date.parse('2026-03-01T00:00:00.000Z'),
@@ -96,14 +102,23 @@ describe('summarizeAiInsightResult', () => {
     expect(summary).toEqual({
       matchedEventCount: 5,
       overallAggregateDisplayValue: '07:02 min/km',
-      peakBucket: expect.objectContaining({
+      highestValueBucket: expect.objectContaining({
+        label: 'Slowest period',
         aggregateDisplayValue: '07:02 min/km',
         totalCount: 5,
+      }),
+      lowestValueBucket: expect.objectContaining({
+        label: 'Fastest period',
+        aggregateDisplayValue: '06:55 min/km',
+        totalCount: 4,
       }),
       latestBucket: expect.objectContaining({
+        label: 'Latest period with data',
         aggregateDisplayValue: '07:02 min/km',
         totalCount: 5,
       }),
+      improvedVerb: 'improved',
+      declinedVerb: 'slowed',
     });
     expect(facts.summary).toEqual(expect.objectContaining({
       overallAggregateDisplayValue: '07:02 min/km',
@@ -111,6 +126,27 @@ describe('summarizeAiInsightResult', () => {
     }));
     expect(facts.buckets[0]?.aggregateDisplayValue).toBe('07:02 min/km');
     expect(facts.buckets[0]).not.toHaveProperty('aggregateValue');
+  });
+
+  it('uses direct metric semantics for highest and lowest labels', () => {
+    const directSummary = buildInsightSummaryFacts({
+      ...paceInput,
+      metricLabel: 'heart rate',
+      query: {
+        ...paceInput.query,
+        dataType: 'Average Heart Rate',
+      },
+      summary: {
+        ...paceSummary,
+        overallAggregateValue: 152,
+      },
+    });
+
+    expect(directSummary.highestValueBucket?.label).toBe('Highest period');
+    expect(directSummary.lowestValueBucket?.label).toBe('Lowest period');
+    expect(directSummary.latestBucket?.label).toBe('Latest period with data');
+    expect(directSummary.improvedVerb).toBe('increased');
+    expect(directSummary.declinedVerb).toBe('decreased');
   });
 
   it('falls back to a formatted narrative when generation fails', async () => {

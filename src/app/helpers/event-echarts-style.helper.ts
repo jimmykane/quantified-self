@@ -54,6 +54,7 @@ import {
   DataVerticalSpeedMetersPerMinute,
   DataVerticalSpeedMilesPerHour
 } from '@sports-alliance/sports-lib';
+import { isInverseMetric } from '@shared/metric-semantics';
 import { AppColors } from '../services/color/app.colors';
 import { AppDataColors } from '../services/color/app.data.colors';
 
@@ -205,7 +206,7 @@ export function resolveEventColorGroupKey(streamType: string): string {
 }
 
 export function isEventPaceStreamType(streamType: string): boolean {
-  return PACE_GROUP.has(streamType) || SWIM_PACE_GROUP.has(streamType);
+  return isInverseMetric(streamType);
 }
 
 export function resolveEventSeriesColor(groupKey: string, seriesIndex: number, seriesCount: number): string {

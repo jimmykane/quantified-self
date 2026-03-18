@@ -3,6 +3,7 @@ import {
   DataEffortPace,
   DataGradeAdjustedPace,
   DataPowerRight,
+  DataSwimPace,
 } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import { AppDataColors } from '../services/color/app.data.colors';
@@ -24,6 +25,7 @@ describe('event-echarts-style.helper', () => {
   it('treats effort pace as part of the canonical pace family', () => {
     expect(isEventPaceStreamType(DataEffortPace.type)).toBe(true);
     expect(isEventPaceStreamType(DataGradeAdjustedPace.type)).toBe(true);
+    expect(isEventPaceStreamType(DataSwimPace.type)).toBe(true);
     expect(isEventPaceStreamType(DataCadence.type)).toBe(false);
   });
 

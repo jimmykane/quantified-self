@@ -107,6 +107,12 @@ function buildResponse(chartType: ChartTypes, categoryType = ChartDataCategoryTy
         aggregateValue: 84.5,
         totalCount: 3,
       },
+      lowestBucket: {
+        bucketKey: categoryType === ChartDataCategoryTypes.DateType ? '2026-01' : ActivityTypes.Cycling,
+        time: categoryType === ChartDataCategoryTypes.DateType ? Date.UTC(2026, 0, 1) : undefined,
+        aggregateValue: 84.5,
+        totalCount: 3,
+      },
       latestBucket: {
         bucketKey: categoryType === ChartDataCategoryTypes.DateType ? '2026-01' : ActivityTypes.Cycling,
         time: categoryType === ChartDataCategoryTypes.DateType ? Date.UTC(2026, 0, 1) : undefined,

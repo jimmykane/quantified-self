@@ -154,6 +154,7 @@ function buildInsightSummary(
   matchedEventCount: number,
 ): AiInsightSummary {
   const peakBucket = [...aggregation.buckets].sort((left, right) => right.aggregateValue - left.aggregateValue)[0] ?? null;
+  const lowestBucket = [...aggregation.buckets].sort((left, right) => left.aggregateValue - right.aggregateValue)[0] ?? null;
   const latestBucket = aggregation.buckets[aggregation.buckets.length - 1] ?? null;
 
   return {
@@ -165,6 +166,14 @@ function buildInsightSummary(
         time: peakBucket.time,
         aggregateValue: peakBucket.aggregateValue,
         totalCount: peakBucket.totalCount,
+      }
+      : null,
+    lowestBucket: lowestBucket
+      ? {
+        bucketKey: lowestBucket.bucketKey,
+        time: lowestBucket.time,
+        aggregateValue: lowestBucket.aggregateValue,
+        totalCount: lowestBucket.totalCount,
       }
       : null,
     latestBucket: latestBucket

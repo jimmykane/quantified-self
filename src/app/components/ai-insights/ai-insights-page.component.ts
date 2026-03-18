@@ -19,6 +19,7 @@ import type {
   AiInsightsUnsupportedResponse,
   NormalizedInsightDateRange,
 } from '@shared/ai-insights.types';
+import { resolveMetricSummarySemantics } from '@shared/metric-semantics';
 import { formatUnitAwareDataValue, normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { MaterialModule } from '../../modules/material.module';
 import { AppThemeService } from '../../services/app.theme.service';
@@ -104,34 +105,6 @@ interface InsightSummaryCard {
   helpText?: string;
 }
 
-function isDateCategoryResponse(response: AiInsightsOkResponse): boolean {
-  return response.query.categoryType === ChartDataCategoryTypes.DateType;
-}
-
-function getPeakSummaryCardLabel(response: AiInsightsOkResponse): string {
-  return isDateCategoryResponse(response) ? 'Peak period' : 'Peak group';
-}
-
-function getLatestSummaryCardLabel(response: AiInsightsOkResponse): string {
-  return isDateCategoryResponse(response) ? 'Latest period' : 'Latest group';
-}
-
-function getPeakSummaryCardHelpText(response: AiInsightsOkResponse): string {
-  if (isDateCategoryResponse(response)) {
-    return 'The chart period with the highest value for this insight. A period is one chart bucket, such as a day, week, or month.';
-  }
-
-  return 'The chart group with the highest value for this insight.';
-}
-
-function getLatestSummaryCardHelpText(response: AiInsightsOkResponse): string {
-  if (isDateCategoryResponse(response)) {
-    return 'The most recent chart period in this result. A period is one chart bucket, such as a day, week, or month.';
-  }
-
-  return 'The final chart group in the current chart ordering.';
-}
-
 @Component({
   selector: 'app-ai-insights-page',
   standalone: true,
@@ -205,6 +178,10 @@ export class AiInsightsPageComponent {
 
     const unitSettings = this.userUnitSettings();
     const locale = getClientLocale();
+    const summarySemantics = resolveMetricSummarySemantics(
+      response.query.dataType,
+      response.query.categoryType,
+    );
     const cards: InsightSummaryCard[] = [
       {
         label: 'Activities',
@@ -232,10 +209,26 @@ export class AiInsightsPageComponent {
       );
       if (peakValue) {
         cards.push({
-          label: getPeakSummaryCardLabel(response),
+          label: summarySemantics.highestLabel,
           value: peakValue,
           meta: formatBucketMeta(response, response.summary.peakBucket, locale) || undefined,
-          helpText: getPeakSummaryCardHelpText(response),
+          helpText: summarySemantics.highestHelpText,
+        });
+      }
+    }
+
+    if (response.summary.lowestBucket) {
+      const lowestValue = formatSummaryValue(
+        response.query.dataType,
+        response.summary.lowestBucket.aggregateValue,
+        unitSettings,
+      );
+      if (lowestValue) {
+        cards.push({
+          label: summarySemantics.lowestLabel,
+          value: lowestValue,
+          meta: formatBucketMeta(response, response.summary.lowestBucket, locale) || undefined,
+          helpText: summarySemantics.lowestHelpText,
         });
       }
     }
@@ -248,10 +241,10 @@ export class AiInsightsPageComponent {
       );
       if (latestValue) {
         cards.push({
-          label: getLatestSummaryCardLabel(response),
+          label: summarySemantics.latestLabel,
           value: latestValue,
           meta: formatBucketMeta(response, response.summary.latestBucket, locale) || undefined,
-          helpText: getLatestSummaryCardHelpText(response),
+          helpText: summarySemantics.latestHelpText,
         });
       }
     }

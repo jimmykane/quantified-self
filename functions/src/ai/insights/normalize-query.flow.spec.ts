@@ -6,8 +6,11 @@ import {
   ChartTypes,
   DataCadenceAvg,
   DataDistance,
+  DataEffortPaceAvg,
+  DataGradeAdjustedPaceAvg,
   DataHeartRateAvg,
   DataHeartRateMax,
+  DataSwimPaceAvg,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
 
@@ -334,6 +337,99 @@ describe('normalizeInsightQuery', () => {
       endDate: '2026-03-18T23:59:59.999Z',
       timezone: 'UTC',
     });
+  });
+
+  it('prefers the prompt alias for grade adjusted pace families', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'pace',
+        aggregation: 'average',
+        category: 'date',
+        requestedTimeInterval: 'auto',
+        activityTypes: ['Trail Running'],
+        dateRange: {
+          kind: 'current_period',
+          unit: 'month',
+        },
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show my average gap for trail running this month',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('grade_adjusted_pace');
+    expect(result.query.dataType).toBe(DataGradeAdjustedPaceAvg.type);
+  });
+
+  it('prefers the prompt alias for effort pace families', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'pace',
+        aggregation: 'average',
+        category: 'date',
+        requestedTimeInterval: 'auto',
+        activityTypes: ['Running'],
+        dateRange: {
+          kind: 'current_period',
+          unit: 'month',
+        },
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show my effort pace for running this month',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('effort_pace');
+    expect(result.query.dataType).toBe(DataEffortPaceAvg.type);
+  });
+
+  it('prefers the prompt alias for swim pace families', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'pace',
+        aggregation: 'average',
+        category: 'date',
+        requestedTimeInterval: 'auto',
+        activityTypes: ['Swimming'],
+        dateRange: {
+          kind: 'current_period',
+          unit: 'month',
+        },
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show my swim pace over time this month',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('swim_pace');
+    expect(result.query.dataType).toBe(DataSwimPaceAvg.type);
   });
 
   it('rejects unsupported split prompts before calling the model', async () => {

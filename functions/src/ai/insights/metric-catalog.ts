@@ -6,10 +6,21 @@ import {
   DataDistance,
   DataDuration,
   DataEnergy,
+  DataEffortPaceAvg,
+  DataEffortPaceMax,
+  DataEffortPaceMin,
+  DataGradeAdjustedPaceAvg,
+  DataGradeAdjustedPaceMax,
+  DataGradeAdjustedPaceMin,
   DataHeartRateAvg,
   DataPaceAvg,
+  DataPaceMax,
+  DataPaceMin,
   DataPowerAvg,
   DataSpeedAvg,
+  DataSwimPaceAvg,
+  DataSwimPaceMax,
+  DataSwimPaceMin,
   DynamicDataLoader,
 } from '@sports-alliance/sports-lib';
 
@@ -23,6 +34,9 @@ export type InsightMetricKey =
   | 'heart_rate'
   | 'speed'
   | 'pace'
+  | 'grade_adjusted_pace'
+  | 'effort_pace'
+  | 'swim_pace'
   | 'calories';
 
 export interface InsightMetricDefinition {
@@ -34,6 +48,7 @@ export interface InsightMetricDefinition {
   allowedValueTypes: ChartDataValueTypes[];
   suggestedPrompt: string;
   familyType?: string;
+  variantDataTypes?: Partial<Record<ChartDataValueTypes, string>>;
 }
 
 function normalizeMetricText(value: string): string {
@@ -210,6 +225,7 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
       'pace',
       'average pace',
       'avg pace',
+      'running pace',
       'minimum pace',
       'min pace',
       'maximum pace',
@@ -225,6 +241,101 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
     ],
     suggestedPrompt: 'Show my average pace over time for running in the last 3 months.',
     familyType: 'Pace',
+    variantDataTypes: {
+      [ChartDataValueTypes.Average]: DataPaceAvg.type,
+      [ChartDataValueTypes.Minimum]: DataPaceMin.type,
+      [ChartDataValueTypes.Maximum]: DataPaceMax.type,
+    },
+  },
+  {
+    key: 'grade_adjusted_pace',
+    dataType: DataGradeAdjustedPaceAvg.type,
+    label: 'grade adjusted pace',
+    aliases: [
+      'grade adjusted pace',
+      'average grade adjusted pace',
+      'avg grade adjusted pace',
+      'minimum grade adjusted pace',
+      'min grade adjusted pace',
+      'maximum grade adjusted pace',
+      'max grade adjusted pace',
+      'fastest grade adjusted pace',
+      'slowest grade adjusted pace',
+      'gap',
+      'average gap',
+      'avg gap',
+      'grade adjusted running pace',
+    ],
+    defaultValueType: ChartDataValueTypes.Average,
+    allowedValueTypes: [
+      ChartDataValueTypes.Average,
+      ChartDataValueTypes.Minimum,
+      ChartDataValueTypes.Maximum,
+    ],
+    suggestedPrompt: 'Show my average grade adjusted pace over time for trail running in the last 90 days.',
+    familyType: 'Grade Adjusted Pace',
+    variantDataTypes: {
+      [ChartDataValueTypes.Average]: DataGradeAdjustedPaceAvg.type,
+      [ChartDataValueTypes.Minimum]: DataGradeAdjustedPaceMin.type,
+      [ChartDataValueTypes.Maximum]: DataGradeAdjustedPaceMax.type,
+    },
+  },
+  {
+    key: 'effort_pace',
+    dataType: DataEffortPaceAvg.type,
+    label: 'effort pace',
+    aliases: [
+      'effort pace',
+      'average effort pace',
+      'avg effort pace',
+      'minimum effort pace',
+      'min effort pace',
+      'maximum effort pace',
+      'max effort pace',
+      'fastest effort pace',
+      'slowest effort pace',
+    ],
+    defaultValueType: ChartDataValueTypes.Average,
+    allowedValueTypes: [
+      ChartDataValueTypes.Average,
+      ChartDataValueTypes.Minimum,
+      ChartDataValueTypes.Maximum,
+    ],
+    suggestedPrompt: 'Show my average effort pace over time for running in the last 90 days.',
+    familyType: 'Effort Pace',
+    variantDataTypes: {
+      [ChartDataValueTypes.Average]: DataEffortPaceAvg.type,
+      [ChartDataValueTypes.Minimum]: DataEffortPaceMin.type,
+      [ChartDataValueTypes.Maximum]: DataEffortPaceMax.type,
+    },
+  },
+  {
+    key: 'swim_pace',
+    dataType: DataSwimPaceAvg.type,
+    label: 'swim pace',
+    aliases: [
+      'swim pace',
+      'average swim pace',
+      'avg swim pace',
+      'minimum swim pace',
+      'min swim pace',
+      'maximum swim pace',
+      'max swim pace',
+      'fastest swim pace',
+      'slowest swim pace',
+    ],
+    defaultValueType: ChartDataValueTypes.Average,
+    allowedValueTypes: [
+      ChartDataValueTypes.Average,
+      ChartDataValueTypes.Minimum,
+      ChartDataValueTypes.Maximum,
+    ],
+    suggestedPrompt: 'Show my average swim pace over time for swimming in the last 90 days.',
+    variantDataTypes: {
+      [ChartDataValueTypes.Average]: DataSwimPaceAvg.type,
+      [ChartDataValueTypes.Minimum]: DataSwimPaceMin.type,
+      [ChartDataValueTypes.Maximum]: DataSwimPaceMax.type,
+    },
   },
   {
     key: 'calories',
@@ -279,11 +390,16 @@ function resolveFamilyVariantDataType(
   valueType: ChartDataValueTypes,
   explicitVariantValueType: ChartDataValueTypes | null,
 ): string {
+  const resolvedValueType = explicitVariantValueType || valueType;
+  const explicitVariantDataType = metric.variantDataTypes?.[resolvedValueType];
+  if (explicitVariantDataType) {
+    return explicitVariantDataType;
+  }
+
   if (!metric.familyType) {
     return metric.dataType;
   }
 
-  const resolvedValueType = explicitVariantValueType || valueType;
   switch (resolvedValueType) {
     case ChartDataValueTypes.Minimum:
       return DynamicDataLoader.dataTypeMinDataType?.[metric.familyType] || metric.dataType;
@@ -317,6 +433,32 @@ export function resolveInsightMetric(
     ...metric,
     dataType: resolveFamilyVariantDataType(metric, valueType, resolveExplicitVariantValueType(metricOrAlias)),
   };
+}
+
+export function findInsightMetricAliasMatch(
+  sourceText: string,
+): { metric: InsightMetricDefinition; alias: string } | null {
+  const normalizedSource = normalizeMetricText(sourceText);
+  if (!normalizedSource) {
+    return null;
+  }
+
+  const candidates = SUPPORTED_INSIGHT_METRICS.flatMap((metric) => {
+    const searchTerms = [...new Set([
+      metric.key,
+      metric.dataType,
+      metric.label,
+      ...metric.aliases,
+    ])]
+      .map(alias => normalizeMetricText(alias))
+      .filter(Boolean)
+      .sort((left, right) => right.length - left.length);
+
+    return searchTerms.map((alias) => ({ metric, alias }));
+  })
+    .sort((left, right) => right.alias.length - left.alias.length);
+
+  return candidates.find(({ alias }) => normalizedSource.includes(alias)) || null;
 }
 
 export function resolveMetricVariantAlias(

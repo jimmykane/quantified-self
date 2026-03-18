@@ -12,6 +12,7 @@ import {
   ChartDataValueTypes,
   ChartTypes,
   DataCadenceAvg,
+  DataPaceAvg,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
 import type {
@@ -82,6 +83,12 @@ function buildOkResponse(): AiInsightsOkResponse {
         aggregateValue: 86,
         totalCount: 4,
       },
+      lowestBucket: {
+        bucketKey: '2025-12',
+        time: Date.UTC(2025, 11, 1),
+        aggregateValue: 79,
+        totalCount: 2,
+      },
       latestBucket: {
         bucketKey: '2026-01',
         time: Date.UTC(2026, 0, 1),
@@ -125,12 +132,83 @@ function buildEmptyResponse(): AiInsightsEmptyResponse {
       matchedEventCount: 0,
       overallAggregateValue: null,
       peakBucket: null,
+      lowestBucket: null,
       latestBucket: null,
     },
     presentation: {
       title: 'Average cadence over time for Cycling',
       chartType: ChartTypes.LinesVertical,
       emptyState: 'No matching events were found for this insight in the requested range.',
+    },
+  };
+}
+
+function buildPaceResponse(): AiInsightsOkResponse {
+  return {
+    status: 'ok',
+    narrative: 'Your average running pace improved over the last two years.',
+    query: {
+      dataType: DataPaceAvg.type,
+      valueType: ChartDataValueTypes.Average,
+      categoryType: ChartDataCategoryTypes.DateType,
+      requestedTimeInterval: TimeIntervals.Monthly,
+      activityTypes: [ActivityTypes.Running],
+      dateRange: {
+        startDate: '2024-03-17T00:00:00.000Z',
+        endDate: '2026-03-18T23:59:59.999Z',
+        timezone: 'Europe/Helsinki',
+      },
+      chartType: ChartTypes.LinesVertical,
+    },
+    aggregation: {
+      dataType: DataPaceAvg.type,
+      valueType: ChartDataValueTypes.Average,
+      categoryType: ChartDataCategoryTypes.DateType,
+      resolvedTimeInterval: TimeIntervals.Monthly,
+      buckets: [
+        {
+          bucketKey: '2024-01',
+          time: Date.UTC(2024, 0, 1),
+          totalCount: 10,
+          aggregateValue: 630,
+          seriesValues: { Running: 630 },
+          seriesCounts: { Running: 10 },
+        },
+        {
+          bucketKey: '2025-01',
+          time: Date.UTC(2025, 0, 1),
+          totalCount: 8,
+          aggregateValue: 473,
+          seriesValues: { Running: 473 },
+          seriesCounts: { Running: 8 },
+        },
+      ],
+    },
+    summary: {
+      matchedEventCount: 18,
+      overallAggregateValue: 552,
+      peakBucket: {
+        bucketKey: '2024-01',
+        time: Date.UTC(2024, 0, 1),
+        aggregateValue: 630,
+        totalCount: 10,
+      },
+      lowestBucket: {
+        bucketKey: '2025-01',
+        time: Date.UTC(2025, 0, 1),
+        aggregateValue: 473,
+        totalCount: 8,
+      },
+      latestBucket: {
+        bucketKey: '2025-01',
+        time: Date.UTC(2025, 0, 1),
+        aggregateValue: 473,
+        totalCount: 8,
+      },
+    },
+    presentation: {
+      title: 'Average pace over time for Running',
+      chartType: ChartTypes.LinesVertical,
     },
   };
 }
@@ -236,11 +314,12 @@ describe('AiInsightsPageComponent', () => {
     expect(chart?.textContent).toContain('Average cadence over time for Cycling');
     expect(chartComponent?.userUnitSettings()).toEqual(userSettingsQueryServiceMock.unitSettings());
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Overall'))).toBe(true);
-    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Peak period'))).toBe(true);
-    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Latest period'))).toBe(true);
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Highest period'))).toBe(true);
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Lowest period'))).toBe(true);
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Latest period with data'))).toBe(true);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Peak bucket'))).toBe(false);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Latest bucket'))).toBe(false);
-    expect(summaryHelpButtons).toHaveLength(2);
+    expect(summaryHelpButtons).toHaveLength(3);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes(expectedOverall ?? ''))).toBe(true);
   });
 
@@ -255,6 +334,21 @@ describe('AiInsightsPageComponent', () => {
 
     expect(unsupportedTitle?.textContent).toContain('Unsupported request');
     expect(suggestionButtons.some(node => node.nativeElement.textContent.includes('Show my total distance by activity type this year'))).toBe(true);
+  });
+
+  it('should use pace-specific summary labels for inverse metrics', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue(buildPaceResponse());
+
+    await component.applySuggestedPrompt('Show my average pace for running over the last 2 years');
+    fixture.detectChanges();
+
+    const summaryCards = fixture.debugElement.queryAll(By.css('.summary-card'));
+
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Slowest period'))).toBe(true);
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Fastest period'))).toBe(true);
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Latest period with data'))).toBe(true);
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Peak period'))).toBe(false);
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Lowest period'))).toBe(false);
   });
 
   it('should render the empty state without the chart', async () => {

@@ -17,9 +17,9 @@ import { aiInsightsGenkit } from './genkit';
 import { CANONICAL_ACTIVITY_TYPES, resolveCanonicalActivityType } from './canonical-activity-types';
 import {
   buildMetricCatalogPromptText,
+  findInsightMetricAliasMatch,
   getSuggestedInsightPrompts,
   isAggregationAllowedForMetric,
-  resolveMetricVariantAlias,
   resolveInsightMetric,
   type InsightMetricKey,
 } from './metric-catalog';
@@ -562,14 +562,16 @@ export async function normalizeInsightQuery(
     return buildUnsupportedResult(intent.unsupportedReasonCode || 'unsupported_metric');
   }
 
-  const baseMetric = resolveInsightMetric(intent.metric || '');
+  const promptMetricMatch = findInsightMetricAliasMatch(prompt);
+  const baseMetric = promptMetricMatch?.metric || resolveInsightMetric(intent.metric || '');
   if (!baseMetric) {
     return buildUnsupportedResult('unsupported_metric');
   }
 
   const valueType = toValueType(intent.aggregation, baseMetric.defaultValueType);
-  const promptMetricAlias = resolveMetricVariantAlias(baseMetric, prompt);
-  const metric = resolveInsightMetric(promptMetricAlias || intent.metric || '', valueType)
+  const metric = (promptMetricMatch
+    ? resolveInsightMetric(promptMetricMatch.alias, valueType)
+    : null)
     || resolveInsightMetric(intent.metric || '', valueType)
     || baseMetric;
 

@@ -76,6 +76,7 @@ export const AiInsightSummarySchema: z.ZodType<AiInsightSummary> = z.object({
   matchedEventCount: z.number().int().nonnegative(),
   overallAggregateValue: z.number().nullable(),
   peakBucket: AiInsightSummaryBucketSchema.nullable(),
+  lowestBucket: AiInsightSummaryBucketSchema.nullable(),
   latestBucket: AiInsightSummaryBucketSchema.nullable(),
 });
 

@@ -6,6 +6,7 @@ import {
 
 import type { AiInsightPresentation, AiInsightSummary, NormalizedInsightQuery } from '../../../../shared/ai-insights.types';
 import type { EventStatAggregationResult } from '../../../../shared/event-stat-aggregation.types';
+import { resolveMetricSemantics, resolveMetricSummarySemantics } from '../../../../shared/metric-semantics';
 import { formatUnitAwareDataValue } from '../../../../shared/unit-aware-display';
 import { aiInsightsGenkit } from './genkit';
 import {
@@ -89,32 +90,53 @@ export function formatInsightAggregateDisplay(
 export function buildInsightSummaryFacts(input: SummarizeInsightResultInput): {
   matchedEventCount: number;
   overallAggregateDisplayValue: string | null;
-  peakBucket: { bucketKey: string | number; time?: number; aggregateDisplayValue: string; totalCount: number } | null;
-  latestBucket: { bucketKey: string | number; time?: number; aggregateDisplayValue: string; totalCount: number } | null;
+  highestValueBucket: { label: string; bucketKey: string | number; time?: number; aggregateDisplayValue: string; totalCount: number } | null;
+  lowestValueBucket: { label: string; bucketKey: string | number; time?: number; aggregateDisplayValue: string; totalCount: number } | null;
+  latestBucket: { label: string; bucketKey: string | number; time?: number; aggregateDisplayValue: string; totalCount: number } | null;
+  improvedVerb: string;
+  declinedVerb: string;
 } {
   const { summary } = input;
+  const summarySemantics = resolveMetricSummarySemantics(
+    input.query.dataType,
+    input.query.categoryType,
+  );
+  const metricSemantics = resolveMetricSemantics(input.query.dataType);
 
   return {
     matchedEventCount: summary.matchedEventCount,
     overallAggregateDisplayValue: summary.overallAggregateValue === null
       ? null
       : formatInsightAggregateDisplay(input.query.dataType, summary.overallAggregateValue, input.unitSettings),
-    peakBucket: summary.peakBucket
+    highestValueBucket: summary.peakBucket
       ? {
+        label: summarySemantics.highestLabel,
         bucketKey: summary.peakBucket.bucketKey,
         time: summary.peakBucket.time,
         aggregateDisplayValue: formatInsightAggregateDisplay(input.query.dataType, summary.peakBucket.aggregateValue, input.unitSettings),
         totalCount: summary.peakBucket.totalCount,
       }
       : null,
+    lowestValueBucket: summary.lowestBucket
+      ? {
+        label: summarySemantics.lowestLabel,
+        bucketKey: summary.lowestBucket.bucketKey,
+        time: summary.lowestBucket.time,
+        aggregateDisplayValue: formatInsightAggregateDisplay(input.query.dataType, summary.lowestBucket.aggregateValue, input.unitSettings),
+        totalCount: summary.lowestBucket.totalCount,
+      }
+      : null,
     latestBucket: summary.latestBucket
       ? {
+        label: summarySemantics.latestLabel,
         bucketKey: summary.latestBucket.bucketKey,
         time: summary.latestBucket.time,
         aggregateDisplayValue: formatInsightAggregateDisplay(input.query.dataType, summary.latestBucket.aggregateValue, input.unitSettings),
         totalCount: summary.latestBucket.totalCount,
       }
       : null,
+    improvedVerb: metricSemantics.improvedVerb,
+    declinedVerb: metricSemantics.declinedVerb,
   };
 }
 
@@ -136,7 +158,7 @@ function buildNarrativeFallback(input: SummarizeInsightResultInput): string {
     return `Your ${input.metricLabel} for ${activityText} between ${dateRangeText} was ${summary.overallAggregateDisplayValue}. This was calculated from ${summary.matchedEventCount} ${activityNoun}.`;
   }
 
-  if (!summary.peakBucket || !summary.latestBucket) {
+  if (!summary.highestValueBucket || !summary.latestBucket) {
     return `I found matching ${activityText} events for ${input.metricLabel}, but there was not enough aggregated data to summarize the result.`;
   }
 
@@ -144,7 +166,7 @@ function buildNarrativeFallback(input: SummarizeInsightResultInput): string {
     ? 'activity groups'
     : 'time buckets';
 
-  return `I found ${input.aggregation.buckets.length} ${grouping} for ${input.presentation.title}. The peak value was ${summary.peakBucket.aggregateDisplayValue}, and the latest value was ${summary.latestBucket.aggregateDisplayValue}.`;
+  return `I found ${input.aggregation.buckets.length} ${grouping} for ${input.presentation.title}. The ${summary.highestValueBucket.label.toLowerCase()} was ${summary.highestValueBucket.aggregateDisplayValue}, and the ${summary.latestBucket.label.toLowerCase()} was ${summary.latestBucket.aggregateDisplayValue}.`;
 }
 
 export function buildNarrativeFacts(input: SummarizeInsightResultInput): Record<string, unknown> {
@@ -152,9 +174,9 @@ export function buildNarrativeFacts(input: SummarizeInsightResultInput): Record<
 
   return {
     status: input.status,
-    prompt: input.prompt,
-    metricLabel: input.metricLabel,
-    title: input.presentation.title,
+      prompt: input.prompt,
+      metricLabel: input.metricLabel,
+      title: input.presentation.title,
     chartType: input.presentation.chartType,
     categoryType: input.query.categoryType,
     valueType: input.query.valueType,
@@ -178,7 +200,7 @@ const defaultSummarizeInsightDependencies: SummarizeInsightDependencies = {
       system: [
         'You write concise fitness insight summaries.',
         'Use only the supplied facts.',
-        'Use the provided formatted display values exactly as supplied.',
+        'Use the provided formatted display values and labels exactly as supplied.',
         'Do not invent units, dates, metrics, or calculations.',
         'Do not restate raw storage values or infer new numeric calculations.',
         'If the status is empty, clearly say that no matching data was found.',
