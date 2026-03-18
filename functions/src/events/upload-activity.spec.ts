@@ -754,6 +754,33 @@ describe('uploadActivity', () => {
     expect(event.name).toBe('keep-me');
   });
 
+  it('should decode percent-encoded original filenames from the request header', async () => {
+    const response = makeResponse();
+    const event = makeParsedEvent();
+    event.name = 'keep-me';
+    hoisted.mockFITImporter.getFromArrayBuffer.mockResolvedValueOnce(event);
+    const originalFilename = 'тренировка.fit';
+
+    await invokeUploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+        'X-Original-Filename-Encoded': encodeURIComponent(originalFilename),
+        'X-File-Extension': 'fit',
+      },
+    }), response);
+
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(event.name).toBe('тренировка');
+    expect(hoisted.mockWriteAllEventData).toHaveBeenCalledWith(
+      'user-1',
+      expect.anything(),
+      expect.objectContaining({
+        originalFilename,
+      }),
+    );
+  });
+
   it('should not regenerate activity ids when the parser already provided them', async () => {
     const response = makeResponse();
     const activity = { getID: vi.fn(() => 'existing-activity-id'), setID: vi.fn() };

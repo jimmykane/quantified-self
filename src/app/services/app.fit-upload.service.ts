@@ -11,6 +11,18 @@ export interface UploadActivityFromFitResponse {
     uploadCountAfterWrite: number | null;
 }
 
+function canUsePlainHeaderValue(value: string): boolean {
+    for (const char of value) {
+        const codePoint = char.codePointAt(0) ?? 0;
+        const isControlCharacter = codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f);
+        if (isControlCharacter || codePoint > 0xff) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 function mapFallbackUploadErrorMessage(statusCode: number): string {
     if (statusCode >= 500) {
         return 'Upload service is temporarily unavailable. Please try again shortly.';
@@ -75,8 +87,12 @@ export class AppFitUploadService {
             'Content-Type': 'application/octet-stream',
         });
 
-        if (originalFilename && originalFilename.trim().length > 0) {
-            headers.set('X-Original-Filename', originalFilename.trim());
+        const trimmedOriginalFilename = originalFilename?.trim();
+        if (trimmedOriginalFilename) {
+            headers.set('X-Original-Filename-Encoded', encodeURIComponent(trimmedOriginalFilename));
+            if (canUsePlainHeaderValue(trimmedOriginalFilename)) {
+                headers.set('X-Original-Filename', trimmedOriginalFilename);
+            }
         }
 
         const response = await fetch(functionURL, {
@@ -88,7 +104,7 @@ export class AppFitUploadService {
         let payload: any = null;
         try {
             payload = await response.json();
-        } catch (_error) {
+        } catch {
             payload = null;
         }
 
