@@ -36,6 +36,20 @@ export interface AiInsightPresentation {
   warnings?: string[];
 }
 
+export interface AiInsightSummaryBucket {
+  bucketKey: string | number;
+  time?: number;
+  aggregateValue: number;
+  totalCount: number;
+}
+
+export interface AiInsightSummary {
+  matchedEventCount: number;
+  overallAggregateValue: number | null;
+  peakBucket: AiInsightSummaryBucket | null;
+  latestBucket: AiInsightSummaryBucket | null;
+}
+
 export type AiInsightsUnsupportedReasonCode =
   | 'invalid_prompt'
   | 'unsupported_metric'
@@ -47,6 +61,7 @@ export interface AiInsightsOkResponse {
   narrative: string;
   query: NormalizedInsightQuery;
   aggregation: EventStatAggregationResult;
+  summary: AiInsightSummary;
   presentation: AiInsightPresentation;
 }
 
@@ -55,6 +70,7 @@ export interface AiInsightsEmptyResponse {
   narrative: string;
   query: NormalizedInsightQuery;
   aggregation: EventStatAggregationResult;
+  summary: AiInsightSummary;
   presentation: AiInsightPresentation & {
     emptyState: string;
   };

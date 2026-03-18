@@ -4,11 +4,13 @@ import {
   DataDuration,
   DataInterface,
   DynamicDataLoader,
+  UserUnitSettingsInterface,
   TimeIntervals
 } from '@sports-alliance/sports-lib';
 import * as weeknumber from 'weeknumber';
 import type { AggregatedChartRow } from './aggregated-chart-row.helper';
 import { getBrowserLocale } from '../shared/adapters/date-locale.config';
+import { resolveUnitAwareDisplayStat, resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 
 type WarnLogger = {
   warn?: (...args: unknown[]) => void;
@@ -160,7 +162,10 @@ export function getDashboardAggregateData(
   }
 }
 
-export function formatDashboardDataDisplay(data: DataInterface | null | undefined): string {
+export function formatDashboardDataDisplay(
+  data: DataInterface | null | undefined,
+  unitSettings?: UserUnitSettingsInterface | null,
+): string {
   if (!data) {
     return '--';
   }
@@ -170,17 +175,26 @@ export function formatDashboardDataDisplay(data: DataInterface | null | undefine
     return data.getDisplayValue(true, false).trim();
   }
 
-  return `${data.getDisplayValue()}${data.getDisplayUnit()}`.trim();
+  return resolveUnitAwareDisplayStat(data, unitSettings, { stripRepeatedUnit: true })?.text
+    ?? `${data.getDisplayValue()}${data.getDisplayUnit()}`.trim();
 }
 
 export function formatDashboardNumericValue(
   chartDataType: string | undefined,
   value: unknown,
-  logger?: WarnLogger
+  logger?: WarnLogger,
+  unitSettings?: UserUnitSettingsInterface | null,
 ): string {
   const numericValue = toFiniteNumber(value);
   if (numericValue === null) {
     return '--';
+  }
+
+  const display = resolveUnitAwareDisplayFromValue(chartDataType, numericValue, unitSettings, {
+    stripRepeatedUnit: true,
+  });
+  if (display) {
+    return display.text;
   }
 
   const data = getDashboardDataInstanceOrNull(chartDataType, numericValue, logger);
@@ -188,7 +202,7 @@ export function formatDashboardNumericValue(
     return Number(numericValue).toLocaleString(undefined, { maximumFractionDigits: 2 });
   }
 
-  return formatDashboardDataDisplay(data);
+  return formatDashboardDataDisplay(data, unitSettings);
 }
 
 export function getDashboardChartSortComparator(

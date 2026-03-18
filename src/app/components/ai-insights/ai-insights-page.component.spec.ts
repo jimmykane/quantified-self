@@ -11,6 +11,7 @@ import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   ChartTypes,
+  DataCadenceAvg,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
 import type {
@@ -19,6 +20,7 @@ import type {
   AiInsightsResponse,
   AiInsightsUnsupportedResponse,
 } from '@shared/ai-insights.types';
+import { formatUnitAwareDataValue, normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { AiInsightsService } from '../../services/ai-insights.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
@@ -35,6 +37,7 @@ class MockAiInsightsChartComponent {
   readonly response = input.required<AiInsightsOkResponse>();
   readonly darkTheme = input(false);
   readonly useAnimations = input(false);
+  readonly userUnitSettings = input<any>(null);
 }
 
 function buildOkResponse(): AiInsightsOkResponse {
@@ -42,7 +45,7 @@ function buildOkResponse(): AiInsightsOkResponse {
     status: 'ok',
     narrative: 'Your average cadence has trended up over the last three months.',
     query: {
-      dataType: 'DataCadenceAvg',
+      dataType: DataCadenceAvg.type,
       valueType: ChartDataValueTypes.Average,
       categoryType: ChartDataCategoryTypes.DateType,
       requestedTimeInterval: TimeIntervals.Monthly,
@@ -55,7 +58,7 @@ function buildOkResponse(): AiInsightsOkResponse {
       chartType: ChartTypes.LinesVertical,
     },
     aggregation: {
-      dataType: 'DataCadenceAvg',
+      dataType: DataCadenceAvg.type,
       valueType: ChartDataValueTypes.Average,
       categoryType: ChartDataCategoryTypes.DateType,
       resolvedTimeInterval: TimeIntervals.Monthly,
@@ -70,6 +73,22 @@ function buildOkResponse(): AiInsightsOkResponse {
         },
       ],
     },
+    summary: {
+      matchedEventCount: 4,
+      overallAggregateValue: 86,
+      peakBucket: {
+        bucketKey: '2026-01',
+        time: Date.UTC(2026, 0, 1),
+        aggregateValue: 86,
+        totalCount: 4,
+      },
+      latestBucket: {
+        bucketKey: '2026-01',
+        time: Date.UTC(2026, 0, 1),
+        aggregateValue: 86,
+        totalCount: 4,
+      },
+    },
     presentation: {
       title: 'Average cadence over time for Cycling',
       chartType: ChartTypes.LinesVertical,
@@ -83,7 +102,7 @@ function buildEmptyResponse(): AiInsightsEmptyResponse {
     status: 'empty',
     narrative: 'I could not find matching events with cadence data in that range.',
     query: {
-      dataType: 'DataCadenceAvg',
+      dataType: DataCadenceAvg.type,
       valueType: ChartDataValueTypes.Average,
       categoryType: ChartDataCategoryTypes.DateType,
       requestedTimeInterval: TimeIntervals.Monthly,
@@ -96,11 +115,17 @@ function buildEmptyResponse(): AiInsightsEmptyResponse {
       chartType: ChartTypes.LinesVertical,
     },
     aggregation: {
-      dataType: 'DataCadenceAvg',
+      dataType: DataCadenceAvg.type,
       valueType: ChartDataValueTypes.Average,
       categoryType: ChartDataCategoryTypes.DateType,
       resolvedTimeInterval: TimeIntervals.Monthly,
       buckets: [],
+    },
+    summary: {
+      matchedEventCount: 0,
+      overallAggregateValue: null,
+      peakBucket: null,
+      latestBucket: null,
     },
     presentation: {
       title: 'Average cadence over time for Cycling',
@@ -132,6 +157,7 @@ describe('AiInsightsPageComponent', () => {
   };
   const userSettingsQueryServiceMock = {
     chartSettings: signal({ useAnimations: true }),
+    unitSettings: signal(normalizeUserUnitSettings({})),
   };
 
   let fixture: ComponentFixture<AiInsightsPageComponent>;
@@ -196,9 +222,20 @@ describe('AiInsightsPageComponent', () => {
 
     const narrative = fixture.debugElement.query(By.css('.narrative'))?.nativeElement as HTMLElement | undefined;
     const chart = fixture.debugElement.query(By.css('.chart-stub'))?.nativeElement as HTMLElement | undefined;
+    const chartComponent = fixture.debugElement.query(By.directive(MockAiInsightsChartComponent))?.componentInstance as MockAiInsightsChartComponent | undefined;
+    const summaryCards = fixture.debugElement.queryAll(By.css('.summary-card'));
+    const expectedOverall = formatUnitAwareDataValue(
+      DataCadenceAvg.type,
+      86,
+      userSettingsQueryServiceMock.unitSettings(),
+      { stripRepeatedUnit: true },
+    );
 
     expect(narrative?.textContent).toContain('trended up');
     expect(chart?.textContent).toContain('Average cadence over time for Cycling');
+    expect(chartComponent?.userUnitSettings()).toEqual(userSettingsQueryServiceMock.unitSettings());
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Overall'))).toBe(true);
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes(expectedOverall ?? ''))).toBe(true);
   });
 
   it('should render unsupported responses and swap in backend suggestions', async () => {

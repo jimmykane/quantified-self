@@ -2,6 +2,12 @@ import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   DataDuration,
+  DataPaceAvg,
+  DataSpeedAvg,
+  DaysOfTheWeek,
+  PaceUnits,
+  SpeedUnits,
+  SwimPaceUnits,
   TimeIntervals
 } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
@@ -12,6 +18,7 @@ import {
   getDashboardChartSortComparator,
   getDashboardSummaryMetaLabel
 } from './dashboard-chart-data.helper';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 
 describe('dashboard-chart-data.helper', () => {
   it('should return per interval labels for date categories', () => {
@@ -61,6 +68,38 @@ describe('dashboard-chart-data.helper', () => {
     const value = formatDashboardNumericValue(DataDuration.type, (2 * 60 * 60) + (15 * 60) + 30);
 
     expect(value).toBe('02h 15m 30s');
+  });
+
+  it('should format pace values using the provided unit settings', () => {
+    const value = formatDashboardNumericValue(
+      DataPaceAvg.type,
+      300,
+      undefined,
+      normalizeUserUnitSettings({
+        paceUnits: [PaceUnits.MinutesPerMile],
+        speedUnits: [SpeedUnits.MilesPerHour],
+        swimPaceUnits: [SwimPaceUnits.MinutesPer100Meter],
+        startOfTheWeek: DaysOfTheWeek.Monday,
+      }),
+    );
+
+    expect(value).toBe('08:02 min/m');
+  });
+
+  it('should format speed values using the provided unit settings', () => {
+    const value = formatDashboardNumericValue(
+      DataSpeedAvg.type,
+      10,
+      undefined,
+      normalizeUserUnitSettings({
+        paceUnits: [PaceUnits.MinutesPerMile],
+        speedUnits: [SpeedUnits.MilesPerHour],
+        swimPaceUnits: [SwimPaceUnits.MinutesPer100Meter],
+        startOfTheWeek: DaysOfTheWeek.Monday,
+      }),
+    );
+
+    expect(value).toBe('22.37 mph');
   });
 
   it('should sort activity rows by their selected aggregate value', () => {

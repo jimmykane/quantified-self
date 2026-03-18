@@ -23,6 +23,23 @@ import {
   summarizeAiInsightResult,
 } from './summarize-result.flow';
 
+const paceSummary = {
+  matchedEventCount: 5,
+  overallAggregateValue: 422.3478623928474,
+  peakBucket: {
+    bucketKey: '2026-03',
+    time: Date.parse('2026-03-01T00:00:00.000Z'),
+    aggregateValue: 422.3478623928474,
+    totalCount: 5,
+  },
+  latestBucket: {
+    bucketKey: '2026-03',
+    time: Date.parse('2026-03-01T00:00:00.000Z'),
+    aggregateValue: 422.3478623928474,
+    totalCount: 5,
+  },
+};
+
 const paceInput = {
   status: 'ok' as const,
   prompt: 'Show my average pace for trailrunning over the last 6 months',
@@ -56,6 +73,7 @@ const paceInput = {
       },
     ],
   },
+  summary: paceSummary,
   presentation: {
     title: 'Average pace over time for Trail Running',
     chartType: ChartTypes.LinesVertical,

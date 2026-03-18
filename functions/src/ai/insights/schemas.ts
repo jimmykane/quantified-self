@@ -6,7 +6,7 @@ import {
   ChartTypes,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
-import type { NormalizedInsightQuery } from '../../../../shared/ai-insights.types';
+import type { AiInsightSummary, NormalizedInsightQuery } from '../../../../shared/ai-insights.types';
 import { CANONICAL_ACTIVITY_TYPES } from './canonical-activity-types';
 
 const CANONICAL_ACTIVITY_TYPE_SCHEMA_VALUES = (
@@ -65,6 +65,20 @@ export const AiInsightPresentationSchema = z.object({
   warnings: z.array(z.string()).optional(),
 });
 
+export const AiInsightSummaryBucketSchema = z.object({
+  bucketKey: z.union([z.string(), z.number()]),
+  time: z.number().optional(),
+  aggregateValue: z.number(),
+  totalCount: z.number().int().nonnegative(),
+});
+
+export const AiInsightSummarySchema: z.ZodType<AiInsightSummary> = z.object({
+  matchedEventCount: z.number().int().nonnegative(),
+  overallAggregateValue: z.number().nullable(),
+  peakBucket: AiInsightSummaryBucketSchema.nullable(),
+  latestBucket: AiInsightSummaryBucketSchema.nullable(),
+});
+
 export const AiInsightsUnsupportedReasonCodeSchema = z.enum([
   'invalid_prompt',
   'unsupported_metric',
@@ -78,6 +92,7 @@ export const AiInsightsResponseSchema = z.discriminatedUnion('status', [
     narrative: z.string().min(1),
     query: NormalizedInsightQuerySchema,
     aggregation: EventStatAggregationResultSchema,
+    summary: AiInsightSummarySchema,
     presentation: AiInsightPresentationSchema,
   }),
   z.object({
@@ -85,6 +100,7 @@ export const AiInsightsResponseSchema = z.discriminatedUnion('status', [
     narrative: z.string().min(1),
     query: NormalizedInsightQuerySchema,
     aggregation: EventStatAggregationResultSchema,
+    summary: AiInsightSummarySchema,
     presentation: AiInsightPresentationSchema.extend({
       emptyState: z.string().min(1),
     }),

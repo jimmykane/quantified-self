@@ -6,6 +6,7 @@ import {
   ChartTypes,
 } from '@sports-alliance/sports-lib';
 import type {
+  AiInsightSummary,
   AiInsightPresentation,
   AiInsightsRequest,
   AiInsightsResponse,
@@ -20,6 +21,7 @@ import { getInsightMetricDefinition, getSuggestedInsightPrompts } from './metric
 import { normalizeInsightQuery } from './normalize-query.flow';
 import { AiInsightsRequestSchema, AiInsightsResponseSchema } from './schemas';
 import { summarizeAiInsightResult } from './summarize-result.flow';
+import { loadUserUnitSettings } from './user-unit-settings';
 
 interface AiInsightsCallableContext {
   auth?: {
@@ -104,6 +106,78 @@ function buildUnsupportedResponse(
   };
 }
 
+function resolveOverallAggregateValue(
+  query: NormalizedInsightQuery,
+  aggregation: {
+    buckets: Array<{ aggregateValue: number; totalCount: number }>;
+  },
+): number | null {
+  const buckets = aggregation.buckets.filter((bucket) => Number.isFinite(bucket.aggregateValue));
+  if (!buckets.length) {
+    return null;
+  }
+
+  switch (query.valueType) {
+    case ChartDataValueTypes.Total:
+      return buckets.reduce((sum, bucket) => sum + bucket.aggregateValue, 0);
+    case ChartDataValueTypes.Maximum:
+      return Math.max(...buckets.map((bucket) => bucket.aggregateValue));
+    case ChartDataValueTypes.Minimum:
+      return Math.min(...buckets.map((bucket) => bucket.aggregateValue));
+    case ChartDataValueTypes.Average: {
+      const weighted = buckets.reduce((acc, bucket) => ({
+        totalValue: acc.totalValue + (bucket.aggregateValue * bucket.totalCount),
+        totalCount: acc.totalCount + bucket.totalCount,
+      }), { totalValue: 0, totalCount: 0 });
+
+      if (weighted.totalCount > 0) {
+        return weighted.totalValue / weighted.totalCount;
+      }
+
+      return buckets.reduce((sum, bucket) => sum + bucket.aggregateValue, 0) / buckets.length;
+    }
+    default:
+      return null;
+  }
+}
+
+function buildInsightSummary(
+  query: NormalizedInsightQuery,
+  aggregation: {
+    buckets: Array<{
+      bucketKey: string | number;
+      time?: number;
+      aggregateValue: number;
+      totalCount: number;
+    }>;
+  },
+  matchedEventCount: number,
+): AiInsightSummary {
+  const peakBucket = [...aggregation.buckets].sort((left, right) => right.aggregateValue - left.aggregateValue)[0] ?? null;
+  const latestBucket = aggregation.buckets[aggregation.buckets.length - 1] ?? null;
+
+  return {
+    matchedEventCount,
+    overallAggregateValue: resolveOverallAggregateValue(query, aggregation),
+    peakBucket: peakBucket
+      ? {
+        bucketKey: peakBucket.bucketKey,
+        time: peakBucket.time,
+        aggregateValue: peakBucket.aggregateValue,
+        totalCount: peakBucket.totalCount,
+      }
+      : null,
+    latestBucket: latestBucket
+      ? {
+        bucketKey: latestBucket.bucketKey,
+        time: latestBucket.time,
+        aggregateValue: latestBucket.aggregateValue,
+        totalCount: latestBucket.totalCount,
+      }
+      : null,
+  };
+}
+
 export async function runAiInsights(
   input: AiInsightsRequest,
   context: AiInsightsCallableContext | undefined,
@@ -146,7 +220,13 @@ export async function runAiInsights(
     return buildUnsupportedResponse('unsupported_metric');
   }
 
+  const unitSettings = await loadUserUnitSettings(context.auth.uid);
   const executionResult = await executeAiInsightsQuery(context.auth.uid, normalizeResult.query, prompt);
+  const summary = buildInsightSummary(
+    normalizeResult.query,
+    executionResult.aggregation,
+    executionResult.matchedEventsCount,
+  );
   const presentation = buildInsightPresentation(normalizeResult.query, metric.label);
   const isEmpty = executionResult.aggregation.buckets.length === 0;
   const emptyPresentation = {
@@ -160,8 +240,10 @@ export async function runAiInsights(
     metricLabel: metric.label,
     query: normalizeResult.query,
     aggregation: executionResult.aggregation,
+    summary,
     presentation: isEmpty ? emptyPresentation : presentation,
     clientLocale: input.clientLocale,
+    unitSettings,
   });
 
   if (isEmpty) {
@@ -170,18 +252,20 @@ export async function runAiInsights(
       narrative,
       query: normalizeResult.query,
       aggregation: executionResult.aggregation,
+      summary,
       presentation: emptyPresentation,
     };
   }
 
   return {
-    status: 'ok',
-    narrative,
-    query: normalizeResult.query,
-    aggregation: executionResult.aggregation,
-    presentation,
-  };
-}
+      status: 'ok',
+      narrative,
+      query: normalizeResult.query,
+      aggregation: executionResult.aggregation,
+      summary,
+      presentation,
+    };
+  }
 
 export const aiInsightsFlow = aiInsightsGenkit.defineFlow({
   name: 'aiInsightsFlow',

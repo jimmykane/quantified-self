@@ -15,8 +15,10 @@ import {
   ActivityTypesHelper,
   ChartDataCategoryTypes,
   ChartDataValueTypes,
-  TimeIntervals
+  TimeIntervals,
+  type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { AppColors } from '../../../services/color/app.colors';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
@@ -67,6 +69,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() darkTheme = false;
   @Input() useAnimations = false;
   @Input() isLoading = false;
+  @Input() userUnitSettings?: UserUnitSettingsInterface | null;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
@@ -116,7 +119,8 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
       changes.chartDataType ||
       changes.chartDataValueType ||
       changes.chartDataCategoryType ||
-      changes.chartDataTimeInterval
+      changes.chartDataTimeInterval ||
+      changes.userUnitSettings
     ) {
       void this.refreshChart();
     }
@@ -207,7 +211,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
     const centerLabel = aggregateData
       ? normalizeUnitDerivedTypeLabel(aggregateData.getType(), aggregateData.getDisplayType())
       : (this.chartDataValueType || 'Value');
-    const centerValue = formatDashboardDataDisplay(aggregateData);
+    const centerValue = formatDashboardDataDisplay(aggregateData, this.getNormalizedUnitSettings());
     const centerSubLabel = getDashboardSummaryMetaLabel(
       this.chartDataCategoryType,
       this.chartDataValueType,
@@ -238,7 +242,12 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
           if (!entry) {
             return '';
           }
-          const valueText = formatDashboardNumericValue(this.chartDataType, entry.value, this.logger);
+          const valueText = formatDashboardNumericValue(
+            this.chartDataType,
+            entry.value,
+            this.logger,
+            this.getNormalizedUnitSettings(),
+          );
           const percent = Number(entry.percent || 0).toFixed(1);
           const activitiesCountLabel = entry.count > 0 ? `<br/>${entry.count} Activities` : '';
 
@@ -343,6 +352,10 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
     }
 
     return this.dateTypePalette[index % this.dateTypePalette.length];
+  }
+
+  private getNormalizedUnitSettings(): UserUnitSettingsInterface {
+    return normalizeUserUnitSettings(this.userUnitSettings);
   }
 }
 

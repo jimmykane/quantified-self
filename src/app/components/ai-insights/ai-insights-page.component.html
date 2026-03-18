@@ -121,10 +121,25 @@
               </mat-chip-set>
             }
 
+            @if (resultSummaryCards().length) {
+              <div class="summary-grid">
+                @for (summaryCard of resultSummaryCards(); track summaryCard.label) {
+                  <section class="summary-card">
+                    <p class="mat-label-medium summary-label">{{ summaryCard.label }}</p>
+                    <p class="mat-title-large summary-value">{{ summaryCard.value }}</p>
+                    @if (summaryCard.meta) {
+                      <p class="mat-body-small summary-meta">{{ summaryCard.meta }}</p>
+                    }
+                  </section>
+                }
+              </div>
+            }
+
             <app-ai-insights-chart
               [response]="result"
               [darkTheme]="isDarkTheme()"
-              [useAnimations]="useAnimations()">
+              [useAnimations]="useAnimations()"
+              [userUnitSettings]="userUnitSettings()">
             </app-ai-insights-chart>
           </div>
         } @else {

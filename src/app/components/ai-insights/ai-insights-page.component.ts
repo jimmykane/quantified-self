@@ -3,8 +3,15 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterModule } from '@angular/router';
-import { AppThemes, type ActivityTypes } from '@sports-alliance/sports-lib';
+import {
+  AppThemes,
+  ChartDataCategoryTypes,
+  TimeIntervals,
+  type ActivityTypes,
+  type UserUnitSettingsInterface,
+} from '@sports-alliance/sports-lib';
 import type {
+  AiInsightSummaryBucket,
   AiInsightsEmptyResponse,
   AiInsightsOkResponse,
   AiInsightsRequest,
@@ -12,6 +19,7 @@ import type {
   AiInsightsUnsupportedResponse,
   NormalizedInsightDateRange,
 } from '@shared/ai-insights.types';
+import { formatUnitAwareDataValue, normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { MaterialModule } from '../../modules/material.module';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
@@ -53,6 +61,48 @@ function formatActivitySummary(activityTypes: ActivityTypes[]): string {
   return `${activityTypes.length} activity types`;
 }
 
+function formatBucketMeta(
+  response: AiInsightsOkResponse,
+  bucket: AiInsightSummaryBucket,
+  locale?: string,
+): string | null {
+  if (
+    response.query.categoryType === ChartDataCategoryTypes.DateType
+    && Number.isFinite(bucket.time)
+  ) {
+    const date = new Date(bucket.time as number);
+    const hasDayGranularity = response.aggregation.resolvedTimeInterval === TimeIntervals.Daily
+      || response.aggregation.resolvedTimeInterval === TimeIntervals.Weekly
+      || response.aggregation.resolvedTimeInterval === TimeIntervals.BiWeekly;
+
+    return new Intl.DateTimeFormat(locale || undefined, hasDayGranularity
+      ? { year: 'numeric', month: 'short', day: 'numeric' }
+      : { year: 'numeric', month: 'short' }).format(date);
+  }
+
+  return `${bucket.bucketKey}`;
+}
+
+function formatSummaryValue(
+  dataType: string,
+  value: number | null,
+  unitSettings: UserUnitSettingsInterface,
+): string | null {
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+
+  return formatUnitAwareDataValue(dataType, value, unitSettings, {
+    stripRepeatedUnit: true,
+  });
+}
+
+interface InsightSummaryCard {
+  label: string;
+  value: string;
+  meta?: string;
+}
+
 @Component({
   selector: 'app-ai-insights-page',
   standalone: true,
@@ -84,6 +134,9 @@ export class AiInsightsPageComponent {
   readonly errorMessage = signal<string | null>(null);
   readonly appTheme = this.themeService.appTheme;
   readonly chartSettings = this.userSettingsQueryService.chartSettings;
+  readonly userUnitSettings = computed(() =>
+    normalizeUserUnitSettings(this.userSettingsQueryService.unitSettings())
+  );
   readonly isDarkTheme = computed(() => this.appTheme() === AppThemes.Dark);
   readonly useAnimations = computed(() => this.chartSettings().useAnimations ?? false);
   readonly canSubmit = computed(() => !this.isSubmitting() && this.promptValue().trim().length > 0);
@@ -115,6 +168,65 @@ export class AiInsightsPageComponent {
     return `${formatDateRange(response.query.dateRange)} • ${formatActivitySummary(response.query.activityTypes)}`;
   });
   readonly resultWarnings = computed(() => this.okResponse()?.presentation.warnings ?? []);
+  readonly resultSummaryCards = computed<InsightSummaryCard[]>(() => {
+    const response = this.okResponse();
+    if (!response) {
+      return [];
+    }
+
+    const unitSettings = this.userUnitSettings();
+    const locale = getClientLocale();
+    const cards: InsightSummaryCard[] = [
+      {
+        label: 'Activities',
+        value: new Intl.NumberFormat(locale || undefined).format(response.summary.matchedEventCount),
+      },
+    ];
+
+    const overallValue = formatSummaryValue(
+      response.query.dataType,
+      response.summary.overallAggregateValue,
+      unitSettings,
+    );
+    if (overallValue) {
+      cards.unshift({
+        label: 'Overall',
+        value: overallValue,
+      });
+    }
+
+    if (response.summary.peakBucket) {
+      const peakValue = formatSummaryValue(
+        response.query.dataType,
+        response.summary.peakBucket.aggregateValue,
+        unitSettings,
+      );
+      if (peakValue) {
+        cards.push({
+          label: 'Peak bucket',
+          value: peakValue,
+          meta: formatBucketMeta(response, response.summary.peakBucket, locale) || undefined,
+        });
+      }
+    }
+
+    if (response.summary.latestBucket) {
+      const latestValue = formatSummaryValue(
+        response.query.dataType,
+        response.summary.latestBucket.aggregateValue,
+        unitSettings,
+      );
+      if (latestValue) {
+        cards.push({
+          label: 'Latest bucket',
+          value: latestValue,
+          meta: formatBucketMeta(response, response.summary.latestBucket, locale) || undefined,
+        });
+      }
+    }
+
+    return cards;
+  });
 
   onFormSubmit(event: SubmitEvent | Event): void {
     event.preventDefault();

@@ -9,6 +9,7 @@ import {
   ChartDataValueTypes,
   ChartTypes,
   TimeIntervals,
+  type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
 import type { AiInsightsOkResponse } from '@shared/ai-insights.types';
 import { AiInsightsChartComponent } from './ai-insights-chart.component';
@@ -27,6 +28,7 @@ class MockXYChartComponent {
   @Input() darkTheme = false;
   @Input() useAnimations = false;
   @Input() vertical = true;
+  @Input() userUnitSettings?: UserUnitSettingsInterface | null;
 }
 
 @Component({
@@ -44,6 +46,7 @@ class MockColumnsChartComponent {
   @Input() useAnimations = false;
   @Input() vertical = true;
   @Input() type: 'columns' | 'pyramids' = 'columns';
+  @Input() userUnitSettings?: UserUnitSettingsInterface | null;
 }
 
 @Component({
@@ -59,6 +62,7 @@ class MockPieChartComponent {
   @Input() chartDataTimeInterval?: TimeIntervals;
   @Input() darkTheme = false;
   @Input() useAnimations = false;
+  @Input() userUnitSettings?: UserUnitSettingsInterface | null;
 }
 
 function buildResponse(chartType: ChartTypes, categoryType = ChartDataCategoryTypes.DateType): AiInsightsOkResponse {
@@ -93,6 +97,22 @@ function buildResponse(chartType: ChartTypes, categoryType = ChartDataCategoryTy
           seriesCounts: { Cycling: 3 },
         },
       ],
+    },
+    summary: {
+      matchedEventCount: 3,
+      overallAggregateValue: 84.5,
+      peakBucket: {
+        bucketKey: categoryType === ChartDataCategoryTypes.DateType ? '2026-01' : ActivityTypes.Cycling,
+        time: categoryType === ChartDataCategoryTypes.DateType ? Date.UTC(2026, 0, 1) : undefined,
+        aggregateValue: 84.5,
+        totalCount: 3,
+      },
+      latestBucket: {
+        bucketKey: categoryType === ChartDataCategoryTypes.DateType ? '2026-01' : ActivityTypes.Cycling,
+        time: categoryType === ChartDataCategoryTypes.DateType ? Date.UTC(2026, 0, 1) : undefined,
+        aggregateValue: 84.5,
+        totalCount: 3,
+      },
     },
     presentation: {
       title: 'Average cadence over time for Cycling',
@@ -129,6 +149,7 @@ describe('AiInsightsChartComponent', () => {
     componentRef.setInput('response', buildResponse(ChartTypes.LinesVertical));
     componentRef.setInput('darkTheme', true);
     componentRef.setInput('useAnimations', true);
+    componentRef.setInput('userUnitSettings', { paceUnits: ['Pace'] } as UserUnitSettingsInterface);
     fixture.detectChanges();
 
     const chart = fixture.debugElement.query(By.directive(MockXYChartComponent));
@@ -136,6 +157,7 @@ describe('AiInsightsChartComponent', () => {
     expect(chart.componentInstance.vertical).toBe(true);
     expect(chart.componentInstance.darkTheme).toBe(true);
     expect(chart.componentInstance.useAnimations).toBe(true);
+    expect(chart.componentInstance.userUnitSettings).toEqual({ paceUnits: ['Pace'] });
     expect(chart.componentInstance.chartDataTimeInterval).toBe(TimeIntervals.Monthly);
     expect(chart.componentInstance.data).toEqual([
       {

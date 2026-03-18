@@ -110,6 +110,31 @@
   margin-bottom: 0.25rem;
 }
 
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.75rem;
+}
+
+.summary-card {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 1rem;
+  background: var(--mat-sys-surface-container-low);
+}
+
+.summary-label,
+.summary-value,
+.summary-meta {
+  margin: 0;
+}
+
+.summary-meta {
+  color: var(--mat-sys-on-surface-variant);
+}
+
 .state-panel {
   display: grid;
   gap: 1rem;

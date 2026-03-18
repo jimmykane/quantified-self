@@ -14,8 +14,10 @@ import {
   ActivityTypes,
   ChartDataCategoryTypes,
   ChartDataValueTypes,
-  TimeIntervals
+  TimeIntervals,
+  type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { AppColors } from '../../../services/color/app.colors';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
@@ -69,6 +71,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
   @Input() darkTheme = false;
   @Input() useAnimations = false;
   @Input() isLoading = false;
+  @Input() userUnitSettings?: UserUnitSettingsInterface | null;
 
   @Input() vertical = true;
   @Input() type: 'columns' | 'pyramids' = 'columns';
@@ -119,7 +122,8 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
       changes.chartDataCategoryType ||
       changes.chartDataTimeInterval ||
       changes.vertical ||
-      changes.type
+      changes.type ||
+      changes.userUnitSettings
     ) {
       void this.refreshChart();
     }
@@ -238,7 +242,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     const summaryLabel = aggregate
       ? normalizeUnitDerivedTypeLabel(aggregate.getType(), aggregate.getDisplayType())
       : (this.chartDataValueType || 'Value');
-    const summaryValue = formatDashboardDataDisplay(aggregate);
+    const summaryValue = formatDashboardDataDisplay(aggregate, this.getNormalizedUnitSettings());
     const summaryMeta = getDashboardSummaryMetaLabel(
       this.chartDataCategoryType,
       this.chartDataValueType,
@@ -650,7 +654,12 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
   }
 
   private formatValue(value: number | null): string {
-    return formatDashboardNumericValue(this.chartDataType, value, this.logger);
+    return formatDashboardNumericValue(
+      this.chartDataType,
+      value,
+      this.logger,
+      this.getNormalizedUnitSettings(),
+    );
   }
 
   private formatTooltip(points: DashboardCartesianPoint[], dataIndex: number): string {
@@ -700,5 +709,9 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
 
     const breakdownText = lines.length ? `<br/>${lines.join('<br/>')}` : '';
     return `${bucket.label}<br/>${valueTypeLabel}: <strong>${totalText}</strong>${activityCountLabel}${breakdownText}`;
+  }
+
+  private getNormalizedUnitSettings(): UserUnitSettingsInterface {
+    return normalizeUserUnitSettings(this.userUnitSettings);
   }
 }

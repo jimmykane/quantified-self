@@ -5,6 +5,7 @@ import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   ChartTypes,
+  DataCadenceAvg,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
 import type { AiInsightsResponse } from '@shared/ai-insights.types';
@@ -22,7 +23,7 @@ describe('AiInsightsService', () => {
     status: 'ok',
     narrative: 'Average cadence improved.',
     query: {
-      dataType: 'DataCadenceAvg',
+      dataType: DataCadenceAvg.type,
       valueType: ChartDataValueTypes.Average,
       categoryType: ChartDataCategoryTypes.DateType,
       requestedTimeInterval: TimeIntervals.Monthly,
@@ -35,11 +36,17 @@ describe('AiInsightsService', () => {
       chartType: ChartTypes.LinesVertical,
     },
     aggregation: {
-      dataType: 'DataCadenceAvg',
+      dataType: DataCadenceAvg.type,
       valueType: ChartDataValueTypes.Average,
       categoryType: ChartDataCategoryTypes.DateType,
       resolvedTimeInterval: TimeIntervals.Monthly,
       buckets: [],
+    },
+    summary: {
+      matchedEventCount: 0,
+      overallAggregateValue: null,
+      peakBucket: null,
+      latestBucket: null,
     },
     presentation: {
       title: 'Average cadence over time for Cycling',

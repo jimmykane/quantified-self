@@ -22,6 +22,7 @@ const hoisted = vi.hoisted(() => {
     executeAiInsightsQuery: vi.fn(),
     summarizeAiInsightResult: vi.fn(),
     getInsightMetricDefinition: vi.fn(),
+    loadUserUnitSettings: vi.fn(),
   };
 });
 
@@ -61,6 +62,10 @@ vi.mock('./summarize-result.flow', () => ({
   summarizeAiInsightResult: (...args: unknown[]) => hoisted.summarizeAiInsightResult(...args),
 }));
 
+vi.mock('./user-unit-settings', () => ({
+  loadUserUnitSettings: (...args: unknown[]) => hoisted.loadUserUnitSettings(...args),
+}));
+
 vi.mock('./metric-catalog', () => ({
   getInsightMetricDefinition: (...args: unknown[]) => hoisted.getInsightMetricDefinition(...args),
   getSuggestedInsightPrompts: () => [
@@ -84,6 +89,23 @@ const normalizedQuery = {
     timezone: 'UTC',
   },
   chartType: ChartTypes.ColumnsVertical,
+};
+
+const summary = {
+  matchedEventCount: 2,
+  overallAggregateValue: 123,
+  peakBucket: {
+    bucketKey: 1,
+    time: 1,
+    aggregateValue: 123,
+    totalCount: 2,
+  },
+  latestBucket: {
+    bucketKey: 1,
+    time: 1,
+    aggregateValue: 123,
+    totalCount: 2,
+  },
 };
 
 describe('aiInsights callable', () => {
@@ -119,6 +141,15 @@ describe('aiInsights callable', () => {
           },
         ],
       },
+    });
+    hoisted.loadUserUnitSettings.mockResolvedValue({
+      speedUnits: ['Speed in kilometers per hour'],
+      gradeAdjustedSpeedUnits: ['Grade Adjusted Speed in kilometers per hour'],
+      paceUnits: ['Pace'],
+      gradeAdjustedPaceUnits: ['Grade Adjusted Pace'],
+      swimPaceUnits: ['Swim Pace'],
+      verticalSpeedUnits: ['Vertical Speed'],
+      startOfTheWeek: 1,
     });
     hoisted.summarizeAiInsightResult.mockResolvedValue('Narrative');
   });
@@ -157,7 +188,14 @@ describe('aiInsights callable', () => {
     } as any);
 
     expect(hoisted.normalizeInsightQuery).toHaveBeenCalled();
-    expect(hoisted.executeAiInsightsQuery).toHaveBeenCalledWith('user-1', normalizedQuery);
+    expect(hoisted.loadUserUnitSettings).toHaveBeenCalledWith('user-1');
+    expect(hoisted.executeAiInsightsQuery).toHaveBeenCalledWith('user-1', normalizedQuery, 'show distance');
+    expect(hoisted.summarizeAiInsightResult).toHaveBeenCalledWith(expect.objectContaining({
+      summary,
+      unitSettings: expect.objectContaining({
+        paceUnits: ['Pace'],
+      }),
+    }));
     expect(result).toEqual({
       status: 'ok',
       narrative: 'Narrative',
@@ -165,6 +203,7 @@ describe('aiInsights callable', () => {
       aggregation: expect.objectContaining({
         buckets: expect.any(Array),
       }),
+      summary,
       presentation: expect.objectContaining({
         title: 'Total distance over time for Cycling',
         chartType: ChartTypes.ColumnsVertical,
@@ -196,6 +235,12 @@ describe('aiInsights callable', () => {
       aggregation: expect.objectContaining({
         buckets: [],
       }),
+      summary: {
+        matchedEventCount: 0,
+        overallAggregateValue: null,
+        peakBucket: null,
+        latestBucket: null,
+      },
       presentation: expect.objectContaining({
         emptyState: 'No matching events were found for this insight in the requested range.',
       }),

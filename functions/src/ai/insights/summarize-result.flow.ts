@@ -1,16 +1,16 @@
 import { z } from 'genkit';
 import {
   ChartDataCategoryTypes,
-  ChartDataValueTypes,
-  DataDuration,
-  DynamicDataLoader,
+  type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
 
-import type { AiInsightPresentation, NormalizedInsightQuery } from '../../../../shared/ai-insights.types';
+import type { AiInsightPresentation, AiInsightSummary, NormalizedInsightQuery } from '../../../../shared/ai-insights.types';
 import type { EventStatAggregationResult } from '../../../../shared/event-stat-aggregation.types';
+import { formatUnitAwareDataValue } from '../../../../shared/unit-aware-display';
 import { aiInsightsGenkit } from './genkit';
 import {
   AiInsightPresentationSchema,
+  AiInsightSummarySchema,
   EventStatAggregationResultSchema,
   NormalizedInsightQuerySchema,
 } from './schemas';
@@ -21,8 +21,10 @@ export interface SummarizeInsightResultInput {
   metricLabel: string;
   query: NormalizedInsightQuery;
   aggregation: EventStatAggregationResult;
+  summary: AiInsightSummary;
   presentation: AiInsightPresentation;
   clientLocale?: string;
+  unitSettings?: UserUnitSettingsInterface;
 }
 
 interface SummarizeInsightDependencies {
@@ -35,15 +37,15 @@ const SummarizeInsightResultInputSchema = z.object({
   metricLabel: z.string().min(1),
   query: NormalizedInsightQuerySchema,
   aggregation: EventStatAggregationResultSchema,
+  summary: AiInsightSummarySchema,
   presentation: AiInsightPresentationSchema,
   clientLocale: z.string().optional(),
+  unitSettings: z.any().optional(),
 });
 
 const SummarizeInsightResultOutputSchema = z.object({
   narrative: z.string().min(1),
 });
-
-const SECONDS_PER_DAY = 24 * 60 * 60;
 
 function formatRangeForFallback(query: NormalizedInsightQuery): string {
   return `${query.dateRange.startDate.slice(0, 10)} to ${query.dateRange.endDate.slice(0, 10)}`;
@@ -72,82 +74,16 @@ function formatNumber(value: number): string {
   return value.toFixed(2);
 }
 
-function stripTrailingDisplayUnit(displayValue: string, displayUnit: string): string {
-  const value = displayValue.trim();
-  const unit = displayUnit.trim();
-  if (!value || !unit) {
-    return value;
-  }
+export function formatInsightAggregateDisplay(
+  dataType: string,
+  value: number,
+  unitSettings?: UserUnitSettingsInterface,
+): string {
+  const formattedValue = formatUnitAwareDataValue(dataType, value, unitSettings, {
+    stripRepeatedUnit: true,
+  });
 
-  const lowerValue = value.toLowerCase();
-  const lowerUnit = unit.toLowerCase();
-  const spacedUnitSuffix = ` ${lowerUnit}`;
-
-  if (lowerValue.endsWith(spacedUnitSuffix)) {
-    return value.slice(0, value.length - spacedUnitSuffix.length).trim();
-  }
-
-  if (lowerValue.endsWith(lowerUnit)) {
-    return value.slice(0, value.length - lowerUnit.length).trim();
-  }
-
-  return value;
-}
-
-export function formatInsightAggregateDisplay(dataType: string, value: number): string {
-  if (!Number.isFinite(value)) {
-    return formatNumber(value);
-  }
-
-  try {
-    const data = DynamicDataLoader.getDataInstanceFromDataType(dataType, value);
-    if (!data) {
-      return formatNumber(value);
-    }
-
-    const rawValue = typeof data.getValue === 'function' ? Number(data.getValue()) : value;
-    if (data instanceof DataDuration && Number.isFinite(rawValue) && rawValue >= SECONDS_PER_DAY) {
-      return `${data.getDisplayValue(true, false)}`.trim();
-    }
-
-    const displayValue = stripTrailingDisplayUnit(`${data.getDisplayValue?.() ?? ''}`, `${data.getDisplayUnit?.() ?? ''}`);
-    const displayUnit = `${data.getDisplayUnit?.() ?? ''}`.trim();
-    return displayUnit ? `${displayValue} ${displayUnit}`.trim() : displayValue;
-  } catch (_error) {
-    return formatNumber(value);
-  }
-}
-
-function resolveOverallAggregateValue(input: SummarizeInsightResultInput): number | null {
-  const buckets = input.aggregation.buckets.filter((bucket) => Number.isFinite(bucket.aggregateValue));
-  if (!buckets.length) {
-    return null;
-  }
-
-  switch (input.query.valueType) {
-    case ChartDataValueTypes.Total:
-      return buckets.reduce((sum, bucket) => sum + bucket.aggregateValue, 0);
-    case ChartDataValueTypes.Maximum:
-      return Math.max(...buckets.map((bucket) => bucket.aggregateValue));
-    case ChartDataValueTypes.Minimum:
-      return Math.min(...buckets.map((bucket) => bucket.aggregateValue));
-    case ChartDataValueTypes.Average: {
-      const weighted = buckets.reduce((acc, bucket) => {
-        return {
-          totalValue: acc.totalValue + (bucket.aggregateValue * bucket.totalCount),
-          totalCount: acc.totalCount + bucket.totalCount,
-        };
-      }, { totalValue: 0, totalCount: 0 });
-
-      if (weighted.totalCount > 0) {
-        return weighted.totalValue / weighted.totalCount;
-      }
-
-      return buckets.reduce((sum, bucket) => sum + bucket.aggregateValue, 0) / buckets.length;
-    }
-    default:
-      return null;
-  }
+  return formattedValue ?? formatNumber(value);
 }
 
 export function buildInsightSummaryFacts(input: SummarizeInsightResultInput): {
@@ -156,31 +92,27 @@ export function buildInsightSummaryFacts(input: SummarizeInsightResultInput): {
   peakBucket: { bucketKey: string | number; time?: number; aggregateDisplayValue: string; totalCount: number } | null;
   latestBucket: { bucketKey: string | number; time?: number; aggregateDisplayValue: string; totalCount: number } | null;
 } {
-  const buckets = input.aggregation.buckets;
-  const matchedEventCount = buckets.reduce((sum, bucket) => sum + bucket.totalCount, 0);
-  const overallAggregateValue = resolveOverallAggregateValue(input);
-  const peakBucket = [...buckets].sort((left, right) => right.aggregateValue - left.aggregateValue)[0];
-  const latestBucket = buckets[buckets.length - 1];
+  const { summary } = input;
 
   return {
-    matchedEventCount,
-    overallAggregateDisplayValue: overallAggregateValue === null
+    matchedEventCount: summary.matchedEventCount,
+    overallAggregateDisplayValue: summary.overallAggregateValue === null
       ? null
-      : formatInsightAggregateDisplay(input.query.dataType, overallAggregateValue),
-    peakBucket: peakBucket
+      : formatInsightAggregateDisplay(input.query.dataType, summary.overallAggregateValue, input.unitSettings),
+    peakBucket: summary.peakBucket
       ? {
-        bucketKey: peakBucket.bucketKey,
-        time: peakBucket.time,
-        aggregateDisplayValue: formatInsightAggregateDisplay(input.query.dataType, peakBucket.aggregateValue),
-        totalCount: peakBucket.totalCount,
+        bucketKey: summary.peakBucket.bucketKey,
+        time: summary.peakBucket.time,
+        aggregateDisplayValue: formatInsightAggregateDisplay(input.query.dataType, summary.peakBucket.aggregateValue, input.unitSettings),
+        totalCount: summary.peakBucket.totalCount,
       }
       : null,
-    latestBucket: latestBucket
+    latestBucket: summary.latestBucket
       ? {
-        bucketKey: latestBucket.bucketKey,
-        time: latestBucket.time,
-        aggregateDisplayValue: formatInsightAggregateDisplay(input.query.dataType, latestBucket.aggregateValue),
-        totalCount: latestBucket.totalCount,
+        bucketKey: summary.latestBucket.bucketKey,
+        time: summary.latestBucket.time,
+        aggregateDisplayValue: formatInsightAggregateDisplay(input.query.dataType, summary.latestBucket.aggregateValue, input.unitSettings),
+        totalCount: summary.latestBucket.totalCount,
       }
       : null,
   };
@@ -233,7 +165,7 @@ export function buildNarrativeFacts(input: SummarizeInsightResultInput): Record<
     buckets: input.aggregation.buckets.slice(0, 24).map(bucket => ({
       bucketKey: bucket.bucketKey,
       time: bucket.time,
-      aggregateDisplayValue: formatInsightAggregateDisplay(input.query.dataType, bucket.aggregateValue),
+      aggregateDisplayValue: formatInsightAggregateDisplay(input.query.dataType, bucket.aggregateValue, input.unitSettings),
       totalCount: bucket.totalCount,
     })),
   };

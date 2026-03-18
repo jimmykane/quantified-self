@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import { ChartTypes } from '@sports-alliance/sports-lib';
+import { ChartTypes, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import type { AiInsightsOkResponse } from '@shared/ai-insights.types';
 import { buildAggregatedChartRows } from '../../helpers/aggregated-chart-row.helper';
 import { AppChartsModule } from '../../modules/app-charts.module';
@@ -17,6 +17,7 @@ export class AiInsightsChartComponent {
   readonly response = input.required<AiInsightsOkResponse>();
   readonly darkTheme = input(false);
   readonly useAnimations = input(false);
+  readonly userUnitSettings = input<UserUnitSettingsInterface | null>(null);
 
   readonly chartRows = computed(() => buildAggregatedChartRows(this.response().aggregation));
   readonly chartType = computed(() => this.response().presentation.chartType);
