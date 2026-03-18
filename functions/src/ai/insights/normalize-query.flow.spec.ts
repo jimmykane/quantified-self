@@ -6,6 +6,7 @@ import {
   ChartTypes,
   DataCadenceAvg,
   DataDistance,
+  DataHeartRateAvg,
   DataHeartRateMax,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
@@ -263,6 +264,38 @@ describe('normalizeInsightQuery', () => {
 
     expect(result.metricKey).toBe('heart_rate');
     expect(result.query.dataType).toBe(DataHeartRateMax.type);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Maximum);
+    expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Daily);
+  });
+
+  it('keeps the average heart rate data type for highest average heart rate prompts', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'heart rate',
+        aggregation: 'maximum',
+        category: 'date',
+        requestedTimeInterval: 'auto',
+        dateRange: {
+          kind: 'current_period',
+          unit: 'month',
+        },
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'What was my highest average heart rate last month',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('heart_rate');
+    expect(result.query.dataType).toBe(DataHeartRateAvg.type);
     expect(result.query.valueType).toBe(ChartDataValueTypes.Maximum);
     expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Daily);
   });

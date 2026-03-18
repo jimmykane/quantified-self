@@ -101,6 +101,35 @@ interface InsightSummaryCard {
   label: string;
   value: string;
   meta?: string;
+  helpText?: string;
+}
+
+function isDateCategoryResponse(response: AiInsightsOkResponse): boolean {
+  return response.query.categoryType === ChartDataCategoryTypes.DateType;
+}
+
+function getPeakSummaryCardLabel(response: AiInsightsOkResponse): string {
+  return isDateCategoryResponse(response) ? 'Peak period' : 'Peak group';
+}
+
+function getLatestSummaryCardLabel(response: AiInsightsOkResponse): string {
+  return isDateCategoryResponse(response) ? 'Latest period' : 'Latest group';
+}
+
+function getPeakSummaryCardHelpText(response: AiInsightsOkResponse): string {
+  if (isDateCategoryResponse(response)) {
+    return 'The chart period with the highest value for this insight. A period is one chart bucket, such as a day, week, or month.';
+  }
+
+  return 'The chart group with the highest value for this insight.';
+}
+
+function getLatestSummaryCardHelpText(response: AiInsightsOkResponse): string {
+  if (isDateCategoryResponse(response)) {
+    return 'The most recent chart period in this result. A period is one chart bucket, such as a day, week, or month.';
+  }
+
+  return 'The final chart group in the current chart ordering.';
 }
 
 @Component({
@@ -203,9 +232,10 @@ export class AiInsightsPageComponent {
       );
       if (peakValue) {
         cards.push({
-          label: 'Peak bucket',
+          label: getPeakSummaryCardLabel(response),
           value: peakValue,
           meta: formatBucketMeta(response, response.summary.peakBucket, locale) || undefined,
+          helpText: getPeakSummaryCardHelpText(response),
         });
       }
     }
@@ -218,9 +248,10 @@ export class AiInsightsPageComponent {
       );
       if (latestValue) {
         cards.push({
-          label: 'Latest bucket',
+          label: getLatestSummaryCardLabel(response),
           value: latestValue,
           meta: formatBucketMeta(response, response.summary.latestBucket, locale) || undefined,
+          helpText: getLatestSummaryCardHelpText(response),
         });
       }
     }

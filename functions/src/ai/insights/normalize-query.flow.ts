@@ -19,6 +19,7 @@ import {
   buildMetricCatalogPromptText,
   getSuggestedInsightPrompts,
   isAggregationAllowedForMetric,
+  resolveMetricVariantAlias,
   resolveInsightMetric,
   type InsightMetricKey,
 } from './metric-catalog';
@@ -567,7 +568,10 @@ export async function normalizeInsightQuery(
   }
 
   const valueType = toValueType(intent.aggregation, baseMetric.defaultValueType);
-  const metric = resolveInsightMetric(intent.metric || '', valueType) || baseMetric;
+  const promptMetricAlias = resolveMetricVariantAlias(baseMetric, prompt);
+  const metric = resolveInsightMetric(promptMetricAlias || intent.metric || '', valueType)
+    || resolveInsightMetric(intent.metric || '', valueType)
+    || baseMetric;
 
   if (!isAggregationAllowedForMetric(metric.key, valueType)) {
     return buildUnsupportedResult('ambiguous_metric');

@@ -224,6 +224,7 @@ describe('AiInsightsPageComponent', () => {
     const chart = fixture.debugElement.query(By.css('.chart-stub'))?.nativeElement as HTMLElement | undefined;
     const chartComponent = fixture.debugElement.query(By.directive(MockAiInsightsChartComponent))?.componentInstance as MockAiInsightsChartComponent | undefined;
     const summaryCards = fixture.debugElement.queryAll(By.css('.summary-card'));
+    const summaryHelpButtons = fixture.debugElement.queryAll(By.css('.summary-help-button'));
     const expectedOverall = formatUnitAwareDataValue(
       DataCadenceAvg.type,
       86,
@@ -235,6 +236,11 @@ describe('AiInsightsPageComponent', () => {
     expect(chart?.textContent).toContain('Average cadence over time for Cycling');
     expect(chartComponent?.userUnitSettings()).toEqual(userSettingsQueryServiceMock.unitSettings());
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Overall'))).toBe(true);
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Peak period'))).toBe(true);
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Latest period'))).toBe(true);
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Peak bucket'))).toBe(false);
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Latest bucket'))).toBe(false);
+    expect(summaryHelpButtons).toHaveLength(2);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes(expectedOverall ?? ''))).toBe(true);
   });
 

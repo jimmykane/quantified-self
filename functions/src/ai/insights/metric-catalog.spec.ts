@@ -6,6 +6,7 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => await importOri
 import {
   getInsightMetricDefinition,
   isAggregationAllowedForMetric,
+  resolveMetricVariantAlias,
   resolveInsightMetric,
 } from './metric-catalog';
 
@@ -18,6 +19,23 @@ describe('metric-catalog', () => {
   it('resolves family metrics to the correct concrete max data type', () => {
     expect(resolveInsightMetric('heart rate', ChartDataValueTypes.Maximum)?.dataType).toBe('Maximum Heart Rate');
     expect(resolveInsightMetric('max heart rate', ChartDataValueTypes.Average)?.dataType).toBe('Maximum Heart Rate');
+  });
+
+  it('prefers the explicit prompt alias that matches the requested family variant', () => {
+    const heartRateMetric = resolveInsightMetric('heart rate');
+    expect(heartRateMetric).toBeTruthy();
+    if (!heartRateMetric) {
+      return;
+    }
+
+    expect(resolveMetricVariantAlias(
+      heartRateMetric,
+      'What was my highest average heart rate last month',
+    )).toBe('average heart rate');
+    expect(resolveMetricVariantAlias(
+      heartRateMetric,
+      'What was my highest max heart rate last month',
+    )).toBe('max heart rate');
   });
 
   it('returns null for unsupported metrics', () => {

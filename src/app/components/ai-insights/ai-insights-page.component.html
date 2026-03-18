@@ -1,157 +1,194 @@
-<div class="ai-insights-page">
-  <section class="hero">
-    <p class="mat-label-large">AI Insights</p>
-    <h1 class="mat-headline-medium hero-title">Ask a focused question about your training data.</h1>
-    <p class="mat-body-large hero-subtitle">
-      Describe the metric, activity type, and time range you want. AI Insights returns one narrative summary and one chart from your persisted event stats.
-    </p>
-  </section>
+<div class="settings-container ai-insights-page">
+  <main class="settings-content">
+    <section class="section-header hero">
+      <p class="mat-label-large">AI Insights</p>
+      <h1 class="hero-title">Ask a focused question about your training data.</h1>
+      <p class="hero-subtitle">
+        Describe the metric, activity type, and time range you want. AI Insights returns one narrative summary and one chart from your persisted event stats.
+      </p>
+      <mat-chip-set class="hero-chips" aria-label="AI insights status">
+        <mat-chip disableRipple>Beta</mat-chip>
+        <mat-chip disableRipple>Pro</mat-chip>
+        <mat-chip disableRipple>Event stats only</mat-chip>
+      </mat-chip-set>
+    </section>
 
-  <div class="page-grid">
-    <mat-card appearance="outlined" class="prompt-card">
-      <mat-card-header>
-        <div mat-card-avatar class="card-avatar">
-          <mat-icon>psychology</mat-icon>
-        </div>
-        <mat-card-title>Prompt</mat-card-title>
-        <mat-card-subtitle>Single-turn, Pro-only insights based on event-level stats.</mat-card-subtitle>
-      </mat-card-header>
-
-      <mat-card-content>
-        <form class="prompt-form" novalidate (submit)="onFormSubmit($event)">
-          <mat-form-field appearance="outline" class="prompt-field">
-            <mat-label>Ask AI for an insight</mat-label>
-            <textarea
-              matInput
-              rows="4"
-              [formControl]="promptControl"
-              placeholder="Tell me my avg cadence for cycling the last 3 months"></textarea>
-            <mat-hint>Be explicit about the metric, activity type, and time range.</mat-hint>
-          </mat-form-field>
-
-          <div class="prompt-actions">
-            <button mat-flat-button type="submit" color="primary" [disabled]="!canSubmit()">
-              {{ isSubmitting() ? 'Thinking…' : 'Ask AI' }}
-            </button>
-            <a mat-button routerLink="/dashboard">Back to dashboard</a>
+    <div class="page-grid">
+      <mat-card appearance="outlined" class="settings-card prompt-card">
+        <mat-card-header>
+          <div mat-card-avatar class="card-avatar">
+            <mat-icon>psychology</mat-icon>
           </div>
-        </form>
+          <mat-card-title>Prompt</mat-card-title>
+          <mat-card-subtitle>Single-turn, Pro-only insights based on event-level stats.</mat-card-subtitle>
+        </mat-card-header>
 
-        <div class="suggestions">
-          <p class="mat-label-medium suggestions-title">Suggested prompts</p>
-          <div class="suggestion-list">
-            @for (prompt of suggestedPrompts(); track prompt) {
-              <button
-                mat-stroked-button
-                type="button"
-                class="suggestion-button"
-                [disabled]="isSubmitting()"
-                (click)="applySuggestedPrompt(prompt)">
-                {{ prompt }}
+        <mat-card-content class="card-content">
+          <form class="prompt-form qs-form" novalidate (submit)="onFormSubmit($event)">
+            <mat-form-field appearance="outline" class="prompt-field">
+              <mat-label>Ask AI for an insight</mat-label>
+              <textarea
+                matInput
+                rows="4"
+                [formControl]="promptControl"
+                placeholder="Tell me my avg cadence for cycling the last 3 months"></textarea>
+              <mat-hint>Be explicit about the metric, activity type, and time range.</mat-hint>
+            </mat-form-field>
+
+            <div class="prompt-actions">
+              <button mat-flat-button type="submit" color="primary" [disabled]="!canSubmit()">
+                {{ isSubmitting() ? 'Thinking…' : 'Ask AI' }}
               </button>
-            }
-          </div>
-        </div>
-      </mat-card-content>
-    </mat-card>
-
-    <mat-card appearance="outlined" class="result-card">
-      <mat-card-header>
-        <div mat-card-avatar class="card-avatar result-avatar">
-          <mat-icon>insights</mat-icon>
-        </div>
-        <mat-card-title>Result</mat-card-title>
-        <mat-card-subtitle>One answer, one chart, no hidden dashboard filters.</mat-card-subtitle>
-      </mat-card-header>
-
-      <mat-card-content>
-        @if (isSubmitting()) {
-          <div class="state-panel">
-            <mat-progress-bar mode="indeterminate"></mat-progress-bar>
-            <p class="mat-title-medium state-title">Generating insight</p>
-            <p class="mat-body-medium state-copy">Normalizing your prompt, querying your event stats, and preparing the chart.</p>
-          </div>
-        } @else if (errorMessage(); as errorMessage) {
-          <div class="state-panel state-panel-error">
-            <mat-icon>error</mat-icon>
-            <div>
-              <p class="mat-title-medium state-title">Could not generate this insight</p>
-              <p class="mat-body-medium state-copy">{{ errorMessage }}</p>
+              <a mat-button routerLink="/dashboard">Back to dashboard</a>
             </div>
-          </div>
-        } @else if (unsupportedResponse(); as unsupported) {
-          <div class="state-panel state-panel-warning">
-            <mat-icon>info</mat-icon>
-            <div>
-              <p class="mat-title-medium state-title">Unsupported request</p>
-              <p class="mat-body-medium state-copy">{{ unsupported.narrative }}</p>
-            </div>
-          </div>
-        } @else if (emptyResponse(); as empty) {
-          <div class="result-content">
-            <div class="result-header">
-              <p class="mat-title-large result-title">{{ empty.presentation.title }}</p>
-              <p class="mat-body-medium result-subtitle">{{ resultSubtitle() }}</p>
-            </div>
+          </form>
 
-            <p class="mat-body-large narrative">{{ empty.narrative }}</p>
+          <mat-divider></mat-divider>
 
-            <div class="state-panel">
-              <mat-icon>search_off</mat-icon>
+          <div class="suggestions">
+            <div class="section-heading">
               <div>
-                <p class="mat-title-medium state-title">No matching data</p>
-                <p class="mat-body-medium state-copy">{{ empty.presentation.emptyState }}</p>
+                <p class="mat-label-medium suggestions-title">Suggested prompts</p>
+                <p class="mat-body-small section-supporting-copy">Use one metric, one activity filter, and one time range.</p>
               </div>
             </div>
-          </div>
-        } @else if (okResponse(); as result) {
-          <div class="result-content">
-            <div class="result-header">
-              <p class="mat-title-large result-title">{{ result.presentation.title }}</p>
-              <p class="mat-body-medium result-subtitle">{{ resultSubtitle() }}</p>
+            <div class="suggestion-list">
+              @for (prompt of suggestedPrompts(); track prompt) {
+                <button
+                  mat-stroked-button
+                  type="button"
+                  class="suggestion-button"
+                  [disabled]="isSubmitting()"
+                  (click)="applySuggestedPrompt(prompt)">
+                  {{ prompt }}
+                </button>
+              }
             </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
 
-            <p class="mat-body-large narrative">{{ result.narrative }}</p>
+      <mat-card appearance="outlined" class="settings-card result-card">
+        <mat-card-header>
+          <div mat-card-avatar class="card-avatar result-avatar">
+            <mat-icon>insights</mat-icon>
+          </div>
+          <mat-card-title>Result</mat-card-title>
+          <mat-card-subtitle>One answer, one chart, no hidden dashboard filters.</mat-card-subtitle>
+        </mat-card-header>
 
-            @if (resultWarnings().length) {
-              <mat-chip-set class="warning-chips" aria-label="Insight warnings">
-                @for (warning of resultWarnings(); track warning) {
-                  <mat-chip disableRipple>{{ warning }}</mat-chip>
-                }
-              </mat-chip-set>
-            }
-
-            @if (resultSummaryCards().length) {
-              <div class="summary-grid">
-                @for (summaryCard of resultSummaryCards(); track summaryCard.label) {
-                  <section class="summary-card">
-                    <p class="mat-label-medium summary-label">{{ summaryCard.label }}</p>
-                    <p class="mat-title-large summary-value">{{ summaryCard.value }}</p>
-                    @if (summaryCard.meta) {
-                      <p class="mat-body-small summary-meta">{{ summaryCard.meta }}</p>
-                    }
-                  </section>
-                }
+        <mat-card-content class="card-content">
+          @if (isSubmitting()) {
+            <div class="state-panel">
+              <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+              <p class="mat-title-medium state-title">Generating insight</p>
+              <p class="mat-body-medium state-copy">Normalizing your prompt, querying your event stats, and preparing the chart.</p>
+            </div>
+          } @else if (errorMessage(); as errorMessage) {
+            <div class="state-panel state-panel-error">
+              <mat-icon>error</mat-icon>
+              <div>
+                <p class="mat-title-medium state-title">Could not generate this insight</p>
+                <p class="mat-body-medium state-copy">{{ errorMessage }}</p>
               </div>
-            }
-
-            <app-ai-insights-chart
-              [response]="result"
-              [darkTheme]="isDarkTheme()"
-              [useAnimations]="useAnimations()"
-              [userUnitSettings]="userUnitSettings()">
-            </app-ai-insights-chart>
-          </div>
-        } @else {
-          <div class="state-panel state-panel-placeholder">
-            <mat-icon>query_stats</mat-icon>
-            <div>
-              <p class="mat-title-medium state-title">Ready for your first question</p>
-              <p class="mat-body-medium state-copy">Start with one metric and one date range, then refine from there.</p>
             </div>
-          </div>
-        }
-      </mat-card-content>
-    </mat-card>
-  </div>
+          } @else if (unsupportedResponse(); as unsupported) {
+            <div class="state-panel state-panel-warning">
+              <mat-icon>info</mat-icon>
+              <div>
+                <p class="mat-title-medium state-title">Unsupported request</p>
+                <p class="mat-body-medium state-copy">{{ unsupported.narrative }}</p>
+              </div>
+            </div>
+          } @else if (emptyResponse(); as empty) {
+            <div class="result-content">
+              <div class="result-header">
+                <p class="result-title">{{ empty.presentation.title }}</p>
+                <p class="result-subtitle">{{ resultSubtitle() }}</p>
+              </div>
+
+              <p class="narrative">{{ empty.narrative }}</p>
+
+              <mat-divider></mat-divider>
+
+              <div class="state-panel">
+                <mat-icon>search_off</mat-icon>
+                <div>
+                  <p class="mat-title-medium state-title">No matching data</p>
+                  <p class="mat-body-medium state-copy">{{ empty.presentation.emptyState }}</p>
+                </div>
+              </div>
+            </div>
+          } @else if (okResponse(); as result) {
+            <div class="result-content">
+              <div class="result-header">
+                <p class="result-title">{{ result.presentation.title }}</p>
+                <p class="result-subtitle">{{ resultSubtitle() }}</p>
+              </div>
+
+              <p class="narrative">{{ result.narrative }}</p>
+
+              @if (resultWarnings().length) {
+                <mat-chip-set class="warning-chips" aria-label="Insight warnings">
+                  @for (warning of resultWarnings(); track warning) {
+                    <mat-chip disableRipple>{{ warning }}</mat-chip>
+                  }
+                </mat-chip-set>
+              }
+
+              @if (resultSummaryCards().length) {
+                <div class="section-heading">
+                  <div>
+                    <p class="mat-label-medium suggestions-title">Summary</p>
+                    <p class="mat-body-small section-supporting-copy">Deterministic values formatted with your saved unit preferences.</p>
+                  </div>
+                </div>
+                <div class="summary-grid">
+                  @for (summaryCard of resultSummaryCards(); track summaryCard.label) {
+                    <section class="summary-card">
+                      <div class="summary-label-row">
+                        <p class="mat-label-medium summary-label">{{ summaryCard.label }}</p>
+                        @if (summaryCard.helpText) {
+                          <button
+                            mat-icon-button
+                            type="button"
+                            class="summary-help-button"
+                            [attr.aria-label]="'Explain ' + summaryCard.label"
+                            [matTooltip]="summaryCard.helpText"
+                            matTooltipPosition="above">
+                            <mat-icon>info</mat-icon>
+                          </button>
+                        }
+                      </div>
+                      <p class="summary-value">{{ summaryCard.value }}</p>
+                      @if (summaryCard.meta) {
+                        <p class="summary-meta">{{ summaryCard.meta }}</p>
+                      }
+                    </section>
+                  }
+                </div>
+              }
+
+              <mat-divider></mat-divider>
+
+              <app-ai-insights-chart
+                [response]="result"
+                [darkTheme]="isDarkTheme()"
+                [useAnimations]="useAnimations()"
+                [userUnitSettings]="userUnitSettings()">
+              </app-ai-insights-chart>
+            </div>
+          } @else {
+            <div class="state-panel state-panel-placeholder">
+              <mat-icon>query_stats</mat-icon>
+              <div>
+                <p class="mat-title-medium state-title">Ready for your first question</p>
+                <p class="mat-body-medium state-copy">Start with one metric and one date range, then refine from there.</p>
+              </div>
+            </div>
+          }
+        </mat-card-content>
+      </mat-card>
+    </div>
+  </main>
 </div>

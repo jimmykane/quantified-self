@@ -319,6 +319,23 @@ export function resolveInsightMetric(
   };
 }
 
+export function resolveMetricVariantAlias(
+  metric: InsightMetricDefinition,
+  sourceText: string,
+): string | null {
+  const normalizedSource = normalizeMetricText(sourceText);
+  if (!normalizedSource) {
+    return null;
+  }
+
+  const candidateAliases = [...new Set([metric.label, ...metric.aliases])]
+    .map(alias => normalizeMetricText(alias))
+    .filter(Boolean)
+    .sort((left, right) => right.length - left.length);
+
+  return candidateAliases.find(alias => normalizedSource.includes(alias)) || null;
+}
+
 export function isAggregationAllowedForMetric(
   metricKey: InsightMetricKey,
   valueType: ChartDataValueTypes,
