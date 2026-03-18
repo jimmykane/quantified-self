@@ -1,0 +1,226 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  ActivityTypes,
+  ChartDataCategoryTypes,
+  ChartDataValueTypes,
+  ChartTypes,
+  TimeIntervals,
+} from '@sports-alliance/sports-lib';
+
+vi.mock('@sports-alliance/sports-lib', async (importOriginal) => await importOriginal());
+
+const hoisted = vi.hoisted(() => {
+  const currentContext = {
+    auth: { uid: 'user-1' },
+    app: { appId: 'app-1' },
+  } as Record<string, unknown>;
+
+  return {
+    currentContext,
+    hasProAccess: vi.fn(),
+    normalizeInsightQuery: vi.fn(),
+    executeAiInsightsQuery: vi.fn(),
+    summarizeAiInsightResult: vi.fn(),
+    getInsightMetricDefinition: vi.fn(),
+  };
+});
+
+vi.mock('firebase-functions/v2/https', () => ({
+  onCallGenkit: (_options: unknown, flow: unknown) => flow,
+  HttpsError: class HttpsError extends Error {
+    code: string;
+
+    constructor(code: string, message: string) {
+      super(message);
+      this.code = code;
+    }
+  },
+}));
+
+vi.mock('./genkit', () => ({
+  aiInsightsGenkit: {
+    defineFlow: (_config: unknown, handler: unknown) => handler,
+    currentContext: () => hoisted.currentContext,
+  },
+}));
+
+vi.mock('../../utils', () => ({
+  ALLOWED_CORS_ORIGINS: [],
+  hasProAccess: (...args: unknown[]) => hoisted.hasProAccess(...args),
+}));
+
+vi.mock('./normalize-query.flow', () => ({
+  normalizeInsightQuery: (...args: unknown[]) => hoisted.normalizeInsightQuery(...args),
+}));
+
+vi.mock('./execute-query', () => ({
+  executeAiInsightsQuery: (...args: unknown[]) => hoisted.executeAiInsightsQuery(...args),
+}));
+
+vi.mock('./summarize-result.flow', () => ({
+  summarizeAiInsightResult: (...args: unknown[]) => hoisted.summarizeAiInsightResult(...args),
+}));
+
+vi.mock('./metric-catalog', () => ({
+  getInsightMetricDefinition: (...args: unknown[]) => hoisted.getInsightMetricDefinition(...args),
+  getSuggestedInsightPrompts: () => [
+    'Show my total distance by activity type this year.',
+    'Tell me my average cadence for cycling over the last 3 months.',
+    'Show my average heart rate over time for running in the last 90 days.',
+  ],
+}));
+
+import { aiInsights } from './callable';
+
+const normalizedQuery = {
+  dataType: 'Distance',
+  valueType: ChartDataValueTypes.Total,
+  categoryType: ChartDataCategoryTypes.DateType,
+  requestedTimeInterval: TimeIntervals.Auto,
+  activityTypes: [ActivityTypes.Cycling],
+  dateRange: {
+    startDate: '2026-01-01T00:00:00.000Z',
+    endDate: '2026-03-31T23:59:59.999Z',
+    timezone: 'UTC',
+  },
+  chartType: ChartTypes.ColumnsVertical,
+};
+
+describe('aiInsights callable', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    hoisted.currentContext.auth = { uid: 'user-1' };
+    hoisted.currentContext.app = { appId: 'app-1' };
+    hoisted.hasProAccess.mockResolvedValue(true);
+    hoisted.getInsightMetricDefinition.mockReturnValue({
+      key: 'distance',
+      label: 'distance',
+    });
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'ok',
+      metricKey: 'distance',
+      query: normalizedQuery,
+    });
+    hoisted.executeAiInsightsQuery.mockResolvedValue({
+      matchedEventsCount: 2,
+      aggregation: {
+        dataType: 'Distance',
+        valueType: ChartDataValueTypes.Total,
+        categoryType: ChartDataCategoryTypes.DateType,
+        resolvedTimeInterval: TimeIntervals.Monthly,
+        buckets: [
+          {
+            bucketKey: 1,
+            time: 1,
+            totalCount: 2,
+            aggregateValue: 123,
+            seriesValues: { Cycling: 123 },
+            seriesCounts: { Cycling: 2 },
+          },
+        ],
+      },
+    });
+    hoisted.summarizeAiInsightResult.mockResolvedValue('Narrative');
+  });
+
+  it('rejects unauthenticated requests', async () => {
+    hoisted.currentContext.auth = undefined;
+
+    await expect(aiInsights({
+      prompt: 'show distance',
+      clientTimezone: 'UTC',
+    } as any)).rejects.toMatchObject({ code: 'unauthenticated' });
+  });
+
+  it('rejects requests without app check context', async () => {
+    hoisted.currentContext.app = undefined;
+
+    await expect(aiInsights({
+      prompt: 'show distance',
+      clientTimezone: 'UTC',
+    } as any)).rejects.toMatchObject({ code: 'failed-precondition' });
+  });
+
+  it('rejects non-pro users', async () => {
+    hoisted.hasProAccess.mockResolvedValue(false);
+
+    await expect(aiInsights({
+      prompt: 'show distance',
+      clientTimezone: 'UTC',
+    } as any)).rejects.toMatchObject({ code: 'permission-denied' });
+  });
+
+  it('returns an ok response when aggregation buckets exist', async () => {
+    const result = await aiInsights({
+      prompt: 'show distance',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(hoisted.normalizeInsightQuery).toHaveBeenCalled();
+    expect(hoisted.executeAiInsightsQuery).toHaveBeenCalledWith('user-1', normalizedQuery);
+    expect(result).toEqual({
+      status: 'ok',
+      narrative: 'Narrative',
+      query: normalizedQuery,
+      aggregation: expect.objectContaining({
+        buckets: expect.any(Array),
+      }),
+      presentation: expect.objectContaining({
+        title: 'Total distance over time for Cycling',
+        chartType: ChartTypes.ColumnsVertical,
+      }),
+    });
+  });
+
+  it('returns an empty response when no aggregation buckets exist', async () => {
+    hoisted.executeAiInsightsQuery.mockResolvedValue({
+      matchedEventsCount: 0,
+      aggregation: {
+        dataType: 'Distance',
+        valueType: ChartDataValueTypes.Total,
+        categoryType: ChartDataCategoryTypes.DateType,
+        resolvedTimeInterval: TimeIntervals.Daily,
+        buckets: [],
+      },
+    });
+
+    const result = await aiInsights({
+      prompt: 'show distance',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(result).toEqual({
+      status: 'empty',
+      narrative: 'Narrative',
+      query: normalizedQuery,
+      aggregation: expect.objectContaining({
+        buckets: [],
+      }),
+      presentation: expect.objectContaining({
+        emptyState: 'No matching events were found for this insight in the requested range.',
+      }),
+    });
+  });
+
+  it('returns unsupported responses without executing the query', async () => {
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'unsupported',
+      reasonCode: 'unsupported_capability',
+      suggestedPrompts: ['show my distance'],
+    });
+
+    const result = await aiInsights({
+      prompt: 'show cadence per kilometer splits',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(hoisted.executeAiInsightsQuery).not.toHaveBeenCalled();
+    expect(hoisted.summarizeAiInsightResult).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      status: 'unsupported',
+      narrative: 'I can only answer questions from persisted event-level stats right now, so streams, splits, laps, routes, and original-file reprocessing are out of scope.',
+      reasonCode: 'unsupported_capability',
+      suggestedPrompts: expect.any(Array),
+    });
+  });
+});

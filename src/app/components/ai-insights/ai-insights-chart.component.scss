@@ -1,0 +1,29 @@
+:host {
+  display: block;
+  height: 100%;
+}
+
+.chart-shell {
+  min-height: 24rem;
+  height: 100%;
+}
+
+app-pie-chart,
+app-xy-chart,
+app-columns-chart {
+  display: block;
+  height: 100%;
+}
+
+.chart-fallback {
+  display: grid;
+  min-height: 24rem;
+  place-items: center;
+  border: 1px dashed var(--mat-sys-outline-variant);
+  border-radius: 1.5rem;
+  background:
+    linear-gradient(180deg, var(--mat-sys-surface-container-low) 0%, var(--mat-sys-surface-container) 100%);
+  color: var(--mat-sys-on-surface-variant);
+  text-align: center;
+  padding: 1.5rem;
+}

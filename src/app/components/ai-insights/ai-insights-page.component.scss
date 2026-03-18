@@ -1,0 +1,158 @@
+:host {
+  display: block;
+}
+
+.ai-insights-page {
+  display: grid;
+  gap: 1.5rem;
+  padding: 1rem 0 2rem;
+}
+
+.hero {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1.5rem;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 1.75rem;
+  background:
+    radial-gradient(circle at top right, var(--mat-sys-primary-container) 0%, transparent 42%),
+    linear-gradient(180deg, var(--mat-sys-surface-container-low) 0%, var(--mat-sys-surface) 100%);
+}
+
+.hero-title,
+.hero-subtitle,
+.result-title,
+.result-subtitle,
+.state-title,
+.state-copy,
+.narrative,
+.suggestions-title {
+  margin: 0;
+}
+
+.page-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.prompt-card,
+.result-card {
+  border-radius: 1.5rem;
+}
+
+.card-avatar {
+  display: grid;
+  place-items: center;
+  border-radius: 1rem;
+  background: var(--mat-sys-surface-container-high);
+  color: var(--mat-sys-primary);
+}
+
+.result-avatar {
+  color: var(--mat-sys-secondary);
+}
+
+.prompt-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.prompt-field {
+  width: 100%;
+}
+
+.prompt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.suggestions {
+  display: grid;
+  gap: 0.75rem;
+  padding-top: 1rem;
+}
+
+.suggestion-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.suggestion-button {
+  justify-content: flex-start;
+  text-align: left;
+  border-radius: 999px;
+}
+
+.result-content {
+  display: grid;
+  gap: 1rem;
+}
+
+.result-header {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.result-subtitle {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.narrative {
+  color: var(--mat-sys-on-surface);
+}
+
+.warning-chips {
+  margin-bottom: 0.25rem;
+}
+
+.state-panel {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 1.25rem;
+  background: var(--mat-sys-surface-container-low);
+}
+
+.state-panel mat-icon {
+  color: var(--mat-sys-primary);
+}
+
+.state-panel-error {
+  background: var(--mat-sys-error-container);
+  border-color: color-mix(in srgb, var(--mat-sys-error) 42%, transparent);
+}
+
+.state-panel-error mat-icon {
+  color: var(--mat-sys-error);
+}
+
+.state-panel-warning {
+  background: var(--mat-sys-secondary-container);
+}
+
+.state-panel-warning mat-icon {
+  color: var(--mat-sys-secondary);
+}
+
+.state-panel-placeholder {
+  min-height: 16rem;
+  place-content: center;
+}
+
+@media (max-width: 959px) {
+  .page-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .hero,
+  .prompt-card,
+  .result-card {
+    border-radius: 1.25rem;
+  }
+}

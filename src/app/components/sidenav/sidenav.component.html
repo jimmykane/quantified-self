@@ -50,6 +50,19 @@
   </mat-list-item>
   }
 
+  @if (user) {
+  <mat-list-item routerLinkActive="active" [routerLink]="aiInsightsRoute"
+    (click)="closeSideNav()">
+    <mat-icon>insights</mat-icon>
+    <span>AI Insights <span class="beta-badge">Beta</span></span>
+    <span class="fill-space"></span>
+    @if (!hasPaidAccess) {
+    <mat-icon class="lock-icon">lock</mat-icon>
+    <span class="pro-badge">PRO</span>
+    }
+  </mat-list-item>
+  }
+
   @if (!user) {
   <mat-list-item routerLinkActive="active" routerLink="/pricing" (click)="closeSideNav()">
     <mat-icon>card_membership</mat-icon>

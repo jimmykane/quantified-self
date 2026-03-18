@@ -94,6 +94,18 @@ export const routes: Routes = [
     }
   },
   {
+    path: 'ai-insights',
+    loadComponent: () => import('./components/ai-insights/ai-insights-page.component').then(m => m.AiInsightsPageComponent),
+    canMatch: [authGuard, onboardingGuard, proGuard],
+    data: {
+      title: 'AI Insights',
+      preload: true,
+      animation: 'AIInsights',
+      description: 'Ask focused questions about your training data and get one AI summary with one chart built from your persisted event statistics.',
+      keywords: 'ai insights, fitness analytics, training insights, cadence trends, activity charts, quantified self',
+    }
+  },
+  {
     path: 'releases',
     loadComponent: () => import('./components/whats-new/whats-new-page.component').then(m => m.WhatsNewPageComponent),
     resolve: { releases: releasesResolver },

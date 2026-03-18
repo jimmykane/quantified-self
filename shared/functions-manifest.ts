@@ -50,6 +50,7 @@ export const FUNCTIONS_MANIFEST = {
     uploadActivity: { name: 'uploadActivity', region: 'europe-west2' },
     reprocessEvent: { name: 'reprocessEvent', region: 'europe-west2' },
     mergeEvents: { name: 'mergeEvents', region: 'europe-west2' },
+    aiInsights: { name: 'aiInsights', region: 'europe-west2' },
 } as const;
 
 export type FunctionName = keyof typeof FUNCTIONS_MANIFEST;

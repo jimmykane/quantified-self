@@ -228,4 +228,48 @@ describe('SideNavComponent', () => {
         ).toBe('/mytracks');
         expect(myTracksItem?.nativeElement.textContent).not.toContain('BASIC');
     });
+
+    it('should link AI Insights directly for paid users and mark it as beta', () => {
+        mockUserService.user = vi.fn().mockReturnValue({
+            uid: 'user-2',
+            displayName: 'Pro User',
+            email: 'pro@example.com'
+        });
+        mockUserService.hasPaidAccessSignal = vi.fn().mockReturnValue(true);
+        mockUserService.isProSignal = vi.fn().mockReturnValue(true);
+        mockUserService.isBasicSignal = vi.fn().mockReturnValue(false);
+
+        fixture.detectChanges();
+
+        const aiInsightsItem = fixture.debugElement
+            .queryAll(By.css('mat-list-item'))
+            .find(item => item.nativeElement.textContent.includes('AI Insights'));
+
+        expect(aiInsightsItem).toBeTruthy();
+        expect(component.aiInsightsRoute).toBe('/ai-insights');
+        expect(aiInsightsItem?.nativeElement.textContent).toContain('Beta');
+        expect(aiInsightsItem?.nativeElement.textContent).not.toContain('PRO');
+    });
+
+    it('should route unpaid users to subscriptions for AI Insights and show the pro lock state', () => {
+        mockUserService.user = vi.fn().mockReturnValue({
+            uid: 'user-3',
+            displayName: 'Free User',
+            email: 'free@example.com'
+        });
+        mockUserService.hasPaidAccessSignal = vi.fn().mockReturnValue(false);
+        mockUserService.isProSignal = vi.fn().mockReturnValue(false);
+        mockUserService.isBasicSignal = vi.fn().mockReturnValue(false);
+
+        fixture.detectChanges();
+
+        const aiInsightsItem = fixture.debugElement
+            .queryAll(By.css('mat-list-item'))
+            .find(item => item.nativeElement.textContent.includes('AI Insights'));
+
+        expect(aiInsightsItem).toBeTruthy();
+        expect(component.aiInsightsRoute).toBe('/subscriptions');
+        expect(aiInsightsItem?.nativeElement.textContent).toContain('Beta');
+        expect(aiInsightsItem?.nativeElement.textContent).toContain('PRO');
+    });
 });

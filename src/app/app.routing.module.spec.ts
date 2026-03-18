@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { routes } from './app.routing.module';
 import { authGuard } from './authentication/app.auth.guard';
 import { onboardingGuard } from './authentication/onboarding.guard';
+import { proGuard } from './authentication/pro.guard';
 
 describe('AppRoutingModule routes', () => {
   it('should define a public help route with help metadata', () => {
@@ -31,5 +32,18 @@ describe('AppRoutingModule routes', () => {
 
     expect(myTracksRoute).toBeTruthy();
     expect(myTracksRoute?.canMatch).toEqual([authGuard, onboardingGuard]);
+  });
+
+  it('should protect ai insights behind auth, onboarding, and pro access', () => {
+    const aiInsightsRoute = routes.find(route => route.path === 'ai-insights');
+
+    expect(aiInsightsRoute).toBeTruthy();
+    expect(aiInsightsRoute?.canMatch).toEqual([authGuard, onboardingGuard, proGuard]);
+    expect(aiInsightsRoute?.loadComponent).toBeTypeOf('function');
+    expect(aiInsightsRoute?.data).toMatchObject({
+      title: 'AI Insights',
+      preload: true,
+      animation: 'AIInsights',
+    });
   });
 });
