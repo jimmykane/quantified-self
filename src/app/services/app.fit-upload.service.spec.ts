@@ -86,6 +86,7 @@ describe('AppFitUploadService', () => {
     expect(headers.get('X-Firebase-AppCheck')).toBe('app-check-token');
     expect(headers.get('X-File-Extension')).toBe('gpx.gz');
     expect(headers.get('X-Original-Filename')).toBe('run.gpx');
+    expect(headers.get('X-Original-Filename-Encoded')).toBe('run.gpx');
     expect(result.eventId).toBe('event-1');
   });
 
@@ -108,6 +109,30 @@ describe('AppFitUploadService', () => {
     const headers = fetchOptions.headers as Headers;
     expect(headers.get('X-File-Extension')).toBe('gpx.gz');
     expect(headers.get('X-Original-Filename')).toBeNull();
+    expect(headers.get('X-Original-Filename-Encoded')).toBeNull();
+  });
+
+  it('should percent-encode unicode original filenames into a header-safe value', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: vi.fn().mockResolvedValue({
+        eventId: 'event-1',
+        activitiesCount: 1,
+        uploadLimit: 10,
+        uploadCountAfterWrite: 1,
+      }),
+    });
+
+    const payload = new Uint8Array([1, 2, 3]).buffer;
+    const originalFilename = 'тренировка.fit';
+
+    await service.uploadActivityFile(payload, 'fit', originalFilename);
+
+    const fetchOptions = fetchMock.mock.calls[0][1];
+    const headers = fetchOptions.headers as Headers;
+    expect(headers.get('X-Original-Filename')).toBeNull();
+    expect(headers.get('X-Original-Filename-Encoded')).toBe(encodeURIComponent(originalFilename));
   });
 
   it('should throw when user is not authenticated', async () => {

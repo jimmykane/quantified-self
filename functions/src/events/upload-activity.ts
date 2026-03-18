@@ -145,6 +145,26 @@ function resolveEventNameFromHeader(originalFilenameHeader?: string): string | n
   return noExtension || null;
 }
 
+function resolveOriginalFilename(
+  encodedOriginalFilenameHeader?: string,
+  originalFilenameHeader?: string,
+): string | undefined {
+  const trimmedEncodedHeader = encodedOriginalFilenameHeader?.trim();
+  if (trimmedEncodedHeader) {
+    try {
+      const decodedFilename = decodeURIComponent(trimmedEncodedHeader).trim();
+      if (decodedFilename) {
+        return decodedFilename;
+      }
+    } catch (error) {
+      logger.warn('[uploadActivity] Failed to decode original filename header', error);
+    }
+  }
+
+  const trimmedOriginalFilename = originalFilenameHeader?.trim();
+  return trimmedOriginalFilename || undefined;
+}
+
 async function verifyFirebaseUserIDFromAuthorizationHeader(
   authorizationHeader?: string,
 ): Promise<string> {
@@ -303,7 +323,10 @@ export const uploadActivity = onRequest({
   try {
     const userID = await verifyFirebaseUserIDFromAuthorizationHeader(request.header('authorization'));
     await verifyAppCheckHeader(request.header('X-Firebase-AppCheck') || request.header('x-firebase-appcheck'));
-    const originalFilename = request.header('X-Original-Filename') || request.header('x-original-filename') || undefined;
+    const originalFilename = resolveOriginalFilename(
+      request.header('X-Original-Filename-Encoded') || request.header('x-original-filename-encoded') || undefined,
+      request.header('X-Original-Filename') || request.header('x-original-filename') || undefined,
+    );
     const resolvedExtension = resolveUploadExtension(
       request.header('X-File-Extension') || request.header('x-file-extension') || undefined,
       originalFilename,

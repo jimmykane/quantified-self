@@ -54,16 +54,7 @@ export class AppAuthService {
     // Use modular user observable to react to token refreshes too
     this.user$ = this.userService.user$;
     this.user$.subscribe({
-      error: err => this.logger.error(
-        '[AppAuthService] user$ stream ERROR',
-        {
-          currentUserUid: this.auth.currentUser?.uid ?? null,
-          currentUserEmail: this.maskEmailForLogs(this.auth.currentUser?.email),
-          code: err?.code ?? null,
-          message: err?.message ?? null
-        },
-        err
-      ),
+      error: err => this.logger.error('[AppAuthService] user$ stream ERROR:', err),
       complete: () => this.logger.warn('[AppAuthService] user$ stream COMPLETED')
     });
   }
@@ -134,70 +125,30 @@ export class AppAuthService {
 
   async sendEmailLink(email: string) {
     const actionCodeSettings = this.buildActionCodeSettings(true);
-    this.logger.log('[Auth][EmailLink] sendEmailLink:start', {
-      email: this.maskEmailForLogs(email),
-      actionCodeSettings: this.getActionCodeSettingsLogContext(actionCodeSettings)
-    });
 
     try {
       await runInInjectionContext(this.injector, () => sendSignInLinkToEmail(this.auth, email, actionCodeSettings));
       this.localStorageService.setItem('emailForSignIn', email);
-      this.logger.log('[Auth][EmailLink] sendEmailLink:success', {
-        email: this.maskEmailForLogs(email),
-        cachedEmailSaved: true
-      });
       this.snackBar.open(`Magic link sent to ${email} `, 'Close', {
         duration: 5000
       });
       return true;
     } catch (error: any) {
-      this.logger.error('[Auth][EmailLink] sendEmailLink:error', {
-        email: this.maskEmailForLogs(email),
-        actionCodeSettings: this.getActionCodeSettingsLogContext(actionCodeSettings),
-        code: error?.code ?? null,
-        message: error?.message ?? null
-      }, error);
       this.handleError(error);
       return false;
     }
   }
 
   isSignInWithEmailLink(url: string): boolean {
-    const result = runInInjectionContext(this.injector, () => isSignInWithEmailLink(this.auth, url));
-    this.logger.log('[Auth][EmailLink] isSignInWithEmailLink:result', {
-      result,
-      link: this.getEmailLinkLogContext(url)
-    });
-    return result;
+    return runInInjectionContext(this.injector, () => isSignInWithEmailLink(this.auth, url));
   }
 
   async signInWithEmailLink(email: string, url: string) {
-    const cachedEmail = this.localStorageService.getItem('emailForSignIn');
-    this.logger.log('[Auth][EmailLink] signInWithEmailLink:start', {
-      email: this.maskEmailForLogs(email),
-      cachedEmailPresent: !!cachedEmail,
-      cachedEmailMatches: cachedEmail === email,
-      link: this.getEmailLinkLogContext(url)
-    });
-
     try {
       const result = await runInInjectionContext(this.injector, () => signInWithEmailLink(this.auth, email, url));
       this.localStorageService.removeItem('emailForSignIn');
-      this.logger.log('[Auth][EmailLink] signInWithEmailLink:success', {
-        email: this.maskEmailForLogs(email),
-        uid: result?.user?.uid ?? null,
-        emailVerified: result?.user?.emailVerified ?? null
-      });
       return result;
     } catch (error: any) {
-      this.logger.error('[Auth][EmailLink] signInWithEmailLink:error', {
-        email: this.maskEmailForLogs(email),
-        cachedEmailPresent: !!cachedEmail,
-        cachedEmailMatches: cachedEmail === email,
-        link: this.getEmailLinkLogContext(url),
-        code: error?.code ?? null,
-        message: error?.message ?? null
-      }, error);
       this.handleError(error);
       throw error;
     }
@@ -255,25 +206,7 @@ export class AppAuthService {
   }
 
   async fetchSignInMethods(email: string) {
-    this.logger.log('[Auth] fetchSignInMethods:start', {
-      email: this.maskEmailForLogs(email)
-    });
-
-    try {
-      const methods = await runInInjectionContext(this.injector, () => fetchSignInMethodsForEmail(this.auth, email));
-      this.logger.log('[Auth] fetchSignInMethods:success', {
-        email: this.maskEmailForLogs(email),
-        methods
-      });
-      return methods;
-    } catch (error: any) {
-      this.logger.error('[Auth] fetchSignInMethods:error', {
-        email: this.maskEmailForLogs(email),
-        code: error?.code ?? null,
-        message: error?.message ?? null
-      }, error);
-      throw error;
-    }
+    return runInInjectionContext(this.injector, () => fetchSignInMethodsForEmail(this.auth, email));
   }
 
   async linkCredential(user: any, credential: AuthCredential) {
@@ -316,58 +249,6 @@ export class AppAuthService {
     return buildAppUrl(baseUrl, APP_LOGIN_PATH, {
       preferHttpsForLocalhost: environment.localhost
     });
-  }
-
-  private maskEmailForLogs(email: string | null | undefined): string {
-    if (!email) {
-      return '(missing)';
-    }
-
-    const [localPart, domainPart] = email.split('@');
-    if (!domainPart) {
-      return `${email.slice(0, 2)}***`;
-    }
-
-    const maskedLocalPart = localPart.length <= 2
-      ? `${localPart.charAt(0)}*`
-      : `${localPart.slice(0, 2)}***`;
-
-    return `${maskedLocalPart}@${domainPart}`;
-  }
-
-  private getEmailLinkLogContext(url: string): Record<string, string | boolean | null> {
-    try {
-      const parsedUrl = new URL(url);
-      return {
-        origin: parsedUrl.origin,
-        pathname: parsedUrl.pathname,
-        mode: parsedUrl.searchParams.get('mode'),
-        hasOobCode: parsedUrl.searchParams.has('oobCode'),
-        hasApiKey: parsedUrl.searchParams.has('apiKey'),
-        hasContinueUrl: parsedUrl.searchParams.has('continueUrl'),
-        hasLang: parsedUrl.searchParams.has('lang')
-      };
-    } catch {
-      return {
-        origin: null,
-        pathname: null,
-        mode: null,
-        hasOobCode: false,
-        hasApiKey: false,
-        hasContinueUrl: false,
-        hasLang: false
-      };
-    }
-  }
-
-  private getActionCodeSettingsLogContext(
-    actionCodeSettings: { url: string; handleCodeInApp?: boolean; linkDomain?: string }
-  ): { url: string; handleCodeInApp: boolean; linkDomain: string | null } {
-    return {
-      url: actionCodeSettings.url,
-      handleCodeInApp: actionCodeSettings.handleCodeInApp === true,
-      linkDomain: actionCodeSettings.linkDomain ?? null
-    };
   }
 
   private buildActionCodeSettings(handleCodeInApp: boolean): { url: string; handleCodeInApp?: boolean; linkDomain?: string } {
