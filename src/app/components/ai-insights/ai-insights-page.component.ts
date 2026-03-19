@@ -3,15 +3,20 @@ import { ChangeDetectionStrategy, Component, LOCALE_ID, NgZone, computed, effect
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterModule } from '@angular/router';
+import { firstValueFrom } from 'rxjs';
 import {
   AppThemes,
+  EventInterface,
   ChartDataCategoryTypes,
   TimeIntervals,
+  User,
   type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
 import type {
   AiInsightSummaryBucket,
+  AiInsightsAggregateOkResponse,
   AiInsightsEmptyResponse,
+  AiInsightsEventLookupOkResponse,
   AiInsightsOkResponse,
   AiInsightsQuotaStatus,
   AiInsightsRequest,
@@ -25,11 +30,13 @@ import { formatUnitAwareDataValue, normalizeUserUnitSettings } from '@shared/uni
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { MaterialModule } from '../../modules/material.module';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { AppEventService } from '../../services/app.event.service';
 import { AiInsightsLatestSnapshotService } from '../../services/ai-insights-latest-snapshot.service';
 import { AiInsightsQuotaService } from '../../services/ai-insights-quota.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { AiInsightsService } from '../../services/ai-insights.service';
+import { LoggerService } from '../../services/logger.service';
 import { formatDashboardBucketDateByInterval, formatDashboardDateRange } from '../../helpers/dashboard-chart-data.helper';
 import { AiInsightsChartComponent } from './ai-insights-chart.component';
 import { AI_INSIGHTS_SUGGESTED_PROMPTS } from './ai-insights.prompts';
@@ -115,7 +122,7 @@ function resolveQuotaBlockedMessage(quotaStatus: AiInsightsQuotaStatus): string 
 }
 
 function formatBucketMeta(
-  response: AiInsightsOkResponse,
+  response: AiInsightsAggregateOkResponse,
   bucket: AiInsightSummaryBucket,
   locale?: string,
 ): string | null {
@@ -149,7 +156,7 @@ function formatSummaryValue(
 }
 
 function buildActivityMixDetails(
-  response: AiInsightsOkResponse,
+  response: AiInsightsAggregateOkResponse,
   locale: string | undefined,
 ): Pick<InsightSummaryCard, 'detailRows' | 'metaFooter'> {
   const activityMix = response.summary.activityMix;
@@ -202,7 +209,7 @@ function resolveCoveragePeriodLabel(timeInterval: TimeIntervals, count: number):
   return count === 1 ? singularLabel : `${singularLabel}s`;
 }
 
-function formatCoverageValue(response: AiInsightsOkResponse): string | null {
+function formatCoverageValue(response: AiInsightsAggregateOkResponse): string | null {
   const coverage = response.summary.bucketCoverage;
   if (!coverage) {
     return null;
@@ -216,7 +223,7 @@ function formatCoverageValue(response: AiInsightsOkResponse): string | null {
 }
 
 function formatTrendValue(
-  response: AiInsightsOkResponse,
+  response: AiInsightsAggregateOkResponse,
   unitSettings: UserUnitSettingsInterface,
 ): string | null {
   const trend = response.summary.trend;
@@ -245,6 +252,53 @@ function formatTrendValue(
   return `${trend.deltaAggregateValue > 0 ? '+' : '-'}${absoluteDisplayValue}`;
 }
 
+function resolveEventLookupStatValue(
+  event: EventInterface | null,
+  dataType: string,
+): number | null {
+  const stat = event?.getStat?.(dataType);
+  const rawValue = stat && 'getValue' in stat && typeof stat.getValue === 'function'
+    ? stat.getValue()
+    : null;
+  return typeof rawValue === 'number' && Number.isFinite(rawValue) ? rawValue : null;
+}
+
+function formatEventLookupEventDate(
+  event: EventInterface | null,
+  locale: string,
+  timeZone: string,
+): string | null {
+  const startDate = event?.startDate;
+  if (!(startDate instanceof Date) || !Number.isFinite(startDate.getTime())) {
+    return null;
+  }
+
+  return startDate.toLocaleDateString(locale || undefined, {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    timeZone,
+  });
+}
+
+function formatEventLookupActivityLabel(event: EventInterface | null): string | null {
+  const activityTypes = Array.isArray(event?.getActivityTypesAsArray?.())
+    ? Array.from(new Set(event.getActivityTypesAsArray().filter((value): value is string => (
+      typeof value === 'string' && value.trim().length > 0
+    ))))
+    : [];
+
+  if (!activityTypes.length) {
+    return null;
+  }
+
+  if (activityTypes.length <= 2) {
+    return activityTypes.join(' • ');
+  }
+
+  return `${activityTypes.slice(0, 2).join(' • ')} • +${activityTypes.length - 2} more`;
+}
+
 interface InsightSummaryCard {
   label: string;
   value: string;
@@ -260,6 +314,19 @@ interface InsightSummaryCard {
 interface ResultNote {
   icon: 'info' | 'history';
   message: string;
+}
+
+interface EventLookupResolvedEvent {
+  eventId: string;
+  event: EventInterface | null;
+}
+
+interface EventLookupDisplayItem {
+  eventId: string;
+  value: string;
+  date: string;
+  activityLabel: string | null;
+  isAvailable: boolean;
 }
 
 @Component({
@@ -279,11 +346,13 @@ interface ResultNote {
 export class AiInsightsPageComponent {
   private readonly authService = inject(AppAuthService);
   private readonly analyticsService = inject(AppAnalyticsService);
+  private readonly eventService = inject(AppEventService);
   private readonly aiInsightsService = inject(AiInsightsService);
   private readonly aiInsightsLatestSnapshotService = inject(AiInsightsLatestSnapshotService);
   private readonly aiInsightsQuotaService = inject(AiInsightsQuotaService);
   private readonly themeService = inject(AppThemeService);
   private readonly userSettingsQueryService = inject(AppUserSettingsQueryService);
+  private readonly logger = inject(LoggerService);
   private readonly ngZone = inject(NgZone);
   private readonly locale = inject(LOCALE_ID);
 
@@ -302,6 +371,9 @@ export class AiInsightsPageComponent {
   readonly latestSnapshotSavedAt = signal<string | null>(null);
   readonly quotaStatus = signal<AiInsightsQuotaStatus | null>(null);
   readonly resultPrompt = signal('');
+  readonly eventLookupResolvedEvents = signal<EventLookupResolvedEvent[]>([]);
+  readonly eventLookupLoading = signal(false);
+  readonly eventLookupLoadError = signal<string | null>(null);
   readonly appTheme = this.themeService.appTheme;
   readonly user = toSignal(this.authService.user$, { initialValue: null });
   readonly chartSettings = this.userSettingsQueryService.chartSettings;
@@ -327,6 +399,14 @@ export class AiInsightsPageComponent {
   readonly okResponse = computed<AiInsightsOkResponse | null>(() => {
     const response = this.response();
     return response?.status === 'ok' ? response : null;
+  });
+  readonly aggregateOkResponse = computed<AiInsightsAggregateOkResponse | null>(() => {
+    const response = this.okResponse();
+    return response?.resultKind === 'aggregate' ? response : null;
+  });
+  readonly eventLookupOkResponse = computed<AiInsightsEventLookupOkResponse | null>(() => {
+    const response = this.okResponse();
+    return response?.resultKind === 'event_lookup' ? response : null;
   });
   readonly emptyResponse = computed<AiInsightsEmptyResponse | null>(() => {
     const response = this.response();
@@ -356,7 +436,21 @@ export class AiInsightsPageComponent {
   readonly latestSnapshotSupportNote = computed(() =>
     'Latest completed insights are temporarily restored from your account. Proper saved insights/history will come later.'
   );
-  readonly resultCardSubtitle = computed(() => 'Insight summary and chart for this prompt.');
+  readonly resultCardSubtitle = computed(() => {
+    if (this.eventLookupOkResponse()) {
+      return 'Winning event and top matches for this prompt.';
+    }
+
+    if (this.aggregateOkResponse()) {
+      return 'Insight summary and chart for this prompt.';
+    }
+
+    if (this.emptyResponse()) {
+      return 'Insight summary for this prompt.';
+    }
+
+    return 'Insight result for this prompt.';
+  });
   readonly resultCardMetaText = computed(() => {
     const savedAtLabel = formatSavedInsightDate(this.latestSnapshotSavedAt(), this.locale);
     if (!savedAtLabel) {
@@ -483,6 +577,9 @@ export class AiInsightsPageComponent {
     this.errorMessage.set(null);
     this.response.set(null);
     this.resultPrompt.set('');
+    this.eventLookupResolvedEvents.set([]);
+    this.eventLookupLoading.set(false);
+    this.eventLookupLoadError.set(null);
     this.promptControl.setValue('');
 
     if (!userID) {
@@ -514,6 +611,63 @@ export class AiInsightsPageComponent {
       cancelled = true;
     });
   });
+  private readonly eventLookupLoadEffect = effect((onCleanup) => {
+    const response = this.eventLookupOkResponse();
+    const userID = this.currentUserID();
+    let cancelled = false;
+
+    this.eventLookupResolvedEvents.set([]);
+    this.eventLookupLoading.set(false);
+    this.eventLookupLoadError.set(null);
+
+    if (!response || !userID) {
+      return;
+    }
+
+    const topEventIds = response.eventLookup.topEventIds.slice(0, 10);
+    if (!topEventIds.length) {
+      return;
+    }
+
+    this.eventLookupLoading.set(true);
+
+    void (async () => {
+      try {
+        const events = await firstValueFrom(
+          this.eventService.getEventsOnceByIds(new User(userID), topEventIds),
+        );
+        if (cancelled) {
+          return;
+        }
+
+        const eventsById = new Map(events.map(event => [event.getID(), event]));
+        this.eventLookupResolvedEvents.set(topEventIds.map(eventId => ({
+          eventId,
+          event: eventsById.get(eventId) ?? null,
+        })));
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        this.logger.error('[AiInsightsPageComponent] Failed to load event lookup details.', {
+          userID,
+          eventIds: topEventIds,
+          error,
+        });
+        this.eventLookupResolvedEvents.set(topEventIds.map(eventId => ({ eventId, event: null })));
+        this.eventLookupLoadError.set('Could not load event details right now.');
+      } finally {
+        if (!cancelled) {
+          this.eventLookupLoading.set(false);
+        }
+      }
+    })();
+
+    onCleanup(() => {
+      cancelled = true;
+    });
+  });
   readonly resultSubtitle = computed(() => {
     const response = this.okResponse() || this.emptyResponse();
     if (!response) {
@@ -530,9 +684,9 @@ export class AiInsightsPageComponent {
 
     return formatDateRangeNote(response.query.dateRange);
   });
-  readonly resultWarnings = computed(() => this.okResponse()?.presentation.warnings ?? []);
+  readonly resultWarnings = computed(() => this.aggregateOkResponse()?.presentation.warnings ?? []);
   readonly resultSummaryCards = computed<InsightSummaryCard[]>(() => {
-    const response = this.okResponse();
+    const response = this.aggregateOkResponse();
     if (!response) {
       return [];
     }
@@ -633,6 +787,52 @@ export class AiInsightsPageComponent {
     }
 
     return cards;
+  });
+  readonly eventLookupItems = computed<EventLookupDisplayItem[]>(() => {
+    const response = this.eventLookupOkResponse();
+    if (!response) {
+      return [];
+    }
+
+    const locale = this.locale;
+    const unitSettings = this.userUnitSettings();
+    const resolvedEvents = this.eventLookupResolvedEvents();
+
+    return response.eventLookup.topEventIds.slice(0, 10).map((eventId) => {
+      const event = resolvedEvents.find(entry => entry.eventId === eventId)?.event ?? null;
+      const rawValue = resolveEventLookupStatValue(event, response.query.dataType);
+      const value = rawValue === null
+        ? 'Unavailable'
+        : (formatUnitAwareDataValue(response.query.dataType, rawValue, unitSettings, {
+          stripRepeatedUnit: true,
+        }) ?? 'Unavailable');
+      const date = formatEventLookupEventDate(event, locale, response.query.dateRange.timezone) ?? 'Event unavailable';
+
+      return {
+        eventId,
+        value,
+        date,
+        activityLabel: formatEventLookupActivityLabel(event),
+        isAvailable: !!event && rawValue !== null,
+      };
+    });
+  });
+  readonly primaryEventLookupItem = computed<EventLookupDisplayItem | null>(() =>
+    this.eventLookupItems()[0] ?? null
+  );
+  readonly eventLookupRankingCopy = computed(() => {
+    const response = this.eventLookupOkResponse();
+    if (!response) {
+      return null;
+    }
+
+    const shownCount = Math.min(response.eventLookup.topEventIds.length, 10);
+    const matchedCount = response.eventLookup.matchedEventCount;
+    if (matchedCount <= shownCount) {
+      return `${matchedCount} matching ${matchedCount === 1 ? 'event' : 'events'} ranked.`;
+    }
+
+    return `Showing top ${shownCount} of ${matchedCount} matching events.`;
   });
 
   onFormSubmit(event: SubmitEvent | Event): void {

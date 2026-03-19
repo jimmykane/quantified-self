@@ -1,6 +1,7 @@
 import { z } from 'genkit';
 import {
   ChartDataCategoryTypes,
+  ChartDataValueTypes,
   type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
 
@@ -17,17 +18,38 @@ import {
   NormalizedInsightQuerySchema,
 } from './schemas';
 
-export interface SummarizeInsightResultInput {
+interface SummarizeInsightEventLookupFact {
+  eventId: string;
+  startDate: string;
+  aggregateValue: number;
+}
+
+interface SummarizeInsightBaseInput {
   status: 'ok' | 'empty';
   prompt: string;
   metricLabel: string;
   query: NormalizedInsightQuery;
-  aggregation: EventStatAggregationResult;
-  summary: AiInsightSummary;
   presentation: AiInsightPresentation;
   clientLocale?: string;
   unitSettings?: UserUnitSettingsInterface;
 }
+
+export interface SummarizeInsightAggregateInput extends SummarizeInsightBaseInput {
+  aggregation: EventStatAggregationResult;
+  summary: AiInsightSummary;
+}
+
+export interface SummarizeInsightEventLookupInput extends SummarizeInsightBaseInput {
+  eventLookup: {
+    matchedEventCount: number;
+    primaryEvent: SummarizeInsightEventLookupFact | null;
+    rankedEvents: SummarizeInsightEventLookupFact[];
+  };
+}
+
+export type SummarizeInsightResultInput =
+  | SummarizeInsightAggregateInput
+  | SummarizeInsightEventLookupInput;
 
 export interface SummarizeInsightNarrativeResult {
   narrative: string;
@@ -38,17 +60,35 @@ interface SummarizeInsightDependencies {
   generateNarrative: (input: SummarizeInsightResultInput) => Promise<SummarizeInsightNarrativeResult>;
 }
 
-const SummarizeInsightResultInputSchema = z.object({
+const SummarizeInsightEventLookupFactSchema = z.object({
+  eventId: z.string().min(1),
+  startDate: z.string().datetime(),
+  aggregateValue: z.number(),
+});
+
+const SummarizeInsightBaseInputSchema = z.object({
   status: z.enum(['ok', 'empty']),
   prompt: z.string().min(1),
   metricLabel: z.string().min(1),
   query: NormalizedInsightQuerySchema,
-  aggregation: EventStatAggregationResultSchema,
-  summary: AiInsightSummarySchema,
   presentation: AiInsightPresentationSchema,
   clientLocale: z.string().optional(),
   unitSettings: z.any().optional(),
 });
+
+const SummarizeInsightResultInputSchema = z.union([
+  SummarizeInsightBaseInputSchema.extend({
+    aggregation: EventStatAggregationResultSchema,
+    summary: AiInsightSummarySchema,
+  }),
+  SummarizeInsightBaseInputSchema.extend({
+    eventLookup: z.object({
+      matchedEventCount: z.number().int().nonnegative(),
+      primaryEvent: SummarizeInsightEventLookupFactSchema.nullable(),
+      rankedEvents: z.array(SummarizeInsightEventLookupFactSchema).max(10),
+    }),
+  }),
+]);
 
 const SummarizeInsightResultOutputSchema = z.object({
   narrative: z.string().min(1),
@@ -126,6 +166,10 @@ export function buildInsightSummaryFacts(input: SummarizeInsightResultInput): {
   improvedVerb: string;
   declinedVerb: string;
 } {
+  if (!('summary' in input)) {
+    throw new Error('Summary facts are only available for aggregate insights.');
+  }
+
   const { summary } = input;
   const summarySemantics = resolveMetricSummarySemantics(
     input.query.dataType,
@@ -170,10 +214,46 @@ export function buildInsightSummaryFacts(input: SummarizeInsightResultInput): {
   };
 }
 
+function resolveEventLookupDescriptor(
+  query: NormalizedInsightQuery,
+  metricLabel: string,
+): string {
+  const semantics = resolveMetricSemantics(query.dataType);
+
+  switch (query.valueType) {
+    case ChartDataValueTypes.Total:
+    case ChartDataValueTypes.Maximum:
+      if (metricLabel === 'distance') {
+        return 'longest distance';
+      }
+      if (metricLabel === 'duration') {
+        return 'longest duration';
+      }
+      return `${semantics.highestValueLabel} ${metricLabel}`;
+    case ChartDataValueTypes.Minimum:
+      if (metricLabel === 'distance') {
+        return 'shortest distance';
+      }
+      if (metricLabel === 'duration') {
+        return 'shortest duration';
+      }
+      return `${semantics.lowestValueLabel} ${metricLabel}`;
+    default:
+      return metricLabel;
+  }
+}
+
+function formatEventLookupDate(
+  value: string,
+  locale: string | undefined,
+  query: NormalizedInsightQuery,
+): string {
+  return formatSemanticDate(value, locale, query.dateRange.timezone);
+}
+
 function buildNarrativeFallback(input: SummarizeInsightResultInput): string {
   const dateRangeText = formatLocalizedDateRange(input.query, input.clientLocale);
   const activityText = formatActivityFilter(input.query);
-  const summary = buildInsightSummaryFacts(input);
   const isAllTime = input.query.dateRange.kind === 'all_time';
 
   if (input.status === 'empty') {
@@ -181,6 +261,24 @@ function buildNarrativeFallback(input: SummarizeInsightResultInput): string {
       ? `I could not find matching ${activityText} events with ${input.metricLabel} data across all recorded history.`
       : `I could not find matching ${activityText} events with ${input.metricLabel} data from ${dateRangeText}.`;
   }
+
+  if ('eventLookup' in input) {
+    const primaryEvent = input.eventLookup.primaryEvent;
+    if (!primaryEvent) {
+      return `I found matching ${activityText} events for ${input.metricLabel}, but could not determine the winning event.`;
+    }
+
+    const descriptor = resolveEventLookupDescriptor(input.query, input.metricLabel);
+    const displayValue = formatInsightAggregateDisplay(input.query.dataType, primaryEvent.aggregateValue, input.unitSettings);
+    const eventDate = formatEventLookupDate(primaryEvent.startDate, input.clientLocale, input.query);
+    const matchedNoun = input.eventLookup.matchedEventCount === 1 ? 'event' : 'events';
+
+    return isAllTime
+      ? `Your ${descriptor} event for ${activityText} was ${displayValue} on ${eventDate}. I ranked ${input.eventLookup.matchedEventCount} matching ${matchedNoun}.`
+      : `Between ${dateRangeText}, your ${descriptor} event for ${activityText} was ${displayValue} on ${eventDate}. I ranked ${input.eventLookup.matchedEventCount} matching ${matchedNoun}.`;
+  }
+
+  const summary = buildInsightSummaryFacts(input);
 
   if (
     input.query.categoryType === ChartDataCategoryTypes.DateType
@@ -205,6 +303,41 @@ function buildNarrativeFallback(input: SummarizeInsightResultInput): string {
 }
 
 export function buildNarrativeFacts(input: SummarizeInsightResultInput): Record<string, unknown> {
+  if ('eventLookup' in input) {
+    return {
+      status: input.status,
+      prompt: input.prompt,
+      metricLabel: input.metricLabel,
+      title: input.presentation.title,
+      resultKind: 'event_lookup',
+      chartType: input.presentation.chartType,
+      dateRangeLabel: formatLocalizedDateRange(input.query, input.clientLocale),
+      activityFilterLabel: formatActivityFilter(input.query),
+      descriptor: resolveEventLookupDescriptor(input.query, input.metricLabel),
+      matchedEventCount: input.eventLookup.matchedEventCount,
+      primaryEvent: input.eventLookup.primaryEvent
+        ? {
+          eventId: input.eventLookup.primaryEvent.eventId,
+          startDateLabel: formatEventLookupDate(input.eventLookup.primaryEvent.startDate, input.clientLocale, input.query),
+          aggregateDisplayValue: formatInsightAggregateDisplay(
+            input.query.dataType,
+            input.eventLookup.primaryEvent.aggregateValue,
+            input.unitSettings,
+          ),
+        }
+        : null,
+      rankedEvents: input.eventLookup.rankedEvents.slice(0, 10).map((event) => ({
+        eventId: event.eventId,
+        startDateLabel: formatEventLookupDate(event.startDate, input.clientLocale, input.query),
+        aggregateDisplayValue: formatInsightAggregateDisplay(
+          input.query.dataType,
+          event.aggregateValue,
+          input.unitSettings,
+        ),
+      })),
+    };
+  }
+
   const summary = buildInsightSummaryFacts(input);
 
   return {

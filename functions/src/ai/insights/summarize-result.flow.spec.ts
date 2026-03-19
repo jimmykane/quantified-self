@@ -103,6 +103,58 @@ const paceInput = {
   },
 };
 
+const eventLookupInput = {
+  status: 'ok' as const,
+  prompt: 'I want to know when I had my longest distance in cycling',
+  metricLabel: 'distance',
+  query: {
+    dataType: 'Distance',
+    valueType: ChartDataValueTypes.Maximum,
+    categoryType: ChartDataCategoryTypes.DateType,
+    requestedTimeInterval: TimeIntervals.Monthly,
+    activityTypeGroups: [],
+    activityTypes: [ActivityTypes.Cycling],
+    dateRange: {
+      kind: 'bounded',
+      startDate: '2026-01-01T00:00:00.000Z',
+      endDate: '2026-03-18T23:59:59.999Z',
+      timezone: 'Europe/Helsinki',
+      source: 'default',
+    },
+    chartType: ChartTypes.LinesVertical,
+    resultKind: 'event_lookup' as const,
+  },
+  eventLookup: {
+    matchedEventCount: 3,
+    primaryEvent: {
+      eventId: 'event-3',
+      startDate: '2026-03-10T08:00:00.000Z',
+      aggregateValue: 123400,
+    },
+    rankedEvents: [
+      {
+        eventId: 'event-3',
+        startDate: '2026-03-10T08:00:00.000Z',
+        aggregateValue: 123400,
+      },
+      {
+        eventId: 'event-2',
+        startDate: '2026-02-14T08:00:00.000Z',
+        aggregateValue: 118200,
+      },
+      {
+        eventId: 'event-1',
+        startDate: '2026-01-11T08:00:00.000Z',
+        aggregateValue: 105700,
+      },
+    ],
+  },
+  presentation: {
+    title: 'Top distance events for Cycling',
+    chartType: ChartTypes.LinesVertical,
+  },
+};
+
 describe('summarizeAiInsightResult', () => {
   afterEach(() => {
     setSummarizeInsightDependenciesForTesting();
@@ -257,5 +309,45 @@ describe('summarizeAiInsightResult', () => {
     expect(result.source).toBe('fallback');
     expect(result.narrative).toContain('across all recorded history');
     expect(result.narrative).not.toContain('between');
+  });
+
+  it('builds event-lookup facts with ranked event ids and display values', () => {
+    const facts = buildNarrativeFacts(eventLookupInput) as {
+      resultKind: string;
+      descriptor: string;
+      matchedEventCount: number;
+      primaryEvent: { eventId: string; aggregateDisplayValue: string };
+      rankedEvents: Array<{ eventId: string; aggregateDisplayValue: string }>;
+    };
+
+    expect(facts.resultKind).toBe('event_lookup');
+    expect(facts.descriptor).toBe('longest distance');
+    expect(facts.matchedEventCount).toBe(3);
+    expect(facts.primaryEvent).toEqual(expect.objectContaining({
+      eventId: 'event-3',
+    }));
+    expect(facts.primaryEvent.aggregateDisplayValue.toLowerCase()).toBe('123.40 km'.toLowerCase());
+    expect(facts.rankedEvents).toHaveLength(3);
+    expect(facts.rankedEvents[0]).toEqual(expect.objectContaining({
+      eventId: 'event-3',
+    }));
+    expect(facts.rankedEvents[0]?.aggregateDisplayValue.toLowerCase()).toBe('123.40 km'.toLowerCase());
+  });
+
+  it('falls back to an event-lookup narrative without aggregate bucket text', async () => {
+    setSummarizeInsightDependenciesForTesting({
+      generateNarrative: async () => {
+        throw new Error('generation failed');
+      },
+    });
+
+    const result = await summarizeAiInsightResult(eventLookupInput);
+
+    expect(result.source).toBe('fallback');
+    expect(result.narrative).toContain('longest distance event');
+    expect(result.narrative).toContain('123.40');
+    expect(result.narrative).toMatch(/km/i);
+    expect(result.narrative).toContain('I ranked 3 matching events');
+    expect(result.narrative).not.toContain('time buckets');
   });
 });

@@ -411,6 +411,60 @@
   gap: 12px;
 }
 
+.event-lookup-primary,
+.event-lookup-row {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 12px;
+  background: var(--mat-sys-surface-container-low);
+}
+
+.event-lookup-primary {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.event-lookup-primary-copy,
+.event-lookup-row-copy,
+.event-lookup-list {
+  display: grid;
+}
+
+.event-lookup-list {
+  gap: 10px;
+}
+
+.event-lookup-row {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.event-lookup-rank {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--mat-sys-surface-container);
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.event-lookup-row-value {
+  font-size: 1.04rem;
+}
+
+.event-lookup-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
 .summary-card {
   display: grid;
   gap: 4px;
@@ -516,6 +570,10 @@
   place-content: center;
 }
 
+.state-panel-inline {
+  min-height: 0;
+}
+
 @keyframes hero-prompt-shine {
   0% {
     background-position: 120% 0;
@@ -594,5 +652,14 @@
 
   .summary-grid {
     grid-template-columns: 1fr;
+  }
+
+  .event-lookup-primary,
+  .event-lookup-row {
+    grid-template-columns: 1fr;
+  }
+
+  .event-lookup-actions {
+    justify-content: flex-start;
   }
 }

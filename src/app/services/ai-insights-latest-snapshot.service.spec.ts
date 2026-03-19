@@ -10,6 +10,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import type {
   AiInsightsLatestSnapshot,
+  AiInsightsEventLookupOkResponse,
   AiInsightsOkResponse,
   AiInsightsQuotaStatus,
 } from '@shared/ai-insights.types';
@@ -35,8 +36,10 @@ vi.mock('@angular/fire/firestore', async (importOriginal) => {
 function buildOkResponse(): AiInsightsOkResponse {
   return {
     status: 'ok',
+    resultKind: 'aggregate',
     narrative: 'Insight narrative',
     query: {
+      resultKind: 'aggregate',
       dataType: 'DataDistance',
       valueType: ChartDataValueTypes.Total,
       categoryType: ChartDataCategoryTypes.DateType,
@@ -114,6 +117,40 @@ function buildOkResponse(): AiInsightsOkResponse {
   };
 }
 
+function buildEventLookupResponse(): AiInsightsEventLookupOkResponse {
+  return {
+    status: 'ok',
+    resultKind: 'event_lookup',
+    narrative: 'Your longest distance event was 123.4 km on Mar 10, 2026.',
+    query: {
+      resultKind: 'event_lookup',
+      dataType: 'DataDistance',
+      valueType: ChartDataValueTypes.Maximum,
+      categoryType: ChartDataCategoryTypes.DateType,
+      requestedTimeInterval: TimeIntervals.Monthly,
+      activityTypeGroups: [],
+      activityTypes: [ActivityTypes.Cycling],
+      dateRange: {
+        kind: 'bounded',
+        startDate: '2026-01-01T00:00:00.000Z',
+        endDate: '2026-03-18T23:59:59.999Z',
+        timezone: 'Europe/Helsinki',
+        source: 'default',
+      },
+      chartType: ChartTypes.LinesVertical,
+    },
+    eventLookup: {
+      primaryEventId: 'event-3',
+      topEventIds: ['event-3', 'event-2', 'event-1'],
+      matchedEventCount: 3,
+    },
+    presentation: {
+      title: 'Top distance events for Cycling',
+      chartType: ChartTypes.LinesVertical,
+    },
+  };
+}
+
 function buildQuotaStatus(): AiInsightsQuotaStatus {
   return {
     role: 'pro',
@@ -184,7 +221,17 @@ describe('AiInsightsLatestSnapshotService', () => {
 
     const restored = await service.loadLatest('user-1');
 
-    expect(restored).toEqual(snapshot);
+    expect(restored).toEqual({
+      ...snapshot,
+      response: {
+        ...snapshot.response,
+        resultKind: 'aggregate',
+        query: {
+          ...snapshot.response.query,
+          resultKind: 'aggregate',
+        },
+      },
+    });
   });
 
   it('should restore snapshots that include the optional quota payload', async () => {
@@ -204,7 +251,17 @@ describe('AiInsightsLatestSnapshotService', () => {
 
     const restored = await service.loadLatest('user-1');
 
-    expect(restored).toEqual(snapshot);
+    expect(restored).toEqual({
+      ...snapshot,
+      response: {
+        ...snapshot.response,
+        resultKind: 'aggregate',
+        query: {
+          ...snapshot.response.query,
+          resultKind: 'aggregate',
+        },
+      },
+    });
     expect(deleteDoc).not.toHaveBeenCalled();
   });
 
@@ -234,6 +291,11 @@ describe('AiInsightsLatestSnapshotService', () => {
       prompt: 'Show my total distance',
       response: {
         ...buildOkResponse(),
+        resultKind: 'aggregate',
+        query: {
+          ...buildOkResponse().query,
+          resultKind: 'aggregate',
+        },
         presentation: buildOkResponse().presentation,
       },
     });
@@ -270,7 +332,9 @@ describe('AiInsightsLatestSnapshotService', () => {
         ...legacyResponse,
         query: {
           ...legacyQueryWithoutRequestedInterval,
+          resultKind: 'aggregate',
         },
+        resultKind: 'aggregate',
       },
     });
     expect((restored as AiInsightsLatestSnapshot | null)?.response.status).toBe('ok');
@@ -353,6 +417,24 @@ describe('AiInsightsLatestSnapshotService', () => {
         responseKeys: ['status'],
       }),
     );
+  });
+
+  it('should restore event-lookup snapshots without clearing them', async () => {
+    const snapshot: AiInsightsLatestSnapshot = {
+      version: 1,
+      savedAt: '2026-03-18T12:00:00.000Z',
+      prompt: 'I want to know when I had my longest distance in cycling',
+      response: buildEventLookupResponse(),
+    };
+    vi.mocked(getDoc).mockResolvedValue({
+      exists: () => true,
+      data: () => snapshot,
+    } as never);
+
+    const restored = await service.loadLatest('user-1');
+
+    expect(restored).toEqual(snapshot);
+    expect(deleteDoc).not.toHaveBeenCalled();
   });
 
   it('should ignore version mismatches and remove the stale snapshot', async () => {

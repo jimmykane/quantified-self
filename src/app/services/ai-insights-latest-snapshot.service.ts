@@ -7,14 +7,18 @@ import {
   setDoc,
 } from '@angular/fire/firestore';
 import type {
+  AiInsightEventLookup,
   AiInsightPresentation,
   AiInsightSummary,
   AiInsightSummaryActivityMix,
   AiInsightSummaryBucket,
   AiInsightSummaryCoverage,
   AiInsightSummaryTrend,
+  AiInsightsAggregateOkResponse,
+  AiInsightsEventLookupOkResponse,
   AiInsightsLatestSnapshot,
   AiInsightsQuotaStatus,
+  AiInsightsResultKind,
   AiInsightsResponse,
   NormalizedInsightDateRange,
   NormalizedInsightQuery,
@@ -35,6 +39,15 @@ export type AiInsightsLatestSnapshotSaveResult =
   | 'failed';
 
 type UnknownRecord = Record<string, unknown>;
+type NormalizedInsightQueryLike = Omit<NormalizedInsightQuery, 'resultKind'> & {
+  resultKind?: AiInsightsResultKind;
+};
+type AggregateNormalizedInsightQuery = NormalizedInsightQuery & {
+  resultKind: 'aggregate';
+};
+type EventLookupNormalizedInsightQuery = NormalizedInsightQuery & {
+  resultKind: 'event_lookup';
+};
 type SnapshotValidationFailure = {
   reason: string;
   details?: UnknownRecord;
@@ -161,6 +174,10 @@ function isQuotaStatus(value: unknown): value is AiInsightsQuotaStatus {
   );
 }
 
+function isResultKind(value: unknown): value is AiInsightsResultKind {
+  return value === 'aggregate' || value === 'event_lookup';
+}
+
 function isNormalizedInsightDateRange(value: unknown): value is NormalizedInsightDateRange {
   if (!isRecord(value) || typeof value.timezone !== 'string') {
     return false;
@@ -181,9 +198,10 @@ function isNormalizedInsightDateRange(value: unknown): value is NormalizedInsigh
   return false;
 }
 
-function isNormalizedInsightQuery(value: unknown): value is NormalizedInsightQuery {
+function isNormalizedInsightQuery(value: unknown): value is NormalizedInsightQueryLike {
   return (
     isRecord(value)
+    && (value.resultKind === undefined || value.resultKind === null || isResultKind(value.resultKind))
     && typeof value.dataType === 'string'
     && isEnumPrimitive(value.valueType)
     && isEnumPrimitive(value.categoryType)
@@ -272,6 +290,15 @@ function isSummary(value: unknown): value is AiInsightSummary {
   );
 }
 
+function isEventLookup(value: unknown): value is AiInsightEventLookup {
+  return (
+    isRecord(value)
+    && typeof value.primaryEventId === 'string'
+    && isStringArray(value.topEventIds)
+    && isFiniteNumber(value.matchedEventCount)
+  );
+}
+
 function isPresentation(value: unknown): value is AiInsightPresentation {
   return (
     isRecord(value)
@@ -282,17 +309,55 @@ function isPresentation(value: unknown): value is AiInsightPresentation {
   );
 }
 
+function resolveCompletedResponseResultKind(
+  value: UnknownRecord,
+): AiInsightsResultKind | null {
+  if (isResultKind(value.resultKind)) {
+    return value.resultKind;
+  }
+
+  if (isEventLookup(value.eventLookup)) {
+    return 'event_lookup';
+  }
+
+  if (isAggregationResult(value.aggregation) && isSummary(value.summary)) {
+    return 'aggregate';
+  }
+
+  return null;
+}
+
 function isCompletedInsightResponse(value: unknown): value is Extract<AiInsightsResponse, { status: 'ok' | 'empty' }> {
+  if (!isRecord(value) || (value.status !== 'ok' && value.status !== 'empty')) {
+    return false;
+  }
+
+  if (
+    typeof value.narrative !== 'string'
+    || (value.quota !== undefined && !isQuotaStatus(value.quota))
+    || !isNormalizedInsightQuery(value.query)
+    || !isPresentation(value.presentation)
+  ) {
+    return false;
+  }
+
+  if (value.status === 'empty') {
+    return (
+      isAggregationResult(value.aggregation)
+      && isSummary(value.summary)
+      && typeof value.presentation.emptyState === 'string'
+    );
+  }
+
+  const resultKind = resolveCompletedResponseResultKind(value);
+  if (resultKind === 'event_lookup') {
+    return isEventLookup(value.eventLookup);
+  }
+
   return (
-    isRecord(value)
-    && (value.status === 'ok' || value.status === 'empty')
-    && typeof value.narrative === 'string'
-    && (value.quota === undefined || isQuotaStatus(value.quota))
-    && isNormalizedInsightQuery(value.query)
+    resultKind === 'aggregate'
     && isAggregationResult(value.aggregation)
     && isSummary(value.summary)
-    && isPresentation(value.presentation)
-    && (value.status !== 'empty' || typeof value.presentation.emptyState === 'string')
   );
 }
 
@@ -441,6 +506,55 @@ function getAiInsightsResponseValidationFailure(value: unknown): SnapshotValidat
     };
   }
 
+  if (!isPresentation(value.presentation)) {
+    return {
+      reason: 'presentation_invalid',
+      details: {
+        responseKeys: Object.keys(value),
+        ...describePresentation(value.presentation),
+      },
+    };
+  }
+
+  if (value.status === 'empty') {
+    if (!isAggregationResult(value.aggregation)) {
+      return {
+        reason: 'aggregation_invalid',
+        details: {
+          responseKeys: Object.keys(value),
+          ...describeAggregationResult(value.aggregation),
+        },
+      };
+    }
+
+    if (!isSummary(value.summary)) {
+      return {
+        reason: 'summary_invalid',
+        details: {
+          responseKeys: Object.keys(value),
+          ...describeSummary(value.summary),
+        },
+      };
+    }
+
+    return null;
+  }
+
+  const resultKind = resolveCompletedResponseResultKind(value);
+  if (resultKind === 'event_lookup') {
+    if (!isEventLookup(value.eventLookup)) {
+      return {
+        reason: 'event_lookup_invalid',
+        details: {
+          responseKeys: Object.keys(value),
+          eventLookupType: describeValueType(value.eventLookup),
+        },
+      };
+    }
+
+    return null;
+  }
+
   if (!isAggregationResult(value.aggregation)) {
     return {
       reason: 'aggregation_invalid',
@@ -461,16 +575,6 @@ function getAiInsightsResponseValidationFailure(value: unknown): SnapshotValidat
     };
   }
 
-  if (!isPresentation(value.presentation)) {
-    return {
-      reason: 'presentation_invalid',
-      details: {
-        responseKeys: Object.keys(value),
-        ...describePresentation(value.presentation),
-      },
-    };
-  }
-
   return null;
 }
 
@@ -483,6 +587,7 @@ function describeNormalizedInsightQuery(value: unknown): UnknownRecord {
 
   return {
     queryKeys: Object.keys(value),
+    resultKindType: describeValueType(value.resultKind),
     dataTypeType: describeValueType(value.dataType),
     valueTypeType: describeValueType(value.valueType),
     categoryTypeType: describeValueType(value.categoryType),
@@ -622,7 +727,7 @@ function normalizeAiInsightsResponse(response: AiInsightsResponse): AiInsightsRe
     return {
       ...response,
       ...(response.quota ? { quota: response.quota } : {}),
-      query: normalizeInsightQuery(response.query),
+      query: normalizeInsightQuery(response.query as NormalizedInsightQueryLike),
       summary: normalizeSummary(response.summary),
       presentation: {
         ...normalizePresentation(response.presentation),
@@ -631,20 +736,64 @@ function normalizeAiInsightsResponse(response: AiInsightsResponse): AiInsightsRe
     };
   }
 
+  const resultKind = resolveCompletedResponseResultKind(response as unknown as UnknownRecord);
+  if (resultKind === 'event_lookup') {
+    const normalizedResponse = response as AiInsightsEventLookupOkResponse & {
+      query: NormalizedInsightQueryLike;
+    };
+    return {
+      ...normalizedResponse,
+      resultKind: 'event_lookup',
+      ...(normalizedResponse.quota ? { quota: normalizedResponse.quota } : {}),
+      query: normalizeEventLookupInsightQuery(normalizedResponse.query),
+      eventLookup: normalizeEventLookup(normalizedResponse.eventLookup),
+      presentation: normalizePresentation(normalizedResponse.presentation),
+    };
+  }
+
+  const normalizedResponse = response as AiInsightsAggregateOkResponse & {
+    query: NormalizedInsightQueryLike;
+  };
   return {
-    ...response,
-    ...(response.quota ? { quota: response.quota } : {}),
-    query: normalizeInsightQuery(response.query),
-    summary: normalizeSummary(response.summary),
-    presentation: normalizePresentation(response.presentation),
+    ...normalizedResponse,
+    resultKind: 'aggregate',
+    ...(normalizedResponse.quota ? { quota: normalizedResponse.quota } : {}),
+    query: normalizeAggregateInsightQuery(normalizedResponse.query),
+    summary: normalizeSummary(normalizedResponse.summary),
+    presentation: normalizePresentation(normalizedResponse.presentation),
   };
 }
 
-function normalizeInsightQuery(query: NormalizedInsightQuery): NormalizedInsightQuery {
-  const { requestedTimeInterval, ...rest } = query as NormalizedInsightQuery & { requestedTimeInterval?: unknown };
+function normalizeInsightQuery(query: NormalizedInsightQueryLike): NormalizedInsightQuery {
+  const { requestedTimeInterval, resultKind, ...rest } = query as NormalizedInsightQueryLike & {
+    requestedTimeInterval?: unknown;
+  };
   return {
     ...rest,
+    resultKind: resultKind === 'event_lookup' ? 'event_lookup' : 'aggregate',
     ...(requestedTimeInterval == null ? {} : { requestedTimeInterval }),
+  };
+}
+
+function normalizeAggregateInsightQuery(query: NormalizedInsightQueryLike): AggregateNormalizedInsightQuery {
+  return {
+    ...normalizeInsightQuery(query),
+    resultKind: 'aggregate',
+  };
+}
+
+function normalizeEventLookupInsightQuery(query: NormalizedInsightQueryLike): EventLookupNormalizedInsightQuery {
+  return {
+    ...normalizeInsightQuery(query),
+    resultKind: 'event_lookup',
+  };
+}
+
+function normalizeEventLookup(eventLookup: AiInsightEventLookup): AiInsightEventLookup {
+  return {
+    primaryEventId: eventLookup.primaryEventId,
+    topEventIds: eventLookup.topEventIds.slice(0, 10),
+    matchedEventCount: eventLookup.matchedEventCount,
   };
 }
 

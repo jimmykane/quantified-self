@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input } from '@angular/core';
 import { ChartDataCategoryTypes, ChartTypes, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
-import type { AiInsightsOkResponse } from '@shared/ai-insights.types';
+import type { AiInsightsAggregateOkResponse } from '@shared/ai-insights.types';
 import { buildAggregatedChartRows } from '../../helpers/aggregated-chart-row.helper';
 import { AppChartsModule } from '../../modules/app-charts.module';
 import { LoggerService } from '../../services/logger.service';
@@ -17,7 +17,7 @@ import { LoggerService } from '../../services/logger.service';
 export class AiInsightsChartComponent {
   private readonly logger = inject(LoggerService);
 
-  readonly response = input.required<AiInsightsOkResponse>();
+  readonly response = input.required<AiInsightsAggregateOkResponse>();
   readonly darkTheme = input(false);
   readonly useAnimations = input(false);
   readonly userUnitSettings = input<UserUnitSettingsInterface | null>(null);

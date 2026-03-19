@@ -3,6 +3,7 @@ import * as logger from 'firebase-functions/logger';
 import {
   ActivityTypes,
   ChartDataCategoryTypes,
+  ChartDataValueTypes,
   ActivityTypesHelper,
   EventImporterJSON,
   EventJSONInterface,
@@ -41,7 +42,14 @@ interface ExecuteQueryDependencies {
   logger: Pick<typeof logger, 'info' | 'warn' | 'error'>;
 }
 
-export interface AiInsightsExecutionResult {
+interface RankedInsightEvent {
+  eventId: string;
+  startDate: string;
+  aggregateValue: number;
+}
+
+interface AggregateExecutionResult {
+  resultKind: 'aggregate';
   aggregation: EventStatAggregationResult;
   matchedEventsCount: number;
   matchedActivityTypeCounts: Array<{
@@ -49,6 +57,24 @@ export interface AiInsightsExecutionResult {
     eventCount: number;
   }>;
 }
+
+interface EventLookupExecutionResult {
+  resultKind: 'event_lookup';
+  matchedEventsCount: number;
+  matchedActivityTypeCounts: Array<{
+    activityType: string;
+    eventCount: number;
+  }>;
+  eventLookup: {
+    primaryEventId: string | null;
+    topEventIds: string[];
+    rankedEvents: RankedInsightEvent[];
+  };
+}
+
+export type AiInsightsExecutionResult =
+  | AggregateExecutionResult
+  | EventLookupExecutionResult;
 
 const defaultExecuteQueryDependencies: ExecuteQueryDependencies = {
   fetchEventDocs: async ({ userID, startDate, endDate }) => {
@@ -202,9 +228,13 @@ function eventMatchesActivitySelection(
 }
 
 function hasRequestedStat(event: EventInterface, dataType: string): boolean {
+  return resolveRequestedStatValue(event, dataType) !== null;
+}
+
+function resolveRequestedStatValue(event: EventInterface, dataType: string): number | null {
   const stat = event.getStat?.(dataType);
   const rawValue = stat?.getValue?.();
-  return typeof rawValue === 'number' && Number.isFinite(rawValue);
+  return typeof rawValue === 'number' && Number.isFinite(rawValue) ? rawValue : null;
 }
 
 function buildMatchedActivityTypeCounts(
@@ -253,6 +283,49 @@ function summarizeError(error: unknown): {
   return {
     errorString: typeof error === 'string' ? error : JSON.stringify(error),
   };
+}
+
+function compareRankedEvents(
+  left: RankedInsightEvent,
+  right: RankedInsightEvent,
+  valueType: NormalizedInsightQuery['valueType'],
+): number {
+  const valueDelta = valueType === ChartDataValueTypes.Minimum
+    ? left.aggregateValue - right.aggregateValue
+    : right.aggregateValue - left.aggregateValue;
+  if (valueDelta !== 0) {
+    return valueDelta;
+  }
+
+  const timeDelta = new Date(right.startDate).getTime() - new Date(left.startDate).getTime();
+  if (timeDelta !== 0) {
+    return timeDelta;
+  }
+
+  return left.eventId.localeCompare(right.eventId);
+}
+
+function buildRankedEvents(
+  events: EventInterface[],
+  query: NormalizedInsightQuery,
+): RankedInsightEvent[] {
+  return events
+    .map((event) => {
+      const aggregateValue = resolveRequestedStatValue(event, query.dataType);
+      const eventId = event.getID?.();
+      const startDate = event.startDate instanceof Date ? event.startDate.toISOString() : null;
+      if (aggregateValue === null || !eventId || !startDate) {
+        return null;
+      }
+
+      return {
+        eventId,
+        startDate,
+        aggregateValue,
+      } satisfies RankedInsightEvent;
+    })
+    .filter((event): event is RankedInsightEvent => event !== null)
+    .sort((left, right) => compareRankedEvents(left, right, query.valueType));
 }
 
 function summarizeEventShape(rawEventData: Record<string, unknown>, normalized: Record<string, unknown>): Record<string, unknown> {
@@ -372,6 +445,31 @@ export async function executeAiInsightsQuery(
     debugRecentEventsSample: debugEventSnapshot?.recentEventsSample ?? [],
   });
 
+  if (query.resultKind === 'event_lookup') {
+    const rankedEvents = buildRankedEvents(eventsWithRequestedStat, query);
+
+    dependencies.logger.info('[aiInsights] Event lookup summary', {
+      prompt: prompt || null,
+      userID,
+      dataType: query.dataType,
+      valueType: query.valueType,
+      rankedEventCount: rankedEvents.length,
+      primaryEventId: rankedEvents[0]?.eventId ?? null,
+      topEventIds: rankedEvents.slice(0, 10).map(event => event.eventId),
+    });
+
+    return {
+      resultKind: 'event_lookup',
+      matchedEventsCount: eventsWithRequestedStat.length,
+      matchedActivityTypeCounts: buildMatchedActivityTypeCounts(matchedEvents, dependencies.logger),
+      eventLookup: {
+        primaryEventId: rankedEvents[0]?.eventId ?? null,
+        topEventIds: rankedEvents.slice(0, 10).map(event => event.eventId),
+        rankedEvents,
+      },
+    };
+  }
+
   const aggregation = buildEventStatAggregation(matchedEvents, {
     dataType: query.dataType,
     valueType: query.valueType,
@@ -391,6 +489,7 @@ export async function executeAiInsightsQuery(
   });
 
   return {
+    resultKind: 'aggregate',
     aggregation,
     matchedEventsCount: matchedEvents.length,
     matchedActivityTypeCounts: buildMatchedActivityTypeCounts(matchedEvents, dependencies.logger),

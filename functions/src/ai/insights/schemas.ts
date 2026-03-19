@@ -8,6 +8,7 @@ import {
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
 import type {
+  AiInsightEventLookup,
   AiInsightsQuotaStatus,
   AiInsightSummary,
   NormalizedInsightQuery,
@@ -44,6 +45,7 @@ export const NormalizedInsightDateRangeSchema = z.discriminatedUnion('kind', [
 ]);
 
 export const NormalizedInsightQuerySchema: z.ZodType<NormalizedInsightQuery> = z.object({
+  resultKind: z.enum(['aggregate', 'event_lookup']),
   dataType: z.string().min(1),
   valueType: z.nativeEnum(ChartDataValueTypes),
   categoryType: z.nativeEnum(ChartDataCategoryTypes),
@@ -137,6 +139,12 @@ export const AiInsightSummarySchema: z.ZodType<AiInsightSummary> = z.object({
   trend: AiInsightSummaryTrendSchema.nullable(),
 });
 
+export const AiInsightEventLookupSchema: z.ZodType<AiInsightEventLookup> = z.object({
+  primaryEventId: z.string().min(1),
+  topEventIds: z.array(z.string().min(1)).max(10),
+  matchedEventCount: z.number().int().nonnegative(),
+});
+
 export const AiInsightsUnsupportedReasonCodeSchema = z.enum([
   'invalid_prompt',
   'unsupported_metric',
@@ -144,14 +152,24 @@ export const AiInsightsUnsupportedReasonCodeSchema = z.enum([
   'unsupported_capability',
 ]);
 
-export const AiInsightsResponseSchema = z.discriminatedUnion('status', [
+export const AiInsightsResponseSchema = z.union([
   z.object({
     status: z.literal('ok'),
+    resultKind: z.literal('aggregate'),
     narrative: z.string().min(1),
     quota: AiInsightsQuotaStatusSchema.optional(),
     query: NormalizedInsightQuerySchema,
     aggregation: EventStatAggregationResultSchema,
     summary: AiInsightSummarySchema,
+    presentation: AiInsightPresentationSchema,
+  }),
+  z.object({
+    status: z.literal('ok'),
+    resultKind: z.literal('event_lookup'),
+    narrative: z.string().min(1),
+    quota: AiInsightsQuotaStatusSchema.optional(),
+    query: NormalizedInsightQuerySchema,
+    eventLookup: AiInsightEventLookupSchema,
     presentation: AiInsightPresentationSchema,
   }),
   z.object({

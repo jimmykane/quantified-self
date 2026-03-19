@@ -4,7 +4,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
-import { BehaviorSubject } from 'rxjs';
+import { BehaviorSubject, of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ActivityTypeGroups,
@@ -14,12 +14,15 @@ import {
   ChartDataValueTypes,
   ChartTypes,
   DataCadenceAvg,
+  DataDistance,
   DataPaceAvg,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
 import type {
   AiInsightsLatestSnapshot,
+  AiInsightsAggregateOkResponse,
   AiInsightsEmptyResponse,
+  AiInsightsEventLookupOkResponse,
   AiInsightsOkResponse,
   AiInsightsQuotaStatus,
   AiInsightsResponse,
@@ -31,8 +34,10 @@ import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AiInsightsLatestSnapshotService } from '../../services/ai-insights-latest-snapshot.service';
 import { AiInsightsQuotaService } from '../../services/ai-insights-quota.service';
 import { AiInsightsService } from '../../services/ai-insights.service';
+import { AppEventService } from '../../services/app.event.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
+import { LoggerService } from '../../services/logger.service';
 import { AiInsightsChartComponent } from './ai-insights-chart.component';
 import { AiInsightsPageComponent } from './ai-insights-page.component';
 import { AI_INSIGHTS_SUGGESTED_PROMPTS } from './ai-insights.prompts';
@@ -67,11 +72,13 @@ function buildQuotaStatus(overrides: Partial<AiInsightsQuotaStatus> = {}): AiIns
   };
 }
 
-function buildOkResponse(): AiInsightsOkResponse {
+function buildOkResponse(): AiInsightsAggregateOkResponse {
   return {
     status: 'ok',
+    resultKind: 'aggregate',
     narrative: 'Your average cadence has trended up over the last three months.',
     query: {
+      resultKind: 'aggregate',
       dataType: DataCadenceAvg.type,
       valueType: ChartDataValueTypes.Average,
       categoryType: ChartDataCategoryTypes.DateType,
@@ -157,6 +164,7 @@ function buildEmptyResponse(): AiInsightsEmptyResponse {
     status: 'empty',
     narrative: 'I could not find matching events with cadence data in that range.',
     query: {
+      resultKind: 'aggregate',
       dataType: DataCadenceAvg.type,
       valueType: ChartDataValueTypes.Average,
       categoryType: ChartDataCategoryTypes.DateType,
@@ -197,11 +205,13 @@ function buildEmptyResponse(): AiInsightsEmptyResponse {
   };
 }
 
-function buildPaceResponse(): AiInsightsOkResponse {
+function buildPaceResponse(): AiInsightsAggregateOkResponse {
   return {
     status: 'ok',
+    resultKind: 'aggregate',
     narrative: 'Your average running pace improved over the last two years.',
     query: {
+      resultKind: 'aggregate',
       dataType: DataPaceAvg.type,
       valueType: ChartDataValueTypes.Average,
       categoryType: ChartDataCategoryTypes.DateType,
@@ -351,11 +361,13 @@ function buildUnsupportedResponse(): AiInsightsUnsupportedResponse {
   };
 }
 
-function buildGroupResponse(): AiInsightsOkResponse {
+function buildGroupResponse(): AiInsightsAggregateOkResponse {
   return {
     status: 'ok',
+    resultKind: 'aggregate',
     narrative: 'Your average pace across water sports has improved.',
     query: {
+      resultKind: 'aggregate',
       dataType: DataPaceAvg.type,
       valueType: ChartDataValueTypes.Average,
       categoryType: ChartDataCategoryTypes.DateType,
@@ -463,6 +475,56 @@ function buildDailyResponse(): AiInsightsOkResponse {
   };
 }
 
+function buildEventLookupResponse(): AiInsightsEventLookupOkResponse {
+  return {
+    status: 'ok',
+    resultKind: 'event_lookup',
+    narrative: 'Your longest distance event for Cycling was 123.4 km on Mar 10, 2026. I ranked 3 matching events.',
+    query: {
+      resultKind: 'event_lookup',
+      dataType: DataDistance.type,
+      valueType: ChartDataValueTypes.Maximum,
+      categoryType: ChartDataCategoryTypes.DateType,
+      requestedTimeInterval: TimeIntervals.Monthly,
+      activityTypeGroups: [],
+      activityTypes: [ActivityTypes.Cycling],
+      dateRange: {
+        kind: 'bounded',
+        startDate: '2026-01-01T00:00:00.000Z',
+        endDate: '2026-03-18T23:59:59.999Z',
+        timezone: 'Europe/Helsinki',
+        source: 'default',
+      },
+      chartType: ChartTypes.LinesVertical,
+    },
+    eventLookup: {
+      primaryEventId: 'event-3',
+      topEventIds: ['event-3', 'event-2', 'event-1'],
+      matchedEventCount: 3,
+    },
+    presentation: {
+      title: 'Top distance events for Cycling',
+      chartType: ChartTypes.LinesVertical,
+    },
+  };
+}
+
+function buildMockEvent(options: {
+  id: string;
+  startDate: string;
+  activityTypes: ActivityTypes[];
+  stats: Record<string, number>;
+}) {
+  return {
+    startDate: new Date(options.startDate),
+    getID: () => options.id,
+    getStat: (dataType: string) => ({
+      getValue: () => options.stats[dataType] ?? null,
+    }),
+    getActivityTypesAsArray: () => options.activityTypes,
+  };
+}
+
 describe('AiInsightsPageComponent', () => {
   const authUserSubject = new BehaviorSubject<any>({ uid: 'user-1' });
   const authServiceMock = {
@@ -479,6 +541,9 @@ describe('AiInsightsPageComponent', () => {
   const aiInsightsQuotaServiceMock = {
     loadQuotaStatus: vi.fn<() => Promise<AiInsightsQuotaStatus | null>>(),
   };
+  const appEventServiceMock = {
+    getEventsOnceByIds: vi.fn(() => of([])),
+  };
   const themeServiceMock = {
     appTheme: signal(AppThemes.Normal),
   };
@@ -488,6 +553,11 @@ describe('AiInsightsPageComponent', () => {
   const userSettingsQueryServiceMock = {
     chartSettings: signal({ useAnimations: true }),
     unitSettings: signal(normalizeUserUnitSettings({})),
+  };
+  const loggerServiceMock = {
+    error: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
   };
 
   let fixture: ComponentFixture<AiInsightsPageComponent>;
@@ -508,8 +578,10 @@ describe('AiInsightsPageComponent', () => {
         { provide: AiInsightsLatestSnapshotService, useValue: aiInsightsLatestSnapshotServiceMock },
         { provide: AiInsightsQuotaService, useValue: aiInsightsQuotaServiceMock },
         { provide: AiInsightsService, useValue: aiInsightsServiceMock },
+        { provide: AppEventService, useValue: appEventServiceMock },
         { provide: AppThemeService, useValue: themeServiceMock },
         { provide: AppUserSettingsQueryService, useValue: userSettingsQueryServiceMock },
+        { provide: LoggerService, useValue: loggerServiceMock },
       ],
     })
       .overrideComponent(AiInsightsPageComponent, {
@@ -536,10 +608,13 @@ describe('AiInsightsPageComponent', () => {
     aiInsightsLatestSnapshotServiceMock.loadLatest.mockReset();
     aiInsightsLatestSnapshotServiceMock.saveLatest.mockReset();
     aiInsightsQuotaServiceMock.loadQuotaStatus.mockReset();
+    appEventServiceMock.getEventsOnceByIds.mockReset();
     analyticsServiceMock.logEvent.mockReset();
+    loggerServiceMock.error.mockReset();
     aiInsightsLatestSnapshotServiceMock.loadLatest.mockResolvedValue(null);
     aiInsightsLatestSnapshotServiceMock.saveLatest.mockResolvedValue('saved');
     aiInsightsQuotaServiceMock.loadQuotaStatus.mockResolvedValue(buildQuotaStatus());
+    appEventServiceMock.getEventsOnceByIds.mockReturnValue(of([]));
     await createComponent();
   });
 
@@ -680,6 +755,83 @@ describe('AiInsightsPageComponent', () => {
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes(expectedOverall ?? ''))).toBe(true);
   });
 
+  it('should render event-lookup results without the aggregate chart', async () => {
+    appEventServiceMock.getEventsOnceByIds.mockReturnValueOnce(of([
+      buildMockEvent({
+        id: 'event-3',
+        startDate: '2026-03-10T08:00:00.000Z',
+        activityTypes: [ActivityTypes.Cycling],
+        stats: { [DataDistance.type]: 123400 },
+      }),
+      buildMockEvent({
+        id: 'event-2',
+        startDate: '2026-02-14T08:00:00.000Z',
+        activityTypes: [ActivityTypes.Cycling],
+        stats: { [DataDistance.type]: 118200 },
+      }),
+      buildMockEvent({
+        id: 'event-1',
+        startDate: '2026-01-11T08:00:00.000Z',
+        activityTypes: [ActivityTypes.Cycling],
+        stats: { [DataDistance.type]: 105700 },
+      }),
+    ]));
+
+    component.response.set(buildEventLookupResponse());
+    component.resultPrompt.set('I want to know when I had my longest distance in cycling');
+    fixture.detectChanges();
+    TestBed.flushEffects();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const chart = fixture.debugElement.query(By.css('.chart-stub'));
+    const subtitle = fixture.debugElement.query(By.css('.result-card-subtitle'))?.nativeElement as HTMLElement | undefined;
+    const primaryCard = fixture.debugElement.query(By.css('.event-lookup-primary'))?.nativeElement as HTMLElement | undefined;
+    const rankingRows = fixture.debugElement.queryAll(By.css('.event-lookup-row'));
+    const openButtons = fixture.debugElement.queryAll(By.css('.event-lookup-actions button'));
+    const expectedPrimaryValue = formatUnitAwareDataValue(
+      DataDistance.type,
+      123400,
+      userSettingsQueryServiceMock.unitSettings(),
+      { stripRepeatedUnit: true },
+    );
+
+    expect(chart).toBeNull();
+    expect(subtitle?.textContent).toContain('Winning event and top matches for this prompt.');
+    expect(primaryCard?.textContent).toContain('Winning event');
+    expect(primaryCard?.textContent).toContain(expectedPrimaryValue ?? '');
+    expect(primaryCard?.textContent).toContain('Mar 10, 2026');
+    expect(rankingRows).toHaveLength(3);
+    expect(openButtons.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('should fetch event details once when an event-lookup response becomes active', async () => {
+    component.response.set(buildEventLookupResponse());
+    fixture.detectChanges();
+
+    TestBed.flushEffects();
+    await fixture.whenStable();
+
+    expect(appEventServiceMock.getEventsOnceByIds).toHaveBeenCalledTimes(1);
+    expect(appEventServiceMock.getEventsOnceByIds.mock.calls[0]?.[1]).toEqual(['event-3', 'event-2', 'event-1']);
+  });
+
+  it('should show unavailable event rows gracefully when event details are missing', async () => {
+    component.response.set(buildEventLookupResponse());
+    component.resultPrompt.set('I want to know when I had my longest distance in cycling');
+    fixture.detectChanges();
+    TestBed.flushEffects();
+    await fixture.whenStable();
+    component.eventLookupLoadError.set('Could not load event details right now.');
+    fixture.detectChanges();
+
+    const notices = fixture.debugElement.queryAll(By.css('.result-date-range-note'));
+    const rankingRows = fixture.debugElement.queryAll(By.css('.event-lookup-row'));
+
+    expect(notices.some((notice) => notice.nativeElement.textContent.includes('Could not load event details right now.'))).toBe(true);
+    expect(rankingRows[0]?.nativeElement.textContent).toContain('Unavailable');
+  });
+
   it('should refresh the visible result with the same prompt even if the input was edited', async () => {
     aiInsightsServiceMock.runInsight.mockResolvedValue(buildOkResponse());
     component.promptControl.setValue('Tell me my avg cadence for cycling the last 3 months');
@@ -727,6 +879,23 @@ describe('AiInsightsPageComponent', () => {
       prompt_source: 'default',
     });
     expect(component.suggestedPrompts()).toContain('Show my total distance by activity type this year');
+  });
+
+  it('should restore event-lookup snapshots and refetch the referenced event ids', async () => {
+    aiInsightsLatestSnapshotServiceMock.loadLatest.mockResolvedValueOnce({
+      version: 1,
+      savedAt: '2026-03-18T12:00:00.000Z',
+      prompt: 'I want to know when I had my longest distance in cycling',
+      response: buildEventLookupResponse(),
+    });
+
+    authUserSubject.next({ uid: 'user-2' });
+    TestBed.flushEffects();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(appEventServiceMock.getEventsOnceByIds).toHaveBeenCalledTimes(1);
+    expect(appEventServiceMock.getEventsOnceByIds.mock.calls[0]?.[1]).toEqual(['event-3', 'event-2', 'event-1']);
   });
 
   it('should restore the latest completed response from Firestore when the signed-in user changes', async () => {

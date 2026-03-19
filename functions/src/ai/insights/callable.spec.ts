@@ -116,6 +116,7 @@ const quotaStatus = {
 } as const;
 
 const normalizedQuery = {
+  resultKind: 'aggregate',
   dataType: 'Distance',
   valueType: ChartDataValueTypes.Total,
   categoryType: ChartDataCategoryTypes.DateType,
@@ -130,6 +131,12 @@ const normalizedQuery = {
     source: 'prompt',
   },
   chartType: ChartTypes.ColumnsVertical,
+};
+
+const eventLookupQuery = {
+  ...normalizedQuery,
+  resultKind: 'event_lookup' as const,
+  chartType: ChartTypes.LinesVertical,
 };
 
 const summary = {
@@ -184,6 +191,7 @@ describe('aiInsights callable', () => {
       query: normalizedQuery,
     });
     hoisted.executeAiInsightsQuery.mockResolvedValue({
+      resultKind: 'aggregate',
       matchedEventsCount: 2,
       matchedActivityTypeCounts: [
         {
@@ -360,6 +368,7 @@ describe('aiInsights callable', () => {
     }));
     expect(result).toEqual({
       status: 'ok',
+      resultKind: 'aggregate',
       narrative: 'Narrative',
       quota: quotaStatus,
       query: normalizedQuery,
@@ -374,8 +383,84 @@ describe('aiInsights callable', () => {
     });
   });
 
+  it('returns an event lookup response with ranked event ids for singular event prompts', async () => {
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'ok',
+      metricKey: 'distance',
+      query: eventLookupQuery,
+    });
+    hoisted.executeAiInsightsQuery.mockResolvedValue({
+      resultKind: 'event_lookup',
+      matchedEventsCount: 3,
+      matchedActivityTypeCounts: [
+        {
+          activityType: ActivityTypes.Cycling,
+          eventCount: 3,
+        },
+      ],
+      eventLookup: {
+        primaryEventId: 'event-3',
+        topEventIds: ['event-3', 'event-2', 'event-1'],
+        rankedEvents: [
+          {
+            eventId: 'event-3',
+            startDate: '2026-03-10T08:00:00.000Z',
+            aggregateValue: 123,
+          },
+          {
+            eventId: 'event-2',
+            startDate: '2026-02-14T08:00:00.000Z',
+            aggregateValue: 118,
+          },
+          {
+            eventId: 'event-1',
+            startDate: '2026-01-11T08:00:00.000Z',
+            aggregateValue: 105,
+          },
+        ],
+      },
+    });
+
+    const result = await aiInsights({
+      prompt: 'I want to know when I had my longest distance in cycling',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(hoisted.summarizeAiInsightResult).toHaveBeenCalledWith(expect.objectContaining({
+      query: eventLookupQuery,
+      eventLookup: {
+        matchedEventCount: 3,
+        primaryEvent: expect.objectContaining({
+          eventId: 'event-3',
+          aggregateValue: 123,
+        }),
+        rankedEvents: expect.arrayContaining([
+          expect.objectContaining({ eventId: 'event-3' }),
+          expect.objectContaining({ eventId: 'event-2' }),
+        ]),
+      },
+    }));
+    expect(result).toEqual({
+      status: 'ok',
+      resultKind: 'event_lookup',
+      narrative: 'Narrative',
+      quota: quotaStatus,
+      query: eventLookupQuery,
+      eventLookup: {
+        primaryEventId: 'event-3',
+        topEventIds: ['event-3', 'event-2', 'event-1'],
+        matchedEventCount: 3,
+      },
+      presentation: expect.objectContaining({
+        title: 'Top distance events for Cycling',
+        chartType: ChartTypes.LinesVertical,
+      }),
+    });
+  });
+
   it('returns an empty response when no aggregation buckets exist', async () => {
     hoisted.executeAiInsightsQuery.mockResolvedValue({
+      resultKind: 'aggregate',
       matchedEventsCount: 0,
       matchedActivityTypeCounts: [],
       aggregation: {
@@ -436,6 +521,7 @@ describe('aiInsights callable', () => {
       },
     });
     hoisted.executeAiInsightsQuery.mockResolvedValue({
+      resultKind: 'aggregate',
       matchedEventsCount: 2,
       matchedActivityTypeCounts: [
         {
@@ -487,6 +573,7 @@ describe('aiInsights callable', () => {
 
   it('derives the lowest bucket from aggregation results', async () => {
     hoisted.executeAiInsightsQuery.mockResolvedValue({
+      resultKind: 'aggregate',
       matchedEventsCount: 3,
       matchedActivityTypeCounts: [
         {

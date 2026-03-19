@@ -669,6 +669,49 @@ export class AppEventService implements OnDestroy {
     return from(this.fetchActivitiesOnceCacheFirst(q, user.uid, eventID, queryStart, warmServer));
   }
 
+  /**
+   * One-shot event fetch by explicit event IDs for compact result surfaces such as AI Insights.
+   * Preserves the input ID ordering and does not fetch activities.
+   */
+  public getEventsOnceByIds(user: User, eventIDs: string[]): Observable<AppEventInterface[]> {
+    const normalizedEventIDs = Array.from(new Set(
+      (eventIDs || []).map(eventID => `${eventID || ''}`.trim()).filter(Boolean)
+    ));
+
+    if (!normalizedEventIDs.length) {
+      return of([]);
+    }
+
+    this.logger.log('[AppEventService] getEventsOnceByIds called', {
+      userID: user.uid,
+      eventIDs: normalizedEventIDs,
+      requestedCount: normalizedEventIDs.length,
+    });
+
+    return from(Promise.all(normalizedEventIDs.map(async (eventID) => {
+      try {
+        const snapshot = await runInInjectionContext(
+          this.injector,
+          () => getDoc(doc(this.firestore, 'users', user.uid, 'events', eventID)),
+        );
+        if (!snapshot.exists()) {
+          return null;
+        }
+
+        return this.buildEventFromSnapshot(snapshot.data(), snapshot.id);
+      } catch (error) {
+        this.logger.error('[AppEventService] Failed to fetch event by ID.', {
+          userID: user.uid,
+          eventID,
+          error,
+        });
+        return null;
+      }
+    }))).pipe(
+      map((events) => events.filter((event): event is AppEventInterface => !!event)),
+    );
+  }
+
   public getEventMetaData(user: User, eventID: string, serviceName: ServiceNames): Observable<EventMetaDataInterface> {
     const metaDataDoc = runInInjectionContext(this.injector, () => doc(this.firestore, 'users', user.uid, 'events', eventID, 'metaData', serviceName));
     return runInInjectionContext(this.injector, () => docData(metaDataDoc)).pipe(

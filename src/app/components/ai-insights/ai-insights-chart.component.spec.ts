@@ -11,7 +11,7 @@ import {
   TimeIntervals,
   type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
-import type { AiInsightsOkResponse } from '@shared/ai-insights.types';
+import type { AiInsightsAggregateOkResponse } from '@shared/ai-insights.types';
 import { AiInsightsChartComponent } from './ai-insights-chart.component';
 
 @Component({
@@ -66,11 +66,13 @@ class MockPieChartComponent {
   @Input() userUnitSettings?: UserUnitSettingsInterface | null;
 }
 
-function buildResponse(chartType: ChartTypes, categoryType = ChartDataCategoryTypes.DateType): AiInsightsOkResponse {
+function buildResponse(chartType: ChartTypes, categoryType = ChartDataCategoryTypes.DateType): AiInsightsAggregateOkResponse {
   return {
     status: 'ok',
+    resultKind: 'aggregate',
     narrative: 'Insight narrative',
     query: {
+      resultKind: 'aggregate',
       dataType: 'DataCadenceAvg',
       valueType: ChartDataValueTypes.Average,
       categoryType,
@@ -78,9 +80,11 @@ function buildResponse(chartType: ChartTypes, categoryType = ChartDataCategoryTy
       activityTypeGroups: [],
       activityTypes: [ActivityTypes.Cycling],
       dateRange: {
+        kind: 'bounded',
         startDate: '2025-12-01',
         endDate: '2026-03-01',
         timezone: 'Europe/Helsinki',
+        source: 'prompt',
       },
       chartType,
     },

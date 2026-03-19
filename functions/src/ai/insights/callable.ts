@@ -6,9 +6,12 @@ import {
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
 import type {
+  AiInsightEventLookup,
   AiInsightSummaryActivityMix,
   AiInsightSummary,
   AiInsightPresentation,
+  AiInsightsAggregateOkResponse,
+  AiInsightsEventLookupOkResponse,
   AiInsightsQuotaStatusResponse,
   AiInsightsRequest,
   AiInsightsResponse,
@@ -59,6 +62,10 @@ function resolveInsightTitle(query: NormalizedInsightQuery, metricLabel: string)
     ? ''
     : ` for ${activityFilterLabel}`;
 
+  if (query.resultKind === 'event_lookup') {
+    return `Top ${metricLabel} events${activityLabel}`;
+  }
+
   if (query.categoryType === ChartDataCategoryTypes.ActivityType) {
     return `${query.valueType} ${metricLabel} by activity type${activityLabel}`;
   }
@@ -67,6 +74,10 @@ function resolveInsightTitle(query: NormalizedInsightQuery, metricLabel: string)
 }
 
 function resolvePresentationWarnings(query: NormalizedInsightQuery): string[] | undefined {
+  if (query.resultKind === 'event_lookup') {
+    return undefined;
+  }
+
   if (
     query.categoryType === ChartDataCategoryTypes.ActivityType
     && query.activityTypeGroups.length === 0
@@ -85,6 +96,29 @@ function buildInsightPresentation(
     title: resolveInsightTitle(query, metricLabel),
     chartType: query.chartType,
     warnings: resolvePresentationWarnings(query),
+  };
+}
+
+function buildEmptyAggregation(query: NormalizedInsightQuery) {
+  return {
+    dataType: query.dataType,
+    valueType: query.valueType,
+    categoryType: query.categoryType,
+    resolvedTimeInterval: query.requestedTimeInterval ?? TimeIntervals.Auto,
+    buckets: [],
+  };
+}
+
+function buildEmptySummary(): AiInsightSummary {
+  return {
+    matchedEventCount: 0,
+    overallAggregateValue: null,
+    peakBucket: null,
+    lowestBucket: null,
+    latestBucket: null,
+    activityMix: null,
+    bucketCoverage: null,
+    trend: null,
   };
 }
 
@@ -527,18 +561,26 @@ export async function runAiInsights(
   });
   const unitSettings = await loadUserUnitSettings(context.auth.uid);
   const executionResult = await executeAiInsightsQuery(context.auth.uid, effectiveQuery, prompt);
-  const summary = buildInsightSummary(
-    effectiveQuery,
-    executionResult.aggregation,
-    executionResult.matchedEventsCount,
-    executionResult.matchedActivityTypeCounts,
-  );
   const presentation = buildInsightPresentation(effectiveQuery, metric.label);
-  const isEmpty = executionResult.aggregation.buckets.length === 0;
   const emptyPresentation = {
     ...presentation,
     emptyState: DEFAULT_EMPTY_STATE,
   };
+
+  const aggregateSummary = executionResult.resultKind === 'aggregate'
+    ? buildInsightSummary(
+      effectiveQuery,
+      executionResult.aggregation,
+      executionResult.matchedEventsCount,
+      executionResult.matchedActivityTypeCounts,
+    )
+    : null;
+  const eventLookupResult = executionResult.resultKind === 'event_lookup'
+    ? executionResult.eventLookup
+    : null;
+  const isEmpty = executionResult.resultKind === 'aggregate'
+    ? executionResult.aggregation.buckets.length === 0
+    : !eventLookupResult?.primaryEventId;
 
   const quotaReservation = await reserveAiInsightsQuotaForGenkit(context.auth.uid);
   let narrativeResult: Awaited<ReturnType<typeof summarizeAiInsightResult>>;
@@ -548,11 +590,21 @@ export async function runAiInsights(
       prompt,
       metricLabel: metric.label,
       query: effectiveQuery,
-      aggregation: executionResult.aggregation,
-      summary,
       presentation: isEmpty ? emptyPresentation : presentation,
       clientLocale: input.clientLocale,
       unitSettings,
+      ...(executionResult.resultKind === 'aggregate'
+        ? {
+          aggregation: executionResult.aggregation,
+          summary: aggregateSummary as AiInsightSummary,
+        }
+        : {
+          eventLookup: {
+            matchedEventCount: executionResult.matchedEventsCount,
+            primaryEvent: eventLookupResult?.rankedEvents[0] ?? null,
+            rankedEvents: eventLookupResult?.rankedEvents.slice(0, 10) ?? [],
+          },
+        }),
     });
   } catch (error) {
     try {
@@ -576,22 +628,51 @@ export async function runAiInsights(
       narrative: narrativeResult.narrative,
       quota,
       query: effectiveQuery,
-      aggregation: executionResult.aggregation,
-      summary,
+      aggregation: executionResult.resultKind === 'aggregate'
+        ? executionResult.aggregation
+        : buildEmptyAggregation(effectiveQuery),
+      summary: executionResult.resultKind === 'aggregate'
+        ? (aggregateSummary as AiInsightSummary)
+        : buildEmptySummary(),
       presentation: emptyPresentation,
     };
   }
 
-  return {
+  if (executionResult.resultKind === 'event_lookup') {
+    const eventLookupQuery = {
+      ...effectiveQuery,
+      resultKind: 'event_lookup' as const,
+    };
+    return {
       status: 'ok',
+      resultKind: 'event_lookup',
       narrative: narrativeResult.narrative,
       quota,
-      query: effectiveQuery,
-      aggregation: executionResult.aggregation,
-      summary,
+      query: eventLookupQuery,
+      eventLookup: {
+        primaryEventId: eventLookupResult?.primaryEventId as string,
+        topEventIds: eventLookupResult?.topEventIds ?? [],
+        matchedEventCount: executionResult.matchedEventsCount,
+      } satisfies AiInsightEventLookup,
       presentation,
-    };
+    } satisfies AiInsightsEventLookupOkResponse;
   }
+
+  const aggregateQuery = {
+    ...effectiveQuery,
+    resultKind: 'aggregate' as const,
+  };
+  return {
+    status: 'ok',
+    resultKind: 'aggregate',
+    narrative: narrativeResult.narrative,
+    quota,
+    query: aggregateQuery,
+    aggregation: executionResult.aggregation,
+    summary: aggregateSummary as AiInsightSummary,
+    presentation,
+  } satisfies AiInsightsAggregateOkResponse;
+}
 
 export const aiInsightsFlow = aiInsightsGenkit.defineFlow({
   name: 'aiInsightsFlow',

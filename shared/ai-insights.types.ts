@@ -32,7 +32,12 @@ export type NormalizedInsightDateRange =
   | NormalizedInsightBoundedDateRange
   | NormalizedInsightAllTimeDateRange;
 
+export type AiInsightsResultKind =
+  | 'aggregate'
+  | 'event_lookup';
+
 export interface NormalizedInsightQuery {
+  resultKind: AiInsightsResultKind;
   dataType: string;
   valueType: ChartDataValueTypes;
   categoryType: ChartDataCategoryTypes;
@@ -121,21 +126,46 @@ export interface AiInsightSummary {
   trend: AiInsightSummaryTrend | null;
 }
 
+export interface AiInsightEventLookup {
+  primaryEventId: string;
+  topEventIds: string[];
+  matchedEventCount: number;
+}
+
 export type AiInsightsUnsupportedReasonCode =
   | 'invalid_prompt'
   | 'unsupported_metric'
   | 'ambiguous_metric'
   | 'unsupported_capability';
 
-export interface AiInsightsOkResponse {
+export interface AiInsightsAggregateOkResponse {
   status: 'ok';
+  resultKind: 'aggregate';
   narrative: string;
   quota?: AiInsightsQuotaStatus;
-  query: NormalizedInsightQuery;
+  query: NormalizedInsightQuery & {
+    resultKind: 'aggregate';
+  };
   aggregation: EventStatAggregationResult;
   summary: AiInsightSummary;
   presentation: AiInsightPresentation;
 }
+
+export interface AiInsightsEventLookupOkResponse {
+  status: 'ok';
+  resultKind: 'event_lookup';
+  narrative: string;
+  quota?: AiInsightsQuotaStatus;
+  query: NormalizedInsightQuery & {
+    resultKind: 'event_lookup';
+  };
+  eventLookup: AiInsightEventLookup;
+  presentation: AiInsightPresentation;
+}
+
+export type AiInsightsOkResponse =
+  | AiInsightsAggregateOkResponse
+  | AiInsightsEventLookupOkResponse;
 
 export interface AiInsightsEmptyResponse {
   status: 'empty';

@@ -193,7 +193,105 @@
                 </div>
               </div>
             </div>
-          } @else if (okResponse(); as result) {
+          } @else if (eventLookupOkResponse(); as result) {
+            <div class="result-content">
+              <div class="result-header">
+                <p class="result-title">{{ result.presentation.title }}</p>
+                <p class="result-subtitle">{{ resultSubtitle() }}</p>
+                @if (resultDateRangeNote(); as dateRangeNote) {
+                  <div class="result-date-range-note">
+                    <mat-icon>info</mat-icon>
+                    <p class="mat-body-small">{{ dateRangeNote }}</p>
+                  </div>
+                }
+                @if (canRefreshResult()) {
+                  <div class="result-actions">
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      class="result-refresh-button"
+                      [disabled]="isSubmitting()"
+                      (click)="refreshCurrentResult()">
+                      <mat-icon>refresh</mat-icon>
+                      <span>Refresh with latest data &amp; dates</span>
+                    </button>
+                  </div>
+                }
+              </div>
+
+              <p class="narrative">{{ result.narrative }}</p>
+
+              @if (eventLookupLoadError(); as eventLookupLoadError) {
+                <div class="result-date-range-note">
+                  <mat-icon>info</mat-icon>
+                  <p class="mat-body-small">{{ eventLookupLoadError }}</p>
+                </div>
+              }
+
+              @if (eventLookupLoading()) {
+                <div class="state-panel state-panel-inline">
+                  <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+                  <p class="mat-title-medium state-title">Loading event details</p>
+                  <p class="mat-body-medium state-copy">Fetching the winning event and the top ranked matches.</p>
+                </div>
+              }
+
+              @if (primaryEventLookupItem(); as primaryEvent) {
+                <section class="event-lookup-primary">
+                  <div class="event-lookup-primary-copy">
+                    <p class="mat-label-medium summary-label">Winning event</p>
+                    <p class="summary-value">{{ primaryEvent.value }}</p>
+                    <p class="summary-meta">{{ primaryEvent.date }}</p>
+                    @if (primaryEvent.activityLabel) {
+                      <p class="summary-meta">{{ primaryEvent.activityLabel }}</p>
+                    }
+                  </div>
+                  <div class="event-lookup-actions">
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      [routerLink]="['/user', currentUserID(), 'event', primaryEvent.eventId]"
+                      [disabled]="!primaryEvent.isAvailable">
+                      <mat-icon>open_in_new</mat-icon>
+                      <span>Open event</span>
+                    </button>
+                  </div>
+                </section>
+              }
+
+              @if (eventLookupItems().length) {
+                <div class="section-heading">
+                  <div>
+                    <p class="mat-label-medium suggestions-title">Top events</p>
+                    <p class="mat-body-small section-supporting-copy">{{ eventLookupRankingCopy() }}</p>
+                  </div>
+                </div>
+                <div class="event-lookup-list">
+                  @for (eventItem of eventLookupItems(); track eventItem.eventId; let index = $index) {
+                    <section class="event-lookup-row">
+                      <div class="event-lookup-rank">{{ index + 1 }}</div>
+                      <div class="event-lookup-row-copy">
+                        <p class="summary-value event-lookup-row-value">{{ eventItem.value }}</p>
+                        <p class="summary-meta">{{ eventItem.date }}</p>
+                        @if (eventItem.activityLabel) {
+                          <p class="summary-meta">{{ eventItem.activityLabel }}</p>
+                        }
+                      </div>
+                      <div class="event-lookup-actions">
+                        <button
+                          mat-button
+                          type="button"
+                          [routerLink]="['/user', currentUserID(), 'event', eventItem.eventId]"
+                          [disabled]="!eventItem.isAvailable">
+                          Open
+                        </button>
+                      </div>
+                    </section>
+                  }
+                </div>
+              }
+            </div>
+          } @else if (aggregateOkResponse(); as result) {
             <div class="result-content">
               <div class="result-header">
                 <p class="result-title">{{ result.presentation.title }}</p>

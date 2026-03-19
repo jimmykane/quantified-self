@@ -57,6 +57,7 @@ describe('normalizeInsightQuery', () => {
       status: 'ok',
       metricKey: 'cadence',
       query: {
+        resultKind: 'aggregate',
         dataType: DataCadenceAvg.type,
         valueType: ChartDataValueTypes.Average,
         categoryType: ChartDataCategoryTypes.DateType,
@@ -133,6 +134,7 @@ describe('normalizeInsightQuery', () => {
       status: 'ok',
       metricKey: 'cadence',
       query: {
+        resultKind: 'aggregate',
         dataType: DataCadenceAvg.type,
         valueType: ChartDataValueTypes.Average,
         categoryType: ChartDataCategoryTypes.DateType,
@@ -257,6 +259,68 @@ describe('normalizeInsightQuery', () => {
     expect(result.query.categoryType).toBe(ChartDataCategoryTypes.DateType);
     expect(result.query.chartType).toBe(ChartTypes.ColumnsVertical);
     expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Monthly);
+  });
+
+  it('resolves singular longest-event prompts to event lookup mode', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-19T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'distance',
+        aggregation: 'maximum',
+        category: 'date',
+        activityTypes: ['Cycling'],
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'I want to know when I had my longest distance in cycling',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('distance');
+    expect(result.query.resultKind).toBe('event_lookup');
+    expect(result.query.dataType).toBe(DataDistance.type);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Maximum);
+    expect(result.query.categoryType).toBe(ChartDataCategoryTypes.DateType);
+    expect(result.query.activityTypes).toEqual([ActivityTypes.Cycling]);
+    expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
+      startDate: '2026-01-01T00:00:00.000Z',
+      endDate: '2026-03-19T23:59:59.999Z',
+      timezone: 'UTC',
+      source: 'default',
+    });
+  });
+
+  it('keeps aggregate mode for over-time prompts even when ranking words are present', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-19T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'distance',
+        aggregation: 'maximum',
+        category: 'date',
+        activityTypes: ['Cycling'],
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show my longest distance in cycling over time by month',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.resultKind).toBe('aggregate');
   });
 
   it('detects stacked date-by-activity intent with noisy punctuation and spacing', async () => {

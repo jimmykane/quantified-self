@@ -144,6 +144,19 @@ const DATE_ACTIVITY_STACKED_TIME_AXIS_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
   /\b(last|past|this|all time|ever|entire history|full history|whole history)\b/i,
   /\b(day|days|week|weeks|month|months|year|years|daily|weekly|monthly|quarterly|yearly)\b/i,
 ];
+const EVENT_LOOKUP_SUBJECT_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
+  /\b(when did i have|when i had|when was|which event|what workout|which workout|which session)\b/i,
+  /\bi want to know when i had\b/i,
+];
+const EVENT_LOOKUP_RANKING_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
+  /\b(longest|shortest|highest|lowest|fastest|slowest)\b/i,
+  /\b(max|maximum|min|minimum)\b/i,
+];
+const AGGREGATE_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
+  /\b(over time|by month|by week|by day|by year|timeline|trend|chart)\b/i,
+  /\b(by activity types?|activity type comparison|by sports?|by sport)\b/i,
+  /\bstack(?:ed|ing)?\b/i,
+];
 
 const ModelDateRangeSchema = z.union([
   z.object({
@@ -764,6 +777,28 @@ function promptImpliesDateActivityStackedColumns(
   return options?.hasDateRangeIntent === true || options?.hasRequestedTimeInterval === true;
 }
 
+function promptImpliesEventLookup(prompt: string): boolean {
+  const normalizedPrompt = normalizePromptSearchText(prompt);
+  if (!normalizedPrompt) {
+    return false;
+  }
+
+  if (AGGREGATE_PROMPT_PATTERNS.some(pattern => pattern.test(normalizedPrompt))) {
+    return false;
+  }
+
+  const hasRankingIntent = EVENT_LOOKUP_RANKING_PROMPT_PATTERNS.some(pattern => pattern.test(normalizedPrompt));
+  if (!hasRankingIntent) {
+    return false;
+  }
+
+  if (EVENT_LOOKUP_SUBJECT_PROMPT_PATTERNS.some(pattern => pattern.test(normalizedPrompt))) {
+    return true;
+  }
+
+  return /\bwhen\b/.test(normalizedPrompt);
+}
+
 function resolvePromptAggregation(prompt: string): ModelAggregationCode | undefined {
   const normalizedPrompt = normalizePromptSearchText(prompt);
   if (!normalizedPrompt) {
@@ -776,10 +811,10 @@ function resolvePromptAggregation(prompt: string): ModelAggregationCode | undefi
   if (/\b(avg|average|mean)\b/.test(normalizedPrompt)) {
     return 'average';
   }
-  if (/\b(min|minimum|lowest|fastest)\b/.test(normalizedPrompt)) {
+  if (/\b(min|minimum|lowest|fastest|shortest)\b/.test(normalizedPrompt)) {
     return 'minimum';
   }
-  if (/\b(max|maximum|highest|peak|slowest)\b/.test(normalizedPrompt)) {
+  if (/\b(max|maximum|highest|peak|slowest|longest|furthest)\b/.test(normalizedPrompt)) {
     return 'maximum';
   }
 
@@ -950,11 +985,14 @@ export async function normalizeInsightQuery(
     ?? resolvePromptDateRangeIntent(prompt)
   );
   const promptRequestedTimeInterval = resolvePromptRequestedTimeInterval(prompt);
+  const resultKind = promptImpliesEventLookup(prompt) ? 'event_lookup' : 'aggregate';
   const stackedDateByActivityRequested = promptImpliesDateActivityStackedColumns(prompt, {
     hasDateRangeIntent: resolvedDateRangeIntent !== undefined,
     hasRequestedTimeInterval: promptRequestedTimeInterval !== undefined,
   });
-  const categoryType = stackedDateByActivityRequested
+  const categoryType = resultKind === 'event_lookup'
+    ? ChartDataCategoryTypes.DateType
+    : stackedDateByActivityRequested
     ? ChartDataCategoryTypes.DateType
     : toCategoryType(modelReturnedUnsupported ? undefined : intent.category);
   const activityTypes = normalizeActivityTypes(modelReturnedUnsupported ? undefined : intent.activityTypes);
@@ -999,6 +1037,7 @@ export async function normalizeInsightQuery(
     status: 'ok',
     metricKey: metric.key,
     query: {
+      resultKind,
       dataType: metric.dataType,
       valueType,
       categoryType,
