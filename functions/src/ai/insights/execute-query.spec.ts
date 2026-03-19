@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as admin from 'firebase-admin';
 import {
   ActivityTypes,
   ChartDataCategoryTypes,
@@ -225,6 +226,61 @@ describe('execute-query', () => {
     expect(fetchEventDocs).toHaveBeenCalledTimes(1);
     expect(result.matchedEventsCount).toBe(1);
     expect(result.aggregation.buckets[0]?.aggregateValue).toBe(40);
+  });
+
+  it('uses a single numeric startDate Firestore query for bounded requests', async () => {
+    const where = vi.fn();
+    const orderBy = vi.fn();
+    const get = vi.fn(async () => ({
+      docs: [
+        { id: 'e1', data: () => ({ startDate: 1768003200000 }) },
+      ],
+    }));
+    const queryChain = {
+      where,
+      orderBy,
+      get,
+    };
+
+    where.mockImplementation(() => queryChain);
+    orderBy.mockImplementation(() => queryChain);
+
+    const eventsCollection = {
+      get: vi.fn(),
+      where,
+      orderBy,
+      count: vi.fn(),
+    };
+    const docRef = {
+      collection: vi.fn((_path: string) => eventsCollection),
+    };
+    const usersCollection = {
+      doc: vi.fn((_userID: string) => docRef),
+    };
+    const firestore = {
+      collection: vi.fn((_path: string) => usersCollection),
+    };
+
+    vi.spyOn(admin, 'firestore').mockReturnValue(firestore as any);
+
+    setExecuteQueryDependenciesForTesting({
+      importEvent: vi.fn(() => createMockEvent({
+        id: 'e1',
+        startDate: new Date('2026-01-10T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: { [DataDistance.type]: 40 },
+      })),
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+    });
+
+    const result = await executeAiInsightsQuery('user-1', createQuery(), 'show my cycling distance');
+
+    expect(where).toHaveBeenCalledTimes(2);
+    expect(where).toHaveBeenNthCalledWith(1, 'startDate', '>=', new Date('2026-01-01T00:00:00.000Z').getTime());
+    expect(where).toHaveBeenNthCalledWith(2, 'startDate', '<=', new Date('2026-03-31T23:59:59.999Z').getTime());
+    expect(orderBy).toHaveBeenCalledWith('startDate', 'asc');
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(result.matchedEventsCount).toBe(1);
   });
 
   it('skips date filters for explicit all-time queries', async () => {

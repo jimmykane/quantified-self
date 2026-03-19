@@ -88,28 +88,17 @@ const defaultExecuteQueryDependencies: ExecuteQueryDependencies = {
       return snapshot.docs;
     }
 
-    const [dateSnapshot, millisSnapshot] = await Promise.all([
-      eventsCollection
-        .where('startDate', '>=', startDate)
-        .where('startDate', '<=', endDate)
-        .orderBy('startDate', 'asc')
-        .get(),
-      eventsCollection
-        .where('startDate', '>=', startDate.getTime())
-        .where('startDate', '<=', endDate.getTime())
-        .orderBy('startDate', 'asc')
-        .get(),
-    ]);
+    // EventWriter persists sports-lib event JSON as-is, and sports-lib exports top-level
+    // event startDate/endDate as epoch milliseconds. The rest of the app, including the
+    // dashboard event queries, also filters startDate numerically. Query the canonical
+    // numeric field directly instead of double-reading a legacy Date/Timestamp path.
+    const snapshot = await eventsCollection
+      .where('startDate', '>=', startDate.getTime())
+      .where('startDate', '<=', endDate.getTime())
+      .orderBy('startDate', 'asc')
+      .get();
 
-    const docsByID = new Map<string, FirestoreEventDocumentLike>();
-    for (const doc of dateSnapshot.docs) {
-      docsByID.set(doc.id, doc);
-    }
-    for (const doc of millisSnapshot.docs) {
-      docsByID.set(doc.id, doc);
-    }
-
-    return [...docsByID.values()];
+    return snapshot.docs;
   },
   fetchDebugEventSnapshot: async (userID) => {
     const eventsCollection = admin.firestore()
