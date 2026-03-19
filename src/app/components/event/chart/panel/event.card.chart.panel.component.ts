@@ -201,7 +201,9 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return;
     }
 
-    event.preventDefault();
+    if (this.shouldPreventDefaultForNonPrimaryMouseButtonEvent(event)) {
+      event.preventDefault();
+    }
     event.stopPropagation();
     if (typeof (event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation === 'function') {
       (event as Event & { stopImmediatePropagation: () => void }).stopImmediatePropagation();
@@ -2106,6 +2108,15 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const eventWithButton = event as Event & { button?: unknown };
     const button = Number(eventWithButton.button);
     return Number.isFinite(button) && button !== 0;
+  }
+
+  private shouldPreventDefaultForNonPrimaryMouseButtonEvent(event: Event): boolean {
+    if (event.type === 'contextmenu') {
+      return false;
+    }
+
+    const eventWithButton = event as Event & { button?: unknown };
+    return Number(eventWithButton.button) !== 2;
   }
 
   private isInteractionArmed(): boolean {

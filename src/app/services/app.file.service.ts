@@ -19,7 +19,20 @@ export class AppFileService {
   }
 
   public downloadFile(blob: Blob, name: string, extension: string): void {
-    saveAs(blob, [name, extension].join('.'));
+    const normalizedExtension = this.normalizeExtension(extension);
+    const filename = `${name}.${normalizedExtension}`;
+    const mimeType = this.resolveDownloadMimeType(normalizedExtension, blob.type);
+    const normalizedBlob = blob.type === mimeType
+      ? blob
+      : new Blob([blob], { type: mimeType });
+    const namedFile = this.createNamedFile(normalizedBlob, filename, mimeType);
+
+    if (namedFile) {
+      saveAs(namedFile);
+      return;
+    }
+
+    saveAs(normalizedBlob, filename);
   }
 
   public async downloadAsZip(files: { data: Blob | ArrayBuffer, fileName: string }[], zipFileName: string): Promise<void> {
@@ -142,5 +155,47 @@ export class AppFileService {
       }
     }
     return buffer;
+  }
+
+  private normalizeExtension(extension: string): string {
+    const normalizedExtension = extension?.trim().replace(/^\./, '').toLowerCase();
+    return normalizedExtension || 'bin';
+  }
+
+  private resolveDownloadMimeType(extension: string, providedType?: string): string {
+    if (providedType && providedType.trim()) {
+      return providedType;
+    }
+
+    switch (extension) {
+      case 'fit':
+        return 'application/vnd.ant.fit';
+      case 'gpx':
+        return 'application/gpx+xml';
+      case 'tcx':
+        return 'application/vnd.garmin.tcx+xml';
+      case 'json':
+        return 'application/json';
+      case 'sml':
+        return 'application/xml';
+      case 'csv':
+        return 'text/csv';
+      case 'zip':
+        return 'application/zip';
+      default:
+        return 'application/octet-stream';
+    }
+  }
+
+  private createNamedFile(blob: Blob, filename: string, mimeType: string): File | null {
+    if (typeof File === 'undefined') {
+      return null;
+    }
+
+    try {
+      return new File([blob], filename, { type: mimeType });
+    } catch {
+      return null;
+    }
   }
 }
