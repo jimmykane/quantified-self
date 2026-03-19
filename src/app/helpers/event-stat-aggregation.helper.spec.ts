@@ -287,6 +287,76 @@ describe('event-stat-aggregation shared core', () => {
     expect(maximum.buckets[0].aggregateValue).toBe(15);
   });
 
+  it('should aggregate per-series values using the selected value type semantics', () => {
+    const events = [
+      makeEvent({
+        id: 'run-1',
+        startDate: new Date('2024-01-01T10:00:00.000Z'),
+        activityTypes: [ActivityTypes.Running],
+        displayActivityType: 'Running',
+        stats: { [DataDistance.type]: 5 },
+      }),
+      makeEvent({
+        id: 'run-2',
+        startDate: new Date('2024-01-01T11:00:00.000Z'),
+        activityTypes: [ActivityTypes.Running],
+        displayActivityType: 'Running',
+        stats: { [DataDistance.type]: 15 },
+      }),
+      makeEvent({
+        id: 'cycle-1',
+        startDate: new Date('2024-01-01T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        displayActivityType: 'Cycling',
+        stats: { [DataDistance.type]: 40 },
+      }),
+    ];
+
+    const total = buildEventStatAggregation(events, {
+      dataType: DataDistance.type,
+      valueType: ChartDataValueTypes.Total,
+      categoryType: ChartDataCategoryTypes.DateType,
+      requestedTimeInterval: TimeIntervals.Daily,
+    });
+    expect(total.buckets[0].seriesValues.Running).toBe(20);
+    expect(total.buckets[0].seriesValues.Cycling).toBe(40);
+    expect(total.buckets[0].seriesCounts.Running).toBe(2);
+    expect(total.buckets[0].seriesCounts.Cycling).toBe(1);
+
+    const average = buildEventStatAggregation(events, {
+      dataType: DataDistance.type,
+      valueType: ChartDataValueTypes.Average,
+      categoryType: ChartDataCategoryTypes.DateType,
+      requestedTimeInterval: TimeIntervals.Daily,
+    });
+    expect(average.buckets[0].seriesValues.Running).toBe(10);
+    expect(average.buckets[0].seriesValues.Cycling).toBe(40);
+    expect(average.buckets[0].seriesCounts.Running).toBe(2);
+    expect(average.buckets[0].seriesCounts.Cycling).toBe(1);
+
+    const minimum = buildEventStatAggregation(events, {
+      dataType: DataDistance.type,
+      valueType: ChartDataValueTypes.Minimum,
+      categoryType: ChartDataCategoryTypes.DateType,
+      requestedTimeInterval: TimeIntervals.Daily,
+    });
+    expect(minimum.buckets[0].seriesValues.Running).toBe(5);
+    expect(minimum.buckets[0].seriesValues.Cycling).toBe(40);
+    expect(minimum.buckets[0].seriesCounts.Running).toBe(2);
+    expect(minimum.buckets[0].seriesCounts.Cycling).toBe(1);
+
+    const maximum = buildEventStatAggregation(events, {
+      dataType: DataDistance.type,
+      valueType: ChartDataValueTypes.Maximum,
+      categoryType: ChartDataCategoryTypes.DateType,
+      requestedTimeInterval: TimeIntervals.Daily,
+    });
+    expect(maximum.buckets[0].seriesValues.Running).toBe(15);
+    expect(maximum.buckets[0].seriesValues.Cycling).toBe(40);
+    expect(maximum.buckets[0].seriesCounts.Running).toBe(2);
+    expect(maximum.buckets[0].seriesCounts.Cycling).toBe(1);
+  });
+
   it('should honor an explicitly requested non-auto interval', () => {
     const aggregation = buildEventStatAggregation([
       makeEvent({

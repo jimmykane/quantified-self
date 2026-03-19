@@ -3,7 +3,6 @@ import * as logger from 'firebase-functions/logger';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
-  ChartTypes,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
 import type {
@@ -73,15 +72,9 @@ function buildInsightPresentation(
   query: NormalizedInsightQuery,
   metricLabel: string,
 ): AiInsightPresentation {
-  const chartType = query.categoryType === ChartDataCategoryTypes.ActivityType
-    ? ChartTypes.ColumnsHorizontal
-    : query.valueType === ChartDataValueTypes.Total
-      ? ChartTypes.ColumnsVertical
-      : ChartTypes.LinesVertical;
-
   return {
     title: resolveInsightTitle(query, metricLabel),
-    chartType,
+    chartType: query.chartType,
     warnings: resolvePresentationWarnings(query),
   };
 }
@@ -415,23 +408,50 @@ export async function runAiInsights(
   });
 
   if (normalizeResult.status === 'unsupported') {
+    logger.warn('[aiInsights] Unsupported request', {
+      userID: context.auth.uid,
+      prompt,
+      clientTimezone,
+      reasonCode: normalizeResult.reasonCode,
+      suggestedPromptsCount: normalizeResult.suggestedPrompts.length,
+    });
     return buildUnsupportedResponse(normalizeResult.reasonCode);
   }
 
   const metric = getInsightMetricDefinition(normalizeResult.metricKey);
   if (!metric) {
+    logger.warn('[aiInsights] Unsupported metric key after normalization', {
+      userID: context.auth.uid,
+      prompt,
+      clientTimezone,
+      metricKey: normalizeResult.metricKey,
+    });
     return buildUnsupportedResponse('unsupported_metric');
   }
 
+  const effectiveQuery = normalizeResult.query;
+  logger.info('[aiInsights] Query normalization debug', {
+    prompt,
+    userID: context.auth.uid,
+    normalizedQuery: {
+      dataType: effectiveQuery.dataType,
+      valueType: effectiveQuery.valueType,
+      categoryType: effectiveQuery.categoryType,
+      requestedTimeInterval: effectiveQuery.requestedTimeInterval,
+      chartType: effectiveQuery.chartType,
+      activityTypesCount: effectiveQuery.activityTypes.length,
+      activityTypeGroupsCount: effectiveQuery.activityTypeGroups.length,
+    },
+  });
   const unitSettings = await loadUserUnitSettings(context.auth.uid);
-  const executionResult = await executeAiInsightsQuery(context.auth.uid, normalizeResult.query, prompt);
+  const executionResult = await executeAiInsightsQuery(context.auth.uid, effectiveQuery, prompt);
   const summary = buildInsightSummary(
-    normalizeResult.query,
+    effectiveQuery,
     executionResult.aggregation,
     executionResult.matchedEventsCount,
     executionResult.matchedActivityTypeCounts,
   );
-  const presentation = buildInsightPresentation(normalizeResult.query, metric.label);
+  const presentation = buildInsightPresentation(effectiveQuery, metric.label);
   const isEmpty = executionResult.aggregation.buckets.length === 0;
   const emptyPresentation = {
     ...presentation,
@@ -442,7 +462,7 @@ export async function runAiInsights(
     status: isEmpty ? 'empty' : 'ok',
     prompt,
     metricLabel: metric.label,
-    query: normalizeResult.query,
+    query: effectiveQuery,
     aggregation: executionResult.aggregation,
     summary,
     presentation: isEmpty ? emptyPresentation : presentation,
@@ -454,7 +474,7 @@ export async function runAiInsights(
     return {
       status: 'empty',
       narrative,
-      query: normalizeResult.query,
+      query: effectiveQuery,
       aggregation: executionResult.aggregation,
       summary,
       presentation: emptyPresentation,
@@ -464,7 +484,7 @@ export async function runAiInsights(
   return {
       status: 'ok',
       narrative,
-      query: normalizeResult.query,
+      query: effectiveQuery,
       aggregation: executionResult.aggregation,
       summary,
       presentation,

@@ -169,7 +169,7 @@ function isNormalizedInsightQuery(value: unknown): value is NormalizedInsightQue
     && typeof value.dataType === 'string'
     && isEnumPrimitive(value.valueType)
     && isEnumPrimitive(value.categoryType)
-    && (value.requestedTimeInterval === undefined || isEnumPrimitive(value.requestedTimeInterval))
+    && (value.requestedTimeInterval === undefined || value.requestedTimeInterval === null || isEnumPrimitive(value.requestedTimeInterval))
     && isStringArray(value.activityTypeGroups)
     && isStringArray(value.activityTypes)
     && isNormalizedInsightDateRange(value.dateRange)
@@ -205,7 +205,7 @@ function isSummaryBucket(value: unknown): value is AiInsightSummaryBucket {
   return (
     isRecord(value)
     && (typeof value.bucketKey === 'string' || isFiniteNumber(value.bucketKey))
-    && (value.time === undefined || isFiniteNumber(value.time))
+    && (value.time === undefined || value.time === null || isFiniteNumber(value.time))
     && isFiniteNumber(value.aggregateValue)
     && isFiniteNumber(value.totalCount)
   );
@@ -220,7 +220,7 @@ function isSummaryActivityMix(value: unknown): value is AiInsightSummaryActivity
       && typeof entry.activityType === 'string'
       && isFiniteNumber(entry.eventCount)
     )
-    && isFiniteNumber(value.remainingActivityTypeCount)
+    && (isFiniteNumber(value.remainingActivityTypeCount) || value.remainingActivityTypeCount === null)
   );
 }
 
@@ -565,6 +565,8 @@ function normalizeAiInsightsResponse(response: AiInsightsResponse): AiInsightsRe
   if (response.status === 'empty') {
     return {
       ...response,
+      query: normalizeInsightQuery(response.query),
+      summary: normalizeSummary(response.summary),
       presentation: {
         ...normalizePresentation(response.presentation),
         emptyState: response.presentation.emptyState,
@@ -574,7 +576,17 @@ function normalizeAiInsightsResponse(response: AiInsightsResponse): AiInsightsRe
 
   return {
     ...response,
+    query: normalizeInsightQuery(response.query),
+    summary: normalizeSummary(response.summary),
     presentation: normalizePresentation(response.presentation),
+  };
+}
+
+function normalizeInsightQuery(query: NormalizedInsightQuery): NormalizedInsightQuery {
+  const { requestedTimeInterval, ...rest } = query as NormalizedInsightQuery & { requestedTimeInterval?: unknown };
+  return {
+    ...rest,
+    ...(requestedTimeInterval == null ? {} : { requestedTimeInterval }),
   };
 }
 
@@ -584,5 +596,36 @@ function normalizePresentation(presentation: AiInsightPresentation): AiInsightPr
     chartType: presentation.chartType,
     ...(presentation.emptyState == null ? {} : { emptyState: presentation.emptyState }),
     ...(presentation.warnings == null ? {} : { warnings: presentation.warnings }),
+  };
+}
+
+function normalizeSummaryBucket(
+  bucket: AiInsightSummaryBucket | null,
+): AiInsightSummaryBucket | null {
+  if (!bucket) {
+    return null;
+  }
+
+  const { time, ...rest } = bucket as AiInsightSummaryBucket & { time?: unknown };
+  return {
+    ...rest,
+    ...(time == null ? {} : { time: time as number }),
+  };
+}
+
+function normalizeSummary(summary: AiInsightSummary): AiInsightSummary {
+  const activityMix = summary.activityMix
+    ? {
+      ...summary.activityMix,
+      remainingActivityTypeCount: summary.activityMix.remainingActivityTypeCount ?? 0,
+    }
+    : null;
+
+  return {
+    ...summary,
+    peakBucket: normalizeSummaryBucket(summary.peakBucket),
+    lowestBucket: normalizeSummaryBucket(summary.lowestBucket),
+    latestBucket: normalizeSummaryBucket(summary.latestBucket),
+    activityMix,
   };
 }

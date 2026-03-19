@@ -139,6 +139,16 @@ const EXPLICIT_ALL_TIME_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
   /\bever\b/i,
 ];
 
+const DATE_ACTIVITY_STACKED_CORE_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
+  /\bstack(?:ed|ing)?\b/i,
+  /\b(activity types?|activities|sports?)\b/i,
+];
+const DATE_ACTIVITY_STACKED_TIME_AXIS_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
+  /\b(over time|by date|by day|by week|by month|timeline)\b/i,
+  /\b(last|past|this|all time|ever|entire history|full history|whole history)\b/i,
+  /\b(day|days|week|weeks|month|months|year|years|daily|weekly|monthly|quarterly|yearly)\b/i,
+];
+
 const ModelDateRangeSchema = z.union([
   z.object({
     kind: z.enum(['last_n', 'last']),
@@ -494,12 +504,13 @@ function resolveDateRange(
 function resolveChartType(
   categoryType: ChartDataCategoryTypes,
   valueType: ChartDataValueTypes,
+  forceDateColumns: boolean,
 ): ChartTypes {
   if (categoryType === ChartDataCategoryTypes.ActivityType) {
     return ChartTypes.ColumnsHorizontal;
   }
 
-  if (valueType === ChartDataValueTypes.Total) {
+  if (forceDateColumns || valueType === ChartDataValueTypes.Total) {
     return ChartTypes.ColumnsVertical;
   }
 
@@ -647,12 +658,173 @@ function toRequestedTimeInterval(
   return TIME_INTERVAL_MAP.auto;
 }
 
+function resolvePromptRequestedTimeInterval(prompt: string): ModelTimeIntervalCode | undefined {
+  const normalizedPrompt = normalizePromptSearchText(prompt);
+  if (!normalizedPrompt) {
+    return undefined;
+  }
+
+  if (/\b(hourly|by hour|per hour)\b/.test(normalizedPrompt)) {
+    return 'hourly';
+  }
+  if (/\b(daily|by day|per day)\b/.test(normalizedPrompt)) {
+    return 'daily';
+  }
+  if (/\b(weekly|by week|per week)\b/.test(normalizedPrompt)) {
+    return 'weekly';
+  }
+  if (/\b(biweekly|bi weekly|every two weeks)\b/.test(normalizedPrompt)) {
+    return 'biweekly';
+  }
+  if (/\b(monthly|by month|per month)\b/.test(normalizedPrompt)) {
+    return 'monthly';
+  }
+  if (/\b(quarterly|by quarter|per quarter)\b/.test(normalizedPrompt)) {
+    return 'quarterly';
+  }
+  if (/\b(yearly|annually|by year|per year)\b/.test(normalizedPrompt)) {
+    return 'yearly';
+  }
+
+  return undefined;
+}
+
+function resolveStackedDateDefaultInterval(dateRangeIntent: DateRangeIntent | undefined): TimeIntervals {
+  if (dateRangeIntent?.kind === 'last_n' || dateRangeIntent?.kind === 'last') {
+    if (dateRangeIntent.unit === 'day') {
+      return dateRangeIntent.amount <= 14 ? TimeIntervals.Daily : TimeIntervals.Weekly;
+    }
+    if (dateRangeIntent.unit === 'week') {
+      return TimeIntervals.Weekly;
+    }
+    if (dateRangeIntent.unit === 'month') {
+      return dateRangeIntent.amount <= 2 ? TimeIntervals.Weekly : TimeIntervals.Monthly;
+    }
+    if (dateRangeIntent.unit === 'year') {
+      return dateRangeIntent.amount <= 1 ? TimeIntervals.Monthly : TimeIntervals.Quarterly;
+    }
+  }
+
+  if (dateRangeIntent?.kind === 'current_period' || dateRangeIntent?.kind === 'this') {
+    if (dateRangeIntent.unit === 'week') {
+      return TimeIntervals.Daily;
+    }
+    if (dateRangeIntent.unit === 'month') {
+      return TimeIntervals.Weekly;
+    }
+    if (dateRangeIntent.unit === 'year') {
+      return TimeIntervals.Monthly;
+    }
+  }
+
+  return TimeIntervals.Weekly;
+}
+
 function detectUnsupportedCapability(prompt: string): boolean {
   return UNSUPPORTED_PROMPT_PATTERNS.some(pattern => pattern.test(prompt));
 }
 
 function promptImpliesAllTime(prompt: string): boolean {
   return EXPLICIT_ALL_TIME_PROMPT_PATTERNS.some(pattern => pattern.test(prompt));
+}
+
+function promptImpliesDateActivityStackedColumns(
+  prompt: string,
+  options?: {
+    hasDateRangeIntent?: boolean;
+    hasRequestedTimeInterval?: boolean;
+  },
+): boolean {
+  const normalizedPrompt = normalizePromptSearchText(prompt);
+  if (!normalizedPrompt) {
+    return false;
+  }
+
+  const matchesCore = DATE_ACTIVITY_STACKED_CORE_PROMPT_PATTERNS.every(pattern => pattern.test(normalizedPrompt));
+  if (!matchesCore) {
+    return false;
+  }
+
+  const matchesExplicitTimeAxis = DATE_ACTIVITY_STACKED_TIME_AXIS_PROMPT_PATTERNS
+    .some(pattern => pattern.test(normalizedPrompt));
+  if (matchesExplicitTimeAxis) {
+    return true;
+  }
+
+  return options?.hasDateRangeIntent === true || options?.hasRequestedTimeInterval === true;
+}
+
+function resolvePromptAggregation(prompt: string): ModelAggregationCode | undefined {
+  const normalizedPrompt = normalizePromptSearchText(prompt);
+  if (!normalizedPrompt) {
+    return undefined;
+  }
+
+  if (/\b(total|sum|combined)\b/.test(normalizedPrompt)) {
+    return 'total';
+  }
+  if (/\b(avg|average|mean)\b/.test(normalizedPrompt)) {
+    return 'average';
+  }
+  if (/\b(min|minimum|lowest|fastest)\b/.test(normalizedPrompt)) {
+    return 'minimum';
+  }
+  if (/\b(max|maximum|highest|peak|slowest)\b/.test(normalizedPrompt)) {
+    return 'maximum';
+  }
+
+  return undefined;
+}
+
+function resolvePromptDateRangeIntent(prompt: string): DateRangeIntent | undefined {
+  const normalizedPrompt = normalizePromptSearchText(prompt);
+  if (!normalizedPrompt) {
+    return undefined;
+  }
+
+  if (promptImpliesAllTime(normalizedPrompt)) {
+    return { kind: 'all_time' };
+  }
+
+  const relativeMatch = normalizedPrompt.match(/\b(?:last|past)\s+(\d+)\s+(day|days|week|weeks|month|months|year|years)\b/);
+  if (relativeMatch) {
+    const amount = Number(relativeMatch[1]);
+    const rawUnit = relativeMatch[2];
+    const unit = rawUnit.endsWith('s') ? rawUnit.slice(0, -1) : rawUnit;
+    if (amount > 0 && (unit === 'day' || unit === 'week' || unit === 'month' || unit === 'year')) {
+      return {
+        kind: 'last_n',
+        amount,
+        unit,
+      };
+    }
+  }
+
+  if (/\blast week\b/.test(normalizedPrompt)) {
+    return { kind: 'last_n', amount: 1, unit: 'week' };
+  }
+
+  if (/\blast month\b/.test(normalizedPrompt)) {
+    return { kind: 'last_n', amount: 1, unit: 'month' };
+  }
+
+  if (/\blast year\b/.test(normalizedPrompt)) {
+    return { kind: 'last_n', amount: 1, unit: 'year' };
+  }
+
+  if (/\bthis week\b/.test(normalizedPrompt)) {
+    return { kind: 'current_period', unit: 'week' };
+  }
+
+  if (/\bthis month\b/.test(normalizedPrompt)) {
+    return { kind: 'current_period', unit: 'month' };
+  }
+
+  if (/\bthis year\b/.test(normalizedPrompt)) {
+    return { kind: 'current_period', unit: 'year' };
+  }
+
+  return undefined;
 }
 
 export function setNormalizeQueryDependenciesForTesting(
@@ -680,18 +852,24 @@ export async function normalizeInsightQuery(
     ...input,
     prompt,
   });
-
-  if (intent.status === 'unsupported') {
-    return buildUnsupportedResult(intent.unsupportedReasonCode || 'unsupported_metric');
-  }
+  const modelReturnedUnsupported = intent.status === 'unsupported';
 
   const promptMetricMatch = findInsightMetricAliasMatch(prompt);
   const baseMetric = promptMetricMatch?.metric || resolveInsightMetric(intent.metric || '');
   if (!baseMetric) {
-    return buildUnsupportedResult('unsupported_metric');
+    return buildUnsupportedResult(
+      modelReturnedUnsupported
+        ? (intent.unsupportedReasonCode || 'unsupported_metric')
+        : 'unsupported_metric',
+    );
   }
 
-  const valueType = toValueType(intent.aggregation, baseMetric.defaultValueType);
+  const valueType = toValueType(
+    modelReturnedUnsupported
+      ? resolvePromptAggregation(prompt)
+      : intent.aggregation,
+    baseMetric.defaultValueType,
+  );
   const metric = (promptMetricMatch
     ? resolveInsightMetric(promptMetricMatch.alias, valueType)
     : null)
@@ -702,9 +880,20 @@ export async function normalizeInsightQuery(
     return buildUnsupportedResult('ambiguous_metric');
   }
 
-  const categoryType = toCategoryType(intent.category);
-  const activityTypes = normalizeActivityTypes(intent.activityTypes);
-  const activityTypeGroups = normalizeActivityTypeGroups(intent.activityTypeGroups);
+  const resolvedDateRangeIntent = (
+    (modelReturnedUnsupported ? undefined : intent.dateRange)
+    ?? resolvePromptDateRangeIntent(prompt)
+  );
+  const promptRequestedTimeInterval = resolvePromptRequestedTimeInterval(prompt);
+  const stackedDateByActivityRequested = promptImpliesDateActivityStackedColumns(prompt, {
+    hasDateRangeIntent: resolvedDateRangeIntent !== undefined,
+    hasRequestedTimeInterval: promptRequestedTimeInterval !== undefined,
+  });
+  const categoryType = stackedDateByActivityRequested
+    ? ChartDataCategoryTypes.DateType
+    : toCategoryType(modelReturnedUnsupported ? undefined : intent.category);
+  const activityTypes = normalizeActivityTypes(modelReturnedUnsupported ? undefined : intent.activityTypes);
+  const activityTypeGroups = normalizeActivityTypeGroups(modelReturnedUnsupported ? undefined : intent.activityTypeGroups);
   if (!activityTypes || !activityTypeGroups) {
     return buildUnsupportedResult('invalid_prompt');
   }
@@ -723,14 +912,18 @@ export async function normalizeInsightQuery(
       ? expandedActivityTypes
       : [];
 
-  const resolvedDateRangeIntent = intent.dateRange ?? (promptImpliesAllTime(prompt)
-    ? { kind: 'all_time' as const }
-    : undefined);
+  const resolvedRequestedTimeInterval = promptRequestedTimeInterval
+    ?? (modelReturnedUnsupported ? undefined : intent.requestedTimeInterval);
   const requestedTimeInterval = toRequestedTimeInterval(
     categoryType,
-    intent.requestedTimeInterval,
+    resolvedRequestedTimeInterval,
     resolvedDateRangeIntent,
   );
+  const finalRequestedTimeInterval = stackedDateByActivityRequested
+    && categoryType === ChartDataCategoryTypes.DateType
+    && (resolvedRequestedTimeInterval === undefined || resolvedRequestedTimeInterval === 'auto')
+    ? resolveStackedDateDefaultInterval(resolvedDateRangeIntent)
+    : requestedTimeInterval;
   const dateRange = resolveDateRange(resolvedDateRangeIntent, input.clientTimezone, dependencies.now());
 
   return {
@@ -740,11 +933,11 @@ export async function normalizeInsightQuery(
       dataType: metric.dataType,
       valueType,
       categoryType,
-      requestedTimeInterval,
+      requestedTimeInterval: finalRequestedTimeInterval,
       activityTypeGroups: finalActivityTypeGroups,
       activityTypes: finalActivityTypes,
       dateRange,
-      chartType: resolveChartType(categoryType, valueType),
+      chartType: resolveChartType(categoryType, valueType, stackedDateByActivityRequested),
     },
   };
 }

@@ -33,8 +33,12 @@ interface EventStatAggregationAccumulator {
   sum: number;
   min: number | null;
   max: number | null;
-  seriesValues: Map<string, number>;
-  seriesCounts: Map<string, number>;
+  seriesAccumulators: Map<string, {
+    sum: number;
+    count: number;
+    min: number | null;
+    max: number | null;
+  }>;
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -190,10 +194,49 @@ function resolveAggregateValue(
   }
 }
 
-function normalizeAccumulatorMaps(accumulator: EventStatAggregationAccumulator): Pick<EventStatAggregationBucket, 'seriesValues' | 'seriesCounts'> {
+function resolveSeriesAggregateValue(
+  accumulator: {
+    sum: number;
+    count: number;
+    min: number | null;
+    max: number | null;
+  },
+  valueType: ChartDataValueTypes,
+): number | null {
+  switch (valueType) {
+    case ChartDataValueTypes.Total:
+      return accumulator.sum;
+    case ChartDataValueTypes.Average:
+      if (accumulator.count <= 0) {
+        return null;
+      }
+      return accumulator.sum / accumulator.count;
+    case ChartDataValueTypes.Minimum:
+      return accumulator.min;
+    case ChartDataValueTypes.Maximum:
+      return accumulator.max;
+    default:
+      return null;
+  }
+}
+
+function normalizeAccumulatorMaps(
+  accumulator: EventStatAggregationAccumulator,
+  valueType: ChartDataValueTypes,
+): Pick<EventStatAggregationBucket, 'seriesValues' | 'seriesCounts'> {
+  const seriesValues = new Map<string, number>();
+  const seriesCounts = new Map<string, number>();
+  accumulator.seriesAccumulators.forEach((seriesAccumulator, seriesKey) => {
+    const aggregatedValue = resolveSeriesAggregateValue(seriesAccumulator, valueType);
+    if (aggregatedValue !== null && Number.isFinite(aggregatedValue)) {
+      seriesValues.set(seriesKey, aggregatedValue);
+    }
+    seriesCounts.set(seriesKey, seriesAccumulator.count);
+  });
+
   return {
-    seriesValues: Object.fromEntries(accumulator.seriesValues.entries()),
-    seriesCounts: Object.fromEntries(accumulator.seriesCounts.entries()),
+    seriesValues: Object.fromEntries(seriesValues.entries()),
+    seriesCounts: Object.fromEntries(seriesCounts.entries()),
   };
 }
 
@@ -284,16 +327,29 @@ export function buildEventStatAggregation(
       sum: 0,
       min: null,
       max: null,
-      seriesValues: new Map<string, number>(),
-      seriesCounts: new Map<string, number>(),
+      seriesAccumulators: new Map<string, {
+        sum: number;
+        count: number;
+        min: number | null;
+        max: number | null;
+      }>(),
     };
 
     existing.totalCount += 1;
     existing.sum += statValue;
     existing.min = existing.min === null ? statValue : Math.min(existing.min, statValue);
     existing.max = existing.max === null ? statValue : Math.max(existing.max, statValue);
-    existing.seriesValues.set(seriesKey, (existing.seriesValues.get(seriesKey) ?? 0) + statValue);
-    existing.seriesCounts.set(seriesKey, (existing.seriesCounts.get(seriesKey) ?? 0) + 1);
+    const seriesAccumulator = existing.seriesAccumulators.get(seriesKey) || {
+      sum: 0,
+      count: 0,
+      min: null,
+      max: null,
+    };
+    seriesAccumulator.sum += statValue;
+    seriesAccumulator.count += 1;
+    seriesAccumulator.min = seriesAccumulator.min === null ? statValue : Math.min(seriesAccumulator.min, statValue);
+    seriesAccumulator.max = seriesAccumulator.max === null ? statValue : Math.max(seriesAccumulator.max, statValue);
+    existing.seriesAccumulators.set(seriesKey, seriesAccumulator);
     bucketMap.set(bucketKey, existing);
     return bucketMap;
   }, new Map<string | number, EventStatAggregationAccumulator>());
@@ -314,7 +370,7 @@ export function buildEventStatAggregation(
         ...(accumulator.time !== undefined ? { time: accumulator.time } : {}),
         totalCount: accumulator.totalCount,
         aggregateValue,
-        ...normalizeAccumulatorMaps(accumulator),
+        ...normalizeAccumulatorMaps(accumulator, request.valueType),
       } satisfies EventStatAggregationBucket;
     })
     .filter((bucket): bucket is EventStatAggregationBucket => bucket !== null)

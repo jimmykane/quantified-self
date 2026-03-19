@@ -11,12 +11,12 @@
 @use 'styles/app-loader';
 
 /* Bundle app fonts locally to avoid runtime dependency on external font CDNs. */
-@import '@fontsource/noto-sans/300.css';
-@import '@fontsource/noto-sans/400.css';
-@import '@fontsource/noto-sans/500.css';
-@import '@fontsource/noto-sans/600.css';
-@import '@fontsource/noto-sans/700.css';
-@import '@fontsource/noto-sans/800.css';
+@import '@fontsource/inter/300.css';
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';
+@import '@fontsource/inter/800.css';
 
 @import '@fontsource/barlow-condensed/300.css';
 @import '@fontsource/barlow-condensed/400.css';
@@ -40,8 +40,8 @@ $app-light-theme: mat.define-theme((color: (theme-type: light,
         primary: app-light-colors.$primary-palette,
         tertiary: app-light-colors.$tertiary-palette,
       ),
-      typography: (plain-family: "'Noto Sans', sans-serif",
-        brand-family: "'Noto Sans', sans-serif",
+      typography: (plain-family: "'Inter', sans-serif",
+        brand-family: "'Inter', sans-serif",
         medium-weight: 500,
         regular-weight: 400,
         bold-weight: 700,
@@ -54,8 +54,8 @@ $app-dark-theme: mat.define-theme((color: (theme-type: dark,
         primary: app-dark-colors.$primary-palette,
         tertiary: app-dark-colors.$tertiary-palette,
       ),
-      typography: (plain-family: "'Noto Sans', sans-serif",
-        brand-family: "'Noto Sans', sans-serif",
+      typography: (plain-family: "'Inter', sans-serif",
+        brand-family: "'Inter', sans-serif",
         medium-weight: 500,
         regular-weight: 400,
         bold-weight: 700,
@@ -110,7 +110,7 @@ body {
 body {
   background-color: var(--mat-sys-background);
   color: var(--mat-sys-on-surface);
-  font-family: 'Noto Sans', sans-serif;
+  font-family: 'Inter', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

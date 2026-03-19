@@ -385,4 +385,32 @@ describe('aiInsights callable', () => {
       }),
     });
   });
+
+  it('passes through normalized stacked queries without callable-level overrides', async () => {
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'ok',
+      metricKey: 'distance',
+      query: {
+        ...normalizedQuery,
+        categoryType: ChartDataCategoryTypes.ActivityType,
+        chartType: ChartTypes.LinesVertical,
+        requestedTimeInterval: TimeIntervals.Auto,
+      },
+    });
+
+    await aiInsights({
+      prompt: 'Show my max heart rate last month as stacked columns by activity type over time',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(hoisted.executeAiInsightsQuery).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({
+        categoryType: ChartDataCategoryTypes.ActivityType,
+        chartType: ChartTypes.LinesVertical,
+        requestedTimeInterval: TimeIntervals.Auto,
+      }),
+      'Show my max heart rate last month as stacked columns by activity type over time',
+    );
+  });
 });

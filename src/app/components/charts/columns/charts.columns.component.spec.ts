@@ -304,7 +304,7 @@ describe('ChartsColumnsComponent', () => {
 
     const option = getLastOption();
     expect(option.xAxis.data).toHaveLength(3);
-    expect(option.series[0].data).toEqual([10, null, 30]);
+    expect(option.series[0].data.map((entry: { value: number | null }) => entry.value)).toEqual([10, null, 30]);
     expect(option.graphic[0].children[1].style.text).toBe('20.0 m');
   });
 
@@ -375,6 +375,52 @@ describe('ChartsColumnsComponent', () => {
     expect(totalLabelSeries).toBeDefined();
     expect(totalLabelSeries.type).toBe('custom');
     expect(option.tooltip.trigger).toBe('axis');
+  });
+
+  it('should keep non-total date activity breakdown in tooltip without stacked rendering', async () => {
+    const activityTypeAliases = Object.keys(ActivityTypes).filter((key) => (
+      Number.isNaN(Number(key))
+      && typeof (ActivityTypes as any)[key] === 'string'
+      && `${(ActivityTypes as any)[key]}`.toLowerCase() !== 'unknown sport'
+    ));
+    const primaryAlias = activityTypeAliases[0];
+    const secondaryAlias = activityTypeAliases[1] || activityTypeAliases[0];
+    component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.chartDataValueType = ChartDataValueTypes.Maximum;
+    component.chartDataTimeInterval = TimeIntervals.Monthly;
+    component.data = [
+      {
+        time: Date.UTC(2024, 0, 1),
+        [ChartDataValueTypes.Maximum]: 180,
+        count: 19,
+        [primaryAlias]: 185,
+        [`${primaryAlias}-Count`]: 8,
+        [secondaryAlias]: 170,
+        [`${secondaryAlias}-Count`]: 5,
+      },
+      {
+        time: Date.UTC(2024, 1, 1),
+        [ChartDataValueTypes.Maximum]: 176,
+        count: 14,
+        [primaryAlias]: 176,
+        [secondaryAlias]: 169,
+      },
+    ];
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const option = getLastOption();
+    const stackedSeries = option.series.filter((seriesEntry: { stack?: string }) => (
+      seriesEntry.stack === 'date-activity-stack'
+    ));
+    expect(stackedSeries).toHaveLength(0);
+    expect(option.tooltip.trigger).toBe('item');
+    const tooltipFormatter = option.tooltip.formatter as (params: { dataIndex: number }) => string;
+    const tooltipText = tooltipFormatter({ dataIndex: 0 });
+    expect(tooltipText).toContain(primaryAlias);
+    expect(tooltipText).toContain(secondaryAlias);
+    expect(tooltipText).toContain('Activities');
   });
 
   it('should render segmented custom pyramids for date category', async () => {
@@ -532,6 +578,99 @@ describe('ChartsColumnsComponent', () => {
     expect(tooltipText).toContain('100');
     expect(tooltipText).toContain('%');
     expect(tooltipText).toContain(primaryAlias);
+  });
+
+  it('should format non-total segmented tooltips using raw per-activity aggregates without percentages', () => {
+    component.chartDataType = DataDistance.type;
+    component.chartDataValueType = ChartDataValueTypes.Maximum;
+
+    const tooltipText = (component as any).formatDateActivityTooltip(
+      [
+        {
+          index: 0,
+          label: 'Feb 2026',
+          time: Date.UTC(2026, 1, 1),
+          total: 180,
+          count: 19,
+          segments: [
+            {
+              activityKey: 'Cycling',
+              activityType: ActivityTypes.Cycling,
+              label: 'Cycling',
+              colorKey: ActivityTypes.Cycling,
+              rawValue: 170,
+              value: 85,
+              percent: 47.5,
+              count: 8,
+            },
+            {
+              activityKey: 'Running',
+              activityType: ActivityTypes.Running,
+              label: 'Running',
+              colorKey: ActivityTypes.Running,
+              rawValue: 160,
+              value: 80,
+              percent: 44.4,
+              count: 7,
+            },
+          ],
+          rawItem: null,
+        },
+      ],
+      [{ dataIndex: 0 }],
+      new Map<string, string>([
+        ['Cycling', '#16B4EA'],
+        ['Running', '#F48FB1'],
+      ]),
+    );
+
+    expect(tooltipText).toContain('Cycling');
+    expect(tooltipText).toContain('170');
+    expect(tooltipText).not.toContain('47.5%');
+    expect(tooltipText).toContain('Maximum');
+  });
+
+  it('should enable segmented stacked date rendering for non-total metrics only when explicitly preferred', async () => {
+    const activityTypeAliases = Object.keys(ActivityTypes).filter((key) => (
+      Number.isNaN(Number(key))
+      && typeof (ActivityTypes as any)[key] === 'string'
+      && `${(ActivityTypes as any)[key]}`.toLowerCase() !== 'unknown sport'
+    ));
+    const primaryAlias = activityTypeAliases[0];
+    const secondaryAlias = activityTypeAliases[1] || activityTypeAliases[0];
+
+    component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.chartDataValueType = ChartDataValueTypes.Maximum;
+    component.chartDataTimeInterval = TimeIntervals.Monthly;
+    component.preferDateActivitySegmentation = true;
+    component.data = [
+      {
+        time: Date.UTC(2026, 0, 1),
+        [ChartDataValueTypes.Maximum]: 193,
+        count: 19,
+        [primaryAlias]: 180,
+        [`${primaryAlias}-Count`]: 8,
+        [secondaryAlias]: 160,
+        [`${secondaryAlias}-Count`]: 7,
+      },
+      {
+        time: Date.UTC(2026, 1, 1),
+        [ChartDataValueTypes.Maximum]: 180,
+        count: 12,
+        [primaryAlias]: 176,
+        [secondaryAlias]: 170,
+      },
+    ];
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const option = getLastOption();
+    const stackedSeries = option.series.filter((seriesEntry: { stack?: string }) => (
+      seriesEntry.stack === 'date-activity-stack'
+    ));
+    expect(stackedSeries.length).toBeGreaterThan(0);
+    expect(option.tooltip.trigger).toBe('axis');
   });
 
   it('should not include a trend line for non-date categories', async () => {

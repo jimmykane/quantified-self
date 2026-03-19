@@ -288,6 +288,40 @@ describe('execute-query', () => {
     expect(result.aggregation.buckets).toEqual([]);
   });
 
+  it('does not override normalized query shape based on prompt text', async () => {
+    const info = vi.fn();
+
+    setExecuteQueryDependenciesForTesting({
+      fetchEventDocs: async () => [
+        { id: 'e1', data: () => ({ startDate: new Date('2026-01-10T12:00:00.000Z') }) },
+      ],
+      fetchDebugEventSnapshot: vi.fn(async () => ({
+        totalEventsCount: 1,
+        recentEventsSample: [],
+      })),
+      importEvent: vi.fn(() => createMockEvent({
+        id: 'e1',
+        startDate: new Date('2026-01-10T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: { [DataDistance.type]: 40 },
+      })),
+      logger: { info, warn: vi.fn(), error: vi.fn() } as any,
+    });
+
+    await executeAiInsightsQuery('user-1', createQuery({
+      categoryType: ChartDataCategoryTypes.ActivityType,
+      chartType: ChartTypes.LinesVertical,
+      requestedTimeInterval: TimeIntervals.Auto,
+      activityTypes: [],
+    }), 'Show my max heart rate last 3 months as stacked columns by activity type over time');
+
+    const aggregationSummaryCall = info.mock.calls.find((call) => call[0] === '[aiInsights] Aggregation summary');
+    expect(aggregationSummaryCall?.[1]).toEqual(expect.objectContaining({
+      categoryType: ChartDataCategoryTypes.ActivityType,
+      requestedTimeInterval: TimeIntervals.Auto,
+    }));
+  });
+
   it('logs query-stage diagnostics including requested-stat coverage', async () => {
     const info = vi.fn();
     const originalFirestoreEmulatorHost = process.env.FIRESTORE_EMULATOR_HOST;

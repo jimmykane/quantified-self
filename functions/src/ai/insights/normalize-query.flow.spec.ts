@@ -191,6 +191,138 @@ describe('normalizeInsightQuery', () => {
     });
   });
 
+  it('forces date columns when prompt asks for stacked activity-type columns over time', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'max heart rate',
+        aggregation: 'maximum',
+        category: 'activity',
+        activityTypes: [],
+        dateRange: {
+          kind: 'last_n',
+          amount: 1,
+          unit: 'month',
+        },
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'show my max heart rate last month as stacked columns by activity type over time',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.dataType).toBe(DataHeartRateMax.type);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Maximum);
+    expect(result.query.categoryType).toBe(ChartDataCategoryTypes.DateType);
+    expect(result.query.chartType).toBe(ChartTypes.ColumnsVertical);
+    expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Weekly);
+  });
+
+  it('keeps stacked date columns for last 5 months by activity type over time prompts', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-19T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'max heart rate',
+        aggregation: 'maximum',
+        category: 'activity',
+        activityTypes: [],
+        dateRange: {
+          kind: 'last_n',
+          amount: 5,
+          unit: 'month',
+        },
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show my max heart rate last 5 months as stacked columns by activity type over time',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.dataType).toBe(DataHeartRateMax.type);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Maximum);
+    expect(result.query.categoryType).toBe(ChartDataCategoryTypes.DateType);
+    expect(result.query.chartType).toBe(ChartTypes.ColumnsVertical);
+    expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Monthly);
+  });
+
+  it('detects stacked date-by-activity intent with noisy punctuation and spacing', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-19T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'max heart rate',
+        aggregation: 'maximum',
+        category: 'activity',
+        activityTypes: [],
+        dateRange: {
+          kind: 'last_n',
+          amount: 3,
+          unit: 'month',
+        },
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show my max heart rate last  3 months, as stacked columns by activity-type timeline.',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.categoryType).toBe(ChartDataCategoryTypes.DateType);
+    expect(result.query.chartType).toBe(ChartTypes.ColumnsVertical);
+    expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Monthly);
+  });
+
+  it('detects stacked date-by-activity intent for activity types wording with explicit range', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-19T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'max heart rate',
+        aggregation: 'maximum',
+        category: 'activity',
+        activityTypes: [],
+        dateRange: {
+          kind: 'last_n',
+          amount: 3,
+          unit: 'month',
+        },
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show my max heart rate last 3 months as stacked columns by activity types',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.categoryType).toBe(ChartDataCategoryTypes.DateType);
+    expect(result.query.chartType).toBe(ChartTypes.ColumnsVertical);
+    expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Monthly);
+  });
+
   it('defaults to the last 90 days when the model omits a range', async () => {
     setNormalizeQueryDependenciesForTesting({
       now: () => new Date('2026-03-18T12:00:00.000Z'),
@@ -826,6 +958,39 @@ describe('normalizeInsightQuery', () => {
       status: 'unsupported',
       reasonCode: 'ambiguous_metric',
       suggestedPrompts: expect.any(Array),
+    });
+  });
+
+  it('falls back to deterministic prompt parsing when the model returns unsupported for a supported prompt', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'unsupported',
+        unsupportedReasonCode: 'unsupported_capability',
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'show my max heart rate last month as stacked columns by activity type over time',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.dataType).toBe(DataHeartRateMax.type);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Maximum);
+    expect(result.query.categoryType).toBe(ChartDataCategoryTypes.DateType);
+    expect(result.query.chartType).toBe(ChartTypes.ColumnsVertical);
+    expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Weekly);
+    expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
+      startDate: '2026-02-18T00:00:00.000Z',
+      endDate: '2026-03-18T23:59:59.999Z',
+      timezone: 'UTC',
+      source: 'prompt',
     });
   });
 });

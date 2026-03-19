@@ -46,6 +46,7 @@ class MockColumnsChartComponent {
   @Input() useAnimations = false;
   @Input() vertical = true;
   @Input() type: 'columns' | 'pyramids' = 'columns';
+  @Input() preferDateActivitySegmentation = false;
   @Input() userUnitSettings?: UserUnitSettingsInterface | null;
 }
 
@@ -203,5 +204,17 @@ describe('AiInsightsChartComponent', () => {
     expect(chart.componentInstance.vertical).toBe(false);
     expect(chart.componentInstance.type).toBe('columns');
     expect(chart.componentInstance.chartDataCategoryType).toBe(ChartDataCategoryTypes.ActivityType);
+  });
+
+  it('should enable date-activity segmentation preference for date-based vertical columns', () => {
+    componentRef.setInput('response', buildResponse(ChartTypes.ColumnsVertical));
+    fixture.detectChanges();
+
+    const lineChart = fixture.debugElement.query(By.directive(MockXYChartComponent));
+    const columnChart = fixture.debugElement.query(By.directive(MockColumnsChartComponent));
+    expect(lineChart).toBeNull();
+    expect(columnChart).toBeTruthy();
+    expect(columnChart.componentInstance.vertical).toBe(true);
+    expect(columnChart.componentInstance.preferDateActivitySegmentation).toBe(true);
   });
 });

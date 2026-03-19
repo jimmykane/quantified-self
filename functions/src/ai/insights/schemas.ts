@@ -52,8 +52,13 @@ export const NormalizedInsightQuerySchema: z.ZodType<NormalizedInsightQuery> = z
   chartType: z.nativeEnum(ChartTypes),
 });
 
+const BucketKeySchema: z.ZodType<string | number> = z.custom<string | number>(
+  (value): value is string | number => typeof value === 'string' || typeof value === 'number',
+  { message: 'Expected bucketKey to be a string or number.' },
+);
+
 export const EventStatAggregationBucketSchema = z.object({
-  bucketKey: z.union([z.string(), z.number()]),
+  bucketKey: BucketKeySchema,
   time: z.number().optional(),
   totalCount: z.number().int().nonnegative(),
   aggregateValue: z.number(),
@@ -77,7 +82,7 @@ export const AiInsightPresentationSchema = z.object({
 });
 
 export const AiInsightSummaryBucketSchema = z.object({
-  bucketKey: z.union([z.string(), z.number()]),
+  bucketKey: BucketKeySchema,
   time: z.number().optional(),
   aggregateValue: z.number(),
   totalCount: z.number().int().nonnegative(),

@@ -202,6 +202,94 @@ describe('AiInsightsLatestSnapshotService', () => {
     expect(deleteDoc).not.toHaveBeenCalled();
   });
 
+  it('should restore legacy snapshots with null requestedTimeInterval by normalizing it away', async () => {
+    const legacyResponse = buildOkResponse();
+    const { requestedTimeInterval: _requestedTimeInterval, ...legacyQueryWithoutRequestedInterval } = legacyResponse.query;
+    const snapshotWithNullRequestedInterval = {
+      version: 1,
+      savedAt: '2026-03-18T12:00:00.000Z',
+      prompt: 'Show my total distance',
+      response: {
+        ...legacyResponse,
+        query: {
+          ...legacyResponse.query,
+          requestedTimeInterval: null,
+        },
+      },
+    };
+    vi.mocked(getDoc).mockResolvedValue({
+      exists: () => true,
+      data: () => snapshotWithNullRequestedInterval,
+    } as never);
+
+    const restored = await service.loadLatest('user-1');
+
+    expect(restored).toEqual({
+      version: 1,
+      savedAt: '2026-03-18T12:00:00.000Z',
+      prompt: 'Show my total distance',
+      response: {
+        ...legacyResponse,
+        query: {
+          ...legacyQueryWithoutRequestedInterval,
+        },
+      },
+    });
+    expect((restored as AiInsightsLatestSnapshot | null)?.response.status).toBe('ok');
+    if ((restored as AiInsightsLatestSnapshot | null)?.response.status === 'ok') {
+      expect((restored as AiInsightsLatestSnapshot).response.query.requestedTimeInterval).toBeUndefined();
+    }
+    expect(deleteDoc).not.toHaveBeenCalled();
+  });
+
+  it('should restore legacy snapshots with nullable summary bucket time and activity mix remainder', async () => {
+    const legacyResponse = buildOkResponse();
+    const snapshotWithLegacySummary = {
+      version: 1,
+      savedAt: '2026-03-18T12:00:00.000Z',
+      prompt: 'Show my total distance',
+      response: {
+        ...legacyResponse,
+        summary: {
+          ...legacyResponse.summary,
+          peakBucket: {
+            ...(legacyResponse.summary.peakBucket as NonNullable<typeof legacyResponse.summary.peakBucket>),
+            time: null,
+          },
+          lowestBucket: {
+            ...(legacyResponse.summary.lowestBucket as NonNullable<typeof legacyResponse.summary.lowestBucket>),
+            time: null,
+          },
+          latestBucket: {
+            ...(legacyResponse.summary.latestBucket as NonNullable<typeof legacyResponse.summary.latestBucket>),
+            time: null,
+          },
+          activityMix: {
+            ...(legacyResponse.summary.activityMix as NonNullable<typeof legacyResponse.summary.activityMix>),
+            remainingActivityTypeCount: null,
+          },
+        },
+      },
+    };
+    vi.mocked(getDoc).mockResolvedValue({
+      exists: () => true,
+      data: () => snapshotWithLegacySummary,
+    } as never);
+
+    const restored = await service.loadLatest('user-1');
+
+    expect(restored).not.toBeNull();
+    expect((restored as AiInsightsLatestSnapshot).response.status).toBe('ok');
+    if ((restored as AiInsightsLatestSnapshot).response.status === 'ok') {
+      const restoredSummary = (restored as AiInsightsLatestSnapshot).response.summary;
+      expect(restoredSummary.peakBucket?.time).toBeUndefined();
+      expect(restoredSummary.lowestBucket?.time).toBeUndefined();
+      expect(restoredSummary.latestBucket?.time).toBeUndefined();
+      expect(restoredSummary.activityMix?.remainingActivityTypeCount).toBe(0);
+    }
+    expect(deleteDoc).not.toHaveBeenCalled();
+  });
+
   it('should clear invalid latest snapshots instead of restoring them', async () => {
     vi.mocked(getDoc).mockResolvedValue({
       exists: () => true,
