@@ -134,11 +134,12 @@
           }
 
           @if (isSubmitting()) {
-            <div class="state-panel">
-              <mat-progress-bar mode="indeterminate"></mat-progress-bar>
-              <p class="mat-title-medium state-title">Generating insight</p>
-              <p class="mat-body-medium state-copy">Normalizing your prompt, querying your event stats, and preparing the chart.</p>
-            </div>
+            <app-ai-insights-loading-state
+              title="Generating insight"
+              eyebrow="Crunching data"
+              [copy]="'Parsing your prompt, querying your event stats, and preparing the chart.'"
+              [steps]="generationLoadingSteps">
+            </app-ai-insights-loading-state>
           } @else if (errorMessage(); as errorMessage) {
             <div class="state-panel state-panel-error">
               <mat-icon>error</mat-icon>
@@ -229,11 +230,13 @@
               }
 
               @if (eventLookupLoading()) {
-                <div class="state-panel state-panel-inline">
-                  <mat-progress-bar mode="indeterminate"></mat-progress-bar>
-                  <p class="mat-title-medium state-title">Loading event details</p>
-                  <p class="mat-body-medium state-copy">Fetching the winning event and the top ranked matches.</p>
-                </div>
+                <app-ai-insights-loading-state
+                  title="Loading event details"
+                  eyebrow="Loading references"
+                  [compact]="true"
+                  [copy]="'Fetching the winning event and the top ranked matches.'"
+                  [steps]="eventLookupLoadingSteps">
+                </app-ai-insights-loading-state>
               }
 
               @if (primaryEventLookupItem(); as primaryEvent) {

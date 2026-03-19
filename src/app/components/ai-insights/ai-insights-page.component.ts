@@ -39,12 +39,25 @@ import { AiInsightsService } from '../../services/ai-insights.service';
 import { LoggerService } from '../../services/logger.service';
 import { formatDashboardBucketDateByInterval, formatDashboardDateRange } from '../../helpers/dashboard-chart-data.helper';
 import { AiInsightsChartComponent } from './ai-insights-chart.component';
+import { AiInsightsLoadingStateComponent } from './ai-insights-loading-state.component';
 import { AI_INSIGHTS_SUGGESTED_PROMPTS } from './ai-insights.prompts';
 
 const HERO_PROMPT_TYPING_DELAY_MS = 38;
 const HERO_PROMPT_DELETING_DELAY_MS = 20;
 const HERO_PROMPT_HOLD_DELAY_MS = 1900;
 const HERO_PROMPT_BETWEEN_PROMPTS_DELAY_MS = 280;
+const AI_INSIGHTS_GENERATION_LOADING_STEPS = [
+  'Parsing your prompt',
+  'Crunching event stats',
+  'Checking saved unit preferences',
+  'Shaping the chart',
+  'Drafting the summary',
+] as const;
+const AI_INSIGHTS_EVENT_LOOKUP_LOADING_STEPS = [
+  'Finding the winning event',
+  'Loading top ranked matches',
+  'Preparing event shortcuts',
+] as const;
 
 function getClientTimeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
@@ -338,6 +351,7 @@ interface EventLookupDisplayItem {
     ReactiveFormsModule,
     MaterialModule,
     AiInsightsChartComponent,
+    AiInsightsLoadingStateComponent,
   ],
   templateUrl: './ai-insights-page.component.html',
   styleUrls: ['./ai-insights-page.component.scss'],
@@ -383,6 +397,8 @@ export class AiInsightsPageComponent {
   readonly currentUserID = computed(() => this.user()?.uid ?? null);
   readonly isDarkTheme = computed(() => this.appTheme() === AppThemes.Dark);
   readonly useAnimations = computed(() => this.chartSettings().useAnimations ?? false);
+  readonly generationLoadingSteps = AI_INSIGHTS_GENERATION_LOADING_STEPS;
+  readonly eventLookupLoadingSteps = AI_INSIGHTS_EVENT_LOOKUP_LOADING_STEPS;
   readonly hasQuotaAvailable = computed(() => {
     const quotaStatus = this.quotaStatus();
     if (!quotaStatus) {

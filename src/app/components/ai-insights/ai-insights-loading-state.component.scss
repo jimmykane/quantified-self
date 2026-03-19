@@ -1,0 +1,323 @@
+:host {
+  display: block;
+  width: 100%;
+}
+
+.ai-loading-state {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+  padding: 2px 0 4px;
+  contain: paint;
+}
+
+.ai-loading-state--compact {
+  gap: 12px;
+  padding: 0;
+}
+
+.ai-loading-state__header,
+.ai-loading-state__lead,
+.ai-loading-state__title-group,
+.ai-loading-state__preview {
+  display: flex;
+}
+
+.ai-loading-state__header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+}
+
+.ai-loading-state__lead {
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.ai-loading-state__title-group {
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ai-loading-state__eyebrow,
+.ai-loading-state__title,
+.ai-loading-state__copy,
+.ai-loading-state__status-label {
+  margin: 0;
+}
+
+.ai-loading-state__eyebrow {
+  color: var(--mat-sys-on-surface-variant);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ai-loading-state__title {
+  line-height: 1.25;
+}
+
+.ai-loading-state__copy {
+  color: var(--mat-sys-on-surface-variant);
+  line-height: 1.55;
+}
+
+.ai-loading-state__orb {
+  position: relative;
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--mat-sys-primary-container) 84%, transparent);
+  color: var(--mat-sys-primary);
+  flex-shrink: 0;
+}
+
+.ai-loading-state__orb::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: inherit;
+  border: 1px solid color-mix(in srgb, var(--mat-sys-primary) 22%, transparent);
+  animation: ai-insights-loading-orb 2.4s ease-in-out infinite;
+}
+
+.ai-loading-state__status-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 4.75rem;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--mat-sys-primary-container) 36%, transparent);
+  color: var(--mat-sys-on-surface-variant);
+  line-height: 1.2;
+  white-space: nowrap;
+  justify-self: end;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.ai-loading-state__status-label::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--mat-sys-primary);
+  animation: ai-insights-loading-dot 1.5s ease-in-out infinite;
+}
+
+.ai-loading-state__roller-window {
+  height: 1.85rem;
+  overflow: hidden;
+}
+
+.ai-loading-state__roller {
+  display: grid;
+  gap: 8px;
+  padding-block: 10px 2px;
+  border-top: 1px solid color-mix(in srgb, var(--mat-sys-outline-variant) 88%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--mat-sys-outline-variant) 72%, transparent);
+}
+
+.ai-loading-state__roller-track {
+  display: grid;
+  transition: transform 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.ai-loading-state__roller-row {
+  height: 1.85rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.ai-loading-state__roller-row--active {
+  color: var(--mat-sys-on-surface);
+}
+
+.ai-loading-state__roller-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--mat-sys-primary) 55%, transparent);
+  flex-shrink: 0;
+}
+
+.ai-loading-state__preview {
+  position: relative;
+  gap: 12px;
+  align-items: stretch;
+  padding-top: 2px;
+}
+
+.ai-loading-state__preview-card {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  display: grid;
+  align-content: center;
+  gap: 8px;
+  min-height: 5.5rem;
+  padding: 0;
+  overflow: hidden;
+}
+
+.ai-loading-state__preview-card::before,
+.ai-loading-state__preview-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+}
+
+.ai-loading-state__preview-card::before {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--mat-sys-surface-container-high) 92%, transparent) 0%,
+    color-mix(in srgb, var(--mat-sys-surface-container) 72%, transparent) 100%
+  );
+}
+
+.ai-loading-state__preview-card::after {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--mat-sys-primary) 5%, transparent) 0%,
+    transparent 100%
+  );
+  opacity: 0.8;
+}
+
+.ai-loading-state__preview-pill,
+.ai-loading-state__preview-line,
+.ai-loading-state__preview-bar {
+  position: relative;
+  z-index: 1;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--mat-sys-primary) 12%, var(--mat-sys-surface-container-highest));
+}
+
+.ai-loading-state__preview-pill {
+  width: 3.6rem;
+  height: 0.58rem;
+}
+
+.ai-loading-state__preview-line {
+  height: 0.58rem;
+}
+
+.ai-loading-state__preview-line--long {
+  width: 100%;
+}
+
+.ai-loading-state__preview-line--medium {
+  width: 72%;
+}
+
+.ai-loading-state__preview-line--short {
+  width: 48%;
+}
+
+.ai-loading-state__preview-card--chart {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: end;
+}
+
+.ai-loading-state__preview-bar {
+  width: 100%;
+  min-height: 1.2rem;
+  border-radius: 10px 10px 6px 6px;
+  animation: ai-insights-loading-bars 1.7s ease-in-out infinite;
+  transform-origin: bottom;
+}
+
+.ai-loading-state__preview-bar--one {
+  height: 36%;
+  animation-delay: 0s;
+}
+
+.ai-loading-state__preview-bar--two {
+  height: 72%;
+  animation-delay: 0.14s;
+}
+
+.ai-loading-state__preview-bar--three {
+  height: 54%;
+  animation-delay: 0.28s;
+}
+
+.ai-loading-state__preview-bar--four {
+  height: 88%;
+  animation-delay: 0.42s;
+}
+
+.ai-loading-state__progress {
+  --mdc-linear-progress-track-height: 4px;
+  border-radius: 999px;
+  overflow: hidden;
+  opacity: 0.92;
+}
+
+.ai-loading-state--compact .ai-loading-state__roller {
+  padding-block: 8px 0;
+}
+
+.ai-loading-state--compact .ai-loading-state__status-label {
+  padding-inline: 9px;
+}
+
+@keyframes ai-insights-loading-orb {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.96);
+  }
+
+  50% {
+    opacity: 0.75;
+    transform: scale(1);
+  }
+}
+
+@keyframes ai-insights-loading-dot {
+  0%,
+  100% {
+    transform: scale(0.92);
+    opacity: 0.55;
+  }
+
+  50% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+}
+
+@keyframes ai-insights-loading-bars {
+  0%,
+  100% {
+    transform: scaleY(0.88);
+  }
+
+  50% {
+    transform: scaleY(1.02);
+  }
+}
+
+@media (max-width: 44rem) {
+  .ai-loading-state__header {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-loading-state__status-label {
+    justify-self: start;
+  }
+
+  .ai-loading-state__preview {
+    flex-direction: column;
+  }
+}

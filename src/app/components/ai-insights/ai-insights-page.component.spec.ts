@@ -755,6 +755,34 @@ describe('AiInsightsPageComponent', () => {
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes(expectedOverall ?? ''))).toBe(true);
   });
 
+  it('should render the richer AI loading state while an insight request is in flight', async () => {
+    let resolveResponse: ((response: AiInsightsResponse) => void) | null = null;
+    aiInsightsServiceMock.runInsight.mockReturnValue(new Promise<AiInsightsResponse>((resolve) => {
+      resolveResponse = resolve;
+    }));
+    component.promptControl.setValue('Tell me my avg cadence for cycling the last 3 months');
+
+    const submitEvent = {
+      preventDefault: vi.fn(),
+    };
+    fixture.debugElement.query(By.css('form')).triggerEventHandler('submit', submitEvent);
+    fixture.detectChanges();
+
+    const loadingTitle = fixture.debugElement.query(By.css('app-ai-insights-loading-state .ai-loading-state__title'))?.nativeElement as HTMLElement | undefined;
+    const loadingStatus = fixture.debugElement.query(By.css('app-ai-insights-loading-state .ai-loading-state__status-label'))?.nativeElement as HTMLElement | undefined;
+    const loadingActiveStep = fixture.debugElement.query(By.css('app-ai-insights-loading-state .ai-loading-state__roller-row--active'))?.nativeElement as HTMLElement | undefined;
+    const loadingPreviewCards = fixture.debugElement.queryAll(By.css('app-ai-insights-loading-state .ai-loading-state__preview-card'));
+
+    expect(loadingTitle?.textContent).toContain('Generating insight');
+    expect(loadingStatus?.textContent).toContain('Step 1/5');
+    expect(loadingActiveStep?.textContent).toContain('Parsing your prompt');
+    expect(loadingPreviewCards).toHaveLength(2);
+
+    resolveResponse?.(buildOkResponse());
+    await fixture.whenStable();
+    fixture.detectChanges();
+  });
+
   it('should render event-lookup results without the aggregate chart', async () => {
     appEventServiceMock.getEventsOnceByIds.mockReturnValueOnce(of([
       buildMockEvent({
