@@ -376,7 +376,7 @@ function resolveDateRange(
   now: Date,
 ): NormalizedInsightDateRange {
   const today = getZonedDateParts(now, timeZone);
-  let start = addDays(today, -89);
+  let start = { year: today.year, month: 1, day: 1 };
   const end = today;
   let source: 'prompt' | 'default' = 'default';
 

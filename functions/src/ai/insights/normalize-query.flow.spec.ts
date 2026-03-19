@@ -323,7 +323,7 @@ describe('normalizeInsightQuery', () => {
     expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Monthly);
   });
 
-  it('defaults to the last 90 days when the model omits a range', async () => {
+  it('defaults to the current year when the model omits a range', async () => {
     setNormalizeQueryDependenciesForTesting({
       now: () => new Date('2026-03-18T12:00:00.000Z'),
       generateIntent: async () => ({
@@ -347,7 +347,7 @@ describe('normalizeInsightQuery', () => {
 
     expect(result.query.dateRange).toEqual({
       kind: 'bounded',
-      startDate: '2025-12-19T00:00:00.000Z',
+      startDate: '2026-01-01T00:00:00.000Z',
       endDate: '2026-03-18T23:59:59.999Z',
       timezone: 'UTC',
       source: 'default',
@@ -378,7 +378,7 @@ describe('normalizeInsightQuery', () => {
 
     expect(result.query.dateRange).toEqual({
       kind: 'bounded',
-      startDate: '2025-12-18T22:00:00.000Z',
+      startDate: '2025-12-31T22:00:00.000Z',
       endDate: '2026-03-18T21:59:59.999Z',
       timezone: 'Europe/Helsinki',
       source: 'default',

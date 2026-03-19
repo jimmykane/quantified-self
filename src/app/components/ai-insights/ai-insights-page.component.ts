@@ -61,7 +61,7 @@ function formatDateRangeNote(dateRange: NormalizedInsightDateRange): string | nu
     return null;
   }
 
-  return 'Used the last 90 days because no time range was found in your prompt.';
+  return 'Used the current year to date because no time range was found in your prompt.';
 }
 
 function formatSavedInsightDate(

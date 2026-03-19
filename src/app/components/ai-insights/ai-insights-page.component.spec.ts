@@ -296,7 +296,7 @@ function buildDefaultedRangeResponse(): AiInsightsOkResponse {
       ...buildOkResponse().query,
       dateRange: {
         kind: 'bounded',
-        startDate: '2025-12-18T22:00:00.000Z',
+        startDate: '2025-12-31T22:00:00.000Z',
         endDate: '2026-03-18T21:59:59.999Z',
         timezone: 'Europe/Helsinki',
         source: 'default',
@@ -776,7 +776,7 @@ describe('AiInsightsPageComponent', () => {
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Lowest period'))).toBe(false);
   });
 
-  it('should explain when the backend defaulted the query to the last 90 days', async () => {
+  it('should explain when the backend defaulted the query to the current year', async () => {
     aiInsightsServiceMock.runInsight.mockResolvedValue(buildDefaultedRangeResponse());
 
     await component.applySuggestedPrompt('Show my average cadence');
@@ -784,7 +784,7 @@ describe('AiInsightsPageComponent', () => {
 
     const note = fixture.debugElement.query(By.css('.result-date-range-note'))?.nativeElement as HTMLElement | undefined;
 
-    expect(note?.textContent).toContain('Used the last 90 days because no time range was found in your prompt.');
+    expect(note?.textContent).toContain('Used the current year to date because no time range was found in your prompt.');
   });
 
   it('should render bounded subtitles using the injected en-US locale instead of raw ISO dates', async () => {
@@ -795,7 +795,7 @@ describe('AiInsightsPageComponent', () => {
 
     const subtitle = fixture.debugElement.query(By.css('.result-subtitle'))?.nativeElement as HTMLElement | undefined;
 
-    expect(subtitle?.textContent).toContain('Dec 19, 2025 to Mar 18, 2026');
+    expect(subtitle?.textContent).toContain('Jan 01, 2026 to Mar 18, 2026');
     expect(subtitle?.textContent).not.toContain('2025-12-18T22:00:00.000Z');
   });
 
@@ -808,7 +808,7 @@ describe('AiInsightsPageComponent', () => {
 
     const subtitle = fixture.debugElement.query(By.css('.result-subtitle'))?.nativeElement as HTMLElement | undefined;
 
-    expect(subtitle?.textContent).toContain('19 Dec 2025 to 18 Mar 2026');
+    expect(subtitle?.textContent).toContain('01 Jan 2026 to 18 Mar 2026');
   });
 
   it('should format bounded subtitles in the query timezone instead of the browser timezone', async () => {
