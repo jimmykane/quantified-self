@@ -220,6 +220,16 @@ export class AppShellComponent implements OnInit, OnDestroy {
     return this.bannerHeight + (this.headerHidden ? 0 : APP_SHELL_HEADER_HEIGHT_PX);
   }
 
+  get effectiveTopOffsetPx(): number {
+    if (!this.showNavigation()) {
+      return 0;
+    }
+
+    // Keep page min-height calculations stable while the header animates out.
+    // This prevents full-height loaders and hero sections from re-centering mid-scroll.
+    return this.bannerHeight + APP_SHELL_HEADER_HEIGHT_PX;
+  }
+
   constructor() {
     // this.afa.setAnalyticsCollectionEnabled(true)
     this.iconService.registerIcons();

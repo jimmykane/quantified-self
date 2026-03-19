@@ -5,6 +5,7 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => await importOri
 
 import {
   findInsightMetricAliasMatch,
+  getSuggestedInsightPrompts,
   getInsightMetricDefinition,
   isAggregationAllowedForMetric,
   resolveMetricVariantAlias,
@@ -96,5 +97,17 @@ describe('metric-catalog', () => {
 
   it('can retrieve canonical metric definitions by key', () => {
     expect(getInsightMetricDefinition('power')?.dataType).toBeTruthy();
+  });
+
+  it('prioritizes context-matching suggested prompts instead of always returning the first metrics', () => {
+    expect(getSuggestedInsightPrompts(3, 'show cadence per kilometer splits')[0]).toBe(
+      'Tell me my average cadence for cycling over the last 3 months.',
+    );
+    expect(getSuggestedInsightPrompts(3, 'show average power per lap')[0]).toBe(
+      'Show my average power over time for cycling in the last 90 days.',
+    );
+    expect(getSuggestedInsightPrompts(3, 'show swim pace per lap')[0]).toBe(
+      'Show my average swim pace over time for swimming in the last 90 days.',
+    );
   });
 });

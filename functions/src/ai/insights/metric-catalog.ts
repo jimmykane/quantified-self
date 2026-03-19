@@ -80,6 +80,11 @@ function normalizeMetricText(value: string): string {
     .replace(/\s+/g, ' ');
 }
 
+function tokenizeMetricText(value: string): string[] {
+  const normalized = normalizeMetricText(value);
+  return normalized ? normalized.split(' ').filter(Boolean) : [];
+}
+
 export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
   {
     key: 'distance',
@@ -768,8 +773,63 @@ export function buildMetricCatalogPromptText(): string {
   }).join('\n');
 }
 
-export function getSuggestedInsightPrompts(limit = 3): string[] {
+function buildSuggestedPromptScore(
+  metric: InsightMetricDefinition,
+  sourceText: string,
+  sourceTokens: Set<string>,
+  explicitMetricMatch: InsightMetricDefinition | null,
+): number {
+  if (!sourceText) {
+    return 0;
+  }
+
+  let score = 0;
+  if (explicitMetricMatch?.key === metric.key) {
+    score += 1000;
+  }
+
+  const searchTerms = [...new Set([
+    metric.key,
+    metric.dataType,
+    metric.label,
+    ...metric.aliases,
+  ])].map(normalizeMetricText);
+
+  for (const searchTerm of searchTerms) {
+    if (!searchTerm) {
+      continue;
+    }
+
+    if (sourceText.includes(searchTerm)) {
+      score = Math.max(score, 500 + searchTerm.length);
+    }
+
+    const overlapCount = tokenizeMetricText(searchTerm)
+      .filter(token => sourceTokens.has(token))
+      .length;
+    score = Math.max(score, overlapCount * 10);
+  }
+
+  return score;
+}
+
+export function getSuggestedInsightPrompts(limit = 3, sourceText?: string): string[] {
+  const normalizedSource = normalizeMetricText(sourceText || '');
+  const sourceTokens = new Set(tokenizeMetricText(sourceText || ''));
+  const explicitMetricMatch = normalizedSource
+    ? (findInsightMetricAliasMatch(sourceText || '')?.metric ?? null)
+    : null;
+
   return SUPPORTED_INSIGHT_METRICS
+    .map((metric, index) => ({
+      metric,
+      index,
+      score: buildSuggestedPromptScore(metric, normalizedSource, sourceTokens, explicitMetricMatch),
+    }))
+    .sort((left, right) => (
+      right.score - left.score
+      || left.index - right.index
+    ))
     .slice(0, Math.max(0, limit))
-    .map(metric => metric.suggestedPrompt);
+    .map(({ metric }) => metric.suggestedPrompt);
 }

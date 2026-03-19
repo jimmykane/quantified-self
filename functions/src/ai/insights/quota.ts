@@ -248,6 +248,16 @@ function normalizeReservationMap(
   return normalized;
 }
 
+export function normalizeUsageDocRole(
+  value: unknown,
+): 'free' | 'basic' | 'pro' {
+  if (value === 'free' || value === 'basic' || value === 'pro') {
+    return value;
+  }
+
+  return 'free';
+}
+
 function normalizeUsageDoc(
   snapshot: FirebaseFirestore.DocumentSnapshot,
   nowMs: number,
@@ -260,9 +270,7 @@ function normalizeUsageDoc(
 
   return {
     version: AI_INSIGHTS_USAGE_DOC_VERSION,
-    role: data?.role === 'basic' || data?.role === 'free' || data?.role === 'pro'
-      ? data.role
-      : 'pro',
+    role: normalizeUsageDocRole(data?.role),
     limit: typeof data?.limit === 'number' && Number.isFinite(data.limit)
       ? Math.max(0, Math.floor(data.limit))
       : 0,
@@ -408,40 +416,20 @@ async function resolveAiInsightsQuotaWindow(
 async function withQuotaDocumentTransaction<T>(
   userID: string,
   periodDocId: string,
+  baseStatus: ResolvedAiInsightsQuotaWindow['status'],
   handler: (
     transaction: FirebaseFirestore.Transaction,
-    baseStatus: ResolvedAiInsightsQuotaWindow['status'],
     usageDoc: AiInsightsQuotaUsageDoc,
     nowMs: number,
     nowIso: string,
   ) => Promise<T> | T,
 ): Promise<T> {
-  const resolvedWindow = await resolveAiInsightsQuotaWindow(userID);
-  if (!resolvedWindow.status.isEligible) {
-    return handler(
-      {} as FirebaseFirestore.Transaction,
-      resolvedWindow.status,
-      {
-        version: AI_INSIGHTS_USAGE_DOC_VERSION,
-        role: resolvedWindow.status.role,
-        limit: resolvedWindow.status.limit,
-        periodStart: resolvedWindow.status.periodStart || '',
-        periodEnd: resolvedWindow.status.periodEnd || '',
-        periodKind: resolvedWindow.status.periodKind,
-        successfulGenkitCount: 0,
-        reservationMap: {},
-      },
-      aiInsightsQuotaDependencies.now().getTime(),
-      aiInsightsQuotaDependencies.now().toISOString(),
-    );
-  }
-
   const docRef = getUsageDocRef(userID, periodDocId);
   return aiInsightsQuotaDependencies.db().runTransaction(async (transaction) => {
     const now = aiInsightsQuotaDependencies.now();
     const snapshot = await transaction.get(docRef);
     const usageDoc = normalizeUsageDoc(snapshot, now.getTime());
-    return handler(transaction, resolvedWindow.status, usageDoc, now.getTime(), now.toISOString());
+    return handler(transaction, usageDoc, now.getTime(), now.toISOString());
   });
 }
 
@@ -453,21 +441,17 @@ export async function getAiInsightsQuotaStatus(
     return buildQuotaStatus(resolvedWindow.status, 0, 0);
   }
 
-  return withQuotaDocumentTransaction(userID, resolvedWindow.periodDocId, async (transaction, baseStatus, usageDoc) => {
-    const activeReservationCount = Object.keys(usageDoc.reservationMap).length;
-    transaction.set(
-      getUsageDocRef(userID, resolvedWindow.periodDocId as string),
-      buildUsageDocPayload(
-        baseStatus,
-        usageDoc.successfulGenkitCount,
-        usageDoc.reservationMap,
-        usageDoc.lastSuccessfulGenkitAt,
-      ),
-      { merge: true },
-    );
+  const snapshot = await getUsageDocRef(userID, resolvedWindow.periodDocId).get();
+  const usageDoc = normalizeUsageDoc(
+    snapshot as FirebaseFirestore.DocumentSnapshot,
+    aiInsightsQuotaDependencies.now().getTime(),
+  );
 
-    return buildQuotaStatus(baseStatus, usageDoc.successfulGenkitCount, activeReservationCount);
-  });
+  return buildQuotaStatus(
+    resolvedWindow.status,
+    usageDoc.successfulGenkitCount,
+    Object.keys(usageDoc.reservationMap).length,
+  );
 }
 
 export async function reserveAiInsightsQuotaForGenkit(
@@ -484,16 +468,16 @@ export async function reserveAiInsightsQuotaForGenkit(
 
   const reservationID = aiInsightsQuotaDependencies.createReservationId();
 
-  await withQuotaDocumentTransaction(userID, resolvedWindow.periodDocId, async (transaction, baseStatus, usageDoc, nowMs) => {
+  await withQuotaDocumentTransaction(userID, resolvedWindow.periodDocId, resolvedWindow.status, async (transaction, usageDoc, nowMs) => {
     const reservationMap = { ...usageDoc.reservationMap };
     const activeReservationCount = Object.keys(reservationMap).length;
-    if (usageDoc.successfulGenkitCount + activeReservationCount >= baseStatus.limit) {
+    if (usageDoc.successfulGenkitCount + activeReservationCount >= resolvedWindow.status.limit) {
       logger.warn('[aiInsightsQuota] Reservation denied because limit was reached', {
         userID,
         periodDocId: resolvedWindow.periodDocId,
         successfulGenkitCount: usageDoc.successfulGenkitCount,
         activeReservationCount,
-        limit: baseStatus.limit,
+        limit: resolvedWindow.status.limit,
       });
       throw new HttpsError('resource-exhausted', AI_INSIGHTS_LIMIT_REACHED_MESSAGE);
     }
@@ -502,7 +486,7 @@ export async function reserveAiInsightsQuotaForGenkit(
     transaction.set(
       getUsageDocRef(userID, resolvedWindow.periodDocId as string),
       buildUsageDocPayload(
-        baseStatus,
+        resolvedWindow.status,
         usageDoc.successfulGenkitCount,
         reservationMap,
         usageDoc.lastSuccessfulGenkitAt,
@@ -534,21 +518,31 @@ export async function reserveAiInsightsQuotaForGenkit(
 export async function finalizeAiInsightsQuotaReservation(
   reservation: AiInsightsQuotaReservation,
 ): Promise<AiInsightsQuotaStatus> {
+  const reservationStatus: ResolvedAiInsightsQuotaWindow['status'] = {
+    role: reservation.role,
+    limit: reservation.limit,
+    periodStart: reservation.periodStart,
+    periodEnd: reservation.periodEnd,
+    periodKind: reservation.periodKind,
+    resetMode: reservation.resetMode,
+    isEligible: reservation.isEligible,
+  };
   const result = await withQuotaDocumentTransaction(
     reservation.userID,
     reservation.periodDocId,
-    async (transaction, baseStatus, usageDoc, _nowMs, nowIso) => {
+    reservationStatus,
+    async (transaction, usageDoc, _nowMs, nowIso) => {
       const reservationMap = { ...usageDoc.reservationMap };
       delete reservationMap[reservation.reservationID];
       const successfulGenkitCount = usageDoc.successfulGenkitCount + 1;
 
       transaction.set(
         getUsageDocRef(reservation.userID, reservation.periodDocId),
-        buildUsageDocPayload(baseStatus, successfulGenkitCount, reservationMap, nowIso),
+        buildUsageDocPayload(reservationStatus, successfulGenkitCount, reservationMap, nowIso),
         { merge: true },
       );
 
-      return buildQuotaStatus(baseStatus, successfulGenkitCount, Object.keys(reservationMap).length);
+      return buildQuotaStatus(reservationStatus, successfulGenkitCount, Object.keys(reservationMap).length);
     },
   );
 
@@ -564,17 +558,27 @@ export async function finalizeAiInsightsQuotaReservation(
 export async function releaseAiInsightsQuotaReservation(
   reservation: AiInsightsQuotaReservation,
 ): Promise<AiInsightsQuotaStatus> {
+  const reservationStatus: ResolvedAiInsightsQuotaWindow['status'] = {
+    role: reservation.role,
+    limit: reservation.limit,
+    periodStart: reservation.periodStart,
+    periodEnd: reservation.periodEnd,
+    periodKind: reservation.periodKind,
+    resetMode: reservation.resetMode,
+    isEligible: reservation.isEligible,
+  };
   const result = await withQuotaDocumentTransaction(
     reservation.userID,
     reservation.periodDocId,
-    async (transaction, baseStatus, usageDoc) => {
+    reservationStatus,
+    async (transaction, usageDoc) => {
       const reservationMap = { ...usageDoc.reservationMap };
       delete reservationMap[reservation.reservationID];
 
       transaction.set(
         getUsageDocRef(reservation.userID, reservation.periodDocId),
         buildUsageDocPayload(
-          baseStatus,
+          reservationStatus,
           usageDoc.successfulGenkitCount,
           reservationMap,
           usageDoc.lastSuccessfulGenkitAt,
@@ -582,7 +586,7 @@ export async function releaseAiInsightsQuotaReservation(
         { merge: true },
       );
 
-      return buildQuotaStatus(baseStatus, usageDoc.successfulGenkitCount, Object.keys(reservationMap).length);
+      return buildQuotaStatus(reservationStatus, usageDoc.successfulGenkitCount, Object.keys(reservationMap).length);
     },
   );
 

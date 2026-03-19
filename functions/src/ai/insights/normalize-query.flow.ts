@@ -246,11 +246,12 @@ let normalizeQueryDependencies: NormalizeQueryDependencies = defaultNormalizeQue
 
 function buildUnsupportedResult(
   reasonCode: AiInsightsUnsupportedReasonCode,
+  prompt: string,
 ): NormalizeInsightQueryUnsupportedResult {
   return {
     status: 'unsupported',
     reasonCode,
-    suggestedPrompts: getSuggestedInsightPrompts(),
+    suggestedPrompts: getSuggestedInsightPrompts(3, prompt),
   };
 }
 
@@ -940,11 +941,11 @@ export async function normalizeInsightQuery(
 ): Promise<NormalizeInsightQueryResult> {
   const prompt = `${input.prompt || ''}`.trim();
   if (!prompt) {
-    return buildUnsupportedResult('invalid_prompt');
+    return buildUnsupportedResult('invalid_prompt', prompt);
   }
 
   if (detectUnsupportedCapability(prompt)) {
-    return buildUnsupportedResult('unsupported_capability');
+    return buildUnsupportedResult('unsupported_capability', prompt);
   }
 
   const dependencies = normalizeQueryDependencies;
@@ -961,6 +962,7 @@ export async function normalizeInsightQuery(
       modelReturnedUnsupported
         ? (intent.unsupportedReasonCode || 'unsupported_metric')
         : 'unsupported_metric',
+      prompt,
     );
   }
 
@@ -977,7 +979,7 @@ export async function normalizeInsightQuery(
     || baseMetric;
 
   if (!isAggregationAllowedForMetric(metric.key, valueType)) {
-    return buildUnsupportedResult('ambiguous_metric');
+    return buildUnsupportedResult('ambiguous_metric', prompt);
   }
 
   const resolvedDateRangeIntent = (
@@ -998,7 +1000,7 @@ export async function normalizeInsightQuery(
   const activityTypes = normalizeActivityTypes(modelReturnedUnsupported ? undefined : intent.activityTypes);
   const activityTypeGroups = normalizeActivityTypeGroups(modelReturnedUnsupported ? undefined : intent.activityTypeGroups);
   if (!activityTypes || !activityTypeGroups) {
-    return buildUnsupportedResult('invalid_prompt');
+    return buildUnsupportedResult('invalid_prompt', prompt);
   }
 
   const promptActivityTypeGroups = resolvePromptActivityTypeGroups(prompt);

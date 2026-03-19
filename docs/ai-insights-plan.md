@@ -21,19 +21,19 @@
 
 ## Backend Shape
 - Callable entrypoint:
-  - [callable.ts](/Users/dimitrios/Projects/quantified-self/functions/src/ai/insights/callable.ts)
+  - [callable.ts](../functions/src/ai/insights/callable.ts)
 - Genkit setup:
-  - [genkit.ts](/Users/dimitrios/Projects/quantified-self/functions/src/ai/insights/genkit.ts)
+  - [genkit.ts](../functions/src/ai/insights/genkit.ts)
 - Metric allowlist:
-  - [metric-catalog.ts](/Users/dimitrios/Projects/quantified-self/functions/src/ai/insights/metric-catalog.ts)
+  - [metric-catalog.ts](../functions/src/ai/insights/metric-catalog.ts)
 - Prompt normalization:
-  - [normalize-query.flow.ts](/Users/dimitrios/Projects/quantified-self/functions/src/ai/insights/normalize-query.flow.ts)
+  - [normalize-query.flow.ts](../functions/src/ai/insights/normalize-query.flow.ts)
 - Deterministic execution:
-  - [execute-query.ts](/Users/dimitrios/Projects/quantified-self/functions/src/ai/insights/execute-query.ts)
+  - [execute-query.ts](../functions/src/ai/insights/execute-query.ts)
 - Narrative generation:
-  - [summarize-result.flow.ts](/Users/dimitrios/Projects/quantified-self/functions/src/ai/insights/summarize-result.flow.ts)
+  - [summarize-result.flow.ts](../functions/src/ai/insights/summarize-result.flow.ts)
 - Shared request/response contract:
-  - [ai-insights.types.ts](/Users/dimitrios/Projects/quantified-self/shared/ai-insights.types.ts)
+  - [ai-insights.types.ts](../shared/ai-insights.types.ts)
 
 ## Supported V1 Metrics
 - Distance
@@ -59,7 +59,7 @@
    - Test: `tell me my avg cadence for cycling the last 3 months`
 2. Add a dedicated frontend client wrapper.
    - Build an `AiInsightsService`
-   - Use the shared [ai-insights.types.ts](/Users/dimitrios/Projects/quantified-self/shared/ai-insights.types.ts) contract
+   - Use the shared [ai-insights.types.ts](../shared/ai-insights.types.ts) contract
 3. Add the `/ai-insights` route.
    - Prompt input
    - Suggested prompts

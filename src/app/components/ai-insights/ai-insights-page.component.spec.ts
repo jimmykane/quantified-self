@@ -414,6 +414,93 @@ function buildGroupResponse(): AiInsightsAggregateOkResponse {
   };
 }
 
+function buildActivityTypeComparisonResponse(): AiInsightsAggregateOkResponse {
+  return {
+    status: 'ok',
+    resultKind: 'aggregate',
+    narrative: 'Cycling carried the most activity volume, while Diving and Yoga both sat at zero distance.',
+    query: {
+      resultKind: 'aggregate',
+      dataType: DataDistance.type,
+      valueType: ChartDataValueTypes.Total,
+      categoryType: ChartDataCategoryTypes.ActivityType,
+      requestedTimeInterval: null,
+      activityTypeGroups: [],
+      activityTypes: [],
+      dateRange: {
+        kind: 'bounded',
+        startDate: '2026-01-01T00:00:00.000Z',
+        endDate: '2026-03-18T23:59:59.999Z',
+        timezone: 'Europe/Helsinki',
+        source: 'prompt',
+      },
+      chartType: ChartTypes.ColumnsHorizontal,
+    },
+    aggregation: {
+      dataType: DataDistance.type,
+      valueType: ChartDataValueTypes.Total,
+      categoryType: ChartDataCategoryTypes.ActivityType,
+      resolvedTimeInterval: TimeIntervals.Monthly,
+      buckets: [
+        {
+          bucketKey: ActivityTypes.Diving,
+          totalCount: 2,
+          aggregateValue: 0,
+          seriesValues: { [ActivityTypes.Diving]: 0 },
+          seriesCounts: { [ActivityTypes.Diving]: 2 },
+        },
+        {
+          bucketKey: ActivityTypes.Yoga,
+          totalCount: 3,
+          aggregateValue: 0,
+          seriesValues: { [ActivityTypes.Yoga]: 0 },
+          seriesCounts: { [ActivityTypes.Yoga]: 3 },
+        },
+        {
+          bucketKey: ActivityTypes.Cycling,
+          totalCount: 5,
+          aggregateValue: 24500,
+          seriesValues: { [ActivityTypes.Cycling]: 24500 },
+          seriesCounts: { [ActivityTypes.Cycling]: 5 },
+        },
+      ],
+    },
+    summary: {
+      matchedEventCount: 10,
+      overallAggregateValue: 24500,
+      peakBucket: {
+        bucketKey: ActivityTypes.Cycling,
+        aggregateValue: 24500,
+        totalCount: 5,
+      },
+      lowestBucket: {
+        bucketKey: ActivityTypes.Diving,
+        aggregateValue: 0,
+        totalCount: 2,
+      },
+      latestBucket: {
+        bucketKey: ActivityTypes.Yoga,
+        aggregateValue: 0,
+        totalCount: 3,
+      },
+      activityMix: {
+        topActivityTypes: [
+          { activityType: ActivityTypes.Cycling, eventCount: 5 },
+          { activityType: ActivityTypes.Yoga, eventCount: 3 },
+          { activityType: ActivityTypes.Diving, eventCount: 2 },
+        ],
+        remainingActivityTypeCount: 0,
+      },
+      bucketCoverage: null,
+      trend: null,
+    },
+    presentation: {
+      title: 'Total distance by activity type',
+      chartType: ChartTypes.ColumnsHorizontal,
+    },
+  };
+}
+
 function buildDailyResponse(): AiInsightsOkResponse {
   return {
     ...buildOkResponse(),
@@ -943,6 +1030,7 @@ describe('AiInsightsPageComponent', () => {
     const subtitle = fixture.debugElement.query(By.css('.result-subtitle'))?.nativeElement as HTMLElement | undefined;
     const resultCardSubtitle = fixture.debugElement.query(By.css('.result-card-subtitle'))?.nativeElement as HTMLElement | undefined;
     const resultCardMeta = fixture.debugElement.query(By.css('.result-card-meta'))?.nativeElement as HTMLElement | undefined;
+    const supportNote = fixture.debugElement.query(By.css('.prompt-support-note'))?.nativeElement as HTMLElement | undefined;
     const resultNotes = fixture.debugElement.queryAll(By.css('.result-note'));
 
     expect(aiInsightsLatestSnapshotServiceMock.loadLatest).toHaveBeenLastCalledWith('user-2');
@@ -951,6 +1039,7 @@ describe('AiInsightsPageComponent', () => {
     expect(resultCardSubtitle?.textContent).toContain('Insight summary and chart for this prompt.');
     expect(resultCardMeta?.textContent).toContain('Restored');
     expect(resultCardMeta?.textContent).toContain('Saved Mar 18, 2026');
+    expect(supportNote?.textContent).toContain('Latest saved Mar 18, 2026');
     expect(resultNotes).toHaveLength(0);
   });
 
@@ -1080,6 +1169,22 @@ describe('AiInsightsPageComponent', () => {
     expect(activitiesCard?.textContent).toContain('Kitesurfing');
     expect(activitiesCard?.textContent).toContain('2');
     expect(activitiesCard?.textContent).toContain('+1 more');
+  });
+
+  it('should hide the arbitrary latest group card and show most activities for grouped comparisons', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue(buildActivityTypeComparisonResponse());
+
+    await component.applySuggestedPrompt('Show my total distance by activity type this year');
+    fixture.detectChanges();
+
+    const summaryCards = fixture.debugElement.queryAll(By.css('.summary-card'));
+
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Latest group'))).toBe(false);
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Lowest group'))).toBe(true);
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Diving'))).toBe(true);
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Most activities'))).toBe(true);
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Cycling'))).toBe(true);
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('5'))).toBe(true);
   });
 
   it('should render the empty state without the chart', async () => {

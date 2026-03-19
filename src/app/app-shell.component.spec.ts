@@ -201,6 +201,7 @@ describe('AppShellComponent', () => {
         const wrapper = fixture.nativeElement.querySelector('.app-layout-wrapper') as HTMLElement | null;
         expect(wrapper).toBeTruthy();
         expect(component.layoutTopOffsetPx).toBe(component.bannerHeight + APP_SHELL_HEADER_HEIGHT_PX);
+        expect(component.effectiveTopOffsetPx).toBe(component.bannerHeight + APP_SHELL_HEADER_HEIGHT_PX);
         expect(wrapper?.style.getPropertyValue('--qs-layout-top-offset')).toBe(expectedTopOffsetPx);
         expect(wrapper?.style.getPropertyValue('--qs-effective-top-offset')).toBe(expectedTopOffsetPx);
         expect(wrapper?.style.getPropertyValue('--qs-banner-height')).toBe('36px');
@@ -228,6 +229,7 @@ describe('AppShellComponent', () => {
 
         expect(component.headerHidden).toBe(true);
         expect(component.layoutTopOffsetPx).toBe(24);
+        expect(component.effectiveTopOffsetPx).toBe(24 + APP_SHELL_HEADER_HEIGHT_PX);
     });
 
     it('should reveal header again near the top of the page', () => {
@@ -239,6 +241,23 @@ describe('AppShellComponent', () => {
 
         expect(component.headerHidden).toBe(false);
         expect(component.layoutTopOffsetPx).toBe(APP_SHELL_HEADER_HEIGHT_PX);
+        expect(component.effectiveTopOffsetPx).toBe(APP_SHELL_HEADER_HEIGHT_PX);
+    });
+
+    it('should keep the effective top offset stable when the header is hidden', () => {
+        component.onboardingCompleted = true;
+        component.bannerHeight = 18;
+        component.headerHidden = false;
+
+        const visibleOffset = component.layoutTopOffsetPx;
+        const visibleEffectiveOffset = component.effectiveTopOffsetPx;
+
+        component.headerHidden = true;
+
+        expect(visibleOffset).toBe(18 + APP_SHELL_HEADER_HEIGHT_PX);
+        expect(component.layoutTopOffsetPx).toBe(18);
+        expect(visibleEffectiveOffset).toBe(18 + APP_SHELL_HEADER_HEIGHT_PX);
+        expect(component.effectiveTopOffsetPx).toBe(18 + APP_SHELL_HEADER_HEIGHT_PX);
     });
 
     it('should react to small scroll deltas once threshold is crossed', () => {

@@ -218,6 +218,42 @@ describe('summarizeAiInsightResult', () => {
     expect(directSummary.declinedVerb).toBe('decreased');
   });
 
+  it('omits latest group facts for non-date grouped comparisons', () => {
+    const groupedSummary = buildInsightSummaryFacts({
+      ...paceInput,
+      metricLabel: 'distance',
+      query: {
+        ...paceInput.query,
+        dataType: 'Distance',
+        valueType: ChartDataValueTypes.Total,
+        categoryType: ChartDataCategoryTypes.ActivityType,
+      },
+      summary: {
+        ...paceSummary,
+        overallAggregateValue: 24500,
+        peakBucket: {
+          bucketKey: ActivityTypes.Cycling,
+          aggregateValue: 24500,
+          totalCount: 5,
+        },
+        lowestBucket: {
+          bucketKey: ActivityTypes.Diving,
+          aggregateValue: 0,
+          totalCount: 2,
+        },
+        latestBucket: {
+          bucketKey: ActivityTypes.Yoga,
+          aggregateValue: 0,
+          totalCount: 3,
+        },
+      },
+    });
+
+    expect(groupedSummary.highestValueBucket?.label).toBe('Highest group');
+    expect(groupedSummary.lowestValueBucket?.label).toBe('Lowest group');
+    expect(groupedSummary.latestBucket).toBeNull();
+  });
+
   it('falls back to a formatted narrative when generation fails', async () => {
     setSummarizeInsightDependenciesForTesting({
       generateNarrative: async () => {

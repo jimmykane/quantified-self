@@ -235,6 +235,36 @@ function formatCoverageValue(response: AiInsightsAggregateOkResponse): string | 
   return `${coverage.nonEmptyBucketCount} of ${coverage.totalBucketCount} ${periodLabel}`;
 }
 
+function resolveMostActivitiesBucket(
+  response: AiInsightsAggregateOkResponse,
+): {
+  bucketKey: string | number;
+  totalCount: number;
+} | null {
+  if (
+    response.query.categoryType === ChartDataCategoryTypes.DateType
+    || response.aggregation.buckets.length < 2
+  ) {
+    return null;
+  }
+
+  const bucket = [...response.aggregation.buckets]
+    .filter((entry) => Number.isFinite(entry.totalCount) && entry.totalCount > 0)
+    .sort((left, right) => (
+      right.totalCount - left.totalCount
+      || `${left.bucketKey}`.localeCompare(`${right.bucketKey}`)
+    ))[0] ?? null;
+
+  if (!bucket) {
+    return null;
+  }
+
+  return {
+    bucketKey: bucket.bucketKey,
+    totalCount: bucket.totalCount,
+  };
+}
+
 function formatTrendValue(
   response: AiInsightsAggregateOkResponse,
   unitSettings: UserUnitSettingsInterface,
@@ -367,6 +397,11 @@ export class AiInsightsPageComponent {
   private readonly themeService = inject(AppThemeService);
   private readonly userSettingsQueryService = inject(AppUserSettingsQueryService);
   private readonly logger = inject(LoggerService);
+  // This animation is intentionally isolated from Angular's zone because it is a
+  // pure cosmetic timer loop. Keeping the timeout chain outside Angular avoids a
+  // full change-detection pass on every typing tick while still letting the signal
+  // writes themselves notify the template. A signal-only clock or setInterval would
+  // still need the same scheduling edge; this keeps the Zone.js coupling narrow.
   private readonly ngZone = inject(NgZone);
   private readonly locale = inject(LOCALE_ID);
 
@@ -449,9 +484,14 @@ export class AiInsightsPageComponent {
       && this.resultPrompt().trim().length > 0
       && this.hasQuotaAvailable();
   });
-  readonly latestSnapshotSupportNote = computed(() =>
-    'Latest completed insights are temporarily restored from your account. Proper saved insights/history will come later.'
-  );
+  readonly latestSnapshotSupportNote = computed(() => {
+    const savedAtLabel = formatSavedInsightDate(this.latestSnapshotSavedAt(), this.locale);
+    if (!savedAtLabel) {
+      return 'Latest completed insights are temporarily restored from your account. Proper saved insights/history will come later.';
+    }
+
+    return `Latest completed insights are temporarily restored from your account. Latest saved ${savedAtLabel}. Proper saved insights/history will come later.`;
+  });
   readonly resultCardSubtitle = computed(() => {
     if (this.eventLookupOkResponse()) {
       return 'Winning event and top matches for this prompt.';
@@ -538,6 +578,8 @@ export class AiInsightsPageComponent {
     };
 
     const schedule = (delay: number): void => {
+      // The timer is the only integration edge that lives outside Angular; the
+      // rest of the animation stays signal-driven inside the component state.
       this.ngZone.runOutsideAngular(() => {
         timer = setTimeout(tick, delay);
       });
@@ -765,7 +807,10 @@ export class AiInsightsPageComponent {
       }
     }
 
-    if (response.summary.latestBucket) {
+    if (
+      response.query.categoryType === ChartDataCategoryTypes.DateType
+      && response.summary.latestBucket
+    ) {
       const latestValue = formatSummaryValue(
         response.query.dataType,
         response.summary.latestBucket.aggregateValue,
@@ -779,6 +824,16 @@ export class AiInsightsPageComponent {
           helpText: summarySemantics.latestHelpText,
         });
       }
+    }
+
+    const mostActivitiesBucket = resolveMostActivitiesBucket(response);
+    if (mostActivitiesBucket) {
+      cards.push({
+        label: 'Most activities',
+        value: new Intl.NumberFormat(locale || undefined).format(mostActivitiesBucket.totalCount),
+        meta: `${mostActivitiesBucket.bucketKey}`,
+        helpText: 'The group with the largest number of matching activities in this result.',
+      });
     }
 
     const coverageValue = formatCoverageValue(response);

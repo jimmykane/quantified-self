@@ -1000,7 +1000,11 @@ describe('normalizeInsightQuery', () => {
     expect(result).toEqual({
       status: 'unsupported',
       reasonCode: 'unsupported_capability',
-      suggestedPrompts: expect.any(Array),
+      suggestedPrompts: [
+        'Tell me my average cadence for cycling over the last 3 months.',
+        'Show my total distance by activity type this year.',
+        'Show my total training duration over time this year.',
+      ],
     });
     expect(generateIntent).not.toHaveBeenCalled();
   });

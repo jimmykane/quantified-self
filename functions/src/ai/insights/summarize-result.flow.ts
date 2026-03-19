@@ -176,6 +176,7 @@ export function buildInsightSummaryFacts(input: SummarizeInsightResultInput): {
     input.query.categoryType,
   );
   const metricSemantics = resolveMetricSemantics(input.query.dataType);
+  const shouldIncludeLatestBucket = input.query.categoryType === ChartDataCategoryTypes.DateType;
 
   return {
     matchedEventCount: summary.matchedEventCount,
@@ -200,7 +201,7 @@ export function buildInsightSummaryFacts(input: SummarizeInsightResultInput): {
         totalCount: summary.lowestBucket.totalCount,
       }
       : null,
-    latestBucket: summary.latestBucket
+    latestBucket: shouldIncludeLatestBucket && summary.latestBucket
       ? {
         label: summarySemantics.latestLabel,
         bucketKey: summary.latestBucket.bucketKey,

@@ -293,7 +293,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
       axisLabel: {
         color: textColor,
         fontSize: axisFontSize,
-        hideOverlap: true,
+        hideOverlap: this.vertical,
         interval: 0,
         rotate: this.vertical && this.chartDataCategoryType === ChartDataCategoryTypes.DateType
           ? (isCompactLayout ? 54 : 42)

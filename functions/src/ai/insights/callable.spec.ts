@@ -646,7 +646,7 @@ describe('aiInsights callable', () => {
       narrative: 'I can only answer questions from persisted event-level stats right now, so streams, splits, laps, routes, and original-file reprocessing are out of scope.',
       quota: quotaStatus,
       reasonCode: 'unsupported_capability',
-      suggestedPrompts: expect.any(Array),
+      suggestedPrompts: ['show my distance'],
     });
   });
 
@@ -758,6 +758,71 @@ describe('aiInsights callable', () => {
       }),
       'Show my max heart rate last month as stacked columns by activity type over time',
     );
+  });
+
+  it('omits latestBucket for non-date grouped summaries', async () => {
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'ok',
+      metricKey: 'distance',
+      query: {
+        ...normalizedQuery,
+        categoryType: ChartDataCategoryTypes.ActivityType,
+        chartType: ChartTypes.ColumnsHorizontal,
+      },
+    });
+    hoisted.executeAiInsightsQuery.mockResolvedValue({
+      resultKind: 'aggregate',
+      matchedEventsCount: 10,
+      matchedActivityTypeCounts: [
+        { activityType: ActivityTypes.Cycling, eventCount: 5 },
+        { activityType: ActivityTypes.Yoga, eventCount: 3 },
+        { activityType: ActivityTypes.Diving, eventCount: 2 },
+      ],
+      aggregation: {
+        dataType: 'Distance',
+        valueType: ChartDataValueTypes.Total,
+        categoryType: ChartDataCategoryTypes.ActivityType,
+        resolvedTimeInterval: TimeIntervals.Monthly,
+        buckets: [
+          {
+            bucketKey: ActivityTypes.Diving,
+            totalCount: 2,
+            aggregateValue: 0,
+            seriesValues: { [ActivityTypes.Diving]: 0 },
+            seriesCounts: { [ActivityTypes.Diving]: 2 },
+          },
+          {
+            bucketKey: ActivityTypes.Yoga,
+            totalCount: 3,
+            aggregateValue: 0,
+            seriesValues: { [ActivityTypes.Yoga]: 0 },
+            seriesCounts: { [ActivityTypes.Yoga]: 3 },
+          },
+          {
+            bucketKey: ActivityTypes.Cycling,
+            totalCount: 5,
+            aggregateValue: 24500,
+            seriesValues: { [ActivityTypes.Cycling]: 24500 },
+            seriesCounts: { [ActivityTypes.Cycling]: 5 },
+          },
+        ],
+      },
+    });
+
+    const result = await aiInsights({
+      prompt: 'show my total distance by activity type this year',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(result).toMatchObject({
+      status: 'ok',
+      summary: expect.objectContaining({
+        latestBucket: null,
+        lowestBucket: expect.objectContaining({
+          bucketKey: ActivityTypes.Diving,
+        }),
+      }),
+    });
   });
 
   it('returns quota status from the dedicated callable', async () => {

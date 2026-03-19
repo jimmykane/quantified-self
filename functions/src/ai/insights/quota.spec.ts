@@ -4,6 +4,7 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import {
   finalizeAiInsightsQuotaReservation,
   getAiInsightsQuotaStatus,
+  normalizeUsageDocRole,
   releaseAiInsightsQuotaReservation,
   reserveAiInsightsQuotaForGenkit,
   setAiInsightsQuotaDependenciesForTesting,
@@ -29,6 +30,10 @@ class FakeDocumentReference {
     private readonly db: FakeFirestore,
     public readonly path: string,
   ) { }
+
+  async get(): Promise<FakeDocumentSnapshot> {
+    return new FakeDocumentSnapshot(this.db.getDocument(this.path));
+  }
 
   collection(name: string): FakeCollectionReference {
     return new FakeCollectionReference(this.db, `${this.path}/${name}`);
@@ -64,6 +69,7 @@ class FakeTransaction {
 
 class FakeFirestore {
   private readonly documents = new Map<string, Record<string, unknown>>();
+  private writeCount = 0;
 
   collection(name: string): FakeCollectionReference {
     return new FakeCollectionReference(this, name);
@@ -83,8 +89,13 @@ class FakeFirestore {
     return this.documents.get(path);
   }
 
+  getWriteCount(): number {
+    return this.writeCount;
+  }
+
   setDocument(path: string, data: Record<string, unknown>, merge: boolean): void {
     const previous = this.documents.get(path);
+    this.writeCount += 1;
     this.documents.set(path, merge ? { ...(previous ?? {}), ...data } : { ...data });
   }
 }
@@ -138,6 +149,15 @@ describe('ai insights quota', () => {
     vi.restoreAllMocks();
   });
 
+  it('defaults malformed usage doc roles to free', () => {
+    expect(normalizeUsageDocRole('free')).toBe('free');
+    expect(normalizeUsageDocRole('basic')).toBe('basic');
+    expect(normalizeUsageDocRole('pro')).toBe('pro');
+    expect(normalizeUsageDocRole(undefined)).toBe('free');
+    expect(normalizeUsageDocRole('enterprise')).toBe('free');
+    expect(normalizeUsageDocRole({ role: 'pro' })).toBe('free');
+  });
+
   it('increments quota only after a successful Genkit finalization', async () => {
     const reservation = await reserveAiInsightsQuotaForGenkit('user-1');
     const finalizedStatus = await finalizeAiInsightsQuotaReservation(reservation);
@@ -175,6 +195,29 @@ describe('ai insights quota', () => {
     expect(releasedStatus.remainingCount).toBe(100);
     expect(quotaStatus.successfulGenkitCount).toBe(0);
     expect(quotaStatus.remainingCount).toBe(100);
+  });
+
+  it('finalizes an existing reservation even if the user becomes ineligible afterward', async () => {
+    const reservation = await reserveAiInsightsQuotaForGenkit('user-1');
+
+    setAiInsightsQuotaDependenciesForTesting({
+      now: () => new Date(FIXED_NOW_ISO),
+      createReservationId: () => 'reservation-2',
+      db: () => fakeDb as unknown as FirebaseFirestore.Firestore,
+      getUserRoleAndGracePeriod: async () => ({ role: 'free' }),
+      isGracePeriodActive: () => false,
+      getActiveSubscriptionPeriod: async () => null,
+      getLatestPaidSubscriptionPeriod: async () => null,
+    });
+
+    const finalizedStatus = await finalizeAiInsightsQuotaReservation(reservation);
+    const storedDoc = fakeDb.getDocument(`users/user-1/aiInsightsUsage/${PERIOD_DOC_ID}`);
+
+    expect(finalizedStatus.successfulGenkitCount).toBe(1);
+    expect(finalizedStatus.activeReservationCount).toBe(0);
+    expect(finalizedStatus.limit).toBe(100);
+    expect(storedDoc?.successfulGenkitCount).toBe(1);
+    expect(storedDoc?.reservationMap).toEqual({});
   });
 
   it('pins grace users to the last paid pro period when there is no active subscription', async () => {
@@ -239,7 +282,26 @@ describe('ai insights quota', () => {
     expect(quotaStatus.successfulGenkitCount).toBe(5);
     expect(quotaStatus.activeReservationCount).toBe(0);
     expect(quotaStatus.remainingCount).toBe(95);
-    expect(storedDoc?.reservationMap).toEqual({});
+    expect(storedDoc?.reservationMap).toEqual({
+      expired: Date.parse('2026-03-19T11:00:00.000Z'),
+    });
+    expect(fakeDb.getWriteCount()).toBe(0);
+  });
+
+  it('does not write usage documents when quota status is fetched', async () => {
+    fakeDb.seedDocument(`users/user-1/aiInsightsUsage/${PERIOD_DOC_ID}`, buildUsageDoc({
+      successfulGenkitCount: 12,
+      reservationMap: {
+        active: Date.parse('2026-03-19T12:05:00.000Z'),
+      },
+    }));
+
+    const quotaStatus = await getAiInsightsQuotaStatus('user-1');
+
+    expect(quotaStatus.successfulGenkitCount).toBe(12);
+    expect(quotaStatus.activeReservationCount).toBe(1);
+    expect(quotaStatus.remainingCount).toBe(87);
+    expect(fakeDb.getWriteCount()).toBe(0);
   });
 
   it('caps concurrent reservations at the configured limit', async () => {
@@ -254,6 +316,37 @@ describe('ai insights quota', () => {
     });
 
     expect(firstReservation.reservationID).toBe('reservation-1');
+  });
+
+  it('resolves the quota window only once when reserving quota', async () => {
+    const getUserRoleAndGracePeriod = vi.fn(async () => ({ role: 'pro' as const }));
+    const getActiveSubscriptionPeriod = vi.fn(async () => ({
+      role: 'pro' as const,
+      startDate: PERIOD_START,
+      endDate: PERIOD_END,
+    }));
+    const getLatestPaidSubscriptionPeriod = vi.fn(async () => ({
+      role: 'pro' as const,
+      startDate: PERIOD_START,
+      endDate: PERIOD_END,
+    }));
+
+    setAiInsightsQuotaDependenciesForTesting({
+      now: () => new Date(FIXED_NOW_ISO),
+      createReservationId: () => 'reservation-1',
+      db: () => fakeDb as unknown as FirebaseFirestore.Firestore,
+      getUserRoleAndGracePeriod,
+      isGracePeriodActive: () => false,
+      getActiveSubscriptionPeriod,
+      getLatestPaidSubscriptionPeriod,
+    });
+
+    const reservation = await reserveAiInsightsQuotaForGenkit('user-1');
+
+    expect(reservation.periodDocId).toBe(PERIOD_DOC_ID);
+    expect(getUserRoleAndGracePeriod).toHaveBeenCalledTimes(1);
+    expect(getActiveSubscriptionPeriod).toHaveBeenCalledTimes(1);
+    expect(getLatestPaidSubscriptionPeriod).not.toHaveBeenCalled();
   });
 
   it('returns an eligible active basic period with a 50 request limit', async () => {
