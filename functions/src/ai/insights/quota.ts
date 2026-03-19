@@ -255,6 +255,8 @@ function buildUsageDocPayload(
   reservationMap: Record<string, number>,
   lastSuccessfulGenkitAt?: string,
 ): FirebaseFirestore.UpdateData<FirebaseFirestore.DocumentData> {
+  const updatedAt = aiInsightsQuotaDependencies.now().toISOString();
+
   return {
     version: AI_INSIGHTS_USAGE_DOC_VERSION,
     role: baseStatus.role,
@@ -265,7 +267,7 @@ function buildUsageDocPayload(
     successfulGenkitCount,
     reservationMap,
     ...(lastSuccessfulGenkitAt ? { lastSuccessfulGenkitAt } : {}),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt,
   };
 }
 

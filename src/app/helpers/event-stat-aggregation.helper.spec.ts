@@ -287,6 +287,99 @@ describe('event-stat-aggregation shared core', () => {
     expect(maximum.buckets[0].aggregateValue).toBe(15);
   });
 
+  it('should group biweekly date buckets by paired calendar weeks instead of raw timestamps', () => {
+    const aggregation = buildEventStatAggregation([
+      makeEvent({
+        id: 'week-1',
+        startDate: new Date('2024-01-02T10:00:00.000Z'),
+        activityTypes: [ActivityTypes.Running],
+        stats: { [DataDistance.type]: 5 },
+      }),
+      makeEvent({
+        id: 'week-2',
+        startDate: new Date('2024-01-09T10:00:00.000Z'),
+        activityTypes: [ActivityTypes.Running],
+        stats: { [DataDistance.type]: 10 },
+      }),
+      makeEvent({
+        id: 'week-3',
+        startDate: new Date('2024-01-16T10:00:00.000Z'),
+        activityTypes: [ActivityTypes.Running],
+        stats: { [DataDistance.type]: 20 },
+      }),
+    ], {
+      dataType: DataDistance.type,
+      valueType: ChartDataValueTypes.Total,
+      categoryType: ChartDataCategoryTypes.DateType,
+      requestedTimeInterval: TimeIntervals.BiWeekly,
+    });
+
+    expect(aggregation.resolvedTimeInterval).toBe(TimeIntervals.BiWeekly);
+    expect(aggregation.buckets).toHaveLength(2);
+    expect(aggregation.buckets.map(bucket => bucket.aggregateValue)).toEqual([15, 20]);
+    expect(aggregation.buckets.map(bucket => bucket.totalCount)).toEqual([2, 1]);
+    expect(aggregation.buckets[0].bucketKey).toBe(new Date(2024, 0, 1).getTime());
+    expect(aggregation.buckets[1].bucketKey).toBe(new Date(2024, 0, 15).getTime());
+  });
+
+  it('should group quarterly and semesterly date buckets by calendar period starts', () => {
+    const events = [
+      makeEvent({
+        id: 'jan',
+        startDate: new Date('2024-01-10T10:00:00.000Z'),
+        activityTypes: [ActivityTypes.Running],
+        stats: { [DataDistance.type]: 5 },
+      }),
+      makeEvent({
+        id: 'mar',
+        startDate: new Date('2024-03-15T10:00:00.000Z'),
+        activityTypes: [ActivityTypes.Running],
+        stats: { [DataDistance.type]: 10 },
+      }),
+      makeEvent({
+        id: 'jun',
+        startDate: new Date('2024-06-20T10:00:00.000Z'),
+        activityTypes: [ActivityTypes.Running],
+        stats: { [DataDistance.type]: 20 },
+      }),
+      makeEvent({
+        id: 'jul',
+        startDate: new Date('2024-07-05T10:00:00.000Z'),
+        activityTypes: [ActivityTypes.Running],
+        stats: { [DataDistance.type]: 30 },
+      }),
+    ];
+
+    const quarterlyAggregation = buildEventStatAggregation(events, {
+      dataType: DataDistance.type,
+      valueType: ChartDataValueTypes.Total,
+      categoryType: ChartDataCategoryTypes.DateType,
+      requestedTimeInterval: TimeIntervals.Quarterly,
+    });
+
+    expect(quarterlyAggregation.buckets).toHaveLength(3);
+    expect(quarterlyAggregation.buckets.map(bucket => bucket.aggregateValue)).toEqual([15, 20, 30]);
+    expect(quarterlyAggregation.buckets.map(bucket => bucket.bucketKey)).toEqual([
+      new Date(2024, 0, 1).getTime(),
+      new Date(2024, 3, 1).getTime(),
+      new Date(2024, 6, 1).getTime(),
+    ]);
+
+    const semesterlyAggregation = buildEventStatAggregation(events, {
+      dataType: DataDistance.type,
+      valueType: ChartDataValueTypes.Total,
+      categoryType: ChartDataCategoryTypes.DateType,
+      requestedTimeInterval: TimeIntervals.Semesterly,
+    });
+
+    expect(semesterlyAggregation.buckets).toHaveLength(2);
+    expect(semesterlyAggregation.buckets.map(bucket => bucket.aggregateValue)).toEqual([35, 30]);
+    expect(semesterlyAggregation.buckets.map(bucket => bucket.bucketKey)).toEqual([
+      new Date(2024, 0, 1).getTime(),
+      new Date(2024, 6, 1).getTime(),
+    ]);
+  });
+
   it('should aggregate per-series values using the selected value type semantics', () => {
     const events = [
       makeEvent({
@@ -379,6 +472,48 @@ describe('event-stat-aggregation shared core', () => {
     expect(aggregation.resolvedTimeInterval).toBe(TimeIntervals.Daily);
     expect(aggregation.buckets).toHaveLength(1);
     expect(aggregation.buckets[0].aggregateValue).toBe(15);
+  });
+
+  it('should truncate hourly date buckets to the hour boundary', () => {
+    const firstEventDate = new Date('2024-01-01T10:05:00.000Z');
+    const secondEventDate = new Date('2024-01-01T10:55:00.000Z');
+    const thirdEventDate = new Date('2024-01-01T11:15:00.000Z');
+    const aggregation = buildEventStatAggregation([
+      makeEvent({
+        id: 'hour-1',
+        startDate: firstEventDate,
+        activityTypes: [ActivityTypes.Running],
+        stats: { [DataDistance.type]: 5 },
+      }),
+      makeEvent({
+        id: 'hour-2',
+        startDate: secondEventDate,
+        activityTypes: [ActivityTypes.Running],
+        stats: { [DataDistance.type]: 10 },
+      }),
+      makeEvent({
+        id: 'hour-3',
+        startDate: thirdEventDate,
+        activityTypes: [ActivityTypes.Running],
+        stats: { [DataDistance.type]: 20 },
+      }),
+    ], {
+      dataType: DataDistance.type,
+      valueType: ChartDataValueTypes.Total,
+      categoryType: ChartDataCategoryTypes.DateType,
+      requestedTimeInterval: TimeIntervals.Hourly,
+    });
+
+    expect(aggregation.resolvedTimeInterval).toBe(TimeIntervals.Hourly);
+    expect(aggregation.buckets).toHaveLength(2);
+    expect(aggregation.buckets.map(bucket => bucket.aggregateValue)).toEqual([15, 20]);
+    expect(aggregation.buckets.map(bucket => bucket.totalCount)).toEqual([2, 1]);
+    const expectedFirstBucket = new Date(firstEventDate.getTime());
+    expectedFirstBucket.setMinutes(0, 0, 0);
+    const expectedSecondBucket = new Date(thirdEventDate.getTime());
+    expectedSecondBucket.setMinutes(0, 0, 0);
+    expect(aggregation.buckets[0].bucketKey).toBe(expectedFirstBucket.getTime());
+    expect(aggregation.buckets[1].bucketKey).toBe(expectedSecondBucket.getTime());
   });
 
   it('should warn and skip invalid date buckets when aggregating by date', () => {

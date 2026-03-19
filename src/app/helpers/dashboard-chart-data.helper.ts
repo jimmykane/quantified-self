@@ -23,6 +23,18 @@ type DashboardDateFormatOptions = {
   timeZone?: string;
 };
 
+function resolveDashboardDisplayInterval(timeInterval: TimeIntervals): TimeIntervals {
+  switch (timeInterval) {
+    case TimeIntervals.BiWeekly:
+      return TimeIntervals.Weekly;
+    case TimeIntervals.Quarterly:
+    case TimeIntervals.Semesterly:
+      return TimeIntervals.Monthly;
+    default:
+      return timeInterval;
+  }
+}
+
 function toFiniteNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === '') {
     return null;
@@ -79,7 +91,7 @@ function formatDashboardDateByIntervalWithOptions(
     return '';
   }
 
-  switch (timeInterval) {
+  switch (resolveDashboardDisplayInterval(timeInterval)) {
     case TimeIntervals.Yearly:
       return date.toLocaleDateString(options.locale, withOptionalTimeZone({ year: 'numeric' }, options.timeZone));
     case TimeIntervals.Monthly:
@@ -114,7 +126,7 @@ function formatDashboardDateByIntervalWithOptions(
 }
 
 export function getDashboardChartDateFormat(timeInterval: TimeIntervals): string {
-  switch (timeInterval) {
+  switch (resolveDashboardDisplayInterval(timeInterval)) {
     case TimeIntervals.Yearly:
       return 'yyyy';
     case TimeIntervals.Monthly:
@@ -131,7 +143,7 @@ export function getDashboardChartDateFormat(timeInterval: TimeIntervals): string
 }
 
 export function getDashboardAxisDateFormat(timeInterval: TimeIntervals): string {
-  switch (timeInterval) {
+  switch (resolveDashboardDisplayInterval(timeInterval)) {
     case TimeIntervals.Yearly:
       return 'yyyy';
     case TimeIntervals.Monthly:
@@ -180,15 +192,7 @@ export function formatDashboardBucketDateByInterval(
   locale = getBrowserLocale(),
   timeZone?: string,
 ): string {
-  switch (timeInterval) {
-    case TimeIntervals.BiWeekly:
-      return formatDashboardDateByInterval(value, TimeIntervals.Weekly, locale, timeZone);
-    case TimeIntervals.Quarterly:
-    case TimeIntervals.Semesterly:
-      return formatDashboardDateByInterval(value, TimeIntervals.Monthly, locale, timeZone);
-    default:
-      return formatDashboardDateByInterval(value, timeInterval, locale, timeZone);
-  }
+  return formatDashboardDateByInterval(value, resolveDashboardDisplayInterval(timeInterval), locale, timeZone);
 }
 
 export function getDashboardDataInstanceOrNull(
@@ -324,6 +328,12 @@ function getDashboardTimeIntervalScopeLabel(timeInterval: TimeIntervals): string
       return 'month';
     case TimeIntervals.Weekly:
       return 'week';
+    case TimeIntervals.BiWeekly:
+      return '2 weeks';
+    case TimeIntervals.Quarterly:
+      return 'quarter';
+    case TimeIntervals.Semesterly:
+      return 'semester';
     case TimeIntervals.Daily:
       return 'day';
     case TimeIntervals.Hourly:

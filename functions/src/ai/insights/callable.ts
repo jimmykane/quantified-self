@@ -41,6 +41,7 @@ interface AiInsightsCallableContext {
 
 const AI_INSIGHTS_PRO_REQUIRED_MESSAGE = 'AI Insights is a Pro feature. Please upgrade to Pro.';
 const DEFAULT_EMPTY_STATE = 'No matching events were found for this insight in the requested range.';
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 function assertValidTimeZone(timeZone: string): void {
   try {
@@ -97,6 +98,10 @@ function startOfWeek(date: Date): Date {
   return weekStart;
 }
 
+function startOfIsoWeekOne(year: number): Date {
+  return startOfWeek(new Date(Date.UTC(year, 0, 4)));
+}
+
 function startOfMonth(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
 }
@@ -111,6 +116,31 @@ function startOfSemester(date: Date): Date {
 
 function startOfYear(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+}
+
+function utcCalendarTime(date: Date): number {
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+}
+
+function startOfBiWeek(date: Date): Date {
+  const weekStart = startOfWeek(date);
+  const weekReference = new Date(weekStart.getTime());
+  weekReference.setUTCDate(weekReference.getUTCDate() + 3);
+  const isoWeekYear = weekReference.getUTCFullYear();
+  const isoWeekOneStart = startOfIsoWeekOne(isoWeekYear);
+  const weeksFromIsoWeekOne = Math.floor(
+    (utcCalendarTime(weekStart) - utcCalendarTime(isoWeekOneStart)) / WEEK_MS,
+  );
+
+  if (weeksFromIsoWeekOne % 2 === 0) {
+    return weekStart;
+  }
+
+  return new Date(Date.UTC(
+    weekStart.getUTCFullYear(),
+    weekStart.getUTCMonth(),
+    weekStart.getUTCDate() - 7,
+  ));
 }
 
 function alignDateToBucketStart(date: Date, timeInterval: TimeIntervals): Date {
@@ -130,7 +160,7 @@ function alignDateToBucketStart(date: Date, timeInterval: TimeIntervals): Date {
     case TimeIntervals.Weekly:
       return startOfWeek(date);
     case TimeIntervals.BiWeekly:
-      return startOfWeek(date);
+      return startOfBiWeek(date);
     case TimeIntervals.Monthly:
       return startOfMonth(date);
     case TimeIntervals.Quarterly:
@@ -383,6 +413,43 @@ function buildInsightSummary(
   };
 }
 
+function serializeErrorForLogging(error: unknown): Record<string, unknown> {
+  if (error instanceof Error) {
+    const errorWithMetadata = error as Error & {
+      code?: unknown;
+      details?: unknown;
+      cause?: unknown;
+    };
+
+    return {
+      errorName: error.name,
+      errorMessage: error.message,
+      ...(typeof error.stack === 'string' ? { errorStack: error.stack } : {}),
+      ...(errorWithMetadata.code !== undefined ? { errorCode: errorWithMetadata.code } : {}),
+      ...(errorWithMetadata.details !== undefined ? { errorDetails: errorWithMetadata.details } : {}),
+      ...(errorWithMetadata.cause !== undefined ? { errorCause: `${errorWithMetadata.cause}` } : {}),
+    };
+  }
+
+  if (typeof error === 'object' && error !== null) {
+    const errorRecord = error as Record<string, unknown>;
+    return {
+      ...(typeof errorRecord.name === 'string' ? { errorName: errorRecord.name } : {}),
+      ...(typeof errorRecord.message === 'string' ? { errorMessage: errorRecord.message } : {}),
+      ...(typeof errorRecord.stack === 'string' ? { errorStack: errorRecord.stack } : {}),
+      ...(errorRecord.code !== undefined ? { errorCode: errorRecord.code } : {}),
+      ...(errorRecord.details !== undefined ? { errorDetails: errorRecord.details } : {}),
+      ...(errorRecord.cause !== undefined ? { errorCause: `${errorRecord.cause}` } : {}),
+      errorType: 'object',
+    };
+  }
+
+  return {
+    errorMessage: `${error}`,
+    errorType: typeof error,
+  };
+}
+
 export async function runAiInsights(
   input: AiInsightsRequest,
   context: AiInsightsCallableContext | undefined,
@@ -535,7 +602,13 @@ export const aiInsightsFlow = aiInsightsGenkit.defineFlow({
       throw error;
     }
 
-    logger.error('[aiInsights] Failed to generate AI insight', { error });
+    const context = aiInsightsGenkit.currentContext() as AiInsightsCallableContext | undefined;
+    logger.error('[aiInsights] Failed to generate AI insight', {
+      userID: context?.auth?.uid ?? null,
+      prompt: typeof input?.prompt === 'string' ? input.prompt : null,
+      clientTimezone: typeof input?.clientTimezone === 'string' ? input.clientTimezone : null,
+      ...serializeErrorForLogging(error),
+    });
     throw new HttpsError('internal', 'Could not generate AI insights.');
   }
 });

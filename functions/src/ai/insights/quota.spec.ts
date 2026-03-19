@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as admin from 'firebase-admin';
 import { HttpsError } from 'firebase-functions/v2/https';
 import {
   finalizeAiInsightsQuotaReservation,
@@ -146,6 +147,20 @@ describe('ai insights quota', () => {
     expect(finalizedStatus.remainingCount).toBe(99);
     expect(quotaStatus.successfulGenkitCount).toBe(1);
     expect(quotaStatus.remainingCount).toBe(99);
+  });
+
+  it('stores usage timestamps without depending on admin.firestore.FieldValue', async () => {
+    const originalFieldValue = (admin.firestore as typeof admin.firestore & { FieldValue?: unknown }).FieldValue;
+    (admin.firestore as typeof admin.firestore & { FieldValue?: unknown }).FieldValue = undefined;
+
+    try {
+      const reservation = await reserveAiInsightsQuotaForGenkit('user-1');
+      const storedDoc = fakeDb.getDocument(`users/user-1/aiInsightsUsage/${reservation.periodDocId}`);
+
+      expect(storedDoc?.updatedAt).toBe(FIXED_NOW_ISO);
+    } finally {
+      (admin.firestore as typeof admin.firestore & { FieldValue?: unknown }).FieldValue = originalFieldValue;
+    }
   });
 
   it('releases fallback reservations without consuming quota', async () => {

@@ -48,6 +48,15 @@ function getNextIntervalTime(time: number, interval: TimeIntervals): number {
     case TimeIntervals.Weekly:
       next.setUTCDate(next.getUTCDate() + 7);
       break;
+    case TimeIntervals.BiWeekly:
+      next.setUTCDate(next.getUTCDate() + 14);
+      break;
+    case TimeIntervals.Quarterly:
+      next.setUTCMonth(next.getUTCMonth() + 3);
+      break;
+    case TimeIntervals.Semesterly:
+      next.setUTCMonth(next.getUTCMonth() + 6);
+      break;
     case TimeIntervals.Hourly:
       next.setUTCHours(next.getUTCHours() + 1);
       break;
@@ -70,6 +79,15 @@ function getPreviousIntervalTime(time: number, interval: TimeIntervals): number 
       break;
     case TimeIntervals.Weekly:
       previous.setUTCDate(previous.getUTCDate() - 7);
+      break;
+    case TimeIntervals.BiWeekly:
+      previous.setUTCDate(previous.getUTCDate() - 14);
+      break;
+    case TimeIntervals.Quarterly:
+      previous.setUTCMonth(previous.getUTCMonth() - 3);
+      break;
+    case TimeIntervals.Semesterly:
+      previous.setUTCMonth(previous.getUTCMonth() - 6);
       break;
     case TimeIntervals.Hourly:
       previous.setUTCHours(previous.getUTCHours() - 1);

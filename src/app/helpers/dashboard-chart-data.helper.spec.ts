@@ -17,6 +17,8 @@ import {
   formatDashboardDateByInterval,
   formatDashboardDateRange,
   formatDashboardNumericValue,
+  getDashboardAxisDateFormat,
+  getDashboardChartDateFormat,
   getDashboardChartSortComparator,
   getDashboardSummaryMetaLabel
 } from './dashboard-chart-data.helper';
@@ -58,6 +60,17 @@ describe('dashboard-chart-data.helper', () => {
     expect(british).not.toBe(american);
     expect(british).toContain('02 Mar 2024');
     expect(american).toContain('Mar 02, 2024');
+  });
+
+  it('should format AI-only intervals without throwing', () => {
+    const timestamp = Date.UTC(2024, 2, 2, 15, 4, 0);
+
+    expect(formatDashboardDateByInterval(timestamp, TimeIntervals.BiWeekly, 'en-GB')).toContain('Week');
+    expect(formatDashboardDateByInterval(timestamp, TimeIntervals.Quarterly, 'en-GB')).toBe('Mar 2024');
+    expect(formatDashboardDateByInterval(timestamp, TimeIntervals.Semesterly, 'en-GB')).toBe('Mar 2024');
+    expect(getDashboardChartDateFormat(TimeIntervals.BiWeekly)).toBe(`'Week' ww dd MMM yyyy`);
+    expect(getDashboardChartDateFormat(TimeIntervals.Quarterly)).toBe('MMM yyyy');
+    expect(getDashboardAxisDateFormat(TimeIntervals.Semesterly)).toBe('MMM');
   });
 
   it('should format bounded date ranges using the provided locale', () => {

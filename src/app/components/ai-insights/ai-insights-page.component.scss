@@ -177,6 +177,22 @@
   line-height: 1.35;
 }
 
+.prompt-card-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.prompt-card-meta mat-icon {
+  width: 15px;
+  height: 15px;
+  font-size: 15px;
+  color: var(--mat-sys-primary);
+  flex-shrink: 0;
+}
+
 .card-content {
   padding: 24px !important;
   display: grid;
@@ -243,6 +259,10 @@
   margin: 0;
   color: var(--mat-sys-on-surface-variant);
   line-height: 1.45;
+}
+
+.prompt-quota-line {
+  font-size: 0.78rem;
 }
 
 .prompt-quota-note {

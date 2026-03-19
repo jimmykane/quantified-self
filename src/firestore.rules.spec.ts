@@ -292,7 +292,7 @@ describe('Firestore Security Rules', () => {
         describe('AI Insights Usage (users/{uid}/aiInsightsUsage/{periodDocId})', () => {
             const usageDocId = 'period_1740787200000_1743465600000';
 
-            it('should allow owner to read AI insights usage period docs', async () => {
+            it('should deny owner from reading AI insights usage period docs', async () => {
                 await testEnv.withSecurityRulesDisabled(async (context) => {
                     await context.firestore().doc(`users/${userId}/aiInsightsUsage/${usageDocId}`).set({
                         version: 1,
@@ -308,7 +308,7 @@ describe('Firestore Security Rules', () => {
                 });
 
                 const db = testEnv.authenticatedContext(userId).firestore();
-                await assertSucceeds(db.doc(`users/${userId}/aiInsightsUsage/${usageDocId}`).get());
+                await assertFails(db.doc(`users/${userId}/aiInsightsUsage/${usageDocId}`).get());
             });
 
             it('should deny owner from writing AI insights usage period docs', async () => {

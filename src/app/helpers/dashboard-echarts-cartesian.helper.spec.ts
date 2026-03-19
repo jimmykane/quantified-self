@@ -78,6 +78,52 @@ describe('dashboard-echarts-cartesian.helper', () => {
     expect(points[2].time).toBe(dayThree);
   });
 
+  it('should fill missing biweekly date buckets using biweekly intervals instead of daily gaps', () => {
+    const firstBucket = Date.UTC(2024, 0, 1);
+    const thirdBucket = Date.UTC(2024, 0, 29);
+
+    const points = buildDashboardCartesianPoints({
+      data: [
+        { time: firstBucket, [ChartDataValueTypes.Total]: 10, count: 1 },
+        { time: thirdBucket, [ChartDataValueTypes.Total]: 30, count: 1 },
+      ],
+      chartDataValueType: ChartDataValueTypes.Total,
+      chartDataCategoryType: ChartDataCategoryTypes.DateType,
+      chartDataTimeInterval: TimeIntervals.BiWeekly,
+    });
+
+    expect(points).toHaveLength(3);
+    expect(points.map(point => point.time)).toEqual([
+      firstBucket,
+      Date.UTC(2024, 0, 15),
+      thirdBucket,
+    ]);
+    expect(points.map(point => point.value)).toEqual([10, 0, 30]);
+  });
+
+  it('should fill missing quarterly date buckets using quarter intervals', () => {
+    const q1 = Date.UTC(2024, 0, 1);
+    const q3 = Date.UTC(2024, 6, 1);
+
+    const points = buildDashboardCartesianPoints({
+      data: [
+        { time: q1, [ChartDataValueTypes.Total]: 10, count: 1 },
+        { time: q3, [ChartDataValueTypes.Total]: 30, count: 1 },
+      ],
+      chartDataValueType: ChartDataValueTypes.Total,
+      chartDataCategoryType: ChartDataCategoryTypes.DateType,
+      chartDataTimeInterval: TimeIntervals.Quarterly,
+    });
+
+    expect(points).toHaveLength(3);
+    expect(points.map(point => point.time)).toEqual([
+      q1,
+      Date.UTC(2024, 3, 1),
+      q3,
+    ]);
+    expect(points.map(point => point.value)).toEqual([10, 0, 30]);
+  });
+
   it('should keep missing daily average buckets null instead of zero', () => {
     const dayOne = Date.UTC(2024, 0, 1);
     const dayThree = Date.UTC(2024, 0, 3);

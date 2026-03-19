@@ -19,6 +19,7 @@ import type {
 } from './event-stat-aggregation.types';
 
 const THIRTY_ONE_DAYS_MS = 31 * 24 * 60 * 60 * 1000;
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const UNKNOWN_ACTIVITY_KEY = '??';
 
 type ActivityTypeStatLike = {
@@ -142,12 +143,56 @@ function resolveActivityKey(event: EventInterface, logger?: EventStatAggregation
   return UNKNOWN_ACTIVITY_KEY;
 }
 
-function resolveWeeklyBucketStart(date: Date): number {
-  const weekStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  weekStart.setHours(0, 0, 0, 0);
+function resolveDayBucketStart(date: Date): Date {
+  const normalizedDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  normalizedDate.setHours(0, 0, 0, 0);
+  return normalizedDate;
+}
+
+function resolveWeeklyBucketStartDate(date: Date): Date {
+  const weekStart = resolveDayBucketStart(date);
   const day = weekStart.getDay() || 7;
   weekStart.setDate(weekStart.getDate() - day + 1);
-  return weekStart.getTime();
+  return weekStart;
+}
+
+function resolveWeeklyBucketStart(date: Date): number {
+  return resolveWeeklyBucketStartDate(date).getTime();
+}
+
+function resolveIsoWeekOneStart(year: number): Date {
+  return resolveWeeklyBucketStartDate(new Date(year, 0, 4));
+}
+
+function resolveUtcCalendarTime(date: Date): number {
+  return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function resolveBiWeeklyBucketStart(date: Date): number {
+  const weekStart = resolveWeeklyBucketStartDate(date);
+  const weekReference = new Date(weekStart.getTime());
+  weekReference.setDate(weekReference.getDate() + 3);
+  const isoWeekYear = weekReference.getFullYear();
+  const isoWeekOneStart = resolveIsoWeekOneStart(isoWeekYear);
+  const weeksFromIsoWeekOne = Math.floor(
+    (resolveUtcCalendarTime(weekStart) - resolveUtcCalendarTime(isoWeekOneStart)) / WEEK_MS,
+  );
+
+  if (weeksFromIsoWeekOne % 2 === 0) {
+    return weekStart.getTime();
+  }
+
+  const biWeeklyStart = new Date(weekStart.getTime());
+  biWeeklyStart.setDate(biWeeklyStart.getDate() - 7);
+  return biWeeklyStart.getTime();
+}
+
+function resolveQuarterlyBucketStart(date: Date): number {
+  return new Date(date.getFullYear(), Math.floor(date.getMonth() / 3) * 3, 1).getTime();
+}
+
+function resolveSemesterlyBucketStart(date: Date): number {
+  return new Date(date.getFullYear(), date.getMonth() < 6 ? 0 : 6, 1).getTime();
 }
 
 function resolveDateBucketKey(date: Date, timeInterval: TimeIntervals): number {
@@ -158,6 +203,12 @@ function resolveDateBucketKey(date: Date, timeInterval: TimeIntervals): number {
       return new Date(date.getFullYear(), date.getMonth()).getTime();
     case TimeIntervals.Weekly:
       return resolveWeeklyBucketStart(date);
+    case TimeIntervals.BiWeekly:
+      return resolveBiWeeklyBucketStart(date);
+    case TimeIntervals.Quarterly:
+      return resolveQuarterlyBucketStart(date);
+    case TimeIntervals.Semesterly:
+      return resolveSemesterlyBucketStart(date);
     case TimeIntervals.Daily:
       return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
     case TimeIntervals.Hourly:
@@ -166,7 +217,9 @@ function resolveDateBucketKey(date: Date, timeInterval: TimeIntervals): number {
         date.getMonth(),
         date.getDate(),
         date.getHours(),
-        date.getMinutes(),
+        0,
+        0,
+        0,
       ).getTime();
     default:
       return date.getTime();

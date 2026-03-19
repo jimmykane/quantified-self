@@ -18,6 +18,10 @@ const hoisted = vi.hoisted(() => {
 
   return {
     currentContext,
+    loggerError: vi.fn(),
+    loggerWarn: vi.fn(),
+    loggerInfo: vi.fn(),
+    loggerDebug: vi.fn(),
     hasProAccess: vi.fn(),
     getAiInsightsQuotaStatus: vi.fn(),
     reserveAiInsightsQuotaForGenkit: vi.fn(),
@@ -30,6 +34,13 @@ const hoisted = vi.hoisted(() => {
     loadUserUnitSettings: vi.fn(),
   };
 });
+
+vi.mock('firebase-functions/logger', () => ({
+  error: (...args: unknown[]) => hoisted.loggerError(...args),
+  warn: (...args: unknown[]) => hoisted.loggerWarn(...args),
+  info: (...args: unknown[]) => hoisted.loggerInfo(...args),
+  debug: (...args: unknown[]) => hoisted.loggerDebug(...args),
+}));
 
 vi.mock('firebase-functions/v2/https', () => ({
   onCall: (_options: unknown, handler: unknown) => handler,
@@ -337,6 +348,72 @@ describe('aiInsights callable', () => {
     });
   });
 
+  it('counts biweekly bucket coverage using paired week buckets that intersect the range', async () => {
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'ok',
+      metricKey: 'distance',
+      query: {
+        ...normalizedQuery,
+        requestedTimeInterval: TimeIntervals.BiWeekly,
+        dateRange: {
+          kind: 'bounded',
+          startDate: '2024-01-08T00:00:00.000Z',
+          endDate: '2024-01-21T23:59:59.999Z',
+          timezone: 'UTC',
+          source: 'prompt',
+        },
+      },
+    });
+    hoisted.executeAiInsightsQuery.mockResolvedValue({
+      matchedEventsCount: 2,
+      matchedActivityTypeCounts: [
+        {
+          activityType: ActivityTypes.Cycling,
+          eventCount: 2,
+        },
+      ],
+      aggregation: {
+        dataType: 'Distance',
+        valueType: ChartDataValueTypes.Total,
+        categoryType: ChartDataCategoryTypes.DateType,
+        resolvedTimeInterval: TimeIntervals.BiWeekly,
+        buckets: [
+          {
+            bucketKey: Date.UTC(2024, 0, 1),
+            time: Date.UTC(2024, 0, 1),
+            totalCount: 1,
+            aggregateValue: 50,
+            seriesValues: { Cycling: 50 },
+            seriesCounts: { Cycling: 1 },
+          },
+          {
+            bucketKey: Date.UTC(2024, 0, 15),
+            time: Date.UTC(2024, 0, 15),
+            totalCount: 1,
+            aggregateValue: 70,
+            seriesValues: { Cycling: 70 },
+            seriesCounts: { Cycling: 1 },
+          },
+        ],
+      },
+    });
+
+    const result = await aiInsights({
+      prompt: 'show distance biweekly',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(result).toMatchObject({
+      status: 'ok',
+      summary: {
+        bucketCoverage: {
+          nonEmptyBucketCount: 2,
+          totalBucketCount: 2,
+        },
+      },
+    });
+  });
+
   it('derives the lowest bucket from aggregation results', async () => {
     hoisted.executeAiInsightsQuery.mockResolvedValue({
       matchedEventsCount: 3,
@@ -451,6 +528,26 @@ describe('aiInsights callable', () => {
       reservationID: 'reservation-1',
     }));
     expect(hoisted.finalizeAiInsightsQuotaReservation).not.toHaveBeenCalled();
+  });
+
+  it('logs serialized error details when ai insight generation fails', async () => {
+    hoisted.summarizeAiInsightResult.mockRejectedValue(new Error('summarize failed'));
+
+    await expect(aiInsights({
+      prompt: 'show distance',
+      clientTimezone: 'UTC',
+    } as any)).rejects.toMatchObject({
+      code: 'internal',
+    });
+
+    expect(hoisted.loggerError).toHaveBeenCalledWith(
+      '[aiInsights] Failed to generate AI insight',
+      expect.objectContaining({
+        errorName: 'Error',
+        errorMessage: 'summarize failed',
+        errorStack: expect.stringContaining('summarize failed'),
+      }),
+    );
   });
 
   it('uses the activity group label in the title when a broad group filter is present', async () => {
