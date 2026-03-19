@@ -41,7 +41,7 @@ describe('genkit config', () => {
 
   it('configures googleAI without a custom apiKey override', () => {
     expect(hoisted.googleAIPlugin).toHaveBeenCalledWith();
-    expect(hoisted.googleAIModel).toHaveBeenCalledWith('gemini-2.5-flash');
+    expect(hoisted.googleAIModel).toHaveBeenCalledWith('gemini-3.1-flash-lite-preview');
     expect(aiInsightsGenkit).toEqual({ mocked: true });
   });
 

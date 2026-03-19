@@ -22,7 +22,6 @@ const hoisted = vi.hoisted(() => {
     loggerWarn: vi.fn(),
     loggerInfo: vi.fn(),
     loggerDebug: vi.fn(),
-    hasProAccess: vi.fn(),
     getAiInsightsQuotaStatus: vi.fn(),
     reserveAiInsightsQuotaForGenkit: vi.fn(),
     finalizeAiInsightsQuotaReservation: vi.fn(),
@@ -65,7 +64,6 @@ vi.mock('./genkit', () => ({
 vi.mock('../../utils', () => ({
   ALLOWED_CORS_ORIGINS: [],
   enforceAppCheck: vi.fn(),
-  hasProAccess: (...args: unknown[]) => hoisted.hasProAccess(...args),
 }));
 
 vi.mock('./normalize-query.flow', () => ({
@@ -176,7 +174,6 @@ describe('aiInsights callable', () => {
     vi.clearAllMocks();
     hoisted.currentContext.auth = { uid: 'user-1' };
     hoisted.currentContext.app = { appId: 'app-1' };
-    hoisted.hasProAccess.mockResolvedValue(true);
     hoisted.getInsightMetricDefinition.mockReturnValue({
       key: 'distance',
       label: 'distance',
@@ -259,13 +256,87 @@ describe('aiInsights callable', () => {
     } as any)).rejects.toMatchObject({ code: 'failed-precondition' });
   });
 
-  it('rejects non-pro users', async () => {
-    hoisted.hasProAccess.mockResolvedValue(false);
+  it('rejects unpaid users before normalization', async () => {
+    hoisted.getAiInsightsQuotaStatus.mockResolvedValue({
+      ...quotaStatus,
+      role: 'free',
+      limit: 0,
+      successfulGenkitCount: 0,
+      remainingCount: 0,
+      isEligible: false,
+      blockedReason: 'requires_pro',
+    });
 
     await expect(aiInsights({
       prompt: 'show distance',
       clientTimezone: 'UTC',
-    } as any)).rejects.toMatchObject({ code: 'permission-denied' });
+    } as any)).rejects.toMatchObject({
+      code: 'permission-denied',
+      message: 'AI Insights is available to Basic and Pro members.',
+    });
+
+    expect(hoisted.normalizeInsightQuery).not.toHaveBeenCalled();
+  });
+
+  it('rejects exhausted users before normalization', async () => {
+    hoisted.getAiInsightsQuotaStatus.mockResolvedValue({
+      ...quotaStatus,
+      successfulGenkitCount: 100,
+      remainingCount: 0,
+      blockedReason: 'limit_reached',
+    });
+
+    await expect(aiInsights({
+      prompt: 'show distance',
+      clientTimezone: 'UTC',
+    } as any)).rejects.toMatchObject({
+      code: 'resource-exhausted',
+      message: 'AI Insights limit reached for this billing period.',
+    });
+
+    expect(hoisted.normalizeInsightQuery).not.toHaveBeenCalled();
+  });
+
+  it('allows active basic users', async () => {
+    hoisted.getAiInsightsQuotaStatus.mockResolvedValue({
+      ...quotaStatus,
+      role: 'basic',
+      limit: 50,
+      successfulGenkitCount: 5,
+      remainingCount: 45,
+    });
+    hoisted.reserveAiInsightsQuotaForGenkit.mockResolvedValue({
+      userID: 'user-1',
+      reservationID: 'reservation-1',
+      periodDocId: 'period_1_2',
+      role: 'basic',
+      limit: 50,
+      periodStart: quotaStatus.periodStart,
+      periodEnd: quotaStatus.periodEnd,
+      periodKind: 'subscription',
+      resetMode: 'date',
+      isEligible: true,
+    });
+    hoisted.finalizeAiInsightsQuotaReservation.mockResolvedValue({
+      ...quotaStatus,
+      role: 'basic',
+      limit: 50,
+      successfulGenkitCount: 6,
+      remainingCount: 44,
+    });
+
+    const result = await aiInsights({
+      prompt: 'show distance',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(result).toMatchObject({
+      status: 'ok',
+      quota: expect.objectContaining({
+        role: 'basic',
+        limit: 50,
+      }),
+    });
   });
 
   it('returns an ok response when aggregation buckets exist', async () => {

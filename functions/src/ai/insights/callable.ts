@@ -17,7 +17,7 @@ import type {
 } from '../../../../shared/ai-insights.types';
 import { resolveAiInsightsActivityFilterLabel } from '../../../../shared/ai-insights-activity-filter';
 import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
-import { ALLOWED_CORS_ORIGINS, enforceAppCheck, hasProAccess } from '../../utils';
+import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../../utils';
 import { aiInsightsGenkit } from './genkit';
 import { executeAiInsightsQuery } from './execute-query';
 import { getInsightMetricDefinition, getSuggestedInsightPrompts } from './metric-catalog';
@@ -28,6 +28,7 @@ import {
   releaseAiInsightsQuotaReservation,
   reserveAiInsightsQuotaForGenkit,
   finalizeAiInsightsQuotaReservation,
+  AI_INSIGHTS_LIMIT_REACHED_MESSAGE,
 } from './quota';
 import { summarizeAiInsightResult } from './summarize-result.flow';
 import { loadUserUnitSettings } from './user-unit-settings';
@@ -39,7 +40,7 @@ interface AiInsightsCallableContext {
   app?: unknown;
 }
 
-const AI_INSIGHTS_PRO_REQUIRED_MESSAGE = 'AI Insights is a Pro feature. Please upgrade to Pro.';
+const AI_INSIGHTS_PAID_REQUIRED_MESSAGE = 'AI Insights is available to Basic and Pro members.';
 const DEFAULT_EMPTY_STATE = 'No matching events were found for this insight in the requested range.';
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -473,8 +474,13 @@ export async function runAiInsights(
   }
   assertValidTimeZone(clientTimezone);
 
-  if (!(await hasProAccess(context.auth.uid))) {
-    throw new HttpsError('permission-denied', AI_INSIGHTS_PRO_REQUIRED_MESSAGE);
+  const initialQuotaStatus = await getAiInsightsQuotaStatusForUser(context.auth.uid);
+  if (!initialQuotaStatus.isEligible) {
+    throw new HttpsError('permission-denied', AI_INSIGHTS_PAID_REQUIRED_MESSAGE);
+  }
+
+  if (initialQuotaStatus.remainingCount <= 0) {
+    throw new HttpsError('resource-exhausted', AI_INSIGHTS_LIMIT_REACHED_MESSAGE);
   }
 
   const normalizeResult = await normalizeInsightQuery({
@@ -484,7 +490,6 @@ export async function runAiInsights(
   });
 
   if (normalizeResult.status === 'unsupported') {
-    const quota = await getAiInsightsQuotaStatusForUser(context.auth.uid);
     logger.warn('[aiInsights] Unsupported request', {
       userID: context.auth.uid,
       prompt,
@@ -492,19 +497,18 @@ export async function runAiInsights(
       reasonCode: normalizeResult.reasonCode,
       suggestedPromptsCount: normalizeResult.suggestedPrompts.length,
     });
-    return buildUnsupportedResponse(normalizeResult.reasonCode, quota);
+    return buildUnsupportedResponse(normalizeResult.reasonCode, initialQuotaStatus);
   }
 
   const metric = getInsightMetricDefinition(normalizeResult.metricKey);
   if (!metric) {
-    const quota = await getAiInsightsQuotaStatusForUser(context.auth.uid);
     logger.warn('[aiInsights] Unsupported metric key after normalization', {
       userID: context.auth.uid,
       prompt,
       clientTimezone,
       metricKey: normalizeResult.metricKey,
     });
-    return buildUnsupportedResponse('unsupported_metric', quota);
+    return buildUnsupportedResponse('unsupported_metric', initialQuotaStatus);
   }
 
   const effectiveQuery = normalizeResult.query;

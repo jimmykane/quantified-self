@@ -558,6 +558,21 @@ describe('AiInsightsPageComponent', () => {
     expect(supportNote?.textContent).toContain('Latest completed insights are temporarily restored from your account.');
   });
 
+  it('should render the Basic tier quota limit in the prompt header', async () => {
+    aiInsightsQuotaServiceMock.loadQuotaStatus.mockResolvedValueOnce(buildQuotaStatus({
+      role: 'basic',
+      limit: 50,
+      successfulGenkitCount: 8,
+      remainingCount: 42,
+    }));
+
+    await createComponent();
+
+    const quotaLine = fixture.debugElement.query(By.css('.prompt-quota-line'))?.nativeElement as HTMLElement | undefined;
+
+    expect(quotaLine?.textContent).toContain('42 of 50 left');
+  });
+
   it('should submit the active hero prompt when clicked', async () => {
     aiInsightsServiceMock.runInsight.mockResolvedValue(buildOkResponse());
     const heroPrompt = 'Show my total distance by activity type this year';
@@ -917,5 +932,29 @@ describe('AiInsightsPageComponent', () => {
     expect(suggestionTrigger?.disabled).toBe(true);
     expect(quotaLine?.textContent).toContain('0 of 100 left');
     expect(quotaNote?.textContent).toContain('limit reached');
+  });
+
+  it('should show the paid-tier access message when AI Insights is unavailable for the current account', async () => {
+    aiInsightsQuotaServiceMock.loadQuotaStatus.mockResolvedValueOnce(buildQuotaStatus({
+      role: 'free',
+      limit: 0,
+      successfulGenkitCount: 0,
+      remainingCount: 0,
+      isEligible: false,
+      periodStart: null,
+      periodEnd: null,
+      periodKind: 'no_billing_period',
+      resetMode: 'next_successful_payment',
+      blockedReason: 'requires_pro',
+    }));
+
+    await createComponent();
+
+    const quotaLine = fixture.debugElement.query(By.css('.prompt-quota-line'))?.nativeElement as HTMLElement | undefined;
+    const quotaNote = fixture.debugElement.query(By.css('.prompt-quota-note'))?.nativeElement as HTMLElement | undefined;
+
+    expect(quotaLine?.textContent).toContain('0 of 0 left');
+    expect(quotaLine?.textContent).toContain('Basic or Pro required');
+    expect(quotaNote?.textContent).toContain('Basic and Pro members');
   });
 });

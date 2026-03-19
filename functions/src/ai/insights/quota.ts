@@ -17,6 +17,7 @@ const AI_INSIGHTS_RESERVATION_TTL_MS = 10 * 60 * 1000;
 export const AI_INSIGHTS_LIMIT_REACHED_MESSAGE = 'AI Insights limit reached for this billing period.';
 
 interface SubscriptionPeriod {
+  role: 'basic' | 'pro';
   startDate: string;
   endDate: string;
 }
@@ -58,7 +59,7 @@ interface AiInsightsQuotaDependencies {
   getUserRoleAndGracePeriod: typeof getUserRoleAndGracePeriod;
   isGracePeriodActive: typeof isGracePeriodActive;
   getActiveSubscriptionPeriod: (userID: string) => Promise<SubscriptionPeriod | null>;
-  getLatestProSubscriptionPeriod: (userID: string) => Promise<SubscriptionPeriod | null>;
+  getLatestPaidSubscriptionPeriod: (userID: string) => Promise<SubscriptionPeriod | null>;
 }
 
 const defaultAiInsightsQuotaDependencies: AiInsightsQuotaDependencies = {
@@ -68,7 +69,7 @@ const defaultAiInsightsQuotaDependencies: AiInsightsQuotaDependencies = {
   getUserRoleAndGracePeriod,
   isGracePeriodActive,
   getActiveSubscriptionPeriod: async (userID) => getActiveSubscriptionPeriodFromFirestore(userID),
-  getLatestProSubscriptionPeriod: async (userID) => getLatestProSubscriptionPeriodFromFirestore(userID),
+  getLatestPaidSubscriptionPeriod: async (userID) => getLatestPaidSubscriptionPeriodFromFirestore(userID),
 };
 
 let aiInsightsQuotaDependencies: AiInsightsQuotaDependencies = defaultAiInsightsQuotaDependencies;
@@ -109,6 +110,47 @@ function toDate(value: unknown): Date | null {
   return null;
 }
 
+function resolvePaidSubscriptionRole(value: unknown): 'basic' | 'pro' | null {
+  return value === 'basic' || value === 'pro' ? value : null;
+}
+
+function selectPreferredActiveSubscriptionPeriod(
+  periods: SubscriptionPeriod[],
+): SubscriptionPeriod | null {
+  if (!periods.length) {
+    return null;
+  }
+
+  return periods.slice().sort((left, right) => {
+    if (left.role !== right.role) {
+      return left.role === 'pro' ? -1 : 1;
+    }
+
+    return Date.parse(right.endDate) - Date.parse(left.endDate);
+  })[0] ?? null;
+}
+
+function selectLatestPaidSubscriptionPeriod(
+  periods: SubscriptionPeriod[],
+): SubscriptionPeriod | null {
+  if (!periods.length) {
+    return null;
+  }
+
+  return periods.slice().sort((left, right) => {
+    const endDifference = Date.parse(right.endDate) - Date.parse(left.endDate);
+    if (endDifference !== 0) {
+      return endDifference;
+    }
+
+    if (left.role !== right.role) {
+      return left.role === 'pro' ? -1 : 1;
+    }
+
+    return Date.parse(right.startDate) - Date.parse(left.startDate);
+  })[0] ?? null;
+}
+
 async function getActiveSubscriptionPeriodFromFirestore(userID: string): Promise<SubscriptionPeriod | null> {
   const snapshot = await admin.firestore()
     .collection('customers')
@@ -116,50 +158,60 @@ async function getActiveSubscriptionPeriodFromFirestore(userID: string): Promise
     .collection('subscriptions')
     .where('status', 'in', ['active', 'trialing'])
     .orderBy('created', 'desc')
-    .limit(5)
-    .get();
-
-  for (const doc of snapshot.docs) {
-    const data = doc.data();
-    const startDate = toDate(data.current_period_start);
-    const endDate = toDate(data.current_period_end);
-    if (startDate && endDate) {
-      return {
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
-      };
-    }
-  }
-
-  return null;
-}
-
-async function getLatestProSubscriptionPeriodFromFirestore(userID: string): Promise<SubscriptionPeriod | null> {
-  const snapshot = await admin.firestore()
-    .collection('customers')
-    .doc(userID)
-    .collection('subscriptions')
-    .orderBy('current_period_end', 'desc')
     .limit(10)
     .get();
 
+  const periods: SubscriptionPeriod[] = [];
   for (const doc of snapshot.docs) {
     const data = doc.data();
-    if (data.role !== 'pro') {
+    const role = resolvePaidSubscriptionRole(data.role);
+    if (!role) {
       continue;
     }
 
     const startDate = toDate(data.current_period_start);
     const endDate = toDate(data.current_period_end);
     if (startDate && endDate) {
-      return {
+      periods.push({
+        role,
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
-      };
+      });
     }
   }
 
-  return null;
+  return selectPreferredActiveSubscriptionPeriod(periods);
+}
+
+async function getLatestPaidSubscriptionPeriodFromFirestore(userID: string): Promise<SubscriptionPeriod | null> {
+  const snapshot = await admin.firestore()
+    .collection('customers')
+    .doc(userID)
+    .collection('subscriptions')
+    .orderBy('current_period_end', 'desc')
+    .limit(20)
+    .get();
+
+  const periods: SubscriptionPeriod[] = [];
+  for (const doc of snapshot.docs) {
+    const data = doc.data();
+    const role = resolvePaidSubscriptionRole(data.role);
+    if (!role) {
+      continue;
+    }
+
+    const startDate = toDate(data.current_period_start);
+    const endDate = toDate(data.current_period_end);
+    if (startDate && endDate) {
+      periods.push({
+        role,
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+      });
+    }
+  }
+
+  return selectLatestPaidSubscriptionPeriod(periods);
 }
 
 function buildUsageDocId(periodStart: string, periodEnd: string): string {
@@ -276,29 +328,14 @@ async function resolveAiInsightsQuotaWindow(
 ): Promise<ResolvedAiInsightsQuotaWindow> {
   const { role, gracePeriodUntil } = await aiInsightsQuotaDependencies.getUserRoleAndGracePeriod(userID);
   const hasGrace = aiInsightsQuotaDependencies.isGracePeriodActive(gracePeriodUntil);
-  const effectiveRole = role === 'pro' || hasGrace ? 'pro' : role === 'basic' ? 'basic' : 'free';
-
-  if (effectiveRole !== 'pro') {
-    return {
-      status: {
-        role: effectiveRole,
-        limit: getAiInsightsRequestLimitForRole(effectiveRole),
-        periodStart: null,
-        periodEnd: null,
-        periodKind: 'no_billing_period',
-        resetMode: 'next_successful_payment',
-        isEligible: false,
-      },
-      periodDocId: null,
-    };
-  }
+  const currentPaidRole = resolvePaidSubscriptionRole(role);
 
   const activePeriod = await aiInsightsQuotaDependencies.getActiveSubscriptionPeriod(userID);
   if (activePeriod) {
     return {
       status: {
-        role: 'pro',
-        limit: getAiInsightsRequestLimitForRole('pro'),
+        role: activePeriod.role,
+        limit: getAiInsightsRequestLimitForRole(activePeriod.role),
         periodStart: activePeriod.startDate,
         periodEnd: activePeriod.endDate,
         periodKind: 'subscription',
@@ -309,19 +346,42 @@ async function resolveAiInsightsQuotaWindow(
     };
   }
 
-  const latestProPeriod = await aiInsightsQuotaDependencies.getLatestProSubscriptionPeriod(userID);
-  if (latestProPeriod) {
+  if (hasGrace) {
+    const latestPaidPeriod = await aiInsightsQuotaDependencies.getLatestPaidSubscriptionPeriod(userID);
+    if (latestPaidPeriod) {
+      return {
+        status: {
+          role: latestPaidPeriod.role,
+          limit: getAiInsightsRequestLimitForRole(latestPaidPeriod.role),
+          periodStart: latestPaidPeriod.startDate,
+          periodEnd: latestPaidPeriod.endDate,
+          periodKind: 'grace_hold',
+          resetMode: 'next_successful_payment',
+          isEligible: true,
+        },
+        periodDocId: buildUsageDocId(latestPaidPeriod.startDate, latestPaidPeriod.endDate),
+      };
+    }
+
+    logger.warn('[aiInsightsQuota] Missing last paid subscription period for grace AI user', {
+      userID,
+      role,
+      hasGrace,
+    });
+  }
+
+  if (!currentPaidRole) {
     return {
       status: {
-        role: 'pro',
-        limit: getAiInsightsRequestLimitForRole('pro'),
-        periodStart: latestProPeriod.startDate,
-        periodEnd: latestProPeriod.endDate,
-        periodKind: hasGrace ? 'grace_hold' : 'subscription',
-        resetMode: hasGrace ? 'next_successful_payment' : 'date',
-        isEligible: true,
+        role: 'free',
+        limit: getAiInsightsRequestLimitForRole('free'),
+        periodStart: null,
+        periodEnd: null,
+        periodKind: 'no_billing_period',
+        resetMode: 'next_successful_payment',
+        isEligible: false,
       },
-      periodDocId: buildUsageDocId(latestProPeriod.startDate, latestProPeriod.endDate),
+      periodDocId: null,
     };
   }
 
@@ -333,8 +393,8 @@ async function resolveAiInsightsQuotaWindow(
 
   return {
     status: {
-      role: 'pro',
-      limit: getAiInsightsRequestLimitForRole('pro'),
+      role: currentPaidRole,
+      limit: getAiInsightsRequestLimitForRole(currentPaidRole),
       periodStart: null,
       periodEnd: null,
       periodKind: hasGrace ? 'grace_hold' : 'no_billing_period',
@@ -415,7 +475,7 @@ export async function reserveAiInsightsQuotaForGenkit(
 ): Promise<AiInsightsQuotaReservation> {
   const resolvedWindow = await resolveAiInsightsQuotaWindow(userID);
   if (!resolvedWindow.status.isEligible) {
-    throw new HttpsError('permission-denied', 'AI Insights is a Pro feature. Please upgrade to Pro.');
+    throw new HttpsError('permission-denied', 'AI Insights is available to Basic and Pro members.');
   }
 
   if (!resolvedWindow.periodDocId || !resolvedWindow.status.periodStart || !resolvedWindow.status.periodEnd) {

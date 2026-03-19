@@ -121,10 +121,12 @@ describe('ai insights quota', () => {
       getUserRoleAndGracePeriod: async () => ({ role: 'pro' }),
       isGracePeriodActive: (gracePeriodUntil?: number) => Boolean(gracePeriodUntil && gracePeriodUntil > Date.parse(FIXED_NOW_ISO)),
       getActiveSubscriptionPeriod: async () => ({
+        role: 'pro',
         startDate: PERIOD_START,
         endDate: PERIOD_END,
       }),
-      getLatestProSubscriptionPeriod: async () => ({
+      getLatestPaidSubscriptionPeriod: async () => ({
+        role: 'pro',
         startDate: PERIOD_START,
         endDate: PERIOD_END,
       }),
@@ -175,7 +177,7 @@ describe('ai insights quota', () => {
     expect(quotaStatus.remainingCount).toBe(100);
   });
 
-  it('pins grace users to the last paid period when there is no active subscription', async () => {
+  it('pins grace users to the last paid pro period when there is no active subscription', async () => {
     setAiInsightsQuotaDependenciesForTesting({
       now: () => new Date(FIXED_NOW_ISO),
       createReservationId: () => 'reservation-1',
@@ -183,7 +185,8 @@ describe('ai insights quota', () => {
       getUserRoleAndGracePeriod: async () => ({ role: 'free', gracePeriodUntil: Date.parse('2026-03-25T00:00:00.000Z') }),
       isGracePeriodActive: (gracePeriodUntil?: number) => Boolean(gracePeriodUntil && gracePeriodUntil > Date.parse(FIXED_NOW_ISO)),
       getActiveSubscriptionPeriod: async () => null,
-      getLatestProSubscriptionPeriod: async () => ({
+      getLatestPaidSubscriptionPeriod: async () => ({
+        role: 'pro',
         startDate: PERIOD_START,
         endDate: PERIOD_END,
       }),
@@ -196,6 +199,30 @@ describe('ai insights quota', () => {
     expect(quotaStatus.resetMode).toBe('next_successful_payment');
     expect(quotaStatus.periodStart).toBe(PERIOD_START);
     expect(quotaStatus.periodEnd).toBe(PERIOD_END);
+  });
+
+  it('pins grace users to the last paid basic period and limit when there is no active subscription', async () => {
+    setAiInsightsQuotaDependenciesForTesting({
+      now: () => new Date(FIXED_NOW_ISO),
+      createReservationId: () => 'reservation-1',
+      db: () => fakeDb as unknown as FirebaseFirestore.Firestore,
+      getUserRoleAndGracePeriod: async () => ({ role: 'free', gracePeriodUntil: Date.parse('2026-03-25T00:00:00.000Z') }),
+      isGracePeriodActive: (gracePeriodUntil?: number) => Boolean(gracePeriodUntil && gracePeriodUntil > Date.parse(FIXED_NOW_ISO)),
+      getActiveSubscriptionPeriod: async () => null,
+      getLatestPaidSubscriptionPeriod: async () => ({
+        role: 'basic',
+        startDate: PERIOD_START,
+        endDate: PERIOD_END,
+      }),
+    });
+
+    const quotaStatus = await getAiInsightsQuotaStatus('user-1');
+
+    expect(quotaStatus.role).toBe('basic');
+    expect(quotaStatus.limit).toBe(50);
+    expect(quotaStatus.remainingCount).toBe(50);
+    expect(quotaStatus.periodKind).toBe('grace_hold');
+    expect(quotaStatus.resetMode).toBe('next_successful_payment');
   });
 
   it('prunes expired reservations before computing availability', async () => {
@@ -229,21 +256,45 @@ describe('ai insights quota', () => {
     expect(firstReservation.reservationID).toBe('reservation-1');
   });
 
-  it('returns an ineligible zero limit status for non-pro users without a billing period', async () => {
+  it('returns an eligible active basic period with a 50 request limit', async () => {
     setAiInsightsQuotaDependenciesForTesting({
       now: () => new Date(FIXED_NOW_ISO),
       createReservationId: () => 'reservation-1',
       db: () => fakeDb as unknown as FirebaseFirestore.Firestore,
       getUserRoleAndGracePeriod: async () => ({ role: 'basic' }),
       isGracePeriodActive: () => false,
+      getActiveSubscriptionPeriod: async () => ({
+        role: 'basic',
+        startDate: PERIOD_START,
+        endDate: PERIOD_END,
+      }),
+      getLatestPaidSubscriptionPeriod: async () => null,
+    });
+
+    const quotaStatus = await getAiInsightsQuotaStatus('user-1');
+
+    expect(quotaStatus.role).toBe('basic');
+    expect(quotaStatus.limit).toBe(50);
+    expect(quotaStatus.remainingCount).toBe(50);
+    expect(quotaStatus.isEligible).toBe(true);
+    expect(quotaStatus.periodKind).toBe('subscription');
+  });
+
+  it('returns an ineligible zero limit status for unpaid users without a billing period', async () => {
+    setAiInsightsQuotaDependenciesForTesting({
+      now: () => new Date(FIXED_NOW_ISO),
+      createReservationId: () => 'reservation-1',
+      db: () => fakeDb as unknown as FirebaseFirestore.Firestore,
+      getUserRoleAndGracePeriod: async () => ({ role: 'free' }),
+      isGracePeriodActive: () => false,
       getActiveSubscriptionPeriod: async () => null,
-      getLatestProSubscriptionPeriod: async () => null,
+      getLatestPaidSubscriptionPeriod: async () => null,
     });
 
     const quotaStatus = await getAiInsightsQuotaStatus('user-1');
 
     expect(quotaStatus).toEqual({
-      role: 'basic',
+      role: 'free',
       limit: 0,
       successfulGenkitCount: 0,
       activeReservationCount: 0,

@@ -45,6 +45,23 @@ describe('aiInsightsGuard', () => {
     expect(result).toBe(true);
   });
 
+  it('should allow access for a basic user', async () => {
+    authServiceStub.user$ = of({
+      uid: '123',
+      stripeRole: 'basic',
+      hasSubscribedOnce: true,
+      acceptedTos: true,
+      acceptedPrivacyPolicy: true,
+      acceptedDataPolicy: true,
+      acceptedTrackingPolicy: true,
+      acceptedDiagnosticsPolicy: true,
+    } as any);
+
+    const result = await TestBed.runInInjectionContext(() => aiInsightsGuard({} as any, [] as any));
+
+    expect(result).toBe(true);
+  });
+
   it('should allow access for an active grace user', async () => {
     authServiceStub.user$ = of({
       uid: '123',
@@ -65,7 +82,7 @@ describe('aiInsightsGuard', () => {
   it('should redirect a lapsed onboarded user to subscriptions', async () => {
     authServiceStub.user$ = of({
       uid: '123',
-      stripeRole: 'basic',
+      stripeRole: 'free',
       hasSubscribedOnce: true,
       acceptedTos: true,
       acceptedPrivacyPolicy: true,

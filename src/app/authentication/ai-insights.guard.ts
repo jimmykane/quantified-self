@@ -29,7 +29,7 @@ class AiInsightsPermissionsService {
         && (user as any).acceptedTos === true;
       const hasSubscribedOnce = (user as any).hasSubscribedOnce === true;
       const isAdmin = (user as any).admin === true;
-      const hasAiInsightsAccess = AppUserUtilities.hasProAccess(user, isAdmin);
+      const hasAiInsightsAccess = AppUserUtilities.hasPaidAccessUser(user, isAdmin);
 
       this.logger.log('[AiInsightsGuard] Status:', {
         stripeRole: (user as any).stripeRole,
@@ -40,7 +40,7 @@ class AiInsightsPermissionsService {
       });
 
       if (hasAiInsightsAccess) {
-        this.logger.log('[AiInsightsGuard] Access GRANTED (Pro/Admin/Grace)');
+        this.logger.log('[AiInsightsGuard] Access GRANTED (Paid/Admin/Grace)');
         return true;
       }
 

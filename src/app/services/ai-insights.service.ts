@@ -47,7 +47,7 @@ export class AiInsightsService {
         case 'APP_CHECK_REQUIRED':
           return 'App verification failed. Refresh the page and try again.';
         case 'PERMISSION_DENIED':
-          return 'AI Insights is available to Pro members.';
+          return 'AI Insights is available to Basic and Pro members.';
         case 'RESOURCE_EXHAUSTED':
           return 'AI Insights limit reached for this billing period.';
         case 'UNAVAILABLE':
@@ -78,7 +78,7 @@ export class AiInsightsService {
       return new AiInsightsError('APP_CHECK_REQUIRED', message || 'App Check verification failed.', error);
     }
     if (code.includes('permission-denied')) {
-      return new AiInsightsError('PERMISSION_DENIED', message || 'AI Insights is available to Pro users.', error);
+      return new AiInsightsError('PERMISSION_DENIED', message || 'AI Insights is available to Basic and Pro members.', error);
     }
     if (code.includes('resource-exhausted')) {
       return new AiInsightsError('RESOURCE_EXHAUSTED', message || 'AI Insights limit reached for this billing period.', error);

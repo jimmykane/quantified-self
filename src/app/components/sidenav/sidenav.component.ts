@@ -58,7 +58,7 @@ export class SideNavComponent {
   }
 
   get aiInsightsRoute(): string {
-    return this.userService.hasProAccessSignal() ? '/ai-insights' : '/subscriptions';
+    return this.userService.hasPaidAccessSignal() ? '/ai-insights' : '/subscriptions';
   }
 
   get user(): User | null {
