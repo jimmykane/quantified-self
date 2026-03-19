@@ -21,6 +21,7 @@ import type {
   AiInsightsLatestSnapshot,
   AiInsightsEmptyResponse,
   AiInsightsOkResponse,
+  AiInsightsQuotaStatus,
   AiInsightsResponse,
   AiInsightsUnsupportedResponse,
 } from '@shared/ai-insights.types';
@@ -28,6 +29,7 @@ import { formatUnitAwareDataValue, normalizeUserUnitSettings } from '@shared/uni
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AiInsightsLatestSnapshotService } from '../../services/ai-insights-latest-snapshot.service';
+import { AiInsightsQuotaService } from '../../services/ai-insights-quota.service';
 import { AiInsightsService } from '../../services/ai-insights.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
@@ -46,6 +48,23 @@ class MockAiInsightsChartComponent {
   readonly darkTheme = input(false);
   readonly useAnimations = input(false);
   readonly userUnitSettings = input<any>(null);
+}
+
+function buildQuotaStatus(overrides: Partial<AiInsightsQuotaStatus> = {}): AiInsightsQuotaStatus {
+  return {
+    role: 'pro',
+    limit: 100,
+    successfulGenkitCount: 12,
+    activeReservationCount: 0,
+    remainingCount: 88,
+    periodStart: '2026-03-01T00:00:00.000Z',
+    periodEnd: '2026-04-01T00:00:00.000Z',
+    periodKind: 'subscription',
+    resetMode: 'date',
+    isEligible: true,
+    blockedReason: null,
+    ...overrides,
+  };
 }
 
 function buildOkResponse(): AiInsightsOkResponse {
@@ -457,6 +476,9 @@ describe('AiInsightsPageComponent', () => {
     loadLatest: vi.fn<() => Promise<AiInsightsLatestSnapshot | null>>(),
     saveLatest: vi.fn<() => Promise<'saved' | 'skipped_too_large' | 'failed'>>(),
   };
+  const aiInsightsQuotaServiceMock = {
+    loadQuotaStatus: vi.fn<() => Promise<AiInsightsQuotaStatus | null>>(),
+  };
   const themeServiceMock = {
     appTheme: signal(AppThemes.Normal),
   };
@@ -484,6 +506,7 @@ describe('AiInsightsPageComponent', () => {
         { provide: AppAuthService, useValue: authServiceMock },
         { provide: AppAnalyticsService, useValue: analyticsServiceMock },
         { provide: AiInsightsLatestSnapshotService, useValue: aiInsightsLatestSnapshotServiceMock },
+        { provide: AiInsightsQuotaService, useValue: aiInsightsQuotaServiceMock },
         { provide: AiInsightsService, useValue: aiInsightsServiceMock },
         { provide: AppThemeService, useValue: themeServiceMock },
         { provide: AppUserSettingsQueryService, useValue: userSettingsQueryServiceMock },
@@ -512,9 +535,11 @@ describe('AiInsightsPageComponent', () => {
     aiInsightsServiceMock.getErrorMessage.mockClear();
     aiInsightsLatestSnapshotServiceMock.loadLatest.mockReset();
     aiInsightsLatestSnapshotServiceMock.saveLatest.mockReset();
+    aiInsightsQuotaServiceMock.loadQuotaStatus.mockReset();
     analyticsServiceMock.logEvent.mockReset();
     aiInsightsLatestSnapshotServiceMock.loadLatest.mockResolvedValue(null);
     aiInsightsLatestSnapshotServiceMock.saveLatest.mockResolvedValue('saved');
+    aiInsightsQuotaServiceMock.loadQuotaStatus.mockResolvedValue(buildQuotaStatus());
     await createComponent();
   });
 
@@ -523,11 +548,13 @@ describe('AiInsightsPageComponent', () => {
     const suggestionTrigger = fixture.debugElement.query(By.css('.suggestion-menu-trigger'))?.nativeElement as HTMLButtonElement | undefined;
     const heroPromptRotator = fixture.debugElement.query(By.css('.hero-prompt-rotator'))?.nativeElement as HTMLButtonElement | undefined;
     const supportNote = fixture.debugElement.query(By.css('.prompt-support-note'))?.nativeElement as HTMLElement | undefined;
+    const quotaLine = fixture.debugElement.query(By.css('.prompt-quota-line'))?.nativeElement as HTMLElement | undefined;
 
     expect(title?.textContent).toContain('Ask a focused question about your training data.');
     expect(suggestionTrigger?.getAttribute('aria-label')).toBe('Suggested prompts');
     expect(component.suggestedPrompts()).toEqual([...AI_INSIGHTS_SUGGESTED_PROMPTS]);
     expect(heroPromptRotator?.getAttribute('aria-label')).toContain(AI_INSIGHTS_SUGGESTED_PROMPTS[0]);
+    expect(quotaLine?.textContent).toContain('88 of 100 left');
     expect(supportNote?.textContent).toContain('Latest completed insights are temporarily restored from your account.');
   });
 
@@ -572,7 +599,11 @@ describe('AiInsightsPageComponent', () => {
   });
 
   it('should submit the prompt and render the result narrative and chart', async () => {
-    aiInsightsServiceMock.runInsight.mockResolvedValue(buildOkResponse());
+    const response = {
+      ...buildOkResponse(),
+      quota: buildQuotaStatus({ successfulGenkitCount: 13, remainingCount: 87 }),
+    };
+    aiInsightsServiceMock.runInsight.mockResolvedValue(response);
     component.promptControl.setValue('Tell me my avg cadence for cycling the last 3 months');
 
     const submitEvent = {
@@ -587,7 +618,7 @@ describe('AiInsightsPageComponent', () => {
     expect(aiInsightsLatestSnapshotServiceMock.saveLatest).toHaveBeenCalledWith(
       'user-1',
       'Tell me my avg cadence for cycling the last 3 months',
-      buildOkResponse(),
+      response,
     );
     expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('ai_insights_action', {
       method: 'ask_button_click',
@@ -604,6 +635,7 @@ describe('AiInsightsPageComponent', () => {
     const chartComponent = fixture.debugElement.query(By.directive(MockAiInsightsChartComponent))?.componentInstance as MockAiInsightsChartComponent | undefined;
     const resultCardSubtitle = fixture.debugElement.query(By.css('.result-card-subtitle'))?.nativeElement as HTMLElement | undefined;
     const resultCardMeta = fixture.debugElement.query(By.css('.result-card-meta'))?.nativeElement as HTMLElement | undefined;
+    const quotaLine = fixture.debugElement.query(By.css('.prompt-quota-line'))?.nativeElement as HTMLElement | undefined;
     const summaryCards = fixture.debugElement.queryAll(By.css('.summary-card'));
     const summaryHelpButtons = fixture.debugElement.queryAll(By.css('.summary-help-button'));
     const expectedOverall = formatUnitAwareDataValue(
@@ -618,6 +650,7 @@ describe('AiInsightsPageComponent', () => {
     expect(chartComponent?.userUnitSettings()).toEqual(userSettingsQueryServiceMock.unitSettings());
     expect(resultCardSubtitle?.textContent).toContain('Insight summary and chart for this prompt.');
     expect(resultCardMeta?.textContent).toContain('Saved');
+    expect(quotaLine?.textContent).toContain('87 of 100 left');
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Overall'))).toBe(true);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Highest period'))).toBe(true);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Lowest period'))).toBe(true);
@@ -662,7 +695,10 @@ describe('AiInsightsPageComponent', () => {
   });
 
   it('should render unsupported responses and swap in backend suggestions', async () => {
-    aiInsightsServiceMock.runInsight.mockResolvedValue(buildUnsupportedResponse());
+    aiInsightsServiceMock.runInsight.mockResolvedValue({
+      ...buildUnsupportedResponse(),
+      quota: buildQuotaStatus(),
+    });
 
     await component.applySuggestedPrompt('Show cadence splits for cycling');
     fixture.detectChanges();
@@ -859,5 +895,27 @@ describe('AiInsightsPageComponent', () => {
     expect(errorTitle?.textContent).toContain('Could not generate this insight');
     expect(errorCopy?.textContent).toContain('Could not generate AI insights.');
     expect(aiInsightsLatestSnapshotServiceMock.saveLatest).not.toHaveBeenCalled();
+  });
+
+  it('should disable prompt submission surfaces when the quota is exhausted', async () => {
+    aiInsightsQuotaServiceMock.loadQuotaStatus.mockResolvedValueOnce(buildQuotaStatus({
+      successfulGenkitCount: 100,
+      remainingCount: 0,
+      blockedReason: 'limit_reached',
+    }));
+
+    await createComponent();
+
+    const askButton = fixture.debugElement.query(By.css('button[type="submit"]'))?.nativeElement as HTMLButtonElement | undefined;
+    const heroPromptRotator = fixture.debugElement.query(By.css('.hero-prompt-rotator'))?.nativeElement as HTMLButtonElement | undefined;
+    const suggestionTrigger = fixture.debugElement.query(By.css('.suggestion-menu-trigger'))?.nativeElement as HTMLButtonElement | undefined;
+    const quotaLine = fixture.debugElement.query(By.css('.prompt-quota-line'))?.nativeElement as HTMLElement | undefined;
+    const quotaNote = fixture.debugElement.query(By.css('.prompt-quota-note'))?.nativeElement as HTMLElement | undefined;
+
+    expect(askButton?.disabled).toBe(true);
+    expect(heroPromptRotator?.disabled).toBe(true);
+    expect(suggestionTrigger?.disabled).toBe(true);
+    expect(quotaLine?.textContent).toContain('0 of 100 left');
+    expect(quotaNote?.textContent).toContain('limit reached');
   });
 });

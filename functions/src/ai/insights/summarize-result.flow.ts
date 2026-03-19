@@ -29,8 +29,13 @@ export interface SummarizeInsightResultInput {
   unitSettings?: UserUnitSettingsInterface;
 }
 
+export interface SummarizeInsightNarrativeResult {
+  narrative: string;
+  source: 'genkit' | 'fallback';
+}
+
 interface SummarizeInsightDependencies {
-  generateNarrative: (input: SummarizeInsightResultInput) => Promise<string>;
+  generateNarrative: (input: SummarizeInsightResultInput) => Promise<SummarizeInsightNarrativeResult>;
 }
 
 const SummarizeInsightResultInputSchema = z.object({
@@ -47,6 +52,11 @@ const SummarizeInsightResultInputSchema = z.object({
 
 const SummarizeInsightResultOutputSchema = z.object({
   narrative: z.string().min(1),
+});
+
+const SummarizeInsightNarrativeResultSchema = z.object({
+  narrative: z.string().min(1),
+  source: z.enum(['genkit', 'fallback']),
 });
 
 function formatSemanticDate(
@@ -235,7 +245,18 @@ const defaultSummarizeInsightDependencies: SummarizeInsightDependencies = {
       output: { schema: SummarizeInsightResultOutputSchema },
     });
 
-    return output?.narrative?.trim() || fallback;
+    const narrative = output?.narrative?.trim();
+    if (narrative) {
+      return {
+        narrative,
+        source: 'genkit',
+      };
+    }
+
+    return {
+      narrative: fallback,
+      source: 'fallback',
+    };
   },
 };
 
@@ -251,18 +272,21 @@ export function setSummarizeInsightDependenciesForTesting(
 
 export async function summarizeAiInsightResult(
   input: SummarizeInsightResultInput,
-): Promise<string> {
+): Promise<SummarizeInsightNarrativeResult> {
   try {
-    return await summarizeInsightDependencies.generateNarrative(input);
+    return SummarizeInsightNarrativeResultSchema.parse(
+      await summarizeInsightDependencies.generateNarrative(input),
+    );
   } catch (_error) {
-    return buildNarrativeFallback(input);
+    return {
+      narrative: buildNarrativeFallback(input),
+      source: 'fallback',
+    };
   }
 }
 
 export const summarizeAiInsightResultFlow = aiInsightsGenkit.defineFlow({
   name: 'aiInsightsSummarizeResult',
   inputSchema: SummarizeInsightResultInputSchema,
-  outputSchema: SummarizeInsightResultOutputSchema,
-}, async (input) => ({
-  narrative: await summarizeAiInsightResult(input),
-}));
+  outputSchema: SummarizeInsightNarrativeResultSchema,
+}, async (input) => summarizeAiInsightResult(input));

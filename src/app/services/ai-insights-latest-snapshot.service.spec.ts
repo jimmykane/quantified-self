@@ -11,6 +11,7 @@ import {
 import type {
   AiInsightsLatestSnapshot,
   AiInsightsOkResponse,
+  AiInsightsQuotaStatus,
 } from '@shared/ai-insights.types';
 import { LoggerService } from './logger.service';
 import {
@@ -113,6 +114,22 @@ function buildOkResponse(): AiInsightsOkResponse {
   };
 }
 
+function buildQuotaStatus(): AiInsightsQuotaStatus {
+  return {
+    role: 'pro',
+    limit: 100,
+    successfulGenkitCount: 12,
+    activeReservationCount: 0,
+    remainingCount: 88,
+    periodStart: '2026-03-01T00:00:00.000Z',
+    periodEnd: '2026-04-01T00:00:00.000Z',
+    periodKind: 'subscription',
+    resetMode: 'date',
+    isEligible: true,
+    blockedReason: null,
+  };
+}
+
 describe('AiInsightsLatestSnapshotService', () => {
   let service: AiInsightsLatestSnapshotService;
   let loggerMock: { warn: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
@@ -168,6 +185,27 @@ describe('AiInsightsLatestSnapshotService', () => {
     const restored = await service.loadLatest('user-1');
 
     expect(restored).toEqual(snapshot);
+  });
+
+  it('should restore snapshots that include the optional quota payload', async () => {
+    const snapshot: AiInsightsLatestSnapshot = {
+      version: 1,
+      savedAt: '2026-03-18T12:00:00.000Z',
+      prompt: 'Show my total distance',
+      response: {
+        ...buildOkResponse(),
+        quota: buildQuotaStatus(),
+      },
+    };
+    vi.mocked(getDoc).mockResolvedValue({
+      exists: () => true,
+      data: () => snapshot,
+    } as never);
+
+    const restored = await service.loadLatest('user-1');
+
+    expect(restored).toEqual(snapshot);
+    expect(deleteDoc).not.toHaveBeenCalled();
   });
 
   it('should restore legacy snapshots with null presentation warnings by normalizing them', async () => {

@@ -237,6 +237,18 @@
   align-items: center;
 }
 
+.prompt-quota-line,
+.prompt-quota-note,
+.prompt-support-note {
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+  line-height: 1.45;
+}
+
+.prompt-quota-note {
+  color: var(--mat-sys-error);
+}
+
 .section-heading {
   display: flex;
   align-items: start;

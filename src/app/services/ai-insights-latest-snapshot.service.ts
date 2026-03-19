@@ -14,6 +14,7 @@ import type {
   AiInsightSummaryCoverage,
   AiInsightSummaryTrend,
   AiInsightsLatestSnapshot,
+  AiInsightsQuotaStatus,
   AiInsightsResponse,
   NormalizedInsightDateRange,
   NormalizedInsightQuery,
@@ -143,6 +144,23 @@ function isNumberRecord(value: unknown): value is Record<string, number> {
   return isRecord(value) && Object.values(value).every(isFiniteNumber);
 }
 
+function isQuotaStatus(value: unknown): value is AiInsightsQuotaStatus {
+  return (
+    isRecord(value)
+    && (value.role === 'free' || value.role === 'basic' || value.role === 'pro')
+    && isFiniteNumber(value.limit)
+    && isFiniteNumber(value.successfulGenkitCount)
+    && isFiniteNumber(value.activeReservationCount)
+    && isFiniteNumber(value.remainingCount)
+    && (value.periodStart === null || typeof value.periodStart === 'string')
+    && (value.periodEnd === null || typeof value.periodEnd === 'string')
+    && (value.periodKind === 'subscription' || value.periodKind === 'grace_hold' || value.periodKind === 'no_billing_period')
+    && (value.resetMode === 'date' || value.resetMode === 'next_successful_payment')
+    && typeof value.isEligible === 'boolean'
+    && (value.blockedReason === null || value.blockedReason === 'requires_pro' || value.blockedReason === 'limit_reached')
+  );
+}
+
 function isNormalizedInsightDateRange(value: unknown): value is NormalizedInsightDateRange {
   if (!isRecord(value) || typeof value.timezone !== 'string') {
     return false;
@@ -269,6 +287,7 @@ function isCompletedInsightResponse(value: unknown): value is Extract<AiInsights
     isRecord(value)
     && (value.status === 'ok' || value.status === 'empty')
     && typeof value.narrative === 'string'
+    && (value.quota === undefined || isQuotaStatus(value.quota))
     && isNormalizedInsightQuery(value.query)
     && isAggregationResult(value.aggregation)
     && isSummary(value.summary)
@@ -282,6 +301,7 @@ function isUnsupportedInsightResponse(value: unknown): value is Extract<AiInsigh
     isRecord(value)
     && value.status === 'unsupported'
     && typeof value.narrative === 'string'
+    && (value.quota === undefined || isQuotaStatus(value.quota))
     && typeof value.reasonCode === 'string'
     && isStringArray(value.suggestedPrompts)
   );
@@ -397,6 +417,16 @@ function getAiInsightsResponseValidationFailure(value: unknown): SnapshotValidat
       details: {
         responseKeys: Object.keys(value),
         actualType: describeValueType(value.narrative),
+      },
+    };
+  }
+
+  if (value.quota !== undefined && !isQuotaStatus(value.quota)) {
+    return {
+      reason: 'quota_invalid',
+      details: {
+        responseKeys: Object.keys(value),
+        ...describeQuotaStatus(value.quota),
       },
     };
   }
@@ -534,6 +564,29 @@ function describePresentation(value: unknown): UnknownRecord {
   };
 }
 
+function describeQuotaStatus(value: unknown): UnknownRecord {
+  if (!isRecord(value)) {
+    return {
+      quotaType: describeValueType(value),
+    };
+  }
+
+  return {
+    quotaKeys: Object.keys(value),
+    roleType: describeValueType(value.role),
+    limitType: describeValueType(value.limit),
+    successfulGenkitCountType: describeValueType(value.successfulGenkitCount),
+    activeReservationCountType: describeValueType(value.activeReservationCount),
+    remainingCountType: describeValueType(value.remainingCount),
+    periodStartType: describeValueType(value.periodStart),
+    periodEndType: describeValueType(value.periodEnd),
+    periodKindType: describeValueType(value.periodKind),
+    resetModeType: describeValueType(value.resetMode),
+    isEligibleType: describeValueType(value.isEligible),
+    blockedReasonType: describeValueType(value.blockedReason),
+  };
+}
+
 function describeValueType(value: unknown): string {
   if (Array.isArray(value)) {
     return 'array';
@@ -559,12 +612,16 @@ function normalizeAiInsightsLatestSnapshot(snapshot: AiInsightsLatestSnapshot): 
 
 function normalizeAiInsightsResponse(response: AiInsightsResponse): AiInsightsResponse {
   if (response.status === 'unsupported') {
-    return response;
+    return {
+      ...response,
+      ...(response.quota ? { quota: response.quota } : {}),
+    };
   }
 
   if (response.status === 'empty') {
     return {
       ...response,
+      ...(response.quota ? { quota: response.quota } : {}),
       query: normalizeInsightQuery(response.query),
       summary: normalizeSummary(response.summary),
       presentation: {
@@ -576,6 +633,7 @@ function normalizeAiInsightsResponse(response: AiInsightsResponse): AiInsightsRe
 
   return {
     ...response,
+    ...(response.quota ? { quota: response.quota } : {}),
     query: normalizeInsightQuery(response.query),
     summary: normalizeSummary(response.summary),
     presentation: normalizePresentation(response.presentation),

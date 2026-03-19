@@ -173,11 +173,12 @@ describe('summarizeAiInsightResult', () => {
       },
     });
 
-    const narrative = await summarizeAiInsightResult(paceInput);
+    const result = await summarizeAiInsightResult(paceInput);
 
-    expect(narrative).toContain('07:02 min/km');
-    expect(narrative).toContain('5 activities');
-    expect(narrative).not.toContain('422.3478623928474');
+    expect(result.source).toBe('fallback');
+    expect(result.narrative).toContain('07:02 min/km');
+    expect(result.narrative).toContain('5 activities');
+    expect(result.narrative).not.toContain('422.3478623928474');
   });
 
   it('formats bounded narrative date ranges using the client locale and query timezone', async () => {
@@ -187,7 +188,7 @@ describe('summarizeAiInsightResult', () => {
       },
     });
 
-    const narrative = await summarizeAiInsightResult({
+    const result = await summarizeAiInsightResult({
       ...paceInput,
       metricLabel: 'highest heart rate',
       clientLocale: 'en-US',
@@ -209,9 +210,10 @@ describe('summarizeAiInsightResult', () => {
       },
     });
 
-    expect(narrative).toContain('from Feb 17, 2026 to Mar 18, 2026');
-    expect(narrative).not.toContain('2026-02-17');
-    expect(narrative).not.toContain('2026-03-18');
+    expect(result.source).toBe('fallback');
+    expect(result.narrative).toContain('from Feb 17, 2026 to Mar 18, 2026');
+    expect(result.narrative).not.toContain('2026-02-17');
+    expect(result.narrative).not.toContain('2026-03-18');
   });
 
   it('builds localized dateRangeLabel facts for model generation', () => {
@@ -240,7 +242,7 @@ describe('summarizeAiInsightResult', () => {
       },
     });
 
-    const narrative = await summarizeAiInsightResult({
+    const result = await summarizeAiInsightResult({
       ...paceInput,
       query: {
         ...paceInput.query,
@@ -252,7 +254,8 @@ describe('summarizeAiInsightResult', () => {
       },
     });
 
-    expect(narrative).toContain('across all recorded history');
-    expect(narrative).not.toContain('between');
+    expect(result.source).toBe('fallback');
+    expect(result.narrative).toContain('across all recorded history');
+    expect(result.narrative).not.toContain('between');
   });
 });

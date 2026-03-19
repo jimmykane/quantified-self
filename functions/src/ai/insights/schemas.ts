@@ -7,7 +7,11 @@ import {
   ChartTypes,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
-import type { AiInsightSummary, NormalizedInsightQuery } from '../../../../shared/ai-insights.types';
+import type {
+  AiInsightsQuotaStatus,
+  AiInsightSummary,
+  NormalizedInsightQuery,
+} from '../../../../shared/ai-insights.types';
 import { CANONICAL_ACTIVITY_TYPES } from './canonical-activity-types';
 
 const CANONICAL_ACTIVITY_TYPE_SCHEMA_VALUES = (
@@ -81,6 +85,20 @@ export const AiInsightPresentationSchema = z.object({
   warnings: z.array(z.string()).optional(),
 });
 
+export const AiInsightsQuotaStatusSchema: z.ZodType<AiInsightsQuotaStatus> = z.object({
+  role: z.enum(['free', 'basic', 'pro']),
+  limit: z.number().int().nonnegative(),
+  successfulGenkitCount: z.number().int().nonnegative(),
+  activeReservationCount: z.number().int().nonnegative(),
+  remainingCount: z.number().int().nonnegative(),
+  periodStart: z.string().datetime().nullable(),
+  periodEnd: z.string().datetime().nullable(),
+  periodKind: z.enum(['subscription', 'grace_hold', 'no_billing_period']),
+  resetMode: z.enum(['date', 'next_successful_payment']),
+  isEligible: z.boolean(),
+  blockedReason: z.enum(['requires_pro', 'limit_reached']).nullable(),
+});
+
 export const AiInsightSummaryBucketSchema = z.object({
   bucketKey: BucketKeySchema,
   time: z.number().optional(),
@@ -130,6 +148,7 @@ export const AiInsightsResponseSchema = z.discriminatedUnion('status', [
   z.object({
     status: z.literal('ok'),
     narrative: z.string().min(1),
+    quota: AiInsightsQuotaStatusSchema.optional(),
     query: NormalizedInsightQuerySchema,
     aggregation: EventStatAggregationResultSchema,
     summary: AiInsightSummarySchema,
@@ -138,6 +157,7 @@ export const AiInsightsResponseSchema = z.discriminatedUnion('status', [
   z.object({
     status: z.literal('empty'),
     narrative: z.string().min(1),
+    quota: AiInsightsQuotaStatusSchema.optional(),
     query: NormalizedInsightQuerySchema,
     aggregation: EventStatAggregationResultSchema,
     summary: AiInsightSummarySchema,
@@ -148,6 +168,7 @@ export const AiInsightsResponseSchema = z.discriminatedUnion('status', [
   z.object({
     status: z.literal('unsupported'),
     narrative: z.string().min(1),
+    quota: AiInsightsQuotaStatusSchema.optional(),
     reasonCode: AiInsightsUnsupportedReasonCodeSchema,
     suggestedPrompts: z.array(z.string()),
   }),

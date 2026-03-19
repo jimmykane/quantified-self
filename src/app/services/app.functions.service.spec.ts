@@ -44,6 +44,7 @@ vi.mock('../../environments/environment', () => ({
 vi.mock('@shared/functions-manifest', () => ({
     FUNCTIONS_MANIFEST: {
         'aiInsights': { name: 'aiInsights', region: 'europe-west2' },
+        'getAiInsightsQuotaStatus': { name: 'getAiInsightsQuotaStatus', region: 'europe-west2' },
         'defaultRegionFunc': { name: 'func1', region: 'europe-west2' },
         'otherRegionFunc': { name: 'func2', region: 'europe-west3' }
     }
@@ -85,7 +86,7 @@ describe('AppFunctionsService', () => {
         // Service is created in beforeEach
         expect(getFunctions).toHaveBeenCalledWith(mockApp, 'europe-west2');
         expect(getFunctions).toHaveBeenCalledWith(mockApp, 'europe-west3');
-        expect(mocks.httpsCallableMock).toHaveBeenCalledTimes(3);
+        expect(mocks.httpsCallableMock).toHaveBeenCalledTimes(4);
     });
 
     it('should call the pre-initialized callable', async () => {
@@ -100,7 +101,7 @@ describe('AppFunctionsService', () => {
         await expect(service.call('invalidFunc' as any)).rejects.toThrow('Function invalidFunc not initialized');
     });
 
-    it('should route only aiInsights to the local emulator on localhost', () => {
+    it('should route ai insights callables to the local emulator on localhost', () => {
         TestBed.resetTestingModule();
         mocks.setLocalhost(true);
         mocks.httpsCallableMock.mockClear();
@@ -113,6 +114,10 @@ describe('AppFunctionsService', () => {
         expect(httpsCallableFromURL).toHaveBeenCalledWith(
             expect.anything(),
             'http://127.0.0.1:5001/quantified-self-io/europe-west2/aiInsights',
+        );
+        expect(httpsCallableFromURL).toHaveBeenCalledWith(
+            expect.anything(),
+            'http://127.0.0.1:5001/quantified-self-io/europe-west2/getAiInsightsQuotaStatus',
         );
         expect(httpsCallable).toHaveBeenCalledWith(expect.anything(), 'func1');
         expect(httpsCallable).toHaveBeenCalledWith(expect.anything(), 'func2');

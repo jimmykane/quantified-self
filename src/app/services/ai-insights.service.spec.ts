@@ -110,4 +110,22 @@ describe('AiInsightsService', () => {
     expect(service.getErrorMessage(new AiInsightsError('APP_CHECK_REQUIRED', 'App Check verification failed.')))
       .toBe('App verification failed. Refresh the page and try again.');
   });
+
+  it('should map resource exhausted function errors into quota limit errors', async () => {
+    functionsServiceMock.call.mockRejectedValue({
+      code: 'functions/resource-exhausted',
+      message: 'AI Insights limit reached for this billing period.',
+    });
+
+    await expect(service.runInsight({
+      prompt: 'Average cadence',
+      clientTimezone: 'Europe/Helsinki',
+    })).rejects.toMatchObject({
+      name: 'AiInsightsError',
+      code: 'RESOURCE_EXHAUSTED',
+    });
+
+    expect(service.getErrorMessage(new AiInsightsError('RESOURCE_EXHAUSTED', 'AI Insights limit reached for this billing period.')))
+      .toBe('AI Insights limit reached for this billing period.');
+  });
 });

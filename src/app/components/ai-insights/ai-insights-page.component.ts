@@ -13,6 +13,7 @@ import type {
   AiInsightSummaryBucket,
   AiInsightsEmptyResponse,
   AiInsightsOkResponse,
+  AiInsightsQuotaStatus,
   AiInsightsRequest,
   AiInsightsResponse,
   AiInsightsUnsupportedResponse,
@@ -25,6 +26,7 @@ import { AppAuthService } from '../../authentication/app.auth.service';
 import { MaterialModule } from '../../modules/material.module';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AiInsightsLatestSnapshotService } from '../../services/ai-insights-latest-snapshot.service';
+import { AiInsightsQuotaService } from '../../services/ai-insights-quota.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { AiInsightsService } from '../../services/ai-insights.service';
@@ -80,6 +82,36 @@ function formatSavedInsightDate(
     month: 'short',
     year: 'numeric',
   });
+}
+
+function formatQuotaStatusText(
+  quotaStatus: AiInsightsQuotaStatus,
+  locale: string,
+): string {
+  const numberFormatter = new Intl.NumberFormat(locale || undefined);
+  const remainingCount = numberFormatter.format(quotaStatus.remainingCount);
+  const limit = numberFormatter.format(quotaStatus.limit);
+
+  if (!quotaStatus.isEligible) {
+    return `${remainingCount} of ${limit} left • Pro required`;
+  }
+
+  if (quotaStatus.resetMode === 'date' && quotaStatus.periodEnd) {
+    const resetDate = formatSavedInsightDate(quotaStatus.periodEnd, locale);
+    if (resetDate) {
+      return `${remainingCount} of ${limit} left • resets ${resetDate}`;
+    }
+  }
+
+  return `${remainingCount} of ${limit} left • resets after next successful payment`;
+}
+
+function resolveQuotaBlockedMessage(quotaStatus: AiInsightsQuotaStatus): string {
+  if (!quotaStatus.isEligible) {
+    return 'AI Insights is available to Pro members.';
+  }
+
+  return 'AI Insights limit reached for this billing period.';
 }
 
 function formatBucketMeta(
@@ -249,6 +281,7 @@ export class AiInsightsPageComponent {
   private readonly analyticsService = inject(AppAnalyticsService);
   private readonly aiInsightsService = inject(AiInsightsService);
   private readonly aiInsightsLatestSnapshotService = inject(AiInsightsLatestSnapshotService);
+  private readonly aiInsightsQuotaService = inject(AiInsightsQuotaService);
   private readonly themeService = inject(AppThemeService);
   private readonly userSettingsQueryService = inject(AppUserSettingsQueryService);
   private readonly ngZone = inject(NgZone);
@@ -267,6 +300,7 @@ export class AiInsightsPageComponent {
   readonly latestSnapshotRestored = signal(false);
   readonly latestSnapshotPersistenceNotice = signal<string | null>(null);
   readonly latestSnapshotSavedAt = signal<string | null>(null);
+  readonly quotaStatus = signal<AiInsightsQuotaStatus | null>(null);
   readonly resultPrompt = signal('');
   readonly appTheme = this.themeService.appTheme;
   readonly user = toSignal(this.authService.user$, { initialValue: null });
@@ -277,7 +311,19 @@ export class AiInsightsPageComponent {
   readonly currentUserID = computed(() => this.user()?.uid ?? null);
   readonly isDarkTheme = computed(() => this.appTheme() === AppThemes.Dark);
   readonly useAnimations = computed(() => this.chartSettings().useAnimations ?? false);
-  readonly canSubmit = computed(() => !this.isSubmitting() && this.promptValue().trim().length > 0);
+  readonly hasQuotaAvailable = computed(() => {
+    const quotaStatus = this.quotaStatus();
+    if (!quotaStatus) {
+      return true;
+    }
+
+    return quotaStatus.isEligible && quotaStatus.remainingCount > 0;
+  });
+  readonly canSubmit = computed(() =>
+    !this.isSubmitting()
+    && this.promptValue().trim().length > 0
+    && this.hasQuotaAvailable()
+  );
   readonly okResponse = computed<AiInsightsOkResponse | null>(() => {
     const response = this.response();
     return response?.status === 'ok' ? response : null;
@@ -303,7 +349,9 @@ export class AiInsightsPageComponent {
 
     const response = this.response();
     const hasRefreshableResult = response?.status === 'ok' || response?.status === 'empty';
-    return hasRefreshableResult && this.resultPrompt().trim().length > 0;
+    return hasRefreshableResult
+      && this.resultPrompt().trim().length > 0
+      && this.hasQuotaAvailable();
   });
   readonly latestSnapshotSupportNote = computed(() =>
     'Latest completed insights are temporarily restored from your account. Proper saved insights/history will come later.'
@@ -332,6 +380,22 @@ export class AiInsightsPageComponent {
       });
     }
     return notes;
+  });
+  readonly quotaStatusText = computed(() => {
+    const quotaStatus = this.quotaStatus();
+    if (!quotaStatus) {
+      return null;
+    }
+
+    return formatQuotaStatusText(quotaStatus, this.locale);
+  });
+  readonly quotaBlockedMessage = computed(() => {
+    const quotaStatus = this.quotaStatus();
+    if (!quotaStatus || (quotaStatus.isEligible && quotaStatus.remainingCount > 0)) {
+      return null;
+    }
+
+    return resolveQuotaBlockedMessage(quotaStatus);
   });
   readonly activeHeroPrompt = signal(AI_INSIGHTS_SUGGESTED_PROMPTS[0] ?? '');
   readonly typedHeroPrompt = signal((AI_INSIGHTS_SUGGESTED_PROMPTS[0] ?? '').slice(0, 1));
@@ -415,6 +479,7 @@ export class AiInsightsPageComponent {
     this.latestSnapshotRestored.set(false);
     this.latestSnapshotPersistenceNotice.set(null);
     this.latestSnapshotSavedAt.set(null);
+    this.quotaStatus.set(null);
     this.errorMessage.set(null);
     this.response.set(null);
     this.resultPrompt.set('');
@@ -425,8 +490,16 @@ export class AiInsightsPageComponent {
     }
 
     void (async () => {
-      const latestSnapshot = await this.aiInsightsLatestSnapshotService.loadLatest(userID);
-      if (cancelled || !latestSnapshot) {
+      const [latestSnapshot, quotaStatus] = await Promise.all([
+        this.aiInsightsLatestSnapshotService.loadLatest(userID),
+        this.aiInsightsQuotaService.loadQuotaStatus(),
+      ]);
+      if (cancelled) {
+        return;
+      }
+
+      this.quotaStatus.set(quotaStatus);
+      if (!latestSnapshot) {
         return;
       }
 
@@ -581,6 +654,12 @@ export class AiInsightsPageComponent {
       this.promptControl.setValue(prompt);
     }
 
+    const quotaStatus = this.quotaStatus();
+    if (quotaStatus && (!quotaStatus.isEligible || quotaStatus.remainingCount <= 0)) {
+      this.errorMessage.set(resolveQuotaBlockedMessage(quotaStatus));
+      return;
+    }
+
     this.isSubmitting.set(true);
     this.latestSnapshotRestored.set(false);
     this.latestSnapshotPersistenceNotice.set(null);
@@ -591,6 +670,7 @@ export class AiInsightsPageComponent {
     try {
       const response = await this.aiInsightsService.runInsight(this.buildInsightRequest(prompt));
       this.response.set(response);
+      this.quotaStatus.set(response.quota ?? this.quotaStatus());
       this.resultPrompt.set(prompt);
       const userID = this.currentUserID();
       if (userID) {
@@ -604,6 +684,10 @@ export class AiInsightsPageComponent {
         }
       }
     } catch (error) {
+      const nextQuotaStatus = await this.aiInsightsQuotaService.loadQuotaStatus();
+      if (nextQuotaStatus) {
+        this.quotaStatus.set(nextQuotaStatus);
+      }
       this.errorMessage.set(this.aiInsightsService.getErrorMessage(error));
     } finally {
       this.isSubmitting.set(false);
@@ -611,6 +695,10 @@ export class AiInsightsPageComponent {
   }
 
   async applySuggestedPrompt(prompt: string, options: { logAnalytics?: boolean } = {}): Promise<void> {
+    if (this.isSubmitting() || !this.hasQuotaAvailable()) {
+      return;
+    }
+
     if (options.logAnalytics !== false) {
       const promptAnalytics = this.resolvePromptAnalytics(prompt);
       this.logAiInsightsAction('suggested_prompt_select', {
@@ -625,7 +713,7 @@ export class AiInsightsPageComponent {
 
   async onHeroPromptClick(): Promise<void> {
     const prompt = this.activeHeroPrompt().trim();
-    if (!prompt || this.isSubmitting()) {
+    if (!prompt || this.isSubmitting() || !this.hasQuotaAvailable()) {
       return;
     }
 
@@ -640,7 +728,7 @@ export class AiInsightsPageComponent {
 
   async refreshCurrentResult(): Promise<void> {
     const prompt = this.resultPrompt().trim();
-    if (!prompt || this.isSubmitting()) {
+    if (!prompt || !this.canRefreshResult()) {
       return;
     }
 

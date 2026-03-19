@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { getUsageLimitForRole, USAGE_LIMITS } from '../../../shared/limits';
+import {
+    AI_INSIGHTS_REQUEST_LIMITS,
+    getAiInsightsRequestLimitForRole,
+    getUsageLimitForRole,
+    USAGE_LIMITS,
+} from '../../../shared/limits';
 
 describe('USAGE_LIMITS', () => {
     it('should define positive increasing limits for limited roles', () => {
@@ -19,5 +24,11 @@ describe('USAGE_LIMITS', () => {
 
     it('should throw for unsupported roles', () => {
         expect(() => getUsageLimitForRole('enterprise')).toThrow("Unsupported subscription role 'enterprise'");
+    });
+
+    it('should resolve AI insights limits explicitly for supported roles', () => {
+        expect(getAiInsightsRequestLimitForRole('free')).toBe(AI_INSIGHTS_REQUEST_LIMITS.free);
+        expect(getAiInsightsRequestLimitForRole('basic')).toBe(AI_INSIGHTS_REQUEST_LIMITS.basic);
+        expect(getAiInsightsRequestLimitForRole('pro')).toBe(AI_INSIGHTS_REQUEST_LIMITS.pro);
     });
 });

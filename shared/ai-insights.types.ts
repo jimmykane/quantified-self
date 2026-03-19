@@ -43,6 +43,39 @@ export interface NormalizedInsightQuery {
   chartType: ChartTypes;
 }
 
+export type AiInsightsQuotaPeriodKind =
+  | 'subscription'
+  | 'grace_hold'
+  | 'no_billing_period';
+
+export type AiInsightsQuotaResetMode =
+  | 'date'
+  | 'next_successful_payment';
+
+export type AiInsightsQuotaBlockedReason =
+  | 'requires_pro'
+  | 'limit_reached'
+  | null;
+
+export interface AiInsightsQuotaStatus {
+  role: 'free' | 'basic' | 'pro';
+  limit: number;
+  successfulGenkitCount: number;
+  activeReservationCount: number;
+  remainingCount: number;
+  periodStart: string | null;
+  periodEnd: string | null;
+  periodKind: AiInsightsQuotaPeriodKind;
+  resetMode: AiInsightsQuotaResetMode;
+  isEligible: boolean;
+  blockedReason: AiInsightsQuotaBlockedReason;
+}
+
+export interface AiInsightsQuotaStatusRequest {
+}
+
+export type AiInsightsQuotaStatusResponse = AiInsightsQuotaStatus;
+
 export interface AiInsightPresentation {
   title: string;
   chartType: ChartTypes;
@@ -97,6 +130,7 @@ export type AiInsightsUnsupportedReasonCode =
 export interface AiInsightsOkResponse {
   status: 'ok';
   narrative: string;
+  quota?: AiInsightsQuotaStatus;
   query: NormalizedInsightQuery;
   aggregation: EventStatAggregationResult;
   summary: AiInsightSummary;
@@ -106,6 +140,7 @@ export interface AiInsightsOkResponse {
 export interface AiInsightsEmptyResponse {
   status: 'empty';
   narrative: string;
+  quota?: AiInsightsQuotaStatus;
   query: NormalizedInsightQuery;
   aggregation: EventStatAggregationResult;
   summary: AiInsightSummary;
@@ -117,6 +152,7 @@ export interface AiInsightsEmptyResponse {
 export interface AiInsightsUnsupportedResponse {
   status: 'unsupported';
   narrative: string;
+  quota?: AiInsightsQuotaStatus;
   reasonCode: AiInsightsUnsupportedReasonCode;
   suggestedPrompts: string[];
 }

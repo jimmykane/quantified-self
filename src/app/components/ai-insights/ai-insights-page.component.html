@@ -15,7 +15,7 @@
         <button
           type="button"
           class="hero-prompt-rotator"
-          [disabled]="isSubmitting()"
+          [disabled]="isSubmitting() || !hasQuotaAvailable()"
           (click)="onHeroPromptClick()"
           [attr.aria-label]="'Example prompt: ' + activeHeroPrompt()"
           [attr.title]="activeHeroPrompt()">
@@ -34,7 +34,7 @@
             <mat-icon>psychology</mat-icon>
           </div>
           <mat-card-title>Prompt</mat-card-title>
-          <mat-card-subtitle>Single-turn, Pro-only insights based on event-level stats.</mat-card-subtitle>
+          <mat-card-subtitle>Single-turn insights based on event-level stats.</mat-card-subtitle>
         </mat-card-header>
 
         <mat-card-content class="card-content prompt-card-content">
@@ -73,7 +73,7 @@
                     mat-icon-button
                     type="button"
                     class="qs-action-menu-icon-button suggestion-menu-trigger"
-                    [disabled]="isSubmitting()"
+                    [disabled]="isSubmitting() || !hasQuotaAvailable()"
                     [matMenuTriggerFor]="suggestedPromptsMenu"
                     aria-label="Suggested prompts">
                     <mat-icon>auto_awesome</mat-icon>
@@ -82,6 +82,12 @@
               </div>
             </div>
 
+            @if (quotaStatusText(); as quotaStatusText) {
+              <p class="mat-body-small prompt-quota-line">{{ quotaStatusText }}</p>
+            }
+            @if (quotaBlockedMessage(); as quotaBlockedMessage) {
+              <p class="mat-body-small prompt-quota-note">{{ quotaBlockedMessage }}</p>
+            }
             <p class="mat-body-small prompt-support-note">{{ latestSnapshotSupportNote() }}</p>
           </form>
 
@@ -91,7 +97,7 @@
                 mat-menu-item
                 type="button"
                 class="suggestion-menu-item"
-                [disabled]="isSubmitting()"
+                [disabled]="isSubmitting() || !hasQuotaAvailable()"
                 (click)="applySuggestedPrompt(prompt)">
                 <span class="suggestion-menu-item-label">{{ prompt }}</span>
               </button>

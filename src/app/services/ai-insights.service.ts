@@ -7,6 +7,7 @@ export type AiInsightsErrorCode =
   | 'UNAUTHENTICATED'
   | 'APP_CHECK_REQUIRED'
   | 'PERMISSION_DENIED'
+  | 'RESOURCE_EXHAUSTED'
   | 'UNAVAILABLE'
   | 'INTERNAL';
 
@@ -47,6 +48,8 @@ export class AiInsightsService {
           return 'App verification failed. Refresh the page and try again.';
         case 'PERMISSION_DENIED':
           return 'AI Insights is available to Pro members.';
+        case 'RESOURCE_EXHAUSTED':
+          return 'AI Insights limit reached for this billing period.';
         case 'UNAVAILABLE':
           return 'AI Insights is temporarily unavailable. Please try again in a moment.';
         default:
@@ -76,6 +79,9 @@ export class AiInsightsService {
     }
     if (code.includes('permission-denied')) {
       return new AiInsightsError('PERMISSION_DENIED', message || 'AI Insights is available to Pro users.', error);
+    }
+    if (code.includes('resource-exhausted')) {
+      return new AiInsightsError('RESOURCE_EXHAUSTED', message || 'AI Insights limit reached for this billing period.', error);
     }
     if (code.includes('unavailable')) {
       return new AiInsightsError('UNAVAILABLE', message || 'AI Insights is temporarily unavailable.', error);

@@ -19,6 +19,10 @@ const hoisted = vi.hoisted(() => {
   return {
     currentContext,
     hasProAccess: vi.fn(),
+    getAiInsightsQuotaStatus: vi.fn(),
+    reserveAiInsightsQuotaForGenkit: vi.fn(),
+    finalizeAiInsightsQuotaReservation: vi.fn(),
+    releaseAiInsightsQuotaReservation: vi.fn(),
     normalizeInsightQuery: vi.fn(),
     executeAiInsightsQuery: vi.fn(),
     summarizeAiInsightResult: vi.fn(),
@@ -28,6 +32,7 @@ const hoisted = vi.hoisted(() => {
 });
 
 vi.mock('firebase-functions/v2/https', () => ({
+  onCall: (_options: unknown, handler: unknown) => handler,
   onCallGenkit: (_options: unknown, flow: unknown) => flow,
   HttpsError: class HttpsError extends Error {
     code: string;
@@ -48,6 +53,7 @@ vi.mock('./genkit', () => ({
 
 vi.mock('../../utils', () => ({
   ALLOWED_CORS_ORIGINS: [],
+  enforceAppCheck: vi.fn(),
   hasProAccess: (...args: unknown[]) => hoisted.hasProAccess(...args),
 }));
 
@@ -67,6 +73,14 @@ vi.mock('./user-unit-settings', () => ({
   loadUserUnitSettings: (...args: unknown[]) => hoisted.loadUserUnitSettings(...args),
 }));
 
+vi.mock('./quota', () => ({
+  AI_INSIGHTS_LIMIT_REACHED_MESSAGE: 'AI Insights limit reached for this billing period.',
+  getAiInsightsQuotaStatus: (...args: unknown[]) => hoisted.getAiInsightsQuotaStatus(...args),
+  reserveAiInsightsQuotaForGenkit: (...args: unknown[]) => hoisted.reserveAiInsightsQuotaForGenkit(...args),
+  finalizeAiInsightsQuotaReservation: (...args: unknown[]) => hoisted.finalizeAiInsightsQuotaReservation(...args),
+  releaseAiInsightsQuotaReservation: (...args: unknown[]) => hoisted.releaseAiInsightsQuotaReservation(...args),
+}));
+
 vi.mock('./metric-catalog', () => ({
   getInsightMetricDefinition: (...args: unknown[]) => hoisted.getInsightMetricDefinition(...args),
   getSuggestedInsightPrompts: () => [
@@ -76,7 +90,21 @@ vi.mock('./metric-catalog', () => ({
   ],
 }));
 
-import { aiInsights } from './callable';
+import { aiInsights, getAiInsightsQuotaStatus } from './callable';
+
+const quotaStatus = {
+  role: 'pro',
+  limit: 100,
+  successfulGenkitCount: 12,
+  activeReservationCount: 0,
+  remainingCount: 88,
+  periodStart: '2026-03-01T00:00:00.000Z',
+  periodEnd: '2026-04-01T00:00:00.000Z',
+  periodKind: 'subscription',
+  resetMode: 'date',
+  isEligible: true,
+  blockedReason: null,
+} as const;
 
 const normalizedQuery = {
   dataType: 'Distance',
@@ -181,7 +209,25 @@ describe('aiInsights callable', () => {
       verticalSpeedUnits: ['Vertical Speed'],
       startOfTheWeek: 1,
     });
-    hoisted.summarizeAiInsightResult.mockResolvedValue('Narrative');
+    hoisted.getAiInsightsQuotaStatus.mockResolvedValue(quotaStatus);
+    hoisted.reserveAiInsightsQuotaForGenkit.mockResolvedValue({
+      userID: 'user-1',
+      reservationID: 'reservation-1',
+      periodDocId: 'period_1_2',
+      role: 'pro',
+      limit: 100,
+      periodStart: quotaStatus.periodStart,
+      periodEnd: quotaStatus.periodEnd,
+      periodKind: 'subscription',
+      resetMode: 'date',
+      isEligible: true,
+    });
+    hoisted.finalizeAiInsightsQuotaReservation.mockResolvedValue(quotaStatus);
+    hoisted.releaseAiInsightsQuotaReservation.mockResolvedValue(quotaStatus);
+    hoisted.summarizeAiInsightResult.mockResolvedValue({
+      narrative: 'Narrative',
+      source: 'genkit',
+    });
   });
 
   it('rejects unauthenticated requests', async () => {
@@ -220,6 +266,10 @@ describe('aiInsights callable', () => {
     expect(hoisted.normalizeInsightQuery).toHaveBeenCalled();
     expect(hoisted.loadUserUnitSettings).toHaveBeenCalledWith('user-1');
     expect(hoisted.executeAiInsightsQuery).toHaveBeenCalledWith('user-1', normalizedQuery, 'show distance');
+    expect(hoisted.reserveAiInsightsQuotaForGenkit).toHaveBeenCalledWith('user-1');
+    expect(hoisted.finalizeAiInsightsQuotaReservation).toHaveBeenCalledWith(expect.objectContaining({
+      reservationID: 'reservation-1',
+    }));
     expect(hoisted.summarizeAiInsightResult).toHaveBeenCalledWith(expect.objectContaining({
       summary,
       unitSettings: expect.objectContaining({
@@ -229,6 +279,7 @@ describe('aiInsights callable', () => {
     expect(result).toEqual({
       status: 'ok',
       narrative: 'Narrative',
+      quota: quotaStatus,
       query: normalizedQuery,
       aggregation: expect.objectContaining({
         buckets: expect.any(Array),
@@ -262,6 +313,7 @@ describe('aiInsights callable', () => {
     expect(result).toEqual({
       status: 'empty',
       narrative: 'Narrative',
+      quota: quotaStatus,
       query: normalizedQuery,
       aggregation: expect.objectContaining({
         buckets: [],
@@ -357,9 +409,48 @@ describe('aiInsights callable', () => {
     expect(result).toEqual({
       status: 'unsupported',
       narrative: 'I can only answer questions from persisted event-level stats right now, so streams, splits, laps, routes, and original-file reprocessing are out of scope.',
+      quota: quotaStatus,
       reasonCode: 'unsupported_capability',
       suggestedPrompts: expect.any(Array),
     });
+  });
+
+  it('releases the reservation when Genkit falls back instead of consuming quota', async () => {
+    hoisted.summarizeAiInsightResult.mockResolvedValue({
+      narrative: 'Fallback narrative',
+      source: 'fallback',
+    });
+
+    const result = await aiInsights({
+      prompt: 'show distance',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(hoisted.finalizeAiInsightsQuotaReservation).not.toHaveBeenCalled();
+    expect(hoisted.releaseAiInsightsQuotaReservation).toHaveBeenCalledWith(expect.objectContaining({
+      reservationID: 'reservation-1',
+    }));
+    expect(result).toMatchObject({
+      status: 'ok',
+      narrative: 'Fallback narrative',
+      quota: quotaStatus,
+    });
+  });
+
+  it('releases the reservation when summarize-result throws before quota can be finalized', async () => {
+    hoisted.summarizeAiInsightResult.mockRejectedValue(new Error('summarize failed'));
+
+    await expect(aiInsights({
+      prompt: 'show distance',
+      clientTimezone: 'UTC',
+    } as any)).rejects.toMatchObject({
+      code: 'internal',
+    });
+
+    expect(hoisted.releaseAiInsightsQuotaReservation).toHaveBeenCalledWith(expect.objectContaining({
+      reservationID: 'reservation-1',
+    }));
+    expect(hoisted.finalizeAiInsightsQuotaReservation).not.toHaveBeenCalled();
   });
 
   it('uses the activity group label in the title when a broad group filter is present', async () => {
@@ -412,5 +503,16 @@ describe('aiInsights callable', () => {
       }),
       'Show my max heart rate last month as stacked columns by activity type over time',
     );
+  });
+
+  it('returns quota status from the dedicated callable', async () => {
+    const result = await getAiInsightsQuotaStatus({
+      auth: { uid: 'user-1' },
+      app: { appId: 'app-1' },
+      data: undefined,
+    } as any);
+
+    expect(hoisted.getAiInsightsQuotaStatus).toHaveBeenCalledWith('user-1');
+    expect(result).toEqual(quotaStatus);
   });
 });

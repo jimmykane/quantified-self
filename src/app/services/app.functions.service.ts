@@ -45,7 +45,8 @@ export class AppFunctionsService {
     }
 
     private shouldUseLocalAiInsightsEmulator(functionKey: FunctionName): boolean {
-        return environment.localhost === true && functionKey === 'aiInsights';
+        return environment.localhost === true
+            && (functionKey === 'aiInsights' || functionKey === 'getAiInsightsQuotaStatus');
     }
 
     private buildLocalCallableUrl(region: string, functionName: string): string {

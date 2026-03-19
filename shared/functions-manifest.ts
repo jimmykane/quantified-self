@@ -51,6 +51,7 @@ export const FUNCTIONS_MANIFEST = {
     reprocessEvent: { name: 'reprocessEvent', region: 'europe-west2' },
     mergeEvents: { name: 'mergeEvents', region: 'europe-west2' },
     aiInsights: { name: 'aiInsights', region: 'europe-west2' },
+    getAiInsightsQuotaStatus: { name: 'getAiInsightsQuotaStatus', region: 'europe-west2' },
 } as const;
 
 export type FunctionName = keyof typeof FUNCTIONS_MANIFEST;

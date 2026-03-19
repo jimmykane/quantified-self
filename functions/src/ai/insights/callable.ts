@@ -1,4 +1,4 @@
-import { HttpsError, onCallGenkit } from 'firebase-functions/v2/https';
+import { HttpsError, onCall, onCallGenkit } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import {
   ChartDataCategoryTypes,
@@ -9,6 +9,7 @@ import type {
   AiInsightSummaryActivityMix,
   AiInsightSummary,
   AiInsightPresentation,
+  AiInsightsQuotaStatusResponse,
   AiInsightsRequest,
   AiInsightsResponse,
   AiInsightsUnsupportedReasonCode,
@@ -16,12 +17,18 @@ import type {
 } from '../../../../shared/ai-insights.types';
 import { resolveAiInsightsActivityFilterLabel } from '../../../../shared/ai-insights-activity-filter';
 import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
-import { ALLOWED_CORS_ORIGINS, hasProAccess } from '../../utils';
+import { ALLOWED_CORS_ORIGINS, enforceAppCheck, hasProAccess } from '../../utils';
 import { aiInsightsGenkit } from './genkit';
 import { executeAiInsightsQuery } from './execute-query';
 import { getInsightMetricDefinition, getSuggestedInsightPrompts } from './metric-catalog';
 import { normalizeInsightQuery } from './normalize-query.flow';
 import { AiInsightsRequestSchema, AiInsightsResponseSchema } from './schemas';
+import {
+  getAiInsightsQuotaStatus as getAiInsightsQuotaStatusForUser,
+  releaseAiInsightsQuotaReservation,
+  reserveAiInsightsQuotaForGenkit,
+  finalizeAiInsightsQuotaReservation,
+} from './quota';
 import { summarizeAiInsightResult } from './summarize-result.flow';
 import { loadUserUnitSettings } from './user-unit-settings';
 
@@ -279,10 +286,12 @@ function buildUnsupportedNarrative(reasonCode: AiInsightsUnsupportedReasonCode):
 
 function buildUnsupportedResponse(
   reasonCode: AiInsightsUnsupportedReasonCode,
+  quota?: AiInsightsQuotaStatusResponse,
 ): AiInsightsResponse {
   return {
     status: 'unsupported',
     narrative: buildUnsupportedNarrative(reasonCode),
+    ...(quota ? { quota } : {}),
     reasonCode,
     suggestedPrompts: getSuggestedInsightPrompts(),
   };
@@ -408,6 +417,7 @@ export async function runAiInsights(
   });
 
   if (normalizeResult.status === 'unsupported') {
+    const quota = await getAiInsightsQuotaStatusForUser(context.auth.uid);
     logger.warn('[aiInsights] Unsupported request', {
       userID: context.auth.uid,
       prompt,
@@ -415,18 +425,19 @@ export async function runAiInsights(
       reasonCode: normalizeResult.reasonCode,
       suggestedPromptsCount: normalizeResult.suggestedPrompts.length,
     });
-    return buildUnsupportedResponse(normalizeResult.reasonCode);
+    return buildUnsupportedResponse(normalizeResult.reasonCode, quota);
   }
 
   const metric = getInsightMetricDefinition(normalizeResult.metricKey);
   if (!metric) {
+    const quota = await getAiInsightsQuotaStatusForUser(context.auth.uid);
     logger.warn('[aiInsights] Unsupported metric key after normalization', {
       userID: context.auth.uid,
       prompt,
       clientTimezone,
       metricKey: normalizeResult.metricKey,
     });
-    return buildUnsupportedResponse('unsupported_metric');
+    return buildUnsupportedResponse('unsupported_metric', quota);
   }
 
   const effectiveQuery = normalizeResult.query;
@@ -458,22 +469,41 @@ export async function runAiInsights(
     emptyState: DEFAULT_EMPTY_STATE,
   };
 
-  const narrative = await summarizeAiInsightResult({
-    status: isEmpty ? 'empty' : 'ok',
-    prompt,
-    metricLabel: metric.label,
-    query: effectiveQuery,
-    aggregation: executionResult.aggregation,
-    summary,
-    presentation: isEmpty ? emptyPresentation : presentation,
-    clientLocale: input.clientLocale,
-    unitSettings,
-  });
+  const quotaReservation = await reserveAiInsightsQuotaForGenkit(context.auth.uid);
+  let narrativeResult: Awaited<ReturnType<typeof summarizeAiInsightResult>>;
+  try {
+    narrativeResult = await summarizeAiInsightResult({
+      status: isEmpty ? 'empty' : 'ok',
+      prompt,
+      metricLabel: metric.label,
+      query: effectiveQuery,
+      aggregation: executionResult.aggregation,
+      summary,
+      presentation: isEmpty ? emptyPresentation : presentation,
+      clientLocale: input.clientLocale,
+      unitSettings,
+    });
+  } catch (error) {
+    try {
+      await releaseAiInsightsQuotaReservation(quotaReservation);
+    } catch (releaseError) {
+      logger.error('[aiInsights] Failed to release quota reservation after summarize-result failure', {
+        userID: context.auth.uid,
+        prompt,
+        releaseError,
+      });
+    }
+    throw error;
+  }
+  const quota = narrativeResult.source === 'genkit'
+    ? await finalizeAiInsightsQuotaReservation(quotaReservation)
+    : await releaseAiInsightsQuotaReservation(quotaReservation);
 
   if (isEmpty) {
     return {
       status: 'empty',
-      narrative,
+      narrative: narrativeResult.narrative,
+      quota,
       query: effectiveQuery,
       aggregation: executionResult.aggregation,
       summary,
@@ -483,7 +513,8 @@ export async function runAiInsights(
 
   return {
       status: 'ok',
-      narrative,
+      narrative: narrativeResult.narrative,
+      quota,
       query: effectiveQuery,
       aggregation: executionResult.aggregation,
       summary,
@@ -517,3 +548,16 @@ export const aiInsights = onCallGenkit({
   timeoutSeconds: 180,
   maxInstances: 10,
 }, aiInsightsFlow);
+
+export const getAiInsightsQuotaStatus = onCall({
+  region: FUNCTIONS_MANIFEST.getAiInsightsQuotaStatus.region,
+  cors: ALLOWED_CORS_ORIGINS,
+  enforceAppCheck: true,
+}, async (request): Promise<AiInsightsQuotaStatusResponse> => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
+  }
+
+  enforceAppCheck(request);
+  return getAiInsightsQuotaStatusForUser(request.auth.uid);
+});

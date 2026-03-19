@@ -289,6 +289,78 @@ describe('Firestore Security Rules', () => {
             });
         });
 
+        describe('AI Insights Usage (users/{uid}/aiInsightsUsage/{periodDocId})', () => {
+            const usageDocId = 'period_1740787200000_1743465600000';
+
+            it('should allow owner to read AI insights usage period docs', async () => {
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/aiInsightsUsage/${usageDocId}`).set({
+                        version: 1,
+                        role: 'pro',
+                        limit: 100,
+                        periodStart: '2026-03-01T00:00:00.000Z',
+                        periodEnd: '2026-04-01T00:00:00.000Z',
+                        periodKind: 'subscription',
+                        successfulGenkitCount: 12,
+                        reservationMap: {},
+                        updatedAt: new Date(),
+                    });
+                });
+
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertSucceeds(db.doc(`users/${userId}/aiInsightsUsage/${usageDocId}`).get());
+            });
+
+            it('should deny owner from writing AI insights usage period docs', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertFails(db.doc(`users/${userId}/aiInsightsUsage/${usageDocId}`).set({
+                    version: 1,
+                    role: 'pro',
+                    limit: 100,
+                    periodStart: '2026-03-01T00:00:00.000Z',
+                    periodEnd: '2026-04-01T00:00:00.000Z',
+                    periodKind: 'subscription',
+                    successfulGenkitCount: 12,
+                    reservationMap: {},
+                    updatedAt: new Date(),
+                }));
+            });
+
+            it('should deny other users from reading AI insights usage period docs', async () => {
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/aiInsightsUsage/${usageDocId}`).set({
+                        version: 1,
+                        role: 'pro',
+                        limit: 100,
+                        periodStart: '2026-03-01T00:00:00.000Z',
+                        periodEnd: '2026-04-01T00:00:00.000Z',
+                        periodKind: 'subscription',
+                        successfulGenkitCount: 12,
+                        reservationMap: {},
+                        updatedAt: new Date(),
+                    });
+                });
+
+                const db = testEnv.authenticatedContext(otherId).firestore();
+                await assertFails(db.doc(`users/${userId}/aiInsightsUsage/${usageDocId}`).get());
+            });
+
+            it('should deny other users from writing AI insights usage period docs', async () => {
+                const db = testEnv.authenticatedContext(otherId).firestore();
+                await assertFails(db.doc(`users/${userId}/aiInsightsUsage/${usageDocId}`).set({
+                    version: 1,
+                    role: 'pro',
+                    limit: 100,
+                    periodStart: '2026-03-01T00:00:00.000Z',
+                    periodEnd: '2026-04-01T00:00:00.000Z',
+                    periodKind: 'subscription',
+                    successfulGenkitCount: 12,
+                    reservationMap: {},
+                    updatedAt: new Date(),
+                }));
+            });
+        });
+
         describe('Event MetaData (users/{uid}/events/{eventId}/metaData)', () => {
             it('should deny owner writing processing metadata', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();

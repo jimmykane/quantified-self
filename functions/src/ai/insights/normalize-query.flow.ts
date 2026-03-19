@@ -19,15 +19,12 @@ import {
   getActivityTypeGroupMetadata,
   isAmbiguousActivityTypeGroup,
 } from '../../../../shared/activity-type-group.metadata';
-import { aiInsightsGenkit } from './genkit';
 import { CANONICAL_ACTIVITY_TYPES, resolveCanonicalActivityType } from './canonical-activity-types';
 import {
-  buildSupportedActivityTypeGroupsPromptText,
   CANONICAL_ACTIVITY_TYPE_GROUPS,
   resolveCanonicalActivityTypeGroup,
 } from './canonical-activity-type-groups';
 import {
-  buildMetricCatalogPromptText,
   findInsightMetricAliasMatch,
   getSuggestedInsightPrompts,
   isAggregationAllowedForMetric,
@@ -117,7 +114,6 @@ interface ZonedDateParts {
 }
 
 const ABSOLUTE_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-const SUPPORTED_ACTIVITY_TYPES = [...CANONICAL_ACTIVITY_TYPES];
 const SUPPORTED_ACTIVITY_TYPE_GROUPS = [...CANONICAL_ACTIVITY_TYPE_GROUPS];
 
 const UNSUPPORTED_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
@@ -230,45 +226,7 @@ const TIME_INTERVAL_MAP: Record<ModelTimeIntervalCode, TimeIntervals> = {
 
 const defaultNormalizeQueryDependencies: NormalizeQueryDependencies = {
   now: () => new Date(),
-  generateIntent: async (input) => {
-    const today = formatZonedDateParts(getZonedDateParts(new Date(), input.clientTimezone));
-    const { output } = await aiInsightsGenkit.generate({
-      system: [
-        'You normalize fitness insight prompts into a strict JSON query schema.',
-        'Supported capabilities are persisted event-level stats only.',
-        'Unsupported capabilities include streams, laps, splits, route geometry, original file reparse, and multi-turn chat.',
-        'Never invent metrics, activity types, Firestore fields, or query operators.',
-        'If the prompt is unsupported or ambiguous, set status to "unsupported" and provide the most specific unsupportedReasonCode.',
-        'If the user does not explicitly ask for a grouping by activity type or sport, default category to "date".',
-        'If the user does not explicitly ask for a time interval granularity, use requestedTimeInterval "auto".',
-        'If the user omits a date range, omit dateRange. The application will apply a last-90-days default.',
-        'If the user explicitly asks for all time, all history, full history, or ever, use dateRange.kind "all_time".',
-        'For relative date ranges, use dateRange.kind "last_n" rather than "last".',
-        'For current periods like this week, this month, or this year, use dateRange.kind "current_period" rather than "this".',
-        'Use activityTypeGroups only for genuinely broad group requests.',
-        'For ambiguous labels like running, trail running, cycling, mountain biking, swimming, and diving, prefer exact activityTypes unless the user explicitly says group, family, or all activities.',
-        'If you populate activityTypeGroups for a broad request, omit activityTypes unless the user explicitly listed exact activities too.',
-        'Use canonical activity labels when possible.',
-      ].join(' '),
-      prompt: [
-        `User prompt: ${input.prompt}`,
-        `Client timezone: ${input.clientTimezone}`,
-        `Current local date in the client timezone: ${today}`,
-        `Supported canonical activity types: ${SUPPORTED_ACTIVITY_TYPES.join(', ')}`,
-        'Supported activity type groups:',
-        buildSupportedActivityTypeGroupsPromptText(),
-        'Supported metrics:',
-        buildMetricCatalogPromptText(),
-      ].join('\n'),
-      output: { schema: ModelInsightIntentSchema },
-    });
-
-    if (!output) {
-      throw new Error('The model did not return a normalized query intent.');
-    }
-
-    return output;
-  },
+  generateIntent: async (input) => buildDeterministicIntent(input.prompt),
 };
 
 let normalizeQueryDependencies: NormalizeQueryDependencies = defaultNormalizeQueryDependencies;
@@ -332,12 +290,6 @@ function getZonedDateParts(date: Date, timeZone: string): ZonedDateParts {
     month: Number(parts.find(part => part.type === 'month')?.value || '0'),
     day: Number(parts.find(part => part.type === 'day')?.value || '0'),
   };
-}
-
-function formatZonedDateParts(parts: ZonedDateParts): string {
-  const month = `${parts.month}`.padStart(2, '0');
-  const day = `${parts.day}`.padStart(2, '0');
-  return `${parts.year}-${month}-${day}`;
 }
 
 function getDaysInMonth(year: number, month: number): number {
@@ -591,6 +543,64 @@ function resolvePromptActivityTypeGroups(prompt: string): ActivityTypeGroup[] {
   });
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function resolveActivityGroupSearchTerms(activityTypeGroup: ActivityTypeGroup): string[] {
+  const metadata = getActivityTypeGroupMetadata(activityTypeGroup);
+  return [metadata.label, ...metadata.aliases]
+    .map(alias => normalizePromptSearchText(alias))
+    .filter(Boolean);
+}
+
+function resolvePromptActivityTypes(
+  prompt: string,
+  promptActivityTypeGroups: ActivityTypeGroup[],
+): ActivityTypes[] {
+  const normalizedPrompt = normalizePromptSearchText(prompt);
+  if (!normalizedPrompt) {
+    return [];
+  }
+
+  const explicitGroupTerms = new Set<string>();
+  for (const activityTypeGroup of promptActivityTypeGroups) {
+    for (const searchTerm of resolveActivityGroupSearchTerms(activityTypeGroup)) {
+      explicitGroupTerms.add(searchTerm);
+    }
+  }
+
+  const exactMatches = CANONICAL_ACTIVITY_TYPES
+    .map(activityType => ({
+      activityType,
+      normalizedLabel: normalizePromptSearchText(activityType),
+    }))
+    .filter(({ normalizedLabel }) => Boolean(normalizedLabel))
+    .sort((left, right) => right.normalizedLabel.length - left.normalizedLabel.length);
+
+  const occupiedRanges: Array<{ start: number; end: number }> = [];
+  const resolved: ActivityTypes[] = [];
+
+  for (const { activityType, normalizedLabel } of exactMatches) {
+    const searchPattern = new RegExp(`\\b${escapeRegExp(normalizedLabel)}\\b`, 'g');
+    let match: RegExpExecArray | null = null;
+    while ((match = searchPattern.exec(normalizedPrompt)) !== null) {
+      const start = match.index;
+      const end = start + normalizedLabel.length;
+      const overlapsExisting = occupiedRanges.some(range => !(end <= range.start || start >= range.end));
+      if (overlapsExisting || explicitGroupTerms.has(normalizedLabel)) {
+        continue;
+      }
+
+      occupiedRanges.push({ start, end });
+      resolved.push(activityType);
+      break;
+    }
+  }
+
+  return resolved;
+}
+
 function expandActivityTypeGroups(activityTypeGroups: ActivityTypeGroup[]): ActivityTypes[] {
   const expanded: ActivityTypes[] = [];
   for (const activityTypeGroup of activityTypeGroups) {
@@ -776,6 +786,19 @@ function resolvePromptAggregation(prompt: string): ModelAggregationCode | undefi
   return undefined;
 }
 
+function resolvePromptCategory(prompt: string): ModelCategoryCode | undefined {
+  const normalizedPrompt = normalizePromptSearchText(prompt);
+  if (!normalizedPrompt) {
+    return undefined;
+  }
+
+  if (/\b(by activity types?|activity type comparison|by sports?|by sport)\b/.test(normalizedPrompt)) {
+    return 'activity';
+  }
+
+  return 'date';
+}
+
 function resolvePromptDateRangeIntent(prompt: string): DateRangeIntent | undefined {
   const normalizedPrompt = normalizePromptSearchText(prompt);
   if (!normalizedPrompt) {
@@ -784,6 +807,24 @@ function resolvePromptDateRangeIntent(prompt: string): DateRangeIntent | undefin
 
   if (promptImpliesAllTime(normalizedPrompt)) {
     return { kind: 'all_time' };
+  }
+
+  const absoluteRangeMatch = normalizedPrompt.match(/\b(?:from|between)\s+(\d{4}-\d{2}-\d{2})\s+(?:to|and)\s+(\d{4}-\d{2}-\d{2})\b/);
+  if (absoluteRangeMatch) {
+    return {
+      kind: 'absolute',
+      startDate: absoluteRangeMatch[1],
+      endDate: absoluteRangeMatch[2],
+    };
+  }
+
+  const standaloneAbsoluteMatch = normalizedPrompt.match(/\b(\d{4}-\d{2}-\d{2})\s+(?:to|through|until|-)\s+(\d{4}-\d{2}-\d{2})\b/);
+  if (standaloneAbsoluteMatch) {
+    return {
+      kind: 'absolute',
+      startDate: standaloneAbsoluteMatch[1],
+      endDate: standaloneAbsoluteMatch[2],
+    };
   }
 
   const relativeMatch = normalizedPrompt.match(/\b(?:last|past)\s+(\d+)\s+(day|days|week|weeks|month|months|year|years)\b/);
@@ -825,6 +866,30 @@ function resolvePromptDateRangeIntent(prompt: string): DateRangeIntent | undefin
   }
 
   return undefined;
+}
+
+function buildDeterministicIntent(prompt: string): ModelInsightIntent {
+  const metricMatch = findInsightMetricAliasMatch(prompt);
+  if (!metricMatch) {
+    return {
+      status: 'unsupported',
+      unsupportedReasonCode: 'unsupported_metric',
+    };
+  }
+
+  const activityTypeGroups = resolvePromptActivityTypeGroups(prompt);
+  const activityTypes = resolvePromptActivityTypes(prompt, activityTypeGroups);
+
+  return ModelInsightIntentSchema.parse({
+    status: 'supported',
+    metric: metricMatch.alias,
+    aggregation: resolvePromptAggregation(prompt),
+    category: resolvePromptCategory(prompt),
+    requestedTimeInterval: resolvePromptRequestedTimeInterval(prompt),
+    activityTypeGroups: activityTypeGroups.map(activityTypeGroup => `${activityTypeGroup}`),
+    activityTypes: activityTypes.map(activityType => `${activityType}`),
+    dateRange: resolvePromptDateRangeIntent(prompt),
+  });
 }
 
 export function setNormalizeQueryDependenciesForTesting(
@@ -899,15 +964,19 @@ export async function normalizeInsightQuery(
   }
 
   const promptActivityTypeGroups = resolvePromptActivityTypeGroups(prompt);
+  const promptActivityTypes = resolvePromptActivityTypes(prompt, promptActivityTypeGroups);
   const resolvedActivityTypeGroups = activityTypeGroups.length > 0
     ? activityTypeGroups
     : promptActivityTypeGroups;
-  const finalActivityTypeGroups = activityTypes.length > 0 ? [] : resolvedActivityTypeGroups;
+  const resolvedActivityTypes = activityTypes.length > 0
+    ? activityTypes
+    : promptActivityTypes;
+  const finalActivityTypeGroups = resolvedActivityTypes.length > 0 ? [] : resolvedActivityTypeGroups;
   const expandedActivityTypes = finalActivityTypeGroups.length > 0
     ? expandActivityTypeGroups(finalActivityTypeGroups)
     : [];
-  const finalActivityTypes = activityTypes.length > 0
-    ? activityTypes
+  const finalActivityTypes = resolvedActivityTypes.length > 0
+    ? resolvedActivityTypes
     : expandedActivityTypes.length > 0
       ? expandedActivityTypes
       : [];
@@ -942,8 +1011,10 @@ export async function normalizeInsightQuery(
   };
 }
 
-export const normalizeInsightQueryFlow = aiInsightsGenkit.defineFlow({
-  name: 'aiInsightsNormalizeQuery',
-  inputSchema: AiInsightsRequestSchema,
-  outputSchema: NormalizeInsightQueryResultSchema,
-}, async (input) => normalizeInsightQuery(input));
+export async function normalizeInsightQueryFlow(
+  input: AiInsightsRequest,
+): Promise<NormalizeInsightQueryResult> {
+  const parsedInput = AiInsightsRequestSchema.parse(input);
+  const result = await normalizeInsightQuery(parsedInput);
+  return NormalizeInsightQueryResultSchema.parse(result) as NormalizeInsightQueryResult;
+}
