@@ -70,14 +70,30 @@ describe('AppFileService', () => {
     });
 
     describe('downloadFile', () => {
-        it('should call saveAs with the correct arguments', () => {
+        it('should call saveAs with a named File preserving extension', () => {
             const blob = new Blob(['test content'], { type: 'text/plain' });
             const name = 'testfile';
             const extension = 'txt';
 
             service.downloadFile(blob, name, extension);
 
-            expect(FileSaver.saveAs).toHaveBeenCalledWith(blob, 'testfile.txt');
+            expect(FileSaver.saveAs).toHaveBeenCalledTimes(1);
+            const fileArg = (FileSaver.saveAs as any).mock.calls[0][0];
+            expect(fileArg).toBeInstanceOf(File);
+            expect(fileArg.name).toBe('testfile.txt');
+            expect(fileArg.type).toBe('text/plain');
+        });
+
+        it('should set FIT mime type when blob type is missing', () => {
+            const blob = new Blob([new Uint8Array([1, 2, 3]).buffer]);
+
+            service.downloadFile(blob, 'activity', 'fit');
+
+            expect(FileSaver.saveAs).toHaveBeenCalledTimes(1);
+            const fileArg = (FileSaver.saveAs as any).mock.calls[0][0];
+            expect(fileArg).toBeInstanceOf(File);
+            expect(fileArg.name).toBe('activity.fit');
+            expect(fileArg.type).toBe('application/vnd.ant.fit');
         });
     });
 
