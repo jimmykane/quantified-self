@@ -23,6 +23,7 @@ import {
 vi.mock('@sports-alliance/sports-lib', async (importOriginal) => await importOriginal());
 
 import { normalizeInsightQuery, normalizeInsightQueryFlow, setNormalizeQueryDependenciesForTesting } from './normalize-query.flow';
+import { getActivityTypesForGroup } from '../../../../shared/activity-type-group.metadata';
 
 describe('normalizeInsightQuery', () => {
   afterEach(() => {
@@ -1023,6 +1024,43 @@ describe('normalizeInsightQuery', () => {
       ActivityTypes.Cycling,
       ActivityTypes.Running,
     ]));
+  });
+
+  it('treats excluded indoor activity-type phrasing as the indoor sports group', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'distance',
+        aggregation: 'maximum',
+        category: 'activity',
+        dateRange: {
+          kind: 'all_time',
+        },
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'I want to know my longest distances by sport all time excluding any indoor type',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    const indoorActivityTypes = getActivityTypesForGroup(ActivityTypeGroups.IndoorSportsGroup);
+
+    expect(result.query.activityTypes).toEqual(expect.arrayContaining([
+      ActivityTypes.Cycling,
+      ActivityTypes.Running,
+    ]));
+    expect(result.query.activityTypes.some(activityType => indoorActivityTypes.includes(activityType))).toBe(false);
+    expect(result.query.activityTypes).not.toContain(ActivityTypes.IndoorCycling);
+    expect(result.query.activityTypes).not.toContain(ActivityTypes.IndoorClimbing);
+    expect(result.query.activityTypes).not.toContain(ActivityTypes.IndoorRunning);
+    expect(result.query.activityTypes).not.toContain(ActivityTypes.IndoorTraining);
   });
 
   it('rejects unsupported split prompts before calling the model', async () => {

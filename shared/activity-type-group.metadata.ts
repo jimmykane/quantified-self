@@ -1,7 +1,7 @@
 import {
   ActivityTypeGroups,
   type ActivityTypeGroup,
-  type ActivityTypes,
+  ActivityTypes,
   ActivityTypesHelper,
 } from '@sports-alliance/sports-lib';
 
@@ -52,7 +52,18 @@ const ActivityTypeGroupMetadataMap: Record<ActivityTypeGroup, ActivityTypeGroupM
   [ActivityTypeGroups.IndoorSportsGroup]: {
     id: ActivityTypeGroups.IndoorSportsGroup,
     label: 'Indoor Sports',
-    aliases: ['indoor sports', 'indoor sports group', 'indoor sports family', 'indoorsports'],
+    aliases: [
+      'indoor sports',
+      'indoor sports group',
+      'indoor sports family',
+      'indoorsports',
+      'indoor type',
+      'indoor types',
+      'indoor activity',
+      'indoor activities',
+      'indoor activity type',
+      'indoor activity types',
+    ],
     ambiguous: false,
   },
   [ActivityTypeGroups.OutdoorAdventuresGroup]: {
@@ -149,4 +160,17 @@ export function resolveActivityTypeGroup(value: unknown): ActivityTypeGroup | nu
 
 export function getActivityTypesForGroup(activityTypeGroup: ActivityTypeGroup): ActivityTypes[] {
   return ActivityTypesHelper.getActivityTypesForActivityGroup(activityTypeGroup);
+}
+
+const EXPLICIT_INDOOR_ACTIVITY_TYPES = new Set<ActivityTypes>([
+  ...getActivityTypesForGroup(ActivityTypeGroups.IndoorSportsGroup),
+  ActivityTypes.IndoorCycling,
+  ActivityTypes.IndoorRunning,
+  ActivityTypes.IndoorTraining,
+  ActivityTypes['Indoor Climbing'],
+  ActivityTypes.Treadmill,
+]);
+
+export function isIndoorActivityType(activityType: ActivityTypes): boolean {
+  return EXPLICIT_INDOOR_ACTIVITY_TYPES.has(activityType);
 }

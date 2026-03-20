@@ -2,7 +2,6 @@ import { z } from 'genkit';
 import {
   type ActivityTypeGroup,
   ActivityTypes,
-  ActivityTypesHelper,
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   ChartTypes,
@@ -17,6 +16,8 @@ import type {
 } from '../../../../shared/ai-insights.types';
 import {
   getActivityTypeGroupMetadata,
+  getActivityTypesForGroup,
+  isIndoorActivityType,
   isAmbiguousActivityTypeGroup,
 } from '../../../../shared/activity-type-group.metadata';
 import { CANONICAL_ACTIVITY_TYPES, resolveCanonicalActivityType } from './canonical-activity-types';
@@ -637,7 +638,7 @@ function resolvePromptActivityTypes(
 function expandActivityTypeGroups(activityTypeGroups: ActivityTypeGroup[]): ActivityTypes[] {
   const expanded: ActivityTypes[] = [];
   for (const activityTypeGroup of activityTypeGroups) {
-    for (const activityType of ActivityTypesHelper.getActivityTypesForActivityGroup(activityTypeGroup)) {
+    for (const activityType of getActivityTypesForGroup(activityTypeGroup)) {
       if (!expanded.includes(activityType)) {
         expanded.push(activityType);
       }
@@ -656,6 +657,23 @@ function excludeActivityTypes(
   }
 
   return activityTypes.filter(activityType => !excludedActivityTypes.has(activityType));
+}
+
+function resolveKeywordActivityTypeExclusions(promptClause: string): ActivityTypes[] {
+  const normalizedClause = normalizePromptSearchText(promptClause);
+  if (!normalizedClause) {
+    return [];
+  }
+
+  const resolved: ActivityTypes[] = [];
+
+  if (/\bindoor\b/.test(normalizedClause)) {
+    resolved.push(
+      ...CANONICAL_ACTIVITY_TYPES.filter(activityType => isIndoorActivityType(activityType)),
+    );
+  }
+
+  return Array.from(new Set(resolved));
 }
 
 function toCategoryType(category: ModelCategoryCode | undefined): ChartDataCategoryTypes {
@@ -1039,7 +1057,10 @@ export async function normalizeInsightQuery(
   const promptExcludedActivityTypes = extractPromptActivityExclusionClauses(prompt)
     .flatMap((clause) => {
       const clauseGroups = resolvePromptActivityTypeGroups(clause);
-      return resolvePromptActivityTypes(clause, clauseGroups);
+      return [
+        ...resolvePromptActivityTypes(clause, clauseGroups),
+        ...resolveKeywordActivityTypeExclusions(clause),
+      ];
     });
   const excludedActivityTypeSet = new Set<ActivityTypes>([
     ...promptExcludedActivityTypes,
