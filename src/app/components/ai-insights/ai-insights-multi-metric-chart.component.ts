@@ -12,7 +12,7 @@ import {
   input,
 } from '@angular/core';
 import type { EChartsType } from 'echarts/core';
-import { ChartDataCategoryTypes, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { ChartDataCategoryTypes, ChartDataValueTypes, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import type {
   AiInsightsMultiMetricAggregateMetricResult,
   AiInsightsMultiMetricAggregateOkResponse,
@@ -45,6 +45,12 @@ interface MultiMetricChartSeries {
   valuesByTime: Map<number, number>;
 }
 
+interface MultiMetricAxisGroup {
+  axisIndex: number;
+  series: MultiMetricChartSeries[];
+  axisConfig: ReturnType<typeof buildDashboardValueAxisConfig>;
+}
+
 function formatAxisLabel(
   dataType: string,
   value: number,
@@ -59,8 +65,33 @@ function resolveAxisKey(metricResult: AiInsightsMultiMetricAggregateMetricResult
   return metricResult.query.dataType;
 }
 
-function resolveAxisLabel(metricResult: AiInsightsMultiMetricAggregateMetricResult): string {
+function resolveShortMetricLabel(metricResult: AiInsightsMultiMetricAggregateMetricResult): string {
+  const prefixCandidates = (() => {
+    switch (metricResult.query.valueType) {
+      case ChartDataValueTypes.Average:
+        return ['Average ', 'Avg '];
+      case ChartDataValueTypes.Maximum:
+        return ['Maximum ', 'Max '];
+      case ChartDataValueTypes.Minimum:
+        return ['Minimum ', 'Min '];
+      case ChartDataValueTypes.Total:
+        return ['Total '];
+      default:
+        return [];
+    }
+  })();
+
+  for (const prefix of prefixCandidates) {
+    if (metricResult.metricLabel.startsWith(prefix) && metricResult.metricLabel.length > prefix.length) {
+      return metricResult.metricLabel.slice(prefix.length);
+    }
+  }
+
   return metricResult.metricLabel;
+}
+
+function resolveAxisLabel(metricResult: AiInsightsMultiMetricAggregateMetricResult): string {
+  return resolveShortMetricLabel(metricResult);
 }
 
 @Component({
@@ -153,7 +184,7 @@ export class AiInsightsMultiMetricChartComponent implements AfterViewInit, OnCha
 
       const axisKey = resolveAxisKey(metricResult);
       if (!axisKeyToIndex.has(axisKey)) {
-        axisKeyToIndex.set(axisKey, Math.min(axisKeyToIndex.size, 1));
+        axisKeyToIndex.set(axisKey, axisKeyToIndex.size);
         axisKeyToLabel.set(axisKey, resolveAxisLabel(metricResult));
       }
 
@@ -163,7 +194,7 @@ export class AiInsightsMultiMetricChartComponent implements AfterViewInit, OnCha
 
       return {
         metricKey: metricResult.metricKey,
-        metricLabel: metricResult.metricLabel,
+        metricLabel: resolveShortMetricLabel(metricResult),
         dataType: metricResult.query.dataType,
         axisKey,
         axisLabel: axisKeyToLabel.get(axisKey) ?? metricResult.metricLabel,
@@ -181,6 +212,36 @@ export class AiInsightsMultiMetricChartComponent implements AfterViewInit, OnCha
       timePoints: [...timePointSet].sort((left, right) => left - right),
       series,
     };
+  }
+
+  private buildAxisGroups(series: MultiMetricChartSeries[]): MultiMetricAxisGroup[] {
+    return [...new Set(series.map(entry => entry.axisIndex))]
+      .sort((left, right) => left - right)
+      .map((axisIndex) => {
+        const axisSeries = series.filter(entry => entry.axisIndex === axisIndex);
+        const values = axisSeries.flatMap(entry => [...entry.valuesByTime.values()]);
+        return {
+          axisIndex,
+          series: axisSeries,
+          axisConfig: buildDashboardValueAxisConfig(values),
+        } satisfies MultiMetricAxisGroup;
+      });
+  }
+
+  private resolveAxisPosition(axisIndex: number): 'left' | 'right' {
+    if (axisIndex === 0) {
+      return 'left';
+    }
+
+    return 'right';
+  }
+
+  private resolveAxisOffset(axisIndex: number): number {
+    if (axisIndex <= 1) {
+      return 0;
+    }
+
+    return (axisIndex - 1) * 56;
   }
 
   private formatTooltip(
@@ -252,22 +313,7 @@ export class AiInsightsMultiMetricChartComponent implements AfterViewInit, OnCha
     const timeZone = this.response().query.dateRange.timezone;
     const isCompactLayout = chartStyle.isCompactLayout;
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
-    const axisGroups = [0, 1]
-      .map((axisIndex) => {
-        const axisSeries = series.filter(entry => entry.axisIndex === axisIndex);
-        if (!axisSeries.length) {
-          return null;
-        }
-
-        const values = axisSeries.flatMap(entry => [...entry.valuesByTime.values()]);
-        const axisConfig = buildDashboardValueAxisConfig(values);
-        return {
-          axisIndex,
-          series: axisSeries,
-          axisConfig,
-        };
-      })
-      .filter((axisGroup): axisGroup is NonNullable<typeof axisGroup> => axisGroup !== null);
+    const axisGroups = this.buildAxisGroups(series);
 
     const option: ChartOption = {
       animation: this.useAnimations() === true,
@@ -337,12 +383,13 @@ export class AiInsightsMultiMetricChartComponent implements AfterViewInit, OnCha
         min: axisGroup.axisConfig.min,
         max: axisGroup.axisConfig.max,
         interval: axisGroup.axisConfig.interval,
-        position: axisGroup.axisIndex === 0 ? 'left' : 'right',
+        position: this.resolveAxisPosition(axisGroup.axisIndex),
+        offset: this.resolveAxisOffset(axisGroup.axisIndex),
         name: axisGroup.series[0]?.axisLabel ?? '',
         nameTextStyle: {
           color: chartStyle.textColor,
           fontSize: chartStyle.axisFontSize,
-          padding: axisGroup.axisIndex === 0 ? [0, 0, 8, 0] : [0, 0, 8, 0],
+          padding: [0, 0, 8, 0],
         },
         axisLine: {
           lineStyle: { color: chartStyle.axisColor },

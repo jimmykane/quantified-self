@@ -7,6 +7,7 @@ import {
   ChartTypes,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
+import { AI_INSIGHTS_REQUEST_LIMITS } from '../../../../shared/limits';
 
 vi.mock('@sports-alliance/sports-lib', async (importOriginal) => await importOriginal());
 
@@ -103,10 +104,10 @@ import { aiInsights, getAiInsightsQuotaStatus } from './callable';
 
 const quotaStatus = {
   role: 'pro',
-  limit: 100,
+  limit: AI_INSIGHTS_REQUEST_LIMITS.pro,
   successfulGenkitCount: 12,
   activeReservationCount: 0,
-  remainingCount: 88,
+  remainingCount: AI_INSIGHTS_REQUEST_LIMITS.pro - 12,
   periodStart: '2026-03-01T00:00:00.000Z',
   periodEnd: '2026-04-01T00:00:00.000Z',
   periodKind: 'subscription',
@@ -254,7 +255,7 @@ describe('aiInsights callable', () => {
       reservationID: 'reservation-1',
       periodDocId: 'period_1_2',
       role: 'pro',
-      limit: 100,
+      limit: AI_INSIGHTS_REQUEST_LIMITS.pro,
       periodStart: quotaStatus.periodStart,
       periodEnd: quotaStatus.periodEnd,
       periodKind: 'subscription',
@@ -332,16 +333,16 @@ describe('aiInsights callable', () => {
     hoisted.getAiInsightsQuotaStatus.mockResolvedValue({
       ...quotaStatus,
       role: 'basic',
-      limit: 50,
+      limit: AI_INSIGHTS_REQUEST_LIMITS.basic,
       successfulGenkitCount: 5,
-      remainingCount: 45,
+      remainingCount: AI_INSIGHTS_REQUEST_LIMITS.basic - 5,
     });
     hoisted.reserveAiInsightsQuotaForGenkit.mockResolvedValue({
       userID: 'user-1',
       reservationID: 'reservation-1',
       periodDocId: 'period_1_2',
       role: 'basic',
-      limit: 50,
+      limit: AI_INSIGHTS_REQUEST_LIMITS.basic,
       periodStart: quotaStatus.periodStart,
       periodEnd: quotaStatus.periodEnd,
       periodKind: 'subscription',
@@ -351,9 +352,9 @@ describe('aiInsights callable', () => {
     hoisted.finalizeAiInsightsQuotaReservation.mockResolvedValue({
       ...quotaStatus,
       role: 'basic',
-      limit: 50,
+      limit: AI_INSIGHTS_REQUEST_LIMITS.basic,
       successfulGenkitCount: 6,
-      remainingCount: 44,
+      remainingCount: AI_INSIGHTS_REQUEST_LIMITS.basic - 6,
     });
 
     const result = await aiInsights({
@@ -365,7 +366,7 @@ describe('aiInsights callable', () => {
       status: 'ok',
       quota: expect.objectContaining({
         role: 'basic',
-        limit: 50,
+        limit: AI_INSIGHTS_REQUEST_LIMITS.basic,
       }),
     });
   });

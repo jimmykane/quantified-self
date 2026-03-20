@@ -5,7 +5,7 @@ export const USAGE_LIMITS = {
 
 export const AI_INSIGHTS_REQUEST_LIMITS = {
     free: 0,
-    basic: 50,
+    basic: 20,
     pro: 100,
 } as const;
 

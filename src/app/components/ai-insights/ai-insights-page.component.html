@@ -101,8 +101,10 @@
           <div mat-card-avatar class="card-avatar result-avatar">
             <mat-icon>insights</mat-icon>
           </div>
-          <mat-card-title>Result</mat-card-title>
-          <mat-card-subtitle class="result-card-subtitle">{{ resultCardSubtitle() }}</mat-card-subtitle>
+          <mat-card-title class="result-card-title">{{ resultCardHeaderTitle() }}</mat-card-title>
+          @if (resultCardHeaderSubtitle(); as resultCardHeaderSubtitle) {
+            <mat-card-subtitle class="result-card-subtitle">{{ resultCardHeaderSubtitle }}</mat-card-subtitle>
+          }
           @if (resultCardMetaText(); as resultCardMetaText) {
             <mat-card-subtitle class="result-card-meta">{{ resultCardMetaText }}</mat-card-subtitle>
           }
@@ -233,8 +235,6 @@
           } @else if (emptyResponse(); as empty) {
             <div class="result-content">
               <div class="result-header">
-                <p class="result-title">{{ empty.presentation.title }}</p>
-                <p class="result-subtitle">{{ resultSubtitle() }}</p>
                 @if (resultDateRangeNote(); as dateRangeNote) {
                   <div class="result-date-range-note">
                     <mat-icon>info</mat-icon>
@@ -271,8 +271,6 @@
           } @else if (eventLookupOkResponse(); as result) {
             <div class="result-content">
               <div class="result-header">
-                <p class="result-title">{{ result.presentation.title }}</p>
-                <p class="result-subtitle">{{ resultSubtitle() }}</p>
                 @if (resultDateRangeNote(); as dateRangeNote) {
                   <div class="result-date-range-note">
                     <mat-icon>info</mat-icon>
@@ -371,8 +369,6 @@
           } @else if (multiMetricOkResponse(); as result) {
             <div class="result-content">
               <div class="result-header">
-                <p class="result-title">{{ result.presentation.title }}</p>
-                <p class="result-subtitle">{{ resultSubtitle() }}</p>
                 @if (resultDateRangeNote(); as dateRangeNote) {
                   <div class="result-date-range-note">
                     <mat-icon>info</mat-icon>
@@ -492,8 +488,6 @@
           } @else if (aggregateOkResponse(); as result) {
             <div class="result-content">
               <div class="result-header">
-                <p class="result-title">{{ result.presentation.title }}</p>
-                <p class="result-subtitle">{{ resultSubtitle() }}</p>
                 @if (resultDateRangeNote(); as dateRangeNote) {
                   <div class="result-date-range-note">
                     <mat-icon>info</mat-icon>

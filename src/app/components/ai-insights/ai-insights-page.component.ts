@@ -7,6 +7,7 @@ import { RouterModule } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import {
   AppThemes,
+  ChartDataValueTypes,
   EventInterface,
   ChartDataCategoryTypes,
   TimeIntervals,
@@ -41,6 +42,7 @@ import { AppUserSettingsQueryService } from '../../services/app.user-settings-qu
 import { AiInsightsService } from '../../services/ai-insights.service';
 import { LoggerService } from '../../services/logger.service';
 import { formatDashboardBucketDateByInterval, formatDashboardDateRange } from '../../helpers/dashboard-chart-data.helper';
+import { resolveAiInsightsDisplayTitle } from '../../helpers/ai-insights-title.helper';
 import { AiInsightsChartComponent } from './ai-insights-chart.component';
 import { AiInsightsLoadingStateComponent } from './ai-insights-loading-state.component';
 import { AiInsightsMultiMetricChartComponent } from './ai-insights-multi-metric-chart.component';
@@ -82,6 +84,85 @@ const AI_INSIGHTS_LOADING_CHART_SKELETON_BARS = [
 type AggregateSummarySource =
   | AiInsightsAggregateOkResponse
   | AiInsightsMultiMetricAggregateMetricResult;
+
+function resolveAggregationLabel(valueType: ChartDataValueTypes): string {
+  switch (valueType) {
+    case ChartDataValueTypes.Average:
+      return 'Average';
+    case ChartDataValueTypes.Maximum:
+      return 'Maximum';
+    case ChartDataValueTypes.Minimum:
+      return 'Minimum';
+    case ChartDataValueTypes.Total:
+      return 'Total';
+    default:
+      return 'Aggregation';
+  }
+}
+
+function resolveSummaryCardLabel(
+  semanticsLabel: string,
+  valueType: ChartDataValueTypes,
+  labelKind: 'highest' | 'lowest' | 'latest',
+): string {
+  const normalizedSemanticsLabel = semanticsLabel.toLowerCase();
+  if (normalizedSemanticsLabel.includes('fastest') || normalizedSemanticsLabel.includes('slowest')) {
+    return semanticsLabel;
+  }
+
+  const suffix = (() => {
+    switch (valueType) {
+      case ChartDataValueTypes.Average:
+        return 'average';
+      case ChartDataValueTypes.Maximum:
+        return 'max';
+      case ChartDataValueTypes.Minimum:
+        return 'min';
+      case ChartDataValueTypes.Total:
+        return 'total';
+      default:
+        return 'value';
+    }
+  })();
+
+  if (labelKind === 'highest') {
+    return `Highest ${suffix}`;
+  }
+
+  if (labelKind === 'lowest') {
+    return `Lowest ${suffix}`;
+  }
+
+  return `Latest ${suffix}`;
+}
+
+function resolveShortMetricLabel(
+  metricLabel: string,
+  valueType: ChartDataValueTypes,
+): string {
+  const prefixCandidates = (() => {
+    switch (valueType) {
+      case ChartDataValueTypes.Average:
+        return ['Average ', 'Avg '];
+      case ChartDataValueTypes.Maximum:
+        return ['Maximum ', 'Max '];
+      case ChartDataValueTypes.Minimum:
+        return ['Minimum ', 'Min '];
+      case ChartDataValueTypes.Total:
+        return ['Total '];
+      default:
+        return [];
+    }
+  })();
+
+  for (const prefix of prefixCandidates) {
+    if (metricLabel.startsWith(prefix) && metricLabel.length > prefix.length) {
+      return metricLabel.slice(prefix.length);
+    }
+  }
+
+  return metricLabel;
+}
 
 function getClientTimeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
@@ -356,7 +437,7 @@ function buildAggregateSummaryCards(
     );
     if (peakValue) {
       cards.push({
-        label: summarySemantics.highestLabel,
+        label: resolveSummaryCardLabel(summarySemantics.highestLabel, response.query.valueType, 'highest'),
         value: peakValue,
         meta: formatBucketMeta(response, response.summary.peakBucket, locale) || undefined,
         helpText: summarySemantics.highestHelpText,
@@ -372,7 +453,7 @@ function buildAggregateSummaryCards(
     );
     if (lowestValue) {
       cards.push({
-        label: summarySemantics.lowestLabel,
+        label: resolveSummaryCardLabel(summarySemantics.lowestLabel, response.query.valueType, 'lowest'),
         value: lowestValue,
         meta: formatBucketMeta(response, response.summary.lowestBucket, locale) || undefined,
         helpText: summarySemantics.lowestHelpText,
@@ -391,7 +472,7 @@ function buildAggregateSummaryCards(
     );
     if (latestValue) {
       cards.push({
-        label: summarySemantics.latestLabel,
+        label: resolveSummaryCardLabel(summarySemantics.latestLabel, response.query.valueType, 'latest'),
         value: latestValue,
         meta: formatBucketMeta(response, response.summary.latestBucket, locale) || undefined,
         helpText: summarySemantics.latestHelpText,
@@ -984,6 +1065,38 @@ export class AiInsightsPageComponent {
 
     return `${formatDateRange(response.query.dateRange, this.locale)} • ${resolveAiInsightsActivityFilterSummary(response.query)}`;
   });
+  readonly resultDisplayTitle = computed(() => {
+    const response = this.okResponse() || this.emptyResponse();
+    if (!response) {
+      return null;
+    }
+
+    const metricLabels = this.multiMetricOkResponse()?.metricResults.map(metricResult => metricResult.metricLabel);
+    return resolveAiInsightsDisplayTitle(response, {
+      metricLabels,
+    }) ?? response.presentation.title;
+  });
+  readonly resultCardHeaderTitle = computed(() => (
+    this.resultDisplayTitle() ?? 'Result'
+  ));
+  readonly resultCardHeaderSubtitle = computed(() => (
+    this.aggregationContextLine()
+  ));
+  readonly aggregationContextLine = computed(() => {
+    const response = this.aggregateOkResponse() || this.multiMetricOkResponse() || this.emptyResponse();
+    if (!response) {
+      return null;
+    }
+
+    const valueType = response.query.resultKind === 'multi_metric_aggregate'
+      ? response.query.metricSelections[0]?.valueType
+      : response.query.valueType;
+    if (!valueType) {
+      return this.resultSubtitle();
+    }
+
+    return `Aggregation: ${resolveAggregationLabel(valueType)} • ${this.resultSubtitle()}`;
+  });
   readonly resultDateRangeNote = computed(() => {
     const response = this.okResponse() || this.emptyResponse();
     if (!response) {
@@ -1015,10 +1128,10 @@ export class AiInsightsPageComponent {
     const locale = this.locale;
     return response.metricResults.map((metricResult) => ({
       metricKey: metricResult.metricKey,
-      title: metricResult.presentation.title,
+      title: resolveShortMetricLabel(metricResult.metricLabel, metricResult.query.valueType),
       summaryCards: buildAggregateSummaryCards(metricResult, unitSettings, locale),
       isEmpty: metricResult.aggregation.buckets.length === 0,
-      emptyState: `No matching ${metricResult.metricLabel} data was found for this result scope.`,
+      emptyState: `No matching ${resolveShortMetricLabel(metricResult.metricLabel, metricResult.query.valueType)} data was found for this result scope.`,
     }));
   });
   readonly multiMetricChartVisible = computed(() => {

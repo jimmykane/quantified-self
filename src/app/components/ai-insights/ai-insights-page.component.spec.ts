@@ -30,6 +30,7 @@ import type {
   AiInsightsResponse,
   AiInsightsUnsupportedResponse,
 } from '@shared/ai-insights.types';
+import { AI_INSIGHTS_REQUEST_LIMITS } from '@shared/limits';
 import { formatUnitAwareDataValue, normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
@@ -77,10 +78,10 @@ class MockAiInsightsMultiMetricChartComponent {
 function buildQuotaStatus(overrides: Partial<AiInsightsQuotaStatus> = {}): AiInsightsQuotaStatus {
   return {
     role: 'pro',
-    limit: 100,
+    limit: AI_INSIGHTS_REQUEST_LIMITS.pro,
     successfulGenkitCount: 12,
     activeReservationCount: 0,
-    remainingCount: 88,
+    remainingCount: AI_INSIGHTS_REQUEST_LIMITS.pro - 12,
     periodStart: '2026-03-01T00:00:00.000Z',
     periodEnd: '2026-04-01T00:00:00.000Z',
     periodKind: 'subscription',
@@ -925,7 +926,7 @@ describe('AiInsightsPageComponent', () => {
     expect(pickerButton?.getAttribute('aria-label')).toBe('Browse prompts');
     expect(component.pickerPromptGroups()).toEqual(AI_INSIGHTS_DEFAULT_PROMPT_GROUPS);
     expect(heroPromptRotator?.getAttribute('aria-label')).toContain(AI_INSIGHTS_FEATURED_PROMPTS[0]);
-    expect(quotaLine?.textContent).toContain('88 of 100 left');
+    expect(quotaLine?.textContent).toContain(`${AI_INSIGHTS_REQUEST_LIMITS.pro - 12} of ${AI_INSIGHTS_REQUEST_LIMITS.pro} left`);
     expect(supportNote?.textContent).toContain('Latest completed insights are temporarily restored from your account.');
   });
 
@@ -966,16 +967,16 @@ describe('AiInsightsPageComponent', () => {
   it('should render the Basic tier quota limit in the prompt header', async () => {
     aiInsightsQuotaServiceMock.loadQuotaStatus.mockResolvedValueOnce(buildQuotaStatus({
       role: 'basic',
-      limit: 50,
+      limit: AI_INSIGHTS_REQUEST_LIMITS.basic,
       successfulGenkitCount: 8,
-      remainingCount: 42,
+      remainingCount: AI_INSIGHTS_REQUEST_LIMITS.basic - 8,
     }));
 
     await createComponent();
 
     const quotaLine = fixture.debugElement.query(By.css('.prompt-quota-line'))?.nativeElement as HTMLElement | undefined;
 
-    expect(quotaLine?.textContent).toContain('42 of 50 left');
+    expect(quotaLine?.textContent).toContain(`${AI_INSIGHTS_REQUEST_LIMITS.basic - 8} of ${AI_INSIGHTS_REQUEST_LIMITS.basic} left`);
   });
 
   it('should submit the active hero prompt when clicked', async () => {
@@ -1083,6 +1084,7 @@ describe('AiInsightsPageComponent', () => {
     });
 
     const narrative = fixture.debugElement.query(By.css('.narrative'))?.nativeElement as HTMLElement | undefined;
+    const resultTitle = fixture.debugElement.query(By.css('.result-card-title'))?.nativeElement as HTMLElement | undefined;
     const chart = fixture.debugElement.query(By.css('.chart-stub'))?.nativeElement as HTMLElement | undefined;
     const chartComponent = fixture.debugElement.query(By.directive(MockAiInsightsChartComponent))?.componentInstance as MockAiInsightsChartComponent | undefined;
     const resultCardSubtitle = fixture.debugElement.query(By.css('.result-card-subtitle'))?.nativeElement as HTMLElement | undefined;
@@ -1098,15 +1100,16 @@ describe('AiInsightsPageComponent', () => {
     );
 
     expect(narrative?.textContent).toContain('trended up');
+    expect(resultTitle?.textContent).toContain('Cadence over time for cycling');
     expect(chart?.textContent).toContain('Average cadence over time for Cycling');
     expect(chartComponent?.userUnitSettings()).toEqual(userSettingsQueryServiceMock.unitSettings());
-    expect(resultCardSubtitle?.textContent).toContain('Insight summary and chart for this prompt.');
+    expect(resultCardSubtitle?.textContent).toContain('Aggregation: Average');
     expect(resultCardMeta?.textContent).toContain('Saved');
-    expect(quotaLine?.textContent).toContain('87 of 100 left');
+    expect(quotaLine?.textContent).toContain(`${AI_INSIGHTS_REQUEST_LIMITS.pro - 13} of ${AI_INSIGHTS_REQUEST_LIMITS.pro} left`);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Overall'))).toBe(true);
-    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Highest period'))).toBe(true);
-    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Lowest period'))).toBe(true);
-    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Latest period with data'))).toBe(true);
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Highest average'))).toBe(true);
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Lowest average'))).toBe(true);
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Latest average'))).toBe(true);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Coverage'))).toBe(true);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('1 of 4 months'))).toBe(true);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Trend'))).toBe(true);
@@ -1129,16 +1132,18 @@ describe('AiInsightsPageComponent', () => {
     fixture.detectChanges();
 
     const narrative = fixture.debugElement.query(By.css('.narrative'))?.nativeElement as HTMLElement | undefined;
+    const resultTitle = fixture.debugElement.query(By.css('.result-card-title'))?.nativeElement as HTMLElement | undefined;
     const multiChart = fixture.debugElement.query(By.css('.multi-chart-stub'))?.nativeElement as HTMLElement | undefined;
     const metricSections = fixture.debugElement.queryAll(By.css('.multi-metric-section'));
     const resultCardSubtitle = fixture.debugElement.query(By.css('.result-card-subtitle'))?.nativeElement as HTMLElement | undefined;
 
     expect(narrative?.textContent).toContain('Cadence and power');
+    expect(resultTitle?.textContent).toContain('Cadence and power over time for cycling');
     expect(multiChart?.textContent).toContain('Cadence and power over time for Cycling');
     expect(metricSections).toHaveLength(2);
-    expect(metricSections[0]?.nativeElement.textContent).toContain('Average cadence over time for Cycling');
-    expect(metricSections[1]?.nativeElement.textContent).toContain('Average power over time for Cycling');
-    expect(resultCardSubtitle?.textContent).toContain('Combined chart and per-metric summaries for this prompt.');
+    expect(metricSections[0]?.nativeElement.textContent).toContain('cadence');
+    expect(metricSections[1]?.nativeElement.textContent).toContain('power');
+    expect(resultCardSubtitle?.textContent).toContain('Aggregation: Average');
   });
 
   it('should render the richer AI loading state while an insight request is in flight', async () => {
@@ -1213,7 +1218,7 @@ describe('AiInsightsPageComponent', () => {
     );
 
     expect(chart).toBeNull();
-    expect(subtitle?.textContent).toContain('Winning event and top matches for this prompt.');
+    expect(subtitle).toBeFalsy();
     expect(primaryCard?.textContent).toContain('Winning event');
     expect(primaryCard?.textContent).toContain(expectedPrimaryValue ?? '');
     expect(primaryCard?.textContent).toContain('Mar 10, 2026');
@@ -1298,6 +1303,58 @@ describe('AiInsightsPageComponent', () => {
     expect(component.pickerPrompts()).toContain('Show my total distance by activity type this year.');
   });
 
+  it('should fall back to backend presentation title when frontend title composition is not possible', async () => {
+    await createComponent();
+
+    component.response.set({
+      status: 'empty',
+      narrative: 'No data',
+      query: {
+        resultKind: 'multi_metric_aggregate',
+        groupingMode: 'date',
+        categoryType: ChartDataCategoryTypes.DateType,
+        requestedTimeInterval: TimeIntervals.Monthly,
+        activityTypeGroups: [],
+        activityTypes: [],
+        dateRange: {
+          kind: 'bounded',
+          startDate: '2025-12-01',
+          endDate: '2026-03-01',
+          timezone: 'Europe/Helsinki',
+          source: 'prompt',
+        },
+        chartType: ChartTypes.LinesVertical,
+        metricSelections: [],
+      },
+      aggregation: {
+        dataType: 'Unknown',
+        valueType: ChartDataValueTypes.Average,
+        categoryType: ChartDataCategoryTypes.DateType,
+        resolvedTimeInterval: TimeIntervals.Monthly,
+        buckets: [],
+      },
+      summary: {
+        matchedEventCount: 0,
+        overallAggregateValue: null,
+        peakBucket: null,
+        lowestBucket: null,
+        latestBucket: null,
+        activityMix: null,
+        bucketCoverage: null,
+        trend: null,
+      },
+      presentation: {
+        title: 'Backend fallback title',
+        chartType: ChartTypes.LinesVertical,
+        emptyState: 'No matching events',
+      },
+    });
+    fixture.detectChanges();
+
+    const resultTitle = fixture.debugElement.query(By.css('.result-card-title'))?.nativeElement as HTMLElement | undefined;
+    expect(resultTitle?.textContent).toContain('Backend fallback title');
+  });
+
   it('should restore event-lookup snapshots and refetch the referenced event ids', async () => {
     aiInsightsLatestSnapshotServiceMock.loadLatest.mockResolvedValueOnce({
       version: 1,
@@ -1329,7 +1386,6 @@ describe('AiInsightsPageComponent', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    const subtitle = fixture.debugElement.query(By.css('.result-subtitle'))?.nativeElement as HTMLElement | undefined;
     const resultCardSubtitle = fixture.debugElement.query(By.css('.result-card-subtitle'))?.nativeElement as HTMLElement | undefined;
     const resultCardMeta = fixture.debugElement.query(By.css('.result-card-meta'))?.nativeElement as HTMLElement | undefined;
     const supportNote = fixture.debugElement.query(By.css('.prompt-support-note'))?.nativeElement as HTMLElement | undefined;
@@ -1337,8 +1393,7 @@ describe('AiInsightsPageComponent', () => {
 
     expect(aiInsightsLatestSnapshotServiceMock.loadLatest).toHaveBeenLastCalledWith('user-2');
     expect(component.promptControl.getRawValue()).toBe('Show my total distance all time');
-    expect(subtitle?.textContent).toContain('All time');
-    expect(resultCardSubtitle?.textContent).toContain('Insight summary and chart for this prompt.');
+    expect(resultCardSubtitle?.textContent).toContain('Aggregation:');
     expect(resultCardMeta?.textContent).toContain('Restored');
     expect(resultCardMeta?.textContent).toContain('Saved Mar 18, 2026');
     expect(supportNote?.textContent).toContain('Latest saved Mar 18, 2026');
@@ -1355,13 +1410,13 @@ describe('AiInsightsPageComponent', () => {
 
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Slowest period'))).toBe(true);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Fastest period'))).toBe(true);
-    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Latest period with data'))).toBe(true);
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Latest average'))).toBe(true);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Coverage'))).toBe(true);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('2 of 25 months'))).toBe(true);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Trend'))).toBe(true);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('02:37 min/km faster'))).toBe(true);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Peak period'))).toBe(false);
-    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Lowest period'))).toBe(false);
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Lowest average'))).toBe(false);
   });
 
   it('should explain when the backend defaulted the query to the current year', async () => {
@@ -1482,7 +1537,7 @@ describe('AiInsightsPageComponent', () => {
     const summaryCards = fixture.debugElement.queryAll(By.css('.summary-card'));
 
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Latest group'))).toBe(false);
-    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Lowest group'))).toBe(true);
+    expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Lowest total'))).toBe(true);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Diving'))).toBe(true);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Most activities'))).toBe(true);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Cycling'))).toBe(true);
@@ -1534,7 +1589,7 @@ describe('AiInsightsPageComponent', () => {
     expect(askButton?.disabled).toBe(true);
     expect(heroPromptRotator?.disabled).toBe(true);
     expect(pickerButton?.disabled).toBe(true);
-    expect(quotaLine?.textContent).toContain('0 of 100 left');
+    expect(quotaLine?.textContent).toContain(`0 of ${AI_INSIGHTS_REQUEST_LIMITS.pro} left`);
     expect(quotaNote?.textContent).toContain('limit reached');
   });
 

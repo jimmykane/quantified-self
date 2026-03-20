@@ -9,6 +9,7 @@ import {
   reserveAiInsightsQuotaForGenkit,
   setAiInsightsQuotaDependenciesForTesting,
 } from './quota';
+import { AI_INSIGHTS_REQUEST_LIMITS } from '../../../../shared/limits';
 
 const FIXED_NOW_ISO = '2026-03-19T12:00:00.000Z';
 const PERIOD_START = '2026-03-01T00:00:00.000Z';
@@ -104,7 +105,7 @@ function buildUsageDoc(overrides: Partial<Record<string, unknown>> = {}): Record
   return {
     version: 1,
     role: 'pro',
-    limit: 100,
+    limit: AI_INSIGHTS_REQUEST_LIMITS.pro,
     periodStart: PERIOD_START,
     periodEnd: PERIOD_END,
     periodKind: 'subscription',
@@ -192,9 +193,9 @@ describe('ai insights quota', () => {
 
     expect(releasedStatus.successfulGenkitCount).toBe(0);
     expect(releasedStatus.activeReservationCount).toBe(0);
-    expect(releasedStatus.remainingCount).toBe(100);
+    expect(releasedStatus.remainingCount).toBe(AI_INSIGHTS_REQUEST_LIMITS.pro);
     expect(quotaStatus.successfulGenkitCount).toBe(0);
-    expect(quotaStatus.remainingCount).toBe(100);
+    expect(quotaStatus.remainingCount).toBe(AI_INSIGHTS_REQUEST_LIMITS.pro);
   });
 
   it('finalizes an existing reservation even if the user becomes ineligible afterward', async () => {
@@ -215,7 +216,7 @@ describe('ai insights quota', () => {
 
     expect(finalizedStatus.successfulGenkitCount).toBe(1);
     expect(finalizedStatus.activeReservationCount).toBe(0);
-    expect(finalizedStatus.limit).toBe(100);
+    expect(finalizedStatus.limit).toBe(AI_INSIGHTS_REQUEST_LIMITS.pro);
     expect(storedDoc?.successfulGenkitCount).toBe(1);
     expect(storedDoc?.reservationMap).toEqual({});
   });
@@ -262,8 +263,8 @@ describe('ai insights quota', () => {
     const quotaStatus = await getAiInsightsQuotaStatus('user-1');
 
     expect(quotaStatus.role).toBe('basic');
-    expect(quotaStatus.limit).toBe(50);
-    expect(quotaStatus.remainingCount).toBe(50);
+    expect(quotaStatus.limit).toBe(AI_INSIGHTS_REQUEST_LIMITS.basic);
+    expect(quotaStatus.remainingCount).toBe(AI_INSIGHTS_REQUEST_LIMITS.basic);
     expect(quotaStatus.periodKind).toBe('grace_hold');
     expect(quotaStatus.resetMode).toBe('next_successful_payment');
   });
@@ -349,7 +350,7 @@ describe('ai insights quota', () => {
     expect(getLatestPaidSubscriptionPeriod).not.toHaveBeenCalled();
   });
 
-  it('returns an eligible active basic period with a 50 request limit', async () => {
+  it('returns an eligible active basic period with the configured basic request limit', async () => {
     setAiInsightsQuotaDependenciesForTesting({
       now: () => new Date(FIXED_NOW_ISO),
       createReservationId: () => 'reservation-1',
@@ -367,8 +368,8 @@ describe('ai insights quota', () => {
     const quotaStatus = await getAiInsightsQuotaStatus('user-1');
 
     expect(quotaStatus.role).toBe('basic');
-    expect(quotaStatus.limit).toBe(50);
-    expect(quotaStatus.remainingCount).toBe(50);
+    expect(quotaStatus.limit).toBe(AI_INSIGHTS_REQUEST_LIMITS.basic);
+    expect(quotaStatus.remainingCount).toBe(AI_INSIGHTS_REQUEST_LIMITS.basic);
     expect(quotaStatus.isEligible).toBe(true);
     expect(quotaStatus.periodKind).toBe('subscription');
   });

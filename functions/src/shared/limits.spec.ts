@@ -30,7 +30,7 @@ describe('USAGE_LIMITS', () => {
         expect(getAiInsightsRequestLimitForRole('free')).toBe(AI_INSIGHTS_REQUEST_LIMITS.free);
         expect(getAiInsightsRequestLimitForRole('basic')).toBe(AI_INSIGHTS_REQUEST_LIMITS.basic);
         expect(getAiInsightsRequestLimitForRole('pro')).toBe(AI_INSIGHTS_REQUEST_LIMITS.pro);
-        expect(getAiInsightsRequestLimitForRole('basic')).toBe(50);
-        expect(getAiInsightsRequestLimitForRole('pro')).toBe(100);
+        expect(getAiInsightsRequestLimitForRole('basic')).toBe(AI_INSIGHTS_REQUEST_LIMITS.basic);
+        expect(getAiInsightsRequestLimitForRole('pro')).toBe(AI_INSIGHTS_REQUEST_LIMITS.pro);
     });
 });

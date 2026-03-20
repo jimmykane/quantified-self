@@ -10,7 +10,7 @@ import { Router } from '@angular/router';
 import { By } from '@angular/platform-browser';
 
 import { AppAnalyticsService } from '../../services/app.analytics.service';
-import { USAGE_LIMITS } from '@shared/limits';
+import { AI_INSIGHTS_REQUEST_LIMITS, USAGE_LIMITS } from '@shared/limits';
 
 class MockAppPaymentService {
     getProducts() {
@@ -128,6 +128,12 @@ describe('PricingComponent', () => {
         expect(component.getActivityLimitLabel('free')).toBe(`Up to ${USAGE_LIMITS.free} activities`);
         expect(component.getActivityLimitLabel('basic')).toBe(`Up to ${USAGE_LIMITS.basic} activities`);
         expect(component.getActivityLimitLabel('pro')).toBe('Unlimited activities');
+    });
+
+    it('should derive AI insights limit labels by plan role', () => {
+        expect(component.getAiInsightsLimitLabel('free')).toBe('AI Insights not included');
+        expect(component.getAiInsightsLimitLabel('basic')).toBe(`AI Insights up to ${AI_INSIGHTS_REQUEST_LIMITS.basic} requests per billing period`);
+        expect(component.getAiInsightsLimitLabel('pro')).toBe(`AI Insights up to ${AI_INSIGHTS_REQUEST_LIMITS.pro} requests per billing period`);
     });
 
     it('should show downgrade warning for pro users', async () => {
