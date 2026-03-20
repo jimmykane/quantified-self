@@ -986,6 +986,45 @@ describe('normalizeInsightQuery', () => {
     expect(result.query.activityTypes).toEqual([ActivityTypes.TrailRunning]);
   });
 
+  it('treats excluded activities as exclusions instead of positive filters', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'distance',
+        aggregation: 'maximum',
+        category: 'activity',
+        activityTypes: ['Diving'],
+        dateRange: {
+          kind: 'all_time',
+        },
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'I want to know my longest distances by sport all time excluding diving',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.categoryType).toBe(ChartDataCategoryTypes.ActivityType);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Maximum);
+    expect(result.query.dateRange).toEqual({
+      kind: 'all_time',
+      timezone: 'UTC',
+      source: 'prompt',
+    });
+    expect(result.query.activityTypes).not.toContain(ActivityTypes.Diving);
+    expect(result.query.activityTypes).toEqual(expect.arrayContaining([
+      ActivityTypes.Cycling,
+      ActivityTypes.Running,
+    ]));
+  });
+
   it('rejects unsupported split prompts before calling the model', async () => {
     const generateIntent = vi.fn();
     setNormalizeQueryDependenciesForTesting({

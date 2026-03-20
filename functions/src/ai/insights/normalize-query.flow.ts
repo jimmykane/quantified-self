@@ -530,6 +530,25 @@ function normalizePromptSearchText(value: string): string {
     .replace(/\s+/g, ' ');
 }
 
+function extractPromptActivityExclusionClauses(prompt: string): string[] {
+  const clauses: string[] = [];
+  const pattern = /\b(?:excluding|exclude|except(?: for)?|without)\b\s+([^,.;]+)/gi;
+  let match: RegExpExecArray | null = null;
+
+  while ((match = pattern.exec(prompt)) !== null) {
+    const clause = `${match[1] || ''}`.trim();
+    if (clause) {
+      clauses.push(clause);
+    }
+  }
+
+  return clauses;
+}
+
+function stripPromptActivityExclusionClauses(prompt: string): string {
+  return prompt.replace(/\b(?:excluding|exclude|except(?: for)?|without)\b\s+[^,.;]+/gi, ' ');
+}
+
 function resolvePromptActivityTypeGroups(prompt: string): ActivityTypeGroup[] {
   const normalizedPrompt = normalizePromptSearchText(prompt);
   if (!normalizedPrompt) {
@@ -626,6 +645,17 @@ function expandActivityTypeGroups(activityTypeGroups: ActivityTypeGroup[]): Acti
   }
 
   return expanded;
+}
+
+function excludeActivityTypes(
+  activityTypes: ActivityTypes[],
+  excludedActivityTypes: ReadonlySet<ActivityTypes>,
+): ActivityTypes[] {
+  if (!excludedActivityTypes.size) {
+    return activityTypes;
+  }
+
+  return activityTypes.filter(activityType => !excludedActivityTypes.has(activityType));
 }
 
 function toCategoryType(category: ModelCategoryCode | undefined): ChartDataCategoryTypes {
@@ -1003,22 +1033,42 @@ export async function normalizeInsightQuery(
     return buildUnsupportedResult('invalid_prompt', prompt);
   }
 
-  const promptActivityTypeGroups = resolvePromptActivityTypeGroups(prompt);
-  const promptActivityTypes = resolvePromptActivityTypes(prompt, promptActivityTypeGroups);
+  const promptWithoutActivityExclusions = stripPromptActivityExclusionClauses(prompt);
+  const promptExcludedActivityTypeGroups = extractPromptActivityExclusionClauses(prompt)
+    .flatMap((clause) => resolvePromptActivityTypeGroups(clause));
+  const promptExcludedActivityTypes = extractPromptActivityExclusionClauses(prompt)
+    .flatMap((clause) => {
+      const clauseGroups = resolvePromptActivityTypeGroups(clause);
+      return resolvePromptActivityTypes(clause, clauseGroups);
+    });
+  const excludedActivityTypeSet = new Set<ActivityTypes>([
+    ...promptExcludedActivityTypes,
+    ...expandActivityTypeGroups(promptExcludedActivityTypeGroups),
+  ]);
+  const promptActivityTypeGroups = resolvePromptActivityTypeGroups(promptWithoutActivityExclusions);
+  const promptActivityTypes = resolvePromptActivityTypes(promptWithoutActivityExclusions, promptActivityTypeGroups);
   const resolvedActivityTypeGroups = activityTypeGroups.length > 0
     ? activityTypeGroups
     : promptActivityTypeGroups;
   const resolvedActivityTypes = activityTypes.length > 0
     ? activityTypes
     : promptActivityTypes;
-  const finalActivityTypeGroups = resolvedActivityTypes.length > 0 ? [] : resolvedActivityTypeGroups;
+  const filteredResolvedActivityTypes = excludeActivityTypes(
+    resolvedActivityTypes,
+    excludedActivityTypeSet,
+  );
+  const filteredResolvedActivityTypeGroups = resolvedActivityTypeGroups
+    .filter(activityTypeGroup => !promptExcludedActivityTypeGroups.includes(activityTypeGroup));
+  const finalActivityTypeGroups = filteredResolvedActivityTypes.length > 0 ? [] : filteredResolvedActivityTypeGroups;
   const expandedActivityTypes = finalActivityTypeGroups.length > 0
-    ? expandActivityTypeGroups(finalActivityTypeGroups)
+    ? excludeActivityTypes(expandActivityTypeGroups(finalActivityTypeGroups), excludedActivityTypeSet)
     : [];
-  const finalActivityTypes = resolvedActivityTypes.length > 0
-    ? resolvedActivityTypes
+  const finalActivityTypes = filteredResolvedActivityTypes.length > 0
+    ? filteredResolvedActivityTypes
     : expandedActivityTypes.length > 0
       ? expandedActivityTypes
+      : excludedActivityTypeSet.size > 0
+        ? excludeActivityTypes(CANONICAL_ACTIVITY_TYPES, excludedActivityTypeSet)
       : [];
 
   const resolvedRequestedTimeInterval = promptRequestedTimeInterval
