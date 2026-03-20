@@ -177,6 +177,8 @@ describe('ChartsColumnsComponent', () => {
     expect(option.yAxis.inverse).toBe(true);
     expect(option.yAxis.axisLine.show).toBe(false);
     expect(option.yAxis.axisLabel.hideOverlap).toBe(false);
+    expect(option.grid.left).toBe(0);
+    expect(option.grid.right).toBe(12);
   });
 
   it('should snap value axis max to a logical grid boundary', async () => {

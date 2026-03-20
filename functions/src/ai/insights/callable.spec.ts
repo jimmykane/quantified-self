@@ -107,6 +107,31 @@ vi.mock('./metric-catalog', () => ({
 
 import { aiInsights, getAiInsightsQuotaStatus } from './callable';
 
+function buildAggregateEventRanking() {
+  return {
+    primaryEventId: 'event-3',
+    topEventIds: ['event-3', 'event-2', 'event-1'],
+    matchedEventCount: 3,
+    rankedEvents: [
+      {
+        eventId: 'event-3',
+        startDate: '2026-03-10T08:00:00.000Z',
+        aggregateValue: 123,
+      },
+      {
+        eventId: 'event-2',
+        startDate: '2026-02-14T08:00:00.000Z',
+        aggregateValue: 118,
+      },
+      {
+        eventId: 'event-1',
+        startDate: '2026-01-11T08:00:00.000Z',
+        aggregateValue: 105,
+      },
+    ],
+  };
+}
+
 const quotaStatus = {
   role: 'pro',
   limit: AI_INSIGHTS_REQUEST_LIMITS.pro,
@@ -210,6 +235,8 @@ describe('aiInsights callable', () => {
     vi.clearAllMocks();
     hoisted.currentContext.auth = { uid: 'user-1' };
     hoisted.currentContext.app = { appId: 'app-1' };
+    delete process.env.FUNCTIONS_EMULATOR;
+    delete process.env.FIREBASE_AUTH_EMULATOR_HOST;
     hoisted.getInsightMetricDefinition.mockReturnValue({
       key: 'distance',
       label: 'distance',
@@ -521,6 +548,76 @@ describe('aiInsights callable', () => {
         chartType: ChartTypes.ColumnsVertical,
       }),
     });
+  });
+
+  it('returns aggregate min/max responses with supplemental event ranking ids', async () => {
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'ok',
+      metricKey: 'distance',
+      query: {
+        ...normalizedQuery,
+        valueType: ChartDataValueTypes.Maximum,
+        categoryType: ChartDataCategoryTypes.ActivityType,
+      },
+    });
+    hoisted.executeAiInsightsQuery.mockResolvedValue({
+      resultKind: 'aggregate',
+      matchedEventsCount: 3,
+      matchedActivityTypeCounts: [
+        {
+          activityType: ActivityTypes.Cycling,
+          eventCount: 2,
+        },
+        {
+          activityType: ActivityTypes.Running,
+          eventCount: 1,
+        },
+      ],
+      aggregation: {
+        dataType: 'Distance',
+        valueType: ChartDataValueTypes.Maximum,
+        categoryType: ChartDataCategoryTypes.ActivityType,
+        resolvedTimeInterval: TimeIntervals.Auto,
+        buckets: [
+          {
+            bucketKey: ActivityTypes.Cycling,
+            aggregateValue: 123,
+            totalCount: 2,
+            seriesValues: {},
+            seriesCounts: {},
+          },
+        ],
+      },
+      eventRanking: buildAggregateEventRanking(),
+    });
+
+    const result = await aiInsights({
+      prompt: 'show my longest distances by sport',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(result).toMatchObject({
+      status: 'ok',
+      resultKind: 'aggregate',
+      eventRanking: {
+        primaryEventId: 'event-3',
+        topEventIds: ['event-3', 'event-2', 'event-1'],
+        matchedEventCount: 3,
+      },
+    });
+  });
+
+  it('does not include aggregate event ranking for non min/max aggregate responses', async () => {
+    const result = await aiInsights({
+      prompt: 'show distance',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(result).toEqual(expect.objectContaining({
+      status: 'ok',
+      resultKind: 'aggregate',
+    }));
+    expect((result as { eventRanking?: unknown }).eventRanking).toBeUndefined();
   });
 
   it('returns an event lookup response with ranked event ids for singular event prompts', async () => {
@@ -1005,5 +1102,60 @@ describe('aiInsights callable', () => {
 
     expect(hoisted.getAiInsightsQuotaStatus).toHaveBeenCalledWith('user-1');
     expect(result).toEqual(quotaStatus);
+  });
+
+  it('uses callable auth token claims for aiInsights quota checks in emulator mode', async () => {
+    process.env.FUNCTIONS_EMULATOR = 'true';
+    hoisted.currentContext.auth = {
+      uid: 'user-1',
+      token: {
+        stripeRole: 'basic',
+        gracePeriodUntil: 1775237359811,
+      },
+    };
+
+    await aiInsights({
+      prompt: 'show distance',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(hoisted.getAiInsightsQuotaStatus).toHaveBeenCalledWith('user-1', {
+      role: 'basic',
+      gracePeriodUntil: 1775237359811,
+    });
+    expect(hoisted.reserveAiInsightsQuotaForRequest).toHaveBeenCalledWith('user-1', {
+      role: 'basic',
+      gracePeriodUntil: 1775237359811,
+    });
+  });
+
+  it('uses callable auth token claims for quota status in emulator mode', async () => {
+    const originalFunctionsEmulator = process.env.FUNCTIONS_EMULATOR;
+    process.env.FUNCTIONS_EMULATOR = 'true';
+
+    try {
+      await getAiInsightsQuotaStatus({
+        auth: {
+          uid: 'user-1',
+          token: {
+            stripeRole: 'basic',
+            gracePeriodUntil: 1775237359811,
+          },
+        },
+        app: { appId: 'app-1' },
+        data: undefined,
+      } as any);
+
+      expect(hoisted.getAiInsightsQuotaStatus).toHaveBeenCalledWith('user-1', {
+        role: 'basic',
+        gracePeriodUntil: 1775237359811,
+      });
+    } finally {
+      if (originalFunctionsEmulator === undefined) {
+        delete process.env.FUNCTIONS_EMULATOR;
+      } else {
+        process.env.FUNCTIONS_EMULATOR = originalFunctionsEmulator;
+      }
+    }
   });
 });

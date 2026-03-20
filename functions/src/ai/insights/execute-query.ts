@@ -56,6 +56,12 @@ interface AggregateExecutionResult {
     activityType: string;
     eventCount: number;
   }>;
+  eventRanking?: {
+    primaryEventId: string | null;
+    topEventIds: string[];
+    matchedEventCount: number;
+    rankedEvents: RankedInsightEvent[];
+  };
 }
 
 interface MultiMetricAggregateExecutionMetricResult {
@@ -612,6 +618,24 @@ export async function executeAiInsightsQuery(
     categoryType: query.categoryType,
     requestedTimeInterval: query.requestedTimeInterval,
   }, dependencies.logger);
+  const eventRanking = (
+    query.valueType === ChartDataValueTypes.Minimum
+    || query.valueType === ChartDataValueTypes.Maximum
+  )
+    ? (() => {
+      const rankedEvents = buildRankedEvents(eventsWithRequestedStat, query);
+      if (!rankedEvents.length) {
+        return undefined;
+      }
+
+      return {
+        primaryEventId: rankedEvents[0]?.eventId ?? null,
+        topEventIds: rankedEvents.slice(0, 10).map(event => event.eventId),
+        matchedEventCount: eventsWithRequestedStat.length,
+        rankedEvents,
+      };
+    })()
+    : undefined;
 
   dependencies.logger.info('[aiInsights] Aggregation summary', {
     prompt: prompt || null,
@@ -622,6 +646,8 @@ export async function executeAiInsightsQuery(
     requestedTimeInterval: query.requestedTimeInterval,
     resolvedTimeInterval: aggregation.resolvedTimeInterval,
     bucketCount: aggregation.buckets.length,
+    rankedEventCount: eventRanking?.rankedEvents.length ?? 0,
+    rankedEventTopIds: eventRanking?.topEventIds ?? [],
   });
 
   return {
@@ -629,5 +655,6 @@ export async function executeAiInsightsQuery(
     aggregation,
     matchedEventsCount: matchedEvents.length,
     matchedActivityTypeCounts: buildMatchedActivityTypeCounts(matchedEvents, dependencies.logger),
+    ...(eventRanking ? { eventRanking } : {}),
   };
 }

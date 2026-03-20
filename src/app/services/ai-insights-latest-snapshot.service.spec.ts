@@ -118,6 +118,27 @@ function buildOkResponse(): AiInsightsOkResponse {
   };
 }
 
+function buildAggregateRankingResponse(): AiInsightsOkResponse {
+  return {
+    ...buildOkResponse(),
+    query: {
+      ...buildOkResponse().query,
+      valueType: ChartDataValueTypes.Maximum,
+      categoryType: ChartDataCategoryTypes.ActivityType,
+    },
+    aggregation: {
+      ...buildOkResponse().aggregation,
+      valueType: ChartDataValueTypes.Maximum,
+      categoryType: ChartDataCategoryTypes.ActivityType,
+    },
+    eventRanking: {
+      primaryEventId: 'event-3',
+      topEventIds: ['event-3', 'event-2', 'event-1'],
+      matchedEventCount: 3,
+    },
+  };
+}
+
 function buildEventLookupResponse(): AiInsightsEventLookupOkResponse {
   return {
     status: 'ok',
@@ -612,6 +633,24 @@ describe('AiInsightsLatestSnapshotService', () => {
       savedAt: '2026-03-18T12:00:00.000Z',
       prompt: 'I want to know when I had my longest distance in cycling',
       response: buildEventLookupResponse(),
+    };
+    vi.mocked(getDoc).mockResolvedValue({
+      exists: () => true,
+      data: () => snapshot,
+    } as never);
+
+    const restored = await service.loadLatest('user-1');
+
+    expect(restored).toEqual(snapshot);
+    expect(deleteDoc).not.toHaveBeenCalled();
+  });
+
+  it('should restore aggregate snapshots that include supplemental event rankings', async () => {
+    const snapshot: AiInsightsLatestSnapshot = {
+      version: 1,
+      savedAt: '2026-03-18T12:00:00.000Z',
+      prompt: 'Show my longest distances by sport',
+      response: buildAggregateRankingResponse(),
     };
     vi.mocked(getDoc).mockResolvedValue({
       exists: () => true,

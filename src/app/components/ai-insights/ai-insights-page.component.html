@@ -293,14 +293,14 @@
                 <p class="description-text narrative">{{ result.narrative }}</p>
               </div>
 
-              @if (eventLookupLoadError(); as eventLookupLoadError) {
+              @if (rankedEventLoadError(); as rankedEventLoadError) {
                 <div class="result-date-range-note">
                   <mat-icon>info</mat-icon>
-                  <p class="mat-body-small">{{ eventLookupLoadError }}</p>
+                  <p class="mat-body-small">{{ rankedEventLoadError }}</p>
                 </div>
               }
 
-              @if (eventLookupLoading()) {
+              @if (rankedEventLoading()) {
                 <app-ai-insights-loading-state
                   title="Loading event details"
                   eyebrow="Loading references"
@@ -310,10 +310,10 @@
                 </app-ai-insights-loading-state>
               }
 
-              @if (primaryEventLookupItem(); as primaryEvent) {
+              @if (primaryRankedEventItem(); as primaryEvent) {
                 <section class="event-lookup-primary qs-glass-card-panel">
                   <div class="event-lookup-primary-copy">
-                    <p class="mat-label-medium summary-label">Winning event</p>
+                    <p class="mat-label-medium summary-label">{{ rankedEventPrimaryLabel() }}</p>
                     <p class="summary-value">{{ primaryEvent.value }}</p>
                     <p class="summary-meta">{{ primaryEvent.date }}</p>
                     @if (primaryEvent.activityLabel) {
@@ -333,15 +333,15 @@
                 </section>
               }
 
-              @if (eventLookupItems().length) {
+              @if (rankedEventItems().length) {
                 <div class="section-heading">
                   <div>
-                    <p class="mat-label-medium suggestions-title">Top events</p>
-                    <p class="mat-body-small section-supporting-copy">{{ eventLookupRankingCopy() }}</p>
+                    <p class="mat-label-medium suggestions-title">{{ rankedEventSectionTitle() }}</p>
+                    <p class="mat-body-small section-supporting-copy">{{ rankedEventRankingCopy() }}</p>
                   </div>
                 </div>
                 <div class="event-lookup-list">
-                  @for (eventItem of eventLookupItems(); track eventItem.eventId; let index = $index) {
+                  @for (eventItem of rankedEventItems(); track eventItem.eventId; let index = $index) {
                     <section class="event-lookup-row qs-glass-card-panel">
                       <div class="event-lookup-rank">{{ index + 1 }}</div>
                       <div class="event-lookup-row-copy">
@@ -579,6 +579,83 @@
                 [useAnimations]="useAnimations()"
                 [userUnitSettings]="userUnitSettings()">
               </app-ai-insights-chart>
+
+              @if (result.eventRanking) {
+                <mat-divider></mat-divider>
+
+                @if (rankedEventLoadError(); as rankedEventLoadError) {
+                  <div class="result-date-range-note">
+                    <mat-icon>info</mat-icon>
+                    <p class="mat-body-small">{{ rankedEventLoadError }}</p>
+                  </div>
+                }
+
+                @if (rankedEventLoading()) {
+                  <app-ai-insights-loading-state
+                    title="Loading event details"
+                    eyebrow="Loading references"
+                    [compact]="true"
+                    [copy]="'Fetching the top ranked events for this result.'"
+                    [steps]="eventLookupLoadingSteps">
+                  </app-ai-insights-loading-state>
+                }
+
+                @if (primaryRankedEventItem(); as primaryEvent) {
+                  <section class="event-lookup-primary qs-glass-card-panel">
+                    <div class="event-lookup-primary-copy">
+                      <p class="mat-label-medium summary-label">{{ rankedEventPrimaryLabel() }}</p>
+                      <p class="summary-value">{{ primaryEvent.value }}</p>
+                      <p class="summary-meta">{{ primaryEvent.date }}</p>
+                      @if (primaryEvent.activityLabel) {
+                        <p class="summary-meta">{{ primaryEvent.activityLabel }}</p>
+                      }
+                    </div>
+                    <div class="event-lookup-actions">
+                      <button
+                        mat-stroked-button
+                        type="button"
+                        [routerLink]="['/user', currentUserID(), 'event', primaryEvent.eventId]"
+                        [disabled]="!primaryEvent.isAvailable">
+                        <mat-icon>open_in_new</mat-icon>
+                        <span>Open event</span>
+                      </button>
+                    </div>
+                  </section>
+                }
+
+                @if (rankedEventItems().length) {
+                  <div class="section-heading">
+                    <div>
+                      <p class="mat-label-medium suggestions-title">{{ rankedEventSectionTitle() }}</p>
+                      <p class="mat-body-small section-supporting-copy">{{ rankedEventRankingCopy() }}</p>
+                    </div>
+                  </div>
+
+                  <div class="event-lookup-list">
+                    @for (eventItem of rankedEventItems(); track eventItem.eventId; let index = $index) {
+                      <section class="event-lookup-row qs-glass-card-panel">
+                        <div class="event-lookup-rank">{{ index + 1 }}</div>
+                        <div class="event-lookup-row-copy">
+                          <p class="summary-value event-lookup-row-value">{{ eventItem.value }}</p>
+                          <p class="summary-meta">{{ eventItem.date }}</p>
+                          @if (eventItem.activityLabel) {
+                            <p class="summary-meta">{{ eventItem.activityLabel }}</p>
+                          }
+                        </div>
+                        <div class="event-lookup-actions">
+                          <button
+                            mat-button
+                            type="button"
+                            [routerLink]="['/user', currentUserID(), 'event', eventItem.eventId]"
+                            [disabled]="!eventItem.isAvailable">
+                            Open
+                          </button>
+                        </div>
+                      </section>
+                    }
+                  </div>
+                }
+              }
             </div>
           } @else {
             <div class="state-panel state-panel-placeholder qs-glass-card-panel">

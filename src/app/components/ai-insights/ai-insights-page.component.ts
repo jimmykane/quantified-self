@@ -86,6 +86,14 @@ type AggregateSummarySource =
   | AiInsightsAggregateOkResponse
   | AiInsightsMultiMetricAggregateMetricResult;
 
+type AggregateRankedEventResponse = AiInsightsAggregateOkResponse & {
+  eventRanking: NonNullable<AiInsightsAggregateOkResponse['eventRanking']>;
+};
+
+type RankedEventResponse =
+  | AiInsightsEventLookupOkResponse
+  | AggregateRankedEventResponse;
+
 function resolveAggregationLabel(valueType: ChartDataValueTypes): string {
   switch (valueType) {
     case ChartDataValueTypes.Average:
@@ -658,6 +666,26 @@ interface EventLookupDisplayItem {
   isAvailable: boolean;
 }
 
+function resolveRankedEventIds(response: RankedEventResponse): string[] {
+  return response.resultKind === 'event_lookup'
+    ? response.eventLookup.topEventIds.slice(0, 10)
+    : response.eventRanking.topEventIds.slice(0, 10);
+}
+
+function resolveRankedEventMatchedCount(response: RankedEventResponse): number {
+  return response.resultKind === 'event_lookup'
+    ? response.eventLookup.matchedEventCount
+    : response.eventRanking.matchedEventCount;
+}
+
+function hasAggregateEventRanking(
+  response: AiInsightsAggregateOkResponse | null,
+): response is AggregateRankedEventResponse {
+  return !!response?.eventRanking?.primaryEventId
+    && Array.isArray(response.eventRanking.topEventIds)
+    && response.eventRanking.topEventIds.length > 0;
+}
+
 @Component({
   selector: 'app-ai-insights-page',
   standalone: true,
@@ -710,9 +738,9 @@ export class AiInsightsPageComponent {
   readonly latestSnapshotSavedAt = signal<string | null>(null);
   readonly quotaStatus = signal<AiInsightsQuotaStatus | null>(null);
   readonly resultPrompt = signal('');
-  readonly eventLookupResolvedEvents = signal<EventLookupResolvedEvent[]>([]);
-  readonly eventLookupLoading = signal(false);
-  readonly eventLookupLoadError = signal<string | null>(null);
+  readonly rankedEventResolvedEvents = signal<EventLookupResolvedEvent[]>([]);
+  readonly rankedEventLoading = signal(false);
+  readonly rankedEventLoadError = signal<string | null>(null);
   readonly appTheme = this.themeService.appTheme;
   readonly user = toSignal(this.authService.user$, { initialValue: null });
   readonly chartSettings = this.userSettingsQueryService.chartSettings;
@@ -1012,9 +1040,9 @@ export class AiInsightsPageComponent {
     this.errorMessage.set(null);
     this.response.set(null);
     this.resultPrompt.set('');
-    this.eventLookupResolvedEvents.set([]);
-    this.eventLookupLoading.set(false);
-    this.eventLookupLoadError.set(null);
+    this.rankedEventResolvedEvents.set([]);
+    this.rankedEventLoading.set(false);
+    this.rankedEventLoadError.set(null);
     this.promptControl.setValue('');
 
     if (!userID) {
@@ -1054,25 +1082,34 @@ export class AiInsightsPageComponent {
       cancelled = true;
     });
   });
-  private readonly eventLookupLoadEffect = effect((onCleanup) => {
-    const response = this.eventLookupOkResponse();
+  readonly rankedEventResponse = computed<RankedEventResponse | null>(() => {
+    const eventLookupResponse = this.eventLookupOkResponse();
+    if (eventLookupResponse) {
+      return eventLookupResponse;
+    }
+
+    const aggregateResponse = this.aggregateOkResponse();
+    return hasAggregateEventRanking(aggregateResponse) ? aggregateResponse : null;
+  });
+  private readonly rankedEventLoadEffect = effect((onCleanup) => {
+    const response = this.rankedEventResponse();
     const userID = this.currentUserID();
     let cancelled = false;
 
-    this.eventLookupResolvedEvents.set([]);
-    this.eventLookupLoading.set(false);
-    this.eventLookupLoadError.set(null);
+    this.rankedEventResolvedEvents.set([]);
+    this.rankedEventLoading.set(false);
+    this.rankedEventLoadError.set(null);
 
     if (!response || !userID) {
       return;
     }
 
-    const topEventIds = response.eventLookup.topEventIds.slice(0, 10);
+    const topEventIds = resolveRankedEventIds(response);
     if (!topEventIds.length) {
       return;
     }
 
-    this.eventLookupLoading.set(true);
+    this.rankedEventLoading.set(true);
 
     void (async () => {
       try {
@@ -1084,7 +1121,7 @@ export class AiInsightsPageComponent {
         }
 
         const eventsById = new Map(events.map(event => [event.getID(), event]));
-        this.eventLookupResolvedEvents.set(topEventIds.map(eventId => ({
+        this.rankedEventResolvedEvents.set(topEventIds.map(eventId => ({
           eventId,
           event: eventsById.get(eventId) ?? null,
         })));
@@ -1098,11 +1135,11 @@ export class AiInsightsPageComponent {
           eventIds: topEventIds,
           error,
         });
-        this.eventLookupResolvedEvents.set(topEventIds.map(eventId => ({ eventId, event: null })));
-        this.eventLookupLoadError.set('Could not load event details right now.');
+        this.rankedEventResolvedEvents.set(topEventIds.map(eventId => ({ eventId, event: null })));
+        this.rankedEventLoadError.set('Could not load event details right now.');
       } finally {
         if (!cancelled) {
-          this.eventLookupLoading.set(false);
+          this.rankedEventLoading.set(false);
         }
       }
     })();
@@ -1217,17 +1254,17 @@ export class AiInsightsPageComponent {
       && response.query.groupingMode === 'date'
       && response.metricResults.some(metricResult => metricResult.aggregation.buckets.length > 0);
   });
-  readonly eventLookupItems = computed<EventLookupDisplayItem[]>(() => {
-    const response = this.eventLookupOkResponse();
+  readonly rankedEventItems = computed<EventLookupDisplayItem[]>(() => {
+    const response = this.rankedEventResponse();
     if (!response) {
       return [];
     }
 
     const locale = this.locale;
     const unitSettings = this.userUnitSettings();
-    const resolvedEvents = this.eventLookupResolvedEvents();
+    const resolvedEvents = this.rankedEventResolvedEvents();
 
-    return response.eventLookup.topEventIds.slice(0, 10).map((eventId) => {
+    return resolveRankedEventIds(response).map((eventId) => {
       const event = resolvedEvents.find(entry => entry.eventId === eventId)?.event ?? null;
       const rawValue = resolveEventLookupStatValue(event, response.query.dataType);
       const value = rawValue === null
@@ -1246,22 +1283,61 @@ export class AiInsightsPageComponent {
       };
     });
   });
-  readonly primaryEventLookupItem = computed<EventLookupDisplayItem | null>(() =>
-    this.eventLookupItems()[0] ?? null
+  readonly primaryRankedEventItem = computed<EventLookupDisplayItem | null>(() =>
+    this.rankedEventItems()[0] ?? null
   );
-  readonly eventLookupRankingCopy = computed(() => {
-    const response = this.eventLookupOkResponse();
+  readonly rankedEventPrimaryLabel = computed(() => {
+    const response = this.rankedEventResponse();
     if (!response) {
       return null;
     }
 
-    const shownCount = Math.min(response.eventLookup.topEventIds.length, 10);
-    const matchedCount = response.eventLookup.matchedEventCount;
-    if (matchedCount <= shownCount) {
-      return `${matchedCount} matching ${matchedCount === 1 ? 'event' : 'events'} ranked.`;
+    if (response.resultKind === 'event_lookup') {
+      return 'Winning event';
     }
 
-    return `Showing top ${shownCount} of ${matchedCount} matching events.`;
+    const isGroupedAcrossSports = response.query.categoryType === ChartDataCategoryTypes.ActivityType;
+    if (response.query.valueType === ChartDataValueTypes.Minimum) {
+      return isGroupedAcrossSports
+        ? 'Overall lowest event across all matched sports'
+        : 'Lowest event';
+    }
+
+    return isGroupedAcrossSports
+      ? 'Overall best event across all matched sports'
+      : 'Top event';
+  });
+  readonly rankedEventSectionTitle = computed(() => {
+    const response = this.rankedEventResponse();
+    if (!response) {
+      return null;
+    }
+
+    return response.resultKind === 'aggregate'
+      && response.query.categoryType === ChartDataCategoryTypes.ActivityType
+      ? 'Top events across all matched sports'
+      : 'Top events';
+  });
+  readonly rankedEventRankingCopy = computed(() => {
+    const response = this.rankedEventResponse();
+    if (!response) {
+      return null;
+    }
+
+    const shownCount = resolveRankedEventIds(response).length;
+    const matchedCount = resolveRankedEventMatchedCount(response);
+    const acrossAllMatchedSports = response.resultKind === 'aggregate'
+      && response.query.categoryType === ChartDataCategoryTypes.ActivityType;
+
+    if (matchedCount <= shownCount) {
+      return acrossAllMatchedSports
+        ? `${matchedCount} matching ${matchedCount === 1 ? 'event' : 'events'} ranked across all matched sports.`
+        : `${matchedCount} matching ${matchedCount === 1 ? 'event' : 'events'} ranked.`;
+    }
+
+    return acrossAllMatchedSports
+      ? `Showing top ${shownCount} of ${matchedCount} matching events across all matched sports.`
+      : `Showing top ${shownCount} of ${matchedCount} matching events.`;
   });
 
   onFormSubmit(event: SubmitEvent | Event): void {

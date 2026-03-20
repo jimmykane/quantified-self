@@ -224,6 +224,7 @@ export const AiInsightsResponseSchema = z.union([
     query: NormalizedInsightQuerySchema,
     aggregation: EventStatAggregationResultSchema,
     summary: AiInsightSummarySchema,
+    eventRanking: AiInsightEventLookupSchema.optional(),
     presentation: AiInsightPresentationSchema,
   }),
   z.object({

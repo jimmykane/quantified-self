@@ -405,6 +405,7 @@ function isCompletedInsightResponse(value: unknown): value is Extract<AiInsights
     resultKind === 'aggregate'
     && isAggregationResult(value.aggregation)
     && isSummary(value.summary)
+    && (value.eventRanking === undefined || isEventLookup(value.eventRanking))
   );
 }
 
@@ -835,6 +836,7 @@ function normalizeAiInsightsResponse(response: AiInsightsResponse): AiInsightsRe
     ...(normalizedResponse.quota ? { quota: normalizedResponse.quota } : {}),
     query: normalizeAggregateInsightQuery(normalizedResponse.query),
     summary: normalizeSummary(normalizedResponse.summary),
+    ...(normalizedResponse.eventRanking ? { eventRanking: normalizeEventLookup(normalizedResponse.eventRanking) } : {}),
     presentation: normalizePresentation(normalizedResponse.presentation),
   };
 }

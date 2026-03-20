@@ -282,8 +282,8 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
         fontFamily: ECHARTS_GLOBAL_FONT_FAMILY
       },
       grid: {
-        left: 4,
-        right: 8,
+        left: 0,
+        right: 12,
         top: 62,
         bottom: isCompactLayout ? 16 : 10,
         outerBoundsMode: 'same',

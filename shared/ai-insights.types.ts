@@ -190,6 +190,7 @@ export interface AiInsightsAggregateOkResponse {
   };
   aggregation: EventStatAggregationResult;
   summary: AiInsightSummary;
+  eventRanking?: AiInsightEventLookup;
   presentation: AiInsightPresentation;
 }
 

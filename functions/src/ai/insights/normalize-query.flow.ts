@@ -128,6 +128,7 @@ export interface NormalizeQueryPromptContext {
   promptCategory: ModelCategoryCode | undefined;
   promptDateSelection: PromptDateSelectionIntent;
   promptRequestedTimeInterval: ModelTimeIntervalCode | undefined;
+  promptChartPreference: 'columns' | 'lines' | undefined;
 }
 
 interface NormalizeQueryDependencies {
@@ -718,7 +719,20 @@ function resolveChartType(
   categoryType: ChartDataCategoryTypes,
   valueType: ChartDataValueTypes,
   forceDateColumns: boolean,
+  promptChartPreference: NormalizeQueryPromptContext['promptChartPreference'],
 ): ChartTypes {
+  if (promptChartPreference === 'columns') {
+    return categoryType === ChartDataCategoryTypes.ActivityType
+      ? ChartTypes.ColumnsHorizontal
+      : ChartTypes.ColumnsVertical;
+  }
+
+  if (promptChartPreference === 'lines') {
+    return categoryType === ChartDataCategoryTypes.ActivityType
+      ? ChartTypes.LinesHorizontal
+      : ChartTypes.LinesVertical;
+  }
+
   if (categoryType === ChartDataCategoryTypes.ActivityType) {
     return ChartTypes.ColumnsHorizontal;
   }
@@ -728,6 +742,25 @@ function resolveChartType(
   }
 
   return ChartTypes.LinesVertical;
+}
+
+function resolvePromptChartPreference(
+  prompt: string,
+): NormalizeQueryPromptContext['promptChartPreference'] {
+  const normalizedPrompt = normalizePromptSearchText(prompt);
+  if (!normalizedPrompt) {
+    return undefined;
+  }
+
+  if (/\b(columns?|bars?)\b/.test(normalizedPrompt)) {
+    return 'columns';
+  }
+
+  if (/\b(lines?|line chart)\b/.test(normalizedPrompt)) {
+    return 'lines';
+  }
+
+  return undefined;
 }
 
 function normalizeActivityTypes(activityTypes: string[] | undefined): ActivityTypes[] | null {
@@ -1469,6 +1502,7 @@ export function resolveNormalizedInsightQueryFromIntent(
     promptCategory,
     promptDateSelection,
     promptRequestedTimeInterval,
+    promptChartPreference,
   } = promptContext;
   const modelReturnedUnsupported = intent.status === 'unsupported';
 
@@ -1596,6 +1630,7 @@ export function resolveNormalizedInsightQueryFromIntent(
           ChartDataCategoryTypes.DateType,
           valueType,
           stackedDateByActivityRequested,
+          promptChartPreference,
         ),
       },
     };
@@ -1615,7 +1650,12 @@ export function resolveNormalizedInsightQueryFromIntent(
       dateRange,
       requestedDateRanges,
       periodMode: promptDateSelection.periodMode,
-      chartType: resolveChartType(categoryType, valueType, stackedDateByActivityRequested),
+      chartType: resolveChartType(
+        categoryType,
+        valueType,
+        stackedDateByActivityRequested,
+        promptChartPreference,
+      ),
     },
   };
 }
@@ -1636,6 +1676,7 @@ export function buildNormalizeQueryPromptContext(
   const promptDateSelection = resolvePromptDateSelection(prompt, promptCategory, promptAggregation);
   const promptRequestedTimeInterval = resolvePromptRequestedTimeInterval(prompt)
     ?? promptDateSelection.compareRequestedTimeInterval;
+  const promptChartPreference = resolvePromptChartPreference(prompt);
 
   return {
     prompt,
@@ -1643,6 +1684,7 @@ export function buildNormalizeQueryPromptContext(
     promptCategory,
     promptDateSelection,
     promptRequestedTimeInterval,
+    promptChartPreference,
   };
 }
 

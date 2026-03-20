@@ -329,8 +329,8 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
         fontFamily: ECHARTS_GLOBAL_FONT_FAMILY
       },
       grid: {
-        left: this.vertical ? 4 : 6,
-        right: 8,
+        left: 0,
+        right: 12,
         top: 62,
         bottom: this.vertical ? (isCompactLayout ? 16 : 10) : 8,
         outerBoundsMode: 'same',

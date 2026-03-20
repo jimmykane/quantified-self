@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ChartDataCategoryTypes,
+  ChartTypes,
   DataHeartRateMax,
 } from '@sports-alliance/sports-lib';
 
@@ -78,5 +79,33 @@ describe('repairUnsupportedInsightQuery', () => {
         suggestedPrompts: ['show my max heart rate by sport in 2024'],
       },
     });
+  });
+
+  it('keeps explicit prompt chart intent when repair succeeds', async () => {
+    setRepairInsightQueryDependenciesForTesting({
+      repairIntent: async () => ({
+        status: 'supported',
+        metric: 'max heart rate',
+        aggregation: 'maximum',
+        category: 'date',
+      }),
+    });
+
+    const repaired = await repairUnsupportedInsightQuery({
+      prompt: 'what was my max heart rate in 2024 and 2026 as columns?',
+      clientTimezone: 'UTC',
+    }, {
+      status: 'unsupported',
+      reasonCode: 'unsupported_metric',
+      suggestedPrompts: ['show my max heart rate in 2024'],
+    });
+
+    expect(repaired.source).toBe('genkit');
+    expect(repaired.result.status).toBe('ok');
+    if (repaired.result.status !== 'ok') {
+      return;
+    }
+
+    expect(repaired.result.query.chartType).toBe(ChartTypes.ColumnsVertical);
   });
 });

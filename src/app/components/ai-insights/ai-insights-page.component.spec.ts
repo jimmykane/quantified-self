@@ -179,6 +179,76 @@ function buildOkResponse(): AiInsightsAggregateOkResponse {
   };
 }
 
+function buildAggregateMaxBySportResponse(): AiInsightsAggregateOkResponse {
+  return {
+    ...buildOkResponse(),
+    narrative: 'Cycling had the highest max distance overall, and I ranked the top matching events across all matched sports.',
+    query: {
+      ...buildOkResponse().query,
+      valueType: ChartDataValueTypes.Maximum,
+      categoryType: ChartDataCategoryTypes.ActivityType,
+      activityTypes: [ActivityTypes.Cycling, ActivityTypes.Running],
+      chartType: ChartTypes.ColumnsHorizontal,
+    },
+    aggregation: {
+      ...buildOkResponse().aggregation,
+      valueType: ChartDataValueTypes.Maximum,
+      categoryType: ChartDataCategoryTypes.ActivityType,
+      resolvedTimeInterval: TimeIntervals.Auto,
+      buckets: [
+        {
+          bucketKey: ActivityTypes.Cycling,
+          totalCount: 2,
+          aggregateValue: 123400,
+          seriesValues: { Cycling: 123400 },
+          seriesCounts: { Cycling: 2 },
+        },
+        {
+          bucketKey: ActivityTypes.Running,
+          totalCount: 1,
+          aggregateValue: 18700,
+          seriesValues: { Running: 18700 },
+          seriesCounts: { Running: 1 },
+        },
+      ],
+    },
+    summary: {
+      ...buildOkResponse().summary,
+      matchedEventCount: 3,
+      overallAggregateValue: 123400,
+      peakBucket: {
+        bucketKey: ActivityTypes.Cycling,
+        aggregateValue: 123400,
+        totalCount: 2,
+      },
+      lowestBucket: {
+        bucketKey: ActivityTypes.Running,
+        aggregateValue: 18700,
+        totalCount: 1,
+      },
+      latestBucket: null,
+      bucketCoverage: null,
+      trend: null,
+      activityMix: {
+        topActivityTypes: [
+          { activityType: ActivityTypes.Cycling, eventCount: 2 },
+          { activityType: ActivityTypes.Running, eventCount: 1 },
+        ],
+        remainingActivityTypeCount: 0,
+      },
+    },
+    eventRanking: {
+      primaryEventId: 'event-3',
+      topEventIds: ['event-3', 'event-2', 'event-1'],
+      matchedEventCount: 3,
+    },
+    presentation: {
+      title: 'Maximum distance by activity type',
+      chartType: ChartTypes.ColumnsHorizontal,
+    },
+  };
+}
+
 function buildEmptyResponse(): AiInsightsEmptyResponse {
   return {
     status: 'empty',
@@ -1259,7 +1329,7 @@ describe('AiInsightsPageComponent', () => {
     fixture.detectChanges();
     TestBed.flushEffects();
     await fixture.whenStable();
-    component.eventLookupLoadError.set('Could not load event details right now.');
+    component.rankedEventLoadError.set('Could not load event details right now.');
     fixture.detectChanges();
 
     const notices = fixture.debugElement.queryAll(By.css('.result-date-range-note'));
@@ -1267,6 +1337,68 @@ describe('AiInsightsPageComponent', () => {
 
     expect(notices.some((notice) => notice.nativeElement.textContent.includes('Could not load event details right now.'))).toBe(true);
     expect(rankingRows[0]?.nativeElement.textContent).toContain('Unavailable');
+  });
+
+  it('should render aggregate max results with a global top-events section across all matched sports', async () => {
+    appEventServiceMock.getEventsOnceByIds.mockReturnValueOnce(of([
+      buildMockEvent({
+        id: 'event-3',
+        startDate: '2026-03-10T08:00:00.000Z',
+        activityTypes: [ActivityTypes.Cycling],
+        stats: { [DataDistance.type]: 123400 },
+      }),
+      buildMockEvent({
+        id: 'event-2',
+        startDate: '2026-02-14T08:00:00.000Z',
+        activityTypes: [ActivityTypes.Cycling],
+        stats: { [DataDistance.type]: 118200 },
+      }),
+      buildMockEvent({
+        id: 'event-1',
+        startDate: '2026-01-11T08:00:00.000Z',
+        activityTypes: [ActivityTypes.Running],
+        stats: { [DataDistance.type]: 18700 },
+      }),
+    ]));
+
+    component.response.set(buildAggregateMaxBySportResponse());
+    component.resultPrompt.set('Show my longest distances by sport');
+    fixture.detectChanges();
+    TestBed.flushEffects();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const chart = fixture.debugElement.query(By.css('.chart-stub'))?.nativeElement as HTMLElement | undefined;
+    const primaryCard = fixture.debugElement.query(By.css('.event-lookup-primary'))?.nativeElement as HTMLElement | undefined;
+    const sectionHeading = fixture.debugElement.queryAll(By.css('.section-heading .suggestions-title'))
+      .map(debugElement => debugElement.nativeElement as HTMLElement)
+      .find(element => element.textContent?.includes('Top events across all matched sports'));
+    const sectionCopy = fixture.debugElement.queryAll(By.css('.section-heading .section-supporting-copy'))
+      .map(debugElement => debugElement.nativeElement as HTMLElement)
+      .find(element => element.textContent?.includes('across all matched sports'));
+    const rankingRows = fixture.debugElement.queryAll(By.css('.event-lookup-row'));
+
+    expect(chart?.textContent).toContain('Maximum distance by activity type');
+    expect(primaryCard?.textContent).toContain('Overall best event across all matched sports');
+    expect(sectionHeading).toBeTruthy();
+    expect(sectionCopy?.textContent).toContain('3 matching events ranked across all matched sports.');
+    expect(rankingRows).toHaveLength(3);
+    expect(appEventServiceMock.getEventsOnceByIds).toHaveBeenCalledWith(expect.anything(), ['event-3', 'event-2', 'event-1']);
+  });
+
+  it('should not render the top-events section for average aggregate results', async () => {
+    component.response.set(buildOkResponse());
+    fixture.detectChanges();
+    TestBed.flushEffects();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const sectionHeading = fixture.debugElement.queryAll(By.css('.section-heading .suggestions-title'))
+      .map(debugElement => debugElement.nativeElement as HTMLElement)
+      .find(element => element.textContent?.includes('Top events'));
+
+    expect(sectionHeading).toBeFalsy();
+    expect(appEventServiceMock.getEventsOnceByIds).not.toHaveBeenCalled();
   });
 
   it('should refresh the visible result with the same prompt even if the input was edited', async () => {

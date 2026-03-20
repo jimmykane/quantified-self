@@ -52,6 +52,11 @@ export interface AiInsightsQuotaReservation {
   isEligible: boolean;
 }
 
+export interface AiInsightsUserRoleContext {
+  role: string;
+  gracePeriodUntil?: number;
+}
+
 interface AiInsightsQuotaDependencies {
   now: () => Date;
   createReservationId: () => string;
@@ -333,8 +338,10 @@ function buildUsageDocPayload(
 
 async function resolveAiInsightsQuotaWindow(
   userID: string,
+  userRoleContext?: AiInsightsUserRoleContext,
 ): Promise<ResolvedAiInsightsQuotaWindow> {
-  const { role, gracePeriodUntil } = await aiInsightsQuotaDependencies.getUserRoleAndGracePeriod(userID);
+  const { role, gracePeriodUntil } = userRoleContext
+    ?? await aiInsightsQuotaDependencies.getUserRoleAndGracePeriod(userID);
   const hasGrace = aiInsightsQuotaDependencies.isGracePeriodActive(gracePeriodUntil);
   const currentPaidRole = resolvePaidSubscriptionRole(role);
 
@@ -435,8 +442,9 @@ async function withQuotaDocumentTransaction<T>(
 
 export async function getAiInsightsQuotaStatus(
   userID: string,
+  userRoleContext?: AiInsightsUserRoleContext,
 ): Promise<AiInsightsQuotaStatus> {
-  const resolvedWindow = await resolveAiInsightsQuotaWindow(userID);
+  const resolvedWindow = await resolveAiInsightsQuotaWindow(userID, userRoleContext);
   if (!resolvedWindow.status.isEligible || !resolvedWindow.periodDocId) {
     return buildQuotaStatus(resolvedWindow.status, 0, 0);
   }
@@ -456,8 +464,9 @@ export async function getAiInsightsQuotaStatus(
 
 export async function reserveAiInsightsQuotaForRequest(
   userID: string,
+  userRoleContext?: AiInsightsUserRoleContext,
 ): Promise<AiInsightsQuotaReservation> {
-  const resolvedWindow = await resolveAiInsightsQuotaWindow(userID);
+  const resolvedWindow = await resolveAiInsightsQuotaWindow(userID, userRoleContext);
   if (!resolvedWindow.status.isEligible) {
     throw new HttpsError('permission-denied', 'AI Insights is available to Basic and Pro members.');
   }

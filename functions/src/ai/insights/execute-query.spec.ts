@@ -585,6 +585,157 @@ describe('execute-query', () => {
     expect(result.eventLookup.topEventIds).toEqual(['e3', 'e1', 'e2']);
   });
 
+  it('returns a global top-10 event ranking for maximum aggregate results', async () => {
+    const fetchEventDocs = vi.fn(async () => Array.from({ length: 12 }, (_, index) => ({
+      id: `e${index + 1}`,
+      data: () => ({
+        startDate: new Date(Date.UTC(2026, 0, index + 1, 12, 0, 0)),
+      }),
+    })));
+
+    const importEvent = vi.fn((eventJSON: { startDate: Date }, eventID: string) => createMockEvent({
+      id: eventID,
+      startDate: eventJSON.startDate,
+      activityTypes: [
+        Number(eventID.slice(1)) % 2 === 0
+          ? ActivityTypes.Cycling
+          : ActivityTypes.Running,
+      ],
+      stats: {
+        [DataDistance.type]: Number(eventID.slice(1)),
+      },
+    }));
+
+    setExecuteQueryDependenciesForTesting({
+      fetchEventDocs,
+      fetchDebugEventSnapshot: vi.fn(async () => ({
+        totalEventsCount: 12,
+        recentEventsSample: [],
+      })),
+      importEvent,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+    });
+
+    const result = await executeAiInsightsQuery('user-1', createQuery({
+      categoryType: ChartDataCategoryTypes.ActivityType,
+      valueType: ChartDataValueTypes.Maximum,
+      activityTypes: [ActivityTypes.Cycling, ActivityTypes.Running],
+    }), 'show my longest distances by sport');
+
+    expect(result.resultKind).toBe('aggregate');
+    if (result.resultKind !== 'aggregate') {
+      return;
+    }
+
+    expect(result.eventRanking).toEqual(expect.objectContaining({
+      primaryEventId: 'e12',
+      matchedEventCount: 12,
+      topEventIds: ['e12', 'e11', 'e10', 'e9', 'e8', 'e7', 'e6', 'e5', 'e4', 'e3'],
+    }));
+  });
+
+  it('returns ascending global event ranking for minimum aggregate results with date filters applied', async () => {
+    const fetchEventDocs = vi.fn(async () => [
+      { id: 'e1', data: () => ({ startDate: new Date('2026-01-10T12:00:00.000Z') }) },
+      { id: 'e2', data: () => ({ startDate: new Date('2026-02-10T12:00:00.000Z') }) },
+      { id: 'e3', data: () => ({ startDate: new Date('2026-03-10T12:00:00.000Z') }) },
+      { id: 'e4', data: () => ({ startDate: new Date('2026-04-10T12:00:00.000Z') }) },
+    ]);
+
+    const importEvent = vi
+      .fn()
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'e1',
+        startDate: new Date('2026-01-10T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: { [DataDistance.type]: 40 },
+      }))
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'e2',
+        startDate: new Date('2026-02-10T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: { [DataDistance.type]: 20 },
+      }))
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'e3',
+        startDate: new Date('2026-03-10T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: { [DataDistance.type]: 20 },
+      }))
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'e4',
+        startDate: new Date('2026-04-10T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: { [DataDistance.type]: 10 },
+      }));
+
+    setExecuteQueryDependenciesForTesting({
+      fetchEventDocs,
+      fetchDebugEventSnapshot: vi.fn(async () => ({
+        totalEventsCount: 4,
+        recentEventsSample: [],
+      })),
+      importEvent,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+    });
+
+    const result = await executeAiInsightsQuery('user-1', createQuery({
+      categoryType: ChartDataCategoryTypes.ActivityType,
+      valueType: ChartDataValueTypes.Minimum,
+      requestedDateRanges: [
+        {
+          kind: 'bounded',
+          startDate: '2026-01-01T00:00:00.000Z',
+          endDate: '2026-03-31T23:59:59.999Z',
+          timezone: 'UTC',
+          source: 'prompt',
+        },
+      ],
+    }), 'show my shortest distances by sport in q1');
+
+    expect(result.resultKind).toBe('aggregate');
+    if (result.resultKind !== 'aggregate') {
+      return;
+    }
+
+    expect(result.eventRanking).toEqual(expect.objectContaining({
+      primaryEventId: 'e3',
+      matchedEventCount: 3,
+      topEventIds: ['e3', 'e2', 'e1'],
+    }));
+  });
+
+  it('omits aggregate event ranking when no stat-bearing events match', async () => {
+    setExecuteQueryDependenciesForTesting({
+      fetchEventDocs: async () => [
+        { id: 'e1', data: () => ({ startDate: new Date('2026-01-10T12:00:00.000Z') }) },
+      ],
+      fetchDebugEventSnapshot: vi.fn(async () => ({
+        totalEventsCount: 1,
+        recentEventsSample: [],
+      })),
+      importEvent: vi.fn(() => createMockEvent({
+        id: 'e1',
+        startDate: new Date('2026-01-10T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: { [DataDistance.type]: null },
+      })),
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+    });
+
+    const result = await executeAiInsightsQuery('user-1', createQuery({
+      valueType: ChartDataValueTypes.Maximum,
+    }), 'show my max distance');
+
+    expect(result.resultKind).toBe('aggregate');
+    if (result.resultKind !== 'aggregate') {
+      return;
+    }
+
+    expect(result.eventRanking).toBeUndefined();
+    expect(result.aggregation.buckets).toEqual([]);
+  });
+
   it('returns an empty aggregation when no events match', async () => {
     const fetchDebugEventSnapshot = vi.fn(async () => ({
       totalEventsCount: 4,

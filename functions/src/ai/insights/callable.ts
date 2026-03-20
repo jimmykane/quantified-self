@@ -28,6 +28,7 @@ import {
   reserveAiInsightsQuotaForRequest,
   finalizeAiInsightsQuotaReservation,
   AI_INSIGHTS_LIMIT_REACHED_MESSAGE,
+  type AiInsightsUserRoleContext,
 } from './quota';
 import { summarizeAiInsightResult } from './summarize-result.flow';
 import { loadUserUnitSettings } from './user-unit-settings';
@@ -46,12 +47,50 @@ import {
 interface AiInsightsCallableContext {
   auth?: {
     uid?: string;
+    token?: Record<string, unknown>;
   };
   app?: unknown;
 }
 
 const AI_INSIGHTS_PAID_REQUIRED_MESSAGE = 'AI Insights is available to Basic and Pro members.';
 const DEFAULT_EMPTY_STATE = 'No matching events were found for this insight in the requested range.';
+
+function shouldUseCallableTokenForQuotaRoleContext(): boolean {
+  return process.env.FUNCTIONS_EMULATOR === 'true'
+    || Boolean(process.env.FIREBASE_AUTH_EMULATOR_HOST);
+}
+
+function parseGracePeriodUntilClaim(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsedValue = Number(value);
+    return Number.isFinite(parsedValue) ? parsedValue : undefined;
+  }
+
+  return undefined;
+}
+
+function buildQuotaRoleContextFromCallableAuth(
+  auth: { token?: Record<string, unknown> } | undefined,
+): AiInsightsUserRoleContext | null {
+  const role = auth?.token?.stripeRole;
+  if (typeof role !== 'string' || !role.trim()) {
+    return null;
+  }
+
+  const gracePeriodUntil = parseGracePeriodUntilClaim(auth?.token?.gracePeriodUntil);
+  if (gracePeriodUntil === undefined) {
+    return { role };
+  }
+
+  return {
+    role,
+    gracePeriodUntil,
+  };
+}
 
 export async function runAiInsights(
   input: AiInsightsRequest,
@@ -71,6 +110,9 @@ export async function runAiInsights(
   }
 
   const userID = context.auth.uid;
+  const quotaRoleContext = shouldUseCallableTokenForQuotaRoleContext()
+    ? buildQuotaRoleContextFromCallableAuth(context.auth)
+    : null;
 
   const clientTimezone = `${input.clientTimezone || ''}`.trim();
   if (!clientTimezone) {
@@ -78,7 +120,9 @@ export async function runAiInsights(
   }
   assertValidTimeZone(clientTimezone);
 
-  const initialQuotaStatus = await getAiInsightsQuotaStatusForUser(userID);
+  const initialQuotaStatus = quotaRoleContext
+    ? await getAiInsightsQuotaStatusForUser(userID, quotaRoleContext)
+    : await getAiInsightsQuotaStatusForUser(userID);
   if (!initialQuotaStatus.isEligible) {
     throw new HttpsError('permission-denied', AI_INSIGHTS_PAID_REQUIRED_MESSAGE);
   }
@@ -95,7 +139,9 @@ export async function runAiInsights(
       return;
     }
 
-    quotaReservation = await reserveAiInsightsQuotaForRequest(userID);
+    quotaReservation = quotaRoleContext
+      ? await reserveAiInsightsQuotaForRequest(userID, quotaRoleContext)
+      : await reserveAiInsightsQuotaForRequest(userID);
   };
 
   const finalizeReservedQuota = async (): Promise<AiInsightsQuotaStatusResponse> => {
@@ -418,6 +464,15 @@ export async function runAiInsights(
     query: aggregateQueryInput as NormalizedInsightAggregateQuery,
     aggregation: executionResult.aggregation,
     summary: aggregateSummary as AiInsightSummary,
+    ...(executionResult.eventRanking
+      ? {
+        eventRanking: {
+          primaryEventId: executionResult.eventRanking.primaryEventId as string,
+          topEventIds: executionResult.eventRanking.topEventIds,
+          matchedEventCount: executionResult.eventRanking.matchedEventCount,
+        } satisfies AiInsightEventLookup,
+      }
+      : {}),
     presentation,
   } satisfies AiInsightsAggregateOkResponse;
 }
@@ -465,5 +520,13 @@ export const getAiInsightsQuotaStatus = onCall({
   }
 
   enforceAppCheck(request);
+  const quotaRoleContext = shouldUseCallableTokenForQuotaRoleContext()
+    ? buildQuotaRoleContextFromCallableAuth(request.auth)
+    : null;
+
+  if (quotaRoleContext) {
+    return getAiInsightsQuotaStatusForUser(request.auth.uid, quotaRoleContext);
+  }
+
   return getAiInsightsQuotaStatusForUser(request.auth.uid);
 });
