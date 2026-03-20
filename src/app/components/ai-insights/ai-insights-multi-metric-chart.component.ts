@@ -21,6 +21,7 @@ import { formatUnitAwareDataValue, normalizeUserUnitSettings } from '@shared/uni
 import { buildDashboardEChartsStyleTokens } from '../../helpers/dashboard-echarts-style.helper';
 import { buildDashboardValueAxisConfig } from '../../helpers/dashboard-echarts-yaxis.helper';
 import { formatDashboardBucketDateByInterval } from '../../helpers/dashboard-chart-data.helper';
+import { resolveMetricColorGroupKey, resolveEventSeriesColor } from '../../helpers/event-echarts-style.helper';
 import {
   isEChartsMobileTooltipViewport,
   resolveEChartsTooltipSurfaceConfig,
@@ -30,7 +31,6 @@ import { ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS, EChartsHostController } fr
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../helpers/echarts-theme.helper';
 import { LoggerService } from '../../services/logger.service';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
-import { AppColors } from '../../services/color/app.colors';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 
@@ -72,12 +72,6 @@ function resolveAxisLabel(metricResult: AiInsightsMultiMetricAggregateMetricResu
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AiInsightsMultiMetricChartComponent implements AfterViewInit, OnChanges, OnDestroy {
-  private static readonly SERIES_COLORS = [
-    AppColors.Blue,
-    AppColors.Orange,
-    AppColors.Green,
-  ] as const;
-
   readonly response = input.required<AiInsightsMultiMetricAggregateOkResponse>();
   readonly darkTheme = input(false);
   readonly useAnimations = input(false);
@@ -133,8 +127,19 @@ export class AiInsightsMultiMetricChartComponent implements AfterViewInit, OnCha
     const timePointSet = new Set<number>();
     const axisKeyToIndex = new Map<string, number>();
     const axisKeyToLabel = new Map<string, string>();
+    const colorGroupKeyToCount = new Map<string, number>();
 
-    const series = validMetricResults.map((metricResult, index) => {
+    validMetricResults.forEach((metricResult) => {
+      const colorGroupKey = resolveMetricColorGroupKey(metricResult.query.dataType);
+      colorGroupKeyToCount.set(
+        colorGroupKey,
+        (colorGroupKeyToCount.get(colorGroupKey) ?? 0) + 1,
+      );
+    });
+
+    const colorGroupKeyToSeenCount = new Map<string, number>();
+
+    const series = validMetricResults.map((metricResult) => {
       const valuesByTime = new Map<number, number>();
       metricResult.aggregation.buckets.forEach((bucket) => {
         if (!Number.isFinite(bucket.time) || !Number.isFinite(bucket.aggregateValue)) {
@@ -152,6 +157,10 @@ export class AiInsightsMultiMetricChartComponent implements AfterViewInit, OnCha
         axisKeyToLabel.set(axisKey, resolveAxisLabel(metricResult));
       }
 
+      const colorGroupKey = resolveMetricColorGroupKey(metricResult.query.dataType);
+      const colorGroupSeriesIndex = colorGroupKeyToSeenCount.get(colorGroupKey) ?? 0;
+      colorGroupKeyToSeenCount.set(colorGroupKey, colorGroupSeriesIndex + 1);
+
       return {
         metricKey: metricResult.metricKey,
         metricLabel: metricResult.metricLabel,
@@ -159,7 +168,11 @@ export class AiInsightsMultiMetricChartComponent implements AfterViewInit, OnCha
         axisKey,
         axisLabel: axisKeyToLabel.get(axisKey) ?? metricResult.metricLabel,
         axisIndex: axisKeyToIndex.get(axisKey) ?? 0,
-        color: AiInsightsMultiMetricChartComponent.SERIES_COLORS[index % AiInsightsMultiMetricChartComponent.SERIES_COLORS.length],
+        color: resolveEventSeriesColor(
+          colorGroupKey,
+          colorGroupSeriesIndex,
+          colorGroupKeyToCount.get(colorGroupKey) ?? 1,
+        ),
         valuesByTime,
       } satisfies MultiMetricChartSeries;
     });
