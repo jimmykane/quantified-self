@@ -36,7 +36,7 @@
   </app-shell-header>
   }
 
-  <mat-sidenav-container class="app-sidenav-container" [style.margin-top.px]="layoutTopOffsetPx">
+  <mat-sidenav-container class="app-sidenav-container">
     @if (showNavigation()) {
     <mat-sidenav #sidenav [mode]="'over'" [fixedInViewport]="true" [fixedTopGap]="layoutTopOffsetPx"
       [autoFocus]="false">
@@ -44,7 +44,7 @@
     </mat-sidenav>
     }
 
-    <mat-sidenav-content>
+    <mat-sidenav-content [style.padding-top.px]="layoutTopOffsetPx">
       <app-impersonation-banner></app-impersonation-banner>
       <div class="router-outlet-container" [@routeAnimations]="routeAnimationState()">
         @if (maintenanceLoading()) {
