@@ -9,10 +9,12 @@ import {
 } from '@sports-alliance/sports-lib';
 import type {
   AiInsightEventLookup,
+  AiInsightsMultiMetricAggregateMetricResult,
   AiInsightsQuotaStatus,
   AiInsightSummary,
   NormalizedInsightQuery,
 } from '../../../../shared/ai-insights.types';
+import type { AiInsightsPromptMetricKey } from '../../../../shared/ai-insights-prompts';
 import { CANONICAL_ACTIVITY_TYPES } from './canonical-activity-types';
 
 const CANONICAL_ACTIVITY_TYPE_SCHEMA_VALUES = (
@@ -22,6 +24,7 @@ const CANONICAL_ACTIVITY_TYPE_SCHEMA_VALUES = (
 ) as [string, ...string[]];
 
 export const CanonicalActivityTypeSchema = z.enum(CANONICAL_ACTIVITY_TYPE_SCHEMA_VALUES);
+const AiInsightsPromptMetricKeySchema = z.string().min(1) as unknown as z.ZodType<AiInsightsPromptMetricKey>;
 
 export const AiInsightsRequestSchema = z.object({
   prompt: z.string().min(1).max(2000),
@@ -44,10 +47,7 @@ export const NormalizedInsightDateRangeSchema = z.discriminatedUnion('kind', [
   }),
 ]);
 
-export const NormalizedInsightQuerySchema: z.ZodType<NormalizedInsightQuery> = z.object({
-  resultKind: z.enum(['aggregate', 'event_lookup']),
-  dataType: z.string().min(1),
-  valueType: z.nativeEnum(ChartDataValueTypes),
+const NormalizedInsightQueryBaseSchema = z.object({
   categoryType: z.nativeEnum(ChartDataCategoryTypes),
   requestedTimeInterval: z.nativeEnum(TimeIntervals).optional(),
   activityTypeGroups: z.array(z.nativeEnum(ActivityTypeGroups)),
@@ -56,6 +56,52 @@ export const NormalizedInsightQuerySchema: z.ZodType<NormalizedInsightQuery> = z
   ),
   dateRange: NormalizedInsightDateRangeSchema,
   chartType: z.nativeEnum(ChartTypes),
+});
+
+export const NormalizedInsightMetricSelectionSchema = z.object({
+  metricKey: AiInsightsPromptMetricKeySchema,
+  dataType: z.string().min(1),
+  valueType: z.nativeEnum(ChartDataValueTypes),
+});
+
+export const NormalizedInsightQuerySchema: z.ZodType<NormalizedInsightQuery> = z.discriminatedUnion('resultKind', [
+  NormalizedInsightQueryBaseSchema.extend({
+    resultKind: z.literal('aggregate'),
+    dataType: z.string().min(1),
+    valueType: z.nativeEnum(ChartDataValueTypes),
+  }),
+  NormalizedInsightQueryBaseSchema.extend({
+    resultKind: z.literal('event_lookup'),
+    dataType: z.string().min(1),
+    valueType: z.nativeEnum(ChartDataValueTypes),
+    categoryType: z.literal(ChartDataCategoryTypes.DateType),
+  }),
+  NormalizedInsightQueryBaseSchema.extend({
+    resultKind: z.literal('multi_metric_aggregate'),
+    groupingMode: z.enum(['overall', 'date']),
+    categoryType: z.literal(ChartDataCategoryTypes.DateType),
+    metricSelections: z.array(NormalizedInsightMetricSelectionSchema).min(2).max(3),
+  }),
+]) as z.ZodType<NormalizedInsightQuery>;
+
+export const NormalizedInsightAggregateQuerySchema = NormalizedInsightQueryBaseSchema.extend({
+  resultKind: z.literal('aggregate'),
+  dataType: z.string().min(1),
+  valueType: z.nativeEnum(ChartDataValueTypes),
+});
+
+export const NormalizedInsightEventLookupQuerySchema = NormalizedInsightQueryBaseSchema.extend({
+  resultKind: z.literal('event_lookup'),
+  dataType: z.string().min(1),
+  valueType: z.nativeEnum(ChartDataValueTypes),
+  categoryType: z.literal(ChartDataCategoryTypes.DateType),
+});
+
+export const NormalizedInsightMultiMetricAggregateQuerySchema = NormalizedInsightQueryBaseSchema.extend({
+  resultKind: z.literal('multi_metric_aggregate'),
+  groupingMode: z.enum(['overall', 'date']),
+  categoryType: z.literal(ChartDataCategoryTypes.DateType),
+  metricSelections: z.array(NormalizedInsightMetricSelectionSchema).min(2).max(3),
 });
 
 const BucketKeySchema: z.ZodType<string | number> = z.custom<string | number>(
@@ -145,11 +191,22 @@ export const AiInsightEventLookupSchema: z.ZodType<AiInsightEventLookup> = z.obj
   matchedEventCount: z.number().int().nonnegative(),
 });
 
+export const AiInsightsMultiMetricAggregateMetricResultSchema: z.ZodType<AiInsightsMultiMetricAggregateMetricResult> = z.object({
+  metricKey: AiInsightsPromptMetricKeySchema,
+  metricLabel: z.string().min(1),
+  query: NormalizedInsightAggregateQuerySchema,
+  aggregation: EventStatAggregationResultSchema,
+  summary: AiInsightSummarySchema,
+  presentation: AiInsightPresentationSchema,
+});
+
 export const AiInsightsUnsupportedReasonCodeSchema = z.enum([
   'invalid_prompt',
   'unsupported_metric',
   'ambiguous_metric',
   'unsupported_capability',
+  'too_many_metrics',
+  'unsupported_multi_metric_combination',
 ]);
 
 export const AiInsightsResponseSchema = z.union([
@@ -170,6 +227,15 @@ export const AiInsightsResponseSchema = z.union([
     quota: AiInsightsQuotaStatusSchema.optional(),
     query: NormalizedInsightQuerySchema,
     eventLookup: AiInsightEventLookupSchema,
+    presentation: AiInsightPresentationSchema,
+  }),
+  z.object({
+    status: z.literal('ok'),
+    resultKind: z.literal('multi_metric_aggregate'),
+    narrative: z.string().min(1),
+    quota: AiInsightsQuotaStatusSchema.optional(),
+    query: NormalizedInsightQuerySchema,
+    metricResults: z.array(AiInsightsMultiMetricAggregateMetricResultSchema).min(1).max(3),
     presentation: AiInsightPresentationSchema,
   }),
   z.object({

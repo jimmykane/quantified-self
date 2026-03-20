@@ -11,6 +11,7 @@ import {
 import type {
   AiInsightsLatestSnapshot,
   AiInsightsEventLookupOkResponse,
+  AiInsightsMultiMetricAggregateOkResponse,
   AiInsightsOkResponse,
   AiInsightsQuotaStatus,
 } from '@shared/ai-insights.types';
@@ -146,6 +147,192 @@ function buildEventLookupResponse(): AiInsightsEventLookupOkResponse {
     },
     presentation: {
       title: 'Top distance events for Cycling',
+      chartType: ChartTypes.LinesVertical,
+    },
+  };
+}
+
+function buildMultiMetricResponse(): AiInsightsMultiMetricAggregateOkResponse {
+  return {
+    status: 'ok',
+    resultKind: 'multi_metric_aggregate',
+    narrative: 'Cadence and power both trended upward over the last three months.',
+    query: {
+      resultKind: 'multi_metric_aggregate',
+      groupingMode: 'date',
+      categoryType: ChartDataCategoryTypes.DateType,
+      requestedTimeInterval: TimeIntervals.Monthly,
+      activityTypeGroups: [],
+      activityTypes: [ActivityTypes.Cycling],
+      dateRange: {
+        kind: 'bounded',
+        startDate: '2026-01-01T00:00:00.000Z',
+        endDate: '2026-03-18T23:59:59.999Z',
+        timezone: 'Europe/Helsinki',
+        source: 'prompt',
+      },
+      chartType: ChartTypes.LinesVertical,
+      metricSelections: [
+        {
+          metricKey: 'cadence',
+          dataType: 'Average Cadence',
+          valueType: ChartDataValueTypes.Average,
+        },
+        {
+          metricKey: 'power',
+          dataType: 'Average Power',
+          valueType: ChartDataValueTypes.Average,
+        },
+      ],
+    },
+    metricResults: [
+      {
+        metricKey: 'cadence',
+        metricLabel: 'cadence',
+        query: {
+          resultKind: 'aggregate',
+          dataType: 'Average Cadence',
+          valueType: ChartDataValueTypes.Average,
+          categoryType: ChartDataCategoryTypes.DateType,
+          requestedTimeInterval: TimeIntervals.Monthly,
+          activityTypeGroups: [],
+          activityTypes: [ActivityTypes.Cycling],
+          dateRange: {
+            kind: 'bounded',
+            startDate: '2026-01-01T00:00:00.000Z',
+            endDate: '2026-03-18T23:59:59.999Z',
+            timezone: 'Europe/Helsinki',
+            source: 'prompt',
+          },
+          chartType: ChartTypes.LinesVertical,
+        },
+        aggregation: {
+          dataType: 'Average Cadence',
+          valueType: ChartDataValueTypes.Average,
+          categoryType: ChartDataCategoryTypes.DateType,
+          resolvedTimeInterval: TimeIntervals.Monthly,
+          buckets: [
+            {
+              bucketKey: '2026-03',
+              time: Date.UTC(2026, 2, 1),
+              totalCount: 3,
+              aggregateValue: 86,
+              seriesValues: { Cycling: 86 },
+              seriesCounts: { Cycling: 3 },
+            },
+          ],
+        },
+        summary: {
+          matchedEventCount: 3,
+          overallAggregateValue: 86,
+          peakBucket: {
+            bucketKey: '2026-03',
+            time: Date.UTC(2026, 2, 1),
+            aggregateValue: 86,
+            totalCount: 3,
+          },
+          lowestBucket: {
+            bucketKey: '2026-03',
+            time: Date.UTC(2026, 2, 1),
+            aggregateValue: 86,
+            totalCount: 3,
+          },
+          latestBucket: {
+            bucketKey: '2026-03',
+            time: Date.UTC(2026, 2, 1),
+            aggregateValue: 86,
+            totalCount: 3,
+          },
+          activityMix: {
+            topActivityTypes: [{ activityType: ActivityTypes.Cycling, eventCount: 3 }],
+            remainingActivityTypeCount: 0,
+          },
+          bucketCoverage: {
+            nonEmptyBucketCount: 1,
+            totalBucketCount: 3,
+          },
+          trend: null,
+        },
+        presentation: {
+          title: 'Average cadence over time for Cycling',
+          chartType: ChartTypes.LinesVertical,
+        },
+      },
+      {
+        metricKey: 'power',
+        metricLabel: 'power',
+        query: {
+          resultKind: 'aggregate',
+          dataType: 'Average Power',
+          valueType: ChartDataValueTypes.Average,
+          categoryType: ChartDataCategoryTypes.DateType,
+          requestedTimeInterval: TimeIntervals.Monthly,
+          activityTypeGroups: [],
+          activityTypes: [ActivityTypes.Cycling],
+          dateRange: {
+            kind: 'bounded',
+            startDate: '2026-01-01T00:00:00.000Z',
+            endDate: '2026-03-18T23:59:59.999Z',
+            timezone: 'Europe/Helsinki',
+            source: 'prompt',
+          },
+          chartType: ChartTypes.LinesVertical,
+        },
+        aggregation: {
+          dataType: 'Average Power',
+          valueType: ChartDataValueTypes.Average,
+          categoryType: ChartDataCategoryTypes.DateType,
+          resolvedTimeInterval: TimeIntervals.Monthly,
+          buckets: [
+            {
+              bucketKey: '2026-03',
+              time: Date.UTC(2026, 2, 1),
+              totalCount: 3,
+              aggregateValue: 210,
+              seriesValues: { Cycling: 210 },
+              seriesCounts: { Cycling: 3 },
+            },
+          ],
+        },
+        summary: {
+          matchedEventCount: 3,
+          overallAggregateValue: 210,
+          peakBucket: {
+            bucketKey: '2026-03',
+            time: Date.UTC(2026, 2, 1),
+            aggregateValue: 210,
+            totalCount: 3,
+          },
+          lowestBucket: {
+            bucketKey: '2026-03',
+            time: Date.UTC(2026, 2, 1),
+            aggregateValue: 210,
+            totalCount: 3,
+          },
+          latestBucket: {
+            bucketKey: '2026-03',
+            time: Date.UTC(2026, 2, 1),
+            aggregateValue: 210,
+            totalCount: 3,
+          },
+          activityMix: {
+            topActivityTypes: [{ activityType: ActivityTypes.Cycling, eventCount: 3 }],
+            remainingActivityTypeCount: 0,
+          },
+          bucketCoverage: {
+            nonEmptyBucketCount: 1,
+            totalBucketCount: 3,
+          },
+          trend: null,
+        },
+        presentation: {
+          title: 'Average power over time for Cycling',
+          chartType: ChartTypes.LinesVertical,
+        },
+      },
+    ],
+    presentation: {
+      title: 'Cadence and power over time for Cycling',
       chartType: ChartTypes.LinesVertical,
     },
   };
@@ -425,6 +612,24 @@ describe('AiInsightsLatestSnapshotService', () => {
       savedAt: '2026-03-18T12:00:00.000Z',
       prompt: 'I want to know when I had my longest distance in cycling',
       response: buildEventLookupResponse(),
+    };
+    vi.mocked(getDoc).mockResolvedValue({
+      exists: () => true,
+      data: () => snapshot,
+    } as never);
+
+    const restored = await service.loadLatest('user-1');
+
+    expect(restored).toEqual(snapshot);
+    expect(deleteDoc).not.toHaveBeenCalled();
+  });
+
+  it('should restore multi-metric snapshots without clearing them', async () => {
+    const snapshot: AiInsightsLatestSnapshot = {
+      version: 1,
+      savedAt: '2026-03-18T12:00:00.000Z',
+      prompt: 'Show me avg cadence and avg power for the last 3 months for cycling',
+      response: buildMultiMetricResponse(),
     };
     vi.mocked(getDoc).mockResolvedValue({
       exists: () => true,

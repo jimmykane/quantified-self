@@ -199,15 +199,17 @@ describe('AppShellComponent', () => {
 
         const expectedTopOffsetPx = `${component.bannerHeight + APP_SHELL_HEADER_HEIGHT_PX}px`;
         const wrapper = fixture.nativeElement.querySelector('.app-layout-wrapper') as HTMLElement | null;
-        const sidenavContent = fixture.nativeElement.querySelector('mat-sidenav-content') as HTMLElement | null;
+        const scrollContent = fixture.nativeElement.querySelector('.app-shell-scroll-content') as HTMLElement | null;
         expect(wrapper).toBeTruthy();
-        expect(sidenavContent).toBeTruthy();
+        expect(scrollContent).toBeTruthy();
         expect(component.layoutTopOffsetPx).toBe(component.bannerHeight + APP_SHELL_HEADER_HEIGHT_PX);
         expect(component.effectiveTopOffsetPx).toBe(component.bannerHeight + APP_SHELL_HEADER_HEIGHT_PX);
+        expect(component.visibleTopOffsetPx).toBe(component.bannerHeight + APP_SHELL_HEADER_HEIGHT_PX);
         expect(wrapper?.style.getPropertyValue('--qs-layout-top-offset')).toBe(expectedTopOffsetPx);
         expect(wrapper?.style.getPropertyValue('--qs-effective-top-offset')).toBe(expectedTopOffsetPx);
+        expect(wrapper?.style.getPropertyValue('--qs-visible-top-offset')).toBe(expectedTopOffsetPx);
         expect(wrapper?.style.getPropertyValue('--qs-banner-height')).toBe('36px');
-        expect(sidenavContent?.style.paddingTop).toBe(expectedTopOffsetPx);
+        expect(scrollContent?.style.paddingTop).toBe(expectedTopOffsetPx);
     });
 
     it('should expose zero effective top offset when onboarding is not completed', () => {
@@ -216,13 +218,14 @@ describe('AppShellComponent', () => {
         fixture.detectChanges();
 
         const wrapper = fixture.nativeElement.querySelector('.app-layout-wrapper') as HTMLElement | null;
-        const sidenavContent = fixture.nativeElement.querySelector('mat-sidenav-content') as HTMLElement | null;
+        const scrollContent = fixture.nativeElement.querySelector('.app-shell-scroll-content') as HTMLElement | null;
         expect(wrapper).toBeTruthy();
-        expect(sidenavContent).toBeTruthy();
+        expect(scrollContent).toBeTruthy();
         expect(wrapper?.style.getPropertyValue('--qs-layout-top-offset')).toBe('0px');
         expect(wrapper?.style.getPropertyValue('--qs-effective-top-offset')).toBe('0px');
+        expect(wrapper?.style.getPropertyValue('--qs-visible-top-offset')).toBe('0px');
         expect(wrapper?.style.getPropertyValue('--qs-banner-height')).toBe('0px');
-        expect(sidenavContent?.style.paddingTop).toBe('0px');
+        expect(scrollContent?.style.paddingTop).toBe('0px');
     });
 
     it('should hide header after scrolling beyond threshold', () => {
@@ -234,8 +237,9 @@ describe('AppShellComponent', () => {
         (component as any).updateHeaderVisibilityFromScroll(90);
 
         expect(component.headerHidden).toBe(true);
-        expect(component.layoutTopOffsetPx).toBe(24);
-        expect(component.effectiveTopOffsetPx).toBe(24);
+        expect(component.layoutTopOffsetPx).toBe(24 + APP_SHELL_HEADER_HEIGHT_PX);
+        expect(component.effectiveTopOffsetPx).toBe(24 + APP_SHELL_HEADER_HEIGHT_PX);
+        expect(component.visibleTopOffsetPx).toBe(24);
     });
 
     it('should reveal header again near the top of the page', () => {
@@ -248,9 +252,10 @@ describe('AppShellComponent', () => {
         expect(component.headerHidden).toBe(false);
         expect(component.layoutTopOffsetPx).toBe(APP_SHELL_HEADER_HEIGHT_PX);
         expect(component.effectiveTopOffsetPx).toBe(APP_SHELL_HEADER_HEIGHT_PX);
+        expect(component.visibleTopOffsetPx).toBe(APP_SHELL_HEADER_HEIGHT_PX);
     });
 
-    it('should keep the effective top offset aligned with the visible header state', () => {
+    it('should keep the content top offsets stable when the header is hidden', () => {
         component.onboardingCompleted = true;
         component.bannerHeight = 18;
         component.headerHidden = false;
@@ -260,8 +265,9 @@ describe('AppShellComponent', () => {
         component.headerHidden = true;
 
         expect(visibleOffset).toBe(18 + APP_SHELL_HEADER_HEIGHT_PX);
-        expect(component.layoutTopOffsetPx).toBe(18);
-        expect(component.effectiveTopOffsetPx).toBe(18);
+        expect(component.layoutTopOffsetPx).toBe(18 + APP_SHELL_HEADER_HEIGHT_PX);
+        expect(component.effectiveTopOffsetPx).toBe(18 + APP_SHELL_HEADER_HEIGHT_PX);
+        expect(component.visibleTopOffsetPx).toBe(18);
     });
 
     it('should ignore small scroll deltas once threshold is crossed', () => {

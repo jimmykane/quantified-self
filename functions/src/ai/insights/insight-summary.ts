@@ -30,7 +30,11 @@ function buildTrend(
     }>;
   },
 ): AiInsightSummary['trend'] {
-  if (query.categoryType !== ChartDataCategoryTypes.DateType || aggregation.buckets.length < 2) {
+  if (
+    query.categoryType !== ChartDataCategoryTypes.DateType
+    || (query.resultKind === 'multi_metric_aggregate' && query.groupingMode === 'overall')
+    || aggregation.buckets.length < 2
+  ) {
     return null;
   }
 
@@ -52,7 +56,7 @@ function buildTrend(
 }
 
 function resolveOverallAggregateValue(
-  query: NormalizedInsightQuery,
+  valueType: ChartDataValueTypes,
   aggregation: {
     buckets: Array<{ aggregateValue: number; totalCount: number }>;
   },
@@ -62,7 +66,7 @@ function resolveOverallAggregateValue(
     return null;
   }
 
-  switch (query.valueType) {
+  switch (valueType) {
     case ChartDataValueTypes.Total:
       return buckets.reduce((sum, bucket) => sum + bucket.aggregateValue, 0);
     case ChartDataValueTypes.Maximum:
@@ -102,6 +106,7 @@ export function buildNonAggregateEmptySummary(): AiInsightSummary {
 export function buildInsightSummary(
   query: NormalizedInsightQuery,
   aggregation: {
+    valueType: ChartDataValueTypes;
     resolvedTimeInterval: TimeIntervals;
     buckets: Array<{
       bucketKey: string | number;
@@ -113,15 +118,20 @@ export function buildInsightSummary(
   matchedEventCount: number,
   matchedActivityTypeCounts: Array<{ activityType: string; eventCount: number }>,
 ): AiInsightSummary {
-  const peakBucket = [...aggregation.buckets].sort((left, right) => right.aggregateValue - left.aggregateValue)[0] ?? null;
-  const lowestBucket = [...aggregation.buckets].sort((left, right) => left.aggregateValue - right.aggregateValue)[0] ?? null;
-  const latestBucket = query.categoryType === ChartDataCategoryTypes.DateType
+  const isOverallMultiMetric = query.resultKind === 'multi_metric_aggregate' && query.groupingMode === 'overall';
+  const peakBucket = isOverallMultiMetric
+    ? null
+    : ([...aggregation.buckets].sort((left, right) => right.aggregateValue - left.aggregateValue)[0] ?? null);
+  const lowestBucket = isOverallMultiMetric
+    ? null
+    : ([...aggregation.buckets].sort((left, right) => left.aggregateValue - right.aggregateValue)[0] ?? null);
+  const latestBucket = query.categoryType === ChartDataCategoryTypes.DateType && !isOverallMultiMetric
     ? (aggregation.buckets[aggregation.buckets.length - 1] ?? null)
     : null;
 
   return {
     matchedEventCount,
-    overallAggregateValue: resolveOverallAggregateValue(query, aggregation),
+    overallAggregateValue: resolveOverallAggregateValue(aggregation.valueType, aggregation),
     peakBucket: peakBucket
       ? {
         bucketKey: peakBucket.bucketKey,
@@ -147,7 +157,7 @@ export function buildInsightSummary(
       }
       : null,
     activityMix: buildActivityMix(matchedActivityTypeCounts),
-    bucketCoverage: buildBucketCoverage(query, aggregation),
-    trend: buildTrend(query, aggregation),
+    bucketCoverage: isOverallMultiMetric ? null : buildBucketCoverage(query, aggregation),
+    trend: isOverallMultiMetric ? null : buildTrend(query, aggregation),
   };
 }

@@ -1,0 +1,52 @@
+@use '../../../styles/breakpoints' as bp;
+
+.prompt-picker-dialog__content {
+  display: grid;
+  gap: 20px;
+  min-width: min(42rem, calc(100vw - 48px));
+  max-width: 100%;
+}
+
+.prompt-picker-dialog__copy,
+.prompt-picker-dialog__group-title,
+.prompt-picker-dialog__item-copy {
+  margin: 0;
+}
+
+.prompt-picker-dialog__copy {
+  color: var(--mat-sys-on-surface-variant);
+  line-height: 1.5;
+}
+
+.prompt-picker-dialog__groups {
+  display: grid;
+  gap: 24px;
+}
+
+.prompt-picker-dialog__group {
+  display: grid;
+  gap: 12px;
+}
+
+.prompt-picker-dialog__list {
+  padding: 0;
+}
+
+.prompt-picker-dialog__item {
+  min-height: 0;
+}
+
+.prompt-picker-dialog__item-copy {
+  display: block;
+  max-width: 100%;
+  padding-block: 12px;
+  white-space: normal;
+  line-height: 1.45;
+  text-align: left;
+}
+
+@include bp.max-768 {
+  .prompt-picker-dialog__content {
+    min-width: 0;
+  }
+}

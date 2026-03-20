@@ -4,6 +4,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
+import { MatDialog } from '@angular/material/dialog';
 import { BehaviorSubject, of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -23,6 +24,7 @@ import type {
   AiInsightsAggregateOkResponse,
   AiInsightsEmptyResponse,
   AiInsightsEventLookupOkResponse,
+  AiInsightsMultiMetricAggregateOkResponse,
   AiInsightsOkResponse,
   AiInsightsQuotaStatus,
   AiInsightsResponse,
@@ -39,8 +41,12 @@ import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { LoggerService } from '../../services/logger.service';
 import { AiInsightsChartComponent } from './ai-insights-chart.component';
+import { AiInsightsMultiMetricChartComponent } from './ai-insights-multi-metric-chart.component';
 import { AiInsightsPageComponent } from './ai-insights-page.component';
-import { AI_INSIGHTS_SUGGESTED_PROMPTS } from './ai-insights.prompts';
+import {
+  AI_INSIGHTS_DEFAULT_PROMPT_GROUPS,
+  AI_INSIGHTS_FEATURED_PROMPTS,
+} from './ai-insights.prompts';
 
 @Component({
   selector: 'app-ai-insights-chart',
@@ -50,6 +56,19 @@ import { AI_INSIGHTS_SUGGESTED_PROMPTS } from './ai-insights.prompts';
 })
 class MockAiInsightsChartComponent {
   readonly response = input.required<AiInsightsOkResponse>();
+  readonly darkTheme = input(false);
+  readonly useAnimations = input(false);
+  readonly userUnitSettings = input<any>(null);
+}
+
+@Component({
+  selector: 'app-ai-insights-multi-metric-chart',
+  standalone: true,
+  imports: [CommonModule],
+  template: '<div class="multi-chart-stub">{{ response().presentation.title }}</div>',
+})
+class MockAiInsightsMultiMetricChartComponent {
+  readonly response = input.required<AiInsightsMultiMetricAggregateOkResponse>();
   readonly darkTheme = input(false);
   readonly useAnimations = input(false);
   readonly userUnitSettings = input<any>(null);
@@ -205,6 +224,186 @@ function buildEmptyResponse(): AiInsightsEmptyResponse {
   };
 }
 
+function buildMultiMetricResponse(): AiInsightsMultiMetricAggregateOkResponse {
+  return {
+    status: 'ok',
+    resultKind: 'multi_metric_aggregate',
+    narrative: 'Cadence and power both trended upward over the last three months.',
+    query: {
+      resultKind: 'multi_metric_aggregate',
+      groupingMode: 'date',
+      categoryType: ChartDataCategoryTypes.DateType,
+      requestedTimeInterval: TimeIntervals.Monthly,
+      activityTypeGroups: [],
+      activityTypes: [ActivityTypes.Cycling],
+      dateRange: {
+        kind: 'bounded',
+        startDate: '2025-12-01',
+        endDate: '2026-03-01',
+        timezone: 'Europe/Helsinki',
+        source: 'prompt',
+      },
+      chartType: ChartTypes.LinesVertical,
+      metricSelections: [
+        {
+          metricKey: 'cadence',
+          dataType: DataCadenceAvg.type,
+          valueType: ChartDataValueTypes.Average,
+        },
+        {
+          metricKey: 'power',
+          dataType: 'Average Power',
+          valueType: ChartDataValueTypes.Average,
+        },
+      ],
+    },
+    metricResults: [
+      {
+        metricKey: 'cadence',
+        metricLabel: 'cadence',
+        query: {
+          resultKind: 'aggregate',
+          dataType: DataCadenceAvg.type,
+          valueType: ChartDataValueTypes.Average,
+          categoryType: ChartDataCategoryTypes.DateType,
+          requestedTimeInterval: TimeIntervals.Monthly,
+          activityTypeGroups: [],
+          activityTypes: [ActivityTypes.Cycling],
+          dateRange: {
+            kind: 'bounded',
+            startDate: '2025-12-01',
+            endDate: '2026-03-01',
+            timezone: 'Europe/Helsinki',
+            source: 'prompt',
+          },
+          chartType: ChartTypes.LinesVertical,
+        },
+        aggregation: {
+          dataType: DataCadenceAvg.type,
+          valueType: ChartDataValueTypes.Average,
+          categoryType: ChartDataCategoryTypes.DateType,
+          resolvedTimeInterval: TimeIntervals.Monthly,
+          buckets: [
+            {
+              bucketKey: '2026-01',
+              time: Date.UTC(2026, 0, 1),
+              totalCount: 4,
+              aggregateValue: 86,
+              seriesValues: { Cycling: 86 },
+              seriesCounts: { Cycling: 4 },
+            },
+          ],
+        },
+        summary: {
+          matchedEventCount: 4,
+          overallAggregateValue: 86,
+          peakBucket: {
+            bucketKey: '2026-01',
+            time: Date.UTC(2026, 0, 1),
+            aggregateValue: 86,
+            totalCount: 4,
+          },
+          lowestBucket: {
+            bucketKey: '2026-01',
+            time: Date.UTC(2026, 0, 1),
+            aggregateValue: 86,
+            totalCount: 4,
+          },
+          latestBucket: {
+            bucketKey: '2026-01',
+            time: Date.UTC(2026, 0, 1),
+            aggregateValue: 86,
+            totalCount: 4,
+          },
+          activityMix: null,
+          bucketCoverage: {
+            nonEmptyBucketCount: 1,
+            totalBucketCount: 4,
+          },
+          trend: null,
+        },
+        presentation: {
+          title: 'Average cadence over time for Cycling',
+          chartType: ChartTypes.LinesVertical,
+        },
+      },
+      {
+        metricKey: 'power',
+        metricLabel: 'power',
+        query: {
+          resultKind: 'aggregate',
+          dataType: 'Average Power',
+          valueType: ChartDataValueTypes.Average,
+          categoryType: ChartDataCategoryTypes.DateType,
+          requestedTimeInterval: TimeIntervals.Monthly,
+          activityTypeGroups: [],
+          activityTypes: [ActivityTypes.Cycling],
+          dateRange: {
+            kind: 'bounded',
+            startDate: '2025-12-01',
+            endDate: '2026-03-01',
+            timezone: 'Europe/Helsinki',
+            source: 'prompt',
+          },
+          chartType: ChartTypes.LinesVertical,
+        },
+        aggregation: {
+          dataType: 'Average Power',
+          valueType: ChartDataValueTypes.Average,
+          categoryType: ChartDataCategoryTypes.DateType,
+          resolvedTimeInterval: TimeIntervals.Monthly,
+          buckets: [
+            {
+              bucketKey: '2026-01',
+              time: Date.UTC(2026, 0, 1),
+              totalCount: 4,
+              aggregateValue: 210,
+              seriesValues: { Cycling: 210 },
+              seriesCounts: { Cycling: 4 },
+            },
+          ],
+        },
+        summary: {
+          matchedEventCount: 4,
+          overallAggregateValue: 210,
+          peakBucket: {
+            bucketKey: '2026-01',
+            time: Date.UTC(2026, 0, 1),
+            aggregateValue: 210,
+            totalCount: 4,
+          },
+          lowestBucket: {
+            bucketKey: '2026-01',
+            time: Date.UTC(2026, 0, 1),
+            aggregateValue: 210,
+            totalCount: 4,
+          },
+          latestBucket: {
+            bucketKey: '2026-01',
+            time: Date.UTC(2026, 0, 1),
+            aggregateValue: 210,
+            totalCount: 4,
+          },
+          activityMix: null,
+          bucketCoverage: {
+            nonEmptyBucketCount: 1,
+            totalBucketCount: 4,
+          },
+          trend: null,
+        },
+        presentation: {
+          title: 'Average power over time for Cycling',
+          chartType: ChartTypes.LinesVertical,
+        },
+      },
+    ],
+    presentation: {
+      title: 'Cadence and power over time for Cycling',
+      chartType: ChartTypes.LinesVertical,
+    },
+  };
+}
+
 function buildPaceResponse(): AiInsightsAggregateOkResponse {
   return {
     status: 'ok',
@@ -355,8 +554,8 @@ function buildUnsupportedResponse(): AiInsightsUnsupportedResponse {
     narrative: 'Streams and splits are out of scope right now.',
     reasonCode: 'unsupported_capability',
     suggestedPrompts: [
-      'Show my total distance by activity type this year',
-      'Tell me my avg cadence for cycling the last 3 months',
+      'Show my total distance by activity type this year.',
+      'Tell me my average cadence for cycling over the last 3 months.',
     ],
   };
 }
@@ -634,6 +833,11 @@ describe('AiInsightsPageComponent', () => {
   const themeServiceMock = {
     appTheme: signal(AppThemes.Normal),
   };
+  const matDialogMock = {
+    open: vi.fn(() => ({
+      afterClosed: () => of(undefined),
+    })),
+  };
   const analyticsServiceMock = {
     logEvent: vi.fn(),
   };
@@ -669,14 +873,15 @@ describe('AiInsightsPageComponent', () => {
         { provide: AppThemeService, useValue: themeServiceMock },
         { provide: AppUserSettingsQueryService, useValue: userSettingsQueryServiceMock },
         { provide: LoggerService, useValue: loggerServiceMock },
+        { provide: MatDialog, useValue: matDialogMock },
       ],
     })
       .overrideComponent(AiInsightsPageComponent, {
         remove: {
-          imports: [AiInsightsChartComponent],
+          imports: [AiInsightsChartComponent, AiInsightsMultiMetricChartComponent],
         },
         add: {
-          imports: [MockAiInsightsChartComponent],
+          imports: [MockAiInsightsChartComponent, MockAiInsightsMultiMetricChartComponent],
         },
       })
       .compileComponents();
@@ -696,28 +901,66 @@ describe('AiInsightsPageComponent', () => {
     aiInsightsLatestSnapshotServiceMock.saveLatest.mockReset();
     aiInsightsQuotaServiceMock.loadQuotaStatus.mockReset();
     appEventServiceMock.getEventsOnceByIds.mockReset();
+    matDialogMock.open.mockReset();
     analyticsServiceMock.logEvent.mockReset();
     loggerServiceMock.error.mockReset();
     aiInsightsLatestSnapshotServiceMock.loadLatest.mockResolvedValue(null);
     aiInsightsLatestSnapshotServiceMock.saveLatest.mockResolvedValue('saved');
     aiInsightsQuotaServiceMock.loadQuotaStatus.mockResolvedValue(buildQuotaStatus());
     appEventServiceMock.getEventsOnceByIds.mockReturnValue(of([]));
+    matDialogMock.open.mockReturnValue({
+      afterClosed: () => of(undefined),
+    });
     await createComponent();
   });
 
-  it('should render the hero title and default suggested prompts', () => {
+  it('should render the hero title and featured hero prompts', () => {
     const title = fixture.debugElement.query(By.css('.hero-title'))?.nativeElement as HTMLElement | undefined;
-    const suggestionTrigger = fixture.debugElement.query(By.css('.suggestion-menu-trigger'))?.nativeElement as HTMLButtonElement | undefined;
+    const pickerButton = fixture.debugElement.query(By.css('.suggestion-picker-button'))?.nativeElement as HTMLButtonElement | undefined;
     const heroPromptRotator = fixture.debugElement.query(By.css('.hero-prompt-rotator'))?.nativeElement as HTMLButtonElement | undefined;
     const supportNote = fixture.debugElement.query(By.css('.prompt-support-note'))?.nativeElement as HTMLElement | undefined;
     const quotaLine = fixture.debugElement.query(By.css('.prompt-quota-line'))?.nativeElement as HTMLElement | undefined;
 
     expect(title?.textContent).toContain('Ask a focused question about your training data.');
-    expect(suggestionTrigger?.getAttribute('aria-label')).toBe('Suggested prompts');
-    expect(component.suggestedPrompts()).toEqual([...AI_INSIGHTS_SUGGESTED_PROMPTS]);
-    expect(heroPromptRotator?.getAttribute('aria-label')).toContain(AI_INSIGHTS_SUGGESTED_PROMPTS[0]);
+    expect(pickerButton?.getAttribute('aria-label')).toBe('Browse prompts');
+    expect(component.pickerPromptGroups()).toEqual(AI_INSIGHTS_DEFAULT_PROMPT_GROUPS);
+    expect(heroPromptRotator?.getAttribute('aria-label')).toContain(AI_INSIGHTS_FEATURED_PROMPTS[0]);
     expect(quotaLine?.textContent).toContain('88 of 100 left');
     expect(supportNote?.textContent).toContain('Latest completed insights are temporarily restored from your account.');
+  });
+
+  it('should disable prompt interactions while restoring the latest insight', async () => {
+    let resolveLatestSnapshot: ((value: AiInsightsLatestSnapshot | null) => void) | null = null;
+    aiInsightsLatestSnapshotServiceMock.loadLatest.mockReturnValueOnce(
+      new Promise<AiInsightsLatestSnapshot | null>((resolve) => {
+        resolveLatestSnapshot = resolve;
+      }),
+    );
+    aiInsightsQuotaServiceMock.loadQuotaStatus.mockResolvedValueOnce(buildQuotaStatus());
+
+    await createComponent();
+
+    const promptInput = fixture.debugElement.query(By.css('.prompt-field input'))?.nativeElement as HTMLInputElement | undefined;
+    const heroPromptRotator = fixture.debugElement.query(By.css('.hero-prompt-rotator'))?.nativeElement as HTMLButtonElement | undefined;
+    const pickerButton = fixture.debugElement.query(By.css('.suggestion-picker-button'))?.nativeElement as HTMLButtonElement | undefined;
+    const submitButton = fixture.debugElement.query(By.css('.prompt-actions button[type="submit"]'))?.nativeElement as HTMLButtonElement | undefined;
+
+    expect(component.isRestoringLatestSnapshot()).toBe(true);
+    expect(component.promptControl.disabled).toBe(true);
+    expect(promptInput?.disabled).toBe(true);
+    expect(heroPromptRotator?.disabled).toBe(true);
+    expect(pickerButton?.disabled).toBe(true);
+    expect(submitButton?.disabled).toBe(true);
+
+    resolveLatestSnapshot?.(null);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(component.isRestoringLatestSnapshot()).toBe(false);
+    expect(component.promptControl.disabled).toBe(false);
+    expect(promptInput?.disabled).toBe(false);
+    expect(heroPromptRotator?.disabled).toBe(false);
+    expect(pickerButton?.disabled).toBe(false);
   });
 
   it('should render the Basic tier quota limit in the prompt header', async () => {
@@ -737,7 +980,7 @@ describe('AiInsightsPageComponent', () => {
 
   it('should submit the active hero prompt when clicked', async () => {
     aiInsightsServiceMock.runInsight.mockResolvedValue(buildOkResponse());
-    const heroPrompt = 'Show my total distance by activity type this year';
+    const heroPrompt = AI_INSIGHTS_FEATURED_PROMPTS[0];
     component.activeHeroPrompt.set(heroPrompt);
     component.typedHeroPrompt.set(heroPrompt);
     fixture.detectChanges();
@@ -754,8 +997,40 @@ describe('AiInsightsPageComponent', () => {
     }));
     expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('ai_insights_action', {
       method: 'hero_prompt_click',
-      prompt_index: 1,
+      prompt_index: 0,
       prompt_length: heroPrompt.length,
+      prompt_source: 'default',
+    });
+  });
+
+  it('should open the grouped prompt picker and submit the selected prompt', async () => {
+    const selectedPrompt = 'Show my average power over time for cycling in the last 90 days.';
+    aiInsightsServiceMock.runInsight.mockResolvedValue(buildOkResponse());
+    matDialogMock.open.mockReturnValueOnce({
+      afterClosed: () => of(selectedPrompt),
+    });
+    Object.defineProperty(component, 'dialog', {
+      value: matDialogMock,
+    });
+
+    await component.openPromptPicker();
+    fixture.detectChanges();
+
+    expect(matDialogMock.open).toHaveBeenCalledTimes(1);
+    expect(matDialogMock.open.mock.calls[0]?.[1]).toMatchObject({
+      data: {
+        promptGroups: AI_INSIGHTS_DEFAULT_PROMPT_GROUPS,
+        promptSource: 'default',
+      },
+    });
+    expect(component.promptControl.getRawValue()).toBe(selectedPrompt);
+    expect(aiInsightsServiceMock.runInsight).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: selectedPrompt,
+    }));
+    expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('ai_insights_action', {
+      method: 'suggested_prompt_select',
+      prompt_index: 13,
+      prompt_length: selectedPrompt.length,
       prompt_source: 'default',
     });
   });
@@ -842,6 +1117,30 @@ describe('AiInsightsPageComponent', () => {
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes(expectedOverall ?? ''))).toBe(true);
   });
 
+  it('should render multi-metric responses with the combined chart and per-metric sections', async () => {
+    const response = buildMultiMetricResponse();
+    aiInsightsServiceMock.runInsight.mockResolvedValue(response);
+    component.promptControl.setValue('Show me avg cadence and avg power for the last 3 months for cycling');
+
+    fixture.debugElement.query(By.css('form')).triggerEventHandler('submit', {
+      preventDefault: vi.fn(),
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const narrative = fixture.debugElement.query(By.css('.narrative'))?.nativeElement as HTMLElement | undefined;
+    const multiChart = fixture.debugElement.query(By.css('.multi-chart-stub'))?.nativeElement as HTMLElement | undefined;
+    const metricSections = fixture.debugElement.queryAll(By.css('.multi-metric-section'));
+    const resultCardSubtitle = fixture.debugElement.query(By.css('.result-card-subtitle'))?.nativeElement as HTMLElement | undefined;
+
+    expect(narrative?.textContent).toContain('Cadence and power');
+    expect(multiChart?.textContent).toContain('Cadence and power over time for Cycling');
+    expect(metricSections).toHaveLength(2);
+    expect(metricSections[0]?.nativeElement.textContent).toContain('Average cadence over time for Cycling');
+    expect(metricSections[1]?.nativeElement.textContent).toContain('Average power over time for Cycling');
+    expect(resultCardSubtitle?.textContent).toContain('Combined chart and per-metric summaries for this prompt.');
+  });
+
   it('should render the richer AI loading state while an insight request is in flight', async () => {
     let resolveResponse: ((response: AiInsightsResponse) => void) | null = null;
     aiInsightsServiceMock.runInsight.mockReturnValue(new Promise<AiInsightsResponse>((resolve) => {
@@ -855,15 +1154,17 @@ describe('AiInsightsPageComponent', () => {
     fixture.debugElement.query(By.css('form')).triggerEventHandler('submit', submitEvent);
     fixture.detectChanges();
 
-    const loadingTitle = fixture.debugElement.query(By.css('app-ai-insights-loading-state .ai-loading-state__title'))?.nativeElement as HTMLElement | undefined;
-    const loadingStatus = fixture.debugElement.query(By.css('app-ai-insights-loading-state .ai-loading-state__status-label'))?.nativeElement as HTMLElement | undefined;
-    const loadingActiveStep = fixture.debugElement.query(By.css('app-ai-insights-loading-state .ai-loading-state__roller-row--active'))?.nativeElement as HTMLElement | undefined;
-    const loadingPreviewCards = fixture.debugElement.queryAll(By.css('app-ai-insights-loading-state .ai-loading-state__preview-card'));
+    const loadingStatus = fixture.debugElement.query(By.css('.result-loading-step-chip'))?.nativeElement as HTMLElement | undefined;
+    const loadingActiveStep = fixture.debugElement.query(By.css('.result-loading-roller-row--active'))?.nativeElement as HTMLElement | undefined;
+    const loadingSummaryCards = fixture.debugElement.queryAll(By.css('.summary-card--loading'));
+    const loadingChartShell = fixture.debugElement.query(By.css('.result-loading-chart-shell'));
+    const loadingStateComponent = fixture.debugElement.query(By.css('app-ai-insights-loading-state'));
 
-    expect(loadingTitle?.textContent).toContain('Generating insight');
     expect(loadingStatus?.textContent).toContain('Step 1/5');
     expect(loadingActiveStep?.textContent).toContain('Parsing your prompt');
-    expect(loadingPreviewCards).toHaveLength(2);
+    expect(loadingSummaryCards).toHaveLength(4);
+    expect(loadingChartShell).toBeTruthy();
+    expect(loadingStateComponent).toBeNull();
 
     resolveResponse?.(buildOkResponse());
     await fixture.whenStable();
@@ -993,7 +1294,8 @@ describe('AiInsightsPageComponent', () => {
       prompt_length: 'Show cadence splits for cycling'.length,
       prompt_source: 'default',
     });
-    expect(component.suggestedPrompts()).toContain('Show my total distance by activity type this year');
+    expect(component.pickerPromptSource()).toBe('unsupported');
+    expect(component.pickerPrompts()).toContain('Show my total distance by activity type this year.');
   });
 
   it('should restore event-lookup snapshots and refetch the referenced event ids', async () => {
@@ -1225,13 +1527,13 @@ describe('AiInsightsPageComponent', () => {
 
     const askButton = fixture.debugElement.query(By.css('button[type="submit"]'))?.nativeElement as HTMLButtonElement | undefined;
     const heroPromptRotator = fixture.debugElement.query(By.css('.hero-prompt-rotator'))?.nativeElement as HTMLButtonElement | undefined;
-    const suggestionTrigger = fixture.debugElement.query(By.css('.suggestion-menu-trigger'))?.nativeElement as HTMLButtonElement | undefined;
+    const pickerButton = fixture.debugElement.query(By.css('.suggestion-picker-button'))?.nativeElement as HTMLButtonElement | undefined;
     const quotaLine = fixture.debugElement.query(By.css('.prompt-quota-line'))?.nativeElement as HTMLElement | undefined;
     const quotaNote = fixture.debugElement.query(By.css('.prompt-quota-note'))?.nativeElement as HTMLElement | undefined;
 
     expect(askButton?.disabled).toBe(true);
     expect(heroPromptRotator?.disabled).toBe(true);
-    expect(suggestionTrigger?.disabled).toBe(true);
+    expect(pickerButton?.disabled).toBe(true);
     expect(quotaLine?.textContent).toContain('0 of 100 left');
     expect(quotaNote?.textContent).toContain('limit reached');
   });

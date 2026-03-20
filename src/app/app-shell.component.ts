@@ -220,11 +220,19 @@ export class AppShellComponent implements OnInit, OnDestroy {
       return 0;
     }
 
-    return this.bannerHeight + (this.headerHidden ? 0 : APP_SHELL_HEADER_HEIGHT_PX);
+    return this.bannerHeight + APP_SHELL_HEADER_HEIGHT_PX;
   }
 
   get effectiveTopOffsetPx(): number {
     return this.layoutTopOffsetPx;
+  }
+
+  get visibleTopOffsetPx(): number {
+    if (!this.showNavigation()) {
+      return 0;
+    }
+
+    return this.bannerHeight + (this.headerHidden ? 0 : APP_SHELL_HEADER_HEIGHT_PX);
   }
 
   constructor() {

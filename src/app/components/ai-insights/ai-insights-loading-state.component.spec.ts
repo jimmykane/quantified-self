@@ -21,7 +21,7 @@ describe('AiInsightsLoadingStateComponent', () => {
     fixture = TestBed.createComponent(AiInsightsLoadingStateComponent);
     component = fixture.componentInstance;
     fixture.componentRef.setInput('title', 'Generating insight');
-    fixture.componentRef.setInput('copy', 'Parsing your prompt, querying your event stats, and preparing the chart.');
+    fixture.componentRef.setInput('copy', 'Parsing your prompt, querying your event stats, and preparing the result.');
     fixture.detectChanges();
   });
 
@@ -30,16 +30,19 @@ describe('AiInsightsLoadingStateComponent', () => {
     vi.useRealTimers();
   });
 
-  it('should render the contained AI loading layout with the default first step', () => {
-    const title = fixture.debugElement.query(By.css('.ai-loading-state__title'))?.nativeElement as HTMLElement | undefined;
+  it('should render the inline AI loading layout with the default first step', () => {
     const statusLabel = fixture.debugElement.query(By.css('.ai-loading-state__status-label'))?.nativeElement as HTMLElement | undefined;
     const activeRollerRow = fixture.debugElement.query(By.css('.ai-loading-state__roller-row--active'))?.nativeElement as HTMLElement | undefined;
-    const previewCards = fixture.debugElement.queryAll(By.css('.ai-loading-state__preview-card'));
+    const supportingCopy = fixture.debugElement.query(By.css('.ai-loading-state__supporting-copy'))?.nativeElement as HTMLElement | undefined;
+    const summaryCards = fixture.debugElement.queryAll(By.css('.ai-loading-state__summary-card'));
+    const chartShell = fixture.debugElement.query(By.css('.ai-loading-state__chart-shell'));
 
-    expect(title?.textContent).toContain('Generating insight');
     expect(statusLabel?.textContent).toContain('Step 1/5');
     expect(activeRollerRow?.textContent).toContain('Parsing your prompt');
-    expect(previewCards).toHaveLength(2);
+    expect(supportingCopy?.textContent).toContain('preparing the result');
+    expect(summaryCards).toHaveLength(4);
+    expect(chartShell).toBeTruthy();
+    expect(fixture.debugElement.query(By.css('.ai-loading-state__title'))).toBeNull();
   });
 
   it('should roll the step label forward over time and stop at the final step', () => {
@@ -59,10 +62,11 @@ describe('AiInsightsLoadingStateComponent', () => {
     expect(activeRollerRow()?.textContent).toContain('Drafting the summary');
   });
 
-  it('should hide the preview cards in compact mode', () => {
+  it('should hide the body skeletons in compact mode', () => {
     fixture.componentRef.setInput('compact', true);
     fixture.detectChanges();
 
-    expect(fixture.debugElement.queryAll(By.css('.ai-loading-state__preview-card'))).toHaveLength(0);
+    expect(fixture.debugElement.queryAll(By.css('.ai-loading-state__summary-card'))).toHaveLength(0);
+    expect(fixture.debugElement.query(By.css('.ai-loading-state__chart-shell'))).toBeNull();
   });
 });

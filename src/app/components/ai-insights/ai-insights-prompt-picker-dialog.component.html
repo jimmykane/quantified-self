@@ -1,0 +1,33 @@
+<h2 mat-dialog-title>{{ dialogTitle() }}</h2>
+
+<mat-dialog-content class="prompt-picker-dialog__content qs-scrollbar">
+  <p class="mat-body-medium prompt-picker-dialog__copy">{{ dialogCopy() }}</p>
+
+  <div class="prompt-picker-dialog__groups">
+    @for (group of promptGroups; track group.category; let isLast = $last) {
+      <section class="prompt-picker-dialog__group">
+        <h3 class="mat-subheader prompt-picker-dialog__group-title">{{ group.category }}</h3>
+
+        <mat-action-list class="prompt-picker-dialog__list">
+          @for (prompt of group.prompts; track prompt.id) {
+            <button
+              mat-list-item
+              type="button"
+              class="prompt-picker-dialog__item"
+              (click)="selectPrompt(prompt.prompt)">
+              <span class="prompt-picker-dialog__item-copy" matListItemTitle>{{ prompt.prompt }}</span>
+            </button>
+          }
+        </mat-action-list>
+
+        @if (!isLast) {
+          <mat-divider></mat-divider>
+        }
+      </section>
+    }
+  </div>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button type="button" (click)="close()">Close</button>
+</mat-dialog-actions>

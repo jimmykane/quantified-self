@@ -5,7 +5,15 @@ import {
   type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
 
-import type { AiInsightPresentation, AiInsightSummary, NormalizedInsightQuery } from '../../../../shared/ai-insights.types';
+import type {
+  AiInsightPresentation,
+  AiInsightSummary,
+  AiInsightsMultiMetricAggregateMetricResult,
+  NormalizedInsightAggregateQuery,
+  NormalizedInsightEventLookupQuery,
+  NormalizedInsightMultiMetricAggregateQuery,
+  NormalizedInsightQuery,
+} from '../../../../shared/ai-insights.types';
 import { resolveAiInsightsActivityFilterLabel } from '../../../../shared/ai-insights-activity-filter';
 import type { EventStatAggregationResult } from '../../../../shared/event-stat-aggregation.types';
 import { resolveMetricSemantics, resolveMetricSummarySemantics } from '../../../../shared/metric-semantics';
@@ -27,7 +35,6 @@ interface SummarizeInsightEventLookupFact {
 interface SummarizeInsightBaseInput {
   status: 'ok' | 'empty';
   prompt: string;
-  metricLabel: string;
   query: NormalizedInsightQuery;
   presentation: AiInsightPresentation;
   clientLocale?: string;
@@ -35,11 +42,15 @@ interface SummarizeInsightBaseInput {
 }
 
 export interface SummarizeInsightAggregateInput extends SummarizeInsightBaseInput {
+  metricLabel: string;
+  query: NormalizedInsightAggregateQuery;
   aggregation: EventStatAggregationResult;
   summary: AiInsightSummary;
 }
 
 export interface SummarizeInsightEventLookupInput extends SummarizeInsightBaseInput {
+  metricLabel: string;
+  query: NormalizedInsightEventLookupQuery;
   eventLookup: {
     matchedEventCount: number;
     primaryEvent: SummarizeInsightEventLookupFact | null;
@@ -47,9 +58,16 @@ export interface SummarizeInsightEventLookupInput extends SummarizeInsightBaseIn
   };
 }
 
+export interface SummarizeInsightMultiMetricAggregateInput extends SummarizeInsightBaseInput {
+  query: NormalizedInsightMultiMetricAggregateQuery;
+  metricLabels: string[];
+  metricResults: AiInsightsMultiMetricAggregateMetricResult[];
+}
+
 export type SummarizeInsightResultInput =
   | SummarizeInsightAggregateInput
-  | SummarizeInsightEventLookupInput;
+  | SummarizeInsightEventLookupInput
+  | SummarizeInsightMultiMetricAggregateInput;
 
 export interface SummarizeInsightNarrativeResult {
   narrative: string;
@@ -69,24 +87,38 @@ const SummarizeInsightEventLookupFactSchema = z.object({
 const SummarizeInsightBaseInputSchema = z.object({
   status: z.enum(['ok', 'empty']),
   prompt: z.string().min(1),
-  metricLabel: z.string().min(1),
   query: NormalizedInsightQuerySchema,
   presentation: AiInsightPresentationSchema,
   clientLocale: z.string().optional(),
   unitSettings: z.any().optional(),
 });
 
+const SummarizeInsightMultiMetricMetricResultSchema = z.object({
+  metricKey: z.string().min(1),
+  metricLabel: z.string().min(1),
+  query: NormalizedInsightQuerySchema,
+  aggregation: EventStatAggregationResultSchema,
+  summary: AiInsightSummarySchema,
+  presentation: AiInsightPresentationSchema,
+});
+
 const SummarizeInsightResultInputSchema = z.union([
   SummarizeInsightBaseInputSchema.extend({
+    metricLabel: z.string().min(1),
     aggregation: EventStatAggregationResultSchema,
     summary: AiInsightSummarySchema,
   }),
   SummarizeInsightBaseInputSchema.extend({
+    metricLabel: z.string().min(1),
     eventLookup: z.object({
       matchedEventCount: z.number().int().nonnegative(),
       primaryEvent: SummarizeInsightEventLookupFactSchema.nullable(),
       rankedEvents: z.array(SummarizeInsightEventLookupFactSchema).max(10),
     }),
+  }),
+  SummarizeInsightBaseInputSchema.extend({
+    metricLabels: z.array(z.string().min(1)).min(2).max(3),
+    metricResults: z.array(SummarizeInsightMultiMetricMetricResultSchema).min(1).max(3),
   }),
 ]);
 
@@ -130,6 +162,18 @@ function formatLocalizedDateRange(
 
 function formatActivityFilter(query: NormalizedInsightQuery): string {
   return resolveAiInsightsActivityFilterLabel(query).toLowerCase();
+}
+
+function joinMetricLabels(metricLabels: string[]): string {
+  if (metricLabels.length <= 1) {
+    return metricLabels[0] ?? '';
+  }
+
+  if (metricLabels.length === 2) {
+    return `${metricLabels[0]} and ${metricLabels[1]}`;
+  }
+
+  return `${metricLabels.slice(0, -1).join(', ')}, and ${metricLabels[metricLabels.length - 1]}`;
 }
 
 function formatNumber(value: number): string {
@@ -215,8 +259,40 @@ export function buildInsightSummaryFacts(input: SummarizeInsightResultInput): {
   };
 }
 
+function buildMultiMetricSummaryFacts(
+  input: SummarizeInsightMultiMetricAggregateInput,
+): Array<{
+  metricKey: string;
+  metricLabel: string;
+  overallAggregateDisplayValue: string | null;
+  matchedEventCount: number;
+  latestBucket: ReturnType<typeof buildInsightSummaryFacts>['latestBucket'];
+}> {
+  return input.metricResults.map((metricResult) => {
+    const summaryFacts = buildInsightSummaryFacts({
+      status: input.status,
+      prompt: input.prompt,
+      metricLabel: metricResult.metricLabel,
+      query: metricResult.query,
+      aggregation: metricResult.aggregation,
+      summary: metricResult.summary,
+      presentation: metricResult.presentation,
+      clientLocale: input.clientLocale,
+      unitSettings: input.unitSettings,
+    });
+
+    return {
+      metricKey: metricResult.metricKey,
+      metricLabel: metricResult.metricLabel,
+      overallAggregateDisplayValue: summaryFacts.overallAggregateDisplayValue,
+      matchedEventCount: summaryFacts.matchedEventCount,
+      latestBucket: summaryFacts.latestBucket,
+    };
+  });
+}
+
 function resolveEventLookupDescriptor(
-  query: NormalizedInsightQuery,
+  query: NormalizedInsightEventLookupQuery,
   metricLabel: string,
 ): string {
   const semantics = resolveMetricSemantics(query.dataType);
@@ -247,7 +323,7 @@ function resolveEventLookupDescriptor(
 function formatEventLookupDate(
   value: string,
   locale: string | undefined,
-  query: NormalizedInsightQuery,
+  query: NormalizedInsightEventLookupQuery,
 ): string {
   return formatSemanticDate(value, locale, query.dateRange.timezone);
 }
@@ -256,6 +332,31 @@ function buildNarrativeFallback(input: SummarizeInsightResultInput): string {
   const dateRangeText = formatLocalizedDateRange(input.query, input.clientLocale);
   const activityText = formatActivityFilter(input.query);
   const isAllTime = input.query.dateRange.kind === 'all_time';
+
+  if ('metricResults' in input) {
+    const metricSummaryFacts = buildMultiMetricSummaryFacts(input);
+    const metricLabelText = joinMetricLabels(input.metricLabels);
+
+    if (input.status === 'empty' || metricSummaryFacts.every((metric) => !metric.overallAggregateDisplayValue)) {
+      return isAllTime
+        ? `I could not find matching ${activityText} events with ${metricLabelText} data across all recorded history.`
+        : `I could not find matching ${activityText} events with ${metricLabelText} data from ${dateRangeText}.`;
+    }
+
+    const metricSummaries = metricSummaryFacts
+      .filter(metric => metric.overallAggregateDisplayValue)
+      .map((metric) => {
+        if (input.query.groupingMode === 'date' && metric.latestBucket) {
+          return `${metric.metricLabel} ended at ${metric.latestBucket.aggregateDisplayValue}`;
+        }
+        return `${metric.metricLabel} was ${metric.overallAggregateDisplayValue}`;
+      });
+
+    const summarySentence = metricSummaries.join('; ');
+    return isAllTime
+      ? `Across all recorded history for ${activityText}, ${summarySentence}.`
+      : `From ${dateRangeText} for ${activityText}, ${summarySentence}.`;
+  }
 
   if (input.status === 'empty') {
     return isAllTime
@@ -304,6 +405,35 @@ function buildNarrativeFallback(input: SummarizeInsightResultInput): string {
 }
 
 export function buildNarrativeFacts(input: SummarizeInsightResultInput): Record<string, unknown> {
+  if ('metricResults' in input) {
+    const metricSummaryFacts = buildMultiMetricSummaryFacts(input);
+
+    return {
+      status: input.status,
+      prompt: input.prompt,
+      resultKind: 'multi_metric_aggregate',
+      groupingMode: input.query.groupingMode,
+      title: input.presentation.title,
+      chartType: input.presentation.chartType,
+      metricLabels: input.metricLabels,
+      dateRangeLabel: formatLocalizedDateRange(input.query, input.clientLocale),
+      activityFilterLabel: formatActivityFilter(input.query),
+      metrics: input.metricResults.map((metricResult, index) => ({
+        metricKey: metricResult.metricKey,
+        metricLabel: metricResult.metricLabel,
+        matchedEventCount: metricSummaryFacts[index]?.matchedEventCount ?? metricResult.summary.matchedEventCount,
+        overallAggregateDisplayValue: metricSummaryFacts[index]?.overallAggregateDisplayValue ?? null,
+        latestBucket: metricSummaryFacts[index]?.latestBucket
+          ? {
+            label: metricSummaryFacts[index]?.latestBucket?.label,
+            aggregateDisplayValue: metricSummaryFacts[index]?.latestBucket?.aggregateDisplayValue,
+          }
+          : null,
+        bucketCount: metricResult.aggregation.buckets.length,
+      })),
+    };
+  }
+
   if ('eventLookup' in input) {
     return {
       status: input.status,
@@ -423,4 +553,4 @@ export const summarizeAiInsightResultFlow = aiInsightsGenkit.defineFlow({
   name: 'aiInsightsSummarizeResult',
   inputSchema: SummarizeInsightResultInputSchema,
   outputSchema: SummarizeInsightNarrativeResultSchema,
-}, async (input) => summarizeAiInsightResult(input));
+}, async (input) => summarizeAiInsightResult(input as SummarizeInsightResultInput));

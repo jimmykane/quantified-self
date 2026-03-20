@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, LOCALE_ID, NgZone, computed, effect, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
+import { MatDialog } from '@angular/material/dialog';
 import { RouterModule } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import {
@@ -17,6 +18,8 @@ import type {
   AiInsightsAggregateOkResponse,
   AiInsightsEmptyResponse,
   AiInsightsEventLookupOkResponse,
+  AiInsightsMultiMetricAggregateMetricResult,
+  AiInsightsMultiMetricAggregateOkResponse,
   AiInsightsOkResponse,
   AiInsightsQuotaStatus,
   AiInsightsRequest,
@@ -40,7 +43,14 @@ import { LoggerService } from '../../services/logger.service';
 import { formatDashboardBucketDateByInterval, formatDashboardDateRange } from '../../helpers/dashboard-chart-data.helper';
 import { AiInsightsChartComponent } from './ai-insights-chart.component';
 import { AiInsightsLoadingStateComponent } from './ai-insights-loading-state.component';
-import { AI_INSIGHTS_SUGGESTED_PROMPTS } from './ai-insights.prompts';
+import { AiInsightsMultiMetricChartComponent } from './ai-insights-multi-metric-chart.component';
+import { AiInsightsPromptPickerDialogComponent } from './ai-insights-prompt-picker-dialog.component';
+import {
+  AI_INSIGHTS_DEFAULT_PICKER_PROMPTS,
+  AI_INSIGHTS_FEATURED_PROMPTS,
+  resolveAiInsightsPromptGroups,
+  type AiInsightsPromptGroup,
+} from './ai-insights.prompts';
 
 const HERO_PROMPT_TYPING_DELAY_MS = 38;
 const HERO_PROMPT_DELETING_DELAY_MS = 20;
@@ -58,6 +68,20 @@ const AI_INSIGHTS_EVENT_LOOKUP_LOADING_STEPS = [
   'Loading top ranked matches',
   'Preparing event shortcuts',
 ] as const;
+const AI_INSIGHTS_GENERATION_LOADING_STEP_DELAY_MS = 1450;
+const AI_INSIGHTS_LOADING_SUMMARY_SKELETON_ITEMS = [0, 1, 2, 3] as const;
+const AI_INSIGHTS_LOADING_CHART_SKELETON_BARS = [
+  '46%',
+  '62%',
+  '34%',
+  '78%',
+  '56%',
+  '88%',
+] as const;
+
+type AggregateSummarySource =
+  | AiInsightsAggregateOkResponse
+  | AiInsightsMultiMetricAggregateMetricResult;
 
 function getClientTimeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
@@ -135,7 +159,7 @@ function resolveQuotaBlockedMessage(quotaStatus: AiInsightsQuotaStatus): string 
 }
 
 function formatBucketMeta(
-  response: AiInsightsAggregateOkResponse,
+  response: AggregateSummarySource,
   bucket: AiInsightSummaryBucket,
   locale?: string,
 ): string | null {
@@ -169,7 +193,7 @@ function formatSummaryValue(
 }
 
 function buildActivityMixDetails(
-  response: AiInsightsAggregateOkResponse,
+  response: AggregateSummarySource,
   locale: string | undefined,
 ): Pick<InsightSummaryCard, 'detailRows' | 'metaFooter'> {
   const activityMix = response.summary.activityMix;
@@ -222,7 +246,7 @@ function resolveCoveragePeriodLabel(timeInterval: TimeIntervals, count: number):
   return count === 1 ? singularLabel : `${singularLabel}s`;
 }
 
-function formatCoverageValue(response: AiInsightsAggregateOkResponse): string | null {
+function formatCoverageValue(response: AggregateSummarySource): string | null {
   const coverage = response.summary.bucketCoverage;
   if (!coverage) {
     return null;
@@ -236,7 +260,7 @@ function formatCoverageValue(response: AiInsightsAggregateOkResponse): string | 
 }
 
 function resolveMostActivitiesBucket(
-  response: AiInsightsAggregateOkResponse,
+  response: AggregateSummarySource,
 ): {
   bucketKey: string | number;
   totalCount: number;
@@ -266,7 +290,7 @@ function resolveMostActivitiesBucket(
 }
 
 function formatTrendValue(
-  response: AiInsightsAggregateOkResponse,
+  response: AggregateSummarySource,
   unitSettings: UserUnitSettingsInterface,
 ): string | null {
   const trend = response.summary.trend;
@@ -293,6 +317,120 @@ function formatTrendValue(
   }
 
   return `${trend.deltaAggregateValue > 0 ? '+' : '-'}${absoluteDisplayValue}`;
+}
+
+function buildAggregateSummaryCards(
+  response: AggregateSummarySource,
+  unitSettings: UserUnitSettingsInterface,
+  locale: string,
+): InsightSummaryCard[] {
+  const summarySemantics = resolveMetricSummarySemantics(
+    response.query.dataType,
+    response.query.categoryType,
+  );
+  const cards: InsightSummaryCard[] = [
+    {
+      label: 'Activities',
+      value: new Intl.NumberFormat(locale || undefined).format(response.summary.matchedEventCount),
+      ...buildActivityMixDetails(response, locale),
+    },
+  ];
+
+  const overallValue = formatSummaryValue(
+    response.query.dataType,
+    response.summary.overallAggregateValue,
+    unitSettings,
+  );
+  if (overallValue) {
+    cards.unshift({
+      label: 'Overall',
+      value: overallValue,
+    });
+  }
+
+  if (response.summary.peakBucket) {
+    const peakValue = formatSummaryValue(
+      response.query.dataType,
+      response.summary.peakBucket.aggregateValue,
+      unitSettings,
+    );
+    if (peakValue) {
+      cards.push({
+        label: summarySemantics.highestLabel,
+        value: peakValue,
+        meta: formatBucketMeta(response, response.summary.peakBucket, locale) || undefined,
+        helpText: summarySemantics.highestHelpText,
+      });
+    }
+  }
+
+  if (response.summary.lowestBucket) {
+    const lowestValue = formatSummaryValue(
+      response.query.dataType,
+      response.summary.lowestBucket.aggregateValue,
+      unitSettings,
+    );
+    if (lowestValue) {
+      cards.push({
+        label: summarySemantics.lowestLabel,
+        value: lowestValue,
+        meta: formatBucketMeta(response, response.summary.lowestBucket, locale) || undefined,
+        helpText: summarySemantics.lowestHelpText,
+      });
+    }
+  }
+
+  if (
+    response.query.categoryType === ChartDataCategoryTypes.DateType
+    && response.summary.latestBucket
+  ) {
+    const latestValue = formatSummaryValue(
+      response.query.dataType,
+      response.summary.latestBucket.aggregateValue,
+      unitSettings,
+    );
+    if (latestValue) {
+      cards.push({
+        label: summarySemantics.latestLabel,
+        value: latestValue,
+        meta: formatBucketMeta(response, response.summary.latestBucket, locale) || undefined,
+        helpText: summarySemantics.latestHelpText,
+      });
+    }
+  }
+
+  const mostActivitiesBucket = resolveMostActivitiesBucket(response);
+  if (mostActivitiesBucket) {
+    cards.push({
+      label: 'Most activities',
+      value: new Intl.NumberFormat(locale || undefined).format(mostActivitiesBucket.totalCount),
+      meta: `${mostActivitiesBucket.bucketKey}`,
+      helpText: 'The group with the largest number of matching activities in this result.',
+    });
+  }
+
+  const coverageValue = formatCoverageValue(response);
+  if (coverageValue) {
+    cards.push({
+      label: 'Coverage',
+      value: coverageValue,
+      helpText: 'How many chart periods in the requested range contained matching data.',
+    });
+  }
+
+  const trendValue = formatTrendValue(response, unitSettings);
+  if (trendValue && response.summary.trend) {
+    cards.push({
+      label: 'Trend',
+      value: trendValue,
+      meta: formatBucketMeta(response, response.summary.trend.previousBucket, locale)
+        ? `vs ${formatBucketMeta(response, response.summary.trend.previousBucket, locale)}`
+        : undefined,
+      helpText: 'Difference between the latest period with data and the previous period with data.',
+    });
+  }
+
+  return cards;
 }
 
 function resolveEventLookupStatValue(
@@ -359,6 +497,14 @@ interface ResultNote {
   message: string;
 }
 
+interface MultiMetricSection {
+  metricKey: string;
+  title: string;
+  summaryCards: InsightSummaryCard[];
+  isEmpty: boolean;
+  emptyState: string;
+}
+
 interface EventLookupResolvedEvent {
   eventId: string;
   event: EventInterface | null;
@@ -382,6 +528,7 @@ interface EventLookupDisplayItem {
     MaterialModule,
     AiInsightsChartComponent,
     AiInsightsLoadingStateComponent,
+    AiInsightsMultiMetricChartComponent,
   ],
   templateUrl: './ai-insights-page.component.html',
   styleUrls: ['./ai-insights-page.component.scss'],
@@ -397,11 +544,13 @@ export class AiInsightsPageComponent {
   private readonly themeService = inject(AppThemeService);
   private readonly userSettingsQueryService = inject(AppUserSettingsQueryService);
   private readonly logger = inject(LoggerService);
-  // This animation is intentionally isolated from Angular's zone because it is a
-  // pure cosmetic timer loop. Keeping the timeout chain outside Angular avoids a
-  // full change-detection pass on every typing tick while still letting the signal
-  // writes themselves notify the template. A signal-only clock or setInterval would
-  // still need the same scheduling edge; this keeps the Zone.js coupling narrow.
+  private readonly dialog = inject(MatDialog);
+  // These animation loops are intentionally isolated from Angular's zone because
+  // they are pure cosmetic timers for the hero prompt typing and the loading-step
+  // progression. Keeping the timeout chains outside Angular avoids a full
+  // change-detection pass on every tick while still letting the signal writes
+  // themselves notify the template. A signal-only clock or setInterval would still
+  // need the same scheduling edge; this keeps the Zone.js coupling narrow.
   private readonly ngZone = inject(NgZone);
   private readonly locale = inject(LOCALE_ID);
 
@@ -413,6 +562,7 @@ export class AiInsightsPageComponent {
     initialValue: this.promptControl.getRawValue(),
   });
   readonly isSubmitting = signal(false);
+  readonly isRestoringLatestSnapshot = signal(false);
   readonly response = signal<AiInsightsResponse | null>(null);
   readonly errorMessage = signal<string | null>(null);
   readonly latestSnapshotRestored = signal(false);
@@ -429,11 +579,31 @@ export class AiInsightsPageComponent {
   readonly userUnitSettings = computed(() =>
     normalizeUserUnitSettings(this.userSettingsQueryService.unitSettings())
   );
+  readonly promptPlaceholder = AI_INSIGHTS_FEATURED_PROMPTS[0] ?? 'Show my total distance by activity type this year.';
   readonly currentUserID = computed(() => this.user()?.uid ?? null);
   readonly isDarkTheme = computed(() => this.appTheme() === AppThemes.Dark);
   readonly useAnimations = computed(() => this.chartSettings().useAnimations ?? false);
   readonly generationLoadingSteps = AI_INSIGHTS_GENERATION_LOADING_STEPS;
   readonly eventLookupLoadingSteps = AI_INSIGHTS_EVENT_LOOKUP_LOADING_STEPS;
+  readonly loadingSummarySkeletonItems = AI_INSIGHTS_LOADING_SUMMARY_SKELETON_ITEMS;
+  readonly loadingChartSkeletonBars = AI_INSIGHTS_LOADING_CHART_SKELETON_BARS;
+  readonly generationLoadingStepIndex = signal(0);
+  readonly generationLoadingActiveStep = computed(() => (
+    this.generationLoadingSteps[
+      Math.min(this.generationLoadingStepIndex(), this.generationLoadingSteps.length - 1)
+    ] ?? ''
+  ));
+  readonly generationLoadingProgressLabel = computed(() => {
+    const totalSteps = this.generationLoadingSteps.length;
+    const currentStep = Math.min(this.generationLoadingStepIndex() + 1, totalSteps);
+    return `${currentStep}/${totalSteps}`;
+  });
+  readonly generationLoadingRollerTransform = computed(() => (
+    `translateY(-${this.generationLoadingStepIndex() * 100}%)`
+  ));
+  readonly isPromptLocked = computed(() => (
+    this.isSubmitting() || this.isRestoringLatestSnapshot()
+  ));
   readonly hasQuotaAvailable = computed(() => {
     const quotaStatus = this.quotaStatus();
     if (!quotaStatus) {
@@ -443,7 +613,7 @@ export class AiInsightsPageComponent {
     return quotaStatus.isEligible && quotaStatus.remainingCount > 0;
   });
   readonly canSubmit = computed(() =>
-    !this.isSubmitting()
+    !this.isPromptLocked()
     && this.promptValue().trim().length > 0
     && this.hasQuotaAvailable()
   );
@@ -454,6 +624,10 @@ export class AiInsightsPageComponent {
   readonly aggregateOkResponse = computed<AiInsightsAggregateOkResponse | null>(() => {
     const response = this.okResponse();
     return response?.resultKind === 'aggregate' ? response : null;
+  });
+  readonly multiMetricOkResponse = computed<AiInsightsMultiMetricAggregateOkResponse | null>(() => {
+    const response = this.okResponse();
+    return response?.resultKind === 'multi_metric_aggregate' ? response : null;
   });
   readonly eventLookupOkResponse = computed<AiInsightsEventLookupOkResponse | null>(() => {
     const response = this.okResponse();
@@ -474,7 +648,7 @@ export class AiInsightsPageComponent {
       || response?.status === 'unsupported';
   });
   readonly canRefreshResult = computed(() => {
-    if (this.isSubmitting()) {
+    if (this.isPromptLocked()) {
       return false;
     }
 
@@ -495,6 +669,13 @@ export class AiInsightsPageComponent {
   readonly resultCardSubtitle = computed(() => {
     if (this.eventLookupOkResponse()) {
       return 'Winning event and top matches for this prompt.';
+    }
+
+    const multiMetricResponse = this.multiMetricOkResponse();
+    if (multiMetricResponse) {
+      return multiMetricResponse.query.groupingMode === 'date'
+        ? 'Combined chart and per-metric summaries for this prompt.'
+        : 'Per-metric summaries for this prompt.';
     }
 
     if (this.aggregateOkResponse()) {
@@ -531,6 +712,47 @@ export class AiInsightsPageComponent {
     }
     return notes;
   });
+  private readonly generationLoadingAnimation = effect((onCleanup) => {
+    const isSubmitting = this.isSubmitting();
+    this.generationLoadingStepIndex.set(0);
+
+    if (!isSubmitting || this.generationLoadingSteps.length < 2) {
+      return;
+    }
+
+    let activeStepIndex = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const schedule = (): void => {
+      if (activeStepIndex >= this.generationLoadingSteps.length - 1) {
+        return;
+      }
+
+      this.ngZone.runOutsideAngular(() => {
+        timer = setTimeout(() => {
+          activeStepIndex += 1;
+          this.generationLoadingStepIndex.set(activeStepIndex);
+          schedule();
+        }, AI_INSIGHTS_GENERATION_LOADING_STEP_DELAY_MS);
+      });
+    };
+
+    schedule();
+
+    onCleanup(() => {
+      if (timer !== null) {
+        clearTimeout(timer);
+      }
+    });
+  });
+  private readonly promptAvailabilityEffect = effect(() => {
+    if (this.isPromptLocked()) {
+      this.promptControl.disable({ emitEvent: false });
+      return;
+    }
+
+    this.promptControl.enable({ emitEvent: false });
+  });
   readonly quotaStatusText = computed(() => {
     const quotaStatus = this.quotaStatus();
     if (!quotaStatus) {
@@ -547,17 +769,36 @@ export class AiInsightsPageComponent {
 
     return resolveQuotaBlockedMessage(quotaStatus);
   });
-  readonly activeHeroPrompt = signal(AI_INSIGHTS_SUGGESTED_PROMPTS[0] ?? '');
-  readonly typedHeroPrompt = signal((AI_INSIGHTS_SUGGESTED_PROMPTS[0] ?? '').slice(0, 1));
-  readonly suggestedPrompts = computed(() => {
+  readonly activeHeroPrompt = signal(AI_INSIGHTS_FEATURED_PROMPTS[0] ?? '');
+  readonly typedHeroPrompt = signal((AI_INSIGHTS_FEATURED_PROMPTS[0] ?? '').slice(0, 1));
+  readonly pickerPromptSource = computed<'default' | 'unsupported'>(() => {
     const unsupportedResponse = this.unsupportedResponse();
-    if (unsupportedResponse?.suggestedPrompts?.length) {
-      return unsupportedResponse.suggestedPrompts;
-    }
-    return AI_INSIGHTS_SUGGESTED_PROMPTS;
+    return unsupportedResponse?.suggestedPrompts?.length ? 'unsupported' : 'default';
   });
+  readonly pickerPromptGroups = computed<readonly AiInsightsPromptGroup[]>(() => {
+    const unsupportedResponse = this.unsupportedResponse();
+    return resolveAiInsightsPromptGroups(unsupportedResponse?.suggestedPrompts);
+  });
+  readonly pickerPrompts = computed(() => (
+    this.pickerPromptGroups().flatMap((group) => group.prompts.map((prompt) => prompt.prompt))
+  ));
+  readonly promptPickerTitle = computed(() => (
+    this.pickerPromptSource() === 'unsupported'
+      ? 'Try one of these prompts'
+      : 'Browse prompts'
+  ));
+  readonly promptPickerButtonLabel = computed(() => (
+    this.pickerPromptSource() === 'unsupported'
+      ? 'Try supported prompts'
+      : 'Browse prompts'
+  ));
+  readonly promptPickerButtonTooltip = computed(() => (
+    this.pickerPromptSource() === 'unsupported'
+      ? 'Browse supported prompt examples'
+      : 'Browse prompt examples'
+  ));
   private readonly heroPromptAnimation = effect((onCleanup) => {
-    const prompts = this.suggestedPrompts().filter(prompt => prompt.trim().length > 0);
+    const prompts = AI_INSIGHTS_FEATURED_PROMPTS.filter(prompt => prompt.trim().length > 0);
     if (!prompts.length) {
       this.activeHeroPrompt.set('');
       this.typedHeroPrompt.set('');
@@ -631,6 +872,7 @@ export class AiInsightsPageComponent {
     this.latestSnapshotRestored.set(false);
     this.latestSnapshotPersistenceNotice.set(null);
     this.latestSnapshotSavedAt.set(null);
+    this.isRestoringLatestSnapshot.set(false);
     this.quotaStatus.set(null);
     this.errorMessage.set(null);
     this.response.set(null);
@@ -645,24 +887,32 @@ export class AiInsightsPageComponent {
     }
 
     void (async () => {
-      const [latestSnapshot, quotaStatus] = await Promise.all([
-        this.aiInsightsLatestSnapshotService.loadLatest(userID),
-        this.aiInsightsQuotaService.loadQuotaStatus(),
-      ]);
-      if (cancelled) {
-        return;
-      }
+      this.isRestoringLatestSnapshot.set(true);
 
-      this.quotaStatus.set(quotaStatus);
-      if (!latestSnapshot) {
-        return;
-      }
+      try {
+        const [latestSnapshot, quotaStatus] = await Promise.all([
+          this.aiInsightsLatestSnapshotService.loadLatest(userID),
+          this.aiInsightsQuotaService.loadQuotaStatus(),
+        ]);
+        if (cancelled) {
+          return;
+        }
 
-      this.promptControl.setValue(latestSnapshot.prompt);
-      this.response.set(latestSnapshot.response);
-      this.resultPrompt.set(latestSnapshot.prompt);
-      this.latestSnapshotSavedAt.set(latestSnapshot.savedAt);
-      this.latestSnapshotRestored.set(true);
+        this.quotaStatus.set(quotaStatus);
+        if (!latestSnapshot) {
+          return;
+        }
+
+        this.promptControl.setValue(latestSnapshot.prompt);
+        this.response.set(latestSnapshot.response);
+        this.resultPrompt.set(latestSnapshot.prompt);
+        this.latestSnapshotSavedAt.set(latestSnapshot.savedAt);
+        this.latestSnapshotRestored.set(true);
+      } finally {
+        if (!cancelled) {
+          this.isRestoringLatestSnapshot.set(false);
+        }
+      }
     })();
 
     onCleanup(() => {
@@ -742,122 +992,40 @@ export class AiInsightsPageComponent {
 
     return formatDateRangeNote(response.query.dateRange);
   });
-  readonly resultWarnings = computed(() => this.aggregateOkResponse()?.presentation.warnings ?? []);
+  readonly resultWarnings = computed(() => (
+    this.aggregateOkResponse()?.presentation.warnings
+    ?? this.multiMetricOkResponse()?.presentation.warnings
+    ?? []
+  ));
   readonly resultSummaryCards = computed<InsightSummaryCard[]>(() => {
     const response = this.aggregateOkResponse();
     if (!response) {
       return [];
     }
 
+    return buildAggregateSummaryCards(response, this.userUnitSettings(), this.locale);
+  });
+  readonly multiMetricSections = computed<MultiMetricSection[]>(() => {
+    const response = this.multiMetricOkResponse();
+    if (!response) {
+      return [];
+    }
+
     const unitSettings = this.userUnitSettings();
     const locale = this.locale;
-    const summarySemantics = resolveMetricSummarySemantics(
-      response.query.dataType,
-      response.query.categoryType,
-    );
-    const cards: InsightSummaryCard[] = [
-      {
-        label: 'Activities',
-        value: new Intl.NumberFormat(locale || undefined).format(response.summary.matchedEventCount),
-        ...buildActivityMixDetails(response, locale),
-      },
-    ];
-
-    const overallValue = formatSummaryValue(
-      response.query.dataType,
-      response.summary.overallAggregateValue,
-      unitSettings,
-    );
-    if (overallValue) {
-      cards.unshift({
-        label: 'Overall',
-        value: overallValue,
-      });
-    }
-
-    if (response.summary.peakBucket) {
-      const peakValue = formatSummaryValue(
-        response.query.dataType,
-        response.summary.peakBucket.aggregateValue,
-        unitSettings,
-      );
-      if (peakValue) {
-        cards.push({
-          label: summarySemantics.highestLabel,
-          value: peakValue,
-          meta: formatBucketMeta(response, response.summary.peakBucket, locale) || undefined,
-          helpText: summarySemantics.highestHelpText,
-        });
-      }
-    }
-
-    if (response.summary.lowestBucket) {
-      const lowestValue = formatSummaryValue(
-        response.query.dataType,
-        response.summary.lowestBucket.aggregateValue,
-        unitSettings,
-      );
-      if (lowestValue) {
-        cards.push({
-          label: summarySemantics.lowestLabel,
-          value: lowestValue,
-          meta: formatBucketMeta(response, response.summary.lowestBucket, locale) || undefined,
-          helpText: summarySemantics.lowestHelpText,
-        });
-      }
-    }
-
-    if (
-      response.query.categoryType === ChartDataCategoryTypes.DateType
-      && response.summary.latestBucket
-    ) {
-      const latestValue = formatSummaryValue(
-        response.query.dataType,
-        response.summary.latestBucket.aggregateValue,
-        unitSettings,
-      );
-      if (latestValue) {
-        cards.push({
-          label: summarySemantics.latestLabel,
-          value: latestValue,
-          meta: formatBucketMeta(response, response.summary.latestBucket, locale) || undefined,
-          helpText: summarySemantics.latestHelpText,
-        });
-      }
-    }
-
-    const mostActivitiesBucket = resolveMostActivitiesBucket(response);
-    if (mostActivitiesBucket) {
-      cards.push({
-        label: 'Most activities',
-        value: new Intl.NumberFormat(locale || undefined).format(mostActivitiesBucket.totalCount),
-        meta: `${mostActivitiesBucket.bucketKey}`,
-        helpText: 'The group with the largest number of matching activities in this result.',
-      });
-    }
-
-    const coverageValue = formatCoverageValue(response);
-    if (coverageValue) {
-      cards.push({
-        label: 'Coverage',
-        value: coverageValue,
-        helpText: 'How many chart periods in the requested range contained matching data.',
-      });
-    }
-
-    const trendValue = formatTrendValue(response, unitSettings);
-    if (trendValue && response.summary.trend) {
-      cards.push({
-        label: 'Trend',
-        value: trendValue,
-        meta: formatBucketMeta(response, response.summary.trend.previousBucket, locale)
-          ? `vs ${formatBucketMeta(response, response.summary.trend.previousBucket, locale)}`
-          : undefined,
-        helpText: 'Difference between the latest period with data and the previous period with data.',
-      });
-    }
-
-    return cards;
+    return response.metricResults.map((metricResult) => ({
+      metricKey: metricResult.metricKey,
+      title: metricResult.presentation.title,
+      summaryCards: buildAggregateSummaryCards(metricResult, unitSettings, locale),
+      isEmpty: metricResult.aggregation.buckets.length === 0,
+      emptyState: `No matching ${metricResult.metricLabel} data was found for this result scope.`,
+    }));
+  });
+  readonly multiMetricChartVisible = computed(() => {
+    const response = this.multiMetricOkResponse();
+    return !!response
+      && response.query.groupingMode === 'date'
+      && response.metricResults.some(metricResult => metricResult.aggregation.buckets.length > 0);
   });
   readonly eventLookupItems = computed<EventLookupDisplayItem[]>(() => {
     const response = this.eventLookupOkResponse();
@@ -915,6 +1083,10 @@ export class AiInsightsPageComponent {
   }
 
   async submitPrompt(promptOverride?: string): Promise<void> {
+    if (this.isPromptLocked()) {
+      return;
+    }
+
     const prompt = `${promptOverride ?? this.promptControl.getRawValue()}`.trim();
     if (!prompt) {
       this.promptControl.markAsTouched();
@@ -965,13 +1137,42 @@ export class AiInsightsPageComponent {
     }
   }
 
-  async applySuggestedPrompt(prompt: string, options: { logAnalytics?: boolean } = {}): Promise<void> {
-    if (this.isSubmitting() || !this.hasQuotaAvailable()) {
+  async openPromptPicker(): Promise<void> {
+    if (this.isPromptLocked() || !this.hasQuotaAvailable()) {
+      return;
+    }
+
+    const promptSource = this.pickerPromptSource();
+    const dialogRef = this.dialog.open(AiInsightsPromptPickerDialogComponent, {
+      autoFocus: false,
+      maxWidth: '44rem',
+      width: 'calc(100vw - 32px)',
+      data: {
+        promptGroups: this.pickerPromptGroups(),
+        promptSource,
+      },
+    });
+    const prompt = await firstValueFrom(dialogRef.afterClosed());
+    if (typeof prompt !== 'string' || !prompt.trim()) {
+      return;
+    }
+
+    await this.applySuggestedPrompt(prompt, { promptSource });
+  }
+
+  async applySuggestedPrompt(
+    prompt: string,
+    options: {
+      logAnalytics?: boolean;
+      promptSource?: 'default' | 'unsupported';
+    } = {},
+  ): Promise<void> {
+    if (this.isPromptLocked() || !this.hasQuotaAvailable()) {
       return;
     }
 
     if (options.logAnalytics !== false) {
-      const promptAnalytics = this.resolvePromptAnalytics(prompt);
+      const promptAnalytics = this.resolvePromptAnalytics(prompt, options.promptSource);
       this.logAiInsightsAction('suggested_prompt_select', {
         promptIndex: promptAnalytics.promptIndex,
         promptSource: promptAnalytics.promptSource,
@@ -984,11 +1185,11 @@ export class AiInsightsPageComponent {
 
   async onHeroPromptClick(): Promise<void> {
     const prompt = this.activeHeroPrompt().trim();
-    if (!prompt || this.isSubmitting() || !this.hasQuotaAvailable()) {
+    if (!prompt || this.isPromptLocked() || !this.hasQuotaAvailable()) {
       return;
     }
 
-    const promptAnalytics = this.resolvePromptAnalytics(prompt);
+    const promptAnalytics = this.resolvePromptAnalytics(prompt, 'default');
     this.logAiInsightsAction('hero_prompt_click', {
       promptIndex: promptAnalytics.promptIndex,
       promptSource: promptAnalytics.promptSource,
@@ -1010,7 +1211,7 @@ export class AiInsightsPageComponent {
   }
 
   clearPrompt(): void {
-    if (this.isSubmitting()) {
+    if (this.isPromptLocked()) {
       return;
     }
 
@@ -1039,16 +1240,21 @@ export class AiInsightsPageComponent {
     this.analyticsService.logEvent('ai_insights_action', eventParams);
   }
 
-  private resolvePromptAnalytics(prompt: string): {
+  private resolvePromptAnalytics(
+    prompt: string,
+    promptSource: 'default' | 'unsupported' = this.pickerPromptSource(),
+  ): {
     promptIndex: number | undefined;
     promptSource: 'default' | 'unsupported';
   } {
-    const prompts = [...this.suggestedPrompts()] as string[];
+    const prompts = promptSource === 'unsupported'
+      ? [...this.pickerPrompts()]
+      : [...AI_INSIGHTS_DEFAULT_PICKER_PROMPTS];
     const promptIndex = prompts.indexOf(prompt);
 
     return {
       promptIndex: promptIndex >= 0 ? promptIndex : undefined,
-      promptSource: this.unsupportedResponse()?.suggestedPrompts?.length ? 'unsupported' : 'default',
+      promptSource,
     };
   }
 

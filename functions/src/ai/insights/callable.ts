@@ -5,9 +5,14 @@ import type {
   AiInsightSummary,
   AiInsightsAggregateOkResponse,
   AiInsightsEventLookupOkResponse,
+  AiInsightsMultiMetricAggregateMetricResult,
+  AiInsightsMultiMetricAggregateOkResponse,
   AiInsightsQuotaStatusResponse,
   AiInsightsRequest,
   AiInsightsResponse,
+  NormalizedInsightAggregateQuery,
+  NormalizedInsightEventLookupQuery,
+  NormalizedInsightMultiMetricAggregateQuery,
 } from '../../../../shared/ai-insights.types';
 import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../../utils';
@@ -98,8 +103,14 @@ export async function runAiInsights(
     });
   }
 
-  const metric = getInsightMetricDefinition(normalizeResult.metricKey);
-  if (!metric) {
+  const effectiveQuery = normalizeResult.query;
+  const aggregateQueryInput = effectiveQuery.resultKind === 'aggregate' ? effectiveQuery : null;
+  const eventLookupQueryInput = effectiveQuery.resultKind === 'event_lookup' ? effectiveQuery : null;
+  const multiMetricQueryInput = effectiveQuery.resultKind === 'multi_metric_aggregate' ? effectiveQuery : null;
+  const metric = normalizeResult.metricKey
+    ? getInsightMetricDefinition(normalizeResult.metricKey)
+    : null;
+  if (effectiveQuery.resultKind !== 'multi_metric_aggregate' && !metric) {
     logger.warn('[aiInsights] Unsupported metric key after normalization', {
       userID: context.auth.uid,
       prompt,
@@ -110,32 +121,65 @@ export async function runAiInsights(
       sourceText: prompt,
     });
   }
-
-  const effectiveQuery = normalizeResult.query;
+  const multiMetricDefinitions = effectiveQuery.resultKind === 'multi_metric_aggregate'
+    ? effectiveQuery.metricSelections
+      .map((metricSelection) => ({
+        metricSelection,
+        metric: getInsightMetricDefinition(metricSelection.metricKey),
+      }))
+      .filter((entry): entry is { metricSelection: typeof effectiveQuery.metricSelections[number]; metric: NonNullable<ReturnType<typeof getInsightMetricDefinition>> } => Boolean(entry.metric))
+    : [];
+  if (
+    effectiveQuery.resultKind === 'multi_metric_aggregate'
+    && multiMetricDefinitions.length !== effectiveQuery.metricSelections.length
+  ) {
+    logger.warn('[aiInsights] Unsupported multi metric selection after normalization', {
+      userID: context.auth.uid,
+      prompt,
+      clientTimezone,
+      metricKeys: effectiveQuery.metricSelections.map(metricSelection => metricSelection.metricKey),
+    });
+    return buildUnsupportedResponse('unsupported_multi_metric_combination', initialQuotaStatus, {
+      sourceText: prompt,
+    });
+  }
   logger.info('[aiInsights] Query normalization debug', {
     prompt,
     userID: context.auth.uid,
     normalizedQuery: {
-      dataType: effectiveQuery.dataType,
-      valueType: effectiveQuery.valueType,
+      dataType: effectiveQuery.resultKind === 'multi_metric_aggregate'
+        ? null
+        : effectiveQuery.dataType,
+      valueType: effectiveQuery.resultKind === 'multi_metric_aggregate'
+        ? null
+        : effectiveQuery.valueType,
       categoryType: effectiveQuery.categoryType,
       requestedTimeInterval: effectiveQuery.requestedTimeInterval,
       chartType: effectiveQuery.chartType,
       activityTypesCount: effectiveQuery.activityTypes.length,
       activityTypeGroupsCount: effectiveQuery.activityTypeGroups.length,
+      metricSelectionCount: effectiveQuery.resultKind === 'multi_metric_aggregate'
+        ? effectiveQuery.metricSelections.length
+        : 1,
     },
   });
   const unitSettings = await loadUserUnitSettings(context.auth.uid);
   const executionResult = await executeAiInsightsQuery(context.auth.uid, effectiveQuery, prompt);
-  const presentation = buildInsightPresentation(effectiveQuery, metric.label);
+  const presentation = buildInsightPresentation(
+    effectiveQuery,
+    effectiveQuery.resultKind === 'multi_metric_aggregate'
+      ? multiMetricDefinitions.map(entry => entry.metric.label)
+      : (metric as NonNullable<typeof metric>).label,
+  );
   const emptyPresentation = {
     ...presentation,
     emptyState: DEFAULT_EMPTY_STATE,
   };
 
   const aggregateSummary = executionResult.resultKind === 'aggregate'
+    && aggregateQueryInput
     ? buildInsightSummary(
-      effectiveQuery,
+      aggregateQueryInput,
       executionResult.aggregation,
       executionResult.matchedEventsCount,
       executionResult.matchedActivityTypeCounts,
@@ -144,34 +188,89 @@ export async function runAiInsights(
   const eventLookupResult = executionResult.resultKind === 'event_lookup'
     ? executionResult.eventLookup
     : null;
+  const multiMetricResultGroups = executionResult.resultKind === 'multi_metric_aggregate'
+    && multiMetricQueryInput
+    ? executionResult.metricResults.map((metricResult) => {
+      const metricDefinition = multiMetricDefinitions.find(entry => entry.metricSelection.metricKey === metricResult.metricKey)?.metric;
+      const metricQuery: NormalizedInsightAggregateQuery = {
+        resultKind: 'aggregate' as const,
+        dataType: metricResult.aggregation.dataType,
+        valueType: metricResult.aggregation.valueType,
+        categoryType: metricResult.aggregation.categoryType as NormalizedInsightAggregateQuery['categoryType'],
+        requestedTimeInterval: multiMetricQueryInput.requestedTimeInterval,
+        activityTypeGroups: multiMetricQueryInput.activityTypeGroups,
+        activityTypes: multiMetricQueryInput.activityTypes,
+        dateRange: multiMetricQueryInput.dateRange,
+        chartType: multiMetricQueryInput.chartType,
+      };
+
+      return {
+        metricKey: metricResult.metricKey,
+        metricLabel: metricDefinition?.label ?? metricResult.metricKey,
+        query: metricQuery,
+        aggregation: metricResult.aggregation,
+        summary: buildInsightSummary(
+          multiMetricQueryInput.groupingMode === 'date'
+            ? metricQuery
+            : multiMetricQueryInput,
+          metricResult.aggregation,
+          metricResult.matchedEventsCount,
+          metricResult.matchedActivityTypeCounts,
+        ),
+        presentation: buildInsightPresentation(metricQuery, metricDefinition?.label ?? metricResult.metricKey),
+      } satisfies AiInsightsMultiMetricAggregateMetricResult;
+    })
+    : [];
   const isEmpty = executionResult.resultKind === 'aggregate'
     ? executionResult.aggregation.buckets.length === 0
-    : !eventLookupResult?.primaryEventId;
+    : executionResult.resultKind === 'event_lookup'
+      ? !eventLookupResult?.primaryEventId
+      : multiMetricResultGroups.every(metricResult => metricResult.aggregation.buckets.length === 0);
 
   const quotaReservation = await reserveAiInsightsQuotaForGenkit(context.auth.uid);
   let narrativeResult: Awaited<ReturnType<typeof summarizeAiInsightResult>>;
   try {
-    narrativeResult = await summarizeAiInsightResult({
-      status: isEmpty ? 'empty' : 'ok',
-      prompt,
-      metricLabel: metric.label,
-      query: effectiveQuery,
-      presentation: isEmpty ? emptyPresentation : presentation,
-      clientLocale: input.clientLocale,
-      unitSettings,
-      ...(executionResult.resultKind === 'aggregate'
-        ? {
-          aggregation: executionResult.aggregation,
-          summary: aggregateSummary as AiInsightSummary,
-        }
-        : {
-          eventLookup: {
-            matchedEventCount: executionResult.matchedEventsCount,
-            primaryEvent: eventLookupResult?.rankedEvents[0] ?? null,
-            rankedEvents: eventLookupResult?.rankedEvents.slice(0, 10) ?? [],
-          },
-        }),
-    });
+    if (executionResult.resultKind === 'aggregate' && aggregateQueryInput) {
+      narrativeResult = await summarizeAiInsightResult({
+        status: isEmpty ? 'empty' : 'ok',
+        prompt,
+        metricLabel: (metric as NonNullable<typeof metric>).label,
+        query: aggregateQueryInput,
+        aggregation: executionResult.aggregation,
+        summary: aggregateSummary as AiInsightSummary,
+        presentation: isEmpty ? emptyPresentation : presentation,
+        clientLocale: input.clientLocale,
+        unitSettings,
+      });
+    } else if (executionResult.resultKind === 'event_lookup' && eventLookupQueryInput) {
+      narrativeResult = await summarizeAiInsightResult({
+        status: isEmpty ? 'empty' : 'ok',
+        prompt,
+        metricLabel: (metric as NonNullable<typeof metric>).label,
+        query: eventLookupQueryInput,
+        eventLookup: {
+          matchedEventCount: executionResult.matchedEventsCount,
+          primaryEvent: eventLookupResult?.rankedEvents[0] ?? null,
+          rankedEvents: eventLookupResult?.rankedEvents.slice(0, 10) ?? [],
+        },
+        presentation: isEmpty ? emptyPresentation : presentation,
+        clientLocale: input.clientLocale,
+        unitSettings,
+      });
+    } else if (executionResult.resultKind === 'multi_metric_aggregate' && multiMetricQueryInput) {
+      narrativeResult = await summarizeAiInsightResult({
+        status: isEmpty ? 'empty' : 'ok',
+        prompt,
+        query: multiMetricQueryInput,
+        metricLabels: multiMetricDefinitions.map(entry => entry.metric.label),
+        metricResults: multiMetricResultGroups,
+        presentation: isEmpty ? emptyPresentation : presentation,
+        clientLocale: input.clientLocale,
+        unitSettings,
+      });
+    } else {
+      throw new HttpsError('internal', 'Could not summarize AI insights.');
+    }
   } catch (error) {
     try {
       await releaseAiInsightsQuotaReservation(quotaReservation);
@@ -203,16 +302,12 @@ export async function runAiInsights(
   }
 
   if (executionResult.resultKind === 'event_lookup') {
-    const eventLookupQuery = {
-      ...effectiveQuery,
-      resultKind: 'event_lookup' as const,
-    };
     return {
       status: 'ok',
       resultKind: 'event_lookup',
       narrative: narrativeResult.narrative,
       quota,
-      query: eventLookupQuery,
+      query: eventLookupQueryInput as NormalizedInsightEventLookupQuery,
       eventLookup: {
         primaryEventId: eventLookupResult?.primaryEventId as string,
         topEventIds: eventLookupResult?.topEventIds ?? [],
@@ -222,16 +317,24 @@ export async function runAiInsights(
     } satisfies AiInsightsEventLookupOkResponse;
   }
 
-  const aggregateQuery = {
-    ...effectiveQuery,
-    resultKind: 'aggregate' as const,
-  };
+  if (executionResult.resultKind === 'multi_metric_aggregate') {
+    return {
+      status: 'ok',
+      resultKind: 'multi_metric_aggregate',
+      narrative: narrativeResult.narrative,
+      quota,
+      query: multiMetricQueryInput as NormalizedInsightMultiMetricAggregateQuery,
+      metricResults: multiMetricResultGroups,
+      presentation,
+    } satisfies AiInsightsMultiMetricAggregateOkResponse;
+  }
+
   return {
     status: 'ok',
     resultKind: 'aggregate',
     narrative: narrativeResult.narrative,
     quota,
-    query: aggregateQuery,
+    query: aggregateQueryInput as NormalizedInsightAggregateQuery,
     aggregation: executionResult.aggregation,
     summary: aggregateSummary as AiInsightSummary,
     presentation,

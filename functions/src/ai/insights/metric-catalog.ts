@@ -33,31 +33,12 @@ import {
   DataVO2Max,
   DynamicDataLoader,
 } from '@sports-alliance/sports-lib';
+import {
+  getAiInsightsDefaultMetricPrompt,
+  type AiInsightsPromptMetricKey,
+} from '../../../../shared/ai-insights-prompts';
 
-export type InsightMetricKey =
-  | 'distance'
-  | 'duration'
-  | 'ascent'
-  | 'descent'
-  | 'cadence'
-  | 'power'
-  | 'heart_rate'
-  | 'speed'
-  | 'pace'
-  | 'grade_adjusted_pace'
-  | 'effort_pace'
-  | 'swim_pace'
-  | 'training_stress_score'
-  | 'normalized_power'
-  | 'intensity_factor'
-  | 'power_work'
-  | 'vo2_max'
-  | 'epoc'
-  | 'avg_vam'
-  | 'aerobic_training_effect'
-  | 'anaerobic_training_effect'
-  | 'recovery_time'
-  | 'calories';
+export type InsightMetricKey = AiInsightsPromptMetricKey;
 
 export interface InsightMetricDefinition {
   key: InsightMetricKey;
@@ -69,6 +50,13 @@ export interface InsightMetricDefinition {
   suggestedPrompt: string;
   familyType?: string;
   variantDataTypes?: Partial<Record<ChartDataValueTypes, string>>;
+}
+
+export interface InsightMetricAliasMatch {
+  metric: InsightMetricDefinition;
+  alias: string;
+  start: number;
+  end: number;
 }
 
 function normalizeMetricText(value: string): string {
@@ -85,6 +73,10 @@ function tokenizeMetricText(value: string): string[] {
   return normalized ? normalized.split(' ').filter(Boolean) : [];
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
   {
     key: 'distance',
@@ -98,7 +90,7 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
       ChartDataValueTypes.Minimum,
       ChartDataValueTypes.Maximum,
     ],
-    suggestedPrompt: 'Show my total distance by activity type this year.',
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('distance'),
   },
   {
     key: 'duration',
@@ -112,7 +104,7 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
       ChartDataValueTypes.Minimum,
       ChartDataValueTypes.Maximum,
     ],
-    suggestedPrompt: 'Show my total training duration over time this year.',
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('duration'),
   },
   {
     key: 'ascent',
@@ -126,7 +118,7 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
       ChartDataValueTypes.Minimum,
       ChartDataValueTypes.Maximum,
     ],
-    suggestedPrompt: 'Show my total ascent over time for trail running this year.',
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('ascent'),
   },
   {
     key: 'descent',
@@ -140,7 +132,7 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
       ChartDataValueTypes.Minimum,
       ChartDataValueTypes.Maximum,
     ],
-    suggestedPrompt: 'Show my total descent over time for skiing this year.',
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('descent'),
   },
   {
     key: 'cadence',
@@ -164,7 +156,7 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
       ChartDataValueTypes.Minimum,
       ChartDataValueTypes.Maximum,
     ],
-    suggestedPrompt: 'Tell me my average cadence for cycling over the last 3 months.',
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('cadence'),
     familyType: 'Cadence',
   },
   {
@@ -189,7 +181,7 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
       ChartDataValueTypes.Minimum,
       ChartDataValueTypes.Maximum,
     ],
-    suggestedPrompt: 'Show my average power over time for cycling in the last 90 days.',
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('power'),
     familyType: 'Power',
   },
   {
@@ -215,7 +207,7 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
       ChartDataValueTypes.Minimum,
       ChartDataValueTypes.Maximum,
     ],
-    suggestedPrompt: 'Show my average heart rate over time for running in the last 90 days.',
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('heart_rate'),
     familyType: 'Heart Rate',
   },
   {
@@ -239,7 +231,7 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
       ChartDataValueTypes.Minimum,
       ChartDataValueTypes.Maximum,
     ],
-    suggestedPrompt: 'Show my average speed over time for cycling in the last 3 months.',
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('speed'),
     familyType: 'Speed',
   },
   {
@@ -264,7 +256,7 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
       ChartDataValueTypes.Minimum,
       ChartDataValueTypes.Maximum,
     ],
-    suggestedPrompt: 'Show my average pace over time for running in the last 3 months.',
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('pace'),
     familyType: 'Pace',
     variantDataTypes: {
       [ChartDataValueTypes.Average]: DataPaceAvg.type,
@@ -297,7 +289,7 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
       ChartDataValueTypes.Minimum,
       ChartDataValueTypes.Maximum,
     ],
-    suggestedPrompt: 'Show my average grade adjusted pace over time for trail running in the last 90 days.',
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('grade_adjusted_pace'),
     familyType: 'Grade Adjusted Pace',
     variantDataTypes: {
       [ChartDataValueTypes.Average]: DataGradeAdjustedPaceAvg.type,
@@ -326,7 +318,7 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
       ChartDataValueTypes.Minimum,
       ChartDataValueTypes.Maximum,
     ],
-    suggestedPrompt: 'Show my average effort pace over time for running in the last 90 days.',
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('effort_pace'),
     familyType: 'Effort Pace',
     variantDataTypes: {
       [ChartDataValueTypes.Average]: DataEffortPaceAvg.type,
@@ -355,7 +347,7 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
       ChartDataValueTypes.Minimum,
       ChartDataValueTypes.Maximum,
     ],
-    suggestedPrompt: 'Show my average swim pace over time for swimming in the last 90 days.',
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('swim_pace'),
     variantDataTypes: {
       [ChartDataValueTypes.Average]: DataSwimPaceAvg.type,
       [ChartDataValueTypes.Minimum]: DataSwimPaceMin.type,
@@ -393,7 +385,7 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
       ChartDataValueTypes.Minimum,
       ChartDataValueTypes.Maximum,
     ],
-    suggestedPrompt: 'Show my total TSS over time for cycling in the last 90 days.',
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('training_stress_score'),
   },
   {
     key: 'normalized_power',
@@ -425,7 +417,7 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
       ChartDataValueTypes.Minimum,
       ChartDataValueTypes.Maximum,
     ],
-    suggestedPrompt: 'Show my average normalized power over time for cycling in the last 90 days.',
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('normalized_power'),
   },
   {
     key: 'intensity_factor',
@@ -448,7 +440,7 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
       ChartDataValueTypes.Minimum,
       ChartDataValueTypes.Maximum,
     ],
-    suggestedPrompt: 'Show my average intensity factor over time for cycling in the last 90 days.',
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('intensity_factor'),
   },
   {
     key: 'power_work',
@@ -473,7 +465,7 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
       ChartDataValueTypes.Minimum,
       ChartDataValueTypes.Maximum,
     ],
-    suggestedPrompt: 'Show my total power work over time for cycling in the last 90 days.',
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('power_work'),
   },
   {
     key: 'vo2_max',
@@ -497,7 +489,7 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
       ChartDataValueTypes.Minimum,
       ChartDataValueTypes.Maximum,
     ],
-    suggestedPrompt: 'Show my average VO2 max over time for running in the last 90 days.',
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('vo2_max'),
   },
   {
     key: 'epoc',
@@ -520,7 +512,7 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
       ChartDataValueTypes.Minimum,
       ChartDataValueTypes.Maximum,
     ],
-    suggestedPrompt: 'Show my average EPOC over time for running in the last 90 days.',
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('epoc'),
   },
   {
     key: 'avg_vam',
@@ -543,7 +535,7 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
       ChartDataValueTypes.Minimum,
       ChartDataValueTypes.Maximum,
     ],
-    suggestedPrompt: 'Show my average VAM over time for climbing activities in the last 90 days.',
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('avg_vam'),
   },
   {
     key: 'aerobic_training_effect',
@@ -567,7 +559,7 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
       ChartDataValueTypes.Minimum,
       ChartDataValueTypes.Maximum,
     ],
-    suggestedPrompt: 'Show my average aerobic training effect over time for running in the last 90 days.',
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('aerobic_training_effect'),
   },
   {
     key: 'anaerobic_training_effect',
@@ -591,7 +583,7 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
       ChartDataValueTypes.Minimum,
       ChartDataValueTypes.Maximum,
     ],
-    suggestedPrompt: 'Show my average anaerobic training effect over time for cycling in the last 90 days.',
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('anaerobic_training_effect'),
   },
   {
     key: 'recovery_time',
@@ -614,7 +606,7 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
       ChartDataValueTypes.Minimum,
       ChartDataValueTypes.Maximum,
     ],
-    suggestedPrompt: 'Show my average recovery time over time for running in the last 90 days.',
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('recovery_time'),
   },
   {
     key: 'calories',
@@ -628,7 +620,7 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
       ChartDataValueTypes.Minimum,
       ChartDataValueTypes.Maximum,
     ],
-    suggestedPrompt: 'Show my total calories burned over time in the last 90 days.',
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('calories'),
   },
 ] as const;
 
@@ -717,27 +709,78 @@ export function resolveInsightMetric(
 export function findInsightMetricAliasMatch(
   sourceText: string,
 ): { metric: InsightMetricDefinition; alias: string } | null {
-  const normalizedSource = normalizeMetricText(sourceText);
-  if (!normalizedSource) {
+  const matches = findInsightMetricAliasMatches(sourceText);
+  if (!matches.length) {
     return null;
   }
 
-  const candidates = SUPPORTED_INSIGHT_METRICS.flatMap((metric) => {
-    const searchTerms = [...new Set([
-      metric.key,
-      metric.dataType,
-      metric.label,
-      ...metric.aliases,
-    ])]
-      .map(alias => normalizeMetricText(alias))
-      .filter(Boolean)
-      .sort((left, right) => right.length - left.length);
+  const [{ metric, alias }] = matches;
+  return { metric, alias };
+}
 
-    return searchTerms.map((alias) => ({ metric, alias }));
-  })
-    .sort((left, right) => right.alias.length - left.alias.length);
+export function findInsightMetricAliasMatches(
+  sourceText: string,
+): InsightMetricAliasMatch[] {
+  const normalizedSource = normalizeMetricText(sourceText);
+  if (!normalizedSource) {
+    return [];
+  }
 
-  return candidates.find(({ alias }) => normalizedSource.includes(alias)) || null;
+  const metricMatches = SUPPORTED_INSIGHT_METRICS
+    .map((metric) => {
+      const aliases = [...new Set([
+        metric.key,
+        metric.dataType,
+        metric.label,
+        ...metric.aliases,
+      ])]
+        .map(alias => normalizeMetricText(alias))
+        .filter(Boolean)
+        .sort((left, right) => right.length - left.length);
+
+      let bestMatch: InsightMetricAliasMatch | null = null;
+      for (const alias of aliases) {
+        const pattern = new RegExp(`(^|\\s)(${escapeRegExp(alias)})(?=$|\\s)`, 'g');
+        let match: RegExpExecArray | null = pattern.exec(normalizedSource);
+        while (match) {
+          const start = match.index + match[1].length;
+          const end = start + match[2].length;
+          if (
+            !bestMatch
+            || start < bestMatch.start
+            || (start === bestMatch.start && alias.length > bestMatch.alias.length)
+          ) {
+            bestMatch = {
+              metric,
+              alias,
+              start,
+              end,
+            };
+          }
+          match = pattern.exec(normalizedSource);
+        }
+      }
+
+      return bestMatch;
+    })
+    .filter((match): match is InsightMetricAliasMatch => match !== null)
+    .sort((left, right) => (
+      left.start - right.start
+      || right.alias.length - left.alias.length
+      || left.metric.key.localeCompare(right.metric.key)
+    ));
+
+  const nonOverlappingMatches: InsightMetricAliasMatch[] = [];
+  for (const match of metricMatches) {
+    const overlaps = nonOverlappingMatches.some(existing => (
+      match.start < existing.end && match.end > existing.start
+    ));
+    if (!overlaps) {
+      nonOverlappingMatches.push(match);
+    }
+  }
+
+  return nonOverlappingMatches;
 }
 
 export function resolveMetricVariantAlias(

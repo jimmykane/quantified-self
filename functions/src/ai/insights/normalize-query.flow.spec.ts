@@ -13,6 +13,7 @@ import {
   DataGradeAdjustedPaceAvg,
   DataHeartRateAvg,
   DataHeartRateMax,
+  DataPowerAvg,
   DataPowerNormalized,
   DataPowerTrainingStressScore,
   DataRecoveryTime,
@@ -296,6 +297,93 @@ describe('normalizeInsightQuery', () => {
       endDate: '2026-03-19T23:59:59.999Z',
       timezone: 'UTC',
       source: 'default',
+    });
+  });
+
+  it('resolves shared-average multi-metric prompts to multi-metric over-time mode', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-19T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show me avg cadence and avg power for the last 3 months for cycling',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.resultKind).toBe('multi_metric_aggregate');
+    if (result.query.resultKind !== 'multi_metric_aggregate') {
+      return;
+    }
+
+    expect(result.query.groupingMode).toBe('date');
+    expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Monthly);
+    expect(result.query.activityTypes).toEqual([ActivityTypes.Cycling]);
+    expect(result.query.metricSelections).toEqual([
+      {
+        metricKey: 'cadence',
+        dataType: DataCadenceAvg.type,
+        valueType: ChartDataValueTypes.Average,
+      },
+      {
+        metricKey: 'power',
+        dataType: DataPowerAvg.type,
+        valueType: ChartDataValueTypes.Average,
+      },
+    ]);
+  });
+
+  it('defaults multi-metric prompts without grouping wording to overall summaries only', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-19T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show me cadence, power, and heart rate for cycling',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok' || result.query.resultKind !== 'multi_metric_aggregate') {
+      return;
+    }
+
+    expect(result.query.groupingMode).toBe('overall');
+    expect(result.query.requestedTimeInterval).toBeUndefined();
+    expect(result.query.metricSelections.map(metric => metric.metricKey)).toEqual([
+      'cadence',
+      'power',
+      'heart_rate',
+    ]);
+  });
+
+  it('rejects multi-metric prompts with more than three metrics', async () => {
+    const result = await normalizeInsightQuery({
+      prompt: 'Show me cadence, power, heart rate, and speed for cycling',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result).toEqual({
+      status: 'unsupported',
+      reasonCode: 'too_many_metrics',
+      suggestedPrompts: expect.any(Array),
+    });
+  });
+
+  it('rejects mixed-aggregation multi-metric prompts', async () => {
+    const result = await normalizeInsightQuery({
+      prompt: 'Show me avg cadence and max power for cycling',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result).toEqual({
+      status: 'unsupported',
+      reasonCode: 'unsupported_multi_metric_combination',
+      suggestedPrompts: expect.any(Array),
     });
   });
 

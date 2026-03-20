@@ -139,6 +139,29 @@ const eventLookupQuery = {
   chartType: ChartTypes.LinesVertical,
 };
 
+const multiMetricQuery = {
+  resultKind: 'multi_metric_aggregate' as const,
+  groupingMode: 'date' as const,
+  categoryType: ChartDataCategoryTypes.DateType,
+  requestedTimeInterval: TimeIntervals.Monthly,
+  activityTypeGroups: [],
+  activityTypes: [ActivityTypes.Cycling],
+  dateRange: normalizedQuery.dateRange,
+  chartType: ChartTypes.LinesVertical,
+  metricSelections: [
+    {
+      metricKey: 'cadence',
+      dataType: 'Average Cadence',
+      valueType: ChartDataValueTypes.Average,
+    },
+    {
+      metricKey: 'power',
+      dataType: 'Average Power',
+      valueType: ChartDataValueTypes.Average,
+    },
+  ],
+};
+
 const summary = {
   matchedEventCount: 2,
   overallAggregateValue: 123,
@@ -345,6 +368,109 @@ describe('aiInsights callable', () => {
         limit: 50,
       }),
     });
+  });
+
+  it('returns a multi-metric aggregate response from one prompt', async () => {
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'ok',
+      query: multiMetricQuery,
+    });
+    hoisted.getInsightMetricDefinition.mockImplementation((metricKey: string) => {
+      if (metricKey === 'cadence') {
+        return { key: 'cadence', label: 'cadence' };
+      }
+      if (metricKey === 'power') {
+        return { key: 'power', label: 'power' };
+      }
+      return null;
+    });
+    hoisted.executeAiInsightsQuery.mockResolvedValue({
+      resultKind: 'multi_metric_aggregate',
+      matchedEventsCount: 3,
+      matchedActivityTypeCounts: [
+        {
+          activityType: ActivityTypes.Cycling,
+          eventCount: 3,
+        },
+      ],
+      metricResults: [
+        {
+          metricKey: 'cadence',
+          matchedEventsCount: 3,
+          matchedActivityTypeCounts: [
+            {
+              activityType: ActivityTypes.Cycling,
+              eventCount: 3,
+            },
+          ],
+          aggregation: {
+            dataType: 'Average Cadence',
+            valueType: ChartDataValueTypes.Average,
+            categoryType: ChartDataCategoryTypes.DateType,
+            resolvedTimeInterval: TimeIntervals.Monthly,
+            buckets: [
+              {
+                bucketKey: 1,
+                time: 1,
+                totalCount: 3,
+                aggregateValue: 90,
+                seriesValues: { Cycling: 90 },
+                seriesCounts: { Cycling: 3 },
+              },
+            ],
+          },
+        },
+        {
+          metricKey: 'power',
+          matchedEventsCount: 2,
+          matchedActivityTypeCounts: [
+            {
+              activityType: ActivityTypes.Cycling,
+              eventCount: 2,
+            },
+          ],
+          aggregation: {
+            dataType: 'Average Power',
+            valueType: ChartDataValueTypes.Average,
+            categoryType: ChartDataCategoryTypes.DateType,
+            resolvedTimeInterval: TimeIntervals.Monthly,
+            buckets: [
+              {
+                bucketKey: 1,
+                time: 1,
+                totalCount: 2,
+                aggregateValue: 220,
+                seriesValues: { Cycling: 220 },
+                seriesCounts: { Cycling: 2 },
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    const result = await aiInsights({
+      prompt: 'show me avg cadence and avg power for the last 3 months for cycling',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(result).toMatchObject({
+      status: 'ok',
+      resultKind: 'multi_metric_aggregate',
+      query: multiMetricQuery,
+      metricResults: [
+        {
+          metricKey: 'cadence',
+          metricLabel: 'cadence',
+        },
+        {
+          metricKey: 'power',
+          metricLabel: 'power',
+        },
+      ],
+    });
+    expect(hoisted.reserveAiInsightsQuotaForGenkit).toHaveBeenCalledTimes(1);
+    expect(hoisted.summarizeAiInsightResult).toHaveBeenCalledTimes(1);
   });
 
   it('returns an ok response when aggregation buckets exist', async () => {

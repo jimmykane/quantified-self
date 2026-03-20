@@ -1,6 +1,6 @@
 .impersonation-banner {
   position: sticky;
-  top: var(--qs-layout-top-offset, 0px);
+  top: var(--qs-visible-top-offset, var(--qs-layout-top-offset, 0px));
   z-index: 3;
   display: flex;
   align-items: center;

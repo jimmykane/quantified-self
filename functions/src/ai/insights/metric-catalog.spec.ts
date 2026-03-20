@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ChartDataValueTypes } from '@sports-alliance/sports-lib';
+import { getAiInsightsPromptEntriesBySurface } from '../../../../shared/ai-insights-prompts';
 
 vi.mock('@sports-alliance/sports-lib', async (importOriginal) => await importOriginal());
 
@@ -109,5 +110,15 @@ describe('metric-catalog', () => {
     expect(getSuggestedInsightPrompts(3, 'show swim pace per lap')[0]).toBe(
       'Show my average swim pace over time for swimming in the last 90 days.',
     );
+  });
+
+  it('returns unique unsupported suggestions from the shared prompt catalog', () => {
+    const sharedUnsupportedPromptSet = new Set(
+      getAiInsightsPromptEntriesBySurface('unsupported').map((prompt) => prompt.prompt),
+    );
+    const suggestions = getSuggestedInsightPrompts(5, 'show cadence per lap and splits');
+
+    expect(new Set(suggestions).size).toBe(suggestions.length);
+    expect(suggestions.every((prompt) => sharedUnsupportedPromptSet.has(prompt))).toBe(true);
   });
 });

@@ -15,7 +15,7 @@
         <button
           type="button"
           class="hero-prompt-rotator"
-          [disabled]="isSubmitting() || !hasQuotaAvailable()"
+          [disabled]="isPromptLocked() || !hasQuotaAvailable()"
           (click)="onHeroPromptClick()"
           [attr.aria-label]="'Example prompt: ' + activeHeroPrompt()"
           [attr.title]="activeHeroPrompt()">
@@ -51,13 +51,13 @@
                 matInput
                 type="text"
                 [formControl]="promptControl"
-                placeholder="Tell me my avg cadence for cycling the last 3 months" />
+                [placeholder]="promptPlaceholder" />
               @if (promptValue().trim().length > 0) {
                 <button
                   mat-icon-button
                   matSuffix
                   type="button"
-                  [disabled]="isSubmitting()"
+                  [disabled]="isPromptLocked()"
                   (click)="clearPrompt()"
                   aria-label="Clear prompt">
                   <mat-icon>close</mat-icon>
@@ -74,17 +74,17 @@
               </div>
 
               <div class="suggestion-actions">
-                <span matTooltip="Suggested prompts">
-                  <button
-                    mat-icon-button
-                    type="button"
-                    class="qs-action-menu-icon-button suggestion-menu-trigger"
-                    [disabled]="isSubmitting() || !hasQuotaAvailable()"
-                    [matMenuTriggerFor]="suggestedPromptsMenu"
-                    aria-label="Suggested prompts">
-                    <mat-icon>auto_awesome</mat-icon>
-                  </button>
-                </span>
+                <button
+                  mat-stroked-button
+                  type="button"
+                  class="suggestion-picker-button"
+                  [disabled]="isPromptLocked() || !hasQuotaAvailable()"
+                  [attr.aria-label]="promptPickerTitle()"
+                  [matTooltip]="promptPickerButtonTooltip()"
+                  (click)="openPromptPicker()">
+                  <mat-icon>auto_awesome</mat-icon>
+                  <span>{{ promptPickerButtonLabel() }}</span>
+                </button>
               </div>
             </div>
 
@@ -93,19 +93,6 @@
             }
             <p class="mat-body-small prompt-support-note">{{ latestSnapshotSupportNote() }}</p>
           </form>
-
-          <mat-menu #suggestedPromptsMenu="matMenu" xPosition="before" yPosition="below" class="qs-menu-panel">
-            @for (prompt of suggestedPrompts(); track prompt) {
-              <button
-                mat-menu-item
-                type="button"
-                class="suggestion-menu-item"
-                [disabled]="isSubmitting() || !hasQuotaAvailable()"
-                (click)="applySuggestedPrompt(prompt)">
-                <span class="suggestion-menu-item-label">{{ prompt }}</span>
-              </button>
-            }
-          </mat-menu>
         </mat-card-content>
       </mat-card>
 
@@ -134,12 +121,99 @@
           }
 
           @if (isSubmitting()) {
-            <app-ai-insights-loading-state
-              title="Generating insight"
-              eyebrow="Crunching data"
-              [copy]="'Parsing your prompt, querying your event stats, and preparing the chart.'"
-              [steps]="generationLoadingSteps">
-            </app-ai-insights-loading-state>
+            <div class="result-content result-content--loading">
+              <div class="result-loading-status" aria-live="polite">
+                <div class="result-loading-status-row">
+                  <mat-chip-set aria-label="Insight generation progress">
+                    <mat-chip disableRipple class="result-loading-step-chip">
+                      Step {{ generationLoadingProgressLabel() }}
+                    </mat-chip>
+                  </mat-chip-set>
+
+                  <div class="result-loading-roller" [attr.aria-label]="'Progress: ' + generationLoadingActiveStep()">
+                    <div class="result-loading-roller-window">
+                      <div class="result-loading-roller-track" [style.transform]="generationLoadingRollerTransform()">
+                        @for (step of generationLoadingSteps; track step; let stepIndex = $index) {
+                          <div
+                            class="result-loading-roller-row"
+                            [class.result-loading-roller-row--active]="stepIndex === generationLoadingStepIndex()">
+                            <span class="result-loading-roller-dot" aria-hidden="true"></span>
+                            <span class="mat-body-small">{{ step }}</span>
+                          </div>
+                        }
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <mat-progress-bar class="result-loading-progress" mode="indeterminate"></mat-progress-bar>
+              </div>
+
+              <div class="result-loading-narrative" aria-hidden="true">
+                <span class="result-loading-skeleton result-loading-skeleton--line result-loading-skeleton--line-wide"></span>
+                <span class="result-loading-skeleton result-loading-skeleton--line result-loading-skeleton--line-medium"></span>
+                <span class="result-loading-skeleton result-loading-skeleton--line result-loading-skeleton--line-short"></span>
+              </div>
+
+              <div class="section-heading result-loading-section-heading" aria-hidden="true">
+                <div>
+                  <p class="mat-label-medium suggestions-title">Summary</p>
+                  <p class="mat-body-small section-supporting-copy">Preparing deterministic values and chart-ready buckets.</p>
+                </div>
+              </div>
+
+              <div class="summary-grid summary-grid--loading" aria-hidden="true">
+                @for (item of loadingSummarySkeletonItems; track item) {
+                  <section class="summary-card summary-card--loading">
+                    <div class="summary-label-row">
+                      <span class="result-loading-skeleton result-loading-skeleton--summary-label"></span>
+                    </div>
+                    <span class="result-loading-skeleton result-loading-skeleton--summary-value"></span>
+                    <span class="result-loading-skeleton result-loading-skeleton--summary-meta"></span>
+                  </section>
+                }
+              </div>
+
+              <mat-divider></mat-divider>
+
+              <div class="result-loading-chart-shell" aria-hidden="true">
+                <div class="result-loading-chart-frame">
+                  <div class="result-loading-chart-y-axis">
+                    <span class="result-loading-skeleton result-loading-skeleton--axis-label"></span>
+                    <span class="result-loading-skeleton result-loading-skeleton--axis-label"></span>
+                    <span class="result-loading-skeleton result-loading-skeleton--axis-label"></span>
+                    <span class="result-loading-skeleton result-loading-skeleton--axis-label"></span>
+                  </div>
+
+                  <div class="result-loading-chart-plot">
+                    <div class="result-loading-chart-grid-lines">
+                      <span></span>
+                      <span></span>
+                      <span></span>
+                      <span></span>
+                    </div>
+
+                    <div class="result-loading-chart-bars">
+                      @for (barHeight of loadingChartSkeletonBars; track barHeight) {
+                        <span
+                          class="result-loading-skeleton result-loading-skeleton--bar"
+                          [style.--ai-insights-loading-bar-height]="barHeight">
+                        </span>
+                      }
+                    </div>
+
+                    <div class="result-loading-chart-x-axis">
+                      <span class="result-loading-skeleton result-loading-skeleton--tick"></span>
+                      <span class="result-loading-skeleton result-loading-skeleton--tick"></span>
+                      <span class="result-loading-skeleton result-loading-skeleton--tick"></span>
+                      <span class="result-loading-skeleton result-loading-skeleton--tick"></span>
+                      <span class="result-loading-skeleton result-loading-skeleton--tick"></span>
+                      <span class="result-loading-skeleton result-loading-skeleton--tick"></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           } @else if (errorMessage(); as errorMessage) {
             <div class="state-panel state-panel-error">
               <mat-icon>error</mat-icon>
@@ -289,6 +363,127 @@
                           Open
                         </button>
                       </div>
+                    </section>
+                  }
+                </div>
+              }
+            </div>
+          } @else if (multiMetricOkResponse(); as result) {
+            <div class="result-content">
+              <div class="result-header">
+                <p class="result-title">{{ result.presentation.title }}</p>
+                <p class="result-subtitle">{{ resultSubtitle() }}</p>
+                @if (resultDateRangeNote(); as dateRangeNote) {
+                  <div class="result-date-range-note">
+                    <mat-icon>info</mat-icon>
+                    <p class="mat-body-small">{{ dateRangeNote }}</p>
+                  </div>
+                }
+                @if (canRefreshResult()) {
+                  <div class="result-actions">
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      class="result-refresh-button"
+                      [disabled]="isSubmitting()"
+                      (click)="refreshCurrentResult()">
+                      <mat-icon>refresh</mat-icon>
+                      <span>Refresh with latest data &amp; dates</span>
+                    </button>
+                  </div>
+                }
+              </div>
+
+              <p class="narrative">{{ result.narrative }}</p>
+
+              @if (resultWarnings().length) {
+                <mat-chip-set class="warning-chips" aria-label="Insight warnings">
+                  @for (warning of resultWarnings(); track warning) {
+                    <mat-chip disableRipple>{{ warning }}</mat-chip>
+                  }
+                </mat-chip-set>
+              }
+
+              @if (multiMetricChartVisible()) {
+                <div class="section-heading">
+                  <div>
+                    <p class="mat-label-medium suggestions-title">Combined chart</p>
+                    <p class="mat-body-small section-supporting-copy">Each metric keeps its own raw scale while sharing the same time axis.</p>
+                  </div>
+                </div>
+
+                <app-ai-insights-multi-metric-chart
+                  [response]="result"
+                  [darkTheme]="isDarkTheme()"
+                  [useAnimations]="useAnimations()"
+                  [userUnitSettings]="userUnitSettings()">
+                </app-ai-insights-multi-metric-chart>
+
+                <mat-divider></mat-divider>
+              }
+
+              @if (multiMetricSections().length) {
+                <div class="section-heading">
+                  <div>
+                    <p class="mat-label-medium suggestions-title">Metrics</p>
+                    <p class="mat-body-small section-supporting-copy">Each metric keeps its own deterministic summary cards.</p>
+                  </div>
+                </div>
+
+                <div class="multi-metric-section-list">
+                  @for (metricSection of multiMetricSections(); track metricSection.metricKey) {
+                    <section class="multi-metric-section">
+                      <div class="multi-metric-section-header">
+                        <p class="result-subtitle">{{ metricSection.title }}</p>
+                      </div>
+
+                      @if (metricSection.isEmpty) {
+                        <div class="state-panel">
+                          <mat-icon>search_off</mat-icon>
+                          <div>
+                            <p class="mat-title-medium state-title">No metric data</p>
+                            <p class="mat-body-medium state-copy">{{ metricSection.emptyState }}</p>
+                          </div>
+                        </div>
+                      } @else if (metricSection.summaryCards.length) {
+                        <div class="summary-grid">
+                          @for (summaryCard of metricSection.summaryCards; track summaryCard.label) {
+                            <section class="summary-card">
+                              <div class="summary-label-row">
+                                <p class="mat-label-medium summary-label">{{ summaryCard.label }}</p>
+                                @if (summaryCard.helpText) {
+                                  <button
+                                    mat-icon-button
+                                    type="button"
+                                    class="summary-help-button"
+                                    [attr.aria-label]="'Explain ' + summaryCard.label"
+                                    [matTooltip]="summaryCard.helpText"
+                                    matTooltipPosition="above">
+                                    <mat-icon>info</mat-icon>
+                                  </button>
+                                }
+                              </div>
+                              <p class="summary-value">{{ summaryCard.value }}</p>
+                              @if (summaryCard.detailRows?.length) {
+                                <div class="summary-detail-list">
+                                  @for (detailRow of summaryCard.detailRows; track detailRow.label) {
+                                    <div class="summary-detail-row">
+                                      <span class="summary-detail-label">{{ detailRow.label }}</span>
+                                      <span class="summary-detail-value">{{ detailRow.value }}</span>
+                                    </div>
+                                  }
+                                </div>
+                              }
+                              @if (summaryCard.metaFooter) {
+                                <p class="summary-meta">{{ summaryCard.metaFooter }}</p>
+                              }
+                              @if (summaryCard.meta) {
+                                <p class="summary-meta">{{ summaryCard.meta }}</p>
+                              }
+                            </section>
+                          }
+                        </div>
+                      }
                     </section>
                   }
                 </div>

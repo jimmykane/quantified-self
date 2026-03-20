@@ -1,8 +1,21 @@
-export const AI_INSIGHTS_SUGGESTED_PROMPTS = [
-  'Tell me my avg cadence for cycling the last 3 months',
-  'Show my total distance by activity type this year',
-  'What was my highest average heart rate last month',
-  'Show my max heart rate last month as stacked columns by activity type over time',
-  'Show my average pace for running over the last 90 days',
-  'Show my total distance for all activities all time',
-] as const;
+import {
+  getAiInsightsHeroPrompts,
+  getAiInsightsPickerPromptGroups,
+  getAiInsightsPromptGroupsForPrompts,
+  type AiInsightsPromptGroup,
+} from '@shared/ai-insights-prompts';
+
+export const AI_INSIGHTS_FEATURED_PROMPTS = getAiInsightsHeroPrompts();
+export const AI_INSIGHTS_DEFAULT_PROMPT_GROUPS = getAiInsightsPickerPromptGroups();
+export const AI_INSIGHTS_DEFAULT_PICKER_PROMPTS = AI_INSIGHTS_DEFAULT_PROMPT_GROUPS
+  .flatMap((group) => group.prompts.map((prompt) => prompt.prompt));
+
+export function resolveAiInsightsPromptGroups(
+  prompts: readonly string[] | null | undefined,
+): readonly AiInsightsPromptGroup[] {
+  return prompts?.length
+    ? getAiInsightsPromptGroupsForPrompts(prompts)
+    : AI_INSIGHTS_DEFAULT_PROMPT_GROUPS;
+}
+
+export type { AiInsightsPromptGroup };

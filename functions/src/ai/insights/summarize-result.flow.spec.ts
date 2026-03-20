@@ -269,6 +269,112 @@ describe('summarizeAiInsightResult', () => {
     expect(result.narrative).not.toContain('422.3478623928474');
   });
 
+  it('builds a fallback narrative for multi-metric aggregate results', async () => {
+    setSummarizeInsightDependenciesForTesting({
+      generateNarrative: async () => {
+        throw new Error('generation failed');
+      },
+    });
+
+    const result = await summarizeAiInsightResult({
+      status: 'ok',
+      prompt: 'show me avg cadence and avg power for the last 3 months for cycling',
+      query: {
+        resultKind: 'multi_metric_aggregate',
+        groupingMode: 'date',
+        categoryType: ChartDataCategoryTypes.DateType,
+        requestedTimeInterval: TimeIntervals.Monthly,
+        activityTypeGroups: [],
+        activityTypes: [ActivityTypes.Cycling],
+        dateRange: {
+          kind: 'bounded',
+          startDate: '2026-01-01T00:00:00.000Z',
+          endDate: '2026-03-18T23:59:59.999Z',
+          timezone: 'Europe/Helsinki',
+          source: 'prompt',
+        },
+        chartType: ChartTypes.LinesVertical,
+        metricSelections: [
+          {
+            metricKey: 'cadence',
+            dataType: 'Average Cadence',
+            valueType: ChartDataValueTypes.Average,
+          },
+          {
+            metricKey: 'power',
+            dataType: 'Average Power',
+            valueType: ChartDataValueTypes.Average,
+          },
+        ],
+      },
+      metricLabels: ['cadence', 'power'],
+      metricResults: [
+        {
+          metricKey: 'cadence',
+          metricLabel: 'cadence',
+          query: {
+            ...paceInput.query,
+            resultKind: 'aggregate',
+            dataType: 'Average Cadence',
+          },
+          aggregation: {
+            ...paceInput.aggregation,
+            dataType: 'Average Cadence',
+          },
+          summary: {
+            ...paceSummary,
+            overallAggregateValue: 88,
+            latestBucket: {
+              bucketKey: '2026-03',
+              time: Date.parse('2026-03-01T00:00:00.000Z'),
+              aggregateValue: 88,
+              totalCount: 5,
+            },
+          },
+          presentation: {
+            title: 'Cadence over time for Cycling',
+            chartType: ChartTypes.LinesVertical,
+          },
+        },
+        {
+          metricKey: 'power',
+          metricLabel: 'power',
+          query: {
+            ...paceInput.query,
+            resultKind: 'aggregate',
+            dataType: 'Average Power',
+          },
+          aggregation: {
+            ...paceInput.aggregation,
+            dataType: 'Average Power',
+          },
+          summary: {
+            ...paceSummary,
+            overallAggregateValue: 220,
+            latestBucket: {
+              bucketKey: '2026-03',
+              time: Date.parse('2026-03-01T00:00:00.000Z'),
+              aggregateValue: 220,
+              totalCount: 4,
+            },
+          },
+          presentation: {
+            title: 'Power over time for Cycling',
+            chartType: ChartTypes.LinesVertical,
+          },
+        },
+      ],
+      presentation: {
+        title: 'Cadence and power over time for Cycling',
+        chartType: ChartTypes.LinesVertical,
+      },
+    });
+
+    expect(result.source).toBe('fallback');
+    expect(result.narrative.toLowerCase()).toContain('cadence');
+    expect(result.narrative.toLowerCase()).toContain('power');
+  });
+
   it('formats bounded narrative date ranges using the client locale and query timezone', async () => {
     setSummarizeInsightDependenciesForTesting({
       generateNarrative: async () => {

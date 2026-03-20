@@ -17,6 +17,8 @@ import type {
   AiInsightsAggregateOkResponse,
   AiInsightsEventLookupOkResponse,
   AiInsightsLatestSnapshot,
+  AiInsightsMultiMetricAggregateMetricResult,
+  AiInsightsMultiMetricAggregateOkResponse,
   AiInsightsQuotaStatus,
   AiInsightsResultKind,
   AiInsightsResponse,
@@ -39,15 +41,10 @@ export type AiInsightsLatestSnapshotSaveResult =
   | 'failed';
 
 type UnknownRecord = Record<string, unknown>;
-type NormalizedInsightQueryLike = Omit<NormalizedInsightQuery, 'resultKind'> & {
-  resultKind?: AiInsightsResultKind;
-};
-type AggregateNormalizedInsightQuery = NormalizedInsightQuery & {
-  resultKind: 'aggregate';
-};
-type EventLookupNormalizedInsightQuery = NormalizedInsightQuery & {
-  resultKind: 'event_lookup';
-};
+type NormalizedInsightQueryLike = UnknownRecord;
+type AggregateNormalizedInsightQuery = Extract<NormalizedInsightQuery, { resultKind: 'aggregate' }>;
+type EventLookupNormalizedInsightQuery = Extract<NormalizedInsightQuery, { resultKind: 'event_lookup' }>;
+type MultiMetricNormalizedInsightQuery = Extract<NormalizedInsightQuery, { resultKind: 'multi_metric_aggregate' }>;
 type SnapshotValidationFailure = {
   reason: string;
   details?: UnknownRecord;
@@ -175,7 +172,7 @@ function isQuotaStatus(value: unknown): value is AiInsightsQuotaStatus {
 }
 
 function isResultKind(value: unknown): value is AiInsightsResultKind {
-  return value === 'aggregate' || value === 'event_lookup';
+  return value === 'aggregate' || value === 'event_lookup' || value === 'multi_metric_aggregate';
 }
 
 function isNormalizedInsightDateRange(value: unknown): value is NormalizedInsightDateRange {
@@ -199,17 +196,35 @@ function isNormalizedInsightDateRange(value: unknown): value is NormalizedInsigh
 }
 
 function isNormalizedInsightQuery(value: unknown): value is NormalizedInsightQueryLike {
+  if (
+    !isRecord(value)
+    || (value.resultKind !== undefined && value.resultKind !== null && !isResultKind(value.resultKind))
+    || !isEnumPrimitive(value.categoryType)
+    || (value.requestedTimeInterval !== undefined && value.requestedTimeInterval !== null && !isEnumPrimitive(value.requestedTimeInterval))
+    || !isStringArray(value.activityTypeGroups)
+    || !isStringArray(value.activityTypes)
+    || !isNormalizedInsightDateRange(value.dateRange)
+    || !isEnumPrimitive(value.chartType)
+  ) {
+    return false;
+  }
+
+  if (value.resultKind === 'multi_metric_aggregate' || Array.isArray(value.metricSelections)) {
+    return (
+      (value.groupingMode === 'overall' || value.groupingMode === 'date')
+      && Array.isArray(value.metricSelections)
+      && value.metricSelections.every((selection) => (
+        isRecord(selection)
+        && typeof selection.metricKey === 'string'
+        && typeof selection.dataType === 'string'
+        && isEnumPrimitive(selection.valueType)
+      ))
+    );
+  }
+
   return (
-    isRecord(value)
-    && (value.resultKind === undefined || value.resultKind === null || isResultKind(value.resultKind))
-    && typeof value.dataType === 'string'
+    typeof value.dataType === 'string'
     && isEnumPrimitive(value.valueType)
-    && isEnumPrimitive(value.categoryType)
-    && (value.requestedTimeInterval === undefined || value.requestedTimeInterval === null || isEnumPrimitive(value.requestedTimeInterval))
-    && isStringArray(value.activityTypeGroups)
-    && isStringArray(value.activityTypes)
-    && isNormalizedInsightDateRange(value.dateRange)
-    && isEnumPrimitive(value.chartType)
   );
 }
 
@@ -299,6 +314,18 @@ function isEventLookup(value: unknown): value is AiInsightEventLookup {
   );
 }
 
+function isMultiMetricAggregateMetricResult(value: unknown): value is AiInsightsMultiMetricAggregateMetricResult {
+  return (
+    isRecord(value)
+    && typeof value.metricKey === 'string'
+    && typeof value.metricLabel === 'string'
+    && isNormalizedInsightQuery(value.query)
+    && isAggregationResult(value.aggregation)
+    && isSummary(value.summary)
+    && isPresentation(value.presentation)
+  );
+}
+
 function isPresentation(value: unknown): value is AiInsightPresentation {
   return (
     isRecord(value)
@@ -312,6 +339,13 @@ function isPresentation(value: unknown): value is AiInsightPresentation {
 function resolveCompletedResponseResultKind(
   value: UnknownRecord,
 ): AiInsightsResultKind | null {
+  if (
+    value.resultKind === 'multi_metric_aggregate'
+    || (Array.isArray(value.metricResults) && value.metricResults.every(isMultiMetricAggregateMetricResult))
+  ) {
+    return 'multi_metric_aggregate';
+  }
+
   if (isResultKind(value.resultKind)) {
     return value.resultKind;
   }
@@ -350,6 +384,10 @@ function isCompletedInsightResponse(value: unknown): value is Extract<AiInsights
   }
 
   const resultKind = resolveCompletedResponseResultKind(value);
+  if (resultKind === 'multi_metric_aggregate') {
+    return Array.isArray(value.metricResults) && value.metricResults.every(isMultiMetricAggregateMetricResult);
+  }
+
   if (resultKind === 'event_lookup') {
     return isEventLookup(value.eventLookup);
   }
@@ -541,6 +579,20 @@ function getAiInsightsResponseValidationFailure(value: unknown): SnapshotValidat
   }
 
   const resultKind = resolveCompletedResponseResultKind(value);
+  if (resultKind === 'multi_metric_aggregate') {
+    if (!Array.isArray(value.metricResults) || !value.metricResults.every(isMultiMetricAggregateMetricResult)) {
+      return {
+        reason: 'metric_results_invalid',
+        details: {
+          responseKeys: Object.keys(value),
+          metricResultsType: describeValueType(value.metricResults),
+        },
+      };
+    }
+
+    return null;
+  }
+
   if (resultKind === 'event_lookup') {
     if (!isEventLookup(value.eventLookup)) {
       return {
@@ -727,7 +779,7 @@ function normalizeAiInsightsResponse(response: AiInsightsResponse): AiInsightsRe
     return {
       ...response,
       ...(response.quota ? { quota: response.quota } : {}),
-      query: normalizeInsightQuery(response.query as NormalizedInsightQueryLike),
+      query: normalizeInsightQuery(response.query as unknown as NormalizedInsightQueryLike),
       summary: normalizeSummary(response.summary),
       presentation: {
         ...normalizePresentation(response.presentation),
@@ -737,6 +789,20 @@ function normalizeAiInsightsResponse(response: AiInsightsResponse): AiInsightsRe
   }
 
   const resultKind = resolveCompletedResponseResultKind(response as unknown as UnknownRecord);
+  if (resultKind === 'multi_metric_aggregate') {
+    const normalizedResponse = response as AiInsightsMultiMetricAggregateOkResponse & {
+      query: NormalizedInsightQueryLike;
+    };
+    return {
+      ...normalizedResponse,
+      resultKind: 'multi_metric_aggregate',
+      ...(normalizedResponse.quota ? { quota: normalizedResponse.quota } : {}),
+      query: normalizeMultiMetricInsightQuery(normalizedResponse.query),
+      metricResults: normalizedResponse.metricResults.map(normalizeMultiMetricMetricResult),
+      presentation: normalizePresentation(normalizedResponse.presentation),
+    };
+  }
+
   if (resultKind === 'event_lookup') {
     const normalizedResponse = response as AiInsightsEventLookupOkResponse & {
       query: NormalizedInsightQueryLike;
@@ -765,28 +831,86 @@ function normalizeAiInsightsResponse(response: AiInsightsResponse): AiInsightsRe
 }
 
 function normalizeInsightQuery(query: NormalizedInsightQueryLike): NormalizedInsightQuery {
-  const { requestedTimeInterval, resultKind, ...rest } = query as NormalizedInsightQueryLike & {
-    requestedTimeInterval?: unknown;
-  };
-  return {
-    ...rest,
-    resultKind: resultKind === 'event_lookup' ? 'event_lookup' : 'aggregate',
-    ...(requestedTimeInterval == null ? {} : { requestedTimeInterval }),
-  };
+  const resultKind = resolveNormalizedInsightQueryResultKind(query);
+  if (resultKind === 'multi_metric_aggregate') {
+    return normalizeMultiMetricInsightQuery(query);
+  }
+
+  if (resultKind === 'event_lookup') {
+    return normalizeEventLookupInsightQuery(query);
+  }
+
+  return normalizeAggregateInsightQuery(query);
 }
 
 function normalizeAggregateInsightQuery(query: NormalizedInsightQueryLike): AggregateNormalizedInsightQuery {
+  const { requestedTimeInterval, resultKind, ...rest } = query as NormalizedInsightQueryLike & {
+    requestedTimeInterval?: unknown;
+    resultKind?: unknown;
+  };
   return {
-    ...normalizeInsightQuery(query),
+    ...(rest as Omit<AggregateNormalizedInsightQuery, 'resultKind' | 'requestedTimeInterval'>),
     resultKind: 'aggregate',
+    ...(requestedTimeInterval == null ? {} : { requestedTimeInterval: requestedTimeInterval as number }),
   };
 }
 
 function normalizeEventLookupInsightQuery(query: NormalizedInsightQueryLike): EventLookupNormalizedInsightQuery {
-  return {
-    ...normalizeInsightQuery(query),
-    resultKind: 'event_lookup',
+  const { requestedTimeInterval, resultKind, ...rest } = query as NormalizedInsightQueryLike & {
+    requestedTimeInterval?: unknown;
+    resultKind?: unknown;
   };
+  return {
+    ...(rest as Omit<EventLookupNormalizedInsightQuery, 'resultKind' | 'requestedTimeInterval' | 'categoryType'>),
+    resultKind: 'event_lookup',
+    categoryType: rest.categoryType as EventLookupNormalizedInsightQuery['categoryType'],
+    ...(requestedTimeInterval == null ? {} : { requestedTimeInterval: requestedTimeInterval as number }),
+  };
+}
+
+function normalizeMultiMetricInsightQuery(query: NormalizedInsightQueryLike): MultiMetricNormalizedInsightQuery {
+  const { requestedTimeInterval, resultKind, metricSelections, ...rest } = query as NormalizedInsightQueryLike & {
+    requestedTimeInterval?: unknown;
+    resultKind?: unknown;
+    metricSelections?: unknown;
+  };
+  return {
+    ...(rest as Omit<MultiMetricNormalizedInsightQuery, 'resultKind' | 'requestedTimeInterval' | 'metricSelections' | 'groupingMode' | 'categoryType'>),
+    resultKind: 'multi_metric_aggregate',
+    groupingMode: (rest.groupingMode === 'overall' ? 'overall' : 'date'),
+    categoryType: rest.categoryType as MultiMetricNormalizedInsightQuery['categoryType'],
+    ...(requestedTimeInterval == null ? {} : { requestedTimeInterval: requestedTimeInterval as number }),
+    metricSelections: Array.isArray(metricSelections)
+      ? metricSelections.map(selection => ({
+        metricKey: `${(selection as UnknownRecord).metricKey}` as MultiMetricNormalizedInsightQuery['metricSelections'][number]['metricKey'],
+        dataType: `${(selection as UnknownRecord).dataType ?? ''}`,
+        valueType: (selection as UnknownRecord).valueType as MultiMetricNormalizedInsightQuery['metricSelections'][number]['valueType'],
+      }))
+      : [],
+  };
+}
+
+function normalizeMultiMetricMetricResult(
+  metricResult: AiInsightsMultiMetricAggregateMetricResult,
+): AiInsightsMultiMetricAggregateMetricResult {
+  return {
+    metricKey: metricResult.metricKey,
+    metricLabel: metricResult.metricLabel,
+    query: normalizeAggregateInsightQuery(metricResult.query as unknown as NormalizedInsightQueryLike),
+    aggregation: metricResult.aggregation,
+    summary: normalizeSummary(metricResult.summary),
+    presentation: normalizePresentation(metricResult.presentation),
+  };
+}
+
+function resolveNormalizedInsightQueryResultKind(
+  query: NormalizedInsightQueryLike,
+): AiInsightsResultKind {
+  if (query.resultKind === 'multi_metric_aggregate' || Array.isArray(query.metricSelections)) {
+    return 'multi_metric_aggregate';
+  }
+
+  return query.resultKind === 'event_lookup' ? 'event_lookup' : 'aggregate';
 }
 
 function normalizeEventLookup(eventLookup: AiInsightEventLookup): AiInsightEventLookup {

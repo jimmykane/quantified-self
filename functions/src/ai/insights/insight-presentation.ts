@@ -1,5 +1,5 @@
 import { HttpsError } from 'firebase-functions/v2/https';
-import { ChartDataCategoryTypes, TimeIntervals } from '@sports-alliance/sports-lib';
+import { ChartDataCategoryTypes, ChartDataValueTypes, TimeIntervals } from '@sports-alliance/sports-lib';
 import type {
   AiInsightPresentation,
   AiInsightsQuotaStatusResponse,
@@ -18,14 +18,35 @@ export function assertValidTimeZone(timeZone: string): void {
   }
 }
 
-function resolveInsightTitle(query: NormalizedInsightQuery, metricLabel: string): string {
+function joinMetricLabels(metricLabels: string[]): string {
+  if (metricLabels.length <= 1) {
+    return metricLabels[0] ?? '';
+  }
+
+  if (metricLabels.length === 2) {
+    return `${metricLabels[0]} and ${metricLabels[1]}`;
+  }
+
+  return `${metricLabels.slice(0, -1).join(', ')}, and ${metricLabels[metricLabels.length - 1]}`;
+}
+
+function resolveInsightTitle(query: NormalizedInsightQuery, metricLabelOrLabels: string | string[]): string {
   const activityFilterLabel = resolveAiInsightsActivityFilterLabel(query);
   const activityLabel = activityFilterLabel === 'All activities'
     ? ''
     : ` for ${activityFilterLabel}`;
+  const metricLabel = Array.isArray(metricLabelOrLabels)
+    ? joinMetricLabels(metricLabelOrLabels)
+    : metricLabelOrLabels;
 
   if (query.resultKind === 'event_lookup') {
     return `Top ${metricLabel} events${activityLabel}`;
+  }
+
+  if (query.resultKind === 'multi_metric_aggregate') {
+    return query.groupingMode === 'date'
+      ? `${metricLabel} over time${activityLabel}`
+      : `${metricLabel}${activityLabel}`;
   }
 
   if (query.categoryType === ChartDataCategoryTypes.ActivityType) {
@@ -53,19 +74,26 @@ function resolvePresentationWarnings(query: NormalizedInsightQuery): string[] | 
 
 export function buildInsightPresentation(
   query: NormalizedInsightQuery,
-  metricLabel: string,
+  metricLabelOrLabels: string | string[],
 ): AiInsightPresentation {
   return {
-    title: resolveInsightTitle(query, metricLabel),
+    title: resolveInsightTitle(query, metricLabelOrLabels),
     chartType: query.chartType,
     warnings: resolvePresentationWarnings(query),
   };
 }
 
 export function buildEmptyAggregation(query: NormalizedInsightQuery) {
+  const dataType = query.resultKind === 'multi_metric_aggregate'
+    ? (query.metricSelections[0]?.dataType ?? 'Unknown')
+    : query.dataType;
+  const valueType = query.resultKind === 'multi_metric_aggregate'
+    ? (query.metricSelections[0]?.valueType ?? null)
+    : query.valueType;
+
   return {
-    dataType: query.dataType,
-    valueType: query.valueType,
+    dataType,
+    valueType: valueType ?? ChartDataValueTypes.Total,
     categoryType: query.categoryType,
     resolvedTimeInterval: query.requestedTimeInterval ?? TimeIntervals.Auto,
     buckets: [],
@@ -80,6 +108,10 @@ function buildUnsupportedNarrative(reasonCode: AiInsightsUnsupportedReasonCode):
       return 'I could not map that request to one supported metric and aggregation combination with enough confidence.';
     case 'invalid_prompt':
       return 'I could not turn that request into a valid insight query.';
+    case 'too_many_metrics':
+      return 'I can compare up to three metrics in one prompt right now. Try narrowing the request to three metrics or fewer.';
+    case 'unsupported_multi_metric_combination':
+      return 'I can compare up to three metrics when they share one aggregation style. Use one aggregation such as average for all metrics, and say over time if you want a combined comparison chart.';
     case 'unsupported_metric':
     default:
       return 'I can answer a curated set of event-level metrics right now, such as distance, duration, ascent, descent, cadence, power, heart rate, speed, pace, calories, and selected performance metrics like TSS, normalized power, intensity factor, VO2 max, EPOC, training effect, and recovery time.';

@@ -58,6 +58,26 @@ interface AggregateExecutionResult {
   }>;
 }
 
+interface MultiMetricAggregateExecutionMetricResult {
+  metricKey: Extract<NormalizedInsightQuery, { resultKind: 'multi_metric_aggregate' }>['metricSelections'][number]['metricKey'];
+  aggregation: EventStatAggregationResult;
+  matchedEventsCount: number;
+  matchedActivityTypeCounts: Array<{
+    activityType: string;
+    eventCount: number;
+  }>;
+}
+
+interface MultiMetricAggregateExecutionResult {
+  resultKind: 'multi_metric_aggregate';
+  matchedEventsCount: number;
+  matchedActivityTypeCounts: Array<{
+    activityType: string;
+    eventCount: number;
+  }>;
+  metricResults: MultiMetricAggregateExecutionMetricResult[];
+}
+
 interface EventLookupExecutionResult {
   resultKind: 'event_lookup';
   matchedEventsCount: number;
@@ -74,7 +94,8 @@ interface EventLookupExecutionResult {
 
 export type AiInsightsExecutionResult =
   | AggregateExecutionResult
-  | EventLookupExecutionResult;
+  | EventLookupExecutionResult
+  | MultiMetricAggregateExecutionResult;
 
 const defaultExecuteQueryDependencies: ExecuteQueryDependencies = {
   fetchEventDocs: async ({ userID, startDate, endDate }) => {
@@ -277,7 +298,7 @@ function summarizeError(error: unknown): {
 function compareRankedEvents(
   left: RankedInsightEvent,
   right: RankedInsightEvent,
-  valueType: NormalizedInsightQuery['valueType'],
+  valueType: ChartDataValueTypes,
 ): number {
   const valueDelta = valueType === ChartDataValueTypes.Minimum
     ? left.aggregateValue - right.aggregateValue
@@ -296,7 +317,7 @@ function compareRankedEvents(
 
 function buildRankedEvents(
   events: EventInterface[],
-  query: NormalizedInsightQuery,
+  query: Extract<NormalizedInsightQuery, { resultKind: 'event_lookup' | 'aggregate' }>,
 ): RankedInsightEvent[] {
   return events
     .map((event) => {
@@ -315,6 +336,55 @@ function buildRankedEvents(
     })
     .filter((event): event is RankedInsightEvent => event !== null)
     .sort((left, right) => compareRankedEvents(left, right, query.valueType));
+}
+
+function buildOverallAggregation(
+  dataType: string,
+  valueType: ChartDataValueTypes,
+  events: EventInterface[],
+): EventStatAggregationResult {
+  const values = events
+    .map(event => resolveRequestedStatValue(event, dataType))
+    .filter((value): value is number => value !== null);
+  if (!values.length) {
+    return {
+      dataType,
+      valueType,
+      categoryType: ChartDataCategoryTypes.DateType,
+      resolvedTimeInterval: TimeIntervals.Auto,
+      buckets: [],
+    };
+  }
+
+  const aggregateValue = (() => {
+    switch (valueType) {
+      case ChartDataValueTypes.Total:
+        return values.reduce((sum, value) => sum + value, 0);
+      case ChartDataValueTypes.Minimum:
+        return Math.min(...values);
+      case ChartDataValueTypes.Maximum:
+        return Math.max(...values);
+      case ChartDataValueTypes.Average:
+      default:
+        return values.reduce((sum, value) => sum + value, 0) / values.length;
+    }
+  })();
+
+  return {
+    dataType,
+    valueType,
+    categoryType: ChartDataCategoryTypes.DateType,
+    resolvedTimeInterval: TimeIntervals.Auto,
+    buckets: [
+      {
+        bucketKey: 'overall',
+        totalCount: values.length,
+        aggregateValue,
+        seriesValues: {},
+        seriesCounts: {},
+      },
+    ],
+  };
 }
 
 function summarizeEventShape(rawEventData: Record<string, unknown>, normalized: Record<string, unknown>): Record<string, unknown> {
@@ -406,8 +476,9 @@ export async function executeAiInsightsQuery(
     .filter(event => (event as { isMerge?: boolean }).isMerge !== true);
   const matchedEvents = nonMergedEvents
     .filter(event => eventMatchesActivitySelection(event, query.activityTypes));
-  const eventsWithRequestedStat = matchedEvents
-    .filter(event => hasRequestedStat(event, query.dataType));
+  const eventsWithRequestedStat = query.resultKind === 'multi_metric_aggregate'
+    ? []
+    : matchedEvents.filter(event => hasRequestedStat(event, query.dataType));
   const firestoreEmulatorHost = process.env.FIRESTORE_EMULATOR_HOST || null;
   const debugEventSnapshot = docs.length === 0
     ? await dependencies.fetchDebugEventSnapshot(userID)
@@ -416,8 +487,8 @@ export async function executeAiInsightsQuery(
   dependencies.logger.info('[aiInsights] Query execution summary', {
     prompt: prompt || null,
     userID,
-    dataType: query.dataType,
-    valueType: query.valueType,
+    dataType: query.resultKind === 'multi_metric_aggregate' ? null : query.dataType,
+    valueType: query.resultKind === 'multi_metric_aggregate' ? null : query.valueType,
     categoryType: query.categoryType,
     activityTypes: query.activityTypes,
     dateRange: query.dateRange,
@@ -427,6 +498,7 @@ export async function executeAiInsightsQuery(
     activityFilteredOutCount: nonMergedEvents.length - matchedEvents.length,
     matchedEventsCount: matchedEvents.length,
     eventsWithRequestedStatCount: eventsWithRequestedStat.length,
+    metricSelectionCount: query.resultKind === 'multi_metric_aggregate' ? query.metricSelections.length : 1,
     matchedEventIDsSample: matchedEvents.slice(0, 10).map(event => event.getID?.()),
     firestoreTarget: firestoreEmulatorHost ? 'emulator' : 'default',
     firestoreEmulatorHost,
@@ -456,6 +528,53 @@ export async function executeAiInsightsQuery(
         topEventIds: rankedEvents.slice(0, 10).map(event => event.eventId),
         rankedEvents,
       },
+    };
+  }
+
+  if (query.resultKind === 'multi_metric_aggregate') {
+    const metricResults = query.metricSelections.map((metricSelection) => {
+      const metricMatchedEvents = matchedEvents
+        .filter(event => hasRequestedStat(event, metricSelection.dataType));
+      const aggregation = query.groupingMode === 'date'
+        ? buildEventStatAggregation(metricMatchedEvents, {
+          dataType: metricSelection.dataType,
+          valueType: metricSelection.valueType,
+          categoryType: ChartDataCategoryTypes.DateType,
+          requestedTimeInterval: query.requestedTimeInterval,
+        }, dependencies.logger)
+        : buildOverallAggregation(
+          metricSelection.dataType,
+          metricSelection.valueType,
+          metricMatchedEvents,
+        );
+
+      return {
+        metricKey: metricSelection.metricKey,
+        aggregation,
+        matchedEventsCount: metricMatchedEvents.length,
+        matchedActivityTypeCounts: buildMatchedActivityTypeCounts(metricMatchedEvents, dependencies.logger),
+      } satisfies MultiMetricAggregateExecutionMetricResult;
+    });
+
+    dependencies.logger.info('[aiInsights] Multi metric aggregation summary', {
+      prompt: prompt || null,
+      userID,
+      metricCount: metricResults.length,
+      groupingMode: query.groupingMode,
+      requestedTimeInterval: query.requestedTimeInterval ?? null,
+      metricSummaries: metricResults.map(metricResult => ({
+        metricKey: metricResult.metricKey,
+        matchedEventsCount: metricResult.matchedEventsCount,
+        bucketCount: metricResult.aggregation.buckets.length,
+        resolvedTimeInterval: metricResult.aggregation.resolvedTimeInterval,
+      })),
+    });
+
+    return {
+      resultKind: 'multi_metric_aggregate',
+      matchedEventsCount: matchedEvents.length,
+      matchedActivityTypeCounts: buildMatchedActivityTypeCounts(matchedEvents, dependencies.logger),
+      metricResults,
     };
   }
 

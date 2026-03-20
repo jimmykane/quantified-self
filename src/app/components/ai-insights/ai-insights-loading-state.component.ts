@@ -12,6 +12,8 @@ const DEFAULT_AI_INSIGHTS_LOADING_STEPS = [
 
 const AI_INSIGHTS_LOADING_STEP_DELAY_MS = 1450;
 const AI_INSIGHTS_LOADING_COMPACT_STEP_DELAY_MS = 1100;
+const DEFAULT_SUMMARY_SKELETON_ITEMS = [0, 1, 2, 3] as const;
+const DEFAULT_CHART_SKELETON_BARS = [0, 1, 2, 3, 4, 5] as const;
 
 function resolveLoadingSteps(steps: readonly string[]): readonly string[] {
   const cleanedSteps = steps
@@ -39,6 +41,8 @@ export class AiInsightsLoadingStateComponent {
   readonly copy = input<string | null>(null);
   readonly steps = input<readonly string[]>(DEFAULT_AI_INSIGHTS_LOADING_STEPS);
   readonly compact = input(false);
+  readonly summarySkeletonItems = DEFAULT_SUMMARY_SKELETON_ITEMS;
+  readonly chartSkeletonBars = DEFAULT_CHART_SKELETON_BARS;
 
   readonly activeStepIndex = signal(0);
   readonly resolvedSteps = computed(() => resolveLoadingSteps(this.steps()));

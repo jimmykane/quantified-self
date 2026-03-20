@@ -156,7 +156,11 @@ export function buildBucketCoverage(
     buckets: Array<unknown>;
   },
 ): AiInsightSummary['bucketCoverage'] {
-  if (query.categoryType !== ChartDataCategoryTypes.DateType || query.dateRange.kind !== 'bounded') {
+  if (
+    query.categoryType !== ChartDataCategoryTypes.DateType
+    || query.dateRange.kind !== 'bounded'
+    || (query.resultKind === 'multi_metric_aggregate' && query.groupingMode === 'overall')
+  ) {
     return null;
   }
 

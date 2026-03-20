@@ -5,7 +5,9 @@ import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   ChartTypes,
+  DataCadenceAvg,
   DataDistance,
+  DataPowerAvg,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
 
@@ -61,6 +63,37 @@ function createQuery(overrides: Partial<NormalizedInsightQuery> = {}): Normalize
     },
     chartType: ChartTypes.ColumnsVertical,
     ...overrides,
+  };
+}
+
+function createMultiMetricQuery(): Extract<NormalizedInsightQuery, { resultKind: 'multi_metric_aggregate' }> {
+  return {
+    resultKind: 'multi_metric_aggregate',
+    groupingMode: 'date',
+    categoryType: ChartDataCategoryTypes.DateType,
+    requestedTimeInterval: TimeIntervals.Monthly,
+    activityTypeGroups: [],
+    activityTypes: [ActivityTypes.Cycling],
+    dateRange: {
+      kind: 'bounded',
+      startDate: '2026-01-01T00:00:00.000Z',
+      endDate: '2026-03-31T23:59:59.999Z',
+      timezone: 'UTC',
+      source: 'prompt',
+    },
+    chartType: ChartTypes.LinesVertical,
+    metricSelections: [
+      {
+        metricKey: 'cadence',
+        dataType: DataCadenceAvg.type,
+        valueType: ChartDataValueTypes.Average,
+      },
+      {
+        metricKey: 'power',
+        dataType: DataPowerAvg.type,
+        valueType: ChartDataValueTypes.Average,
+      },
+    ],
   };
 }
 
@@ -226,6 +259,61 @@ describe('execute-query', () => {
     expect(fetchEventDocs).toHaveBeenCalledTimes(1);
     expect(result.matchedEventsCount).toBe(1);
     expect(result.aggregation.buckets[0]?.aggregateValue).toBe(40);
+  });
+
+  it('reuses one filtered event pool for multi-metric aggregations', async () => {
+    const fetchEventDocs = vi.fn(async () => [
+      { id: 'e1', data: () => ({ startDate: 1768003200000 }) },
+      { id: 'e2', data: () => ({ startDate: 1768608000000 }) },
+    ]);
+
+    const importEvent = vi
+      .fn()
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'e1',
+        startDate: new Date('2026-01-10T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: {
+          [DataCadenceAvg.type]: 88,
+          [DataPowerAvg.type]: 210,
+        },
+      }))
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'e2',
+        startDate: new Date('2026-02-10T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: {
+          [DataCadenceAvg.type]: 91,
+        },
+      }));
+
+    setExecuteQueryDependenciesForTesting({
+      fetchEventDocs,
+      fetchDebugEventSnapshot: vi.fn(async () => ({
+        totalEventsCount: 2,
+        recentEventsSample: [],
+      })),
+      importEvent,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+    });
+
+    const result = await executeAiInsightsQuery('user-1', createMultiMetricQuery(), 'compare cadence and power');
+
+    expect(fetchEventDocs).toHaveBeenCalledTimes(1);
+    expect(result.resultKind).toBe('multi_metric_aggregate');
+    if (result.resultKind !== 'multi_metric_aggregate') {
+      return;
+    }
+
+    expect(result.metricResults).toHaveLength(2);
+    expect(result.metricResults[0]).toEqual(expect.objectContaining({
+      metricKey: 'cadence',
+      matchedEventsCount: 2,
+    }));
+    expect(result.metricResults[1]).toEqual(expect.objectContaining({
+      metricKey: 'power',
+      matchedEventsCount: 1,
+    }));
   });
 
   it('uses a single numeric startDate Firestore query for bounded requests', async () => {

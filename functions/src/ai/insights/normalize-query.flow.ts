@@ -10,8 +10,10 @@ import {
 
 import type {
   AiInsightsRequest,
+  AiInsightsMultiMetricGroupingMode,
   AiInsightsUnsupportedReasonCode,
   NormalizedInsightDateRange,
+  NormalizedInsightMetricSelection,
   NormalizedInsightQuery,
 } from '../../../../shared/ai-insights.types';
 import {
@@ -27,6 +29,7 @@ import {
 } from './canonical-activity-type-groups';
 import {
   findInsightMetricAliasMatch,
+  findInsightMetricAliasMatches,
   getSuggestedInsightPrompts,
   isAggregationAllowedForMetric,
   resolveInsightMetric,
@@ -50,7 +53,7 @@ type ModelDateRangeUnit = 'day' | 'week' | 'month' | 'year';
 
 interface NormalizeInsightQuerySupportedResult {
   status: 'ok';
-  metricKey: InsightMetricKey;
+  metricKey?: InsightMetricKey;
   query: NormalizedInsightQuery;
 }
 
@@ -103,6 +106,12 @@ interface ModelInsightIntent {
   unsupportedReasonCode?: AiInsightsUnsupportedReasonCode;
 }
 
+interface MultiMetricIntent {
+  valueType: ChartDataValueTypes;
+  metricSelections: NormalizedInsightMetricSelection[];
+  groupingMode: AiInsightsMultiMetricGroupingMode;
+}
+
 interface NormalizeQueryDependencies {
   now: () => Date;
   generateIntent: (input: AiInsightsRequest) => Promise<ModelInsightIntent>;
@@ -116,6 +125,7 @@ interface ZonedDateParts {
 
 const ABSOLUTE_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const SUPPORTED_ACTIVITY_TYPE_GROUPS = [...CANONICAL_ACTIVITY_TYPE_GROUPS];
+const MAX_MULTI_METRICS = 3;
 
 const UNSUPPORTED_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
   /\bsplits?\b/i,
@@ -204,7 +214,7 @@ const ModelInsightIntentSchema = z.object({
 const NormalizeInsightQueryResultSchema = z.discriminatedUnion('status', [
   z.object({
     status: z.literal('ok'),
-    metricKey: z.string(),
+    metricKey: z.string().optional(),
     query: NormalizedInsightQuerySchema,
   }),
   z.object({
@@ -870,6 +880,115 @@ function resolvePromptAggregation(prompt: string): ModelAggregationCode | undefi
   return undefined;
 }
 
+function resolvePromptAggregationCodes(prompt: string): ModelAggregationCode[] {
+  const normalizedPrompt = normalizePromptSearchText(prompt);
+  if (!normalizedPrompt) {
+    return [];
+  }
+
+  const aggregationCodes = new Set<ModelAggregationCode>();
+  if (/\b(total|sum|combined)\b/.test(normalizedPrompt)) {
+    aggregationCodes.add('total');
+  }
+  if (/\b(avg|average|mean)\b/.test(normalizedPrompt)) {
+    aggregationCodes.add('average');
+  }
+  if (/\b(min|minimum|lowest|fastest|shortest)\b/.test(normalizedPrompt)) {
+    aggregationCodes.add('minimum');
+  }
+  if (/\b(max|maximum|highest|peak|slowest|longest|furthest)\b/.test(normalizedPrompt)) {
+    aggregationCodes.add('maximum');
+  }
+
+  return [...aggregationCodes];
+}
+
+function resolveMultiMetricGroupingMode(
+  prompt: string,
+  dateRangeIntent: DateRangeIntent | undefined,
+  requestedTimeInterval: ModelTimeIntervalCode | undefined,
+): AiInsightsMultiMetricGroupingMode {
+  const normalizedPrompt = normalizePromptSearchText(prompt);
+  if (
+    /\b(over time|timeline|trend)\b/.test(normalizedPrompt)
+    || dateRangeIntent !== undefined
+    || requestedTimeInterval !== undefined
+  ) {
+    return 'date';
+  }
+
+  return 'overall';
+}
+
+function resolveMultiMetricIntent(prompt: string): MultiMetricIntent | NormalizeInsightQueryUnsupportedResult | null {
+  const metricMatches = findInsightMetricAliasMatches(prompt);
+  if (metricMatches.length <= 1) {
+    return null;
+  }
+
+  if (metricMatches.length > MAX_MULTI_METRICS) {
+    return buildUnsupportedResult('too_many_metrics', prompt);
+  }
+
+  if (promptImpliesEventLookup(prompt)) {
+    return buildUnsupportedResult('unsupported_multi_metric_combination', prompt);
+  }
+
+  const category = resolvePromptCategory(prompt);
+  const requestedTimeInterval = resolvePromptRequestedTimeInterval(prompt);
+  const dateRangeIntent = resolvePromptDateRangeIntent(prompt);
+  if (
+    category === 'activity'
+    || promptImpliesDateActivityStackedColumns(prompt, {
+      hasDateRangeIntent: dateRangeIntent !== undefined,
+      hasRequestedTimeInterval: requestedTimeInterval !== undefined,
+    })
+  ) {
+    return buildUnsupportedResult('unsupported_multi_metric_combination', prompt);
+  }
+
+  const aggregationCodes = resolvePromptAggregationCodes(prompt);
+  if (aggregationCodes.length > 1) {
+    return buildUnsupportedResult('unsupported_multi_metric_combination', prompt);
+  }
+
+  const sharedValueType = aggregationCodes.length === 1
+    ? AGGREGATION_MAP[aggregationCodes[0]]
+    : (() => {
+      const defaultValueTypes = Array.from(new Set(metricMatches.map(match => match.metric.defaultValueType)));
+      return defaultValueTypes.length === 1 ? defaultValueTypes[0] : null;
+    })();
+  if (!sharedValueType) {
+    return buildUnsupportedResult('unsupported_multi_metric_combination', prompt);
+  }
+
+  const metricSelections = metricMatches.map((match) => {
+    const metric = resolveInsightMetric(match.alias, sharedValueType)
+      || resolveInsightMetric(match.metric.key, sharedValueType)
+      || match.metric;
+
+    if (!isAggregationAllowedForMetric(metric.key, sharedValueType)) {
+      return null;
+    }
+
+    return {
+      metricKey: metric.key,
+      dataType: metric.dataType,
+      valueType: sharedValueType,
+    } satisfies NormalizedInsightMetricSelection;
+  });
+
+  if (metricSelections.some(selection => selection === null)) {
+    return buildUnsupportedResult('unsupported_multi_metric_combination', prompt);
+  }
+
+  return {
+    valueType: sharedValueType,
+    metricSelections: metricSelections as NormalizedInsightMetricSelection[],
+    groupingMode: resolveMultiMetricGroupingMode(prompt, dateRangeIntent, requestedTimeInterval),
+  };
+}
+
 function resolvePromptCategory(prompt: string): ModelCategoryCode | undefined {
   const normalizedPrompt = normalizePromptSearchText(prompt);
   if (!normalizedPrompt) {
@@ -996,6 +1115,86 @@ export async function normalizeInsightQuery(
     return buildUnsupportedResult('unsupported_capability', prompt);
   }
 
+  const promptRequestedTimeInterval = resolvePromptRequestedTimeInterval(prompt);
+  const promptDateRangeIntent = resolvePromptDateRangeIntent(prompt);
+  const multiMetricIntent = resolveMultiMetricIntent(prompt);
+  if (multiMetricIntent && 'status' in multiMetricIntent) {
+    return multiMetricIntent;
+  }
+
+  if (multiMetricIntent) {
+    const activityTypes = normalizeActivityTypes(undefined);
+    const activityTypeGroups = normalizeActivityTypeGroups(undefined);
+    if (!activityTypes || !activityTypeGroups) {
+      return buildUnsupportedResult('invalid_prompt', prompt);
+    }
+
+    const promptWithoutActivityExclusions = stripPromptActivityExclusionClauses(prompt);
+    const promptExcludedActivityTypeGroups = extractPromptActivityExclusionClauses(prompt)
+      .flatMap((clause) => resolvePromptActivityTypeGroups(clause));
+    const promptExcludedActivityTypes = extractPromptActivityExclusionClauses(prompt)
+      .flatMap((clause) => {
+        const clauseGroups = resolvePromptActivityTypeGroups(clause);
+        return [
+          ...resolvePromptActivityTypes(clause, clauseGroups),
+          ...resolveKeywordActivityTypeExclusions(clause),
+        ];
+      });
+    const excludedActivityTypeSet = new Set<ActivityTypes>([
+      ...promptExcludedActivityTypes,
+      ...expandActivityTypeGroups(promptExcludedActivityTypeGroups),
+    ]);
+    const promptActivityTypeGroups = resolvePromptActivityTypeGroups(promptWithoutActivityExclusions);
+    const promptActivityTypes = resolvePromptActivityTypes(promptWithoutActivityExclusions, promptActivityTypeGroups);
+    const resolvedActivityTypeGroups = activityTypeGroups.length > 0
+      ? activityTypeGroups
+      : promptActivityTypeGroups;
+    const resolvedActivityTypes = activityTypes.length > 0
+      ? activityTypes
+      : promptActivityTypes;
+    const filteredResolvedActivityTypes = excludeActivityTypes(
+      resolvedActivityTypes,
+      excludedActivityTypeSet,
+    );
+    const filteredResolvedActivityTypeGroups = resolvedActivityTypeGroups
+      .filter(activityTypeGroup => !promptExcludedActivityTypeGroups.includes(activityTypeGroup));
+    const finalActivityTypeGroups = filteredResolvedActivityTypes.length > 0 ? [] : filteredResolvedActivityTypeGroups;
+    const expandedActivityTypes = finalActivityTypeGroups.length > 0
+      ? excludeActivityTypes(expandActivityTypeGroups(finalActivityTypeGroups), excludedActivityTypeSet)
+      : [];
+    const finalActivityTypes = filteredResolvedActivityTypes.length > 0
+      ? filteredResolvedActivityTypes
+      : expandedActivityTypes.length > 0
+        ? expandedActivityTypes
+        : excludedActivityTypeSet.size > 0
+          ? excludeActivityTypes(CANONICAL_ACTIVITY_TYPES, excludedActivityTypeSet)
+          : [];
+
+    const finalRequestedTimeInterval = multiMetricIntent.groupingMode === 'date'
+      ? toRequestedTimeInterval(
+        ChartDataCategoryTypes.DateType,
+        promptRequestedTimeInterval,
+        promptDateRangeIntent,
+      )
+      : undefined;
+    const dateRange = resolveDateRange(promptDateRangeIntent, input.clientTimezone, normalizeQueryDependencies.now());
+
+    return {
+      status: 'ok',
+      query: {
+        resultKind: 'multi_metric_aggregate',
+        groupingMode: multiMetricIntent.groupingMode,
+        categoryType: ChartDataCategoryTypes.DateType,
+        requestedTimeInterval: finalRequestedTimeInterval,
+        activityTypeGroups: finalActivityTypeGroups,
+        activityTypes: finalActivityTypes,
+        dateRange,
+        chartType: ChartTypes.LinesVertical,
+        metricSelections: multiMetricIntent.metricSelections,
+      },
+    };
+  }
+
   const dependencies = normalizeQueryDependencies;
   const intent = await dependencies.generateIntent({
     ...input,
@@ -1032,9 +1231,8 @@ export async function normalizeInsightQuery(
 
   const resolvedDateRangeIntent = (
     (modelReturnedUnsupported ? undefined : intent.dateRange)
-    ?? resolvePromptDateRangeIntent(prompt)
+    ?? promptDateRangeIntent
   );
-  const promptRequestedTimeInterval = resolvePromptRequestedTimeInterval(prompt);
   const resultKind = promptImpliesEventLookup(prompt) ? 'event_lookup' : 'aggregate';
   const stackedDateByActivityRequested = promptImpliesDateActivityStackedColumns(prompt, {
     hasDateRangeIntent: resolvedDateRangeIntent !== undefined,
@@ -1106,11 +1304,33 @@ export async function normalizeInsightQuery(
     : requestedTimeInterval;
   const dateRange = resolveDateRange(resolvedDateRangeIntent, input.clientTimezone, dependencies.now());
 
+  if (resultKind === 'event_lookup') {
+    return {
+      status: 'ok',
+      metricKey: metric.key,
+      query: {
+        resultKind: 'event_lookup',
+        dataType: metric.dataType,
+        valueType,
+        categoryType: ChartDataCategoryTypes.DateType,
+        requestedTimeInterval: finalRequestedTimeInterval,
+        activityTypeGroups: finalActivityTypeGroups,
+        activityTypes: finalActivityTypes,
+        dateRange,
+        chartType: resolveChartType(
+          ChartDataCategoryTypes.DateType,
+          valueType,
+          stackedDateByActivityRequested,
+        ),
+      },
+    };
+  }
+
   return {
     status: 'ok',
     metricKey: metric.key,
     query: {
-      resultKind,
+      resultKind: 'aggregate',
       dataType: metric.dataType,
       valueType,
       categoryType,

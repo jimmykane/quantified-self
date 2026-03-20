@@ -7,6 +7,7 @@ import {
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
 import type { EventStatAggregationResult } from './event-stat-aggregation.types';
+import type { AiInsightsPromptMetricKey } from './ai-insights-prompts';
 
 export interface AiInsightsRequest {
   prompt: string;
@@ -34,12 +35,15 @@ export type NormalizedInsightDateRange =
 
 export type AiInsightsResultKind =
   | 'aggregate'
-  | 'event_lookup';
+  | 'event_lookup'
+  | 'multi_metric_aggregate';
 
-export interface NormalizedInsightQuery {
+export type AiInsightsMultiMetricGroupingMode =
+  | 'overall'
+  | 'date';
+
+export interface NormalizedInsightQueryBase {
   resultKind: AiInsightsResultKind;
-  dataType: string;
-  valueType: ChartDataValueTypes;
   categoryType: ChartDataCategoryTypes;
   requestedTimeInterval?: TimeIntervals;
   activityTypeGroups: ActivityTypeGroup[];
@@ -47,6 +51,37 @@ export interface NormalizedInsightQuery {
   dateRange: NormalizedInsightDateRange;
   chartType: ChartTypes;
 }
+
+export interface NormalizedInsightAggregateQuery extends NormalizedInsightQueryBase {
+  resultKind: 'aggregate';
+  dataType: string;
+  valueType: ChartDataValueTypes;
+}
+
+export interface NormalizedInsightEventLookupQuery extends NormalizedInsightQueryBase {
+  resultKind: 'event_lookup';
+  dataType: string;
+  valueType: ChartDataValueTypes;
+  categoryType: ChartDataCategoryTypes.DateType;
+}
+
+export interface NormalizedInsightMetricSelection {
+  metricKey: AiInsightsPromptMetricKey;
+  dataType: string;
+  valueType: ChartDataValueTypes;
+}
+
+export interface NormalizedInsightMultiMetricAggregateQuery extends NormalizedInsightQueryBase {
+  resultKind: 'multi_metric_aggregate';
+  groupingMode: AiInsightsMultiMetricGroupingMode;
+  categoryType: ChartDataCategoryTypes.DateType;
+  metricSelections: NormalizedInsightMetricSelection[];
+}
+
+export type NormalizedInsightQuery =
+  | NormalizedInsightAggregateQuery
+  | NormalizedInsightEventLookupQuery
+  | NormalizedInsightMultiMetricAggregateQuery;
 
 export type AiInsightsQuotaPeriodKind =
   | 'subscription'
@@ -136,7 +171,9 @@ export type AiInsightsUnsupportedReasonCode =
   | 'invalid_prompt'
   | 'unsupported_metric'
   | 'ambiguous_metric'
-  | 'unsupported_capability';
+  | 'unsupported_capability'
+  | 'too_many_metrics'
+  | 'unsupported_multi_metric_combination';
 
 export interface AiInsightsAggregateOkResponse {
   status: 'ok';
@@ -156,16 +193,34 @@ export interface AiInsightsEventLookupOkResponse {
   resultKind: 'event_lookup';
   narrative: string;
   quota?: AiInsightsQuotaStatus;
-  query: NormalizedInsightQuery & {
-    resultKind: 'event_lookup';
-  };
+  query: NormalizedInsightEventLookupQuery;
   eventLookup: AiInsightEventLookup;
+  presentation: AiInsightPresentation;
+}
+
+export interface AiInsightsMultiMetricAggregateMetricResult {
+  metricKey: AiInsightsPromptMetricKey;
+  metricLabel: string;
+  query: NormalizedInsightAggregateQuery;
+  aggregation: EventStatAggregationResult;
+  summary: AiInsightSummary;
+  presentation: AiInsightPresentation;
+}
+
+export interface AiInsightsMultiMetricAggregateOkResponse {
+  status: 'ok';
+  resultKind: 'multi_metric_aggregate';
+  narrative: string;
+  quota?: AiInsightsQuotaStatus;
+  query: NormalizedInsightMultiMetricAggregateQuery;
+  metricResults: AiInsightsMultiMetricAggregateMetricResult[];
   presentation: AiInsightPresentation;
 }
 
 export type AiInsightsOkResponse =
   | AiInsightsAggregateOkResponse
-  | AiInsightsEventLookupOkResponse;
+  | AiInsightsEventLookupOkResponse
+  | AiInsightsMultiMetricAggregateOkResponse;
 
 export interface AiInsightsEmptyResponse {
   status: 'empty';

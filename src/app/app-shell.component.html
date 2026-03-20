@@ -13,6 +13,7 @@
 <div [class.has-banner]="hasBanner" class="app-layout-wrapper"
   [style.--qs-layout-top-offset]="layoutTopOffsetPx + 'px'"
   [style.--qs-effective-top-offset]="effectiveTopOffsetPx + 'px'"
+  [style.--qs-visible-top-offset]="visibleTopOffsetPx + 'px'"
   [style.--qs-banner-height]="(showNavigation() ? bannerHeight : 0) + 'px'">
   <app-grace-period-banner (heightChanged)="onBannerHeightChanged($event)"></app-grace-period-banner>
 
@@ -44,18 +45,20 @@
     </mat-sidenav>
     }
 
-    <mat-sidenav-content [style.padding-top.px]="layoutTopOffsetPx">
-      <app-impersonation-banner></app-impersonation-banner>
-      <div class="router-outlet-container" [@routeAnimations]="routeAnimationState()">
-        @if (maintenanceLoading()) {
-        <div class="loading-overlay">
-          <div class="logo-spinner">
-            <mat-icon svgIcon="logo"></mat-icon>
+    <mat-sidenav-content>
+      <div class="app-shell-scroll-content" [style.padding-top.px]="layoutTopOffsetPx">
+        <app-impersonation-banner></app-impersonation-banner>
+        <div class="router-outlet-container" [@routeAnimations]="routeAnimationState()">
+          @if (maintenanceLoading()) {
+          <div class="loading-overlay">
+            <div class="logo-spinner">
+              <mat-icon svgIcon="logo"></mat-icon>
+            </div>
           </div>
-        </div>
-        }
+          }
 
-        <router-outlet #outlet="outlet"></router-outlet>
+          <router-outlet #outlet="outlet"></router-outlet>
+        </div>
       </div>
     </mat-sidenav-content>
   </mat-sidenav-container>
