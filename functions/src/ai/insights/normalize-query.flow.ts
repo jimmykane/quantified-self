@@ -126,6 +126,33 @@ interface ZonedDateParts {
 const ABSOLUTE_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const SUPPORTED_ACTIVITY_TYPE_GROUPS = [...CANONICAL_ACTIVITY_TYPE_GROUPS];
 const MAX_MULTI_METRICS = 3;
+const YEAR_PATTERN = /(?:19|20)\d{2}/;
+const MONTH_NAME_TO_NUMBER: Readonly<Record<string, number>> = {
+  jan: 1,
+  january: 1,
+  feb: 2,
+  february: 2,
+  mar: 3,
+  march: 3,
+  apr: 4,
+  april: 4,
+  may: 5,
+  jun: 6,
+  june: 6,
+  jul: 7,
+  july: 7,
+  aug: 8,
+  august: 8,
+  sep: 9,
+  sept: 9,
+  september: 9,
+  oct: 10,
+  october: 10,
+  nov: 11,
+  november: 11,
+  dec: 12,
+  december: 12,
+};
 
 const UNSUPPORTED_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
   /\bsplits?\b/i,
@@ -393,6 +420,76 @@ function parseAbsoluteDateString(value: string): ZonedDateParts | null {
   }
 
   return { year, month, day };
+}
+
+function formatAbsoluteDate(year: number, month: number, day: number): string {
+  return `${year}-${`${month}`.padStart(2, '0')}-${`${day}`.padStart(2, '0')}`;
+}
+
+function buildNormalizedAbsoluteRange(
+  start: ZonedDateParts,
+  end: ZonedDateParts,
+): AbsoluteDateRangeIntent {
+  const startMillis = Date.UTC(start.year, start.month - 1, start.day);
+  const endMillis = Date.UTC(end.year, end.month - 1, end.day);
+  const normalizedStart = startMillis <= endMillis ? start : end;
+  const normalizedEnd = startMillis <= endMillis ? end : start;
+
+  return {
+    kind: 'absolute',
+    startDate: formatAbsoluteDate(normalizedStart.year, normalizedStart.month, normalizedStart.day),
+    endDate: formatAbsoluteDate(normalizedEnd.year, normalizedEnd.month, normalizedEnd.day),
+  };
+}
+
+function resolveCalendarYearAbsoluteRange(year: number): AbsoluteDateRangeIntent {
+  return buildNormalizedAbsoluteRange(
+    { year, month: 1, day: 1 },
+    { year, month: 12, day: 31 },
+  );
+}
+
+function resolveCalendarMonthAbsoluteRange(
+  month: number,
+  year: number,
+): AbsoluteDateRangeIntent {
+  return buildNormalizedAbsoluteRange(
+    { year, month, day: 1 },
+    { year, month, day: getDaysInMonth(year, month) },
+  );
+}
+
+function resolveQuarterAbsoluteRange(
+  quarter: number,
+  year: number,
+): AbsoluteDateRangeIntent {
+  const normalizedQuarter = Math.max(1, Math.min(4, quarter));
+  const startMonth = ((normalizedQuarter - 1) * 3) + 1;
+  const endMonth = startMonth + 2;
+
+  return buildNormalizedAbsoluteRange(
+    { year, month: startMonth, day: 1 },
+    { year, month: endMonth, day: getDaysInMonth(year, endMonth) },
+  );
+}
+
+function resolveHalfYearAbsoluteRange(
+  half: number,
+  year: number,
+): AbsoluteDateRangeIntent {
+  const normalizedHalf = half <= 1 ? 1 : 2;
+  const startMonth = normalizedHalf === 1 ? 1 : 7;
+  const endMonth = normalizedHalf === 1 ? 6 : 12;
+
+  return buildNormalizedAbsoluteRange(
+    { year, month: startMonth, day: 1 },
+    { year, month: endMonth, day: getDaysInMonth(year, endMonth) },
+  );
+}
+
+function resolveMonthNameToNumber(value: string): number | null {
+  const normalized = normalizePromptSearchText(value);
+  return MONTH_NAME_TO_NUMBER[normalized] ?? null;
 }
 
 function resolveDateRange(
@@ -995,7 +1092,7 @@ function resolvePromptCategory(prompt: string): ModelCategoryCode | undefined {
     return undefined;
   }
 
-  if (/\b(by activity types?|activity type comparison|by sports?|by sport)\b/.test(normalizedPrompt)) {
+  if (/\b((?:by|per)\s+(?:activity types?|sports?|sport)|activity type comparison)\b/.test(normalizedPrompt)) {
     return 'activity';
   }
 
@@ -1028,6 +1125,137 @@ function resolvePromptDateRangeIntent(prompt: string): DateRangeIntent | undefin
       startDate: standaloneAbsoluteMatch[1],
       endDate: standaloneAbsoluteMatch[2],
     };
+  }
+
+  const monthNamePattern = '(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
+  const monthYearRangeMatch = normalizedPrompt.match(
+    new RegExp(`\\b(?:from|between)\\s+${monthNamePattern}\\s+(${YEAR_PATTERN.source})\\s+(?:to|through|and|-)\\s+${monthNamePattern}\\s+(${YEAR_PATTERN.source})\\b`),
+  );
+  if (monthYearRangeMatch) {
+    const startMonth = resolveMonthNameToNumber(monthYearRangeMatch[1] || '');
+    const startYear = Number(monthYearRangeMatch[2]);
+    const endMonth = resolveMonthNameToNumber(monthYearRangeMatch[3] || '');
+    const endYear = Number(monthYearRangeMatch[4]);
+    if (startMonth && endMonth && Number.isInteger(startYear) && Number.isInteger(endYear)) {
+      return buildNormalizedAbsoluteRange(
+        { year: startYear, month: startMonth, day: 1 },
+        { year: endYear, month: endMonth, day: getDaysInMonth(endYear, endMonth) },
+      );
+    }
+  }
+
+  const explicitMonthYearMatch = normalizedPrompt.match(
+    new RegExp(`\\b(?:in|for|during)\\s+${monthNamePattern}\\s+(${YEAR_PATTERN.source})\\b`),
+  );
+  if (explicitMonthYearMatch) {
+    const month = resolveMonthNameToNumber(explicitMonthYearMatch[1] || '');
+    const year = Number(explicitMonthYearMatch[2]);
+    if (month && Number.isInteger(year)) {
+      return resolveCalendarMonthAbsoluteRange(month, year);
+    }
+  }
+
+  const explicitYearMonthMatch = normalizedPrompt.match(
+    new RegExp(`\\b(?:in|for|during)\\s+(${YEAR_PATTERN.source})\\s+${monthNamePattern}\\b`),
+  );
+  if (explicitYearMonthMatch) {
+    const year = Number(explicitYearMonthMatch[1]);
+    const month = resolveMonthNameToNumber(explicitYearMonthMatch[2] || '');
+    if (month && Number.isInteger(year)) {
+      return resolveCalendarMonthAbsoluteRange(month, year);
+    }
+  }
+
+  const calendarYearRangeMatch = normalizedPrompt.match(/\b(?:from|between)\s+((?:19|20)\d{2})\s+(?:to|through|and|-)\s+((?:19|20)\d{2})\b/);
+  if (calendarYearRangeMatch) {
+    const startYear = Number(calendarYearRangeMatch[1]);
+    const endYear = Number(calendarYearRangeMatch[2]);
+    if (Number.isInteger(startYear) && Number.isInteger(endYear)) {
+      return buildNormalizedAbsoluteRange(
+        { year: startYear, month: 1, day: 1 },
+        { year: endYear, month: 12, day: 31 },
+      );
+    }
+  }
+
+  const standaloneCalendarYearRangeMatch = normalizedPrompt.match(/\b((?:19|20)\d{2})\s*(?:to|through|until|-)\s*((?:19|20)\d{2})\b/);
+  if (standaloneCalendarYearRangeMatch) {
+    const startYear = Number(standaloneCalendarYearRangeMatch[1]);
+    const endYear = Number(standaloneCalendarYearRangeMatch[2]);
+    if (Number.isInteger(startYear) && Number.isInteger(endYear)) {
+      return buildNormalizedAbsoluteRange(
+        { year: startYear, month: 1, day: 1 },
+        { year: endYear, month: 12, day: 31 },
+      );
+    }
+  }
+
+  const explicitQuarterMatch = normalizedPrompt.match(/\b(?:in|for|during)\s+q([1-4])\s+((?:19|20)\d{2})\b/);
+  if (explicitQuarterMatch) {
+    const quarter = Number(explicitQuarterMatch[1]);
+    const year = Number(explicitQuarterMatch[2]);
+    if (Number.isInteger(quarter) && Number.isInteger(year)) {
+      return resolveQuarterAbsoluteRange(quarter, year);
+    }
+  }
+
+  const textualQuarterMatch = normalizedPrompt.match(/\b(?:in|for|during)\s+(first|1st|second|2nd|third|3rd|fourth|4th)\s+quarter(?:\s+of)?\s+((?:19|20)\d{2})\b/);
+  if (textualQuarterMatch) {
+    const quarter = (() => {
+      switch (textualQuarterMatch[1]) {
+        case 'first':
+        case '1st':
+          return 1;
+        case 'second':
+        case '2nd':
+          return 2;
+        case 'third':
+        case '3rd':
+          return 3;
+        case 'fourth':
+        case '4th':
+          return 4;
+        default:
+          return null;
+      }
+    })();
+    const year = Number(textualQuarterMatch[2]);
+    if (quarter && Number.isInteger(year)) {
+      return resolveQuarterAbsoluteRange(quarter, year);
+    }
+  }
+
+  const explicitHalfYearMatch = normalizedPrompt.match(/\b(?:in|for|during)\s+h([12])\s+((?:19|20)\d{2})\b/);
+  if (explicitHalfYearMatch) {
+    const half = Number(explicitHalfYearMatch[1]);
+    const year = Number(explicitHalfYearMatch[2]);
+    if (Number.isInteger(half) && Number.isInteger(year)) {
+      return resolveHalfYearAbsoluteRange(half, year);
+    }
+  }
+
+  const textualHalfYearMatch = normalizedPrompt.match(/\b(?:in|for|during)\s+(first|1st|second|2nd)\s+half(?:\s+of)?\s+((?:19|20)\d{2})\b/);
+  if (textualHalfYearMatch) {
+    const half = textualHalfYearMatch[1] === 'first' || textualHalfYearMatch[1] === '1st' ? 1 : 2;
+    const year = Number(textualHalfYearMatch[2]);
+    if (Number.isInteger(year)) {
+      return resolveHalfYearAbsoluteRange(half, year);
+    }
+  }
+
+  const calendarYearMatch = normalizedPrompt.match(/\b(?:in|for|during)\s+(?:the\s+)?(?:year\s+)?((?:19|20)\d{2})\b/);
+  if (calendarYearMatch) {
+    const year = Number(calendarYearMatch[1]);
+    if (Number.isInteger(year)) {
+      return resolveCalendarYearAbsoluteRange(year);
+    }
+  }
+
+  const bareYearMatches = [...normalizedPrompt.matchAll(new RegExp(`\\b(${YEAR_PATTERN.source})\\b`, 'g'))]
+    .map((match) => Number(match[1]))
+    .filter(year => Number.isInteger(year));
+  if (bareYearMatches.length === 1) {
+    return resolveCalendarYearAbsoluteRange(bareYearMatches[0]);
   }
 
   const relativeMatch = normalizedPrompt.match(/\b(?:last|past)\s+(\d+)\s+(day|days|week|weeks|month|months|year|years)\b/);

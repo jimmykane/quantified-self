@@ -269,6 +269,133 @@ describe('summarizeAiInsightResult', () => {
     expect(result.narrative).not.toContain('422.3478623928474');
   });
 
+  it('forces empty narratives to use the resolved default date range text', async () => {
+    setSummarizeInsightDependenciesForTesting({
+      generateNarrative: async () => ({
+        source: 'genkit',
+        narrative: 'No matching data was found for 2024 as the provided information covers the period from Jan 01, 2026 to Mar 20, 2026.',
+      }),
+    });
+
+    const result = await summarizeAiInsightResult({
+      ...paceInput,
+      status: 'empty',
+      query: {
+        ...paceInput.query,
+        dateRange: {
+          kind: 'bounded',
+          startDate: '2025-12-31T22:00:00.000Z',
+          endDate: '2026-03-20T21:59:59.999Z',
+          timezone: 'Europe/Helsinki',
+          source: 'default',
+        },
+      },
+    });
+
+    expect(result.source).toBe('genkit');
+    expect(result.narrative).toBe(
+      'Used the default date range (Jan 01, 2026 to Mar 20, 2026) because no time range was found in your prompt. No matching trail running events with pace data were found in Jan 01, 2026 to Mar 20, 2026.',
+    );
+    expect(result.narrative).not.toContain('2024');
+  });
+
+  it('replaces successful default-range narratives that claim no matching data', async () => {
+    setSummarizeInsightDependenciesForTesting({
+      generateNarrative: async () => ({
+        source: 'genkit',
+        narrative: 'No matching data was found for 2024 as the provided information covers the period from Jan 01, 2026 to Mar 18, 2026.',
+      }),
+    });
+
+    const result = await summarizeAiInsightResult({
+      ...paceInput,
+      query: {
+        ...paceInput.query,
+        dateRange: {
+          kind: 'bounded',
+          startDate: '2025-12-31T22:00:00.000Z',
+          endDate: '2026-03-18T21:59:59.999Z',
+          timezone: 'Europe/Helsinki',
+          source: 'default',
+        },
+      },
+    });
+
+    expect(result.source).toBe('genkit');
+    expect(result.narrative).toContain('from Jan 01, 2026 to Mar 18, 2026');
+    expect(result.narrative).toContain('07:02 min/km');
+    expect(result.narrative).not.toContain('No matching data was found');
+    expect(result.narrative).not.toContain('2024');
+  });
+
+  it('replaces successful default-range narratives that omit the effective range', async () => {
+    setSummarizeInsightDependenciesForTesting({
+      generateNarrative: async () => ({
+        source: 'genkit',
+        narrative: 'Your average pace improved recently for trail running.',
+      }),
+    });
+
+    const result = await summarizeAiInsightResult({
+      ...paceInput,
+      query: {
+        ...paceInput.query,
+        dateRange: {
+          kind: 'bounded',
+          startDate: '2025-12-31T22:00:00.000Z',
+          endDate: '2026-03-18T21:59:59.999Z',
+          timezone: 'Europe/Helsinki',
+          source: 'default',
+        },
+      },
+    });
+
+    expect(result.source).toBe('genkit');
+    expect(result.narrative).toContain('from Jan 01, 2026 to Mar 18, 2026');
+    expect(result.narrative).toContain('07:02 min/km');
+    expect(result.narrative).not.toContain('recently');
+  });
+
+  it('keeps successful default-range narratives that already match the effective range', async () => {
+    setSummarizeInsightDependenciesForTesting({
+      generateNarrative: async () => ({
+        source: 'genkit',
+        narrative: 'From Jan 01, 2026 to Mar 18, 2026 for trail running, your average pace was 07:02 min/km.',
+      }),
+    });
+
+    const result = await summarizeAiInsightResult({
+      ...paceInput,
+      query: {
+        ...paceInput.query,
+        dateRange: {
+          kind: 'bounded',
+          startDate: '2025-12-31T22:00:00.000Z',
+          endDate: '2026-03-18T21:59:59.999Z',
+          timezone: 'Europe/Helsinki',
+          source: 'default',
+        },
+      },
+    });
+
+    expect(result.source).toBe('genkit');
+    expect(result.narrative).toBe('From Jan 01, 2026 to Mar 18, 2026 for trail running, your average pace was 07:02 min/km.');
+  });
+
+  it('does not apply the default-range guard to prompt-sourced ranges', async () => {
+    setSummarizeInsightDependenciesForTesting({
+      generateNarrative: async () => ({
+        source: 'genkit',
+        narrative: 'No matching data was found for 2024.',
+      }),
+    });
+
+    const result = await summarizeAiInsightResult(paceInput);
+
+    expect(result.source).toBe('genkit');
+    expect(result.narrative).toBe('No matching data was found for 2024.');
+  });
+
   it('builds a fallback narrative for multi-metric aggregate results', async () => {
     setSummarizeInsightDependenciesForTesting({
       generateNarrative: async () => {

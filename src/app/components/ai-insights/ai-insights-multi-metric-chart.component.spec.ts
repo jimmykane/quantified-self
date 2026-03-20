@@ -195,6 +195,18 @@ describe('AiInsightsMultiMetricChartComponent', () => {
     expect(offset).toBeGreaterThan(0);
   });
 
+  it('aligns axis names and tick labels consistently by axis side', () => {
+    const leftAlign = (fixture.componentInstance as any).resolveAxisLabelAlign(0) as string;
+    const rightAlign = (fixture.componentInstance as any).resolveAxisLabelAlign(1) as string;
+    const leftPadding = (fixture.componentInstance as any).resolveAxisTextPadding(0) as [number, number, number, number];
+    const rightPadding = (fixture.componentInstance as any).resolveAxisTextPadding(1) as [number, number, number, number];
+
+    expect(leftAlign).toBe('right');
+    expect(rightAlign).toBe('left');
+    expect(leftPadding).toEqual([0, 8, 0, 0]);
+    expect(rightPadding).toEqual([0, 0, 0, 8]);
+  });
+
   it('keeps series labels short by dropping aggregation prefixes', () => {
     const series = (fixture.componentInstance as any).buildSeries().series as Array<{ metricLabel: string }>;
     expect(series.map(entry => entry.metricLabel)).toEqual(['cadence', 'power', 'heart rate']);

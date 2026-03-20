@@ -1120,7 +1120,7 @@ describe('AiInsightsPageComponent', () => {
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes(expectedOverall ?? ''))).toBe(true);
   });
 
-  it('should render multi-metric responses with the combined chart and per-metric sections', async () => {
+  it('should render multi-metric responses with the combined chart and merged summary cards', async () => {
     const response = buildMultiMetricResponse();
     aiInsightsServiceMock.runInsight.mockResolvedValue(response);
     component.promptControl.setValue('Show me avg cadence and avg power for the last 3 months for cycling');
@@ -1134,16 +1134,32 @@ describe('AiInsightsPageComponent', () => {
     const narrative = fixture.debugElement.query(By.css('.narrative'))?.nativeElement as HTMLElement | undefined;
     const resultTitle = fixture.debugElement.query(By.css('.result-card-title'))?.nativeElement as HTMLElement | undefined;
     const multiChart = fixture.debugElement.query(By.css('.multi-chart-stub'))?.nativeElement as HTMLElement | undefined;
-    const metricSections = fixture.debugElement.queryAll(By.css('.multi-metric-section'));
     const resultCardSubtitle = fixture.debugElement.query(By.css('.result-card-subtitle'))?.nativeElement as HTMLElement | undefined;
+    const summaryCards = fixture.debugElement.queryAll(By.css('.summary-card'));
+    const overallCard = summaryCards.find((card) => card.nativeElement.textContent.includes('Overall'))?.nativeElement as HTMLElement | undefined;
+    const expectedCadenceOverall = formatUnitAwareDataValue(
+      DataCadenceAvg.type,
+      86,
+      userSettingsQueryServiceMock.unitSettings(),
+      { stripRepeatedUnit: true },
+    );
+    const expectedPowerOverall = formatUnitAwareDataValue(
+      'Average Power',
+      210,
+      userSettingsQueryServiceMock.unitSettings(),
+      { stripRepeatedUnit: true },
+    );
+    const metricSections = fixture.debugElement.queryAll(By.css('.multi-metric-section'));
 
     expect(narrative?.textContent).toContain('Cadence and power');
     expect(resultTitle?.textContent).toContain('Cadence and power over time for cycling');
     expect(multiChart?.textContent).toContain('Cadence and power over time for Cycling');
-    expect(metricSections).toHaveLength(2);
-    expect(metricSections[0]?.nativeElement.textContent).toContain('cadence');
-    expect(metricSections[1]?.nativeElement.textContent).toContain('power');
     expect(resultCardSubtitle?.textContent).toContain('Aggregation: Average');
+    expect(overallCard?.textContent).toContain('Cadence');
+    expect(overallCard?.textContent).toContain('Power');
+    expect(overallCard?.textContent).toContain(expectedCadenceOverall ?? '');
+    expect(overallCard?.textContent).toContain(expectedPowerOverall ?? '');
+    expect(metricSections).toHaveLength(0);
   });
 
   it('should render the richer AI loading state while an insight request is in flight', async () => {
@@ -1428,8 +1444,10 @@ describe('AiInsightsPageComponent', () => {
     fixture.detectChanges();
 
     const note = fixture.debugElement.query(By.css('.result-date-range-note'))?.nativeElement as HTMLElement | undefined;
+    const narrative = fixture.debugElement.query(By.css('.narrative'))?.nativeElement as HTMLElement | undefined;
 
     expect(note?.textContent).toContain('Used the current year to date because no time range was found in your prompt.');
+    expect(narrative?.textContent).not.toContain('No matching data');
   });
 
   it('should render bounded subtitles using the injected en-US locale instead of raw ISO dates', async () => {

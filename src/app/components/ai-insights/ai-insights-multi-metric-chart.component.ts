@@ -236,6 +236,16 @@ export class AiInsightsMultiMetricChartComponent implements AfterViewInit, OnCha
     return 'right';
   }
 
+  private resolveAxisLabelAlign(axisIndex: number): 'left' | 'right' {
+    return this.resolveAxisPosition(axisIndex) === 'left' ? 'right' : 'left';
+  }
+
+  private resolveAxisTextPadding(axisIndex: number): [number, number, number, number] {
+    return this.resolveAxisPosition(axisIndex) === 'left'
+      ? [0, 8, 0, 0]
+      : [0, 0, 0, 8];
+  }
+
   private resolveAxisOffset(axisIndex: number): number {
     if (axisIndex <= 1) {
       return 0;
@@ -386,10 +396,14 @@ export class AiInsightsMultiMetricChartComponent implements AfterViewInit, OnCha
         position: this.resolveAxisPosition(axisGroup.axisIndex),
         offset: this.resolveAxisOffset(axisGroup.axisIndex),
         name: axisGroup.series[0]?.axisLabel ?? '',
+        nameLocation: 'end',
+        nameRotate: 0,
+        nameGap: 6,
         nameTextStyle: {
           color: chartStyle.textColor,
           fontSize: chartStyle.axisFontSize,
-          padding: [0, 0, 8, 0],
+          align: this.resolveAxisLabelAlign(axisGroup.axisIndex),
+          padding: this.resolveAxisTextPadding(axisGroup.axisIndex),
         },
         axisLine: {
           lineStyle: { color: chartStyle.axisColor },
@@ -402,6 +416,9 @@ export class AiInsightsMultiMetricChartComponent implements AfterViewInit, OnCha
         axisLabel: {
           color: chartStyle.textColor,
           fontSize: chartStyle.axisFontSize,
+          align: this.resolveAxisLabelAlign(axisGroup.axisIndex),
+          margin: 0,
+          padding: this.resolveAxisTextPadding(axisGroup.axisIndex),
           formatter: (value: number) => formatAxisLabel(
             axisGroup.series[0]?.dataType ?? '',
             value,

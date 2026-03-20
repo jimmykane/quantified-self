@@ -1,4 +1,5 @@
 import { z } from 'genkit';
+import * as logger from 'firebase-functions/logger';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -328,16 +329,87 @@ function formatEventLookupDate(
   return formatSemanticDate(value, locale, query.dateRange.timezone);
 }
 
+function containsNoDataPhrasing(narrative: string): boolean {
+  return [
+    /\bno matching data\b/i,
+    /\bno matching (?:event|events|activity|activities)\b/i,
+    /\bno matching .*?\b(?:was|were) found\b/i,
+    /\bcould not find matching\b/i,
+    /\bno data was found\b/i,
+  ].some(pattern => pattern.test(narrative));
+}
+
+function hasEffectiveRangeReference(
+  input: SummarizeInsightResultInput,
+  narrative: string,
+): boolean {
+  if (input.query.dateRange.kind !== 'bounded') {
+    return true;
+  }
+
+  const dateRangeText = formatLocalizedDateRange(input.query, input.clientLocale);
+  if (narrative.includes(dateRangeText)) {
+    return true;
+  }
+
+  const startDateText = formatSemanticDate(
+    input.query.dateRange.startDate,
+    input.clientLocale,
+    input.query.dateRange.timezone,
+  );
+  const endDateText = formatSemanticDate(
+    input.query.dateRange.endDate,
+    input.clientLocale,
+    input.query.dateRange.timezone,
+  );
+
+  return narrative.includes(startDateText) && narrative.includes(endDateText);
+}
+
+function resolveNarrativeOverrideReason(
+  input: SummarizeInsightResultInput,
+  narrative: string,
+): 'empty_result' | 'contains_no_data_phrasing' | 'missing_effective_range' | null {
+  if (input.status === 'empty') {
+    return 'empty_result';
+  }
+
+  if (input.query.dateRange.kind !== 'bounded' || input.query.dateRange.source !== 'default') {
+    return null;
+  }
+
+  if (containsNoDataPhrasing(narrative)) {
+    return 'contains_no_data_phrasing';
+  }
+
+  if (!hasEffectiveRangeReference(input, narrative)) {
+    return 'missing_effective_range';
+  }
+
+  return null;
+}
+
 function buildNarrativeFallback(input: SummarizeInsightResultInput): string {
   const dateRangeText = formatLocalizedDateRange(input.query, input.clientLocale);
   const activityText = formatActivityFilter(input.query);
   const isAllTime = input.query.dateRange.kind === 'all_time';
+  const metricLabelText = 'metricResults' in input
+    ? joinMetricLabels(input.metricLabels)
+    : input.metricLabel;
+
+  if (input.status === 'empty') {
+    const defaultRangePrefix = input.query.dateRange.source === 'default' && !isAllTime
+      ? `Used the default date range (${dateRangeText}) because no time range was found in your prompt. `
+      : '';
+
+    return isAllTime
+      ? `${defaultRangePrefix}No matching ${activityText} events with ${metricLabelText} data were found across all recorded history.`
+      : `${defaultRangePrefix}No matching ${activityText} events with ${metricLabelText} data were found in ${dateRangeText}.`;
+  }
 
   if ('metricResults' in input) {
     const metricSummaryFacts = buildMultiMetricSummaryFacts(input);
-    const metricLabelText = joinMetricLabels(input.metricLabels);
-
-    if (input.status === 'empty' || metricSummaryFacts.every((metric) => !metric.overallAggregateDisplayValue)) {
+    if (metricSummaryFacts.every((metric) => !metric.overallAggregateDisplayValue)) {
       return isAllTime
         ? `I could not find matching ${activityText} events with ${metricLabelText} data across all recorded history.`
         : `I could not find matching ${activityText} events with ${metricLabelText} data from ${dateRangeText}.`;
@@ -356,12 +428,6 @@ function buildNarrativeFallback(input: SummarizeInsightResultInput): string {
     return isAllTime
       ? `Across all recorded history for ${activityText}, ${summarySentence}.`
       : `From ${dateRangeText} for ${activityText}, ${summarySentence}.`;
-  }
-
-  if (input.status === 'empty') {
-    return isAllTime
-      ? `I could not find matching ${activityText} events with ${input.metricLabel} data across all recorded history.`
-      : `I could not find matching ${activityText} events with ${input.metricLabel} data from ${dateRangeText}.`;
   }
 
   if ('eventLookup' in input) {
@@ -394,14 +460,18 @@ function buildNarrativeFallback(input: SummarizeInsightResultInput): string {
   }
 
   if (!summary.highestValueBucket || !summary.latestBucket) {
-    return `I found matching ${activityText} events for ${input.metricLabel}, but there was not enough aggregated data to summarize the result.`;
+    return isAllTime
+      ? `I found matching ${activityText} events for ${input.metricLabel}, but there was not enough aggregated data to summarize the result across all recorded history.`
+      : `I found matching ${activityText} events for ${input.metricLabel} from ${dateRangeText}, but there was not enough aggregated data to summarize the result.`;
   }
 
   const grouping = input.query.categoryType === ChartDataCategoryTypes.ActivityType
     ? 'activity groups'
     : 'time buckets';
 
-  return `I found ${input.aggregation.buckets.length} ${grouping} for ${input.presentation.title}. The ${summary.highestValueBucket.label.toLowerCase()} was ${summary.highestValueBucket.aggregateDisplayValue}, and the ${summary.latestBucket.label.toLowerCase()} was ${summary.latestBucket.aggregateDisplayValue}.`;
+  return isAllTime
+    ? `Across all recorded history, I found ${input.aggregation.buckets.length} ${grouping} for ${input.presentation.title}. The ${summary.highestValueBucket.label.toLowerCase()} was ${summary.highestValueBucket.aggregateDisplayValue}, and the ${summary.latestBucket.label.toLowerCase()} was ${summary.latestBucket.aggregateDisplayValue}.`
+    : `From ${dateRangeText}, I found ${input.aggregation.buckets.length} ${grouping} for ${input.presentation.title}. The ${summary.highestValueBucket.label.toLowerCase()} was ${summary.highestValueBucket.aggregateDisplayValue}, and the ${summary.latestBucket.label.toLowerCase()} was ${summary.latestBucket.aggregateDisplayValue}.`;
 }
 
 export function buildNarrativeFacts(input: SummarizeInsightResultInput): Record<string, unknown> {
@@ -503,6 +573,8 @@ const defaultSummarizeInsightDependencies: SummarizeInsightDependencies = {
         'Use the provided formatted display values and labels exactly as supplied.',
         'Do not invent units, dates, metrics, or calculations.',
         'Do not restate raw storage values or infer new numeric calculations.',
+        'Always anchor the summary to the supplied effective dateRangeLabel when it is provided.',
+        'If status is ok, do not claim that no matching data was found and do not mention any date range other than the supplied effective range.',
         'If the status is empty, clearly say that no matching data was found.',
       ].join(' '),
       prompt: JSON.stringify(buildNarrativeFacts(input)),
@@ -538,9 +610,32 @@ export async function summarizeAiInsightResult(
   input: SummarizeInsightResultInput,
 ): Promise<SummarizeInsightNarrativeResult> {
   try {
-    return SummarizeInsightNarrativeResultSchema.parse(
+    const generatedNarrative = SummarizeInsightNarrativeResultSchema.parse(
       await summarizeInsightDependencies.generateNarrative(input),
     );
+
+    const overrideReason = resolveNarrativeOverrideReason(input, generatedNarrative.narrative);
+    if (overrideReason === 'empty_result') {
+      return {
+        ...generatedNarrative,
+        narrative: buildNarrativeFallback(input),
+      };
+    }
+
+    if (overrideReason) {
+      logger.debug('[aiInsights] Replaced inconsistent default-range narrative.', {
+        prompt: input.prompt,
+        resultKind: input.query.resultKind,
+        reason: overrideReason,
+        dateRangeLabel: formatLocalizedDateRange(input.query, input.clientLocale),
+      });
+      return {
+        ...generatedNarrative,
+        narrative: buildNarrativeFallback(input),
+      };
+    }
+
+    return generatedNarrative;
   } catch (_error) {
     return {
       narrative: buildNarrativeFallback(input),

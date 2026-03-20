@@ -7,6 +7,7 @@ import {
   ChartTypes,
   DataAerobicTrainingEffect,
   DataAnaerobicTrainingEffect,
+  DataAscent,
   DataCadenceAvg,
   DataDistance,
   DataEffortPaceAvg,
@@ -190,6 +191,118 @@ describe('normalizeInsightQuery', () => {
       kind: 'bounded',
       startDate: '2026-01-01T00:00:00.000Z',
       endDate: '2026-03-18T23:59:59.999Z',
+      timezone: 'UTC',
+      source: 'prompt',
+    });
+  });
+
+  it('normalizes explicit calendar-year prompts such as "in year 2024"', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-20T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'how much ascent did i do in year 2024 as a total per sport',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.dataType).toBe(DataAscent.type);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Total);
+    expect(result.query.categoryType).toBe(ChartDataCategoryTypes.ActivityType);
+    expect(result.query.chartType).toBe(ChartTypes.ColumnsHorizontal);
+    expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
+      startDate: '2024-01-01T00:00:00.000Z',
+      endDate: '2024-12-31T23:59:59.999Z',
+      timezone: 'UTC',
+      source: 'prompt',
+    });
+  });
+
+  it('normalizes explicit month-year prompts such as "in January 2024"', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-20T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'show my total distance per sport in january 2024',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.dataType).toBe(DataDistance.type);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Total);
+    expect(result.query.categoryType).toBe(ChartDataCategoryTypes.ActivityType);
+    expect(result.query.chartType).toBe(ChartTypes.ColumnsHorizontal);
+    expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
+      startDate: '2024-01-01T00:00:00.000Z',
+      endDate: '2024-01-31T23:59:59.999Z',
+      timezone: 'UTC',
+      source: 'prompt',
+    });
+  });
+
+  it('normalizes quarter prompts such as "in Q1 2024"', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-20T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'show my total distance by sport in q1 2024',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.dataType).toBe(DataDistance.type);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Total);
+    expect(result.query.categoryType).toBe(ChartDataCategoryTypes.ActivityType);
+    expect(result.query.chartType).toBe(ChartTypes.ColumnsHorizontal);
+    expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
+      startDate: '2024-01-01T00:00:00.000Z',
+      endDate: '2024-03-31T23:59:59.999Z',
+      timezone: 'UTC',
+      source: 'prompt',
+    });
+  });
+
+  it('normalizes half-year prompts such as "in H2 2024"', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-20T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'show my total ascent by sport in h2 2024',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.dataType).toBe(DataAscent.type);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Total);
+    expect(result.query.categoryType).toBe(ChartDataCategoryTypes.ActivityType);
+    expect(result.query.chartType).toBe(ChartTypes.ColumnsHorizontal);
+    expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
+      startDate: '2024-07-01T00:00:00.000Z',
+      endDate: '2024-12-31T23:59:59.999Z',
       timezone: 'UTC',
       source: 'prompt',
     });

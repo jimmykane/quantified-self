@@ -140,6 +140,11 @@ function resolveShortMetricLabel(
   metricLabel: string,
   valueType: ChartDataValueTypes,
 ): string {
+  const trimmedLabel = metricLabel.trim();
+  if (!trimmedLabel) {
+    return '';
+  }
+
   const prefixCandidates = (() => {
     switch (valueType) {
       case ChartDataValueTypes.Average:
@@ -155,13 +160,18 @@ function resolveShortMetricLabel(
     }
   })();
 
+  const normalizedLabel = trimmedLabel.toLowerCase();
   for (const prefix of prefixCandidates) {
-    if (metricLabel.startsWith(prefix) && metricLabel.length > prefix.length) {
-      return metricLabel.slice(prefix.length);
+    const normalizedPrefix = prefix.toLowerCase();
+    if (normalizedLabel.startsWith(normalizedPrefix) && trimmedLabel.length > prefix.length) {
+      const stripped = trimmedLabel.slice(prefix.length).trim();
+      return stripped
+        ? `${stripped.slice(0, 1).toUpperCase()}${stripped.slice(1)}`
+        : '';
     }
   }
 
-  return metricLabel;
+  return `${trimmedLabel.slice(0, 1).toUpperCase()}${trimmedLabel.slice(1)}`;
 }
 
 function getClientTimeZone(): string {
@@ -563,7 +573,7 @@ function formatEventLookupActivityLabel(event: EventInterface | null): string | 
 
 interface InsightSummaryCard {
   label: string;
-  value: string;
+  value?: string;
   meta?: string;
   detailRows?: Array<{
     label: string;
@@ -584,6 +594,57 @@ interface MultiMetricSection {
   summaryCards: InsightSummaryCard[];
   isEmpty: boolean;
   emptyState: string;
+}
+
+function buildMergedMultiMetricSummaryCards(
+  sections: MultiMetricSection[],
+): InsightSummaryCard[] {
+  const orderedLabels: string[] = [];
+  const cardsByLabel = new Map<string, InsightSummaryCard>();
+
+  for (const section of sections) {
+    if (section.isEmpty) {
+      continue;
+    }
+
+    for (const summaryCard of section.summaryCards) {
+      const primaryValue = summaryCard.value?.trim() ?? '';
+      const metaValue = summaryCard.meta?.trim() ?? '';
+      const mergedValue = primaryValue && metaValue
+        ? `${primaryValue} • ${metaValue}`
+        : (primaryValue || metaValue);
+      if (!mergedValue) {
+        continue;
+      }
+
+      let mergedCard = cardsByLabel.get(summaryCard.label);
+      if (!mergedCard) {
+        mergedCard = {
+          label: summaryCard.label,
+          helpText: summaryCard.helpText,
+          detailRows: [],
+        };
+        cardsByLabel.set(summaryCard.label, mergedCard);
+        orderedLabels.push(summaryCard.label);
+      }
+
+      if (!mergedCard.helpText && summaryCard.helpText) {
+        mergedCard.helpText = summaryCard.helpText;
+      }
+
+      mergedCard.detailRows = [
+        ...(mergedCard.detailRows ?? []),
+        {
+          label: section.title,
+          value: mergedValue,
+        },
+      ];
+    }
+  }
+
+  return orderedLabels
+    .map((label) => cardsByLabel.get(label))
+    .filter((card): card is InsightSummaryCard => !!card && !!card.detailRows?.length);
 }
 
 interface EventLookupResolvedEvent {
@@ -680,7 +741,7 @@ export class AiInsightsPageComponent {
     return `${currentStep}/${totalSteps}`;
   });
   readonly generationLoadingRollerTransform = computed(() => (
-    `translateY(calc(-1 * ${this.generationLoadingStepIndex()} * var(--ai-insights-loading-roller-row-height, 1.85rem)))`
+    `translateY(calc(-1 * ${this.generationLoadingStepIndex()} * var(--ai-insights-loading-roller-row-height, 32px)))`
   ));
   readonly isPromptLocked = computed(() => (
     this.isSubmitting() || this.isRestoringLatestSnapshot()
@@ -750,8 +811,8 @@ export class AiInsightsPageComponent {
     const multiMetricResponse = this.multiMetricOkResponse();
     if (multiMetricResponse) {
       return multiMetricResponse.query.groupingMode === 'date'
-        ? 'Combined chart and per-metric summaries for this prompt.'
-        : 'Per-metric summaries for this prompt.';
+        ? 'Combined chart and merged metric summaries for this prompt.'
+        : 'Merged metric summaries for this prompt.';
     }
 
     if (this.aggregateOkResponse()) {
@@ -1121,14 +1182,37 @@ export class AiInsightsPageComponent {
 
     const unitSettings = this.userUnitSettings();
     const locale = this.locale;
+    const metricSelectionsByKey = new Map(
+      response.query.metricSelections.map((selection) => [selection.metricKey, selection] as const),
+    );
+
     return response.metricResults.map((metricResult) => ({
       metricKey: metricResult.metricKey,
-      title: resolveShortMetricLabel(metricResult.metricLabel, metricResult.query.valueType),
+      title: (() => {
+        const metricSelection = metricSelectionsByKey.get(metricResult.metricKey);
+        return resolveShortMetricLabel(
+          metricSelection?.dataType ?? metricResult.metricLabel,
+          metricSelection?.valueType ?? metricResult.query.valueType,
+        );
+      })(),
       summaryCards: buildAggregateSummaryCards(metricResult, unitSettings, locale),
       isEmpty: metricResult.aggregation.buckets.length === 0,
-      emptyState: `No matching ${resolveShortMetricLabel(metricResult.metricLabel, metricResult.query.valueType)} data was found for this result scope.`,
+      emptyState: (() => {
+        const metricSelection = metricSelectionsByKey.get(metricResult.metricKey);
+        const metricLabel = resolveShortMetricLabel(
+          metricSelection?.dataType ?? metricResult.metricLabel,
+          metricSelection?.valueType ?? metricResult.query.valueType,
+        );
+        return `No matching ${metricLabel} data was found for this result scope.`;
+      })(),
     }));
   });
+  readonly multiMetricMergedSummaryCards = computed<InsightSummaryCard[]>(() => (
+    buildMergedMultiMetricSummaryCards(this.multiMetricSections())
+  ));
+  readonly multiMetricEmptySections = computed<MultiMetricSection[]>(() => (
+    this.multiMetricSections().filter(section => section.isEmpty)
+  ));
   readonly multiMetricChartVisible = computed(() => {
     const response = this.multiMetricOkResponse();
     return !!response

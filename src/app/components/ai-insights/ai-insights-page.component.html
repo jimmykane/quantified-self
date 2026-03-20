@@ -419,22 +419,63 @@
                 <mat-divider></mat-divider>
               }
 
-              @if (multiMetricSections().length) {
+              @if (multiMetricMergedSummaryCards().length || multiMetricEmptySections().length) {
                 <div class="section-heading">
                   <div>
-                    <p class="mat-label-medium suggestions-title">Metrics</p>
-                    <p class="mat-body-small section-supporting-copy">Each metric keeps its own deterministic summary cards.</p>
+                    <p class="mat-label-medium suggestions-title">Summary</p>
+                    <p class="mat-body-small section-supporting-copy">Merged cards compare metrics side by side for the same result scope.</p>
                   </div>
                 </div>
 
-                <div class="multi-metric-section-list">
-                  @for (metricSection of multiMetricSections(); track metricSection.metricKey) {
-                    <section class="multi-metric-section">
-                      <div class="multi-metric-section-header">
-                        <p class="result-subtitle">{{ metricSection.title }}</p>
-                      </div>
+                @if (multiMetricMergedSummaryCards().length) {
+                  <div class="summary-grid">
+                    @for (summaryCard of multiMetricMergedSummaryCards(); track summaryCard.label) {
+                      <section class="summary-card">
+                        <div class="summary-label-row">
+                          <p class="mat-label-medium summary-label">{{ summaryCard.label }}</p>
+                          @if (summaryCard.helpText) {
+                            <button
+                              mat-icon-button
+                              type="button"
+                              class="summary-help-button"
+                              [attr.aria-label]="'Explain ' + summaryCard.label"
+                              [matTooltip]="summaryCard.helpText"
+                              matTooltipPosition="above">
+                              <mat-icon>info</mat-icon>
+                            </button>
+                          }
+                        </div>
+                        @if (summaryCard.value) {
+                          <p class="summary-value">{{ summaryCard.value }}</p>
+                        }
+                        @if (summaryCard.detailRows?.length) {
+                          <div class="summary-detail-list">
+                            @for (detailRow of summaryCard.detailRows; track detailRow.label + ':' + detailRow.value) {
+                              <div class="summary-detail-row">
+                                <span class="summary-detail-label">{{ detailRow.label }}</span>
+                                <span class="summary-detail-value">{{ detailRow.value }}</span>
+                              </div>
+                            }
+                          </div>
+                        }
+                        @if (summaryCard.metaFooter) {
+                          <p class="summary-meta">{{ summaryCard.metaFooter }}</p>
+                        }
+                        @if (summaryCard.meta) {
+                          <p class="summary-meta">{{ summaryCard.meta }}</p>
+                        }
+                      </section>
+                    }
+                  </div>
+                }
 
-                      @if (metricSection.isEmpty) {
+                @if (multiMetricEmptySections().length) {
+                  <div class="multi-metric-section-list">
+                    @for (metricSection of multiMetricEmptySections(); track metricSection.metricKey) {
+                      <section class="multi-metric-section">
+                        <div class="multi-metric-section-header">
+                          <p class="result-subtitle">{{ metricSection.title }}</p>
+                        </div>
                         <div class="state-panel">
                           <mat-icon>search_off</mat-icon>
                           <div>
@@ -442,48 +483,10 @@
                             <p class="mat-body-medium state-copy">{{ metricSection.emptyState }}</p>
                           </div>
                         </div>
-                      } @else if (metricSection.summaryCards.length) {
-                        <div class="summary-grid">
-                          @for (summaryCard of metricSection.summaryCards; track summaryCard.label) {
-                            <section class="summary-card">
-                              <div class="summary-label-row">
-                                <p class="mat-label-medium summary-label">{{ summaryCard.label }}</p>
-                                @if (summaryCard.helpText) {
-                                  <button
-                                    mat-icon-button
-                                    type="button"
-                                    class="summary-help-button"
-                                    [attr.aria-label]="'Explain ' + summaryCard.label"
-                                    [matTooltip]="summaryCard.helpText"
-                                    matTooltipPosition="above">
-                                    <mat-icon>info</mat-icon>
-                                  </button>
-                                }
-                              </div>
-                              <p class="summary-value">{{ summaryCard.value }}</p>
-                              @if (summaryCard.detailRows?.length) {
-                                <div class="summary-detail-list">
-                                  @for (detailRow of summaryCard.detailRows; track detailRow.label) {
-                                    <div class="summary-detail-row">
-                                      <span class="summary-detail-label">{{ detailRow.label }}</span>
-                                      <span class="summary-detail-value">{{ detailRow.value }}</span>
-                                    </div>
-                                  }
-                                </div>
-                              }
-                              @if (summaryCard.metaFooter) {
-                                <p class="summary-meta">{{ summaryCard.metaFooter }}</p>
-                              }
-                              @if (summaryCard.meta) {
-                                <p class="summary-meta">{{ summaryCard.meta }}</p>
-                              }
-                            </section>
-                          }
-                        </div>
-                      }
-                    </section>
-                  }
-                </div>
+                      </section>
+                    }
+                  </div>
+                }
               }
             </div>
           } @else if (aggregateOkResponse(); as result) {
