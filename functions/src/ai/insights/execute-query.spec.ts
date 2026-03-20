@@ -261,6 +261,81 @@ describe('execute-query', () => {
     expect(result.aggregation.buckets[0]?.aggregateValue).toBe(40);
   });
 
+  it('filters matched events to the exact requested date-range union inside the broader fetch span', async () => {
+    const fetchEventDocs = vi.fn(async () => [
+      { id: 'e2024', data: () => ({ startDate: Date.UTC(2024, 5, 1, 12, 0, 0) }) },
+      { id: 'e2025', data: () => ({ startDate: Date.UTC(2025, 5, 1, 12, 0, 0) }) },
+      { id: 'e2026', data: () => ({ startDate: Date.UTC(2026, 5, 1, 12, 0, 0) }) },
+    ]);
+
+    const importEvent = vi
+      .fn()
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'e2024',
+        startDate: new Date('2024-06-01T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: { [DataDistance.type]: 40 },
+      }))
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'e2025',
+        startDate: new Date('2025-06-01T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: { [DataDistance.type]: 50 },
+      }))
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'e2026',
+        startDate: new Date('2026-06-01T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: { [DataDistance.type]: 60 },
+      }));
+
+    setExecuteQueryDependenciesForTesting({
+      fetchEventDocs,
+      fetchDebugEventSnapshot: vi.fn(async () => ({
+        totalEventsCount: 3,
+        recentEventsSample: [],
+      })),
+      importEvent,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+    });
+
+    const result = await executeAiInsightsQuery('user-1', createQuery({
+      requestedTimeInterval: TimeIntervals.Yearly,
+      dateRange: {
+        kind: 'bounded',
+        startDate: '2024-01-01T00:00:00.000Z',
+        endDate: '2026-12-31T23:59:59.999Z',
+        timezone: 'UTC',
+        source: 'prompt',
+      },
+      requestedDateRanges: [
+        {
+          kind: 'bounded',
+          startDate: '2024-01-01T00:00:00.000Z',
+          endDate: '2024-12-31T23:59:59.999Z',
+          timezone: 'UTC',
+          source: 'prompt',
+        },
+        {
+          kind: 'bounded',
+          startDate: '2026-01-01T00:00:00.000Z',
+          endDate: '2026-12-31T23:59:59.999Z',
+          timezone: 'UTC',
+          source: 'prompt',
+        },
+      ],
+      periodMode: 'compare',
+    }), 'show my max distance in 2024 and 2026');
+
+    expect(fetchEventDocs).toHaveBeenCalledWith({
+      userID: 'user-1',
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      endDate: new Date('2026-12-31T23:59:59.999Z'),
+    });
+    expect(result.matchedEventsCount).toBe(2);
+    expect(result.aggregation.buckets.map(bucket => bucket.aggregateValue)).toEqual([40, 60]);
+  });
+
   it('reuses one filtered event pool for multi-metric aggregations', async () => {
     const fetchEventDocs = vi.fn(async () => [
       { id: 'e1', data: () => ({ startDate: 1768003200000 }) },

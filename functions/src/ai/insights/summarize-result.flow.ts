@@ -16,6 +16,7 @@ import type {
   NormalizedInsightQuery,
 } from '../../../../shared/ai-insights.types';
 import { resolveAiInsightsActivityFilterLabel } from '../../../../shared/ai-insights-activity-filter';
+import { formatAiInsightsSelectedDateRanges } from '../../../../shared/ai-insights-date-selection';
 import type { EventStatAggregationResult } from '../../../../shared/event-stat-aggregation.types';
 import { resolveMetricSemantics, resolveMetricSummarySemantics } from '../../../../shared/metric-semantics';
 import { formatUnitAwareDataValue } from '../../../../shared/unit-aware-display';
@@ -154,11 +155,7 @@ function formatLocalizedDateRange(
   query: NormalizedInsightQuery,
   locale: string | undefined,
 ): string {
-  if (query.dateRange.kind === 'all_time') {
-    return 'all time';
-  }
-
-  return `${formatSemanticDate(query.dateRange.startDate, locale, query.dateRange.timezone)} to ${formatSemanticDate(query.dateRange.endDate, locale, query.dateRange.timezone)}`;
+  return formatAiInsightsSelectedDateRanges(query, locale);
 }
 
 function formatActivityFilter(query: NormalizedInsightQuery): string {

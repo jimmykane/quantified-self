@@ -20,11 +20,12 @@ import { aiInsightsGenkit } from './genkit';
 import { executeAiInsightsQuery } from './execute-query';
 import { getInsightMetricDefinition } from './metric-catalog';
 import { normalizeInsightQuery } from './normalize-query.flow';
+import { repairUnsupportedInsightQuery } from './normalize-query.repair';
 import { AiInsightsRequestSchema, AiInsightsResponseSchema } from './schemas';
 import {
   getAiInsightsQuotaStatus as getAiInsightsQuotaStatusForUser,
   releaseAiInsightsQuotaReservation,
-  reserveAiInsightsQuotaForGenkit,
+  reserveAiInsightsQuotaForRequest,
   finalizeAiInsightsQuotaReservation,
   AI_INSIGHTS_LIMIT_REACHED_MESSAGE,
 } from './quota';
@@ -69,13 +70,15 @@ export async function runAiInsights(
     throw new HttpsError('invalid-argument', 'prompt is required.');
   }
 
+  const userID = context.auth.uid;
+
   const clientTimezone = `${input.clientTimezone || ''}`.trim();
   if (!clientTimezone) {
     throw new HttpsError('invalid-argument', 'clientTimezone is required.');
   }
   assertValidTimeZone(clientTimezone);
 
-  const initialQuotaStatus = await getAiInsightsQuotaStatusForUser(context.auth.uid);
+  const initialQuotaStatus = await getAiInsightsQuotaStatusForUser(userID);
   if (!initialQuotaStatus.isEligible) {
     throw new HttpsError('permission-denied', AI_INSIGHTS_PAID_REQUIRED_MESSAGE);
   }
@@ -84,23 +87,98 @@ export async function runAiInsights(
     throw new HttpsError('resource-exhausted', AI_INSIGHTS_LIMIT_REACHED_MESSAGE);
   }
 
-  const normalizeResult = await normalizeInsightQuery({
+  let quotaReservation: Awaited<ReturnType<typeof reserveAiInsightsQuotaForRequest>> | null = null;
+  let consumedQuotaStatus: AiInsightsQuotaStatusResponse | null = null;
+
+  const ensureQuotaReservation = async (): Promise<void> => {
+    if (quotaReservation || consumedQuotaStatus) {
+      return;
+    }
+
+    quotaReservation = await reserveAiInsightsQuotaForRequest(userID);
+  };
+
+  const finalizeReservedQuota = async (): Promise<AiInsightsQuotaStatusResponse> => {
+    if (consumedQuotaStatus) {
+      return consumedQuotaStatus;
+    }
+
+    if (!quotaReservation) {
+      return initialQuotaStatus;
+    }
+
+    consumedQuotaStatus = await finalizeAiInsightsQuotaReservation(quotaReservation);
+    quotaReservation = null;
+    return consumedQuotaStatus;
+  };
+
+  const releaseReservedQuota = async (): Promise<AiInsightsQuotaStatusResponse> => {
+    if (consumedQuotaStatus) {
+      return consumedQuotaStatus;
+    }
+
+    if (!quotaReservation) {
+      return initialQuotaStatus;
+    }
+
+    const releasedStatus = await releaseAiInsightsQuotaReservation(quotaReservation);
+    quotaReservation = null;
+    return releasedStatus;
+  };
+
+  let normalizeResult = await normalizeInsightQuery({
     ...input,
     prompt,
     clientTimezone,
   });
 
   if (normalizeResult.status === 'unsupported') {
-    logger.warn('[aiInsights] Unsupported request', {
-      userID: context.auth.uid,
-      prompt,
-      clientTimezone,
-      reasonCode: normalizeResult.reasonCode,
-      suggestedPromptsCount: normalizeResult.suggestedPrompts.length,
-    });
-    return buildUnsupportedResponse(normalizeResult.reasonCode, initialQuotaStatus, {
-      suggestedPrompts: normalizeResult.suggestedPrompts,
-    });
+    const shouldAttemptRepair = normalizeResult.reasonCode === 'invalid_prompt'
+      || normalizeResult.reasonCode === 'unsupported_metric'
+      || normalizeResult.reasonCode === 'ambiguous_metric';
+
+    if (shouldAttemptRepair) {
+      await ensureQuotaReservation();
+      const repairedResult = await repairUnsupportedInsightQuery({
+        ...input,
+        prompt,
+        clientTimezone,
+      }, normalizeResult);
+      if (repairedResult.source === 'genkit') {
+        await finalizeReservedQuota();
+      }
+
+      normalizeResult = repairedResult.result;
+      if (normalizeResult.status === 'unsupported') {
+        const quota = repairedResult.source === 'genkit'
+          ? (consumedQuotaStatus ?? await finalizeReservedQuota())
+          : await releaseReservedQuota();
+        logger.warn('[aiInsights] Unsupported request', {
+          userID,
+          prompt,
+          clientTimezone,
+          reasonCode: normalizeResult.reasonCode,
+          suggestedPromptsCount: normalizeResult.suggestedPrompts.length,
+          repairedWithAi: repairedResult.source === 'genkit',
+        });
+        return buildUnsupportedResponse(normalizeResult.reasonCode, quota, {
+          suggestedPrompts: normalizeResult.suggestedPrompts,
+        });
+      }
+    } else {
+      const quota = await releaseReservedQuota();
+      logger.warn('[aiInsights] Unsupported request', {
+        userID,
+        prompt,
+        clientTimezone,
+        reasonCode: normalizeResult.reasonCode,
+        suggestedPromptsCount: normalizeResult.suggestedPrompts.length,
+        repairedWithAi: false,
+      });
+      return buildUnsupportedResponse(normalizeResult.reasonCode, quota, {
+        suggestedPrompts: normalizeResult.suggestedPrompts,
+      });
+    }
   }
 
   const effectiveQuery = normalizeResult.query;
@@ -112,7 +190,7 @@ export async function runAiInsights(
     : null;
   if (effectiveQuery.resultKind !== 'multi_metric_aggregate' && !metric) {
     logger.warn('[aiInsights] Unsupported metric key after normalization', {
-      userID: context.auth.uid,
+      userID,
       prompt,
       clientTimezone,
       metricKey: normalizeResult.metricKey,
@@ -133,8 +211,8 @@ export async function runAiInsights(
     effectiveQuery.resultKind === 'multi_metric_aggregate'
     && multiMetricDefinitions.length !== effectiveQuery.metricSelections.length
   ) {
-    logger.warn('[aiInsights] Unsupported multi metric selection after normalization', {
-      userID: context.auth.uid,
+      logger.warn('[aiInsights] Unsupported multi metric selection after normalization', {
+      userID,
       prompt,
       clientTimezone,
       metricKeys: effectiveQuery.metricSelections.map(metricSelection => metricSelection.metricKey),
@@ -145,7 +223,7 @@ export async function runAiInsights(
   }
   logger.info('[aiInsights] Query normalization debug', {
     prompt,
-    userID: context.auth.uid,
+    userID,
     normalizedQuery: {
       dataType: effectiveQuery.resultKind === 'multi_metric_aggregate'
         ? null
@@ -163,8 +241,8 @@ export async function runAiInsights(
         : 1,
     },
   });
-  const unitSettings = await loadUserUnitSettings(context.auth.uid);
-  const executionResult = await executeAiInsightsQuery(context.auth.uid, effectiveQuery, prompt);
+  const unitSettings = await loadUserUnitSettings(userID);
+  const executionResult = await executeAiInsightsQuery(userID, effectiveQuery, prompt);
   const presentation = buildInsightPresentation(
     effectiveQuery,
     effectiveQuery.resultKind === 'multi_metric_aggregate'
@@ -227,9 +305,9 @@ export async function runAiInsights(
       ? !eventLookupResult?.primaryEventId
       : multiMetricResultGroups.every(metricResult => metricResult.aggregation.buckets.length === 0);
 
-  const quotaReservation = await reserveAiInsightsQuotaForGenkit(context.auth.uid);
   let narrativeResult: Awaited<ReturnType<typeof summarizeAiInsightResult>>;
   try {
+    await ensureQuotaReservation();
     if (executionResult.resultKind === 'aggregate' && aggregateQueryInput) {
       narrativeResult = await summarizeAiInsightResult({
         status: isEmpty ? 'empty' : 'ok',
@@ -273,19 +351,22 @@ export async function runAiInsights(
     }
   } catch (error) {
     try {
-      await releaseAiInsightsQuotaReservation(quotaReservation);
+      await releaseReservedQuota();
     } catch (releaseError) {
-      logger.error('[aiInsights] Failed to release quota reservation after summarize-result failure', {
-        userID: context.auth.uid,
+        logger.error('[aiInsights] Failed to release quota reservation after summarize-result failure', {
+        userID,
         prompt,
         releaseError,
       });
     }
     throw error;
   }
-  const quota = narrativeResult.source === 'genkit'
-    ? await finalizeAiInsightsQuotaReservation(quotaReservation)
-    : await releaseAiInsightsQuotaReservation(quotaReservation);
+  const quota = consumedQuotaStatus
+    ?? (
+      narrativeResult.source === 'genkit'
+        ? await finalizeReservedQuota()
+        : await releaseReservedQuota()
+    );
 
   if (isEmpty) {
     return {

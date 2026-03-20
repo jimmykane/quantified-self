@@ -301,7 +301,7 @@ describe('Firestore Security Rules', () => {
                         periodStart: '2026-03-01T00:00:00.000Z',
                         periodEnd: '2026-04-01T00:00:00.000Z',
                         periodKind: 'subscription',
-                        successfulGenkitCount: 12,
+                        successfulRequestCount: 12,
                         reservationMap: {},
                         updatedAt: new Date(),
                     });
@@ -320,7 +320,7 @@ describe('Firestore Security Rules', () => {
                     periodStart: '2026-03-01T00:00:00.000Z',
                     periodEnd: '2026-04-01T00:00:00.000Z',
                     periodKind: 'subscription',
-                    successfulGenkitCount: 12,
+                    successfulRequestCount: 12,
                     reservationMap: {},
                     updatedAt: new Date(),
                 }));
@@ -335,7 +335,7 @@ describe('Firestore Security Rules', () => {
                         periodStart: '2026-03-01T00:00:00.000Z',
                         periodEnd: '2026-04-01T00:00:00.000Z',
                         periodKind: 'subscription',
-                        successfulGenkitCount: 12,
+                        successfulRequestCount: 12,
                         reservationMap: {},
                         updatedAt: new Date(),
                     });
@@ -354,7 +354,7 @@ describe('Firestore Security Rules', () => {
                     periodStart: '2026-03-01T00:00:00.000Z',
                     periodEnd: '2026-04-01T00:00:00.000Z',
                     periodKind: 'subscription',
-                    successfulGenkitCount: 12,
+                    successfulRequestCount: 12,
                     reservationMap: {},
                     updatedAt: new Date(),
                 }));

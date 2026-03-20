@@ -237,6 +237,29 @@ function eventMatchesActivitySelection(
   return eventActivityTypes.some(activityType => selectedActivityTypes.includes(activityType));
 }
 
+function eventMatchesRequestedDateRanges(
+  event: EventInterface,
+  requestedDateRanges: NormalizedInsightQuery['requestedDateRanges'],
+): boolean {
+  if (!requestedDateRanges?.length) {
+    return true;
+  }
+
+  const eventStartTime = event.startDate instanceof Date ? event.startDate.getTime() : NaN;
+  if (!Number.isFinite(eventStartTime)) {
+    return false;
+  }
+
+  return requestedDateRanges.some((dateRange) => {
+    const startTime = Date.parse(dateRange.startDate);
+    const endTime = Date.parse(dateRange.endDate);
+    return Number.isFinite(startTime)
+      && Number.isFinite(endTime)
+      && eventStartTime >= startTime
+      && eventStartTime <= endTime;
+  });
+}
+
 function hasRequestedStat(event: EventInterface, dataType: string): boolean {
   return resolveRequestedStatValue(event, dataType) !== null;
 }
@@ -474,8 +497,10 @@ export async function executeAiInsightsQuery(
     .filter((event): event is EventInterface => event !== null);
   const nonMergedEvents = rehydratedEvents
     .filter(event => (event as { isMerge?: boolean }).isMerge !== true);
-  const matchedEvents = nonMergedEvents
+  const activityMatchedEvents = nonMergedEvents
     .filter(event => eventMatchesActivitySelection(event, query.activityTypes));
+  const matchedEvents = activityMatchedEvents
+    .filter(event => eventMatchesRequestedDateRanges(event, query.requestedDateRanges));
   const eventsWithRequestedStat = query.resultKind === 'multi_metric_aggregate'
     ? []
     : matchedEvents.filter(event => hasRequestedStat(event, query.dataType));
@@ -492,10 +517,13 @@ export async function executeAiInsightsQuery(
     categoryType: query.categoryType,
     activityTypes: query.activityTypes,
     dateRange: query.dateRange,
+    requestedDateRanges: query.requestedDateRanges ?? null,
+    periodMode: query.periodMode ?? null,
     fetchedDocsCount: docs.length,
     rehydratedEventsCount: rehydratedEvents.length,
     mergedEventsExcludedCount: rehydratedEvents.length - nonMergedEvents.length,
-    activityFilteredOutCount: nonMergedEvents.length - matchedEvents.length,
+    activityFilteredOutCount: nonMergedEvents.length - activityMatchedEvents.length,
+    requestedDateRangeFilteredOutCount: activityMatchedEvents.length - matchedEvents.length,
     matchedEventsCount: matchedEvents.length,
     eventsWithRequestedStatCount: eventsWithRequestedStat.length,
     metricSelectionCount: query.resultKind === 'multi_metric_aggregate' ? query.metricSelections.length : 1,

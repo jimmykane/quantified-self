@@ -6,7 +6,7 @@ import {
   getAiInsightsQuotaStatus,
   normalizeUsageDocRole,
   releaseAiInsightsQuotaReservation,
-  reserveAiInsightsQuotaForGenkit,
+  reserveAiInsightsQuotaForRequest,
   setAiInsightsQuotaDependenciesForTesting,
 } from './quota';
 import { AI_INSIGHTS_REQUEST_LIMITS } from '../../../../shared/limits';
@@ -109,7 +109,7 @@ function buildUsageDoc(overrides: Partial<Record<string, unknown>> = {}): Record
     periodStart: PERIOD_START,
     periodEnd: PERIOD_END,
     periodKind: 'subscription',
-    successfulGenkitCount: 0,
+    successfulRequestCount: 0,
     reservationMap: {},
     ...overrides,
   };
@@ -160,15 +160,15 @@ describe('ai insights quota', () => {
   });
 
   it('increments quota only after a successful Genkit finalization', async () => {
-    const reservation = await reserveAiInsightsQuotaForGenkit('user-1');
+    const reservation = await reserveAiInsightsQuotaForRequest('user-1');
     const finalizedStatus = await finalizeAiInsightsQuotaReservation(reservation);
     const quotaStatus = await getAiInsightsQuotaStatus('user-1');
 
     expect(reservation.periodDocId).toBe(PERIOD_DOC_ID);
-    expect(finalizedStatus.successfulGenkitCount).toBe(1);
-    expect(finalizedStatus.activeReservationCount).toBe(0);
+    expect(finalizedStatus.successfulRequestCount).toBe(1);
+    expect(finalizedStatus.activeRequestCount).toBe(0);
     expect(finalizedStatus.remainingCount).toBe(99);
-    expect(quotaStatus.successfulGenkitCount).toBe(1);
+    expect(quotaStatus.successfulRequestCount).toBe(1);
     expect(quotaStatus.remainingCount).toBe(99);
   });
 
@@ -177,7 +177,7 @@ describe('ai insights quota', () => {
     (admin.firestore as typeof admin.firestore & { FieldValue?: unknown }).FieldValue = undefined;
 
     try {
-      const reservation = await reserveAiInsightsQuotaForGenkit('user-1');
+      const reservation = await reserveAiInsightsQuotaForRequest('user-1');
       const storedDoc = fakeDb.getDocument(`users/user-1/aiInsightsUsage/${reservation.periodDocId}`);
 
       expect(storedDoc?.updatedAt).toBe(FIXED_NOW_ISO);
@@ -187,19 +187,19 @@ describe('ai insights quota', () => {
   });
 
   it('releases fallback reservations without consuming quota', async () => {
-    const reservation = await reserveAiInsightsQuotaForGenkit('user-1');
+    const reservation = await reserveAiInsightsQuotaForRequest('user-1');
     const releasedStatus = await releaseAiInsightsQuotaReservation(reservation);
     const quotaStatus = await getAiInsightsQuotaStatus('user-1');
 
-    expect(releasedStatus.successfulGenkitCount).toBe(0);
-    expect(releasedStatus.activeReservationCount).toBe(0);
+    expect(releasedStatus.successfulRequestCount).toBe(0);
+    expect(releasedStatus.activeRequestCount).toBe(0);
     expect(releasedStatus.remainingCount).toBe(AI_INSIGHTS_REQUEST_LIMITS.pro);
-    expect(quotaStatus.successfulGenkitCount).toBe(0);
+    expect(quotaStatus.successfulRequestCount).toBe(0);
     expect(quotaStatus.remainingCount).toBe(AI_INSIGHTS_REQUEST_LIMITS.pro);
   });
 
   it('finalizes an existing reservation even if the user becomes ineligible afterward', async () => {
-    const reservation = await reserveAiInsightsQuotaForGenkit('user-1');
+    const reservation = await reserveAiInsightsQuotaForRequest('user-1');
 
     setAiInsightsQuotaDependenciesForTesting({
       now: () => new Date(FIXED_NOW_ISO),
@@ -214,10 +214,10 @@ describe('ai insights quota', () => {
     const finalizedStatus = await finalizeAiInsightsQuotaReservation(reservation);
     const storedDoc = fakeDb.getDocument(`users/user-1/aiInsightsUsage/${PERIOD_DOC_ID}`);
 
-    expect(finalizedStatus.successfulGenkitCount).toBe(1);
-    expect(finalizedStatus.activeReservationCount).toBe(0);
+    expect(finalizedStatus.successfulRequestCount).toBe(1);
+    expect(finalizedStatus.activeRequestCount).toBe(0);
     expect(finalizedStatus.limit).toBe(AI_INSIGHTS_REQUEST_LIMITS.pro);
-    expect(storedDoc?.successfulGenkitCount).toBe(1);
+    expect(storedDoc?.successfulRequestCount).toBe(1);
     expect(storedDoc?.reservationMap).toEqual({});
   });
 
@@ -271,7 +271,7 @@ describe('ai insights quota', () => {
 
   it('prunes expired reservations before computing availability', async () => {
     fakeDb.seedDocument(`users/user-1/aiInsightsUsage/${PERIOD_DOC_ID}`, buildUsageDoc({
-      successfulGenkitCount: 5,
+      successfulRequestCount: 5,
       reservationMap: {
         expired: Date.parse('2026-03-19T11:00:00.000Z'),
       },
@@ -280,8 +280,8 @@ describe('ai insights quota', () => {
     const quotaStatus = await getAiInsightsQuotaStatus('user-1');
     const storedDoc = fakeDb.getDocument(`users/user-1/aiInsightsUsage/${PERIOD_DOC_ID}`);
 
-    expect(quotaStatus.successfulGenkitCount).toBe(5);
-    expect(quotaStatus.activeReservationCount).toBe(0);
+    expect(quotaStatus.successfulRequestCount).toBe(5);
+    expect(quotaStatus.activeRequestCount).toBe(0);
     expect(quotaStatus.remainingCount).toBe(95);
     expect(storedDoc?.reservationMap).toEqual({
       expired: Date.parse('2026-03-19T11:00:00.000Z'),
@@ -291,7 +291,7 @@ describe('ai insights quota', () => {
 
   it('does not write usage documents when quota status is fetched', async () => {
     fakeDb.seedDocument(`users/user-1/aiInsightsUsage/${PERIOD_DOC_ID}`, buildUsageDoc({
-      successfulGenkitCount: 12,
+      successfulRequestCount: 12,
       reservationMap: {
         active: Date.parse('2026-03-19T12:05:00.000Z'),
       },
@@ -299,20 +299,20 @@ describe('ai insights quota', () => {
 
     const quotaStatus = await getAiInsightsQuotaStatus('user-1');
 
-    expect(quotaStatus.successfulGenkitCount).toBe(12);
-    expect(quotaStatus.activeReservationCount).toBe(1);
+    expect(quotaStatus.successfulRequestCount).toBe(12);
+    expect(quotaStatus.activeRequestCount).toBe(1);
     expect(quotaStatus.remainingCount).toBe(87);
     expect(fakeDb.getWriteCount()).toBe(0);
   });
 
   it('caps concurrent reservations at the configured limit', async () => {
     fakeDb.seedDocument(`users/user-1/aiInsightsUsage/${PERIOD_DOC_ID}`, buildUsageDoc({
-      successfulGenkitCount: 99,
+      successfulRequestCount: 99,
     }));
 
-    const firstReservation = await reserveAiInsightsQuotaForGenkit('user-1');
+    const firstReservation = await reserveAiInsightsQuotaForRequest('user-1');
 
-    await expect(reserveAiInsightsQuotaForGenkit('user-1')).rejects.toMatchObject<HttpsError>({
+    await expect(reserveAiInsightsQuotaForRequest('user-1')).rejects.toMatchObject<HttpsError>({
       code: 'resource-exhausted',
     });
 
@@ -342,7 +342,7 @@ describe('ai insights quota', () => {
       getLatestPaidSubscriptionPeriod,
     });
 
-    const reservation = await reserveAiInsightsQuotaForGenkit('user-1');
+    const reservation = await reserveAiInsightsQuotaForRequest('user-1');
 
     expect(reservation.periodDocId).toBe(PERIOD_DOC_ID);
     expect(getUserRoleAndGracePeriod).toHaveBeenCalledTimes(1);
@@ -390,8 +390,8 @@ describe('ai insights quota', () => {
     expect(quotaStatus).toEqual({
       role: 'free',
       limit: 0,
-      successfulGenkitCount: 0,
-      activeReservationCount: 0,
+      successfulRequestCount: 0,
+      activeRequestCount: 0,
       remainingCount: 0,
       periodStart: null,
       periodEnd: null,

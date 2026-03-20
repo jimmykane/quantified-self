@@ -42,6 +42,10 @@ export type AiInsightsMultiMetricGroupingMode =
   | 'overall'
   | 'date';
 
+export type NormalizedInsightPeriodMode =
+  | 'combined'
+  | 'compare';
+
 export interface NormalizedInsightQueryBase {
   resultKind: AiInsightsResultKind;
   categoryType: ChartDataCategoryTypes;
@@ -49,6 +53,8 @@ export interface NormalizedInsightQueryBase {
   activityTypeGroups: ActivityTypeGroup[];
   activityTypes: ActivityTypes[];
   dateRange: NormalizedInsightDateRange;
+  requestedDateRanges?: NormalizedInsightBoundedDateRange[];
+  periodMode?: NormalizedInsightPeriodMode;
   chartType: ChartTypes;
 }
 
@@ -100,8 +106,8 @@ export type AiInsightsQuotaBlockedReason =
 export interface AiInsightsQuotaStatus {
   role: 'free' | 'basic' | 'pro';
   limit: number;
-  successfulGenkitCount: number;
-  activeReservationCount: number;
+  successfulRequestCount: number;
+  activeRequestCount: number;
   remainingCount: number;
   periodStart: string | null;
   periodEnd: string | null;

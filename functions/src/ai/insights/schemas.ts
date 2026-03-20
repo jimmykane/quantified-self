@@ -32,19 +32,23 @@ export const AiInsightsRequestSchema = z.object({
   clientLocale: z.string().min(1).max(100).optional(),
 });
 
+const NormalizedInsightBoundedDateRangeSchema = z.object({
+  kind: z.literal('bounded'),
+  startDate: z.string().datetime(),
+  endDate: z.string().datetime(),
+  timezone: z.string().min(1),
+  source: z.enum(['prompt', 'default']),
+});
+
+const NormalizedInsightAllTimeDateRangeSchema = z.object({
+  kind: z.literal('all_time'),
+  timezone: z.string().min(1),
+  source: z.literal('prompt'),
+});
+
 export const NormalizedInsightDateRangeSchema = z.discriminatedUnion('kind', [
-  z.object({
-    kind: z.literal('bounded'),
-    startDate: z.string().datetime(),
-    endDate: z.string().datetime(),
-    timezone: z.string().min(1),
-    source: z.enum(['prompt', 'default']),
-  }),
-  z.object({
-    kind: z.literal('all_time'),
-    timezone: z.string().min(1),
-    source: z.literal('prompt'),
-  }),
+  NormalizedInsightBoundedDateRangeSchema,
+  NormalizedInsightAllTimeDateRangeSchema,
 ]);
 
 const NormalizedInsightQueryBaseSchema = z.object({
@@ -55,6 +59,8 @@ const NormalizedInsightQueryBaseSchema = z.object({
     CanonicalActivityTypeSchema as unknown as z.ZodType<ActivityTypes>
   ),
   dateRange: NormalizedInsightDateRangeSchema,
+  requestedDateRanges: z.array(NormalizedInsightBoundedDateRangeSchema).max(12).optional(),
+  periodMode: z.enum(['combined', 'compare']).optional(),
   chartType: z.nativeEnum(ChartTypes),
 });
 
@@ -136,8 +142,8 @@ export const AiInsightPresentationSchema = z.object({
 export const AiInsightsQuotaStatusSchema: z.ZodType<AiInsightsQuotaStatus> = z.object({
   role: z.enum(['free', 'basic', 'pro']),
   limit: z.number().int().nonnegative(),
-  successfulGenkitCount: z.number().int().nonnegative(),
-  activeReservationCount: z.number().int().nonnegative(),
+  successfulRequestCount: z.number().int().nonnegative(),
+  activeRequestCount: z.number().int().nonnegative(),
   remainingCount: z.number().int().nonnegative(),
   periodStart: z.string().datetime().nullable(),
   periodEnd: z.string().datetime().nullable(),

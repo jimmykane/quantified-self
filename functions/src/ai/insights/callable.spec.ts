@@ -24,10 +24,11 @@ const hoisted = vi.hoisted(() => {
     loggerInfo: vi.fn(),
     loggerDebug: vi.fn(),
     getAiInsightsQuotaStatus: vi.fn(),
-    reserveAiInsightsQuotaForGenkit: vi.fn(),
+    reserveAiInsightsQuotaForRequest: vi.fn(),
     finalizeAiInsightsQuotaReservation: vi.fn(),
     releaseAiInsightsQuotaReservation: vi.fn(),
     normalizeInsightQuery: vi.fn(),
+    repairUnsupportedInsightQuery: vi.fn(),
     executeAiInsightsQuery: vi.fn(),
     summarizeAiInsightResult: vi.fn(),
     getInsightMetricDefinition: vi.fn(),
@@ -71,6 +72,10 @@ vi.mock('./normalize-query.flow', () => ({
   normalizeInsightQuery: (...args: unknown[]) => hoisted.normalizeInsightQuery(...args),
 }));
 
+vi.mock('./normalize-query.repair', () => ({
+  repairUnsupportedInsightQuery: (...args: unknown[]) => hoisted.repairUnsupportedInsightQuery(...args),
+}));
+
 vi.mock('./execute-query', () => ({
   executeAiInsightsQuery: (...args: unknown[]) => hoisted.executeAiInsightsQuery(...args),
 }));
@@ -86,7 +91,7 @@ vi.mock('./user-unit-settings', () => ({
 vi.mock('./quota', () => ({
   AI_INSIGHTS_LIMIT_REACHED_MESSAGE: 'AI Insights limit reached for this billing period.',
   getAiInsightsQuotaStatus: (...args: unknown[]) => hoisted.getAiInsightsQuotaStatus(...args),
-  reserveAiInsightsQuotaForGenkit: (...args: unknown[]) => hoisted.reserveAiInsightsQuotaForGenkit(...args),
+  reserveAiInsightsQuotaForRequest: (...args: unknown[]) => hoisted.reserveAiInsightsQuotaForRequest(...args),
   finalizeAiInsightsQuotaReservation: (...args: unknown[]) => hoisted.finalizeAiInsightsQuotaReservation(...args),
   releaseAiInsightsQuotaReservation: (...args: unknown[]) => hoisted.releaseAiInsightsQuotaReservation(...args),
 }));
@@ -105,8 +110,8 @@ import { aiInsights, getAiInsightsQuotaStatus } from './callable';
 const quotaStatus = {
   role: 'pro',
   limit: AI_INSIGHTS_REQUEST_LIMITS.pro,
-  successfulGenkitCount: 12,
-  activeReservationCount: 0,
+  successfulRequestCount: 12,
+  activeRequestCount: 0,
   remainingCount: AI_INSIGHTS_REQUEST_LIMITS.pro - 12,
   periodStart: '2026-03-01T00:00:00.000Z',
   periodEnd: '2026-04-01T00:00:00.000Z',
@@ -214,6 +219,14 @@ describe('aiInsights callable', () => {
       metricKey: 'distance',
       query: normalizedQuery,
     });
+    hoisted.repairUnsupportedInsightQuery.mockResolvedValue({
+      result: {
+        status: 'unsupported',
+        reasonCode: 'unsupported_metric',
+        suggestedPrompts: ['show my distance'],
+      },
+      source: 'none',
+    });
     hoisted.executeAiInsightsQuery.mockResolvedValue({
       resultKind: 'aggregate',
       matchedEventsCount: 2,
@@ -250,7 +263,7 @@ describe('aiInsights callable', () => {
       startOfTheWeek: 1,
     });
     hoisted.getAiInsightsQuotaStatus.mockResolvedValue(quotaStatus);
-    hoisted.reserveAiInsightsQuotaForGenkit.mockResolvedValue({
+    hoisted.reserveAiInsightsQuotaForRequest.mockResolvedValue({
       userID: 'user-1',
       reservationID: 'reservation-1',
       periodDocId: 'period_1_2',
@@ -293,7 +306,7 @@ describe('aiInsights callable', () => {
       ...quotaStatus,
       role: 'free',
       limit: 0,
-      successfulGenkitCount: 0,
+      successfulRequestCount: 0,
       remainingCount: 0,
       isEligible: false,
       blockedReason: 'requires_pro',
@@ -313,7 +326,7 @@ describe('aiInsights callable', () => {
   it('rejects exhausted users before normalization', async () => {
     hoisted.getAiInsightsQuotaStatus.mockResolvedValue({
       ...quotaStatus,
-      successfulGenkitCount: 100,
+      successfulRequestCount: 100,
       remainingCount: 0,
       blockedReason: 'limit_reached',
     });
@@ -334,10 +347,10 @@ describe('aiInsights callable', () => {
       ...quotaStatus,
       role: 'basic',
       limit: AI_INSIGHTS_REQUEST_LIMITS.basic,
-      successfulGenkitCount: 5,
+      successfulRequestCount: 5,
       remainingCount: AI_INSIGHTS_REQUEST_LIMITS.basic - 5,
     });
-    hoisted.reserveAiInsightsQuotaForGenkit.mockResolvedValue({
+    hoisted.reserveAiInsightsQuotaForRequest.mockResolvedValue({
       userID: 'user-1',
       reservationID: 'reservation-1',
       periodDocId: 'period_1_2',
@@ -353,7 +366,7 @@ describe('aiInsights callable', () => {
       ...quotaStatus,
       role: 'basic',
       limit: AI_INSIGHTS_REQUEST_LIMITS.basic,
-      successfulGenkitCount: 6,
+      successfulRequestCount: 6,
       remainingCount: AI_INSIGHTS_REQUEST_LIMITS.basic - 6,
     });
 
@@ -470,7 +483,7 @@ describe('aiInsights callable', () => {
         },
       ],
     });
-    expect(hoisted.reserveAiInsightsQuotaForGenkit).toHaveBeenCalledTimes(1);
+    expect(hoisted.reserveAiInsightsQuotaForRequest).toHaveBeenCalledTimes(1);
     expect(hoisted.summarizeAiInsightResult).toHaveBeenCalledTimes(1);
   });
 
@@ -483,7 +496,7 @@ describe('aiInsights callable', () => {
     expect(hoisted.normalizeInsightQuery).toHaveBeenCalled();
     expect(hoisted.loadUserUnitSettings).toHaveBeenCalledWith('user-1');
     expect(hoisted.executeAiInsightsQuery).toHaveBeenCalledWith('user-1', normalizedQuery, 'show distance');
-    expect(hoisted.reserveAiInsightsQuotaForGenkit).toHaveBeenCalledWith('user-1');
+    expect(hoisted.reserveAiInsightsQuotaForRequest).toHaveBeenCalledWith('user-1');
     expect(hoisted.finalizeAiInsightsQuotaReservation).toHaveBeenCalledWith(expect.objectContaining({
       reservationID: 'reservation-1',
     }));
@@ -774,6 +787,37 @@ describe('aiInsights callable', () => {
       quota: quotaStatus,
       reasonCode: 'unsupported_capability',
       suggestedPrompts: ['show my distance'],
+    });
+  });
+
+  it('consumes prompt quota once when AI repair succeeds before narrative generation', async () => {
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'unsupported',
+      reasonCode: 'unsupported_metric',
+      suggestedPrompts: ['show my distance'],
+    });
+    hoisted.repairUnsupportedInsightQuery.mockResolvedValue({
+      source: 'genkit',
+      result: {
+        status: 'ok',
+        metricKey: 'distance',
+        query: normalizedQuery,
+      },
+    });
+
+    const result = await aiInsights({
+      prompt: 'show my max cardio in cycling',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(hoisted.reserveAiInsightsQuotaForRequest).toHaveBeenCalledTimes(1);
+    expect(hoisted.finalizeAiInsightsQuotaReservation).toHaveBeenCalledTimes(1);
+    expect(hoisted.releaseAiInsightsQuotaReservation).not.toHaveBeenCalled();
+    expect(hoisted.executeAiInsightsQuery).toHaveBeenCalledWith('user-1', normalizedQuery, 'show my max cardio in cycling');
+    expect(hoisted.summarizeAiInsightResult).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      status: 'ok',
+      quota: quotaStatus,
     });
   });
 

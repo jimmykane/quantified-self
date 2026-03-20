@@ -224,6 +224,145 @@ describe('normalizeInsightQuery', () => {
     });
   });
 
+  it('normalizes heart-rate token variants such as heartrate and question-form activity grouping', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-20T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'what activities had the max heartrate in 2024 and 2025',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('heart_rate');
+    expect(result.query.dataType).toBe(DataHeartRateMax.type);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Maximum);
+    expect(result.query.categoryType).toBe(ChartDataCategoryTypes.ActivityType);
+    expect(result.query.periodMode).toBe('combined');
+    expect(result.query.requestedDateRanges).toEqual([
+      {
+        kind: 'bounded',
+        startDate: '2024-01-01T00:00:00.000Z',
+        endDate: '2025-12-31T23:59:59.999Z',
+        timezone: 'UTC',
+        source: 'prompt',
+      },
+    ]);
+  });
+
+  it('resolves date-based year lists to compare mode with yearly buckets', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-20T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'show my max heart rate in 2024 and 2025',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.categoryType).toBe(ChartDataCategoryTypes.DateType);
+    expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Yearly);
+    expect(result.query.periodMode).toBe('compare');
+    expect(result.query.requestedDateRanges).toEqual([
+      {
+        kind: 'bounded',
+        startDate: '2024-01-01T00:00:00.000Z',
+        endDate: '2025-12-31T23:59:59.999Z',
+        timezone: 'UTC',
+        source: 'prompt',
+      },
+    ]);
+  });
+
+  it('keeps total multi-year prompts in combined mode', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-20T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'show my total ascent in 2024 and 2025',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Total);
+    expect(result.query.periodMode).toBe('combined');
+    expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Auto);
+  });
+
+  it('sorts comma-separated year lists and collapses contiguous years into one exact requested window', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-20T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'show my max heart rate in 2025, 2024',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.requestedDateRanges).toEqual([
+      {
+        kind: 'bounded',
+        startDate: '2024-01-01T00:00:00.000Z',
+        endDate: '2025-12-31T23:59:59.999Z',
+        timezone: 'UTC',
+        source: 'prompt',
+      },
+    ]);
+  });
+
+  it('keeps discrete year lists as separate requested windows', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-20T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'show my max heart rate in 2024, 2026',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.requestedDateRanges).toEqual([
+      {
+        kind: 'bounded',
+        startDate: '2024-01-01T00:00:00.000Z',
+        endDate: '2024-12-31T23:59:59.999Z',
+        timezone: 'UTC',
+        source: 'prompt',
+      },
+      {
+        kind: 'bounded',
+        startDate: '2026-01-01T00:00:00.000Z',
+        endDate: '2026-12-31T23:59:59.999Z',
+        timezone: 'UTC',
+        source: 'prompt',
+      },
+    ]);
+  });
+
   it('normalizes explicit month-year prompts such as "in January 2024"', async () => {
     setNormalizeQueryDependenciesForTesting({
       now: () => new Date('2026-03-20T12:00:00.000Z'),

@@ -1,6 +1,6 @@
 <div class="settings-container ai-insights-page">
   <main class="settings-content">
-    <section class="section-header hero">
+    <section class="section-header hero qs-glass-card-panel">
       <div class="hero-kicker-row">
         <p class="mat-label-large hero-kicker">AI Insights</p>
         <mat-chip-set aria-label="AI Insights status">
@@ -14,7 +14,7 @@
       @if (activeHeroPrompt()) {
         <button
           type="button"
-          class="hero-prompt-rotator"
+          class="hero-prompt-rotator qs-glass-card-panel"
           [disabled]="isPromptLocked() || !hasQuotaAvailable()"
           (click)="onHeroPromptClick()"
           [attr.aria-label]="'Example prompt: ' + activeHeroPrompt()"
@@ -28,7 +28,7 @@
     </section>
 
     <div class="page-grid">
-      <mat-card appearance="outlined" class="settings-card prompt-card">
+      <mat-card appearance="outlined" class="settings-card prompt-card qs-glass-card-panel">
         <mat-card-header>
           <div mat-card-avatar class="card-avatar">
             <mat-icon>psychology</mat-icon>
@@ -98,7 +98,7 @@
         </mat-card-footer>
       </mat-card>
 
-      <mat-card appearance="outlined" class="settings-card result-card">
+      <mat-card appearance="outlined" class="settings-card result-card qs-glass-card-panel">
         <mat-card-header>
           <div mat-card-avatar class="card-avatar result-avatar">
             <mat-icon>insights</mat-icon>
@@ -161,7 +161,7 @@
 
               <div class="summary-grid summary-grid--loading" aria-hidden="true">
                 @for (item of loadingSummarySkeletonItems; track item) {
-                  <section class="summary-card summary-card--loading">
+                  <section class="summary-card summary-card--loading qs-glass-card-panel">
                     <div class="summary-label-row">
                       <span class="result-loading-skeleton result-loading-skeleton--summary-label"></span>
                     </div>
@@ -212,7 +212,7 @@
               </div>
             </div>
           } @else if (errorMessage(); as errorMessage) {
-            <div class="state-panel state-panel-error">
+            <div class="state-panel state-panel-error qs-glass-card-panel">
               <mat-icon>error</mat-icon>
               <div>
                 <p class="mat-title-medium state-title">Could not generate this insight</p>
@@ -220,7 +220,7 @@
               </div>
             </div>
           } @else if (unsupportedResponse(); as unsupported) {
-            <div class="state-panel state-panel-warning">
+            <div class="state-panel state-panel-warning qs-glass-card-panel">
               <mat-icon>info</mat-icon>
               <div>
                 <p class="mat-title-medium state-title">Unsupported request</p>
@@ -251,13 +251,13 @@
                 }
               </div>
 
-              <div class="narrative-info">
+              <div class="narrative-info qs-glass-card-panel">
                 <p class="description-text narrative">{{ empty.narrative }}</p>
               </div>
 
               <mat-divider></mat-divider>
 
-              <div class="state-panel">
+              <div class="state-panel qs-glass-card-panel">
                 <mat-icon>search_off</mat-icon>
                 <div>
                   <p class="mat-title-medium state-title">No matching data</p>
@@ -289,7 +289,7 @@
                 }
               </div>
 
-              <div class="narrative-info">
+              <div class="narrative-info qs-glass-card-panel">
                 <p class="description-text narrative">{{ result.narrative }}</p>
               </div>
 
@@ -311,7 +311,7 @@
               }
 
               @if (primaryEventLookupItem(); as primaryEvent) {
-                <section class="event-lookup-primary">
+                <section class="event-lookup-primary qs-glass-card-panel">
                   <div class="event-lookup-primary-copy">
                     <p class="mat-label-medium summary-label">Winning event</p>
                     <p class="summary-value">{{ primaryEvent.value }}</p>
@@ -342,7 +342,7 @@
                 </div>
                 <div class="event-lookup-list">
                   @for (eventItem of eventLookupItems(); track eventItem.eventId; let index = $index) {
-                    <section class="event-lookup-row">
+                    <section class="event-lookup-row qs-glass-card-panel">
                       <div class="event-lookup-rank">{{ index + 1 }}</div>
                       <div class="event-lookup-row-copy">
                         <p class="summary-value event-lookup-row-value">{{ eventItem.value }}</p>
@@ -389,7 +389,7 @@
                 }
               </div>
 
-              <div class="narrative-info">
+              <div class="narrative-info qs-glass-card-panel">
                 <p class="description-text narrative">{{ result.narrative }}</p>
               </div>
 
@@ -430,7 +430,7 @@
                 @if (multiMetricMergedSummaryCards().length) {
                   <div class="summary-grid">
                     @for (summaryCard of multiMetricMergedSummaryCards(); track summaryCard.label) {
-                      <section class="summary-card">
+                      <section class="summary-card qs-glass-card-panel">
                         <div class="summary-label-row">
                           <p class="mat-label-medium summary-label">{{ summaryCard.label }}</p>
                           @if (summaryCard.helpText) {
@@ -476,7 +476,7 @@
                         <div class="multi-metric-section-header">
                           <p class="result-subtitle">{{ metricSection.title }}</p>
                         </div>
-                        <div class="state-panel">
+                        <div class="state-panel qs-glass-card-panel">
                           <mat-icon>search_off</mat-icon>
                           <div>
                             <p class="mat-title-medium state-title">No metric data</p>
@@ -513,7 +513,7 @@
                 }
               </div>
 
-              <div class="narrative-info">
+              <div class="narrative-info qs-glass-card-panel">
                 <p class="description-text narrative">{{ result.narrative }}</p>
               </div>
 
@@ -534,7 +534,7 @@
                 </div>
                 <div class="summary-grid">
                   @for (summaryCard of resultSummaryCards(); track summaryCard.label) {
-                    <section class="summary-card">
+                    <section class="summary-card qs-glass-card-panel">
                       <div class="summary-label-row">
                         <p class="mat-label-medium summary-label">{{ summaryCard.label }}</p>
                         @if (summaryCard.helpText) {
@@ -581,7 +581,7 @@
               </app-ai-insights-chart>
             </div>
           } @else {
-            <div class="state-panel state-panel-placeholder">
+            <div class="state-panel state-panel-placeholder qs-glass-card-panel">
               <mat-icon>query_stats</mat-icon>
               <div>
                 <p class="mat-title-medium state-title">Ready for your first question</p>

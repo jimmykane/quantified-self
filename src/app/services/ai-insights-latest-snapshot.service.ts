@@ -159,8 +159,8 @@ function isQuotaStatus(value: unknown): value is AiInsightsQuotaStatus {
     isRecord(value)
     && (value.role === 'free' || value.role === 'basic' || value.role === 'pro')
     && isFiniteNumber(value.limit)
-    && isFiniteNumber(value.successfulGenkitCount)
-    && isFiniteNumber(value.activeReservationCount)
+    && isFiniteNumber(value.successfulRequestCount)
+    && isFiniteNumber(value.activeRequestCount)
     && isFiniteNumber(value.remainingCount)
     && (value.periodStart === null || typeof value.periodStart === 'string')
     && (value.periodEnd === null || typeof value.periodEnd === 'string')
@@ -195,6 +195,12 @@ function isNormalizedInsightDateRange(value: unknown): value is NormalizedInsigh
   return false;
 }
 
+function isNormalizedInsightBoundedDateRange(value: unknown): boolean {
+  return isNormalizedInsightDateRange(value)
+    && isRecord(value)
+    && value.kind === 'bounded';
+}
+
 function isNormalizedInsightQuery(value: unknown): value is NormalizedInsightQueryLike {
   if (
     !isRecord(value)
@@ -204,6 +210,9 @@ function isNormalizedInsightQuery(value: unknown): value is NormalizedInsightQue
     || !isStringArray(value.activityTypeGroups)
     || !isStringArray(value.activityTypes)
     || !isNormalizedInsightDateRange(value.dateRange)
+    || (value.requestedDateRanges !== undefined
+      && (!Array.isArray(value.requestedDateRanges) || !value.requestedDateRanges.every(isNormalizedInsightBoundedDateRange)))
+    || (value.periodMode !== undefined && value.periodMode !== 'combined' && value.periodMode !== 'compare')
     || !isEnumPrimitive(value.chartType)
   ) {
     return false;
@@ -732,8 +741,8 @@ function describeQuotaStatus(value: unknown): UnknownRecord {
     quotaKeys: Object.keys(value),
     roleType: describeValueType(value.role),
     limitType: describeValueType(value.limit),
-    successfulGenkitCountType: describeValueType(value.successfulGenkitCount),
-    activeReservationCountType: describeValueType(value.activeReservationCount),
+    successfulRequestCountType: describeValueType(value.successfulRequestCount),
+    activeRequestCountType: describeValueType(value.activeRequestCount),
     remainingCountType: describeValueType(value.remainingCount),
     periodStartType: describeValueType(value.periodStart),
     periodEndType: describeValueType(value.periodEnd),

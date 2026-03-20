@@ -29,6 +29,7 @@ import type {
   NormalizedInsightDateRange,
 } from '@shared/ai-insights.types';
 import { resolveAiInsightsActivityFilterSummary } from '@shared/ai-insights-activity-filter';
+import { formatAiInsightsSelectedDateRanges } from '@shared/ai-insights-date-selection';
 import { resolveMetricSemantics, resolveMetricSummarySemantics } from '@shared/metric-semantics';
 import { formatUnitAwareDataValue, normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { AppAuthService } from '../../authentication/app.auth.service';
@@ -41,7 +42,7 @@ import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { AiInsightsService } from '../../services/ai-insights.service';
 import { LoggerService } from '../../services/logger.service';
-import { formatDashboardBucketDateByInterval, formatDashboardDateRange } from '../../helpers/dashboard-chart-data.helper';
+import { formatDashboardBucketDateByInterval } from '../../helpers/dashboard-chart-data.helper';
 import { resolveAiInsightsDisplayTitle } from '../../helpers/ai-insights-title.helper';
 import { AiInsightsChartComponent } from './ai-insights-chart.component';
 import { AiInsightsLoadingStateComponent } from './ai-insights-loading-state.component';
@@ -178,25 +179,22 @@ function getClientTimeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 }
 
-function formatDateRange(dateRange: NormalizedInsightDateRange, locale: string): string {
-  if (dateRange.kind === 'all_time') {
-    return 'All time';
-  }
-
-  return formatDashboardDateRange(
-    dateRange.startDate,
-    dateRange.endDate,
-    locale,
-    dateRange.timezone,
-  );
-}
-
 function formatDateRangeNote(dateRange: NormalizedInsightDateRange): string | null {
   if (dateRange.kind !== 'bounded' || dateRange.source !== 'default') {
     return null;
   }
 
   return 'Used the current year to date because no time range was found in your prompt.';
+}
+
+function formatDateSelectionSummary(
+  response: AiInsightsOkResponse | AiInsightsEmptyResponse,
+  locale: string,
+): string {
+  const label = formatAiInsightsSelectedDateRanges(response.query, locale);
+  return label
+    ? `${label.slice(0, 1).toUpperCase()}${label.slice(1)}`
+    : label;
 }
 
 function formatSavedInsightDate(
@@ -1119,7 +1117,7 @@ export class AiInsightsPageComponent {
       return '';
     }
 
-    return `${formatDateRange(response.query.dateRange, this.locale)} • ${resolveAiInsightsActivityFilterSummary(response.query)}`;
+    return `${formatDateSelectionSummary(response, this.locale)} • ${resolveAiInsightsActivityFilterSummary(response.query)}`;
   });
   readonly resultDisplayTitle = computed(() => {
     const response = this.okResponse() || this.emptyResponse();

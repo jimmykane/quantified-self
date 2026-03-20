@@ -79,8 +79,8 @@ function buildQuotaStatus(overrides: Partial<AiInsightsQuotaStatus> = {}): AiIns
   return {
     role: 'pro',
     limit: AI_INSIGHTS_REQUEST_LIMITS.pro,
-    successfulGenkitCount: 12,
-    activeReservationCount: 0,
+    successfulRequestCount: 12,
+    activeRequestCount: 0,
     remainingCount: AI_INSIGHTS_REQUEST_LIMITS.pro - 12,
     periodStart: '2026-03-01T00:00:00.000Z',
     periodEnd: '2026-04-01T00:00:00.000Z',
@@ -968,7 +968,7 @@ describe('AiInsightsPageComponent', () => {
     aiInsightsQuotaServiceMock.loadQuotaStatus.mockResolvedValueOnce(buildQuotaStatus({
       role: 'basic',
       limit: AI_INSIGHTS_REQUEST_LIMITS.basic,
-      successfulGenkitCount: 8,
+      successfulRequestCount: 8,
       remainingCount: AI_INSIGHTS_REQUEST_LIMITS.basic - 8,
     }));
 
@@ -1054,7 +1054,7 @@ describe('AiInsightsPageComponent', () => {
   it('should submit the prompt and render the result narrative and chart', async () => {
     const response = {
       ...buildOkResponse(),
-      quota: buildQuotaStatus({ successfulGenkitCount: 13, remainingCount: 87 }),
+      quota: buildQuotaStatus({ successfulRequestCount: 13, remainingCount: 87 }),
     };
     aiInsightsServiceMock.runInsight.mockResolvedValue(response);
     component.promptControl.setValue('Tell me my avg cadence for cycling the last 3 months');
@@ -1593,7 +1593,7 @@ describe('AiInsightsPageComponent', () => {
 
   it('should disable prompt submission surfaces when the quota is exhausted', async () => {
     aiInsightsQuotaServiceMock.loadQuotaStatus.mockResolvedValueOnce(buildQuotaStatus({
-      successfulGenkitCount: 100,
+      successfulRequestCount: 100,
       remainingCount: 0,
       blockedReason: 'limit_reached',
     }));
@@ -1617,7 +1617,7 @@ describe('AiInsightsPageComponent', () => {
     aiInsightsQuotaServiceMock.loadQuotaStatus.mockResolvedValueOnce(buildQuotaStatus({
       role: 'free',
       limit: 0,
-      successfulGenkitCount: 0,
+      successfulRequestCount: 0,
       remainingCount: 0,
       isEligible: false,
       periodStart: null,

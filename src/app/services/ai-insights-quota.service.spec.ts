@@ -34,8 +34,8 @@ describe('AiInsightsQuotaService', () => {
     const quotaStatus: AiInsightsQuotaStatusResponse = {
       role: 'pro',
       limit: 100,
-      successfulGenkitCount: 12,
-      activeReservationCount: 0,
+      successfulRequestCount: 12,
+      activeRequestCount: 0,
       remainingCount: 88,
       periodStart: '2026-03-01T00:00:00.000Z',
       periodEnd: '2026-04-01T00:00:00.000Z',
