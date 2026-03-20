@@ -111,8 +111,7 @@ export interface AiInsightsQuotaStatus {
   blockedReason: AiInsightsQuotaBlockedReason;
 }
 
-export interface AiInsightsQuotaStatusRequest {
-}
+export type AiInsightsQuotaStatusRequest = Record<string, never>;
 
 export type AiInsightsQuotaStatusResponse = AiInsightsQuotaStatus;
 
