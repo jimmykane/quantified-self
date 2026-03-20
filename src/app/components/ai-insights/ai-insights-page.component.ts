@@ -59,11 +59,11 @@ const HERO_PROMPT_DELETING_DELAY_MS = 20;
 const HERO_PROMPT_HOLD_DELAY_MS = 1900;
 const HERO_PROMPT_BETWEEN_PROMPTS_DELAY_MS = 280;
 const AI_INSIGHTS_GENERATION_LOADING_STEPS = [
-  'Parsing your prompt',
-  'Crunching event stats',
-  'Checking saved unit preferences',
-  'Shaping the chart',
-  'Drafting the summary',
+  'Parsing prompt',
+  'Fetching matching events',
+  'Computing metrics and buckets',
+  'Preparing summary and chart',
+  'Finalizing AI narrative',
 ] as const;
 const AI_INSIGHTS_EVENT_LOOKUP_LOADING_STEPS = [
   'Finding the winning event',

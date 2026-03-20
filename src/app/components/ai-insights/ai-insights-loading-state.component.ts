@@ -3,11 +3,11 @@ import { ChangeDetectionStrategy, Component, NgZone, computed, effect, inject, i
 import { MaterialModule } from '../../modules/material.module';
 
 const DEFAULT_AI_INSIGHTS_LOADING_STEPS = [
-  'Parsing your prompt',
-  'Crunching event stats',
-  'Checking saved unit preferences',
-  'Shaping the chart',
-  'Drafting the summary',
+  'Parsing prompt',
+  'Fetching matching events',
+  'Computing metrics and buckets',
+  'Preparing summary and chart',
+  'Finalizing AI narrative',
 ] as const;
 
 const AI_INSIGHTS_LOADING_STEP_DELAY_MS = 1450;

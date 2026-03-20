@@ -38,7 +38,7 @@ describe('AiInsightsLoadingStateComponent', () => {
     const chartShell = fixture.debugElement.query(By.css('.ai-loading-state__chart-shell'));
 
     expect(statusLabel?.textContent).toContain('Step 1/5');
-    expect(activeRollerRow?.textContent).toContain('Parsing your prompt');
+    expect(activeRollerRow?.textContent).toContain('Parsing prompt');
     expect(supportingCopy?.textContent).toContain('preparing the result');
     expect(summaryCards).toHaveLength(4);
     expect(chartShell).toBeTruthy();
@@ -54,12 +54,12 @@ describe('AiInsightsLoadingStateComponent', () => {
     vi.advanceTimersByTime(1600);
     fixture.detectChanges();
     expect(statusLabel()?.textContent).toContain('Step 2/5');
-    expect(activeRollerRow()?.textContent).toContain('Crunching event stats');
+    expect(activeRollerRow()?.textContent).toContain('Fetching matching events');
 
     vi.advanceTimersByTime(6000);
     fixture.detectChanges();
     expect(statusLabel()?.textContent).toContain('Step 5/5');
-    expect(activeRollerRow()?.textContent).toContain('Drafting the summary');
+    expect(activeRollerRow()?.textContent).toContain('Finalizing AI narrative');
   });
 
   it('should hide the body skeletons in compact mode', () => {

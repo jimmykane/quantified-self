@@ -1166,7 +1166,7 @@ describe('AiInsightsPageComponent', () => {
     const loadingStateComponent = fixture.debugElement.query(By.css('app-ai-insights-loading-state'));
 
     expect(loadingStatus?.textContent).toContain('Step 1/5');
-    expect(loadingActiveStep?.textContent).toContain('Parsing your prompt');
+    expect(loadingActiveStep?.textContent).toContain('Parsing prompt');
     expect(loadingSummaryCards).toHaveLength(4);
     expect(loadingChartShell).toBeTruthy();
     expect(loadingStateComponent).toBeNull();
