@@ -680,7 +680,7 @@ export class AiInsightsPageComponent {
     return `${currentStep}/${totalSteps}`;
   });
   readonly generationLoadingRollerTransform = computed(() => (
-    `translateY(-${this.generationLoadingStepIndex() * 100}%)`
+    `translateY(calc(-1 * ${this.generationLoadingStepIndex()} * var(--ai-insights-loading-roller-row-height, 1.85rem)))`
   ));
   readonly isPromptLocked = computed(() => (
     this.isSubmitting() || this.isRestoringLatestSnapshot()
@@ -740,12 +740,7 @@ export class AiInsightsPageComponent {
       && this.hasQuotaAvailable();
   });
   readonly latestSnapshotSupportNote = computed(() => {
-    const savedAtLabel = formatSavedInsightDate(this.latestSnapshotSavedAt(), this.locale);
-    if (!savedAtLabel) {
-      return 'Latest completed insights are temporarily restored from your account. Proper saved insights/history will come later.';
-    }
-
-    return `Latest completed insights are temporarily restored from your account. Latest saved ${savedAtLabel}. Proper saved insights/history will come later.`;
+    return 'Latest completed insights are temporarily restored from your account. Proper saved insights/history will come later.';
   });
   readonly resultCardSubtitle = computed(() => {
     if (this.eventLookupOkResponse()) {

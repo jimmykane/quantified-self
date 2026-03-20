@@ -91,9 +91,11 @@
             @if (quotaBlockedMessage(); as quotaBlockedMessage) {
               <p class="mat-body-small prompt-quota-note">{{ quotaBlockedMessage }}</p>
             }
-            <p class="mat-body-small prompt-support-note">{{ latestSnapshotSupportNote() }}</p>
           </form>
         </mat-card-content>
+        <mat-card-footer class="prompt-card-footer">
+          <p class="mat-body-small prompt-support-note">{{ latestSnapshotSupportNote() }}</p>
+        </mat-card-footer>
       </mat-card>
 
       <mat-card appearance="outlined" class="settings-card result-card">
@@ -103,7 +105,7 @@
           </div>
           <mat-card-title class="result-card-title">{{ resultCardHeaderTitle() }}</mat-card-title>
           @if (resultCardHeaderSubtitle(); as resultCardHeaderSubtitle) {
-            <mat-card-subtitle class="result-card-subtitle">{{ resultCardHeaderSubtitle }}</mat-card-subtitle>
+            <mat-card-subtitle class="result-card-subtitle result-subtitle">{{ resultCardHeaderSubtitle }}</mat-card-subtitle>
           }
           @if (resultCardMetaText(); as resultCardMetaText) {
             <mat-card-subtitle class="result-card-meta">{{ resultCardMetaText }}</mat-card-subtitle>
@@ -140,7 +142,7 @@
                             class="result-loading-roller-row"
                             [class.result-loading-roller-row--active]="stepIndex === generationLoadingStepIndex()">
                             <span class="result-loading-roller-dot" aria-hidden="true"></span>
-                            <span class="mat-body-small">{{ step }}</span>
+                            <span class="mat-body-small result-loading-roller-text">{{ step }}</span>
                           </div>
                         }
                       </div>
@@ -256,7 +258,9 @@
                 }
               </div>
 
-              <p class="narrative">{{ empty.narrative }}</p>
+              <div class="narrative-info">
+                <p class="description-text narrative">{{ empty.narrative }}</p>
+              </div>
 
               <mat-divider></mat-divider>
 
@@ -292,7 +296,9 @@
                 }
               </div>
 
-              <p class="narrative">{{ result.narrative }}</p>
+              <div class="narrative-info">
+                <p class="description-text narrative">{{ result.narrative }}</p>
+              </div>
 
               @if (eventLookupLoadError(); as eventLookupLoadError) {
                 <div class="result-date-range-note">
@@ -390,7 +396,9 @@
                 }
               </div>
 
-              <p class="narrative">{{ result.narrative }}</p>
+              <div class="narrative-info">
+                <p class="description-text narrative">{{ result.narrative }}</p>
+              </div>
 
               @if (resultWarnings().length) {
                 <mat-chip-set class="warning-chips" aria-label="Insight warnings">
@@ -509,7 +517,9 @@
                 }
               </div>
 
-              <p class="narrative">{{ result.narrative }}</p>
+              <div class="narrative-info">
+                <p class="description-text narrative">{{ result.narrative }}</p>
+              </div>
 
               @if (resultWarnings().length) {
                 <mat-chip-set class="warning-chips" aria-label="Insight warnings">

@@ -1396,7 +1396,9 @@ describe('AiInsightsPageComponent', () => {
     expect(resultCardSubtitle?.textContent).toContain('Aggregation:');
     expect(resultCardMeta?.textContent).toContain('Restored');
     expect(resultCardMeta?.textContent).toContain('Saved Mar 18, 2026');
-    expect(supportNote?.textContent).toContain('Latest saved Mar 18, 2026');
+    expect(supportNote?.textContent).toContain('Latest completed insights are temporarily restored from your account.');
+    expect(supportNote?.textContent).toContain('Proper saved insights/history will come later.');
+    expect(supportNote?.textContent).not.toContain('Latest saved');
     expect(resultNotes).toHaveLength(0);
   });
 

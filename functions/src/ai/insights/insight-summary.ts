@@ -90,6 +90,17 @@ function resolveOverallAggregateValue(
   }
 }
 
+function resolveSummaryValueType(
+  query: NormalizedInsightQuery,
+  aggregationValueType: ChartDataValueTypes | undefined,
+): ChartDataValueTypes | null {
+  if (query.resultKind === 'multi_metric_aggregate') {
+    return aggregationValueType ?? null;
+  }
+
+  return query.valueType ?? aggregationValueType ?? null;
+}
+
 export function buildNonAggregateEmptySummary(): AiInsightSummary {
   return {
     matchedEventCount: 0,
@@ -106,7 +117,7 @@ export function buildNonAggregateEmptySummary(): AiInsightSummary {
 export function buildInsightSummary(
   query: NormalizedInsightQuery,
   aggregation: {
-    valueType: ChartDataValueTypes;
+    valueType?: ChartDataValueTypes;
     resolvedTimeInterval: TimeIntervals;
     buckets: Array<{
       bucketKey: string | number;
@@ -118,6 +129,7 @@ export function buildInsightSummary(
   matchedEventCount: number,
   matchedActivityTypeCounts: Array<{ activityType: string; eventCount: number }>,
 ): AiInsightSummary {
+  const resolvedValueType = resolveSummaryValueType(query, aggregation.valueType);
   const isOverallMultiMetric = query.resultKind === 'multi_metric_aggregate' && query.groupingMode === 'overall';
   const peakBucket = isOverallMultiMetric
     ? null
@@ -131,7 +143,7 @@ export function buildInsightSummary(
 
   return {
     matchedEventCount,
-    overallAggregateValue: resolveOverallAggregateValue(aggregation.valueType, aggregation),
+    overallAggregateValue: resolvedValueType ? resolveOverallAggregateValue(resolvedValueType, aggregation) : null,
     peakBucket: peakBucket
       ? {
         bucketKey: peakBucket.bucketKey,

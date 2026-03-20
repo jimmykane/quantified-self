@@ -227,6 +227,10 @@
   gap: 16px;
 }
 
+.result-content {
+  width: 100%;
+}
+
 .result-content--loading {
   gap: 18px;
 }
@@ -258,24 +262,29 @@
 
 .result-loading-roller {
   min-width: 0;
+  --ai-insights-loading-roller-row-height: 1.85rem;
   padding-block: 6px;
   border-top: 1px solid color-mix(in srgb, var(--mat-sys-outline-variant) 88%, transparent);
   border-bottom: 1px solid color-mix(in srgb, var(--mat-sys-outline-variant) 72%, transparent);
 }
 
 .result-loading-roller-window {
-  height: 1.85rem;
+  height: var(--ai-insights-loading-roller-row-height);
   overflow: hidden;
 }
 
 .result-loading-roller-track {
   display: grid;
+  grid-auto-rows: var(--ai-insights-loading-roller-row-height);
   transition: transform 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: transform;
 }
 
 .result-loading-roller-row {
-  height: 1.85rem;
-  display: inline-flex;
+  height: var(--ai-insights-loading-roller-row-height);
+  min-width: 0;
+  width: 100%;
+  display: flex;
   align-items: center;
   gap: 10px;
   color: var(--mat-sys-on-surface-variant);
@@ -283,6 +292,13 @@
 
 .result-loading-roller-row--active {
   color: var(--mat-sys-on-surface);
+}
+
+.result-loading-roller-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .result-loading-roller-dot {
@@ -488,6 +504,10 @@
   color: var(--mat-sys-error);
 }
 
+.prompt-card-footer {
+  padding: 0 24px 24px;
+}
+
 .section-heading {
   display: flex;
   align-items: start;
@@ -527,15 +547,31 @@
 }
 
 .narrative {
-  font-size: 0.92rem;
-  line-height: 1.58;
+  color: var(--mat-sys-on-surface);
+}
+
+.description-text {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.narrative-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px;
+  background: var(--mat-sys-surface-variant);
+  border-left: 4px solid var(--mat-sys-primary);
+  border-radius: 0 4px 4px 0;
+  box-sizing: border-box;
+  width: 100%;
 }
 
 .result-date-range-note {
-  display: inline-flex;
+  display: flex;
   align-items: flex-start;
   gap: 8px;
-  max-width: 48rem;
+  width: 100%;
   color: var(--mat-sys-on-surface-variant);
 }
 
@@ -574,12 +610,6 @@
   max-width: 100%;
 }
 
-.prompt-support-note {
-  margin: 0;
-  color: var(--mat-sys-on-surface-variant);
-  line-height: 1.45;
-}
-
 .warning-chips {
   margin-top: -4px;
 }
@@ -590,10 +620,10 @@
 }
 
 .result-note {
-  display: inline-flex;
+  display: flex;
   align-items: flex-start;
   gap: 8px;
-  max-width: 48rem;
+  width: 100%;
   color: var(--mat-sys-on-surface-variant);
 }
 

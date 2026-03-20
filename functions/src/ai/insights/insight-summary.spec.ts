@@ -58,6 +58,37 @@ describe('insight-summary', () => {
     });
   });
 
+  it('prefers query valueType over aggregation valueType for single-metric summaries', () => {
+    const query = {
+      resultKind: 'aggregate' as const,
+      dataType: 'Average Cadence',
+      valueType: ChartDataValueTypes.Average,
+      categoryType: ChartDataCategoryTypes.DateType,
+      requestedTimeInterval: TimeIntervals.Monthly,
+      activityTypeGroups: [],
+      activityTypes: [ActivityTypes.Cycling],
+      dateRange: {
+        kind: 'bounded' as const,
+        startDate: '2026-01-01T00:00:00.000Z',
+        endDate: '2026-03-31T23:59:59.999Z',
+        timezone: 'UTC',
+        source: 'prompt' as const,
+      },
+      chartType: ChartTypes.LinesVertical,
+    };
+
+    const summary = buildInsightSummary(query, {
+      valueType: ChartDataValueTypes.Maximum,
+      resolvedTimeInterval: TimeIntervals.Monthly,
+      buckets: [
+        { bucketKey: '2026-01', time: 1, aggregateValue: 80, totalCount: 2 },
+        { bucketKey: '2026-02', time: 2, aggregateValue: 84, totalCount: 4 },
+      ],
+    }, 6, [{ activityType: ActivityTypes.Cycling, eventCount: 6 }]);
+
+    expect(summary.overallAggregateValue).toBeCloseTo(82.6666666667);
+  });
+
   it('omits latest bucket for non-date grouped summaries and preserves activity mix', () => {
     const query = {
       resultKind: 'aggregate' as const,
