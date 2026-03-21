@@ -123,6 +123,12 @@ service cloud.firestore {
         }
     }
 
+    // AI Insights repaired prompt backlog (global / server-owned only)
+    match /aiInsightsPromptRepairs/{docId} {
+      allow read: if false;
+      allow write: if false;
+    }
+
     match /customers/{userID} {
       allow read: if request.auth.uid == userID;
       

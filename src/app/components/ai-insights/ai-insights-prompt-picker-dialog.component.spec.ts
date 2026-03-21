@@ -67,7 +67,7 @@ describe('AiInsightsPromptPickerDialogComponent', () => {
     const title = fixture.debugElement.query(By.css('[mat-dialog-title]'))?.nativeElement as HTMLElement | undefined;
     const copy = fixture.debugElement.query(By.css('.prompt-picker-dialog__copy'))?.nativeElement as HTMLElement | undefined;
 
-    expect(title?.textContent).toContain('Try one of these prompts');
+    expect(title?.textContent).toContain('Try a supported prompt');
     expect(copy?.textContent).toContain('not supported yet');
   });
 });

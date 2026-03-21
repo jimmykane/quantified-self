@@ -25,6 +25,10 @@ import {
   detectPromptLanguageDeterministic,
   sanitizePromptToEnglish,
 } from './prompt-language-sanitization';
+import {
+  buildAiInsightsPromptRepairIdentity,
+  recordSuccessfulAiInsightRepair,
+} from './repaired-prompt-backlog';
 import { AiInsightsRequestSchema, AiInsightsResponseSchema } from './schemas';
 import {
   getAiInsightsQuotaStatus as getAiInsightsQuotaStatusForUser,
@@ -237,11 +241,12 @@ export async function runAiInsights(
       || normalizeResult.reasonCode === 'ambiguous_metric';
 
     if (shouldAttemptRepair) {
+      const deterministicFailureReasonCode = normalizeResult.reasonCode;
       logger.info('[aiInsights] Starting AI prompt repair', {
         userID,
         prompt,
         effectivePrompt,
-        reasonCode: normalizeResult.reasonCode,
+        reasonCode: deterministicFailureReasonCode,
       });
       await consumeQuotaOnAiAttempt('repair');
       const repairedResult = await repairUnsupportedInsightQuery({
@@ -258,6 +263,33 @@ export async function runAiInsights(
       });
 
       normalizeResult = repairedResult.result;
+      if (repairedResult.source === 'genkit' && normalizeResult.status === 'ok') {
+        let intentDocID: string | null = null;
+        try {
+          const repairIdentity = buildAiInsightsPromptRepairIdentity(effectivePrompt, normalizeResult.query);
+          intentDocID = repairIdentity.intentDocID;
+          await recordSuccessfulAiInsightRepair({
+            rawPrompt: prompt,
+            repairInputPrompt: effectivePrompt,
+            normalizedQuery: normalizeResult.query,
+            deterministicFailureReasonCode,
+            metricKey: normalizeResult.metricKey,
+          });
+          logger.info('[aiInsights] Recorded successful AI prompt repair for deterministic backlog', {
+            userID,
+            intentDocID,
+            deterministicFailureReasonCode,
+          });
+        } catch (error) {
+          logger.warn('[aiInsights] Failed to record successful AI prompt repair backlog entry.', {
+            userID,
+            intentDocID,
+            deterministicFailureReasonCode,
+            error,
+          });
+        }
+      }
+
       if (normalizeResult.status === 'unsupported') {
         const quota = await resolveQuotaForResponse();
         logger.warn('[aiInsights] Unsupported request', {

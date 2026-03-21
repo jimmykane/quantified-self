@@ -109,6 +109,7 @@ To ensure data hygiene and compliance, we enforce Time-To-Live (TTL) policies on
 | Collection | TTL Duration | Field | Description |
 | :--- | :--- | :--- | :--- |
 | `mail` | ~90 days | `expireAt` | Transactional emails logs |
+| `aiInsightsPromptRepairs` | ~90 days | `expireAt` | Server-owned backlog of AI-repaired prompts for deterministic parser improvements |
 | `failed_jobs` | 7 days | `expireAt` | Logs for failed background jobs |
 | `*Queue` | 7 days | `expireAt` | Temporary queue items for processing |
 

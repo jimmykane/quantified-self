@@ -26,13 +26,13 @@ export class AiInsightsPromptPickerDialogComponent {
   readonly promptGroups = this.data.promptGroups;
   readonly dialogTitle = computed(() => (
     this.data.promptSource === 'unsupported'
-      ? 'Try one of these prompts'
-      : 'Browse prompt ideas'
+      ? 'Try a supported prompt'
+      : 'Prompt ideas'
   ));
   readonly dialogCopy = computed(() => (
     this.data.promptSource === 'unsupported'
-      ? 'This request is not supported yet. Pick one of these supported prompt examples instead.'
-      : 'Choose a supported prompt example and run it as-is or adapt it in the input field.'
+      ? 'This request is not supported yet. Pick one of these examples.'
+      : 'Pick a prompt and run it as-is, or tweak it first.'
   ));
 
   selectPrompt(prompt: string): void {

@@ -2,6 +2,7 @@
 
 # Array of collection group names
 COLLECTIONS=(
+    "aiInsightsPromptRepairs"
     "COROSAPIWorkoutQueue"
     "suuntoAppWorkoutQueue"
     "garminAPIActivityQueue"

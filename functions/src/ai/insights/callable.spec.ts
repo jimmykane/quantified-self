@@ -31,6 +31,8 @@ const hoisted = vi.hoisted(() => {
     repairUnsupportedInsightQuery: vi.fn(),
     detectPromptLanguageDeterministic: vi.fn(),
     sanitizePromptToEnglish: vi.fn(),
+    buildAiInsightsPromptRepairIdentity: vi.fn(),
+    recordSuccessfulAiInsightRepair: vi.fn(),
     executeAiInsightsQuery: vi.fn(),
     summarizeAiInsightResult: vi.fn(),
     getInsightMetricDefinition: vi.fn(),
@@ -81,6 +83,11 @@ vi.mock('./normalize-query.repair', () => ({
 vi.mock('./prompt-language-sanitization', () => ({
   detectPromptLanguageDeterministic: (...args: unknown[]) => hoisted.detectPromptLanguageDeterministic(...args),
   sanitizePromptToEnglish: (...args: unknown[]) => hoisted.sanitizePromptToEnglish(...args),
+}));
+
+vi.mock('./repaired-prompt-backlog', () => ({
+  buildAiInsightsPromptRepairIdentity: (...args: unknown[]) => hoisted.buildAiInsightsPromptRepairIdentity(...args),
+  recordSuccessfulAiInsightRepair: (...args: unknown[]) => hoisted.recordSuccessfulAiInsightRepair(...args),
 }));
 
 vi.mock('./execute-query', () => ({
@@ -265,6 +272,16 @@ describe('aiInsights callable', () => {
     hoisted.sanitizePromptToEnglish.mockResolvedValue({
       status: 'english',
       prompt: 'show distance',
+    });
+    hoisted.buildAiInsightsPromptRepairIdentity.mockReturnValue({
+      canonicalPrompt: 'show my max cardio in cycling',
+      normalizedQuerySignature: '{"query":"signature"}',
+      intentDocID: 'repair-intent-1',
+    });
+    hoisted.recordSuccessfulAiInsightRepair.mockResolvedValue({
+      canonicalPrompt: 'show my max cardio in cycling',
+      normalizedQuerySignature: '{"query":"signature"}',
+      intentDocID: 'repair-intent-1',
     });
     hoisted.executeAiInsightsQuery.mockResolvedValue({
       resultKind: 'aggregate',
@@ -893,6 +910,7 @@ describe('aiInsights callable', () => {
     expect(hoisted.reserveAiInsightsQuotaForRequest).not.toHaveBeenCalled();
     expect(hoisted.finalizeAiInsightsQuotaReservation).not.toHaveBeenCalled();
     expect(hoisted.sanitizePromptToEnglish).not.toHaveBeenCalled();
+    expect(hoisted.recordSuccessfulAiInsightRepair).not.toHaveBeenCalled();
     expect(result).toEqual({
       status: 'unsupported',
       narrative: 'I can only answer questions from persisted event-level stats right now, so streams, splits, laps, routes, and original-file reprocessing are out of scope.',
@@ -999,10 +1017,106 @@ describe('aiInsights callable', () => {
     expect(hoisted.releaseAiInsightsQuotaReservation).not.toHaveBeenCalled();
     expect(hoisted.executeAiInsightsQuery).toHaveBeenCalledWith('user-1', normalizedQuery, 'show my max cardio in cycling');
     expect(hoisted.summarizeAiInsightResult).toHaveBeenCalledTimes(1);
+    expect(hoisted.buildAiInsightsPromptRepairIdentity).toHaveBeenCalledWith('show my max cardio in cycling', normalizedQuery);
+    expect(hoisted.recordSuccessfulAiInsightRepair).toHaveBeenCalledWith(expect.objectContaining({
+      rawPrompt: 'show my max cardio in cycling',
+      repairInputPrompt: 'show my max cardio in cycling',
+      normalizedQuery,
+      deterministicFailureReasonCode: 'unsupported_metric',
+      metricKey: 'distance',
+    }));
     expect(result).toMatchObject({
       status: 'ok',
       quota: quotaStatus,
     });
+  });
+
+  it('does not record repaired prompts when AI repair source is none', async () => {
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'unsupported',
+      reasonCode: 'unsupported_metric',
+      suggestedPrompts: ['show my distance'],
+    });
+    hoisted.repairUnsupportedInsightQuery.mockResolvedValue({
+      source: 'none',
+      result: {
+        status: 'ok',
+        metricKey: 'distance',
+        query: normalizedQuery,
+      },
+    });
+
+    await aiInsights({
+      prompt: 'show my max cardio in cycling',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(hoisted.buildAiInsightsPromptRepairIdentity).not.toHaveBeenCalled();
+    expect(hoisted.recordSuccessfulAiInsightRepair).not.toHaveBeenCalled();
+  });
+
+  it('does not record repaired prompts when AI repair remains unsupported', async () => {
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'unsupported',
+      reasonCode: 'unsupported_metric',
+      suggestedPrompts: ['show my distance'],
+    });
+    hoisted.repairUnsupportedInsightQuery.mockResolvedValue({
+      source: 'genkit',
+      result: {
+        status: 'unsupported',
+        reasonCode: 'unsupported_metric',
+        suggestedPrompts: ['show my distance'],
+      },
+    });
+
+    await aiInsights({
+      prompt: 'show my max cardio in cycling',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(hoisted.buildAiInsightsPromptRepairIdentity).not.toHaveBeenCalled();
+    expect(hoisted.recordSuccessfulAiInsightRepair).not.toHaveBeenCalled();
+  });
+
+  it('continues successfully when backlog recording fails after AI repair success', async () => {
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'unsupported',
+      reasonCode: 'unsupported_metric',
+      suggestedPrompts: ['show my distance'],
+    });
+    hoisted.repairUnsupportedInsightQuery.mockResolvedValue({
+      source: 'genkit',
+      result: {
+        status: 'ok',
+        metricKey: 'distance',
+        query: normalizedQuery,
+      },
+    });
+    hoisted.buildAiInsightsPromptRepairIdentity.mockReturnValue({
+      canonicalPrompt: 'show my max cardio in cycling',
+      normalizedQuerySignature: '{"query":"signature"}',
+      intentDocID: 'repair-intent-123',
+    });
+    hoisted.recordSuccessfulAiInsightRepair.mockRejectedValue(new Error('write failed'));
+
+    const result = await aiInsights({
+      prompt: 'show my max cardio in cycling',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(result).toMatchObject({
+      status: 'ok',
+      quota: quotaStatus,
+    });
+    expect(hoisted.summarizeAiInsightResult).toHaveBeenCalledTimes(1);
+    expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+      '[aiInsights] Failed to record successful AI prompt repair backlog entry.',
+      expect.objectContaining({
+        intentDocID: 'repair-intent-123',
+        deterministicFailureReasonCode: 'unsupported_metric',
+      }),
+    );
   });
 
   it('consumes prompt quota when summarize returns fallback narrative', async () => {

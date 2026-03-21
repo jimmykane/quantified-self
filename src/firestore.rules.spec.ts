@@ -750,6 +750,56 @@ describe('Firestore Security Rules', () => {
         });
     });
 
+    describe('AI Insights Prompt Repair Backlog (aiInsightsPromptRepairs/{docId})', () => {
+        const docId = 'repair-intent-1';
+
+        it('should deny authenticated users from reading repair backlog docs', async () => {
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().doc(`aiInsightsPromptRepairs/${docId}`).set({
+                    canonicalPrompt: 'show max heart rate by activity type',
+                    normalizedQuerySignature: '{"q":"sig"}',
+                    normalizedQuery: { resultKind: 'aggregate' },
+                    seenCount: 3,
+                });
+            });
+
+            const db = testEnv.authenticatedContext('repair-user').firestore();
+            await assertFails(db.doc(`aiInsightsPromptRepairs/${docId}`).get());
+        });
+
+        it('should deny authenticated users from writing repair backlog docs', async () => {
+            const db = testEnv.authenticatedContext('repair-user').firestore();
+            await assertFails(db.doc(`aiInsightsPromptRepairs/${docId}`).set({
+                canonicalPrompt: 'show max heart rate by activity type',
+                normalizedQuerySignature: '{"q":"sig"}',
+                seenCount: 1,
+            }));
+        });
+
+        it('should deny unauthenticated users from reading repair backlog docs', async () => {
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().doc(`aiInsightsPromptRepairs/${docId}`).set({
+                    canonicalPrompt: 'show max heart rate by activity type',
+                    normalizedQuerySignature: '{"q":"sig"}',
+                    normalizedQuery: { resultKind: 'aggregate' },
+                    seenCount: 3,
+                });
+            });
+
+            const db = testEnv.unauthenticatedContext().firestore();
+            await assertFails(db.doc(`aiInsightsPromptRepairs/${docId}`).get());
+        });
+
+        it('should deny unauthenticated users from writing repair backlog docs', async () => {
+            const db = testEnv.unauthenticatedContext().firestore();
+            await assertFails(db.doc(`aiInsightsPromptRepairs/${docId}`).set({
+                canonicalPrompt: 'show max heart rate by activity type',
+                normalizedQuerySignature: '{"q":"sig"}',
+                seenCount: 1,
+            }));
+        });
+    });
+
     describe('Changelogs Collection', () => {
         const userId = 'user_123';
         const adminId = 'admin_456';

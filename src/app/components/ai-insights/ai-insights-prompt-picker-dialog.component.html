@@ -8,17 +8,18 @@
       <section class="prompt-picker-dialog__group">
         <h3 class="mat-subheader prompt-picker-dialog__group-title">{{ group.category }}</h3>
 
-        <mat-action-list class="prompt-picker-dialog__list">
+        <div class="prompt-picker-dialog__list" role="list">
           @for (prompt of group.prompts; track prompt.id) {
             <button
-              mat-list-item
+              mat-button
               type="button"
-              class="prompt-picker-dialog__item"
+              class="prompt-picker-dialog__item qs-glass-card-panel"
               (click)="selectPrompt(prompt.prompt)">
-              <span class="prompt-picker-dialog__item-copy" matListItemTitle>{{ prompt.prompt }}</span>
+              <span class="prompt-picker-dialog__item-copy">{{ prompt.prompt }}</span>
+              <mat-icon class="prompt-picker-dialog__item-icon" aria-hidden="true">arrow_forward</mat-icon>
             </button>
           }
-        </mat-action-list>
+        </div>
 
         @if (!isLast) {
           <mat-divider></mat-divider>
