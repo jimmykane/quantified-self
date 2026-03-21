@@ -42,6 +42,10 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === 'string');
 }
 
+function isEnumPrimitiveArray(value: unknown): value is Array<number | string> {
+  return Array.isArray(value) && value.every(isEnumPrimitive);
+}
+
 function isNumberRecord(value: unknown): value is Record<string, number> {
   return isRecord(value) && Object.values(value).every(isFiniteNumber);
 }
@@ -99,8 +103,8 @@ function isNormalizedInsightQuery(value: unknown): value is NormalizedInsightQue
     || (value.resultKind !== undefined && value.resultKind !== null && !isResultKind(value.resultKind))
     || !isEnumPrimitive(value.categoryType)
     || (value.requestedTimeInterval !== undefined && value.requestedTimeInterval !== null && !isEnumPrimitive(value.requestedTimeInterval))
-    || !isStringArray(value.activityTypeGroups)
-    || !isStringArray(value.activityTypes)
+    || !isEnumPrimitiveArray(value.activityTypeGroups)
+    || !isEnumPrimitiveArray(value.activityTypes)
     || !isNormalizedInsightDateRange(value.dateRange)
     || (value.requestedDateRanges !== undefined
       && (!Array.isArray(value.requestedDateRanges) || !value.requestedDateRanges.every(isNormalizedInsightBoundedDateRange)))

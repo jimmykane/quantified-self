@@ -28,6 +28,8 @@ class AiInsightsPermissionsService {
         && user.acceptedDataPolicy === true
         && (user as any).acceptedTos === true;
       const hasSubscribedOnce = (user as any).hasSubscribedOnce === true;
+      const explicitlyCompleted = (user as any).onboardingCompleted === true;
+      const onboardingCompleted = termsAccepted && (hasSubscribedOnce || explicitlyCompleted);
       const isAdmin = (user as any).admin === true;
       const hasAiInsightsAccess = AppUserUtilities.hasPaidAccessUser(user, isAdmin);
 
@@ -37,6 +39,8 @@ class AiInsightsPermissionsService {
         hasAiInsightsAccess,
         termsAccepted,
         hasSubscribedOnce,
+        explicitlyCompleted,
+        onboardingCompleted,
       });
 
       if (hasAiInsightsAccess) {
@@ -44,7 +48,7 @@ class AiInsightsPermissionsService {
         return true;
       }
 
-      if (!termsAccepted || !hasSubscribedOnce) {
+      if (!onboardingCompleted) {
         this.logger.log('[AiInsightsGuard] Access DENIED but deferring to OnboardingGuard (Not fully onboarded)');
         return false;
       }

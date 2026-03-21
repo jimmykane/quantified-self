@@ -216,6 +216,7 @@ export async function runAiInsights(
     return consumedQuotaStatus;
   };
 
+  try {
   let effectivePrompt = prompt;
   const promptLanguage = aiInsightsRuntime.detectPromptLanguageDeterministic(prompt);
   logger.info('[aiInsights] Prompt language gate result', {
@@ -639,6 +640,24 @@ export async function runAiInsights(
       : {}),
     presentation,
   } satisfies AiInsightsAggregateOkResponse;
+  } catch (error) {
+    if (quotaReservation) {
+      const reservationToRelease = quotaReservation;
+      quotaReservation = null;
+      try {
+        await aiInsightsRuntime.releaseAiInsightsQuotaReservation(reservationToRelease);
+      } catch (releaseError) {
+        logger.error('[aiInsights] Failed to release quota reservation after request failure', {
+          userID,
+          reservationID: reservationToRelease.reservationID,
+          ...buildPromptLogContext(prompt),
+          ...serializeErrorForLogging(releaseError),
+        });
+      }
+    }
+
+    throw error;
+  }
 }
 
 export const aiInsightsFlow = aiInsightsGenkit.defineFlow({

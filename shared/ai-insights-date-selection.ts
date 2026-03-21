@@ -65,11 +65,14 @@ function formatMonthLabel(
   locale: string | undefined,
   timeZone: string,
 ): string {
+  // Use a mid-month UTC timestamp so timezone projection cannot roll the
+  // calendar month backward/forward at boundaries (for example UTC-08 on day 1).
+  const midMonthUtcDate = new Date(Date.UTC(year, month - 1, 15, 12, 0, 0, 0));
   return new Intl.DateTimeFormat(locale || 'en-US', {
     month: 'short',
     year: 'numeric',
     timeZone,
-  }).format(new Date(Date.UTC(year, month - 1, 1)));
+  }).format(midMonthUtcDate);
 }
 
 function isCalendarYearRange(

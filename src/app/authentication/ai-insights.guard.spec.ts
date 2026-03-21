@@ -98,6 +98,26 @@ describe('aiInsightsGuard', () => {
     expect((result as any).toString()).toContain('/subscriptions');
   });
 
+  it('should redirect explicitly completed free onboarding users to subscriptions', async () => {
+    authServiceStub.user$ = of({
+      uid: '123',
+      stripeRole: 'free',
+      hasSubscribedOnce: false,
+      onboardingCompleted: true,
+      acceptedTos: true,
+      acceptedPrivacyPolicy: true,
+      acceptedDataPolicy: true,
+      acceptedTrackingPolicy: true,
+      acceptedDiagnosticsPolicy: true,
+    } as any);
+
+    const result = await TestBed.runInInjectionContext(() => aiInsightsGuard({} as any, [] as any));
+
+    expect(result).not.toBe(true);
+    expect(result).not.toBe(false);
+    expect((result as any).toString()).toContain('/subscriptions');
+  });
+
   it('should defer to onboarding when onboarding is incomplete', async () => {
     authServiceStub.user$ = of({
       uid: '123',

@@ -448,6 +448,26 @@ describe('aiInsights callable', () => {
     expect(hoisted.summarizeAiInsightResult).not.toHaveBeenCalled();
   });
 
+  it('releases reserved quota when deterministic normalization throws', async () => {
+    hoisted.normalizeInsightQuery.mockRejectedValue(new Error('normalize failed'));
+
+    await expect(aiInsights({
+      prompt: 'show distance',
+      clientTimezone: 'UTC',
+    } as any)).rejects.toMatchObject({
+      code: 'internal',
+      message: 'Could not generate AI insights.',
+    });
+
+    expect(hoisted.reserveAiInsightsQuotaForRequest).toHaveBeenCalledTimes(1);
+    expect(hoisted.finalizeAiInsightsQuotaReservation).not.toHaveBeenCalled();
+    expect(hoisted.releaseAiInsightsQuotaReservation).toHaveBeenCalledTimes(1);
+    expect(hoisted.releaseAiInsightsQuotaReservation).toHaveBeenCalledWith(expect.objectContaining({
+      userID: 'user-1',
+      reservationID: 'reservation-1',
+    }));
+  });
+
   it('allows active basic users', async () => {
     hoisted.getAiInsightsQuotaStatus.mockResolvedValue({
       ...quotaStatus,
