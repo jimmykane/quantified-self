@@ -21,6 +21,10 @@ import { executeAiInsightsQuery } from './execute-query';
 import { getInsightMetricDefinition } from './metric-catalog';
 import { normalizeInsightQuery } from './normalize-query.flow';
 import { repairUnsupportedInsightQuery } from './normalize-query.repair';
+import {
+  detectPromptLanguageDeterministic,
+  sanitizePromptToEnglish,
+} from './prompt-language-sanitization';
 import { AiInsightsRequestSchema, AiInsightsResponseSchema } from './schemas';
 import {
   getAiInsightsQuotaStatus as getAiInsightsQuotaStatusForUser,
@@ -144,20 +148,6 @@ export async function runAiInsights(
       : await reserveAiInsightsQuotaForRequest(userID);
   };
 
-  const finalizeReservedQuota = async (): Promise<AiInsightsQuotaStatusResponse> => {
-    if (consumedQuotaStatus) {
-      return consumedQuotaStatus;
-    }
-
-    if (!quotaReservation) {
-      return initialQuotaStatus;
-    }
-
-    consumedQuotaStatus = await finalizeAiInsightsQuotaReservation(quotaReservation);
-    quotaReservation = null;
-    return consumedQuotaStatus;
-  };
-
   const releaseReservedQuota = async (): Promise<AiInsightsQuotaStatusResponse> => {
     if (consumedQuotaStatus) {
       return consumedQuotaStatus;
@@ -172,9 +162,72 @@ export async function runAiInsights(
     return releasedStatus;
   };
 
+  const resolveQuotaForResponse = async (): Promise<AiInsightsQuotaStatusResponse> => (
+    consumedQuotaStatus ?? await releaseReservedQuota()
+  );
+
+  const consumeQuotaOnAiAttempt = async (
+    stage: 'sanitize' | 'repair' | 'summarize',
+  ): Promise<AiInsightsQuotaStatusResponse> => {
+    if (consumedQuotaStatus) {
+      return consumedQuotaStatus;
+    }
+
+    await ensureQuotaReservation();
+    consumedQuotaStatus = await finalizeAiInsightsQuotaReservation(
+      quotaReservation as NonNullable<typeof quotaReservation>,
+    );
+    quotaReservation = null;
+    logger.info('[aiInsights] Consumed prompt quota on AI attempt', {
+      userID,
+      stage,
+      prompt,
+    });
+    return consumedQuotaStatus;
+  };
+
+  let effectivePrompt = prompt;
+  const promptLanguage = detectPromptLanguageDeterministic(prompt);
+  logger.info('[aiInsights] Prompt language gate result', {
+    userID,
+    prompt,
+    promptLanguage,
+  });
+
+  if (promptLanguage !== 'english') {
+    logger.info('[aiInsights] Starting AI prompt sanitization', {
+      userID,
+      prompt,
+      promptLanguage,
+    });
+    await consumeQuotaOnAiAttempt('sanitize');
+    const sanitizationResult = await sanitizePromptToEnglish(prompt);
+    logger.info('[aiInsights] Finished AI prompt sanitization', {
+      userID,
+      prompt,
+      status: sanitizationResult.status,
+    });
+
+    if (sanitizationResult.status === 'unsupported') {
+      const quota = await resolveQuotaForResponse();
+      logger.info('[aiInsights] Terminal result', {
+        userID,
+        prompt,
+        resultCategory: 'unsupported',
+        reasonCode: sanitizationResult.reasonCode,
+        source: 'sanitize',
+      });
+      return buildUnsupportedResponse(sanitizationResult.reasonCode, quota, {
+        suggestedPrompts: sanitizationResult.suggestedPrompts,
+      });
+    }
+
+    effectivePrompt = sanitizationResult.prompt;
+  }
+
   let normalizeResult = await normalizeInsightQuery({
     ...input,
-    prompt,
+    prompt: effectivePrompt,
     clientTimezone,
   });
 
@@ -184,42 +237,66 @@ export async function runAiInsights(
       || normalizeResult.reasonCode === 'ambiguous_metric';
 
     if (shouldAttemptRepair) {
-      await ensureQuotaReservation();
+      logger.info('[aiInsights] Starting AI prompt repair', {
+        userID,
+        prompt,
+        effectivePrompt,
+        reasonCode: normalizeResult.reasonCode,
+      });
+      await consumeQuotaOnAiAttempt('repair');
       const repairedResult = await repairUnsupportedInsightQuery({
         ...input,
-        prompt,
+        prompt: effectivePrompt,
         clientTimezone,
       }, normalizeResult);
-      if (repairedResult.source === 'genkit') {
-        await finalizeReservedQuota();
-      }
+      logger.info('[aiInsights] Finished AI prompt repair', {
+        userID,
+        prompt,
+        effectivePrompt,
+        source: repairedResult.source,
+        status: repairedResult.result.status,
+      });
 
       normalizeResult = repairedResult.result;
       if (normalizeResult.status === 'unsupported') {
-        const quota = repairedResult.source === 'genkit'
-          ? (consumedQuotaStatus ?? await finalizeReservedQuota())
-          : await releaseReservedQuota();
+        const quota = await resolveQuotaForResponse();
         logger.warn('[aiInsights] Unsupported request', {
           userID,
           prompt,
+          effectivePrompt,
           clientTimezone,
           reasonCode: normalizeResult.reasonCode,
           suggestedPromptsCount: normalizeResult.suggestedPrompts.length,
           repairedWithAi: repairedResult.source === 'genkit',
+        });
+        logger.info('[aiInsights] Terminal result', {
+          userID,
+          prompt,
+          effectivePrompt,
+          resultCategory: 'unsupported',
+          reasonCode: normalizeResult.reasonCode,
         });
         return buildUnsupportedResponse(normalizeResult.reasonCode, quota, {
           suggestedPrompts: normalizeResult.suggestedPrompts,
         });
       }
     } else {
-      const quota = await releaseReservedQuota();
+      const quota = await resolveQuotaForResponse();
       logger.warn('[aiInsights] Unsupported request', {
         userID,
         prompt,
+        effectivePrompt,
         clientTimezone,
         reasonCode: normalizeResult.reasonCode,
         suggestedPromptsCount: normalizeResult.suggestedPrompts.length,
         repairedWithAi: false,
+      });
+      logger.info('[aiInsights] Terminal result', {
+        userID,
+        prompt,
+        effectivePrompt,
+        resultCategory: 'unsupported',
+        reasonCode: normalizeResult.reasonCode,
       });
       return buildUnsupportedResponse(normalizeResult.reasonCode, quota, {
         suggestedPrompts: normalizeResult.suggestedPrompts,
@@ -238,11 +315,20 @@ export async function runAiInsights(
     logger.warn('[aiInsights] Unsupported metric key after normalization', {
       userID,
       prompt,
+      effectivePrompt,
       clientTimezone,
       metricKey: normalizeResult.metricKey,
     });
-    return buildUnsupportedResponse('unsupported_metric', initialQuotaStatus, {
-      sourceText: prompt,
+    const quota = await resolveQuotaForResponse();
+    logger.info('[aiInsights] Terminal result', {
+      userID,
+      prompt,
+      effectivePrompt,
+      resultCategory: 'unsupported',
+      reasonCode: 'unsupported_metric',
+    });
+    return buildUnsupportedResponse('unsupported_metric', quota, {
+      sourceText: effectivePrompt,
     });
   }
   const multiMetricDefinitions = effectiveQuery.resultKind === 'multi_metric_aggregate'
@@ -260,15 +346,25 @@ export async function runAiInsights(
       logger.warn('[aiInsights] Unsupported multi metric selection after normalization', {
       userID,
       prompt,
+      effectivePrompt,
       clientTimezone,
       metricKeys: effectiveQuery.metricSelections.map(metricSelection => metricSelection.metricKey),
     });
-    return buildUnsupportedResponse('unsupported_multi_metric_combination', initialQuotaStatus, {
-      sourceText: prompt,
+    const quota = await resolveQuotaForResponse();
+    logger.info('[aiInsights] Terminal result', {
+      userID,
+      prompt,
+      effectivePrompt,
+      resultCategory: 'unsupported',
+      reasonCode: 'unsupported_multi_metric_combination',
+    });
+    return buildUnsupportedResponse('unsupported_multi_metric_combination', quota, {
+      sourceText: effectivePrompt,
     });
   }
   logger.info('[aiInsights] Query normalization debug', {
     prompt,
+    effectivePrompt,
     userID,
     normalizedQuery: {
       dataType: effectiveQuery.resultKind === 'multi_metric_aggregate'
@@ -288,7 +384,7 @@ export async function runAiInsights(
     },
   });
   const unitSettings = await loadUserUnitSettings(userID);
-  const executionResult = await executeAiInsightsQuery(userID, effectiveQuery, prompt);
+  const executionResult = await executeAiInsightsQuery(userID, effectiveQuery, effectivePrompt);
   const presentation = buildInsightPresentation(
     effectiveQuery,
     effectiveQuery.resultKind === 'multi_metric_aggregate'
@@ -352,69 +448,72 @@ export async function runAiInsights(
       : multiMetricResultGroups.every(metricResult => metricResult.aggregation.buckets.length === 0);
 
   let narrativeResult: Awaited<ReturnType<typeof summarizeAiInsightResult>>;
-  try {
-    await ensureQuotaReservation();
-    if (executionResult.resultKind === 'aggregate' && aggregateQueryInput) {
-      narrativeResult = await summarizeAiInsightResult({
-        status: isEmpty ? 'empty' : 'ok',
-        prompt,
-        metricLabel: (metric as NonNullable<typeof metric>).label,
-        query: aggregateQueryInput,
-        aggregation: executionResult.aggregation,
-        summary: aggregateSummary as AiInsightSummary,
-        presentation: isEmpty ? emptyPresentation : presentation,
-        clientLocale: input.clientLocale,
-        unitSettings,
-      });
-    } else if (executionResult.resultKind === 'event_lookup' && eventLookupQueryInput) {
-      narrativeResult = await summarizeAiInsightResult({
-        status: isEmpty ? 'empty' : 'ok',
-        prompt,
-        metricLabel: (metric as NonNullable<typeof metric>).label,
-        query: eventLookupQueryInput,
-        eventLookup: {
-          matchedEventCount: executionResult.matchedEventsCount,
-          primaryEvent: eventLookupResult?.rankedEvents[0] ?? null,
-          rankedEvents: eventLookupResult?.rankedEvents.slice(0, 10) ?? [],
-        },
-        presentation: isEmpty ? emptyPresentation : presentation,
-        clientLocale: input.clientLocale,
-        unitSettings,
-      });
-    } else if (executionResult.resultKind === 'multi_metric_aggregate' && multiMetricQueryInput) {
-      narrativeResult = await summarizeAiInsightResult({
-        status: isEmpty ? 'empty' : 'ok',
-        prompt,
-        query: multiMetricQueryInput,
-        metricLabels: multiMetricDefinitions.map(entry => entry.metric.label),
-        metricResults: multiMetricResultGroups,
-        presentation: isEmpty ? emptyPresentation : presentation,
-        clientLocale: input.clientLocale,
-        unitSettings,
-      });
-    } else {
-      throw new HttpsError('internal', 'Could not summarize AI insights.');
-    }
-  } catch (error) {
-    try {
-      await releaseReservedQuota();
-    } catch (releaseError) {
-        logger.error('[aiInsights] Failed to release quota reservation after summarize-result failure', {
-        userID,
-        prompt,
-        releaseError,
-      });
-    }
-    throw error;
+  logger.info('[aiInsights] Starting AI insight summarization', {
+    userID,
+    prompt,
+    effectivePrompt,
+    resultKind: executionResult.resultKind,
+    isEmpty,
+  });
+  await consumeQuotaOnAiAttempt('summarize');
+
+  if (executionResult.resultKind === 'aggregate' && aggregateQueryInput) {
+    narrativeResult = await summarizeAiInsightResult({
+      status: isEmpty ? 'empty' : 'ok',
+      prompt: effectivePrompt,
+      metricLabel: (metric as NonNullable<typeof metric>).label,
+      query: aggregateQueryInput,
+      aggregation: executionResult.aggregation,
+      summary: aggregateSummary as AiInsightSummary,
+      presentation: isEmpty ? emptyPresentation : presentation,
+      clientLocale: input.clientLocale,
+      unitSettings,
+    });
+  } else if (executionResult.resultKind === 'event_lookup' && eventLookupQueryInput) {
+    narrativeResult = await summarizeAiInsightResult({
+      status: isEmpty ? 'empty' : 'ok',
+      prompt: effectivePrompt,
+      metricLabel: (metric as NonNullable<typeof metric>).label,
+      query: eventLookupQueryInput,
+      eventLookup: {
+        matchedEventCount: executionResult.matchedEventsCount,
+        primaryEvent: eventLookupResult?.rankedEvents[0] ?? null,
+        rankedEvents: eventLookupResult?.rankedEvents.slice(0, 10) ?? [],
+      },
+      presentation: isEmpty ? emptyPresentation : presentation,
+      clientLocale: input.clientLocale,
+      unitSettings,
+    });
+  } else if (executionResult.resultKind === 'multi_metric_aggregate' && multiMetricQueryInput) {
+    narrativeResult = await summarizeAiInsightResult({
+      status: isEmpty ? 'empty' : 'ok',
+      prompt: effectivePrompt,
+      query: multiMetricQueryInput,
+      metricLabels: multiMetricDefinitions.map(entry => entry.metric.label),
+      metricResults: multiMetricResultGroups,
+      presentation: isEmpty ? emptyPresentation : presentation,
+      clientLocale: input.clientLocale,
+      unitSettings,
+    });
+  } else {
+    throw new HttpsError('internal', 'Could not summarize AI insights.');
   }
-  const quota = consumedQuotaStatus
-    ?? (
-      narrativeResult.source === 'genkit'
-        ? await finalizeReservedQuota()
-        : await releaseReservedQuota()
-    );
+  logger.info('[aiInsights] Finished AI insight summarization', {
+    userID,
+    prompt,
+    effectivePrompt,
+    source: narrativeResult.source,
+  });
+  const quota = await resolveQuotaForResponse();
 
   if (isEmpty) {
+    logger.info('[aiInsights] Terminal result', {
+      userID,
+      prompt,
+      effectivePrompt,
+      resultCategory: 'empty',
+      resultKind: executionResult.resultKind,
+    });
     return {
       status: 'empty',
       narrative: narrativeResult.narrative,
@@ -429,6 +528,13 @@ export async function runAiInsights(
   }
 
   if (executionResult.resultKind === 'event_lookup') {
+    logger.info('[aiInsights] Terminal result', {
+      userID,
+      prompt,
+      effectivePrompt,
+      resultCategory: 'ok',
+      resultKind: 'event_lookup',
+    });
     return {
       status: 'ok',
       resultKind: 'event_lookup',
@@ -445,6 +551,13 @@ export async function runAiInsights(
   }
 
   if (executionResult.resultKind === 'multi_metric_aggregate') {
+    logger.info('[aiInsights] Terminal result', {
+      userID,
+      prompt,
+      effectivePrompt,
+      resultCategory: 'ok',
+      resultKind: 'multi_metric_aggregate',
+    });
     return {
       status: 'ok',
       resultKind: 'multi_metric_aggregate',
@@ -456,6 +569,13 @@ export async function runAiInsights(
     } satisfies AiInsightsMultiMetricAggregateOkResponse;
   }
 
+  logger.info('[aiInsights] Terminal result', {
+    userID,
+    prompt,
+    effectivePrompt,
+    resultCategory: 'ok',
+    resultKind: 'aggregate',
+  });
   return {
     status: 'ok',
     resultKind: 'aggregate',

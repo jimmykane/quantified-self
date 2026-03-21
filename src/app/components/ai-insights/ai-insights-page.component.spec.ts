@@ -38,6 +38,7 @@ import { AiInsightsLatestSnapshotService } from '../../services/ai-insights-late
 import { AiInsightsQuotaService } from '../../services/ai-insights-quota.service';
 import { AiInsightsService } from '../../services/ai-insights.service';
 import { AppEventService } from '../../services/app.event.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { LoggerService } from '../../services/logger.service';
@@ -912,6 +913,10 @@ describe('AiInsightsPageComponent', () => {
   const analyticsServiceMock = {
     logEvent: vi.fn(),
   };
+  const hapticsServiceMock = {
+    selection: vi.fn(),
+    success: vi.fn(),
+  };
   const userSettingsQueryServiceMock = {
     chartSettings: signal({ useAnimations: true }),
     unitSettings: signal(normalizeUserUnitSettings({})),
@@ -937,6 +942,7 @@ describe('AiInsightsPageComponent', () => {
         { provide: LOCALE_ID, useValue: locale },
         { provide: AppAuthService, useValue: authServiceMock },
         { provide: AppAnalyticsService, useValue: analyticsServiceMock },
+        { provide: AppHapticsService, useValue: hapticsServiceMock },
         { provide: AiInsightsLatestSnapshotService, useValue: aiInsightsLatestSnapshotServiceMock },
         { provide: AiInsightsQuotaService, useValue: aiInsightsQuotaServiceMock },
         { provide: AiInsightsService, useValue: aiInsightsServiceMock },
@@ -974,6 +980,8 @@ describe('AiInsightsPageComponent', () => {
     appEventServiceMock.getEventsOnceByIds.mockReset();
     matDialogMock.open.mockReset();
     analyticsServiceMock.logEvent.mockReset();
+    hapticsServiceMock.selection.mockReset();
+    hapticsServiceMock.success.mockReset();
     loggerServiceMock.error.mockReset();
     aiInsightsLatestSnapshotServiceMock.loadLatest.mockResolvedValue(null);
     aiInsightsLatestSnapshotServiceMock.saveLatest.mockResolvedValue('saved');
@@ -1188,6 +1196,26 @@ describe('AiInsightsPageComponent', () => {
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Latest bucket'))).toBe(false);
     expect(summaryHelpButtons).toHaveLength(5);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes(expectedOverall ?? ''))).toBe(true);
+  });
+
+  it('should trigger haptics on submit, processing start, and successful response', async () => {
+    let resolveResponse: ((response: AiInsightsResponse) => void) | null = null;
+    aiInsightsServiceMock.runInsight.mockReturnValue(new Promise<AiInsightsResponse>((resolve) => {
+      resolveResponse = resolve;
+    }));
+    component.promptControl.setValue('Tell me my avg cadence for cycling the last 3 months');
+
+    const submitPromise = component.submitPrompt();
+    expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(1);
+
+    await new Promise<void>((resolve) => setTimeout(resolve, 180));
+    expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(2);
+
+    resolveResponse?.(buildOkResponse());
+    await submitPromise;
+    await fixture.whenStable();
+
+    expect(hapticsServiceMock.success).toHaveBeenCalledTimes(1);
   });
 
   it('should render multi-metric responses with the combined chart and merged summary cards', async () => {

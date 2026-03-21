@@ -36,6 +36,7 @@ import { AppAuthService } from '../../authentication/app.auth.service';
 import { MaterialModule } from '../../modules/material.module';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppEventService } from '../../services/app.event.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { AiInsightsLatestSnapshotService } from '../../services/ai-insights-latest-snapshot.service';
 import { AiInsightsQuotaService } from '../../services/ai-insights-quota.service';
 import { AppThemeService } from '../../services/app.theme.service';
@@ -72,6 +73,7 @@ const AI_INSIGHTS_EVENT_LOOKUP_LOADING_STEPS = [
   'Preparing event shortcuts',
 ] as const;
 const AI_INSIGHTS_GENERATION_LOADING_STEP_DELAY_MS = 1450;
+const AI_INSIGHTS_PROCESSING_HAPTIC_DELAY_MS = 150;
 const AI_INSIGHTS_LOADING_SUMMARY_SKELETON_ITEMS = [0, 1, 2, 3] as const;
 const AI_INSIGHTS_LOADING_CHART_SKELETON_BARS = [
   '46%',
@@ -706,6 +708,7 @@ export class AiInsightsPageComponent {
   private readonly authService = inject(AppAuthService);
   private readonly analyticsService = inject(AppAnalyticsService);
   private readonly eventService = inject(AppEventService);
+  private readonly hapticsService = inject(AppHapticsService);
   private readonly aiInsightsService = inject(AiInsightsService);
   private readonly aiInsightsLatestSnapshotService = inject(AiInsightsLatestSnapshotService);
   private readonly aiInsightsQuotaService = inject(AiInsightsQuotaService);
@@ -721,6 +724,7 @@ export class AiInsightsPageComponent {
   // need the same scheduling edge; this keeps the Zone.js coupling narrow.
   private readonly ngZone = inject(NgZone);
   private readonly locale = inject(LOCALE_ID);
+  private processingHapticTimer: ReturnType<typeof setTimeout> | null = null;
 
   readonly promptControl = new FormControl('', {
     nonNullable: true,
@@ -1369,7 +1373,9 @@ export class AiInsightsPageComponent {
       return;
     }
 
+    this.hapticsService.selection();
     this.isSubmitting.set(true);
+    this.scheduleProcessingHaptic();
     this.latestSnapshotRestored.set(false);
     this.latestSnapshotPersistenceNotice.set(null);
     this.latestSnapshotSavedAt.set(null);
@@ -1379,6 +1385,7 @@ export class AiInsightsPageComponent {
     try {
       const response = await this.aiInsightsService.runInsight(this.buildInsightRequest(prompt));
       this.response.set(response);
+      this.hapticsService.success();
       this.quotaStatus.set(response.quota ?? this.quotaStatus());
       this.resultPrompt.set(prompt);
       const userID = this.currentUserID();
@@ -1399,6 +1406,7 @@ export class AiInsightsPageComponent {
       }
       this.errorMessage.set(this.aiInsightsService.getErrorMessage(error));
     } finally {
+      this.clearProcessingHaptic();
       this.isSubmitting.set(false);
     }
   }
@@ -1530,5 +1538,26 @@ export class AiInsightsPageComponent {
       clientTimezone: getClientTimeZone(),
       clientLocale: this.locale,
     };
+  }
+
+  private scheduleProcessingHaptic(): void {
+    this.clearProcessingHaptic();
+    this.ngZone.runOutsideAngular(() => {
+      this.processingHapticTimer = setTimeout(() => {
+        this.processingHapticTimer = null;
+        if (this.isSubmitting()) {
+          this.hapticsService.selection();
+        }
+      }, AI_INSIGHTS_PROCESSING_HAPTIC_DELAY_MS);
+    });
+  }
+
+  private clearProcessingHaptic(): void {
+    if (this.processingHapticTimer === null) {
+      return;
+    }
+
+    clearTimeout(this.processingHapticTimer);
+    this.processingHapticTimer = null;
   }
 }

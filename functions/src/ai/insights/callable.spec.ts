@@ -29,6 +29,8 @@ const hoisted = vi.hoisted(() => {
     releaseAiInsightsQuotaReservation: vi.fn(),
     normalizeInsightQuery: vi.fn(),
     repairUnsupportedInsightQuery: vi.fn(),
+    detectPromptLanguageDeterministic: vi.fn(),
+    sanitizePromptToEnglish: vi.fn(),
     executeAiInsightsQuery: vi.fn(),
     summarizeAiInsightResult: vi.fn(),
     getInsightMetricDefinition: vi.fn(),
@@ -74,6 +76,11 @@ vi.mock('./normalize-query.flow', () => ({
 
 vi.mock('./normalize-query.repair', () => ({
   repairUnsupportedInsightQuery: (...args: unknown[]) => hoisted.repairUnsupportedInsightQuery(...args),
+}));
+
+vi.mock('./prompt-language-sanitization', () => ({
+  detectPromptLanguageDeterministic: (...args: unknown[]) => hoisted.detectPromptLanguageDeterministic(...args),
+  sanitizePromptToEnglish: (...args: unknown[]) => hoisted.sanitizePromptToEnglish(...args),
 }));
 
 vi.mock('./execute-query', () => ({
@@ -253,6 +260,11 @@ describe('aiInsights callable', () => {
         suggestedPrompts: ['show my distance'],
       },
       source: 'none',
+    });
+    hoisted.detectPromptLanguageDeterministic.mockReturnValue('english');
+    hoisted.sanitizePromptToEnglish.mockResolvedValue({
+      status: 'english',
+      prompt: 'show distance',
     });
     hoisted.executeAiInsightsQuery.mockResolvedValue({
       resultKind: 'aggregate',
@@ -878,6 +890,9 @@ describe('aiInsights callable', () => {
 
     expect(hoisted.executeAiInsightsQuery).not.toHaveBeenCalled();
     expect(hoisted.summarizeAiInsightResult).not.toHaveBeenCalled();
+    expect(hoisted.reserveAiInsightsQuotaForRequest).not.toHaveBeenCalled();
+    expect(hoisted.finalizeAiInsightsQuotaReservation).not.toHaveBeenCalled();
+    expect(hoisted.sanitizePromptToEnglish).not.toHaveBeenCalled();
     expect(result).toEqual({
       status: 'unsupported',
       narrative: 'I can only answer questions from persisted event-level stats right now, so streams, splits, laps, routes, and original-file reprocessing are out of scope.',
@@ -885,6 +900,78 @@ describe('aiInsights callable', () => {
       reasonCode: 'unsupported_capability',
       suggestedPrompts: ['show my distance'],
     });
+  });
+
+  it('sanitizes non-english prompts before deterministic normalization and still consumes one credit', async () => {
+    hoisted.detectPromptLanguageDeterministic.mockReturnValue('non_english');
+    hoisted.sanitizePromptToEnglish.mockResolvedValue({
+      status: 'english',
+      prompt: 'show my total distance over time for cycling this year',
+    });
+
+    const result = await aiInsights({
+      prompt: 'δείξε μου τη συνολική απόσταση ποδηλασίας φέτος',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(hoisted.sanitizePromptToEnglish).toHaveBeenCalledWith('δείξε μου τη συνολική απόσταση ποδηλασίας φέτος');
+    expect(hoisted.normalizeInsightQuery).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: 'show my total distance over time for cycling this year',
+    }));
+    expect(hoisted.executeAiInsightsQuery).toHaveBeenCalledWith(
+      'user-1',
+      normalizedQuery,
+      'show my total distance over time for cycling this year',
+    );
+    expect(hoisted.finalizeAiInsightsQuotaReservation).toHaveBeenCalledTimes(1);
+    expect(hoisted.releaseAiInsightsQuotaReservation).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      status: 'ok',
+      quota: quotaStatus,
+    });
+  });
+
+  it('returns unsupported and consumes one credit when non-english sanitization cannot recover intent', async () => {
+    hoisted.detectPromptLanguageDeterministic.mockReturnValue('non_english');
+    hoisted.sanitizePromptToEnglish.mockResolvedValue({
+      status: 'unsupported',
+      reasonCode: 'invalid_prompt',
+      suggestedPrompts: ['show distance'],
+    });
+
+    const result = await aiInsights({
+      prompt: 'просто что-то невалидное',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(hoisted.finalizeAiInsightsQuotaReservation).toHaveBeenCalledTimes(1);
+    expect(hoisted.releaseAiInsightsQuotaReservation).not.toHaveBeenCalled();
+    expect(hoisted.normalizeInsightQuery).not.toHaveBeenCalled();
+    expect(hoisted.executeAiInsightsQuery).not.toHaveBeenCalled();
+    expect(hoisted.summarizeAiInsightResult).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      status: 'unsupported',
+      narrative: 'I could not turn that request into a valid insight query.',
+      quota: quotaStatus,
+      reasonCode: 'invalid_prompt',
+      suggestedPrompts: ['show distance'],
+    });
+  });
+
+  it('consumes one credit when non-english sanitization AI attempt throws', async () => {
+    hoisted.detectPromptLanguageDeterministic.mockReturnValue('uncertain');
+    hoisted.sanitizePromptToEnglish.mockRejectedValue(new Error('sanitize failed'));
+
+    await expect(aiInsights({
+      prompt: 'zeige mir distanz',
+      clientTimezone: 'UTC',
+    } as any)).rejects.toMatchObject({
+      code: 'internal',
+    });
+
+    expect(hoisted.finalizeAiInsightsQuotaReservation).toHaveBeenCalledTimes(1);
+    expect(hoisted.releaseAiInsightsQuotaReservation).not.toHaveBeenCalled();
+    expect(hoisted.normalizeInsightQuery).not.toHaveBeenCalled();
   });
 
   it('consumes prompt quota once when AI repair succeeds before narrative generation', async () => {
@@ -918,7 +1005,7 @@ describe('aiInsights callable', () => {
     });
   });
 
-  it('releases the reservation when Genkit falls back instead of consuming quota', async () => {
+  it('consumes prompt quota when summarize returns fallback narrative', async () => {
     hoisted.summarizeAiInsightResult.mockResolvedValue({
       narrative: 'Fallback narrative',
       source: 'fallback',
@@ -929,10 +1016,10 @@ describe('aiInsights callable', () => {
       clientTimezone: 'UTC',
     } as any);
 
-    expect(hoisted.finalizeAiInsightsQuotaReservation).not.toHaveBeenCalled();
-    expect(hoisted.releaseAiInsightsQuotaReservation).toHaveBeenCalledWith(expect.objectContaining({
+    expect(hoisted.finalizeAiInsightsQuotaReservation).toHaveBeenCalledWith(expect.objectContaining({
       reservationID: 'reservation-1',
     }));
+    expect(hoisted.releaseAiInsightsQuotaReservation).not.toHaveBeenCalled();
     expect(result).toMatchObject({
       status: 'ok',
       narrative: 'Fallback narrative',
@@ -940,7 +1027,7 @@ describe('aiInsights callable', () => {
     });
   });
 
-  it('releases the reservation when summarize-result throws before quota can be finalized', async () => {
+  it('keeps consumed quota when summarize-result throws after AI attempt', async () => {
     hoisted.summarizeAiInsightResult.mockRejectedValue(new Error('summarize failed'));
 
     await expect(aiInsights({
@@ -950,10 +1037,10 @@ describe('aiInsights callable', () => {
       code: 'internal',
     });
 
-    expect(hoisted.releaseAiInsightsQuotaReservation).toHaveBeenCalledWith(expect.objectContaining({
+    expect(hoisted.finalizeAiInsightsQuotaReservation).toHaveBeenCalledWith(expect.objectContaining({
       reservationID: 'reservation-1',
     }));
-    expect(hoisted.finalizeAiInsightsQuotaReservation).not.toHaveBeenCalled();
+    expect(hoisted.releaseAiInsightsQuotaReservation).not.toHaveBeenCalled();
   });
 
   it('logs serialized error details when ai insight generation fails', async () => {
