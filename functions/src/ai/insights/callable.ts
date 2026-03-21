@@ -2,24 +2,13 @@ import { HttpsError, onCall, onCallGenkit } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import { z } from 'genkit';
 import type {
-  AiInsightEventLookup,
-  AiInsightLatestEvent,
-  AiInsightSummary,
-  AiInsightsAggregateOkResponse,
-  AiInsightsEventLookupOkResponse,
-  AiInsightsLatestEventOkResponse,
   AiInsightsMultiMetricAggregateMetricResult,
-  AiInsightsMultiMetricAggregateOkResponse,
   AiInsightsQuotaStatusResponse,
   AiInsightsRequest,
   AiInsightsResponse,
   NormalizedInsightAggregateQuery,
-  NormalizedInsightEventLookupQuery,
-  NormalizedInsightLatestEventQuery,
-  NormalizedInsightMultiMetricAggregateQuery,
 } from '../../../../shared/ai-insights.types';
 import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
-import { resolveAiInsightsActivityFilterLabel } from '../../../../shared/ai-insights-activity-filter';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../../utils';
 import { aiInsightsGenkit } from './genkit';
 import { getInsightMetricDefinition } from './metric-catalog';
@@ -43,6 +32,10 @@ import {
   buildInsightSummary,
   buildNonAggregateEmptySummary,
 } from './insight-summary';
+import {
+  type CallableResultKindContext,
+  resolveCallableResultKindHandler,
+} from './callable.result-kind-handlers';
 
 interface AiInsightsCallableContext {
   auth?: {
@@ -84,35 +77,6 @@ function buildPromptLogContext(
           : null,
       }),
   };
-}
-
-function buildLatestEventNarrative(params: {
-  query: NormalizedInsightLatestEventQuery;
-  latestEventStartDate: string | null;
-  matchedEventCount: number;
-  locale?: string;
-}): string {
-  const activityLabel = resolveAiInsightsActivityFilterLabel(params.query).toLowerCase();
-  const activityText = activityLabel === 'all activities'
-    ? 'activities'
-    : activityLabel;
-  const matchedNoun = params.matchedEventCount === 1 ? 'event' : 'events';
-
-  if (!params.latestEventStartDate) {
-    return `I found no matching ${activityText} events in this range.`;
-  }
-
-  const eventDate = new Date(params.latestEventStartDate);
-  const eventDateLabel = Number.isFinite(eventDate.getTime())
-    ? new Intl.DateTimeFormat(params.locale || 'en-US', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      timeZone: params.query.dateRange.timezone,
-    }).format(eventDate)
-    : params.latestEventStartDate;
-
-  return `Your latest ${activityText} event was on ${eventDateLabel}. I matched ${params.matchedEventCount} ${matchedNoun}.`;
 }
 
 function shouldUseCallableTokenForQuotaRoleContext(): boolean {
@@ -504,12 +468,6 @@ export async function runAiInsights(
       executionResult.matchedActivityTypeCounts,
     )
     : null;
-  const eventLookupResult = executionResult.resultKind === 'event_lookup'
-    ? executionResult.eventLookup
-    : null;
-  const latestEventResult = executionResult.resultKind === 'latest_event'
-    ? executionResult.latestEvent
-    : null;
   const multiMetricResultGroups = executionResult.resultKind === 'multi_metric_aggregate'
     && multiMetricQueryInput
     ? executionResult.metricResults.map((metricResult) => {
@@ -543,77 +501,86 @@ export async function runAiInsights(
       } satisfies AiInsightsMultiMetricAggregateMetricResult;
     })
     : [];
-  const isEmpty = executionResult.resultKind === 'aggregate'
-    ? executionResult.aggregation.buckets.length === 0
-    : executionResult.resultKind === 'event_lookup'
-      ? !eventLookupResult?.primaryEventId
-      : executionResult.resultKind === 'latest_event'
-        ? !latestEventResult?.eventId
-      : multiMetricResultGroups.every(metricResult => metricResult.aggregation.buckets.length === 0);
+  const callableResultKindContext: CallableResultKindContext = (() => {
+    const contextBase = {
+      userID,
+      input,
+      effectivePrompt,
+      presentation,
+      emptyPresentation,
+      summarizeAiInsightResult: aiInsightsRuntime.summarizeAiInsightResult,
+      unitSettings,
+    } as const;
 
-  let narrativeResult: {
-    narrative: string;
-    source: 'genkit' | 'fallback';
-  };
+    if (executionResult.resultKind === 'aggregate') {
+      if (!aggregateQueryInput || !aggregateSummary || !metric) {
+        throw new HttpsError('internal', 'Could not summarize AI insights.');
+      }
+
+      return {
+        ...contextBase,
+        resultKind: 'aggregate',
+        query: aggregateQueryInput,
+        metricLabel: metric.label,
+        executionResult,
+        aggregateSummary,
+      };
+    }
+
+    if (executionResult.resultKind === 'event_lookup') {
+      if (!eventLookupQueryInput || !metric) {
+        throw new HttpsError('internal', 'Could not summarize AI insights.');
+      }
+
+      return {
+        ...contextBase,
+        resultKind: 'event_lookup',
+        query: eventLookupQueryInput,
+        metricLabel: metric.label,
+        executionResult,
+      };
+    }
+
+    if (executionResult.resultKind === 'latest_event') {
+      if (!latestEventQueryInput) {
+        throw new HttpsError('internal', 'Could not summarize AI insights.');
+      }
+
+      return {
+        ...contextBase,
+        resultKind: 'latest_event',
+        query: latestEventQueryInput,
+        executionResult,
+      };
+    }
+
+    if (executionResult.resultKind === 'multi_metric_aggregate') {
+      if (!multiMetricQueryInput) {
+        throw new HttpsError('internal', 'Could not summarize AI insights.');
+      }
+
+      return {
+        ...contextBase,
+        resultKind: 'multi_metric_aggregate',
+        query: multiMetricQueryInput,
+        metricLabels: multiMetricDefinitions.map(entry => entry.metric.label),
+        metricResults: multiMetricResultGroups,
+        executionResult,
+      };
+    }
+
+    throw new HttpsError('internal', 'Could not summarize AI insights.');
+  })();
+  const resultKindHandler = resolveCallableResultKindHandler(callableResultKindContext.resultKind);
+  const isEmpty = resultKindHandler.isEmpty(callableResultKindContext);
   logger.info('[aiInsights] Starting AI insight summarization', {
     userID,
     ...buildPromptLogContext(prompt, effectivePrompt),
-    resultKind: executionResult.resultKind,
+    resultKind: callableResultKindContext.resultKind,
     isEmpty,
   });
   await consumeQuotaOnAiAttempt('summarize');
-
-  if (executionResult.resultKind === 'aggregate' && aggregateQueryInput) {
-    narrativeResult = await aiInsightsRuntime.summarizeAiInsightResult({
-      status: isEmpty ? 'empty' : 'ok',
-      prompt: effectivePrompt,
-      metricLabel: (metric as NonNullable<typeof metric>).label,
-      query: aggregateQueryInput,
-      aggregation: executionResult.aggregation,
-      summary: aggregateSummary as AiInsightSummary,
-      presentation: isEmpty ? emptyPresentation : presentation,
-      clientLocale: input.clientLocale,
-      unitSettings,
-    });
-  } else if (executionResult.resultKind === 'event_lookup' && eventLookupQueryInput) {
-    narrativeResult = await aiInsightsRuntime.summarizeAiInsightResult({
-      status: isEmpty ? 'empty' : 'ok',
-      prompt: effectivePrompt,
-      metricLabel: (metric as NonNullable<typeof metric>).label,
-      query: eventLookupQueryInput,
-      eventLookup: {
-        matchedEventCount: executionResult.matchedEventsCount,
-        primaryEvent: eventLookupResult?.rankedEvents[0] ?? null,
-        rankedEvents: eventLookupResult?.rankedEvents.slice(0, 10) ?? [],
-      },
-      presentation: isEmpty ? emptyPresentation : presentation,
-      clientLocale: input.clientLocale,
-      unitSettings,
-    });
-  } else if (executionResult.resultKind === 'latest_event' && latestEventQueryInput) {
-    narrativeResult = {
-      narrative: buildLatestEventNarrative({
-        query: latestEventQueryInput,
-        latestEventStartDate: latestEventResult?.startDate ?? null,
-        matchedEventCount: executionResult.matchedEventsCount,
-        locale: input.clientLocale,
-      }),
-      source: 'fallback',
-    };
-  } else if (executionResult.resultKind === 'multi_metric_aggregate' && multiMetricQueryInput) {
-    narrativeResult = await aiInsightsRuntime.summarizeAiInsightResult({
-      status: isEmpty ? 'empty' : 'ok',
-      prompt: effectivePrompt,
-      query: multiMetricQueryInput,
-      metricLabels: multiMetricDefinitions.map(entry => entry.metric.label),
-      metricResults: multiMetricResultGroups,
-      presentation: isEmpty ? emptyPresentation : presentation,
-      clientLocale: input.clientLocale,
-      unitSettings,
-    });
-  } else {
-    throw new HttpsError('internal', 'Could not summarize AI insights.');
-  }
+  const narrativeResult = await resultKindHandler.summarize(callableResultKindContext, isEmpty);
   logger.info('[aiInsights] Finished AI insight summarization', {
     userID,
     ...buildPromptLogContext(prompt, effectivePrompt),
@@ -626,7 +593,7 @@ export async function runAiInsights(
       userID,
       ...buildPromptLogContext(prompt, effectivePrompt),
       resultCategory: 'empty',
-      resultKind: executionResult.resultKind,
+      resultKind: callableResultKindContext.resultKind,
     });
     return {
       status: 'empty',
@@ -640,94 +607,13 @@ export async function runAiInsights(
       presentation: emptyPresentation,
     };
   }
-
-  if (executionResult.resultKind === 'event_lookup') {
-    logger.info('[aiInsights] Terminal result', {
-      userID,
-      ...buildPromptLogContext(prompt, effectivePrompt),
-      resultCategory: 'ok',
-      resultKind: 'event_lookup',
-    });
-    return {
-      status: 'ok',
-      resultKind: 'event_lookup',
-      narrative: narrativeResult.narrative,
-      quota,
-      query: eventLookupQueryInput as NormalizedInsightEventLookupQuery,
-      eventLookup: {
-        primaryEventId: eventLookupResult?.primaryEventId as string,
-        topEventIds: eventLookupResult?.topEventIds ?? [],
-        matchedEventCount: executionResult.matchedEventsCount,
-      } satisfies AiInsightEventLookup,
-      presentation,
-    } satisfies AiInsightsEventLookupOkResponse;
-  }
-
-  if (executionResult.resultKind === 'latest_event') {
-    logger.info('[aiInsights] Terminal result', {
-      userID,
-      ...buildPromptLogContext(prompt, effectivePrompt),
-      resultCategory: 'ok',
-      resultKind: 'latest_event',
-    });
-    return {
-      status: 'ok',
-      resultKind: 'latest_event',
-      narrative: narrativeResult.narrative,
-      quota,
-      query: latestEventQueryInput as NormalizedInsightLatestEventQuery,
-      latestEvent: {
-        eventId: latestEventResult?.eventId as string,
-        startDate: latestEventResult?.startDate as string,
-        matchedEventCount: executionResult.matchedEventsCount,
-      } satisfies AiInsightLatestEvent,
-      presentation,
-    } satisfies AiInsightsLatestEventOkResponse;
-  }
-
-  if (executionResult.resultKind === 'multi_metric_aggregate') {
-    logger.info('[aiInsights] Terminal result', {
-      userID,
-      ...buildPromptLogContext(prompt, effectivePrompt),
-      resultCategory: 'ok',
-      resultKind: 'multi_metric_aggregate',
-    });
-    return {
-      status: 'ok',
-      resultKind: 'multi_metric_aggregate',
-      narrative: narrativeResult.narrative,
-      quota,
-      query: multiMetricQueryInput as NormalizedInsightMultiMetricAggregateQuery,
-      metricResults: multiMetricResultGroups,
-      presentation,
-    } satisfies AiInsightsMultiMetricAggregateOkResponse;
-  }
-
   logger.info('[aiInsights] Terminal result', {
     userID,
     ...buildPromptLogContext(prompt, effectivePrompt),
     resultCategory: 'ok',
-    resultKind: 'aggregate',
+    resultKind: callableResultKindContext.resultKind,
   });
-  return {
-    status: 'ok',
-    resultKind: 'aggregate',
-    narrative: narrativeResult.narrative,
-    quota,
-    query: aggregateQueryInput as NormalizedInsightAggregateQuery,
-    aggregation: executionResult.aggregation,
-    summary: aggregateSummary as AiInsightSummary,
-    ...(executionResult.eventRanking
-      ? {
-        eventRanking: {
-          primaryEventId: executionResult.eventRanking.primaryEventId as string,
-          topEventIds: executionResult.eventRanking.topEventIds,
-          matchedEventCount: executionResult.eventRanking.matchedEventCount,
-        } satisfies AiInsightEventLookup,
-      }
-      : {}),
-    presentation,
-  } satisfies AiInsightsAggregateOkResponse;
+  return resultKindHandler.buildOkResponse(callableResultKindContext, narrativeResult, quota);
   } catch (error) {
     if (quotaReservation) {
       const reservationToRelease = quotaReservation as NonNullable<typeof quotaReservation>;

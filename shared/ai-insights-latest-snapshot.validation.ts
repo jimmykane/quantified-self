@@ -424,6 +424,89 @@ function describeQuotaStatus(value: unknown): UnknownRecord {
   };
 }
 
+function validateAggregateOkResponse(
+  value: UnknownRecord,
+): AiInsightsLatestSnapshotValidationFailure | null {
+  if (!isAggregationResult(value.aggregation)) {
+    return {
+      reason: 'aggregation_invalid',
+      details: {
+        responseKeys: Object.keys(value),
+        ...describeAggregationResult(value.aggregation),
+      },
+    };
+  }
+
+  if (!isSummary(value.summary)) {
+    return {
+      reason: 'summary_invalid',
+      details: {
+        responseKeys: Object.keys(value),
+        ...describeSummary(value.summary),
+      },
+    };
+  }
+
+  return null;
+}
+
+function validateEventLookupOkResponse(
+  value: UnknownRecord,
+): AiInsightsLatestSnapshotValidationFailure | null {
+  if (!isEventLookup(value.eventLookup)) {
+    return {
+      reason: 'event_lookup_invalid',
+      details: {
+        responseKeys: Object.keys(value),
+        eventLookupType: describeValueType(value.eventLookup),
+      },
+    };
+  }
+
+  return null;
+}
+
+function validateLatestEventOkResponse(
+  value: UnknownRecord,
+): AiInsightsLatestSnapshotValidationFailure | null {
+  if (!isLatestEvent(value.latestEvent)) {
+    return {
+      reason: 'latest_event_invalid',
+      details: {
+        responseKeys: Object.keys(value),
+        latestEventType: describeValueType(value.latestEvent),
+      },
+    };
+  }
+
+  return null;
+}
+
+function validateMultiMetricAggregateOkResponse(
+  value: UnknownRecord,
+): AiInsightsLatestSnapshotValidationFailure | null {
+  if (!Array.isArray(value.metricResults) || !value.metricResults.every(isMultiMetricAggregateMetricResult)) {
+    return {
+      reason: 'metric_results_invalid',
+      details: {
+        responseKeys: Object.keys(value),
+        metricResultsType: describeValueType(value.metricResults),
+      },
+    };
+  }
+
+  return null;
+}
+
+type OkResponseResultKindValidator = (value: UnknownRecord) => AiInsightsLatestSnapshotValidationFailure | null;
+
+const OK_RESPONSE_RESULT_KIND_VALIDATORS: Record<AiInsightsResultKind, OkResponseResultKindValidator> = {
+  aggregate: validateAggregateOkResponse,
+  event_lookup: validateEventLookupOkResponse,
+  latest_event: validateLatestEventOkResponse,
+  multi_metric_aggregate: validateMultiMetricAggregateOkResponse,
+};
+
 function getAiInsightsResponseValidationFailure(value: unknown): AiInsightsLatestSnapshotValidationFailure | null {
   if (!isRecord(value)) {
     return {
@@ -500,93 +583,14 @@ function getAiInsightsResponseValidationFailure(value: unknown): AiInsightsLates
   }
 
   if (value.status === 'empty') {
-    if (!isAggregationResult(value.aggregation)) {
-      return {
-        reason: 'aggregation_invalid',
-        details: {
-          responseKeys: Object.keys(value),
-          ...describeAggregationResult(value.aggregation),
-        },
-      };
-    }
-
-    if (!isSummary(value.summary)) {
-      return {
-        reason: 'summary_invalid',
-        details: {
-          responseKeys: Object.keys(value),
-          ...describeSummary(value.summary),
-        },
-      };
-    }
-
-    return null;
+    return validateAggregateOkResponse(value);
   }
 
   const resultKind = resolveCompletedAiInsightsResponseResultKind(value);
-  if (resultKind === 'multi_metric_aggregate') {
-    if (!Array.isArray(value.metricResults) || !value.metricResults.every(isMultiMetricAggregateMetricResult)) {
-      return {
-        reason: 'metric_results_invalid',
-        details: {
-          responseKeys: Object.keys(value),
-          metricResultsType: describeValueType(value.metricResults),
-        },
-      };
-    }
-
-    return null;
-  }
-
-  if (resultKind === 'event_lookup') {
-    if (!isEventLookup(value.eventLookup)) {
-      return {
-        reason: 'event_lookup_invalid',
-        details: {
-          responseKeys: Object.keys(value),
-          eventLookupType: describeValueType(value.eventLookup),
-        },
-      };
-    }
-
-    return null;
-  }
-
-  if (resultKind === 'latest_event') {
-    if (!isLatestEvent(value.latestEvent)) {
-      return {
-        reason: 'latest_event_invalid',
-        details: {
-          responseKeys: Object.keys(value),
-          latestEventType: describeValueType(value.latestEvent),
-        },
-      };
-    }
-
-    return null;
-  }
-
-  if (!isAggregationResult(value.aggregation)) {
-    return {
-      reason: 'aggregation_invalid',
-      details: {
-        responseKeys: Object.keys(value),
-        ...describeAggregationResult(value.aggregation),
-      },
-    };
-  }
-
-  if (!isSummary(value.summary)) {
-    return {
-      reason: 'summary_invalid',
-      details: {
-        responseKeys: Object.keys(value),
-        ...describeSummary(value.summary),
-      },
-    };
-  }
-
-  return null;
+  const kindValidator = resultKind
+    ? OK_RESPONSE_RESULT_KIND_VALIDATORS[resultKind]
+    : OK_RESPONSE_RESULT_KIND_VALIDATORS.aggregate;
+  return kindValidator(value);
 }
 
 export function getAiInsightsLatestSnapshotValidationFailure(

@@ -7,31 +7,21 @@ import { RouterModule } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import {
   AppThemes,
-  ChartDataValueTypes,
-  EventInterface,
-  ChartDataCategoryTypes,
-  TimeIntervals,
   User,
-  type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
 import type {
-  AiInsightSummaryBucket,
   AiInsightsAggregateOkResponse,
   AiInsightsEmptyResponse,
   AiInsightsEventLookupOkResponse,
   AiInsightsLatestEventOkResponse,
-  AiInsightsMultiMetricAggregateMetricResult,
   AiInsightsMultiMetricAggregateOkResponse,
   AiInsightsOkResponse,
   AiInsightsQuotaStatus,
   AiInsightsRequest,
   AiInsightsResponse,
   AiInsightsUnsupportedResponse,
-  NormalizedInsightDateRange,
 } from '@shared/ai-insights.types';
 import { resolveAiInsightsActivityFilterSummary } from '@shared/ai-insights-activity-filter';
-import { formatAiInsightsSelectedDateRanges } from '@shared/ai-insights-date-selection';
-import { resolveMetricSemantics, resolveMetricSummarySemantics } from '@shared/metric-semantics';
 import { formatUnitAwareDataValue, normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { MaterialModule } from '../../modules/material.module';
@@ -65,6 +55,10 @@ import {
   resolveQuotaBlockedMessage,
   resolveRankedEventIds,
   resolveRankedEventMatchedCount,
+  resolveRankedEventPrimaryLabel,
+  resolveRankedEventRankingCopy,
+  resolveRankedEventSectionTitle,
+  resolveResultCardSubtitle,
   resolveShortMetricLabel,
   type EventLookupDisplayItem,
   type EventLookupResolvedEvent,
@@ -259,30 +253,8 @@ export class AiInsightsPageComponent {
     return 'Latest completed insights are temporarily restored from your account. Proper saved insights/history will come later.';
   });
   readonly resultCardSubtitle = computed(() => {
-    if (this.latestEventOkResponse()) {
-      return 'Most recent matching event for this prompt.';
-    }
-
-    if (this.eventLookupOkResponse()) {
-      return 'Winning event and top matches for this prompt.';
-    }
-
-    const multiMetricResponse = this.multiMetricOkResponse();
-    if (multiMetricResponse) {
-      return multiMetricResponse.query.groupingMode === 'date'
-        ? 'Combined chart and merged metric summaries for this prompt.'
-        : 'Merged metric summaries for this prompt.';
-    }
-
-    if (this.aggregateOkResponse()) {
-      return 'Insight summary and chart for this prompt.';
-    }
-
-    if (this.emptyResponse()) {
-      return 'Insight summary for this prompt.';
-    }
-
-    return 'Insight result for this prompt.';
+    const response = this.okResponse() ?? this.emptyResponse();
+    return resolveResultCardSubtitle(response);
   });
   readonly resultCardMetaText = computed(() => {
     const savedAtLabel = formatSavedInsightDate(this.latestSnapshotSavedAt(), this.locale);
@@ -757,43 +729,11 @@ export class AiInsightsPageComponent {
   );
   readonly rankedEventPrimaryLabel = computed(() => {
     const response = this.rankedEventResponse();
-    if (!response) {
-      return null;
-    }
-
-    if (response.resultKind === 'event_lookup') {
-      return 'Winning event';
-    }
-
-    if (response.resultKind === 'latest_event') {
-      return 'Latest event';
-    }
-
-    const isGroupedAcrossSports = response.query.categoryType === ChartDataCategoryTypes.ActivityType;
-    if (response.query.valueType === ChartDataValueTypes.Minimum) {
-      return isGroupedAcrossSports
-        ? 'Overall lowest event across all matched sports'
-        : 'Lowest event';
-    }
-
-    return isGroupedAcrossSports
-      ? 'Overall best event across all matched sports'
-      : 'Top event';
+    return response ? resolveRankedEventPrimaryLabel(response) : null;
   });
   readonly rankedEventSectionTitle = computed(() => {
     const response = this.rankedEventResponse();
-    if (!response) {
-      return null;
-    }
-
-    if (response.resultKind === 'latest_event') {
-      return null;
-    }
-
-    return response.resultKind === 'aggregate'
-      && response.query.categoryType === ChartDataCategoryTypes.ActivityType
-      ? 'Top events across all matched sports'
-      : 'Top events';
+    return response ? resolveRankedEventSectionTitle(response) : null;
   });
   readonly rankedEventRankingCopy = computed(() => {
     const response = this.rankedEventResponse();
@@ -801,24 +741,9 @@ export class AiInsightsPageComponent {
       return null;
     }
 
-    if (response.resultKind === 'latest_event') {
-      return null;
-    }
-
     const shownCount = resolveRankedEventIds(response).length;
     const matchedCount = resolveRankedEventMatchedCount(response);
-    const acrossAllMatchedSports = response.resultKind === 'aggregate'
-      && response.query.categoryType === ChartDataCategoryTypes.ActivityType;
-
-    if (matchedCount <= shownCount) {
-      return acrossAllMatchedSports
-        ? `${matchedCount} matching ${matchedCount === 1 ? 'event' : 'events'} ranked across all matched sports.`
-        : `${matchedCount} matching ${matchedCount === 1 ? 'event' : 'events'} ranked.`;
-    }
-
-    return acrossAllMatchedSports
-      ? `Showing top ${shownCount} of ${matchedCount} matching events across all matched sports.`
-      : `Showing top ${shownCount} of ${matchedCount} matching events.`;
+    return resolveRankedEventRankingCopy(response, shownCount, matchedCount);
   });
 
   onFormSubmit(event: SubmitEvent | Event): void {

@@ -607,19 +607,138 @@ export function buildMergedMultiMetricSummaryCards(
 }
 
 export function resolveRankedEventIds(response: RankedEventResponse): string[] {
-  return response.resultKind === 'event_lookup'
-    ? response.eventLookup.topEventIds.slice(0, 10)
-    : response.resultKind === 'latest_event'
-      ? [response.latestEvent.eventId]
-    : response.eventRanking.topEventIds.slice(0, 10);
+  return RANKED_EVENT_IDS_BY_RESULT_KIND[response.resultKind](response as never);
 }
 
 export function resolveRankedEventMatchedCount(response: RankedEventResponse): number {
-  return response.resultKind === 'event_lookup'
-    ? response.eventLookup.matchedEventCount
-    : response.resultKind === 'latest_event'
-      ? response.latestEvent.matchedEventCount
-    : response.eventRanking.matchedEventCount;
+  return RANKED_EVENT_MATCHED_COUNT_BY_RESULT_KIND[response.resultKind](response as never);
+}
+
+type RankedEventResultKind = RankedEventResponse['resultKind'];
+
+const RANKED_EVENT_IDS_BY_RESULT_KIND: {
+  [K in RankedEventResultKind]: (response: Extract<RankedEventResponse, { resultKind: K }>) => string[];
+} = {
+  aggregate: response => response.eventRanking.topEventIds.slice(0, 10),
+  event_lookup: response => response.eventLookup.topEventIds.slice(0, 10),
+  latest_event: response => [response.latestEvent.eventId],
+};
+
+const RANKED_EVENT_MATCHED_COUNT_BY_RESULT_KIND: {
+  [K in RankedEventResultKind]: (response: Extract<RankedEventResponse, { resultKind: K }>) => number;
+} = {
+  aggregate: response => response.eventRanking.matchedEventCount,
+  event_lookup: response => response.eventLookup.matchedEventCount,
+  latest_event: response => response.latestEvent.matchedEventCount,
+};
+
+const RANKED_EVENT_PRIMARY_LABEL_BY_RESULT_KIND: {
+  [K in RankedEventResultKind]: (response: Extract<RankedEventResponse, { resultKind: K }>) => string;
+} = {
+  aggregate: (response) => {
+    const isGroupedAcrossSports = response.query.categoryType === ChartDataCategoryTypes.ActivityType;
+    if (response.query.valueType === ChartDataValueTypes.Minimum) {
+      return isGroupedAcrossSports
+        ? 'Overall lowest event across all matched sports'
+        : 'Lowest event';
+    }
+
+    return isGroupedAcrossSports
+      ? 'Overall best event across all matched sports'
+      : 'Top event';
+  },
+  event_lookup: () => 'Winning event',
+  latest_event: () => 'Latest event',
+};
+
+const RANKED_EVENT_SECTION_TITLE_BY_RESULT_KIND: {
+  [K in RankedEventResultKind]: (response: Extract<RankedEventResponse, { resultKind: K }>) => string | null;
+} = {
+  aggregate: response => (
+    response.query.categoryType === ChartDataCategoryTypes.ActivityType
+      ? 'Top events across all matched sports'
+      : 'Top events'
+  ),
+  event_lookup: () => 'Top events',
+  latest_event: () => null,
+};
+
+const RANKED_EVENT_RANKING_COPY_BY_RESULT_KIND: {
+  [K in RankedEventResultKind]: (
+    response: Extract<RankedEventResponse, { resultKind: K }>,
+    shownCount: number,
+    matchedCount: number,
+  ) => string | null;
+} = {
+  aggregate: (response, shownCount, matchedCount) => {
+    const acrossAllMatchedSports = response.query.categoryType === ChartDataCategoryTypes.ActivityType;
+    if (matchedCount <= shownCount) {
+      return acrossAllMatchedSports
+        ? `${matchedCount} matching ${matchedCount === 1 ? 'event' : 'events'} ranked across all matched sports.`
+        : `${matchedCount} matching ${matchedCount === 1 ? 'event' : 'events'} ranked.`;
+    }
+
+    return acrossAllMatchedSports
+      ? `Showing top ${shownCount} of ${matchedCount} matching events across all matched sports.`
+      : `Showing top ${shownCount} of ${matchedCount} matching events.`;
+  },
+  event_lookup: (_response, shownCount, matchedCount) => {
+    if (matchedCount <= shownCount) {
+      return `${matchedCount} matching ${matchedCount === 1 ? 'event' : 'events'} ranked.`;
+    }
+
+    return `Showing top ${shownCount} of ${matchedCount} matching events.`;
+  },
+  latest_event: () => null,
+};
+
+const RESULT_CARD_SUBTITLE_BY_RESULT_KIND: {
+  [K in AiInsightsOkResponse['resultKind']]: (
+    response: Extract<AiInsightsOkResponse, { resultKind: K }>,
+  ) => string;
+} = {
+  aggregate: () => 'Insight summary and chart for this prompt.',
+  event_lookup: () => 'Winning event and top matches for this prompt.',
+  latest_event: () => 'Most recent matching event for this prompt.',
+  multi_metric_aggregate: (response) => (
+    response.query.groupingMode === 'date'
+      ? 'Combined chart and merged metric summaries for this prompt.'
+      : 'Merged metric summaries for this prompt.'
+  ),
+};
+
+export function resolveResultCardSubtitle(
+  response: AiInsightsOkResponse | AiInsightsEmptyResponse | null,
+): string {
+  if (!response) {
+    return 'Insight result for this prompt.';
+  }
+
+  if (response.status === 'empty') {
+    return 'Insight summary for this prompt.';
+  }
+
+  return RESULT_CARD_SUBTITLE_BY_RESULT_KIND[response.resultKind](response as never);
+}
+
+export function resolveRankedEventPrimaryLabel(response: RankedEventResponse): string {
+  return RANKED_EVENT_PRIMARY_LABEL_BY_RESULT_KIND[response.resultKind](response as never);
+}
+
+export function resolveRankedEventSectionTitle(response: RankedEventResponse): string | null {
+  return RANKED_EVENT_SECTION_TITLE_BY_RESULT_KIND[response.resultKind](response as never);
+}
+
+export function resolveRankedEventRankingCopy(
+  response: RankedEventResponse,
+  shownCount: number,
+  matchedCount: number,
+): string | null {
+  return RANKED_EVENT_RANKING_COPY_BY_RESULT_KIND[response.resultKind](
+    response as never,
+    shownCount,
+    matchedCount,
+  );
 }
 
 export function hasAggregateEventRanking(

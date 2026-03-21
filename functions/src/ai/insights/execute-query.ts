@@ -16,11 +16,11 @@ import {
 import type { NormalizedInsightQuery } from '../../../../shared/ai-insights.types';
 import type { FirestoreEventJSON } from '../../../../shared/app-event.interface';
 import {
-  buildEventStatAggregation,
   resolveAggregationCategoryKey,
 } from '../../../../shared/event-stat-aggregation';
 import type { EventStatAggregationResult } from '../../../../shared/event-stat-aggregation.types';
 import { serializeErrorForLogging } from './error-logging';
+import { executeQueryByResultKind } from './execute-query.result-kind-handlers';
 
 interface FirestoreEventDocumentLike {
   id: string;
@@ -54,7 +54,7 @@ export interface ExecuteQueryApi {
   ) => Promise<AiInsightsExecutionResult>;
 }
 
-interface RankedInsightEvent {
+export interface RankedInsightEvent {
   eventId: string;
   startDate: string;
   aggregateValue: number;
@@ -76,7 +76,7 @@ interface AggregateExecutionResult {
   };
 }
 
-interface MultiMetricAggregateExecutionMetricResult {
+export interface MultiMetricAggregateExecutionMetricResult {
   metricKey: Extract<NormalizedInsightQuery, { resultKind: 'multi_metric_aggregate' }>['metricSelections'][number]['metricKey'];
   aggregation: EventStatAggregationResult;
   matchedEventsCount: number;
@@ -801,147 +801,20 @@ export function createExecuteQuery(
         debugRecentEventsSample: debugEventSnapshot?.recentEventsSample ?? [],
       });
 
-      if (query.resultKind === 'event_lookup') {
-        const eventsWithRequestedStat = matchedEvents.filter(event => hasRequestedStat(event, query.dataType));
-        const rankedEvents = buildRankedEvents(eventsWithRequestedStat, query);
-
-        dependencies.logger.info('[aiInsights] Event lookup summary', {
-          prompt: prompt || null,
-          userID,
-          dataType: query.dataType,
-          valueType: query.valueType,
-          rankedEventCount: rankedEvents.length,
-          primaryEventId: rankedEvents[0]?.eventId ?? null,
-          topEventIds: rankedEvents.slice(0, 10).map(event => event.eventId),
-        });
-
-        return {
-          resultKind: 'event_lookup',
-          matchedEventsCount: eventsWithRequestedStat.length,
-          matchedActivityTypeCounts: buildMatchedActivityTypeCounts(matchedEvents, dependencies.logger),
-          eventLookup: {
-            primaryEventId: rankedEvents[0]?.eventId ?? null,
-            topEventIds: rankedEvents.slice(0, 10).map(event => event.eventId),
-            rankedEvents,
-          },
-        };
-      }
-
-      if (query.resultKind === 'latest_event') {
-        const latestEvent = buildLatestEvent(matchedEvents);
-
-        dependencies.logger.info('[aiInsights] Latest event lookup summary', {
-          prompt: prompt || null,
-          userID,
-          latestEventId: latestEvent?.eventId ?? null,
-          latestEventStartDate: latestEvent?.startDate ?? null,
-          matchedEventCount: matchedEvents.length,
-        });
-
-        return {
-          resultKind: 'latest_event',
-          matchedEventsCount: matchedEvents.length,
-          matchedActivityTypeCounts: buildMatchedActivityTypeCounts(matchedEvents, dependencies.logger),
-          latestEvent: {
-            eventId: latestEvent?.eventId ?? null,
-            startDate: latestEvent?.startDate ?? null,
-          },
-        };
-      }
-
-      if (query.resultKind === 'multi_metric_aggregate') {
-        const metricResults = query.metricSelections.map((metricSelection) => {
-          const metricMatchedEvents = matchedEvents
-            .filter(event => hasRequestedStat(event, metricSelection.dataType));
-          const aggregation = query.groupingMode === 'date'
-            ? buildEventStatAggregation(metricMatchedEvents, {
-              dataType: metricSelection.dataType,
-              valueType: metricSelection.valueType,
-              categoryType: ChartDataCategoryTypes.DateType,
-              requestedTimeInterval: query.requestedTimeInterval,
-            }, dependencies.logger)
-            : buildOverallAggregation(
-              metricSelection.dataType,
-              metricSelection.valueType,
-              metricMatchedEvents,
-            );
-
-          return {
-            metricKey: metricSelection.metricKey,
-            aggregation,
-            matchedEventsCount: metricMatchedEvents.length,
-            matchedActivityTypeCounts: buildMatchedActivityTypeCounts(metricMatchedEvents, dependencies.logger),
-          } satisfies MultiMetricAggregateExecutionMetricResult;
-        });
-
-        dependencies.logger.info('[aiInsights] Multi metric aggregation summary', {
-          prompt: prompt || null,
-          userID,
-          metricCount: metricResults.length,
-          groupingMode: query.groupingMode,
-          requestedTimeInterval: query.requestedTimeInterval ?? null,
-          metricSummaries: metricResults.map(metricResult => ({
-            metricKey: metricResult.metricKey,
-            matchedEventsCount: metricResult.matchedEventsCount,
-            bucketCount: metricResult.aggregation.buckets.length,
-            resolvedTimeInterval: metricResult.aggregation.resolvedTimeInterval,
-          })),
-        });
-
-        return {
-          resultKind: 'multi_metric_aggregate',
-          matchedEventsCount: matchedEvents.length,
-          matchedActivityTypeCounts: buildMatchedActivityTypeCounts(matchedEvents, dependencies.logger),
-          metricResults,
-        };
-      }
-
-      const eventsWithRequestedStat = matchedEvents.filter(event => hasRequestedStat(event, query.dataType));
-      const aggregation = buildEventStatAggregation(matchedEvents, {
-        dataType: query.dataType,
-        valueType: query.valueType,
-        categoryType: query.categoryType,
-        requestedTimeInterval: query.requestedTimeInterval,
-      }, dependencies.logger);
-      const eventRanking = (
-        query.valueType === ChartDataValueTypes.Minimum
-        || query.valueType === ChartDataValueTypes.Maximum
-      )
-        ? (() => {
-          const rankedEvents = buildRankedEvents(eventsWithRequestedStat, query);
-          if (!rankedEvents.length) {
-            return undefined;
-          }
-
-          return {
-            primaryEventId: rankedEvents[0]?.eventId ?? null,
-            topEventIds: rankedEvents.slice(0, 10).map(event => event.eventId),
-            matchedEventCount: eventsWithRequestedStat.length,
-            rankedEvents,
-          };
-        })()
-        : undefined;
-
-      dependencies.logger.info('[aiInsights] Aggregation summary', {
-        prompt: prompt || null,
+      return executeQueryByResultKind({
         userID,
-        dataType: query.dataType,
-        valueType: query.valueType,
-        categoryType: query.categoryType,
-        requestedTimeInterval: query.requestedTimeInterval,
-        resolvedTimeInterval: aggregation.resolvedTimeInterval,
-        bucketCount: aggregation.buckets.length,
-        rankedEventCount: eventRanking?.rankedEvents.length ?? 0,
-        rankedEventTopIds: eventRanking?.topEventIds ?? [],
+        prompt,
+        query,
+        matchedEvents,
+        dependencies,
+        helpers: {
+          buildLatestEvent,
+          buildMatchedActivityTypeCounts,
+          buildOverallAggregation,
+          buildRankedEvents,
+          hasRequestedStat,
+        },
       });
-
-      return {
-        resultKind: 'aggregate',
-        aggregation,
-        matchedEventsCount: matchedEvents.length,
-        matchedActivityTypeCounts: buildMatchedActivityTypeCounts(matchedEvents, dependencies.logger),
-        ...(eventRanking ? { eventRanking } : {}),
-      };
     },
   };
 }

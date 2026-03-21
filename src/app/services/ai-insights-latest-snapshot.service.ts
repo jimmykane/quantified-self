@@ -11,24 +11,18 @@ import type {
   AiInsightLatestEvent,
   AiInsightPresentation,
   AiInsightSummary,
-  AiInsightSummaryActivityMix,
   AiInsightSummaryBucket,
-  AiInsightSummaryCoverage,
-  AiInsightSummaryTrend,
   AiInsightsAggregateOkResponse,
   AiInsightsEventLookupOkResponse,
   AiInsightsLatestEventOkResponse,
   AiInsightsLatestSnapshot,
   AiInsightsMultiMetricAggregateMetricResult,
   AiInsightsMultiMetricAggregateOkResponse,
-  AiInsightsQuotaStatus,
   AiInsightsResultKind,
   AiInsightsResponse,
-  NormalizedInsightDateRange,
   NormalizedInsightQuery,
 } from '@shared/ai-insights.types';
 import type {
-  EventStatAggregationBucket,
   EventStatAggregationResult,
 } from '@shared/event-stat-aggregation.types';
 import {
@@ -58,6 +52,7 @@ type AggregateNormalizedInsightQuery = Extract<NormalizedInsightQuery, { resultK
 type EventLookupNormalizedInsightQuery = Extract<NormalizedInsightQuery, { resultKind: 'event_lookup' }>;
 type LatestEventNormalizedInsightQuery = Extract<NormalizedInsightQuery, { resultKind: 'latest_event' }>;
 type MultiMetricNormalizedInsightQuery = Extract<NormalizedInsightQuery, { resultKind: 'multi_metric_aggregate' }>;
+type CompletedAiInsightsOkResponse = Extract<AiInsightsResponse, { status: 'ok' }>;
 const KNOWN_CHART_DATA_CATEGORY_TYPES = buildEnumValueSet(ChartDataCategoryTypes);
 const KNOWN_CHART_DATA_VALUE_TYPES = buildEnumValueSet(ChartDataValueTypes);
 const KNOWN_CHART_TYPES = buildEnumValueSet(ChartTypes);
@@ -189,82 +184,19 @@ function normalizeAiInsightsResponse(response: AiInsightsResponse): AiInsightsRe
     };
   }
 
-  const resultKind = resolveCompletedAiInsightsResponseResultKind(response as unknown as UnknownRecord);
-  if (resultKind === 'multi_metric_aggregate') {
-    const normalizedResponse = response as AiInsightsMultiMetricAggregateOkResponse & {
-      query: NormalizedInsightQueryLike;
-    };
-    return {
-      ...normalizedResponse,
-      resultKind: 'multi_metric_aggregate',
-      ...(normalizedResponse.quota ? { quota: normalizedResponse.quota } : {}),
-      query: normalizeMultiMetricInsightQuery(normalizedResponse.query),
-      metricResults: normalizedResponse.metricResults.map(normalizeMultiMetricMetricResult),
-      presentation: normalizePresentation(normalizedResponse.presentation),
-    };
-  }
+  const resultKind = resolveCompletedAiInsightsResponseResultKind(response as unknown as UnknownRecord) ?? 'aggregate';
+  const normalizer = OK_RESPONSE_NORMALIZERS_BY_RESULT_KIND[resultKind];
 
-  if (resultKind === 'event_lookup') {
-    const normalizedResponse = response as AiInsightsEventLookupOkResponse & {
-      query: NormalizedInsightQueryLike;
-    };
-    return {
-      ...normalizedResponse,
-      resultKind: 'event_lookup',
-      ...(normalizedResponse.quota ? { quota: normalizedResponse.quota } : {}),
-      query: normalizeEventLookupInsightQuery(normalizedResponse.query),
-      eventLookup: normalizeEventLookup(normalizedResponse.eventLookup),
-      presentation: normalizePresentation(normalizedResponse.presentation),
-    };
-  }
-
-  if (resultKind === 'latest_event') {
-    const normalizedResponse = response as AiInsightsLatestEventOkResponse & {
-      query: NormalizedInsightQueryLike;
-    };
-    return {
-      ...normalizedResponse,
-      resultKind: 'latest_event',
-      ...(normalizedResponse.quota ? { quota: normalizedResponse.quota } : {}),
-      query: normalizeLatestEventInsightQuery(normalizedResponse.query),
-      latestEvent: normalizeLatestEvent(normalizedResponse.latestEvent),
-      presentation: normalizePresentation(normalizedResponse.presentation),
-    };
-  }
-
-  const normalizedResponse = response as AiInsightsAggregateOkResponse & {
-    query: NormalizedInsightQueryLike;
-  };
-  return {
-    ...normalizedResponse,
-    resultKind: 'aggregate',
-    ...(normalizedResponse.quota ? { quota: normalizedResponse.quota } : {}),
-    query: normalizeAggregateInsightQuery(normalizedResponse.query),
-    aggregation: normalizeAggregationResult(normalizedResponse.aggregation),
-    summary: normalizeSummary(normalizedResponse.summary),
-    ...(normalizedResponse.eventRanking ? { eventRanking: normalizeEventLookup(normalizedResponse.eventRanking) } : {}),
-    presentation: normalizePresentation(normalizedResponse.presentation),
-  };
+  return normalizer(response as never) as AiInsightsResponse;
 }
 
 function normalizeInsightQuery(query: NormalizedInsightQueryLike): NormalizedInsightQuery {
   const resultKind = resolveNormalizedInsightQueryResultKind(query);
-  switch (resultKind) {
-    case 'multi_metric_aggregate':
-      return normalizeMultiMetricInsightQuery(query);
-    case 'event_lookup':
-      return normalizeEventLookupInsightQuery(query);
-    case 'latest_event':
-      return normalizeLatestEventInsightQuery(query);
-    case 'aggregate':
-      return normalizeAggregateInsightQuery(query);
-    default:
-      return assertNever(resultKind);
-  }
+  return INSIGHT_QUERY_NORMALIZERS_BY_RESULT_KIND[resultKind](query) as NormalizedInsightQuery;
 }
 
 function normalizeAggregateInsightQuery(query: NormalizedInsightQueryLike): AggregateNormalizedInsightQuery {
-  const { requestedTimeInterval, resultKind, ...rest } = query as NormalizedInsightQueryLike & {
+  const { requestedTimeInterval, ...rest } = query as NormalizedInsightQueryLike & {
     requestedTimeInterval?: unknown;
     resultKind?: unknown;
   };
@@ -279,7 +211,7 @@ function normalizeAggregateInsightQuery(query: NormalizedInsightQueryLike): Aggr
 }
 
 function normalizeEventLookupInsightQuery(query: NormalizedInsightQueryLike): EventLookupNormalizedInsightQuery {
-  const { requestedTimeInterval, resultKind, ...rest } = query as NormalizedInsightQueryLike & {
+  const { requestedTimeInterval, ...rest } = query as NormalizedInsightQueryLike & {
     requestedTimeInterval?: unknown;
     resultKind?: unknown;
   };
@@ -294,7 +226,7 @@ function normalizeEventLookupInsightQuery(query: NormalizedInsightQueryLike): Ev
 }
 
 function normalizeLatestEventInsightQuery(query: NormalizedInsightQueryLike): LatestEventNormalizedInsightQuery {
-  const { requestedTimeInterval, resultKind, ...rest } = query as NormalizedInsightQueryLike & {
+  const { requestedTimeInterval, ...rest } = query as NormalizedInsightQueryLike & {
     requestedTimeInterval?: unknown;
     resultKind?: unknown;
   };
@@ -308,7 +240,7 @@ function normalizeLatestEventInsightQuery(query: NormalizedInsightQueryLike): La
 }
 
 function normalizeMultiMetricInsightQuery(query: NormalizedInsightQueryLike): MultiMetricNormalizedInsightQuery {
-  const { requestedTimeInterval, resultKind, metricSelections, ...rest } = query as NormalizedInsightQueryLike & {
+  const { requestedTimeInterval, metricSelections, ...rest } = query as NormalizedInsightQueryLike & {
     requestedTimeInterval?: unknown;
     resultKind?: unknown;
     metricSelections?: unknown;
@@ -329,6 +261,66 @@ function normalizeMultiMetricInsightQuery(query: NormalizedInsightQueryLike): Mu
       : [],
   };
 }
+
+type InsightQueryNormalizerMap = {
+  [K in AiInsightsResultKind]: (query: NormalizedInsightQueryLike) => Extract<NormalizedInsightQuery, { resultKind: K }>;
+};
+
+export const INSIGHT_QUERY_NORMALIZERS_BY_RESULT_KIND = {
+  aggregate: normalizeAggregateInsightQuery,
+  event_lookup: normalizeEventLookupInsightQuery,
+  latest_event: normalizeLatestEventInsightQuery,
+  multi_metric_aggregate: normalizeMultiMetricInsightQuery,
+} satisfies InsightQueryNormalizerMap;
+export const INSIGHT_QUERY_NORMALIZER_RESULT_KIND_KEYS = Object.freeze(
+  Object.keys(INSIGHT_QUERY_NORMALIZERS_BY_RESULT_KIND) as AiInsightsResultKind[],
+);
+
+type OkResponseNormalizerMap = {
+  [K in AiInsightsResultKind]: (
+    response: Extract<CompletedAiInsightsOkResponse, { resultKind: K }> & { query: NormalizedInsightQueryLike },
+  ) => Extract<CompletedAiInsightsOkResponse, { resultKind: K }>;
+};
+
+export const OK_RESPONSE_NORMALIZERS_BY_RESULT_KIND = {
+  aggregate: (response) => ({
+    ...(response as AiInsightsAggregateOkResponse & { query: NormalizedInsightQueryLike }),
+    resultKind: 'aggregate',
+    ...(response.quota ? { quota: response.quota } : {}),
+    query: normalizeAggregateInsightQuery(response.query),
+    aggregation: normalizeAggregationResult(response.aggregation),
+    summary: normalizeSummary(response.summary),
+    ...(response.eventRanking ? { eventRanking: normalizeEventLookup(response.eventRanking) } : {}),
+    presentation: normalizePresentation(response.presentation),
+  }),
+  event_lookup: (response) => ({
+    ...(response as AiInsightsEventLookupOkResponse & { query: NormalizedInsightQueryLike }),
+    resultKind: 'event_lookup',
+    ...(response.quota ? { quota: response.quota } : {}),
+    query: normalizeEventLookupInsightQuery(response.query),
+    eventLookup: normalizeEventLookup(response.eventLookup),
+    presentation: normalizePresentation(response.presentation),
+  }),
+  latest_event: (response) => ({
+    ...(response as AiInsightsLatestEventOkResponse & { query: NormalizedInsightQueryLike }),
+    resultKind: 'latest_event',
+    ...(response.quota ? { quota: response.quota } : {}),
+    query: normalizeLatestEventInsightQuery(response.query),
+    latestEvent: normalizeLatestEvent(response.latestEvent),
+    presentation: normalizePresentation(response.presentation),
+  }),
+  multi_metric_aggregate: (response) => ({
+    ...(response as AiInsightsMultiMetricAggregateOkResponse & { query: NormalizedInsightQueryLike }),
+    resultKind: 'multi_metric_aggregate',
+    ...(response.quota ? { quota: response.quota } : {}),
+    query: normalizeMultiMetricInsightQuery(response.query),
+    metricResults: response.metricResults.map(normalizeMultiMetricMetricResult),
+    presentation: normalizePresentation(response.presentation),
+  }),
+} satisfies OkResponseNormalizerMap;
+export const OK_RESPONSE_NORMALIZER_RESULT_KIND_KEYS = Object.freeze(
+  Object.keys(OK_RESPONSE_NORMALIZERS_BY_RESULT_KIND) as AiInsightsResultKind[],
+);
 
 function normalizeMultiMetricMetricResult(
   metricResult: AiInsightsMultiMetricAggregateMetricResult,
@@ -442,10 +434,6 @@ function buildEnumValueSet(
   );
 
   return new Set<string | number>(enumValues);
-}
-
-function assertNever(value: never): never {
-  throw new Error(`[AiInsightsLatestSnapshotService] Unsupported result kind: ${String(value)}`);
 }
 
 function normalizeSummaryBucket(

@@ -38,6 +38,12 @@ import {
   type InsightMetricKey,
 } from './metric-catalog';
 import { canonicalizeInsightPrompt, normalizePromptSearchText } from './prompt-normalization';
+import {
+  buildAggregateInsightQuery,
+  buildEventLookupInsightQuery,
+  buildLatestEventInsightQuery,
+  buildMultiMetricInsightQuery,
+} from './normalize-query.result-kind-query-builders';
 import { AiInsightsRequestSchema, AiInsightsUnsupportedReasonCodeSchema, NormalizedInsightQuerySchema } from './schemas';
 
 type ModelAggregationCode = 'total' | 'average' | 'minimum' | 'maximum';
@@ -1635,16 +1641,14 @@ export function resolveNormalizedInsightQueryFromIntent(
 
     return {
       status: 'ok',
-      query: {
-        resultKind: 'latest_event',
-        categoryType: ChartDataCategoryTypes.DateType,
+      query: buildLatestEventInsightQuery({
         activityTypeGroups: finalActivityTypeGroups,
         activityTypes: finalActivityTypes,
         dateRange,
         requestedDateRanges,
         periodMode: promptDateSelection.periodMode,
         chartType: ChartTypes.LinesVertical,
-      },
+      }),
     };
   }
 
@@ -1757,11 +1761,9 @@ export function resolveNormalizedInsightQueryFromIntent(
     return {
       status: 'ok',
       metricKey: metric.key,
-      query: {
-        resultKind: 'event_lookup',
+      query: buildEventLookupInsightQuery({
         dataType: metric.dataType,
         valueType,
-        categoryType: ChartDataCategoryTypes.DateType,
         requestedTimeInterval: finalRequestedTimeInterval,
         activityTypeGroups: finalActivityTypeGroups,
         activityTypes: finalActivityTypes,
@@ -1774,15 +1776,14 @@ export function resolveNormalizedInsightQueryFromIntent(
           stackedDateByActivityRequested,
           promptChartPreference,
         ),
-      },
+      }),
     };
   }
 
   return {
     status: 'ok',
     metricKey: metric.key,
-    query: {
-      resultKind: 'aggregate',
+    query: buildAggregateInsightQuery({
       dataType: metric.dataType,
       valueType,
       categoryType,
@@ -1798,7 +1799,7 @@ export function resolveNormalizedInsightQueryFromIntent(
         stackedDateByActivityRequested,
         promptChartPreference,
       ),
-    },
+    }),
   };
 }
 
@@ -1924,10 +1925,8 @@ export function createNormalizeQuery(
 
       return {
         status: 'ok',
-        query: {
-          resultKind: 'multi_metric_aggregate',
+        query: buildMultiMetricInsightQuery({
           groupingMode: multiMetricIntent.groupingMode,
-          categoryType: ChartDataCategoryTypes.DateType,
           requestedTimeInterval: finalRequestedTimeInterval,
           activityTypeGroups: finalActivityTypeGroups,
           activityTypes: finalActivityTypes,
@@ -1936,7 +1935,7 @@ export function createNormalizeQuery(
           periodMode: promptDateSelection.periodMode,
           chartType: ChartTypes.LinesVertical,
           metricSelections: multiMetricIntent.metricSelections,
-        },
+        }),
       };
     }
 
