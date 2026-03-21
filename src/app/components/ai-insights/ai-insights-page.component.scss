@@ -833,6 +833,12 @@
   color: var(--mat-sys-secondary);
 }
 
+.state-support-note {
+  margin: 6px 0 0;
+  color: var(--mat-sys-on-surface-variant);
+  line-height: 1.4;
+}
+
 .state-panel-placeholder {
   min-height: 15rem;
   place-content: center;

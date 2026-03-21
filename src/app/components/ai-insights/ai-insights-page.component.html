@@ -5,6 +5,7 @@
         <p class="mat-label-large hero-kicker">AI Insights</p>
         <mat-chip-set aria-label="AI Insights status">
           <mat-chip disableRipple class="hero-beta-chip">Beta</mat-chip>
+          <mat-chip disableRipple class="hero-beta-chip">en</mat-chip>
         </mat-chip-set>
       </div>
       <h1 class="hero-title">Ask a focused question about your training data.</h1>
@@ -219,6 +220,7 @@
               <div>
                 <p class="mat-title-medium state-title">Unsupported request</p>
                 <p class="mat-body-medium state-copy">{{ unsupported.narrative }}</p>
+                <p class="mat-body-small state-support-note">English-only prompts are supported right now.</p>
               </div>
             </div>
           } @else if (emptyResponse(); as empty) {
