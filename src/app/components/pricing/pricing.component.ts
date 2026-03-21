@@ -16,6 +16,7 @@ import { LoggerService } from '../../services/logger.service';
 import { Observable, firstValueFrom, map, take } from 'rxjs';
 import { StripeRole } from '../../models/stripe-role.model';
 import { Router } from '@angular/router';
+import { User } from '@sports-alliance/sports-lib';
 
 import { environment } from '../../../environments/environment';
 
@@ -40,6 +41,7 @@ interface SubscriptionSummary {
 })
 export class PricingComponent implements OnInit, OnDestroy {
     @Input() isOnboarding = false;
+    @Input() onboardingUser: User | null = null;
     @Output() planSelected = new EventEmitter<void>();
     @Output() loadingStateChange = new EventEmitter<boolean>();
 
@@ -426,6 +428,10 @@ export class PricingComponent implements OnInit, OnDestroy {
     }
 
     private async getCurrentAppUser() {
+        if (this.isOnboarding && this.onboardingUser?.uid) {
+            return this.onboardingUser as any;
+        }
+
         const user = await firstValueFrom(this.authService.user$.pipe(take(1)));
         return user;
     }
