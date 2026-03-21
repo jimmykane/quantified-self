@@ -928,6 +928,9 @@ export class AiInsightsPageComponent {
 
     return formatQuotaStatusText(quotaStatus, this.locale);
   });
+  readonly promptHeaderQuotaText = computed(() => (
+    this.quotaStatusText() ?? 'Loading quota…'
+  ));
   readonly quotaBlockedMessage = computed(() => {
     const quotaStatus = this.quotaStatus();
     if (!quotaStatus || (quotaStatus.isEligible && quotaStatus.remainingCount > 0)) {

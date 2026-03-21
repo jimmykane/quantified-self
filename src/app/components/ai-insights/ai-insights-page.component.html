@@ -34,13 +34,7 @@
             <mat-icon>psychology</mat-icon>
           </div>
           <mat-card-title>Prompt</mat-card-title>
-          <mat-card-subtitle>Single-turn insights based on event-level stats.</mat-card-subtitle>
-          @if (quotaStatusText(); as quotaStatusText) {
-            <div class="prompt-card-meta">
-              <mat-icon>toll</mat-icon>
-              <p class="mat-body-small prompt-quota-line">{{ quotaStatusText }}</p>
-            </div>
-          }
+          <mat-card-subtitle class="prompt-quota-line">{{ promptHeaderQuotaText() }}</mat-card-subtitle>
         </mat-card-header>
 
         <mat-card-content class="card-content prompt-card-content">
