@@ -1,0 +1,89 @@
+<div
+  class="ai-loading-state"
+  [class.ai-loading-state--compact]="compact()"
+  [attr.aria-label]="title()">
+  <div class="ai-loading-state__status-row">
+    <p class="mat-label-small ai-loading-state__status-label">Step {{ progressLabel() }}</p>
+
+    <div class="ai-loading-state__roller" [attr.aria-label]="'Progress: ' + activeStep()">
+      <div class="ai-loading-state__roller-window">
+        <div class="ai-loading-state__roller-track" [style.transform]="rollerTransform()">
+          @for (step of resolvedSteps(); track step; let stepIndex = $index) {
+            <div
+              class="ai-loading-state__roller-row"
+              [class.ai-loading-state__roller-row--active]="stepIndex === activeStepIndex()">
+              <span class="ai-loading-state__roller-dot" aria-hidden="true"></span>
+              <span class="mat-body-small">{{ step }}</span>
+            </div>
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+
+  @if (copy()) {
+    <p class="mat-body-small ai-loading-state__supporting-copy">{{ copy() }}</p>
+  }
+
+  @if (!compact()) {
+    <div class="ai-loading-state__body" aria-hidden="true">
+      <div class="ai-loading-state__narrative">
+        <span class="ai-loading-state__skeleton ai-loading-state__skeleton--line ai-loading-state__skeleton--line-wide"></span>
+        <span class="ai-loading-state__skeleton ai-loading-state__skeleton--line ai-loading-state__skeleton--line-medium"></span>
+        <span class="ai-loading-state__skeleton ai-loading-state__skeleton--line ai-loading-state__skeleton--line-short"></span>
+      </div>
+
+      <div class="ai-loading-state__summary-grid">
+        @for (item of summarySkeletonItems; track item) {
+          <section class="ai-loading-state__summary-card">
+            <span class="ai-loading-state__skeleton ai-loading-state__skeleton--label"></span>
+            <span class="ai-loading-state__skeleton ai-loading-state__skeleton--value"></span>
+            <span class="ai-loading-state__skeleton ai-loading-state__skeleton--meta"></span>
+          </section>
+        }
+      </div>
+
+      <mat-divider></mat-divider>
+
+      <div class="ai-loading-state__chart-shell">
+        <div class="ai-loading-state__chart-frame">
+          <div class="ai-loading-state__chart-y-axis">
+            <span class="ai-loading-state__skeleton ai-loading-state__skeleton--axis-label"></span>
+            <span class="ai-loading-state__skeleton ai-loading-state__skeleton--axis-label"></span>
+            <span class="ai-loading-state__skeleton ai-loading-state__skeleton--axis-label"></span>
+            <span class="ai-loading-state__skeleton ai-loading-state__skeleton--axis-label"></span>
+          </div>
+
+          <div class="ai-loading-state__chart-plot">
+            <div class="ai-loading-state__chart-grid-lines">
+              <span></span>
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+
+            <div class="ai-loading-state__chart-bars">
+              @for (bar of chartSkeletonBars; track bar) {
+                <span
+                  class="ai-loading-state__skeleton ai-loading-state__skeleton--bar"
+                  [style.--ai-loading-bar-height]="bar === 0 ? '46%' : bar === 1 ? '62%' : bar === 2 ? '34%' : bar === 3 ? '78%' : bar === 4 ? '56%' : '88%'">
+                </span>
+              }
+            </div>
+
+            <div class="ai-loading-state__chart-x-axis">
+              <span class="ai-loading-state__skeleton ai-loading-state__skeleton--tick"></span>
+              <span class="ai-loading-state__skeleton ai-loading-state__skeleton--tick"></span>
+              <span class="ai-loading-state__skeleton ai-loading-state__skeleton--tick"></span>
+              <span class="ai-loading-state__skeleton ai-loading-state__skeleton--tick"></span>
+              <span class="ai-loading-state__skeleton ai-loading-state__skeleton--tick"></span>
+              <span class="ai-loading-state__skeleton ai-loading-state__skeleton--tick"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+
+  <mat-progress-bar class="ai-loading-state__progress" mode="indeterminate"></mat-progress-bar>
+</div>

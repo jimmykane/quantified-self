@@ -39,6 +39,7 @@ describe('SideNavComponent', () => {
         };
         mockUserService = {
             isAdmin: vi.fn().mockResolvedValue(false),
+            hasProAccessSignal: vi.fn().mockReturnValue(false),
         };
         mockThemeService = {
             getAppTheme: () => of(AppThemes.Normal),
@@ -212,6 +213,7 @@ describe('SideNavComponent', () => {
             email: 'free@example.com'
         });
         mockUserService.hasPaidAccessSignal = vi.fn().mockReturnValue(false);
+        mockUserService.hasProAccessSignal = vi.fn().mockReturnValue(false);
         mockUserService.isProSignal = vi.fn().mockReturnValue(false);
         mockUserService.isBasicSignal = vi.fn().mockReturnValue(false);
 
@@ -227,5 +229,70 @@ describe('SideNavComponent', () => {
             ?? myTracksItem?.nativeElement.getAttribute('routerLink')
         ).toBe('/mytracks');
         expect(myTracksItem?.nativeElement.textContent).not.toContain('BASIC');
+    });
+
+    it('should link AI Insights directly for basic users and mark it as beta', () => {
+        mockUserService.user = vi.fn().mockReturnValue({
+            uid: 'user-2',
+            displayName: 'Basic User',
+            email: 'basic@example.com',
+            stripeRole: 'basic'
+        });
+        mockUserService.hasPaidAccessSignal = vi.fn().mockReturnValue(true);
+        mockUserService.hasProAccessSignal = vi.fn().mockReturnValue(false);
+        mockUserService.isProSignal = vi.fn().mockReturnValue(false);
+        mockUserService.isBasicSignal = vi.fn().mockReturnValue(true);
+
+        fixture.detectChanges();
+
+        const aiInsightsItem = fixture.debugElement
+            .queryAll(By.css('mat-list-item'))
+            .find(item => item.nativeElement.textContent.includes('AI Insights'));
+
+        expect(aiInsightsItem).toBeTruthy();
+        expect(component.aiInsightsRoute).toBe('/ai-insights');
+        expect(aiInsightsItem?.nativeElement.textContent).toContain('Beta');
+        expect(aiInsightsItem?.nativeElement.textContent).not.toContain('PRO');
+    });
+
+    it('should link AI Insights directly for grace users', () => {
+        mockUserService.user = vi.fn().mockReturnValue({
+            uid: 'user-4',
+            displayName: 'Grace User',
+            email: 'grace@example.com',
+            stripeRole: 'free',
+            gracePeriodUntil: Date.now() + 60_000,
+        });
+        mockUserService.hasPaidAccessSignal = vi.fn().mockReturnValue(true);
+        mockUserService.hasProAccessSignal = vi.fn().mockReturnValue(true);
+        mockUserService.isProSignal = vi.fn().mockReturnValue(true);
+        mockUserService.isBasicSignal = vi.fn().mockReturnValue(false);
+
+        fixture.detectChanges();
+
+        expect(component.aiInsightsRoute).toBe('/ai-insights');
+    });
+
+    it('should route unpaid users to subscriptions for AI Insights and show the paid lock state', () => {
+        mockUserService.user = vi.fn().mockReturnValue({
+            uid: 'user-3',
+            displayName: 'Free User',
+            email: 'free@example.com'
+        });
+        mockUserService.hasPaidAccessSignal = vi.fn().mockReturnValue(false);
+        mockUserService.hasProAccessSignal = vi.fn().mockReturnValue(false);
+        mockUserService.isProSignal = vi.fn().mockReturnValue(false);
+        mockUserService.isBasicSignal = vi.fn().mockReturnValue(false);
+
+        fixture.detectChanges();
+
+        const aiInsightsItem = fixture.debugElement
+            .queryAll(By.css('mat-list-item'))
+            .find(item => item.nativeElement.textContent.includes('AI Insights'));
+
+        expect(aiInsightsItem).toBeTruthy();
+        expect(component.aiInsightsRoute).toBe('/subscriptions');
+        expect(aiInsightsItem?.nativeElement.textContent).toContain('Beta');
+        expect(aiInsightsItem?.nativeElement.textContent).toContain('PAID');
     });
 });

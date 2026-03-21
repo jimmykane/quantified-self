@@ -20,8 +20,8 @@
   z-index: 1001;
   /* Above sidenav backdrop (z-index: 1000) */
   overflow: visible !important;
-  transition: transform 180ms ease;
-  will-change: transform;
+  transition: top 180ms ease, transform 180ms ease;
+  will-change: top, transform;
 }
 
 :host(.app-shell-header--hidden) .custom-header {

@@ -1,0 +1,100 @@
+@use '../../../styles/breakpoints' as bp;
+
+.prompt-picker-dialog__content {
+  display: grid;
+  gap: 12px;
+  min-width: min(34rem, calc(100vw - 48px));
+  max-height: min(68vh, 42rem);
+  max-width: 100%;
+}
+
+.prompt-picker-dialog__copy,
+.prompt-picker-dialog__group-title,
+.prompt-picker-dialog__item-copy {
+  margin: 0;
+}
+
+.prompt-picker-dialog__copy {
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.prompt-picker-dialog__groups {
+  display: grid;
+  gap: 14px;
+}
+
+.prompt-picker-dialog__search-field {
+  width: 100%;
+}
+
+.prompt-picker-dialog__group {
+  display: grid;
+  gap: 8px;
+}
+
+.prompt-picker-dialog__list {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+}
+
+.prompt-picker-dialog__item {
+  --qs-glass-panel-radius: 12px;
+  --qs-glass-panel-bg: var(--mat-sys-surface-container-low);
+  --qs-glass-panel-shadow: none;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 0;
+  width: 100%;
+  padding: 9px 12px;
+  text-align: left;
+  line-height: 1.25;
+}
+
+.prompt-picker-dialog__item:hover {
+  --qs-glass-panel-bg: var(--mat-sys-surface-container);
+  --qs-glass-panel-border: color-mix(in srgb, var(--mat-sys-outline) 38%, transparent);
+}
+
+.prompt-picker-dialog__item-icon {
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
+  color: var(--mat-sys-on-surface-variant);
+  flex-shrink: 0;
+}
+
+.prompt-picker-dialog__item-copy {
+  display: block;
+  max-width: 100%;
+  white-space: normal;
+  line-height: 1.35;
+  font-size: 0.9rem;
+  text-align: left;
+}
+
+.prompt-picker-dialog__group-title {
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.72rem;
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.prompt-picker-dialog__empty-state {
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+mat-dialog-actions {
+  padding-top: 6px;
+}
+
+@include bp.max-768 {
+  .prompt-picker-dialog__content {
+    min-width: 0;
+    max-height: 72vh;
+  }
+}

@@ -488,7 +488,7 @@
 
         .visual-box {
             height: 320px;
-            background: var(--mat-sys-surface-container-highest);
+            background: var(--mat-sys-surface);
             border-radius: 16px;
             position: relative;
             overflow: hidden;
@@ -535,7 +535,7 @@
                     fill: var(--mat-sys-on-surface);
                     font-size: 10px;
                     font-weight: 700;
-                    font-family: 'Noto Sans', sans-serif;
+                    font-family: 'Inter', sans-serif;
                 }
 
                 &.primary rect {
@@ -600,7 +600,7 @@
                     fill: var(--mat-sys-secondary);
                     font-size: 11px;
                     font-weight: 800;
-                    font-family: 'Noto Sans', sans-serif;
+                    font-family: 'Inter', sans-serif;
                 }
             }
         }
@@ -637,7 +637,7 @@
             font-size: 8px;
             opacity: 0.4;
             letter-spacing: 1px;
-            font-family: 'Noto Sans', sans-serif;
+            font-family: 'Inter', sans-serif;
         }
 
         .stat-preview {
@@ -665,7 +665,7 @@
             .stat-value {
                 font-size: 1.1rem;
                 font-weight: 700;
-                font-family: 'Noto Sans', sans-serif;
+                font-family: 'Inter', sans-serif;
 
                 &.success {
                     color: #4CAF50;

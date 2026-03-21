@@ -59,6 +59,17 @@ service cloud.firestore {
          allow read, write: if request.auth.uid == userID;
       }
 
+      // AI Insights Latest Snapshot (Private / Owner Read-Write, fixed latest doc only)
+      match /aiInsightsRequests/{requestID} {
+         allow read, write: if request.auth.uid == userID && requestID == 'latest';
+      }
+
+      // AI Insights Usage (Private / Server-Owned only)
+      match /aiInsightsUsage/{periodDocId} {
+         allow read: if false;
+         allow write: if false;
+      }
+
       // System Status (Admin Only)
       match /system/status {
          allow read: if request.auth.uid == userID;
@@ -110,6 +121,12 @@ service cloud.firestore {
         match /meta/{document=**} {
           allow read: if request.auth.uid == userID;
         }
+    }
+
+    // AI Insights repaired prompt backlog (global / server-owned only)
+    match /aiInsightsPromptRepairs/{docId} {
+      allow read: if false;
+      allow write: if false;
     }
 
     match /customers/{userID} {

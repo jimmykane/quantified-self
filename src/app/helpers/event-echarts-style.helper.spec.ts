@@ -3,11 +3,13 @@ import {
   DataEffortPace,
   DataGradeAdjustedPace,
   DataPowerRight,
+  DataSwimPace,
 } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import { AppDataColors } from '../services/color/app.data.colors';
 import {
   isEventPaceStreamType,
+  resolveMetricColorGroupKey,
   resolveEventColorGroupKey,
   resolveEventSeriesColor,
 } from './event-echarts-style.helper';
@@ -21,9 +23,19 @@ describe('event-echarts-style.helper', () => {
     expect(resolveEventColorGroupKey('Unknown Data Type')).toBe('Unknown Data Type');
   });
 
+  it('maps AI aggregate metric labels into the canonical chart color groups', () => {
+    expect(resolveMetricColorGroupKey('Average Power')).toBe('Power');
+    expect(resolveMetricColorGroupKey('Average Cadence')).toBe(DataCadence.type);
+    expect(resolveMetricColorGroupKey('Average Heart Rate')).toBe('Heart Rate');
+    expect(resolveMetricColorGroupKey('Average Pace')).toBe('Pace');
+    expect(resolveMetricColorGroupKey('Average Swim Pace')).toBe('Swim Pace');
+    expect(resolveMetricColorGroupKey('Average VAM')).toBe('Vertical Speed');
+  });
+
   it('treats effort pace as part of the canonical pace family', () => {
     expect(isEventPaceStreamType(DataEffortPace.type)).toBe(true);
     expect(isEventPaceStreamType(DataGradeAdjustedPace.type)).toBe(true);
+    expect(isEventPaceStreamType(DataSwimPace.type)).toBe(true);
     expect(isEventPaceStreamType(DataCadence.type)).toBe(false);
   });
 

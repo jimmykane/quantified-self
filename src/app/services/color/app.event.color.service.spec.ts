@@ -152,7 +152,7 @@ describe('AppEventColorService', () => {
 
   describe('getColorForActivityTypeByActivityTypeGroup', () => {
     it('should use mountain-biking color for MTB related activities', () => {
-      const expectedMountainBikingColor = AppActivityTypeGroupColors[ActivityTypeGroups.MountainBiking];
+      const expectedMountainBikingColor = AppActivityTypeGroupColors[ActivityTypeGroups.MountainBikingGroup];
 
       expect(service.getColorForActivityTypeByActivityTypeGroup(ActivityTypes.MountainBiking)).toBe(expectedMountainBikingColor);
       expect(service.getColorForActivityTypeByActivityTypeGroup(ActivityTypes['Enduro MTB'])).toBe(expectedMountainBikingColor);

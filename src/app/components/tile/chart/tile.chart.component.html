@@ -9,14 +9,15 @@
   @if (chartType === chartTypes.Pie) {
   <app-pie-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme" [chartDataType]="dataType"
     [chartDataValueType]="dataValueType" [chartDataCategoryType]="dataCategoryType"
-    [chartDataTimeInterval]="dataTimeInterval">
+    [chartDataTimeInterval]="dataTimeInterval" [userUnitSettings]="user?.settings?.unitSettings">
   </app-pie-chart>
   }
   @if (chartType === chartTypes.LinesHorizontal
   || chartType === chartTypes.LinesVertical) {
   <app-xy-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme" [chartDataType]="dataType"
     [chartDataValueType]="dataValueType" [chartDataCategoryType]="dataCategoryType"
-    [chartDataTimeInterval]="dataTimeInterval" [vertical]="chartType !== chartTypes.LinesHorizontal">
+    [chartDataTimeInterval]="dataTimeInterval" [vertical]="chartType !== chartTypes.LinesHorizontal"
+    [userUnitSettings]="user?.settings?.unitSettings">
   </app-xy-chart>
   }
   @if (chartType === chartTypes.ColumnsHorizontal
@@ -25,7 +26,8 @@
   <app-columns-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme" [type]="(chartType === chartTypes.ColumnsVertical || chartType === chartTypes.ColumnsHorizontal)
       ? 'columns'
       : 'pyramids'" [vertical]="chartType !== chartTypes.ColumnsHorizontal" [chartDataType]="dataType" [chartDataValueType]="dataValueType"
-    [chartDataCategoryType]="dataCategoryType" [chartDataTimeInterval]="dataTimeInterval">
+    [chartDataCategoryType]="dataCategoryType" [chartDataTimeInterval]="dataTimeInterval"
+    [userUnitSettings]="user?.settings?.unitSettings">
   </app-columns-chart>
   }
 

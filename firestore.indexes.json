@@ -670,6 +670,25 @@
       "density": "SPARSE_ALL"
     },
     {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "stats.`Activity Types`",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "startDate",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
       "collectionGroup": "garminAPIActivityQueue",
       "queryScope": "COLLECTION",
       "fields": [
@@ -1006,6 +1025,25 @@
     }
   ],
   "fieldOverrides": [
+    {
+      "collectionGroup": "aiInsightsPromptRepairs",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "arrayConfig": "CONTAINS",
+          "queryScope": "COLLECTION"
+        }
+      ]
+    },
     {
       "collectionGroup": "COROSAPIWorkoutQueue",
       "fieldPath": "expireAt",

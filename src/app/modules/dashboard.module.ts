@@ -16,18 +16,16 @@ import { TileChartActionsComponent } from '../components/tile/actions/chart/tile
 import { TileMapActionsComponent } from '../components/tile/actions/map/tile.map.actions.component';
 import { TileActionsHeaderComponent } from '../components/tile/actions/header/tile.actions.header.component';
 import { TileActionsFooterComponent } from '../components/tile/actions/footer/tile.actions.footer.component';
-
-import { ChartsXYComponent } from '../components/charts/xy/charts.xy.component';
-import { ChartsColumnsComponent } from '../components/charts/columns/charts.columns.component';
 import { EventTableActionsComponent } from '../components/event-table/actions/event.table.actions.component';
-import { ChartsPieComponent } from '../components/charts/pie/charts.pie.component';
 import { BenchmarkModule } from './benchmark.module';
+import { AppChartsModule } from './app-charts.module';
 
 @NgModule({
     imports: [
         CommonModule,
         SharedModule,
         MaterialModule,
+        AppChartsModule,
         BenchmarkModule,
         DashboardRoutingModule,
     ],
@@ -46,9 +44,6 @@ import { BenchmarkModule } from './benchmark.module';
         EventsMapComponent,
         TileChartComponent,
         TileMapComponent,
-        ChartsPieComponent,
-        ChartsXYComponent,
-        ChartsColumnsComponent,
 
     ],
     providers: [

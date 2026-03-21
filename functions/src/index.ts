@@ -3,6 +3,7 @@
 // Firebase Setup
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
+import { resolveServiceAccountPath } from './firebase-admin-config';
 
 let storageBucket = 'quantified-self-io';
 if (process.env.FIREBASE_CONFIG) {
@@ -18,13 +19,18 @@ if (process.env.FIREBASE_CONFIG) {
 
 if (admin.apps.length === 0) {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const serviceAccount = require('../service-account.json');
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
-      databaseURL: `https://${process.env.GCLOUD_PROJECT}.firebaseio.com`,
-      storageBucket: storageBucket,
-    });
+    const serviceAccountPath = resolveServiceAccountPath();
+    if (serviceAccountPath) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const serviceAccount = require(serviceAccountPath);
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+        databaseURL: `https://${process.env.GCLOUD_PROJECT}.firebaseio.com`,
+        storageBucket: storageBucket,
+      });
+    } else {
+      throw new Error('service-account.json not found');
+    }
   } catch (e) {
     logger.warn('Service account not found, initializing with default credentials');
     admin.initializeApp({
@@ -128,6 +134,7 @@ export { cleanupEventFile } from './events/cleanup';
 export { uploadActivity } from './events/upload-activity';
 export { reprocessEvent } from './events/reprocess-event';
 export { mergeEvents } from './events/merge-events';
+export { aiInsights, getAiInsightsQuotaStatus } from './ai/insights/callable';
 export { restoreUserClaims, linkExistingStripeCustomer } from './stripe/claims';
 export { onSubscriptionUpdated } from './stripe/subscriptions';
 export { enforceSubscriptionLimits } from './schedule/enforce-subscription-limits';

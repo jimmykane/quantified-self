@@ -22,7 +22,7 @@ import { environment } from '../../../environments/environment';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { POLICY_CONTENT } from '../../shared/policies.content';
-import { getUsageLimitForRole } from '@shared/limits';
+import { getAiInsightsRequestLimitForRole, getUsageLimitForRole } from '@shared/limits';
 
 interface SubscriptionSummary {
     status: StripeSubscription['status'];
@@ -187,6 +187,21 @@ export class PricingComponent implements OnInit, OnDestroy {
         } catch (error) {
             this.logger.error(`Unsupported pricing role '${resolvedRole}' in pricing UI`, error);
             return 'Activity limits unavailable';
+        }
+    }
+
+    getAiInsightsLimitLabel(role: string | null | undefined): string {
+        const resolvedRole = role ?? 'free';
+
+        try {
+            const limit = getAiInsightsRequestLimitForRole(resolvedRole);
+            if (limit <= 0) {
+                return 'AI Insights not included';
+            }
+            return `AI Insights up to ${limit} requests per billing period`;
+        } catch (error) {
+            this.logger.error(`Unsupported pricing role '${resolvedRole}' in AI insights pricing UI`, error);
+            return 'AI Insights limits unavailable';
         }
     }
 

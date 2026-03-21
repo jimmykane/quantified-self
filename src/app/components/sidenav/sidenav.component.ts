@@ -57,6 +57,10 @@ export class SideNavComponent {
     return this.userService.hasPaidAccessSignal();
   }
 
+  get aiInsightsRoute(): string {
+    return this.userService.hasPaidAccessSignal() ? '/ai-insights' : '/subscriptions';
+  }
+
   get user(): User | null {
     return this.userService.user();
   }
