@@ -4,7 +4,7 @@ import { By } from '@angular/platform-browser';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { describe, expect, it, vi } from 'vitest';
 import { AiInsightsPromptPickerDialogComponent } from './ai-insights-prompt-picker-dialog.component';
-import { AI_INSIGHTS_DEFAULT_PROMPT_GROUPS } from './ai-insights.prompts';
+import { AI_INSIGHTS_DEFAULT_PROMPT_SECTIONS } from './ai-insights.prompts';
 
 describe('AiInsightsPromptPickerDialogComponent', () => {
   async function createComponent(promptSource: 'default' | 'unsupported' = 'default'): Promise<{
@@ -24,7 +24,7 @@ describe('AiInsightsPromptPickerDialogComponent', () => {
         {
           provide: MAT_DIALOG_DATA,
           useValue: {
-            promptGroups: AI_INSIGHTS_DEFAULT_PROMPT_GROUPS,
+            promptSections: AI_INSIGHTS_DEFAULT_PROMPT_SECTIONS,
             promptSource,
           },
         },
@@ -41,15 +41,19 @@ describe('AiInsightsPromptPickerDialogComponent', () => {
   it('renders grouped prompt categories and prompts', async () => {
     const { fixture } = await createComponent();
 
+    const sectionTitles = fixture.debugElement.queryAll(By.css('.prompt-picker-dialog__section-title'))
+      .map((element) => element.nativeElement.textContent.trim());
     const groupTitles = fixture.debugElement.queryAll(By.css('.prompt-picker-dialog__group-title'))
       .map((element) => element.nativeElement.textContent.trim());
     const promptItems = fixture.debugElement.queryAll(By.css('.prompt-picker-dialog__item-copy'))
       .map((element) => element.nativeElement.textContent.trim());
 
+    expect(sectionTitles).toEqual(['Popular Ways To Ask', 'Browse By Metric']);
+    expect(groupTitles).toContain('Recent activity');
     expect(groupTitles).toContain('Volume & Distance');
     expect(groupTitles).toContain('Power & Load');
+    expect(promptItems).toContain('Show my training time over time this year.');
     expect(promptItems).toContain('Show my total distance by activity type this year.');
-    expect(promptItems).toContain('I want to know when I had my longest distance in cycling.');
   });
 
   it('closes with the selected prompt', async () => {
@@ -58,7 +62,7 @@ describe('AiInsightsPromptPickerDialogComponent', () => {
     const promptButton = fixture.debugElement.query(By.css('.prompt-picker-dialog__item'));
     promptButton.triggerEventHandler('click');
 
-    expect(dialogRef.close).toHaveBeenCalledWith('Show my total distance by activity type this year.');
+    expect(dialogRef.close).toHaveBeenCalledWith('When was my last ride?');
   });
 
   it('switches copy for unsupported prompt suggestions', async () => {
@@ -89,8 +93,12 @@ describe('AiInsightsPromptPickerDialogComponent', () => {
     const promptItems = fixture.debugElement.queryAll(By.css('.prompt-picker-dialog__item-copy'))
       .map((element) => element.nativeElement.textContent.trim());
 
-    expect(groupTitles).toEqual(['Cardio & Speed']);
-    expect(promptItems).toEqual(['Tell me my average cadence for cycling over the last 3 months.']);
+    expect(groupTitles).toEqual(['Compare & explore', 'Cardio & Speed', 'Advanced Examples']);
+    expect(promptItems).toEqual([
+      'Show my cadence and power over the last 3 months for cycling.',
+      'Tell me my average cadence for cycling over the last 3 months.',
+      'Show me avg cadence and avg power for the last 3 months for cycling.',
+    ]);
   });
 
   it('shows an empty state when no prompts match the search', async () => {

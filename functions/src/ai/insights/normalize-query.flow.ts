@@ -578,11 +578,11 @@ function resolvePromptYearListDateSelection(
   }
 
   const explicitListMatch = normalizedPrompt.match(
-    /\b(?:in|for|during)\s+(?:the\s+)?(?:years?\s+)?((?:19|20)\d{2}(?:\s*(?:,|and)\s*(?:19|20)\d{2})+)\b/,
+    /\b(?:in|for|during)\s+(?:the\s+)?(?:years?\s+)?((?:19|20)\d{2}(?:\s*(?:,|and|vs|versus)\s*(?:19|20)\d{2})+)\b/,
   );
   const bareListMatch = explicitListMatch
     ? null
-    : normalizedPrompt.match(/\b((?:19|20)\d{2}(?:\s*(?:,|and)\s*(?:19|20)\d{2})+)\b/);
+    : normalizedPrompt.match(/\b((?:19|20)\d{2}(?:\s*(?:,|and|vs|versus)\s*(?:19|20)\d{2})+)\b/);
   const yearListSource = explicitListMatch?.[1] ?? bareListMatch?.[1] ?? null;
   if (!yearListSource) {
     return null;

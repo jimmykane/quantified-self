@@ -2,11 +2,11 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
-import type { AiInsightsPromptGroup } from './ai-insights.prompts';
+import type { AiInsightsPromptSection } from './ai-insights.prompts';
 import { MaterialModule } from '../../modules/material.module';
 
 export interface AiInsightsPromptPickerDialogData {
-  promptGroups: readonly AiInsightsPromptGroup[];
+  promptSections: readonly AiInsightsPromptSection[];
   promptSource: 'default' | 'unsupported';
 }
 
@@ -25,7 +25,7 @@ export interface AiInsightsPromptPickerDialogData {
 export class AiInsightsPromptPickerDialogComponent {
   private readonly dialogRef = inject(MatDialogRef<AiInsightsPromptPickerDialogComponent, string | undefined>);
   readonly data = inject<AiInsightsPromptPickerDialogData>(MAT_DIALOG_DATA);
-  readonly promptGroups = this.data.promptGroups;
+  readonly promptSections = this.data.promptSections;
   readonly searchTerm = signal('');
   readonly dialogTitle = computed(() => (
     this.data.promptSource === 'unsupported'
@@ -38,20 +38,25 @@ export class AiInsightsPromptPickerDialogComponent {
       : 'Select a prompt to run it immediately.'
   ));
   readonly normalizedSearchTerm = computed(() => this.searchTerm().trim().toLocaleLowerCase());
-  readonly filteredPromptGroups = computed<readonly AiInsightsPromptGroup[]>(() => {
+  readonly filteredPromptSections = computed<readonly AiInsightsPromptSection[]>(() => {
     const normalizedSearchTerm = this.normalizedSearchTerm();
     if (!normalizedSearchTerm) {
-      return this.promptGroups;
+      return this.promptSections;
     }
 
-    return this.promptGroups
-      .map((group) => ({
-        ...group,
-        prompts: group.prompts.filter(prompt => prompt.prompt.toLocaleLowerCase().includes(normalizedSearchTerm)),
+    return this.promptSections
+      .map((section) => ({
+        ...section,
+        groups: section.groups
+          .map((group) => ({
+            ...group,
+            prompts: group.prompts.filter(prompt => prompt.prompt.toLocaleLowerCase().includes(normalizedSearchTerm)),
+          }))
+          .filter((group) => group.prompts.length > 0),
       }))
-      .filter(group => group.prompts.length > 0);
+      .filter((section) => section.groups.length > 0);
   });
-  readonly hasFilteredPrompts = computed(() => this.filteredPromptGroups().length > 0);
+  readonly hasFilteredPrompts = computed(() => this.filteredPromptSections().length > 0);
 
   onSearchInput(event: Event): void {
     const target = event.target as HTMLInputElement | null;

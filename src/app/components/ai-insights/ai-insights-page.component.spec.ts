@@ -47,7 +47,8 @@ import { AiInsightsChartComponent } from './ai-insights-chart.component';
 import { AiInsightsMultiMetricChartComponent } from './ai-insights-multi-metric-chart.component';
 import { AiInsightsPageComponent } from './ai-insights-page.component';
 import {
-  AI_INSIGHTS_DEFAULT_PROMPT_GROUPS,
+  AI_INSIGHTS_DEFAULT_PICKER_PROMPTS,
+  AI_INSIGHTS_DEFAULT_PROMPT_SECTIONS,
   AI_INSIGHTS_FEATURED_PROMPTS,
 } from './ai-insights.prompts';
 
@@ -1035,7 +1036,10 @@ describe('AiInsightsPageComponent', () => {
 
     expect(title?.textContent).toContain('Ask a focused question about your training data.');
     expect(pickerButton?.getAttribute('aria-label')).toBe('Browse prompts');
-    expect(component.pickerPromptGroups()).toEqual(AI_INSIGHTS_DEFAULT_PROMPT_GROUPS);
+    expect(component.pickerPromptSections()).toEqual(AI_INSIGHTS_DEFAULT_PROMPT_SECTIONS);
+    expect(component.pickerPromptGroups()).toEqual(
+      AI_INSIGHTS_DEFAULT_PROMPT_SECTIONS.flatMap((section) => section.groups),
+    );
     expect(heroPromptRotator?.getAttribute('aria-label')).toContain(AI_INSIGHTS_FEATURED_PROMPTS[0]);
     expect(quotaLine?.textContent).toContain(`${AI_INSIGHTS_REQUEST_LIMITS.pro - 12} of ${AI_INSIGHTS_REQUEST_LIMITS.pro} left`);
     expect(supportNote?.textContent).toContain('Latest completed insights are temporarily restored from your account.');
@@ -1141,9 +1145,7 @@ describe('AiInsightsPageComponent', () => {
 
   it('should open the grouped prompt picker and submit the selected prompt', async () => {
     const selectedPrompt = 'Show my average power over time for cycling in the last 90 days.';
-    const flattenedDefaultPrompts = AI_INSIGHTS_DEFAULT_PROMPT_GROUPS
-      .flatMap(group => group.prompts.map(prompt => prompt.prompt));
-    const expectedPromptIndex = flattenedDefaultPrompts.findIndex(prompt => prompt === selectedPrompt);
+    const expectedPromptIndex = AI_INSIGHTS_DEFAULT_PICKER_PROMPTS.findIndex(prompt => prompt === selectedPrompt);
     expect(expectedPromptIndex).toBeGreaterThanOrEqual(0);
     aiInsightsServiceMock.runInsight.mockResolvedValue(buildOkResponse());
     matDialogMock.open.mockReturnValueOnce({
@@ -1159,7 +1161,7 @@ describe('AiInsightsPageComponent', () => {
     expect(matDialogMock.open).toHaveBeenCalledTimes(1);
     expect(matDialogMock.open.mock.calls[0]?.[1]).toMatchObject({
       data: {
-        promptGroups: AI_INSIGHTS_DEFAULT_PROMPT_GROUPS,
+        promptSections: AI_INSIGHTS_DEFAULT_PROMPT_SECTIONS,
         promptSource: 'default',
       },
     });

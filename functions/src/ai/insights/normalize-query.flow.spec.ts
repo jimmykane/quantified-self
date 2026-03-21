@@ -385,6 +385,36 @@ describe('normalizeInsightQuery', () => {
     ]);
   });
 
+  it('supports natural year comparison prompts that use "vs"', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-20T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Compare my max heart rate in 2024 vs 2025.',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('heart_rate');
+    expect(result.query.categoryType).toBe(ChartDataCategoryTypes.DateType);
+    expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Yearly);
+    expect(result.query.periodMode).toBe('compare');
+    expect(result.query.requestedDateRanges).toEqual([
+      {
+        kind: 'bounded',
+        startDate: '2024-01-01T00:00:00.000Z',
+        endDate: '2025-12-31T23:59:59.999Z',
+        timezone: 'UTC',
+        source: 'prompt',
+      },
+    ]);
+  });
+
   it('honors explicit column chart wording for sparse multi-year comparisons', async () => {
     setNormalizeQueryDependenciesForTesting({
       now: () => new Date('2026-03-20T12:00:00.000Z'),
@@ -753,6 +783,45 @@ describe('normalizeInsightQuery', () => {
     expect(result.query.valueType).toBe(ChartDataValueTypes.Maximum);
   });
 
+  it('supports natural jump event prompts with explicit "when did I have" wording', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-19T12:00:00.000Z'),
+    });
+
+    const longestResult = await normalizeInsightQuery({
+      prompt: 'When did I have my longest jump?',
+      clientTimezone: 'UTC',
+    });
+    expect(longestResult.status).toBe('ok');
+    if (longestResult.status === 'ok') {
+      expect(longestResult.metricKey).toBe('jump_distance');
+      expect(longestResult.query.resultKind).toBe('event_lookup');
+      expect(longestResult.query.dataType).toBe(DataJumpDistanceMax.type);
+    }
+
+    const highestResult = await normalizeInsightQuery({
+      prompt: 'When did I have my highest jump?',
+      clientTimezone: 'UTC',
+    });
+    expect(highestResult.status).toBe('ok');
+    if (highestResult.status === 'ok') {
+      expect(highestResult.metricKey).toBe('jump_height');
+      expect(highestResult.query.resultKind).toBe('event_lookup');
+      expect(highestResult.query.dataType).toBe(DataJumpHeightMax.type);
+    }
+
+    const biggestResult = await normalizeInsightQuery({
+      prompt: 'When did I have my biggest jump?',
+      clientTimezone: 'UTC',
+    });
+    expect(biggestResult.status).toBe('ok');
+    if (biggestResult.status === 'ok') {
+      expect(biggestResult.metricKey).toBe('jump_height');
+      expect(biggestResult.query.resultKind).toBe('event_lookup');
+      expect(biggestResult.query.dataType).toBe(DataJumpHeightMax.type);
+    }
+  });
+
   it('maps biggest hang-time prompts to jump-hang-time event lookup by default', async () => {
     setNormalizeQueryDependenciesForTesting({
       now: () => new Date('2026-03-19T12:00:00.000Z'),
@@ -863,6 +932,28 @@ describe('normalizeInsightQuery', () => {
     }
   });
 
+  it('resolves exact natural latest run and swim prompts to activity aliases', async () => {
+    const latestRunResult = await normalizeInsightQuery({
+      prompt: 'When was my last run?',
+      clientTimezone: 'UTC',
+    });
+    expect(latestRunResult.status).toBe('ok');
+    if (latestRunResult.status === 'ok') {
+      expect(latestRunResult.query.resultKind).toBe('latest_event');
+      expect(latestRunResult.query.activityTypes).toEqual([ActivityTypes.Running]);
+    }
+
+    const latestSwimResult = await normalizeInsightQuery({
+      prompt: 'When was my last swim?',
+      clientTimezone: 'UTC',
+    });
+    expect(latestSwimResult.status).toBe('ok');
+    if (latestSwimResult.status === 'ok') {
+      expect(latestSwimResult.query.resultKind).toBe('latest_event');
+      expect(latestSwimResult.query.activityTypes).toEqual([ActivityTypes.Swimming]);
+    }
+  });
+
   it('keeps latest metric prompts in metric mode instead of latest_event mode', async () => {
     const result = await normalizeInsightQuery({
       prompt: 'latest average cadence',
@@ -912,6 +1003,38 @@ describe('normalizeInsightQuery', () => {
 
     expect(result.query.resultKind).toBe('multi_metric_aggregate');
     if (result.query.resultKind !== 'multi_metric_aggregate') {
+      return;
+    }
+
+    expect(result.query.groupingMode).toBe('date');
+    expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Monthly);
+    expect(result.query.activityTypes).toEqual([ActivityTypes.Cycling]);
+    expect(result.query.metricSelections).toEqual([
+      {
+        metricKey: 'cadence',
+        dataType: DataCadenceAvg.type,
+        valueType: ChartDataValueTypes.Average,
+      },
+      {
+        metricKey: 'power',
+        dataType: DataPowerAvg.type,
+        valueType: ChartDataValueTypes.Average,
+      },
+    ]);
+  });
+
+  it('resolves natural cadence and power prompts to multi-metric over-time mode', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-19T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show my cadence and power over the last 3 months for cycling.',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok' || result.query.resultKind !== 'multi_metric_aggregate') {
       return;
     }
 
@@ -1199,6 +1322,33 @@ describe('normalizeInsightQuery', () => {
     });
   });
 
+  it('normalizes natural distance-by-sport prompts to activity aggregates', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show my distance by sport this year.',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('distance');
+    expect(result.query.categoryType).toBe(ChartDataCategoryTypes.ActivityType);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Total);
+    expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
+      startDate: '2026-01-01T00:00:00.000Z',
+      endDate: '2026-03-18T23:59:59.999Z',
+      timezone: 'UTC',
+      source: 'prompt',
+    });
+  });
+
   it('infers weekly buckets for date-based prompts over the last 90 days', async () => {
     setNormalizeQueryDependenciesForTesting({
       now: () => new Date('2026-03-18T12:00:00.000Z'),
@@ -1226,6 +1376,52 @@ describe('normalizeInsightQuery', () => {
       return;
     }
 
+    expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Weekly);
+  });
+
+  it('normalizes natural running heart rate over-time prompts', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show my running heart rate over time in the last 90 days.',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('heart_rate');
+    expect(result.query.resultKind).toBe('aggregate');
+    expect(result.query.dataType).toBe(DataHeartRateAvg.type);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Average);
+    expect(result.query.activityTypes).toEqual([ActivityTypes.Running]);
+    expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Weekly);
+  });
+
+  it('normalizes natural cycling power over-time prompts', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show my cycling power over time in the last 90 days.',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('power');
+    expect(result.query.resultKind).toBe('aggregate');
+    expect(result.query.dataType).toBe(DataPowerAvg.type);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Average);
+    expect(result.query.activityTypes).toEqual([ActivityTypes.Cycling]);
     expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Weekly);
   });
 
@@ -1523,6 +1719,40 @@ describe('normalizeInsightQuery', () => {
     expect(result.metricKey).toBe('duration');
     expect(result.query.dataType).toBe(DataDuration.type);
     expect(result.query.valueType).toBe(ChartDataValueTypes.Total);
+    expect(result.query.activityTypes).toEqual([]);
+    expect(result.query.activityTypes).not.toContain(ActivityTypes.Training);
+  });
+
+  it('normalizes natural training-time prompts to duration without a Training activity filter', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'duration',
+        aggregation: 'total',
+        category: 'date',
+        requestedTimeInterval: 'auto',
+        dateRange: {
+          kind: 'current_period',
+          unit: 'year',
+        },
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show my training time over time this year.',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('duration');
+    expect(result.query.dataType).toBe(DataDuration.type);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Total);
+    expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Monthly);
     expect(result.query.activityTypes).toEqual([]);
     expect(result.query.activityTypes).not.toContain(ActivityTypes.Training);
   });

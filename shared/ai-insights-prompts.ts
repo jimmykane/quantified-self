@@ -12,6 +12,12 @@ export type AiInsightsPromptCategory =
   | 'Advanced Examples'
   | 'Suggested next prompts';
 
+export type AiInsightsPopularPromptCategory =
+  | 'Recent activity'
+  | 'Progress over time'
+  | 'Compare & explore'
+  | 'Best efforts';
+
 export type AiInsightsPromptMetricKey =
   | 'distance'
   | 'duration'
@@ -46,15 +52,20 @@ export type AiInsightsPromptMetricKey =
 export interface AiInsightsPromptDefinition {
   id: string;
   prompt: string;
-  category: AiInsightsPromptCategory;
+  category: AiInsightsPromptCategory | AiInsightsPopularPromptCategory;
   featured: boolean;
   surfaces: readonly AiInsightsPromptSurface[];
   metricKey?: AiInsightsPromptMetricKey;
 }
 
 export interface AiInsightsPromptGroup {
-  category: AiInsightsPromptCategory;
+  category: AiInsightsPromptDefinition['category'];
   prompts: readonly AiInsightsPromptDefinition[];
+}
+
+export interface AiInsightsPromptSection {
+  title: 'Popular Ways To Ask' | 'Browse By Metric' | 'Suggested Prompts';
+  groups: readonly AiInsightsPromptGroup[];
 }
 
 const AI_INSIGHTS_PROMPT_CATEGORY_ORDER: readonly AiInsightsPromptCategory[] = [
@@ -65,6 +76,13 @@ const AI_INSIGHTS_PROMPT_CATEGORY_ORDER: readonly AiInsightsPromptCategory[] = [
   'Recovery & Performance',
   'Advanced Examples',
   'Suggested next prompts',
+] as const;
+
+const AI_INSIGHTS_POPULAR_PROMPT_CATEGORY_ORDER: readonly AiInsightsPopularPromptCategory[] = [
+  'Recent activity',
+  'Progress over time',
+  'Compare & explore',
+  'Best efforts',
 ] as const;
 
 export const AI_INSIGHTS_PROMPT_CATALOG = [
@@ -394,6 +412,101 @@ export const AI_INSIGHTS_PROMPT_CATALOG = [
   },
 ] as const satisfies readonly AiInsightsPromptDefinition[];
 
+export const AI_INSIGHTS_CURATED_PROMPT_CATALOG = [
+  {
+    id: 'popular-last-ride',
+    prompt: 'When was my last ride?',
+    category: 'Recent activity',
+    featured: true,
+    surfaces: ['hero', 'picker'],
+  },
+  {
+    id: 'popular-last-run',
+    prompt: 'When was my last run?',
+    category: 'Recent activity',
+    featured: false,
+    surfaces: ['picker'],
+  },
+  {
+    id: 'popular-last-swim',
+    prompt: 'When was my last swim?',
+    category: 'Recent activity',
+    featured: false,
+    surfaces: ['picker'],
+  },
+  {
+    id: 'popular-training-time-this-year',
+    prompt: 'Show my training time over time this year.',
+    category: 'Progress over time',
+    featured: true,
+    surfaces: ['hero', 'picker'],
+    metricKey: 'duration',
+  },
+  {
+    id: 'popular-distance-by-sport-this-year',
+    prompt: 'Show my distance by sport this year.',
+    category: 'Progress over time',
+    featured: false,
+    surfaces: ['picker'],
+    metricKey: 'distance',
+  },
+  {
+    id: 'popular-running-heart-rate-90-days',
+    prompt: 'Show my running heart rate over time in the last 90 days.',
+    category: 'Progress over time',
+    featured: true,
+    surfaces: ['hero', 'picker'],
+    metricKey: 'heart_rate',
+  },
+  {
+    id: 'popular-cycling-power-90-days',
+    prompt: 'Show my cycling power over time in the last 90 days.',
+    category: 'Progress over time',
+    featured: true,
+    surfaces: ['hero', 'picker'],
+    metricKey: 'power',
+  },
+  {
+    id: 'popular-cadence-power-cycling-3-months',
+    prompt: 'Show my cadence and power over the last 3 months for cycling.',
+    category: 'Compare & explore',
+    featured: false,
+    surfaces: ['picker'],
+  },
+  {
+    id: 'popular-compare-heart-rate-2024-vs-2025',
+    prompt: 'Compare my max heart rate in 2024 vs 2025.',
+    category: 'Compare & explore',
+    featured: false,
+    surfaces: ['picker'],
+    metricKey: 'heart_rate',
+  },
+  {
+    id: 'popular-longest-jump-event',
+    prompt: 'When did I have my longest jump?',
+    category: 'Best efforts',
+    featured: false,
+    surfaces: ['picker'],
+    metricKey: 'jump_distance',
+  },
+  {
+    id: 'popular-highest-jump-event',
+    prompt: 'When did I have my highest jump?',
+    category: 'Best efforts',
+    featured: false,
+    surfaces: ['picker'],
+    metricKey: 'jump_height',
+  },
+  {
+    id: 'popular-biggest-jump-event',
+    prompt: 'When did I have my biggest jump?',
+    category: 'Best efforts',
+    featured: false,
+    surfaces: ['picker'],
+    metricKey: 'jump_height',
+  },
+] as const satisfies readonly AiInsightsPromptDefinition[];
+
 function hasSurface(
   prompt: AiInsightsPromptDefinition,
   surface: AiInsightsPromptSurface,
@@ -403,9 +516,10 @@ function hasSurface(
 
 function groupPromptEntries(
   promptEntries: readonly AiInsightsPromptDefinition[],
+  categoryOrder: readonly AiInsightsPromptDefinition['category'][],
 ): readonly AiInsightsPromptGroup[] {
-  return AI_INSIGHTS_PROMPT_CATEGORY_ORDER
-    .map((category) => ({
+  return categoryOrder
+    .map((category): AiInsightsPromptGroup => ({
       category,
       prompts: promptEntries.filter((entry) => entry.category === category),
     }))
@@ -419,20 +533,61 @@ export function getAiInsightsPromptEntriesBySurface(
 }
 
 export function getAiInsightsHeroPrompts(): readonly string[] {
-  return AI_INSIGHTS_PROMPT_CATALOG
+  return AI_INSIGHTS_CURATED_PROMPT_CATALOG
     .filter((prompt) => prompt.featured && hasSurface(prompt, 'hero'))
     .map((prompt) => prompt.prompt);
 }
 
 export function getAiInsightsPickerPromptGroups(): readonly AiInsightsPromptGroup[] {
-  return groupPromptEntries(getAiInsightsPromptEntriesBySurface('picker'));
+  const curatedPromptSet = new Set<string>(
+    AI_INSIGHTS_CURATED_PROMPT_CATALOG
+      .filter((prompt) => hasSurface(prompt, 'picker'))
+      .map((prompt) => prompt.prompt),
+  );
+  return groupPromptEntries(
+    getAiInsightsPromptEntriesBySurface('picker')
+      .filter((prompt) => !curatedPromptSet.has(prompt.prompt)),
+    AI_INSIGHTS_PROMPT_CATEGORY_ORDER,
+  );
+}
+
+export function getAiInsightsPopularPromptGroups(): readonly AiInsightsPromptGroup[] {
+  return groupPromptEntries(
+    AI_INSIGHTS_CURATED_PROMPT_CATALOG.filter((prompt) => hasSurface(prompt, 'picker')),
+    AI_INSIGHTS_POPULAR_PROMPT_CATEGORY_ORDER,
+  );
+}
+
+export function getAiInsightsDefaultPickerPromptSections(): readonly AiInsightsPromptSection[] {
+  const sections: AiInsightsPromptSection[] = [];
+  const popularGroups = getAiInsightsPopularPromptGroups();
+  const metricGroups = getAiInsightsPickerPromptGroups();
+
+  if (popularGroups.length > 0) {
+    sections.push({
+      title: 'Popular Ways To Ask',
+      groups: popularGroups,
+    });
+  }
+
+  if (metricGroups.length > 0) {
+    sections.push({
+      title: 'Browse By Metric',
+      groups: metricGroups,
+    });
+  }
+
+  return sections;
 }
 
 export function getAiInsightsPromptGroupsForPrompts(
   prompts: readonly string[],
 ): readonly AiInsightsPromptGroup[] {
   const promptLookup = new Map<string, AiInsightsPromptDefinition>(
-    AI_INSIGHTS_PROMPT_CATALOG.map((prompt) => [prompt.prompt, prompt] as const),
+    [
+      ...AI_INSIGHTS_CURATED_PROMPT_CATALOG,
+      ...AI_INSIGHTS_PROMPT_CATALOG,
+    ].map((prompt) => [prompt.prompt, prompt] as const),
   );
   const seenPrompts = new Set<string>();
   const resolvedPrompts: AiInsightsPromptDefinition[] = [];
@@ -453,14 +608,32 @@ export function getAiInsightsPromptGroupsForPrompts(
     });
   }
 
-  return groupPromptEntries(resolvedPrompts);
+  return [
+    {
+      category: 'Suggested next prompts',
+      prompts: resolvedPrompts,
+    },
+  ];
+}
+
+export function getAiInsightsPromptSectionsForPrompts(
+  prompts: readonly string[],
+): readonly AiInsightsPromptSection[] {
+  const groups = getAiInsightsPromptGroupsForPrompts(prompts);
+  return groups.length
+    ? [{
+      title: 'Suggested Prompts',
+      groups,
+    }]
+    : [];
 }
 
 export function getAiInsightsDefaultMetricPrompt(
   metricKey: AiInsightsPromptMetricKey,
 ): string {
   const prompt = AI_INSIGHTS_PROMPT_CATALOG.find((entry) => (
-    entry.metricKey === metricKey
+    'metricKey' in entry
+    && entry.metricKey === metricKey
     && hasSurface(entry, 'unsupported')
   ))?.prompt;
 

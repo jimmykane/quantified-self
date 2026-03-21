@@ -21,24 +21,33 @@
 
   @if (hasFilteredPrompts()) {
     <div class="prompt-picker-dialog__groups">
-      @for (group of filteredPromptGroups(); track group.category; let isLast = $last) {
-        <section class="prompt-picker-dialog__group">
-          <h3 class="mat-subheader prompt-picker-dialog__group-title">{{ group.category }}</h3>
+      @for (section of filteredPromptSections(); track section.title; let sectionIsLast = $last) {
+        <section class="prompt-picker-dialog__section">
+          <h3 class="mat-title-small prompt-picker-dialog__section-title">{{ section.title }}</h3>
+          @for (group of section.groups; track group.category; let groupIsLast = $last) {
+            <section class="prompt-picker-dialog__group">
+              <h4 class="mat-subheader prompt-picker-dialog__group-title">{{ group.category }}</h4>
 
-          <div class="prompt-picker-dialog__list" role="list">
-            @for (prompt of group.prompts; track prompt.id) {
-              <button
-                mat-button
-                type="button"
-                class="prompt-picker-dialog__item qs-glass-card-panel"
-                (click)="selectPrompt(prompt.prompt)">
-                <span class="prompt-picker-dialog__item-copy">{{ prompt.prompt }}</span>
-                <mat-icon class="prompt-picker-dialog__item-icon" aria-hidden="true">arrow_forward</mat-icon>
-              </button>
-            }
-          </div>
+              <div class="prompt-picker-dialog__list" role="list">
+                @for (prompt of group.prompts; track prompt.id) {
+                  <button
+                    mat-button
+                    type="button"
+                    class="prompt-picker-dialog__item qs-glass-card-panel"
+                    (click)="selectPrompt(prompt.prompt)">
+                    <span class="prompt-picker-dialog__item-copy">{{ prompt.prompt }}</span>
+                    <mat-icon class="prompt-picker-dialog__item-icon" aria-hidden="true">arrow_forward</mat-icon>
+                  </button>
+                }
+              </div>
 
-          @if (!isLast) {
+              @if (!groupIsLast) {
+                <mat-divider></mat-divider>
+              }
+            </section>
+          }
+
+          @if (!sectionIsLast) {
             <mat-divider></mat-divider>
           }
         </section>

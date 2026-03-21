@@ -70,8 +70,9 @@ import {
 import {
   AI_INSIGHTS_DEFAULT_PICKER_PROMPTS,
   AI_INSIGHTS_FEATURED_PROMPTS,
-  resolveAiInsightsPromptGroups,
+  resolveAiInsightsPromptSections,
   type AiInsightsPromptGroup,
+  type AiInsightsPromptSection,
 } from './ai-insights.prompts';
 
 const HERO_PROMPT_TYPING_DELAY_MS = 38;
@@ -351,12 +352,19 @@ export class AiInsightsPageComponent {
     const unsupportedResponse = this.unsupportedResponse();
     return unsupportedResponse?.suggestedPrompts?.length ? 'unsupported' : 'default';
   });
-  readonly pickerPromptGroups = computed<readonly AiInsightsPromptGroup[]>(() => {
+  readonly pickerPromptSections = computed<readonly AiInsightsPromptSection[]>(() => {
     const unsupportedResponse = this.unsupportedResponse();
-    return resolveAiInsightsPromptGroups(unsupportedResponse?.suggestedPrompts);
+    return resolveAiInsightsPromptSections(unsupportedResponse?.suggestedPrompts);
+  });
+  readonly pickerPromptGroups = computed<readonly AiInsightsPromptGroup[]>(() => {
+    return this.pickerPromptSections().flatMap((section) => section.groups);
   });
   readonly pickerPrompts = computed(() => (
-    this.pickerPromptGroups().flatMap((group) => group.prompts.map((prompt) => prompt.prompt))
+    Array.from(new Set(
+      this.pickerPromptSections().flatMap((section) => (
+        section.groups.flatMap((group) => group.prompts.map((prompt) => prompt.prompt))
+      )),
+    ))
   ));
   readonly promptPickerTitle = computed(() => (
     this.pickerPromptSource() === 'unsupported'
@@ -824,7 +832,7 @@ export class AiInsightsPageComponent {
       maxWidth: '44rem',
       width: 'calc(100vw - 32px)',
       data: {
-        promptGroups: this.pickerPromptGroups(),
+        promptSections: this.pickerPromptSections(),
         promptSource,
       },
     });
