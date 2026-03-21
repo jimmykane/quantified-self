@@ -206,6 +206,15 @@ const eventLookupQuery = {
   chartType: ChartTypes.LinesVertical,
 };
 
+const latestEventQuery = {
+  resultKind: 'latest_event' as const,
+  categoryType: ChartDataCategoryTypes.DateType,
+  activityTypeGroups: [],
+  activityTypes: [ActivityTypes.Cycling],
+  dateRange: normalizedQuery.dateRange,
+  chartType: ChartTypes.LinesVertical,
+};
+
 const jumpEventLookupQuery = {
   ...eventLookupQuery,
   dataType: DataJumpDistanceMax.type,
@@ -814,6 +823,80 @@ describe('aiInsights callable', () => {
         chartType: ChartTypes.LinesVertical,
       }),
     });
+  });
+
+  it('returns a latest_event response with one event payload for latest prompts', async () => {
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'ok',
+      query: latestEventQuery,
+    });
+    hoisted.executeAiInsightsQuery.mockResolvedValue({
+      resultKind: 'latest_event',
+      matchedEventsCount: 4,
+      matchedActivityTypeCounts: [
+        {
+          activityType: ActivityTypes.Cycling,
+          eventCount: 4,
+        },
+      ],
+      latestEvent: {
+        eventId: 'event-9',
+        startDate: '2026-03-18T08:00:00.000Z',
+      },
+    });
+
+    const result = await aiInsights({
+      prompt: 'When was my last ride?',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(hoisted.summarizeAiInsightResult).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      status: 'ok',
+      resultKind: 'latest_event',
+      narrative: 'Your latest cycling event was on Mar 18, 2026. I matched 4 events.',
+      quota: quotaStatus,
+      query: latestEventQuery,
+      latestEvent: {
+        eventId: 'event-9',
+        startDate: '2026-03-18T08:00:00.000Z',
+        matchedEventCount: 4,
+      },
+      presentation: expect.objectContaining({
+        title: 'Latest event for Cycling',
+        chartType: ChartTypes.LinesVertical,
+      }),
+    });
+  });
+
+  it('returns empty for latest_event prompts when no event matches', async () => {
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'ok',
+      query: latestEventQuery,
+    });
+    hoisted.executeAiInsightsQuery.mockResolvedValue({
+      resultKind: 'latest_event',
+      matchedEventsCount: 0,
+      matchedActivityTypeCounts: [],
+      latestEvent: {
+        eventId: null,
+        startDate: null,
+      },
+    });
+
+    const result = await aiInsights({
+      prompt: 'When was my last ride?',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(result).toEqual(expect.objectContaining({
+      status: 'empty',
+      query: latestEventQuery,
+      narrative: 'I found no matching cycling events in this range.',
+      presentation: expect.objectContaining({
+        emptyState: expect.any(String),
+      }),
+    }));
   });
 
   it('returns an event lookup response for longest-jump prompts', async () => {

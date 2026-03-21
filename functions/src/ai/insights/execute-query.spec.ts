@@ -126,6 +126,24 @@ function createMultiMetricQuery(): Extract<NormalizedInsightQuery, { resultKind:
   };
 }
 
+function createLatestEventQuery(): Extract<NormalizedInsightQuery, { resultKind: 'latest_event' }> {
+  return {
+    resultKind: 'latest_event',
+    categoryType: ChartDataCategoryTypes.DateType,
+    requestedTimeInterval: TimeIntervals.Daily,
+    activityTypeGroups: [],
+    activityTypes: [ActivityTypes.Cycling],
+    dateRange: {
+      kind: 'bounded',
+      startDate: '2026-01-01T00:00:00.000Z',
+      endDate: '2026-03-31T23:59:59.999Z',
+      timezone: 'UTC',
+      source: 'prompt',
+    },
+    chartType: ChartTypes.LinesVertical,
+  };
+}
+
 describe('execute-query', () => {
   afterEach(() => {
     setExecuteQueryDependenciesForTesting();
@@ -277,6 +295,120 @@ describe('execute-query', () => {
     expect(result.matchedEventsCount).toBe(1);
     expect(result.aggregation.buckets).toHaveLength(1);
     expect(result.aggregation.buckets[0]?.aggregateValue).toBe(40);
+  });
+
+  it('returns the newest matching event for latest_event queries', async () => {
+    const fetchEventDocs = vi.fn(async () => [
+      { id: 'e1', data: () => ({ startDate: new Date('2026-01-10T12:00:00.000Z') }) },
+      { id: 'e2', data: () => ({ startDate: new Date('2026-02-11T12:00:00.000Z') }) },
+      { id: 'e3', data: () => ({ startDate: new Date('2026-03-12T12:00:00.000Z') }) },
+    ]);
+    const importEvent = vi
+      .fn()
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'e1',
+        startDate: new Date('2026-01-10T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: {},
+      }))
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'e2',
+        startDate: new Date('2026-02-11T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: {},
+      }))
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'e3',
+        startDate: new Date('2026-03-12T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: {},
+      }));
+
+    setExecuteQueryDependenciesForTesting({
+      fetchEventDocs,
+      fetchDebugEventSnapshot: vi.fn(async () => ({
+        totalEventsCount: 3,
+        recentEventsSample: [],
+      })),
+      importEvent,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+    });
+
+    const result = await executeAiInsightsQuery('user-1', createLatestEventQuery(), 'when was my last ride');
+
+    expect(result.resultKind).toBe('latest_event');
+    if (result.resultKind !== 'latest_event') {
+      return;
+    }
+
+    expect(result.matchedEventsCount).toBe(3);
+    expect(result.latestEvent.eventId).toBe('e3');
+    expect(result.latestEvent.startDate).toBe('2026-03-12T12:00:00.000Z');
+  });
+
+  it('uses event id as deterministic tiebreaker for latest_event queries', async () => {
+    const fetchEventDocs = vi.fn(async () => [
+      { id: 'e2', data: () => ({ startDate: new Date('2026-03-12T12:00:00.000Z') }) },
+      { id: 'e1', data: () => ({ startDate: new Date('2026-03-12T12:00:00.000Z') }) },
+    ]);
+    const importEvent = vi
+      .fn()
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'e2',
+        startDate: new Date('2026-03-12T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: {},
+      }))
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'e1',
+        startDate: new Date('2026-03-12T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: {},
+      }));
+
+    setExecuteQueryDependenciesForTesting({
+      fetchEventDocs,
+      fetchDebugEventSnapshot: vi.fn(async () => ({
+        totalEventsCount: 2,
+        recentEventsSample: [],
+      })),
+      importEvent,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+    });
+
+    const result = await executeAiInsightsQuery('user-1', createLatestEventQuery(), 'latest ride');
+    expect(result.resultKind).toBe('latest_event');
+    if (result.resultKind !== 'latest_event') {
+      return;
+    }
+
+    expect(result.latestEvent.eventId).toBe('e1');
+    expect(result.latestEvent.startDate).toBe('2026-03-12T12:00:00.000Z');
+  });
+
+  it('returns null latest event when no events match latest_event filters', async () => {
+    const fetchEventDocs = vi.fn(async () => []);
+    const importEvent = vi.fn();
+
+    setExecuteQueryDependenciesForTesting({
+      fetchEventDocs,
+      fetchDebugEventSnapshot: vi.fn(async () => ({
+        totalEventsCount: 0,
+        recentEventsSample: [],
+      })),
+      importEvent,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+    });
+
+    const result = await executeAiInsightsQuery('user-1', createLatestEventQuery(), 'latest ride');
+    expect(result.resultKind).toBe('latest_event');
+    if (result.resultKind !== 'latest_event') {
+      return;
+    }
+
+    expect(result.matchedEventsCount).toBe(0);
+    expect(result.latestEvent.eventId).toBeNull();
+    expect(result.latestEvent.startDate).toBeNull();
   });
 
   it('scopes dependency overrides and restores previous test dependencies', async () => {

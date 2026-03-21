@@ -9,10 +9,12 @@ import {
 } from '@sports-alliance/sports-lib';
 import type {
   AiInsightEventLookup,
+  AiInsightLatestEvent,
   AiInsightsMultiMetricAggregateMetricResult,
   AiInsightsQuotaStatus,
   AiInsightSummary,
   NormalizedInsightQuery,
+  NormalizedInsightLatestEventQuery,
 } from '../../../../shared/ai-insights.types';
 import type { AiInsightsPromptMetricKey } from '../../../../shared/ai-insights-prompts';
 import { CANONICAL_ACTIVITY_TYPES } from './canonical-activity-types';
@@ -83,6 +85,10 @@ export const NormalizedInsightQuerySchema: z.ZodType<NormalizedInsightQuery> = z
     categoryType: z.literal(ChartDataCategoryTypes.DateType),
   }),
   NormalizedInsightQueryBaseSchema.extend({
+    resultKind: z.literal('latest_event'),
+    categoryType: z.literal(ChartDataCategoryTypes.DateType),
+  }),
+  NormalizedInsightQueryBaseSchema.extend({
     resultKind: z.literal('multi_metric_aggregate'),
     groupingMode: z.enum(['overall', 'date']),
     categoryType: z.literal(ChartDataCategoryTypes.DateType),
@@ -108,6 +114,11 @@ export const NormalizedInsightMultiMetricAggregateQuerySchema = NormalizedInsigh
   groupingMode: z.enum(['overall', 'date']),
   categoryType: z.literal(ChartDataCategoryTypes.DateType),
   metricSelections: z.array(NormalizedInsightMetricSelectionSchema).min(2).max(3),
+});
+
+export const NormalizedInsightLatestEventQuerySchema: z.ZodType<NormalizedInsightLatestEventQuery> = NormalizedInsightQueryBaseSchema.extend({
+  resultKind: z.literal('latest_event'),
+  categoryType: z.literal(ChartDataCategoryTypes.DateType),
 });
 
 const BucketKeySchema: z.ZodType<string | number> = z.custom<string | number>(
@@ -197,6 +208,12 @@ export const AiInsightEventLookupSchema: z.ZodType<AiInsightEventLookup> = z.obj
   matchedEventCount: z.number().int().nonnegative(),
 });
 
+export const AiInsightLatestEventSchema: z.ZodType<AiInsightLatestEvent> = z.object({
+  eventId: z.string().min(1),
+  startDate: z.string().datetime(),
+  matchedEventCount: z.number().int().nonnegative(),
+});
+
 export const AiInsightsMultiMetricAggregateMetricResultSchema: z.ZodType<AiInsightsMultiMetricAggregateMetricResult> = z.object({
   metricKey: AiInsightsPromptMetricKeySchema,
   metricLabel: z.string().min(1),
@@ -222,12 +239,13 @@ const AiInsightsOkResponseBaseSchema = z.object({
 });
 
 const AiInsightsOkResponseSchema = AiInsightsOkResponseBaseSchema.extend({
-  resultKind: z.enum(['aggregate', 'event_lookup', 'multi_metric_aggregate']),
+  resultKind: z.enum(['aggregate', 'event_lookup', 'latest_event', 'multi_metric_aggregate']),
   query: NormalizedInsightQuerySchema,
   aggregation: EventStatAggregationResultSchema.optional(),
   summary: AiInsightSummarySchema.optional(),
   eventRanking: AiInsightEventLookupSchema.optional(),
   eventLookup: AiInsightEventLookupSchema.optional(),
+  latestEvent: AiInsightLatestEventSchema.optional(),
   metricResults: z.array(AiInsightsMultiMetricAggregateMetricResultSchema).min(1).max(3).optional(),
   presentation: AiInsightPresentationSchema,
 });

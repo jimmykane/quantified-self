@@ -36,6 +36,7 @@ export type NormalizedInsightDateRange =
 export type AiInsightsResultKind =
   | 'aggregate'
   | 'event_lookup'
+  | 'latest_event'
   | 'multi_metric_aggregate';
 
 export type AiInsightsMultiMetricGroupingMode =
@@ -71,6 +72,11 @@ export interface NormalizedInsightEventLookupQuery extends NormalizedInsightQuer
   categoryType: ChartDataCategoryTypes.DateType;
 }
 
+export interface NormalizedInsightLatestEventQuery extends NormalizedInsightQueryBase {
+  resultKind: 'latest_event';
+  categoryType: ChartDataCategoryTypes.DateType;
+}
+
 export interface NormalizedInsightMetricSelection {
   metricKey: AiInsightsPromptMetricKey;
   dataType: string;
@@ -87,6 +93,7 @@ export interface NormalizedInsightMultiMetricAggregateQuery extends NormalizedIn
 export type NormalizedInsightQuery =
   | NormalizedInsightAggregateQuery
   | NormalizedInsightEventLookupQuery
+  | NormalizedInsightLatestEventQuery
   | NormalizedInsightMultiMetricAggregateQuery;
 
 export type AiInsightsQuotaPeriodKind =
@@ -172,6 +179,12 @@ export interface AiInsightEventLookup {
   matchedEventCount: number;
 }
 
+export interface AiInsightLatestEvent {
+  eventId: string;
+  startDate: string;
+  matchedEventCount: number;
+}
+
 export type AiInsightsUnsupportedReasonCode =
   | 'invalid_prompt'
   | 'unsupported_metric'
@@ -204,6 +217,16 @@ export interface AiInsightsEventLookupOkResponse {
   presentation: AiInsightPresentation;
 }
 
+export interface AiInsightsLatestEventOkResponse {
+  status: 'ok';
+  resultKind: 'latest_event';
+  narrative: string;
+  quota?: AiInsightsQuotaStatus;
+  query: NormalizedInsightLatestEventQuery;
+  latestEvent: AiInsightLatestEvent;
+  presentation: AiInsightPresentation;
+}
+
 export interface AiInsightsMultiMetricAggregateMetricResult {
   metricKey: AiInsightsPromptMetricKey;
   metricLabel: string;
@@ -226,6 +249,7 @@ export interface AiInsightsMultiMetricAggregateOkResponse {
 export type AiInsightsOkResponse =
   | AiInsightsAggregateOkResponse
   | AiInsightsEventLookupOkResponse
+  | AiInsightsLatestEventOkResponse
   | AiInsightsMultiMetricAggregateOkResponse;
 
 export interface AiInsightsEmptyResponse {

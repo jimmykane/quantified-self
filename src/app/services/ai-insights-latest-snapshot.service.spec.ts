@@ -11,6 +11,7 @@ import {
 import type {
   AiInsightsLatestSnapshot,
   AiInsightsEventLookupOkResponse,
+  AiInsightsLatestEventOkResponse,
   AiInsightsMultiMetricAggregateOkResponse,
   AiInsightsOkResponse,
   AiInsightsQuotaStatus,
@@ -359,6 +360,38 @@ function buildMultiMetricResponse(): AiInsightsMultiMetricAggregateOkResponse {
   };
 }
 
+function buildLatestEventResponse(): AiInsightsLatestEventOkResponse {
+  return {
+    status: 'ok',
+    resultKind: 'latest_event',
+    narrative: 'Your latest cycling event was on Mar 18, 2026.',
+    query: {
+      resultKind: 'latest_event',
+      categoryType: ChartDataCategoryTypes.DateType,
+      requestedTimeInterval: TimeIntervals.Daily,
+      activityTypeGroups: [],
+      activityTypes: [ActivityTypes.Cycling],
+      dateRange: {
+        kind: 'bounded',
+        startDate: '2026-01-01T00:00:00.000Z',
+        endDate: '2026-03-18T23:59:59.999Z',
+        timezone: 'Europe/Helsinki',
+        source: 'default',
+      },
+      chartType: ChartTypes.LinesVertical,
+    },
+    latestEvent: {
+      eventId: 'event-9',
+      startDate: '2026-03-18T08:00:00.000Z',
+      matchedEventCount: 4,
+    },
+    presentation: {
+      title: 'Latest event for Cycling',
+      chartType: ChartTypes.LinesVertical,
+    },
+  };
+}
+
 function buildQuotaStatus(): AiInsightsQuotaStatus {
   return {
     role: 'pro',
@@ -695,6 +728,24 @@ describe('AiInsightsLatestSnapshotService', () => {
       savedAt: '2026-03-18T12:00:00.000Z',
       prompt: 'I want to know when I had my longest distance in cycling',
       response: buildEventLookupResponse(),
+    };
+    vi.mocked(getDoc).mockResolvedValue({
+      exists: () => true,
+      data: () => snapshot,
+    } as never);
+
+    const restored = await service.loadLatest('user-1');
+
+    expect(restored).toEqual(snapshot);
+    expect(deleteDoc).not.toHaveBeenCalled();
+  });
+
+  it('should restore latest-event snapshots without clearing them', async () => {
+    const snapshot: AiInsightsLatestSnapshot = {
+      version: 1,
+      savedAt: '2026-03-18T12:00:00.000Z',
+      prompt: 'When was my last ride?',
+      response: buildLatestEventResponse(),
     };
     vi.mocked(getDoc).mockResolvedValue({
       exists: () => true,

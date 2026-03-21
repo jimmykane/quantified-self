@@ -10,6 +10,7 @@ import type {
   AiInsightsAggregateOkResponse,
   AiInsightsEmptyResponse,
   AiInsightsEventLookupOkResponse,
+  AiInsightsLatestEventOkResponse,
   AiInsightsMultiMetricAggregateOkResponse,
 } from '@shared/ai-insights.types';
 import { resolveAiInsightsDisplayTitle } from './ai-insights-title.helper';
@@ -146,6 +147,41 @@ describe('resolveAiInsightsDisplayTitle', () => {
 
     const title = resolveAiInsightsDisplayTitle(response);
     expect(title).toBe('Top distance events for cycling');
+  });
+
+  it('builds a latest-event title', () => {
+    const response: AiInsightsLatestEventOkResponse = {
+      status: 'ok',
+      resultKind: 'latest_event',
+      narrative: 'Narrative',
+      query: {
+        resultKind: 'latest_event',
+        categoryType: ChartDataCategoryTypes.DateType,
+        requestedTimeInterval: TimeIntervals.Monthly,
+        activityTypeGroups: [],
+        activityTypes: [ActivityTypes.Cycling],
+        dateRange: {
+          kind: 'bounded',
+          startDate: '2025-12-01',
+          endDate: '2026-03-01',
+          timezone: 'Europe/Helsinki',
+          source: 'prompt',
+        },
+        chartType: ChartTypes.LinesVertical,
+      },
+      latestEvent: {
+        eventId: 'event-1',
+        startDate: '2026-03-10T08:00:00.000Z',
+        matchedEventCount: 1,
+      },
+      presentation: {
+        title: 'Backend title',
+        chartType: ChartTypes.LinesVertical,
+      },
+    };
+
+    const title = resolveAiInsightsDisplayTitle(response);
+    expect(title).toBe('Latest event for cycling');
   });
 
   it('returns null when metric labels cannot be resolved for multi-metric empty responses', () => {

@@ -8,6 +8,7 @@ import {
 } from '@angular/fire/firestore';
 import type {
   AiInsightEventLookup,
+  AiInsightLatestEvent,
   AiInsightPresentation,
   AiInsightSummary,
   AiInsightSummaryActivityMix,
@@ -16,6 +17,7 @@ import type {
   AiInsightSummaryTrend,
   AiInsightsAggregateOkResponse,
   AiInsightsEventLookupOkResponse,
+  AiInsightsLatestEventOkResponse,
   AiInsightsLatestSnapshot,
   AiInsightsMultiMetricAggregateMetricResult,
   AiInsightsMultiMetricAggregateOkResponse,
@@ -54,6 +56,7 @@ type UnknownRecord = Record<string, unknown>;
 type NormalizedInsightQueryLike = UnknownRecord;
 type AggregateNormalizedInsightQuery = Extract<NormalizedInsightQuery, { resultKind: 'aggregate' }>;
 type EventLookupNormalizedInsightQuery = Extract<NormalizedInsightQuery, { resultKind: 'event_lookup' }>;
+type LatestEventNormalizedInsightQuery = Extract<NormalizedInsightQuery, { resultKind: 'latest_event' }>;
 type MultiMetricNormalizedInsightQuery = Extract<NormalizedInsightQuery, { resultKind: 'multi_metric_aggregate' }>;
 const KNOWN_CHART_DATA_CATEGORY_TYPES = buildEnumValueSet(ChartDataCategoryTypes);
 const KNOWN_CHART_DATA_VALUE_TYPES = buildEnumValueSet(ChartDataValueTypes);
@@ -215,6 +218,20 @@ function normalizeAiInsightsResponse(response: AiInsightsResponse): AiInsightsRe
     };
   }
 
+  if (resultKind === 'latest_event') {
+    const normalizedResponse = response as AiInsightsLatestEventOkResponse & {
+      query: NormalizedInsightQueryLike;
+    };
+    return {
+      ...normalizedResponse,
+      resultKind: 'latest_event',
+      ...(normalizedResponse.quota ? { quota: normalizedResponse.quota } : {}),
+      query: normalizeLatestEventInsightQuery(normalizedResponse.query),
+      latestEvent: normalizeLatestEvent(normalizedResponse.latestEvent),
+      presentation: normalizePresentation(normalizedResponse.presentation),
+    };
+  }
+
   const normalizedResponse = response as AiInsightsAggregateOkResponse & {
     query: NormalizedInsightQueryLike;
   };
@@ -237,6 +254,8 @@ function normalizeInsightQuery(query: NormalizedInsightQueryLike): NormalizedIns
       return normalizeMultiMetricInsightQuery(query);
     case 'event_lookup':
       return normalizeEventLookupInsightQuery(query);
+    case 'latest_event':
+      return normalizeLatestEventInsightQuery(query);
     case 'aggregate':
       return normalizeAggregateInsightQuery(query);
     default:
@@ -269,6 +288,20 @@ function normalizeEventLookupInsightQuery(query: NormalizedInsightQueryLike): Ev
     resultKind: 'event_lookup',
     categoryType: ChartDataCategoryTypes.DateType,
     valueType: normalizeChartDataValueType(rest.valueType),
+    chartType: normalizeChartType(rest.chartType),
+    ...(requestedTimeInterval == null ? {} : { requestedTimeInterval: normalizeTimeInterval(requestedTimeInterval) }),
+  };
+}
+
+function normalizeLatestEventInsightQuery(query: NormalizedInsightQueryLike): LatestEventNormalizedInsightQuery {
+  const { requestedTimeInterval, resultKind, ...rest } = query as NormalizedInsightQueryLike & {
+    requestedTimeInterval?: unknown;
+    resultKind?: unknown;
+  };
+  return {
+    ...(rest as Omit<LatestEventNormalizedInsightQuery, 'resultKind' | 'requestedTimeInterval' | 'categoryType'>),
+    resultKind: 'latest_event',
+    categoryType: ChartDataCategoryTypes.DateType,
     chartType: normalizeChartType(rest.chartType),
     ...(requestedTimeInterval == null ? {} : { requestedTimeInterval: normalizeTimeInterval(requestedTimeInterval) }),
   };
@@ -318,6 +351,7 @@ function resolveNormalizedInsightQueryResultKind(
     && query.resultKind !== null
     && query.resultKind !== 'aggregate'
     && query.resultKind !== 'event_lookup'
+    && query.resultKind !== 'latest_event'
     && query.resultKind !== 'multi_metric_aggregate'
   ) {
     throw new Error(`[AiInsightsLatestSnapshotService] Unsupported result kind in normalized query: ${String(query.resultKind)}`);
@@ -325,6 +359,10 @@ function resolveNormalizedInsightQueryResultKind(
 
   if (query.resultKind === 'multi_metric_aggregate' || Array.isArray(query.metricSelections)) {
     return 'multi_metric_aggregate';
+  }
+
+  if (query.resultKind === 'latest_event') {
+    return 'latest_event';
   }
 
   return query.resultKind === 'event_lookup' ? 'event_lookup' : 'aggregate';
@@ -335,6 +373,14 @@ function normalizeEventLookup(eventLookup: AiInsightEventLookup): AiInsightEvent
     primaryEventId: eventLookup.primaryEventId,
     topEventIds: eventLookup.topEventIds.slice(0, 10),
     matchedEventCount: eventLookup.matchedEventCount,
+  };
+}
+
+function normalizeLatestEvent(latestEvent: AiInsightLatestEvent): AiInsightLatestEvent {
+  return {
+    eventId: latestEvent.eventId,
+    startDate: latestEvent.startDate,
+    matchedEventCount: latestEvent.matchedEventCount,
   };
 }
 

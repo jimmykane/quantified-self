@@ -3,9 +3,11 @@ import * as logger from 'firebase-functions/logger';
 import { z } from 'genkit';
 import type {
   AiInsightEventLookup,
+  AiInsightLatestEvent,
   AiInsightSummary,
   AiInsightsAggregateOkResponse,
   AiInsightsEventLookupOkResponse,
+  AiInsightsLatestEventOkResponse,
   AiInsightsMultiMetricAggregateMetricResult,
   AiInsightsMultiMetricAggregateOkResponse,
   AiInsightsQuotaStatusResponse,
@@ -13,9 +15,11 @@ import type {
   AiInsightsResponse,
   NormalizedInsightAggregateQuery,
   NormalizedInsightEventLookupQuery,
+  NormalizedInsightLatestEventQuery,
   NormalizedInsightMultiMetricAggregateQuery,
 } from '../../../../shared/ai-insights.types';
 import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
+import { resolveAiInsightsActivityFilterLabel } from '../../../../shared/ai-insights-activity-filter';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../../utils';
 import { aiInsightsGenkit } from './genkit';
 import { getInsightMetricDefinition } from './metric-catalog';
@@ -80,6 +84,35 @@ function buildPromptLogContext(
           : null,
       }),
   };
+}
+
+function buildLatestEventNarrative(params: {
+  query: NormalizedInsightLatestEventQuery;
+  latestEventStartDate: string | null;
+  matchedEventCount: number;
+  locale?: string;
+}): string {
+  const activityLabel = resolveAiInsightsActivityFilterLabel(params.query).toLowerCase();
+  const activityText = activityLabel === 'all activities'
+    ? 'activities'
+    : activityLabel;
+  const matchedNoun = params.matchedEventCount === 1 ? 'event' : 'events';
+
+  if (!params.latestEventStartDate) {
+    return `I found no matching ${activityText} events in this range.`;
+  }
+
+  const eventDate = new Date(params.latestEventStartDate);
+  const eventDateLabel = Number.isFinite(eventDate.getTime())
+    ? new Intl.DateTimeFormat(params.locale || 'en-US', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      timeZone: params.query.dateRange.timezone,
+    }).format(eventDate)
+    : params.latestEventStartDate;
+
+  return `Your latest ${activityText} event was on ${eventDateLabel}. I matched ${params.matchedEventCount} ${matchedNoun}.`;
 }
 
 function shouldUseCallableTokenForQuotaRoleContext(): boolean {
@@ -363,11 +396,16 @@ export async function runAiInsights(
   const effectiveQuery = normalizeResult.query;
   const aggregateQueryInput = effectiveQuery.resultKind === 'aggregate' ? effectiveQuery : null;
   const eventLookupQueryInput = effectiveQuery.resultKind === 'event_lookup' ? effectiveQuery : null;
+  const latestEventQueryInput = effectiveQuery.resultKind === 'latest_event' ? effectiveQuery : null;
   const multiMetricQueryInput = effectiveQuery.resultKind === 'multi_metric_aggregate' ? effectiveQuery : null;
   const metric = normalizeResult.metricKey
     ? getInsightMetricDefinition(normalizeResult.metricKey)
     : null;
-  if (effectiveQuery.resultKind !== 'multi_metric_aggregate' && !metric) {
+  if (
+    effectiveQuery.resultKind !== 'multi_metric_aggregate'
+    && effectiveQuery.resultKind !== 'latest_event'
+    && !metric
+  ) {
     logger.warn('[aiInsights] Unsupported metric key after normalization', {
       userID,
       ...buildPromptLogContext(prompt, effectivePrompt),
@@ -418,10 +456,16 @@ export async function runAiInsights(
     userID,
     ...buildPromptLogContext(prompt, effectivePrompt),
     normalizedQuery: {
-      dataType: effectiveQuery.resultKind === 'multi_metric_aggregate'
+      dataType: (
+        effectiveQuery.resultKind === 'multi_metric_aggregate'
+        || effectiveQuery.resultKind === 'latest_event'
+      )
         ? null
         : effectiveQuery.dataType,
-      valueType: effectiveQuery.resultKind === 'multi_metric_aggregate'
+      valueType: (
+        effectiveQuery.resultKind === 'multi_metric_aggregate'
+        || effectiveQuery.resultKind === 'latest_event'
+      )
         ? null
         : effectiveQuery.valueType,
       categoryType: effectiveQuery.categoryType,
@@ -431,6 +475,8 @@ export async function runAiInsights(
       activityTypeGroupsCount: effectiveQuery.activityTypeGroups.length,
       metricSelectionCount: effectiveQuery.resultKind === 'multi_metric_aggregate'
         ? effectiveQuery.metricSelections.length
+        : effectiveQuery.resultKind === 'latest_event'
+          ? 0
         : 1,
     },
   });
@@ -440,6 +486,8 @@ export async function runAiInsights(
     effectiveQuery,
     effectiveQuery.resultKind === 'multi_metric_aggregate'
       ? multiMetricDefinitions.map(entry => entry.metric.label)
+      : effectiveQuery.resultKind === 'latest_event'
+        ? 'latest event'
       : (metric as NonNullable<typeof metric>).label,
   );
   const emptyPresentation = {
@@ -458,6 +506,9 @@ export async function runAiInsights(
     : null;
   const eventLookupResult = executionResult.resultKind === 'event_lookup'
     ? executionResult.eventLookup
+    : null;
+  const latestEventResult = executionResult.resultKind === 'latest_event'
+    ? executionResult.latestEvent
     : null;
   const multiMetricResultGroups = executionResult.resultKind === 'multi_metric_aggregate'
     && multiMetricQueryInput
@@ -496,9 +547,14 @@ export async function runAiInsights(
     ? executionResult.aggregation.buckets.length === 0
     : executionResult.resultKind === 'event_lookup'
       ? !eventLookupResult?.primaryEventId
+      : executionResult.resultKind === 'latest_event'
+        ? !latestEventResult?.eventId
       : multiMetricResultGroups.every(metricResult => metricResult.aggregation.buckets.length === 0);
 
-  let narrativeResult: Awaited<ReturnType<typeof aiInsightsRuntime.summarizeAiInsightResult>>;
+  let narrativeResult: {
+    narrative: string;
+    source: 'genkit' | 'fallback';
+  };
   logger.info('[aiInsights] Starting AI insight summarization', {
     userID,
     ...buildPromptLogContext(prompt, effectivePrompt),
@@ -534,6 +590,16 @@ export async function runAiInsights(
       clientLocale: input.clientLocale,
       unitSettings,
     });
+  } else if (executionResult.resultKind === 'latest_event' && latestEventQueryInput) {
+    narrativeResult = {
+      narrative: buildLatestEventNarrative({
+        query: latestEventQueryInput,
+        latestEventStartDate: latestEventResult?.startDate ?? null,
+        matchedEventCount: executionResult.matchedEventsCount,
+        locale: input.clientLocale,
+      }),
+      source: 'fallback',
+    };
   } else if (executionResult.resultKind === 'multi_metric_aggregate' && multiMetricQueryInput) {
     narrativeResult = await aiInsightsRuntime.summarizeAiInsightResult({
       status: isEmpty ? 'empty' : 'ok',
@@ -597,6 +663,28 @@ export async function runAiInsights(
     } satisfies AiInsightsEventLookupOkResponse;
   }
 
+  if (executionResult.resultKind === 'latest_event') {
+    logger.info('[aiInsights] Terminal result', {
+      userID,
+      ...buildPromptLogContext(prompt, effectivePrompt),
+      resultCategory: 'ok',
+      resultKind: 'latest_event',
+    });
+    return {
+      status: 'ok',
+      resultKind: 'latest_event',
+      narrative: narrativeResult.narrative,
+      quota,
+      query: latestEventQueryInput as NormalizedInsightLatestEventQuery,
+      latestEvent: {
+        eventId: latestEventResult?.eventId as string,
+        startDate: latestEventResult?.startDate as string,
+        matchedEventCount: executionResult.matchedEventsCount,
+      } satisfies AiInsightLatestEvent,
+      presentation,
+    } satisfies AiInsightsLatestEventOkResponse;
+  }
+
   if (executionResult.resultKind === 'multi_metric_aggregate') {
     logger.info('[aiInsights] Terminal result', {
       userID,
@@ -642,14 +730,14 @@ export async function runAiInsights(
   } satisfies AiInsightsAggregateOkResponse;
   } catch (error) {
     if (quotaReservation) {
-      const reservationToRelease = quotaReservation;
+      const reservationToRelease = quotaReservation as NonNullable<typeof quotaReservation>;
       quotaReservation = null;
       try {
         await aiInsightsRuntime.releaseAiInsightsQuotaReservation(reservationToRelease);
       } catch (releaseError) {
         logger.error('[aiInsights] Failed to release quota reservation after request failure', {
           userID,
-          reservationID: reservationToRelease.reservationID,
+          reservationID: (reservationToRelease as { reservationID?: string }).reservationID ?? null,
           ...buildPromptLogContext(prompt),
           ...serializeErrorForLogging(releaseError),
         });

@@ -210,6 +210,10 @@ const EVENT_LOOKUP_SUBJECT_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
   /\b(when did i have|when i had|when was|which event|what workout|which workout|which session)\b/i,
   /\bi want to know when i had\b/i,
 ];
+const LATEST_EVENT_SUBJECT_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
+  /\b(when was my last|when did i last|my last|latest|most recent)\b/i,
+  /\b(last|latest|most recent)\s+(ride|rides|run|runs|swim|swims|workout|workouts|session|sessions|activity|activities|event|events)\b/i,
+];
 const EVENT_LOOKUP_RANKING_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
   /\b(longest|shortest|highest|lowest|fastest|slowest|biggest|farthest|furthest)\b/i,
   /\b(max|maximum|min|minimum|peak)\b/i,
@@ -218,6 +222,23 @@ const AGGREGATE_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
   /\b(over time|by month|by week|by day|by year|timeline|trend|chart)\b/i,
   /\b(by activity types?|activity type comparison|by sports?|by sport)\b/i,
   /\bstack(?:ed|ing)?\b/i,
+];
+const PROMPT_ACTIVITY_TYPE_ALIAS_PATTERNS: ReadonlyArray<{
+  pattern: RegExp;
+  activityTypes: ActivityTypes[];
+}> = [
+  {
+    pattern: /\b(ride|rides|cycling ride|bike ride|bike rides)\b/i,
+    activityTypes: [ActivityTypes.Cycling],
+  },
+  {
+    pattern: /\b(run|runs)\b/i,
+    activityTypes: [ActivityTypes.Running],
+  },
+  {
+    pattern: /\b(swim|swims)\b/i,
+    activityTypes: [ActivityTypes.Swimming],
+  },
 ];
 
 const ModelDateRangeSchema: z.ZodType<DateRangeIntent> = z.union([
@@ -905,6 +926,17 @@ function resolvePromptActivityTypes(
     }
   }
 
+  for (const activityAliasPattern of PROMPT_ACTIVITY_TYPE_ALIAS_PATTERNS) {
+    if (!activityAliasPattern.pattern.test(normalizedPrompt)) {
+      continue;
+    }
+    for (const activityType of activityAliasPattern.activityTypes) {
+      if (!resolved.includes(activityType)) {
+        resolved.push(activityType);
+      }
+    }
+  }
+
   return resolved;
 }
 
@@ -1123,6 +1155,27 @@ function promptImpliesEventLookup(prompt: string): boolean {
   }
 
   return /\bwhen\b/.test(normalizedPrompt);
+}
+
+function promptImpliesLatestEventLookup(prompt: string): boolean {
+  const normalizedPrompt = normalizePromptSearchText(prompt);
+  if (!normalizedPrompt) {
+    return false;
+  }
+
+  if (AGGREGATE_PROMPT_PATTERNS.some(pattern => pattern.test(normalizedPrompt))) {
+    return false;
+  }
+
+  if (EVENT_LOOKUP_RANKING_PROMPT_PATTERNS.some(pattern => pattern.test(normalizedPrompt))) {
+    return false;
+  }
+
+  if (!/\b(last|latest|most recent)\b/.test(normalizedPrompt)) {
+    return false;
+  }
+
+  return LATEST_EVENT_SUBJECT_PROMPT_PATTERNS.some(pattern => pattern.test(normalizedPrompt));
 }
 
 function resolvePromptAggregation(prompt: string): ModelAggregationCode | undefined {
@@ -1513,6 +1566,79 @@ export function resolveNormalizedInsightQueryFromIntent(
     promptChartPreference,
   } = promptContext;
   const modelReturnedUnsupported = intent.status === 'unsupported';
+  const latestEventRequested = promptImpliesLatestEventLookup(prompt);
+
+  if (latestEventRequested) {
+    const resolvedDateRangeIntent = promptDateSelection.effectiveDateRangeIntent
+      ?? (modelReturnedUnsupported ? undefined : intent.dateRange);
+    const activityTypes = normalizeActivityTypes(modelReturnedUnsupported ? undefined : intent.activityTypes);
+    const activityTypeGroups = normalizeActivityTypeGroups(modelReturnedUnsupported ? undefined : intent.activityTypeGroups);
+    if (!activityTypes || !activityTypeGroups) {
+      return buildUnsupportedResult('invalid_prompt', prompt);
+    }
+
+    const promptWithoutActivityExclusions = stripPromptActivityExclusionClauses(prompt);
+    const promptExcludedActivityTypeGroups = extractPromptActivityExclusionClauses(prompt)
+      .flatMap((clause) => resolvePromptActivityTypeGroups(clause));
+    const promptExcludedActivityTypes = extractPromptActivityExclusionClauses(prompt)
+      .flatMap((clause) => {
+        const clauseGroups = resolvePromptActivityTypeGroups(clause);
+        return [
+          ...resolvePromptActivityTypes(clause, clauseGroups),
+          ...resolveKeywordActivityTypeExclusions(clause),
+        ];
+      });
+    const excludedActivityTypeSet = new Set<ActivityTypes>([
+      ...promptExcludedActivityTypes,
+      ...expandActivityTypeGroups(promptExcludedActivityTypeGroups),
+    ]);
+    const promptActivityTypeGroups = resolvePromptActivityTypeGroups(promptWithoutActivityExclusions);
+    const promptActivityTypes = resolvePromptActivityTypes(promptWithoutActivityExclusions, promptActivityTypeGroups);
+    const resolvedActivityTypeGroups = activityTypeGroups.length > 0
+      ? activityTypeGroups
+      : promptActivityTypeGroups;
+    const resolvedActivityTypes = activityTypes.length > 0
+      ? activityTypes
+      : promptActivityTypes;
+    const filteredResolvedActivityTypes = excludeActivityTypes(
+      resolvedActivityTypes,
+      excludedActivityTypeSet,
+    );
+    const filteredResolvedActivityTypeGroups = resolvedActivityTypeGroups
+      .filter(activityTypeGroup => !promptExcludedActivityTypeGroups.includes(activityTypeGroup));
+    const finalActivityTypeGroups = filteredResolvedActivityTypes.length > 0 ? [] : filteredResolvedActivityTypeGroups;
+    const expandedActivityTypes = finalActivityTypeGroups.length > 0
+      ? excludeActivityTypes(expandActivityTypeGroups(finalActivityTypeGroups), excludedActivityTypeSet)
+      : [];
+    const finalActivityTypes = filteredResolvedActivityTypes.length > 0
+      ? filteredResolvedActivityTypes
+      : expandedActivityTypes.length > 0
+        ? expandedActivityTypes
+        : excludedActivityTypeSet.size > 0
+          ? excludeActivityTypes(CANONICAL_ACTIVITY_TYPES, excludedActivityTypeSet)
+          : [];
+
+    const dateRange = resolveDateRange(resolvedDateRangeIntent, input.clientTimezone, dependencies.now());
+    const requestedDateRanges = resolveRequestedDateRanges(
+      promptDateSelection.requestedDateRangeIntents,
+      input.clientTimezone,
+      dependencies.now(),
+    );
+
+    return {
+      status: 'ok',
+      query: {
+        resultKind: 'latest_event',
+        categoryType: ChartDataCategoryTypes.DateType,
+        activityTypeGroups: finalActivityTypeGroups,
+        activityTypes: finalActivityTypes,
+        dateRange,
+        requestedDateRanges,
+        periodMode: promptDateSelection.periodMode,
+        chartType: ChartTypes.LinesVertical,
+      },
+    };
+  }
 
   const promptMetricMatch = findInsightMetricAliasMatch(canonicalizeInsightPrompt(prompt));
   const baseMetric = promptMetricMatch?.metric || resolveInsightMetric(intent.metric || '');

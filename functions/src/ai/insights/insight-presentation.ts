@@ -43,6 +43,10 @@ function resolveInsightTitle(query: NormalizedInsightQuery, metricLabelOrLabels:
     return `Top ${metricLabel} events${activityLabel}`;
   }
 
+  if (query.resultKind === 'latest_event') {
+    return `Latest event${activityLabel}`;
+  }
+
   if (query.resultKind === 'multi_metric_aggregate') {
     return query.groupingMode === 'date'
       ? `${metricLabel} over time${activityLabel}`
@@ -58,6 +62,10 @@ function resolveInsightTitle(query: NormalizedInsightQuery, metricLabelOrLabels:
 
 function resolvePresentationWarnings(query: NormalizedInsightQuery): string[] | undefined {
   if (query.resultKind === 'event_lookup') {
+    return undefined;
+  }
+
+  if (query.resultKind === 'latest_event') {
     return undefined;
   }
 
@@ -86,9 +94,13 @@ export function buildInsightPresentation(
 export function buildEmptyAggregation(query: NormalizedInsightQuery) {
   const dataType = query.resultKind === 'multi_metric_aggregate'
     ? (query.metricSelections[0]?.dataType ?? 'Unknown')
+    : query.resultKind === 'latest_event'
+      ? 'Latest Event'
     : query.dataType;
   const valueType = query.resultKind === 'multi_metric_aggregate'
     ? (query.metricSelections[0]?.valueType ?? null)
+    : query.resultKind === 'latest_event'
+      ? ChartDataValueTypes.Total
     : query.valueType;
 
   return {

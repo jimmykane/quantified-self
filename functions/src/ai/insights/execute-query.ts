@@ -110,9 +110,23 @@ interface EventLookupExecutionResult {
   };
 }
 
+interface LatestEventExecutionResult {
+  resultKind: 'latest_event';
+  matchedEventsCount: number;
+  matchedActivityTypeCounts: Array<{
+    activityType: string;
+    eventCount: number;
+  }>;
+  latestEvent: {
+    eventId: string | null;
+    startDate: string | null;
+  };
+}
+
 export type AiInsightsExecutionResult =
   | AggregateExecutionResult
   | EventLookupExecutionResult
+  | LatestEventExecutionResult
   | MultiMetricAggregateExecutionResult;
 
 type ActivityPrefilterMode = 'none' | 'contains' | 'contains_any' | 'chunked';
@@ -522,6 +536,33 @@ function buildRankedEvents(
     .sort((left, right) => compareRankedEvents(left, right, query.valueType));
 }
 
+function buildLatestEvent(events: EventInterface[]): { eventId: string; startDate: string } | null {
+  const latestEventCandidates = events
+    .map((event) => {
+      const eventId = event.getID?.();
+      const startDate = event.startDate instanceof Date ? event.startDate.toISOString() : null;
+      if (!eventId || !startDate) {
+        return null;
+      }
+
+      return {
+        eventId,
+        startDate,
+      };
+    })
+    .filter((event): event is { eventId: string; startDate: string } => event !== null)
+    .sort((left, right) => {
+      const timeDelta = new Date(right.startDate).getTime() - new Date(left.startDate).getTime();
+      if (timeDelta !== 0) {
+        return timeDelta;
+      }
+
+      return left.eventId.localeCompare(right.eventId);
+    });
+
+  return latestEventCandidates[0] ?? null;
+}
+
 function buildOverallAggregation(
   dataType: string,
   valueType: ChartDataValueTypes,
@@ -693,9 +734,12 @@ export function createExecuteQuery(
       });
       const matchedEvents = activityMatchedEvents
         .filter(event => eventMatchesRequestedDateRanges(event, query.requestedDateRanges));
-      const eventsWithRequestedStatCount = query.resultKind === 'multi_metric_aggregate'
-        ? null
-        : matchedEvents.filter(event => hasRequestedStat(event, query.dataType)).length;
+      const eventsWithRequestedStatCount = (
+        query.resultKind === 'aggregate'
+        || query.resultKind === 'event_lookup'
+      )
+        ? matchedEvents.filter(event => hasRequestedStat(event, query.dataType)).length
+        : null;
       const firestoreEmulatorHost = process.env.FIRESTORE_EMULATOR_HOST || null;
       const debugEventSnapshot = docs.length === 0
         ? await dependencies.fetchDebugEventSnapshot(userID)
@@ -720,8 +764,14 @@ export function createExecuteQuery(
       dependencies.logger.info('[aiInsights] Query execution summary', {
         prompt: prompt || null,
         userID,
-        dataType: query.resultKind === 'multi_metric_aggregate' ? null : query.dataType,
-        valueType: query.resultKind === 'multi_metric_aggregate' ? null : query.valueType,
+        dataType: (
+          query.resultKind === 'aggregate'
+          || query.resultKind === 'event_lookup'
+        ) ? query.dataType : null,
+        valueType: (
+          query.resultKind === 'aggregate'
+          || query.resultKind === 'event_lookup'
+        ) ? query.valueType : null,
         categoryType: query.categoryType,
         activityTypes: query.activityTypes,
         dateRange: query.dateRange,
@@ -739,7 +789,11 @@ export function createExecuteQuery(
         requestedDateRangeFilteredOutCount: activityMatchedEvents.length - matchedEvents.length,
         matchedEventsCount: matchedEvents.length,
         eventsWithRequestedStatCount,
-        metricSelectionCount: query.resultKind === 'multi_metric_aggregate' ? query.metricSelections.length : 1,
+        metricSelectionCount: query.resultKind === 'multi_metric_aggregate'
+          ? query.metricSelections.length
+          : query.resultKind === 'latest_event'
+            ? 0
+            : 1,
         matchedEventIDsSample: matchedEvents.slice(0, 10).map(event => event.getID?.()),
         firestoreTarget: firestoreEmulatorHost ? 'emulator' : 'default',
         firestoreEmulatorHost,
@@ -769,6 +823,28 @@ export function createExecuteQuery(
             primaryEventId: rankedEvents[0]?.eventId ?? null,
             topEventIds: rankedEvents.slice(0, 10).map(event => event.eventId),
             rankedEvents,
+          },
+        };
+      }
+
+      if (query.resultKind === 'latest_event') {
+        const latestEvent = buildLatestEvent(matchedEvents);
+
+        dependencies.logger.info('[aiInsights] Latest event lookup summary', {
+          prompt: prompt || null,
+          userID,
+          latestEventId: latestEvent?.eventId ?? null,
+          latestEventStartDate: latestEvent?.startDate ?? null,
+          matchedEventCount: matchedEvents.length,
+        });
+
+        return {
+          resultKind: 'latest_event',
+          matchedEventsCount: matchedEvents.length,
+          matchedActivityTypeCounts: buildMatchedActivityTypeCounts(matchedEvents, dependencies.logger),
+          latestEvent: {
+            eventId: latestEvent?.eventId ?? null,
+            startDate: latestEvent?.startDate ?? null,
           },
         };
       }

@@ -94,7 +94,7 @@ function resolveSummaryValueType(
   query: NormalizedInsightQuery,
   aggregationValueType: ChartDataValueTypes | undefined,
 ): ChartDataValueTypes | null {
-  if (query.resultKind === 'multi_metric_aggregate') {
+  if (query.resultKind === 'multi_metric_aggregate' || query.resultKind === 'latest_event') {
     return aggregationValueType ?? null;
   }
 

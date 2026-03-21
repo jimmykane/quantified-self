@@ -160,4 +160,42 @@ describe('Ai Insights latest snapshot shared validation', () => {
 
     expect(validation.valid).toBe(true);
   });
+
+  it('accepts latest_event snapshot payloads', () => {
+    const validation = validateAiInsightsLatestSnapshot({
+      version: 1,
+      savedAt: '2026-03-21T10:00:00.000Z',
+      prompt: 'when was my last ride?',
+      response: {
+        status: 'ok',
+        resultKind: 'latest_event',
+        narrative: 'Your latest cycling event was on Mar 18, 2026.',
+        query: {
+          resultKind: 'latest_event',
+          categoryType: ChartDataCategoryTypes.DateType,
+          activityTypeGroups: [],
+          activityTypes: [ActivityTypes.Cycling],
+          dateRange: {
+            kind: 'bounded',
+            startDate: '2026-01-01T00:00:00.000Z',
+            endDate: '2026-03-21T23:59:59.999Z',
+            timezone: 'UTC',
+            source: 'prompt',
+          },
+          chartType: ChartTypes.LinesVertical,
+        },
+        latestEvent: {
+          eventId: 'event-9',
+          startDate: '2026-03-18T08:00:00.000Z',
+          matchedEventCount: 4,
+        },
+        presentation: {
+          title: 'Latest event for Cycling',
+          chartType: ChartTypes.LinesVertical,
+        },
+      },
+    }, 1);
+
+    expect(validation.valid).toBe(true);
+  });
 });

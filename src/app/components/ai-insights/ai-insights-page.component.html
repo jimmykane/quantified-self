@@ -259,6 +259,73 @@
                 </div>
               </div>
             </div>
+          } @else if (latestEventOkResponse(); as result) {
+            <div class="result-content">
+              <div class="result-header">
+                @if (resultDateRangeNote(); as dateRangeNote) {
+                  <div class="result-date-range-note">
+                    <mat-icon>info</mat-icon>
+                    <p class="mat-body-small">{{ dateRangeNote }}</p>
+                  </div>
+                }
+                @if (canRefreshResult()) {
+                  <div class="result-actions">
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      class="result-refresh-button"
+                      [disabled]="isSubmitting()"
+                      (click)="refreshCurrentResult()">
+                      <mat-icon>refresh</mat-icon>
+                      <span>Refresh with latest data &amp; dates</span>
+                    </button>
+                  </div>
+                }
+              </div>
+
+              <div class="narrative-info qs-glass-card-panel">
+                <p class="description-text narrative">{{ result.narrative }}</p>
+              </div>
+
+              @if (rankedEventLoadError(); as rankedEventLoadError) {
+                <div class="result-date-range-note">
+                  <mat-icon>info</mat-icon>
+                  <p class="mat-body-small">{{ rankedEventLoadError }}</p>
+                </div>
+              }
+
+              @if (rankedEventLoading()) {
+                <app-ai-insights-loading-state
+                  title="Loading latest event"
+                  eyebrow="Loading references"
+                  [compact]="true"
+                  [copy]="'Fetching the most recent matching event.'"
+                  [steps]="eventLookupLoadingSteps">
+                </app-ai-insights-loading-state>
+              }
+
+              @if (primaryRankedEventItem(); as primaryEvent) {
+                <section class="event-lookup-primary qs-glass-card-panel">
+                  <div class="event-lookup-primary-copy">
+                    <p class="mat-label-medium summary-label">{{ rankedEventPrimaryLabel() }}</p>
+                    <p class="summary-meta">{{ primaryEvent.date }}</p>
+                    @if (primaryEvent.activityLabel) {
+                      <p class="summary-meta">{{ primaryEvent.activityLabel }}</p>
+                    }
+                  </div>
+                  <div class="event-lookup-actions">
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      [routerLink]="['/user', currentUserID(), 'event', primaryEvent.eventId]"
+                      [disabled]="!primaryEvent.isAvailable">
+                      <mat-icon>open_in_new</mat-icon>
+                      <span>Open event</span>
+                    </button>
+                  </div>
+                </section>
+              }
+            </div>
           } @else if (eventLookupOkResponse(); as result) {
             <div class="result-content">
               <div class="result-header">

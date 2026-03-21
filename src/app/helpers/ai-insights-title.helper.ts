@@ -88,6 +88,10 @@ export function resolveAiInsightsDisplayTitle(
     return metricLabel ? toSentenceCase(`top ${metricLabel} events${activitySuffix}`) : null;
   }
 
+  if (response.query.resultKind === 'latest_event') {
+    return toSentenceCase(`latest event${activitySuffix}`);
+  }
+
   if (response.query.resultKind === 'multi_metric_aggregate') {
     const defaultValueType = response.query.metricSelections[0]?.valueType ?? ChartDataValueTypes.Total;
     const incomingLabels = (options?.metricLabels ?? [])

@@ -24,6 +24,7 @@ import type {
   AiInsightsAggregateOkResponse,
   AiInsightsEmptyResponse,
   AiInsightsEventLookupOkResponse,
+  AiInsightsLatestEventOkResponse,
   AiInsightsMultiMetricAggregateOkResponse,
   AiInsightsOkResponse,
   AiInsightsQuotaStatus,
@@ -867,6 +868,38 @@ function buildEventLookupResponse(): AiInsightsEventLookupOkResponse {
   };
 }
 
+function buildLatestEventResponse(): AiInsightsLatestEventOkResponse {
+  return {
+    status: 'ok',
+    resultKind: 'latest_event',
+    narrative: 'Your latest cycling event was on Mar 18, 2026. I matched 4 events.',
+    query: {
+      resultKind: 'latest_event',
+      categoryType: ChartDataCategoryTypes.DateType,
+      requestedTimeInterval: TimeIntervals.Daily,
+      activityTypeGroups: [],
+      activityTypes: [ActivityTypes.Cycling],
+      dateRange: {
+        kind: 'bounded',
+        startDate: '2026-01-01T00:00:00.000Z',
+        endDate: '2026-03-18T23:59:59.999Z',
+        timezone: 'Europe/Helsinki',
+        source: 'default',
+      },
+      chartType: ChartTypes.LinesVertical,
+    },
+    latestEvent: {
+      eventId: 'event-9',
+      startDate: '2026-03-18T08:00:00.000Z',
+      matchedEventCount: 4,
+    },
+    presentation: {
+      title: 'Latest event for Cycling',
+      chartType: ChartTypes.LinesVertical,
+    },
+  };
+}
+
 function buildMockEvent(options: {
   id: string;
   startDate: string;
@@ -1377,6 +1410,32 @@ describe('AiInsightsPageComponent', () => {
 
     expect(appEventServiceMock.getEventsOnceByIds).toHaveBeenCalledTimes(1);
     expect(appEventServiceMock.getEventsOnceByIds.mock.calls[0]?.[1]).toEqual(['event-3', 'event-2', 'event-1']);
+  });
+
+  it('should render latest-event responses as text plus one event card', async () => {
+    appEventServiceMock.getEventsOnceByIds.mockReturnValueOnce(of([
+      buildMockEvent({
+        id: 'event-9',
+        startDate: '2026-03-18T08:00:00.000Z',
+        activityTypes: [ActivityTypes.Cycling],
+        stats: { [DataDistance.type]: 20000 },
+      }),
+    ]));
+
+    component.response.set(buildLatestEventResponse());
+    component.resultPrompt.set('When was my last ride?');
+    fixture.detectChanges();
+    TestBed.flushEffects();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const primaryCard = fixture.debugElement.query(By.css('.event-lookup-primary'))?.nativeElement as HTMLElement | undefined;
+    const rankingRows = fixture.debugElement.queryAll(By.css('.event-lookup-row'));
+
+    expect(primaryCard?.textContent).toContain('Latest event');
+    expect(primaryCard?.textContent).toContain('Mar 18, 2026');
+    expect(rankingRows).toHaveLength(0);
+    expect(appEventServiceMock.getEventsOnceByIds.mock.calls.at(-1)?.[1]).toEqual(['event-9']);
   });
 
   it('should show unavailable event rows gracefully when event details are missing', async () => {

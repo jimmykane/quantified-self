@@ -1,5 +1,6 @@
 import type {
   AiInsightEventLookup,
+  AiInsightLatestEvent,
   AiInsightPresentation,
   AiInsightSummary,
   AiInsightSummaryActivityMix,
@@ -68,7 +69,10 @@ function isQuotaStatus(value: unknown): value is AiInsightsQuotaStatus {
 }
 
 function isResultKind(value: unknown): value is AiInsightsResultKind {
-  return value === 'aggregate' || value === 'event_lookup' || value === 'multi_metric_aggregate';
+  return value === 'aggregate'
+    || value === 'event_lookup'
+    || value === 'latest_event'
+    || value === 'multi_metric_aggregate';
 }
 
 function isNormalizedInsightDateRange(value: unknown): value is NormalizedInsightDateRange {
@@ -125,6 +129,10 @@ function isNormalizedInsightQuery(value: unknown): value is NormalizedInsightQue
         && isEnumPrimitive(selection.valueType)
       ))
     );
+  }
+
+  if (value.resultKind === 'latest_event') {
+    return true;
   }
 
   return (
@@ -219,6 +227,15 @@ function isEventLookup(value: unknown): value is AiInsightEventLookup {
   );
 }
 
+function isLatestEvent(value: unknown): value is AiInsightLatestEvent {
+  return (
+    isRecord(value)
+    && typeof value.eventId === 'string'
+    && typeof value.startDate === 'string'
+    && isFiniteNumber(value.matchedEventCount)
+  );
+}
+
 function isMultiMetricAggregateMetricResult(value: unknown): value is AiInsightsMultiMetricAggregateMetricResult {
   return (
     isRecord(value)
@@ -253,6 +270,10 @@ export function resolveCompletedAiInsightsResponseResultKind(
 
   if (isResultKind(value.resultKind)) {
     return value.resultKind;
+  }
+
+  if (isLatestEvent(value.latestEvent)) {
+    return 'latest_event';
   }
 
   if (isEventLookup(value.eventLookup)) {
@@ -524,6 +545,20 @@ function getAiInsightsResponseValidationFailure(value: unknown): AiInsightsLates
         details: {
           responseKeys: Object.keys(value),
           eventLookupType: describeValueType(value.eventLookup),
+        },
+      };
+    }
+
+    return null;
+  }
+
+  if (resultKind === 'latest_event') {
+    if (!isLatestEvent(value.latestEvent)) {
+      return {
+        reason: 'latest_event_invalid',
+        details: {
+          responseKeys: Object.keys(value),
+          latestEventType: describeValueType(value.latestEvent),
         },
       };
     }

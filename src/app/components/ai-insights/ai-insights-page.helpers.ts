@@ -10,6 +10,7 @@ import type {
   AiInsightsAggregateOkResponse,
   AiInsightsEmptyResponse,
   AiInsightsEventLookupOkResponse,
+  AiInsightsLatestEventOkResponse,
   AiInsightsMultiMetricAggregateMetricResult,
   AiInsightsOkResponse,
   AiInsightsQuotaStatus,
@@ -30,6 +31,7 @@ export type AggregateRankedEventResponse = AiInsightsAggregateOkResponse & {
 
 export type RankedEventResponse =
   | AiInsightsEventLookupOkResponse
+  | AiInsightsLatestEventOkResponse
   | AggregateRankedEventResponse;
 
 export interface InsightSummaryCard {
@@ -607,12 +609,16 @@ export function buildMergedMultiMetricSummaryCards(
 export function resolveRankedEventIds(response: RankedEventResponse): string[] {
   return response.resultKind === 'event_lookup'
     ? response.eventLookup.topEventIds.slice(0, 10)
+    : response.resultKind === 'latest_event'
+      ? [response.latestEvent.eventId]
     : response.eventRanking.topEventIds.slice(0, 10);
 }
 
 export function resolveRankedEventMatchedCount(response: RankedEventResponse): number {
   return response.resultKind === 'event_lookup'
     ? response.eventLookup.matchedEventCount
+    : response.resultKind === 'latest_event'
+      ? response.latestEvent.matchedEventCount
     : response.eventRanking.matchedEventCount;
 }
 

@@ -19,6 +19,7 @@ import type {
   AiInsightsAggregateOkResponse,
   AiInsightsEmptyResponse,
   AiInsightsEventLookupOkResponse,
+  AiInsightsLatestEventOkResponse,
   AiInsightsMultiMetricAggregateMetricResult,
   AiInsightsMultiMetricAggregateOkResponse,
   AiInsightsOkResponse,
@@ -225,6 +226,10 @@ export class AiInsightsPageComponent {
     const response = this.okResponse();
     return response?.resultKind === 'event_lookup' ? response : null;
   });
+  readonly latestEventOkResponse = computed<AiInsightsLatestEventOkResponse | null>(() => {
+    const response = this.okResponse();
+    return response?.resultKind === 'latest_event' ? response : null;
+  });
   readonly emptyResponse = computed<AiInsightsEmptyResponse | null>(() => {
     const response = this.response();
     return response?.status === 'empty' ? response : null;
@@ -254,6 +259,10 @@ export class AiInsightsPageComponent {
     return 'Latest completed insights are temporarily restored from your account. Proper saved insights/history will come later.';
   });
   readonly resultCardSubtitle = computed(() => {
+    if (this.latestEventOkResponse()) {
+      return 'Most recent matching event for this prompt.';
+    }
+
     if (this.eventLookupOkResponse()) {
       return 'Winning event and top matches for this prompt.';
     }
@@ -526,6 +535,11 @@ export class AiInsightsPageComponent {
     });
   });
   readonly rankedEventResponse = computed<RankedEventResponse | null>(() => {
+    const latestEventResponse = this.latestEventOkResponse();
+    if (latestEventResponse) {
+      return latestEventResponse;
+    }
+
     const eventLookupResponse = this.eventLookupOkResponse();
     if (eventLookupResponse) {
       return eventLookupResponse;
@@ -624,6 +638,8 @@ export class AiInsightsPageComponent {
 
     const valueType = response.query.resultKind === 'multi_metric_aggregate'
       ? response.query.metricSelections[0]?.valueType
+      : response.query.resultKind === 'latest_event'
+        ? null
       : response.query.valueType;
     if (!valueType) {
       return this.resultSubtitle();
@@ -709,20 +725,30 @@ export class AiInsightsPageComponent {
 
     return resolveRankedEventIds(response).map((eventId) => {
       const event = resolvedEvents.find(entry => entry.eventId === eventId)?.event ?? null;
-      const rawValue = resolveEventLookupStatValue(event, response.query.dataType);
-      const value = rawValue === null
-        ? 'Unavailable'
-        : (formatUnitAwareDataValue(response.query.dataType, rawValue, unitSettings, {
-          stripRepeatedUnit: true,
-        }) ?? 'Unavailable');
+      const value = response.resultKind === 'latest_event'
+        ? 'Most recent in range'
+        : (() => {
+          const rawValue = resolveEventLookupStatValue(event, response.query.dataType);
+          return rawValue === null
+            ? 'Unavailable'
+            : (formatUnitAwareDataValue(response.query.dataType, rawValue, unitSettings, {
+              stripRepeatedUnit: true,
+            }) ?? 'Unavailable');
+        })();
       const date = formatEventLookupEventDate(event, locale, response.query.dateRange.timezone) ?? 'Event unavailable';
+      const isAvailable = response.resultKind === 'latest_event'
+        ? !!event
+        : (() => {
+          const rawValue = resolveEventLookupStatValue(event, response.query.dataType);
+          return !!event && rawValue !== null;
+        })();
 
       return {
         eventId,
         value,
         date,
         activityLabel: formatEventLookupActivityLabel(event),
-        isAvailable: !!event && rawValue !== null,
+        isAvailable,
       };
     });
   });
@@ -737,6 +763,10 @@ export class AiInsightsPageComponent {
 
     if (response.resultKind === 'event_lookup') {
       return 'Winning event';
+    }
+
+    if (response.resultKind === 'latest_event') {
+      return 'Latest event';
     }
 
     const isGroupedAcrossSports = response.query.categoryType === ChartDataCategoryTypes.ActivityType;
@@ -756,6 +786,10 @@ export class AiInsightsPageComponent {
       return null;
     }
 
+    if (response.resultKind === 'latest_event') {
+      return null;
+    }
+
     return response.resultKind === 'aggregate'
       && response.query.categoryType === ChartDataCategoryTypes.ActivityType
       ? 'Top events across all matched sports'
@@ -764,6 +798,10 @@ export class AiInsightsPageComponent {
   readonly rankedEventRankingCopy = computed(() => {
     const response = this.rankedEventResponse();
     if (!response) {
+      return null;
+    }
+
+    if (response.resultKind === 'latest_event') {
       return null;
     }
 

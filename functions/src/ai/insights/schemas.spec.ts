@@ -1,4 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
+import {
+  ActivityTypes,
+  ChartDataCategoryTypes,
+  ChartTypes,
+} from '@sports-alliance/sports-lib';
 import { AiInsightsResponseSchema } from './schemas';
 
 vi.mock('@sports-alliance/sports-lib', async (importOriginal) => await importOriginal());
@@ -25,5 +30,38 @@ describe('AiInsightsResponseSchema', () => {
     });
 
     expect(parsed.success).toBe(false);
+  });
+
+  it('parses latest_event responses through the status discriminator', () => {
+    const parsed = AiInsightsResponseSchema.safeParse({
+      status: 'ok',
+      resultKind: 'latest_event',
+      narrative: 'Your latest cycling event was on Mar 18, 2026.',
+      query: {
+        resultKind: 'latest_event',
+        categoryType: ChartDataCategoryTypes.DateType,
+        activityTypeGroups: [],
+        activityTypes: [ActivityTypes.Cycling],
+        dateRange: {
+          kind: 'bounded',
+          startDate: '2026-01-01T00:00:00.000Z',
+          endDate: '2026-03-18T23:59:59.999Z',
+          timezone: 'UTC',
+          source: 'prompt',
+        },
+        chartType: ChartTypes.LinesVertical,
+      },
+      latestEvent: {
+        eventId: 'event-9',
+        startDate: '2026-03-18T08:00:00.000Z',
+        matchedEventCount: 4,
+      },
+      presentation: {
+        title: 'Latest event for Cycling',
+        chartType: ChartTypes.LinesVertical,
+      },
+    });
+
+    expect(parsed.success).toBe(true);
   });
 });

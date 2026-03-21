@@ -794,6 +794,74 @@ describe('normalizeInsightQuery', () => {
     expect(result.query.valueType).toBe(ChartDataValueTypes.Average);
   });
 
+  it('resolves latest ride prompts to latest_event mode with cycling filters', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-19T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'When was my last ride?',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBeUndefined();
+    expect(result.query.resultKind).toBe('latest_event');
+    expect(result.query.activityTypes).toEqual([ActivityTypes.Cycling]);
+    expect(result.query.dateRange.kind).toBe('bounded');
+    if (result.query.dateRange.kind !== 'bounded') {
+      return;
+    }
+    expect(result.query.dateRange.startDate).toBe('2026-01-01T00:00:00.000Z');
+    expect(result.query.dateRange.endDate).toBe('2026-03-19T23:59:59.999Z');
+  });
+
+  it('keeps explicit date ranges for latest-event prompts', async () => {
+    const result = await normalizeInsightQuery({
+      prompt: 'When was my last ride in 2023?',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.resultKind).toBe('latest_event');
+    expect(result.query.dateRange.kind).toBe('bounded');
+    if (result.query.dateRange.kind !== 'bounded') {
+      return;
+    }
+    expect(result.query.dateRange.startDate).toBe('2023-01-01T00:00:00.000Z');
+    expect(result.query.dateRange.endDate).toBe('2023-12-31T23:59:59.999Z');
+  });
+
+  it('resolves latest run and latest swim prompts to activity aliases', async () => {
+    const latestRunResult = await normalizeInsightQuery({
+      prompt: 'latest run',
+      clientTimezone: 'UTC',
+    });
+    expect(latestRunResult.status).toBe('ok');
+    if (latestRunResult.status === 'ok') {
+      expect(latestRunResult.query.resultKind).toBe('latest_event');
+      expect(latestRunResult.query.activityTypes).toEqual([ActivityTypes.Running]);
+    }
+
+    const latestSwimResult = await normalizeInsightQuery({
+      prompt: 'last swim',
+      clientTimezone: 'UTC',
+    });
+    expect(latestSwimResult.status).toBe('ok');
+    if (latestSwimResult.status === 'ok') {
+      expect(latestSwimResult.query.resultKind).toBe('latest_event');
+      expect(latestSwimResult.query.activityTypes).toEqual([ActivityTypes.Swimming]);
+    }
+  });
+
   it('resolves shared-average multi-metric prompts to multi-metric over-time mode', async () => {
     setNormalizeQueryDependenciesForTesting({
       now: () => new Date('2026-03-19T12:00:00.000Z'),
