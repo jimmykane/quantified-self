@@ -389,11 +389,11 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "startDate",
-          "order": "ASCENDING"
+          "fieldPath": "stats.`Activity Types`",
+          "arrayConfig": "CONTAINS"
         },
         {
-          "fieldPath": "stats.`Activity Types`",
+          "fieldPath": "startDate",
           "order": "ASCENDING"
         },
         {
@@ -408,12 +408,12 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "startDate",
-          "order": "ASCENDING"
+          "fieldPath": "stats.`Activity Types`",
+          "arrayConfig": "CONTAINS"
         },
         {
-          "fieldPath": "stats.`Activity Types`",
-          "order": "DESCENDING"
+          "fieldPath": "startDate",
+          "order": "ASCENDING"
         },
         {
           "fieldPath": "__name__",

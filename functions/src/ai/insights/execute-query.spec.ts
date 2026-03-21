@@ -245,6 +245,7 @@ describe('execute-query', () => {
       userID: 'user-1',
       startDate: new Date('2026-01-01T00:00:00.000Z'),
       endDate: new Date('2026-03-31T23:59:59.999Z'),
+      activityTypes: [ActivityTypes.Cycling],
     });
     expect(result.matchedEventsCount).toBe(1);
     expect(result.aggregation.buckets).toHaveLength(1);
@@ -391,6 +392,7 @@ describe('execute-query', () => {
       userID: 'user-1',
       startDate: new Date('2024-01-01T00:00:00.000Z'),
       endDate: new Date('2026-12-31T23:59:59.999Z'),
+      activityTypes: [ActivityTypes.Cycling],
     });
     expect(result.matchedEventsCount).toBe(2);
     expect(result.aggregation.buckets.map(bucket => bucket.aggregateValue)).toEqual([40, 60]);
@@ -498,18 +500,167 @@ describe('execute-query', () => {
 
     const result = await executeAiInsightsQuery('user-1', createQuery(), 'show my cycling distance');
 
-    expect(where).toHaveBeenCalledTimes(2);
+    expect(where).toHaveBeenCalledTimes(3);
     expect(where).toHaveBeenNthCalledWith(1, 'startDate', '>=', new Date('2026-01-01T00:00:00.000Z').getTime());
     expect(where).toHaveBeenNthCalledWith(2, 'startDate', '<=', new Date('2026-03-31T23:59:59.999Z').getTime());
+    expect(where).toHaveBeenNthCalledWith(3, expect.anything(), 'array-contains', ActivityTypes.Cycling);
     expect(orderBy).toHaveBeenCalledWith('startDate', 'asc');
     expect(get).toHaveBeenCalledTimes(1);
     expect(result.matchedEventsCount).toBe(1);
   });
 
+  it('uses array-contains-any for activity filters up to ten values', async () => {
+    const where = vi.fn();
+    const orderBy = vi.fn();
+    const get = vi.fn(async () => ({
+      docs: [
+        { id: 'e1', data: () => ({ startDate: 1768003200000 }) },
+      ],
+    }));
+    const queryChain = {
+      where,
+      orderBy,
+      get,
+    };
+
+    where.mockImplementation(() => queryChain);
+    orderBy.mockImplementation(() => queryChain);
+
+    const eventsCollection = {
+      get: vi.fn(),
+      where,
+      orderBy,
+      count: vi.fn(),
+    };
+    const docRef = {
+      collection: vi.fn((_path: string) => eventsCollection),
+    };
+    const usersCollection = {
+      doc: vi.fn((_userID: string) => docRef),
+    };
+    const firestore = {
+      collection: vi.fn((_path: string) => usersCollection),
+    };
+
+    vi.spyOn(admin, 'firestore').mockReturnValue(firestore as any);
+
+    setExecuteQueryDependenciesForTesting({
+      importEvent: vi.fn(() => createMockEvent({
+        id: 'e1',
+        startDate: new Date('2026-01-10T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: { [DataDistance.type]: 40 },
+      })),
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+    });
+
+    await executeAiInsightsQuery('user-1', createQuery({
+      activityTypes: [ActivityTypes.Cycling, ActivityTypes.Running],
+    }), 'show my distance');
+
+    expect(where).toHaveBeenCalledTimes(3);
+    expect(where).toHaveBeenNthCalledWith(1, 'startDate', '>=', new Date('2026-01-01T00:00:00.000Z').getTime());
+    expect(where).toHaveBeenNthCalledWith(2, 'startDate', '<=', new Date('2026-03-31T23:59:59.999Z').getTime());
+    expect(where).toHaveBeenNthCalledWith(
+      3,
+      expect.anything(),
+      'array-contains-any',
+      [ActivityTypes.Cycling, ActivityTypes.Running],
+    );
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  it('chunks activity-type Firestore filters above ten values, de-dups docs, and sorts by startDate/id', async () => {
+    const where = vi.fn();
+    const orderBy = vi.fn();
+    const get = vi
+      .fn()
+      .mockResolvedValueOnce({
+        docs: [
+          { id: 'e2', data: () => ({ startDate: Date.UTC(2026, 0, 2, 12, 0, 0) }) },
+          { id: 'e1', data: () => ({ startDate: Date.UTC(2026, 0, 1, 12, 0, 0) }) },
+        ],
+      })
+      .mockResolvedValueOnce({
+        docs: [
+          { id: 'e3', data: () => ({ startDate: Date.UTC(2026, 0, 3, 12, 0, 0) }) },
+          { id: 'e1', data: () => ({ startDate: Date.UTC(2026, 0, 1, 12, 0, 0) }) },
+        ],
+      });
+    const queryChain = {
+      where,
+      orderBy,
+      get,
+    };
+
+    where.mockImplementation(() => queryChain);
+    orderBy.mockImplementation(() => queryChain);
+
+    const eventsCollection = {
+      get: vi.fn(),
+      where,
+      orderBy,
+      count: vi.fn(),
+    };
+    const docRef = {
+      collection: vi.fn((_path: string) => eventsCollection),
+    };
+    const usersCollection = {
+      doc: vi.fn((_userID: string) => docRef),
+    };
+    const firestore = {
+      collection: vi.fn((_path: string) => usersCollection),
+    };
+
+    vi.spyOn(admin, 'firestore').mockReturnValue(firestore as any);
+
+    const importEvent = vi.fn((eventJSON: { startDate: Date }, eventID: string) => createMockEvent({
+      id: eventID,
+      startDate: eventJSON.startDate,
+      activityTypes: [ActivityTypes.Cycling],
+      stats: { [DataDistance.type]: 40 },
+    }));
+    const info = vi.fn();
+
+    setExecuteQueryDependenciesForTesting({
+      importEvent,
+      logger: { info, warn: vi.fn(), error: vi.fn() } as any,
+    });
+
+    const manyActivityTypes = [
+      ActivityTypes.Cycling,
+      ActivityTypes.Running,
+      'A' as ActivityTypes,
+      'B' as ActivityTypes,
+      'C' as ActivityTypes,
+      'D' as ActivityTypes,
+      'E' as ActivityTypes,
+      'F' as ActivityTypes,
+      'G' as ActivityTypes,
+      'H' as ActivityTypes,
+      'I' as ActivityTypes,
+      'J' as ActivityTypes,
+    ];
+
+    await executeAiInsightsQuery('user-1', createQuery({
+      activityTypes: manyActivityTypes,
+    }), 'show my distance');
+
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(where).toHaveBeenCalledTimes(6);
+    expect(importEvent.mock.calls.map((call) => call[1])).toEqual(['e1', 'e2', 'e3']);
+    expect(info).toHaveBeenCalledWith('[aiInsights] Query execution summary', expect.objectContaining({
+      prefilterMode: 'chunked',
+      prefilterChunkCount: 2,
+      prefilterDedupedCount: 1,
+    }));
+  });
+
   it('skips date filters for explicit all-time queries', async () => {
-    const fetchEventDocs = vi.fn(async ({ startDate, endDate }) => {
+    const fetchEventDocs = vi.fn(async ({ startDate, endDate, activityTypes }) => {
       expect(startDate).toBeUndefined();
       expect(endDate).toBeUndefined();
+      expect(activityTypes).toEqual([ActivityTypes.Cycling]);
       return [
         { id: 'e1', data: () => ({ startDate: new Date('2026-01-10T12:00:00.000Z') }) },
       ];
@@ -544,8 +695,56 @@ describe('execute-query', () => {
       userID: 'user-1',
       startDate: undefined,
       endDate: undefined,
+      activityTypes: [ActivityTypes.Cycling],
     });
     expect(result.matchedEventsCount).toBe(1);
+  });
+
+  it('skips events with missing activity-type stats and normalizes non-canonical values with warning telemetry', async () => {
+    const warn = vi.fn();
+    const info = vi.fn();
+
+    setExecuteQueryDependenciesForTesting({
+      fetchEventDocs: async () => [
+        { id: 'missing', data: () => ({ startDate: new Date('2026-01-10T12:00:00.000Z') }) },
+        { id: 'alias', data: () => ({ startDate: new Date('2026-01-11T12:00:00.000Z') }) },
+      ],
+      fetchDebugEventSnapshot: vi.fn(async () => ({
+        totalEventsCount: 2,
+        recentEventsSample: [],
+      })),
+      importEvent: vi
+        .fn()
+        .mockImplementationOnce(() => ({
+          startDate: new Date('2026-01-10T12:00:00.000Z'),
+          getID: () => 'missing',
+          getActivityTypesAsArray: () => {
+            throw new Error('missing activity type stat');
+          },
+          getStat: () => ({ getValue: () => 12 }),
+        }))
+        .mockImplementationOnce(() => ({
+          startDate: new Date('2026-01-11T12:00:00.000Z'),
+          getID: () => 'alias',
+          getActivityTypesAsArray: () => ['cycling_road'],
+          getStat: () => ({ getValue: () => 34 }),
+        })),
+      logger: { info, warn, error: vi.fn() } as any,
+    });
+
+    const result = await executeAiInsightsQuery('user-1', createQuery(), 'show my cycling distance');
+
+    expect(result.matchedEventsCount).toBe(1);
+    expect(warn).toHaveBeenCalledWith('[aiInsights] Skipped events with missing or invalid activity type stats', expect.objectContaining({
+      skippedMissingActivityTypeCount: 1,
+    }));
+    expect(warn).toHaveBeenCalledWith('[aiInsights] Normalized non-canonical activity types in AI filtering', expect.objectContaining({
+      normalizedNonCanonicalActivityTypeCount: 1,
+    }));
+    expect(info).toHaveBeenCalledWith('[aiInsights] Query execution summary', expect.objectContaining({
+      skippedMissingActivityTypeCount: 1,
+      normalizedNonCanonicalActivityTypeCount: 1,
+    }));
   });
 
   it('returns ranked event ids for event lookup mode and caps the list at 10', async () => {
