@@ -10,6 +10,7 @@ import {
   DataAscent,
   DataCadenceAvg,
   DataDistance,
+  DataDuration,
   DataEffortPaceAvg,
   DataGradeAdjustedPaceAvg,
   DataHeartRateAvg,
@@ -1431,6 +1432,39 @@ describe('normalizeInsightQuery', () => {
     expect(result.query.valueType).toBe(ChartDataValueTypes.Total);
     expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Monthly);
     expect(result.query.activityTypes).toEqual([ActivityTypes.Cycling]);
+  });
+
+  it('does not treat generic "training duration" wording as a Training activity filter', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'duration',
+        aggregation: 'total',
+        category: 'date',
+        requestedTimeInterval: 'auto',
+        dateRange: {
+          kind: 'current_period',
+          unit: 'year',
+        },
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show my total training duration over time this year',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('duration');
+    expect(result.query.dataType).toBe(DataDuration.type);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Total);
+    expect(result.query.activityTypes).toEqual([]);
+    expect(result.query.activityTypes).not.toContain(ActivityTypes.Training);
   });
 
   it('normalizes average normalized power for cycling this month', async () => {

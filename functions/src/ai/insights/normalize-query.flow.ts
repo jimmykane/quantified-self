@@ -883,6 +883,14 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function isGenericTrainingMetricPhrase(
+  normalizedPrompt: string,
+  matchEndIndex: number,
+): boolean {
+  const suffix = normalizedPrompt.slice(matchEndIndex).trimStart();
+  return /^(duration|time|stress|effect|score|load)\b/.test(suffix);
+}
+
 function resolveActivityGroupSearchTerms(activityTypeGroup: ActivityTypeGroup): string[] {
   const metadata = getActivityTypeGroupMetadata(activityTypeGroup);
   return [metadata.label, ...metadata.aliases]
@@ -923,6 +931,12 @@ function resolvePromptActivityTypes(
     while ((match = searchPattern.exec(normalizedPrompt)) !== null) {
       const start = match.index;
       const end = start + normalizedLabel.length;
+      if (
+        activityType === ActivityTypes.Training
+        && isGenericTrainingMetricPhrase(normalizedPrompt, end)
+      ) {
+        continue;
+      }
       const overlapsExisting = occupiedRanges.some(range => !(end <= range.start || start >= range.end));
       if (overlapsExisting || explicitGroupTerms.has(normalizedLabel)) {
         continue;
