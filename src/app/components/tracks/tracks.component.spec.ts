@@ -469,6 +469,17 @@ describe('TracksComponent', () => {
   });
 
   describe('Initialization robustness', () => {
+    it('should tolerate getLayer throwing while waiting for the start layer during style transitions', async () => {
+      const trackManager = (component as any).tracksMapManager;
+      vi.spyOn(trackManager, 'getMap').mockReturnValue(mockMap);
+      mockMap.isStyleLoaded.mockReturnValue(true);
+      mockMap.getLayer.mockImplementation(() => {
+        throw new TypeError('undefined is not an object (evaluating "this.style.getOwnLayer")');
+      });
+
+      await expect((component as any).waitForStartPointLayerReady(0)).resolves.toBeUndefined();
+    });
+
     it('should skip geolocation flyTo when track bounds were already applied', () => {
       const originalGeolocation = navigator.geolocation;
       let successCallback: ((position: any) => void) | undefined;

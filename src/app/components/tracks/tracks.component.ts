@@ -2633,10 +2633,28 @@ export class TracksComponent implements OnInit, OnDestroy {
   private waitForStartPointLayerReady(timeoutMs: number = 240): Promise<void> {
     const map = this.tracksMapManager.getMap();
     const layerId = 'track-start-layer';
+
+    const hasStartLayer = (): boolean => {
+      if (!map?.getLayer) {
+        return false;
+      }
+
+      if (map?.isStyleLoaded && !map.isStyleLoaded()) {
+        return false;
+      }
+
+      try {
+        return !!map.getLayer(layerId);
+      } catch {
+        // During style swaps/teardown, map.getLayer can throw before style is fully available.
+        return false;
+      }
+    };
+
     if (!map?.getLayer) {
       return Promise.resolve();
     }
-    if (map.getLayer(layerId)) {
+    if (hasStartLayer()) {
       return this.waitForMapRenderTick();
     }
 
@@ -2655,7 +2673,7 @@ export class TracksComponent implements OnInit, OnDestroy {
         resolve();
       };
       const checkReady = () => {
-        if (map.getLayer?.(layerId)) {
+        if (hasStartLayer()) {
           done();
         }
       };
