@@ -389,11 +389,11 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "stats.`Activity Types`",
-          "arrayConfig": "CONTAINS"
+          "fieldPath": "startDate",
+          "order": "ASCENDING"
         },
         {
-          "fieldPath": "startDate",
+          "fieldPath": "stats.`Activity Types`",
           "order": "ASCENDING"
         },
         {
@@ -408,12 +408,12 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "stats.`Activity Types`",
-          "arrayConfig": "CONTAINS"
-        },
-        {
           "fieldPath": "startDate",
           "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "stats.`Activity Types`",
+          "order": "DESCENDING"
         },
         {
           "fieldPath": "__name__",
@@ -665,6 +665,25 @@
         {
           "fieldPath": "__name__",
           "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "stats.`Activity Types`",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "startDate",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
         }
       ],
       "density": "SPARSE_ALL"
