@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as admin from 'firebase-admin';
+import { HttpsError } from 'firebase-functions/v2/https';
 import {
   ActivityTypes,
   ChartDataCategoryTypes,
@@ -19,6 +20,7 @@ import {
   normalizeFirestoreValue,
   rehydrateAiInsightsEvent,
   setExecuteQueryDependenciesForTesting,
+  withExecuteQueryDependenciesForTesting,
 } from './execute-query';
 
 function createMockEvent(options: {
@@ -177,6 +179,27 @@ describe('execute-query', () => {
     }));
   });
 
+  it('logs structured error metadata when importer throws an HttpsError-like failure', () => {
+    const warn = vi.fn();
+
+    const event = rehydrateAiInsightsEvent('bad-event', {
+      startDate: 1768003200000,
+      stats: {
+        'Average Cadence': { value: 90 },
+      },
+    }, (() => {
+      throw new HttpsError('internal', 'Importer exploded');
+    }) as any, { info: vi.fn(), warn, error: vi.fn() });
+
+    expect(event).toBeNull();
+    expect(warn).toHaveBeenCalledWith('[aiInsights] Failed to rehydrate event snapshot', expect.objectContaining({
+      eventID: 'bad-event',
+      errorName: 'Error',
+      errorMessage: 'Importer exploded',
+      errorCode: 'internal',
+    }));
+  });
+
   it('filters on startDate, removes merges, filters activities, and aggregates matching events', async () => {
     const fetchEventDocs = vi.fn(async () => [
       { id: 'e1', data: () => ({ startDate: new Date('2026-01-10T12:00:00.000Z') }) },
@@ -226,6 +249,43 @@ describe('execute-query', () => {
     expect(result.matchedEventsCount).toBe(1);
     expect(result.aggregation.buckets).toHaveLength(1);
     expect(result.aggregation.buckets[0]?.aggregateValue).toBe(40);
+  });
+
+  it('scopes dependency overrides and restores previous test dependencies', async () => {
+    const loggerStub = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any;
+    const importEvent = vi.fn(() => createMockEvent({
+      id: 'e1',
+      startDate: new Date('2026-01-10T12:00:00.000Z'),
+      activityTypes: [ActivityTypes.Cycling],
+      stats: { [DataDistance.type]: 40 },
+    }));
+    const baseFetchEventDocs = vi.fn(async () => [
+      { id: 'e1', data: () => ({ startDate: new Date('2026-01-10T12:00:00.000Z') }) },
+    ]);
+    const scopedFetchEventDocs = vi.fn(async () => [
+      { id: 'e1', data: () => ({ startDate: new Date('2026-01-10T12:00:00.000Z') }) },
+    ]);
+
+    setExecuteQueryDependenciesForTesting({
+      fetchEventDocs: baseFetchEventDocs as any,
+      fetchDebugEventSnapshot: vi.fn(async () => ({ totalEventsCount: 1, recentEventsSample: [] })),
+      importEvent,
+      logger: loggerStub,
+    });
+
+    await withExecuteQueryDependenciesForTesting({
+      fetchEventDocs: scopedFetchEventDocs as any,
+      fetchDebugEventSnapshot: vi.fn(async () => ({ totalEventsCount: 1, recentEventsSample: [] })),
+      importEvent,
+      logger: loggerStub,
+    }, async () => {
+      await executeAiInsightsQuery('user-1', createQuery(), 'show distance');
+    });
+
+    await executeAiInsightsQuery('user-1', createQuery(), 'show distance');
+
+    expect(scopedFetchEventDocs).toHaveBeenCalledTimes(1);
+    expect(baseFetchEventDocs).toHaveBeenCalledTimes(1);
   });
 
   it('supports events collections that store startDate as epoch milliseconds', async () => {

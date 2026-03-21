@@ -627,6 +627,68 @@ describe('AiInsightsLatestSnapshotService', () => {
     );
   });
 
+  it('should clear snapshots when normalization encounters unknown enum variants', async () => {
+    const snapshotWithUnknownChartType = {
+      version: 1,
+      savedAt: '2026-03-18T12:00:00.000Z',
+      prompt: 'Show my total distance',
+      response: {
+        ...buildOkResponse(),
+        query: {
+          ...buildOkResponse().query,
+          chartType: 9999,
+        },
+      },
+    };
+    vi.mocked(getDoc).mockResolvedValue({
+      exists: () => true,
+      data: () => snapshotWithUnknownChartType,
+    } as never);
+
+    const restored = await service.loadLatest('user-1');
+
+    expect(restored).toBeNull();
+    expect(deleteDoc).toHaveBeenCalledWith({ path: 'users/user-1/aiInsightsRequests/latest' });
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      '[AiInsightsLatestSnapshotService] Clearing latest AI insight snapshot because normalization failed.',
+      expect.objectContaining({
+        userID: 'user-1',
+        reason: 'normalization_failed',
+      }),
+    );
+  });
+
+  it('should clear snapshots when aggregation enum variants are unknown', async () => {
+    const snapshotWithUnknownAggregationInterval = {
+      version: 1,
+      savedAt: '2026-03-18T12:00:00.000Z',
+      prompt: 'Show my total distance',
+      response: {
+        ...buildOkResponse(),
+        aggregation: {
+          ...buildOkResponse().aggregation,
+          resolvedTimeInterval: 9999,
+        },
+      },
+    };
+    vi.mocked(getDoc).mockResolvedValue({
+      exists: () => true,
+      data: () => snapshotWithUnknownAggregationInterval,
+    } as never);
+
+    const restored = await service.loadLatest('user-1');
+
+    expect(restored).toBeNull();
+    expect(deleteDoc).toHaveBeenCalledWith({ path: 'users/user-1/aiInsightsRequests/latest' });
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      '[AiInsightsLatestSnapshotService] Clearing latest AI insight snapshot because normalization failed.',
+      expect.objectContaining({
+        userID: 'user-1',
+        reason: 'normalization_failed',
+      }),
+    );
+  });
+
   it('should restore event-lookup snapshots without clearing them', async () => {
     const snapshot: AiInsightsLatestSnapshot = {
       version: 1,

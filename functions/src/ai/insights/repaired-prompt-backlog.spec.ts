@@ -11,6 +11,7 @@ import {
   buildNormalizedInsightQuerySignature,
   recordSuccessfulAiInsightRepair,
   setAiInsightsPromptRepairBacklogDependenciesForTesting,
+  withAiInsightsPromptRepairBacklogDependenciesForTesting,
 } from './repaired-prompt-backlog';
 
 vi.mock('@sports-alliance/sports-lib', async (importOriginal) => await importOriginal());
@@ -19,6 +20,10 @@ type StoredDoc = Record<string, unknown> | undefined;
 
 class FakeDocumentSnapshot {
   constructor(private readonly storedDoc: StoredDoc) { }
+
+  get exists(): boolean {
+    return this.storedDoc !== undefined;
+  }
 
   data(): StoredDoc {
     return this.storedDoc;
@@ -57,10 +62,25 @@ class FakeTransaction {
   ): void {
     this.db.setDocument(docRef.path, data, options?.merge === true);
   }
+
+  create(
+    docRef: FakeDocumentReference,
+    data: Record<string, unknown>,
+  ): void {
+    this.db.createDocument(docRef.path, data);
+  }
+
+  update(
+    docRef: FakeDocumentReference,
+    data: Record<string, unknown>,
+  ): void {
+    this.db.updateDocument(docRef.path, data);
+  }
 }
 
 class FakeFirestore {
   private readonly documents = new Map<string, Record<string, unknown>>();
+  readonly operations: Array<'set' | 'create' | 'update'> = [];
 
   collection(name: string): FakeCollectionReference {
     return new FakeCollectionReference(this, name);
@@ -77,8 +97,28 @@ class FakeFirestore {
   }
 
   setDocument(path: string, data: Record<string, unknown>, merge: boolean): void {
+    this.operations.push('set');
     const previous = this.documents.get(path);
     this.documents.set(path, merge ? { ...(previous ?? {}), ...data } : { ...data });
+  }
+
+  createDocument(path: string, data: Record<string, unknown>): void {
+    this.operations.push('create');
+    if (this.documents.has(path)) {
+      throw new Error(`Document already exists: ${path}`);
+    }
+
+    this.documents.set(path, { ...data });
+  }
+
+  updateDocument(path: string, data: Record<string, unknown>): void {
+    this.operations.push('update');
+    const previous = this.documents.get(path);
+    if (!previous) {
+      throw new Error(`Document does not exist: ${path}`);
+    }
+
+    this.documents.set(path, { ...previous, ...data });
   }
 }
 
@@ -137,6 +177,19 @@ describe('repaired prompt backlog', () => {
     expect(firstIdentity.intentDocID).toBe(secondIdentity.intentDocID);
   });
 
+  it('scopes backlog dependency overrides and restores previous test dependencies', async () => {
+    const query = buildAggregateQuery();
+
+    const scopedIdentity = await withAiInsightsPromptRepairBacklogDependenciesForTesting({
+      hashText: () => 'scoped-doc-id',
+    }, async () => buildAiInsightsPromptRepairIdentity('show max heartrate', query));
+
+    const restoredIdentity = buildAiInsightsPromptRepairIdentity('show max heartrate', query);
+
+    expect(scopedIdentity.intentDocID).toBe('scoped-doc-id');
+    expect(restoredIdentity.intentDocID).not.toBe('scoped-doc-id');
+  });
+
   it('increments seenCount and updates lastSeenAt on repeated upserts', async () => {
     const query = buildAggregateQuery();
     const firstRecord = await recordSuccessfulAiInsightRepair({
@@ -160,6 +213,7 @@ describe('repaired prompt backlog', () => {
     expect(storedDoc?.seenCount).toBe(2);
     expect(storedDoc?.firstSeenAt).toBe('2026-03-21T00:00:00.000Z');
     expect(storedDoc?.lastSeenAt).toBe('2026-03-25T00:00:00.000Z');
+    expect(fakeDb.operations).toEqual(['create', 'update']);
   });
 
   it('stores canonical/raw/resolved fields and excludes uid fields', async () => {

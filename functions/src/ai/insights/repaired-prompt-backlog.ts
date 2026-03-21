@@ -42,10 +42,10 @@ const defaultAiInsightsPromptRepairBacklogDependencies: AiInsightsPromptRepairBa
 
 let aiInsightsPromptRepairBacklogDependencies = defaultAiInsightsPromptRepairBacklogDependencies;
 
-function trimPromptSample(prompt: string): string {
+export function trimPromptSample(prompt: string, maxChars = AI_INSIGHTS_PROMPT_REPAIR_RAW_PROMPT_MAX_CHARS): string {
   return `${prompt || ''}`
     .trim()
-    .slice(0, AI_INSIGHTS_PROMPT_REPAIR_RAW_PROMPT_MAX_CHARS);
+    .slice(0, Math.max(0, maxChars));
 }
 
 function stableSerialize(value: unknown): string {
@@ -110,15 +110,13 @@ export async function recordSuccessfulAiInsightRepair(
       ? existingData.triageStatus
       : 'pending';
 
-    transaction.set(docRef, {
+    const commonPayload = {
       version: AI_INSIGHTS_PROMPT_REPAIR_BACKLOG_VERSION,
       canonicalPrompt: identity.canonicalPrompt,
       normalizedQuerySignature: identity.normalizedQuerySignature,
       normalizedQuery: input.normalizedQuery,
       metricKey: input.metricKey ?? null,
       deterministicFailureReasonCode: input.deterministicFailureReasonCode,
-      seenCount: existingSeenCount + 1,
-      firstSeenAt: existingFirstSeenAt,
       lastSeenAt: nowIso,
       latestRawPrompt: trimPromptSample(input.rawPrompt),
       latestRepairInputPrompt: trimPromptSample(input.repairInputPrompt),
@@ -126,7 +124,21 @@ export async function recordSuccessfulAiInsightRepair(
       triageStatus: existingTriageStatus,
       expireAt,
       updatedAt: nowIso,
-    }, { merge: true });
+    };
+
+    if (snapshot.exists) {
+      transaction.update(docRef, {
+        ...commonPayload,
+        seenCount: existingSeenCount + 1,
+      });
+      return;
+    }
+
+    transaction.create(docRef, {
+      ...commonPayload,
+      seenCount: 1,
+      firstSeenAt: existingFirstSeenAt,
+    });
   });
 
   return identity;
@@ -134,8 +146,25 @@ export async function recordSuccessfulAiInsightRepair(
 
 export function setAiInsightsPromptRepairBacklogDependenciesForTesting(
   dependencies?: Partial<AiInsightsPromptRepairBacklogDependencies>,
-): void {
+): () => void {
+  const previousDependencies = aiInsightsPromptRepairBacklogDependencies;
   aiInsightsPromptRepairBacklogDependencies = dependencies
     ? { ...defaultAiInsightsPromptRepairBacklogDependencies, ...dependencies }
     : defaultAiInsightsPromptRepairBacklogDependencies;
+
+  return () => {
+    aiInsightsPromptRepairBacklogDependencies = previousDependencies;
+  };
+}
+
+export async function withAiInsightsPromptRepairBacklogDependenciesForTesting<T>(
+  dependencies: Partial<AiInsightsPromptRepairBacklogDependencies>,
+  run: () => Promise<T> | T,
+): Promise<T> {
+  const restore = setAiInsightsPromptRepairBacklogDependenciesForTesting(dependencies);
+  try {
+    return await run();
+  } finally {
+    restore();
+  }
 }

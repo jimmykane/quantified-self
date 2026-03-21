@@ -610,8 +610,25 @@ export async function releaseAiInsightsQuotaReservation(
 
 export function setAiInsightsQuotaDependenciesForTesting(
   dependencies?: Partial<AiInsightsQuotaDependencies>,
-): void {
+): () => void {
+  const previousDependencies = aiInsightsQuotaDependencies;
   aiInsightsQuotaDependencies = dependencies
     ? { ...defaultAiInsightsQuotaDependencies, ...dependencies }
     : defaultAiInsightsQuotaDependencies;
+
+  return () => {
+    aiInsightsQuotaDependencies = previousDependencies;
+  };
+}
+
+export async function withAiInsightsQuotaDependenciesForTesting<T>(
+  dependencies: Partial<AiInsightsQuotaDependencies>,
+  run: () => Promise<T> | T,
+): Promise<T> {
+  const restore = setAiInsightsQuotaDependenciesForTesting(dependencies);
+  try {
+    return await run();
+  } finally {
+    restore();
+  }
 }

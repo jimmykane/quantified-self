@@ -28,6 +28,7 @@ import {
 import {
   buildAiInsightsPromptRepairIdentity,
   recordSuccessfulAiInsightRepair,
+  trimPromptSample,
 } from './repaired-prompt-backlog';
 import { AiInsightsRequestSchema, AiInsightsResponseSchema } from './schemas';
 import {
@@ -62,10 +63,44 @@ interface AiInsightsCallableContext {
 
 const AI_INSIGHTS_PAID_REQUIRED_MESSAGE = 'AI Insights is available to Basic and Pro members.';
 const DEFAULT_EMPTY_STATE = 'No matching events were found for this insight in the requested range.';
+const AI_INSIGHTS_LOG_PROMPT_PREVIEW_MAX_CHARS = 60;
+
+function buildPromptLogContext(
+  prompt: string | null | undefined,
+  effectivePrompt?: string | null | undefined,
+): {
+  promptLength: number;
+  promptPreview: string | null;
+  effectivePromptLength?: number;
+  effectivePromptPreview?: string | null;
+} {
+  const normalizedPrompt = `${prompt || ''}`.trim();
+  const normalizedEffectivePrompt = effectivePrompt === undefined
+    ? undefined
+    : `${effectivePrompt || ''}`.trim();
+
+  return {
+    promptLength: normalizedPrompt.length,
+    promptPreview: normalizedPrompt
+      ? trimPromptSample(normalizedPrompt, AI_INSIGHTS_LOG_PROMPT_PREVIEW_MAX_CHARS)
+      : null,
+    ...(normalizedEffectivePrompt === undefined
+      ? {}
+      : {
+        effectivePromptLength: normalizedEffectivePrompt.length,
+        effectivePromptPreview: normalizedEffectivePrompt
+          ? trimPromptSample(normalizedEffectivePrompt, AI_INSIGHTS_LOG_PROMPT_PREVIEW_MAX_CHARS)
+          : null,
+      }),
+  };
+}
 
 function shouldUseCallableTokenForQuotaRoleContext(): boolean {
-  return process.env.FUNCTIONS_EMULATOR === 'true'
-    || Boolean(process.env.FIREBASE_AUTH_EMULATOR_HOST);
+  // Only trust callable JWT role claims while running the Cloud Functions emulator.
+  // In hosted environments, claims can be stale and Firestore remains the source of truth.
+  // Do not gate this on FIREBASE_AUTH_EMULATOR_HOST alone, because accidental env leakage
+  // could otherwise switch production/staging behavior to claim-based quota role resolution.
+  return process.env.FUNCTIONS_EMULATOR === 'true';
 }
 
 function parseGracePeriodUntilClaim(value: unknown): number | undefined {
@@ -85,6 +120,9 @@ function buildQuotaRoleContextFromCallableAuth(
   auth: { token?: Record<string, unknown> } | undefined,
 ): AiInsightsUserRoleContext | null {
   const role = auth?.token?.stripeRole;
+  // In emulator mode, missing/blank stripeRole claims intentionally fall back
+  // to Firestore role resolution so free/legacy test users still follow the
+  // production source-of-truth path instead of forcing claim-based behavior.
   if (typeof role !== 'string' || !role.trim()) {
     return null;
   }
@@ -151,6 +189,7 @@ export async function runAiInsights(
       ? await reserveAiInsightsQuotaForRequest(userID, quotaRoleContext)
       : await reserveAiInsightsQuotaForRequest(userID);
   };
+  await ensureQuotaReservation();
 
   const releaseReservedQuota = async (): Promise<AiInsightsQuotaStatusResponse> => {
     if (consumedQuotaStatus) {
@@ -185,7 +224,7 @@ export async function runAiInsights(
     logger.info('[aiInsights] Consumed prompt quota on AI attempt', {
       userID,
       stage,
-      prompt,
+      ...buildPromptLogContext(prompt),
     });
     return consumedQuotaStatus;
   };
@@ -194,21 +233,21 @@ export async function runAiInsights(
   const promptLanguage = detectPromptLanguageDeterministic(prompt);
   logger.info('[aiInsights] Prompt language gate result', {
     userID,
-    prompt,
+    ...buildPromptLogContext(prompt),
     promptLanguage,
   });
 
   if (promptLanguage !== 'english') {
     logger.info('[aiInsights] Starting AI prompt sanitization', {
       userID,
-      prompt,
+      ...buildPromptLogContext(prompt),
       promptLanguage,
     });
     await consumeQuotaOnAiAttempt('sanitize');
     const sanitizationResult = await sanitizePromptToEnglish(prompt);
     logger.info('[aiInsights] Finished AI prompt sanitization', {
       userID,
-      prompt,
+      ...buildPromptLogContext(prompt),
       status: sanitizationResult.status,
     });
 
@@ -216,7 +255,7 @@ export async function runAiInsights(
       const quota = await resolveQuotaForResponse();
       logger.info('[aiInsights] Terminal result', {
         userID,
-        prompt,
+        ...buildPromptLogContext(prompt),
         resultCategory: 'unsupported',
         reasonCode: sanitizationResult.reasonCode,
         source: 'sanitize',
@@ -244,8 +283,7 @@ export async function runAiInsights(
       const deterministicFailureReasonCode = normalizeResult.reasonCode;
       logger.info('[aiInsights] Starting AI prompt repair', {
         userID,
-        prompt,
-        effectivePrompt,
+        ...buildPromptLogContext(prompt, effectivePrompt),
         reasonCode: deterministicFailureReasonCode,
       });
       await consumeQuotaOnAiAttempt('repair');
@@ -256,8 +294,7 @@ export async function runAiInsights(
       }, normalizeResult);
       logger.info('[aiInsights] Finished AI prompt repair', {
         userID,
-        prompt,
-        effectivePrompt,
+        ...buildPromptLogContext(prompt, effectivePrompt),
         source: repairedResult.source,
         status: repairedResult.result.status,
       });
@@ -294,8 +331,7 @@ export async function runAiInsights(
         const quota = await resolveQuotaForResponse();
         logger.warn('[aiInsights] Unsupported request', {
           userID,
-          prompt,
-          effectivePrompt,
+          ...buildPromptLogContext(prompt, effectivePrompt),
           clientTimezone,
           reasonCode: normalizeResult.reasonCode,
           suggestedPromptsCount: normalizeResult.suggestedPrompts.length,
@@ -303,8 +339,7 @@ export async function runAiInsights(
         });
         logger.info('[aiInsights] Terminal result', {
           userID,
-          prompt,
-          effectivePrompt,
+          ...buildPromptLogContext(prompt, effectivePrompt),
           resultCategory: 'unsupported',
           reasonCode: normalizeResult.reasonCode,
         });
@@ -316,8 +351,7 @@ export async function runAiInsights(
       const quota = await resolveQuotaForResponse();
       logger.warn('[aiInsights] Unsupported request', {
         userID,
-        prompt,
-        effectivePrompt,
+        ...buildPromptLogContext(prompt, effectivePrompt),
         clientTimezone,
         reasonCode: normalizeResult.reasonCode,
         suggestedPromptsCount: normalizeResult.suggestedPrompts.length,
@@ -325,8 +359,7 @@ export async function runAiInsights(
       });
       logger.info('[aiInsights] Terminal result', {
         userID,
-        prompt,
-        effectivePrompt,
+        ...buildPromptLogContext(prompt, effectivePrompt),
         resultCategory: 'unsupported',
         reasonCode: normalizeResult.reasonCode,
       });
@@ -346,16 +379,14 @@ export async function runAiInsights(
   if (effectiveQuery.resultKind !== 'multi_metric_aggregate' && !metric) {
     logger.warn('[aiInsights] Unsupported metric key after normalization', {
       userID,
-      prompt,
-      effectivePrompt,
+      ...buildPromptLogContext(prompt, effectivePrompt),
       clientTimezone,
       metricKey: normalizeResult.metricKey,
     });
     const quota = await resolveQuotaForResponse();
     logger.info('[aiInsights] Terminal result', {
       userID,
-      prompt,
-      effectivePrompt,
+      ...buildPromptLogContext(prompt, effectivePrompt),
       resultCategory: 'unsupported',
       reasonCode: 'unsupported_metric',
     });
@@ -377,16 +408,14 @@ export async function runAiInsights(
   ) {
       logger.warn('[aiInsights] Unsupported multi metric selection after normalization', {
       userID,
-      prompt,
-      effectivePrompt,
+      ...buildPromptLogContext(prompt, effectivePrompt),
       clientTimezone,
       metricKeys: effectiveQuery.metricSelections.map(metricSelection => metricSelection.metricKey),
     });
     const quota = await resolveQuotaForResponse();
     logger.info('[aiInsights] Terminal result', {
       userID,
-      prompt,
-      effectivePrompt,
+      ...buildPromptLogContext(prompt, effectivePrompt),
       resultCategory: 'unsupported',
       reasonCode: 'unsupported_multi_metric_combination',
     });
@@ -395,9 +424,8 @@ export async function runAiInsights(
     });
   }
   logger.info('[aiInsights] Query normalization debug', {
-    prompt,
-    effectivePrompt,
     userID,
+    ...buildPromptLogContext(prompt, effectivePrompt),
     normalizedQuery: {
       dataType: effectiveQuery.resultKind === 'multi_metric_aggregate'
         ? null
@@ -482,8 +510,7 @@ export async function runAiInsights(
   let narrativeResult: Awaited<ReturnType<typeof summarizeAiInsightResult>>;
   logger.info('[aiInsights] Starting AI insight summarization', {
     userID,
-    prompt,
-    effectivePrompt,
+    ...buildPromptLogContext(prompt, effectivePrompt),
     resultKind: executionResult.resultKind,
     isEmpty,
   });
@@ -532,8 +559,7 @@ export async function runAiInsights(
   }
   logger.info('[aiInsights] Finished AI insight summarization', {
     userID,
-    prompt,
-    effectivePrompt,
+    ...buildPromptLogContext(prompt, effectivePrompt),
     source: narrativeResult.source,
   });
   const quota = await resolveQuotaForResponse();
@@ -541,8 +567,7 @@ export async function runAiInsights(
   if (isEmpty) {
     logger.info('[aiInsights] Terminal result', {
       userID,
-      prompt,
-      effectivePrompt,
+      ...buildPromptLogContext(prompt, effectivePrompt),
       resultCategory: 'empty',
       resultKind: executionResult.resultKind,
     });
@@ -562,8 +587,7 @@ export async function runAiInsights(
   if (executionResult.resultKind === 'event_lookup') {
     logger.info('[aiInsights] Terminal result', {
       userID,
-      prompt,
-      effectivePrompt,
+      ...buildPromptLogContext(prompt, effectivePrompt),
       resultCategory: 'ok',
       resultKind: 'event_lookup',
     });
@@ -585,8 +609,7 @@ export async function runAiInsights(
   if (executionResult.resultKind === 'multi_metric_aggregate') {
     logger.info('[aiInsights] Terminal result', {
       userID,
-      prompt,
-      effectivePrompt,
+      ...buildPromptLogContext(prompt, effectivePrompt),
       resultCategory: 'ok',
       resultKind: 'multi_metric_aggregate',
     });
@@ -603,8 +626,7 @@ export async function runAiInsights(
 
   logger.info('[aiInsights] Terminal result', {
     userID,
-    prompt,
-    effectivePrompt,
+    ...buildPromptLogContext(prompt, effectivePrompt),
     resultCategory: 'ok',
     resultKind: 'aggregate',
   });
@@ -645,7 +667,7 @@ export const aiInsightsFlow = aiInsightsGenkit.defineFlow({
     const context = aiInsightsGenkit.currentContext() as AiInsightsCallableContext | undefined;
     logger.error('[aiInsights] Failed to generate AI insight', {
       userID: context?.auth?.uid ?? null,
-      prompt: typeof input?.prompt === 'string' ? input.prompt : null,
+      ...buildPromptLogContext(typeof input?.prompt === 'string' ? input.prompt : null),
       clientTimezone: typeof input?.clientTimezone === 'string' ? input.clientTimezone : null,
       ...serializeErrorForLogging(error),
     });

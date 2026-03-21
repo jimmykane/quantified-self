@@ -29,6 +29,13 @@ import type {
   EventStatAggregationBucket,
   EventStatAggregationResult,
 } from '@shared/event-stat-aggregation.types';
+import {
+  ChartDataCategoryTypes,
+  ChartDataValueTypes,
+  ChartTypes,
+  TimeIntervals,
+} from '@sports-alliance/sports-lib';
+import { validateAiInsightsLatestSnapshot } from '@shared/ai-insights-latest-snapshot.validation';
 import { LoggerService } from './logger.service';
 
 const AI_INSIGHTS_LATEST_DOC_ID = 'latest';
@@ -49,6 +56,10 @@ type SnapshotValidationFailure = {
   reason: string;
   details?: UnknownRecord;
 };
+const KNOWN_CHART_DATA_CATEGORY_TYPES = buildEnumValueSet(ChartDataCategoryTypes);
+const KNOWN_CHART_DATA_VALUE_TYPES = buildEnumValueSet(ChartDataValueTypes);
+const KNOWN_CHART_TYPES = buildEnumValueSet(ChartTypes);
+const KNOWN_TIME_INTERVALS = buildEnumValueSet(TimeIntervals);
 
 @Injectable({
   providedIn: 'root',
@@ -67,22 +78,31 @@ export class AiInsightsLatestSnapshotService {
       }
 
       const data = latestSnapshot.data();
-      const validationFailure = getAiInsightsLatestSnapshotValidationFailure(data);
-      if (validationFailure) {
+      const validationResult = validateAiInsightsLatestSnapshot(
+        data,
+        AI_INSIGHTS_LATEST_SNAPSHOT_VERSION,
+      );
+      if (!validationResult.valid) {
         this.logger.warn('[AiInsightsLatestSnapshotService] Clearing invalid latest AI insight snapshot.', {
           userID,
-          reason: validationFailure.reason,
-          ...validationFailure.details,
+          reason: validationResult.failure.reason,
+          ...validationResult.failure.details,
         });
         await this.deleteLatest(userID);
         return null;
       }
 
-      if (!isAiInsightsLatestSnapshot(data)) {
+      try {
+        return normalizeAiInsightsLatestSnapshot(validationResult.snapshot);
+      } catch (error) {
+        this.logger.warn('[AiInsightsLatestSnapshotService] Clearing latest AI insight snapshot because normalization failed.', {
+          userID,
+          reason: 'normalization_failed',
+          error,
+        });
+        await this.deleteLatest(userID);
         return null;
       }
-
-      return normalizeAiInsightsLatestSnapshot(data);
     } catch (error) {
       this.logger.error('[AiInsightsLatestSnapshotService] Failed to load latest AI insight snapshot.', { userID, error });
       return null;
@@ -790,6 +810,7 @@ function normalizeAiInsightsResponse(response: AiInsightsResponse): AiInsightsRe
       ...response,
       ...(response.quota ? { quota: response.quota } : {}),
       query: normalizeInsightQuery(response.query as unknown as NormalizedInsightQueryLike),
+      aggregation: normalizeAggregationResult(response.aggregation),
       summary: normalizeSummary(response.summary),
       presentation: {
         ...normalizePresentation(response.presentation),
@@ -835,6 +856,7 @@ function normalizeAiInsightsResponse(response: AiInsightsResponse): AiInsightsRe
     resultKind: 'aggregate',
     ...(normalizedResponse.quota ? { quota: normalizedResponse.quota } : {}),
     query: normalizeAggregateInsightQuery(normalizedResponse.query),
+    aggregation: normalizeAggregationResult(normalizedResponse.aggregation),
     summary: normalizeSummary(normalizedResponse.summary),
     ...(normalizedResponse.eventRanking ? { eventRanking: normalizeEventLookup(normalizedResponse.eventRanking) } : {}),
     presentation: normalizePresentation(normalizedResponse.presentation),
@@ -843,15 +865,16 @@ function normalizeAiInsightsResponse(response: AiInsightsResponse): AiInsightsRe
 
 function normalizeInsightQuery(query: NormalizedInsightQueryLike): NormalizedInsightQuery {
   const resultKind = resolveNormalizedInsightQueryResultKind(query);
-  if (resultKind === 'multi_metric_aggregate') {
-    return normalizeMultiMetricInsightQuery(query);
+  switch (resultKind) {
+    case 'multi_metric_aggregate':
+      return normalizeMultiMetricInsightQuery(query);
+    case 'event_lookup':
+      return normalizeEventLookupInsightQuery(query);
+    case 'aggregate':
+      return normalizeAggregateInsightQuery(query);
+    default:
+      return assertNever(resultKind);
   }
-
-  if (resultKind === 'event_lookup') {
-    return normalizeEventLookupInsightQuery(query);
-  }
-
-  return normalizeAggregateInsightQuery(query);
 }
 
 function normalizeAggregateInsightQuery(query: NormalizedInsightQueryLike): AggregateNormalizedInsightQuery {
@@ -862,7 +885,10 @@ function normalizeAggregateInsightQuery(query: NormalizedInsightQueryLike): Aggr
   return {
     ...(rest as Omit<AggregateNormalizedInsightQuery, 'resultKind' | 'requestedTimeInterval'>),
     resultKind: 'aggregate',
-    ...(requestedTimeInterval == null ? {} : { requestedTimeInterval: requestedTimeInterval as number }),
+    categoryType: normalizeChartDataCategoryType(rest.categoryType),
+    valueType: normalizeChartDataValueType(rest.valueType),
+    chartType: normalizeChartType(rest.chartType),
+    ...(requestedTimeInterval == null ? {} : { requestedTimeInterval: normalizeTimeInterval(requestedTimeInterval) }),
   };
 }
 
@@ -874,8 +900,10 @@ function normalizeEventLookupInsightQuery(query: NormalizedInsightQueryLike): Ev
   return {
     ...(rest as Omit<EventLookupNormalizedInsightQuery, 'resultKind' | 'requestedTimeInterval' | 'categoryType'>),
     resultKind: 'event_lookup',
-    categoryType: rest.categoryType as EventLookupNormalizedInsightQuery['categoryType'],
-    ...(requestedTimeInterval == null ? {} : { requestedTimeInterval: requestedTimeInterval as number }),
+    categoryType: normalizeChartDataCategoryType(rest.categoryType),
+    valueType: normalizeChartDataValueType(rest.valueType),
+    chartType: normalizeChartType(rest.chartType),
+    ...(requestedTimeInterval == null ? {} : { requestedTimeInterval: normalizeTimeInterval(requestedTimeInterval) }),
   };
 }
 
@@ -889,13 +917,14 @@ function normalizeMultiMetricInsightQuery(query: NormalizedInsightQueryLike): Mu
     ...(rest as Omit<MultiMetricNormalizedInsightQuery, 'resultKind' | 'requestedTimeInterval' | 'metricSelections' | 'groupingMode' | 'categoryType'>),
     resultKind: 'multi_metric_aggregate',
     groupingMode: (rest.groupingMode === 'overall' ? 'overall' : 'date'),
-    categoryType: rest.categoryType as MultiMetricNormalizedInsightQuery['categoryType'],
-    ...(requestedTimeInterval == null ? {} : { requestedTimeInterval: requestedTimeInterval as number }),
+    categoryType: normalizeChartDataCategoryType(rest.categoryType),
+    chartType: normalizeChartType(rest.chartType),
+    ...(requestedTimeInterval == null ? {} : { requestedTimeInterval: normalizeTimeInterval(requestedTimeInterval) }),
     metricSelections: Array.isArray(metricSelections)
       ? metricSelections.map(selection => ({
         metricKey: `${(selection as UnknownRecord).metricKey}` as MultiMetricNormalizedInsightQuery['metricSelections'][number]['metricKey'],
         dataType: `${(selection as UnknownRecord).dataType ?? ''}`,
-        valueType: (selection as UnknownRecord).valueType as MultiMetricNormalizedInsightQuery['metricSelections'][number]['valueType'],
+        valueType: normalizeChartDataValueType((selection as UnknownRecord).valueType),
       }))
       : [],
   };
@@ -908,7 +937,7 @@ function normalizeMultiMetricMetricResult(
     metricKey: metricResult.metricKey,
     metricLabel: metricResult.metricLabel,
     query: normalizeAggregateInsightQuery(metricResult.query as unknown as NormalizedInsightQueryLike),
-    aggregation: metricResult.aggregation,
+    aggregation: normalizeAggregationResult(metricResult.aggregation),
     summary: normalizeSummary(metricResult.summary),
     presentation: normalizePresentation(metricResult.presentation),
   };
@@ -917,6 +946,10 @@ function normalizeMultiMetricMetricResult(
 function resolveNormalizedInsightQueryResultKind(
   query: NormalizedInsightQueryLike,
 ): AiInsightsResultKind {
+  if (query.resultKind !== undefined && query.resultKind !== null && !isResultKind(query.resultKind)) {
+    throw new Error(`[AiInsightsLatestSnapshotService] Unsupported result kind in normalized query: ${String(query.resultKind)}`);
+  }
+
   if (query.resultKind === 'multi_metric_aggregate' || Array.isArray(query.metricSelections)) {
     return 'multi_metric_aggregate';
   }
@@ -935,10 +968,70 @@ function normalizeEventLookup(eventLookup: AiInsightEventLookup): AiInsightEvent
 function normalizePresentation(presentation: AiInsightPresentation): AiInsightPresentation {
   return {
     title: presentation.title,
-    chartType: presentation.chartType,
+    chartType: normalizeChartType(presentation.chartType),
     ...(presentation.emptyState == null ? {} : { emptyState: presentation.emptyState }),
     ...(presentation.warnings == null ? {} : { warnings: presentation.warnings }),
   };
+}
+
+function normalizeAggregationResult(aggregation: EventStatAggregationResult): EventStatAggregationResult {
+  return {
+    ...aggregation,
+    valueType: normalizeChartDataValueType(aggregation.valueType),
+    categoryType: normalizeChartDataCategoryType(aggregation.categoryType),
+    resolvedTimeInterval: normalizeTimeInterval(aggregation.resolvedTimeInterval),
+  };
+}
+
+function normalizeChartType(value: unknown): ChartTypes {
+  return requireKnownEnumValue(value, KNOWN_CHART_TYPES, 'chartType') as ChartTypes;
+}
+
+function normalizeChartDataCategoryType(value: unknown): ChartDataCategoryTypes {
+  return requireKnownEnumValue(value, KNOWN_CHART_DATA_CATEGORY_TYPES, 'categoryType') as ChartDataCategoryTypes;
+}
+
+function normalizeChartDataValueType(value: unknown): ChartDataValueTypes {
+  return requireKnownEnumValue(value, KNOWN_CHART_DATA_VALUE_TYPES, 'valueType') as ChartDataValueTypes;
+}
+
+function normalizeTimeInterval(value: unknown): TimeIntervals {
+  return requireKnownEnumValue(value, KNOWN_TIME_INTERVALS, 'timeInterval') as TimeIntervals;
+}
+
+function requireKnownEnumValue(
+  value: unknown,
+  allowedValues: ReadonlySet<string | number>,
+  fieldName: string,
+): string | number {
+  if (typeof value !== 'string' && typeof value !== 'number') {
+    throw new Error(`[AiInsightsLatestSnapshotService] Unsupported ${fieldName}: ${String(value)}`);
+  }
+
+  if (!allowedValues.has(value)) {
+    throw new Error(`[AiInsightsLatestSnapshotService] Unsupported ${fieldName}: ${String(value)}`);
+  }
+
+  return value;
+}
+
+function buildEnumValueSet(
+  enumValue: Record<string, string | number>,
+): ReadonlySet<string | number> {
+  const enumValues = Object.values(enumValue).filter(
+    (value): value is string | number => typeof value === 'string' || typeof value === 'number',
+  );
+  const hasNumericMembers = enumValues.some((value) => typeof value === 'number');
+
+  return new Set(
+    hasNumericMembers
+      ? enumValues.filter((value): value is number => typeof value === 'number')
+      : enumValues.filter((value): value is string => typeof value === 'string'),
+  );
+}
+
+function assertNever(value: never): never {
+  throw new Error(`[AiInsightsLatestSnapshotService] Unsupported result kind: ${String(value)}`);
 }
 
 function normalizeSummaryBucket(

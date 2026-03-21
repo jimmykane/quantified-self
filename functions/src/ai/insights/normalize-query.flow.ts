@@ -529,7 +529,7 @@ function resolveMultiPeriodMode(
     return 'compare';
   }
 
-  return 'compare';
+  return 'combined';
 }
 
 function resolvePromptYearListDateSelection(
@@ -1662,10 +1662,27 @@ export function resolveNormalizedInsightQueryFromIntent(
 
 export function setNormalizeQueryDependenciesForTesting(
   dependencies?: Partial<NormalizeQueryDependencies>,
-): void {
+): () => void {
+  const previousDependencies = normalizeQueryDependencies;
   normalizeQueryDependencies = dependencies
     ? { ...defaultNormalizeQueryDependencies, ...dependencies }
     : defaultNormalizeQueryDependencies;
+
+  return () => {
+    normalizeQueryDependencies = previousDependencies;
+  };
+}
+
+export async function withNormalizeQueryDependenciesForTesting<T>(
+  dependencies: Partial<NormalizeQueryDependencies>,
+  run: () => Promise<T> | T,
+): Promise<T> {
+  const restore = setNormalizeQueryDependenciesForTesting(dependencies);
+  try {
+    return await run();
+  } finally {
+    restore();
+  }
 }
 
 export function buildNormalizeQueryPromptContext(

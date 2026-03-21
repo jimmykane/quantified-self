@@ -8,6 +8,7 @@ import {
   releaseAiInsightsQuotaReservation,
   reserveAiInsightsQuotaForRequest,
   setAiInsightsQuotaDependenciesForTesting,
+  withAiInsightsQuotaDependenciesForTesting,
 } from './quota';
 import { AI_INSIGHTS_REQUEST_LIMITS } from '../../../../shared/limits';
 
@@ -170,6 +171,31 @@ describe('ai insights quota', () => {
     expect(finalizedStatus.remainingCount).toBe(99);
     expect(quotaStatus.successfulRequestCount).toBe(1);
     expect(quotaStatus.remainingCount).toBe(99);
+  });
+
+  it('scopes quota dependency overrides and restores previous test dependencies', async () => {
+    const scopedReservation = await withAiInsightsQuotaDependenciesForTesting({
+      now: () => new Date(FIXED_NOW_ISO),
+      createReservationId: () => 'scoped-reservation',
+      db: () => fakeDb as unknown as FirebaseFirestore.Firestore,
+      getUserRoleAndGracePeriod: async () => ({ role: 'pro' }),
+      isGracePeriodActive: (gracePeriodUntil?: number) => Boolean(gracePeriodUntil && gracePeriodUntil > Date.parse(FIXED_NOW_ISO)),
+      getActiveSubscriptionPeriod: async () => ({
+        role: 'pro',
+        startDate: PERIOD_START,
+        endDate: PERIOD_END,
+      }),
+      getLatestPaidSubscriptionPeriod: async () => ({
+        role: 'pro',
+        startDate: PERIOD_START,
+        endDate: PERIOD_END,
+      }),
+    }, async () => reserveAiInsightsQuotaForRequest('user-1'));
+
+    const restoredReservation = await reserveAiInsightsQuotaForRequest('user-2');
+
+    expect(scopedReservation.reservationID).toBe('scoped-reservation');
+    expect(restoredReservation.reservationID).toBe('reservation-1');
   });
 
   it('stores usage timestamps without depending on admin.firestore.FieldValue', async () => {

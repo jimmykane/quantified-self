@@ -1,4 +1,4 @@
-import { z } from 'genkit';
+import { z } from 'zod/v3';
 import {
   ActivityTypeGroups,
   ActivityTypes,
@@ -215,36 +215,25 @@ export const AiInsightsUnsupportedReasonCodeSchema = z.enum([
   'unsupported_multi_metric_combination',
 ]);
 
-export const AiInsightsResponseSchema = z.union([
-  z.object({
-    status: z.literal('ok'),
-    resultKind: z.literal('aggregate'),
-    narrative: z.string().min(1),
-    quota: AiInsightsQuotaStatusSchema.optional(),
-    query: NormalizedInsightQuerySchema,
-    aggregation: EventStatAggregationResultSchema,
-    summary: AiInsightSummarySchema,
-    eventRanking: AiInsightEventLookupSchema.optional(),
-    presentation: AiInsightPresentationSchema,
-  }),
-  z.object({
-    status: z.literal('ok'),
-    resultKind: z.literal('event_lookup'),
-    narrative: z.string().min(1),
-    quota: AiInsightsQuotaStatusSchema.optional(),
-    query: NormalizedInsightQuerySchema,
-    eventLookup: AiInsightEventLookupSchema,
-    presentation: AiInsightPresentationSchema,
-  }),
-  z.object({
-    status: z.literal('ok'),
-    resultKind: z.literal('multi_metric_aggregate'),
-    narrative: z.string().min(1),
-    quota: AiInsightsQuotaStatusSchema.optional(),
-    query: NormalizedInsightQuerySchema,
-    metricResults: z.array(AiInsightsMultiMetricAggregateMetricResultSchema).min(1).max(3),
-    presentation: AiInsightPresentationSchema,
-  }),
+const AiInsightsOkResponseBaseSchema = z.object({
+  status: z.literal('ok'),
+  narrative: z.string().min(1),
+  quota: AiInsightsQuotaStatusSchema.optional(),
+});
+
+const AiInsightsOkResponseSchema = AiInsightsOkResponseBaseSchema.extend({
+  resultKind: z.enum(['aggregate', 'event_lookup', 'multi_metric_aggregate']),
+  query: NormalizedInsightQuerySchema,
+  aggregation: EventStatAggregationResultSchema.optional(),
+  summary: AiInsightSummarySchema.optional(),
+  eventRanking: AiInsightEventLookupSchema.optional(),
+  eventLookup: AiInsightEventLookupSchema.optional(),
+  metricResults: z.array(AiInsightsMultiMetricAggregateMetricResultSchema).min(1).max(3).optional(),
+  presentation: AiInsightPresentationSchema,
+});
+
+export const AiInsightsResponseSchema = z.discriminatedUnion('status', [
+  AiInsightsOkResponseSchema,
   z.object({
     status: z.literal('empty'),
     narrative: z.string().min(1),

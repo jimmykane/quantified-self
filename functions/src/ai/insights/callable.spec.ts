@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { HttpsError } from 'firebase-functions/v2/https';
 import {
   ActivityTypeGroups,
   ActivityTypes,
@@ -88,6 +89,7 @@ vi.mock('./prompt-language-sanitization', () => ({
 vi.mock('./repaired-prompt-backlog', () => ({
   buildAiInsightsPromptRepairIdentity: (...args: unknown[]) => hoisted.buildAiInsightsPromptRepairIdentity(...args),
   recordSuccessfulAiInsightRepair: (...args: unknown[]) => hoisted.recordSuccessfulAiInsightRepair(...args),
+  trimPromptSample: (prompt: string, maxChars = 1000) => `${prompt || ''}`.trim().slice(0, Math.max(0, maxChars)),
 }));
 
 vi.mock('./execute-query', () => ({
@@ -398,6 +400,28 @@ describe('aiInsights callable', () => {
     expect(hoisted.normalizeInsightQuery).not.toHaveBeenCalled();
   });
 
+  it('fails before normalization when concurrent requests exhaust quota during reservation', async () => {
+    hoisted.getAiInsightsQuotaStatus.mockResolvedValue({
+      ...quotaStatus,
+      remainingCount: 1,
+    });
+    hoisted.reserveAiInsightsQuotaForRequest.mockRejectedValue(
+      new HttpsError('resource-exhausted', 'AI Insights limit reached for this billing period.'),
+    );
+
+    await expect(aiInsights({
+      prompt: 'show distance',
+      clientTimezone: 'UTC',
+    } as any)).rejects.toMatchObject({
+      code: 'resource-exhausted',
+      message: 'AI Insights limit reached for this billing period.',
+    });
+
+    expect(hoisted.normalizeInsightQuery).not.toHaveBeenCalled();
+    expect(hoisted.executeAiInsightsQuery).not.toHaveBeenCalled();
+    expect(hoisted.summarizeAiInsightResult).not.toHaveBeenCalled();
+  });
+
   it('allows active basic users', async () => {
     hoisted.getAiInsightsQuotaStatus.mockResolvedValue({
       ...quotaStatus,
@@ -577,6 +601,28 @@ describe('aiInsights callable', () => {
         chartType: ChartTypes.ColumnsVertical,
       }),
     });
+  });
+
+  it('logs prompt metadata without storing raw prompt text', async () => {
+    const piiPrompt = 'what was my pace when I ran the day I had my knee surgery in ioannina';
+
+    await aiInsights({
+      prompt: piiPrompt,
+      clientTimezone: 'UTC',
+    } as any);
+
+    const queryNormalizationLogCall = hoisted.loggerInfo.mock.calls.find(
+      (call) => call[0] === '[aiInsights] Query normalization debug',
+    );
+    expect(queryNormalizationLogCall).toBeDefined();
+    const queryNormalizationPayload = queryNormalizationLogCall?.[1] as Record<string, unknown>;
+
+    expect(queryNormalizationPayload.prompt).toBeUndefined();
+    expect(queryNormalizationPayload.effectivePrompt).toBeUndefined();
+    expect(queryNormalizationPayload.promptLength).toBe(piiPrompt.length);
+    expect(queryNormalizationPayload.promptPreview).toBe(piiPrompt.slice(0, 60));
+    expect(queryNormalizationPayload.effectivePromptLength).toBe(piiPrompt.length);
+    expect(queryNormalizationPayload.effectivePromptPreview).toBe(piiPrompt.slice(0, 60));
   });
 
   it('returns aggregate min/max responses with supplemental event ranking ids', async () => {
@@ -907,8 +953,9 @@ describe('aiInsights callable', () => {
 
     expect(hoisted.executeAiInsightsQuery).not.toHaveBeenCalled();
     expect(hoisted.summarizeAiInsightResult).not.toHaveBeenCalled();
-    expect(hoisted.reserveAiInsightsQuotaForRequest).not.toHaveBeenCalled();
+    expect(hoisted.reserveAiInsightsQuotaForRequest).toHaveBeenCalledTimes(1);
     expect(hoisted.finalizeAiInsightsQuotaReservation).not.toHaveBeenCalled();
+    expect(hoisted.releaseAiInsightsQuotaReservation).toHaveBeenCalledTimes(1);
     expect(hoisted.sanitizePromptToEnglish).not.toHaveBeenCalled();
     expect(hoisted.recordSuccessfulAiInsightRepair).not.toHaveBeenCalled();
     expect(result).toEqual({
@@ -1159,9 +1206,10 @@ describe('aiInsights callable', () => {
 
   it('logs serialized error details when ai insight generation fails', async () => {
     hoisted.summarizeAiInsightResult.mockRejectedValue(new Error('summarize failed'));
+    const piiPrompt = 'what was my pace when I ran the day I had my knee surgery';
 
     await expect(aiInsights({
-      prompt: 'show distance',
+      prompt: piiPrompt,
       clientTimezone: 'UTC',
     } as any)).rejects.toMatchObject({
       code: 'internal',
@@ -1175,6 +1223,11 @@ describe('aiInsights callable', () => {
         errorStack: expect.stringContaining('summarize failed'),
       }),
     );
+
+    const errorPayload = hoisted.loggerError.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(errorPayload.prompt).toBeUndefined();
+    expect(errorPayload.promptLength).toBe(piiPrompt.length);
+    expect(errorPayload.promptPreview).toBe(piiPrompt.slice(0, 60));
   });
 
   it('uses the activity group label in the title when a broad group filter is present', async () => {
@@ -1328,6 +1381,44 @@ describe('aiInsights callable', () => {
       role: 'basic',
       gracePeriodUntil: 1775237359811,
     });
+  });
+
+  it('falls back to Firestore quota role resolution in emulator mode when stripeRole claim is missing', async () => {
+    process.env.FUNCTIONS_EMULATOR = 'true';
+    hoisted.currentContext.auth = {
+      uid: 'user-1',
+      token: {
+        gracePeriodUntil: 1775237359811,
+      },
+    };
+
+    await aiInsights({
+      prompt: 'show distance',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(hoisted.getAiInsightsQuotaStatus).toHaveBeenCalledWith('user-1');
+    expect(hoisted.reserveAiInsightsQuotaForRequest).toHaveBeenCalledWith('user-1');
+  });
+
+  it('does not use callable auth token claims outside explicit functions emulator mode', async () => {
+    process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
+    delete process.env.FUNCTIONS_EMULATOR;
+    hoisted.currentContext.auth = {
+      uid: 'user-1',
+      token: {
+        stripeRole: 'basic',
+        gracePeriodUntil: 1775237359811,
+      },
+    };
+
+    await aiInsights({
+      prompt: 'show distance',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(hoisted.getAiInsightsQuotaStatus).toHaveBeenCalledWith('user-1');
+    expect(hoisted.reserveAiInsightsQuotaForRequest).toHaveBeenCalledWith('user-1');
   });
 
   it('uses callable auth token claims for quota status in emulator mode', async () => {

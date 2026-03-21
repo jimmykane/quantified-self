@@ -24,7 +24,12 @@ import {
 
 vi.mock('@sports-alliance/sports-lib', async (importOriginal) => await importOriginal());
 
-import { normalizeInsightQuery, normalizeInsightQueryFlow, setNormalizeQueryDependenciesForTesting } from './normalize-query.flow';
+import {
+  normalizeInsightQuery,
+  normalizeInsightQueryFlow,
+  setNormalizeQueryDependenciesForTesting,
+  withNormalizeQueryDependenciesForTesting,
+} from './normalize-query.flow';
 import { getActivityTypesForGroup } from '../../../../shared/activity-type-group.metadata';
 
 describe('normalizeInsightQuery', () => {
@@ -156,6 +161,65 @@ describe('normalizeInsightQuery', () => {
     });
   });
 
+  it('scopes normalize-query dependencies and restores previous test dependencies', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'distance',
+        aggregation: 'total',
+        category: 'date',
+        dateRange: {
+          kind: 'current_period',
+          unit: 'year',
+        },
+      }),
+    });
+
+    const scopedResult = await withNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-01-15T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'distance',
+        aggregation: 'total',
+        category: 'date',
+        dateRange: {
+          kind: 'current_period',
+          unit: 'year',
+        },
+      }),
+    }, async () => normalizeInsightQuery({
+      prompt: 'show my total distance this year',
+      clientTimezone: 'UTC',
+    }));
+
+    const restoredResult = await normalizeInsightQuery({
+      prompt: 'show my total distance this year',
+      clientTimezone: 'UTC',
+    });
+
+    expect(scopedResult.status).toBe('ok');
+    expect(restoredResult.status).toBe('ok');
+    if (scopedResult.status !== 'ok' || restoredResult.status !== 'ok') {
+      return;
+    }
+
+    expect(scopedResult.query.dateRange).toEqual({
+      kind: 'bounded',
+      startDate: '2026-01-01T00:00:00.000Z',
+      endDate: '2026-01-15T23:59:59.999Z',
+      timezone: 'UTC',
+      source: 'prompt',
+    });
+    expect(restoredResult.query.dateRange).toEqual({
+      kind: 'bounded',
+      startDate: '2026-01-01T00:00:00.000Z',
+      endDate: '2026-03-18T23:59:59.999Z',
+      timezone: 'UTC',
+      source: 'prompt',
+    });
+  });
+
   it('normalizes total distance by activity type this year', async () => {
     setNormalizeQueryDependenciesForTesting({
       now: () => new Date('2026-03-18T12:00:00.000Z'),
@@ -261,7 +325,7 @@ describe('normalizeInsightQuery', () => {
     });
 
     const result = await normalizeInsightQuery({
-      prompt: 'show my max heart rate in 2024 and 2025',
+      prompt: 'compare my max heart rate in 2024 and 2025',
       clientTimezone: 'UTC',
     });
 
@@ -290,7 +354,7 @@ describe('normalizeInsightQuery', () => {
     });
 
     const result = await normalizeInsightQuery({
-      prompt: 'what was my max heart rate in 2024 and 2026 as columns?',
+      prompt: 'compare my max heart rate in 2024 and 2026 as columns?',
       clientTimezone: 'UTC',
     });
 
@@ -339,6 +403,25 @@ describe('normalizeInsightQuery', () => {
     }
 
     expect(result.query.valueType).toBe(ChartDataValueTypes.Total);
+    expect(result.query.periodMode).toBe('combined');
+    expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Auto);
+  });
+
+  it('defaults ambiguous multi-year prompts to combined mode', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-20T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'show my average heart rate in 2024 and 2025',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
     expect(result.query.periodMode).toBe('combined');
     expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Auto);
   });

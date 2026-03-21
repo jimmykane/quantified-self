@@ -18,6 +18,7 @@ import {
   resolveAggregationCategoryKey,
 } from '../../../../shared/event-stat-aggregation';
 import type { EventStatAggregationResult } from '../../../../shared/event-stat-aggregation.types';
+import { serializeErrorForLogging } from './error-logging';
 
 interface FirestoreEventDocumentLike {
   id: string;
@@ -305,25 +306,6 @@ function buildMatchedActivityTypeCounts(
     ));
 }
 
-function summarizeError(error: unknown): {
-  errorName?: string;
-  errorMessage?: string;
-  errorStackTop?: string;
-  errorString?: string;
-} {
-  if (error instanceof Error) {
-    return {
-      errorName: error.name,
-      errorMessage: error.message,
-      errorStackTop: error.stack?.split('\n').slice(0, 3).join('\n'),
-    };
-  }
-
-  return {
-    errorString: typeof error === 'string' ? error : JSON.stringify(error),
-  };
-}
-
 function compareRankedEvents(
   left: RankedInsightEvent,
   right: RankedInsightEvent,
@@ -469,7 +451,7 @@ export function rehydrateAiInsightsEvent(
   } catch (error) {
     log.warn('[aiInsights] Failed to rehydrate event snapshot', {
       eventID,
-      ...summarizeError(error),
+      ...serializeErrorForLogging(error),
       ...summarizeEventShape(rawEventData, normalized),
     });
     return null;
@@ -478,10 +460,27 @@ export function rehydrateAiInsightsEvent(
 
 export function setExecuteQueryDependenciesForTesting(
   dependencies?: Partial<ExecuteQueryDependencies>,
-): void {
+): () => void {
+  const previousDependencies = executeQueryDependencies;
   executeQueryDependencies = dependencies
     ? { ...defaultExecuteQueryDependencies, ...dependencies }
     : defaultExecuteQueryDependencies;
+
+  return () => {
+    executeQueryDependencies = previousDependencies;
+  };
+}
+
+export async function withExecuteQueryDependenciesForTesting<T>(
+  dependencies: Partial<ExecuteQueryDependencies>,
+  run: () => Promise<T> | T,
+): Promise<T> {
+  const restore = setExecuteQueryDependenciesForTesting(dependencies);
+  try {
+    return await run();
+  } finally {
+    restore();
+  }
 }
 
 export async function executeAiInsightsQuery(
@@ -507,9 +506,9 @@ export async function executeAiInsightsQuery(
     .filter(event => eventMatchesActivitySelection(event, query.activityTypes));
   const matchedEvents = activityMatchedEvents
     .filter(event => eventMatchesRequestedDateRanges(event, query.requestedDateRanges));
-  const eventsWithRequestedStat = query.resultKind === 'multi_metric_aggregate'
-    ? []
-    : matchedEvents.filter(event => hasRequestedStat(event, query.dataType));
+  const eventsWithRequestedStatCount = query.resultKind === 'multi_metric_aggregate'
+    ? null
+    : matchedEvents.filter(event => hasRequestedStat(event, query.dataType)).length;
   const firestoreEmulatorHost = process.env.FIRESTORE_EMULATOR_HOST || null;
   const debugEventSnapshot = docs.length === 0
     ? await dependencies.fetchDebugEventSnapshot(userID)
@@ -531,7 +530,7 @@ export async function executeAiInsightsQuery(
     activityFilteredOutCount: nonMergedEvents.length - activityMatchedEvents.length,
     requestedDateRangeFilteredOutCount: activityMatchedEvents.length - matchedEvents.length,
     matchedEventsCount: matchedEvents.length,
-    eventsWithRequestedStatCount: eventsWithRequestedStat.length,
+    eventsWithRequestedStatCount,
     metricSelectionCount: query.resultKind === 'multi_metric_aggregate' ? query.metricSelections.length : 1,
     matchedEventIDsSample: matchedEvents.slice(0, 10).map(event => event.getID?.()),
     firestoreTarget: firestoreEmulatorHost ? 'emulator' : 'default',
@@ -541,6 +540,7 @@ export async function executeAiInsightsQuery(
   });
 
   if (query.resultKind === 'event_lookup') {
+    const eventsWithRequestedStat = matchedEvents.filter(event => hasRequestedStat(event, query.dataType));
     const rankedEvents = buildRankedEvents(eventsWithRequestedStat, query);
 
     dependencies.logger.info('[aiInsights] Event lookup summary', {
@@ -612,6 +612,7 @@ export async function executeAiInsightsQuery(
     };
   }
 
+  const eventsWithRequestedStat = matchedEvents.filter(event => hasRequestedStat(event, query.dataType));
   const aggregation = buildEventStatAggregation(matchedEvents, {
     dataType: query.dataType,
     valueType: query.valueType,
