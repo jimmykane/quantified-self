@@ -427,4 +427,49 @@ describe('ai insights quota', () => {
       blockedReason: 'requires_pro',
     });
   });
+
+  it('returns an ineligible status for paid users when no billing window can be resolved', async () => {
+    setAiInsightsQuotaDependenciesForTesting({
+      now: () => new Date(FIXED_NOW_ISO),
+      createReservationId: () => 'reservation-1',
+      db: () => fakeDb as unknown as FirebaseFirestore.Firestore,
+      getUserRoleAndGracePeriod: async () => ({ role: 'basic' }),
+      isGracePeriodActive: () => false,
+      getActiveSubscriptionPeriod: async () => null,
+      getLatestPaidSubscriptionPeriod: async () => null,
+    });
+
+    const quotaStatus = await getAiInsightsQuotaStatus('user-1');
+
+    expect(quotaStatus).toEqual({
+      role: 'basic',
+      limit: AI_INSIGHTS_REQUEST_LIMITS.basic,
+      successfulRequestCount: 0,
+      activeRequestCount: 0,
+      remainingCount: 0,
+      periodStart: null,
+      periodEnd: null,
+      periodKind: 'no_billing_period',
+      resetMode: 'next_successful_payment',
+      isEligible: false,
+      blockedReason: 'requires_pro',
+    });
+  });
+
+  it('rejects reservation for paid users without a resolvable billing window before internal failures', async () => {
+    setAiInsightsQuotaDependenciesForTesting({
+      now: () => new Date(FIXED_NOW_ISO),
+      createReservationId: () => 'reservation-1',
+      db: () => fakeDb as unknown as FirebaseFirestore.Firestore,
+      getUserRoleAndGracePeriod: async () => ({ role: 'pro' }),
+      isGracePeriodActive: () => false,
+      getActiveSubscriptionPeriod: async () => null,
+      getLatestPaidSubscriptionPeriod: async () => null,
+    });
+
+    await expect(reserveAiInsightsQuotaForRequest('user-1')).rejects.toMatchObject<HttpsError>({
+      code: 'permission-denied',
+      message: 'AI Insights is available to Basic and Pro members.',
+    });
+  });
 });

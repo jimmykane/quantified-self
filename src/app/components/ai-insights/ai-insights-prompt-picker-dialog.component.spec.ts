@@ -70,4 +70,46 @@ describe('AiInsightsPromptPickerDialogComponent', () => {
     expect(title?.textContent).toContain('Try a supported prompt');
     expect(copy?.textContent).toContain('not supported yet');
   });
+
+  it('filters prompt results by search text', async () => {
+    const { fixture } = await createComponent();
+
+    const searchInput = fixture.debugElement.query(By.css('.prompt-picker-dialog__search-input'))?.nativeElement as HTMLInputElement | undefined;
+    expect(searchInput).toBeTruthy();
+    if (!searchInput) {
+      return;
+    }
+
+    searchInput.value = 'cadence';
+    searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+
+    const groupTitles = fixture.debugElement.queryAll(By.css('.prompt-picker-dialog__group-title'))
+      .map((element) => element.nativeElement.textContent.trim());
+    const promptItems = fixture.debugElement.queryAll(By.css('.prompt-picker-dialog__item-copy'))
+      .map((element) => element.nativeElement.textContent.trim());
+
+    expect(groupTitles).toEqual(['Cardio & Speed']);
+    expect(promptItems).toEqual(['Tell me my average cadence for cycling over the last 3 months.']);
+  });
+
+  it('shows an empty state when no prompts match the search', async () => {
+    const { fixture } = await createComponent();
+
+    const searchInput = fixture.debugElement.query(By.css('.prompt-picker-dialog__search-input'))?.nativeElement as HTMLInputElement | undefined;
+    expect(searchInput).toBeTruthy();
+    if (!searchInput) {
+      return;
+    }
+
+    searchInput.value = 'zzzz-unmatched';
+    searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+
+    const emptyState = fixture.debugElement.query(By.css('.prompt-picker-dialog__empty-state'))?.nativeElement as HTMLElement | undefined;
+    const promptItems = fixture.debugElement.queryAll(By.css('.prompt-picker-dialog__item-copy'));
+
+    expect(emptyState?.textContent).toContain('No prompts match your search.');
+    expect(promptItems).toHaveLength(0);
+  });
 });

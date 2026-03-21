@@ -21,12 +21,6 @@ import type { EventStatAggregationResult } from '../../../../shared/event-stat-a
 import { resolveMetricSemantics, resolveMetricSummarySemantics } from '../../../../shared/metric-semantics';
 import { formatUnitAwareDataValue } from '../../../../shared/unit-aware-display';
 import { aiInsightsGenkit } from './genkit';
-import {
-  AiInsightPresentationSchema,
-  AiInsightSummarySchema,
-  EventStatAggregationResultSchema,
-  NormalizedInsightQuerySchema,
-} from './schemas';
 
 interface SummarizeInsightEventLookupFact {
   eventId: string;
@@ -80,49 +74,7 @@ interface SummarizeInsightDependencies {
   generateNarrative: (input: SummarizeInsightResultInput) => Promise<SummarizeInsightNarrativeResult>;
 }
 
-const SummarizeInsightEventLookupFactSchema = z.object({
-  eventId: z.string().min(1),
-  startDate: z.string().datetime(),
-  aggregateValue: z.number(),
-});
-
-const SummarizeInsightBaseInputSchema = z.object({
-  status: z.enum(['ok', 'empty']),
-  prompt: z.string().min(1),
-  query: NormalizedInsightQuerySchema,
-  presentation: AiInsightPresentationSchema,
-  clientLocale: z.string().optional(),
-  unitSettings: z.any().optional(),
-});
-
-const SummarizeInsightMultiMetricMetricResultSchema = z.object({
-  metricKey: z.string().min(1),
-  metricLabel: z.string().min(1),
-  query: NormalizedInsightQuerySchema,
-  aggregation: EventStatAggregationResultSchema,
-  summary: AiInsightSummarySchema,
-  presentation: AiInsightPresentationSchema,
-});
-
-const SummarizeInsightResultInputSchema = z.union([
-  SummarizeInsightBaseInputSchema.extend({
-    metricLabel: z.string().min(1),
-    aggregation: EventStatAggregationResultSchema,
-    summary: AiInsightSummarySchema,
-  }),
-  SummarizeInsightBaseInputSchema.extend({
-    metricLabel: z.string().min(1),
-    eventLookup: z.object({
-      matchedEventCount: z.number().int().nonnegative(),
-      primaryEvent: SummarizeInsightEventLookupFactSchema.nullable(),
-      rankedEvents: z.array(SummarizeInsightEventLookupFactSchema).max(10),
-    }),
-  }),
-  SummarizeInsightBaseInputSchema.extend({
-    metricLabels: z.array(z.string().min(1)).min(2).max(3),
-    metricResults: z.array(SummarizeInsightMultiMetricMetricResultSchema).min(1).max(3),
-  }),
-]);
+const SummarizeInsightResultInputSchema = z.any();
 
 const SummarizeInsightResultOutputSchema = z.object({
   narrative: z.string().min(1),

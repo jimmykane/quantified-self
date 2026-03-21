@@ -1,4 +1,4 @@
-import { z } from 'genkit';
+import { z } from 'zod/v3';
 import {
   type ActivityTypeGroup,
   ActivityTypes,
@@ -215,7 +215,7 @@ const AGGREGATE_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
   /\bstack(?:ed|ing)?\b/i,
 ];
 
-const ModelDateRangeSchema = z.union([
+const ModelDateRangeSchema: z.ZodType<DateRangeIntent> = z.union([
   z.object({
     kind: z.enum(['last_n', 'last']),
     amount: z.number().int().positive().max(3650),
@@ -235,7 +235,7 @@ const ModelDateRangeSchema = z.union([
   }),
 ]);
 
-const ModelInsightIntentSchema = z.object({
+const ModelInsightIntentSchema: z.ZodType<ModelInsightIntent> = z.object({
   status: z.enum(['supported', 'unsupported']),
   metric: z.string().optional(),
   aggregation: z.enum(['total', 'average', 'minimum', 'maximum']).optional(),
@@ -257,7 +257,7 @@ const ModelInsightIntentSchema = z.object({
   unsupportedReasonCode: AiInsightsUnsupportedReasonCodeSchema.optional(),
 });
 
-const NormalizeInsightQueryResultSchema = z.discriminatedUnion('status', [
+const NormalizeInsightQueryResultSchema = z.union([
   z.object({
     status: z.literal('ok'),
     metricKey: z.string().optional(),

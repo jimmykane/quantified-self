@@ -400,7 +400,7 @@ async function resolveAiInsightsQuotaWindow(
     };
   }
 
-  logger.warn('[aiInsightsQuota] Missing subscription period for eligible AI user', {
+  logger.warn('[aiInsightsQuota] Missing subscription period for paid AI user; marking ineligible', {
     userID,
     role,
     hasGrace,
@@ -414,7 +414,7 @@ async function resolveAiInsightsQuotaWindow(
       periodEnd: null,
       periodKind: hasGrace ? 'grace_hold' : 'no_billing_period',
       resetMode: 'next_successful_payment',
-      isEligible: true,
+      isEligible: false,
     },
     periodDocId: null,
   };

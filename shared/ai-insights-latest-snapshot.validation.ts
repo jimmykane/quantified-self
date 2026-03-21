@@ -12,7 +12,6 @@ import type {
   AiInsightsResponse,
   AiInsightsResultKind,
   NormalizedInsightDateRange,
-  NormalizedInsightQuery,
 } from './ai-insights.types';
 import type {
   EventStatAggregationBucket,
@@ -263,45 +262,6 @@ export function resolveCompletedAiInsightsResponseResultKind(
   return null;
 }
 
-function isCompletedInsightResponse(value: unknown): value is Extract<AiInsightsResponse, { status: 'ok' | 'empty' }> {
-  if (!isRecord(value) || (value.status !== 'ok' && value.status !== 'empty')) {
-    return false;
-  }
-
-  if (
-    typeof value.narrative !== 'string'
-    || (value.quota !== undefined && !isQuotaStatus(value.quota))
-    || !isNormalizedInsightQuery(value.query)
-    || !isPresentation(value.presentation)
-  ) {
-    return false;
-  }
-
-  if (value.status === 'empty') {
-    return (
-      isAggregationResult(value.aggregation)
-      && isSummary(value.summary)
-      && typeof value.presentation.emptyState === 'string'
-    );
-  }
-
-  const resultKind = resolveCompletedAiInsightsResponseResultKind(value);
-  if (resultKind === 'multi_metric_aggregate') {
-    return Array.isArray(value.metricResults) && value.metricResults.every(isMultiMetricAggregateMetricResult);
-  }
-
-  if (resultKind === 'event_lookup') {
-    return isEventLookup(value.eventLookup);
-  }
-
-  return (
-    resultKind === 'aggregate'
-    && isAggregationResult(value.aggregation)
-    && isSummary(value.summary)
-    && (value.eventRanking === undefined || isEventLookup(value.eventRanking))
-  );
-}
-
 function isUnsupportedInsightResponse(value: unknown): value is Extract<AiInsightsResponse, { status: 'unsupported' }> {
   return (
     isRecord(value)
@@ -311,10 +271,6 @@ function isUnsupportedInsightResponse(value: unknown): value is Extract<AiInsigh
     && typeof value.reasonCode === 'string'
     && isStringArray(value.suggestedPrompts)
   );
-}
-
-function isAiInsightsResponse(value: unknown): value is AiInsightsResponse {
-  return isCompletedInsightResponse(value) || isUnsupportedInsightResponse(value);
 }
 
 function describeValueType(value: unknown): string {
@@ -669,6 +625,6 @@ export function validateAiInsightsLatestSnapshot(
 
   return {
     valid: true,
-    snapshot: value as AiInsightsLatestSnapshot,
+    snapshot: value as unknown as AiInsightsLatestSnapshot,
   };
 }

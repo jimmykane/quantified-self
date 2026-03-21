@@ -1,5 +1,6 @@
 import { HttpsError, onCall, onCallGenkit } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
+import { z } from 'genkit';
 import type {
   AiInsightEventLookup,
   AiInsightSummary,
@@ -653,12 +654,13 @@ export async function runAiInsights(
 
 export const aiInsightsFlow = aiInsightsGenkit.defineFlow({
   name: 'aiInsightsFlow',
-  inputSchema: AiInsightsRequestSchema,
-  outputSchema: AiInsightsResponseSchema,
+  inputSchema: z.any(),
+  outputSchema: z.any(),
 }, async (input) => {
+  const validatedInput = AiInsightsRequestSchema.parse(input);
   try {
     const context = aiInsightsGenkit.currentContext() as AiInsightsCallableContext | undefined;
-    return await runAiInsights(input, context);
+    return AiInsightsResponseSchema.parse(await runAiInsights(validatedInput, context));
   } catch (error) {
     if (error instanceof HttpsError) {
       throw error;
@@ -667,8 +669,8 @@ export const aiInsightsFlow = aiInsightsGenkit.defineFlow({
     const context = aiInsightsGenkit.currentContext() as AiInsightsCallableContext | undefined;
     logger.error('[aiInsights] Failed to generate AI insight', {
       userID: context?.auth?.uid ?? null,
-      ...buildPromptLogContext(typeof input?.prompt === 'string' ? input.prompt : null),
-      clientTimezone: typeof input?.clientTimezone === 'string' ? input.clientTimezone : null,
+      ...buildPromptLogContext(validatedInput.prompt),
+      clientTimezone: validatedInput.clientTimezone,
       ...serializeErrorForLogging(error),
     });
     throw new HttpsError('internal', 'Could not generate AI insights.');
