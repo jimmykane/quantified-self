@@ -328,6 +328,9 @@ const TIME_INTERVAL_MAP: Record<ModelTimeIntervalCode, TimeIntervals> = {
   yearly: TimeIntervals.Yearly,
 };
 
+const AUTO_INTERVAL_DAILY_MAX_DAYS = 31;
+const AUTO_INTERVAL_WEEKLY_MAX_DAYS = 120;
+
 const defaultNormalizeQueryDependencies: NormalizeQueryDependencies = {
   now: () => new Date(),
   generateIntent: async (input) => buildDeterministicIntent(input.prompt),
@@ -1030,7 +1033,13 @@ function toRequestedTimeInterval(
   if (dateRangeIntent?.kind === 'last_n' || dateRangeIntent?.kind === 'last') {
     switch (dateRangeIntent.unit) {
       case 'day':
-        return TimeIntervals.Daily;
+        if (dateRangeIntent.amount <= AUTO_INTERVAL_DAILY_MAX_DAYS) {
+          return TimeIntervals.Daily;
+        }
+        if (dateRangeIntent.amount <= AUTO_INTERVAL_WEEKLY_MAX_DAYS) {
+          return TimeIntervals.Weekly;
+        }
+        return TimeIntervals.Monthly;
       case 'week':
         return dateRangeIntent.amount > 1 ? TimeIntervals.Weekly : TimeIntervals.Daily;
       case 'month':

@@ -402,6 +402,10 @@ export class PricingComponent implements OnInit, OnDestroy {
             return null;
         }
 
+        if (this.isOnboarding && this.onboardingUser?.uid) {
+            return user;
+        }
+
         const termsAccepted = this.requiredPolicies.every((policy) => {
             const userProperty = this.mapFormControlNameToUserProperty(policy.formControlName || '');
             return (user as any)[userProperty] === true;

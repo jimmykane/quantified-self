@@ -1199,6 +1199,66 @@ describe('normalizeInsightQuery', () => {
     });
   });
 
+  it('infers weekly buckets for date-based prompts over the last 90 days', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'distance',
+        aggregation: 'total',
+        category: 'date',
+        requestedTimeInterval: 'auto',
+        dateRange: {
+          kind: 'last_n',
+          amount: 90,
+          unit: 'day',
+        },
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'show my total distance over time in the last 90 days',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Weekly);
+  });
+
+  it('keeps explicit daily interval wording for last-90-days prompts', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'distance',
+        aggregation: 'total',
+        category: 'date',
+        requestedTimeInterval: 'auto',
+        dateRange: {
+          kind: 'last_n',
+          amount: 90,
+          unit: 'day',
+        },
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'show my total distance by day in the last 90 days',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Daily);
+  });
+
   it('uses the maximum heart rate data type for highest max heart rate prompts', async () => {
     setNormalizeQueryDependenciesForTesting({
       now: () => new Date('2026-03-18T12:00:00.000Z'),
