@@ -206,8 +206,8 @@ const EVENT_LOOKUP_SUBJECT_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
   /\bi want to know when i had\b/i,
 ];
 const EVENT_LOOKUP_RANKING_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
-  /\b(longest|shortest|highest|lowest|fastest|slowest)\b/i,
-  /\b(max|maximum|min|minimum)\b/i,
+  /\b(longest|shortest|highest|lowest|fastest|slowest|biggest|farthest|furthest)\b/i,
+  /\b(max|maximum|min|minimum|peak)\b/i,
 ];
 const AGGREGATE_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
   /\b(over time|by month|by week|by day|by year|timeline|trend|chart)\b/i,
@@ -1115,6 +1115,10 @@ function promptImpliesEventLookup(prompt: string): boolean {
     return true;
   }
 
+  if (/\b(jump|hang time|air time)\b/.test(normalizedPrompt)) {
+    return true;
+  }
+
   return /\bwhen\b/.test(normalizedPrompt);
 }
 
@@ -1133,7 +1137,7 @@ function resolvePromptAggregation(prompt: string): ModelAggregationCode | undefi
   if (/\b(min|minimum|lowest|fastest|shortest)\b/.test(normalizedPrompt)) {
     return 'minimum';
   }
-  if (/\b(max|maximum|highest|peak|slowest|longest|furthest)\b/.test(normalizedPrompt)) {
+  if (/\b(max|maximum|highest|peak|slowest|longest|furthest|farthest|biggest)\b/.test(normalizedPrompt)) {
     return 'maximum';
   }
 
@@ -1156,7 +1160,7 @@ function resolvePromptAggregationCodes(prompt: string): ModelAggregationCode[] {
   if (/\b(min|minimum|lowest|fastest|shortest)\b/.test(normalizedPrompt)) {
     aggregationCodes.add('minimum');
   }
-  if (/\b(max|maximum|highest|peak|slowest|longest|furthest)\b/.test(normalizedPrompt)) {
+  if (/\b(max|maximum|highest|peak|slowest|longest|furthest|farthest|biggest)\b/.test(normalizedPrompt)) {
     aggregationCodes.add('maximum');
   }
 

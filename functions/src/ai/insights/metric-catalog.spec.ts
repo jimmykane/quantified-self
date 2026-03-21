@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ChartDataValueTypes } from '@sports-alliance/sports-lib';
+import {
+  ChartDataValueTypes,
+  DataJumpDistanceMax,
+  DataJumpHangTimeMax,
+  DataJumpHeightMax,
+} from '@sports-alliance/sports-lib';
 import { getAiInsightsPromptEntriesBySurface } from '../../../../shared/ai-insights-prompts';
 
 vi.mock('@sports-alliance/sports-lib', async (importOriginal) => await importOriginal());
@@ -30,6 +35,10 @@ describe('metric-catalog', () => {
     expect(resolveInsightMetric('aerobic training effect')?.key).toBe('aerobic_training_effect');
     expect(resolveInsightMetric('anaerobic training effect')?.key).toBe('anaerobic_training_effect');
     expect(resolveInsightMetric('recovery time')?.key).toBe('recovery_time');
+    expect(resolveInsightMetric('longest jump')?.key).toBe('jump_distance');
+    expect(resolveInsightMetric('highest jump')?.key).toBe('jump_height');
+    expect(resolveInsightMetric('biggest jump')?.key).toBe('jump_height');
+    expect(resolveInsightMetric('air time')?.key).toBe('jump_hang_time');
   });
 
   it('resolves family metrics to the correct concrete max data type', () => {
@@ -38,6 +47,9 @@ describe('metric-catalog', () => {
     expect(resolveInsightMetric('gap', ChartDataValueTypes.Maximum)?.dataType).toBe('Maximum Grade Adjusted Pace');
     expect(resolveInsightMetric('effort pace', ChartDataValueTypes.Minimum)?.dataType).toBe('Minimum Effort Pace');
     expect(resolveInsightMetric('swim pace', ChartDataValueTypes.Maximum)?.dataType).toBe('Maximum Swim Pace');
+    expect(resolveInsightMetric('longest jump', ChartDataValueTypes.Maximum)?.dataType).toBe(DataJumpDistanceMax.type);
+    expect(resolveInsightMetric('highest jump', ChartDataValueTypes.Maximum)?.dataType).toBe(DataJumpHeightMax.type);
+    expect(resolveInsightMetric('biggest hang time', ChartDataValueTypes.Maximum)?.dataType).toBe(DataJumpHangTimeMax.type);
   });
 
   it('prefers the explicit prompt alias that matches the requested family variant', () => {
@@ -98,6 +110,9 @@ describe('metric-catalog', () => {
 
   it('can retrieve canonical metric definitions by key', () => {
     expect(getInsightMetricDefinition('power')?.dataType).toBeTruthy();
+    expect(getInsightMetricDefinition('jump_height')?.suggestedPrompt).toBe('Show my jump height over time in the last 90 days.');
+    expect(getInsightMetricDefinition('jump_distance')?.suggestedPrompt).toBe('Show my jump distance over time this season.');
+    expect(getInsightMetricDefinition('jump_hang_time')?.suggestedPrompt).toBe('Show my jump hang time over time in the last 90 days.');
   });
 
   it('prioritizes context-matching suggested prompts instead of always returning the first metrics', () => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   AI_INSIGHTS_PROMPT_CATALOG,
+  getAiInsightsDefaultMetricPrompt,
   getAiInsightsPromptEntriesBySurface,
 } from '@shared/ai-insights-prompts';
 import {
@@ -44,5 +45,27 @@ describe('ai-insights prompts', () => {
 
     expect(unsupportedPrompts.length).toBeGreaterThanOrEqual(3);
     expect(unsupportedPrompts.every((prompt) => AI_INSIGHTS_DEFAULT_PICKER_PROMPTS.includes(prompt))).toBe(true);
+  });
+
+  it('includes new jump prompts in the default picker catalog', () => {
+    const pickerPromptSet = new Set(AI_INSIGHTS_DEFAULT_PICKER_PROMPTS);
+    const expectedJumpPrompts = [
+      'Find my longest jump.',
+      'Find my highest jump.',
+      'Find my biggest hang time.',
+      'Show my jump height over time in the last 90 days.',
+      'Show my jump distance over time this season.',
+    ];
+
+    expect(expectedJumpPrompts.every((prompt) => pickerPromptSet.has(prompt))).toBe(true);
+  });
+
+  it('resolves unsupported default prompts for all jump metrics', () => {
+    expect(getAiInsightsDefaultMetricPrompt('jump_height')).toBe('Show my jump height over time in the last 90 days.');
+    expect(getAiInsightsDefaultMetricPrompt('jump_hang_time')).toBe('Show my jump hang time over time in the last 90 days.');
+    expect(getAiInsightsDefaultMetricPrompt('jump_distance')).toBe('Show my jump distance over time this season.');
+    expect(getAiInsightsDefaultMetricPrompt('jump_speed')).toBe('Show my jump speed over time in the last 90 days.');
+    expect(getAiInsightsDefaultMetricPrompt('jump_rotations')).toBe('Show my jump rotations over time in the last 90 days.');
+    expect(getAiInsightsDefaultMetricPrompt('jump_score')).toBe('Show my jump score over time in the last 90 days.');
   });
 });

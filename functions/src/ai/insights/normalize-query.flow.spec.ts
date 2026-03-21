@@ -14,6 +14,10 @@ import {
   DataGradeAdjustedPaceAvg,
   DataHeartRateAvg,
   DataHeartRateMax,
+  DataJumpDistanceMax,
+  DataJumpHangTimeMax,
+  DataJumpHeightAvg,
+  DataJumpHeightMax,
   DataPowerAvg,
   DataPowerNormalized,
   DataPowerTrainingStressScore,
@@ -672,6 +676,90 @@ describe('normalizeInsightQuery', () => {
       timezone: 'UTC',
       source: 'default',
     });
+  });
+
+  it('maps longest jump prompts to jump-distance event lookup by default', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-19T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Find my longest jump.',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('jump_distance');
+    expect(result.query.resultKind).toBe('event_lookup');
+    expect(result.query.dataType).toBe(DataJumpDistanceMax.type);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Maximum);
+  });
+
+  it('maps highest jump prompts to jump-height event lookup by default', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-19T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Find my highest jump.',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('jump_height');
+    expect(result.query.resultKind).toBe('event_lookup');
+    expect(result.query.dataType).toBe(DataJumpHeightMax.type);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Maximum);
+  });
+
+  it('maps biggest hang-time prompts to jump-hang-time event lookup by default', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-19T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Find my biggest hang time.',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('jump_hang_time');
+    expect(result.query.resultKind).toBe('event_lookup');
+    expect(result.query.dataType).toBe(DataJumpHangTimeMax.type);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Maximum);
+  });
+
+  it('keeps jump-height over-time prompts in aggregate mode', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-19T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show my jump height over time in the last 90 days.',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('jump_height');
+    expect(result.query.resultKind).toBe('aggregate');
+    expect(result.query.dataType).toBe(DataJumpHeightAvg.type);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Average);
   });
 
   it('resolves shared-average multi-metric prompts to multi-metric over-time mode', async () => {

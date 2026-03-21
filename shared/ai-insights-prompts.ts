@@ -17,6 +17,12 @@ export type AiInsightsPromptMetricKey =
   | 'duration'
   | 'ascent'
   | 'descent'
+  | 'jump_height'
+  | 'jump_hang_time'
+  | 'jump_distance'
+  | 'jump_speed'
+  | 'jump_rotations'
+  | 'jump_score'
   | 'cadence'
   | 'power'
   | 'heart_rate'
@@ -101,6 +107,54 @@ export const AI_INSIGHTS_PROMPT_CATALOG = [
     featured: true,
     surfaces: ['hero', 'picker', 'unsupported'],
     metricKey: 'calories',
+  },
+  {
+    id: 'jump-height-over-time-90-days',
+    prompt: 'Show my jump height over time in the last 90 days.',
+    category: 'Cardio & Speed',
+    featured: false,
+    surfaces: ['picker', 'unsupported'],
+    metricKey: 'jump_height',
+  },
+  {
+    id: 'jump-distance-over-time-season',
+    prompt: 'Show my jump distance over time this season.',
+    category: 'Cardio & Speed',
+    featured: false,
+    surfaces: ['picker', 'unsupported'],
+    metricKey: 'jump_distance',
+  },
+  {
+    id: 'jump-hang-time-over-time-90-days',
+    prompt: 'Show my jump hang time over time in the last 90 days.',
+    category: 'Cardio & Speed',
+    featured: false,
+    surfaces: ['picker', 'unsupported'],
+    metricKey: 'jump_hang_time',
+  },
+  {
+    id: 'jump-speed-over-time-90-days',
+    prompt: 'Show my jump speed over time in the last 90 days.',
+    category: 'Cardio & Speed',
+    featured: false,
+    surfaces: ['picker', 'unsupported'],
+    metricKey: 'jump_speed',
+  },
+  {
+    id: 'jump-rotations-over-time-90-days',
+    prompt: 'Show my jump rotations over time in the last 90 days.',
+    category: 'Cardio & Speed',
+    featured: false,
+    surfaces: ['picker', 'unsupported'],
+    metricKey: 'jump_rotations',
+  },
+  {
+    id: 'jump-score-over-time-90-days',
+    prompt: 'Show my jump score over time in the last 90 days.',
+    category: 'Cardio & Speed',
+    featured: false,
+    surfaces: ['picker', 'unsupported'],
+    metricKey: 'jump_score',
   },
   {
     id: 'cadence-cycling-3-months',
@@ -269,6 +323,30 @@ export const AI_INSIGHTS_PROMPT_CATALOG = [
     featured: false,
     surfaces: ['picker'],
     metricKey: 'distance',
+  },
+  {
+    id: 'event-lookup-longest-jump',
+    prompt: 'Find my longest jump.',
+    category: 'Advanced Examples',
+    featured: false,
+    surfaces: ['picker'],
+    metricKey: 'jump_distance',
+  },
+  {
+    id: 'event-lookup-highest-jump',
+    prompt: 'Find my highest jump.',
+    category: 'Advanced Examples',
+    featured: false,
+    surfaces: ['picker'],
+    metricKey: 'jump_height',
+  },
+  {
+    id: 'event-lookup-biggest-hang-time',
+    prompt: 'Find my biggest hang time.',
+    category: 'Advanced Examples',
+    featured: false,
+    surfaces: ['picker'],
+    metricKey: 'jump_hang_time',
   },
 ] as const satisfies readonly AiInsightsPromptDefinition[];
 

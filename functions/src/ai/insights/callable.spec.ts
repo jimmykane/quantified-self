@@ -6,6 +6,7 @@ import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   ChartTypes,
+  DataJumpDistanceMax,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
 import { AI_INSIGHTS_REQUEST_LIMITS } from '../../../../shared/limits';
@@ -184,6 +185,12 @@ const eventLookupQuery = {
   ...normalizedQuery,
   resultKind: 'event_lookup' as const,
   chartType: ChartTypes.LinesVertical,
+};
+
+const jumpEventLookupQuery = {
+  ...eventLookupQuery,
+  dataType: DataJumpDistanceMax.type,
+  valueType: ChartDataValueTypes.Maximum,
 };
 
 const multiMetricQuery = {
@@ -765,6 +772,66 @@ describe('aiInsights callable', () => {
       },
       presentation: expect.objectContaining({
         title: 'Top distance events for Cycling',
+        chartType: ChartTypes.LinesVertical,
+      }),
+    });
+  });
+
+  it('returns an event lookup response for longest-jump prompts', async () => {
+    hoisted.getInsightMetricDefinition.mockReturnValue({
+      key: 'jump_distance',
+      label: 'jump distance',
+    });
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'ok',
+      metricKey: 'jump_distance',
+      query: jumpEventLookupQuery,
+    });
+    hoisted.executeAiInsightsQuery.mockResolvedValue({
+      resultKind: 'event_lookup',
+      matchedEventsCount: 2,
+      matchedActivityTypeCounts: [
+        {
+          activityType: ActivityTypes.Snowboarding,
+          eventCount: 2,
+        },
+      ],
+      eventLookup: {
+        primaryEventId: 'jump-event-2',
+        topEventIds: ['jump-event-2', 'jump-event-1'],
+        rankedEvents: [
+          {
+            eventId: 'jump-event-2',
+            startDate: '2026-03-12T10:00:00.000Z',
+            aggregateValue: 9.4,
+          },
+          {
+            eventId: 'jump-event-1',
+            startDate: '2026-02-18T10:00:00.000Z',
+            aggregateValue: 8.9,
+          },
+        ],
+      },
+    });
+
+    const result = await aiInsights({
+      prompt: 'Find my longest jump.',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(result).toEqual({
+      status: 'ok',
+      resultKind: 'event_lookup',
+      narrative: 'Narrative',
+      quota: quotaStatus,
+      query: jumpEventLookupQuery,
+      eventLookup: {
+        primaryEventId: 'jump-event-2',
+        topEventIds: ['jump-event-2', 'jump-event-1'],
+        matchedEventCount: 2,
+      },
+      presentation: expect.objectContaining({
+        title: 'Top jump distance events for Cycling',
         chartType: ChartTypes.LinesVertical,
       }),
     });
