@@ -82,7 +82,7 @@ export class AiInsightsLatestSnapshotService {
         data,
         AI_INSIGHTS_LATEST_SNAPSHOT_VERSION,
       );
-      if (!validationResult.valid) {
+      if ('failure' in validationResult) {
         this.logger.warn('[AiInsightsLatestSnapshotService] Clearing invalid latest AI insight snapshot.', {
           userID,
           reason: validationResult.failure.reason,
@@ -900,7 +900,7 @@ function normalizeEventLookupInsightQuery(query: NormalizedInsightQueryLike): Ev
   return {
     ...(rest as Omit<EventLookupNormalizedInsightQuery, 'resultKind' | 'requestedTimeInterval' | 'categoryType'>),
     resultKind: 'event_lookup',
-    categoryType: normalizeChartDataCategoryType(rest.categoryType),
+    categoryType: ChartDataCategoryTypes.DateType,
     valueType: normalizeChartDataValueType(rest.valueType),
     chartType: normalizeChartType(rest.chartType),
     ...(requestedTimeInterval == null ? {} : { requestedTimeInterval: normalizeTimeInterval(requestedTimeInterval) }),
@@ -917,7 +917,7 @@ function normalizeMultiMetricInsightQuery(query: NormalizedInsightQueryLike): Mu
     ...(rest as Omit<MultiMetricNormalizedInsightQuery, 'resultKind' | 'requestedTimeInterval' | 'metricSelections' | 'groupingMode' | 'categoryType'>),
     resultKind: 'multi_metric_aggregate',
     groupingMode: (rest.groupingMode === 'overall' ? 'overall' : 'date'),
-    categoryType: normalizeChartDataCategoryType(rest.categoryType),
+    categoryType: ChartDataCategoryTypes.DateType,
     chartType: normalizeChartType(rest.chartType),
     ...(requestedTimeInterval == null ? {} : { requestedTimeInterval: normalizeTimeInterval(requestedTimeInterval) }),
     metricSelections: Array.isArray(metricSelections)
@@ -1021,13 +1021,8 @@ function buildEnumValueSet(
   const enumValues = Object.values(enumValue).filter(
     (value): value is string | number => typeof value === 'string' || typeof value === 'number',
   );
-  const hasNumericMembers = enumValues.some((value) => typeof value === 'number');
 
-  return new Set(
-    hasNumericMembers
-      ? enumValues.filter((value): value is number => typeof value === 'number')
-      : enumValues.filter((value): value is string => typeof value === 'string'),
-  );
+  return new Set<string | number>(enumValues);
 }
 
 function assertNever(value: never): never {
