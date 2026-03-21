@@ -18,30 +18,16 @@ import type {
 import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../../utils';
 import { aiInsightsGenkit } from './genkit';
-import { executeAiInsightsQuery } from './execute-query';
 import { getInsightMetricDefinition } from './metric-catalog';
-import { normalizeInsightQuery } from './normalize-query.flow';
-import { repairUnsupportedInsightQuery } from './normalize-query.repair';
 import {
-  detectPromptLanguageDeterministic,
-  sanitizePromptToEnglish,
-} from './prompt-language-sanitization';
-import {
-  buildAiInsightsPromptRepairIdentity,
-  recordSuccessfulAiInsightRepair,
   trimPromptSample,
 } from './repaired-prompt-backlog';
 import { AiInsightsRequestSchema, AiInsightsResponseSchema } from './schemas';
 import {
-  getAiInsightsQuotaStatus as getAiInsightsQuotaStatusForUser,
-  releaseAiInsightsQuotaReservation,
-  reserveAiInsightsQuotaForRequest,
-  finalizeAiInsightsQuotaReservation,
+  aiInsightsRuntime,
   AI_INSIGHTS_LIMIT_REACHED_MESSAGE,
   type AiInsightsUserRoleContext,
-} from './quota';
-import { summarizeAiInsightResult } from './summarize-result.flow';
-import { loadUserUnitSettings } from './user-unit-settings';
+} from './runtime';
 import { serializeErrorForLogging } from './error-logging';
 import {
   assertValidTimeZone,
@@ -168,8 +154,8 @@ export async function runAiInsights(
   assertValidTimeZone(clientTimezone);
 
   const initialQuotaStatus = quotaRoleContext
-    ? await getAiInsightsQuotaStatusForUser(userID, quotaRoleContext)
-    : await getAiInsightsQuotaStatusForUser(userID);
+    ? await aiInsightsRuntime.getAiInsightsQuotaStatus(userID, quotaRoleContext)
+    : await aiInsightsRuntime.getAiInsightsQuotaStatus(userID);
   if (!initialQuotaStatus.isEligible) {
     throw new HttpsError('permission-denied', AI_INSIGHTS_PAID_REQUIRED_MESSAGE);
   }
@@ -178,7 +164,7 @@ export async function runAiInsights(
     throw new HttpsError('resource-exhausted', AI_INSIGHTS_LIMIT_REACHED_MESSAGE);
   }
 
-  let quotaReservation: Awaited<ReturnType<typeof reserveAiInsightsQuotaForRequest>> | null = null;
+  let quotaReservation: Awaited<ReturnType<typeof aiInsightsRuntime.reserveAiInsightsQuotaForRequest>> | null = null;
   let consumedQuotaStatus: AiInsightsQuotaStatusResponse | null = null;
 
   const ensureQuotaReservation = async (): Promise<void> => {
@@ -187,8 +173,8 @@ export async function runAiInsights(
     }
 
     quotaReservation = quotaRoleContext
-      ? await reserveAiInsightsQuotaForRequest(userID, quotaRoleContext)
-      : await reserveAiInsightsQuotaForRequest(userID);
+      ? await aiInsightsRuntime.reserveAiInsightsQuotaForRequest(userID, quotaRoleContext)
+      : await aiInsightsRuntime.reserveAiInsightsQuotaForRequest(userID);
   };
   await ensureQuotaReservation();
 
@@ -201,7 +187,7 @@ export async function runAiInsights(
       return initialQuotaStatus;
     }
 
-    const releasedStatus = await releaseAiInsightsQuotaReservation(quotaReservation);
+    const releasedStatus = await aiInsightsRuntime.releaseAiInsightsQuotaReservation(quotaReservation);
     quotaReservation = null;
     return releasedStatus;
   };
@@ -218,7 +204,7 @@ export async function runAiInsights(
     }
 
     await ensureQuotaReservation();
-    consumedQuotaStatus = await finalizeAiInsightsQuotaReservation(
+    consumedQuotaStatus = await aiInsightsRuntime.finalizeAiInsightsQuotaReservation(
       quotaReservation as NonNullable<typeof quotaReservation>,
     );
     quotaReservation = null;
@@ -231,7 +217,7 @@ export async function runAiInsights(
   };
 
   let effectivePrompt = prompt;
-  const promptLanguage = detectPromptLanguageDeterministic(prompt);
+  const promptLanguage = aiInsightsRuntime.detectPromptLanguageDeterministic(prompt);
   logger.info('[aiInsights] Prompt language gate result', {
     userID,
     ...buildPromptLogContext(prompt),
@@ -245,7 +231,7 @@ export async function runAiInsights(
       promptLanguage,
     });
     await consumeQuotaOnAiAttempt('sanitize');
-    const sanitizationResult = await sanitizePromptToEnglish(prompt);
+    const sanitizationResult = await aiInsightsRuntime.sanitizePromptToEnglish(prompt);
     logger.info('[aiInsights] Finished AI prompt sanitization', {
       userID,
       ...buildPromptLogContext(prompt),
@@ -269,7 +255,7 @@ export async function runAiInsights(
     effectivePrompt = sanitizationResult.prompt;
   }
 
-  let normalizeResult = await normalizeInsightQuery({
+  let normalizeResult = await aiInsightsRuntime.normalizeInsightQuery({
     ...input,
     prompt: effectivePrompt,
     clientTimezone,
@@ -288,7 +274,7 @@ export async function runAiInsights(
         reasonCode: deterministicFailureReasonCode,
       });
       await consumeQuotaOnAiAttempt('repair');
-      const repairedResult = await repairUnsupportedInsightQuery({
+      const repairedResult = await aiInsightsRuntime.repairUnsupportedInsightQuery({
         ...input,
         prompt: effectivePrompt,
         clientTimezone,
@@ -304,9 +290,12 @@ export async function runAiInsights(
       if (repairedResult.source === 'genkit' && normalizeResult.status === 'ok') {
         let intentDocID: string | null = null;
         try {
-          const repairIdentity = buildAiInsightsPromptRepairIdentity(effectivePrompt, normalizeResult.query);
+          const repairIdentity = aiInsightsRuntime.buildAiInsightsPromptRepairIdentity(
+            effectivePrompt,
+            normalizeResult.query,
+          );
           intentDocID = repairIdentity.intentDocID;
-          await recordSuccessfulAiInsightRepair({
+          await aiInsightsRuntime.recordSuccessfulAiInsightRepair({
             rawPrompt: prompt,
             repairInputPrompt: effectivePrompt,
             normalizedQuery: normalizeResult.query,
@@ -444,8 +433,8 @@ export async function runAiInsights(
         : 1,
     },
   });
-  const unitSettings = await loadUserUnitSettings(userID);
-  const executionResult = await executeAiInsightsQuery(userID, effectiveQuery, effectivePrompt);
+  const unitSettings = await aiInsightsRuntime.loadUserUnitSettings(userID);
+  const executionResult = await aiInsightsRuntime.executeAiInsightsQuery(userID, effectiveQuery, effectivePrompt);
   const presentation = buildInsightPresentation(
     effectiveQuery,
     effectiveQuery.resultKind === 'multi_metric_aggregate'
@@ -508,7 +497,7 @@ export async function runAiInsights(
       ? !eventLookupResult?.primaryEventId
       : multiMetricResultGroups.every(metricResult => metricResult.aggregation.buckets.length === 0);
 
-  let narrativeResult: Awaited<ReturnType<typeof summarizeAiInsightResult>>;
+  let narrativeResult: Awaited<ReturnType<typeof aiInsightsRuntime.summarizeAiInsightResult>>;
   logger.info('[aiInsights] Starting AI insight summarization', {
     userID,
     ...buildPromptLogContext(prompt, effectivePrompt),
@@ -518,7 +507,7 @@ export async function runAiInsights(
   await consumeQuotaOnAiAttempt('summarize');
 
   if (executionResult.resultKind === 'aggregate' && aggregateQueryInput) {
-    narrativeResult = await summarizeAiInsightResult({
+    narrativeResult = await aiInsightsRuntime.summarizeAiInsightResult({
       status: isEmpty ? 'empty' : 'ok',
       prompt: effectivePrompt,
       metricLabel: (metric as NonNullable<typeof metric>).label,
@@ -530,7 +519,7 @@ export async function runAiInsights(
       unitSettings,
     });
   } else if (executionResult.resultKind === 'event_lookup' && eventLookupQueryInput) {
-    narrativeResult = await summarizeAiInsightResult({
+    narrativeResult = await aiInsightsRuntime.summarizeAiInsightResult({
       status: isEmpty ? 'empty' : 'ok',
       prompt: effectivePrompt,
       metricLabel: (metric as NonNullable<typeof metric>).label,
@@ -545,7 +534,7 @@ export async function runAiInsights(
       unitSettings,
     });
   } else if (executionResult.resultKind === 'multi_metric_aggregate' && multiMetricQueryInput) {
-    narrativeResult = await summarizeAiInsightResult({
+    narrativeResult = await aiInsightsRuntime.summarizeAiInsightResult({
       status: isEmpty ? 'empty' : 'ok',
       prompt: effectivePrompt,
       query: multiMetricQueryInput,
@@ -701,8 +690,8 @@ export const getAiInsightsQuotaStatus = onCall({
     : null;
 
   if (quotaRoleContext) {
-    return getAiInsightsQuotaStatusForUser(request.auth.uid, quotaRoleContext);
+    return aiInsightsRuntime.getAiInsightsQuotaStatus(request.auth.uid, quotaRoleContext);
   }
 
-  return getAiInsightsQuotaStatusForUser(request.auth.uid);
+  return aiInsightsRuntime.getAiInsightsQuotaStatus(request.auth.uid);
 });

@@ -1057,6 +1057,30 @@ describe('AiInsightsPageComponent', () => {
     expect(quotaLine?.textContent).toContain(`${AI_INSIGHTS_REQUEST_LIMITS.basic - 8} of ${AI_INSIGHTS_REQUEST_LIMITS.basic} left`);
   });
 
+  it('should show a quota error message in the prompt header when quota loading fails', async () => {
+    aiInsightsQuotaServiceMock.loadQuotaStatus.mockRejectedValueOnce(new Error('quota failure'));
+
+    await createComponent();
+
+    const quotaLine = fixture.debugElement.query(By.css('.prompt-quota-line'))?.nativeElement as HTMLElement | undefined;
+
+    expect(quotaLine?.textContent).toContain('Quota unavailable');
+    expect(loggerServiceMock.warn).toHaveBeenCalledWith(
+      '[AiInsightsPageComponent] Failed to load AI insights quota status.',
+      expect.any(Error),
+    );
+  });
+
+  it('should show a quota error message in the prompt header when quota loading returns null', async () => {
+    aiInsightsQuotaServiceMock.loadQuotaStatus.mockResolvedValueOnce(null);
+
+    await createComponent();
+
+    const quotaLine = fixture.debugElement.query(By.css('.prompt-quota-line'))?.nativeElement as HTMLElement | undefined;
+
+    expect(quotaLine?.textContent).toContain('Quota unavailable');
+  });
+
   it('should submit the active hero prompt when clicked', async () => {
     aiInsightsServiceMock.runInsight.mockResolvedValue(buildOkResponse());
     const heroPrompt = AI_INSIGHTS_FEATURED_PROMPTS[0];
@@ -1084,6 +1108,10 @@ describe('AiInsightsPageComponent', () => {
 
   it('should open the grouped prompt picker and submit the selected prompt', async () => {
     const selectedPrompt = 'Show my average power over time for cycling in the last 90 days.';
+    const flattenedDefaultPrompts = AI_INSIGHTS_DEFAULT_PROMPT_GROUPS
+      .flatMap(group => group.prompts.map(prompt => prompt.prompt));
+    const expectedPromptIndex = flattenedDefaultPrompts.findIndex(prompt => prompt === selectedPrompt);
+    expect(expectedPromptIndex).toBeGreaterThanOrEqual(0);
     aiInsightsServiceMock.runInsight.mockResolvedValue(buildOkResponse());
     matDialogMock.open.mockReturnValueOnce({
       afterClosed: () => of(selectedPrompt),
@@ -1108,7 +1136,7 @@ describe('AiInsightsPageComponent', () => {
     }));
     expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('ai_insights_action', {
       method: 'suggested_prompt_select',
-      prompt_index: 13,
+      prompt_index: expectedPromptIndex,
       prompt_length: selectedPrompt.length,
       prompt_source: 'default',
     });

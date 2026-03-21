@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   ChartDataCategoryTypes,
   ChartTypes,
@@ -7,15 +7,11 @@ import {
 
 vi.mock('@sports-alliance/sports-lib', async (importOriginal) => await importOriginal());
 
-import { repairUnsupportedInsightQuery, setRepairInsightQueryDependenciesForTesting } from './normalize-query.repair';
+import { createRepairInsightQuery } from './normalize-query.repair';
 
 describe('repairUnsupportedInsightQuery', () => {
-  afterEach(() => {
-    setRepairInsightQueryDependenciesForTesting();
-  });
-
   it('uses AI repair only to fill unresolved fields while keeping deterministic activity/date parsing authoritative', async () => {
-    setRepairInsightQueryDependenciesForTesting({
+    const { repairUnsupportedInsightQuery } = createRepairInsightQuery({
       repairIntent: async () => ({
         status: 'supported',
         metric: 'max heart rate',
@@ -56,7 +52,7 @@ describe('repairUnsupportedInsightQuery', () => {
   });
 
   it('falls back to the deterministic unsupported result when AI repair fails', async () => {
-    setRepairInsightQueryDependenciesForTesting({
+    const { repairUnsupportedInsightQuery } = createRepairInsightQuery({
       repairIntent: async () => {
         throw new Error('model failed');
       },
@@ -82,7 +78,7 @@ describe('repairUnsupportedInsightQuery', () => {
   });
 
   it('keeps explicit prompt chart intent when repair succeeds', async () => {
-    setRepairInsightQueryDependenciesForTesting({
+    const { repairUnsupportedInsightQuery } = createRepairInsightQuery({
       repairIntent: async () => ({
         status: 'supported',
         metric: 'max heart rate',

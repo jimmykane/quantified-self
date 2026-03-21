@@ -96,7 +96,9 @@ const defaultPromptLanguageSanitizationDependencies: PromptLanguageSanitizationD
   },
 };
 
-let promptLanguageSanitizationDependencies = defaultPromptLanguageSanitizationDependencies;
+export interface PromptLanguageSanitizationApi {
+  sanitizePromptToEnglish: (prompt: string) => Promise<PromptSanitizationResult>;
+}
 
 function isAsciiOnly(value: string): boolean {
   for (let index = 0; index < value.length; index += 1) {
@@ -106,14 +108,6 @@ function isAsciiOnly(value: string): boolean {
   }
 
   return true;
-}
-
-export function setPromptLanguageSanitizationDependenciesForTesting(
-  dependencies?: Partial<PromptLanguageSanitizationDependencies>,
-): void {
-  promptLanguageSanitizationDependencies = dependencies
-    ? { ...defaultPromptLanguageSanitizationDependencies, ...dependencies }
-    : defaultPromptLanguageSanitizationDependencies;
 }
 
 export function detectPromptLanguageDeterministic(prompt: string): PromptLanguage {
@@ -145,43 +139,60 @@ export function detectPromptLanguageDeterministic(prompt: string): PromptLanguag
   return 'uncertain';
 }
 
-export async function sanitizePromptToEnglish(prompt: string): Promise<PromptSanitizationResult> {
-  const sanitized = await promptLanguageSanitizationDependencies.sanitizeWithModel({ prompt });
-  if (!sanitized) {
-    return {
-      status: 'unsupported',
-      reasonCode: 'invalid_prompt',
-      suggestedPrompts: getSuggestedInsightPrompts(3, prompt),
-    };
-  }
-
-  if (sanitized.status === 'unsupported') {
-    return {
-      status: 'unsupported',
-      reasonCode: sanitized.unsupportedReasonCode || 'invalid_prompt',
-      suggestedPrompts: getSuggestedInsightPrompts(3, prompt),
-    };
-  }
-
-  const sanitizedPrompt = `${sanitized.englishPrompt || ''}`.trim();
-  if (!sanitizedPrompt) {
-    return {
-      status: 'unsupported',
-      reasonCode: 'invalid_prompt',
-      suggestedPrompts: getSuggestedInsightPrompts(3, prompt),
-    };
-  }
-
-  if (detectPromptLanguageDeterministic(sanitizedPrompt) !== 'english') {
-    return {
-      status: 'unsupported',
-      reasonCode: 'invalid_prompt',
-      suggestedPrompts: getSuggestedInsightPrompts(3, prompt),
-    };
-  }
+export function createPromptLanguageSanitization(
+  dependencies: Partial<PromptLanguageSanitizationDependencies> = {},
+): PromptLanguageSanitizationApi {
+  const resolvedDependencies: PromptLanguageSanitizationDependencies = {
+    ...defaultPromptLanguageSanitizationDependencies,
+    ...dependencies,
+  };
 
   return {
-    status: 'english',
-    prompt: sanitizedPrompt,
+    sanitizePromptToEnglish: async (prompt: string): Promise<PromptSanitizationResult> => {
+      const sanitized = await resolvedDependencies.sanitizeWithModel({ prompt });
+      if (!sanitized) {
+        return {
+          status: 'unsupported',
+          reasonCode: 'invalid_prompt',
+          suggestedPrompts: getSuggestedInsightPrompts(3, prompt),
+        };
+      }
+
+      if (sanitized.status === 'unsupported') {
+        return {
+          status: 'unsupported',
+          reasonCode: sanitized.unsupportedReasonCode || 'invalid_prompt',
+          suggestedPrompts: getSuggestedInsightPrompts(3, prompt),
+        };
+      }
+
+      const sanitizedPrompt = `${sanitized.englishPrompt || ''}`.trim();
+      if (!sanitizedPrompt) {
+        return {
+          status: 'unsupported',
+          reasonCode: 'invalid_prompt',
+          suggestedPrompts: getSuggestedInsightPrompts(3, prompt),
+        };
+      }
+
+      if (detectPromptLanguageDeterministic(sanitizedPrompt) !== 'english') {
+        return {
+          status: 'unsupported',
+          reasonCode: 'invalid_prompt',
+          suggestedPrompts: getSuggestedInsightPrompts(3, prompt),
+        };
+      }
+
+      return {
+        status: 'english',
+        prompt: sanitizedPrompt,
+      };
+    },
   };
+}
+
+const promptLanguageSanitizationRuntime = createPromptLanguageSanitization();
+
+export async function sanitizePromptToEnglish(prompt: string): Promise<PromptSanitizationResult> {
+  return promptLanguageSanitizationRuntime.sanitizePromptToEnglish(prompt);
 }

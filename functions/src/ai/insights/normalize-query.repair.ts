@@ -27,7 +27,7 @@ export interface RepairInsightQueryResult {
   source: 'genkit' | 'none';
 }
 
-interface RepairInsightQueryDependencies {
+export interface RepairInsightQueryDependencies {
   repairIntent: (input: {
     prompt: string;
     canonicalizedPrompt: string;
@@ -40,6 +40,13 @@ interface RepairInsightQueryDependencies {
     activityTypeCandidates: string[];
     activityTypeGroupCandidates: string[];
   }) => Promise<ModelInsightIntent | null>;
+}
+
+export interface RepairInsightQueryApi {
+  repairUnsupportedInsightQuery: (
+    input: AiInsightsRequest,
+    deterministicResult: RepairUnsupportedResult,
+  ) => Promise<RepairInsightQueryResult>;
 }
 
 const RepairInsightIntentSchema = z.object({
@@ -112,8 +119,6 @@ const defaultRepairInsightQueryDependencies: RepairInsightQueryDependencies = {
   },
 };
 
-let repairInsightQueryDependencies: RepairInsightQueryDependencies = defaultRepairInsightQueryDependencies;
-
 function buildUnsupportedResult(
   reasonCode: AiInsightsUnsupportedReasonCode,
   sourceText: string,
@@ -125,66 +130,78 @@ function buildUnsupportedResult(
   };
 }
 
-export function setRepairInsightQueryDependenciesForTesting(
-  dependencies?: Partial<RepairInsightQueryDependencies>,
-): void {
-  repairInsightQueryDependencies = dependencies
-    ? { ...defaultRepairInsightQueryDependencies, ...dependencies }
-    : defaultRepairInsightQueryDependencies;
+export function createRepairInsightQuery(
+  dependencies: Partial<RepairInsightQueryDependencies> = {},
+): RepairInsightQueryApi {
+  const resolvedDependencies: RepairInsightQueryDependencies = {
+    ...defaultRepairInsightQueryDependencies,
+    ...dependencies,
+  };
+
+  return {
+    repairUnsupportedInsightQuery: async (
+      input: AiInsightsRequest,
+      deterministicResult: RepairUnsupportedResult,
+    ): Promise<RepairInsightQueryResult> => {
+      try {
+        const prompt = `${input.prompt || ''}`.trim();
+        const promptContext = buildNormalizeQueryPromptContext(prompt);
+        const repairedIntent = await resolvedDependencies.repairIntent({
+          prompt,
+          canonicalizedPrompt: canonicalizeInsightPrompt(prompt),
+          clientTimezone: input.clientTimezone,
+          unsupportedReasonCode: deterministicResult.reasonCode,
+          promptCategory: promptContext.promptCategory ?? null,
+          promptRequestedTimeInterval: promptContext.promptRequestedTimeInterval ?? null,
+          promptDateSelection: promptContext.promptDateSelection.effectiveDateRangeIntent
+            ? JSON.stringify(promptContext.promptDateSelection.effectiveDateRangeIntent)
+            : null,
+          metricCandidates: findInsightMetricAliasMatches(prompt).map(match => match.metric.key),
+          activityTypeCandidates: [],
+          activityTypeGroupCandidates: [],
+        });
+
+        if (!repairedIntent) {
+          return {
+            result: deterministicResult,
+            source: 'none',
+          };
+        }
+
+        if (repairedIntent.status === 'unsupported') {
+          return {
+            result: buildUnsupportedResult(
+              repairedIntent.unsupportedReasonCode || deterministicResult.reasonCode,
+              prompt,
+            ),
+            source: 'genkit',
+          };
+        }
+
+        return {
+          result: resolveNormalizedInsightQueryFromIntent(input, promptContext, repairedIntent),
+          source: 'genkit',
+        };
+      } catch (error) {
+        logger.warn('[aiInsights] Prompt repair failed; falling back to deterministic unsupported result.', {
+          prompt: input.prompt,
+          unsupportedReasonCode: deterministicResult.reasonCode,
+          error,
+        });
+        return {
+          result: deterministicResult,
+          source: 'none',
+        };
+      }
+    },
+  };
 }
+
+const repairInsightQueryRuntime = createRepairInsightQuery();
 
 export async function repairUnsupportedInsightQuery(
   input: AiInsightsRequest,
   deterministicResult: RepairUnsupportedResult,
 ): Promise<RepairInsightQueryResult> {
-  try {
-    const prompt = `${input.prompt || ''}`.trim();
-    const promptContext = buildNormalizeQueryPromptContext(prompt);
-    const repairedIntent = await repairInsightQueryDependencies.repairIntent({
-      prompt,
-      canonicalizedPrompt: canonicalizeInsightPrompt(prompt),
-      clientTimezone: input.clientTimezone,
-      unsupportedReasonCode: deterministicResult.reasonCode,
-      promptCategory: promptContext.promptCategory ?? null,
-      promptRequestedTimeInterval: promptContext.promptRequestedTimeInterval ?? null,
-      promptDateSelection: promptContext.promptDateSelection.effectiveDateRangeIntent
-        ? JSON.stringify(promptContext.promptDateSelection.effectiveDateRangeIntent)
-        : null,
-      metricCandidates: findInsightMetricAliasMatches(prompt).map(match => match.metric.key),
-      activityTypeCandidates: [],
-      activityTypeGroupCandidates: [],
-    });
-
-    if (!repairedIntent) {
-      return {
-        result: deterministicResult,
-        source: 'none',
-      };
-    }
-
-    if (repairedIntent.status === 'unsupported') {
-      return {
-        result: buildUnsupportedResult(
-          repairedIntent.unsupportedReasonCode || deterministicResult.reasonCode,
-          prompt,
-        ),
-        source: 'genkit',
-      };
-    }
-
-    return {
-      result: resolveNormalizedInsightQueryFromIntent(input, promptContext, repairedIntent),
-      source: 'genkit',
-    };
-  } catch (error) {
-    logger.warn('[aiInsights] Prompt repair failed; falling back to deterministic unsupported result.', {
-      prompt: input.prompt,
-      unsupportedReasonCode: deterministicResult.reasonCode,
-      error,
-    });
-    return {
-      result: deterministicResult,
-      source: 'none',
-    };
-  }
+  return repairInsightQueryRuntime.repairUnsupportedInsightQuery(input, deterministicResult);
 }

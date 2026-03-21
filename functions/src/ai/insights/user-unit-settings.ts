@@ -2,7 +2,7 @@ import * as admin from 'firebase-admin';
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '../../../../shared/unit-aware-display';
 
-interface LoadUserUnitSettingsDependencies {
+export interface LoadUserUnitSettingsDependencies {
   getSettingsData: (userID: string) => Promise<unknown>;
 }
 
@@ -19,21 +19,32 @@ const defaultDependencies: LoadUserUnitSettingsDependencies = {
   },
 };
 
-let dependencies: LoadUserUnitSettingsDependencies = defaultDependencies;
-
-export function setLoadUserUnitSettingsDependenciesForTesting(
-  overrides?: Partial<LoadUserUnitSettingsDependencies>,
-): void {
-  dependencies = overrides
-    ? { ...defaultDependencies, ...overrides }
-    : defaultDependencies;
+export interface LoadUserUnitSettingsApi {
+  loadUserUnitSettings: (userID: string) => Promise<UserUnitSettingsInterface>;
 }
 
-export async function loadUserUnitSettings(userID: string): Promise<UserUnitSettingsInterface> {
-  const rawSettings = await dependencies.getSettingsData(userID);
-  const rawUnitSettings = (rawSettings && typeof rawSettings === 'object')
-    ? (rawSettings as { unitSettings?: unknown }).unitSettings
-    : undefined;
+export function createLoadUserUnitSettings(
+  overrides: Partial<LoadUserUnitSettingsDependencies> = {},
+): LoadUserUnitSettingsApi {
+  const dependencies: LoadUserUnitSettingsDependencies = {
+    ...defaultDependencies,
+    ...overrides,
+  };
 
-  return normalizeUserUnitSettings(rawUnitSettings);
+  return {
+    loadUserUnitSettings: async (userID: string): Promise<UserUnitSettingsInterface> => {
+      const rawSettings = await dependencies.getSettingsData(userID);
+      const rawUnitSettings = (rawSettings && typeof rawSettings === 'object')
+        ? (rawSettings as { unitSettings?: unknown }).unitSettings
+        : undefined;
+
+      return normalizeUserUnitSettings(rawUnitSettings);
+    },
+  };
+}
+
+const loadUserUnitSettingsRuntime = createLoadUserUnitSettings();
+
+export async function loadUserUnitSettings(userID: string): Promise<UserUnitSettingsInterface> {
+  return loadUserUnitSettingsRuntime.loadUserUnitSettings(userID);
 }

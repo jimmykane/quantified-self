@@ -74,6 +74,25 @@ vi.mock('../../utils', () => ({
   enforceAppCheck: vi.fn(),
 }));
 
+vi.mock('./runtime', () => ({
+  AI_INSIGHTS_LIMIT_REACHED_MESSAGE: 'AI Insights limit reached for this billing period.',
+  aiInsightsRuntime: {
+    getAiInsightsQuotaStatus: (...args: unknown[]) => hoisted.getAiInsightsQuotaStatus(...args),
+    reserveAiInsightsQuotaForRequest: (...args: unknown[]) => hoisted.reserveAiInsightsQuotaForRequest(...args),
+    finalizeAiInsightsQuotaReservation: (...args: unknown[]) => hoisted.finalizeAiInsightsQuotaReservation(...args),
+    releaseAiInsightsQuotaReservation: (...args: unknown[]) => hoisted.releaseAiInsightsQuotaReservation(...args),
+    normalizeInsightQuery: (...args: unknown[]) => hoisted.normalizeInsightQuery(...args),
+    repairUnsupportedInsightQuery: (...args: unknown[]) => hoisted.repairUnsupportedInsightQuery(...args),
+    detectPromptLanguageDeterministic: (...args: unknown[]) => hoisted.detectPromptLanguageDeterministic(...args),
+    sanitizePromptToEnglish: (...args: unknown[]) => hoisted.sanitizePromptToEnglish(...args),
+    buildAiInsightsPromptRepairIdentity: (...args: unknown[]) => hoisted.buildAiInsightsPromptRepairIdentity(...args),
+    recordSuccessfulAiInsightRepair: (...args: unknown[]) => hoisted.recordSuccessfulAiInsightRepair(...args),
+    executeAiInsightsQuery: (...args: unknown[]) => hoisted.executeAiInsightsQuery(...args),
+    summarizeAiInsightResult: (...args: unknown[]) => hoisted.summarizeAiInsightResult(...args),
+    loadUserUnitSettings: (...args: unknown[]) => hoisted.loadUserUnitSettings(...args),
+  },
+}));
+
 vi.mock('./normalize-query.flow', () => ({
   normalizeInsightQuery: (...args: unknown[]) => hoisted.normalizeInsightQuery(...args),
 }));

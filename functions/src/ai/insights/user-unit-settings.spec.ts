@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   DaysOfTheWeek,
   PaceUnits,
@@ -10,17 +10,12 @@ import {
 vi.mock('@sports-alliance/sports-lib', async (importOriginal) => await importOriginal());
 
 import {
-  loadUserUnitSettings,
-  setLoadUserUnitSettingsDependenciesForTesting,
+  createLoadUserUnitSettings,
 } from './user-unit-settings';
 
 describe('loadUserUnitSettings', () => {
-  afterEach(() => {
-    setLoadUserUnitSettingsDependenciesForTesting();
-  });
-
   it('loads unit settings from config/settings data and normalizes them', async () => {
-    setLoadUserUnitSettingsDependenciesForTesting({
+    const { loadUserUnitSettings } = createLoadUserUnitSettings({
       getSettingsData: async () => ({
         unitSettings: {
           speedUnits: [SpeedUnits.MilesPerHour],
@@ -44,7 +39,7 @@ describe('loadUserUnitSettings', () => {
   });
 
   it('falls back to defaults when the settings doc is missing or malformed', async () => {
-    setLoadUserUnitSettingsDependenciesForTesting({
+    const { loadUserUnitSettings } = createLoadUserUnitSettings({
       getSettingsData: async () => ({
         unitSettings: {
           speedUnits: ['bad-value'],

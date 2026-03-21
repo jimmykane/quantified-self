@@ -16,12 +16,39 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => await importOri
 
 import type { NormalizedInsightQuery } from '../../../../shared/ai-insights.types';
 import {
-  executeAiInsightsQuery,
+  createExecuteQuery,
   normalizeFirestoreValue,
   rehydrateAiInsightsEvent,
-  setExecuteQueryDependenciesForTesting,
-  withExecuteQueryDependenciesForTesting,
+  type ExecuteQueryApi,
+  type ExecuteQueryDependencies,
 } from './execute-query';
+
+let executeQuerySubject = createExecuteQuery();
+
+function setExecuteQueryDependenciesForTesting(
+  dependencies: Partial<ExecuteQueryDependencies> = {},
+): void {
+  executeQuerySubject = createExecuteQuery(dependencies);
+}
+
+async function withExecuteQueryDependenciesForTesting<T>(
+  dependencies: Partial<ExecuteQueryDependencies>,
+  run: () => Promise<T> | T,
+): Promise<T> {
+  const previousSubject = executeQuerySubject;
+  executeQuerySubject = createExecuteQuery(dependencies);
+  try {
+    return await run();
+  } finally {
+    executeQuerySubject = previousSubject;
+  }
+}
+
+async function executeAiInsightsQuery(
+  ...args: Parameters<ExecuteQueryApi['executeAiInsightsQuery']>
+): ReturnType<ExecuteQueryApi['executeAiInsightsQuery']> {
+  return executeQuerySubject.executeAiInsightsQuery(...args);
+}
 
 function createMockEvent(options: {
   id: string;

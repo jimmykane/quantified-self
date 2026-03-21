@@ -27,7 +27,7 @@ interface FirestoreEventDocumentLike {
   data: () => FirestoreEventJSON | Record<string, unknown> | undefined;
 }
 
-interface ExecuteQueryDependencies {
+export interface ExecuteQueryDependencies {
   fetchEventDocs: (params: {
     userID: string;
     startDate?: Date;
@@ -44,6 +44,14 @@ interface ExecuteQueryDependencies {
   }>;
   importEvent: (eventJSON: EventJSONInterface, eventID: string) => EventInterface;
   logger: Pick<typeof logger, 'info' | 'warn' | 'error'>;
+}
+
+export interface ExecuteQueryApi {
+  executeAiInsightsQuery: (
+    userID: string,
+    query: NormalizedInsightQuery,
+    prompt?: string,
+  ) => Promise<AiInsightsExecutionResult>;
 }
 
 interface RankedInsightEvent {
@@ -282,8 +290,6 @@ const defaultExecuteQueryDependencies: ExecuteQueryDependencies = {
   importEvent: (eventJSON, eventID) => EventImporterJSON.getEventFromJSON(eventJSON).setID(eventID),
   logger,
 };
-
-let executeQueryDependencies: ExecuteQueryDependencies = defaultExecuteQueryDependencies;
 
 function isMergedEventDocument(rawEventData: Record<string, unknown>): boolean {
   if (rawEventData.isMerge === true) {
@@ -625,248 +631,251 @@ export function rehydrateAiInsightsEvent(
   }
 }
 
-export function setExecuteQueryDependenciesForTesting(
-  dependencies?: Partial<ExecuteQueryDependencies>,
-): () => void {
-  const previousDependencies = executeQueryDependencies;
-  executeQueryDependencies = dependencies
-    ? { ...defaultExecuteQueryDependencies, ...dependencies }
-    : defaultExecuteQueryDependencies;
+export async function withExecuteQueryDependenciesForTesting<T>(
+  dependencies: Partial<ExecuteQueryDependencies>,
+  run: (api: ExecuteQueryApi) => Promise<T> | T,
+): Promise<T> {
+  return run(createExecuteQuery(dependencies));
+}
 
-  return () => {
-    executeQueryDependencies = previousDependencies;
+export function createExecuteQuery(
+  dependencies: Partial<ExecuteQueryDependencies> = {},
+): ExecuteQueryApi {
+  const resolvedDependencies: ExecuteQueryDependencies = {
+    ...defaultExecuteQueryDependencies,
+    ...dependencies,
+  };
+
+  return {
+    executeAiInsightsQuery: async (
+      userID: string,
+      query: NormalizedInsightQuery,
+      prompt?: string,
+    ): Promise<AiInsightsExecutionResult> => {
+      const dependencies = resolvedDependencies;
+      const startDate = query.dateRange.kind === 'bounded'
+        ? new Date(query.dateRange.startDate)
+        : undefined;
+      const endDate = query.dateRange.kind === 'bounded'
+        ? new Date(query.dateRange.endDate)
+        : undefined;
+      const fetchEventDocsResult = await dependencies.fetchEventDocs({
+        userID,
+        startDate,
+        endDate,
+        activityTypes: query.activityTypes,
+      });
+      const {
+        docs,
+        prefilterDiagnostics,
+      } = Array.isArray(fetchEventDocsResult)
+        ? {
+          docs: fetchEventDocsResult,
+          prefilterDiagnostics: resolveDefaultPrefilterDiagnostics(query.activityTypes),
+        }
+        : fetchEventDocsResult;
+
+      const rehydratedEvents = docs
+        .map(doc => rehydrateAiInsightsEvent(doc.id, doc.data(), dependencies.importEvent, dependencies.logger))
+        .filter((event): event is EventInterface => event !== null);
+      const nonMergedEvents = rehydratedEvents
+        .filter(event => (event as { isMerge?: boolean }).isMerge !== true);
+      let skippedMissingActivityTypeCount = 0;
+      let normalizedNonCanonicalActivityTypeCount = 0;
+      const activityMatchedEvents = nonMergedEvents.filter((event) => {
+        const activitySelectionEvaluation = eventMatchesActivitySelection(event, query.activityTypes);
+        normalizedNonCanonicalActivityTypeCount += activitySelectionEvaluation.normalizedNonCanonicalCount;
+        if (activitySelectionEvaluation.missingOrInvalid) {
+          skippedMissingActivityTypeCount += 1;
+          return false;
+        }
+        return activitySelectionEvaluation.matchesSelection;
+      });
+      const matchedEvents = activityMatchedEvents
+        .filter(event => eventMatchesRequestedDateRanges(event, query.requestedDateRanges));
+      const eventsWithRequestedStatCount = query.resultKind === 'multi_metric_aggregate'
+        ? null
+        : matchedEvents.filter(event => hasRequestedStat(event, query.dataType)).length;
+      const firestoreEmulatorHost = process.env.FIRESTORE_EMULATOR_HOST || null;
+      const debugEventSnapshot = docs.length === 0
+        ? await dependencies.fetchDebugEventSnapshot(userID)
+        : null;
+
+      if (skippedMissingActivityTypeCount > 0) {
+        dependencies.logger.warn('[aiInsights] Skipped events with missing or invalid activity type stats', {
+          userID,
+          skippedMissingActivityTypeCount,
+          selectedActivityTypeCount: query.activityTypes.length,
+        });
+      }
+
+      if (normalizedNonCanonicalActivityTypeCount > 0) {
+        dependencies.logger.warn('[aiInsights] Normalized non-canonical activity types in AI filtering', {
+          userID,
+          normalizedNonCanonicalActivityTypeCount,
+          selectedActivityTypeCount: query.activityTypes.length,
+        });
+      }
+
+      dependencies.logger.info('[aiInsights] Query execution summary', {
+        prompt: prompt || null,
+        userID,
+        dataType: query.resultKind === 'multi_metric_aggregate' ? null : query.dataType,
+        valueType: query.resultKind === 'multi_metric_aggregate' ? null : query.valueType,
+        categoryType: query.categoryType,
+        activityTypes: query.activityTypes,
+        dateRange: query.dateRange,
+        requestedDateRanges: query.requestedDateRanges ?? null,
+        periodMode: query.periodMode ?? null,
+        prefilterMode: prefilterDiagnostics.mode,
+        prefilterChunkCount: prefilterDiagnostics.chunkCount,
+        prefilterDedupedCount: prefilterDiagnostics.dedupedCount,
+        fetchedDocsCount: docs.length,
+        rehydratedEventsCount: rehydratedEvents.length,
+        mergedEventsExcludedCount: rehydratedEvents.length - nonMergedEvents.length,
+        activityFilteredOutCount: nonMergedEvents.length - activityMatchedEvents.length,
+        skippedMissingActivityTypeCount,
+        normalizedNonCanonicalActivityTypeCount,
+        requestedDateRangeFilteredOutCount: activityMatchedEvents.length - matchedEvents.length,
+        matchedEventsCount: matchedEvents.length,
+        eventsWithRequestedStatCount,
+        metricSelectionCount: query.resultKind === 'multi_metric_aggregate' ? query.metricSelections.length : 1,
+        matchedEventIDsSample: matchedEvents.slice(0, 10).map(event => event.getID?.()),
+        firestoreTarget: firestoreEmulatorHost ? 'emulator' : 'default',
+        firestoreEmulatorHost,
+        debugTotalEventsCount: debugEventSnapshot?.totalEventsCount ?? null,
+        debugRecentEventsSample: debugEventSnapshot?.recentEventsSample ?? [],
+      });
+
+      if (query.resultKind === 'event_lookup') {
+        const eventsWithRequestedStat = matchedEvents.filter(event => hasRequestedStat(event, query.dataType));
+        const rankedEvents = buildRankedEvents(eventsWithRequestedStat, query);
+
+        dependencies.logger.info('[aiInsights] Event lookup summary', {
+          prompt: prompt || null,
+          userID,
+          dataType: query.dataType,
+          valueType: query.valueType,
+          rankedEventCount: rankedEvents.length,
+          primaryEventId: rankedEvents[0]?.eventId ?? null,
+          topEventIds: rankedEvents.slice(0, 10).map(event => event.eventId),
+        });
+
+        return {
+          resultKind: 'event_lookup',
+          matchedEventsCount: eventsWithRequestedStat.length,
+          matchedActivityTypeCounts: buildMatchedActivityTypeCounts(matchedEvents, dependencies.logger),
+          eventLookup: {
+            primaryEventId: rankedEvents[0]?.eventId ?? null,
+            topEventIds: rankedEvents.slice(0, 10).map(event => event.eventId),
+            rankedEvents,
+          },
+        };
+      }
+
+      if (query.resultKind === 'multi_metric_aggregate') {
+        const metricResults = query.metricSelections.map((metricSelection) => {
+          const metricMatchedEvents = matchedEvents
+            .filter(event => hasRequestedStat(event, metricSelection.dataType));
+          const aggregation = query.groupingMode === 'date'
+            ? buildEventStatAggregation(metricMatchedEvents, {
+              dataType: metricSelection.dataType,
+              valueType: metricSelection.valueType,
+              categoryType: ChartDataCategoryTypes.DateType,
+              requestedTimeInterval: query.requestedTimeInterval,
+            }, dependencies.logger)
+            : buildOverallAggregation(
+              metricSelection.dataType,
+              metricSelection.valueType,
+              metricMatchedEvents,
+            );
+
+          return {
+            metricKey: metricSelection.metricKey,
+            aggregation,
+            matchedEventsCount: metricMatchedEvents.length,
+            matchedActivityTypeCounts: buildMatchedActivityTypeCounts(metricMatchedEvents, dependencies.logger),
+          } satisfies MultiMetricAggregateExecutionMetricResult;
+        });
+
+        dependencies.logger.info('[aiInsights] Multi metric aggregation summary', {
+          prompt: prompt || null,
+          userID,
+          metricCount: metricResults.length,
+          groupingMode: query.groupingMode,
+          requestedTimeInterval: query.requestedTimeInterval ?? null,
+          metricSummaries: metricResults.map(metricResult => ({
+            metricKey: metricResult.metricKey,
+            matchedEventsCount: metricResult.matchedEventsCount,
+            bucketCount: metricResult.aggregation.buckets.length,
+            resolvedTimeInterval: metricResult.aggregation.resolvedTimeInterval,
+          })),
+        });
+
+        return {
+          resultKind: 'multi_metric_aggregate',
+          matchedEventsCount: matchedEvents.length,
+          matchedActivityTypeCounts: buildMatchedActivityTypeCounts(matchedEvents, dependencies.logger),
+          metricResults,
+        };
+      }
+
+      const eventsWithRequestedStat = matchedEvents.filter(event => hasRequestedStat(event, query.dataType));
+      const aggregation = buildEventStatAggregation(matchedEvents, {
+        dataType: query.dataType,
+        valueType: query.valueType,
+        categoryType: query.categoryType,
+        requestedTimeInterval: query.requestedTimeInterval,
+      }, dependencies.logger);
+      const eventRanking = (
+        query.valueType === ChartDataValueTypes.Minimum
+        || query.valueType === ChartDataValueTypes.Maximum
+      )
+        ? (() => {
+          const rankedEvents = buildRankedEvents(eventsWithRequestedStat, query);
+          if (!rankedEvents.length) {
+            return undefined;
+          }
+
+          return {
+            primaryEventId: rankedEvents[0]?.eventId ?? null,
+            topEventIds: rankedEvents.slice(0, 10).map(event => event.eventId),
+            matchedEventCount: eventsWithRequestedStat.length,
+            rankedEvents,
+          };
+        })()
+        : undefined;
+
+      dependencies.logger.info('[aiInsights] Aggregation summary', {
+        prompt: prompt || null,
+        userID,
+        dataType: query.dataType,
+        valueType: query.valueType,
+        categoryType: query.categoryType,
+        requestedTimeInterval: query.requestedTimeInterval,
+        resolvedTimeInterval: aggregation.resolvedTimeInterval,
+        bucketCount: aggregation.buckets.length,
+        rankedEventCount: eventRanking?.rankedEvents.length ?? 0,
+        rankedEventTopIds: eventRanking?.topEventIds ?? [],
+      });
+
+      return {
+        resultKind: 'aggregate',
+        aggregation,
+        matchedEventsCount: matchedEvents.length,
+        matchedActivityTypeCounts: buildMatchedActivityTypeCounts(matchedEvents, dependencies.logger),
+        ...(eventRanking ? { eventRanking } : {}),
+      };
+    },
   };
 }
 
-export async function withExecuteQueryDependenciesForTesting<T>(
-  dependencies: Partial<ExecuteQueryDependencies>,
-  run: () => Promise<T> | T,
-): Promise<T> {
-  const restore = setExecuteQueryDependenciesForTesting(dependencies);
-  try {
-    return await run();
-  } finally {
-    restore();
-  }
-}
+const executeQueryRuntime = createExecuteQuery();
 
 export async function executeAiInsightsQuery(
   userID: string,
   query: NormalizedInsightQuery,
   prompt?: string,
 ): Promise<AiInsightsExecutionResult> {
-  const dependencies = executeQueryDependencies;
-  const startDate = query.dateRange.kind === 'bounded'
-    ? new Date(query.dateRange.startDate)
-    : undefined;
-  const endDate = query.dateRange.kind === 'bounded'
-    ? new Date(query.dateRange.endDate)
-    : undefined;
-  const fetchEventDocsResult = await dependencies.fetchEventDocs({
-    userID,
-    startDate,
-    endDate,
-    activityTypes: query.activityTypes,
-  });
-  const {
-    docs,
-    prefilterDiagnostics,
-  } = Array.isArray(fetchEventDocsResult)
-    ? {
-      docs: fetchEventDocsResult,
-      prefilterDiagnostics: resolveDefaultPrefilterDiagnostics(query.activityTypes),
-    }
-    : fetchEventDocsResult;
-
-  const rehydratedEvents = docs
-    .map(doc => rehydrateAiInsightsEvent(doc.id, doc.data(), dependencies.importEvent, dependencies.logger))
-    .filter((event): event is EventInterface => event !== null);
-  const nonMergedEvents = rehydratedEvents
-    .filter(event => (event as { isMerge?: boolean }).isMerge !== true);
-  let skippedMissingActivityTypeCount = 0;
-  let normalizedNonCanonicalActivityTypeCount = 0;
-  const activityMatchedEvents = nonMergedEvents.filter((event) => {
-    const activitySelectionEvaluation = eventMatchesActivitySelection(event, query.activityTypes);
-    normalizedNonCanonicalActivityTypeCount += activitySelectionEvaluation.normalizedNonCanonicalCount;
-    if (activitySelectionEvaluation.missingOrInvalid) {
-      skippedMissingActivityTypeCount += 1;
-      return false;
-    }
-    return activitySelectionEvaluation.matchesSelection;
-  });
-  const matchedEvents = activityMatchedEvents
-    .filter(event => eventMatchesRequestedDateRanges(event, query.requestedDateRanges));
-  const eventsWithRequestedStatCount = query.resultKind === 'multi_metric_aggregate'
-    ? null
-    : matchedEvents.filter(event => hasRequestedStat(event, query.dataType)).length;
-  const firestoreEmulatorHost = process.env.FIRESTORE_EMULATOR_HOST || null;
-  const debugEventSnapshot = docs.length === 0
-    ? await dependencies.fetchDebugEventSnapshot(userID)
-    : null;
-
-  if (skippedMissingActivityTypeCount > 0) {
-    dependencies.logger.warn('[aiInsights] Skipped events with missing or invalid activity type stats', {
-      userID,
-      skippedMissingActivityTypeCount,
-      selectedActivityTypeCount: query.activityTypes.length,
-    });
-  }
-
-  if (normalizedNonCanonicalActivityTypeCount > 0) {
-    dependencies.logger.warn('[aiInsights] Normalized non-canonical activity types in AI filtering', {
-      userID,
-      normalizedNonCanonicalActivityTypeCount,
-      selectedActivityTypeCount: query.activityTypes.length,
-    });
-  }
-
-  dependencies.logger.info('[aiInsights] Query execution summary', {
-    prompt: prompt || null,
-    userID,
-    dataType: query.resultKind === 'multi_metric_aggregate' ? null : query.dataType,
-    valueType: query.resultKind === 'multi_metric_aggregate' ? null : query.valueType,
-    categoryType: query.categoryType,
-    activityTypes: query.activityTypes,
-    dateRange: query.dateRange,
-    requestedDateRanges: query.requestedDateRanges ?? null,
-    periodMode: query.periodMode ?? null,
-    prefilterMode: prefilterDiagnostics.mode,
-    prefilterChunkCount: prefilterDiagnostics.chunkCount,
-    prefilterDedupedCount: prefilterDiagnostics.dedupedCount,
-    fetchedDocsCount: docs.length,
-    rehydratedEventsCount: rehydratedEvents.length,
-    mergedEventsExcludedCount: rehydratedEvents.length - nonMergedEvents.length,
-    activityFilteredOutCount: nonMergedEvents.length - activityMatchedEvents.length,
-    skippedMissingActivityTypeCount,
-    normalizedNonCanonicalActivityTypeCount,
-    requestedDateRangeFilteredOutCount: activityMatchedEvents.length - matchedEvents.length,
-    matchedEventsCount: matchedEvents.length,
-    eventsWithRequestedStatCount,
-    metricSelectionCount: query.resultKind === 'multi_metric_aggregate' ? query.metricSelections.length : 1,
-    matchedEventIDsSample: matchedEvents.slice(0, 10).map(event => event.getID?.()),
-    firestoreTarget: firestoreEmulatorHost ? 'emulator' : 'default',
-    firestoreEmulatorHost,
-    debugTotalEventsCount: debugEventSnapshot?.totalEventsCount ?? null,
-    debugRecentEventsSample: debugEventSnapshot?.recentEventsSample ?? [],
-  });
-
-  if (query.resultKind === 'event_lookup') {
-    const eventsWithRequestedStat = matchedEvents.filter(event => hasRequestedStat(event, query.dataType));
-    const rankedEvents = buildRankedEvents(eventsWithRequestedStat, query);
-
-    dependencies.logger.info('[aiInsights] Event lookup summary', {
-      prompt: prompt || null,
-      userID,
-      dataType: query.dataType,
-      valueType: query.valueType,
-      rankedEventCount: rankedEvents.length,
-      primaryEventId: rankedEvents[0]?.eventId ?? null,
-      topEventIds: rankedEvents.slice(0, 10).map(event => event.eventId),
-    });
-
-    return {
-      resultKind: 'event_lookup',
-      matchedEventsCount: eventsWithRequestedStat.length,
-      matchedActivityTypeCounts: buildMatchedActivityTypeCounts(matchedEvents, dependencies.logger),
-      eventLookup: {
-        primaryEventId: rankedEvents[0]?.eventId ?? null,
-        topEventIds: rankedEvents.slice(0, 10).map(event => event.eventId),
-        rankedEvents,
-      },
-    };
-  }
-
-  if (query.resultKind === 'multi_metric_aggregate') {
-    const metricResults = query.metricSelections.map((metricSelection) => {
-      const metricMatchedEvents = matchedEvents
-        .filter(event => hasRequestedStat(event, metricSelection.dataType));
-      const aggregation = query.groupingMode === 'date'
-        ? buildEventStatAggregation(metricMatchedEvents, {
-          dataType: metricSelection.dataType,
-          valueType: metricSelection.valueType,
-          categoryType: ChartDataCategoryTypes.DateType,
-          requestedTimeInterval: query.requestedTimeInterval,
-        }, dependencies.logger)
-        : buildOverallAggregation(
-          metricSelection.dataType,
-          metricSelection.valueType,
-          metricMatchedEvents,
-        );
-
-      return {
-        metricKey: metricSelection.metricKey,
-        aggregation,
-        matchedEventsCount: metricMatchedEvents.length,
-        matchedActivityTypeCounts: buildMatchedActivityTypeCounts(metricMatchedEvents, dependencies.logger),
-      } satisfies MultiMetricAggregateExecutionMetricResult;
-    });
-
-    dependencies.logger.info('[aiInsights] Multi metric aggregation summary', {
-      prompt: prompt || null,
-      userID,
-      metricCount: metricResults.length,
-      groupingMode: query.groupingMode,
-      requestedTimeInterval: query.requestedTimeInterval ?? null,
-      metricSummaries: metricResults.map(metricResult => ({
-        metricKey: metricResult.metricKey,
-        matchedEventsCount: metricResult.matchedEventsCount,
-        bucketCount: metricResult.aggregation.buckets.length,
-        resolvedTimeInterval: metricResult.aggregation.resolvedTimeInterval,
-      })),
-    });
-
-    return {
-      resultKind: 'multi_metric_aggregate',
-      matchedEventsCount: matchedEvents.length,
-      matchedActivityTypeCounts: buildMatchedActivityTypeCounts(matchedEvents, dependencies.logger),
-      metricResults,
-    };
-  }
-
-  const eventsWithRequestedStat = matchedEvents.filter(event => hasRequestedStat(event, query.dataType));
-  const aggregation = buildEventStatAggregation(matchedEvents, {
-    dataType: query.dataType,
-    valueType: query.valueType,
-    categoryType: query.categoryType,
-    requestedTimeInterval: query.requestedTimeInterval,
-  }, dependencies.logger);
-  const eventRanking = (
-    query.valueType === ChartDataValueTypes.Minimum
-    || query.valueType === ChartDataValueTypes.Maximum
-  )
-    ? (() => {
-      const rankedEvents = buildRankedEvents(eventsWithRequestedStat, query);
-      if (!rankedEvents.length) {
-        return undefined;
-      }
-
-      return {
-        primaryEventId: rankedEvents[0]?.eventId ?? null,
-        topEventIds: rankedEvents.slice(0, 10).map(event => event.eventId),
-        matchedEventCount: eventsWithRequestedStat.length,
-        rankedEvents,
-      };
-    })()
-    : undefined;
-
-  dependencies.logger.info('[aiInsights] Aggregation summary', {
-    prompt: prompt || null,
-    userID,
-    dataType: query.dataType,
-    valueType: query.valueType,
-    categoryType: query.categoryType,
-    requestedTimeInterval: query.requestedTimeInterval,
-    resolvedTimeInterval: aggregation.resolvedTimeInterval,
-    bucketCount: aggregation.buckets.length,
-    rankedEventCount: eventRanking?.rankedEvents.length ?? 0,
-    rankedEventTopIds: eventRanking?.topEventIds ?? [],
-  });
-
-  return {
-    resultKind: 'aggregate',
-    aggregation,
-    matchedEventsCount: matchedEvents.length,
-    matchedActivityTypeCounts: buildMatchedActivityTypeCounts(matchedEvents, dependencies.logger),
-    ...(eventRanking ? { eventRanking } : {}),
-  };
+  return executeQueryRuntime.executeAiInsightsQuery(userID, query, prompt);
 }

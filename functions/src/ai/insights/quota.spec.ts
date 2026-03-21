@@ -2,15 +2,57 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as admin from 'firebase-admin';
 import { HttpsError } from 'firebase-functions/v2/https';
 import {
-  finalizeAiInsightsQuotaReservation,
-  getAiInsightsQuotaStatus,
+  createAiInsightsQuota,
   normalizeUsageDocRole,
-  releaseAiInsightsQuotaReservation,
-  reserveAiInsightsQuotaForRequest,
-  setAiInsightsQuotaDependenciesForTesting,
-  withAiInsightsQuotaDependenciesForTesting,
+  type AiInsightsQuotaApi,
+  type AiInsightsQuotaDependencies,
 } from './quota';
 import { AI_INSIGHTS_REQUEST_LIMITS } from '../../../../shared/limits';
+
+let quotaSubject = createAiInsightsQuota();
+
+function setAiInsightsQuotaDependenciesForTesting(
+  dependencies: Partial<AiInsightsQuotaDependencies> = {},
+): void {
+  quotaSubject = createAiInsightsQuota(dependencies);
+}
+
+async function withAiInsightsQuotaDependenciesForTesting<T>(
+  dependencies: Partial<AiInsightsQuotaDependencies>,
+  run: () => Promise<T> | T,
+): Promise<T> {
+  const previousSubject = quotaSubject;
+  quotaSubject = createAiInsightsQuota(dependencies);
+  try {
+    return await run();
+  } finally {
+    quotaSubject = previousSubject;
+  }
+}
+
+function getAiInsightsQuotaStatus(
+  ...args: Parameters<AiInsightsQuotaApi['getAiInsightsQuotaStatus']>
+): ReturnType<AiInsightsQuotaApi['getAiInsightsQuotaStatus']> {
+  return quotaSubject.getAiInsightsQuotaStatus(...args);
+}
+
+function reserveAiInsightsQuotaForRequest(
+  ...args: Parameters<AiInsightsQuotaApi['reserveAiInsightsQuotaForRequest']>
+): ReturnType<AiInsightsQuotaApi['reserveAiInsightsQuotaForRequest']> {
+  return quotaSubject.reserveAiInsightsQuotaForRequest(...args);
+}
+
+function finalizeAiInsightsQuotaReservation(
+  ...args: Parameters<AiInsightsQuotaApi['finalizeAiInsightsQuotaReservation']>
+): ReturnType<AiInsightsQuotaApi['finalizeAiInsightsQuotaReservation']> {
+  return quotaSubject.finalizeAiInsightsQuotaReservation(...args);
+}
+
+function releaseAiInsightsQuotaReservation(
+  ...args: Parameters<AiInsightsQuotaApi['releaseAiInsightsQuotaReservation']>
+): ReturnType<AiInsightsQuotaApi['releaseAiInsightsQuotaReservation']> {
+  return quotaSubject.releaseAiInsightsQuotaReservation(...args);
+}
 
 const FIXED_NOW_ISO = '2026-03-19T12:00:00.000Z';
 const PERIOD_START = '2026-03-01T00:00:00.000Z';

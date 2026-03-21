@@ -19,9 +19,24 @@ vi.mock('./genkit', () => ({
 import {
   buildNarrativeFacts,
   buildInsightSummaryFacts,
-  setSummarizeInsightDependenciesForTesting,
-  summarizeAiInsightResult,
+  createSummarizeInsight,
+  type SummarizeInsightDependencies,
+  type SummarizeInsightResultInput,
 } from './summarize-result.flow';
+
+let summarizeInsightSubject = createSummarizeInsight();
+
+function setSummarizeInsightDependenciesForTesting(
+  dependencies: Partial<SummarizeInsightDependencies> = {},
+): void {
+  summarizeInsightSubject = createSummarizeInsight(dependencies);
+}
+
+async function summarizeAiInsightResult(
+  input: SummarizeInsightResultInput,
+) {
+  return summarizeInsightSubject.summarizeAiInsightResult(input);
+}
 
 const paceSummary = {
   matchedEventCount: 5,

@@ -26,11 +26,21 @@ export interface RecordSuccessfulAiInsightRepairInput {
   metricKey?: string;
 }
 
-interface AiInsightsPromptRepairBacklogDependencies {
+export interface AiInsightsPromptRepairBacklogDependencies {
   now: () => Date;
   db: () => FirebaseFirestore.Firestore;
   canonicalizePrompt: (prompt: string) => string;
   hashText: (text: string) => string;
+}
+
+export interface AiInsightsPromptRepairBacklogApi {
+  buildAiInsightsPromptRepairIdentity: (
+    repairInputPrompt: string,
+    normalizedQuery: NormalizedInsightQuery,
+  ) => AiInsightsPromptRepairIdentity;
+  recordSuccessfulAiInsightRepair: (
+    input: RecordSuccessfulAiInsightRepairInput,
+  ) => Promise<AiInsightsPromptRepairIdentity>;
 }
 
 const defaultAiInsightsPromptRepairBacklogDependencies: AiInsightsPromptRepairBacklogDependencies = {
@@ -39,8 +49,6 @@ const defaultAiInsightsPromptRepairBacklogDependencies: AiInsightsPromptRepairBa
   canonicalizePrompt: canonicalizeInsightPrompt,
   hashText: (text: string) => createHash('sha256').update(text).digest('hex'),
 };
-
-let aiInsightsPromptRepairBacklogDependencies = defaultAiInsightsPromptRepairBacklogDependencies;
 
 export function trimPromptSample(prompt: string, maxChars = AI_INSIGHTS_PROMPT_REPAIR_RAW_PROMPT_MAX_CHARS): string {
   return `${prompt || ''}`
@@ -68,103 +76,117 @@ export function buildNormalizedInsightQuerySignature(
   return stableSerialize(normalizedQuery);
 }
 
-export function buildAiInsightsPromptRepairIdentity(
-  repairInputPrompt: string,
-  normalizedQuery: NormalizedInsightQuery,
-): AiInsightsPromptRepairIdentity {
-  const canonicalPrompt = aiInsightsPromptRepairBacklogDependencies.canonicalizePrompt(repairInputPrompt);
-  const normalizedQuerySignature = buildNormalizedInsightQuerySignature(normalizedQuery);
-  const intentDocID = aiInsightsPromptRepairBacklogDependencies.hashText(
-    `${canonicalPrompt}\n${normalizedQuerySignature}`,
-  );
+export function createAiInsightsPromptRepairBacklog(
+  dependencies: Partial<AiInsightsPromptRepairBacklogDependencies> = {},
+): AiInsightsPromptRepairBacklogApi {
+  const resolvedDependencies: AiInsightsPromptRepairBacklogDependencies = {
+    ...defaultAiInsightsPromptRepairBacklogDependencies,
+    ...dependencies,
+  };
+
+  const buildAiInsightsPromptRepairIdentity = (
+    repairInputPrompt: string,
+    normalizedQuery: NormalizedInsightQuery,
+  ): AiInsightsPromptRepairIdentity => {
+    const canonicalPrompt = resolvedDependencies.canonicalizePrompt(repairInputPrompt);
+    const normalizedQuerySignature = buildNormalizedInsightQuerySignature(normalizedQuery);
+    const intentDocID = resolvedDependencies.hashText(
+      `${canonicalPrompt}\n${normalizedQuerySignature}`,
+    );
+
+    return {
+      canonicalPrompt,
+      normalizedQuerySignature,
+      intentDocID,
+    };
+  };
+
+  const recordSuccessfulAiInsightRepair = async (
+    input: RecordSuccessfulAiInsightRepairInput,
+  ): Promise<AiInsightsPromptRepairIdentity> => {
+    const identity = buildAiInsightsPromptRepairIdentity(input.repairInputPrompt, input.normalizedQuery);
+    const docRef = resolvedDependencies.db()
+      .collection(AI_INSIGHTS_PROMPT_REPAIRS_COLLECTION)
+      .doc(identity.intentDocID);
+
+    await resolvedDependencies.db().runTransaction(async (transaction) => {
+      const now = resolvedDependencies.now();
+      const nowIso = now.toISOString();
+      const nowMs = now.getTime();
+      const expireAt = new Date(nowMs + AI_INSIGHTS_PROMPT_REPAIR_TTL_MS);
+      const snapshot = await transaction.get(docRef);
+      const existingData = snapshot.data() as Record<string, unknown> | undefined;
+      const existingSeenCount = typeof existingData?.seenCount === 'number'
+        ? Math.max(0, Math.floor(existingData.seenCount))
+        : 0;
+      const existingFirstSeenAt = typeof existingData?.firstSeenAt === 'string'
+        ? existingData.firstSeenAt
+        : nowIso;
+      const existingTriageStatus = typeof existingData?.triageStatus === 'string'
+        ? existingData.triageStatus
+        : 'pending';
+
+      const commonPayload = {
+        version: AI_INSIGHTS_PROMPT_REPAIR_BACKLOG_VERSION,
+        canonicalPrompt: identity.canonicalPrompt,
+        normalizedQuerySignature: identity.normalizedQuerySignature,
+        normalizedQuery: input.normalizedQuery,
+        metricKey: input.metricKey ?? null,
+        deterministicFailureReasonCode: input.deterministicFailureReasonCode,
+        lastSeenAt: nowIso,
+        latestRawPrompt: trimPromptSample(input.rawPrompt),
+        latestRepairInputPrompt: trimPromptSample(input.repairInputPrompt),
+        source: 'repair_genkit_success',
+        triageStatus: existingTriageStatus,
+        expireAt,
+        updatedAt: nowIso,
+      };
+
+      if (snapshot.exists) {
+        transaction.update(docRef, {
+          ...commonPayload,
+          seenCount: existingSeenCount + 1,
+        });
+        return;
+      }
+
+      transaction.create(docRef, {
+        ...commonPayload,
+        seenCount: 1,
+        firstSeenAt: existingFirstSeenAt,
+      });
+    });
+
+    return identity;
+  };
 
   return {
-    canonicalPrompt,
-    normalizedQuerySignature,
-    intentDocID,
-  };
-}
-
-export async function recordSuccessfulAiInsightRepair(
-  input: RecordSuccessfulAiInsightRepairInput,
-): Promise<AiInsightsPromptRepairIdentity> {
-  const identity = buildAiInsightsPromptRepairIdentity(input.repairInputPrompt, input.normalizedQuery);
-  const docRef = aiInsightsPromptRepairBacklogDependencies.db()
-    .collection(AI_INSIGHTS_PROMPT_REPAIRS_COLLECTION)
-    .doc(identity.intentDocID);
-
-  await aiInsightsPromptRepairBacklogDependencies.db().runTransaction(async (transaction) => {
-    const now = aiInsightsPromptRepairBacklogDependencies.now();
-    const nowIso = now.toISOString();
-    const nowMs = now.getTime();
-    const expireAt = new Date(nowMs + AI_INSIGHTS_PROMPT_REPAIR_TTL_MS);
-    const snapshot = await transaction.get(docRef);
-    const existingData = snapshot.data() as Record<string, unknown> | undefined;
-    const existingSeenCount = typeof existingData?.seenCount === 'number'
-      ? Math.max(0, Math.floor(existingData.seenCount))
-      : 0;
-    const existingFirstSeenAt = typeof existingData?.firstSeenAt === 'string'
-      ? existingData.firstSeenAt
-      : nowIso;
-    const existingTriageStatus = typeof existingData?.triageStatus === 'string'
-      ? existingData.triageStatus
-      : 'pending';
-
-    const commonPayload = {
-      version: AI_INSIGHTS_PROMPT_REPAIR_BACKLOG_VERSION,
-      canonicalPrompt: identity.canonicalPrompt,
-      normalizedQuerySignature: identity.normalizedQuerySignature,
-      normalizedQuery: input.normalizedQuery,
-      metricKey: input.metricKey ?? null,
-      deterministicFailureReasonCode: input.deterministicFailureReasonCode,
-      lastSeenAt: nowIso,
-      latestRawPrompt: trimPromptSample(input.rawPrompt),
-      latestRepairInputPrompt: trimPromptSample(input.repairInputPrompt),
-      source: 'repair_genkit_success',
-      triageStatus: existingTriageStatus,
-      expireAt,
-      updatedAt: nowIso,
-    };
-
-    if (snapshot.exists) {
-      transaction.update(docRef, {
-        ...commonPayload,
-        seenCount: existingSeenCount + 1,
-      });
-      return;
-    }
-
-    transaction.create(docRef, {
-      ...commonPayload,
-      seenCount: 1,
-      firstSeenAt: existingFirstSeenAt,
-    });
-  });
-
-  return identity;
-}
-
-export function setAiInsightsPromptRepairBacklogDependenciesForTesting(
-  dependencies?: Partial<AiInsightsPromptRepairBacklogDependencies>,
-): () => void {
-  const previousDependencies = aiInsightsPromptRepairBacklogDependencies;
-  aiInsightsPromptRepairBacklogDependencies = dependencies
-    ? { ...defaultAiInsightsPromptRepairBacklogDependencies, ...dependencies }
-    : defaultAiInsightsPromptRepairBacklogDependencies;
-
-  return () => {
-    aiInsightsPromptRepairBacklogDependencies = previousDependencies;
+    buildAiInsightsPromptRepairIdentity,
+    recordSuccessfulAiInsightRepair,
   };
 }
 
 export async function withAiInsightsPromptRepairBacklogDependenciesForTesting<T>(
   dependencies: Partial<AiInsightsPromptRepairBacklogDependencies>,
-  run: () => Promise<T> | T,
+  run: (api: AiInsightsPromptRepairBacklogApi) => Promise<T> | T,
 ): Promise<T> {
-  const restore = setAiInsightsPromptRepairBacklogDependenciesForTesting(dependencies);
-  try {
-    return await run();
-  } finally {
-    restore();
-  }
+  return run(createAiInsightsPromptRepairBacklog(dependencies));
+}
+
+const aiInsightsPromptRepairBacklogRuntime = createAiInsightsPromptRepairBacklog();
+
+export function buildAiInsightsPromptRepairIdentity(
+  repairInputPrompt: string,
+  normalizedQuery: NormalizedInsightQuery,
+): AiInsightsPromptRepairIdentity {
+  return aiInsightsPromptRepairBacklogRuntime.buildAiInsightsPromptRepairIdentity(
+    repairInputPrompt,
+    normalizedQuery,
+  );
+}
+
+export async function recordSuccessfulAiInsightRepair(
+  input: RecordSuccessfulAiInsightRepairInput,
+): Promise<AiInsightsPromptRepairIdentity> {
+  return aiInsightsPromptRepairBacklogRuntime.recordSuccessfulAiInsightRepair(input);
 }

@@ -131,9 +131,14 @@ export interface NormalizeQueryPromptContext {
   promptChartPreference: 'columns' | 'lines' | undefined;
 }
 
-interface NormalizeQueryDependencies {
+export interface NormalizeQueryDependencies {
   now: () => Date;
   generateIntent: (input: AiInsightsRequest) => Promise<ModelInsightIntent>;
+}
+
+export interface NormalizeQueryApi {
+  normalizeInsightQuery: (input: AiInsightsRequest) => Promise<NormalizeInsightQueryResult>;
+  normalizeInsightQueryFlow: (input: AiInsightsRequest) => Promise<NormalizeInsightQueryResult>;
 }
 
 interface ZonedDateParts {
@@ -298,8 +303,6 @@ const defaultNormalizeQueryDependencies: NormalizeQueryDependencies = {
   now: () => new Date(),
   generateIntent: async (input) => buildDeterministicIntent(input.prompt),
 };
-
-let normalizeQueryDependencies: NormalizeQueryDependencies = defaultNormalizeQueryDependencies;
 
 function buildUnsupportedResult(
   reasonCode: AiInsightsUnsupportedReasonCode,
@@ -1500,6 +1503,7 @@ export function resolveNormalizedInsightQueryFromIntent(
   input: AiInsightsRequest,
   promptContext: NormalizeQueryPromptContext,
   intent: ModelInsightIntent,
+  dependencies: NormalizeQueryDependencies = defaultNormalizeQueryDependencies,
 ): NormalizeInsightQueryResult {
   const {
     prompt,
@@ -1608,11 +1612,11 @@ export function resolveNormalizedInsightQueryFromIntent(
     && (resolvedRequestedTimeInterval === undefined || resolvedRequestedTimeInterval === 'auto')
     ? resolveStackedDateDefaultInterval(resolvedDateRangeIntent)
     : requestedTimeInterval;
-  const dateRange = resolveDateRange(resolvedDateRangeIntent, input.clientTimezone, normalizeQueryDependencies.now());
+  const dateRange = resolveDateRange(resolvedDateRangeIntent, input.clientTimezone, dependencies.now());
   const requestedDateRanges = resolveRequestedDateRanges(
     promptDateSelection.requestedDateRangeIntents,
     input.clientTimezone,
-    normalizeQueryDependencies.now(),
+    dependencies.now(),
   );
 
   if (resultKind === 'event_lookup') {
@@ -1664,29 +1668,11 @@ export function resolveNormalizedInsightQueryFromIntent(
   };
 }
 
-export function setNormalizeQueryDependenciesForTesting(
-  dependencies?: Partial<NormalizeQueryDependencies>,
-): () => void {
-  const previousDependencies = normalizeQueryDependencies;
-  normalizeQueryDependencies = dependencies
-    ? { ...defaultNormalizeQueryDependencies, ...dependencies }
-    : defaultNormalizeQueryDependencies;
-
-  return () => {
-    normalizeQueryDependencies = previousDependencies;
-  };
-}
-
 export async function withNormalizeQueryDependenciesForTesting<T>(
   dependencies: Partial<NormalizeQueryDependencies>,
-  run: () => Promise<T> | T,
+  run: (api: NormalizeQueryApi) => Promise<T> | T,
 ): Promise<T> {
-  const restore = setNormalizeQueryDependenciesForTesting(dependencies);
-  try {
-    return await run();
-  } finally {
-    restore();
-  }
+  return run(createNormalizeQuery(dependencies));
 }
 
 export function buildNormalizeQueryPromptContext(
@@ -1709,121 +1695,148 @@ export function buildNormalizeQueryPromptContext(
   };
 }
 
-export async function normalizeInsightQuery(
-  input: AiInsightsRequest,
-): Promise<NormalizeInsightQueryResult> {
-  const prompt = `${input.prompt || ''}`.trim();
-  if (!prompt) {
-    return buildUnsupportedResult('invalid_prompt', prompt);
-  }
+export function createNormalizeQuery(
+  dependencies: Partial<NormalizeQueryDependencies> = {},
+): NormalizeQueryApi {
+  const resolvedDependencies: NormalizeQueryDependencies = {
+    ...defaultNormalizeQueryDependencies,
+    ...dependencies,
+  };
 
-  if (detectUnsupportedCapability(prompt)) {
-    return buildUnsupportedResult('unsupported_capability', prompt);
-  }
-
-  const promptContext = buildNormalizeQueryPromptContext(prompt);
-  const {
-    promptDateSelection,
-    promptRequestedTimeInterval,
-  } = promptContext;
-  const promptDateRangeIntent = promptDateSelection.effectiveDateRangeIntent;
-  const multiMetricIntent = resolveMultiMetricIntent(prompt);
-  if (multiMetricIntent && 'status' in multiMetricIntent) {
-    return multiMetricIntent;
-  }
-
-  if (multiMetricIntent) {
-    const activityTypes = normalizeActivityTypes(undefined);
-    const activityTypeGroups = normalizeActivityTypeGroups(undefined);
-    if (!activityTypes || !activityTypeGroups) {
+  const normalizeInsightQuery = async (
+    input: AiInsightsRequest,
+  ): Promise<NormalizeInsightQueryResult> => {
+    const prompt = `${input.prompt || ''}`.trim();
+    if (!prompt) {
       return buildUnsupportedResult('invalid_prompt', prompt);
     }
 
-    const promptWithoutActivityExclusions = stripPromptActivityExclusionClauses(prompt);
-    const promptExcludedActivityTypeGroups = extractPromptActivityExclusionClauses(prompt)
-      .flatMap((clause) => resolvePromptActivityTypeGroups(clause));
-    const promptExcludedActivityTypes = extractPromptActivityExclusionClauses(prompt)
-      .flatMap((clause) => {
-        const clauseGroups = resolvePromptActivityTypeGroups(clause);
-        return [
-          ...resolvePromptActivityTypes(clause, clauseGroups),
-          ...resolveKeywordActivityTypeExclusions(clause),
-        ];
-      });
-    const excludedActivityTypeSet = new Set<ActivityTypes>([
-      ...promptExcludedActivityTypes,
-      ...expandActivityTypeGroups(promptExcludedActivityTypeGroups),
-    ]);
-    const promptActivityTypeGroups = resolvePromptActivityTypeGroups(promptWithoutActivityExclusions);
-    const promptActivityTypes = resolvePromptActivityTypes(promptWithoutActivityExclusions, promptActivityTypeGroups);
-    const resolvedActivityTypeGroups = activityTypeGroups.length > 0
-      ? activityTypeGroups
-      : promptActivityTypeGroups;
-    const resolvedActivityTypes = activityTypes.length > 0
-      ? activityTypes
-      : promptActivityTypes;
-    const filteredResolvedActivityTypes = excludeActivityTypes(
-      resolvedActivityTypes,
-      excludedActivityTypeSet,
-    );
-    const filteredResolvedActivityTypeGroups = resolvedActivityTypeGroups
-      .filter(activityTypeGroup => !promptExcludedActivityTypeGroups.includes(activityTypeGroup));
-    const finalActivityTypeGroups = filteredResolvedActivityTypes.length > 0 ? [] : filteredResolvedActivityTypeGroups;
-    const expandedActivityTypes = finalActivityTypeGroups.length > 0
-      ? excludeActivityTypes(expandActivityTypeGroups(finalActivityTypeGroups), excludedActivityTypeSet)
-      : [];
-    const finalActivityTypes = filteredResolvedActivityTypes.length > 0
-      ? filteredResolvedActivityTypes
-      : expandedActivityTypes.length > 0
-        ? expandedActivityTypes
-        : excludedActivityTypeSet.size > 0
-          ? excludeActivityTypes(CANONICAL_ACTIVITY_TYPES, excludedActivityTypeSet)
-          : [];
+    if (detectUnsupportedCapability(prompt)) {
+      return buildUnsupportedResult('unsupported_capability', prompt);
+    }
 
-    const finalRequestedTimeInterval = multiMetricIntent.groupingMode === 'date'
-      ? toRequestedTimeInterval(
-        ChartDataCategoryTypes.DateType,
-        promptRequestedTimeInterval,
-        promptDateRangeIntent,
-      )
-      : undefined;
-    const dateRange = resolveDateRange(promptDateRangeIntent, input.clientTimezone, normalizeQueryDependencies.now());
-    const requestedDateRanges = resolveRequestedDateRanges(
-      promptDateSelection.requestedDateRangeIntents,
-      input.clientTimezone,
-      normalizeQueryDependencies.now(),
-    );
+    const promptContext = buildNormalizeQueryPromptContext(prompt);
+    const {
+      promptDateSelection,
+      promptRequestedTimeInterval,
+    } = promptContext;
+    const promptDateRangeIntent = promptDateSelection.effectiveDateRangeIntent;
+    const multiMetricIntent = resolveMultiMetricIntent(prompt);
+    if (multiMetricIntent && 'status' in multiMetricIntent) {
+      return multiMetricIntent;
+    }
 
-    return {
-      status: 'ok',
-      query: {
-        resultKind: 'multi_metric_aggregate',
-        groupingMode: multiMetricIntent.groupingMode,
-        categoryType: ChartDataCategoryTypes.DateType,
-        requestedTimeInterval: finalRequestedTimeInterval,
-        activityTypeGroups: finalActivityTypeGroups,
-        activityTypes: finalActivityTypes,
-        dateRange,
-        requestedDateRanges,
-        periodMode: promptDateSelection.periodMode,
-        chartType: ChartTypes.LinesVertical,
-        metricSelections: multiMetricIntent.metricSelections,
-      },
-    };
-  }
+    if (multiMetricIntent) {
+      const activityTypes = normalizeActivityTypes(undefined);
+      const activityTypeGroups = normalizeActivityTypeGroups(undefined);
+      if (!activityTypes || !activityTypeGroups) {
+        return buildUnsupportedResult('invalid_prompt', prompt);
+      }
 
-  const dependencies = normalizeQueryDependencies;
-  const intent = await dependencies.generateIntent({
-    ...input,
-    prompt,
-  });
-  return resolveNormalizedInsightQueryFromIntent(input, promptContext, intent);
+      const promptWithoutActivityExclusions = stripPromptActivityExclusionClauses(prompt);
+      const promptExcludedActivityTypeGroups = extractPromptActivityExclusionClauses(prompt)
+        .flatMap((clause) => resolvePromptActivityTypeGroups(clause));
+      const promptExcludedActivityTypes = extractPromptActivityExclusionClauses(prompt)
+        .flatMap((clause) => {
+          const clauseGroups = resolvePromptActivityTypeGroups(clause);
+          return [
+            ...resolvePromptActivityTypes(clause, clauseGroups),
+            ...resolveKeywordActivityTypeExclusions(clause),
+          ];
+        });
+      const excludedActivityTypeSet = new Set<ActivityTypes>([
+        ...promptExcludedActivityTypes,
+        ...expandActivityTypeGroups(promptExcludedActivityTypeGroups),
+      ]);
+      const promptActivityTypeGroups = resolvePromptActivityTypeGroups(promptWithoutActivityExclusions);
+      const promptActivityTypes = resolvePromptActivityTypes(promptWithoutActivityExclusions, promptActivityTypeGroups);
+      const resolvedActivityTypeGroups = activityTypeGroups.length > 0
+        ? activityTypeGroups
+        : promptActivityTypeGroups;
+      const resolvedActivityTypes = activityTypes.length > 0
+        ? activityTypes
+        : promptActivityTypes;
+      const filteredResolvedActivityTypes = excludeActivityTypes(
+        resolvedActivityTypes,
+        excludedActivityTypeSet,
+      );
+      const filteredResolvedActivityTypeGroups = resolvedActivityTypeGroups
+        .filter(activityTypeGroup => !promptExcludedActivityTypeGroups.includes(activityTypeGroup));
+      const finalActivityTypeGroups = filteredResolvedActivityTypes.length > 0 ? [] : filteredResolvedActivityTypeGroups;
+      const expandedActivityTypes = finalActivityTypeGroups.length > 0
+        ? excludeActivityTypes(expandActivityTypeGroups(finalActivityTypeGroups), excludedActivityTypeSet)
+        : [];
+      const finalActivityTypes = filteredResolvedActivityTypes.length > 0
+        ? filteredResolvedActivityTypes
+        : expandedActivityTypes.length > 0
+          ? expandedActivityTypes
+          : excludedActivityTypeSet.size > 0
+            ? excludeActivityTypes(CANONICAL_ACTIVITY_TYPES, excludedActivityTypeSet)
+            : [];
+
+      const finalRequestedTimeInterval = multiMetricIntent.groupingMode === 'date'
+        ? toRequestedTimeInterval(
+          ChartDataCategoryTypes.DateType,
+          promptRequestedTimeInterval,
+          promptDateRangeIntent,
+        )
+        : undefined;
+      const dateRange = resolveDateRange(promptDateRangeIntent, input.clientTimezone, resolvedDependencies.now());
+      const requestedDateRanges = resolveRequestedDateRanges(
+        promptDateSelection.requestedDateRangeIntents,
+        input.clientTimezone,
+        resolvedDependencies.now(),
+      );
+
+      return {
+        status: 'ok',
+        query: {
+          resultKind: 'multi_metric_aggregate',
+          groupingMode: multiMetricIntent.groupingMode,
+          categoryType: ChartDataCategoryTypes.DateType,
+          requestedTimeInterval: finalRequestedTimeInterval,
+          activityTypeGroups: finalActivityTypeGroups,
+          activityTypes: finalActivityTypes,
+          dateRange,
+          requestedDateRanges,
+          periodMode: promptDateSelection.periodMode,
+          chartType: ChartTypes.LinesVertical,
+          metricSelections: multiMetricIntent.metricSelections,
+        },
+      };
+    }
+
+    const intent = await resolvedDependencies.generateIntent({
+      ...input,
+      prompt,
+    });
+    return resolveNormalizedInsightQueryFromIntent(input, promptContext, intent, resolvedDependencies);
+  };
+
+  const normalizeInsightQueryFlow = async (
+    input: AiInsightsRequest,
+  ): Promise<NormalizeInsightQueryResult> => {
+    const parsedInput = AiInsightsRequestSchema.parse(input);
+    const result = await normalizeInsightQuery(parsedInput);
+    return NormalizeInsightQueryResultSchema.parse(result) as NormalizeInsightQueryResult;
+  };
+
+  return {
+    normalizeInsightQuery,
+    normalizeInsightQueryFlow,
+  };
+}
+
+const normalizeQueryRuntime = createNormalizeQuery();
+
+export async function normalizeInsightQuery(
+  input: AiInsightsRequest,
+): Promise<NormalizeInsightQueryResult> {
+  return normalizeQueryRuntime.normalizeInsightQuery(input);
 }
 
 export async function normalizeInsightQueryFlow(
   input: AiInsightsRequest,
 ): Promise<NormalizeInsightQueryResult> {
-  const parsedInput = AiInsightsRequestSchema.parse(input);
-  const result = await normalizeInsightQuery(parsedInput);
-  return NormalizeInsightQueryResultSchema.parse(result) as NormalizeInsightQueryResult;
+  return normalizeQueryRuntime.normalizeInsightQueryFlow(input);
 }

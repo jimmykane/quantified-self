@@ -29,12 +29,44 @@ import {
 vi.mock('@sports-alliance/sports-lib', async (importOriginal) => await importOriginal());
 
 import {
-  normalizeInsightQuery,
-  normalizeInsightQueryFlow,
-  setNormalizeQueryDependenciesForTesting,
-  withNormalizeQueryDependenciesForTesting,
+  createNormalizeQuery,
+  type NormalizeQueryApi,
+  type NormalizeQueryDependencies,
 } from './normalize-query.flow';
 import { getActivityTypesForGroup } from '../../../../shared/activity-type-group.metadata';
+
+let normalizeQuerySubject = createNormalizeQuery();
+
+function setNormalizeQueryDependenciesForTesting(
+  dependencies: Partial<NormalizeQueryDependencies> = {},
+): void {
+  normalizeQuerySubject = createNormalizeQuery(dependencies);
+}
+
+async function withNormalizeQueryDependenciesForTesting<T>(
+  dependencies: Partial<NormalizeQueryDependencies>,
+  run: () => Promise<T> | T,
+): Promise<T> {
+  const previousSubject = normalizeQuerySubject;
+  normalizeQuerySubject = createNormalizeQuery(dependencies);
+  try {
+    return await run();
+  } finally {
+    normalizeQuerySubject = previousSubject;
+  }
+}
+
+async function normalizeInsightQuery(
+  ...args: Parameters<NormalizeQueryApi['normalizeInsightQuery']>
+): ReturnType<NormalizeQueryApi['normalizeInsightQuery']> {
+  return normalizeQuerySubject.normalizeInsightQuery(...args);
+}
+
+async function normalizeInsightQueryFlow(
+  ...args: Parameters<NormalizeQueryApi['normalizeInsightQueryFlow']>
+): ReturnType<NormalizeQueryApi['normalizeInsightQueryFlow']> {
+  return normalizeQuerySubject.normalizeInsightQueryFlow(...args);
+}
 
 describe('normalizeInsightQuery', () => {
   afterEach(() => {

@@ -7,10 +7,8 @@ import {
 } from '@sports-alliance/sports-lib';
 import type { NormalizedInsightQuery } from '../../../../shared/ai-insights.types';
 import {
-  buildAiInsightsPromptRepairIdentity,
   buildNormalizedInsightQuerySignature,
-  recordSuccessfulAiInsightRepair,
-  setAiInsightsPromptRepairBacklogDependenciesForTesting,
+  createAiInsightsPromptRepairBacklog,
   withAiInsightsPromptRepairBacklogDependenciesForTesting,
 } from './repaired-prompt-backlog';
 
@@ -146,28 +144,25 @@ function buildAggregateQuery(overrides: Partial<NormalizedInsightQuery> = {}): N
 describe('repaired prompt backlog', () => {
   let fakeDb: FakeFirestore;
   let nowIso: string;
+  let testSubject: ReturnType<typeof createAiInsightsPromptRepairBacklog>;
 
   beforeEach(() => {
     fakeDb = new FakeFirestore();
     nowIso = '2026-03-21T00:00:00.000Z';
-    setAiInsightsPromptRepairBacklogDependenciesForTesting({
+    testSubject = createAiInsightsPromptRepairBacklog({
       db: () => fakeDb as unknown as FirebaseFirestore.Firestore,
       now: () => new Date(nowIso),
     });
   });
 
-  afterEach(() => {
-    setAiInsightsPromptRepairBacklogDependenciesForTesting();
-  });
-
   it('builds the same intent identity for canonical-equivalent prompts and same query signature', () => {
     const query = buildAggregateQuery();
 
-    const firstIdentity = buildAiInsightsPromptRepairIdentity(
+    const firstIdentity = testSubject.buildAiInsightsPromptRepairIdentity(
       'show max heartrate by activity type this year',
       query,
     );
-    const secondIdentity = buildAiInsightsPromptRepairIdentity(
+    const secondIdentity = testSubject.buildAiInsightsPromptRepairIdentity(
       'show max heart rate by activity type this year',
       query,
     );
@@ -182,9 +177,9 @@ describe('repaired prompt backlog', () => {
 
     const scopedIdentity = await withAiInsightsPromptRepairBacklogDependenciesForTesting({
       hashText: () => 'scoped-doc-id',
-    }, async () => buildAiInsightsPromptRepairIdentity('show max heartrate', query));
+    }, async (scopedBacklog) => scopedBacklog.buildAiInsightsPromptRepairIdentity('show max heartrate', query));
 
-    const restoredIdentity = buildAiInsightsPromptRepairIdentity('show max heartrate', query);
+    const restoredIdentity = testSubject.buildAiInsightsPromptRepairIdentity('show max heartrate', query);
 
     expect(scopedIdentity.intentDocID).toBe('scoped-doc-id');
     expect(restoredIdentity.intentDocID).not.toBe('scoped-doc-id');
@@ -192,7 +187,7 @@ describe('repaired prompt backlog', () => {
 
   it('increments seenCount and updates lastSeenAt on repeated upserts', async () => {
     const query = buildAggregateQuery();
-    const firstRecord = await recordSuccessfulAiInsightRepair({
+    const firstRecord = await testSubject.recordSuccessfulAiInsightRepair({
       rawPrompt: 'show max heartrate',
       repairInputPrompt: 'show max heartrate',
       normalizedQuery: query,
@@ -201,7 +196,7 @@ describe('repaired prompt backlog', () => {
     });
 
     nowIso = '2026-03-25T00:00:00.000Z';
-    await recordSuccessfulAiInsightRepair({
+    await testSubject.recordSuccessfulAiInsightRepair({
       rawPrompt: 'show max heartrate',
       repairInputPrompt: 'show max heartrate',
       normalizedQuery: query,
@@ -222,7 +217,7 @@ describe('repaired prompt backlog', () => {
       valueType: ChartDataValueTypes.Maximum,
     });
 
-    const record = await recordSuccessfulAiInsightRepair({
+    const record = await testSubject.recordSuccessfulAiInsightRepair({
       rawPrompt: 'Show my max heart rate last month as stacked columns by activity type over time',
       repairInputPrompt: 'show my max heartrate last month as stacked columns by activity type over time',
       normalizedQuery,
@@ -243,7 +238,7 @@ describe('repaired prompt backlog', () => {
   it('sets expireAt to 90 days from write time', async () => {
     const query = buildAggregateQuery();
 
-    const record = await recordSuccessfulAiInsightRepair({
+    const record = await testSubject.recordSuccessfulAiInsightRepair({
       rawPrompt: 'show distance',
       repairInputPrompt: 'show distance',
       normalizedQuery: query,

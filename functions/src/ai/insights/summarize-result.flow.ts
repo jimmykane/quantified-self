@@ -70,8 +70,14 @@ export interface SummarizeInsightNarrativeResult {
   source: 'genkit' | 'fallback';
 }
 
-interface SummarizeInsightDependencies {
+export interface SummarizeInsightDependencies {
   generateNarrative: (input: SummarizeInsightResultInput) => Promise<SummarizeInsightNarrativeResult>;
+}
+
+export interface SummarizeInsightApi {
+  summarizeAiInsightResult: (
+    input: SummarizeInsightResultInput,
+  ) => Promise<SummarizeInsightNarrativeResult>;
 }
 
 const SummarizeInsightResultInputSchema = z.any();
@@ -545,52 +551,61 @@ const defaultSummarizeInsightDependencies: SummarizeInsightDependencies = {
   },
 };
 
-let summarizeInsightDependencies: SummarizeInsightDependencies = defaultSummarizeInsightDependencies;
+export function createSummarizeInsight(
+  dependencies: Partial<SummarizeInsightDependencies> = {},
+): SummarizeInsightApi {
+  const resolvedDependencies: SummarizeInsightDependencies = {
+    ...defaultSummarizeInsightDependencies,
+    ...dependencies,
+  };
 
-export function setSummarizeInsightDependenciesForTesting(
-  dependencies?: Partial<SummarizeInsightDependencies>,
-): void {
-  summarizeInsightDependencies = dependencies
-    ? { ...defaultSummarizeInsightDependencies, ...dependencies }
-    : defaultSummarizeInsightDependencies;
+  return {
+    summarizeAiInsightResult: async (
+      input: SummarizeInsightResultInput,
+    ): Promise<SummarizeInsightNarrativeResult> => {
+      try {
+        const generatedNarrative = SummarizeInsightNarrativeResultSchema.parse(
+          await resolvedDependencies.generateNarrative(input),
+        );
+
+        const overrideReason = resolveNarrativeOverrideReason(input, generatedNarrative.narrative);
+        if (overrideReason === 'empty_result') {
+          return {
+            ...generatedNarrative,
+            narrative: buildNarrativeFallback(input),
+          };
+        }
+
+        if (overrideReason) {
+          logger.debug('[aiInsights] Replaced inconsistent default-range narrative.', {
+            prompt: input.prompt,
+            resultKind: input.query.resultKind,
+            reason: overrideReason,
+            dateRangeLabel: formatLocalizedDateRange(input.query, input.clientLocale),
+          });
+          return {
+            ...generatedNarrative,
+            narrative: buildNarrativeFallback(input),
+          };
+        }
+
+        return generatedNarrative;
+      } catch (_error) {
+        return {
+          narrative: buildNarrativeFallback(input),
+          source: 'fallback',
+        };
+      }
+    },
+  };
 }
+
+const summarizeInsightRuntime = createSummarizeInsight();
 
 export async function summarizeAiInsightResult(
   input: SummarizeInsightResultInput,
 ): Promise<SummarizeInsightNarrativeResult> {
-  try {
-    const generatedNarrative = SummarizeInsightNarrativeResultSchema.parse(
-      await summarizeInsightDependencies.generateNarrative(input),
-    );
-
-    const overrideReason = resolveNarrativeOverrideReason(input, generatedNarrative.narrative);
-    if (overrideReason === 'empty_result') {
-      return {
-        ...generatedNarrative,
-        narrative: buildNarrativeFallback(input),
-      };
-    }
-
-    if (overrideReason) {
-      logger.debug('[aiInsights] Replaced inconsistent default-range narrative.', {
-        prompt: input.prompt,
-        resultKind: input.query.resultKind,
-        reason: overrideReason,
-        dateRangeLabel: formatLocalizedDateRange(input.query, input.clientLocale),
-      });
-      return {
-        ...generatedNarrative,
-        narrative: buildNarrativeFallback(input),
-      };
-    }
-
-    return generatedNarrative;
-  } catch (_error) {
-    return {
-      narrative: buildNarrativeFallback(input),
-      source: 'fallback',
-    };
-  }
+  return summarizeInsightRuntime.summarizeAiInsightResult(input);
 }
 
 export const summarizeAiInsightResultFlow = aiInsightsGenkit.defineFlow({

@@ -57,7 +57,7 @@ export interface AiInsightsUserRoleContext {
   gracePeriodUntil?: number;
 }
 
-interface AiInsightsQuotaDependencies {
+export interface AiInsightsQuotaDependencies {
   now: () => Date;
   createReservationId: () => string;
   db: () => FirebaseFirestore.Firestore;
@@ -65,6 +65,23 @@ interface AiInsightsQuotaDependencies {
   isGracePeriodActive: typeof isGracePeriodActive;
   getActiveSubscriptionPeriod: (userID: string) => Promise<SubscriptionPeriod | null>;
   getLatestPaidSubscriptionPeriod: (userID: string) => Promise<SubscriptionPeriod | null>;
+}
+
+export interface AiInsightsQuotaApi {
+  getAiInsightsQuotaStatus: (
+    userID: string,
+    userRoleContext?: AiInsightsUserRoleContext,
+  ) => Promise<AiInsightsQuotaStatus>;
+  reserveAiInsightsQuotaForRequest: (
+    userID: string,
+    userRoleContext?: AiInsightsUserRoleContext,
+  ) => Promise<AiInsightsQuotaReservation>;
+  finalizeAiInsightsQuotaReservation: (
+    reservation: AiInsightsQuotaReservation,
+  ) => Promise<AiInsightsQuotaStatus>;
+  releaseAiInsightsQuotaReservation: (
+    reservation: AiInsightsQuotaReservation,
+  ) => Promise<AiInsightsQuotaStatus>;
 }
 
 const defaultAiInsightsQuotaDependencies: AiInsightsQuotaDependencies = {
@@ -76,8 +93,6 @@ const defaultAiInsightsQuotaDependencies: AiInsightsQuotaDependencies = {
   getActiveSubscriptionPeriod: async (userID) => getActiveSubscriptionPeriodFromFirestore(userID),
   getLatestPaidSubscriptionPeriod: async (userID) => getLatestPaidSubscriptionPeriodFromFirestore(userID),
 };
-
-let aiInsightsQuotaDependencies: AiInsightsQuotaDependencies = defaultAiInsightsQuotaDependencies;
 
 function toDate(value: unknown): Date | null {
   if (value instanceof Date && Number.isFinite(value.getTime())) {
@@ -226,8 +241,9 @@ function buildUsageDocId(periodStart: string, periodEnd: string): string {
 function getUsageDocRef(
   userID: string,
   periodDocId: string,
+  dependencies: AiInsightsQuotaDependencies,
 ): FirebaseFirestore.DocumentReference {
-  return aiInsightsQuotaDependencies.db()
+  return dependencies.db()
     .collection('users')
     .doc(userID)
     .collection(AI_INSIGHTS_USAGE_COLLECTION)
@@ -318,9 +334,10 @@ function buildUsageDocPayload(
   baseStatus: ResolvedAiInsightsQuotaWindow['status'],
   successfulRequestCount: number,
   reservationMap: Record<string, number>,
+  dependencies: AiInsightsQuotaDependencies,
   lastSuccessfulRequestAt?: string,
 ): FirebaseFirestore.UpdateData<FirebaseFirestore.DocumentData> {
-  const updatedAt = aiInsightsQuotaDependencies.now().toISOString();
+  const updatedAt = dependencies.now().toISOString();
 
   return {
     version: AI_INSIGHTS_USAGE_DOC_VERSION,
@@ -338,14 +355,15 @@ function buildUsageDocPayload(
 
 async function resolveAiInsightsQuotaWindow(
   userID: string,
+  dependencies: AiInsightsQuotaDependencies,
   userRoleContext?: AiInsightsUserRoleContext,
 ): Promise<ResolvedAiInsightsQuotaWindow> {
   const { role, gracePeriodUntil } = userRoleContext
-    ?? await aiInsightsQuotaDependencies.getUserRoleAndGracePeriod(userID);
-  const hasGrace = aiInsightsQuotaDependencies.isGracePeriodActive(gracePeriodUntil);
+    ?? await dependencies.getUserRoleAndGracePeriod(userID);
+  const hasGrace = dependencies.isGracePeriodActive(gracePeriodUntil);
   const currentPaidRole = resolvePaidSubscriptionRole(role);
 
-  const activePeriod = await aiInsightsQuotaDependencies.getActiveSubscriptionPeriod(userID);
+  const activePeriod = await dependencies.getActiveSubscriptionPeriod(userID);
   if (activePeriod) {
     return {
       status: {
@@ -362,7 +380,7 @@ async function resolveAiInsightsQuotaWindow(
   }
 
   if (hasGrace) {
-    const latestPaidPeriod = await aiInsightsQuotaDependencies.getLatestPaidSubscriptionPeriod(userID);
+    const latestPaidPeriod = await dependencies.getLatestPaidSubscriptionPeriod(userID);
     if (latestPaidPeriod) {
       return {
         status: {
@@ -424,6 +442,7 @@ async function withQuotaDocumentTransaction<T>(
   userID: string,
   periodDocId: string,
   baseStatus: ResolvedAiInsightsQuotaWindow['status'],
+  dependencies: AiInsightsQuotaDependencies,
   handler: (
     transaction: FirebaseFirestore.Transaction,
     usageDoc: AiInsightsQuotaUsageDoc,
@@ -431,9 +450,9 @@ async function withQuotaDocumentTransaction<T>(
     nowIso: string,
   ) => Promise<T> | T,
 ): Promise<T> {
-  const docRef = getUsageDocRef(userID, periodDocId);
-  return aiInsightsQuotaDependencies.db().runTransaction(async (transaction) => {
-    const now = aiInsightsQuotaDependencies.now();
+  const docRef = getUsageDocRef(userID, periodDocId, dependencies);
+  return dependencies.db().runTransaction(async (transaction) => {
+    const now = dependencies.now();
     const snapshot = await transaction.get(docRef);
     const usageDoc = normalizeUsageDoc(snapshot, now.getTime());
     return handler(transaction, usageDoc, now.getTime(), now.toISOString());
@@ -443,16 +462,17 @@ async function withQuotaDocumentTransaction<T>(
 export async function getAiInsightsQuotaStatus(
   userID: string,
   userRoleContext?: AiInsightsUserRoleContext,
+  dependencies: AiInsightsQuotaDependencies = defaultAiInsightsQuotaDependencies,
 ): Promise<AiInsightsQuotaStatus> {
-  const resolvedWindow = await resolveAiInsightsQuotaWindow(userID, userRoleContext);
+  const resolvedWindow = await resolveAiInsightsQuotaWindow(userID, dependencies, userRoleContext);
   if (!resolvedWindow.status.isEligible || !resolvedWindow.periodDocId) {
     return buildQuotaStatus(resolvedWindow.status, 0, 0);
   }
 
-  const snapshot = await getUsageDocRef(userID, resolvedWindow.periodDocId).get();
+  const snapshot = await getUsageDocRef(userID, resolvedWindow.periodDocId, dependencies).get();
   const usageDoc = normalizeUsageDoc(
     snapshot as FirebaseFirestore.DocumentSnapshot,
-    aiInsightsQuotaDependencies.now().getTime(),
+    dependencies.now().getTime(),
   );
 
   return buildQuotaStatus(
@@ -465,8 +485,9 @@ export async function getAiInsightsQuotaStatus(
 export async function reserveAiInsightsQuotaForRequest(
   userID: string,
   userRoleContext?: AiInsightsUserRoleContext,
+  dependencies: AiInsightsQuotaDependencies = defaultAiInsightsQuotaDependencies,
 ): Promise<AiInsightsQuotaReservation> {
-  const resolvedWindow = await resolveAiInsightsQuotaWindow(userID, userRoleContext);
+  const resolvedWindow = await resolveAiInsightsQuotaWindow(userID, dependencies, userRoleContext);
   if (!resolvedWindow.status.isEligible) {
     throw new HttpsError('permission-denied', 'AI Insights is available to Basic and Pro members.');
   }
@@ -475,9 +496,14 @@ export async function reserveAiInsightsQuotaForRequest(
     throw new HttpsError('internal', 'Could not resolve an AI Insights billing period for this account.');
   }
 
-  const reservationID = aiInsightsQuotaDependencies.createReservationId();
+  const reservationID = dependencies.createReservationId();
 
-  await withQuotaDocumentTransaction(userID, resolvedWindow.periodDocId, resolvedWindow.status, async (transaction, usageDoc, nowMs) => {
+  await withQuotaDocumentTransaction(
+    userID,
+    resolvedWindow.periodDocId,
+    resolvedWindow.status,
+    dependencies,
+    async (transaction, usageDoc, nowMs) => {
     const reservationMap = { ...usageDoc.reservationMap };
     const activeRequestCount = Object.keys(reservationMap).length;
     if (usageDoc.successfulRequestCount + activeRequestCount >= resolvedWindow.status.limit) {
@@ -493,16 +519,18 @@ export async function reserveAiInsightsQuotaForRequest(
 
     reservationMap[reservationID] = nowMs + AI_INSIGHTS_RESERVATION_TTL_MS;
     transaction.set(
-      getUsageDocRef(userID, resolvedWindow.periodDocId as string),
+      getUsageDocRef(userID, resolvedWindow.periodDocId as string, dependencies),
       buildUsageDocPayload(
         resolvedWindow.status,
         usageDoc.successfulRequestCount,
         reservationMap,
+        dependencies,
         usageDoc.lastSuccessfulRequestAt,
       ),
       { merge: true },
     );
-  });
+    },
+  );
 
   logger.info('[aiInsightsQuota] Reserved quota slot', {
     userID,
@@ -526,6 +554,7 @@ export async function reserveAiInsightsQuotaForRequest(
 
 export async function finalizeAiInsightsQuotaReservation(
   reservation: AiInsightsQuotaReservation,
+  dependencies: AiInsightsQuotaDependencies = defaultAiInsightsQuotaDependencies,
 ): Promise<AiInsightsQuotaStatus> {
   const reservationStatus: ResolvedAiInsightsQuotaWindow['status'] = {
     role: reservation.role,
@@ -540,14 +569,15 @@ export async function finalizeAiInsightsQuotaReservation(
     reservation.userID,
     reservation.periodDocId,
     reservationStatus,
+    dependencies,
     async (transaction, usageDoc, _nowMs, nowIso) => {
       const reservationMap = { ...usageDoc.reservationMap };
       delete reservationMap[reservation.reservationID];
       const successfulRequestCount = usageDoc.successfulRequestCount + 1;
 
       transaction.set(
-        getUsageDocRef(reservation.userID, reservation.periodDocId),
-        buildUsageDocPayload(reservationStatus, successfulRequestCount, reservationMap, nowIso),
+        getUsageDocRef(reservation.userID, reservation.periodDocId, dependencies),
+        buildUsageDocPayload(reservationStatus, successfulRequestCount, reservationMap, dependencies, nowIso),
         { merge: true },
       );
 
@@ -566,6 +596,7 @@ export async function finalizeAiInsightsQuotaReservation(
 
 export async function releaseAiInsightsQuotaReservation(
   reservation: AiInsightsQuotaReservation,
+  dependencies: AiInsightsQuotaDependencies = defaultAiInsightsQuotaDependencies,
 ): Promise<AiInsightsQuotaStatus> {
   const reservationStatus: ResolvedAiInsightsQuotaWindow['status'] = {
     role: reservation.role,
@@ -580,16 +611,18 @@ export async function releaseAiInsightsQuotaReservation(
     reservation.userID,
     reservation.periodDocId,
     reservationStatus,
+    dependencies,
     async (transaction, usageDoc) => {
       const reservationMap = { ...usageDoc.reservationMap };
       delete reservationMap[reservation.reservationID];
 
       transaction.set(
-        getUsageDocRef(reservation.userID, reservation.periodDocId),
+        getUsageDocRef(reservation.userID, reservation.periodDocId, dependencies),
         buildUsageDocPayload(
           reservationStatus,
           usageDoc.successfulRequestCount,
           reservationMap,
+          dependencies,
           usageDoc.lastSuccessfulRequestAt,
         ),
         { merge: true },
@@ -608,27 +641,33 @@ export async function releaseAiInsightsQuotaReservation(
   return result;
 }
 
-export function setAiInsightsQuotaDependenciesForTesting(
-  dependencies?: Partial<AiInsightsQuotaDependencies>,
-): () => void {
-  const previousDependencies = aiInsightsQuotaDependencies;
-  aiInsightsQuotaDependencies = dependencies
-    ? { ...defaultAiInsightsQuotaDependencies, ...dependencies }
-    : defaultAiInsightsQuotaDependencies;
+export function createAiInsightsQuota(
+  dependencies: Partial<AiInsightsQuotaDependencies> = {},
+): AiInsightsQuotaApi {
+  const resolvedDependencies: AiInsightsQuotaDependencies = {
+    ...defaultAiInsightsQuotaDependencies,
+    ...dependencies,
+  };
 
-  return () => {
-    aiInsightsQuotaDependencies = previousDependencies;
+  return {
+    getAiInsightsQuotaStatus: (userID, userRoleContext) => (
+      getAiInsightsQuotaStatus(userID, userRoleContext, resolvedDependencies)
+    ),
+    reserveAiInsightsQuotaForRequest: (userID, userRoleContext) => (
+      reserveAiInsightsQuotaForRequest(userID, userRoleContext, resolvedDependencies)
+    ),
+    finalizeAiInsightsQuotaReservation: (reservation) => (
+      finalizeAiInsightsQuotaReservation(reservation, resolvedDependencies)
+    ),
+    releaseAiInsightsQuotaReservation: (reservation) => (
+      releaseAiInsightsQuotaReservation(reservation, resolvedDependencies)
+    ),
   };
 }
 
 export async function withAiInsightsQuotaDependenciesForTesting<T>(
   dependencies: Partial<AiInsightsQuotaDependencies>,
-  run: () => Promise<T> | T,
+  run: (api: AiInsightsQuotaApi) => Promise<T> | T,
 ): Promise<T> {
-  const restore = setAiInsightsQuotaDependenciesForTesting(dependencies);
-  try {
-    return await run();
-  } finally {
-    restore();
-  }
+  return run(createAiInsightsQuota(dependencies));
 }
