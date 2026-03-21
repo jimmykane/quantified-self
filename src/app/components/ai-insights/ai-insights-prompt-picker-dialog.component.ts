@@ -32,7 +32,7 @@ export class AiInsightsPromptPickerDialogComponent {
   readonly dialogCopy = computed(() => (
     this.data.promptSource === 'unsupported'
       ? 'This request is not supported yet. Pick one of these examples.'
-      : 'Pick a prompt and run it as-is, or tweak it first.'
+      : 'Select a prompt to run it immediately.'
   ));
 
   selectPrompt(prompt: string): void {
