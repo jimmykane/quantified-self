@@ -62,7 +62,6 @@ describe('ai-insights prompts', () => {
       'Show my cadence and power over the last 3 months for cycling.',
       'Compare my max heart rate in 2024 vs 2025.',
       'When did I have my longest jump?',
-      'When did I have my highest jump?',
       'When did I have my biggest jump?',
     ]);
   });
@@ -78,7 +77,6 @@ describe('ai-insights prompts', () => {
     const pickerPromptSet = new Set(AI_INSIGHTS_DEFAULT_PICKER_PROMPTS);
     const expectedJumpPrompts = [
       'Find my longest jump.',
-      'Find my highest jump.',
       'Find my biggest hang time.',
       'Show my jump height over time in the last 90 days.',
       'Show my jump distance over time this season.',

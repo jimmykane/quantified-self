@@ -395,14 +395,6 @@ export const AI_INSIGHTS_PROMPT_CATALOG = [
     metricKey: 'jump_distance',
   },
   {
-    id: 'event-lookup-highest-jump',
-    prompt: 'Find my highest jump.',
-    category: 'Advanced Examples',
-    featured: false,
-    surfaces: ['picker'],
-    metricKey: 'jump_height',
-  },
-  {
     id: 'event-lookup-biggest-hang-time',
     prompt: 'Find my biggest hang time.',
     category: 'Advanced Examples',
@@ -488,14 +480,6 @@ export const AI_INSIGHTS_CURATED_PROMPT_CATALOG = [
     featured: false,
     surfaces: ['picker'],
     metricKey: 'jump_distance',
-  },
-  {
-    id: 'popular-highest-jump-event',
-    prompt: 'When did I have my highest jump?',
-    category: 'Best efforts',
-    featured: false,
-    surfaces: ['picker'],
-    metricKey: 'jump_height',
   },
   {
     id: 'popular-biggest-jump-event',
