@@ -211,7 +211,7 @@ const EVENT_LOOKUP_SUBJECT_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
   /\bi want to know when i had\b/i,
 ];
 const LATEST_EVENT_SUBJECT_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
-  /\b(when was my last|when did i last|my last|latest|most recent)\b/i,
+  /\b(when was my last|when did i last|my last)\b/i,
   /\b(last|latest|most recent)\s+(ride|rides|run|runs|swim|swims|workout|workouts|session|sessions|activity|activities|event|events)\b/i,
 ];
 const EVENT_LOOKUP_RANKING_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
@@ -232,7 +232,9 @@ const PROMPT_ACTIVITY_TYPE_ALIAS_PATTERNS: ReadonlyArray<{
     activityTypes: [ActivityTypes.Cycling],
   },
   {
-    pattern: /\b(run|runs)\b/i,
+    // Keep singular "run" as an activity alias only in noun contexts
+    // so command-verb phrasing like "run a comparison" is not misclassified.
+    pattern: /\b(runs|(?:last|latest|most recent|my|a|an|the)\s+run)\b/i,
     activityTypes: [ActivityTypes.Running],
   },
   {
@@ -1160,6 +1162,12 @@ function promptImpliesEventLookup(prompt: string): boolean {
 function promptImpliesLatestEventLookup(prompt: string): boolean {
   const normalizedPrompt = normalizePromptSearchText(prompt);
   if (!normalizedPrompt) {
+    return false;
+  }
+
+  // Metric-bearing prompts should continue through metric normalization
+  // instead of being short-circuited to latest-event lookups.
+  if (findInsightMetricAliasMatch(canonicalizeInsightPrompt(prompt))) {
     return false;
   }
 

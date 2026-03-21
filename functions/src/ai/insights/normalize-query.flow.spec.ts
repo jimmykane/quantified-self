@@ -862,6 +862,38 @@ describe('normalizeInsightQuery', () => {
     }
   });
 
+  it('keeps latest metric prompts in metric mode instead of latest_event mode', async () => {
+    const result = await normalizeInsightQuery({
+      prompt: 'latest average cadence',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('cadence');
+    expect(result.query.resultKind).toBe('aggregate');
+    expect(result.query.dataType).toBe(DataCadenceAvg.type);
+  });
+
+  it('does not treat verb "run" as an activity type alias', async () => {
+    const result = await normalizeInsightQuery({
+      prompt: 'run a distance comparison by activity type',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.resultKind).toBe('aggregate');
+    expect(result.query.categoryType).toBe(ChartDataCategoryTypes.ActivityType);
+    expect(result.query.activityTypes).toEqual([]);
+  });
+
   it('resolves shared-average multi-metric prompts to multi-metric over-time mode', async () => {
     setNormalizeQueryDependenciesForTesting({
       now: () => new Date('2026-03-19T12:00:00.000Z'),
