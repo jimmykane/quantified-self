@@ -79,6 +79,8 @@ describe('ai-insights prompts', () => {
       'Find my longest jump.',
       'Find my biggest hang time.',
       'Show my jump distance over time this season.',
+      'Show my weight over time this year.',
+      'When did I have my lowest weight?',
     ];
 
     expect(expectedJumpPrompts.every((prompt) => pickerPromptSet.has(prompt))).toBe(true);
@@ -112,5 +114,6 @@ describe('ai-insights prompts', () => {
     expect(getAiInsightsDefaultMetricPrompt('jump_distance')).toBe('Show my jump distance over time this season.');
     expect(getAiInsightsDefaultMetricPrompt('jump_speed')).toBe('Show my jump speed over time in the last 90 days.');
     expect(getAiInsightsDefaultMetricPrompt('jump_score')).toBe('Show my jump score over time in the last 90 days.');
+    expect(getAiInsightsDefaultMetricPrompt('body_weight')).toBe('Show my weight over time this year.');
   });
 });

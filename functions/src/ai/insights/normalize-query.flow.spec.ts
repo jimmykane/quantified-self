@@ -24,6 +24,7 @@ import {
   DataPowerTrainingStressScore,
   DataRecoveryTime,
   DataSwimPaceAvg,
+  DataWeight,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
 
@@ -1788,6 +1789,83 @@ describe('normalizeInsightQuery', () => {
     expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Monthly);
     expect(result.query.activityTypes).toEqual([]);
     expect(result.query.activityTypes).not.toContain(ActivityTypes.Training);
+  });
+
+  it('normalizes natural weight-over-time prompts to the body-weight metric', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show my weight over time this year.',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('body_weight');
+    expect(result.query.resultKind).toBe('aggregate');
+    expect(result.query.dataType).toBe(DataWeight.type);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Average);
+    expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Monthly);
+    expect(result.query.activityTypes).toEqual([]);
+  });
+
+  it('normalizes lowest-weight prompts to event lookup mode', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'When did I have my lowest weight?',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('body_weight');
+    expect(result.query.resultKind).toBe('event_lookup');
+    expect(result.query.dataType).toBe(DataWeight.type);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Minimum);
+    expect(result.query.activityTypes).toEqual([]);
+  });
+
+  it('does not confuse weight prompts with the Weight Training activity type', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'duration',
+        aggregation: 'total',
+        category: 'date',
+        requestedTimeInterval: 'auto',
+        activityTypes: ['Weight Training'],
+        dateRange: {
+          kind: 'current_period',
+          unit: 'year',
+        },
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show my total training duration over time for weight training this year.',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('duration');
+    expect(result.query.dataType).toBe(DataDuration.type);
+    expect(result.query.activityTypes).toEqual([ActivityTypes['Weight Training']]);
   });
 
   it('normalizes average normalized power for cycling this month', async () => {

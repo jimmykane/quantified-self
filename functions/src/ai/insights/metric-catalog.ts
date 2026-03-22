@@ -43,6 +43,7 @@ import {
   DataSwimPaceMax,
   DataSwimPaceMin,
   DataVO2Max,
+  DataWeight,
   DynamicDataLoader,
 } from '@sports-alliance/sports-lib';
 import {
@@ -62,6 +63,7 @@ export interface InsightMetricDefinition {
   suggestedPrompt: string;
   familyType?: string;
   variantDataTypes?: Partial<Record<ChartDataValueTypes, string>>;
+  includeDataTypeInAliasIndex?: boolean;
 }
 
 export interface InsightMetricAliasMatch {
@@ -735,6 +737,34 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
     suggestedPrompt: getAiInsightsDefaultMetricPrompt('recovery_time'),
   },
   {
+    key: 'body_weight',
+    dataType: DataWeight.type,
+    label: 'body weight',
+    aliases: [
+      'my weight',
+      'body weight',
+      'body mass',
+      'average weight',
+      'avg weight',
+      'minimum weight',
+      'min weight',
+      'maximum weight',
+      'max weight',
+      'lowest weight',
+      'highest weight',
+      'weigh in',
+      'weigh-in',
+    ],
+    defaultValueType: ChartDataValueTypes.Average,
+    allowedValueTypes: [
+      ChartDataValueTypes.Average,
+      ChartDataValueTypes.Minimum,
+      ChartDataValueTypes.Maximum,
+    ],
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('body_weight'),
+    includeDataTypeInAliasIndex: false,
+  },
+  {
     key: 'calories',
     dataType: DataEnergy.type,
     label: 'calories',
@@ -754,9 +784,9 @@ const METRIC_INDEX = new Map<string, InsightMetricDefinition>(
   SUPPORTED_INSIGHT_METRICS.flatMap((metric) => {
     const searchTerms = new Set<string>([
       metric.key,
-      metric.dataType,
       metric.label,
       ...metric.aliases,
+      ...(metric.includeDataTypeInAliasIndex === false ? [] : [metric.dataType]),
     ].map(normalizeMetricText));
 
     return [...searchTerms].map((term) => [term, metric] as const);
@@ -856,9 +886,9 @@ export function findInsightMetricAliasMatches(
     .map((metric) => {
       const aliases = [...new Set([
         metric.key,
-        metric.dataType,
         metric.label,
         ...metric.aliases,
+        ...(metric.includeDataTypeInAliasIndex === false ? [] : [metric.dataType]),
       ])]
         .map(alias => normalizeMetricText(alias))
         .filter(Boolean)

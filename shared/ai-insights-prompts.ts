@@ -45,6 +45,7 @@ export type AiInsightsPromptMetricKey =
   | 'aerobic_training_effect'
   | 'anaerobic_training_effect'
   | 'recovery_time'
+  | 'body_weight'
   | 'calories';
 
 export interface AiInsightsPromptDefinition {
@@ -293,6 +294,14 @@ export const AI_INSIGHTS_PROMPT_CATALOG = [
     metricKey: 'recovery_time',
   },
   {
+    id: 'weight-over-time-this-year',
+    prompt: 'Show my weight over time this year.',
+    category: 'Recovery & Performance',
+    featured: false,
+    surfaces: ['picker', 'unsupported'],
+    metricKey: 'body_weight',
+  },
+  {
     id: 'latest-event-last-ride',
     prompt: 'When was my last ride?',
     category: 'Advanced Examples',
@@ -375,6 +384,22 @@ export const AI_INSIGHTS_PROMPT_CATALOG = [
     featured: false,
     surfaces: ['picker'],
     metricKey: 'jump_hang_time',
+  },
+  {
+    id: 'event-lookup-lowest-weight',
+    prompt: 'When did I have my lowest weight?',
+    category: 'Advanced Examples',
+    featured: false,
+    surfaces: ['picker'],
+    metricKey: 'body_weight',
+  },
+  {
+    id: 'event-lookup-highest-weight',
+    prompt: 'When did I have my highest weight?',
+    category: 'Advanced Examples',
+    featured: false,
+    surfaces: ['picker'],
+    metricKey: 'body_weight',
   },
 ] as const satisfies readonly AiInsightsPromptDefinition[];
 

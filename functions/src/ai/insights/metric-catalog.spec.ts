@@ -3,6 +3,7 @@ import {
   ChartDataValueTypes,
   DataJumpDistanceMax,
   DataJumpHangTimeMax,
+  DataWeight,
 } from '@sports-alliance/sports-lib';
 import { getAiInsightsPromptEntriesBySurface } from '../../../../shared/ai-insights-prompts';
 
@@ -34,6 +35,7 @@ describe('metric-catalog', () => {
     expect(resolveInsightMetric('aerobic training effect')?.key).toBe('aerobic_training_effect');
     expect(resolveInsightMetric('anaerobic training effect')?.key).toBe('anaerobic_training_effect');
     expect(resolveInsightMetric('recovery time')?.key).toBe('recovery_time');
+    expect(resolveInsightMetric('my weight')?.key).toBe('body_weight');
     expect(resolveInsightMetric('longest jump')?.key).toBe('jump_distance');
     expect(resolveInsightMetric('highest jump')).toBeNull();
     expect(resolveInsightMetric('biggest jump')?.key).toBe('jump_distance');
@@ -46,6 +48,8 @@ describe('metric-catalog', () => {
     expect(resolveInsightMetric('gap', ChartDataValueTypes.Maximum)?.dataType).toBe('Maximum Grade Adjusted Pace');
     expect(resolveInsightMetric('effort pace', ChartDataValueTypes.Minimum)?.dataType).toBe('Minimum Effort Pace');
     expect(resolveInsightMetric('swim pace', ChartDataValueTypes.Maximum)?.dataType).toBe('Maximum Swim Pace');
+    expect(resolveInsightMetric('lowest weight', ChartDataValueTypes.Minimum)?.dataType).toBe(DataWeight.type);
+    expect(resolveInsightMetric('highest weight', ChartDataValueTypes.Maximum)?.dataType).toBe(DataWeight.type);
     expect(resolveInsightMetric('longest jump', ChartDataValueTypes.Maximum)?.dataType).toBe(DataJumpDistanceMax.type);
     expect(resolveInsightMetric('biggest jump', ChartDataValueTypes.Maximum)?.dataType).toBe(DataJumpDistanceMax.type);
     expect(resolveInsightMetric('biggest hang time', ChartDataValueTypes.Maximum)?.dataType).toBe(DataJumpHangTimeMax.type);
@@ -97,6 +101,11 @@ describe('metric-catalog', () => {
         metric: expect.objectContaining({ key: 'anaerobic_training_effect' }),
       }),
     );
+    expect(findInsightMetricAliasMatch('Show my total training duration over time for weight training this year')).toEqual(
+      expect.objectContaining({
+        metric: expect.objectContaining({ key: 'duration' }),
+      }),
+    );
   });
 
   it('exposes the supported aggregation set for each metric', () => {
@@ -104,11 +113,13 @@ describe('metric-catalog', () => {
     expect(isAggregationAllowedForMetric('cadence', ChartDataValueTypes.Total)).toBe(false);
     expect(isAggregationAllowedForMetric('training_stress_score', ChartDataValueTypes.Total)).toBe(true);
     expect(isAggregationAllowedForMetric('normalized_power', ChartDataValueTypes.Total)).toBe(false);
+    expect(isAggregationAllowedForMetric('body_weight', ChartDataValueTypes.Total)).toBe(false);
     expect(isAggregationAllowedForMetric('recovery_time', ChartDataValueTypes.Maximum)).toBe(true);
   });
 
   it('can retrieve canonical metric definitions by key', () => {
     expect(getInsightMetricDefinition('power')?.dataType).toBeTruthy();
+    expect(getInsightMetricDefinition('body_weight')?.suggestedPrompt).toBe('Show my weight over time this year.');
     expect(getInsightMetricDefinition('jump_distance')?.suggestedPrompt).toBe('Show my jump distance over time this season.');
     expect(getInsightMetricDefinition('jump_hang_time')?.suggestedPrompt).toBe('Show my jump hang time over time in the last 90 days.');
   });
