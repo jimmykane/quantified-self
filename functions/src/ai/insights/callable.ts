@@ -8,6 +8,7 @@ import type {
   AiInsightsResponse,
   NormalizedInsightAggregateQuery,
 } from '../../../../shared/ai-insights.types';
+import { AiInsightsResponseSchema } from '../../../../shared/ai-insights-response.contract';
 import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../../utils';
 import { aiInsightsGenkit } from './genkit';
@@ -15,7 +16,7 @@ import { getInsightMetricDefinition } from './metric-catalog';
 import {
   trimPromptSample,
 } from './repaired-prompt-backlog';
-import { AiInsightsRequestSchema, AiInsightsResponseSchema } from './schemas';
+import { AiInsightsRequestSchema } from './schemas';
 import {
   aiInsightsRuntime,
   AI_INSIGHTS_LIMIT_REACHED_MESSAGE,

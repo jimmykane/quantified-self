@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import type { AiInsightsRequest, AiInsightsResponse } from '@shared/ai-insights.types';
+import { validateAiInsightsResponse } from '@shared/ai-insights-response.contract';
 import { AppFunctionsService } from './app.functions.service';
 
 export type AiInsightsErrorCode =
@@ -31,8 +32,19 @@ export class AiInsightsService {
   async runInsight(request: AiInsightsRequest): Promise<AiInsightsResponse> {
     try {
       const response = await this.functionsService.call<AiInsightsRequest, AiInsightsResponse>('aiInsights', request);
-      return response.data;
+      const validationResult = validateAiInsightsResponse(response.data);
+      if (validationResult.ok === false) {
+        throw new AiInsightsError(
+          'INTERNAL',
+          `AI Insights returned an invalid response (${validationResult.reason}).`,
+          validationResult,
+        );
+      }
+      return validationResult.data;
     } catch (error) {
+      if (error instanceof AiInsightsError) {
+        throw error;
+      }
       throw this.mapFunctionError(error);
     }
   }

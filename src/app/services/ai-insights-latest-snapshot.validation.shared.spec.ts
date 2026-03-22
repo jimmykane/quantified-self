@@ -108,7 +108,7 @@ describe('Ai Insights latest snapshot shared validation', () => {
     expect(validation.failure.reason).toContain('response_');
   });
 
-  it('accepts enum-primitive activity arrays in query snapshots', () => {
+  it('rejects snapshots that do not match strict query enums', () => {
     const validation = validateAiInsightsLatestSnapshot({
       version: 1,
       savedAt: '2026-03-21T10:00:00.000Z',
@@ -122,7 +122,7 @@ describe('Ai Insights latest snapshot shared validation', () => {
           dataType: 'Distance',
           valueType: ChartDataValueTypes.Total,
           categoryType: ChartDataCategoryTypes.DateType,
-          requestedTimeInterval: TimeIntervals.Monthly,
+          requestedTimeInterval: null,
           activityTypeGroups: [1],
           activityTypes: [2],
           dateRange: {
@@ -158,7 +158,11 @@ describe('Ai Insights latest snapshot shared validation', () => {
       },
     }, 1);
 
-    expect(validation.valid).toBe(true);
+    expect(validation.valid).toBe(false);
+    if (validation.valid) {
+      return;
+    }
+    expect(validation.failure.reason).toBe('response_query_invalid');
   });
 
   it('accepts latest_event snapshot payloads', () => {

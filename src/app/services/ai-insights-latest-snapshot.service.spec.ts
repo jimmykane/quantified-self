@@ -448,6 +448,29 @@ describe('AiInsightsLatestSnapshotService', () => {
     );
   });
 
+  it('should skip saving invalid latest snapshots before they reach Firestore', async () => {
+    const invalidResponse = {
+      ...buildOkResponse(),
+      query: {
+        ...buildOkResponse().query,
+        resultKind: 'not-a-real-kind',
+      },
+    } as unknown as AiInsightsOkResponse;
+
+    const result = await service.saveLatest('user-1', 'Show my total distance', invalidResponse);
+
+    expect(result).toBe('failed');
+    expect(setDoc).not.toHaveBeenCalled();
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      '[AiInsightsLatestSnapshotService] Skipping invalid latest AI insight snapshot before save.',
+      expect.objectContaining({
+        userID: 'user-1',
+        reason: 'response_query_invalid',
+        issuePath: 'query.resultKind',
+      }),
+    );
+  });
+
   it('should restore a valid latest snapshot from Firestore', async () => {
     const snapshot: AiInsightsLatestSnapshot = {
       version: 1,
@@ -462,17 +485,7 @@ describe('AiInsightsLatestSnapshotService', () => {
 
     const restored = await service.loadLatest('user-1');
 
-    expect(restored).toEqual({
-      ...snapshot,
-      response: {
-        ...snapshot.response,
-        resultKind: 'aggregate',
-        query: {
-          ...snapshot.response.query,
-          resultKind: 'aggregate',
-        },
-      },
-    });
+    expect(restored).toEqual(snapshot);
   });
 
   it('should restore snapshots that include the optional quota payload', async () => {
@@ -492,21 +505,11 @@ describe('AiInsightsLatestSnapshotService', () => {
 
     const restored = await service.loadLatest('user-1');
 
-    expect(restored).toEqual({
-      ...snapshot,
-      response: {
-        ...snapshot.response,
-        resultKind: 'aggregate',
-        query: {
-          ...snapshot.response.query,
-          resultKind: 'aggregate',
-        },
-      },
-    });
+    expect(restored).toEqual(snapshot);
     expect(deleteDoc).not.toHaveBeenCalled();
   });
 
-  it('should restore legacy snapshots with null presentation warnings by normalizing them', async () => {
+  it('should clear snapshots with null presentation warnings because the contract is strict', async () => {
     const snapshotWithLegacyWarnings = {
       version: 1,
       savedAt: '2026-03-18T12:00:00.000Z',
@@ -526,26 +529,19 @@ describe('AiInsightsLatestSnapshotService', () => {
 
     const restored = await service.loadLatest('user-1');
 
-    expect(restored).toEqual({
-      version: 1,
-      savedAt: '2026-03-18T12:00:00.000Z',
-      prompt: 'Show my total distance',
-      response: {
-        ...buildOkResponse(),
-        resultKind: 'aggregate',
-        query: {
-          ...buildOkResponse().query,
-          resultKind: 'aggregate',
-        },
-        presentation: buildOkResponse().presentation,
-      },
-    });
-    expect(deleteDoc).not.toHaveBeenCalled();
+    expect(restored).toBeNull();
+    expect(deleteDoc).toHaveBeenCalledWith({ path: 'users/user-1/aiInsightsRequests/latest' });
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      '[AiInsightsLatestSnapshotService] Clearing invalid latest AI insight snapshot.',
+      expect.objectContaining({
+        userID: 'user-1',
+        reason: 'response_presentation_invalid',
+      }),
+    );
   });
 
-  it('should restore legacy snapshots with null requestedTimeInterval by normalizing it away', async () => {
+  it('should clear snapshots with null requestedTimeInterval because the contract is strict', async () => {
     const legacyResponse = buildOkResponse();
-    const { requestedTimeInterval: _requestedTimeInterval, ...legacyQueryWithoutRequestedInterval } = legacyResponse.query;
     const snapshotWithNullRequestedInterval = {
       version: 1,
       savedAt: '2026-03-18T12:00:00.000Z',
@@ -565,27 +561,18 @@ describe('AiInsightsLatestSnapshotService', () => {
 
     const restored = await service.loadLatest('user-1');
 
-    expect(restored).toEqual({
-      version: 1,
-      savedAt: '2026-03-18T12:00:00.000Z',
-      prompt: 'Show my total distance',
-      response: {
-        ...legacyResponse,
-        query: {
-          ...legacyQueryWithoutRequestedInterval,
-          resultKind: 'aggregate',
-        },
-        resultKind: 'aggregate',
-      },
-    });
-    expect((restored as AiInsightsLatestSnapshot | null)?.response.status).toBe('ok');
-    if ((restored as AiInsightsLatestSnapshot | null)?.response.status === 'ok') {
-      expect((restored as AiInsightsLatestSnapshot).response.query.requestedTimeInterval).toBeUndefined();
-    }
-    expect(deleteDoc).not.toHaveBeenCalled();
+    expect(restored).toBeNull();
+    expect(deleteDoc).toHaveBeenCalledWith({ path: 'users/user-1/aiInsightsRequests/latest' });
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      '[AiInsightsLatestSnapshotService] Clearing invalid latest AI insight snapshot.',
+      expect.objectContaining({
+        userID: 'user-1',
+        reason: 'response_query_invalid',
+      }),
+    );
   });
 
-  it('should restore legacy snapshots with nullable summary bucket time and activity mix remainder', async () => {
+  it('should clear snapshots with nullable summary fields because the contract is strict', async () => {
     const legacyResponse = buildOkResponse();
     const snapshotWithLegacySummary = {
       version: 1,
@@ -621,16 +608,15 @@ describe('AiInsightsLatestSnapshotService', () => {
 
     const restored = await service.loadLatest('user-1');
 
-    expect(restored).not.toBeNull();
-    expect((restored as AiInsightsLatestSnapshot).response.status).toBe('ok');
-    if ((restored as AiInsightsLatestSnapshot).response.status === 'ok') {
-      const restoredSummary = (restored as AiInsightsLatestSnapshot).response.summary;
-      expect(restoredSummary.peakBucket?.time).toBeUndefined();
-      expect(restoredSummary.lowestBucket?.time).toBeUndefined();
-      expect(restoredSummary.latestBucket?.time).toBeUndefined();
-      expect(restoredSummary.activityMix?.remainingActivityTypeCount).toBe(0);
-    }
-    expect(deleteDoc).not.toHaveBeenCalled();
+    expect(restored).toBeNull();
+    expect(deleteDoc).toHaveBeenCalledWith({ path: 'users/user-1/aiInsightsRequests/latest' });
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      '[AiInsightsLatestSnapshotService] Clearing invalid latest AI insight snapshot.',
+      expect.objectContaining({
+        userID: 'user-1',
+        reason: 'response_summary_invalid',
+      }),
+    );
   });
 
   it('should clear invalid latest snapshots instead of restoring them', async () => {
@@ -660,7 +646,7 @@ describe('AiInsightsLatestSnapshotService', () => {
     );
   });
 
-  it('should clear snapshots when normalization encounters unknown enum variants', async () => {
+  it('should clear snapshots when query enum variants are unknown', async () => {
     const snapshotWithUnknownChartType = {
       version: 1,
       savedAt: '2026-03-18T12:00:00.000Z',
@@ -683,10 +669,10 @@ describe('AiInsightsLatestSnapshotService', () => {
     expect(restored).toBeNull();
     expect(deleteDoc).toHaveBeenCalledWith({ path: 'users/user-1/aiInsightsRequests/latest' });
     expect(loggerMock.warn).toHaveBeenCalledWith(
-      '[AiInsightsLatestSnapshotService] Clearing latest AI insight snapshot because normalization failed.',
+      '[AiInsightsLatestSnapshotService] Clearing invalid latest AI insight snapshot.',
       expect.objectContaining({
         userID: 'user-1',
-        reason: 'normalization_failed',
+        reason: 'response_query_invalid',
       }),
     );
   });
@@ -714,10 +700,10 @@ describe('AiInsightsLatestSnapshotService', () => {
     expect(restored).toBeNull();
     expect(deleteDoc).toHaveBeenCalledWith({ path: 'users/user-1/aiInsightsRequests/latest' });
     expect(loggerMock.warn).toHaveBeenCalledWith(
-      '[AiInsightsLatestSnapshotService] Clearing latest AI insight snapshot because normalization failed.',
+      '[AiInsightsLatestSnapshotService] Clearing invalid latest AI insight snapshot.',
       expect.objectContaining({
         userID: 'user-1',
-        reason: 'normalization_failed',
+        reason: 'response_aggregation_invalid',
       }),
     );
   });

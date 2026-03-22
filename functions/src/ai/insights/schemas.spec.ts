@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   ActivityTypes,
   ChartDataCategoryTypes,
+  ChartDataValueTypes,
   ChartTypes,
+  TimeIntervals,
 } from '@sports-alliance/sports-lib';
 import { AiInsightsResponseSchema } from './schemas';
 
@@ -63,5 +65,55 @@ describe('AiInsightsResponseSchema', () => {
     });
 
     expect(parsed.success).toBe(true);
+  });
+
+  it('rejects invalid aggregate query fields for strict response contracts', () => {
+    const parsed = AiInsightsResponseSchema.safeParse({
+      status: 'ok',
+      resultKind: 'aggregate',
+      narrative: 'Invalid aggregate query',
+      query: {
+        resultKind: 'aggregate',
+        dataType: 'Distance',
+        valueType: ChartDataValueTypes.Total,
+        categoryType: ChartDataCategoryTypes.DateType,
+        requestedTimeInterval: null,
+        activityTypeGroups: [],
+        activityTypes: [ActivityTypes.Cycling],
+        dateRange: {
+          kind: 'bounded',
+          startDate: '2026-01-01T00:00:00.000Z',
+          endDate: '2026-03-18T23:59:59.999Z',
+          timezone: 'UTC',
+          source: 'prompt',
+        },
+        requestedDateRanges: [{}],
+        periodMode: 'invalid-mode',
+        chartType: ChartTypes.LinesVertical,
+      },
+      aggregation: {
+        dataType: 'Distance',
+        valueType: ChartDataValueTypes.Total,
+        categoryType: ChartDataCategoryTypes.DateType,
+        resolvedTimeInterval: TimeIntervals.Monthly,
+        buckets: [],
+      },
+      summary: {
+        matchedEventCount: 0,
+        overallAggregateValue: null,
+        peakBucket: null,
+        lowestBucket: null,
+        latestBucket: null,
+        activityMix: null,
+        bucketCoverage: null,
+        trend: null,
+      },
+      presentation: {
+        title: 'Aggregate',
+        chartType: ChartTypes.LinesVertical,
+      },
+    });
+
+    expect(parsed.success).toBe(false);
   });
 });

@@ -44,7 +44,7 @@ import {
   buildLatestEventInsightQuery,
   buildMultiMetricInsightQuery,
 } from './normalize-query.result-kind-query-builders';
-import { AiInsightsRequestSchema, AiInsightsUnsupportedReasonCodeSchema, NormalizedInsightQuerySchema } from './schemas';
+import { AiInsightsRequestSchema } from './schemas';
 
 type ModelAggregationCode = 'total' | 'average' | 'minimum' | 'maximum';
 type ModelCategoryCode = 'date' | 'activity';
@@ -249,7 +249,7 @@ const PROMPT_ACTIVITY_TYPE_ALIAS_PATTERNS: ReadonlyArray<{
   },
 ];
 
-const ModelDateRangeSchema: z.ZodType<DateRangeIntent> = z.union([
+const ModelDateRangeSchema = z.union([
   z.object({
     kind: z.enum(['last_n', 'last']),
     amount: z.number().int().positive().max(3650),
@@ -269,7 +269,16 @@ const ModelDateRangeSchema: z.ZodType<DateRangeIntent> = z.union([
   }),
 ]);
 
-const ModelInsightIntentSchema: z.ZodType<ModelInsightIntent> = z.object({
+const UnsupportedReasonCodeSchema = z.enum([
+  'invalid_prompt',
+  'unsupported_metric',
+  'ambiguous_metric',
+  'unsupported_capability',
+  'too_many_metrics',
+  'unsupported_multi_metric_combination',
+]) as unknown as z.ZodType<AiInsightsUnsupportedReasonCode>;
+
+const ModelInsightIntentSchema = z.object({
   status: z.enum(['supported', 'unsupported']),
   metric: z.string().optional(),
   aggregation: z.enum(['total', 'average', 'minimum', 'maximum']).optional(),
@@ -288,18 +297,18 @@ const ModelInsightIntentSchema: z.ZodType<ModelInsightIntent> = z.object({
   activityTypeGroups: z.array(z.string()).optional(),
   activityTypes: z.array(z.string()).optional(),
   dateRange: ModelDateRangeSchema.optional(),
-  unsupportedReasonCode: AiInsightsUnsupportedReasonCodeSchema.optional(),
+  unsupportedReasonCode: UnsupportedReasonCodeSchema.optional(),
 });
 
 const NormalizeInsightQueryResultSchema = z.union([
   z.object({
     status: z.literal('ok'),
     metricKey: z.string().optional(),
-    query: NormalizedInsightQuerySchema,
+    query: z.any(),
   }),
   z.object({
     status: z.literal('unsupported'),
-    reasonCode: AiInsightsUnsupportedReasonCodeSchema,
+    reasonCode: UnsupportedReasonCodeSchema,
     suggestedPrompts: z.array(z.string()),
   }),
 ]);

@@ -21,8 +21,10 @@ describe('AiInsightsService', () => {
 
   const response: AiInsightsResponse = {
     status: 'ok',
+    resultKind: 'aggregate',
     narrative: 'Average cadence improved.',
     query: {
+      resultKind: 'aggregate',
       dataType: DataCadenceAvg.type,
       valueType: ChartDataValueTypes.Average,
       categoryType: ChartDataCategoryTypes.DateType,
@@ -31,8 +33,8 @@ describe('AiInsightsService', () => {
       activityTypes: [ActivityTypes.Cycling],
       dateRange: {
         kind: 'bounded',
-        startDate: '2025-12-01',
-        endDate: '2026-03-01',
+        startDate: '2025-12-01T00:00:00.000Z',
+        endDate: '2026-03-01T23:59:59.999Z',
         timezone: 'Europe/Helsinki',
         source: 'prompt',
       },
@@ -89,6 +91,68 @@ describe('AiInsightsService', () => {
       clientLocale: 'en-US',
     });
     expect(result).toEqual(response);
+  });
+
+  it('should reject invalid callable payloads before they reach the page state', async () => {
+    functionsServiceMock.call.mockResolvedValue({
+      data: {
+        status: 'ok',
+        narrative: 'Average cadence improved.',
+        query: {
+          resultKind: 'not-a-real-kind',
+          dataType: DataCadenceAvg.type,
+          valueType: ChartDataValueTypes.Average,
+          categoryType: ChartDataCategoryTypes.DateType,
+          requestedTimeInterval: TimeIntervals.Monthly,
+          activityTypeGroups: [],
+          activityTypes: [ActivityTypes.Cycling],
+          dateRange: {
+            kind: 'bounded',
+            startDate: '2025-12-01T00:00:00.000Z',
+            endDate: '2026-03-01T23:59:59.999Z',
+            timezone: 'Europe/Helsinki',
+            source: 'prompt',
+          },
+          chartType: ChartTypes.LinesVertical,
+        },
+        aggregation: {
+          dataType: DataCadenceAvg.type,
+          valueType: ChartDataValueTypes.Average,
+          categoryType: ChartDataCategoryTypes.DateType,
+          resolvedTimeInterval: TimeIntervals.Monthly,
+          buckets: [],
+        },
+        summary: {
+          matchedEventCount: 0,
+          overallAggregateValue: null,
+          peakBucket: null,
+          lowestBucket: null,
+          latestBucket: null,
+          activityMix: null,
+          bucketCoverage: null,
+          trend: null,
+        },
+        presentation: {
+          title: 'Average cadence over time for Cycling',
+          chartType: ChartTypes.LinesVertical,
+        },
+      },
+    });
+
+    await expect(service.runInsight({
+      prompt: 'Tell me my avg cadence for cycling the last 3 months',
+      clientTimezone: 'Europe/Helsinki',
+      clientLocale: 'en-US',
+    })).rejects.toThrow('AI Insights returned an invalid response (shape_invalid).');
+
+    await expect(service.runInsight({
+      prompt: 'Tell me my avg cadence for cycling the last 3 months',
+      clientTimezone: 'Europe/Helsinki',
+      clientLocale: 'en-US',
+    })).rejects.toMatchObject({
+      name: 'AiInsightsError',
+      code: 'INTERNAL',
+    });
   });
 
   it('should map function errors into AiInsightsError instances', async () => {
