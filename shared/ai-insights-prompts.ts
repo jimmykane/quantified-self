@@ -23,7 +23,6 @@ export type AiInsightsPromptMetricKey =
   | 'duration'
   | 'ascent'
   | 'descent'
-  | 'jump_height'
   | 'jump_hang_time'
   | 'jump_distance'
   | 'jump_speed'
@@ -124,14 +123,6 @@ export const AI_INSIGHTS_PROMPT_CATALOG = [
     featured: true,
     surfaces: ['hero', 'picker', 'unsupported'],
     metricKey: 'calories',
-  },
-  {
-    id: 'jump-height-over-time-90-days',
-    prompt: 'Show my jump height over time in the last 90 days.',
-    category: 'Cardio & Speed',
-    featured: false,
-    surfaces: ['picker', 'unsupported'],
-    metricKey: 'jump_height',
   },
   {
     id: 'jump-distance-over-time-season',
@@ -598,18 +589,11 @@ export function getAiInsightsPromptSectionsForPrompts(
 export function getAiInsightsDefaultMetricPrompt(
   metricKey: AiInsightsPromptMetricKey,
 ): string {
-  const resolvePrompt = (key: AiInsightsPromptMetricKey): string | undefined => AI_INSIGHTS_PROMPT_CATALOG.find((entry) => (
+  const prompt = AI_INSIGHTS_PROMPT_CATALOG.find((entry) => (
     'metricKey' in entry
-    && entry.metricKey === key
+    && entry.metricKey === metricKey
     && hasSurface(entry, 'unsupported')
   ))?.prompt;
-
-  const fallbackMetricByKey: Partial<Record<AiInsightsPromptMetricKey, AiInsightsPromptMetricKey>> = {
-    jump_height: 'jump_distance',
-  };
-
-  const prompt = resolvePrompt(metricKey)
-    ?? (fallbackMetricByKey[metricKey] ? resolvePrompt(fallbackMetricByKey[metricKey]) : undefined);
 
   if (!prompt) {
     throw new Error(`Missing default AI insights prompt for metric ${metricKey}`);

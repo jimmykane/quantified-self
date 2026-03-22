@@ -17,8 +17,6 @@ import {
   DataHeartRateMax,
   DataJumpDistanceMax,
   DataJumpHangTimeMax,
-  DataJumpHeightAvg,
-  DataJumpHeightMax,
   DataPowerAvg,
   DataPowerNormalized,
   DataPowerTrainingStressScore,
@@ -762,7 +760,7 @@ describe('normalizeInsightQuery', () => {
     expect(result.query.valueType).toBe(ChartDataValueTypes.Maximum);
   });
 
-  it('maps highest jump prompts to jump-height event lookup by default', async () => {
+  it('rejects highest jump prompts because jump-height metric is disabled', async () => {
     setNormalizeQueryDependenciesForTesting({
       now: () => new Date('2026-03-19T12:00:00.000Z'),
     });
@@ -772,15 +770,11 @@ describe('normalizeInsightQuery', () => {
       clientTimezone: 'UTC',
     });
 
-    expect(result.status).toBe('ok');
-    if (result.status !== 'ok') {
-      return;
-    }
-
-    expect(result.metricKey).toBe('jump_height');
-    expect(result.query.resultKind).toBe('event_lookup');
-    expect(result.query.dataType).toBe(DataJumpHeightMax.type);
-    expect(result.query.valueType).toBe(ChartDataValueTypes.Maximum);
+    expect(result).toEqual({
+      status: 'unsupported',
+      reasonCode: expect.any(String),
+      suggestedPrompts: expect.any(Array),
+    });
   });
 
   it('supports natural jump event prompts with explicit "when did I have" wording', async () => {
@@ -803,12 +797,11 @@ describe('normalizeInsightQuery', () => {
       prompt: 'When did I have my highest jump?',
       clientTimezone: 'UTC',
     });
-    expect(highestResult.status).toBe('ok');
-    if (highestResult.status === 'ok') {
-      expect(highestResult.metricKey).toBe('jump_height');
-      expect(highestResult.query.resultKind).toBe('event_lookup');
-      expect(highestResult.query.dataType).toBe(DataJumpHeightMax.type);
-    }
+    expect(highestResult).toEqual({
+      status: 'unsupported',
+      reasonCode: expect.any(String),
+      suggestedPrompts: expect.any(Array),
+    });
 
     const biggestResult = await normalizeInsightQuery({
       prompt: 'When did I have my biggest jump?',
@@ -843,7 +836,7 @@ describe('normalizeInsightQuery', () => {
     expect(result.query.valueType).toBe(ChartDataValueTypes.Maximum);
   });
 
-  it('keeps jump-height over-time prompts in aggregate mode', async () => {
+  it('rejects jump-height over-time prompts because jump-height metric is disabled', async () => {
     setNormalizeQueryDependenciesForTesting({
       now: () => new Date('2026-03-19T12:00:00.000Z'),
     });
@@ -853,15 +846,11 @@ describe('normalizeInsightQuery', () => {
       clientTimezone: 'UTC',
     });
 
-    expect(result.status).toBe('ok');
-    if (result.status !== 'ok') {
-      return;
-    }
-
-    expect(result.metricKey).toBe('jump_height');
-    expect(result.query.resultKind).toBe('aggregate');
-    expect(result.query.dataType).toBe(DataJumpHeightAvg.type);
-    expect(result.query.valueType).toBe(ChartDataValueTypes.Average);
+    expect(result).toEqual({
+      status: 'unsupported',
+      reasonCode: expect.any(String),
+      suggestedPrompts: expect.any(Array),
+    });
   });
 
   it('resolves latest ride prompts to latest_event mode with cycling filters', async () => {
