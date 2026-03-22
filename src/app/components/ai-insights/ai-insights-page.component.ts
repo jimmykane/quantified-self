@@ -565,6 +565,24 @@ export class AiInsightsPageComponent {
     }
 
     this.lastAutoScrolledResponse = response;
+    const scrollContainer = this.resolveResultScrollContainer(resultCard);
+    if (scrollContainer) {
+      const stickyOffset = this.resolveScrollContainerOverlayOffset(scrollContainer);
+      const containerRect = scrollContainer.getBoundingClientRect();
+      const targetTop = Math.max(
+        0,
+        scrollContainer.scrollTop + resultCard.getBoundingClientRect().top - containerRect.top - stickyOffset - 12,
+      );
+
+      if (typeof scrollContainer.scrollTo === 'function') {
+        scrollContainer.scrollTo({
+          top: targetTop,
+          behavior: 'smooth',
+        });
+        return;
+      }
+    }
+
     const windowRef = this.document.defaultView;
     const topOffset = this.resolveScrollTopOverlayOffset(resultCard);
     const currentScrollTop = windowRef?.scrollY ?? this.document.documentElement.scrollTop ?? 0;
@@ -1063,6 +1081,33 @@ export class AiInsightsPageComponent {
     }
 
     return shellTopOffset + impersonationBannerOffset;
+  }
+
+  private resolveResultScrollContainer(resultCard: HTMLElement): HTMLElement | null {
+    const candidate = resultCard.closest<HTMLElement>('.mat-drawer-content, mat-sidenav-content');
+    if (!candidate) {
+      return null;
+    }
+
+    return candidate.scrollHeight > candidate.clientHeight ? candidate : null;
+  }
+
+  private resolveScrollContainerOverlayOffset(scrollContainer: HTMLElement): number {
+    const stickyImpersonationBanner = scrollContainer.querySelector<HTMLElement>('.impersonation-banner');
+    if (!stickyImpersonationBanner) {
+      return 0;
+    }
+
+    const bannerStyles = this.document.defaultView?.getComputedStyle(stickyImpersonationBanner);
+    if (bannerStyles?.position !== 'sticky' && bannerStyles?.position !== 'fixed') {
+      return 0;
+    }
+
+    const bannerRect = stickyImpersonationBanner.getBoundingClientRect();
+    const containerRect = scrollContainer.getBoundingClientRect();
+    return bannerRect.height > 0 && bannerRect.top <= containerRect.top + 1
+      ? bannerRect.height
+      : 0;
   }
 
   private parseCssPx(value: string | null | undefined): number | null {
