@@ -640,8 +640,9 @@ describe('AiInsightsLatestSnapshotService', () => {
       '[AiInsightsLatestSnapshotService] Clearing invalid latest AI insight snapshot.',
       expect.objectContaining({
         userID: 'user-1',
-        reason: 'response_narrative_invalid',
+        reason: 'response_shape_invalid',
         responseKeys: ['status'],
+        issuePath: 'resultKind',
       }),
     );
   });

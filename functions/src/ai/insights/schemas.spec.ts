@@ -11,8 +11,9 @@ import { AiInsightsResponseSchema } from './schemas';
 vi.mock('@sports-alliance/sports-lib', async (importOriginal) => await importOriginal());
 
 describe('AiInsightsResponseSchema', () => {
-  it('is defined as a discriminated union on status', () => {
-    expect((AiInsightsResponseSchema as any)._def?.typeName).toBe('ZodDiscriminatedUnion');
+  it('is defined as a union over all response variants', () => {
+    const schemaDef = (AiInsightsResponseSchema as unknown as { _def?: { typeName?: string } })._def;
+    expect(schemaDef?.typeName).toBe('ZodUnion');
   });
 
   it('parses unsupported responses through the status discriminator', () => {

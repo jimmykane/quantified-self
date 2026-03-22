@@ -44,7 +44,7 @@ import {
   buildLatestEventInsightQuery,
   buildMultiMetricInsightQuery,
 } from './normalize-query.result-kind-query-builders';
-import { AiInsightsRequestSchema } from './schemas';
+import { AiInsightsRequestSchema, NormalizedInsightQuerySchema } from './schemas';
 
 type ModelAggregationCode = 'total' | 'average' | 'minimum' | 'maximum';
 type ModelCategoryCode = 'date' | 'activity';
@@ -269,14 +269,26 @@ const ModelDateRangeSchema = z.union([
   }),
 ]);
 
-const UnsupportedReasonCodeSchema = z.enum([
+const UNSUPPORTED_REASON_CODE_VALUES = [
   'invalid_prompt',
   'unsupported_metric',
   'ambiguous_metric',
   'unsupported_capability',
   'too_many_metrics',
   'unsupported_multi_metric_combination',
-]) as unknown as z.ZodType<AiInsightsUnsupportedReasonCode>;
+] as const;
+
+const UNSUPPORTED_REASON_CODE_COVERAGE: Record<AiInsightsUnsupportedReasonCode, true> = {
+  invalid_prompt: true,
+  unsupported_metric: true,
+  ambiguous_metric: true,
+  unsupported_capability: true,
+  too_many_metrics: true,
+  unsupported_multi_metric_combination: true,
+};
+void UNSUPPORTED_REASON_CODE_COVERAGE;
+
+const UnsupportedReasonCodeSchema = z.enum(UNSUPPORTED_REASON_CODE_VALUES);
 
 const ModelInsightIntentSchema = z.object({
   status: z.enum(['supported', 'unsupported']),
@@ -300,18 +312,11 @@ const ModelInsightIntentSchema = z.object({
   unsupportedReasonCode: UnsupportedReasonCodeSchema.optional(),
 });
 
-const NormalizeInsightQueryResultSchema = z.union([
-  z.object({
-    status: z.literal('ok'),
-    metricKey: z.string().optional(),
-    query: z.any(),
-  }),
-  z.object({
-    status: z.literal('unsupported'),
-    reasonCode: UnsupportedReasonCodeSchema,
-    suggestedPrompts: z.array(z.string()),
-  }),
-]);
+const UnsupportedNormalizeInsightQueryResultSchema = z.object({
+  status: z.literal('unsupported'),
+  reasonCode: UnsupportedReasonCodeSchema,
+  suggestedPrompts: z.array(z.string()),
+});
 
 const AGGREGATION_MAP: Record<ModelAggregationCode, ChartDataValueTypes> = {
   total: ChartDataValueTypes.Total,
@@ -1983,7 +1988,15 @@ export function createNormalizeQuery(
   ): Promise<NormalizeInsightQueryResult> => {
     const parsedInput = AiInsightsRequestSchema.parse(input);
     const result = await normalizeInsightQuery(parsedInput);
-    return NormalizeInsightQueryResultSchema.parse(result) as NormalizeInsightQueryResult;
+    if (result.status === 'ok') {
+      return {
+        status: 'ok',
+        ...(result.metricKey ? { metricKey: result.metricKey } : {}),
+        query: NormalizedInsightQuerySchema.parse(result.query),
+      };
+    }
+
+    return UnsupportedNormalizeInsightQueryResultSchema.parse(result) as NormalizeInsightQueryResult;
   };
 
   return {

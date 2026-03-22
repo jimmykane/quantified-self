@@ -95,8 +95,27 @@ export function validateAiInsightsLatestSnapshot(
     };
   }
 
+  const parsedResponse = validateAiInsightsResponse(value.response);
+  if (parsedResponse.ok === false) {
+    return {
+      valid: false,
+      failure: {
+        reason: `response_${parsedResponse.reason}`,
+        details: {
+          topLevelKeys: Object.keys(value),
+          ...parsedResponse.details,
+        },
+      },
+    };
+  }
+
   return {
     valid: true,
-    snapshot: value as unknown as AiInsightsLatestSnapshot,
+    snapshot: {
+      version: value.version as number,
+      savedAt: value.savedAt as string,
+      prompt: value.prompt as string,
+      response: parsedResponse.data,
+    },
   };
 }

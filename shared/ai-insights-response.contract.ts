@@ -226,38 +226,67 @@ const AiInsightsOkResponseBaseSchema = z.object({
   quota: AiInsightsQuotaStatusSchema.optional(),
 });
 
-const AiInsightsOkResponseSchema = AiInsightsOkResponseBaseSchema.extend({
-  resultKind: z.enum(['aggregate', 'event_lookup', 'latest_event', 'multi_metric_aggregate']),
-  query: NormalizedInsightQuerySchema,
-  aggregation: EventStatAggregationResultSchema.optional(),
-  summary: AiInsightSummarySchema.optional(),
+const AiInsightsAggregateOkResponseSchema = AiInsightsOkResponseBaseSchema.extend({
+  resultKind: z.literal('aggregate'),
+  query: NormalizedInsightAggregateQuerySchema,
+  aggregation: EventStatAggregationResultSchema,
+  summary: AiInsightSummarySchema,
   eventRanking: AiInsightEventLookupSchema.optional(),
-  eventLookup: AiInsightEventLookupSchema.optional(),
-  latestEvent: AiInsightLatestEventSchema.optional(),
-  metricResults: z.array(AiInsightsMultiMetricAggregateMetricResultSchema).min(1).max(3).optional(),
   presentation: AiInsightPresentationSchema,
 });
 
-export const AiInsightsResponseSchema = z.discriminatedUnion('status', [
-  AiInsightsOkResponseSchema,
-  z.object({
-    status: z.literal('empty'),
-    narrative: z.string().min(1),
-    quota: AiInsightsQuotaStatusSchema.optional(),
-    query: NormalizedInsightQuerySchema,
-    aggregation: EventStatAggregationResultSchema,
-    summary: AiInsightSummarySchema,
-    presentation: AiInsightPresentationSchema.extend({
-      emptyState: z.string().min(1),
-    }),
+const AiInsightsEventLookupOkResponseSchema = AiInsightsOkResponseBaseSchema.extend({
+  resultKind: z.literal('event_lookup'),
+  query: NormalizedInsightEventLookupQuerySchema,
+  eventLookup: AiInsightEventLookupSchema,
+  presentation: AiInsightPresentationSchema,
+});
+
+const AiInsightsLatestEventOkResponseSchema = AiInsightsOkResponseBaseSchema.extend({
+  resultKind: z.literal('latest_event'),
+  query: NormalizedInsightLatestEventQuerySchema,
+  latestEvent: AiInsightLatestEventSchema,
+  presentation: AiInsightPresentationSchema,
+});
+
+const AiInsightsMultiMetricAggregateOkResponseSchema = AiInsightsOkResponseBaseSchema.extend({
+  resultKind: z.literal('multi_metric_aggregate'),
+  query: NormalizedInsightMultiMetricAggregateQuerySchema,
+  metricResults: z.array(AiInsightsMultiMetricAggregateMetricResultSchema).min(1).max(3),
+  presentation: AiInsightPresentationSchema,
+});
+
+const AiInsightsOkStrictSchema = z.discriminatedUnion('resultKind', [
+  AiInsightsAggregateOkResponseSchema,
+  AiInsightsEventLookupOkResponseSchema,
+  AiInsightsLatestEventOkResponseSchema,
+  AiInsightsMultiMetricAggregateOkResponseSchema,
+]);
+
+const AiInsightsEmptyResponseSchema = z.object({
+  status: z.literal('empty'),
+  narrative: z.string().min(1),
+  quota: AiInsightsQuotaStatusSchema.optional(),
+  query: NormalizedInsightQuerySchema,
+  aggregation: EventStatAggregationResultSchema,
+  summary: AiInsightSummarySchema,
+  presentation: AiInsightPresentationSchema.extend({
+    emptyState: z.string().min(1),
   }),
-  z.object({
-    status: z.literal('unsupported'),
-    narrative: z.string().min(1),
-    quota: AiInsightsQuotaStatusSchema.optional(),
-    reasonCode: AiInsightsUnsupportedReasonCodeSchema,
-    suggestedPrompts: z.array(z.string()),
-  }),
+});
+
+const AiInsightsUnsupportedResponseSchema = z.object({
+  status: z.literal('unsupported'),
+  narrative: z.string().min(1),
+  quota: AiInsightsQuotaStatusSchema.optional(),
+  reasonCode: AiInsightsUnsupportedReasonCodeSchema,
+  suggestedPrompts: z.array(z.string()),
+});
+
+export const AiInsightsResponseSchema = z.union([
+  AiInsightsOkStrictSchema,
+  AiInsightsEmptyResponseSchema,
+  AiInsightsUnsupportedResponseSchema,
 ]);
 
 function isRecord(value: unknown): value is UnknownRecord {
@@ -342,21 +371,93 @@ function buildResponseValidationDetails(value: unknown, parsedError: z.ZodError)
 }
 
 export function validateAiInsightsResponse(value: unknown): AiInsightsResponseValidationResult {
-  const parsed = AiInsightsResponseSchema.safeParse(value);
-  if (parsed.success) {
+  if (!isRecord(value)) {
     return {
-      ok: true,
-      data: parsed.data as unknown as AiInsightsResponse,
+      ok: false,
+      reason: 'not_object',
+      details: {
+        responseKeys: null,
+        queryKeys: null,
+      },
     };
   }
 
-  const firstIssuePathKey = parsed.error.issues[0]?.path?.[0];
+  if (value.status === 'ok') {
+    const parsedOk = AiInsightsOkStrictSchema.safeParse(value);
+    if (parsedOk.success) {
+      return {
+        ok: true,
+        data: parsedOk.data as unknown as AiInsightsResponse,
+      };
+    }
+
+    const firstIssuePathKey = parsedOk.error.issues[0]?.path?.[0];
+    return {
+      ok: false,
+      reason: resolveResponseValidationReason(
+        value,
+        typeof firstIssuePathKey === 'string' ? firstIssuePathKey : undefined,
+      ),
+      details: buildResponseValidationDetails(value, parsedOk.error),
+    };
+  }
+
+  if (value.status === 'empty') {
+    const parsedEmpty = AiInsightsEmptyResponseSchema.safeParse(value);
+    if (parsedEmpty.success) {
+      return {
+        ok: true,
+        data: parsedEmpty.data as unknown as AiInsightsResponse,
+      };
+    }
+
+    const firstIssuePathKey = parsedEmpty.error.issues[0]?.path?.[0];
+    return {
+      ok: false,
+      reason: resolveResponseValidationReason(
+        value,
+        typeof firstIssuePathKey === 'string' ? firstIssuePathKey : undefined,
+      ),
+      details: buildResponseValidationDetails(value, parsedEmpty.error),
+    };
+  }
+
+  if (value.status === 'unsupported') {
+    const parsedUnsupported = AiInsightsUnsupportedResponseSchema.safeParse(value);
+    if (parsedUnsupported.success) {
+      return {
+        ok: true,
+        data: parsedUnsupported.data as unknown as AiInsightsResponse,
+      };
+    }
+
+    const firstIssuePathKey = parsedUnsupported.error.issues[0]?.path?.[0];
+    return {
+      ok: false,
+      reason: resolveResponseValidationReason(
+        value,
+        typeof firstIssuePathKey === 'string' ? firstIssuePathKey : undefined,
+      ),
+      details: buildResponseValidationDetails(value, parsedUnsupported.error),
+    };
+  }
+
   return {
     ok: false,
-    reason: resolveResponseValidationReason(
-      value,
-      typeof firstIssuePathKey === 'string' ? firstIssuePathKey : undefined,
-    ),
-    details: buildResponseValidationDetails(value, parsed.error),
+    reason: 'status_invalid',
+    details: {
+      responseKeys: Object.keys(value),
+      queryKeys: isRecord(value.query) ? Object.keys(value.query) : null,
+      issueCode: null,
+      issuePath: null,
+      issueMessage: null,
+      resultKind: value.resultKind ?? null,
+      resultKindType: describeValueType(value.resultKind),
+      dataTypeType: describeValueType((value.query as UnknownRecord | undefined)?.dataType),
+      valueTypeType: describeValueType((value.query as UnknownRecord | undefined)?.valueType),
+      requestedTimeIntervalType: describeValueType((value.query as UnknownRecord | undefined)?.requestedTimeInterval),
+      periodModeType: describeValueType((value.query as UnknownRecord | undefined)?.periodMode),
+      chartTypeType: describeValueType((value.query as UnknownRecord | undefined)?.chartType),
+    },
   };
 }
