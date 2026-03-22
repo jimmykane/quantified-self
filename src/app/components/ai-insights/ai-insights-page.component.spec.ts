@@ -1237,7 +1237,7 @@ describe('AiInsightsPageComponent', () => {
     expect(chart?.textContent).toContain('Average cadence over time for Cycling');
     expect(chartComponent?.userUnitSettings()).toEqual(userSettingsQueryServiceMock.unitSettings());
     expect(resultCardSubtitle?.textContent).toContain('Aggregation: Average');
-    expect(resultCardMeta?.textContent).toContain('Saved');
+    expect(resultCardMeta).toBeUndefined();
     expect(quotaLine?.textContent).toContain(`${AI_INSIGHTS_REQUEST_LIMITS.pro - 13} of ${AI_INSIGHTS_REQUEST_LIMITS.pro} left`);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Overall'))).toBe(true);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Highest average'))).toBe(true);

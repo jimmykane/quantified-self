@@ -798,10 +798,6 @@ export class AiInsightsPageComponent {
       this.hapticsService.success();
       this.quotaStatus.set(response.quota ?? this.quotaStatus());
       this.resultPrompt.set(prompt);
-      const userID = this.currentUserID();
-      if (userID) {
-        this.latestSnapshotSavedAt.set(new Date().toISOString());
-      }
     } catch (error) {
       const nextQuotaStatus = await this.aiInsightsQuotaService.loadQuotaStatus();
       if (nextQuotaStatus) {

@@ -33,6 +33,27 @@ function measureUtf8Bytes(serializedValue: string): number {
   return new TextEncoder().encode(serializedValue).length;
 }
 
+function stripUndefinedDeep(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value
+      .map(entry => stripUndefinedDeep(entry))
+      .filter(entry => entry !== undefined);
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>)
+      .reduce<Record<string, unknown>>((accumulator, [key, nestedValue]) => {
+        const cleanedValue = stripUndefinedDeep(nestedValue);
+        if (cleanedValue !== undefined) {
+          accumulator[key] = cleanedValue;
+        }
+        return accumulator;
+      }, {});
+  }
+
+  return value;
+}
+
 export function createAiInsightsLatestSnapshotStore(
   dependencies: Partial<AiInsightsLatestSnapshotStoreDependencies> = {},
 ): AiInsightsLatestSnapshotStoreApi {
@@ -76,7 +97,22 @@ export function createAiInsightsLatestSnapshotStore(
         return;
       }
 
-      const snapshotBytes = measureUtf8Bytes(JSON.stringify(snapshot));
+      const firestoreSnapshot = stripUndefinedDeep(snapshot) as Record<string, unknown>;
+      const firestoreSnapshotValidation = validateAiInsightsLatestSnapshot(
+        firestoreSnapshot,
+        AI_INSIGHTS_LATEST_SNAPSHOT_VERSION,
+      );
+      if (firestoreSnapshotValidation.valid === false) {
+        resolvedDependencies.logger.warn('[aiInsights] Skipping invalid latest snapshot persistence after write-sanitization.', {
+          userID,
+          reason: firestoreSnapshotValidation.failure.reason,
+          promptLength: `${prompt || ''}`.trim().length,
+          ...firestoreSnapshotValidation.failure.details,
+        });
+        return;
+      }
+
+      const snapshotBytes = measureUtf8Bytes(JSON.stringify(firestoreSnapshot));
       if (snapshotBytes > AI_INSIGHTS_LATEST_SNAPSHOT_MAX_BYTES) {
         resolvedDependencies.logger.warn('[aiInsights] Skipping latest snapshot persistence because it exceeds the size guard.', {
           userID,
@@ -92,7 +128,7 @@ export function createAiInsightsLatestSnapshotStore(
           .doc(userID)
           .collection('aiInsightsRequests')
           .doc(AI_INSIGHTS_LATEST_DOC_ID)
-          .set(snapshot);
+          .set(firestoreSnapshot);
       } catch (error) {
         resolvedDependencies.logger.warn('[aiInsights] Failed to persist latest snapshot.', {
           userID,
