@@ -27,7 +27,6 @@ export type AiInsightsPromptMetricKey =
   | 'jump_hang_time'
   | 'jump_distance'
   | 'jump_speed'
-  | 'jump_rotations'
   | 'jump_score'
   | 'cadence'
   | 'power'
@@ -159,14 +158,6 @@ export const AI_INSIGHTS_PROMPT_CATALOG = [
     metricKey: 'jump_speed',
   },
   {
-    id: 'jump-rotations-over-time-90-days',
-    prompt: 'Show my jump rotations over time in the last 90 days.',
-    category: 'Cardio & Speed',
-    featured: false,
-    surfaces: ['picker', 'unsupported'],
-    metricKey: 'jump_rotations',
-  },
-  {
     id: 'jump-score-over-time-90-days',
     prompt: 'Show my jump score over time in the last 90 days.',
     category: 'Cardio & Speed',
@@ -221,14 +212,6 @@ export const AI_INSIGHTS_PROMPT_CATALOG = [
     featured: false,
     surfaces: ['picker', 'unsupported'],
     metricKey: 'grade_adjusted_pace',
-  },
-  {
-    id: 'effort-pace-running-90-days',
-    prompt: 'Show my average effort pace over time for running in the last 90 days.',
-    category: 'Terrain & Pace Variants',
-    featured: false,
-    surfaces: ['picker', 'unsupported'],
-    metricKey: 'effort_pace',
   },
   {
     id: 'vam-climbing-90-days',
@@ -384,7 +367,7 @@ export const AI_INSIGHTS_PROMPT_CATALOG = [
     category: 'Advanced Examples',
     featured: false,
     surfaces: ['picker'],
-    metricKey: 'jump_height',
+    metricKey: 'jump_distance',
   },
   {
     id: 'event-lookup-longest-jump',
@@ -487,7 +470,7 @@ export const AI_INSIGHTS_CURATED_PROMPT_CATALOG = [
     category: 'Best efforts',
     featured: false,
     surfaces: ['picker'],
-    metricKey: 'jump_height',
+    metricKey: 'jump_distance',
   },
 ] as const satisfies readonly AiInsightsPromptDefinition[];
 
@@ -615,11 +598,18 @@ export function getAiInsightsPromptSectionsForPrompts(
 export function getAiInsightsDefaultMetricPrompt(
   metricKey: AiInsightsPromptMetricKey,
 ): string {
-  const prompt = AI_INSIGHTS_PROMPT_CATALOG.find((entry) => (
+  const resolvePrompt = (key: AiInsightsPromptMetricKey): string | undefined => AI_INSIGHTS_PROMPT_CATALOG.find((entry) => (
     'metricKey' in entry
-    && entry.metricKey === metricKey
+    && entry.metricKey === key
     && hasSurface(entry, 'unsupported')
   ))?.prompt;
+
+  const fallbackMetricByKey: Partial<Record<AiInsightsPromptMetricKey, AiInsightsPromptMetricKey>> = {
+    jump_height: 'jump_distance',
+  };
+
+  const prompt = resolvePrompt(metricKey)
+    ?? (fallbackMetricByKey[metricKey] ? resolvePrompt(fallbackMetricByKey[metricKey]) : undefined);
 
   if (!prompt) {
     throw new Error(`Missing default AI insights prompt for metric ${metricKey}`);

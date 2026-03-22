@@ -3,7 +3,6 @@ import {
   ChartDataValueTypes,
   DataJumpDistanceMax,
   DataJumpHangTimeMax,
-  DataJumpHeightMax,
 } from '@sports-alliance/sports-lib';
 import { getAiInsightsPromptEntriesBySurface } from '../../../../shared/ai-insights-prompts';
 
@@ -37,7 +36,7 @@ describe('metric-catalog', () => {
     expect(resolveInsightMetric('recovery time')?.key).toBe('recovery_time');
     expect(resolveInsightMetric('longest jump')?.key).toBe('jump_distance');
     expect(resolveInsightMetric('highest jump')?.key).toBe('jump_height');
-    expect(resolveInsightMetric('biggest jump')?.key).toBe('jump_height');
+    expect(resolveInsightMetric('biggest jump')?.key).toBe('jump_distance');
     expect(resolveInsightMetric('air time')?.key).toBe('jump_hang_time');
   });
 
@@ -48,7 +47,7 @@ describe('metric-catalog', () => {
     expect(resolveInsightMetric('effort pace', ChartDataValueTypes.Minimum)?.dataType).toBe('Minimum Effort Pace');
     expect(resolveInsightMetric('swim pace', ChartDataValueTypes.Maximum)?.dataType).toBe('Maximum Swim Pace');
     expect(resolveInsightMetric('longest jump', ChartDataValueTypes.Maximum)?.dataType).toBe(DataJumpDistanceMax.type);
-    expect(resolveInsightMetric('highest jump', ChartDataValueTypes.Maximum)?.dataType).toBe(DataJumpHeightMax.type);
+    expect(resolveInsightMetric('biggest jump', ChartDataValueTypes.Maximum)?.dataType).toBe(DataJumpDistanceMax.type);
     expect(resolveInsightMetric('biggest hang time', ChartDataValueTypes.Maximum)?.dataType).toBe(DataJumpHangTimeMax.type);
   });
 

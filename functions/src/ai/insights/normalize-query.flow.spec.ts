@@ -816,9 +816,9 @@ describe('normalizeInsightQuery', () => {
     });
     expect(biggestResult.status).toBe('ok');
     if (biggestResult.status === 'ok') {
-      expect(biggestResult.metricKey).toBe('jump_height');
+      expect(biggestResult.metricKey).toBe('jump_distance');
       expect(biggestResult.query.resultKind).toBe('event_lookup');
-      expect(biggestResult.query.dataType).toBe(DataJumpHeightMax.type);
+      expect(biggestResult.query.dataType).toBe(DataJumpDistanceMax.type);
     }
   });
 

@@ -78,7 +78,6 @@ describe('ai-insights prompts', () => {
     const expectedJumpPrompts = [
       'Find my longest jump.',
       'Find my biggest hang time.',
-      'Show my jump height over time in the last 90 days.',
       'Show my jump distance over time this season.',
     ];
 
@@ -108,12 +107,11 @@ describe('ai-insights prompts', () => {
     ]);
   });
 
-  it('resolves unsupported default prompts for all jump metrics', () => {
+  it('resolves unsupported default prompts for jump metrics in the shared catalog', () => {
     expect(getAiInsightsDefaultMetricPrompt('jump_height')).toBe('Show my jump height over time in the last 90 days.');
     expect(getAiInsightsDefaultMetricPrompt('jump_hang_time')).toBe('Show my jump hang time over time in the last 90 days.');
     expect(getAiInsightsDefaultMetricPrompt('jump_distance')).toBe('Show my jump distance over time this season.');
     expect(getAiInsightsDefaultMetricPrompt('jump_speed')).toBe('Show my jump speed over time in the last 90 days.');
-    expect(getAiInsightsDefaultMetricPrompt('jump_rotations')).toBe('Show my jump rotations over time in the last 90 days.');
     expect(getAiInsightsDefaultMetricPrompt('jump_score')).toBe('Show my jump score over time in the last 90 days.');
   });
 });
