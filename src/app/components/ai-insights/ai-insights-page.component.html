@@ -4,13 +4,13 @@
       <div class="hero-kicker-row">
         <p class="mat-label-large hero-kicker">AI Insights</p>
         <mat-chip-set aria-label="AI Insights status">
-          <mat-chip disableRipple class="hero-beta-chip">Beta</mat-chip>
-          <mat-chip disableRipple class="hero-beta-chip">en</mat-chip>
+          <mat-chip disableRipple highlighted color="accent" class="hero-beta-chip">Beta</mat-chip>
+          <mat-chip disableRipple highlighted color="primary" class="hero-beta-chip">english only</mat-chip>
         </mat-chip-set>
       </div>
-      <h1 class="hero-title">Ask a focused question about your training data.</h1>
+      <h1 class="hero-title">Turn Your Activity Data Into Insight</h1>
       <p class="hero-subtitle">
-        Describe the metric, activity type, and time range you want. If you want your full history, say all time. AI Insights returns one narrative summary and one chart from your persisted event stats.
+        Ask for distance, pace, heart rate, power, and more by sport and date range. Say "all time" for your full history.
       </p>
       @if (activeHeroPrompt()) {
         <button
@@ -20,9 +20,11 @@
           (click)="onHeroPromptClick()"
           [attr.aria-label]="'Example prompt: ' + activeHeroPrompt()"
           [attr.title]="activeHeroPrompt()">
-          <span class="hero-prompt-display" aria-hidden="true">
-            <span class="hero-prompt-text">{{ typedHeroPrompt() }}</span>
-            <span class="hero-prompt-caret"></span>
+          <span #heroPromptViewport class="hero-prompt-display" aria-hidden="true">
+            <span #heroPromptTrack class="hero-prompt-track" [style.transform]="heroPromptTrackTransform()">
+              <span class="hero-prompt-text">{{ typedHeroPrompt() }}</span>
+              <span class="hero-prompt-caret"></span>
+            </span>
           </span>
         </button>
       }
@@ -35,7 +37,15 @@
             <mat-icon>psychology</mat-icon>
           </div>
           <mat-card-title>Prompt</mat-card-title>
-          <mat-card-subtitle class="prompt-quota-line">{{ promptHeaderQuotaText() }}</mat-card-subtitle>
+          <mat-card-subtitle class="prompt-quota-line">
+            {{ promptHeaderQuotaText() }}
+            @if (shouldShowQuotaSupportContact()) {
+              <span>
+                • Need more?
+                <a [href]="quotaSupportMailtoHref()">Contact us</a>
+              </span>
+            }
+          </mat-card-subtitle>
         </mat-card-header>
 
         <mat-card-content class="card-content prompt-card-content">
@@ -93,7 +103,7 @@
         </mat-card-footer>
       </mat-card>
 
-      <mat-card appearance="outlined" class="settings-card result-card qs-glass-card-panel">
+      <mat-card #resultCard appearance="outlined" class="settings-card result-card qs-glass-card-panel">
         <mat-card-header>
           <div mat-card-avatar class="card-avatar result-avatar">
             <mat-icon>insights</mat-icon>

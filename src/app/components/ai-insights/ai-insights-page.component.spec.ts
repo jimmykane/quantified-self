@@ -1031,7 +1031,7 @@ describe('AiInsightsPageComponent', () => {
     const supportNote = fixture.debugElement.query(By.css('.prompt-support-note'))?.nativeElement as HTMLElement | undefined;
     const quotaLine = fixture.debugElement.query(By.css('.prompt-quota-line'))?.nativeElement as HTMLElement | undefined;
 
-    expect(title?.textContent).toContain('Ask a focused question about your training data.');
+    expect(title?.textContent).toContain('Turn Your Activity Data Into Insight');
     expect(pickerButton?.getAttribute('aria-label')).toBe('Browse prompts');
     expect(component.pickerPromptSections()).toEqual(AI_INSIGHTS_DEFAULT_PROMPT_SECTIONS);
     expect(component.pickerPromptGroups()).toEqual(
@@ -1201,6 +1201,20 @@ describe('AiInsightsPageComponent', () => {
     };
     aiInsightsServiceMock.runInsight.mockResolvedValue(response);
     component.promptControl.setValue('Tell me my avg cadence for cycling the last 3 months');
+    const resultCard = fixture.debugElement.query(By.css('.result-card'))?.nativeElement as HTMLElement | undefined;
+    const scrollIntoViewSpy = vi.fn();
+    if (resultCard) {
+      Object.defineProperty(resultCard, 'scrollIntoView', {
+        configurable: true,
+        value: scrollIntoViewSpy,
+      });
+    }
+    const scrollToSpy = vi.fn();
+    const originalScrollTo = window.scrollTo;
+    Object.defineProperty(window, 'scrollTo', {
+      configurable: true,
+      value: scrollToSpy,
+    });
 
     const submitEvent = {
       preventDefault: vi.fn(),
@@ -1256,6 +1270,13 @@ describe('AiInsightsPageComponent', () => {
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Latest bucket'))).toBe(false);
     expect(summaryHelpButtons).toHaveLength(5);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes(expectedOverall ?? ''))).toBe(true);
+    const calledWindowScroll = scrollToSpy.mock.calls.length > 0;
+    const calledElementScroll = scrollIntoViewSpy.mock.calls.length > 0;
+    expect(calledWindowScroll || calledElementScroll).toBe(true);
+    Object.defineProperty(window, 'scrollTo', {
+      configurable: true,
+      value: originalScrollTo,
+    });
   });
 
   it('should trigger haptics on submit, processing start, and successful response', async () => {
@@ -1642,6 +1663,20 @@ describe('AiInsightsPageComponent', () => {
       response: buildAllTimeResponse(),
     };
     aiInsightsLatestSnapshotServiceMock.loadLatest.mockResolvedValueOnce(restoredSnapshot);
+    const resultCard = fixture.debugElement.query(By.css('.result-card'))?.nativeElement as HTMLElement | undefined;
+    const scrollIntoViewSpy = vi.fn();
+    if (resultCard) {
+      Object.defineProperty(resultCard, 'scrollIntoView', {
+        configurable: true,
+        value: scrollIntoViewSpy,
+      });
+    }
+    const scrollToSpy = vi.fn();
+    const originalScrollTo = window.scrollTo;
+    Object.defineProperty(window, 'scrollTo', {
+      configurable: true,
+      value: scrollToSpy,
+    });
 
     authUserSubject.next({ uid: 'user-2' });
     TestBed.flushEffects();
@@ -1662,6 +1697,13 @@ describe('AiInsightsPageComponent', () => {
     expect(supportNote?.textContent).toContain('Proper saved insights/history will come later.');
     expect(supportNote?.textContent).not.toContain('Latest saved');
     expect(resultNotes).toHaveLength(0);
+    const calledWindowScroll = scrollToSpy.mock.calls.length > 0;
+    const calledElementScroll = scrollIntoViewSpy.mock.calls.length > 0;
+    expect(calledWindowScroll || calledElementScroll).toBe(true);
+    Object.defineProperty(window, 'scrollTo', {
+      configurable: true,
+      value: originalScrollTo,
+    });
   });
 
   it('should use pace-specific summary labels for inverse metrics', async () => {
@@ -1844,6 +1886,25 @@ describe('AiInsightsPageComponent', () => {
     expect(pickerButton?.disabled).toBe(true);
     expect(quotaLine?.textContent).toContain(`0 of ${AI_INSIGHTS_REQUEST_LIMITS.pro} left`);
     expect(quotaNote?.textContent).toContain('limit reached');
+  });
+
+  it('should show support contact details when quota resets after next successful payment', async () => {
+    aiInsightsQuotaServiceMock.loadQuotaStatus.mockResolvedValueOnce(buildQuotaStatus({
+      periodEnd: null,
+      resetMode: 'next_successful_payment',
+    }));
+
+    await createComponent();
+
+    const quotaLine = fixture.debugElement.query(By.css('.prompt-quota-line'))?.nativeElement as HTMLElement | undefined;
+    const quotaSupportLink = fixture.debugElement.query(By.css('.prompt-quota-line a'))?.nativeElement as HTMLAnchorElement | undefined;
+
+    expect(quotaLine?.textContent).toContain('resets after next successful payment');
+    expect(quotaLine?.textContent).toContain('Need more?');
+    expect(quotaSupportLink?.textContent).toContain('Contact us');
+    expect(quotaSupportLink?.getAttribute('href')).toContain('mailto:support@quantified-self.io?subject=');
+    expect(decodeURIComponent((quotaSupportLink?.getAttribute('href') ?? '').replace(/\+/g, '%20')))
+      .toContain('AI Insights quota reset question (User ID: user-1)');
   });
 
   it('should show the paid-tier access message when AI Insights is unavailable for the current account', async () => {

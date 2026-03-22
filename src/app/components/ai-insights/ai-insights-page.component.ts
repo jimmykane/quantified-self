@@ -1,5 +1,5 @@
-import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, LOCALE_ID, NgZone, computed, effect, inject, signal } from '@angular/core';
+import { CommonModule, DOCUMENT } from '@angular/common';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, LOCALE_ID, NgZone, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
@@ -24,6 +24,7 @@ import type {
 import { resolveAiInsightsActivityFilterSummary } from '@shared/ai-insights-activity-filter';
 import { formatUnitAwareDataValue, normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { AppAuthService } from '../../authentication/app.auth.service';
+import { environment } from '../../../environments/environment';
 import { MaterialModule } from '../../modules/material.module';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppEventService } from '../../services/app.event.service';
@@ -139,7 +140,13 @@ export class AiInsightsPageComponent {
   // need the same scheduling edge; this keeps the Zone.js coupling narrow.
   private readonly ngZone = inject(NgZone);
   private readonly locale = inject(LOCALE_ID);
+  private readonly document = inject(DOCUMENT);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly heroPromptViewport = viewChild<ElementRef<HTMLElement>>('heroPromptViewport');
+  private readonly heroPromptTrack = viewChild<ElementRef<HTMLElement>>('heroPromptTrack');
   private processingHapticTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastAutoScrolledResponse: AiInsightsResponse | null = null;
+  private heroPromptTrackSyncFrame: number | null = null;
 
   readonly promptControl = new FormControl('', {
     nonNullable: true,
@@ -169,6 +176,7 @@ export class AiInsightsPageComponent {
   );
   readonly promptPlaceholder = AI_INSIGHTS_FEATURED_PROMPTS[0] ?? 'Show my total distance by activity type this year.';
   readonly currentUserID = computed(() => this.user()?.uid ?? null);
+  readonly supportEmail = environment.supportEmail;
   readonly isDarkTheme = computed(() => this.appTheme() === AppThemes.Dark);
   readonly useAnimations = computed(() => this.chartSettings().useAnimations ?? false);
   readonly generationLoadingSteps = AI_INSIGHTS_GENERATION_LOADING_STEPS;
@@ -338,6 +346,22 @@ export class AiInsightsPageComponent {
         : 'Quota unavailable'
     )
   ));
+  readonly shouldShowQuotaSupportContact = computed(() => {
+    const quotaStatus = this.quotaStatus();
+    return !!quotaStatus
+      && quotaStatus.isEligible
+      && quotaStatus.resetMode === 'next_successful_payment';
+  });
+  readonly quotaSupportSubjectText = computed(() => {
+    const userId = this.currentUserID() ?? 'unknown-user';
+    return `AI Insights quota reset question (User ID: ${userId})`;
+  });
+  readonly quotaSupportMailtoHref = computed(() => {
+    const params = new URLSearchParams({
+      subject: this.quotaSupportSubjectText(),
+    });
+    return `mailto:${this.supportEmail}?${params.toString()}`;
+  });
   readonly quotaBlockedMessage = computed(() => {
     const quotaStatus = this.quotaStatus();
     if (!quotaStatus || (quotaStatus.isEligible && quotaStatus.remainingCount > 0)) {
@@ -348,6 +372,10 @@ export class AiInsightsPageComponent {
   });
   readonly activeHeroPrompt = signal(AI_INSIGHTS_FEATURED_PROMPTS[0] ?? '');
   readonly typedHeroPrompt = signal((AI_INSIGHTS_FEATURED_PROMPTS[0] ?? '').slice(0, 1));
+  readonly heroPromptTrackOffsetPx = signal(0);
+  readonly heroPromptTrackTransform = computed(() => (
+    `translateX(-${this.heroPromptTrackOffsetPx()}px)`
+  ));
   readonly pickerPromptSource = computed<'default' | 'unsupported'>(() => {
     const unsupportedResponse = this.unsupportedResponse();
     return unsupportedResponse?.suggestedPrompts?.length ? 'unsupported' : 'default';
@@ -449,6 +477,12 @@ export class AiInsightsPageComponent {
       }
     });
   });
+  private readonly heroPromptTrackSyncEffect = effect(() => {
+    this.typedHeroPrompt();
+    this.heroPromptViewport();
+    this.heroPromptTrack();
+    this.scheduleHeroPromptTrackSync();
+  });
   private readonly latestSnapshotRestoreEffect = effect((onCleanup) => {
     const userID = this.currentUserID();
     let cancelled = false;
@@ -512,6 +546,49 @@ export class AiInsightsPageComponent {
 
     onCleanup(() => {
       cancelled = true;
+    });
+  });
+  private readonly completedResultAutoScrollEffect = effect(() => {
+    const response = this.response();
+    const resultCard = this.document.querySelector<HTMLElement>('.result-card');
+    if (!resultCard || !response || !this.isCompletedResponse(response)) {
+      return;
+    }
+
+    if (this.lastAutoScrolledResponse === response) {
+      return;
+    }
+
+    const scrollIntoView = resultCard.scrollIntoView;
+    if (typeof scrollIntoView !== 'function') {
+      return;
+    }
+
+    this.lastAutoScrolledResponse = response;
+    const windowRef = this.document.defaultView;
+    const topOffset = this.resolveScrollTopOverlayOffset(resultCard);
+    const currentScrollTop = windowRef?.scrollY ?? this.document.documentElement.scrollTop ?? 0;
+    const targetTop = Math.max(
+      0,
+      currentScrollTop + resultCard.getBoundingClientRect().top - topOffset - 12,
+    );
+
+    if (windowRef && typeof windowRef.scrollTo === 'function') {
+      try {
+        windowRef.scrollTo({
+          top: targetTop,
+          behavior: 'smooth',
+        });
+        return;
+      } catch {
+        // Fall through to element scroll when smooth window scrolling is unavailable.
+      }
+    }
+
+    scrollIntoView.call(resultCard, {
+      behavior: 'smooth',
+      block: 'start',
+      inline: 'nearest',
     });
   });
   readonly rankedEventResponse = computed<RankedEventResponse | null>(() => {
@@ -754,6 +831,25 @@ export class AiInsightsPageComponent {
     return resolveRankedEventRankingCopy(response, shownCount, matchedCount);
   });
 
+  constructor() {
+    const windowRef = this.document.defaultView;
+    if (!windowRef) {
+      return;
+    }
+
+    const onResize = (): void => {
+      this.scheduleHeroPromptTrackSync();
+    };
+
+    this.ngZone.runOutsideAngular(() => {
+      windowRef.addEventListener('resize', onResize, { passive: true });
+    });
+    this.destroyRef.onDestroy(() => {
+      windowRef.removeEventListener('resize', onResize);
+      this.cancelHeroPromptTrackSync();
+    });
+  }
+
   onFormSubmit(event: SubmitEvent | Event): void {
     event.preventDefault();
     this.logAiInsightsAction('ask_button_click', {
@@ -939,6 +1035,45 @@ export class AiInsightsPageComponent {
     };
   }
 
+  private isCompletedResponse(response: AiInsightsResponse): boolean {
+    return response.status === 'ok'
+      || response.status === 'empty'
+      || response.status === 'unsupported';
+  }
+
+  private resolveScrollTopOverlayOffset(resultCard: HTMLElement): number {
+    const layoutWrapper = resultCard.closest<HTMLElement>('.app-layout-wrapper')
+      ?? this.document.querySelector<HTMLElement>('.app-layout-wrapper');
+    const layoutStyles = layoutWrapper ? this.document.defaultView?.getComputedStyle(layoutWrapper) : null;
+    const shellTopOffset = this.parseCssPx(layoutStyles?.getPropertyValue('--qs-visible-top-offset'))
+      ?? this.parseCssPx(layoutStyles?.getPropertyValue('--qs-layout-top-offset'))
+      ?? 0;
+
+    // Sticky impersonation banner lives inside the scroll content and can overlap the target.
+    const stickyImpersonationBanner = this.document.querySelector<HTMLElement>('.impersonation-banner');
+    let impersonationBannerOffset = 0;
+    if (stickyImpersonationBanner) {
+      const bannerStyles = this.document.defaultView?.getComputedStyle(stickyImpersonationBanner);
+      if (bannerStyles?.position === 'sticky' || bannerStyles?.position === 'fixed') {
+        const bannerRect = stickyImpersonationBanner.getBoundingClientRect();
+        if (bannerRect.height > 0 && bannerRect.top <= shellTopOffset + 1) {
+          impersonationBannerOffset = bannerRect.height;
+        }
+      }
+    }
+
+    return shellTopOffset + impersonationBannerOffset;
+  }
+
+  private parseCssPx(value: string | null | undefined): number | null {
+    if (!value) {
+      return null;
+    }
+
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
   private scheduleProcessingHaptic(): void {
     this.clearProcessingHaptic();
     this.ngZone.runOutsideAngular(() => {
@@ -958,5 +1093,48 @@ export class AiInsightsPageComponent {
 
     clearTimeout(this.processingHapticTimer);
     this.processingHapticTimer = null;
+  }
+
+  private scheduleHeroPromptTrackSync(): void {
+    const windowRef = this.document.defaultView;
+    if (!windowRef || typeof windowRef.requestAnimationFrame !== 'function') {
+      this.syncHeroPromptTrackOffset();
+      return;
+    }
+
+    this.cancelHeroPromptTrackSync();
+    this.ngZone.runOutsideAngular(() => {
+      this.heroPromptTrackSyncFrame = windowRef.requestAnimationFrame(() => {
+        this.heroPromptTrackSyncFrame = null;
+        this.syncHeroPromptTrackOffset();
+      });
+    });
+  }
+
+  private cancelHeroPromptTrackSync(): void {
+    const windowRef = this.document.defaultView;
+    if (this.heroPromptTrackSyncFrame === null || !windowRef || typeof windowRef.cancelAnimationFrame !== 'function') {
+      this.heroPromptTrackSyncFrame = null;
+      return;
+    }
+
+    windowRef.cancelAnimationFrame(this.heroPromptTrackSyncFrame);
+    this.heroPromptTrackSyncFrame = null;
+  }
+
+  private syncHeroPromptTrackOffset(): void {
+    const viewportElement = this.heroPromptViewport()?.nativeElement;
+    const trackElement = this.heroPromptTrack()?.nativeElement;
+    if (!viewportElement || !trackElement) {
+      this.heroPromptTrackOffsetPx.set(0);
+      return;
+    }
+
+    const viewportWidth = viewportElement.clientWidth;
+    const trackWidth = trackElement.scrollWidth;
+    const nextOffset = Math.max(0, trackWidth - viewportWidth);
+    if (this.heroPromptTrackOffsetPx() !== nextOffset) {
+      this.heroPromptTrackOffsetPx.set(nextOffset);
+    }
   }
 }

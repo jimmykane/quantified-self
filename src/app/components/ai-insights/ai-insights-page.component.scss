@@ -77,7 +77,7 @@
   align-items: center;
   gap: 12px;
   min-width: 0;
-  width: fit-content;
+  width: 100%;
   max-width: min(100%, 48rem);
   padding: 12px 14px;
   color: inherit;
@@ -103,20 +103,25 @@
 }
 
 .hero-prompt-display {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
+  display: block;
   min-width: 0;
+  width: 100%;
+  max-width: 100%;
   min-height: calc(0.95rem * 1.45);
   overflow: hidden;
 }
 
+.hero-prompt-track {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: max-content;
+  will-change: transform;
+}
+
 .hero-prompt-text {
   display: block;
-  min-width: 0;
-  overflow: hidden;
   white-space: nowrap;
-  text-overflow: ellipsis;
   font-size: 0.95rem;
   font-weight: 500;
   line-height: 1.45;
@@ -137,11 +142,12 @@
 }
 
 .hero-prompt-caret {
+  display: inline-block;
   width: 2px;
   height: 1.05rem;
   border-radius: 999px;
   background: var(--mat-sys-primary);
-  flex-shrink: 0;
+  flex: 0 0 auto;
   animation: hero-prompt-caret 1.05s steps(1, end) infinite;
 }
 
@@ -170,6 +176,10 @@
 .settings-card :is(mat-card-subtitle, .mat-mdc-card-subtitle) {
   font-size: 0.84rem;
   line-height: 1.4;
+}
+
+.result-card {
+  scroll-margin-top: 16px;
 }
 
 .result-card-meta {
@@ -497,6 +507,10 @@
 
 .prompt-quota-note {
   color: var(--mat-sys-error);
+}
+
+.prompt-quota-line a {
+  color: var(--mat-sys-primary);
 }
 
 .prompt-card-footer {
@@ -915,6 +929,10 @@
   .hero-prompt-display {
     flex: 1 1 100%;
     width: 100%;
+  }
+
+  .hero-prompt-text {
+    font-size: 0.92rem;
   }
 
   .settings-card mat-card-header {
