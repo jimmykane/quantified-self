@@ -1,6 +1,5 @@
 import { HttpsError, onCall, onCallGenkit } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
-import { z } from 'genkit';
 import type {
   AiInsightsMultiMetricAggregateMetricResult,
   AiInsightsQuotaStatusResponse,
@@ -8,6 +7,9 @@ import type {
   AiInsightsResponse,
   NormalizedInsightAggregateQuery,
 } from '../../../../shared/ai-insights.types';
+import {
+  AiInsightsFlowResponseSchema,
+} from './flow.contract';
 import { AiInsightsResponseSchema } from '../../../../shared/ai-insights-response.contract';
 import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../../utils';
@@ -650,8 +652,8 @@ export async function runAiInsights(
 
 export const aiInsightsFlow = aiInsightsGenkit.defineFlow({
   name: 'aiInsightsFlow',
-  inputSchema: z.any(),
-  outputSchema: z.any(),
+  inputSchema: AiInsightsRequestSchema,
+  outputSchema: AiInsightsFlowResponseSchema,
 }, async (input) => {
   const validatedInput = AiInsightsRequestSchema.parse(input);
   try {

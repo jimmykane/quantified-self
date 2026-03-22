@@ -1,4 +1,4 @@
-import { z } from 'zod/v3';
+import { AiInsightsRequestSchema } from './flow.contract';
 import {
   AiInsightsResponseSchema,
   AiInsightsUnsupportedReasonCodeSchema,
@@ -20,6 +20,7 @@ import {
 } from '../../../../shared/ai-insights-response.contract';
 
 export {
+  AiInsightsRequestSchema,
   AiInsightsResponseSchema,
   AiInsightsUnsupportedReasonCodeSchema,
   AiInsightsQuotaStatusSchema,
@@ -38,9 +39,3 @@ export {
   NormalizedInsightMultiMetricAggregateQuerySchema,
   NormalizedInsightQuerySchema,
 };
-
-export const AiInsightsRequestSchema = z.object({
-  prompt: z.string().min(1).max(2000),
-  clientTimezone: z.string().min(1).max(100),
-  clientLocale: z.string().min(1).max(100).optional(),
-});

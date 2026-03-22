@@ -12,8 +12,12 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => await importOri
 
 describe('AiInsightsResponseSchema', () => {
   it('is defined as a union over all response variants', () => {
-    const schemaDef = (AiInsightsResponseSchema as unknown as { _def?: { typeName?: string } })._def;
-    expect(schemaDef?.typeName).toBe('ZodUnion');
+    const schemaDef = (AiInsightsResponseSchema as unknown as {
+      _def?: { typeName?: string; type?: string };
+      constructor?: { name?: string };
+    })._def;
+    const schemaType = schemaDef?.typeName ?? schemaDef?.type;
+    expect(['ZodUnion', 'union']).toContain(schemaType);
   });
 
   it('parses unsupported responses through the status discriminator', () => {
