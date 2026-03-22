@@ -16,6 +16,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import {
   buildEventChartPanels,
+  hasEventChartableData,
   buildEventLapMarkers,
   buildEventLegendItems,
   buildEventZoomOverviewData,
@@ -191,6 +192,90 @@ describe('event-echarts-data.helper', () => {
     expect(withShowAllData).toHaveLength(1);
     expect(withShowAllData[0].series[0].points).toHaveLength(3);
     expect(withShowAllData[0].series[0].points[0].time).toBe(activity.startDate.getTime());
+  });
+
+  it('skips distance-axis chart building when missing distance streams throw from provider', () => {
+    vi.spyOn(ActivityUtilities, 'createUnitStreamsFromStreams').mockReturnValue([] as any);
+    vi.spyOn(DynamicDataLoader, 'getUnitBasedDataTypesFromDataTypes').mockImplementation((types: any) => types as any);
+    vi.spyOn(DynamicDataLoader, 'getUnitBasedDataTypesFromDataType').mockImplementation((type: any) => [type] as any);
+    vi.spyOn(DynamicDataLoader, 'getNonUnitBasedDataTypes').mockReturnValue([DataDistance.type]);
+    vi.spyOn(DynamicDataLoader, 'getDataClassFromDataType').mockReturnValue({
+      displayType: 'Power',
+      type: 'Power',
+      unit: 'W'
+    } as any);
+
+    const powerStream = {
+      type: DataPower.type,
+      getData: () => [100, 101, 102],
+    } as any;
+    const timeStream = {
+      type: XAxisTypes.Time,
+      getData: () => [0, 1, 2],
+    } as any;
+    const getStream = vi.fn((type: string) => {
+      if (type === XAxisTypes.Time) {
+        return timeStream;
+      }
+      throw new Error(`No stream found with type ${type}`);
+    });
+
+    const activity = {
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      creator: { name: 'TrainerRoad' },
+      type: 'Ride',
+      getID: () => 'indoor-1',
+      getAllStreams: () => [powerStream],
+      getStream,
+    } as any;
+
+    const panels = buildEventChartPanels({
+      selectedActivities: [activity],
+      allActivities: [activity],
+      xAxisType: XAxisTypes.Distance,
+      showAllData: false,
+      dataTypesToUse: [DataPower.type],
+      userUnitSettings: {} as any,
+      eventColorService: {
+        getActivityColor: () => '#ffaa00'
+      } as any,
+    });
+
+    expect(panels).toEqual([]);
+    expect(getStream).not.toHaveBeenCalledWith(DataDistance.type);
+    expect(getStream).not.toHaveBeenCalledWith('Distance');
+  });
+
+  it('returns false for distance-axis chartability when distance lookup throws', () => {
+    const powerStream = {
+      type: DataPower.type,
+      getData: () => [220, 225, 230],
+    } as any;
+    const timeStream = {
+      type: XAxisTypes.Time,
+      getData: () => [0, 1, 2],
+    } as any;
+    const getStream = vi.fn((type: string) => {
+      if (type === XAxisTypes.Time) {
+        return timeStream;
+      }
+      if (type === DataPower.type) {
+        return powerStream;
+      }
+      throw new Error(`No stream found with type ${type}`);
+    });
+
+    const activity = {
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      creator: { name: 'Zwift' },
+      getID: () => 'indoor-2',
+      getAllStreams: () => [powerStream, timeStream],
+      getStream,
+    } as any;
+
+    expect(hasEventChartableData([activity], XAxisTypes.Distance)).toBe(false);
+    expect(getStream).not.toHaveBeenCalledWith(DataDistance.type);
+    expect(getStream).not.toHaveBeenCalledWith('Distance');
   });
 
   it('builds stable legend items for activities', () => {

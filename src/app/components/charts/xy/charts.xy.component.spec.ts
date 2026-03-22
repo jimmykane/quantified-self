@@ -5,13 +5,17 @@ import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   DataDistance,
+  DataPaceAvg,
+  PaceUnits,
   TimeIntervals
 } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChartsXYComponent } from './charts.xy.component';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { LoggerService } from '../../../services/logger.service';
+import { formatDashboardNumericValue } from '../../../helpers/dashboard-chart-data.helper';
 import { getOrCreateEChartsTooltipHost } from '../../../helpers/echarts-tooltip-host.helper';
 import { getViewportConstrainedTooltipPosition } from '../../../helpers/echarts-tooltip-position.helper';
 
@@ -204,6 +208,32 @@ describe('ChartsXYComponent', () => {
     expect(option.graphic[0].children[2].style.text).toBe('Total per month');
   });
 
+  it('should format pace summary and axis labels using passed unit settings', async () => {
+    component.chartDataType = DataPaceAvg.type;
+    component.chartDataValueType = ChartDataValueTypes.Average;
+    component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.chartDataTimeInterval = TimeIntervals.Monthly;
+    component.userUnitSettings = normalizeUserUnitSettings({
+      paceUnits: [PaceUnits.MinutesPerMile],
+    });
+    component.data = [
+      { time: Date.UTC(2026, 2, 1), [ChartDataValueTypes.Average]: 422.3478623928474, count: 5 },
+    ];
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const option = getLastOption();
+    const expectedValue = formatDashboardNumericValue(
+      DataPaceAvg.type,
+      422.3478623928474,
+      undefined as any,
+      component.userUnitSettings,
+    );
+    expect(option.graphic[0].children[1].style.text).toBe(expectedValue);
+    expect(option.yAxis.axisLabel.formatter(422.3478623928474)).toBe(expectedValue);
+  });
+
   it('should render horizontal axes when vertical is false', async () => {
     component.vertical = false;
 
@@ -215,6 +245,8 @@ describe('ChartsXYComponent', () => {
     expect(option.yAxis.type).toBe('category');
     expect(option.yAxis.inverse).toBe(true);
     expect(option.yAxis.boundaryGap).toBe(false);
+    expect(option.grid.left).toBe(0);
+    expect(option.grid.right).toBe(12);
     expect(Array.isArray(option.series[0].data[0].value)).toBe(false);
   });
 
@@ -289,7 +321,7 @@ describe('ChartsXYComponent', () => {
     const option = getLastOption();
     expect(option.xAxis.data).toHaveLength(3);
     expect(option.series[0].data.map((entry: { value: number | null }) => entry.value)).toEqual([10, null, 30]);
-    expect(option.graphic[0].children[1].style.text).toBe('20.0m');
+    expect(option.graphic[0].children[1].style.text).toBe('20.0 m');
     const categoryFormatter = option.xAxis.axisLabel.formatter as (value: string, index: number) => string;
     expect(categoryFormatter(option.xAxis.data[0], 0)).toBe(option.xAxis.data[0]);
     expect(categoryFormatter(option.xAxis.data[1], 1)).toBe('');

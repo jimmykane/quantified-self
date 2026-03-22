@@ -1,0 +1,778 @@
+<div class="settings-container ai-insights-page">
+  <main class="settings-content">
+    <section class="section-header hero qs-glass-card-panel">
+      <div class="hero-kicker-row">
+        <p class="mat-label-large hero-kicker">AI Insights</p>
+        <mat-chip-set aria-label="AI Insights status">
+          <mat-chip disableRipple highlighted color="accent" class="hero-beta-chip">Beta</mat-chip>
+          <mat-chip disableRipple highlighted color="primary" class="hero-beta-chip">english only</mat-chip>
+        </mat-chip-set>
+      </div>
+      <h1 class="hero-title">Turn Your Activity Data Into Insight</h1>
+      <p class="hero-subtitle">
+        Ask for distance, pace, heart rate, power, and more by sport and date range. Say "all time" for your full history.
+      </p>
+      @if (activeHeroPrompt()) {
+        <button
+          type="button"
+          class="hero-prompt-rotator qs-glass-card-panel"
+          [disabled]="isPromptLocked() || !hasQuotaAvailable()"
+          (click)="onHeroPromptClick()"
+          [attr.aria-label]="'Example prompt: ' + activeHeroPrompt()"
+          [attr.title]="activeHeroPrompt()">
+          <span #heroPromptViewport class="hero-prompt-display" aria-hidden="true">
+            <span #heroPromptTrack class="hero-prompt-track" [style.transform]="heroPromptTrackTransform()">
+              <span class="hero-prompt-text">{{ typedHeroPrompt() }}</span>
+              <span class="hero-prompt-caret"></span>
+            </span>
+          </span>
+        </button>
+      }
+    </section>
+
+    <div class="page-grid">
+      <mat-card appearance="outlined" class="settings-card prompt-card qs-glass-card-panel">
+        <mat-card-header>
+          <div mat-card-avatar class="card-avatar">
+            <mat-icon>psychology</mat-icon>
+          </div>
+          <mat-card-title>Prompt</mat-card-title>
+          <mat-card-subtitle class="prompt-quota-line">
+            {{ promptHeaderQuotaText() }}
+            @if (shouldShowQuotaSupportContact()) {
+              <span>
+                • Need more?
+                <a [href]="quotaSupportMailtoHref()">
+                  Contact us
+                </a>
+              </span>
+            }
+          </mat-card-subtitle>
+        </mat-card-header>
+
+        <mat-card-content class="card-content prompt-card-content">
+          <form class="prompt-form qs-form" novalidate (submit)="onFormSubmit($event)">
+            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="prompt-field">
+              <mat-label>Ask AI for an insight</mat-label>
+              <input
+                matInput
+                type="text"
+                [formControl]="promptControl"
+                [placeholder]="promptPlaceholder" />
+              @if (promptValue().trim().length > 0) {
+                <button
+                  mat-icon-button
+                  matSuffix
+                  type="button"
+                  [disabled]="isPromptLocked()"
+                  (click)="clearPrompt()"
+                  aria-label="Clear prompt">
+                  <mat-icon>close</mat-icon>
+                </button>
+              }
+              <mat-hint>If you omit a time range, AI Insights uses the current year to date. Say all time for your full history.</mat-hint>
+            </mat-form-field>
+
+            <div class="prompt-toolbar">
+              <div class="prompt-actions">
+                <button mat-flat-button type="submit" color="primary" [disabled]="!canSubmit()">
+                  {{ isSubmitting() ? 'Thinking…' : 'Ask AI' }}
+                </button>
+              </div>
+
+              <div class="suggestion-actions">
+                <button
+                  mat-stroked-button
+                  type="button"
+                  class="suggestion-picker-button"
+                  [disabled]="isPromptLocked() || !hasQuotaAvailable()"
+                  [attr.aria-label]="promptPickerTitle()"
+                  [matTooltip]="promptPickerButtonTooltip()"
+                  (click)="openPromptPicker()">
+                  <mat-icon>auto_awesome</mat-icon>
+                  <span>{{ promptPickerButtonLabel() }}</span>
+                </button>
+              </div>
+            </div>
+
+            @if (quotaBlockedMessage(); as quotaBlockedMessage) {
+              <p class="mat-body-small prompt-quota-note">{{ quotaBlockedMessage }}</p>
+            }
+          </form>
+        </mat-card-content>
+        <mat-card-footer class="prompt-card-footer">
+          <p class="mat-body-small prompt-support-note">{{ latestSnapshotSupportNote() }}</p>
+        </mat-card-footer>
+      </mat-card>
+
+      <mat-card #resultCard appearance="outlined" class="settings-card result-card qs-glass-card-panel">
+        <mat-card-header>
+          <div mat-card-avatar class="card-avatar result-avatar">
+            <mat-icon>insights</mat-icon>
+          </div>
+          <mat-card-title class="result-card-title description-text result-card-input-text">
+            <div class="result-card-title-content">
+              <div class="result-card-title-row">
+                <span class="result-card-title-text">{{ resultCardHeaderTitle() }}</span>
+                @if (latestSnapshotRestored() || resultCardMetaText()) {
+                  <mat-chip-set class="result-status-chip-set" aria-label="Result snapshot status">
+                    @if (latestSnapshotRestored()) {
+                      <mat-chip disableRipple highlighted class="result-status-chip">Restored</mat-chip>
+                    }
+                    @if (resultCardMetaText(); as resultCardMetaText) {
+                      <mat-chip disableRipple highlighted class="result-status-chip">{{ resultCardMetaText }}</mat-chip>
+                    }
+                  </mat-chip-set>
+                }
+              </div>
+            </div>
+          </mat-card-title>
+          @if (resultHeaderContextRows().length) {
+            <mat-card-subtitle class="result-card-context-list" aria-label="Result context details">
+              @for (contextRow of resultHeaderContextRows(); track contextRow.label) {
+                <div class="result-card-context-row">
+                  <span class="result-card-context-label">{{ contextRow.label }}</span>
+                  <span class="result-card-context-value result-card-subtitle result-subtitle">{{ contextRow.value }}</span>
+                </div>
+              }
+            </mat-card-subtitle>
+          }
+        </mat-card-header>
+
+        <mat-card-content class="card-content">
+          @if (resultNotes().length) {
+            <div class="result-note-list">
+              @for (note of resultNotes(); track note.message) {
+                <div class="result-note">
+                  <mat-icon>{{ note.icon }}</mat-icon>
+                  <p class="mat-body-small">{{ note.message }}</p>
+                </div>
+              }
+            </div>
+          }
+
+          @if (isSubmitting() || isRestoringLatestSnapshot()) {
+            <div class="result-content result-content--loading">
+              @if (isSubmitting()) {
+                <div class="result-loading-status" aria-live="polite">
+                  <div class="result-loading-status-row">
+                    <mat-chip-set aria-label="Insight generation progress">
+                      <mat-chip disableRipple class="result-loading-step-chip">
+                        Step {{ generationLoadingProgressLabel() }}
+                      </mat-chip>
+                    </mat-chip-set>
+
+                    <div class="result-loading-roller" [attr.aria-label]="'Progress: ' + generationLoadingActiveStep()">
+                      <div class="result-loading-roller-window">
+                        <div class="result-loading-roller-track" [style.transform]="generationLoadingRollerTransform()">
+                          @for (step of generationLoadingSteps; track step; let stepIndex = $index) {
+                            <div
+                              class="result-loading-roller-row"
+                              [class.result-loading-roller-row--active]="stepIndex === generationLoadingStepIndex()">
+                              <span class="result-loading-roller-dot" aria-hidden="true"></span>
+                              <span class="mat-body-small result-loading-roller-text">{{ step }}</span>
+                            </div>
+                          }
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <mat-progress-bar class="result-loading-progress" mode="indeterminate"></mat-progress-bar>
+                </div>
+              }
+
+              <div class="result-loading-narrative" aria-hidden="true">
+                <span class="result-loading-skeleton result-loading-skeleton--line result-loading-skeleton--line-wide"></span>
+                <span class="result-loading-skeleton result-loading-skeleton--line result-loading-skeleton--line-medium"></span>
+                <span class="result-loading-skeleton result-loading-skeleton--line result-loading-skeleton--line-short"></span>
+              </div>
+
+              <div class="summary-grid summary-grid--loading" aria-hidden="true">
+                @for (item of loadingSummarySkeletonItems; track item) {
+                  <section class="summary-card summary-card--loading qs-glass-card-panel">
+                    <div class="summary-label-row">
+                      <span class="result-loading-skeleton result-loading-skeleton--summary-label"></span>
+                    </div>
+                    <span class="result-loading-skeleton result-loading-skeleton--summary-value"></span>
+                    <span class="result-loading-skeleton result-loading-skeleton--summary-meta"></span>
+                  </section>
+                }
+              </div>
+
+              <mat-divider></mat-divider>
+
+              <div class="result-loading-chart-shell" aria-hidden="true">
+                <div class="result-loading-chart-frame">
+                  <div class="result-loading-chart-y-axis">
+                    <span class="result-loading-skeleton result-loading-skeleton--axis-label"></span>
+                    <span class="result-loading-skeleton result-loading-skeleton--axis-label"></span>
+                    <span class="result-loading-skeleton result-loading-skeleton--axis-label"></span>
+                    <span class="result-loading-skeleton result-loading-skeleton--axis-label"></span>
+                  </div>
+
+                  <div class="result-loading-chart-plot">
+                    <div class="result-loading-chart-grid-lines">
+                      <span></span>
+                      <span></span>
+                      <span></span>
+                      <span></span>
+                    </div>
+
+                    <div class="result-loading-chart-bars">
+                      @for (barHeight of loadingChartSkeletonBars; track barHeight) {
+                        <span
+                          class="result-loading-skeleton result-loading-skeleton--bar"
+                          [style.--ai-insights-loading-bar-height]="barHeight">
+                        </span>
+                      }
+                    </div>
+
+                    <div class="result-loading-chart-x-axis">
+                      <span class="result-loading-skeleton result-loading-skeleton--tick"></span>
+                      <span class="result-loading-skeleton result-loading-skeleton--tick"></span>
+                      <span class="result-loading-skeleton result-loading-skeleton--tick"></span>
+                      <span class="result-loading-skeleton result-loading-skeleton--tick"></span>
+                      <span class="result-loading-skeleton result-loading-skeleton--tick"></span>
+                      <span class="result-loading-skeleton result-loading-skeleton--tick"></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          } @else if (errorMessage(); as errorMessage) {
+            <div class="state-panel state-panel-error qs-glass-card-panel">
+              <mat-icon>error</mat-icon>
+              <div>
+                <p class="mat-title-medium state-title">Could not generate this insight</p>
+                <p class="mat-body-medium state-copy">{{ errorMessage }}</p>
+              </div>
+            </div>
+          } @else if (unsupportedResponse(); as unsupported) {
+            <div class="state-panel state-panel-warning qs-glass-card-panel">
+              <mat-icon>info</mat-icon>
+              <div>
+                <p class="mat-title-medium state-title">Unsupported request</p>
+                <p class="mat-body-medium state-copy">{{ unsupported.narrative }}</p>
+                <p class="mat-body-small state-support-note">English-only prompts are supported right now.</p>
+              </div>
+            </div>
+          } @else if (emptyResponse(); as empty) {
+            <div class="result-content">
+              <div class="result-header">
+                @if (resultDateRangeNote(); as dateRangeNote) {
+                  <div class="result-date-range-note">
+                    <mat-icon>info</mat-icon>
+                    <p class="mat-body-small">{{ dateRangeNote }}</p>
+                  </div>
+                }
+                @if (canRefreshResult()) {
+                  <div class="result-actions">
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      class="result-refresh-button"
+                      [disabled]="isSubmitting()"
+                      (click)="refreshCurrentResult()">
+                      <mat-icon>refresh</mat-icon>
+                      <span>Refresh with latest data &amp; dates</span>
+                    </button>
+                  </div>
+                }
+              </div>
+
+              <div class="narrative-info qs-glass-card-panel">
+                <p class="description-text narrative">{{ empty.narrative }}</p>
+              </div>
+
+              <mat-divider></mat-divider>
+
+              <div class="state-panel qs-glass-card-panel">
+                <mat-icon>search_off</mat-icon>
+                <div>
+                  <p class="mat-title-medium state-title">No matching data</p>
+                  <p class="mat-body-medium state-copy">{{ empty.presentation.emptyState }}</p>
+                </div>
+              </div>
+            </div>
+          } @else if (latestEventOkResponse(); as result) {
+            <div class="result-content">
+              <div class="result-header">
+                @if (resultDateRangeNote(); as dateRangeNote) {
+                  <div class="result-date-range-note">
+                    <mat-icon>info</mat-icon>
+                    <p class="mat-body-small">{{ dateRangeNote }}</p>
+                  </div>
+                }
+                @if (canRefreshResult()) {
+                  <div class="result-actions">
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      class="result-refresh-button"
+                      [disabled]="isSubmitting()"
+                      (click)="refreshCurrentResult()">
+                      <mat-icon>refresh</mat-icon>
+                      <span>Refresh with latest data &amp; dates</span>
+                    </button>
+                  </div>
+                }
+              </div>
+
+              <div class="narrative-info qs-glass-card-panel">
+                <p class="description-text narrative">{{ result.narrative }}</p>
+              </div>
+
+              @if (rankedEventLoadError(); as rankedEventLoadError) {
+                <div class="result-date-range-note">
+                  <mat-icon>info</mat-icon>
+                  <p class="mat-body-small">{{ rankedEventLoadError }}</p>
+                </div>
+              }
+
+              @if (rankedEventLoading()) {
+                <app-ai-insights-loading-state
+                  title="Loading latest event"
+                  eyebrow="Loading references"
+                  [compact]="true"
+                  [copy]="'Fetching the most recent matching event.'"
+                  [steps]="eventLookupLoadingSteps">
+                </app-ai-insights-loading-state>
+              }
+
+              @if (primaryRankedEventItem(); as primaryEvent) {
+                <section class="event-lookup-primary qs-glass-card-panel">
+                  <div class="event-lookup-primary-copy">
+                    <p class="mat-label-medium summary-label">{{ rankedEventPrimaryLabel() }}</p>
+                    <p class="summary-meta">{{ primaryEvent.date }}</p>
+                    @if (primaryEvent.activityLabel) {
+                      <p class="summary-meta">{{ primaryEvent.activityLabel }}</p>
+                    }
+                  </div>
+                  <div class="event-lookup-actions">
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      [routerLink]="['/user', currentUserID(), 'event', primaryEvent.eventId]"
+                      [disabled]="!primaryEvent.isAvailable">
+                      <mat-icon>open_in_new</mat-icon>
+                      <span>Open event</span>
+                    </button>
+                  </div>
+                </section>
+              }
+            </div>
+          } @else if (eventLookupOkResponse(); as result) {
+            <div class="result-content">
+              <div class="result-header">
+                @if (resultDateRangeNote(); as dateRangeNote) {
+                  <div class="result-date-range-note">
+                    <mat-icon>info</mat-icon>
+                    <p class="mat-body-small">{{ dateRangeNote }}</p>
+                  </div>
+                }
+                @if (canRefreshResult()) {
+                  <div class="result-actions">
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      class="result-refresh-button"
+                      [disabled]="isSubmitting()"
+                      (click)="refreshCurrentResult()">
+                      <mat-icon>refresh</mat-icon>
+                      <span>Refresh with latest data &amp; dates</span>
+                    </button>
+                  </div>
+                }
+              </div>
+
+              <div class="narrative-info qs-glass-card-panel">
+                <p class="description-text narrative">{{ result.narrative }}</p>
+              </div>
+
+              @if (rankedEventLoadError(); as rankedEventLoadError) {
+                <div class="result-date-range-note">
+                  <mat-icon>info</mat-icon>
+                  <p class="mat-body-small">{{ rankedEventLoadError }}</p>
+                </div>
+              }
+
+              @if (rankedEventLoading()) {
+                <app-ai-insights-loading-state
+                  title="Loading event details"
+                  eyebrow="Loading references"
+                  [compact]="true"
+                  [copy]="'Fetching the winning event and the top ranked matches.'"
+                  [steps]="eventLookupLoadingSteps">
+                </app-ai-insights-loading-state>
+              }
+
+              @if (primaryRankedEventItem(); as primaryEvent) {
+                <section class="event-lookup-primary qs-glass-card-panel">
+                  <div class="event-lookup-primary-copy">
+                    <p class="mat-label-medium summary-label">{{ rankedEventPrimaryLabel() }}</p>
+                    <p class="summary-value">{{ primaryEvent.value }}</p>
+                    <p class="summary-meta">{{ primaryEvent.date }}</p>
+                    @if (primaryEvent.activityLabel) {
+                      <p class="summary-meta">{{ primaryEvent.activityLabel }}</p>
+                    }
+                  </div>
+                  <div class="event-lookup-actions">
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      [routerLink]="['/user', currentUserID(), 'event', primaryEvent.eventId]"
+                      [disabled]="!primaryEvent.isAvailable">
+                      <mat-icon>open_in_new</mat-icon>
+                      <span>Open event</span>
+                    </button>
+                  </div>
+                </section>
+              }
+
+              @if (rankedEventItems().length) {
+                <div class="section-heading">
+                  <div>
+                    <p class="mat-label-medium suggestions-title">{{ rankedEventSectionTitle() }}</p>
+                    <p class="mat-body-small section-supporting-copy">{{ rankedEventRankingCopy() }}</p>
+                  </div>
+                </div>
+                <div class="event-lookup-list">
+                  @for (eventItem of rankedEventItems(); track eventItem.eventId; let index = $index) {
+                    <section class="event-lookup-row qs-glass-card-panel">
+                      <div class="event-lookup-rank">{{ index + 1 }}</div>
+                      <div class="event-lookup-row-copy">
+                        <p class="summary-value event-lookup-row-value">{{ eventItem.value }}</p>
+                        <p class="summary-meta">{{ eventItem.date }}</p>
+                        @if (eventItem.activityLabel) {
+                          <p class="summary-meta">{{ eventItem.activityLabel }}</p>
+                        }
+                      </div>
+                      <div class="event-lookup-actions">
+                        <button
+                          mat-button
+                          type="button"
+                          [routerLink]="['/user', currentUserID(), 'event', eventItem.eventId]"
+                          [disabled]="!eventItem.isAvailable">
+                          Open
+                        </button>
+                      </div>
+                    </section>
+                  }
+                </div>
+              }
+            </div>
+          } @else if (multiMetricOkResponse(); as result) {
+            <div class="result-content">
+              <div class="result-header">
+                @if (resultDateRangeNote(); as dateRangeNote) {
+                  <div class="result-date-range-note">
+                    <mat-icon>info</mat-icon>
+                    <p class="mat-body-small">{{ dateRangeNote }}</p>
+                  </div>
+                }
+                @if (canRefreshResult()) {
+                  <div class="result-actions">
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      class="result-refresh-button"
+                      [disabled]="isSubmitting()"
+                      (click)="refreshCurrentResult()">
+                      <mat-icon>refresh</mat-icon>
+                      <span>Refresh with latest data &amp; dates</span>
+                    </button>
+                  </div>
+                }
+              </div>
+
+              <div class="narrative-info qs-glass-card-panel">
+                <p class="description-text narrative">{{ result.narrative }}</p>
+              </div>
+
+              @if (resultWarnings().length) {
+                <mat-chip-set class="warning-chips" aria-label="Insight warnings">
+                  @for (warning of resultWarnings(); track warning) {
+                    <mat-chip disableRipple>{{ warning }}</mat-chip>
+                  }
+                </mat-chip-set>
+              }
+
+              @if (multiMetricChartVisible()) {
+                <div class="section-heading">
+                  <div>
+                    <p class="mat-label-medium suggestions-title">Combined chart</p>
+                    <p class="mat-body-small section-supporting-copy">Each metric keeps its own raw scale while sharing the same time axis.</p>
+                  </div>
+                </div>
+
+                <app-ai-insights-multi-metric-chart
+                  [response]="result"
+                  [darkTheme]="isDarkTheme()"
+                  [useAnimations]="useAnimations()"
+                  [userUnitSettings]="userUnitSettings()">
+                </app-ai-insights-multi-metric-chart>
+
+                <mat-divider></mat-divider>
+              }
+
+              @if (multiMetricMergedSummaryCards().length || multiMetricEmptySections().length) {
+                <div class="section-heading">
+                  <div>
+                    <p class="mat-label-medium suggestions-title">Summary</p>
+                    <p class="mat-body-small section-supporting-copy">Merged cards compare metrics side by side for the same result scope.</p>
+                  </div>
+                </div>
+
+                @if (multiMetricMergedSummaryCards().length) {
+                  <div class="summary-grid">
+                    @for (summaryCard of multiMetricMergedSummaryCards(); track summaryCard.label) {
+                      <section class="summary-card qs-glass-card-panel">
+                        <div class="summary-label-row">
+                          <p class="mat-label-medium summary-label">{{ summaryCard.label }}</p>
+                          @if (summaryCard.helpText) {
+                            <button
+                              mat-icon-button
+                              type="button"
+                              class="summary-help-button"
+                              [attr.aria-label]="'Explain ' + summaryCard.label"
+                              [matTooltip]="summaryCard.helpText"
+                              matTooltipPosition="above">
+                              <mat-icon>info</mat-icon>
+                            </button>
+                          }
+                        </div>
+                        @if (summaryCard.value) {
+                          <p class="summary-value">{{ summaryCard.value }}</p>
+                        }
+                        @if (summaryCard.detailRows?.length) {
+                          <div class="summary-detail-list">
+                            @for (detailRow of summaryCard.detailRows; track detailRow.label + ':' + detailRow.value) {
+                              <div class="summary-detail-row">
+                                <span class="summary-detail-label">{{ detailRow.label }}</span>
+                                <span class="summary-detail-value">{{ detailRow.value }}</span>
+                              </div>
+                            }
+                          </div>
+                        }
+                        @if (summaryCard.metaFooter || summaryCard.meta) {
+                          <div class="summary-card-footer">
+                            @if (summaryCard.metaFooter) {
+                              <p class="summary-meta">{{ summaryCard.metaFooter }}</p>
+                            }
+                            @if (summaryCard.meta) {
+                              <p class="summary-meta summary-meta--date">{{ summaryCard.meta }}</p>
+                            }
+                          </div>
+                        }
+                      </section>
+                    }
+                  </div>
+                }
+
+                @if (multiMetricEmptySections().length) {
+                  <div class="multi-metric-section-list">
+                    @for (metricSection of multiMetricEmptySections(); track metricSection.metricKey) {
+                      <section class="multi-metric-section">
+                        <div class="multi-metric-section-header">
+                          <p class="result-subtitle">{{ metricSection.title }}</p>
+                        </div>
+                        <div class="state-panel qs-glass-card-panel">
+                          <mat-icon>search_off</mat-icon>
+                          <div>
+                            <p class="mat-title-medium state-title">No metric data</p>
+                            <p class="mat-body-medium state-copy">{{ metricSection.emptyState }}</p>
+                          </div>
+                        </div>
+                      </section>
+                    }
+                  </div>
+                }
+              }
+            </div>
+          } @else if (aggregateOkResponse(); as result) {
+            <div class="result-content">
+              <div class="result-header">
+                @if (resultDateRangeNote(); as dateRangeNote) {
+                  <div class="result-date-range-note">
+                    <mat-icon>info</mat-icon>
+                    <p class="mat-body-small">{{ dateRangeNote }}</p>
+                  </div>
+                }
+                @if (canRefreshResult()) {
+                  <div class="result-actions">
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      class="result-refresh-button"
+                      [disabled]="isSubmitting()"
+                      (click)="refreshCurrentResult()">
+                      <mat-icon>refresh</mat-icon>
+                      <span>Refresh with latest data &amp; dates</span>
+                    </button>
+                  </div>
+                }
+              </div>
+
+              <div class="narrative-info qs-glass-card-panel">
+                <p class="description-text narrative">{{ result.narrative }}</p>
+              </div>
+
+              @if (resultWarnings().length) {
+                <mat-chip-set class="warning-chips" aria-label="Insight warnings">
+                  @for (warning of resultWarnings(); track warning) {
+                    <mat-chip disableRipple>{{ warning }}</mat-chip>
+                  }
+                </mat-chip-set>
+              }
+
+              @if (resultSummaryCards().length) {
+                <div class="section-heading">
+                  <div>
+                    <p class="mat-label-medium suggestions-title">Summary</p>
+                    <p class="mat-body-small section-supporting-copy">Deterministic values formatted with your saved unit preferences.</p>
+                  </div>
+                </div>
+                <div class="summary-grid">
+                  @for (summaryCard of resultSummaryCards(); track summaryCard.label) {
+                    <section class="summary-card qs-glass-card-panel">
+                      <div class="summary-label-row">
+                        <p class="mat-label-medium summary-label">{{ summaryCard.label }}</p>
+                        @if (summaryCard.helpText) {
+                          <button
+                            mat-icon-button
+                            type="button"
+                            class="summary-help-button"
+                            [attr.aria-label]="'Explain ' + summaryCard.label"
+                            [matTooltip]="summaryCard.helpText"
+                            matTooltipPosition="above">
+                            <mat-icon>info</mat-icon>
+                          </button>
+                        }
+                      </div>
+                      <p class="summary-value">{{ summaryCard.value }}</p>
+                      @if (summaryCard.detailRows?.length) {
+                        <div class="summary-detail-list">
+                          @for (detailRow of summaryCard.detailRows; track detailRow.label) {
+                            <div class="summary-detail-row">
+                              <span class="summary-detail-label">{{ detailRow.label }}</span>
+                              <span class="summary-detail-value">{{ detailRow.value }}</span>
+                            </div>
+                          }
+                        </div>
+                      }
+                      @if (summaryCard.metaFooter || summaryCard.meta) {
+                        <div class="summary-card-footer">
+                          @if (summaryCard.metaFooter) {
+                            <p class="summary-meta">{{ summaryCard.metaFooter }}</p>
+                          }
+                          @if (summaryCard.meta) {
+                            <p class="summary-meta summary-meta--date">{{ summaryCard.meta }}</p>
+                          }
+                        </div>
+                      }
+                    </section>
+                  }
+                </div>
+              }
+
+              <mat-divider></mat-divider>
+
+              <app-ai-insights-chart
+                [response]="result"
+                [darkTheme]="isDarkTheme()"
+                [useAnimations]="useAnimations()"
+                [userUnitSettings]="userUnitSettings()">
+              </app-ai-insights-chart>
+
+              @if (result.eventRanking) {
+                <mat-divider></mat-divider>
+
+                @if (rankedEventLoadError(); as rankedEventLoadError) {
+                  <div class="result-date-range-note">
+                    <mat-icon>info</mat-icon>
+                    <p class="mat-body-small">{{ rankedEventLoadError }}</p>
+                  </div>
+                }
+
+                @if (rankedEventLoading()) {
+                  <app-ai-insights-loading-state
+                    title="Loading event details"
+                    eyebrow="Loading references"
+                    [compact]="true"
+                    [copy]="'Fetching the top ranked events for this result.'"
+                    [steps]="eventLookupLoadingSteps">
+                  </app-ai-insights-loading-state>
+                }
+
+                @if (primaryRankedEventItem(); as primaryEvent) {
+                  <section class="event-lookup-primary qs-glass-card-panel">
+                    <div class="event-lookup-primary-copy">
+                      <p class="mat-label-medium summary-label">{{ rankedEventPrimaryLabel() }}</p>
+                      <p class="summary-value">{{ primaryEvent.value }}</p>
+                      <p class="summary-meta">{{ primaryEvent.date }}</p>
+                      @if (primaryEvent.activityLabel) {
+                        <p class="summary-meta">{{ primaryEvent.activityLabel }}</p>
+                      }
+                    </div>
+                    <div class="event-lookup-actions">
+                      <button
+                        mat-stroked-button
+                        type="button"
+                        [routerLink]="['/user', currentUserID(), 'event', primaryEvent.eventId]"
+                        [disabled]="!primaryEvent.isAvailable">
+                        <mat-icon>open_in_new</mat-icon>
+                        <span>Open event</span>
+                      </button>
+                    </div>
+                  </section>
+                }
+
+                @if (rankedEventItems().length) {
+                  <div class="section-heading">
+                    <div>
+                      <p class="mat-label-medium suggestions-title">{{ rankedEventSectionTitle() }}</p>
+                      <p class="mat-body-small section-supporting-copy">{{ rankedEventRankingCopy() }}</p>
+                    </div>
+                  </div>
+
+                  <div class="event-lookup-list">
+                    @for (eventItem of rankedEventItems(); track eventItem.eventId; let index = $index) {
+                      <section class="event-lookup-row qs-glass-card-panel">
+                        <div class="event-lookup-rank">{{ index + 1 }}</div>
+                        <div class="event-lookup-row-copy">
+                          <p class="summary-value event-lookup-row-value">{{ eventItem.value }}</p>
+                          <p class="summary-meta">{{ eventItem.date }}</p>
+                          @if (eventItem.activityLabel) {
+                            <p class="summary-meta">{{ eventItem.activityLabel }}</p>
+                          }
+                        </div>
+                        <div class="event-lookup-actions">
+                          <button
+                            mat-button
+                            type="button"
+                            [routerLink]="['/user', currentUserID(), 'event', eventItem.eventId]"
+                            [disabled]="!eventItem.isAvailable">
+                            Open
+                          </button>
+                        </div>
+                      </section>
+                    }
+                  </div>
+                }
+              }
+            </div>
+          } @else {
+            <div class="state-panel state-panel-placeholder qs-glass-card-panel">
+              <mat-icon>query_stats</mat-icon>
+              <div>
+                <p class="mat-title-medium state-title">Ready for your first question</p>
+                <p class="mat-body-medium state-copy">Start with one metric and one date range, then refine from there.</p>
+              </div>
+            </div>
+          }
+        </mat-card-content>
+      </mat-card>
+    </div>
+  </main>
+</div>

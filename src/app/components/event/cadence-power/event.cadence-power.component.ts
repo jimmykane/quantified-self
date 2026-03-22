@@ -218,7 +218,8 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
         right: this.isMobile ? 6 : 4,
         top: singleActivity ? 0 : 18,
         bottom: this.isMobile ? 8 : 4,
-        containLabel: true,
+        outerBoundsMode: 'same',
+        outerBoundsContain: 'axisLabel',
       },
       xAxis: {
         type: 'value',

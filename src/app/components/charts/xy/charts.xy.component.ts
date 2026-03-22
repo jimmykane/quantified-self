@@ -14,8 +14,10 @@ import {
   ActivityTypes,
   ChartDataCategoryTypes,
   ChartDataValueTypes,
-  TimeIntervals
+  TimeIntervals,
+  type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { AppColors } from '../../../services/color/app.colors';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
@@ -65,6 +67,7 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() useAnimations = false;
   @Input() isLoading = false;
   @Input() vertical = true;
+  @Input() userUnitSettings?: UserUnitSettingsInterface | null;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
@@ -115,7 +118,8 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
       changes.chartDataValueType ||
       changes.chartDataCategoryType ||
       changes.chartDataTimeInterval ||
-      changes.vertical
+      changes.vertical ||
+      changes.userUnitSettings
     ) {
       void this.refreshChart();
     }
@@ -211,7 +215,7 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
     const summaryLabel = aggregate
       ? normalizeUnitDerivedTypeLabel(aggregate.getType(), aggregate.getDisplayType())
       : (this.chartDataValueType || 'Value');
-    const summaryValue = formatDashboardDataDisplay(aggregate);
+    const summaryValue = formatDashboardDataDisplay(aggregate, this.getNormalizedUnitSettings());
     const summaryMeta = getDashboardSummaryMetaLabel(
       this.chartDataCategoryType,
       this.chartDataValueType,
@@ -272,16 +276,18 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
 
     return {
       animation: this.useAnimations === true,
+      backgroundColor: 'transparent',
       textStyle: {
         color: textColor,
         fontFamily: ECHARTS_GLOBAL_FONT_FAMILY
       },
       grid: {
-        left: 4,
-        right: 8,
+        left: 0,
+        right: 12,
         top: 62,
         bottom: isCompactLayout ? 16 : 10,
-        containLabel: true
+        outerBoundsMode: 'same',
+        outerBoundsContain: 'axisLabel'
       },
       tooltip: {
         trigger: 'item',
@@ -422,7 +428,12 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
   }
 
   private formatValue(value: number | null): string {
-    return formatDashboardNumericValue(this.chartDataType, value, this.logger);
+    return formatDashboardNumericValue(
+      this.chartDataType,
+      value,
+      this.logger,
+      this.getNormalizedUnitSettings(),
+    );
   }
 
   private formatTooltip(points: DashboardCartesianPoint[], dataIndex: number): string {
@@ -435,5 +446,9 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
     const valueTypeLabel = this.chartDataValueType || 'Value';
     const activityCountLabel = point.count > 0 ? `<br/>${point.count} Activities` : '';
     return `${point.label}<br/>${valueTypeLabel}: <strong>${valueText}</strong>${activityCountLabel}`;
+  }
+
+  private getNormalizedUnitSettings(): UserUnitSettingsInterface {
+    return normalizeUserUnitSettings(this.userUnitSettings);
   }
 }

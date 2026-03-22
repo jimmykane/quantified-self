@@ -1,18 +1,17 @@
-import { ActivityTypeGroups } from '@sports-alliance/sports-lib';
+import { ActivityTypeGroups, type ActivityTypeGroup } from '@sports-alliance/sports-lib';
 
-export const AppActivityTypeGroupColors: { [key in ActivityTypeGroups]: string } = {
-  [ActivityTypeGroups.Running]: '#FDD300',
-  [ActivityTypeGroups.TrailRunning]: '#c7ef0c',
-  // [ActivityTypeGroups.TrailRunning]: '#aeea00',
-  [ActivityTypeGroups.Cycling]: '#FF7C3B',
-  [ActivityTypeGroups.MountainBiking]: '#B6C83A',
-  [ActivityTypeGroups.Swimming]: '#40C4FF',
-  [ActivityTypeGroups.Performance]: '#AFE443',
-  [ActivityTypeGroups.IndoorSports]: '#FF467E',
-  [ActivityTypeGroups.OutdoorAdventures]: '#55D781',
-  [ActivityTypeGroups.WinterSports]: '#6289FE',
-  [ActivityTypeGroups.WaterSports]: '#59C7FE',
-  [ActivityTypeGroups.Diving]: '#72E3DE',
-  [ActivityTypeGroups.TeamRacket]: '#9A7DEA',
-  [ActivityTypeGroups.Unspecified]: '#A3ADB0',
+export const AppActivityTypeGroupColors: Record<ActivityTypeGroup, string> = {
+  [ActivityTypeGroups.RunningGroup]: '#FDD300',
+  [ActivityTypeGroups.TrailRunningGroup]: '#c7ef0c',
+  [ActivityTypeGroups.CyclingGroup]: '#FF7C3B',
+  [ActivityTypeGroups.MountainBikingGroup]: '#B6C83A',
+  [ActivityTypeGroups.SwimmingGroup]: '#40C4FF',
+  [ActivityTypeGroups.PerformanceGroup]: '#AFE443',
+  [ActivityTypeGroups.IndoorSportsGroup]: '#FF467E',
+  [ActivityTypeGroups.OutdoorAdventuresGroup]: '#55D781',
+  [ActivityTypeGroups.WinterSportsGroup]: '#6289FE',
+  [ActivityTypeGroups.WaterSportsGroup]: '#59C7FE',
+  [ActivityTypeGroups.DivingGroup]: '#72E3DE',
+  [ActivityTypeGroups.TeamRacketGroup]: '#9A7DEA',
+  [ActivityTypeGroups.UnspecifiedGroup]: '#A3ADB0',
 };

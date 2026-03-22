@@ -578,7 +578,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         right: 0,
         top: 8,
         bottom: 16,
-        containLabel: true,
+        outerBoundsMode: 'same',
+        outerBoundsContain: 'axisLabel',
       },
       tooltip: {
         trigger: 'axis',

@@ -6,12 +6,12 @@
 
 /* Use app's global font-family for text, but EXCLUDE icons */
 :host *:not(mat-icon) {
-    font-family: 'Noto Sans', sans-serif !important;
+    font-family: 'Inter', sans-serif !important;
 }
 
 /* Override the broad host selector for value cells only */
 :host .value {
-    font-family: 'Barlow Condensed', 'Noto Sans', sans-serif !important;
+    font-family: 'Barlow Condensed', 'Inter', sans-serif !important;
 }
 
 .popup-container {

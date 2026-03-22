@@ -1,0 +1,73 @@
+<h2 mat-dialog-title>{{ dialogTitle() }}</h2>
+
+<mat-dialog-content class="prompt-picker-dialog__content qs-scrollbar">
+  <p class="mat-body-medium prompt-picker-dialog__copy">{{ dialogCopy() }}</p>
+  <div class="prompt-picker-dialog__meta mat-label-small">
+    <mat-icon class="prompt-picker-dialog__meta-icon" aria-hidden="true">bolt</mat-icon>
+    <span class="prompt-picker-dialog__meta-text">One tap runs the prompt immediately.</span>
+    <span class="prompt-picker-dialog__meta-count">
+      {{ totalFilteredPromptCount() }}
+      {{ totalFilteredPromptCount() === 1 ? 'prompt' : 'prompts' }}
+    </span>
+  </div>
+
+  <mat-form-field appearance="outline" subscriptSizing="dynamic" class="prompt-picker-dialog__search-field">
+    <mat-label>Search prompts</mat-label>
+    <mat-icon matPrefix class="prompt-picker-dialog__search-icon" aria-hidden="true">search</mat-icon>
+    <input
+      matInput
+      type="search"
+      class="prompt-picker-dialog__search-input"
+      placeholder="Filter prompt ideas"
+      [value]="searchTerm()"
+      (input)="onSearchInput($event)" />
+    @if (searchTerm().length) {
+      <button mat-icon-button matSuffix type="button" aria-label="Clear search" (click)="clearSearch()">
+        <mat-icon>close</mat-icon>
+      </button>
+    }
+  </mat-form-field>
+
+  @if (hasFilteredPrompts()) {
+    <div class="prompt-picker-dialog__groups">
+      @for (section of filteredPromptSections(); track section.title) {
+        <section class="prompt-picker-dialog__section qs-glass-card-panel">
+          <div class="prompt-picker-dialog__section-header">
+            <h3 class="mat-title-small prompt-picker-dialog__section-title">{{ section.title }}</h3>
+            <span class="prompt-picker-dialog__section-count">{{ section.promptCount }}</span>
+          </div>
+          @for (group of section.groups; track group.category) {
+            <section class="prompt-picker-dialog__group">
+              <div class="prompt-picker-dialog__group-header">
+                <h4 class="mat-subheader prompt-picker-dialog__group-title">{{ group.category }}</h4>
+                <span class="prompt-picker-dialog__group-count">{{ group.promptCount }}</span>
+              </div>
+
+              <div class="prompt-picker-dialog__list" role="list">
+                @for (prompt of group.prompts; track prompt.id) {
+                  <button
+                    mat-button
+                    type="button"
+                    class="prompt-picker-dialog__item"
+                    (click)="selectPrompt(prompt.prompt)">
+                    <span class="prompt-picker-dialog__item-copy">{{ prompt.prompt }}</span>
+                    <mat-icon class="prompt-picker-dialog__item-icon" aria-hidden="true">arrow_outward</mat-icon>
+                  </button>
+                }
+              </div>
+            </section>
+          }
+        </section>
+      }
+    </div>
+  } @else {
+    <div class="prompt-picker-dialog__empty-state qs-glass-card-panel" role="status" aria-live="polite">
+      <mat-icon aria-hidden="true">search_off</mat-icon>
+      <p class="mat-body-medium">No prompts match your search.</p>
+    </div>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button type="button" (click)="close()">Close</button>
+</mat-dialog-actions>

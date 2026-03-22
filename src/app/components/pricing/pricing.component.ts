@@ -16,13 +16,14 @@ import { LoggerService } from '../../services/logger.service';
 import { Observable, firstValueFrom, map, take } from 'rxjs';
 import { StripeRole } from '../../models/stripe-role.model';
 import { Router } from '@angular/router';
+import { User } from '@sports-alliance/sports-lib';
 
 import { environment } from '../../../environments/environment';
 
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { POLICY_CONTENT } from '../../shared/policies.content';
-import { getUsageLimitForRole } from '@shared/limits';
+import { getAiInsightsRequestLimitForRole, getUsageLimitForRole } from '@shared/limits';
 
 interface SubscriptionSummary {
     status: StripeSubscription['status'];
@@ -40,6 +41,7 @@ interface SubscriptionSummary {
 })
 export class PricingComponent implements OnInit, OnDestroy {
     @Input() isOnboarding = false;
+    @Input() onboardingUser: User | null = null;
     @Output() planSelected = new EventEmitter<void>();
     @Output() loadingStateChange = new EventEmitter<boolean>();
 
@@ -187,6 +189,21 @@ export class PricingComponent implements OnInit, OnDestroy {
         } catch (error) {
             this.logger.error(`Unsupported pricing role '${resolvedRole}' in pricing UI`, error);
             return 'Activity limits unavailable';
+        }
+    }
+
+    getAiInsightsLimitLabel(role: string | null | undefined): string {
+        const resolvedRole = role ?? 'free';
+
+        try {
+            const limit = getAiInsightsRequestLimitForRole(resolvedRole);
+            if (limit <= 0) {
+                return 'AI Insights not included';
+            }
+            return `AI Insights up to ${limit} requests per billing period`;
+        } catch (error) {
+            this.logger.error(`Unsupported pricing role '${resolvedRole}' in AI insights pricing UI`, error);
+            return 'AI Insights limits unavailable';
         }
     }
 
@@ -387,6 +404,10 @@ export class PricingComponent implements OnInit, OnDestroy {
             return null;
         }
 
+        if (this.isOnboarding && this.onboardingUser?.uid) {
+            return user;
+        }
+
         const termsAccepted = this.requiredPolicies.every((policy) => {
             const userProperty = this.mapFormControlNameToUserProperty(policy.formControlName || '');
             return (user as any)[userProperty] === true;
@@ -407,6 +428,10 @@ export class PricingComponent implements OnInit, OnDestroy {
     }
 
     private async getCurrentAppUser() {
+        if (this.isOnboarding && this.onboardingUser?.uid) {
+            return this.onboardingUser as any;
+        }
+
         const user = await firstValueFrom(this.authService.user$.pipe(take(1)));
         return user;
     }

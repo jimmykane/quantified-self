@@ -5,13 +5,17 @@ import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   DataDistance,
+  DataPaceAvg,
+  PaceUnits,
   TimeIntervals
 } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChartsColumnsComponent } from './charts.columns.component';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { LoggerService } from '../../../services/logger.service';
+import { formatDashboardNumericValue } from '../../../helpers/dashboard-chart-data.helper';
 import { getOrCreateEChartsTooltipHost } from '../../../helpers/echarts-tooltip-host.helper';
 import { getViewportConstrainedTooltipPosition } from '../../../helpers/echarts-tooltip-position.helper';
 
@@ -172,6 +176,9 @@ describe('ChartsColumnsComponent', () => {
     expect(option.yAxis.type).toBe('category');
     expect(option.yAxis.inverse).toBe(true);
     expect(option.yAxis.axisLine.show).toBe(false);
+    expect(option.yAxis.axisLabel.hideOverlap).toBe(false);
+    expect(option.grid.left).toBe(0);
+    expect(option.grid.right).toBe(12);
   });
 
   it('should snap value axis max to a logical grid boundary', async () => {
@@ -244,6 +251,32 @@ describe('ChartsColumnsComponent', () => {
     expect(option.graphic[0].children[2].style.text).toBe('Total per month');
   });
 
+  it('should format pace summary and axis labels using passed unit settings', async () => {
+    component.chartDataType = DataPaceAvg.type;
+    component.chartDataValueType = ChartDataValueTypes.Average;
+    component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.chartDataTimeInterval = TimeIntervals.Monthly;
+    component.userUnitSettings = normalizeUserUnitSettings({
+      paceUnits: [PaceUnits.MinutesPerMile],
+    });
+    component.data = [
+      { time: Date.UTC(2026, 2, 1), [ChartDataValueTypes.Average]: 422.3478623928474, count: 5 },
+    ];
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const option = getLastOption();
+    const expectedValue = formatDashboardNumericValue(
+      DataPaceAvg.type,
+      422.3478623928474,
+      undefined as any,
+      component.userUnitSettings,
+    );
+    expect(option.graphic[0].children[1].style.text).toBe(expectedValue);
+    expect(option.yAxis.axisLabel.formatter(422.3478623928474)).toBe(expectedValue);
+  });
+
   it('should fill missing daily date buckets with zero-valued bars', async () => {
     component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
     component.chartDataTimeInterval = TimeIntervals.Daily;
@@ -274,8 +307,8 @@ describe('ChartsColumnsComponent', () => {
 
     const option = getLastOption();
     expect(option.xAxis.data).toHaveLength(3);
-    expect(option.series[0].data).toEqual([10, null, 30]);
-    expect(option.graphic[0].children[1].style.text).toBe('20.0m');
+    expect(option.series[0].data.map((entry: { value: number | null }) => entry.value)).toEqual([10, null, 30]);
+    expect(option.graphic[0].children[1].style.text).toBe('20.0 m');
   });
 
   it('should pad a single daily point with adjacent zero buckets and skip trend line', async () => {
@@ -345,6 +378,52 @@ describe('ChartsColumnsComponent', () => {
     expect(totalLabelSeries).toBeDefined();
     expect(totalLabelSeries.type).toBe('custom');
     expect(option.tooltip.trigger).toBe('axis');
+  });
+
+  it('should keep non-total date activity breakdown in tooltip without stacked rendering', async () => {
+    const activityTypeAliases = Object.keys(ActivityTypes).filter((key) => (
+      Number.isNaN(Number(key))
+      && typeof (ActivityTypes as any)[key] === 'string'
+      && `${(ActivityTypes as any)[key]}`.toLowerCase() !== 'unknown sport'
+    ));
+    const primaryAlias = activityTypeAliases[0];
+    const secondaryAlias = activityTypeAliases[1] || activityTypeAliases[0];
+    component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.chartDataValueType = ChartDataValueTypes.Maximum;
+    component.chartDataTimeInterval = TimeIntervals.Monthly;
+    component.data = [
+      {
+        time: Date.UTC(2024, 0, 1),
+        [ChartDataValueTypes.Maximum]: 180,
+        count: 19,
+        [primaryAlias]: 185,
+        [`${primaryAlias}-Count`]: 8,
+        [secondaryAlias]: 170,
+        [`${secondaryAlias}-Count`]: 5,
+      },
+      {
+        time: Date.UTC(2024, 1, 1),
+        [ChartDataValueTypes.Maximum]: 176,
+        count: 14,
+        [primaryAlias]: 176,
+        [secondaryAlias]: 169,
+      },
+    ];
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const option = getLastOption();
+    const stackedSeries = option.series.filter((seriesEntry: { stack?: string }) => (
+      seriesEntry.stack === 'date-activity-stack'
+    ));
+    expect(stackedSeries).toHaveLength(0);
+    expect(option.tooltip.trigger).toBe('item');
+    const tooltipFormatter = option.tooltip.formatter as (params: { dataIndex: number }) => string;
+    const tooltipText = tooltipFormatter({ dataIndex: 0 });
+    expect(tooltipText).toContain(primaryAlias);
+    expect(tooltipText).toContain(secondaryAlias);
+    expect(tooltipText).toContain('Activities');
   });
 
   it('should render segmented custom pyramids for date category', async () => {
@@ -502,6 +581,99 @@ describe('ChartsColumnsComponent', () => {
     expect(tooltipText).toContain('100');
     expect(tooltipText).toContain('%');
     expect(tooltipText).toContain(primaryAlias);
+  });
+
+  it('should format non-total segmented tooltips using raw per-activity aggregates without percentages', () => {
+    component.chartDataType = DataDistance.type;
+    component.chartDataValueType = ChartDataValueTypes.Maximum;
+
+    const tooltipText = (component as any).formatDateActivityTooltip(
+      [
+        {
+          index: 0,
+          label: 'Feb 2026',
+          time: Date.UTC(2026, 1, 1),
+          total: 180,
+          count: 19,
+          segments: [
+            {
+              activityKey: 'Cycling',
+              activityType: ActivityTypes.Cycling,
+              label: 'Cycling',
+              colorKey: ActivityTypes.Cycling,
+              rawValue: 170,
+              value: 85,
+              percent: 47.5,
+              count: 8,
+            },
+            {
+              activityKey: 'Running',
+              activityType: ActivityTypes.Running,
+              label: 'Running',
+              colorKey: ActivityTypes.Running,
+              rawValue: 160,
+              value: 80,
+              percent: 44.4,
+              count: 7,
+            },
+          ],
+          rawItem: null,
+        },
+      ],
+      [{ dataIndex: 0 }],
+      new Map<string, string>([
+        ['Cycling', '#16B4EA'],
+        ['Running', '#F48FB1'],
+      ]),
+    );
+
+    expect(tooltipText).toContain('Cycling');
+    expect(tooltipText).toContain('170');
+    expect(tooltipText).not.toContain('47.5%');
+    expect(tooltipText).toContain('Maximum');
+  });
+
+  it('should enable segmented stacked date rendering for non-total metrics only when explicitly preferred', async () => {
+    const activityTypeAliases = Object.keys(ActivityTypes).filter((key) => (
+      Number.isNaN(Number(key))
+      && typeof (ActivityTypes as any)[key] === 'string'
+      && `${(ActivityTypes as any)[key]}`.toLowerCase() !== 'unknown sport'
+    ));
+    const primaryAlias = activityTypeAliases[0];
+    const secondaryAlias = activityTypeAliases[1] || activityTypeAliases[0];
+
+    component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.chartDataValueType = ChartDataValueTypes.Maximum;
+    component.chartDataTimeInterval = TimeIntervals.Monthly;
+    component.preferDateActivitySegmentation = true;
+    component.data = [
+      {
+        time: Date.UTC(2026, 0, 1),
+        [ChartDataValueTypes.Maximum]: 193,
+        count: 19,
+        [primaryAlias]: 180,
+        [`${primaryAlias}-Count`]: 8,
+        [secondaryAlias]: 160,
+        [`${secondaryAlias}-Count`]: 7,
+      },
+      {
+        time: Date.UTC(2026, 1, 1),
+        [ChartDataValueTypes.Maximum]: 180,
+        count: 12,
+        [primaryAlias]: 176,
+        [secondaryAlias]: 170,
+      },
+    ];
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const option = getLastOption();
+    const stackedSeries = option.series.filter((seriesEntry: { stack?: string }) => (
+      seriesEntry.stack === 'date-activity-stack'
+    ));
+    expect(stackedSeries.length).toBeGreaterThan(0);
+    expect(option.tooltip.trigger).toBe('axis');
   });
 
   it('should not include a trend line for non-date categories', async () => {

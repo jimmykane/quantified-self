@@ -1,16 +1,23 @@
 import { TestBed } from '@angular/core/testing';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { AppFunctionsService } from './app.functions.service';
-import { Functions, getFunctions, httpsCallable } from '@angular/fire/functions';
+import { Functions, getFunctions, httpsCallable, httpsCallableFromURL } from '@angular/fire/functions';
 import { FirebaseApp } from '@angular/fire/app';
 import { FUNCTIONS_MANIFEST } from '@shared/functions-manifest';
 
 const mocks = vi.hoisted(() => {
     const callableSpy = vi.fn().mockResolvedValue({ data: 'success' });
     const httpsCallableMock = vi.fn(() => callableSpy);
+    const httpsCallableFromURLMock = vi.fn(() => callableSpy);
+    let localhost = false;
     return {
         callableSpy,
-        httpsCallableMock
+        httpsCallableMock,
+        httpsCallableFromURLMock,
+        getLocalhost: () => localhost,
+        setLocalhost: (value: boolean) => {
+            localhost = value;
+        },
     };
 });
 
@@ -18,12 +25,26 @@ const mocks = vi.hoisted(() => {
 vi.mock('@angular/fire/functions', () => ({
     Functions: class { },
     getFunctions: vi.fn(() => ({ region: 'mock-region-instance' })),
-    httpsCallable: mocks.httpsCallableMock
+    httpsCallable: mocks.httpsCallableMock,
+    httpsCallableFromURL: mocks.httpsCallableFromURLMock,
+}));
+
+vi.mock('../../environments/environment', () => ({
+    environment: {
+        get localhost() {
+            return mocks.getLocalhost();
+        },
+        firebase: {
+            projectId: 'quantified-self-io',
+        },
+    },
 }));
 
 // Mock the manifest
 vi.mock('@shared/functions-manifest', () => ({
     FUNCTIONS_MANIFEST: {
+        'aiInsights': { name: 'aiInsights', region: 'europe-west2' },
+        'getAiInsightsQuotaStatus': { name: 'getAiInsightsQuotaStatus', region: 'europe-west2' },
         'defaultRegionFunc': { name: 'func1', region: 'europe-west2' },
         'otherRegionFunc': { name: 'func2', region: 'europe-west3' }
     }
@@ -34,13 +55,7 @@ describe('AppFunctionsService', () => {
     let mockDefaultFunctions: any;
     let mockApp: any;
 
-    beforeEach(() => {
-        mocks.httpsCallableMock.mockClear();
-        mocks.callableSpy.mockClear();
-
-        mockDefaultFunctions = { region: 'europe-west2-instance' };
-        mockApp = { name: '[DEFAULT]' };
-
+    function configureTestingModule(): AppFunctionsService {
         TestBed.configureTestingModule({
             providers: [
                 AppFunctionsService,
@@ -48,7 +63,19 @@ describe('AppFunctionsService', () => {
                 { provide: FirebaseApp, useValue: mockApp }
             ]
         });
-        service = TestBed.inject(AppFunctionsService);
+        return TestBed.inject(AppFunctionsService);
+    }
+
+    beforeEach(() => {
+        mocks.httpsCallableMock.mockClear();
+        mocks.httpsCallableFromURLMock.mockClear();
+        mocks.callableSpy.mockClear();
+        mocks.setLocalhost(false);
+
+        mockDefaultFunctions = { region: 'europe-west2-instance' };
+        mockApp = { name: '[DEFAULT]' };
+
+        service = configureTestingModule();
     });
 
     afterEach(() => {
@@ -59,7 +86,7 @@ describe('AppFunctionsService', () => {
         // Service is created in beforeEach
         expect(getFunctions).toHaveBeenCalledWith(mockApp, 'europe-west2');
         expect(getFunctions).toHaveBeenCalledWith(mockApp, 'europe-west3');
-        expect(mocks.httpsCallableMock).toHaveBeenCalledTimes(2);
+        expect(mocks.httpsCallableMock).toHaveBeenCalledTimes(4);
     });
 
     it('should call the pre-initialized callable', async () => {
@@ -72,5 +99,28 @@ describe('AppFunctionsService', () => {
 
     it('should throw error for invalid function key', async () => {
         await expect(service.call('invalidFunc' as any)).rejects.toThrow('Function invalidFunc not initialized');
+    });
+
+    it('should route ai insights callables to the local emulator on localhost', () => {
+        TestBed.resetTestingModule();
+        mocks.setLocalhost(true);
+        mocks.httpsCallableMock.mockClear();
+        mocks.httpsCallableFromURLMock.mockClear();
+        mocks.callableSpy.mockClear();
+
+        const localService = configureTestingModule();
+
+        expect(getFunctions).toHaveBeenCalledWith(mockApp, 'europe-west2');
+        expect(httpsCallableFromURL).toHaveBeenCalledWith(
+            expect.anything(),
+            'http://127.0.0.1:5001/quantified-self-io/europe-west2/aiInsights',
+        );
+        expect(httpsCallableFromURL).toHaveBeenCalledWith(
+            expect.anything(),
+            'http://127.0.0.1:5001/quantified-self-io/europe-west2/getAiInsightsQuotaStatus',
+        );
+        expect(httpsCallable).toHaveBeenCalledWith(expect.anything(), 'func1');
+        expect(httpsCallable).toHaveBeenCalledWith(expect.anything(), 'func2');
+        expect(localService).toBeTruthy();
     });
 });

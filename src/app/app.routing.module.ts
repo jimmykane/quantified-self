@@ -3,6 +3,7 @@ import { RouterModule, Routes } from '@angular/router';
 import { NetworkAwarePreloadingStrategy } from './resolvers/network-aware-preloading.strategy';
 import { authGuard } from './authentication/app.auth.guard';
 import { proGuard } from './authentication/pro.guard';
+import { aiInsightsGuard } from './authentication/ai-insights.guard';
 import { onboardingGuard } from './authentication/onboarding.guard';
 import { adminGuard } from './authentication/admin.guard';
 import { loggedInGuard } from './authentication/logged-in.guard';
@@ -66,13 +67,13 @@ export const routes: Routes = [
       title: 'Help & Support',
       preload: true,
       animation: 'Help',
-      description: 'Get help with account setup, uploads, device integrations, billing, privacy, and common troubleshooting in Quantified Self.',
-      keywords: 'help, support, faq, garmin, suunto, coros, uploads, billing, privacy, quantified self',
+      description: 'Get help with AI Insights, account setup, uploads, device integrations, billing, privacy, and common troubleshooting in Quantified Self.',
+      keywords: 'help, support, faq, ai insights, garmin, suunto, coros, uploads, billing, privacy, quantified self',
       jsonLd: {
         "@context": "https://schema.org",
         "@type": "WebPage",
         "name": "Quantified Self Help & Support",
-        "description": "Get help with account setup, uploads, device integrations, billing, privacy, and common troubleshooting in Quantified Self.",
+        "description": "Get help with AI Insights, account setup, uploads, device integrations, billing, privacy, and common troubleshooting in Quantified Self.",
         "url": "https://www.quantified-self.io/help",
         "inLanguage": "en",
         "isPartOf": {
@@ -81,6 +82,7 @@ export const routes: Routes = [
           "url": "https://www.quantified-self.io"
         },
         "about": [
+          "AI Insights",
           "Account setup",
           "Manual uploads",
           "Membership and billing",
@@ -91,6 +93,18 @@ export const routes: Routes = [
           "Troubleshooting"
         ]
       }
+    }
+  },
+  {
+    path: 'ai-insights',
+    loadComponent: () => import('./components/ai-insights/ai-insights-page.component').then(m => m.AiInsightsPageComponent),
+    canMatch: [authGuard, onboardingGuard, aiInsightsGuard],
+    data: {
+      title: 'AI Insights',
+      preload: true,
+      animation: 'AIInsights',
+      description: 'Ask focused questions about your training data and get one AI summary with one chart built from your persisted event statistics.',
+      keywords: 'ai insights, fitness analytics, training insights, cadence trends, activity charts, quantified self',
     }
   },
   {

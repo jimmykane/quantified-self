@@ -6,5 +6,5 @@
 
 .table-container mat-cell,
 .table-container .mat-mdc-cell {
-  font-family: 'Barlow Condensed', 'Noto Sans', sans-serif;
+  font-family: 'Barlow Condensed', 'Inter', sans-serif;
 }

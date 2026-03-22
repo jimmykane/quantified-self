@@ -30,7 +30,7 @@ describe('HelpPageComponent', () => {
 
   it('should render the hero title and all section titles', () => {
     const title = fixture.debugElement.query(By.css('.hero-title'))?.nativeElement as HTMLElement | undefined;
-    expect(title?.textContent).toContain('Help for setup, uploads, billing, and integrations.');
+    expect(title?.textContent).toContain('Help for AI Insights, setup, uploads, billing, and integrations.');
 
     const renderedTabLabels = fixture.debugElement
       .queryAll(By.css('.tab-label'))

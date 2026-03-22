@@ -1,46 +1,18 @@
-import { DataDuration, DataInterface, DynamicDataLoader, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { DataDuration, DataInterface, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import {
+  type UnitAwareStatDisplay,
+  resolveUnitAwareDisplayStat as resolveSharedUnitAwareDisplayStat,
+} from '@shared/unit-aware-display';
 import { SummaryPrimaryInfoMetric } from '../components/shared/summary-primary-info/summary-primary-info.component';
-
-export interface UnitAwareStatDisplay {
-  type: string;
-  value: string;
-  unit: string;
-}
-
-const toDisplayString = (value: unknown): string => {
-  if (value === null || value === undefined) {
-    return '';
-  }
-  return String(value);
-};
 
 export const resolvePrimaryUnitAwareDisplayStat = (
   stat: DataInterface | void | null | undefined,
   unitSettings?: UserUnitSettingsInterface | null,
   preferredType?: string | null
 ): UnitAwareStatDisplay | null => {
-  if (!stat) {
-    return null;
-  }
-
-  const unitBasedStats = unitSettings
-    ? DynamicDataLoader.getUnitBasedDataFromDataInstance(stat, unitSettings)
-    : [];
-
-  const preferredUnitStat = preferredType
-    ? unitBasedStats.find((unitStat) => unitStat.getType?.() === preferredType)
-    : undefined;
-  const selectedStat = preferredUnitStat || unitBasedStats[0] || stat;
-  const selectedType = selectedStat?.getType?.();
-  if (!selectedType) {
-    return null;
-  }
-
-  return {
-    type: selectedType,
-    value: toDisplayString(selectedStat.getDisplayValue?.()),
-    unit: toDisplayString(selectedStat.getDisplayUnit?.()),
-  };
+  return resolveSharedUnitAwareDisplayStat(stat, unitSettings, {
+    preferredType,
+  });
 };
 
 /**
@@ -73,4 +45,3 @@ export const buildHeroMetric = (
     ? { value: display.value, label: display.unit }
     : { value: '--', label: '' };
 };
-

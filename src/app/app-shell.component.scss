@@ -7,13 +7,22 @@
 }
 
 mat-sidenav-container {
-  height: calc(100vh - var(--qs-layout-top-offset, 0px));
+  height: 100vh;
+  background: var(--mat-sys-surface);
 }
 
 @supports (height: 100dvh) {
   mat-sidenav-container {
-    height: calc(100dvh - var(--qs-layout-top-offset, 0px));
+    height: 100dvh;
   }
+}
+
+mat-sidenav-content {
+  background: var(--mat-sys-surface);
+}
+
+.app-shell-scroll-content {
+  transition: padding-top 180ms ease;
 }
 
 mat-sidenav {

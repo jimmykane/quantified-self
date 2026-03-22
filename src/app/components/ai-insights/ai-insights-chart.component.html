@@ -1,0 +1,44 @@
+<div class="chart-shell">
+  @if (renderPieChart()) {
+    <app-pie-chart
+      [data]="chartRows()"
+      [darkTheme]="darkTheme()"
+      [useAnimations]="useAnimations()"
+      [userUnitSettings]="userUnitSettings()"
+      [chartDataType]="chartDataType()"
+      [chartDataValueType]="chartDataValueType()"
+      [chartDataCategoryType]="chartDataCategoryType()"
+      [chartDataTimeInterval]="chartDataTimeInterval()">
+    </app-pie-chart>
+  } @else if (renderLineChart()) {
+    <app-xy-chart
+      [data]="chartRows()"
+      [darkTheme]="darkTheme()"
+      [useAnimations]="useAnimations()"
+      [vertical]="chartVertical()"
+      [userUnitSettings]="userUnitSettings()"
+      [chartDataType]="chartDataType()"
+      [chartDataValueType]="chartDataValueType()"
+      [chartDataCategoryType]="chartDataCategoryType()"
+      [chartDataTimeInterval]="chartDataTimeInterval()">
+    </app-xy-chart>
+  } @else if (renderColumnChart()) {
+    <app-columns-chart
+      [data]="chartRows()"
+      [darkTheme]="darkTheme()"
+      [useAnimations]="useAnimations()"
+      [vertical]="chartVertical()"
+      [type]="columnsType()"
+      [preferDateActivitySegmentation]="preferDateActivitySegmentation()"
+      [userUnitSettings]="userUnitSettings()"
+      [chartDataType]="chartDataType()"
+      [chartDataValueType]="chartDataValueType()"
+      [chartDataCategoryType]="chartDataCategoryType()"
+      [chartDataTimeInterval]="chartDataTimeInterval()">
+    </app-columns-chart>
+  } @else {
+    <div class="chart-fallback mat-body-medium">
+      This insight returned a chart type that is not supported in the current UI.
+    </div>
+  }
+</div>

@@ -12,10 +12,13 @@ import {
 import type { EChartsType } from 'echarts/core';
 import {
   ActivityTypes,
+  ActivityTypesHelper,
   ChartDataCategoryTypes,
   ChartDataValueTypes,
-  TimeIntervals
+  TimeIntervals,
+  type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { AppColors } from '../../../services/color/app.colors';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
@@ -69,6 +72,8 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
   @Input() darkTheme = false;
   @Input() useAnimations = false;
   @Input() isLoading = false;
+  @Input() userUnitSettings?: UserUnitSettingsInterface | null;
+  @Input() preferDateActivitySegmentation = false;
 
   @Input() vertical = true;
   @Input() type: 'columns' | 'pyramids' = 'columns';
@@ -119,7 +124,9 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
       changes.chartDataCategoryType ||
       changes.chartDataTimeInterval ||
       changes.vertical ||
-      changes.type
+      changes.type ||
+      changes.userUnitSettings ||
+      changes.preferDateActivitySegmentation
     ) {
       void this.refreshChart();
     }
@@ -174,6 +181,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     const axisFontSize = chartStyle.axisFontSize;
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
     const isDateCategory = this.chartDataCategoryType === ChartDataCategoryTypes.DateType;
+    const supportsAdditiveActivitySegmentation = this.chartDataValueType === ChartDataValueTypes.Total;
     const dateActivitySegmentation = isDateCategory
       ? buildDashboardDateActivitySegmentation({
         rawData: this.data,
@@ -181,7 +189,34 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
         chartDataValueType: this.chartDataValueType
       })
       : null;
-    const useDateActivitySegmentation = isDateCategory && !!dateActivitySegmentation;
+    const useDateActivitySegmentation = isDateCategory
+      && (supportsAdditiveActivitySegmentation || this.preferDateActivitySegmentation)
+      && !!dateActivitySegmentation;
+    if (isDateCategory) {
+      this.logger.log?.('[ChartsColumnsComponent] Date segmentation debug', {
+        chartDataType: this.chartDataType,
+        chartDataValueType: this.chartDataValueType,
+        chartDataTimeInterval: this.chartDataTimeInterval,
+        supportsAdditiveActivitySegmentation,
+        preferDateActivitySegmentation: this.preferDateActivitySegmentation,
+        rawRowCount: Array.isArray(this.data) ? this.data.length : 0,
+        pointCount: points.length,
+        useDateActivitySegmentation,
+        segmentationSeriesCount: dateActivitySegmentation?.series.length ?? 0,
+        segmentationSeries: (dateActivitySegmentation?.series ?? []).slice(0, 8).map(entry => ({
+          key: entry.key,
+          label: entry.label,
+          totalRawValue: entry.totalRawValue,
+        })),
+        segmentationBucketSample: (dateActivitySegmentation?.buckets ?? []).slice(0, 3).map(bucket => ({
+          label: bucket.label,
+          time: bucket.time,
+          total: bucket.total,
+          segmentCount: bucket.segments.length,
+          segmentLabels: bucket.segments.slice(0, 8).map(segment => segment.label),
+        })),
+      });
+    }
     const showValueLabels = points.length > 0 && points.length <= 200 && !useDateActivitySegmentation;
 
     if (!points.length) {
@@ -238,7 +273,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     const summaryLabel = aggregate
       ? normalizeUnitDerivedTypeLabel(aggregate.getType(), aggregate.getDisplayType())
       : (this.chartDataValueType || 'Value');
-    const summaryValue = formatDashboardDataDisplay(aggregate);
+    const summaryValue = formatDashboardDataDisplay(aggregate, this.getNormalizedUnitSettings());
     const summaryMeta = getDashboardSummaryMetaLabel(
       this.chartDataCategoryType,
       this.chartDataValueType,
@@ -258,7 +293,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
       axisLabel: {
         color: textColor,
         fontSize: axisFontSize,
-        hideOverlap: true,
+        hideOverlap: this.vertical,
         interval: 0,
         rotate: this.vertical && this.chartDataCategoryType === ChartDataCategoryTypes.DateType
           ? (isCompactLayout ? 54 : 42)
@@ -288,16 +323,18 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
 
     return {
       animation: this.useAnimations === true,
+      backgroundColor: 'transparent',
       textStyle: {
         color: textColor,
         fontFamily: ECHARTS_GLOBAL_FONT_FAMILY
       },
       grid: {
-        left: this.vertical ? 4 : 6,
-        right: 8,
+        left: 0,
+        right: 12,
         top: 62,
         bottom: this.vertical ? (isCompactLayout ? 16 : 10) : 8,
-        containLabel: true
+        outerBoundsMode: 'same',
+        outerBoundsContain: 'axisLabel'
       },
       tooltip: {
         trigger: useDateActivitySegmentation ? 'axis' : 'item',
@@ -650,7 +687,12 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
   }
 
   private formatValue(value: number | null): string {
-    return formatDashboardNumericValue(this.chartDataType, value, this.logger);
+    return formatDashboardNumericValue(
+      this.chartDataType,
+      value,
+      this.logger,
+      this.getNormalizedUnitSettings(),
+    );
   }
 
   private formatTooltip(points: DashboardCartesianPoint[], dataIndex: number): string {
@@ -662,7 +704,16 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     const valueText = this.formatValue(point.value);
     const valueTypeLabel = this.chartDataValueType || 'Value';
     const activityCountLabel = point.count > 0 ? `<br/>${point.count} Activities` : '';
-    return `${point.label}<br/>${valueTypeLabel}: <strong>${valueText}</strong>${activityCountLabel}`;
+    const additiveTypeBreakdown = this.buildNonAdditiveDateActivityBreakdown(point.rawItem);
+    const breakdownLines = additiveTypeBreakdown.map((entry, index) => {
+      const color = this.resolveBreakdownColor(entry.activityLabel, index);
+      const marker = `<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${color};margin-right:6px;"></span>`;
+      const entryValueText = this.formatValue(entry.value);
+      const entryCountText = entry.count > 0 ? `, ${entry.count} Activities` : '';
+      return `${marker}${entry.activityLabel}: <strong>${entryValueText}</strong>${entryCountText}`;
+    });
+    const breakdownText = breakdownLines.length ? `<br/>${breakdownLines.join('<br/>')}` : '';
+    return `${point.label}<br/>${valueTypeLabel}: <strong>${valueText}</strong>${activityCountLabel}${breakdownText}`;
   }
 
   private formatDateActivityTooltip(
@@ -685,6 +736,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
       return '';
     }
 
+    const isTotalAggregation = this.chartDataValueType === ChartDataValueTypes.Total;
     const totalText = this.formatValue(bucket.total);
     const valueTypeLabel = this.chartDataValueType || 'Value';
     const activityCountLabel = bucket.count > 0 ? `<br/>${bucket.count} Activities` : '';
@@ -693,12 +745,68 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
       .map((segment, index) => {
         const color = colorMap.get(segment.activityKey) || this.dateTypePalette[index % this.dateTypePalette.length];
         const marker = `<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${color};margin-right:6px;"></span>`;
-        const valueText = this.formatValue(segment.value);
+        const segmentDisplayValue = isTotalAggregation ? segment.value : segment.rawValue;
+        const valueText = this.formatValue(segmentDisplayValue);
+        const percentText = isTotalAggregation ? ` (${segment.percent.toFixed(1)}%)` : '';
         const countText = segment.count > 0 ? `, ${segment.count} Activities` : '';
-        return `${marker}${segment.label}: <strong>${valueText}</strong> (${segment.percent.toFixed(1)}%)${countText}`;
+        return `${marker}${segment.label}: <strong>${valueText}</strong>${percentText}${countText}`;
       });
 
     const breakdownText = lines.length ? `<br/>${lines.join('<br/>')}` : '';
     return `${bucket.label}<br/>${valueTypeLabel}: <strong>${totalText}</strong>${activityCountLabel}${breakdownText}`;
+  }
+
+  private buildNonAdditiveDateActivityBreakdown(
+    rawItem: unknown,
+  ): Array<{ activityLabel: string; value: number; count: number }> {
+    if (
+      this.chartDataCategoryType !== ChartDataCategoryTypes.DateType
+      || this.chartDataValueType === ChartDataValueTypes.Total
+      || !rawItem
+      || typeof rawItem !== 'object'
+      || Array.isArray(rawItem)
+    ) {
+      return [];
+    }
+
+    const row = rawItem as Record<string, unknown>;
+    const reservedKeys = new Set([
+      'time',
+      'type',
+      'count',
+      `${this.chartDataValueType || ''}`,
+    ]);
+    const seriesEntries = Object.keys(row)
+      .filter((key) => !reservedKeys.has(key) && !key.endsWith('-Count'))
+      .map((key) => {
+        const value = Number(row[key]);
+        if (!Number.isFinite(value)) {
+          return null;
+        }
+
+        const countValue = Number(row[`${key}-Count`]);
+        return {
+          activityLabel: key,
+          value,
+          count: Number.isFinite(countValue) ? Math.max(0, countValue) : 0,
+        };
+      })
+      .filter((entry): entry is { activityLabel: string; value: number; count: number } => entry !== null)
+      .sort((left, right) => right.value - left.value)
+      .slice(0, 6);
+
+    return seriesEntries;
+  }
+
+  private resolveBreakdownColor(activityLabel: string, index: number): string {
+    const resolvedActivityType = ActivityTypesHelper.resolveActivityType(activityLabel);
+    if (resolvedActivityType) {
+      return this.eventColorService.getColorForActivityTypeByActivityTypeGroup(resolvedActivityType);
+    }
+    return this.dateTypePalette[index % this.dateTypePalette.length];
+  }
+
+  private getNormalizedUnitSettings(): UserUnitSettingsInterface {
+    return normalizeUserUnitSettings(this.userUnitSettings);
   }
 }

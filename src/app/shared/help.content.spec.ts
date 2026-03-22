@@ -5,6 +5,7 @@ describe('help.content', () => {
   it('should expose the expected ordered section ids', () => {
     expect(HELP_SECTIONS.map(section => section.id)).toEqual<HelpSectionId[]>([
       'getting-started',
+      'ai-insights',
       'plans-and-billing',
       'uploads-and-imports',
       'service-connections',
@@ -13,8 +14,8 @@ describe('help.content', () => {
     ]);
   });
 
-  it('should define six unique sections with complete content', () => {
-    expect(HELP_SECTIONS).toHaveLength(6);
+  it('should define seven unique sections with complete content', () => {
+    expect(HELP_SECTIONS).toHaveLength(7);
 
     const uniqueIds = new Set(HELP_SECTIONS.map(section => section.id));
     expect(uniqueIds.size).toBe(HELP_SECTIONS.length);

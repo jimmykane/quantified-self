@@ -57,6 +57,10 @@ export class SideNavComponent {
     return this.userService.hasPaidAccessSignal();
   }
 
+  get aiInsightsRoute(): string {
+    return this.userService.hasPaidAccessSignal() ? '/ai-insights' : '/subscriptions';
+  }
+
   get user(): User | null {
     return this.userService.user();
   }
@@ -75,6 +79,12 @@ export class SideNavComponent {
     this.analyticsService.logEvent('github_star');
     this.hapticsService.selection();
     window.open('https://github.com/jimmykane/quantified-self/');
+  }
+
+  async facebookGroup() {
+    this.analyticsService.logEvent('facebook_group_click');
+    this.hapticsService.selection();
+    window.open('https://www.facebook.com/groups/quantifiedself.io');
   }
 
   async logout() {

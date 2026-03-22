@@ -36,6 +36,8 @@ import { AppUserUtilities } from './utils/app.user.utilities';
 import { ShellNavigationEffectsService } from './services/shell-navigation-effects.service';
 
 export const APP_SHELL_HEADER_HEIGHT_PX = 64;
+const APP_SHELL_BANNER_HEIGHT_WOBBLE_TOLERANCE_PX = 2;
+const APP_SHELL_HEADER_VISIBILITY_TOGGLE_DELTA_PX = 24;
 
 @Component({
   selector: 'app-shell',
@@ -142,6 +144,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private shellScrollSubscription: Subscription | null = null;
   private globalScrollListener: ((event: Event) => void) | null = null;
   private lastShellScrollTop = 0;
+  private headerVisibilityAnchorScrollTop = 0;
   private readonly hideHeaderScrollThresholdPx = 48;
 
   get bannerHeight(): number {
@@ -217,6 +220,18 @@ export class AppShellComponent implements OnInit, OnDestroy {
       return 0;
     }
 
+    return this.bannerHeight + APP_SHELL_HEADER_HEIGHT_PX;
+  }
+
+  get effectiveTopOffsetPx(): number {
+    return this.layoutTopOffsetPx;
+  }
+
+  get visibleTopOffsetPx(): number {
+    if (!this.showNavigation()) {
+      return 0;
+    }
+
     return this.bannerHeight + (this.headerHidden ? 0 : APP_SHELL_HEADER_HEIGHT_PX);
   }
 
@@ -265,7 +280,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
       .subscribe(() => {
         this.updateOnboardingState();
         if (this.shouldForceVisibleHeader()) {
-          this.lastShellScrollTop = 0;
+          this.resetHeaderVisibilityTracking(0);
           this.setHeaderHidden(false);
           return;
         }
@@ -336,6 +351,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     }
 
     if (this.shouldForceVisibleHeader()) {
+      this.resetHeaderVisibilityTracking(this.lastShellScrollTop);
       this.setHeaderHidden(false);
     }
   }
@@ -385,7 +401,8 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   onBannerHeightChanged(height: number) {
     const nextHasBanner = height > 0;
-    if (this.bannerHeight === height && this.hasBanner === nextHasBanner) {
+    const heightDelta = Math.abs(this.bannerHeight - height);
+    if (this.hasBanner === nextHasBanner && heightDelta <= APP_SHELL_BANNER_HEIGHT_WOBBLE_TOLERANCE_PX) {
       return;
     }
     this.bannerHeight = height;
@@ -401,6 +418,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     const shellScroller = container.scrollable.getElementRef().nativeElement as HTMLElement;
     this.shellNavigationEffectsService.setShellScroller(shellScroller);
     this.lastShellScrollTop = Math.max(0, shellScroller.scrollTop);
+    this.headerVisibilityAnchorScrollTop = this.lastShellScrollTop;
 
     this.shellScrollSubscription = container.scrollable.elementScrolled().subscribe(() => {
       this.updateHeaderVisibilityFromScroll(shellScroller.scrollTop);
@@ -439,13 +457,13 @@ export class AppShellComponent implements OnInit, OnDestroy {
     const nextScrollTop = Math.max(0, scrollTop);
 
     if (!this.showNavigation()) {
-      this.lastShellScrollTop = nextScrollTop;
+      this.resetHeaderVisibilityTracking(nextScrollTop);
       this.setHeaderHidden(false);
       return;
     }
 
     if (nextScrollTop <= this.hideHeaderScrollThresholdPx) {
-      this.lastShellScrollTop = nextScrollTop;
+      this.resetHeaderVisibilityTracking(nextScrollTop);
       this.setHeaderHidden(false);
       return;
     }
@@ -457,7 +475,32 @@ export class AppShellComponent implements OnInit, OnDestroy {
       return;
     }
 
-    this.setHeaderHidden(delta > 0);
+    if (!this.headerHidden) {
+      if (delta < 0) {
+        this.headerVisibilityAnchorScrollTop = nextScrollTop;
+        return;
+      }
+
+      if ((nextScrollTop - this.headerVisibilityAnchorScrollTop) < APP_SHELL_HEADER_VISIBILITY_TOGGLE_DELTA_PX) {
+        return;
+      }
+
+      this.headerVisibilityAnchorScrollTop = nextScrollTop;
+      this.setHeaderHidden(true);
+      return;
+    }
+
+    if (delta > 0) {
+      this.headerVisibilityAnchorScrollTop = nextScrollTop;
+      return;
+    }
+
+    if ((this.headerVisibilityAnchorScrollTop - nextScrollTop) < APP_SHELL_HEADER_VISIBILITY_TOGGLE_DELTA_PX) {
+      return;
+    }
+
+    this.headerVisibilityAnchorScrollTop = nextScrollTop;
+    this.setHeaderHidden(false);
   }
 
   private syncHeaderVisibilityFromCurrentScrollPosition(): void {
@@ -482,6 +525,11 @@ export class AppShellComponent implements OnInit, OnDestroy {
     }
 
     this.headerHidden = hidden;
+  }
+
+  private resetHeaderVisibilityTracking(scrollTop: number): void {
+    this.lastShellScrollTop = scrollTop;
+    this.headerVisibilityAnchorScrollTop = scrollTop;
   }
 
   private triggerThemeReveal(theme: AppThemes) {

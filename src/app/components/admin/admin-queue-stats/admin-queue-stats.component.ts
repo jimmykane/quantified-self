@@ -154,7 +154,14 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
                     return `${item?.axisValueLabel || item?.name}: ${item?.value ?? 0}`;
                 }
             },
-            grid: { left: 18, right: 18, bottom: 32, top: 16, containLabel: true },
+            grid: {
+                left: 18,
+                right: 18,
+                bottom: 32,
+                top: 16,
+                outerBoundsMode: 'same',
+                outerBoundsContain: 'axisLabel'
+            },
             xAxis: {
                 type: 'category',
                 data: ['0-3 Retries', '4-7 Retries', '8-9 Retries'],

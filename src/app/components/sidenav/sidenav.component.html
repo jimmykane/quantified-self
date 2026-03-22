@@ -50,6 +50,19 @@
   </mat-list-item>
   }
 
+  @if (user) {
+  <mat-list-item [routerLinkActive]="hasPaidAccess ? 'active' : ''" [routerLinkActiveOptions]="{exact: true}" [routerLink]="aiInsightsRoute"
+    (click)="closeSideNav()">
+    <mat-icon>insights</mat-icon>
+    <span>AI Insights <span class="beta-badge">Beta</span></span>
+    <span class="fill-space"></span>
+    @if (!hasPaidAccess) {
+    <mat-icon class="lock-icon">lock</mat-icon>
+    <span class="pro-badge">PAID</span>
+    }
+  </mat-list-item>
+  }
+
   @if (!user) {
   <mat-list-item routerLinkActive="active" routerLink="/pricing" (click)="closeSideNav()">
     <mat-icon>card_membership</mat-icon>
@@ -78,7 +91,7 @@
   @if (user) {
   <div class="sidenav-section-header">Account</div>
 
-  <mat-list-item routerLinkActive="active" [routerLink]="hasPaidAccess ? '/services' : '/subscriptions'"
+  <mat-list-item [routerLinkActive]="hasPaidAccess ? 'active' : ''" [routerLinkActiveOptions]="{exact: true}" [routerLink]="hasPaidAccess ? '/services' : '/subscriptions'"
     (click)="closeSideNav()">
     <mat-icon>leak_add</mat-icon>
     <span>Services</span>
@@ -94,7 +107,7 @@
     <span>Settings</span>
   </mat-list-item>
 
-  <mat-list-item routerLinkActive="active" routerLink="/subscriptions" (click)="closeSideNav()">
+  <mat-list-item routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" routerLink="/subscriptions" (click)="closeSideNav()">
     <mat-icon>card_membership</mat-icon>
     <span>Subscription</span>
   </mat-list-item>
@@ -169,6 +182,9 @@
       </button>
       <button mat-icon-button matTooltip="Policies" routerLink="/policies" (click)="closeSideNav()">
         <mat-icon>policy</mat-icon>
+      </button>
+      <button mat-icon-button matTooltip="Facebook Group" (click)="facebookGroup()">
+        <mat-icon>groups</mat-icon>
       </button>
     </div>
   </div>

@@ -1,266 +1,329 @@
+import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { SummariesComponent } from './summaries.component';
-import { TestBed, ComponentFixture } from '@angular/core/testing';
-import { Router } from '@angular/router';
-import { AppAuthService } from '../../authentication/app.auth.service';
-import { AppEventService } from '../../services/app.event.service';
-import { AppThemeService } from '../../services/app.theme.service';
-import { MatSnackBar } from '@angular/material/snack-bar';
-import { MatDialog } from '@angular/material/dialog';
-import { ChangeDetectorRef, NO_ERRORS_SCHEMA } from '@angular/core';
-import { LoggerService } from '../../services/logger.service';
 import { of } from 'rxjs';
 import {
-    ActivityTypes,
-    ChartDataValueTypes,
-    ChartDataCategoryTypes,
-    TimeIntervals,
-    DataAscent,
-    DataDescent,
-    ChartTypes,
-    TileTypes
+  ActivityTypes,
+  ChartDataCategoryTypes,
+  ChartDataValueTypes,
+  ChartTypes,
+  DataAscent,
+  TileTypes,
+  TimeIntervals,
 } from '@sports-alliance/sports-lib';
+import { AppThemeService } from '../../services/app.theme.service';
+import { LoggerService } from '../../services/logger.service';
+import * as dashboardTileViewModelHelper from '../../helpers/dashboard-tile-view-model.helper';
+import { SummariesComponent } from './summaries.component';
 
 describe('SummariesComponent', () => {
-    let component: SummariesComponent;
-    let fixture: ComponentFixture<SummariesComponent>;
-    let mockRouter: any;
-    let mockAuthService: any;
-    let mockEventService: any;
-    let mockThemeService: any;
-    let mockSnackBar: any;
-    let mockDialog: any;
-    let mockLogger: any;
+  let component: SummariesComponent;
+  let fixture: ComponentFixture<SummariesComponent>;
+  let mockThemeService: { getAppTheme: ReturnType<typeof vi.fn> };
+  let mockLogger: { error: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn>; log: ReturnType<typeof vi.fn> };
+  let buildDashboardTileViewModelsSpy: ReturnType<typeof vi.spyOn>;
 
-    beforeEach(async () => {
-        mockRouter = { navigate: vi.fn() };
-        mockAuthService = {};
-        mockEventService = {};
-        mockThemeService = {
-            getChartTheme: vi.fn().mockReturnValue(of('light')),
-            getAppTheme: vi.fn().mockReturnValue(of('light'))
-        };
-        mockSnackBar = { open: vi.fn() };
-        mockDialog = { open: vi.fn() };
-        mockLogger = { error: vi.fn(), warn: vi.fn(), log: vi.fn() };
+  beforeEach(async () => {
+    vi.restoreAllMocks();
+    mockThemeService = {
+      getAppTheme: vi.fn().mockReturnValue(of('light')),
+    };
+    mockLogger = { error: vi.fn(), warn: vi.fn(), log: vi.fn() };
+    buildDashboardTileViewModelsSpy = vi.spyOn(dashboardTileViewModelHelper, 'buildDashboardTileViewModels');
 
-        await TestBed.configureTestingModule({
-            declarations: [SummariesComponent],
-            schemas: [NO_ERRORS_SCHEMA],
-            providers: [
-                { provide: Router, useValue: mockRouter },
-                { provide: AppAuthService, useValue: mockAuthService },
-                { provide: AppEventService, useValue: mockEventService },
-                { provide: AppThemeService, useValue: mockThemeService },
-                { provide: MatSnackBar, useValue: mockSnackBar },
-                { provide: MatDialog, useValue: mockDialog },
-                { provide: LoggerService, useValue: mockLogger },
-                ChangeDetectorRef
-            ]
-        }).compileComponents();
+    await TestBed.configureTestingModule({
+      declarations: [SummariesComponent],
+      schemas: [NO_ERRORS_SCHEMA],
+      providers: [
+        { provide: AppThemeService, useValue: mockThemeService },
+        { provide: LoggerService, useValue: mockLogger },
+      ],
+    }).compileComponents();
 
-        fixture = TestBed.createComponent(SummariesComponent);
-        component = fixture.componentInstance;
+    fixture = TestBed.createComponent(SummariesComponent);
+    component = fixture.componentInstance;
+  });
+
+  it('should create', () => {
+    expect(component).toBeTruthy();
+  });
+
+  it('should delegate tile building with dashboard tiles, events, preferences, and logger on input changes', async () => {
+    const builtTiles = [{
+      type: TileTypes.Chart,
+      order: 0,
+      chartType: ChartTypes.ColumnsVertical,
+      dataCategoryType: ChartDataCategoryTypes.ActivityType,
+      dataValueType: ChartDataValueTypes.Total,
+      data: [],
+      timeInterval: TimeIntervals.Daily,
+      size: { columns: 1, rows: 1 },
+    }] as any[];
+    buildDashboardTileViewModelsSpy.mockReturnValue(builtTiles as any);
+
+    component.user = {
+      settings: {
+        dashboardSettings: {
+          tiles: [{
+            type: TileTypes.Chart,
+            order: 0,
+            chartType: ChartTypes.ColumnsVertical,
+            dataType: DataAscent.type,
+            dataValueType: ChartDataValueTypes.Total,
+            dataCategoryType: ChartDataCategoryTypes.ActivityType,
+            size: { columns: 1, rows: 1 },
+          }],
+        },
+        summariesSettings: {
+          removeAscentForEventTypes: [ActivityTypes.Running],
+          removeDescentForEventTypes: [ActivityTypes.Cycling],
+        },
+      },
+    } as any;
+    component.events = [{ id: 'event-1' }] as any;
+
+    await component.ngOnChanges({
+      user: {
+        currentValue: component.user,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+      events: {
+        currentValue: component.events,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
     });
 
-    it('should create', () => {
-        expect(component).toBeTruthy();
+    expect(buildDashboardTileViewModelsSpy).toHaveBeenCalledWith({
+      tiles: component.user.settings.dashboardSettings.tiles,
+      events: component.events,
+      preferences: {
+        removeAscentForEventTypes: [ActivityTypes.Running],
+        removeDescentForEventTypes: [ActivityTypes.Cycling],
+      },
+      logger: mockLogger,
+    });
+    expect(component.tiles).toBe(builtTiles);
+  });
+
+  it('should rebuild tiles when dashboard settings mutate in place', async () => {
+    const initialTiles = [{
+      type: TileTypes.Chart,
+      order: 0,
+      chartType: ChartTypes.IntensityZones,
+      data: [],
+      timeInterval: TimeIntervals.Auto,
+      size: { columns: 1, rows: 1 },
+    }] as any[];
+    const updatedTiles = [{
+      type: TileTypes.Chart,
+      order: 0,
+      chartType: ChartTypes.ColumnsVertical,
+      data: [],
+      timeInterval: TimeIntervals.Daily,
+      size: { columns: 1, rows: 1 },
+    }] as any[];
+
+    buildDashboardTileViewModelsSpy
+      .mockReturnValueOnce(initialTiles as any)
+      .mockReturnValueOnce(updatedTiles as any);
+
+    component.user = {
+      settings: {
+        dashboardSettings: {
+          tiles: [{
+            type: TileTypes.Chart,
+            order: 0,
+            chartType: ChartTypes.IntensityZones,
+            dataType: DataAscent.type,
+            dataValueType: ChartDataValueTypes.Total,
+            dataCategoryType: ChartDataCategoryTypes.ActivityType,
+            size: { columns: 1, rows: 1 },
+          }],
+        },
+      },
+    } as any;
+    component.events = [];
+
+    await component.ngOnChanges({
+      user: {
+        currentValue: component.user,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+      events: {
+        currentValue: component.events,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
     });
 
-    it('should rebuild tiles when dashboard settings mutate in place', async () => {
-        component.user = {
-            settings: {
-                dashboardSettings: {
-                    tiles: [
-                        {
-                            type: TileTypes.Chart,
-                            order: 0,
-                            chartType: ChartTypes.IntensityZones,
-                            dataType: DataAscent.type,
-                            dataValueType: ChartDataValueTypes.Total,
-                            dataCategoryType: ChartDataCategoryTypes.ActivityType,
-                            size: { columns: 1, rows: 1 }
-                        }
-                    ]
-                }
-            }
-        } as any;
-        component.events = [];
+    component.user.settings.dashboardSettings.tiles[0].chartType = ChartTypes.ColumnsVertical;
+    component.ngDoCheck();
 
-        await component.ngOnChanges({
-            user: {
-                currentValue: component.user,
-                previousValue: null,
-                firstChange: true,
-                isFirstChange: () => true
-            } as any,
-            events: {
-                currentValue: component.events,
-                previousValue: null,
-                firstChange: true,
-                isFirstChange: () => true
-            } as any
-        });
+    expect(buildDashboardTileViewModelsSpy).toHaveBeenCalledTimes(2);
+    expect((component.tiles[0] as any).chartType).toBe(ChartTypes.ColumnsVertical);
+  });
 
-        expect((component.tiles[0] as any).chartType).toBe(ChartTypes.IntensityZones);
+  it('should not rebuild tiles during ngDoCheck when the tile snapshot is unchanged', async () => {
+    const builtTiles = [{
+      type: TileTypes.Chart,
+      order: 0,
+      chartType: ChartTypes.ColumnsVertical,
+      data: [],
+      timeInterval: TimeIntervals.Daily,
+      size: { columns: 1, rows: 1 },
+    }] as any[];
+    buildDashboardTileViewModelsSpy.mockReturnValue(builtTiles as any);
 
-        component.user.settings.dashboardSettings.tiles[0].chartType = ChartTypes.ColumnsVertical;
-        component.ngDoCheck();
+    component.user = {
+      settings: {
+        dashboardSettings: {
+          tiles: [{
+            type: TileTypes.Chart,
+            order: 0,
+            chartType: ChartTypes.ColumnsVertical,
+            dataType: DataAscent.type,
+            dataValueType: ChartDataValueTypes.Total,
+            dataCategoryType: ChartDataCategoryTypes.ActivityType,
+            size: { columns: 1, rows: 1 },
+          }],
+        },
+      },
+    } as any;
+    component.events = [];
 
-        expect((component.tiles[0] as any).chartType).toBe(ChartTypes.ColumnsVertical);
+    await component.ngOnChanges({
+      user: {
+        currentValue: component.user,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+      events: {
+        currentValue: component.events,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
     });
 
-    describe('getChartData', () => {
-        it('should filter out ascent data for AlpineSki events', () => {
-            const mockEvents = [
-                {
-                    getActivityTypesAsArray: () => [ActivityTypes.AlpineSki],
-                    getStat: vi.fn().mockReturnValue({ getValue: () => 100 }),
-                    startDate: new Date(),
-                    isMerge: false
-                },
-                {
-                    getActivityTypesAsArray: () => [ActivityTypes.Running],
-                    getStat: vi.fn().mockReturnValue({ getValue: () => 50 }),
-                    startDate: new Date(),
-                    isMerge: false
-                }
-            ] as any;
+    component.ngDoCheck();
 
-            // Mock getEventCategoryKey to return a simple key
-            vi.spyOn(component as any, 'getEventCategoryKey').mockReturnValue('key');
-            vi.spyOn(component as any, 'getValueSum').mockReturnValue(150);
+    expect(buildDashboardTileViewModelsSpy).toHaveBeenCalledTimes(1);
+  });
 
-            const result = (component as any).getChartData(
-                mockEvents,
-                DataAscent.type,
-                ChartDataValueTypes.Total,
-                ChartDataCategoryTypes.ActivityType,
-                TimeIntervals.Daily
-            );
+  it('should remove tiles that are no longer returned by the tile builder', async () => {
+    const initialTiles = [{
+      type: TileTypes.Chart,
+      order: 0,
+      chartType: ChartTypes.ColumnsVertical,
+      data: [],
+      timeInterval: TimeIntervals.Daily,
+      size: { columns: 1, rows: 1 },
+    }, {
+      type: TileTypes.Chart,
+      order: 1,
+      chartType: ChartTypes.ColumnsHorizontal,
+      data: [],
+      timeInterval: TimeIntervals.Daily,
+      size: { columns: 1, rows: 1 },
+    }] as any[];
+    const updatedTiles = [initialTiles[0]];
 
-            // AlpineSki event should be filtered out, only Running event remains
-            // But we need to check if the total is correct or if the events were filtered.
-            // Since AlpineSki is filtered out before processing, only Running should be in result.
-            expect(result.length).toBe(1);
-        });
+    buildDashboardTileViewModelsSpy
+      .mockReturnValueOnce(initialTiles as any)
+      .mockReturnValueOnce(updatedTiles as any);
 
-        it('should filter out descent data for Swimming events', () => {
-            const mockEvents = [
-                {
-                    getActivityTypesAsArray: () => [ActivityTypes.Swimming],
-                    getStat: vi.fn().mockReturnValue({ getValue: () => 100 }),
-                    startDate: new Date(),
-                    isMerge: false
-                },
-                {
-                    getActivityTypesAsArray: () => [ActivityTypes.Running],
-                    getStat: vi.fn().mockReturnValue({ getValue: () => 50 }),
-                    startDate: new Date(),
-                    isMerge: false
-                }
-            ] as any;
+    component.user = {
+      settings: {
+        dashboardSettings: {
+          tiles: [
+            {
+              type: TileTypes.Chart,
+              order: 0,
+              chartType: ChartTypes.ColumnsVertical,
+              dataType: DataAscent.type,
+              dataValueType: ChartDataValueTypes.Total,
+              dataCategoryType: ChartDataCategoryTypes.ActivityType,
+              size: { columns: 1, rows: 1 },
+            },
+            {
+              type: TileTypes.Chart,
+              order: 1,
+              chartType: ChartTypes.ColumnsHorizontal,
+              dataType: DataAscent.type,
+              dataValueType: ChartDataValueTypes.Total,
+              dataCategoryType: ChartDataCategoryTypes.ActivityType,
+              size: { columns: 1, rows: 1 },
+            },
+          ],
+        },
+      },
+    } as any;
+    component.events = [];
 
-            vi.spyOn(component as any, 'getEventCategoryKey').mockReturnValue('key');
-            vi.spyOn(component as any, 'getValueSum').mockReturnValue(150);
-
-            const result = (component as any).getChartData(
-                mockEvents,
-                DataDescent.type,
-                ChartDataValueTypes.Total,
-                ChartDataCategoryTypes.ActivityType,
-                TimeIntervals.Daily
-            );
-
-            expect(result.length).toBe(1);
-        });
-
-        it('should not filter out ascent data for Running events', () => {
-            const mockEvents = [
-                {
-                    getActivityTypesAsArray: () => [ActivityTypes.Running],
-                    getStat: vi.fn().mockReturnValue({ getValue: () => 100 }),
-                    startDate: new Date(),
-                    isMerge: false
-                }
-            ] as any;
-
-            vi.spyOn(component as any, 'getEventCategoryKey').mockReturnValue('key');
-            vi.spyOn(component as any, 'getValueSum').mockReturnValue(100);
-
-            const result = (component as any).getChartData(
-                mockEvents,
-                DataAscent.type,
-                ChartDataValueTypes.Total,
-                ChartDataCategoryTypes.ActivityType,
-                TimeIntervals.Daily
-            );
-
-            expect(result.length).toBe(1);
-        });
-
-        it('should filter out ascent data if manually excluded by user setting', () => {
-            component.user = {
-                settings: {
-                    summariesSettings: {
-                        removeAscentForEventTypes: [ActivityTypes.Running]
-                    }
-                }
-            } as any;
-
-            const mockEvents = [
-                {
-                    getActivityTypesAsArray: () => [ActivityTypes.Running],
-                    getStat: vi.fn().mockReturnValue({ getValue: () => 100 }),
-                    startDate: new Date(),
-                    isMerge: false
-                }
-            ] as any;
-
-            vi.spyOn(component as any, 'getEventCategoryKey').mockReturnValue('key');
-            vi.spyOn(component as any, 'getValueSum').mockReturnValue(100);
-
-            const result = (component as any).getChartData(
-                mockEvents,
-                DataAscent.type,
-                ChartDataValueTypes.Total,
-                ChartDataCategoryTypes.ActivityType,
-                TimeIntervals.Daily
-            );
-
-            expect(result.length).toBe(0);
-        });
-
-        it('should filter out descent data if manually excluded by user setting', () => {
-            component.user = {
-                settings: {
-                    summariesSettings: {
-                        removeDescentForEventTypes: [ActivityTypes.Running]
-                    }
-                }
-            } as any;
-
-            const mockEvents = [
-                {
-                    getActivityTypesAsArray: () => [ActivityTypes.Running],
-                    getStat: vi.fn().mockReturnValue({ getValue: () => 100 }),
-                    startDate: new Date(),
-                    isMerge: false
-                }
-            ] as any;
-
-            vi.spyOn(component as any, 'getEventCategoryKey').mockReturnValue('key');
-            vi.spyOn(component as any, 'getValueSum').mockReturnValue(100);
-
-            const result = (component as any).getChartData(
-                mockEvents,
-                DataDescent.type,
-                ChartDataValueTypes.Total,
-                ChartDataCategoryTypes.ActivityType,
-                TimeIntervals.Daily
-            );
-
-            expect(result.length).toBe(0);
-        });
+    await component.ngOnChanges({
+      user: {
+        currentValue: component.user,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+      events: {
+        currentValue: component.events,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
     });
+
+    component.user.settings.dashboardSettings.tiles.pop();
+    component.ngDoCheck();
+
+    expect(component.tiles).toHaveLength(1);
+    expect((component.tiles[0] as any).order).toBe(0);
+  });
+
+  it('should build stable trackBy keys for chart and map tiles', () => {
+    const chartKey = component.trackByTile(0, {
+      type: TileTypes.Chart,
+      order: 2,
+      name: 'Distance',
+      chartType: ChartTypes.ColumnsVertical,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataValueType: ChartDataValueTypes.Total,
+      timeInterval: TimeIntervals.Monthly,
+      data: [],
+      size: { columns: 1, rows: 1 },
+    } as any);
+    const mapKey = component.trackByTile(1, {
+      type: TileTypes.Map,
+      order: 3,
+      name: 'Map',
+      clusterMarkers: true,
+      mapTheme: 'normal',
+      mapStyle: 'streets',
+      showHeatMap: false,
+      events: [],
+      size: { columns: 2, rows: 1 },
+    } as any);
+
+    expect(chartKey).toBe(`${ChartTypes.ColumnsVertical}${ChartDataCategoryTypes.DateType}${ChartDataValueTypes.Total}Distance2${TimeIntervals.Monthly}`);
+    expect(mapKey).toBe('truenormalstreetsMap3false');
+  });
+
+  it('should unsubscribe from the theme subscription on destroy', () => {
+    const unsubscribe = vi.fn();
+    (component as any).appThemeSubscription = { unsubscribe };
+
+    component.ngOnDestroy();
+
+    expect(unsubscribe).toHaveBeenCalledOnce();
+  });
 });

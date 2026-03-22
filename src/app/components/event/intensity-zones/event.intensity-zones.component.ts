@@ -242,7 +242,8 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
         right: isHorizontal ? rightInset : verticalEdgeBleed,
         top: 0,
         bottom: 0,
-        containLabel: true
+        outerBoundsMode: 'same',
+        outerBoundsContain: 'axisLabel'
       },
       legend: {
         show: false,
