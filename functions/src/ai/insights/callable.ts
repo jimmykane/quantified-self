@@ -214,6 +214,13 @@ export async function runAiInsights(
     return consumedQuotaStatus;
   };
 
+  const persistLatestSnapshot = async (
+    response: AiInsightsResponse,
+  ): Promise<AiInsightsResponse> => {
+    await aiInsightsRuntime.persistLatestAiInsightsSnapshot(userID, prompt, response);
+    return response;
+  };
+
   try {
   let effectivePrompt = prompt;
   const promptLanguage = aiInsightsRuntime.detectPromptLanguageDeterministic(prompt);
@@ -246,9 +253,9 @@ export async function runAiInsights(
         reasonCode: sanitizationResult.reasonCode,
         source: 'sanitize',
       });
-      return buildUnsupportedResponse(sanitizationResult.reasonCode, quota, {
+      return persistLatestSnapshot(buildUnsupportedResponse(sanitizationResult.reasonCode, quota, {
         suggestedPrompts: sanitizationResult.suggestedPrompts,
-      });
+      }));
     }
 
     effectivePrompt = sanitizationResult.prompt;
@@ -332,9 +339,9 @@ export async function runAiInsights(
           resultCategory: 'unsupported',
           reasonCode: normalizeResult.reasonCode,
         });
-        return buildUnsupportedResponse(normalizeResult.reasonCode, quota, {
+        return persistLatestSnapshot(buildUnsupportedResponse(normalizeResult.reasonCode, quota, {
           suggestedPrompts: normalizeResult.suggestedPrompts,
-        });
+        }));
       }
     } else {
       const quota = await resolveQuotaForResponse();
@@ -352,9 +359,9 @@ export async function runAiInsights(
         resultCategory: 'unsupported',
         reasonCode: normalizeResult.reasonCode,
       });
-      return buildUnsupportedResponse(normalizeResult.reasonCode, quota, {
+      return persistLatestSnapshot(buildUnsupportedResponse(normalizeResult.reasonCode, quota, {
         suggestedPrompts: normalizeResult.suggestedPrompts,
-      });
+      }));
     }
   }
 
@@ -384,9 +391,9 @@ export async function runAiInsights(
       resultCategory: 'unsupported',
       reasonCode: 'unsupported_metric',
     });
-    return buildUnsupportedResponse('unsupported_metric', quota, {
+    return persistLatestSnapshot(buildUnsupportedResponse('unsupported_metric', quota, {
       sourceText: effectivePrompt,
-    });
+    }));
   }
   const multiMetricDefinitions = effectiveQuery.resultKind === 'multi_metric_aggregate'
     ? effectiveQuery.metricSelections
@@ -413,9 +420,9 @@ export async function runAiInsights(
       resultCategory: 'unsupported',
       reasonCode: 'unsupported_multi_metric_combination',
     });
-    return buildUnsupportedResponse('unsupported_multi_metric_combination', quota, {
+    return persistLatestSnapshot(buildUnsupportedResponse('unsupported_multi_metric_combination', quota, {
       sourceText: effectivePrompt,
-    });
+    }));
   }
   logger.info('[aiInsights] Query normalization debug', {
     userID,
@@ -596,7 +603,7 @@ export async function runAiInsights(
       resultCategory: 'empty',
       resultKind: callableResultKindContext.resultKind,
     });
-    return {
+    return persistLatestSnapshot({
       status: 'empty',
       narrative: narrativeResult.narrative,
       quota,
@@ -606,7 +613,7 @@ export async function runAiInsights(
         : buildEmptyAggregation(effectiveQuery),
       summary: aggregateSummary ?? buildNonAggregateEmptySummary(),
       presentation: emptyPresentation,
-    };
+    });
   }
   logger.info('[aiInsights] Terminal result', {
     userID,
@@ -614,7 +621,9 @@ export async function runAiInsights(
     resultCategory: 'ok',
     resultKind: callableResultKindContext.resultKind,
   });
-  return resultKindHandler.buildOkResponse(callableResultKindContext, narrativeResult, quota);
+  return persistLatestSnapshot(
+    resultKindHandler.buildOkResponse(callableResultKindContext, narrativeResult, quota),
+  );
   } catch (error) {
     if (quotaReservation) {
       const reservationToRelease = quotaReservation as NonNullable<typeof quotaReservation>;

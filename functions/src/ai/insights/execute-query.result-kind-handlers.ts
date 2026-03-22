@@ -13,6 +13,7 @@ import type {
   MultiMetricAggregateExecutionMetricResult,
   RankedInsightEvent,
 } from './execute-query';
+import { buildExecutionPromptLogContext } from './execute-query.logging';
 
 interface ExecuteQueryResultKindHelpers {
   buildLatestEvent: (events: EventInterface[]) => { eventId: string; startDate: string } | null;
@@ -72,7 +73,7 @@ const EXECUTE_QUERY_RESULT_KIND_REGISTRY = {
       const rankedEvents = helpers.buildRankedEvents(eventsWithRequestedStat, query);
 
       dependencies.logger.info('[aiInsights] Event lookup summary', {
-        prompt: prompt || null,
+        ...buildExecutionPromptLogContext(prompt),
         userID,
         dataType: query.dataType,
         valueType: query.valueType,
@@ -105,7 +106,7 @@ const EXECUTE_QUERY_RESULT_KIND_REGISTRY = {
       const latestEvent = helpers.buildLatestEvent(matchedEvents);
 
       dependencies.logger.info('[aiInsights] Latest event lookup summary', {
-        prompt: prompt || null,
+        ...buildExecutionPromptLogContext(prompt),
         userID,
         latestEventId: latestEvent?.eventId ?? null,
         latestEventStartDate: latestEvent?.startDate ?? null,
@@ -158,7 +159,7 @@ const EXECUTE_QUERY_RESULT_KIND_REGISTRY = {
       });
 
       dependencies.logger.info('[aiInsights] Multi metric aggregation summary', {
-        prompt: prompt || null,
+        ...buildExecutionPromptLogContext(prompt),
         userID,
         metricCount: metricResults.length,
         groupingMode: query.groupingMode,
@@ -218,7 +219,7 @@ const EXECUTE_QUERY_RESULT_KIND_REGISTRY = {
         : undefined;
 
       dependencies.logger.info('[aiInsights] Aggregation summary', {
-        prompt: prompt || null,
+        ...buildExecutionPromptLogContext(prompt),
         userID,
         dataType: query.dataType,
         valueType: query.valueType,

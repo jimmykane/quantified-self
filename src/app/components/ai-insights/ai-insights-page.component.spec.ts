@@ -928,7 +928,6 @@ describe('AiInsightsPageComponent', () => {
   };
   const aiInsightsLatestSnapshotServiceMock = {
     loadLatest: vi.fn<() => Promise<AiInsightsLatestSnapshot | null>>(),
-    saveLatest: vi.fn<() => Promise<'saved' | 'skipped_too_large' | 'failed'>>(),
   };
   const aiInsightsQuotaServiceMock = {
     loadQuotaStatus: vi.fn<() => Promise<AiInsightsQuotaStatus | null>>(),
@@ -1009,7 +1008,6 @@ describe('AiInsightsPageComponent', () => {
     aiInsightsServiceMock.runInsight.mockReset();
     aiInsightsServiceMock.getErrorMessage.mockClear();
     aiInsightsLatestSnapshotServiceMock.loadLatest.mockReset();
-    aiInsightsLatestSnapshotServiceMock.saveLatest.mockReset();
     aiInsightsQuotaServiceMock.loadQuotaStatus.mockReset();
     appEventServiceMock.getEventsOnceByIds.mockReset();
     matDialogMock.open.mockReset();
@@ -1018,7 +1016,6 @@ describe('AiInsightsPageComponent', () => {
     hapticsServiceMock.success.mockReset();
     loggerServiceMock.error.mockReset();
     aiInsightsLatestSnapshotServiceMock.loadLatest.mockResolvedValue(null);
-    aiInsightsLatestSnapshotServiceMock.saveLatest.mockResolvedValue('saved');
     aiInsightsQuotaServiceMock.loadQuotaStatus.mockResolvedValue(buildQuotaStatus());
     appEventServiceMock.getEventsOnceByIds.mockReturnValue(of([]));
     matDialogMock.open.mockReturnValue({
@@ -1209,11 +1206,6 @@ describe('AiInsightsPageComponent', () => {
 
     expect(submitEvent.preventDefault).toHaveBeenCalledTimes(1);
     expect(aiInsightsServiceMock.runInsight).toHaveBeenCalledTimes(1);
-    expect(aiInsightsLatestSnapshotServiceMock.saveLatest).toHaveBeenCalledWith(
-      'user-1',
-      'Tell me my avg cadence for cycling the last 3 months',
-      response,
-    );
     expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('ai_insights_action', {
       method: 'ask_button_click',
       prompt_length: 'Tell me my avg cadence for cycling the last 3 months'.length,
@@ -1748,18 +1740,6 @@ describe('AiInsightsPageComponent', () => {
     expect(note).toBeNull();
   });
 
-  it('should show a non-blocking note when a result is too large to save to Firestore', async () => {
-    aiInsightsServiceMock.runInsight.mockResolvedValue(buildOkResponse());
-    aiInsightsLatestSnapshotServiceMock.saveLatest.mockResolvedValue('skipped_too_large');
-
-    await component.applySuggestedPrompt('Show my total distance by activity type this year');
-    fixture.detectChanges();
-
-    const resultNotes = fixture.debugElement.queryAll(By.css('.result-note'));
-
-    expect(resultNotes.some((note) => note.nativeElement.textContent.includes('This result is too large to save to your account yet'))).toBe(true);
-  });
-
   it('should format date bucket meta using the injected locale and shared dashboard date helpers', async () => {
     await createComponent('en-GB');
     aiInsightsServiceMock.runInsight.mockResolvedValue(buildDailyResponse());
@@ -1837,7 +1817,6 @@ describe('AiInsightsPageComponent', () => {
 
     expect(errorTitle?.textContent).toContain('Could not generate this insight');
     expect(errorCopy?.textContent).toContain('Could not generate AI insights.');
-    expect(aiInsightsLatestSnapshotServiceMock.saveLatest).not.toHaveBeenCalled();
   });
 
   it('should disable prompt submission surfaces when the quota is exhausted', async () => {

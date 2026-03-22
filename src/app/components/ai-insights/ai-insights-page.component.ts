@@ -800,14 +800,7 @@ export class AiInsightsPageComponent {
       this.resultPrompt.set(prompt);
       const userID = this.currentUserID();
       if (userID) {
-        const saveResult = await this.aiInsightsLatestSnapshotService.saveLatest(userID, prompt, response);
-        if (saveResult === 'saved') {
-          this.latestSnapshotSavedAt.set(new Date().toISOString());
-        } else if (saveResult === 'skipped_too_large') {
-          this.latestSnapshotPersistenceNotice.set(
-            'This result is too large to save to your account yet, so a refresh will lose it.',
-          );
-        }
+        this.latestSnapshotSavedAt.set(new Date().toISOString());
       }
     } catch (error) {
       const nextQuotaStatus = await this.aiInsightsQuotaService.loadQuotaStatus();

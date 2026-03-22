@@ -20,6 +20,7 @@ import {
 } from '../../../../shared/event-stat-aggregation';
 import type { EventStatAggregationResult } from '../../../../shared/event-stat-aggregation.types';
 import { serializeErrorForLogging } from './error-logging';
+import { buildExecutionPromptLogContext } from './execute-query.logging';
 import { executeQueryByResultKind } from './execute-query.result-kind-handlers';
 
 interface FirestoreEventDocumentLike {
@@ -762,7 +763,7 @@ export function createExecuteQuery(
       }
 
       dependencies.logger.info('[aiInsights] Query execution summary', {
-        prompt: prompt || null,
+        ...buildExecutionPromptLogContext(prompt),
         userID,
         dataType: (
           query.resultKind === 'aggregate'

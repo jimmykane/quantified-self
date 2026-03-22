@@ -219,9 +219,9 @@ describe('Firestore Security Rules', () => {
         });
 
         describe('AI Insights Latest Snapshot (users/{uid}/aiInsightsRequests/latest)', () => {
-            it('should allow owner to write the fixed latest doc', async () => {
+            it('should deny owner from writing the latest doc', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
-                await assertSucceeds(db.doc(`users/${userId}/aiInsightsRequests/latest`).set({
+                await assertFails(db.doc(`users/${userId}/aiInsightsRequests/latest`).set({
                     version: 1,
                     savedAt: '2026-03-18T12:00:00.000Z',
                     prompt: 'Show my total distance all time',
@@ -251,6 +251,25 @@ describe('Firestore Security Rules', () => {
 
                 const db = testEnv.authenticatedContext(userId).firestore();
                 await assertSucceeds(db.doc(`users/${userId}/aiInsightsRequests/latest`).get());
+            });
+
+            it('should allow owner to delete the fixed latest doc', async () => {
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/aiInsightsRequests/latest`).set({
+                        version: 1,
+                        savedAt: '2026-03-18T12:00:00.000Z',
+                        prompt: 'Show my total distance all time',
+                        response: {
+                            status: 'unsupported',
+                            narrative: 'Unsupported request',
+                            reasonCode: 'unsupported_capability',
+                            suggestedPrompts: ['Show my total distance this year']
+                        }
+                    });
+                });
+
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertSucceeds(db.doc(`users/${userId}/aiInsightsRequests/latest`).delete());
             });
 
             it('should deny owner from writing any doc id other than latest', async () => {
@@ -286,6 +305,25 @@ describe('Firestore Security Rules', () => {
                     savedAt: '2026-03-18T12:00:00.000Z',
                     prompt: 'Show my total distance all time'
                 }));
+            });
+
+            it('should deny other users from deleting latest AI insight snapshots', async () => {
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/aiInsightsRequests/latest`).set({
+                        version: 1,
+                        savedAt: '2026-03-18T12:00:00.000Z',
+                        prompt: 'Show my total distance all time',
+                        response: {
+                            status: 'unsupported',
+                            narrative: 'Unsupported request',
+                            reasonCode: 'unsupported_capability',
+                            suggestedPrompts: ['Show my total distance this year']
+                        }
+                    });
+                });
+
+                const db = testEnv.authenticatedContext(otherId).firestore();
+                await assertFails(db.doc(`users/${userId}/aiInsightsRequests/latest`).delete());
             });
         });
 

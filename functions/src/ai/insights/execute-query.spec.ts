@@ -1242,8 +1242,10 @@ describe('execute-query', () => {
 
       await executeAiInsightsQuery('user-1', createQuery(), 'tell me my avg cadence for cycling the last 3 months');
 
-      expect(info).toHaveBeenCalledWith('[aiInsights] Query execution summary', expect.objectContaining({
-        prompt: 'tell me my avg cadence for cycling the last 3 months',
+      const queryExecutionSummaryCall = info.mock.calls.find((call) => call[0] === '[aiInsights] Query execution summary');
+      expect(queryExecutionSummaryCall?.[1]).toEqual(expect.objectContaining({
+        promptLength: 52,
+        promptPreview: 'tell me my avg cadence for cycling the last 3 months',
         fetchedDocsCount: 2,
         rehydratedEventsCount: 2,
         mergedEventsExcludedCount: 0,
@@ -1256,6 +1258,7 @@ describe('execute-query', () => {
         debugTotalEventsCount: null,
         debugRecentEventsSample: [],
       }));
+      expect((queryExecutionSummaryCall?.[1] as { prompt?: unknown } | undefined)?.prompt).toBeUndefined();
     } finally {
       if (originalFirestoreEmulatorHost === undefined) {
         delete process.env.FIRESTORE_EMULATOR_HOST;

@@ -39,6 +39,7 @@ const hoisted = vi.hoisted(() => {
     summarizeAiInsightResult: vi.fn(),
     getInsightMetricDefinition: vi.fn(),
     loadUserUnitSettings: vi.fn(),
+    persistLatestAiInsightsSnapshot: vi.fn(),
   };
 });
 
@@ -90,6 +91,7 @@ vi.mock('./runtime', () => ({
     executeAiInsightsQuery: (...args: unknown[]) => hoisted.executeAiInsightsQuery(...args),
     summarizeAiInsightResult: (...args: unknown[]) => hoisted.summarizeAiInsightResult(...args),
     loadUserUnitSettings: (...args: unknown[]) => hoisted.loadUserUnitSettings(...args),
+    persistLatestAiInsightsSnapshot: (...args: unknown[]) => hoisted.persistLatestAiInsightsSnapshot(...args),
   },
 }));
 
@@ -374,6 +376,7 @@ describe('aiInsights callable', () => {
       narrative: 'Narrative',
       source: 'genkit',
     });
+    hoisted.persistLatestAiInsightsSnapshot.mockResolvedValue(undefined);
   });
 
   it('rejects unauthenticated requests', async () => {
@@ -656,6 +659,11 @@ describe('aiInsights callable', () => {
         chartType: ChartTypes.ColumnsVertical,
       }),
     });
+    expect(hoisted.persistLatestAiInsightsSnapshot).toHaveBeenCalledWith(
+      'user-1',
+      'show distance',
+      result,
+    );
   });
 
   it('logs prompt metadata without storing raw prompt text', async () => {
@@ -1154,6 +1162,11 @@ describe('aiInsights callable', () => {
       reasonCode: 'unsupported_capability',
       suggestedPrompts: ['show my distance'],
     });
+    expect(hoisted.persistLatestAiInsightsSnapshot).toHaveBeenCalledWith(
+      'user-1',
+      'show cadence per kilometer splits',
+      result,
+    );
   });
 
   it('sanitizes non-english prompts before deterministic normalization and still consumes one credit', async () => {

@@ -7,6 +7,7 @@ import {
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
 import { validateAiInsightsLatestSnapshot } from '@shared/ai-insights-latest-snapshot.validation';
+import { validateAiInsightsResponse } from '@shared/ai-insights-response.contract';
 
 describe('Ai Insights latest snapshot shared validation', () => {
   it('accepts a valid snapshot payload', () => {
@@ -201,5 +202,111 @@ describe('Ai Insights latest snapshot shared validation', () => {
     }, 1);
 
     expect(validation.valid).toBe(true);
+  });
+
+  it('rejects ok responses that do not include result-kind required payload fields', () => {
+    const latestEventMissingValidation = validateAiInsightsLatestSnapshot({
+      version: 1,
+      savedAt: '2026-03-21T10:00:00.000Z',
+      prompt: 'when was my last ride?',
+      response: {
+        status: 'ok',
+        resultKind: 'latest_event',
+        narrative: 'Your latest cycling event was on Mar 18, 2026.',
+        query: {
+          resultKind: 'latest_event',
+          categoryType: ChartDataCategoryTypes.DateType,
+          activityTypeGroups: [],
+          activityTypes: [ActivityTypes.Cycling],
+          dateRange: {
+            kind: 'bounded',
+            startDate: '2026-01-01T00:00:00.000Z',
+            endDate: '2026-03-21T23:59:59.999Z',
+            timezone: 'UTC',
+            source: 'prompt',
+          },
+          chartType: ChartTypes.LinesVertical,
+        },
+        presentation: {
+          title: 'Latest event for Cycling',
+          chartType: ChartTypes.LinesVertical,
+        },
+      },
+    }, 1);
+
+    expect(latestEventMissingValidation.valid).toBe(false);
+    if (latestEventMissingValidation.valid) {
+      return;
+    }
+    expect(latestEventMissingValidation.failure.reason).toBe('response_latest_event_invalid');
+
+    const eventLookupMissingValidation = validateAiInsightsLatestSnapshot({
+      version: 1,
+      savedAt: '2026-03-21T10:00:00.000Z',
+      prompt: 'when did I have my longest ride?',
+      response: {
+        status: 'ok',
+        resultKind: 'event_lookup',
+        narrative: 'Your longest cycling event was on Mar 18, 2026.',
+        query: {
+          resultKind: 'event_lookup',
+          dataType: 'Distance',
+          valueType: ChartDataValueTypes.Maximum,
+          categoryType: ChartDataCategoryTypes.DateType,
+          activityTypeGroups: [],
+          activityTypes: [ActivityTypes.Cycling],
+          dateRange: {
+            kind: 'bounded',
+            startDate: '2026-01-01T00:00:00.000Z',
+            endDate: '2026-03-21T23:59:59.999Z',
+            timezone: 'UTC',
+            source: 'prompt',
+          },
+          chartType: ChartTypes.LinesVertical,
+        },
+        presentation: {
+          title: 'Longest event for Cycling',
+          chartType: ChartTypes.LinesVertical,
+        },
+      },
+    }, 1);
+
+    expect(eventLookupMissingValidation.valid).toBe(false);
+    if (eventLookupMissingValidation.valid) {
+      return;
+    }
+    expect(eventLookupMissingValidation.failure.reason).toBe('response_event_lookup_invalid');
+  });
+
+  it('rejects malformed ok responses at contract level when result-kind fields are missing', () => {
+    const validation = validateAiInsightsResponse({
+      status: 'ok',
+      resultKind: 'latest_event',
+      narrative: 'Your latest cycling event was on Mar 18, 2026.',
+      query: {
+        resultKind: 'latest_event',
+        categoryType: ChartDataCategoryTypes.DateType,
+        activityTypeGroups: [],
+        activityTypes: [ActivityTypes.Cycling],
+        dateRange: {
+          kind: 'bounded',
+          startDate: '2026-01-01T00:00:00.000Z',
+          endDate: '2026-03-21T23:59:59.999Z',
+          timezone: 'UTC',
+          source: 'prompt',
+        },
+        chartType: ChartTypes.LinesVertical,
+      },
+      presentation: {
+        title: 'Latest event for Cycling',
+        chartType: ChartTypes.LinesVertical,
+      },
+    });
+
+    expect(validation.ok).toBe(false);
+    if (validation.ok) {
+      return;
+    }
+    expect(validation.reason).toBe('latest_event_invalid');
   });
 });

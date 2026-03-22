@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { Firestore, deleteDoc, doc, getDoc, setDoc } from '@angular/fire/firestore';
+import { Firestore, deleteDoc, doc, getDoc } from '@angular/fire/firestore';
 import { describe, beforeEach, expect, it, vi } from 'vitest';
 import {
   ActivityTypes,
@@ -30,7 +30,6 @@ vi.mock('@angular/fire/firestore', async (importOriginal) => {
         Firestore: MockFirestore,
         doc: vi.fn((...segments: unknown[]) => ({ path: segments.slice(1).join('/') })),
         getDoc: vi.fn(),
-        setDoc: vi.fn().mockResolvedValue(undefined),
         deleteDoc: vi.fn().mockResolvedValue(undefined),
     };
 });
@@ -430,47 +429,6 @@ describe('AiInsightsLatestSnapshotService', () => {
     service = TestBed.inject(AiInsightsLatestSnapshotService);
   });
 
-  it('should save the latest completed AI snapshot to the fixed latest doc', async () => {
-    const response = buildOkResponse();
-
-    const result = await service.saveLatest('user-1', 'Show my total distance', response);
-
-    expect(result).toBe('saved');
-    expect(doc).toHaveBeenCalledWith({}, 'users', 'user-1', 'aiInsightsRequests', 'latest');
-    expect(setDoc).toHaveBeenCalledWith(
-      { path: 'users/user-1/aiInsightsRequests/latest' },
-      expect.objectContaining({
-        version: 1,
-        prompt: 'Show my total distance',
-        response,
-        savedAt: expect.any(String),
-      }),
-    );
-  });
-
-  it('should skip saving invalid latest snapshots before they reach Firestore', async () => {
-    const invalidResponse = {
-      ...buildOkResponse(),
-      query: {
-        ...buildOkResponse().query,
-        resultKind: 'not-a-real-kind',
-      },
-    } as unknown as AiInsightsOkResponse;
-
-    const result = await service.saveLatest('user-1', 'Show my total distance', invalidResponse);
-
-    expect(result).toBe('failed');
-    expect(setDoc).not.toHaveBeenCalled();
-    expect(loggerMock.warn).toHaveBeenCalledWith(
-      '[AiInsightsLatestSnapshotService] Skipping invalid latest AI insight snapshot before save.',
-      expect.objectContaining({
-        userID: 'user-1',
-        reason: 'response_query_invalid',
-        issuePath: 'query.resultKind',
-      }),
-    );
-  });
-
   it('should restore a valid latest snapshot from Firestore', async () => {
     const snapshot: AiInsightsLatestSnapshot = {
       version: 1,
@@ -807,13 +765,4 @@ describe('AiInsightsLatestSnapshotService', () => {
     );
   });
 
-  it('should skip oversized snapshots before writing to Firestore', async () => {
-    const largePrompt = 'x'.repeat(900 * 1024);
-
-    const result = await service.saveLatest('user-1', largePrompt, buildOkResponse());
-
-    expect(result).toBe('skipped_too_large');
-    expect(setDoc).not.toHaveBeenCalled();
-    expect(loggerMock.warn).toHaveBeenCalled();
-  });
 });

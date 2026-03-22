@@ -44,6 +44,11 @@ import {
   type LoadUserUnitSettingsApi,
   type LoadUserUnitSettingsDependencies,
 } from './user-unit-settings';
+import {
+  createAiInsightsLatestSnapshotStore,
+  type AiInsightsLatestSnapshotStoreApi,
+  type AiInsightsLatestSnapshotStoreDependencies,
+} from './latest-snapshot-store';
 
 interface AiInsightsRuntimeDependencies {
   normalizeQuery?: Partial<NormalizeQueryDependencies>;
@@ -54,6 +59,7 @@ interface AiInsightsRuntimeDependencies {
   quota?: Partial<AiInsightsQuotaDependencies>;
   summarizeInsight?: Partial<SummarizeInsightDependencies>;
   loadUserUnitSettings?: Partial<LoadUserUnitSettingsDependencies>;
+  latestSnapshotStore?: Partial<AiInsightsLatestSnapshotStoreDependencies>;
 }
 
 interface RepairUnsupportedResult {
@@ -79,6 +85,7 @@ export interface AiInsightsRuntime {
   executeAiInsightsQuery: ExecuteQueryApi['executeAiInsightsQuery'];
   summarizeAiInsightResult: SummarizeInsightApi['summarizeAiInsightResult'];
   loadUserUnitSettings: LoadUserUnitSettingsApi['loadUserUnitSettings'];
+  persistLatestAiInsightsSnapshot: AiInsightsLatestSnapshotStoreApi['persistLatestAiInsightsSnapshot'];
 }
 
 export function createAiInsightsRuntime(
@@ -92,6 +99,7 @@ export function createAiInsightsRuntime(
   const quota = createAiInsightsQuota(dependencies.quota);
   const summarizeInsight = createSummarizeInsight(dependencies.summarizeInsight);
   const loadUserUnitSettings = createLoadUserUnitSettings(dependencies.loadUserUnitSettings);
+  const latestSnapshotStore = createAiInsightsLatestSnapshotStore(dependencies.latestSnapshotStore);
 
   return {
     normalizeInsightQuery: normalizeQuery.normalizeInsightQuery,
@@ -107,6 +115,7 @@ export function createAiInsightsRuntime(
     executeAiInsightsQuery: executeQuery.executeAiInsightsQuery,
     summarizeAiInsightResult: summarizeInsight.summarizeAiInsightResult,
     loadUserUnitSettings: loadUserUnitSettings.loadUserUnitSettings,
+    persistLatestAiInsightsSnapshot: latestSnapshotStore.persistLatestAiInsightsSnapshot,
   };
 }
 

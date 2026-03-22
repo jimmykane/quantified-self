@@ -59,9 +59,11 @@ service cloud.firestore {
          allow read, write: if request.auth.uid == userID;
       }
 
-      // AI Insights Latest Snapshot (Private / Owner Read-Write, fixed latest doc only)
+      // AI Insights Latest Snapshot (Private / Owner Read/Delete, fixed latest doc only)
       match /aiInsightsRequests/{requestID} {
-         allow read, write: if request.auth.uid == userID && requestID == 'latest';
+         allow read: if request.auth.uid == userID && requestID == 'latest';
+         allow delete: if request.auth.uid == userID && requestID == 'latest';
+         allow create, update: if false;
       }
 
       // AI Insights Usage (Private / Server-Owned only)
