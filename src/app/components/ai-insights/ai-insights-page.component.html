@@ -119,34 +119,36 @@
             </div>
           }
 
-          @if (isSubmitting()) {
+          @if (isSubmitting() || isRestoringLatestSnapshot()) {
             <div class="result-content result-content--loading">
-              <div class="result-loading-status" aria-live="polite">
-                <div class="result-loading-status-row">
-                  <mat-chip-set aria-label="Insight generation progress">
-                    <mat-chip disableRipple class="result-loading-step-chip">
-                      Step {{ generationLoadingProgressLabel() }}
-                    </mat-chip>
-                  </mat-chip-set>
+              @if (isSubmitting()) {
+                <div class="result-loading-status" aria-live="polite">
+                  <div class="result-loading-status-row">
+                    <mat-chip-set aria-label="Insight generation progress">
+                      <mat-chip disableRipple class="result-loading-step-chip">
+                        Step {{ generationLoadingProgressLabel() }}
+                      </mat-chip>
+                    </mat-chip-set>
 
-                  <div class="result-loading-roller" [attr.aria-label]="'Progress: ' + generationLoadingActiveStep()">
-                    <div class="result-loading-roller-window">
-                      <div class="result-loading-roller-track" [style.transform]="generationLoadingRollerTransform()">
-                        @for (step of generationLoadingSteps; track step; let stepIndex = $index) {
-                          <div
-                            class="result-loading-roller-row"
-                            [class.result-loading-roller-row--active]="stepIndex === generationLoadingStepIndex()">
-                            <span class="result-loading-roller-dot" aria-hidden="true"></span>
-                            <span class="mat-body-small result-loading-roller-text">{{ step }}</span>
-                          </div>
-                        }
+                    <div class="result-loading-roller" [attr.aria-label]="'Progress: ' + generationLoadingActiveStep()">
+                      <div class="result-loading-roller-window">
+                        <div class="result-loading-roller-track" [style.transform]="generationLoadingRollerTransform()">
+                          @for (step of generationLoadingSteps; track step; let stepIndex = $index) {
+                            <div
+                              class="result-loading-roller-row"
+                              [class.result-loading-roller-row--active]="stepIndex === generationLoadingStepIndex()">
+                              <span class="result-loading-roller-dot" aria-hidden="true"></span>
+                              <span class="mat-body-small result-loading-roller-text">{{ step }}</span>
+                            </div>
+                          }
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
 
-                <mat-progress-bar class="result-loading-progress" mode="indeterminate"></mat-progress-bar>
-              </div>
+                  <mat-progress-bar class="result-loading-progress" mode="indeterminate"></mat-progress-bar>
+                </div>
+              }
 
               <div class="result-loading-narrative" aria-hidden="true">
                 <span class="result-loading-skeleton result-loading-skeleton--line result-loading-skeleton--line-wide"></span>

@@ -1057,6 +1057,8 @@ describe('AiInsightsPageComponent', () => {
     const heroPromptRotator = fixture.debugElement.query(By.css('.hero-prompt-rotator'))?.nativeElement as HTMLButtonElement | undefined;
     const pickerButton = fixture.debugElement.query(By.css('.suggestion-picker-button'))?.nativeElement as HTMLButtonElement | undefined;
     const submitButton = fixture.debugElement.query(By.css('.prompt-actions button[type="submit"]'))?.nativeElement as HTMLButtonElement | undefined;
+    const loadingPanel = fixture.debugElement.query(By.css('.result-content--loading'))?.nativeElement as HTMLElement | undefined;
+    const loadingStepChip = fixture.debugElement.query(By.css('.result-loading-step-chip'));
 
     expect(component.isRestoringLatestSnapshot()).toBe(true);
     expect(component.promptControl.disabled).toBe(true);
@@ -1064,6 +1066,8 @@ describe('AiInsightsPageComponent', () => {
     expect(heroPromptRotator?.disabled).toBe(true);
     expect(pickerButton?.disabled).toBe(true);
     expect(submitButton?.disabled).toBe(true);
+    expect(loadingPanel).toBeTruthy();
+    expect(loadingStepChip).toBeNull();
 
     resolveLatestSnapshot?.(null);
     await fixture.whenStable();
@@ -1074,6 +1078,7 @@ describe('AiInsightsPageComponent', () => {
     expect(promptInput?.disabled).toBe(false);
     expect(heroPromptRotator?.disabled).toBe(false);
     expect(pickerButton?.disabled).toBe(false);
+    expect(fixture.debugElement.query(By.css('.result-content--loading'))).toBeNull();
   });
 
   it('should render the Basic tier quota limit in the prompt header', async () => {
