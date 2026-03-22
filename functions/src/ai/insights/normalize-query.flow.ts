@@ -1331,6 +1331,7 @@ function resolveMultiMetricGroupingMode(
 }
 
 function resolveMultiMetricIntent(prompt: string): MultiMetricIntent | NormalizeInsightQueryUnsupportedResult | null {
+  const normalizedPrompt = normalizePromptSearchText(prompt);
   const metricMatches = findInsightMetricAliasMatches(canonicalizeInsightPrompt(prompt));
   if (metricMatches.length <= 1) {
     return null;
@@ -1365,11 +1366,23 @@ function resolveMultiMetricIntent(prompt: string): MultiMetricIntent | Normalize
     return buildUnsupportedResult('unsupported_multi_metric_combination', prompt);
   }
 
+  const prefersSharedAverageFallback = /\b(compare|vs|versus|over time|timeline|trend)\b/.test(normalizedPrompt);
   const sharedValueType = aggregationCodes.length === 1
     ? AGGREGATION_MAP[aggregationCodes[0]]
     : (() => {
       const defaultValueTypes = Array.from(new Set(metricMatches.map(match => match.metric.defaultValueType)));
-      return defaultValueTypes.length === 1 ? defaultValueTypes[0] : null;
+      if (defaultValueTypes.length === 1) {
+        return defaultValueTypes[0];
+      }
+
+      if (!prefersSharedAverageFallback) {
+        return null;
+      }
+
+      const allMetricsSupportAverage = metricMatches.every((match) => (
+        isAggregationAllowedForMetric(match.metric.key, ChartDataValueTypes.Average)
+      ));
+      return allMetricsSupportAverage ? ChartDataValueTypes.Average : null;
     })();
   if (!sharedValueType) {
     return buildUnsupportedResult('unsupported_multi_metric_combination', prompt);

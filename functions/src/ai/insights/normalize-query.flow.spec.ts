@@ -1089,6 +1089,37 @@ describe('normalizeInsightQuery', () => {
     ]);
   });
 
+  it('resolves mixed-default compare prompts to shared-average multi-metric mode', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-19T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Compare my weight with duration of activities over time this year.',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok' || result.query.resultKind !== 'multi_metric_aggregate') {
+      return;
+    }
+
+    expect(result.query.groupingMode).toBe('date');
+    expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Monthly);
+    expect(result.query.metricSelections).toEqual([
+      {
+        metricKey: 'body_weight',
+        dataType: DataWeight.type,
+        valueType: ChartDataValueTypes.Average,
+      },
+      {
+        metricKey: 'duration',
+        dataType: DataDuration.type,
+        valueType: ChartDataValueTypes.Average,
+      },
+    ]);
+  });
+
   it('defaults multi-metric prompts without grouping wording to overall summaries only', async () => {
     setNormalizeQueryDependenciesForTesting({
       now: () => new Date('2026-03-19T12:00:00.000Z'),
