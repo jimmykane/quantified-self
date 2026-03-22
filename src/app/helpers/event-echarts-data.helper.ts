@@ -494,22 +494,45 @@ function canActivityRenderEventChart(activity: ActivityInterface, xAxisType: XAx
     return false;
   }
 
-  if (!hasFiniteStreamData(activity?.getStream?.(XAxisTypes.Time) || streams.find((stream) => stream?.type === XAxisTypes.Time))) {
+  if (!hasFiniteStreamData(getActivityStreamByType(activity, XAxisTypes.Time, streams))) {
     return false;
   }
 
   if (
     xAxisType === XAxisTypes.Distance
     && !hasFiniteStreamData(
-      activity?.getStream?.(DataDistance.type)
-      || activity?.getStream?.(DataStrydDistance.type)
-      || streams.find((stream) => stream?.type === DataDistance.type || stream?.type === DataStrydDistance.type)
+      getActivityStreamByType(activity, DataDistance.type, streams)
+      || getActivityStreamByType(activity, DataStrydDistance.type, streams)
     )
   ) {
     return false;
   }
 
   return streams.some((stream) => isEventChartableRawStream(stream) && hasFiniteStreamData(stream));
+}
+
+function getActivityStreamByType(
+  activity: ActivityInterface | undefined | null,
+  streamType: string,
+  knownStreams: StreamInterface[] | null = null
+): StreamInterface | null {
+  if (!activity || !streamType) {
+    return null;
+  }
+
+  if (typeof activity.getStream === 'function') {
+    try {
+      const stream = activity.getStream(streamType);
+      if (stream) {
+        return stream;
+      }
+    } catch {
+      // Some providers throw when a requested stream is unavailable.
+    }
+  }
+
+  const streams = Array.isArray(knownStreams) ? knownStreams : activity.getAllStreams?.() || [];
+  return streams.find((stream) => stream?.type === streamType) || null;
 }
 
 function isEventChartableRawStream(stream: StreamInterface | undefined | null): boolean {
@@ -911,7 +934,7 @@ function getActivityStreamNumericValues(
     return cached;
   }
 
-  const values = toNumericArray(activity.getStream(streamType)?.getData?.());
+  const values = toNumericArray(getActivityStreamByType(activity, streamType)?.getData?.());
   cache.streamValuesByType.set(streamType, values);
   return values;
 }
