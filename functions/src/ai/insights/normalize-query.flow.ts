@@ -128,6 +128,13 @@ interface PromptDateSelectionIntent {
   compareRequestedTimeInterval?: ModelTimeIntervalCode;
 }
 
+const INVERSE_SUPERLATIVE_METRIC_KEYS = new Set<InsightMetricKey>([
+  'pace',
+  'grade_adjusted_pace',
+  'effort_pace',
+  'swim_pace',
+]);
+
 export interface NormalizeQueryPromptContext {
   prompt: string;
   promptAggregation: ModelAggregationCode | undefined;
@@ -1241,10 +1248,10 @@ function resolvePromptAggregation(prompt: string): ModelAggregationCode | undefi
   if (/\b(avg|average|mean)\b/.test(normalizedPrompt)) {
     return 'average';
   }
-  if (/\b(min|minimum|lowest|fastest|shortest)\b/.test(normalizedPrompt)) {
+  if (/\b(min|minimum|lowest|shortest)\b/.test(normalizedPrompt)) {
     return 'minimum';
   }
-  if (/\b(max|maximum|highest|peak|slowest|longest|furthest|farthest|biggest)\b/.test(normalizedPrompt)) {
+  if (/\b(max|maximum|highest|peak|longest|furthest|farthest|biggest)\b/.test(normalizedPrompt)) {
     return 'maximum';
   }
 
@@ -1264,14 +1271,46 @@ function resolvePromptAggregationCodes(prompt: string): ModelAggregationCode[] {
   if (/\b(avg|average|mean)\b/.test(normalizedPrompt)) {
     aggregationCodes.add('average');
   }
-  if (/\b(min|minimum|lowest|fastest|shortest)\b/.test(normalizedPrompt)) {
+  if (/\b(min|minimum|lowest|shortest)\b/.test(normalizedPrompt)) {
     aggregationCodes.add('minimum');
   }
-  if (/\b(max|maximum|highest|peak|slowest|longest|furthest|farthest|biggest)\b/.test(normalizedPrompt)) {
+  if (/\b(max|maximum|highest|peak|longest|furthest|farthest|biggest)\b/.test(normalizedPrompt)) {
     aggregationCodes.add('maximum');
   }
 
   return [...aggregationCodes];
+}
+
+function resolvePromptAggregationForMetric(
+  prompt: string,
+  metricKey: InsightMetricKey,
+  fallback: ModelAggregationCode | undefined,
+): ModelAggregationCode | undefined {
+  const normalizedPrompt = normalizePromptSearchText(prompt);
+  if (!normalizedPrompt) {
+    return fallback;
+  }
+
+  const hasFastest = /\bfastest\b/.test(normalizedPrompt);
+  const hasSlowest = /\bslowest\b/.test(normalizedPrompt);
+  if (!hasFastest && !hasSlowest) {
+    return fallback;
+  }
+
+  // Keep explicit aggregation bounds authoritative when present.
+  if (/\b(min|minimum|max|maximum|lowest|highest|peak|shortest|longest|furthest|farthest|biggest)\b/.test(normalizedPrompt)) {
+    return fallback;
+  }
+
+  const isInverseMetric = INVERSE_SUPERLATIVE_METRIC_KEYS.has(metricKey);
+  if (hasFastest) {
+    return isInverseMetric ? 'minimum' : 'maximum';
+  }
+  if (hasSlowest) {
+    return isInverseMetric ? 'maximum' : 'minimum';
+  }
+
+  return fallback;
 }
 
 function resolveMultiMetricGroupingMode(
@@ -1591,10 +1630,16 @@ function buildDeterministicIntent(prompt: string): ModelInsightIntent {
   const activityTypeGroups = resolvePromptActivityTypeGroups(prompt);
   const activityTypes = resolvePromptActivityTypes(prompt, activityTypeGroups);
 
+  const promptAggregation = resolvePromptAggregationForMetric(
+    prompt,
+    metricMatch.metric.key,
+    resolvePromptAggregation(prompt),
+  );
+
   return ModelInsightIntentSchema.parse({
     status: 'supported',
     metric: metricMatch.alias,
-    aggregation: resolvePromptAggregation(prompt),
+    aggregation: promptAggregation,
     category: resolvePromptCategory(prompt),
     requestedTimeInterval: resolvePromptRequestedTimeInterval(prompt),
     activityTypeGroups: activityTypeGroups.map(activityTypeGroup => `${activityTypeGroup}`),
@@ -1700,10 +1745,16 @@ export function resolveNormalizedInsightQueryFromIntent(
     );
   }
 
-  const valueType = toValueType(
+  const resolvedAggregation = resolvePromptAggregationForMetric(
+    prompt,
+    baseMetric.key,
     modelReturnedUnsupported
       ? resolvePromptAggregation(prompt)
       : intent.aggregation,
+  );
+
+  const valueType = toValueType(
+    resolvedAggregation,
     baseMetric.defaultValueType,
   );
   const metric = (promptMetricMatch

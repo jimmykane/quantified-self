@@ -17,6 +17,8 @@ import {
   DataHeartRateMax,
   DataJumpDistanceMax,
   DataJumpHangTimeMax,
+  DataJumpSpeedMax,
+  DataPaceMin,
   DataPowerAvg,
   DataPowerNormalized,
   DataPowerTrainingStressScore,
@@ -834,6 +836,48 @@ describe('normalizeInsightQuery', () => {
     expect(result.query.resultKind).toBe('event_lookup');
     expect(result.query.dataType).toBe(DataJumpHangTimeMax.type);
     expect(result.query.valueType).toBe(ChartDataValueTypes.Maximum);
+  });
+
+  it('maps fastest jump prompts to jump-speed maximum instead of minimum', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-19T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'When did I have my fastest jump all time?',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('jump_speed');
+    expect(result.query.resultKind).toBe('event_lookup');
+    expect(result.query.dataType).toBe(DataJumpSpeedMax.type);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Maximum);
+  });
+
+  it('keeps fastest pace prompts on minimum pace semantics', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-19T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'When did I have my fastest pace all time?',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('pace');
+    expect(result.query.resultKind).toBe('event_lookup');
+    expect(result.query.dataType).toBe(DataPaceMin.type);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Minimum);
   });
 
   it('rejects jump-height over-time prompts because jump-height metric is disabled', async () => {
