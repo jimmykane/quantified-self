@@ -997,7 +997,7 @@ export class AiInsightsPageComponent {
     await this.submitPrompt(prompt);
   }
 
-  async onHeroPromptClick(): Promise<void> {
+  onHeroPromptClick(): void {
     const prompt = this.activeHeroPrompt().trim();
     if (!prompt || this.isPromptLocked() || !this.hasQuotaAvailable()) {
       return;
@@ -1009,7 +1009,9 @@ export class AiInsightsPageComponent {
       promptSource: promptAnalytics.promptSource,
       promptLength: prompt.length,
     });
-    await this.applySuggestedPrompt(prompt, { logAnalytics: false });
+    this.promptControl.setValue(prompt);
+    this.promptControl.markAsDirty();
+    this.promptControl.markAsTouched();
   }
 
   async refreshCurrentResult(): Promise<void> {

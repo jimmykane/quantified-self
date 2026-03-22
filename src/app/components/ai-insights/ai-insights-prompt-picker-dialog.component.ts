@@ -2,12 +2,21 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
-import type { AiInsightsPromptSection } from './ai-insights.prompts';
+import type { AiInsightsPromptGroup, AiInsightsPromptSection } from './ai-insights.prompts';
 import { MaterialModule } from '../../modules/material.module';
 
 export interface AiInsightsPromptPickerDialogData {
   promptSections: readonly AiInsightsPromptSection[];
   promptSource: 'default' | 'unsupported';
+}
+
+interface PromptGroupView extends AiInsightsPromptGroup {
+  promptCount: number;
+}
+
+interface PromptSectionView extends AiInsightsPromptSection {
+  groups: readonly PromptGroupView[];
+  promptCount: number;
 }
 
 @Component({
@@ -38,25 +47,36 @@ export class AiInsightsPromptPickerDialogComponent {
       : 'Select a prompt to run it immediately.'
   ));
   readonly normalizedSearchTerm = computed(() => this.searchTerm().trim().toLocaleLowerCase());
-  readonly filteredPromptSections = computed<readonly AiInsightsPromptSection[]>(() => {
+  readonly filteredPromptSections = computed<readonly PromptSectionView[]>(() => {
     const normalizedSearchTerm = this.normalizedSearchTerm();
-    if (!normalizedSearchTerm) {
-      return this.promptSections;
-    }
-
     return this.promptSections
       .map((section) => ({
         ...section,
         groups: section.groups
-          .map((group) => ({
-            ...group,
-            prompts: group.prompts.filter(prompt => prompt.prompt.toLocaleLowerCase().includes(normalizedSearchTerm)),
-          }))
-          .filter((group) => group.prompts.length > 0),
+          .map((group) => {
+            const prompts = normalizedSearchTerm
+              ? group.prompts.filter(prompt => prompt.prompt.toLocaleLowerCase().includes(normalizedSearchTerm))
+              : group.prompts;
+
+            return {
+              ...group,
+              prompts,
+              promptCount: prompts.length,
+            };
+          })
+          .filter((group) => group.promptCount > 0),
+        promptCount: 0,
       }))
-      .filter((section) => section.groups.length > 0);
+      .map((section) => ({
+        ...section,
+        promptCount: section.groups.reduce((total, group) => total + group.promptCount, 0),
+      }))
+      .filter((section) => section.promptCount > 0);
   });
   readonly hasFilteredPrompts = computed(() => this.filteredPromptSections().length > 0);
+  readonly totalFilteredPromptCount = computed(() => (
+    this.filteredPromptSections().reduce((total, section) => total + section.promptCount, 0)
+  ));
 
   onSearchInput(event: Event): void {
     const target = event.target as HTMLInputElement | null;

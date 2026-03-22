@@ -1120,8 +1120,7 @@ describe('AiInsightsPageComponent', () => {
     expect(quotaLine?.textContent).toContain('Quota unavailable');
   });
 
-  it('should submit the active hero prompt when clicked', async () => {
-    aiInsightsServiceMock.runInsight.mockResolvedValue(buildOkResponse());
+  it('should fill the prompt input from the active hero prompt without submitting', async () => {
     const heroPrompt = AI_INSIGHTS_FEATURED_PROMPTS[0];
     component.activeHeroPrompt.set(heroPrompt);
     component.typedHeroPrompt.set(heroPrompt);
@@ -1134,9 +1133,7 @@ describe('AiInsightsPageComponent', () => {
     fixture.detectChanges();
 
     expect(component.promptControl.getRawValue()).toBe(heroPrompt);
-    expect(aiInsightsServiceMock.runInsight).toHaveBeenCalledWith(expect.objectContaining({
-      prompt: heroPrompt,
-    }));
+    expect(aiInsightsServiceMock.runInsight).not.toHaveBeenCalled();
     expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('ai_insights_action', {
       method: 'hero_prompt_click',
       prompt_index: 0,

@@ -117,10 +117,10 @@
                 @if (latestSnapshotRestored() || resultCardMetaText()) {
                   <mat-chip-set class="result-status-chip-set" aria-label="Result snapshot status">
                     @if (latestSnapshotRestored()) {
-                      <mat-chip disableRipple class="result-status-chip">Restored</mat-chip>
+                      <mat-chip disableRipple highlighted class="result-status-chip">Restored</mat-chip>
                     }
                     @if (resultCardMetaText(); as resultCardMetaText) {
-                      <mat-chip disableRipple class="result-status-chip">{{ resultCardMetaText }}</mat-chip>
+                      <mat-chip disableRipple highlighted class="result-status-chip">{{ resultCardMetaText }}</mat-chip>
                     }
                   </mat-chip-set>
                 }

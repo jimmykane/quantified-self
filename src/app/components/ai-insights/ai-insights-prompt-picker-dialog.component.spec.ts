@@ -95,7 +95,7 @@ describe('AiInsightsPromptPickerDialogComponent', () => {
 
     expect(groupTitles).toEqual(['Compare & explore', 'Cardio & Speed', 'Advanced Examples']);
     expect(promptItems).toEqual([
-      'Show my cadence and power over the last 3 months for cycling.',
+      'Show cadence vs power over time in the last 3 months for cycling.',
       'Tell me my average cadence for cycling over the last 3 months.',
       'Show me avg cadence and avg power for the last 3 months for cycling.',
     ]);

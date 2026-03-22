@@ -206,30 +206,8 @@
   gap: 8px;
 }
 
-.result-status-chip-set {
-  margin-inline-start: 2px;
-}
-
 .result-status-chip {
-  min-height: 20px;
-  padding-inline: 8px;
-  border-radius: 999px;
   --mat-chip-label-text-font: 'Barlow Condensed', sans-serif;
-  --mat-chip-label-text-size: 0.68rem;
-  --mat-chip-label-text-weight: 500;
-  --mat-chip-label-text-tracking: 0.03em;
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.68rem;
-  font-weight: 500;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-
-:host ::ng-deep .result-status-chip .mdc-evolution-chip__text-label {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.68rem;
-  font-weight: 500;
-  letter-spacing: 0.03em;
 }
 
 .result-card-title-text::before,
@@ -261,7 +239,6 @@
 }
 
 .result-card-context-label {
-  font-family: 'Barlow Condensed', sans-serif;
   color: var(--mat-sys-on-surface-variant);
   font-size: 0.68rem;
   font-weight: 600;
