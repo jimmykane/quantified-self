@@ -159,7 +159,34 @@ export function resolveActivityTypeGroup(value: unknown): ActivityTypeGroup | nu
 }
 
 export function getActivityTypesForGroup(activityTypeGroup: ActivityTypeGroup): ActivityTypes[] {
-  return ActivityTypesHelper.getActivityTypesForActivityGroup(activityTypeGroup);
+  const helper = ActivityTypesHelper as unknown as {
+    getActivityTypesForActivityGroup?: (group: ActivityTypeGroup) => ActivityTypes[];
+    getActivityGroupForActivityType?: (activityType: ActivityTypes) => ActivityTypeGroup;
+  };
+
+  if (typeof helper.getActivityTypesForActivityGroup === 'function') {
+    try {
+      return helper.getActivityTypesForActivityGroup(activityTypeGroup);
+    } catch {
+      // Fall through to group-by-activity lookup so module initialization cannot fail.
+    }
+  }
+
+  if (typeof helper.getActivityGroupForActivityType === 'function') {
+    const deduped = new Set<ActivityTypes>();
+    for (const activityType of Object.values(ActivityTypes) as ActivityTypes[]) {
+      try {
+        if (helper.getActivityGroupForActivityType(activityType) === activityTypeGroup) {
+          deduped.add(activityType);
+        }
+      } catch {
+        // Ignore malformed values and continue collecting valid members.
+      }
+    }
+    return [...deduped];
+  }
+
+  return [];
 }
 
 const EXPLICIT_INDOOR_ACTIVITY_TYPES = new Set<ActivityTypes>([

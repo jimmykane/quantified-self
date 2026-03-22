@@ -459,10 +459,10 @@ export const AI_INSIGHTS_CURATED_PROMPT_CATALOG = [
   },
   {
     id: 'popular-cadence-power-cycling-3-months',
-    prompt: 'Show my cadence and power over the last 3 months for cycling.',
+    prompt: 'Show cadence vs power over time in the last 3 months for cycling.',
     category: 'Compare & explore',
-    featured: false,
-    surfaces: ['picker'],
+    featured: true,
+    surfaces: ['hero', 'picker'],
   },
   {
     id: 'popular-compare-heart-rate-2024-vs-2025',
@@ -470,6 +470,14 @@ export const AI_INSIGHTS_CURATED_PROMPT_CATALOG = [
     category: 'Compare & explore',
     featured: false,
     surfaces: ['picker'],
+    metricKey: 'heart_rate',
+  },
+  {
+    id: 'popular-max-heartrate-all-time',
+    prompt: 'What was my maximum heartrate all time?',
+    category: 'Best efforts',
+    featured: true,
+    surfaces: ['hero', 'picker'],
     metricKey: 'heart_rate',
   },
   {

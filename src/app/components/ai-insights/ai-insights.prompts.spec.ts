@@ -59,8 +59,9 @@ describe('ai-insights prompts', () => {
       'Show my distance by sport this year.',
       'Show my running heart rate over time in the last 90 days.',
       'Show my cycling power over time in the last 90 days.',
-      'Show my cadence and power over the last 3 months for cycling.',
+      'Show cadence vs power over time in the last 3 months for cycling.',
       'Compare my max heart rate in 2024 vs 2025.',
+      'What was my maximum heartrate all time?',
       'When did I have my longest jump?',
       'When did I have my biggest jump?',
     ]);
@@ -94,19 +95,24 @@ describe('ai-insights prompts', () => {
     expect(pickerPromptSet.has('When was my last ride?')).toBe(true);
     expect(pickerPromptSet.has('When was my last run?')).toBe(true);
     expect(pickerPromptSet.has('When was my last swim?')).toBe(true);
-    expect(pickerPromptSet.has('Show my cadence and power over the last 3 months for cycling.')).toBe(true);
+    expect(pickerPromptSet.has('Show cadence vs power over time in the last 3 months for cycling.')).toBe(true);
     expect(pickerPromptSet.has('Compare my max heart rate in 2024 vs 2025.')).toBe(true);
+    expect(pickerPromptSet.has('What was my maximum heartrate all time?')).toBe(true);
     expect(pickerPromptSet.has('When did I have my biggest jump?')).toBe(true);
 
     expect(featuredPromptSet.has('When was my last ride?')).toBe(true);
     expect(featuredPromptSet.has('Show my training time over time this year.')).toBe(true);
     expect(featuredPromptSet.has('Show my running heart rate over time in the last 90 days.')).toBe(true);
     expect(featuredPromptSet.has('Show my cycling power over time in the last 90 days.')).toBe(true);
+    expect(featuredPromptSet.has('Show cadence vs power over time in the last 3 months for cycling.')).toBe(true);
+    expect(featuredPromptSet.has('What was my maximum heartrate all time?')).toBe(true);
     expect(AI_INSIGHTS_FEATURED_PROMPTS).toEqual([
       'When was my last ride?',
       'Show my training time over time this year.',
       'Show my running heart rate over time in the last 90 days.',
       'Show my cycling power over time in the last 90 days.',
+      'Show cadence vs power over time in the last 3 months for cycling.',
+      'What was my maximum heartrate all time?',
     ]);
   });
 

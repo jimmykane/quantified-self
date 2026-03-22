@@ -268,12 +268,10 @@ export class AiInsightsPageComponent {
   readonly resultCardMetaText = computed(() => {
     const savedAtLabel = formatSavedInsightDate(this.latestSnapshotSavedAt(), this.locale);
     if (!savedAtLabel) {
-      return this.latestSnapshotRestored() ? 'Restored' : null;
+      return null;
     }
 
-    return this.latestSnapshotRestored()
-      ? `Restored • Saved ${savedAtLabel}`
-      : `Saved ${savedAtLabel}`;
+    return `Saved ${savedAtLabel}`;
   });
   readonly resultNotes = computed<ResultNote[]>(() => {
     if (!this.hasCompletedResponse()) {
@@ -696,6 +694,44 @@ export class AiInsightsPageComponent {
   readonly resultCardHeaderSubtitle = computed(() => (
     this.aggregationContextLine()
   ));
+  readonly resultHeaderContextRows = computed<Array<{ label: string; value: string }>>(() => {
+    const response = this.aggregateOkResponse() || this.multiMetricOkResponse() || this.emptyResponse();
+    if (!response) {
+      return [];
+    }
+
+    const rows: Array<{ label: string; value: string }> = [];
+    const valueType = response.query.resultKind === 'multi_metric_aggregate'
+      ? response.query.metricSelections[0]?.valueType
+      : response.query.resultKind === 'latest_event'
+        ? null
+      : response.query.valueType;
+
+    if (valueType) {
+      rows.push({
+        label: 'Aggregation',
+        value: resolveAggregationLabel(valueType),
+      });
+    }
+
+    const dateRangeSummary = formatDateSelectionSummary(response, this.locale);
+    if (dateRangeSummary) {
+      rows.push({
+        label: 'Date range',
+        value: dateRangeSummary,
+      });
+    }
+
+    const activitySummary = resolveAiInsightsActivityFilterSummary(response.query);
+    if (activitySummary) {
+      rows.push({
+        label: 'Activities',
+        value: activitySummary,
+      });
+    }
+
+    return rows;
+  });
   readonly aggregationContextLine = computed(() => {
     const response = this.aggregateOkResponse() || this.multiMetricOkResponse() || this.emptyResponse();
     if (!response) {

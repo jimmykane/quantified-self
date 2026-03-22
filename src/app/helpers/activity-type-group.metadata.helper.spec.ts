@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
-import { ActivityTypeGroups, ActivityTypes } from '@sports-alliance/sports-lib';
+import { describe, expect, it, vi } from 'vitest';
+import { ActivityTypeGroups, ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
 import {
   getActivityTypeGroupLabel,
+  getActivityTypesForGroup,
   isIndoorActivityType,
   isAmbiguousActivityTypeGroup,
   resolveActivityTypeGroup,
@@ -32,5 +33,20 @@ describe('activity-type-group.metadata', () => {
     expect(isIndoorActivityType(ActivityTypes.Yoga)).toBe(true);
     expect(isIndoorActivityType(ActivityTypes.Treadmill)).toBe(true);
     expect(isIndoorActivityType(ActivityTypes.Cycling)).toBe(false);
+  });
+
+  it('falls back to per-activity group resolution when direct group-members helper is unavailable', () => {
+    const directHelperSpy = vi.spyOn(ActivityTypesHelper, 'getActivityTypesForActivityGroup')
+      .mockImplementation(() => {
+        throw new Error('helper unavailable');
+      });
+
+    try {
+      const indoorGroupActivityTypes = getActivityTypesForGroup(ActivityTypeGroups.IndoorSportsGroup);
+      expect(indoorGroupActivityTypes).toContain(ActivityTypes.Yoga);
+      expect(indoorGroupActivityTypes.length).toBeGreaterThan(0);
+    } finally {
+      directHelperSpy.mockRestore();
+    }
   });
 });

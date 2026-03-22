@@ -138,6 +138,17 @@ describe('SideNavComponent', () => {
         openSpy.mockRestore();
     });
 
+    it('should trigger haptics when opening the Facebook group', async () => {
+        const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+
+        await component.facebookGroup();
+
+        expect(mockHapticsService.selection).toHaveBeenCalledTimes(1);
+        expect(mockAnalyticsService.logEvent).toHaveBeenCalledWith('facebook_group_click');
+        expect(openSpy).toHaveBeenCalledWith('https://www.facebook.com/groups/quantifiedself.io');
+        openSpy.mockRestore();
+    });
+
     it('should trigger haptics when logging out', async () => {
         await component.logout();
 

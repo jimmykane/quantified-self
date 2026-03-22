@@ -1239,7 +1239,7 @@ describe('AiInsightsPageComponent', () => {
     const resultTitle = fixture.debugElement.query(By.css('.result-card-title'))?.nativeElement as HTMLElement | undefined;
     const chart = fixture.debugElement.query(By.css('.chart-stub'))?.nativeElement as HTMLElement | undefined;
     const chartComponent = fixture.debugElement.query(By.directive(MockAiInsightsChartComponent))?.componentInstance as MockAiInsightsChartComponent | undefined;
-    const resultCardSubtitle = fixture.debugElement.query(By.css('.result-card-subtitle'))?.nativeElement as HTMLElement | undefined;
+    const resultContextRows = fixture.debugElement.queryAll(By.css('.result-card-context-row'));
     const resultCardMeta = fixture.debugElement.query(By.css('.result-card-meta'))?.nativeElement as HTMLElement | undefined;
     const quotaLine = fixture.debugElement.query(By.css('.prompt-quota-line'))?.nativeElement as HTMLElement | undefined;
     const summaryCards = fixture.debugElement.queryAll(By.css('.summary-card'));
@@ -1255,7 +1255,7 @@ describe('AiInsightsPageComponent', () => {
     expect(resultTitle?.textContent).toContain('Cadence over time for cycling');
     expect(chart?.textContent).toContain('Average cadence over time for Cycling');
     expect(chartComponent?.userUnitSettings()).toEqual(userSettingsQueryServiceMock.unitSettings());
-    expect(resultCardSubtitle?.textContent).toContain('Aggregation: Average');
+    expect(resultContextRows.some((row) => row.nativeElement.textContent.includes('Aggregation') && row.nativeElement.textContent.includes('Average'))).toBe(true);
     expect(resultCardMeta).toBeUndefined();
     expect(quotaLine?.textContent).toContain(`${AI_INSIGHTS_REQUEST_LIMITS.pro - 13} of ${AI_INSIGHTS_REQUEST_LIMITS.pro} left`);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Overall'))).toBe(true);
@@ -1313,7 +1313,7 @@ describe('AiInsightsPageComponent', () => {
     const narrative = fixture.debugElement.query(By.css('.narrative'))?.nativeElement as HTMLElement | undefined;
     const resultTitle = fixture.debugElement.query(By.css('.result-card-title'))?.nativeElement as HTMLElement | undefined;
     const multiChart = fixture.debugElement.query(By.css('.multi-chart-stub'))?.nativeElement as HTMLElement | undefined;
-    const resultCardSubtitle = fixture.debugElement.query(By.css('.result-card-subtitle'))?.nativeElement as HTMLElement | undefined;
+    const resultContextRows = fixture.debugElement.queryAll(By.css('.result-card-context-row'));
     const summaryCards = fixture.debugElement.queryAll(By.css('.summary-card'));
     const overallCard = summaryCards.find((card) => card.nativeElement.textContent.includes('Overall'))?.nativeElement as HTMLElement | undefined;
     const expectedCadenceOverall = formatUnitAwareDataValue(
@@ -1333,7 +1333,7 @@ describe('AiInsightsPageComponent', () => {
     expect(narrative?.textContent).toContain('Cadence and power');
     expect(resultTitle?.textContent).toContain('Cadence and power over time for cycling');
     expect(multiChart?.textContent).toContain('Cadence and power over time for Cycling');
-    expect(resultCardSubtitle?.textContent).toContain('Aggregation: Average');
+    expect(resultContextRows.some((row) => row.nativeElement.textContent.includes('Aggregation') && row.nativeElement.textContent.includes('Average'))).toBe(true);
     expect(overallCard?.textContent).toContain('Cadence');
     expect(overallCard?.textContent).toContain('Power');
     expect(overallCard?.textContent).toContain(expectedCadenceOverall ?? '');
@@ -1401,7 +1401,7 @@ describe('AiInsightsPageComponent', () => {
     fixture.detectChanges();
 
     const chart = fixture.debugElement.query(By.css('.chart-stub'));
-    const subtitle = fixture.debugElement.query(By.css('.result-card-subtitle'))?.nativeElement as HTMLElement | undefined;
+    const contextRows = fixture.debugElement.queryAll(By.css('.result-card-context-row'));
     const primaryCard = fixture.debugElement.query(By.css('.event-lookup-primary'))?.nativeElement as HTMLElement | undefined;
     const rankingRows = fixture.debugElement.queryAll(By.css('.event-lookup-row'));
     const openButtons = fixture.debugElement.queryAll(By.css('.event-lookup-actions button'));
@@ -1413,7 +1413,7 @@ describe('AiInsightsPageComponent', () => {
     );
 
     expect(chart).toBeNull();
-    expect(subtitle).toBeFalsy();
+    expect(contextRows).toHaveLength(0);
     expect(primaryCard?.textContent).toContain('Winning event');
     expect(primaryCard?.textContent).toContain(expectedPrimaryValue ?? '');
     expect(primaryCard?.textContent).toContain('Mar 10, 2026');
@@ -1683,16 +1683,17 @@ describe('AiInsightsPageComponent', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    const resultCardSubtitle = fixture.debugElement.query(By.css('.result-card-subtitle'))?.nativeElement as HTMLElement | undefined;
-    const resultCardMeta = fixture.debugElement.query(By.css('.result-card-meta'))?.nativeElement as HTMLElement | undefined;
+    const resultContextRows = fixture.debugElement.queryAll(By.css('.result-card-context-row'));
+    const resultStatusChips = fixture.debugElement.queryAll(By.css('.result-status-chip'));
     const supportNote = fixture.debugElement.query(By.css('.prompt-support-note'))?.nativeElement as HTMLElement | undefined;
     const resultNotes = fixture.debugElement.queryAll(By.css('.result-note'));
 
     expect(aiInsightsLatestSnapshotServiceMock.loadLatest).toHaveBeenLastCalledWith('user-2');
     expect(component.promptControl.getRawValue()).toBe('Show my total distance all time');
-    expect(resultCardSubtitle?.textContent).toContain('Aggregation:');
-    expect(resultCardMeta?.textContent).toContain('Restored');
-    expect(resultCardMeta?.textContent).toContain('Saved Mar 18, 2026');
+    expect(resultContextRows.some((row) => row.nativeElement.textContent.includes('Aggregation'))).toBe(true);
+    expect(resultStatusChips.length).toBeGreaterThanOrEqual(2);
+    expect(resultStatusChips.some((chip) => chip.nativeElement.textContent.includes('Restored'))).toBe(true);
+    expect(resultStatusChips.some((chip) => chip.nativeElement.textContent.includes('Saved Mar 18, 2026'))).toBe(true);
     expect(supportNote?.textContent).toContain('Latest completed insights are temporarily restored from your account.');
     expect(supportNote?.textContent).toContain('Proper saved insights/history will come later.');
     expect(supportNote?.textContent).not.toContain('Latest saved');
@@ -1744,10 +1745,10 @@ describe('AiInsightsPageComponent', () => {
     await component.applySuggestedPrompt('Show my average cadence');
     fixture.detectChanges();
 
-    const subtitle = fixture.debugElement.query(By.css('.result-subtitle'))?.nativeElement as HTMLElement | undefined;
+    const subtitleValues = fixture.debugElement.queryAll(By.css('.result-card-context-value'));
 
-    expect(subtitle?.textContent).toContain('Jan 01, 2026 to Mar 18, 2026');
-    expect(subtitle?.textContent).not.toContain('2025-12-18T22:00:00.000Z');
+    expect(subtitleValues.some((value) => value.nativeElement.textContent.includes('Jan 01, 2026 to Mar 18, 2026'))).toBe(true);
+    expect(subtitleValues.some((value) => value.nativeElement.textContent.includes('2025-12-18T22:00:00.000Z'))).toBe(false);
   });
 
   it('should render bounded subtitles using the injected en-GB locale order', async () => {
@@ -1757,9 +1758,9 @@ describe('AiInsightsPageComponent', () => {
     await component.applySuggestedPrompt('Show my average cadence');
     fixture.detectChanges();
 
-    const subtitle = fixture.debugElement.query(By.css('.result-subtitle'))?.nativeElement as HTMLElement | undefined;
+    const subtitleValues = fixture.debugElement.queryAll(By.css('.result-card-context-value'));
 
-    expect(subtitle?.textContent).toContain('01 Jan 2026 to 18 Mar 2026');
+    expect(subtitleValues.some((value) => value.nativeElement.textContent.includes('01 Jan 2026 to 18 Mar 2026'))).toBe(true);
   });
 
   it('should format bounded subtitles in the query timezone instead of the browser timezone', async () => {
@@ -1768,9 +1769,9 @@ describe('AiInsightsPageComponent', () => {
     await component.applySuggestedPrompt('Show my average cadence for cycling');
     fixture.detectChanges();
 
-    const subtitle = fixture.debugElement.query(By.css('.result-subtitle'))?.nativeElement as HTMLElement | undefined;
+    const subtitleValues = fixture.debugElement.queryAll(By.css('.result-card-context-value'));
 
-    expect(subtitle?.textContent).toContain('Dec 19, 2025 to Mar 18, 2026');
+    expect(subtitleValues.some((value) => value.nativeElement.textContent.includes('Dec 19, 2025 to Mar 18, 2026'))).toBe(true);
   });
 
   it('should render all-time responses without a raw date span', async () => {
@@ -1779,11 +1780,11 @@ describe('AiInsightsPageComponent', () => {
     await component.applySuggestedPrompt('Show my total distance all time');
     fixture.detectChanges();
 
-    const subtitle = fixture.debugElement.query(By.css('.result-subtitle'))?.nativeElement as HTMLElement | undefined;
+    const subtitleValues = fixture.debugElement.queryAll(By.css('.result-card-context-value'));
     const note = fixture.debugElement.query(By.css('.result-date-range-note'));
 
-    expect(subtitle?.textContent).toContain('All time');
-    expect(subtitle?.textContent).not.toContain('to');
+    expect(subtitleValues.some((value) => value.nativeElement.textContent.includes('All time'))).toBe(true);
+    expect(subtitleValues.some((value) => value.nativeElement.textContent.includes('to'))).toBe(false);
     expect(note).toBeNull();
   });
 
@@ -1806,15 +1807,15 @@ describe('AiInsightsPageComponent', () => {
     await component.applySuggestedPrompt('Show my average pace for water sports over the last 6 months');
     fixture.detectChanges();
 
-    const subtitle = fixture.debugElement.query(By.css('.result-subtitle'))?.nativeElement as HTMLElement | undefined;
+    const subtitleValues = fixture.debugElement.queryAll(By.css('.result-card-context-value'));
     const summaryCards = fixture.debugElement.queryAll(By.css('.summary-card'));
     const activitiesCard = summaryCards.find((card) => card.nativeElement.textContent.includes('Activities'))?.nativeElement as HTMLElement | undefined;
 
-    expect(subtitle?.textContent).toContain('Water Sports');
-    expect(subtitle?.textContent).toContain('Rowing');
-    expect(subtitle?.textContent).toContain('Surfing');
-    expect(subtitle?.textContent).toContain('Kitesurfing');
-    expect(subtitle?.textContent).toContain('+6 more');
+    expect(subtitleValues.some((value) => value.nativeElement.textContent.includes('Water Sports'))).toBe(true);
+    expect(subtitleValues.some((value) => value.nativeElement.textContent.includes('Rowing'))).toBe(true);
+    expect(subtitleValues.some((value) => value.nativeElement.textContent.includes('Surfing'))).toBe(true);
+    expect(subtitleValues.some((value) => value.nativeElement.textContent.includes('Kitesurfing'))).toBe(true);
+    expect(subtitleValues.some((value) => value.nativeElement.textContent.includes('+6 more'))).toBe(true);
     expect(activitiesCard?.textContent).toContain('Rowing');
     expect(activitiesCard?.textContent).toContain('5');
     expect(activitiesCard?.textContent).toContain('Surfing');

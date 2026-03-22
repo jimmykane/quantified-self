@@ -110,12 +110,32 @@
           <div mat-card-avatar class="card-avatar result-avatar">
             <mat-icon>insights</mat-icon>
           </div>
-          <mat-card-title class="result-card-title">{{ resultCardHeaderTitle() }}</mat-card-title>
-          @if (resultCardHeaderSubtitle(); as resultCardHeaderSubtitle) {
-            <mat-card-subtitle class="result-card-subtitle result-subtitle">{{ resultCardHeaderSubtitle }}</mat-card-subtitle>
-          }
-          @if (resultCardMetaText(); as resultCardMetaText) {
-            <mat-card-subtitle class="result-card-meta">{{ resultCardMetaText }}</mat-card-subtitle>
+          <mat-card-title class="result-card-title description-text result-card-input-text">
+            <div class="result-card-title-content">
+              <div class="result-card-title-row">
+                <span class="result-card-title-text">{{ resultCardHeaderTitle() }}</span>
+                @if (latestSnapshotRestored() || resultCardMetaText()) {
+                  <mat-chip-set class="result-status-chip-set" aria-label="Result snapshot status">
+                    @if (latestSnapshotRestored()) {
+                      <mat-chip disableRipple class="result-status-chip">Restored</mat-chip>
+                    }
+                    @if (resultCardMetaText(); as resultCardMetaText) {
+                      <mat-chip disableRipple class="result-status-chip">{{ resultCardMetaText }}</mat-chip>
+                    }
+                  </mat-chip-set>
+                }
+              </div>
+            </div>
+          </mat-card-title>
+          @if (resultHeaderContextRows().length) {
+            <mat-card-subtitle class="result-card-context-list" aria-label="Result context details">
+              @for (contextRow of resultHeaderContextRows(); track contextRow.label) {
+                <div class="result-card-context-row">
+                  <span class="result-card-context-label">{{ contextRow.label }}</span>
+                  <span class="result-card-context-value result-card-subtitle result-subtitle">{{ contextRow.value }}</span>
+                </div>
+              }
+            </mat-card-subtitle>
           }
         </mat-card-header>
 
@@ -535,11 +555,15 @@
                             }
                           </div>
                         }
-                        @if (summaryCard.metaFooter) {
-                          <p class="summary-meta">{{ summaryCard.metaFooter }}</p>
-                        }
-                        @if (summaryCard.meta) {
-                          <p class="summary-meta">{{ summaryCard.meta }}</p>
+                        @if (summaryCard.metaFooter || summaryCard.meta) {
+                          <div class="summary-card-footer">
+                            @if (summaryCard.metaFooter) {
+                              <p class="summary-meta">{{ summaryCard.metaFooter }}</p>
+                            }
+                            @if (summaryCard.meta) {
+                              <p class="summary-meta summary-meta--date">{{ summaryCard.meta }}</p>
+                            }
+                          </div>
                         }
                       </section>
                     }
@@ -637,11 +661,15 @@
                           }
                         </div>
                       }
-                      @if (summaryCard.metaFooter) {
-                        <p class="summary-meta">{{ summaryCard.metaFooter }}</p>
-                      }
-                      @if (summaryCard.meta) {
-                        <p class="summary-meta">{{ summaryCard.meta }}</p>
+                      @if (summaryCard.metaFooter || summaryCard.meta) {
+                        <div class="summary-card-footer">
+                          @if (summaryCard.metaFooter) {
+                            <p class="summary-meta">{{ summaryCard.metaFooter }}</p>
+                          }
+                          @if (summaryCard.meta) {
+                            <p class="summary-meta summary-meta--date">{{ summaryCard.meta }}</p>
+                          }
+                        </div>
                       }
                     </section>
                   }
