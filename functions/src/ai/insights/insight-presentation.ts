@@ -126,7 +126,7 @@ function buildUnsupportedNarrative(reasonCode: AiInsightsUnsupportedReasonCode):
       return 'I can compare up to three metrics when they share one aggregation style. Use one aggregation such as average for all metrics, and say over time if you want a combined comparison chart.';
     case 'unsupported_metric':
     default:
-      return 'I can answer a curated set of event-level metrics right now, such as distance, duration, ascent, descent, cadence, power, heart rate, speed, pace, calories, and selected performance metrics like TSS, normalized power, intensity factor, VO2 max, EPOC, training effect, and recovery time.';
+      return 'I can answer a curated set of event-level metrics right now, such as distance, duration, ascent, descent, cadence, power, heart rate, speed, pace, calories, and selected performance metrics like TSS, normalized power, intensity factor, VO2 max, training effect, and recovery time. This list is growing over time, and if you need a specific metric please contact us so we can prioritize it.';
   }
 }
 

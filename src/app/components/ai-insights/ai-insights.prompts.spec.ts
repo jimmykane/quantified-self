@@ -68,9 +68,10 @@ describe('ai-insights prompts', () => {
 
   it('marks unsupported suggestions from the shared prompt catalog', () => {
     const unsupportedPrompts = getAiInsightsPromptEntriesBySurface('unsupported').map((prompt) => prompt.prompt);
+    const sharedPromptSet = new Set(AI_INSIGHTS_PROMPT_CATALOG.map((prompt) => prompt.prompt));
 
     expect(unsupportedPrompts.length).toBeGreaterThanOrEqual(3);
-    expect(unsupportedPrompts.every((prompt) => AI_INSIGHTS_DEFAULT_PICKER_PROMPTS.includes(prompt))).toBe(true);
+    expect(unsupportedPrompts.every((prompt) => sharedPromptSet.has(prompt))).toBe(true);
   });
 
   it('includes new jump prompts in the default picker catalog', () => {

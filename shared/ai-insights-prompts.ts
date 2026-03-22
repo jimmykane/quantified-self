@@ -266,7 +266,7 @@ export const AI_INSIGHTS_PROMPT_CATALOG = [
     prompt: 'Show my average EPOC over time for running in the last 90 days.',
     category: 'Recovery & Performance',
     featured: false,
-    surfaces: ['picker', 'unsupported'],
+    surfaces: [],
     metricKey: 'epoc',
   },
   {
@@ -617,7 +617,6 @@ export function getAiInsightsDefaultMetricPrompt(
   const prompt = AI_INSIGHTS_PROMPT_CATALOG.find((entry) => (
     'metricKey' in entry
     && entry.metricKey === metricKey
-    && hasSurface(entry, 'unsupported')
   ))?.prompt;
 
   if (!prompt) {

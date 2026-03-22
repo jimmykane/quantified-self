@@ -352,16 +352,7 @@ export class AiInsightsPageComponent {
       && quotaStatus.isEligible
       && quotaStatus.resetMode === 'next_successful_payment';
   });
-  readonly quotaSupportSubjectText = computed(() => {
-    const userId = this.currentUserID() ?? 'unknown-user';
-    return `AI Insights quota reset question (User ID: ${userId})`;
-  });
-  readonly quotaSupportMailtoHref = computed(() => {
-    const params = new URLSearchParams({
-      subject: this.quotaSupportSubjectText(),
-    });
-    return `mailto:${this.supportEmail}?${params.toString()}`;
-  });
+  readonly quotaSupportMailtoHref = computed(() => `mailto:${this.supportEmail}`);
   readonly quotaBlockedMessage = computed(() => {
     const quotaStatus = this.quotaStatus();
     if (!quotaStatus || (quotaStatus.isEligible && quotaStatus.remainingCount > 0)) {

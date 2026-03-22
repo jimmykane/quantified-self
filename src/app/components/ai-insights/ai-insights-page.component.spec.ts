@@ -1902,9 +1902,21 @@ describe('AiInsightsPageComponent', () => {
     expect(quotaLine?.textContent).toContain('resets after next successful payment');
     expect(quotaLine?.textContent).toContain('Need more?');
     expect(quotaSupportLink?.textContent).toContain('Contact us');
-    expect(quotaSupportLink?.getAttribute('href')).toContain('mailto:support@quantified-self.io?subject=');
-    expect(decodeURIComponent((quotaSupportLink?.getAttribute('href') ?? '').replace(/\+/g, '%20')))
-      .toContain('AI Insights quota reset question (User ID: user-1)');
+    expect(quotaSupportLink?.getAttribute('href')).toBe('mailto:support@quantified-self.io');
+  });
+
+  it('should navigate to support mailto when the quota support contact is clicked', async () => {
+    aiInsightsQuotaServiceMock.loadQuotaStatus.mockResolvedValueOnce(buildQuotaStatus({
+      periodEnd: null,
+      resetMode: 'next_successful_payment',
+    }));
+
+    await createComponent();
+
+    const quotaSupportLink = fixture.debugElement.query(By.css('.prompt-quota-line a'))?.nativeElement as HTMLAnchorElement | undefined;
+    quotaSupportLink?.click();
+
+    expect(quotaSupportLink?.getAttribute('href')).toBe('mailto:support@quantified-self.io');
   });
 
   it('should show the paid-tier access message when AI Insights is unavailable for the current account', async () => {
