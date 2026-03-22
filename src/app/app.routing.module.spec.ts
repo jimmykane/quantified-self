@@ -13,8 +13,8 @@ describe('AppRoutingModule routes', () => {
     expect(helpRoute?.loadComponent).toBeTypeOf('function');
     expect(helpRoute?.data).toMatchObject({
       title: 'Help & Support',
-      description: 'Get help with account setup, uploads, device integrations, billing, privacy, and common troubleshooting in Quantified Self.',
-      keywords: 'help, support, faq, garmin, suunto, coros, uploads, billing, privacy, quantified self',
+      description: 'Get help with AI Insights, account setup, uploads, device integrations, billing, privacy, and common troubleshooting in Quantified Self.',
+      keywords: 'help, support, faq, ai insights, garmin, suunto, coros, uploads, billing, privacy, quantified self',
       animation: 'Help',
       preload: true,
       jsonLd: {

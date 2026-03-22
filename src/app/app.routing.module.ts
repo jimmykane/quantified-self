@@ -67,13 +67,13 @@ export const routes: Routes = [
       title: 'Help & Support',
       preload: true,
       animation: 'Help',
-      description: 'Get help with account setup, uploads, device integrations, billing, privacy, and common troubleshooting in Quantified Self.',
-      keywords: 'help, support, faq, garmin, suunto, coros, uploads, billing, privacy, quantified self',
+      description: 'Get help with AI Insights, account setup, uploads, device integrations, billing, privacy, and common troubleshooting in Quantified Self.',
+      keywords: 'help, support, faq, ai insights, garmin, suunto, coros, uploads, billing, privacy, quantified self',
       jsonLd: {
         "@context": "https://schema.org",
         "@type": "WebPage",
         "name": "Quantified Self Help & Support",
-        "description": "Get help with account setup, uploads, device integrations, billing, privacy, and common troubleshooting in Quantified Self.",
+        "description": "Get help with AI Insights, account setup, uploads, device integrations, billing, privacy, and common troubleshooting in Quantified Self.",
         "url": "https://www.quantified-self.io/help",
         "inLanguage": "en",
         "isPartOf": {
@@ -82,6 +82,7 @@ export const routes: Routes = [
           "url": "https://www.quantified-self.io"
         },
         "about": [
+          "AI Insights",
           "Account setup",
           "Manual uploads",
           "Membership and billing",

@@ -1,7 +1,9 @@
 import { environment } from '../../environments/environment';
+import { AI_INSIGHTS_REQUEST_LIMITS } from '../../../shared/limits';
 
 export type HelpSectionId =
   | 'getting-started'
+  | 'ai-insights'
   | 'plans-and-billing'
   | 'uploads-and-imports'
   | 'service-connections'
@@ -113,6 +115,59 @@ export const HELP_SECTIONS: HelpSection[] = [
       { label: 'Login', icon: 'login', kind: 'route', target: '/login' },
       { label: 'Dashboard', icon: 'space_dashboard', kind: 'route', target: '/dashboard' },
       { label: 'Membership', icon: 'card_membership', kind: 'route', target: '/pricing' },
+      { label: 'Release Notes', icon: 'campaign', kind: 'route', target: '/releases' },
+    ],
+  },
+  {
+    id: 'ai-insights',
+    icon: 'insights',
+    title: 'AI Insights',
+    summary: 'How prompt execution, result types, quotas, and restore behavior work in the AI Insights page.',
+    content: `## Access and quota
+
+- AI Insights is available for **Basic** and **Pro** accounts.
+- Free accounts are redirected to the subscription flow for AI Insights access.
+- Prompts are currently **English only**.
+- Request limits per billing period:
+  - Basic: up to **${AI_INSIGHTS_REQUEST_LIMITS.basic}** requests
+  - Pro: up to **${AI_INSIGHTS_REQUEST_LIMITS.pro}** requests
+- The prompt card always shows your live remaining requests and reset timing.
+
+## Prompt flow and execution
+
+- Type a prompt and press **Ask AI** to execute.
+- Hero rotating examples at the top now **fill the input only**. They do not run automatically.
+- **Browse prompts** opens the prompt picker dialog. Selecting a prompt there runs it immediately.
+- If your prompt does not include a date range, AI Insights defaults to **current year to date**.
+- Add **all time** to query your full history.
+
+## Supported result modes
+
+- **Aggregate**: narrative + summary cards + chart, with optional ranked event links.
+- **Event lookup**: best matching event plus top-ranked matching events.
+- **Latest event**: most recent matching event in scope (single primary event card).
+- **Multi-metric aggregate**: combined chart for multiple metrics with merged summary cards.
+- **Empty**: the request shape is valid but no matching data was found in scope.
+- **Unsupported**: the request could not be mapped confidently; suggested prompts are returned.
+
+## Saved latest result behavior
+
+- The latest completed AI result is restored automatically when you open the page.
+- Restored results are marked with a **Restored** chip and saved-date metadata.
+- Invalid latest snapshots are automatically cleared and ignored.
+- **Refresh with latest data & dates** reruns the current result prompt with fresh data.
+
+## Troubleshooting quick checks
+
+- **App verification failed**: refresh and retry.
+- **Invalid request**: include one metric, an activity/sport, and a date scope.
+- **Permission denied**: ensure your account has Basic or Pro access.
+- **Quota reached**: wait for reset or upgrade.
+- If you need a metric that is not currently supported, contact support.`,
+    links: [
+      { label: 'AI Insights', icon: 'insights', kind: 'route', target: '/ai-insights' },
+      { label: 'Membership', icon: 'card_membership', kind: 'route', target: '/pricing' },
+      { label: 'Email Support', icon: 'email', kind: 'external', target: SUPPORT_MAILTO },
       { label: 'Release Notes', icon: 'campaign', kind: 'route', target: '/releases' },
     ],
   },
