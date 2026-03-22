@@ -112,6 +112,7 @@ const ALL_KNOWN_UNIT_VARIANTS = new Set<string>(
 
 interface ActivityNumericCache {
   startTimeMs: number;
+  streamByType: Map<string, StreamInterface>;
   streamValuesByType: Map<string, number[]>;
   timeValues: number[] | null;
   distanceValues: number[] | null;
@@ -134,8 +135,8 @@ export function buildEventChartPanels(input: BuildEventChartPanelsInput): EventC
   const preferredDataTypeOrder = buildPreferredDataTypeOrder(input.dataTypesToUse, input.userUnitSettings);
 
   selectedActivities.forEach((activity) => {
-    const activityCache = createActivityNumericCache(activity);
     const streams = activity.getAllStreams() || [];
+    const activityCache = createActivityNumericCache(activity, streams);
     if (!streams.length) {
       return;
     }
@@ -514,9 +515,25 @@ function canActivityRenderEventChart(activity: ActivityInterface, xAxisType: XAx
 function getActivityStreamByType(
   activity: ActivityInterface | undefined | null,
   streamType: string,
-  knownStreams: StreamInterface[] | null = null
+  knownStreams: Map<string, StreamInterface> | StreamInterface[] | null = null
 ): StreamInterface | null {
   if (!activity || !streamType) {
+    return null;
+  }
+
+  const hasKnownStreams = (knownStreams instanceof Map && knownStreams.size > 0)
+    || (Array.isArray(knownStreams) && knownStreams.length > 0);
+  const streamFromKnown = knownStreams instanceof Map
+    ? (knownStreams.get(streamType) || null)
+    : (Array.isArray(knownStreams) ? knownStreams.find((stream) => stream?.type === streamType) || null : null);
+  if (streamFromKnown) {
+    return streamFromKnown;
+  }
+
+  if (
+    hasKnownStreams
+    && (streamType === DataDistance.type || streamType === DataStrydDistance.type)
+  ) {
     return null;
   }
 
@@ -831,9 +848,24 @@ function getFiniteValueNearIndex(values: number[], index: number): number {
   return Number.NaN;
 }
 
-function createActivityNumericCache(activity: ActivityInterface): ActivityNumericCache {
+function createActivityNumericCache(
+  activity: ActivityInterface,
+  knownStreams: StreamInterface[] | null = null
+): ActivityNumericCache {
+  const streams = Array.isArray(knownStreams) ? knownStreams : activity.getAllStreams?.() || [];
+  const streamByType = new Map<string, StreamInterface>();
+  for (let index = 0; index < streams.length; index += 1) {
+    const stream = streams[index];
+    const streamType = `${stream?.type || ''}`;
+    if (!streamType || streamByType.has(streamType)) {
+      continue;
+    }
+    streamByType.set(streamType, stream);
+  }
+
   return {
     startTimeMs: activity.startDate.getTime(),
+    streamByType,
     streamValuesByType: new Map<string, number[]>(),
     timeValues: null,
     distanceValues: null,
@@ -934,7 +966,7 @@ function getActivityStreamNumericValues(
     return cached;
   }
 
-  const values = toNumericArray(getActivityStreamByType(activity, streamType)?.getData?.());
+  const values = toNumericArray(getActivityStreamByType(activity, streamType, cache.streamByType)?.getData?.());
   cache.streamValuesByType.set(streamType, values);
   return values;
 }

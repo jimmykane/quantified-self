@@ -213,6 +213,12 @@ describe('event-echarts-data.helper', () => {
       type: XAxisTypes.Time,
       getData: () => [0, 1, 2],
     } as any;
+    const getStream = vi.fn((type: string) => {
+      if (type === XAxisTypes.Time) {
+        return timeStream;
+      }
+      throw new Error(`No stream found with type ${type}`);
+    });
 
     const activity = {
       startDate: new Date('2024-01-01T00:00:00.000Z'),
@@ -220,12 +226,7 @@ describe('event-echarts-data.helper', () => {
       type: 'Ride',
       getID: () => 'indoor-1',
       getAllStreams: () => [powerStream],
-      getStream: (type: string) => {
-        if (type === XAxisTypes.Time) {
-          return timeStream;
-        }
-        throw new Error(`No stream found with type ${type}`);
-      },
+      getStream,
     } as any;
 
     const panels = buildEventChartPanels({
@@ -241,6 +242,8 @@ describe('event-echarts-data.helper', () => {
     });
 
     expect(panels).toEqual([]);
+    expect(getStream).not.toHaveBeenCalledWith(DataDistance.type);
+    expect(getStream).not.toHaveBeenCalledWith('Distance');
   });
 
   it('returns false for distance-axis chartability when distance lookup throws', () => {
@@ -252,24 +255,27 @@ describe('event-echarts-data.helper', () => {
       type: XAxisTypes.Time,
       getData: () => [0, 1, 2],
     } as any;
+    const getStream = vi.fn((type: string) => {
+      if (type === XAxisTypes.Time) {
+        return timeStream;
+      }
+      if (type === DataPower.type) {
+        return powerStream;
+      }
+      throw new Error(`No stream found with type ${type}`);
+    });
 
     const activity = {
       startDate: new Date('2024-01-01T00:00:00.000Z'),
       creator: { name: 'Zwift' },
       getID: () => 'indoor-2',
       getAllStreams: () => [powerStream, timeStream],
-      getStream: (type: string) => {
-        if (type === XAxisTypes.Time) {
-          return timeStream;
-        }
-        if (type === DataPower.type) {
-          return powerStream;
-        }
-        throw new Error(`No stream found with type ${type}`);
-      },
+      getStream,
     } as any;
 
     expect(hasEventChartableData([activity], XAxisTypes.Distance)).toBe(false);
+    expect(getStream).not.toHaveBeenCalledWith(DataDistance.type);
+    expect(getStream).not.toHaveBeenCalledWith('Distance');
   });
 
   it('builds stable legend items for activities', () => {
