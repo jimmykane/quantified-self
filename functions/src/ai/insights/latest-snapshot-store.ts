@@ -4,6 +4,7 @@ import type { AiInsightsResponse } from '../../../../shared/ai-insights.types';
 import { validateAiInsightsLatestSnapshot } from '../../../../shared/ai-insights-latest-snapshot.validation';
 import { validateAiInsightsResponse } from '../../../../shared/ai-insights-response.contract';
 import { serializeErrorForLogging } from './error-logging';
+import { stripUndefinedDeep } from './strip-undefined-deep';
 
 const AI_INSIGHTS_LATEST_DOC_ID = 'latest';
 const AI_INSIGHTS_LATEST_SNAPSHOT_VERSION = 1;
@@ -31,27 +32,6 @@ const defaultAiInsightsLatestSnapshotStoreDependencies: AiInsightsLatestSnapshot
 
 function measureUtf8Bytes(serializedValue: string): number {
   return new TextEncoder().encode(serializedValue).length;
-}
-
-function stripUndefinedDeep(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value
-      .map(entry => stripUndefinedDeep(entry))
-      .filter(entry => entry !== undefined);
-  }
-
-  if (value && typeof value === 'object') {
-    return Object.entries(value as Record<string, unknown>)
-      .reduce<Record<string, unknown>>((accumulator, [key, nestedValue]) => {
-        const cleanedValue = stripUndefinedDeep(nestedValue);
-        if (cleanedValue !== undefined) {
-          accumulator[key] = cleanedValue;
-        }
-        return accumulator;
-      }, {});
-  }
-
-  return value;
 }
 
 export function createAiInsightsLatestSnapshotStore(

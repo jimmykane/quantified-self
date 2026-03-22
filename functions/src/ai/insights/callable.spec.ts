@@ -833,6 +833,64 @@ describe('aiInsights callable', () => {
     });
   });
 
+  it('omits optional undefined fields from callable responses before returning them', async () => {
+    const queryWithUndefinedOptionals = {
+      ...eventLookupQuery,
+      requestedTimeInterval: undefined,
+      requestedDateRanges: undefined,
+      periodMode: undefined,
+    };
+
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'ok',
+      metricKey: 'distance',
+      query: queryWithUndefinedOptionals,
+    });
+    hoisted.executeAiInsightsQuery.mockResolvedValue({
+      resultKind: 'event_lookup',
+      matchedEventsCount: 3,
+      matchedActivityTypeCounts: [
+        {
+          activityType: ActivityTypes.Cycling,
+          eventCount: 3,
+        },
+      ],
+      eventLookup: {
+        primaryEventId: 'event-3',
+        topEventIds: ['event-3', 'event-2', 'event-1'],
+        rankedEvents: [
+          {
+            eventId: 'event-3',
+            startDate: '2026-03-10T08:00:00.000Z',
+            aggregateValue: 123,
+          },
+        ],
+      },
+    });
+
+    const result = await aiInsights({
+      prompt: 'I want to know when I had my longest distance in cycling',
+      clientTimezone: 'UTC',
+    } as any) as Record<string, unknown>;
+
+    const resultQuery = (result.query ?? {}) as Record<string, unknown>;
+    expect('requestedTimeInterval' in resultQuery).toBe(false);
+    expect('requestedDateRanges' in resultQuery).toBe(false);
+    expect('periodMode' in resultQuery).toBe(false);
+
+    const resultPresentation = (result.presentation ?? {}) as Record<string, unknown>;
+    expect('warnings' in resultPresentation).toBe(false);
+
+    const persistedResponse = hoisted.persistLatestAiInsightsSnapshot.mock.calls[0]?.[2] as Record<string, unknown>;
+    expect(persistedResponse).toBeDefined();
+    const persistedQuery = (persistedResponse.query ?? {}) as Record<string, unknown>;
+    expect('requestedTimeInterval' in persistedQuery).toBe(false);
+    expect('requestedDateRanges' in persistedQuery).toBe(false);
+    expect('periodMode' in persistedQuery).toBe(false);
+    const persistedPresentation = (persistedResponse.presentation ?? {}) as Record<string, unknown>;
+    expect('warnings' in persistedPresentation).toBe(false);
+  });
+
   it('returns a latest_event response with one event payload for latest prompts', async () => {
     hoisted.normalizeInsightQuery.mockResolvedValue({
       status: 'ok',

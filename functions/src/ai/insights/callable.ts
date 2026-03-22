@@ -37,6 +37,7 @@ import {
   type CallableResultKindContext,
   resolveCallableResultKindHandler,
 } from './callable.result-kind-handlers';
+import { stripUndefinedDeep } from './strip-undefined-deep';
 
 interface AiInsightsCallableContext {
   auth?: {
@@ -217,8 +218,11 @@ export async function runAiInsights(
   const persistLatestSnapshot = async (
     response: AiInsightsResponse,
   ): Promise<AiInsightsResponse> => {
-    await aiInsightsRuntime.persistLatestAiInsightsSnapshot(userID, prompt, response);
-    return response;
+    const wireSafeResponse = AiInsightsResponseSchema.parse(
+      stripUndefinedDeep(response),
+    );
+    await aiInsightsRuntime.persistLatestAiInsightsSnapshot(userID, prompt, wireSafeResponse);
+    return wireSafeResponse;
   };
 
   try {
