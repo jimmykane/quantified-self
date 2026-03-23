@@ -1295,12 +1295,20 @@ function resolvePromptTopResultsLimit(prompt: string): number | undefined {
     return undefined;
   }
 
-  const topResultsMatch = normalizedPrompt.match(/\btop\s+((?:\d{1,3}(?:\s\d{3})+)|\d+)\b/);
-  if (!topResultsMatch) {
+  const limitPatterns: readonly RegExp[] = [
+    /\btop\s+((?:\d{1,3}(?:\s\d{3})+)|\d+)\b/,
+    /\b((?:\d{1,3}(?:\s\d{3})+)|\d+)\s+top\b/,
+    /\bbest\s+((?:\d{1,3}(?:\s\d{3})+)|\d+)\b/,
+  ];
+
+  const matchedLimitToken = limitPatterns
+    .map((pattern) => normalizedPrompt.match(pattern)?.[1] ?? null)
+    .find((value) => typeof value === 'string' && value.length > 0);
+  if (!matchedLimitToken) {
     return undefined;
   }
 
-  const parsedLimit = Number.parseInt(topResultsMatch[1].replace(/\s+/g, ''), 10);
+  const parsedLimit = Number.parseInt(matchedLimitToken.replace(/\s+/g, ''), 10);
   if (!Number.isFinite(parsedLimit)) {
     return undefined;
   }

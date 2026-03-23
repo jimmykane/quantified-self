@@ -834,6 +834,84 @@ describe('normalizeInsightQuery', () => {
     expect(result.query.topResultsLimit).toBe(20);
   });
 
+  it('parses reversed "N top" ranked phrasing', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-19T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'distance',
+        aggregation: 'maximum',
+        category: 'date',
+        activityTypes: ['Cycling'],
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show my 5 top distance rides this year.',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.resultKind).toBe('event_lookup');
+    expect(result.query.topResultsLimit).toBe(5);
+  });
+
+  it('parses "best N" ranked phrasing', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-19T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'distance',
+        aggregation: 'maximum',
+        category: 'date',
+        activityTypes: ['Cycling'],
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show my best 10 distance rides this year.',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.resultKind).toBe('event_lookup');
+    expect(result.query.topResultsLimit).toBe(10);
+  });
+
+  it('parses hyphenated "top-N" ranked phrasing', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-19T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'distance',
+        aggregation: 'maximum',
+        category: 'date',
+        activityTypes: ['Cycling'],
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show my top-10 distance rides this year.',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.resultKind).toBe('event_lookup');
+    expect(result.query.topResultsLimit).toBe(10);
+  });
+
   it('clamps oversized explicit top-N limits to the shared max', async () => {
     setNormalizeQueryDependenciesForTesting({
       now: () => new Date('2026-03-19T12:00:00.000Z'),

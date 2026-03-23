@@ -2,7 +2,7 @@ import { inject, Injectable, Injector, OnDestroy, runInInjectionContext } from '
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { EventImporterJSON } from '@sports-alliance/sports-lib';
 import { combineLatest, from, Observable, of, throwError, zip } from 'rxjs';
-import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, onSnapshot, doc, docData, getDoc, getDocs, getDocsFromCache, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, Query, QuerySnapshot, DocumentData, getCountFromServer } from '@angular/fire/firestore';
+import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, onSnapshot, doc, docData, getDoc, getDocs, getDocsFromCache, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, Query, QuerySnapshot, DocumentData, getCountFromServer, documentId } from '@angular/fire/firestore';
 import { catchError, map, switchMap, take, distinctUntilChanged, tap } from 'rxjs/operators';
 import { EventJSONInterface } from '@sports-alliance/sports-lib';
 import { ActivityJSONInterface } from '@sports-alliance/sports-lib';
@@ -88,6 +88,7 @@ export class AppEventService implements OnDestroy {
   private static readonly DEDUPE_TTL_MS = 6 * 60 * 60 * 1000;
   private static readonly SANITIZER_EVENT_TTL_MS = 30 * 60 * 1000;
   private static readonly EVENT_QUERY_SEED_TTL_MS = 30 * 1000;
+  private static readonly FIRESTORE_IN_QUERY_MAX_IDS = 30;
   private static readonly DEDUPE_UNKNOWN_TYPES_MAX = 500;
   private static readonly DEDUPE_SANITIZER_ISSUES_MAX = 5000;
   private static readonly DEDUPE_SANITIZER_EVENTS_MAX = 1000;
@@ -183,6 +184,19 @@ export class AppEventService implements OnDestroy {
       docID,
       snapshot,
     });
+  }
+
+  private chunkValues<T>(values: readonly T[], chunkSize: number): T[][] {
+    if (!values.length) {
+      return [];
+    }
+
+    const chunks: T[][] = [];
+    for (let startIndex = 0; startIndex < values.length; startIndex += chunkSize) {
+      chunks.push(values.slice(startIndex, startIndex + chunkSize));
+    }
+
+    return chunks;
   }
 
   private getActivityIDsForDebug(activities: Array<Partial<ActivityInterface> | any> | null | undefined): string[] {
@@ -686,29 +700,50 @@ export class AppEventService implements OnDestroy {
       userID: user.uid,
       eventIDs: normalizedEventIDs,
       requestedCount: normalizedEventIDs.length,
+      queryChunkCount: Math.ceil(normalizedEventIDs.length / AppEventService.FIRESTORE_IN_QUERY_MAX_IDS),
     });
 
-    return from(Promise.all(normalizedEventIDs.map(async (eventID) => {
-      try {
-        const snapshot = await runInInjectionContext(
-          this.injector,
-          () => getDoc(doc(this.firestore, 'users', user.uid, 'events', eventID)),
-        );
-        if (!snapshot.exists()) {
-          return null;
-        }
+    const eventsCollection = runInInjectionContext(
+      this.injector,
+      () => collection(this.firestore, 'users', user.uid, 'events'),
+    );
+    const eventIDChunks = this.chunkValues(
+      normalizedEventIDs,
+      AppEventService.FIRESTORE_IN_QUERY_MAX_IDS,
+    );
 
-        return this.buildEventFromSnapshot(snapshot.data(), snapshot.id);
+    return from(Promise.all(eventIDChunks.map(async (eventIDChunk) => {
+      try {
+        const chunkQuery = runInInjectionContext(
+          this.injector,
+          () => query(eventsCollection, where(documentId(), 'in', eventIDChunk)),
+        );
+        const querySnapshot = await runInInjectionContext(this.injector, () => getDocs(chunkQuery));
+        return querySnapshot.docs
+          .map((snapshot) => this.buildEventFromSnapshot(snapshot.data(), snapshot.id))
+          .filter((event): event is AppEventInterface => !!event);
       } catch (error) {
-        this.logger.error('[AppEventService] Failed to fetch event by ID.', {
+        this.logger.error('[AppEventService] Failed to fetch events by chunked IDs.', {
           userID: user.uid,
-          eventID,
+          eventIDs: eventIDChunk,
           error,
         });
-        return null;
+        return [];
       }
     }))).pipe(
-      map((events) => events.filter((event): event is AppEventInterface => !!event)),
+      map((chunkEvents) => {
+        const eventsByID = new Map<string, AppEventInterface>();
+        for (const event of chunkEvents.flat()) {
+          const eventID = event.getID();
+          if (eventID && !eventsByID.has(eventID)) {
+            eventsByID.set(eventID, event);
+          }
+        }
+
+        return normalizedEventIDs
+          .map((eventID) => eventsByID.get(eventID))
+          .filter((event): event is AppEventInterface => !!event);
+      }),
     );
   }
 
