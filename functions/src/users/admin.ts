@@ -46,6 +46,8 @@ function toSafeNumber(value: unknown, fallback: number = 0): number {
 
 const DEFAULT_SUBSCRIPTION_HISTORY_MONTHS = 12;
 const MAX_SUBSCRIPTION_HISTORY_MONTHS = 24;
+const DEFAULT_LIST_USERS_PAGE_SIZE = 10;
+const MAX_LIST_USERS_PAGE_SIZE = 50;
 const ACTIVE_SUBSCRIPTION_STATUSES = ['active', 'trialing', 'past_due'] as const;
 const ACTIVE_SUBSCRIPTION_STATUS_SET = new Set<string>(ACTIVE_SUBSCRIPTION_STATUSES);
 const SUBSCRIPTION_ROLE_BASIC = 'basic';
@@ -118,6 +120,19 @@ function clampSubscriptionHistoryMonths(rawMonths: unknown): number {
         return MAX_SUBSCRIPTION_HISTORY_MONTHS;
     }
     return normalized;
+}
+
+function clampListUsersPageSize(rawPageSize: unknown): number {
+    if (rawPageSize === null || rawPageSize === undefined || rawPageSize === '') {
+        return DEFAULT_LIST_USERS_PAGE_SIZE;
+    }
+
+    const parsed = Number.parseInt(String(rawPageSize), 10);
+    if (!Number.isFinite(parsed) || parsed < 1) {
+        return DEFAULT_LIST_USERS_PAGE_SIZE;
+    }
+
+    return Math.min(parsed, MAX_LIST_USERS_PAGE_SIZE);
 }
 
 function normalizeEpochNumberToMillis(value: number): number | null {
@@ -453,7 +468,7 @@ export const listUsers = onAdminCall<ListUsersRequest, any>({
 }, async (request) => {
     try {
         const data = request.data || {};
-        const pageSize = data.pageSize ? parseInt(String(data.pageSize)) : 10;
+        const pageSize = clampListUsersPageSize(data.pageSize);
         const page = data.page ? parseInt(String(data.page)) : 0;
         const searchTerm = (data.searchTerm || '').toLowerCase().trim();
         const sortField = data.sortField || 'created';

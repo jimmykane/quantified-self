@@ -250,6 +250,18 @@ describe('listUsers Cloud Function', () => {
         expect(result.users[0].providerIds).toEqual(['google.com']);
     });
 
+    it('should clamp oversized pageSize values to the server-side max', async () => {
+        const request = {
+            data: { page: 0, pageSize: 1000 },
+            auth: { uid: 'admin-uid', token: { admin: true } },
+            app: { appId: 'mock-app-id' }
+        } as unknown as CallableRequest<any>;
+
+        const result: any = await (listUsers as any)(request);
+
+        expect(result.pageSize).toBe(50);
+    });
+
     it('should include onboardingCompleted=true when user doc has onboardingCompleted=true', async () => {
         mockListUsers.mockResolvedValue({
             users: [{ uid: 'user1', email: 'alice@test.com', providerData: [], metadata: {}, customClaims: {} }],
