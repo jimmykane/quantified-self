@@ -420,6 +420,53 @@ describe('normalizeInsightQuery', () => {
     ]);
   });
 
+  it('resolves relative year comparisons (this year vs last year) in compare mode', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-20T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'duration this year vs last year',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('duration');
+    expect(result.query.resultKind).toBe('aggregate');
+    expect(result.query.dataType).toBe(DataDuration.type);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Total);
+    expect(result.query.categoryType).toBe(ChartDataCategoryTypes.DateType);
+    expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Yearly);
+    expect(result.query.periodMode).toBe('compare');
+    expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
+      startDate: '2025-01-01T00:00:00.000Z',
+      endDate: '2026-12-31T23:59:59.999Z',
+      timezone: 'UTC',
+      source: 'prompt',
+    });
+    expect(result.query.requestedDateRanges).toEqual([
+      {
+        kind: 'bounded',
+        startDate: '2025-01-01T00:00:00.000Z',
+        endDate: '2025-12-31T23:59:59.999Z',
+        timezone: 'UTC',
+        source: 'prompt',
+      },
+      {
+        kind: 'bounded',
+        startDate: '2026-01-01T00:00:00.000Z',
+        endDate: '2026-12-31T23:59:59.999Z',
+        timezone: 'UTC',
+        source: 'prompt',
+      },
+    ]);
+  });
+
   it('honors explicit column chart wording for sparse multi-year comparisons', async () => {
     setNormalizeQueryDependenciesForTesting({
       now: () => new Date('2026-03-20T12:00:00.000Z'),
@@ -1264,7 +1311,10 @@ describe('normalizeInsightQuery', () => {
     expect(latestSwimResult.status).toBe('ok');
     if (latestSwimResult.status === 'ok') {
       expect(latestSwimResult.query.resultKind).toBe('latest_event');
-      expect(latestSwimResult.query.activityTypes).toEqual([ActivityTypes.Swimming]);
+      expect(latestSwimResult.query.activityTypes).toEqual([
+        ActivityTypes.Swimming,
+        ActivityTypes.OpenWaterSwimming,
+      ]);
     }
   });
 
@@ -1286,7 +1336,30 @@ describe('normalizeInsightQuery', () => {
     expect(latestSwimResult.status).toBe('ok');
     if (latestSwimResult.status === 'ok') {
       expect(latestSwimResult.query.resultKind).toBe('latest_event');
-      expect(latestSwimResult.query.activityTypes).toEqual([ActivityTypes.Swimming]);
+      expect(latestSwimResult.query.activityTypes).toEqual([
+        ActivityTypes.Swimming,
+        ActivityTypes.OpenWaterSwimming,
+      ]);
+    }
+  });
+
+  it('resolves latest swim all-time prompts to swim and open-water swim activity aliases', async () => {
+    const latestSwimAllTimeResult = await normalizeInsightQuery({
+      prompt: 'When was my last swim all time?',
+      clientTimezone: 'UTC',
+    });
+    expect(latestSwimAllTimeResult.status).toBe('ok');
+    if (latestSwimAllTimeResult.status === 'ok') {
+      expect(latestSwimAllTimeResult.query.resultKind).toBe('latest_event');
+      expect(latestSwimAllTimeResult.query.activityTypes).toEqual([
+        ActivityTypes.Swimming,
+        ActivityTypes.OpenWaterSwimming,
+      ]);
+      expect(latestSwimAllTimeResult.query.dateRange).toEqual({
+        kind: 'all_time',
+        timezone: 'UTC',
+        source: 'prompt',
+      });
     }
   });
 
