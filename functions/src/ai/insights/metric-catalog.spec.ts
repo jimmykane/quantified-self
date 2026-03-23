@@ -121,7 +121,7 @@ describe('metric-catalog', () => {
     expect(getInsightMetricDefinition('power')?.dataType).toBeTruthy();
     expect(getInsightMetricDefinition('body_weight')?.suggestedPrompt).toBe('Show my weight over time this year.');
     expect(getInsightMetricDefinition('jump_distance')?.suggestedPrompt).toBe('Show my jump distance over time this season.');
-    expect(getInsightMetricDefinition('jump_hang_time')?.suggestedPrompt).toBe('Show my jump hang time over time in the last 90 days.');
+    expect(getInsightMetricDefinition('jump_hang_time')?.suggestedPrompt).toBe('Show my jump hang time over time this year.');
   });
 
   it('prioritizes context-matching suggested prompts instead of always returning the first metrics', () => {
@@ -129,10 +129,10 @@ describe('metric-catalog', () => {
       'Tell me my average cadence for cycling over the last 3 months.',
     );
     expect(getSuggestedInsightPrompts(3, 'show average power per lap')[0]).toBe(
-      'Show my average power over time for cycling in the last 90 days.',
+      'Show my average power over time for cycling this year.',
     );
     expect(getSuggestedInsightPrompts(3, 'show swim pace per lap')[0]).toBe(
-      'Show my average swim pace over time for swimming in the last 90 days.',
+      'Show my average swim pace over time for swimming this year.',
     );
   });
 
