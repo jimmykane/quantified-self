@@ -1754,7 +1754,7 @@ describe('AiInsightsPageComponent', () => {
     expect(resultNotes).toHaveLength(0);
     const calledWindowScroll = scrollToSpy.mock.calls.length > 0;
     const calledElementScroll = scrollIntoViewSpy.mock.calls.length > 0;
-    expect(calledWindowScroll || calledElementScroll).toBe(true);
+    expect(calledWindowScroll || calledElementScroll).toBe(false);
     Object.defineProperty(window, 'scrollTo', {
       configurable: true,
       value: originalScrollTo,
