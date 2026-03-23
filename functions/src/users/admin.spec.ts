@@ -519,6 +519,213 @@ describe('listUsers Cloud Function', () => {
             expect(user.subscription).toEqual(mockSubData);
             expect(user.connectedServices).toHaveLength(3);
         });
+
+        it('should include aiCreditsConsumed from the current subscription usage period', async () => {
+            const periodStartMs = Date.parse('2026-01-01T00:00:00.000Z');
+            const periodEndMs = Date.parse('2026-02-01T00:00:00.000Z');
+            const expectedUsageDocID = `period_${periodStartMs}_${periodEndMs}`;
+
+            mockListUsers.mockResolvedValue({
+                users: [
+                    {
+                        uid: 'u1',
+                        email: 'u1@test.com',
+                        displayName: 'U1',
+                        disabled: false,
+                        metadata: { creationTime: '2024-01-01', lastSignInTime: '2024-01-02' },
+                        customClaims: {},
+                        providerData: []
+                    }
+                ],
+                pageToken: undefined
+            });
+
+            const createSnap = (dataOrEmpty: any) => ({
+                empty: !dataOrEmpty,
+                docs: dataOrEmpty ? [{ data: () => dataOrEmpty, createTime: 11111 }] : []
+            });
+
+            mockCollection.mockImplementation((path: string) => {
+                if (path === 'customers') {
+                    return {
+                        doc: vi.fn().mockReturnValue({
+                            collection: vi.fn().mockReturnValue({
+                                where: vi.fn().mockReturnThis(),
+                                orderBy: vi.fn().mockReturnThis(),
+                                limit: vi.fn().mockReturnValue({
+                                    get: vi.fn().mockResolvedValue(createSnap({
+                                        status: 'active',
+                                        current_period_start: periodStartMs,
+                                        current_period_end: periodEndMs,
+                                        cancel_at_period_end: false,
+                                        stripeLink: 'https://stripe.example/u1'
+                                    }))
+                                })
+                            })
+                        })
+                    };
+                }
+
+                if (path === 'users') {
+                    return {
+                        doc: vi.fn().mockReturnValue({
+                            collection: vi.fn().mockImplementation((collectionName: string) => {
+                                if (collectionName === 'aiInsightsUsage') {
+                                    return {
+                                        doc: vi.fn().mockImplementation((docID: string) => ({
+                                            get: vi.fn().mockResolvedValue({
+                                                exists: docID === expectedUsageDocID,
+                                                data: () => ({ successfulRequestCount: 17 })
+                                            })
+                                        }))
+                                    };
+                                }
+
+                                return {
+                                    limit: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ empty: true }) })
+                                };
+                            })
+                        })
+                    };
+                }
+
+                if (['garminAPITokens', 'suuntoAppAccessTokens', 'COROSAPIAccessTokens'].includes(path)) {
+                    return {
+                        doc: vi.fn().mockReturnValue({
+                            collection: vi.fn().mockReturnValue({
+                                limit: vi.fn().mockReturnValue({
+                                    get: vi.fn().mockResolvedValue({ empty: true, docs: [] })
+                                })
+                            })
+                        })
+                    };
+                }
+
+                return {
+                    doc: vi.fn().mockReturnValue({
+                        collection: vi.fn().mockReturnValue({
+                            limit: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ empty: true }) })
+                        })
+                    }),
+                    where: vi.fn().mockReturnThis(),
+                    orderBy: vi.fn().mockReturnThis(),
+                    limit: vi.fn().mockReturnThis(),
+                    get: vi.fn().mockResolvedValue({ empty: true })
+                };
+            });
+
+            const result: any = await (listUsers as any)(getAdminRequest({ page: 0, pageSize: 10 }));
+            expect(result.users[0].aiCreditsConsumed).toBe(17);
+        });
+
+        it('should fall back to latest usage doc when the current period doc is not found', async () => {
+            const periodStartMs = Date.parse('2026-01-01T00:00:00.000Z');
+            const periodEndMs = Date.parse('2026-02-01T00:00:00.000Z');
+
+            mockListUsers.mockResolvedValue({
+                users: [
+                    {
+                        uid: 'u1',
+                        email: 'u1@test.com',
+                        displayName: 'U1',
+                        disabled: false,
+                        metadata: { creationTime: '2024-01-01', lastSignInTime: '2024-01-02' },
+                        customClaims: {},
+                        providerData: []
+                    }
+                ],
+                pageToken: undefined
+            });
+
+            const createSnap = (dataOrEmpty: any) => ({
+                empty: !dataOrEmpty,
+                docs: dataOrEmpty ? [{ data: () => dataOrEmpty, createTime: 11111 }] : []
+            });
+
+            mockGetAll.mockResolvedValue([
+                { id: 'u1', data: () => ({ hasSubscribedOnce: true }) }
+            ]);
+
+            mockCollection.mockImplementation((path: string) => {
+                if (path === 'customers') {
+                    return {
+                        doc: vi.fn().mockReturnValue({
+                            collection: vi.fn().mockReturnValue({
+                                where: vi.fn().mockReturnThis(),
+                                orderBy: vi.fn().mockReturnThis(),
+                                limit: vi.fn().mockReturnValue({
+                                    get: vi.fn().mockResolvedValue(createSnap({
+                                        status: 'active',
+                                        current_period_start: periodStartMs,
+                                        current_period_end: periodEndMs,
+                                        cancel_at_period_end: false,
+                                        stripeLink: 'https://stripe.example/u1'
+                                    }))
+                                })
+                            })
+                        })
+                    };
+                }
+
+                if (path === 'users') {
+                    return {
+                        doc: vi.fn().mockReturnValue({
+                            collection: vi.fn().mockImplementation((collectionName: string) => {
+                                if (collectionName === 'aiInsightsUsage') {
+                                    return {
+                                        doc: vi.fn().mockReturnValue({
+                                            get: vi.fn().mockResolvedValue({
+                                                exists: false,
+                                                data: () => undefined
+                                            })
+                                        }),
+                                        orderBy: vi.fn().mockReturnValue({
+                                            limit: vi.fn().mockReturnValue({
+                                                get: vi.fn().mockResolvedValue({
+                                                    empty: false,
+                                                    docs: [{ data: () => ({ successfulRequestCount: 29 }) }]
+                                                })
+                                            })
+                                        })
+                                    };
+                                }
+
+                                return {
+                                    limit: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ empty: true }) })
+                                };
+                            })
+                        })
+                    };
+                }
+
+                if (['garminAPITokens', 'suuntoAppAccessTokens', 'COROSAPIAccessTokens'].includes(path)) {
+                    return {
+                        doc: vi.fn().mockReturnValue({
+                            collection: vi.fn().mockReturnValue({
+                                limit: vi.fn().mockReturnValue({
+                                    get: vi.fn().mockResolvedValue({ empty: true, docs: [] })
+                                })
+                            })
+                        })
+                    };
+                }
+
+                return {
+                    doc: vi.fn().mockReturnValue({
+                        collection: vi.fn().mockReturnValue({
+                            limit: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ empty: true }) })
+                        })
+                    }),
+                    where: vi.fn().mockReturnThis(),
+                    orderBy: vi.fn().mockReturnThis(),
+                    limit: vi.fn().mockReturnThis(),
+                    get: vi.fn().mockResolvedValue({ empty: true })
+                };
+            });
+
+            const result: any = await (listUsers as any)(getAdminRequest({ page: 0, pageSize: 10 }));
+            expect(result.users[0].aiCreditsConsumed).toBe(29);
+        });
     });
 
     // -------------------------------------------------------------------------

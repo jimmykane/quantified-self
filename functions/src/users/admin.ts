@@ -274,6 +274,39 @@ interface EnrichedUser extends BasicUser {
     connectedServices: { provider: string; connectedAt: unknown }[];
     onboardingCompleted: boolean;
     hasSubscribedOnce: boolean;
+    aiCreditsConsumed: number;
+}
+
+function buildAiInsightsUsageDocIdForSubscriptionPeriod(
+    periodStart: unknown,
+    periodEnd: unknown
+): string | null {
+    const periodStartMs = toEpochMillis(periodStart);
+    const periodEndMs = toEpochMillis(periodEnd);
+
+    if (periodStartMs === null || periodEndMs === null) {
+        return null;
+    }
+
+    return `period_${periodStartMs}_${periodEndMs}`;
+}
+
+function resolveAiInsightsSuccessfulRequestCount(value: unknown): number {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return 0;
+    }
+
+    return Math.max(0, Math.floor(value));
+}
+
+function resolveAiCreditsConsumedFromUsageData(value: unknown): number {
+    if (!value || typeof value !== 'object') {
+        return 0;
+    }
+
+    return resolveAiInsightsSuccessfulRequestCount(
+        (value as { successfulRequestCount?: unknown }).successfulRequestCount
+    );
 }
 
 /**
@@ -307,6 +340,9 @@ async function enrichUsers(
         users.map(async (user) => {
             let subscriptionData: EnrichedUser['subscription'] = null;
             const connectedServices: { provider: string; connectedAt: unknown }[] = [];
+            let aiCreditsConsumed = 0;
+            let hasResolvedAiUsageFromCurrentPeriod = false;
+            const hasSubscribedOnce = userFlagsByUid.get(user.uid)?.hasSubscribedOnce === true;
 
             try {
                 const [subsSnapshot, garminDoc, suuntoSnapshot, corosSnapshot] = await Promise.all([
@@ -330,6 +366,43 @@ async function enrichUsers(
                         cancel_at_period_end: sub.cancel_at_period_end,
                         stripeLink: sub.stripeLink
                     };
+
+                    const usageDocID = buildAiInsightsUsageDocIdForSubscriptionPeriod(
+                        sub.current_period_start,
+                        sub.current_period_end
+                    );
+
+                    if (usageDocID) {
+                        const usageSnapshot = await db.collection('users')
+                            .doc(user.uid)
+                            .collection('aiInsightsUsage')
+                            .doc(usageDocID)
+                            .get();
+
+                        if (usageSnapshot.exists) {
+                            aiCreditsConsumed = resolveAiCreditsConsumedFromUsageData(usageSnapshot.data());
+                            hasResolvedAiUsageFromCurrentPeriod = true;
+                        }
+                    }
+                }
+
+                if (!hasResolvedAiUsageFromCurrentPeriod && (subscriptionData || hasSubscribedOnce)) {
+                    try {
+                        const latestUsageSnapshot = await db.collection('users')
+                            .doc(user.uid)
+                            .collection('aiInsightsUsage')
+                            .orderBy('periodEnd', 'desc')
+                            .limit(1)
+                            .get();
+
+                        if (!latestUsageSnapshot.empty) {
+                            aiCreditsConsumed = resolveAiCreditsConsumedFromUsageData(
+                                latestUsageSnapshot.docs[0].data()
+                            );
+                        }
+                    } catch (fallbackUsageError) {
+                        logger.warn(`Failed to fetch fallback AI usage for ${user.uid}`, fallbackUsageError);
+                    }
                 }
 
                 if (!garminDoc.empty) {
@@ -356,7 +429,8 @@ async function enrichUsers(
                 subscription: subscriptionData,
                 connectedServices: connectedServices,
                 onboardingCompleted: userFlagsByUid.get(user.uid)?.onboardingCompleted === true,
-                hasSubscribedOnce: userFlagsByUid.get(user.uid)?.hasSubscribedOnce === true
+                hasSubscribedOnce,
+                aiCreditsConsumed
             };
         })
     );
@@ -369,8 +443,8 @@ async function enrichUsers(
  * Performance:
  * - Firebase Auth listUsers: FREE (no Firestore reads)
  * - Search/Sort on Auth data: FREE
- * - Enrich current page only: ~5 reads per user (onboarding, subscription, garmin, suunto, coros)
- * - For pageSize=10: ~50 Firestore reads total
+ * - Enrich current page only: ~5-7 reads per user (onboarding, subscription, service tokens, AI usage with fallback lookup)
+ * - For pageSize=10: ~50-70 Firestore reads total
  */
 export const listUsers = onAdminCall<ListUsersRequest, any>({
     region: FUNCTIONS_MANIFEST.listUsers.region,

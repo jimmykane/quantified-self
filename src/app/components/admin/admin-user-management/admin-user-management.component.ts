@@ -124,7 +124,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
 
     displayedColumns: string[] = [
         'photoURL', 'email', 'uid', 'providerIds', 'displayName', 'role', 'subscriptionHistory',
-        'services', 'created', 'lastLogin', 'onboarding', 'status', 'actions'
+        'aiCreditsConsumed', 'services', 'created', 'lastLogin', 'onboarding', 'status', 'actions'
     ];
 
     private searchSubject = new Subject<string>();

@@ -32,6 +32,7 @@ export interface AdminUser {
         connectedAt?: { seconds: number; nanoseconds: number } | string | number | null;
     }[];
     hasSubscribedOnce?: boolean;
+    aiCreditsConsumed?: number;
 }
 
 export interface ListUsersParams {
