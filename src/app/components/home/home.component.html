@@ -15,8 +15,8 @@
       </h1>
 
       <p class="hero-subtitle">
-        Unlock the full potential of your performance data.<br>
-        Ask focused training questions with AI Insights and get answers grounded in your stored stats.<br>
+        Turn questions into chart-backed answers with AI Insights.<br>
+        Ask focused training questions grounded in your stored activity data.<br>
         Seamlessly upload activities and sync routes across Garmin, COROS, and Suunto. Full history imports supported.
       </p>
 
@@ -49,7 +49,7 @@
     <div class="ai-insights-header animate-on-scroll">
       <h2 class="section-title">AI Insights</h2>
       <p class="section-subtitle">
-        Built into the same performance workflow. Ask your question, review narrative + chart or activity-based output, then refine your prompt and keep moving.
+        Ask focused training questions. Get chart-backed answers.
       </p>
     </div>
 
@@ -108,11 +108,25 @@
         <mat-icon iconPositionEnd>login</mat-icon>
       </button>
     </div>
+    <p class="ai-insights-cta-note animate-on-scroll">Your activity questions, chart-backed answers.</p>
   </section>
 
-  <!-- 1.6 Fast Track Section (Using Features Styling) -->
-  <section class="features-section container" style="padding-bottom: 0;">
-    <div class="features-grid">
+  <!-- 1.6 Integration / Ecosystem Ticker -->
+  <section class="integrations-section animate-on-scroll">
+    <p class="section-label">Seamless Integration With</p>
+    <div class="logos-container">
+      <mat-icon svgIcon="garmin" class="partner-logo" matTooltip="Garmin Connect"></mat-icon>
+      <mat-icon svgIcon="suunto" class="partner-logo" matTooltip="Suunto App - Sync Routes & Activities"></mat-icon>
+      <mat-icon svgIcon="coros" class="partner-logo wide" matTooltip="COROS"></mat-icon>
+      <div class="divider"></div>
+      <div class="file-formats">
+        <span class="format">FIT</span>
+        <span class="format">TCX</span>
+        <span class="format">GPX</span>
+      </div>
+    </div>
+
+    <div class="integration-followup-grid">
       <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
         <mat-card-header>
           <div mat-card-avatar class="feature-icon-container import">
@@ -137,22 +151,6 @@
           <p>New activities appear instantly. Watch your new activities and routes sync automatically to Suunto.</p>
         </mat-card-content>
       </mat-card>
-    </div>
-  </section>
-
-  <!-- 2. Integration / Ecosystem Ticker -->
-  <section class="integrations-section animate-on-scroll">
-    <p class="section-label">Seamless Integration With</p>
-    <div class="logos-container">
-      <mat-icon svgIcon="garmin" class="partner-logo" matTooltip="Garmin Connect"></mat-icon>
-      <mat-icon svgIcon="suunto" class="partner-logo" matTooltip="Suunto App - Sync Routes & Activities"></mat-icon>
-      <mat-icon svgIcon="coros" class="partner-logo wide" matTooltip="COROS"></mat-icon>
-      <div class="divider"></div>
-      <div class="file-formats">
-        <span class="format">FIT</span>
-        <span class="format">TCX</span>
-        <span class="format">GPX</span>
-      </div>
     </div>
   </section>
 

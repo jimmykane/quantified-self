@@ -2,6 +2,7 @@ import { Component, AfterViewInit, OnDestroy, ElementRef } from '@angular/core';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { Router } from '@angular/router';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { getAiInsightsHeroPrompts } from '@shared/ai-insights-prompts';
 
 @Component({
   selector: 'app-home',
@@ -14,16 +15,7 @@ export class HomeComponent implements AfterViewInit, OnDestroy {
   public serviceNames = ServiceNames;
   public currentYear = new Date().getFullYear();
   private observer: IntersectionObserver | undefined;
-  public readonly aiPromptExamples: readonly string[] = [
-    '"Show my total distance by activity type this year."',
-    '"Compare average pace and heart rate for running in the last 90 days."',
-    '"Find my longest cycling activity this month and summarize the key metrics."',
-    '"Summarize my latest running activity with pace and heart rate context."',
-    '"Show my average heart rate over time for running in the last 90 days."',
-    '"Compare weekly training load and moving time over the last 12 weeks."',
-    '"Show the activity where I had my highest average heart rate in the last 30 days."',
-    '"What changed in my most recent workout compared to my recent baseline?"'
-  ];
+  public readonly aiPromptExamples: readonly string[] = getAiInsightsHeroPrompts();
 
   constructor(
     public authService: AppAuthService,

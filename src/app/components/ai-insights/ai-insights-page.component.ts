@@ -539,8 +539,7 @@ export class AiInsightsPageComponent {
   });
   private readonly completedResultAutoScrollEffect = effect(() => {
     const response = this.response();
-    const resultCard = this.document.querySelector<HTMLElement>('.result-card');
-    if (!resultCard || !response || !this.isCompletedResponse(response)) {
+    if (!response || !this.isCompletedResponse(response)) {
       return;
     }
 
@@ -548,55 +547,8 @@ export class AiInsightsPageComponent {
       return;
     }
 
-    const scrollIntoView = resultCard.scrollIntoView;
-    if (typeof scrollIntoView !== 'function') {
-      return;
-    }
-
     this.lastAutoScrolledResponse = response;
-    const scrollContainer = this.resolveResultScrollContainer(resultCard);
-    if (scrollContainer) {
-      const stickyOffset = this.resolveScrollContainerOverlayOffset(scrollContainer);
-      const containerRect = scrollContainer.getBoundingClientRect();
-      const targetTop = Math.max(
-        0,
-        scrollContainer.scrollTop + resultCard.getBoundingClientRect().top - containerRect.top - stickyOffset - 12,
-      );
-
-      if (typeof scrollContainer.scrollTo === 'function') {
-        scrollContainer.scrollTo({
-          top: targetTop,
-          behavior: 'smooth',
-        });
-        return;
-      }
-    }
-
-    const windowRef = this.document.defaultView;
-    const topOffset = this.resolveScrollTopOverlayOffset(resultCard);
-    const currentScrollTop = windowRef?.scrollY ?? this.document.documentElement.scrollTop ?? 0;
-    const targetTop = Math.max(
-      0,
-      currentScrollTop + resultCard.getBoundingClientRect().top - topOffset - 12,
-    );
-
-    if (windowRef && typeof windowRef.scrollTo === 'function') {
-      try {
-        windowRef.scrollTo({
-          top: targetTop,
-          behavior: 'smooth',
-        });
-        return;
-      } catch {
-        // Fall through to element scroll when smooth window scrolling is unavailable.
-      }
-    }
-
-    scrollIntoView.call(resultCard, {
-      behavior: 'smooth',
-      block: 'start',
-      inline: 'nearest',
-    });
+    this.scrollResultCardIntoView();
   });
   readonly rankedEventResponse = computed<RankedEventResponse | null>(() => {
     const latestEventResponse = this.latestEventOkResponse();
@@ -932,6 +884,7 @@ export class AiInsightsPageComponent {
     this.latestSnapshotSavedAt.set(null);
     this.errorMessage.set(null);
     this.response.set(null);
+    this.scrollResultCardIntoView();
 
     try {
       const response = await this.aiInsightsService.runInsight(this.buildInsightRequest(prompt));
@@ -1086,6 +1039,62 @@ export class AiInsightsPageComponent {
     return response.status === 'ok'
       || response.status === 'empty'
       || response.status === 'unsupported';
+  }
+
+  private scrollResultCardIntoView(): void {
+    const resultCard = this.document.querySelector<HTMLElement>('.result-card');
+    if (!resultCard) {
+      return;
+    }
+
+    const scrollIntoView = resultCard.scrollIntoView;
+    if (typeof scrollIntoView !== 'function') {
+      return;
+    }
+
+    const scrollContainer = this.resolveResultScrollContainer(resultCard);
+    if (scrollContainer) {
+      const stickyOffset = this.resolveScrollContainerOverlayOffset(scrollContainer);
+      const containerRect = scrollContainer.getBoundingClientRect();
+      const targetTop = Math.max(
+        0,
+        scrollContainer.scrollTop + resultCard.getBoundingClientRect().top - containerRect.top - stickyOffset - 12,
+      );
+
+      if (typeof scrollContainer.scrollTo === 'function') {
+        scrollContainer.scrollTo({
+          top: targetTop,
+          behavior: 'smooth',
+        });
+        return;
+      }
+    }
+
+    const windowRef = this.document.defaultView;
+    const topOffset = this.resolveScrollTopOverlayOffset(resultCard);
+    const currentScrollTop = windowRef?.scrollY ?? this.document.documentElement.scrollTop ?? 0;
+    const targetTop = Math.max(
+      0,
+      currentScrollTop + resultCard.getBoundingClientRect().top - topOffset - 12,
+    );
+
+    if (windowRef && typeof windowRef.scrollTo === 'function') {
+      try {
+        windowRef.scrollTo({
+          top: targetTop,
+          behavior: 'smooth',
+        });
+        return;
+      } catch {
+        // Fall through to element scroll when smooth window scrolling is unavailable.
+      }
+    }
+
+    scrollIntoView.call(resultCard, {
+      behavior: 'smooth',
+      block: 'start',
+      inline: 'nearest',
+    });
   }
 
   private resolveScrollTopOverlayOffset(resultCard: HTMLElement): number {

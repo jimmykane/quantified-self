@@ -100,9 +100,6 @@
             }
           </form>
         </mat-card-content>
-        <mat-card-footer class="prompt-card-footer">
-          <p class="mat-body-small prompt-support-note">{{ latestSnapshotSupportNote() }}</p>
-        </mat-card-footer>
       </mat-card>
 
       <mat-card #resultCard appearance="outlined" class="settings-card result-card qs-glass-card-panel">
@@ -117,7 +114,16 @@
                 @if (latestSnapshotRestored() || resultCardMetaText()) {
                   <mat-chip-set class="result-status-chip-set" aria-label="Result snapshot status">
                     @if (latestSnapshotRestored()) {
-                      <mat-chip disableRipple highlighted class="result-status-chip">Restored</mat-chip>
+                      <mat-chip disableRipple highlighted class="result-status-chip">
+                        <span class="result-status-chip-label">Restored</span>
+                        <button
+                          type="button"
+                          class="result-status-info-button"
+                          [matTooltip]="latestSnapshotSupportNote()"
+                          aria-label="Restored snapshot info">
+                          <mat-icon>info</mat-icon>
+                        </button>
+                      </mat-chip>
                     }
                     @if (resultCardMetaText(); as resultCardMetaText) {
                       <mat-chip disableRipple highlighted class="result-status-chip">{{ resultCardMetaText }}</mat-chip>
@@ -626,7 +632,16 @@
                 </mat-chip-set>
               }
 
+              <app-ai-insights-chart
+                [response]="result"
+                [darkTheme]="isDarkTheme()"
+                [useAnimations]="useAnimations()"
+                [userUnitSettings]="userUnitSettings()">
+              </app-ai-insights-chart>
+
               @if (resultSummaryCards().length) {
+                <mat-divider></mat-divider>
+
                 <div class="section-heading">
                   <div>
                     <p class="mat-label-medium suggestions-title">Summary</p>
@@ -675,15 +690,6 @@
                   }
                 </div>
               }
-
-              <mat-divider></mat-divider>
-
-              <app-ai-insights-chart
-                [response]="result"
-                [darkTheme]="isDarkTheme()"
-                [useAnimations]="useAnimations()"
-                [userUnitSettings]="userUnitSettings()">
-              </app-ai-insights-chart>
 
               @if (result.eventRanking) {
                 <mat-divider></mat-divider>

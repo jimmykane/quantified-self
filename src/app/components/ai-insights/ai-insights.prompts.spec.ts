@@ -57,13 +57,16 @@ describe('ai-insights prompts', () => {
       'When was my last swim?',
       'Show my training time over time this year.',
       'Show my distance by sport this year.',
-      'Show my running heart rate over time in the last 90 days.',
-      'Show my cycling power over time in the last 90 days.',
+      'Show my running heart rate over time this year.',
+      'Show my cycling power over time this year.',
+      'Show my average pace trend for running this year.',
       'Show cadence vs power over time in the last 3 months for cycling.',
+      'Compare my weekly distance for the last 8 weeks.',
       'Compare my max heart rate in 2024 vs 2025.',
       'What was my maximum heartrate all time?',
       'When did I have my longest jump?',
       'When did I have my biggest jump?',
+      'Which rides had my highest power output this month?',
     ]);
   });
 
@@ -96,31 +99,40 @@ describe('ai-insights prompts', () => {
     expect(pickerPromptSet.has('When was my last run?')).toBe(true);
     expect(pickerPromptSet.has('When was my last swim?')).toBe(true);
     expect(pickerPromptSet.has('Show cadence vs power over time in the last 3 months for cycling.')).toBe(true);
+    expect(pickerPromptSet.has('Show my average pace trend for running this year.')).toBe(true);
+    expect(pickerPromptSet.has('Compare my weekly distance for the last 8 weeks.')).toBe(true);
     expect(pickerPromptSet.has('Compare my max heart rate in 2024 vs 2025.')).toBe(true);
     expect(pickerPromptSet.has('What was my maximum heartrate all time?')).toBe(true);
     expect(pickerPromptSet.has('When did I have my biggest jump?')).toBe(true);
+    expect(pickerPromptSet.has('Which rides had my highest power output this month?')).toBe(true);
 
     expect(featuredPromptSet.has('When was my last ride?')).toBe(true);
     expect(featuredPromptSet.has('Show my training time over time this year.')).toBe(true);
-    expect(featuredPromptSet.has('Show my running heart rate over time in the last 90 days.')).toBe(true);
-    expect(featuredPromptSet.has('Show my cycling power over time in the last 90 days.')).toBe(true);
+    expect(featuredPromptSet.has('Show my running heart rate over time this year.')).toBe(true);
+    expect(featuredPromptSet.has('Show my cycling power over time this year.')).toBe(true);
+    expect(featuredPromptSet.has('Show my average pace trend for running this year.')).toBe(true);
     expect(featuredPromptSet.has('Show cadence vs power over time in the last 3 months for cycling.')).toBe(true);
+    expect(featuredPromptSet.has('Compare my weekly distance for the last 8 weeks.')).toBe(true);
     expect(featuredPromptSet.has('What was my maximum heartrate all time?')).toBe(true);
+    expect(featuredPromptSet.has('Which rides had my highest power output this month?')).toBe(true);
     expect(AI_INSIGHTS_FEATURED_PROMPTS).toEqual([
       'When was my last ride?',
       'Show my training time over time this year.',
-      'Show my running heart rate over time in the last 90 days.',
-      'Show my cycling power over time in the last 90 days.',
+      'Show my running heart rate over time this year.',
+      'Show my cycling power over time this year.',
+      'Show my average pace trend for running this year.',
       'Show cadence vs power over time in the last 3 months for cycling.',
+      'Compare my weekly distance for the last 8 weeks.',
       'What was my maximum heartrate all time?',
+      'Which rides had my highest power output this month?',
     ]);
   });
 
   it('resolves unsupported default prompts for jump metrics in the shared catalog', () => {
-    expect(getAiInsightsDefaultMetricPrompt('jump_hang_time')).toBe('Show my jump hang time over time in the last 90 days.');
+    expect(getAiInsightsDefaultMetricPrompt('jump_hang_time')).toBe('Show my jump hang time over time this year.');
     expect(getAiInsightsDefaultMetricPrompt('jump_distance')).toBe('Show my jump distance over time this season.');
-    expect(getAiInsightsDefaultMetricPrompt('jump_speed')).toBe('Show my jump speed over time in the last 90 days.');
-    expect(getAiInsightsDefaultMetricPrompt('jump_score')).toBe('Show my jump score over time in the last 90 days.');
+    expect(getAiInsightsDefaultMetricPrompt('jump_speed')).toBe('Show my jump speed over time this year.');
+    expect(getAiInsightsDefaultMetricPrompt('jump_score')).toBe('Show my jump score over time this year.');
     expect(getAiInsightsDefaultMetricPrompt('body_weight')).toBe('Show my weight over time this year.');
   });
 });

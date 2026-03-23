@@ -31,7 +31,7 @@
   @if (hasFilteredPrompts()) {
     <div class="prompt-picker-dialog__groups">
       @for (section of filteredPromptSections(); track section.title) {
-        <section class="prompt-picker-dialog__section qs-glass-card-panel">
+        <section class="prompt-picker-dialog__section">
           <div class="prompt-picker-dialog__section-header">
             <h3 class="mat-title-small prompt-picker-dialog__section-title">{{ section.title }}</h3>
             <span class="prompt-picker-dialog__section-count">{{ section.promptCount }}</span>
@@ -61,7 +61,7 @@
       }
     </div>
   } @else {
-    <div class="prompt-picker-dialog__empty-state qs-glass-card-panel" role="status" aria-live="polite">
+    <div class="prompt-picker-dialog__empty-state" role="status" aria-live="polite">
       <mat-icon aria-hidden="true">search_off</mat-icon>
       <p class="mat-body-medium">No prompts match your search.</p>
     </div>

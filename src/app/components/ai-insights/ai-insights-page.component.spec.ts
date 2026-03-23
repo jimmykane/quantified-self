@@ -1028,7 +1028,6 @@ describe('AiInsightsPageComponent', () => {
     const title = fixture.debugElement.query(By.css('.hero-title'))?.nativeElement as HTMLElement | undefined;
     const pickerButton = fixture.debugElement.query(By.css('.suggestion-picker-button'))?.nativeElement as HTMLButtonElement | undefined;
     const heroPromptRotator = fixture.debugElement.query(By.css('.hero-prompt-rotator'))?.nativeElement as HTMLButtonElement | undefined;
-    const supportNote = fixture.debugElement.query(By.css('.prompt-support-note'))?.nativeElement as HTMLElement | undefined;
     const quotaLine = fixture.debugElement.query(By.css('.prompt-quota-line'))?.nativeElement as HTMLElement | undefined;
 
     expect(title?.textContent).toContain('Turn Your Activity Data Into Insight');
@@ -1039,7 +1038,6 @@ describe('AiInsightsPageComponent', () => {
     );
     expect(heroPromptRotator?.getAttribute('aria-label')).toContain(AI_INSIGHTS_FEATURED_PROMPTS[0]);
     expect(quotaLine?.textContent).toContain(`${AI_INSIGHTS_REQUEST_LIMITS.pro - 12} of ${AI_INSIGHTS_REQUEST_LIMITS.pro} left`);
-    expect(supportNote?.textContent).toContain('Latest completed insights are temporarily restored from your account.');
   });
 
   it('should disable prompt interactions while restoring the latest insight', async () => {
@@ -1143,7 +1141,7 @@ describe('AiInsightsPageComponent', () => {
   });
 
   it('should open the grouped prompt picker and submit the selected prompt', async () => {
-    const selectedPrompt = 'Show my average power over time for cycling in the last 90 days.';
+    const selectedPrompt = 'Show my average power over time for cycling this year.';
     const expectedPromptIndex = AI_INSIGHTS_DEFAULT_PICKER_PROMPTS.findIndex(prompt => prompt === selectedPrompt);
     expect(expectedPromptIndex).toBeGreaterThanOrEqual(0);
     aiInsightsServiceMock.runInsight.mockResolvedValue(buildOkResponse());
@@ -1294,6 +1292,45 @@ describe('AiInsightsPageComponent', () => {
     await fixture.whenStable();
 
     expect(hapticsServiceMock.success).toHaveBeenCalledTimes(1);
+  });
+
+  it('should scroll to the result card immediately when prompt submission starts', async () => {
+    let resolveResponse: ((response: AiInsightsResponse) => void) | null = null;
+    aiInsightsServiceMock.runInsight.mockReturnValue(new Promise<AiInsightsResponse>((resolve) => {
+      resolveResponse = resolve;
+    }));
+    component.promptControl.setValue('Tell me my avg cadence for cycling the last 3 months');
+
+    const resultCard = fixture.debugElement.query(By.css('.result-card'))?.nativeElement as HTMLElement | undefined;
+    const scrollIntoViewSpy = vi.fn();
+    if (resultCard) {
+      Object.defineProperty(resultCard, 'scrollIntoView', {
+        configurable: true,
+        value: scrollIntoViewSpy,
+      });
+    }
+    const scrollToSpy = vi.fn();
+    const originalScrollTo = window.scrollTo;
+    Object.defineProperty(window, 'scrollTo', {
+      configurable: true,
+      value: scrollToSpy,
+    });
+
+    const submitPromise = component.submitPrompt();
+    fixture.detectChanges();
+
+    const calledWindowScroll = scrollToSpy.mock.calls.length > 0;
+    const calledElementScroll = scrollIntoViewSpy.mock.calls.length > 0;
+    expect(calledWindowScroll || calledElementScroll).toBe(true);
+
+    resolveResponse?.(buildOkResponse());
+    await submitPromise;
+    await fixture.whenStable();
+
+    Object.defineProperty(window, 'scrollTo', {
+      configurable: true,
+      value: originalScrollTo,
+    });
   });
 
   it('should render multi-metric responses with the combined chart and merged summary cards', async () => {
@@ -1701,7 +1738,7 @@ describe('AiInsightsPageComponent', () => {
 
     const resultContextRows = fixture.debugElement.queryAll(By.css('.result-card-context-row'));
     const resultStatusChips = fixture.debugElement.queryAll(By.css('.result-status-chip'));
-    const supportNote = fixture.debugElement.query(By.css('.prompt-support-note'))?.nativeElement as HTMLElement | undefined;
+    const restoredInfoButton = fixture.debugElement.query(By.css('.result-status-info-button'))?.nativeElement as HTMLButtonElement | undefined;
     const resultNotes = fixture.debugElement.queryAll(By.css('.result-note'));
 
     expect(aiInsightsLatestSnapshotServiceMock.loadLatest).toHaveBeenLastCalledWith('user-2');
@@ -1710,9 +1747,10 @@ describe('AiInsightsPageComponent', () => {
     expect(resultStatusChips.length).toBeGreaterThanOrEqual(2);
     expect(resultStatusChips.some((chip) => chip.nativeElement.textContent.includes('Restored'))).toBe(true);
     expect(resultStatusChips.some((chip) => chip.nativeElement.textContent.includes('Saved Mar 18, 2026'))).toBe(true);
-    expect(supportNote?.textContent).toContain('Latest completed insights are temporarily restored from your account.');
-    expect(supportNote?.textContent).toContain('Proper saved insights/history will come later.');
-    expect(supportNote?.textContent).not.toContain('Latest saved');
+    expect(restoredInfoButton).toBeTruthy();
+    expect(restoredInfoButton?.getAttribute('aria-label')).toBe('Restored snapshot info');
+    expect(component.latestSnapshotSupportNote()).toBe('Latest completed insights are temporarily restored from your account. Proper saved insights/history will come later.');
+    expect(fixture.debugElement.query(By.css('.prompt-support-note'))).toBeNull();
     expect(resultNotes).toHaveLength(0);
     const calledWindowScroll = scrollToSpy.mock.calls.length > 0;
     const calledElementScroll = scrollIntoViewSpy.mock.calls.length > 0;
