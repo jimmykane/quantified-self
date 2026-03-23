@@ -386,7 +386,7 @@ async function enrichUsers(
                     }
                 }
 
-                if (!hasResolvedAiUsageFromCurrentPeriod && (subscriptionData || hasSubscribedOnce)) {
+                if (!hasResolvedAiUsageFromCurrentPeriod && !subscriptionData && hasSubscribedOnce) {
                     try {
                         const latestUsageSnapshot = await db.collection('users')
                             .doc(user.uid)

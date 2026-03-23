@@ -1294,12 +1294,12 @@ function resolvePromptTopResultsLimit(prompt: string): number | undefined {
     return undefined;
   }
 
-  const topResultsMatch = normalizedPrompt.match(/\btop\s+(\d{1,4})\b/);
+  const topResultsMatch = normalizedPrompt.match(/\btop\s+((?:\d{1,3}(?:\s\d{3})+)|\d+)\b/);
   if (!topResultsMatch) {
     return undefined;
   }
 
-  const parsedLimit = Number.parseInt(topResultsMatch[1], 10);
+  const parsedLimit = Number.parseInt(topResultsMatch[1].replace(/\s+/g, ''), 10);
   if (!Number.isFinite(parsedLimit)) {
     return undefined;
   }

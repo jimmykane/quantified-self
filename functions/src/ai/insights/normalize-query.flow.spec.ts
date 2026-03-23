@@ -825,6 +825,32 @@ describe('normalizeInsightQuery', () => {
     expect(result.query.topResultsLimit).toBe(AI_INSIGHTS_TOP_RESULTS_MAX);
   });
 
+  it('parses top-N limits with thousand separators before clamping', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-19T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'distance',
+        aggregation: 'maximum',
+        category: 'date',
+        activityTypes: ['Cycling'],
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'When did I have my top 1,000 longest cycling rides?',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.resultKind).toBe('event_lookup');
+    expect(result.query.topResultsLimit).toBe(AI_INSIGHTS_TOP_RESULTS_MAX);
+  });
+
   it('leaves topResultsLimit undefined when no explicit top-N is requested', async () => {
     setNormalizeQueryDependenciesForTesting({
       now: () => new Date('2026-03-19T12:00:00.000Z'),

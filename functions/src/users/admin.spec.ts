@@ -618,9 +618,13 @@ describe('listUsers Cloud Function', () => {
             expect(result.users[0].aiCreditsConsumed).toBe(17);
         });
 
-        it('should fall back to latest usage doc when the current period doc is not found', async () => {
+        it('should not fall back to latest usage doc for active subscriptions when current period doc is missing', async () => {
             const periodStartMs = Date.parse('2026-01-01T00:00:00.000Z');
             const periodEndMs = Date.parse('2026-02-01T00:00:00.000Z');
+            const latestUsageGet = vi.fn().mockResolvedValue({
+                empty: false,
+                docs: [{ data: () => ({ successfulRequestCount: 29 }) }]
+            });
 
             mockListUsers.mockResolvedValue({
                 users: [
@@ -681,10 +685,105 @@ describe('listUsers Cloud Function', () => {
                                         }),
                                         orderBy: vi.fn().mockReturnValue({
                                             limit: vi.fn().mockReturnValue({
-                                                get: vi.fn().mockResolvedValue({
-                                                    empty: false,
-                                                    docs: [{ data: () => ({ successfulRequestCount: 29 }) }]
-                                                })
+                                                get: latestUsageGet
+                                            })
+                                        })
+                                    };
+                                }
+
+                                return {
+                                    limit: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ empty: true }) })
+                                };
+                            })
+                        })
+                    };
+                }
+
+                if (['garminAPITokens', 'suuntoAppAccessTokens', 'COROSAPIAccessTokens'].includes(path)) {
+                    return {
+                        doc: vi.fn().mockReturnValue({
+                            collection: vi.fn().mockReturnValue({
+                                limit: vi.fn().mockReturnValue({
+                                    get: vi.fn().mockResolvedValue({ empty: true, docs: [] })
+                                })
+                            })
+                        })
+                    };
+                }
+
+                return {
+                    doc: vi.fn().mockReturnValue({
+                        collection: vi.fn().mockReturnValue({
+                            limit: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ empty: true }) })
+                        })
+                    }),
+                    where: vi.fn().mockReturnThis(),
+                    orderBy: vi.fn().mockReturnThis(),
+                    limit: vi.fn().mockReturnThis(),
+                    get: vi.fn().mockResolvedValue({ empty: true })
+                };
+            });
+
+            const result: any = await (listUsers as any)(getAdminRequest({ page: 0, pageSize: 10 }));
+            expect(result.users[0].aiCreditsConsumed).toBe(0);
+            expect(latestUsageGet).not.toHaveBeenCalled();
+        });
+
+        it('should fall back to latest usage doc when there is no active subscription and user has subscribed before', async () => {
+            const latestUsageGet = vi.fn().mockResolvedValue({
+                empty: false,
+                docs: [{ data: () => ({ successfulRequestCount: 29 }) }]
+            });
+
+            mockListUsers.mockResolvedValue({
+                users: [
+                    {
+                        uid: 'u1',
+                        email: 'u1@test.com',
+                        displayName: 'U1',
+                        disabled: false,
+                        metadata: { creationTime: '2024-01-01', lastSignInTime: '2024-01-02' },
+                        customClaims: {},
+                        providerData: []
+                    }
+                ],
+                pageToken: undefined
+            });
+
+            mockGetAll.mockResolvedValue([
+                { id: 'u1', data: () => ({ hasSubscribedOnce: true }) }
+            ]);
+
+            mockCollection.mockImplementation((path: string) => {
+                if (path === 'customers') {
+                    return {
+                        doc: vi.fn().mockReturnValue({
+                            collection: vi.fn().mockReturnValue({
+                                where: vi.fn().mockReturnThis(),
+                                orderBy: vi.fn().mockReturnThis(),
+                                limit: vi.fn().mockReturnValue({
+                                    get: vi.fn().mockResolvedValue({ empty: true, docs: [] })
+                                })
+                            })
+                        })
+                    };
+                }
+
+                if (path === 'users') {
+                    return {
+                        doc: vi.fn().mockReturnValue({
+                            collection: vi.fn().mockImplementation((collectionName: string) => {
+                                if (collectionName === 'aiInsightsUsage') {
+                                    return {
+                                        doc: vi.fn().mockReturnValue({
+                                            get: vi.fn().mockResolvedValue({
+                                                exists: false,
+                                                data: () => undefined
+                                            })
+                                        }),
+                                        orderBy: vi.fn().mockReturnValue({
+                                            limit: vi.fn().mockReturnValue({
+                                                get: latestUsageGet
                                             })
                                         })
                                     };
@@ -725,6 +824,7 @@ describe('listUsers Cloud Function', () => {
 
             const result: any = await (listUsers as any)(getAdminRequest({ page: 0, pageSize: 10 }));
             expect(result.users[0].aiCreditsConsumed).toBe(29);
+            expect(latestUsageGet).toHaveBeenCalledTimes(1);
         });
     });
 
