@@ -252,6 +252,13 @@
               <div>
                 <p class="mat-title-medium state-title">Could not generate this insight</p>
                 <p class="mat-body-medium state-copy">{{ errorMessage }}</p>
+                <a
+                  mat-stroked-button
+                  class="state-support-button"
+                  [href]="errorResultSupportMailtoHref()">
+                  <mat-icon>mail</mat-icon>
+                  <span>Contact us</span>
+                </a>
               </div>
             </div>
           } @else if (unsupportedResponse(); as unsupported) {
@@ -298,6 +305,13 @@
                 <div>
                   <p class="mat-title-medium state-title">No matching data</p>
                   <p class="mat-body-medium state-copy">{{ empty.presentation.emptyState }}</p>
+                  <a
+                    mat-stroked-button
+                    class="state-support-button"
+                    [href]="emptyResultSupportMailtoHref()">
+                    <mat-icon>mail</mat-icon>
+                    <span>Contact us</span>
+                  </a>
                 </div>
               </div>
             </div>

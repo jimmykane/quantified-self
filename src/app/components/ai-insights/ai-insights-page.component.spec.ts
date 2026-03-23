@@ -1902,9 +1902,11 @@ describe('AiInsightsPageComponent', () => {
     fixture.detectChanges();
 
     const stateTitle = fixture.debugElement.query(By.css('.result-content .state-title'))?.nativeElement as HTMLElement | undefined;
+    const supportLink = fixture.debugElement.query(By.css('.result-content .state-support-button'))?.nativeElement as HTMLAnchorElement | undefined;
     const chart = fixture.debugElement.query(By.css('.chart-stub'));
 
     expect(stateTitle?.textContent).toContain('No matching data');
+    expect(supportLink?.getAttribute('href')).toBe('mailto:support@quantified-self.io?subject=AI%20Insights%20-%20No%20prompt%20results');
     expect(chart).toBeNull();
   });
 
@@ -1916,9 +1918,11 @@ describe('AiInsightsPageComponent', () => {
 
     const errorTitle = fixture.debugElement.query(By.css('.state-panel-error .state-title'))?.nativeElement as HTMLElement | undefined;
     const errorCopy = fixture.debugElement.query(By.css('.state-panel-error .state-copy'))?.nativeElement as HTMLElement | undefined;
+    const supportLink = fixture.debugElement.query(By.css('.state-panel-error .state-support-button'))?.nativeElement as HTMLAnchorElement | undefined;
 
     expect(errorTitle?.textContent).toContain('Could not generate this insight');
     expect(errorCopy?.textContent).toContain('Could not generate AI insights.');
+    expect(supportLink?.getAttribute('href')).toBe('mailto:support@quantified-self.io?subject=AI%20Insights%20-%20Prompt%20error');
   });
 
   it('should disable prompt submission surfaces when the quota is exhausted', async () => {
@@ -1957,7 +1961,7 @@ describe('AiInsightsPageComponent', () => {
     expect(quotaLine?.textContent).toContain('resets after next successful payment');
     expect(quotaLine?.textContent).toContain('Need more?');
     expect(quotaSupportLink?.textContent).toContain('Contact us');
-    expect(quotaSupportLink?.getAttribute('href')).toBe('mailto:support@quantified-self.io');
+    expect(quotaSupportLink?.getAttribute('href')).toBe('mailto:support@quantified-self.io?subject=Renew%20tokens');
   });
 
   it('should navigate to support mailto when the quota support contact is clicked', async () => {
@@ -1971,7 +1975,7 @@ describe('AiInsightsPageComponent', () => {
     const quotaSupportLink = fixture.debugElement.query(By.css('.prompt-quota-line a'))?.nativeElement as HTMLAnchorElement | undefined;
     quotaSupportLink?.click();
 
-    expect(quotaSupportLink?.getAttribute('href')).toBe('mailto:support@quantified-self.io');
+    expect(quotaSupportLink?.getAttribute('href')).toBe('mailto:support@quantified-self.io?subject=Renew%20tokens');
   });
 
   it('should show the paid-tier access message when AI Insights is unavailable for the current account', async () => {

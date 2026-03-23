@@ -103,6 +103,11 @@ const AI_INSIGHTS_LOADING_CHART_SKELETON_BARS = [
   '56%',
   '88%',
 ] as const;
+const AI_INSIGHTS_SUPPORT_SUBJECTS = {
+  quotaReset: 'Renew tokens',
+  noPromptResults: 'AI Insights - No prompt results',
+  promptError: 'AI Insights - Prompt error',
+} as const;
 
 @Component({
   selector: 'app-ai-insights-page',
@@ -350,7 +355,15 @@ export class AiInsightsPageComponent {
       && quotaStatus.isEligible
       && quotaStatus.resetMode === 'next_successful_payment';
   });
-  readonly quotaSupportMailtoHref = computed(() => `mailto:${this.supportEmail}`);
+  readonly quotaSupportMailtoHref = computed(() => (
+    this.buildSupportMailtoHref(AI_INSIGHTS_SUPPORT_SUBJECTS.quotaReset)
+  ));
+  readonly emptyResultSupportMailtoHref = computed(() => (
+    this.buildSupportMailtoHref(AI_INSIGHTS_SUPPORT_SUBJECTS.noPromptResults)
+  ));
+  readonly errorResultSupportMailtoHref = computed(() => (
+    this.buildSupportMailtoHref(AI_INSIGHTS_SUPPORT_SUBJECTS.promptError)
+  ));
   readonly quotaBlockedMessage = computed(() => {
     const quotaStatus = this.quotaStatus();
     if (!quotaStatus || (quotaStatus.isEligible && quotaStatus.remainingCount > 0)) {
@@ -1033,6 +1046,10 @@ export class AiInsightsPageComponent {
       clientTimezone: getClientTimeZone(),
       clientLocale: this.locale,
     };
+  }
+
+  private buildSupportMailtoHref(subject: string): string {
+    return `mailto:${this.supportEmail}?subject=${encodeURIComponent(subject)}`;
   }
 
   private isCompletedResponse(response: AiInsightsResponse): boolean {
