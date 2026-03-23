@@ -29,7 +29,11 @@ interface ExecuteQueryResultKindHelpers {
   buildRankedEvents: (
     events: EventInterface[],
     query: Extract<NormalizedInsightQuery, { resultKind: 'event_lookup' | 'aggregate' }>,
+    topResultsLimit: number,
   ) => RankedInsightEvent[];
+  resolveRankedTopResultsLimit: (
+    query: Extract<NormalizedInsightQuery, { resultKind: 'event_lookup' | 'aggregate' }>,
+  ) => number;
   hasRequestedStat: (event: EventInterface, dataType: string) => boolean;
 }
 
@@ -70,16 +74,19 @@ const EXECUTE_QUERY_RESULT_KIND_REGISTRY = {
       } = context;
       const eventsWithRequestedStat = matchedEvents
         .filter(event => helpers.hasRequestedStat(event, query.dataType));
-      const rankedEvents = helpers.buildRankedEvents(eventsWithRequestedStat, query);
+      const topResultsLimit = helpers.resolveRankedTopResultsLimit(query);
+      const rankedEvents = helpers.buildRankedEvents(eventsWithRequestedStat, query, topResultsLimit);
+      const topEventIds = rankedEvents.map(event => event.eventId);
 
       dependencies.logger.info('[aiInsights] Event lookup summary', {
         ...buildExecutionPromptLogContext(prompt),
         userID,
         dataType: query.dataType,
         valueType: query.valueType,
+        topResultsLimit,
         rankedEventCount: rankedEvents.length,
         primaryEventId: rankedEvents[0]?.eventId ?? null,
-        topEventIds: rankedEvents.slice(0, 10).map(event => event.eventId),
+        topEventIds,
       });
 
       return {
@@ -88,7 +95,7 @@ const EXECUTE_QUERY_RESULT_KIND_REGISTRY = {
         matchedActivityTypeCounts: helpers.buildMatchedActivityTypeCounts(matchedEvents, dependencies.logger),
         eventLookup: {
           primaryEventId: rankedEvents[0]?.eventId ?? null,
-          topEventIds: rankedEvents.slice(0, 10).map(event => event.eventId),
+          topEventIds,
           rankedEvents,
         },
       };
@@ -204,14 +211,16 @@ const EXECUTE_QUERY_RESULT_KIND_REGISTRY = {
         || query.valueType === ChartDataValueTypes.Maximum
       )
         ? (() => {
-          const rankedEvents = helpers.buildRankedEvents(eventsWithRequestedStat, query);
+          const topResultsLimit = helpers.resolveRankedTopResultsLimit(query);
+          const rankedEvents = helpers.buildRankedEvents(eventsWithRequestedStat, query, topResultsLimit);
           if (!rankedEvents.length) {
             return undefined;
           }
 
+          const topEventIds = rankedEvents.map(event => event.eventId);
           return {
             primaryEventId: rankedEvents[0]?.eventId ?? null,
-            topEventIds: rankedEvents.slice(0, 10).map(event => event.eventId),
+            topEventIds,
             matchedEventCount: eventsWithRequestedStat.length,
             rankedEvents,
           };

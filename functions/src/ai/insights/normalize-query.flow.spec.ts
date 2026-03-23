@@ -36,6 +36,10 @@ import {
   type NormalizeQueryDependencies,
 } from './normalize-query.flow';
 import { getActivityTypesForGroup } from '../../../../shared/activity-type-group.metadata';
+import {
+  AI_INSIGHTS_TOP_RESULTS_DEFAULT,
+  AI_INSIGHTS_TOP_RESULTS_MAX,
+} from '../../../../shared/ai-insights-ranking.constants';
 
 let normalizeQuerySubject = createNormalizeQuery();
 
@@ -733,6 +737,7 @@ describe('normalizeInsightQuery', () => {
     expect(result.query.valueType).toBe(ChartDataValueTypes.Maximum);
     expect(result.query.categoryType).toBe(ChartDataCategoryTypes.DateType);
     expect(result.query.activityTypes).toEqual([ActivityTypes.Cycling]);
+    expect(result.query.topResultsLimit).toBeUndefined();
     expect(result.query.dateRange).toEqual({
       kind: 'bounded',
       startDate: '2026-01-01T00:00:00.000Z',
@@ -740,6 +745,164 @@ describe('normalizeInsightQuery', () => {
       timezone: 'UTC',
       source: 'default',
     });
+  });
+
+  it('parses explicit top-N limits for event lookup prompts', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-19T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'distance',
+        aggregation: 'maximum',
+        category: 'date',
+        activityTypes: ['Cycling'],
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'When did I have my top 20 longest cycling rides?',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.resultKind).toBe('event_lookup');
+    expect(result.query.topResultsLimit).toBe(20);
+  });
+
+  it('treats "top N" prompts as event lookups even without explicit superlative words', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-19T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'distance',
+        aggregation: undefined,
+        category: 'date',
+        activityTypes: ['Cycling'],
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show my top 20 distance rides this year.',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.resultKind).toBe('event_lookup');
+    expect(result.query.topResultsLimit).toBe(20);
+  });
+
+  it('clamps oversized explicit top-N limits to the shared max', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-19T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'distance',
+        aggregation: 'maximum',
+        category: 'date',
+        activityTypes: ['Cycling'],
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'When did I have my top 999 longest cycling rides?',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.resultKind).toBe('event_lookup');
+    expect(result.query.topResultsLimit).toBe(AI_INSIGHTS_TOP_RESULTS_MAX);
+  });
+
+  it('leaves topResultsLimit undefined when no explicit top-N is requested', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-19T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'distance',
+        aggregation: 'maximum',
+        category: 'date',
+        activityTypes: ['Cycling'],
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'When did I have my longest cycling distance?',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.resultKind).toBe('event_lookup');
+    expect(result.query.topResultsLimit ?? AI_INSIGHTS_TOP_RESULTS_DEFAULT).toBe(AI_INSIGHTS_TOP_RESULTS_DEFAULT);
+  });
+
+  it('applies explicit top-N limits to aggregate min/max ranking prompts', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-19T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'distance',
+        aggregation: 'maximum',
+        category: 'activity',
+        activityTypes: ['Cycling', 'Running'],
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show my max distance by sport top 20 this year.',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.resultKind).toBe('aggregate');
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Maximum);
+    expect(result.query.topResultsLimit).toBe(20);
+  });
+
+  it('keeps aggregate mode for top-N prompts that explicitly request over-time grouping', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-19T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'distance',
+        aggregation: 'total',
+        category: 'date',
+        activityTypes: ['Cycling'],
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show my top 20 distance rides over time this year.',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.resultKind).toBe('aggregate');
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Total);
+    expect(result.query.topResultsLimit).toBeUndefined();
   });
 
   it('maps longest jump prompts to jump-distance event lookup by default', async () => {

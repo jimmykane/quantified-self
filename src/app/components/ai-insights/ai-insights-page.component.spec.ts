@@ -1429,6 +1429,25 @@ describe('AiInsightsPageComponent', () => {
     expect(appEventServiceMock.getEventsOnceByIds.mock.calls[0]?.[1]).toEqual(['event-3', 'event-2', 'event-1']);
   });
 
+  it('should fetch all ranked event ids when event-lookup returns more than ten items', async () => {
+    const topEventIds = Array.from({ length: 12 }, (_, index) => `event-${index + 1}`);
+    component.response.set({
+      ...buildEventLookupResponse(),
+      eventLookup: {
+        primaryEventId: topEventIds[0],
+        topEventIds,
+        matchedEventCount: 12,
+      },
+    });
+    fixture.detectChanges();
+
+    TestBed.flushEffects();
+    await fixture.whenStable();
+
+    expect(appEventServiceMock.getEventsOnceByIds).toHaveBeenCalledTimes(1);
+    expect(appEventServiceMock.getEventsOnceByIds.mock.calls[0]?.[1]).toEqual(topEventIds);
+  });
+
   it('should render latest-event responses as text plus one event card', async () => {
     appEventServiceMock.getEventsOnceByIds.mockReturnValueOnce(of([
       buildMockEvent({

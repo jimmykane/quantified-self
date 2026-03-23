@@ -27,6 +27,7 @@ interface BuildMetricQueryCommonInput extends BuildQueryCommonInput {
   dataType: string;
   valueType: ChartDataValueTypes;
   requestedTimeInterval?: TimeIntervals;
+  topResultsLimit?: number;
 }
 
 export function buildLatestEventInsightQuery(
@@ -59,6 +60,7 @@ export function buildEventLookupInsightQuery(
     requestedDateRanges: input.requestedDateRanges,
     periodMode: input.periodMode,
     chartType: input.chartType,
+    ...(input.topResultsLimit !== undefined ? { topResultsLimit: input.topResultsLimit } : {}),
   };
 }
 
@@ -81,6 +83,7 @@ export function buildAggregateInsightQuery(
     requestedDateRanges: input.requestedDateRanges,
     periodMode: input.periodMode,
     chartType: input.chartType,
+    ...(input.topResultsLimit !== undefined ? { topResultsLimit: input.topResultsLimit } : {}),
   };
 }
 

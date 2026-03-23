@@ -15,6 +15,10 @@ import type {
   NormalizedInsightMultiMetricAggregateQuery,
   NormalizedInsightQuery,
 } from '../../../../shared/ai-insights.types';
+import {
+  AI_INSIGHTS_TOP_RESULTS_DEFAULT,
+  clampAiInsightsTopResultsLimit,
+} from '../../../../shared/ai-insights-ranking.constants';
 import { resolveAiInsightsActivityFilterLabel } from '../../../../shared/ai-insights-activity-filter';
 import { formatAiInsightsSelectedDateRanges } from '../../../../shared/ai-insights-date-selection';
 import type { EventStatAggregationResult } from '../../../../shared/event-stat-aggregation.types';
@@ -460,6 +464,9 @@ export function buildNarrativeFacts(input: SummarizeInsightResultInput): Record<
   }
 
   if ('eventLookup' in input) {
+    const topResultsLimit = clampAiInsightsTopResultsLimit(
+      input.query.topResultsLimit ?? AI_INSIGHTS_TOP_RESULTS_DEFAULT,
+    );
     return {
       status: input.status,
       prompt: input.prompt,
@@ -482,7 +489,7 @@ export function buildNarrativeFacts(input: SummarizeInsightResultInput): Record<
           ),
         }
         : null,
-      rankedEvents: input.eventLookup.rankedEvents.slice(0, 10).map((event) => ({
+      rankedEvents: input.eventLookup.rankedEvents.slice(0, topResultsLimit).map((event) => ({
         eventId: event.eventId,
         startDateLabel: formatEventLookupDate(event.startDate, input.clientLocale, input.query),
         aggregateDisplayValue: formatInsightAggregateDisplay(

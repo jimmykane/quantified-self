@@ -16,6 +16,10 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => await importOri
 
 import type { NormalizedInsightQuery } from '../../../../shared/ai-insights.types';
 import {
+  AI_INSIGHTS_TOP_RESULTS_DEFAULT,
+  AI_INSIGHTS_TOP_RESULTS_MAX,
+} from '../../../../shared/ai-insights-ranking.constants';
+import {
   createExecuteQuery,
   normalizeFirestoreValue,
   rehydrateAiInsightsEvent,
@@ -906,7 +910,7 @@ describe('execute-query', () => {
     }));
   });
 
-  it('returns ranked event ids for event lookup mode and caps the list at 10', async () => {
+  it('returns ranked event ids for event lookup mode and caps the list at the default limit', async () => {
     const fetchEventDocs = vi.fn(async () => Array.from({ length: 12 }, (_, index) => ({
       id: `e${index + 1}`,
       data: () => ({
@@ -944,12 +948,98 @@ describe('execute-query', () => {
     }
 
     expect(result.eventLookup.primaryEventId).toBe('e12');
-    expect(result.eventLookup.topEventIds).toHaveLength(10);
+    expect(result.eventLookup.topEventIds).toHaveLength(AI_INSIGHTS_TOP_RESULTS_DEFAULT);
     expect(result.eventLookup.topEventIds).toEqual(['e12', 'e11', 'e10', 'e9', 'e8', 'e7', 'e6', 'e5', 'e4', 'e3']);
     expect(result.eventLookup.rankedEvents[0]).toEqual(expect.objectContaining({
       eventId: 'e12',
       aggregateValue: 12,
     }));
+  });
+
+  it('respects explicit event-lookup topResultsLimit values', async () => {
+    const fetchEventDocs = vi.fn(async () => Array.from({ length: 24 }, (_, index) => ({
+      id: `e${index + 1}`,
+      data: () => ({
+        startDate: new Date(Date.UTC(2026, 0, index + 1, 12, 0, 0)),
+      }),
+    })));
+
+    const importEvent = vi.fn((eventJSON: { startDate: Date }, eventID: string) => createMockEvent({
+      id: eventID,
+      startDate: eventJSON.startDate,
+      activityTypes: [ActivityTypes.Cycling],
+      stats: {
+        [DataDistance.type]: Number(eventID.slice(1)),
+      },
+    }));
+
+    setExecuteQueryDependenciesForTesting({
+      fetchEventDocs,
+      fetchDebugEventSnapshot: vi.fn(async () => ({
+        totalEventsCount: 24,
+        recentEventsSample: [],
+      })),
+      importEvent,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+    });
+
+    const result = await executeAiInsightsQuery('user-1', createQuery({
+      resultKind: 'event_lookup',
+      valueType: ChartDataValueTypes.Maximum,
+      topResultsLimit: 20,
+    }), 'show top 20 distance events');
+
+    expect(result.resultKind).toBe('event_lookup');
+    if (result.resultKind !== 'event_lookup') {
+      return;
+    }
+
+    expect(result.eventLookup.topEventIds).toHaveLength(20);
+    expect(result.eventLookup.topEventIds[0]).toBe('e24');
+    expect(result.eventLookup.topEventIds.at(-1)).toBe('e5');
+  });
+
+  it('clamps oversized event-lookup topResultsLimit values to the shared max cap', async () => {
+    const fetchEventDocs = vi.fn(async () => Array.from({ length: 80 }, (_, index) => ({
+      id: `e${index + 1}`,
+      data: () => ({
+        startDate: new Date(Date.UTC(2026, 0, index + 1, 12, 0, 0)),
+      }),
+    })));
+
+    const importEvent = vi.fn((eventJSON: { startDate: Date }, eventID: string) => createMockEvent({
+      id: eventID,
+      startDate: eventJSON.startDate,
+      activityTypes: [ActivityTypes.Cycling],
+      stats: {
+        [DataDistance.type]: Number(eventID.slice(1)),
+      },
+    }));
+
+    setExecuteQueryDependenciesForTesting({
+      fetchEventDocs,
+      fetchDebugEventSnapshot: vi.fn(async () => ({
+        totalEventsCount: 80,
+        recentEventsSample: [],
+      })),
+      importEvent,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+    });
+
+    const result = await executeAiInsightsQuery('user-1', createQuery({
+      resultKind: 'event_lookup',
+      valueType: ChartDataValueTypes.Maximum,
+      topResultsLimit: 999,
+    }), 'show top 999 distance events');
+
+    expect(result.resultKind).toBe('event_lookup');
+    if (result.resultKind !== 'event_lookup') {
+      return;
+    }
+
+    expect(result.eventLookup.topEventIds).toHaveLength(AI_INSIGHTS_TOP_RESULTS_MAX);
+    expect(result.eventLookup.topEventIds[0]).toBe('e80');
+    expect(result.eventLookup.topEventIds.at(-1)).toBe('e31');
   });
 
   it('breaks event-lookup ties by most recent event date and then event id', async () => {
@@ -1049,6 +1139,52 @@ describe('execute-query', () => {
       primaryEventId: 'e12',
       matchedEventCount: 12,
       topEventIds: ['e12', 'e11', 'e10', 'e9', 'e8', 'e7', 'e6', 'e5', 'e4', 'e3'],
+    }));
+  });
+
+  it('respects explicit topResultsLimit for aggregate min/max event rankings', async () => {
+    const fetchEventDocs = vi.fn(async () => Array.from({ length: 15 }, (_, index) => ({
+      id: `e${index + 1}`,
+      data: () => ({
+        startDate: new Date(Date.UTC(2026, 0, index + 1, 12, 0, 0)),
+      }),
+    })));
+
+    const importEvent = vi.fn((eventJSON: { startDate: Date }, eventID: string) => createMockEvent({
+      id: eventID,
+      startDate: eventJSON.startDate,
+      activityTypes: [ActivityTypes.Cycling],
+      stats: {
+        [DataDistance.type]: Number(eventID.slice(1)),
+      },
+    }));
+
+    setExecuteQueryDependenciesForTesting({
+      fetchEventDocs,
+      fetchDebugEventSnapshot: vi.fn(async () => ({
+        totalEventsCount: 15,
+        recentEventsSample: [],
+      })),
+      importEvent,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+    });
+
+    const result = await executeAiInsightsQuery('user-1', createQuery({
+      categoryType: ChartDataCategoryTypes.ActivityType,
+      valueType: ChartDataValueTypes.Maximum,
+      topResultsLimit: 5,
+      activityTypes: [ActivityTypes.Cycling],
+    }), 'show top 5 longest distances by sport');
+
+    expect(result.resultKind).toBe('aggregate');
+    if (result.resultKind !== 'aggregate') {
+      return;
+    }
+
+    expect(result.eventRanking).toEqual(expect.objectContaining({
+      primaryEventId: 'e15',
+      matchedEventCount: 15,
+      topEventIds: ['e15', 'e14', 'e13', 'e12', 'e11'],
     }));
   });
 

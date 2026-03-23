@@ -16,6 +16,10 @@ import {
 import type { NormalizedInsightQuery } from '../../../../shared/ai-insights.types';
 import type { FirestoreEventJSON } from '../../../../shared/app-event.interface';
 import {
+  AI_INSIGHTS_TOP_RESULTS_DEFAULT,
+  clampAiInsightsTopResultsLimit,
+} from '../../../../shared/ai-insights-ranking.constants';
+import {
   resolveAggregationCategoryKey,
 } from '../../../../shared/event-stat-aggregation';
 import type { EventStatAggregationResult } from '../../../../shared/event-stat-aggregation.types';
@@ -514,27 +518,53 @@ function compareRankedEvents(
   return left.eventId.localeCompare(right.eventId);
 }
 
+function resolveRankedTopResultsLimit(
+  query: Extract<NormalizedInsightQuery, { resultKind: 'event_lookup' | 'aggregate' }>,
+): number {
+  return clampAiInsightsTopResultsLimit(query.topResultsLimit ?? AI_INSIGHTS_TOP_RESULTS_DEFAULT);
+}
+
 function buildRankedEvents(
   events: EventInterface[],
   query: Extract<NormalizedInsightQuery, { resultKind: 'event_lookup' | 'aggregate' }>,
+  topResultsLimit: number,
 ): RankedInsightEvent[] {
-  return events
-    .map((event) => {
-      const aggregateValue = resolveRequestedStatValue(event, query.dataType);
-      const eventId = event.getID?.();
-      const startDate = event.startDate instanceof Date ? event.startDate.toISOString() : null;
-      if (aggregateValue === null || !eventId || !startDate) {
-        return null;
-      }
+  if (topResultsLimit <= 0) {
+    return [];
+  }
 
-      return {
-        eventId,
-        startDate,
-        aggregateValue,
-      } satisfies RankedInsightEvent;
-    })
-    .filter((event): event is RankedInsightEvent => event !== null)
-    .sort((left, right) => compareRankedEvents(left, right, query.valueType));
+  const rankedEvents: RankedInsightEvent[] = [];
+
+  for (const event of events) {
+    const aggregateValue = resolveRequestedStatValue(event, query.dataType);
+    const eventId = event.getID?.();
+    const startDate = event.startDate instanceof Date ? event.startDate.toISOString() : null;
+    if (aggregateValue === null || !eventId || !startDate) {
+      continue;
+    }
+
+    const candidate = {
+      eventId,
+      startDate,
+      aggregateValue,
+    } satisfies RankedInsightEvent;
+
+    const insertionIndex = rankedEvents.findIndex((rankedEvent) => (
+      compareRankedEvents(candidate, rankedEvent, query.valueType) < 0
+    ));
+    if (insertionIndex === -1) {
+      if (rankedEvents.length < topResultsLimit) {
+        rankedEvents.push(candidate);
+      }
+    } else {
+      rankedEvents.splice(insertionIndex, 0, candidate);
+      if (rankedEvents.length > topResultsLimit) {
+        rankedEvents.pop();
+      }
+    }
+  }
+
+  return rankedEvents;
 }
 
 function buildLatestEvent(events: EventInterface[]): { eventId: string; startDate: string } | null {
@@ -773,6 +803,16 @@ export function createExecuteQuery(
           query.resultKind === 'aggregate'
           || query.resultKind === 'event_lookup'
         ) ? query.valueType : null,
+        rankedTopResultsLimit: (
+          query.resultKind === 'event_lookup'
+          || (
+            query.resultKind === 'aggregate'
+            && (
+              query.valueType === ChartDataValueTypes.Minimum
+              || query.valueType === ChartDataValueTypes.Maximum
+            )
+          )
+        ) ? resolveRankedTopResultsLimit(query) : null,
         categoryType: query.categoryType,
         activityTypes: query.activityTypes,
         dateRange: query.dateRange,
@@ -813,6 +853,7 @@ export function createExecuteQuery(
           buildMatchedActivityTypeCounts,
           buildOverallAggregation,
           buildRankedEvents,
+          resolveRankedTopResultsLimit,
           hasRequestedStat,
         },
       });

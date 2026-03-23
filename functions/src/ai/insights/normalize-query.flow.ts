@@ -18,6 +18,7 @@ import type {
   NormalizedInsightPeriodMode,
   NormalizedInsightQuery,
 } from '../../../../shared/ai-insights.types';
+import { clampAiInsightsTopResultsLimit } from '../../../../shared/ai-insights-ranking.constants';
 import {
   getActivityTypeGroupMetadata,
   getActivityTypesForGroup,
@@ -1193,9 +1194,15 @@ function promptImpliesEventLookup(prompt: string): boolean {
     return false;
   }
 
+  const hasExplicitTopResultsIntent = resolvePromptTopResultsLimit(prompt) !== undefined;
   const hasRankingIntent = EVENT_LOOKUP_RANKING_PROMPT_PATTERNS.some(pattern => pattern.test(normalizedPrompt));
-  if (!hasRankingIntent) {
+  if (!hasRankingIntent && !hasExplicitTopResultsIntent) {
     return false;
+  }
+
+  // "top N" phrasing is an explicit ranked-event lookup intent.
+  if (hasExplicitTopResultsIntent) {
+    return true;
   }
 
   if (EVENT_LOOKUP_SUBJECT_PROMPT_PATTERNS.some(pattern => pattern.test(normalizedPrompt))) {
@@ -1279,6 +1286,25 @@ function resolvePromptAggregationCodes(prompt: string): ModelAggregationCode[] {
   }
 
   return [...aggregationCodes];
+}
+
+function resolvePromptTopResultsLimit(prompt: string): number | undefined {
+  const normalizedPrompt = normalizePromptSearchText(prompt);
+  if (!normalizedPrompt) {
+    return undefined;
+  }
+
+  const topResultsMatch = normalizedPrompt.match(/\btop\s+(\d{1,4})\b/);
+  if (!topResultsMatch) {
+    return undefined;
+  }
+
+  const parsedLimit = Number.parseInt(topResultsMatch[1], 10);
+  if (!Number.isFinite(parsedLimit)) {
+    return undefined;
+  }
+
+  return clampAiInsightsTopResultsLimit(parsedLimit);
 }
 
 function resolvePromptAggregationForMetric(
@@ -1770,6 +1796,7 @@ export function resolveNormalizedInsightQueryFromIntent(
     resolvedAggregation,
     baseMetric.defaultValueType,
   );
+  const promptTopResultsLimit = resolvePromptTopResultsLimit(prompt);
   const metric = (promptMetricMatch
     ? resolveInsightMetric(promptMetricMatch.alias, valueType)
     : null)
@@ -1866,6 +1893,7 @@ export function resolveNormalizedInsightQueryFromIntent(
         dataType: metric.dataType,
         valueType,
         requestedTimeInterval: finalRequestedTimeInterval,
+        topResultsLimit: promptTopResultsLimit,
         activityTypeGroups: finalActivityTypeGroups,
         activityTypes: finalActivityTypes,
         dateRange,
@@ -1887,6 +1915,12 @@ export function resolveNormalizedInsightQueryFromIntent(
     query: buildAggregateInsightQuery({
       dataType: metric.dataType,
       valueType,
+      topResultsLimit: (
+        valueType === ChartDataValueTypes.Minimum
+        || valueType === ChartDataValueTypes.Maximum
+      )
+        ? promptTopResultsLimit
+        : undefined,
       categoryType,
       requestedTimeInterval: finalRequestedTimeInterval,
       activityTypeGroups: finalActivityTypeGroups,
