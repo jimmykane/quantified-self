@@ -22,6 +22,8 @@ describe('metric-catalog', () => {
   it('resolves supported metrics from aliases', () => {
     expect(resolveInsightMetric('avg cadence')?.key).toBe('cadence');
     expect(resolveInsightMetric('mileage')?.key).toBe('distance');
+    expect(resolveInsightMetric('distances')?.key).toBe('distance');
+    expect(resolveInsightMetric('longest distances')?.key).toBe('distance');
     expect(resolveInsightMetric('gap')?.key).toBe('grade_adjusted_pace');
     expect(resolveInsightMetric('effort pace')?.key).toBe('effort_pace');
     expect(resolveInsightMetric('swim pace')?.key).toBe('swim_pace');

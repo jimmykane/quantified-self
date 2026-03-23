@@ -2513,6 +2513,39 @@ describe('normalizeInsightQuery', () => {
     expect(result.query.activityTypes).not.toContain(ActivityTypes.IndoorTraining);
   });
 
+  it('deterministically normalizes longest distances by sport with indoor exclusions', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-22T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'show my longest distances by sport all time excluding indoor activities.',
+      clientTimezone: 'Europe/Helsinki',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('distance');
+    expect(result.query.resultKind).toBe('aggregate');
+    expect(result.query.categoryType).toBe(ChartDataCategoryTypes.ActivityType);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Maximum);
+    expect(result.query.dateRange).toEqual({
+      kind: 'all_time',
+      timezone: 'Europe/Helsinki',
+      source: 'prompt',
+    });
+    expect(result.query.activityTypes).toEqual(expect.arrayContaining([
+      ActivityTypes.Cycling,
+      ActivityTypes.Running,
+    ]));
+    expect(result.query.activityTypes).not.toContain(ActivityTypes.IndoorCycling);
+    expect(result.query.activityTypes).not.toContain(ActivityTypes.IndoorRunning);
+    expect(result.query.activityTypes).not.toContain(ActivityTypes.IndoorTraining);
+  });
+
   it('rejects unsupported split prompts before calling the model', async () => {
     const generateIntent = vi.fn();
     setNormalizeQueryDependenciesForTesting({
