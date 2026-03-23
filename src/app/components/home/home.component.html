@@ -11,12 +11,13 @@
       <h1 class="hero-title">
         <p>Quantify. Analyze. Improve.</p>
         <mat-divider></mat-divider>
-        <p class="highlight-text">Performance Analytics Platform</p>
+        <p class="highlight-text">Measure Performance. Get AI Insights.</p>
       </h1>
 
       <p class="hero-subtitle">
         Unlock the full potential of your performance data.<br>
-        Seamlessly sync activities and routes to Suunto. Full history imports supported.
+        Ask focused training questions with AI Insights and get answers grounded in your stored stats.<br>
+        Seamlessly upload activities and sync routes across Garmin, COROS, and Suunto. Full history imports supported.
       </p>
 
       <div class="hero-actions">
@@ -43,7 +44,73 @@
     </div>
   </section>
 
-  <!-- 1.5 Fast Track Section (Using Features Styling) -->
+  <!-- 1.5 AI Insights Launch Section -->
+  <section class="features-section ai-insights-section">
+    <div class="ai-insights-header animate-on-scroll">
+      <h2 class="section-title">AI Insights</h2>
+      <p class="section-subtitle">
+        Built into the same performance workflow. Ask your question, review narrative + chart or event-based output, then refine your prompt and keep moving.
+      </p>
+    </div>
+
+    <div class="features-grid">
+      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
+        <mat-card-header>
+          <div mat-card-avatar class="feature-icon-container">
+            <mat-icon>chat</mat-icon>
+          </div>
+          <mat-card-title>Ask Focused Questions</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <p>Specify a metric, activity type, and date range to keep each answer precise and directly usable in training decisions.</p>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
+        <mat-card-header>
+          <div mat-card-avatar class="feature-icon-container">
+            <mat-icon>auto_graph</mat-icon>
+          </div>
+          <mat-card-title>Get the Right Result Mode</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <p>Receive aggregate trends, multi-metric summaries, event lookups, or latest-event answers that match your prompt intent.</p>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
+        <mat-card-header>
+          <div mat-card-avatar class="feature-icon-container">
+            <mat-icon>tips_and_updates</mat-icon>
+          </div>
+          <mat-card-title>Refine Prompts Faster</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <p>If a request is unsupported, AI Insights suggests better prompt paths so you can quickly land on a supported query.</p>
+        </mat-card-content>
+      </mat-card>
+    </div>
+
+    <div class="ai-insights-examples animate-on-scroll">
+      <p class="examples-label">What you can ask</p>
+      <div class="example-prompts">
+        <app-typed-prompt-rotator [prompts]="aiPromptExamples"></app-typed-prompt-rotator>
+      </div>
+    </div>
+
+    <div class="hero-actions ai-insights-actions animate-on-scroll">
+      <button mat-flat-button class="cta-button primary qs-mat-primary" routerLink="/pricing">
+        View Plans
+        <mat-icon iconPositionEnd>insights</mat-icon>
+      </button>
+      <button mat-stroked-button class="cta-button secondary" routerLink="/login">
+        Member Login
+        <mat-icon iconPositionEnd>login</mat-icon>
+      </button>
+    </div>
+  </section>
+
+  <!-- 1.6 Fast Track Section (Using Features Styling) -->
   <section class="features-section container" style="padding-bottom: 0;">
     <div class="features-grid">
       <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
@@ -147,6 +214,32 @@
         <mat-card-content>
           <p>The ultimate Suunto companion. Sync routes and activities directly to your watch. Perform full history
             imports from major platforms with ease.</p>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- Feature 5: AI Insights -->
+      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
+        <mat-card-header>
+          <div mat-card-avatar class="feature-icon-container">
+            <mat-icon>insights</mat-icon>
+          </div>
+          <mat-card-title>AI-Powered Insights</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <p>Ask focused training questions and get data-grounded answers from your stored activity history.</p>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- Feature 6: Activity Upload -->
+      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
+        <mat-card-header>
+          <div mat-card-avatar class="feature-icon-container">
+            <mat-icon>upload_file</mat-icon>
+          </div>
+          <mat-card-title>Activity Upload + History Imports</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <p>Upload FIT, TCX, and GPX files and import years of training data to analyze everything in one place.</p>
         </mat-card-content>
       </mat-card>
     </div>

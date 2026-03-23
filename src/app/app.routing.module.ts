@@ -172,8 +172,8 @@ export const routes: Routes = [
     loadChildren: () => import('./modules/home.module').then(module => module.HomeModule),
     data: {
       animation: 'Home',
-      description: 'Quantified Self: Premium fitness analytics for Suunto, Garmin, and COROS. Jump into your data with full history imports or watch your activities sync automatically.',
-      keywords: 'quantified self, fitness tracker, activity analysis, garmin connect sync, suunto app, coros integration, strava alternative, history import, suunto routes, activity sync, fit file viewer, gpx parser'
+      description: 'Quantified Self AI Insights helps performance athletes ask focused training questions and get narrative summaries plus chart or event-level answers from persisted activity stats.',
+      keywords: 'ai insights, quantified self, training analytics, fitness ai, performance metrics, event lookup, activity trends, garmin connect sync, suunto app, coros integration, history import'
     },
     canMatch: [loggedInGuard, onboardingGuard],
     pathMatch: 'full'

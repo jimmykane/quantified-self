@@ -1,0 +1,31 @@
+@if (activePrompt()) {
+  @if (interactive()) {
+    <button
+      type="button"
+      class="hero-prompt-rotator qs-glass-card-panel"
+      [disabled]="disabled()"
+      [attr.aria-label]="promptAriaLabel()"
+      [attr.title]="activePrompt()"
+      (click)="onPromptClick()">
+      <ng-container [ngTemplateOutlet]="promptTemplate"></ng-container>
+    </button>
+  } @else {
+    <div
+      class="hero-prompt-rotator hero-prompt-rotator--readonly qs-glass-card-panel"
+      role="status"
+      aria-live="polite"
+      [attr.aria-label]="promptAriaLabel()"
+      [attr.title]="activePrompt()">
+      <ng-container [ngTemplateOutlet]="promptTemplate"></ng-container>
+    </div>
+  }
+}
+
+<ng-template #promptTemplate>
+  <span #promptViewport class="hero-prompt-display" aria-hidden="true">
+    <span #promptTrack class="hero-prompt-track" [style.transform]="promptTrackTransform()">
+      <span class="hero-prompt-text">{{ typedPrompt() }}</span>
+      <span class="hero-prompt-caret"></span>
+    </span>
+  </span>
+</ng-template>

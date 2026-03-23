@@ -33,6 +33,7 @@ import { MyTracksMapLayersControlComponent } from '../components/map/my-tracks-m
 import { MapLayersMenuPanelComponent } from '../components/map/shared/map-layers-menu-panel.component';
 import { EventIntensityZonesComponent } from '../components/event/intensity-zones/event.intensity-zones.component';
 import { MenuRadioListComponent } from '../components/shared/menu-radio-list/menu-radio-list.component';
+import { TypedPromptRotatorComponent } from '../components/shared/typed-prompt-rotator/typed-prompt-rotator.component';
 
 @NgModule({
     imports: [
@@ -70,6 +71,7 @@ import { MenuRadioListComponent } from '../components/shared/menu-radio-list/men
         MapLayersMenuPanelComponent,
         EventIntensityZonesComponent,
         MenuRadioListComponent,
+        TypedPromptRotatorComponent,
     ],
     providers: [],
     exports: [
@@ -103,6 +105,7 @@ import { MenuRadioListComponent } from '../components/shared/menu-radio-list/men
         MapLayersActionsComponent,
         EventIntensityZonesComponent,
         MenuRadioListComponent,
+        TypedPromptRotatorComponent,
     ]
 })
 
