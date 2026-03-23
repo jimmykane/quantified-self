@@ -17,6 +17,7 @@ import type {
   NormalizedInsightDateRange,
 } from '@shared/ai-insights.types';
 import { formatAiInsightsSelectedDateRanges } from '@shared/ai-insights-date-selection';
+import { AI_INSIGHTS_TOP_RESULTS_MAX } from '@shared/ai-insights-ranking.constants';
 import { resolveMetricSemantics, resolveMetricSummarySemantics } from '@shared/metric-semantics';
 import { formatUnitAwareDataValue } from '@shared/unit-aware-display';
 import { formatDashboardBucketDateByInterval } from '../../helpers/dashboard-chart-data.helper';
@@ -619,8 +620,8 @@ type RankedEventResultKind = RankedEventResponse['resultKind'];
 const RANKED_EVENT_IDS_BY_RESULT_KIND: {
   [K in RankedEventResultKind]: (response: Extract<RankedEventResponse, { resultKind: K }>) => string[];
 } = {
-  aggregate: response => response.eventRanking.topEventIds.slice(0, 10),
-  event_lookup: response => response.eventLookup.topEventIds.slice(0, 10),
+  aggregate: response => response.eventRanking.topEventIds.slice(0, AI_INSIGHTS_TOP_RESULTS_MAX),
+  event_lookup: response => response.eventLookup.topEventIds.slice(0, AI_INSIGHTS_TOP_RESULTS_MAX),
   latest_event: response => [response.latestEvent.eventId],
 };
 

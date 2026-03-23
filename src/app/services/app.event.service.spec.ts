@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { AppEventService } from './app.event.service';
-import { Firestore, doc, docData, collection, collectionData, deleteDoc, updateDoc, writeBatch, query, where, getDocs, getDocsFromCache, onSnapshot } from '@angular/fire/firestore';
+import { Firestore, doc, docData, collection, collectionData, deleteDoc, updateDoc, writeBatch, query, where, getDocs, getDocsFromCache, onSnapshot, documentId } from '@angular/fire/firestore';
 import { Storage } from '@angular/fire/storage';
 import { Auth } from '@angular/fire/auth';
 import { AppAnalyticsService } from './app.analytics.service';
@@ -111,6 +111,7 @@ vi.mock('@angular/fire/firestore', async (importOriginal) => {
         collectionData: vi.fn(),
         query: vi.fn(),
         where: vi.fn(),
+        documentId: vi.fn(() => '__name__'),
         getDocs: vi.fn(),
         getDocsFromCache: vi.fn(),
         onSnapshot: vi.fn(),
@@ -247,6 +248,74 @@ describe('AppEventService', () => {
 
     it('should be created', () => {
         expect(service).toBeTruthy();
+    });
+
+    describe('getEventsOnceByIds', () => {
+        it('should batch ID fetches with documentId in-queries and preserve requested order', async () => {
+            const user = { uid: 'user-ids' } as any;
+            const requestedIDs = Array.from({ length: 35 }, (_, index) => `event-${index + 1}`);
+
+            (collection as Mock).mockReturnValue('events-collection');
+            (where as Mock).mockImplementation((fieldPath: unknown, opStr: unknown, value: unknown) => ({
+                fieldPath,
+                opStr,
+                value,
+            }));
+            (query as Mock).mockImplementation((collectionRef: unknown, whereConstraint: unknown) => ({
+                collectionRef,
+                whereConstraint,
+            }));
+            (documentId as Mock).mockReturnValue('__name__');
+            (getDocs as Mock).mockImplementation(async (queryRef: any) => {
+                const eventIDsForChunk = (queryRef.whereConstraint?.value || []) as string[];
+                return {
+                    docs: eventIDsForChunk
+                        .slice()
+                        .reverse()
+                        .map((eventID) => ({
+                            id: eventID,
+                            data: () => ({ id: eventID, startDate: 1710000000000 }),
+                        })),
+                };
+            });
+            mocks.getEventFromJSON.mockImplementation((json: Record<string, unknown>) => createMockEvent(json));
+
+            const result = await firstValueFrom(service.getEventsOnceByIds(user, requestedIDs));
+
+            expect(getDocs).toHaveBeenCalledTimes(2);
+            expect(where).toHaveBeenCalledTimes(2);
+            expect(where).toHaveBeenNthCalledWith(1, '__name__', 'in', requestedIDs.slice(0, 30));
+            expect(where).toHaveBeenNthCalledWith(2, '__name__', 'in', requestedIDs.slice(30));
+            expect(result.map((event) => event.getID())).toEqual(requestedIDs);
+        });
+
+        it('should skip missing docs and keep ordering for found IDs', async () => {
+            const user = { uid: 'user-ids-missing' } as any;
+            const requestedIDs = ['event-3', 'event-1', 'event-2'];
+
+            (collection as Mock).mockReturnValue('events-collection');
+            (where as Mock).mockImplementation((fieldPath: unknown, opStr: unknown, value: unknown) => ({
+                fieldPath,
+                opStr,
+                value,
+            }));
+            (query as Mock).mockImplementation((collectionRef: unknown, whereConstraint: unknown) => ({
+                collectionRef,
+                whereConstraint,
+            }));
+            (documentId as Mock).mockReturnValue('__name__');
+            (getDocs as Mock).mockResolvedValue({
+                docs: [
+                    { id: 'event-2', data: () => ({ id: 'event-2', startDate: 1710003600000 }) },
+                    { id: 'event-1', data: () => ({ id: 'event-1', startDate: 1710000000000 }) },
+                ],
+            });
+            mocks.getEventFromJSON.mockImplementation((json: Record<string, unknown>) => createMockEvent(json));
+
+            const result = await firstValueFrom(service.getEventsOnceByIds(user, requestedIDs));
+
+            expect(result.map((event) => event.getID())).toEqual(['event-1', 'event-2']);
+        });
     });
 
     it('should reuse one-shot event parsing for an identical initial live snapshot', async () => {

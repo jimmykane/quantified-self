@@ -25,12 +25,16 @@
 }
 
 .prompt-picker-dialog__meta {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   min-height: 28px;
   padding: 5px 10px;
+  box-sizing: border-box;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--mat-sys-outline-variant) 70%, transparent);
   background: color-mix(in srgb, var(--mat-sys-surface-container-low) 82%, transparent);
@@ -51,7 +55,14 @@
   letter-spacing: 0.02em;
 }
 
+.prompt-picker-dialog__meta-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .prompt-picker-dialog__meta-count {
+  flex: 0 0 auto;
   margin-inline-start: auto;
   font-variant-numeric: tabular-nums;
 }
@@ -126,14 +137,22 @@
 
 .prompt-picker-dialog__item {
   background: transparent !important;
-  justify-content: space-between;
-  gap: 10px;
-  min-height: 0;
+  min-height: 40px;
+  height: auto;
   width: 100%;
   padding: 8px 10px;
   text-align: left;
   line-height: 1.25;
   transition: border-color 0.16s ease, background-color 0.16s ease, transform 0.16s ease;
+}
+
+:host ::ng-deep .prompt-picker-dialog__item .mdc-button__label {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  white-space: normal;
 }
 
 .prompt-picker-dialog__item:hover {
@@ -158,6 +177,7 @@
   display: block;
   max-width: 100%;
   white-space: normal;
+  overflow-wrap: anywhere;
   line-height: 1.32;
   font-size: 0.86rem;
   text-align: left;

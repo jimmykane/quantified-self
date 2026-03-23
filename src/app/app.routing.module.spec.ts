@@ -46,4 +46,15 @@ describe('AppRoutingModule routes', () => {
       animation: 'AIInsights',
     });
   });
+
+  it('should include AI insights launch metadata on the public home route', () => {
+    const homeRoute = routes.find(route => route.path === '');
+
+    expect(homeRoute).toBeTruthy();
+    expect(homeRoute?.data).toMatchObject({
+      animation: 'Home',
+    });
+    expect(homeRoute?.data?.['description']).toContain('AI Insights');
+    expect(homeRoute?.data?.['keywords']).toContain('ai insights');
+  });
 });

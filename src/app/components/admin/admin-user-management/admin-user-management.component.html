@@ -228,6 +228,12 @@
                         </td>
                     </ng-container>
 
+                    <!-- AI Credits Column -->
+                    <ng-container matColumnDef="aiCreditsConsumed">
+                        <th mat-header-cell *matHeaderCellDef> AI Credits Used </th>
+                        <td mat-cell *matCellDef="let user"> {{ (user.aiCreditsConsumed ?? 0) | number }} </td>
+                    </ng-container>
+
                     <!-- Services Column -->
                     <ng-container matColumnDef="services">
                         <th mat-header-cell *matHeaderCellDef> Services </th>

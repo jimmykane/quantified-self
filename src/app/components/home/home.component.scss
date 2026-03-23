@@ -284,6 +284,7 @@
     flex-direction: column;
     align-items: center;
     padding: 6rem 2rem;
+    padding-top: 0;
     background-color: var(--mat-sys-surface);
     border-bottom: 1px solid var(--mat-sys-outline-variant);
     border-bottom: 1px solid var(--mat-sys-outline-variant);
@@ -353,6 +354,36 @@
                     background-color: var(--mat-sys-surface-container-high);
                     color: var(--mat-sys-on-surface);
                 }
+            }
+        }
+    }
+
+    .integration-followup-grid {
+        width: min(1200px, 100%);
+        margin-top: 3rem;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 2rem;
+    }
+
+    .feature-card {
+        @include glass-interactive-card;
+        text-align: left;
+
+        .feature-icon-container {
+            @include icon-container-base;
+            background-color: var(--mat-sys-primary-container);
+            color: var(--mat-sys-on-primary-container);
+            margin-bottom: 0;
+
+            &.import {
+                background-color: var(--mat-sys-secondary-container);
+                color: var(--mat-sys-on-secondary-container);
+            }
+
+            &.sync {
+                background-color: var(--mat-sys-tertiary-container);
+                color: var(--mat-sys-on-tertiary-container);
             }
         }
     }
@@ -428,6 +459,99 @@
             }
         }
     }
+}
+
+.ai-insights-section {
+    padding-top: 0.5rem;
+    margin-top: -0.75rem;
+
+    .ai-insights-header {
+        text-align: center;
+        margin-bottom: 2rem;
+
+        .section-title {
+            margin-bottom: 1rem;
+            font-size: 2.5rem;
+            font-weight: 700;
+            opacity: 1;
+            transform: none;
+        }
+
+        .section-subtitle {
+            font-size: 1.2rem;
+            color: var(--mat-sys-on-surface-variant);
+            max-width: 760px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+    }
+
+    .ai-insights-examples {
+        margin-top: 1.5rem;
+        padding: 1.25rem;
+        border-radius: 16px;
+        border: 1px solid var(--mat-sys-outline-variant);
+        background: var(--mat-sys-surface-container-low);
+
+        .examples-label {
+            margin: 0 0 0.75rem;
+            font-size: 0.9rem;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: var(--mat-sys-on-surface-variant);
+            font-weight: 700;
+            text-align: center;
+        }
+
+        .example-prompts {
+            width: 100%;
+            max-width: min(100%, 48rem);
+            margin: 0 auto;
+            min-height: 48px;
+        }
+    }
+
+    .ai-insights-actions {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-top: 2rem;
+        margin-bottom: 0;
+
+        .cta-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.45rem;
+            min-width: 180px;
+            min-height: 48px;
+            padding: 0.75rem 1.35rem;
+            border-radius: 999px;
+            font-size: 0.98rem;
+            font-weight: 600;
+            line-height: 1;
+            white-space: nowrap;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+            &:hover {
+                transform: translateY(-2px);
+            }
+        }
+
+        .cta-button.primary:hover {
+            box-shadow: 0 4px 12px color-mix(in srgb, var(--mat-sys-primary) 30%, transparent);
+        }
+    }
+
+    .ai-insights-cta-note {
+        margin: 0.75rem 0 0;
+        text-align: center;
+        color: var(--mat-sys-on-surface-variant);
+        font-size: 0.95rem;
+    }
+
 }
 
 // 3.1 Hardware Analysis Section
@@ -844,8 +968,44 @@
         grid-template-columns: 1fr;
     }
 
+    .integrations-section {
+        .integration-followup-grid {
+            margin-top: 2rem;
+            grid-template-columns: 1fr;
+        }
+    }
+
     .trust-indicators {
         flex-direction: column;
         gap: 0.5rem;
+    }
+
+    .ai-insights-section {
+        margin-top: -0.25rem;
+
+        .section-subtitle {
+            font-size: 1.05rem;
+        }
+
+        .ai-insights-examples {
+            padding: 1rem;
+
+            .example-prompts {
+                width: 100%;
+                max-width: 100%;
+            }
+        }
+
+        .ai-insights-actions {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 0.75rem;
+
+            .cta-button {
+                width: 100%;
+                max-width: 360px;
+                margin: 0 auto;
+            }
+        }
     }
 }

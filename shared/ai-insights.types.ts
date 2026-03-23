@@ -63,6 +63,7 @@ export interface NormalizedInsightAggregateQuery extends NormalizedInsightQueryB
   resultKind: 'aggregate';
   dataType: string;
   valueType: ChartDataValueTypes;
+  topResultsLimit?: number;
 }
 
 export interface NormalizedInsightEventLookupQuery extends NormalizedInsightQueryBase {
@@ -70,6 +71,7 @@ export interface NormalizedInsightEventLookupQuery extends NormalizedInsightQuer
   dataType: string;
   valueType: ChartDataValueTypes;
   categoryType: ChartDataCategoryTypes.DateType;
+  topResultsLimit?: number;
 }
 
 export interface NormalizedInsightLatestEventQuery extends NormalizedInsightQueryBase {

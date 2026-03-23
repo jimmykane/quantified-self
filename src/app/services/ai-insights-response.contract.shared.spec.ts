@@ -7,6 +7,7 @@ import {
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
 import { validateAiInsightsResponse } from '@shared/ai-insights-response.contract';
+import { AI_INSIGHTS_TOP_RESULTS_MAX } from '@shared/ai-insights-ranking.constants';
 
 describe('Ai insights shared response contract', () => {
   it('accepts valid responses for all result kinds', () => {
@@ -254,5 +255,78 @@ describe('Ai insights shared response contract', () => {
     expect(result.details?.queryKeys).toContain('periodMode');
     expect(result.details?.queryKeys).toContain('requestedDateRanges');
     expect(result.details?.valueTypeType).toBe('string');
+  });
+
+  it('accepts topEventIds up to the shared max cap and rejects values above it', () => {
+    const topIdsAtLimit = Array.from({ length: AI_INSIGHTS_TOP_RESULTS_MAX }, (_, index) => `event-${index + 1}`);
+    const validResult = validateAiInsightsResponse({
+      status: 'ok',
+      resultKind: 'event_lookup',
+      narrative: 'ok',
+      query: {
+        resultKind: 'event_lookup',
+        dataType: 'Distance',
+        valueType: ChartDataValueTypes.Maximum,
+        categoryType: ChartDataCategoryTypes.DateType,
+        topResultsLimit: AI_INSIGHTS_TOP_RESULTS_MAX,
+        activityTypeGroups: [],
+        activityTypes: [ActivityTypes.Cycling],
+        dateRange: {
+          kind: 'bounded',
+          startDate: '2026-01-01T00:00:00.000Z',
+          endDate: '2026-03-22T23:59:59.999Z',
+          timezone: 'UTC',
+          source: 'prompt',
+        },
+        chartType: ChartTypes.LinesVertical,
+      },
+      eventLookup: {
+        primaryEventId: topIdsAtLimit[0],
+        topEventIds: topIdsAtLimit,
+        matchedEventCount: AI_INSIGHTS_TOP_RESULTS_MAX,
+      },
+      presentation: {
+        title: 'Top events',
+        chartType: ChartTypes.LinesVertical,
+      },
+    });
+
+    const invalidResult = validateAiInsightsResponse({
+      status: 'ok',
+      resultKind: 'event_lookup',
+      narrative: 'ok',
+      query: {
+        resultKind: 'event_lookup',
+        dataType: 'Distance',
+        valueType: ChartDataValueTypes.Maximum,
+        categoryType: ChartDataCategoryTypes.DateType,
+        activityTypeGroups: [],
+        activityTypes: [ActivityTypes.Cycling],
+        dateRange: {
+          kind: 'bounded',
+          startDate: '2026-01-01T00:00:00.000Z',
+          endDate: '2026-03-22T23:59:59.999Z',
+          timezone: 'UTC',
+          source: 'prompt',
+        },
+        chartType: ChartTypes.LinesVertical,
+      },
+      eventLookup: {
+        primaryEventId: 'event-1',
+        topEventIds: [...topIdsAtLimit, 'event-over-cap'],
+        matchedEventCount: AI_INSIGHTS_TOP_RESULTS_MAX + 1,
+      },
+      presentation: {
+        title: 'Top events',
+        chartType: ChartTypes.LinesVertical,
+      },
+    });
+
+    expect(validResult.ok).toBe(true);
+    expect(invalidResult.ok).toBe(false);
+    if (invalidResult.ok) {
+      return;
+    }
+    expect(invalidResult.reason).toBe('event_lookup_invalid');
   });
 });

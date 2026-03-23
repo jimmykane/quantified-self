@@ -18,6 +18,7 @@ import type {
   NormalizedInsightPeriodMode,
   NormalizedInsightQuery,
 } from '../../../../shared/ai-insights.types';
+import { clampAiInsightsTopResultsLimit } from '../../../../shared/ai-insights-ranking.constants';
 import {
   getActivityTypeGroupMetadata,
   getActivityTypesForGroup,
@@ -221,6 +222,7 @@ const DATE_ACTIVITY_STACKED_TIME_AXIS_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
 ];
 const EVENT_LOOKUP_SUBJECT_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
   /\b(when did i have|when i had|when was|which event|what workout|which workout|which session)\b/i,
+  /\bwhich\s+(ride|rides|run|runs|swim|swims|workout|workouts|session|sessions|activity|activities|event|events)\s+had\b/i,
   /\bi want to know when i had\b/i,
 ];
 const LATEST_EVENT_SUBJECT_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
@@ -1193,9 +1195,15 @@ function promptImpliesEventLookup(prompt: string): boolean {
     return false;
   }
 
+  const hasExplicitTopResultsIntent = resolvePromptTopResultsLimit(prompt) !== undefined;
   const hasRankingIntent = EVENT_LOOKUP_RANKING_PROMPT_PATTERNS.some(pattern => pattern.test(normalizedPrompt));
-  if (!hasRankingIntent) {
+  if (!hasRankingIntent && !hasExplicitTopResultsIntent) {
     return false;
+  }
+
+  // "top N" phrasing is an explicit ranked-event lookup intent.
+  if (hasExplicitTopResultsIntent) {
+    return true;
   }
 
   if (EVENT_LOOKUP_SUBJECT_PROMPT_PATTERNS.some(pattern => pattern.test(normalizedPrompt))) {
@@ -1281,6 +1289,33 @@ function resolvePromptAggregationCodes(prompt: string): ModelAggregationCode[] {
   return [...aggregationCodes];
 }
 
+function resolvePromptTopResultsLimit(prompt: string): number | undefined {
+  const normalizedPrompt = normalizePromptSearchText(prompt);
+  if (!normalizedPrompt) {
+    return undefined;
+  }
+
+  const limitPatterns: readonly RegExp[] = [
+    /\btop\s+((?:\d{1,3}(?:\s\d{3})+)|\d+)\b/,
+    /\b((?:\d{1,3}(?:\s\d{3})+)|\d+)\s+top\b/,
+    /\bbest\s+((?:\d{1,3}(?:\s\d{3})+)|\d+)\b/,
+  ];
+
+  const matchedLimitToken = limitPatterns
+    .map((pattern) => normalizedPrompt.match(pattern)?.[1] ?? null)
+    .find((value) => typeof value === 'string' && value.length > 0);
+  if (!matchedLimitToken) {
+    return undefined;
+  }
+
+  const parsedLimit = Number.parseInt(matchedLimitToken.replace(/\s+/g, ''), 10);
+  if (!Number.isFinite(parsedLimit)) {
+    return undefined;
+  }
+
+  return clampAiInsightsTopResultsLimit(parsedLimit);
+}
+
 function resolvePromptAggregationForMetric(
   prompt: string,
   metricKey: InsightMetricKey,
@@ -1331,6 +1366,7 @@ function resolveMultiMetricGroupingMode(
 }
 
 function resolveMultiMetricIntent(prompt: string): MultiMetricIntent | NormalizeInsightQueryUnsupportedResult | null {
+  const normalizedPrompt = normalizePromptSearchText(prompt);
   const metricMatches = findInsightMetricAliasMatches(canonicalizeInsightPrompt(prompt));
   if (metricMatches.length <= 1) {
     return null;
@@ -1365,11 +1401,23 @@ function resolveMultiMetricIntent(prompt: string): MultiMetricIntent | Normalize
     return buildUnsupportedResult('unsupported_multi_metric_combination', prompt);
   }
 
+  const prefersSharedAverageFallback = /\b(compare|vs|versus|over time|timeline|trend)\b/.test(normalizedPrompt);
   const sharedValueType = aggregationCodes.length === 1
     ? AGGREGATION_MAP[aggregationCodes[0]]
     : (() => {
       const defaultValueTypes = Array.from(new Set(metricMatches.map(match => match.metric.defaultValueType)));
-      return defaultValueTypes.length === 1 ? defaultValueTypes[0] : null;
+      if (defaultValueTypes.length === 1) {
+        return defaultValueTypes[0];
+      }
+
+      if (!prefersSharedAverageFallback) {
+        return null;
+      }
+
+      const allMetricsSupportAverage = metricMatches.every((match) => (
+        isAggregationAllowedForMetric(match.metric.key, ChartDataValueTypes.Average)
+      ));
+      return allMetricsSupportAverage ? ChartDataValueTypes.Average : null;
     })();
   if (!sharedValueType) {
     return buildUnsupportedResult('unsupported_multi_metric_combination', prompt);
@@ -1757,6 +1805,7 @@ export function resolveNormalizedInsightQueryFromIntent(
     resolvedAggregation,
     baseMetric.defaultValueType,
   );
+  const promptTopResultsLimit = resolvePromptTopResultsLimit(prompt);
   const metric = (promptMetricMatch
     ? resolveInsightMetric(promptMetricMatch.alias, valueType)
     : null)
@@ -1853,6 +1902,7 @@ export function resolveNormalizedInsightQueryFromIntent(
         dataType: metric.dataType,
         valueType,
         requestedTimeInterval: finalRequestedTimeInterval,
+        topResultsLimit: promptTopResultsLimit,
         activityTypeGroups: finalActivityTypeGroups,
         activityTypes: finalActivityTypes,
         dateRange,
@@ -1874,6 +1924,12 @@ export function resolveNormalizedInsightQueryFromIntent(
     query: buildAggregateInsightQuery({
       dataType: metric.dataType,
       valueType,
+      topResultsLimit: (
+        valueType === ChartDataValueTypes.Minimum
+        || valueType === ChartDataValueTypes.Maximum
+      )
+        ? promptTopResultsLimit
+        : undefined,
       categoryType,
       requestedTimeInterval: finalRequestedTimeInterval,
       activityTypeGroups: finalActivityTypeGroups,

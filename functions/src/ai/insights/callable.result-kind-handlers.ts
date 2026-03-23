@@ -169,7 +169,7 @@ const CALLABLE_RESULT_KIND_REGISTRY = {
       eventLookup: {
         matchedEventCount: context.executionResult.matchedEventsCount,
         primaryEvent: context.executionResult.eventLookup.rankedEvents[0] ?? null,
-        rankedEvents: context.executionResult.eventLookup.rankedEvents.slice(0, 10),
+        rankedEvents: context.executionResult.eventLookup.rankedEvents,
       },
       presentation: isEmpty ? context.emptyPresentation : context.presentation,
       clientLocale: context.input.clientLocale,

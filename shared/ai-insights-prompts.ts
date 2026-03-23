@@ -119,7 +119,7 @@ export const AI_INSIGHTS_PROMPT_CATALOG = [
   },
   {
     id: 'calories-over-time-90-days',
-    prompt: 'Show my total calories burned over time in the last 90 days.',
+    prompt: 'Show my total calories burned over time this year.',
     category: 'Volume & Distance',
     featured: true,
     surfaces: ['hero', 'picker', 'unsupported'],
@@ -135,7 +135,7 @@ export const AI_INSIGHTS_PROMPT_CATALOG = [
   },
   {
     id: 'jump-hang-time-over-time-90-days',
-    prompt: 'Show my jump hang time over time in the last 90 days.',
+    prompt: 'Show my jump hang time over time this year.',
     category: 'Cardio & Speed',
     featured: false,
     surfaces: ['picker', 'unsupported'],
@@ -143,7 +143,7 @@ export const AI_INSIGHTS_PROMPT_CATALOG = [
   },
   {
     id: 'jump-speed-over-time-90-days',
-    prompt: 'Show my jump speed over time in the last 90 days.',
+    prompt: 'Show my jump speed over time this year.',
     category: 'Cardio & Speed',
     featured: false,
     surfaces: ['picker', 'unsupported'],
@@ -151,7 +151,7 @@ export const AI_INSIGHTS_PROMPT_CATALOG = [
   },
   {
     id: 'jump-score-over-time-90-days',
-    prompt: 'Show my jump score over time in the last 90 days.',
+    prompt: 'Show my jump score over time this year.',
     category: 'Cardio & Speed',
     featured: false,
     surfaces: ['picker', 'unsupported'],
@@ -167,7 +167,7 @@ export const AI_INSIGHTS_PROMPT_CATALOG = [
   },
   {
     id: 'heart-rate-running-90-days',
-    prompt: 'Show my average heart rate over time for running in the last 90 days.',
+    prompt: 'Show my average heart rate over time for running this year.',
     category: 'Cardio & Speed',
     featured: true,
     surfaces: ['hero', 'picker', 'unsupported'],
@@ -191,7 +191,7 @@ export const AI_INSIGHTS_PROMPT_CATALOG = [
   },
   {
     id: 'swim-pace-swimming-90-days',
-    prompt: 'Show my average swim pace over time for swimming in the last 90 days.',
+    prompt: 'Show my average swim pace over time for swimming this year.',
     category: 'Cardio & Speed',
     featured: false,
     surfaces: ['picker', 'unsupported'],
@@ -199,23 +199,23 @@ export const AI_INSIGHTS_PROMPT_CATALOG = [
   },
   {
     id: 'gap-trail-running-90-days',
-    prompt: 'Show my average grade adjusted pace over time for trail running in the last 90 days.',
+    prompt: 'Show my average grade adjusted pace over time for trail running this year.',
     category: 'Terrain & Pace Variants',
     featured: false,
-    surfaces: ['picker', 'unsupported'],
+    surfaces: ['unsupported'],
     metricKey: 'grade_adjusted_pace',
   },
   {
     id: 'vam-climbing-90-days',
-    prompt: 'Show my average VAM over time for climbing activities in the last 90 days.',
+    prompt: 'Show my average VAM over time for climbing activities this year.',
     category: 'Terrain & Pace Variants',
     featured: false,
-    surfaces: ['picker', 'unsupported'],
+    surfaces: ['unsupported'],
     metricKey: 'avg_vam',
   },
   {
     id: 'power-cycling-90-days',
-    prompt: 'Show my average power over time for cycling in the last 90 days.',
+    prompt: 'Show my average power over time for cycling this year.',
     category: 'Power & Load',
     featured: true,
     surfaces: ['hero', 'picker', 'unsupported'],
@@ -223,7 +223,7 @@ export const AI_INSIGHTS_PROMPT_CATALOG = [
   },
   {
     id: 'tss-cycling-90-days',
-    prompt: 'Show my total TSS over time for cycling in the last 90 days.',
+    prompt: 'Show my total TSS over time for cycling this year.',
     category: 'Power & Load',
     featured: false,
     surfaces: ['picker', 'unsupported'],
@@ -231,7 +231,7 @@ export const AI_INSIGHTS_PROMPT_CATALOG = [
   },
   {
     id: 'normalized-power-cycling-90-days',
-    prompt: 'Show my average normalized power over time for cycling in the last 90 days.',
+    prompt: 'Show my average normalized power over time for cycling this year.',
     category: 'Power & Load',
     featured: false,
     surfaces: ['picker', 'unsupported'],
@@ -239,7 +239,7 @@ export const AI_INSIGHTS_PROMPT_CATALOG = [
   },
   {
     id: 'intensity-factor-cycling-90-days',
-    prompt: 'Show my average intensity factor over time for cycling in the last 90 days.',
+    prompt: 'Show my average intensity factor over time for cycling this year.',
     category: 'Power & Load',
     featured: false,
     surfaces: ['picker', 'unsupported'],
@@ -247,7 +247,7 @@ export const AI_INSIGHTS_PROMPT_CATALOG = [
   },
   {
     id: 'power-work-cycling-90-days',
-    prompt: 'Show my total power work over time for cycling in the last 90 days.',
+    prompt: 'Show my total power work over time for cycling this year.',
     category: 'Power & Load',
     featured: false,
     surfaces: ['picker', 'unsupported'],
@@ -255,7 +255,7 @@ export const AI_INSIGHTS_PROMPT_CATALOG = [
   },
   {
     id: 'vo2max-running-90-days',
-    prompt: 'Show my average VO2 max over time for running in the last 90 days.',
+    prompt: 'Show my average VO2 max over time for running this year.',
     category: 'Recovery & Performance',
     featured: false,
     surfaces: ['picker', 'unsupported'],
@@ -263,7 +263,7 @@ export const AI_INSIGHTS_PROMPT_CATALOG = [
   },
   {
     id: 'epoc-running-90-days',
-    prompt: 'Show my average EPOC over time for running in the last 90 days.',
+    prompt: 'Show my average EPOC over time for running this year.',
     category: 'Recovery & Performance',
     featured: false,
     surfaces: [],
@@ -271,7 +271,7 @@ export const AI_INSIGHTS_PROMPT_CATALOG = [
   },
   {
     id: 'aerobic-training-effect-running-90-days',
-    prompt: 'Show my average aerobic training effect over time for running in the last 90 days.',
+    prompt: 'Show my average aerobic training effect over time for running this year.',
     category: 'Recovery & Performance',
     featured: false,
     surfaces: ['picker', 'unsupported'],
@@ -279,7 +279,7 @@ export const AI_INSIGHTS_PROMPT_CATALOG = [
   },
   {
     id: 'anaerobic-training-effect-cycling-90-days',
-    prompt: 'Show my average anaerobic training effect over time for cycling in the last 90 days.',
+    prompt: 'Show my average anaerobic training effect over time for cycling this year.',
     category: 'Recovery & Performance',
     featured: false,
     surfaces: ['picker', 'unsupported'],
@@ -287,7 +287,7 @@ export const AI_INSIGHTS_PROMPT_CATALOG = [
   },
   {
     id: 'recovery-time-running-90-days',
-    prompt: 'Show my average recovery time over time for running in the last 90 days.',
+    prompt: 'Show my average recovery time over time for running this year.',
     category: 'Recovery & Performance',
     featured: false,
     surfaces: ['picker', 'unsupported'],
@@ -443,7 +443,7 @@ export const AI_INSIGHTS_CURATED_PROMPT_CATALOG = [
   },
   {
     id: 'popular-running-heart-rate-90-days',
-    prompt: 'Show my running heart rate over time in the last 90 days.',
+    prompt: 'Show my running heart rate over time this year.',
     category: 'Progress over time',
     featured: true,
     surfaces: ['hero', 'picker'],
@@ -451,11 +451,19 @@ export const AI_INSIGHTS_CURATED_PROMPT_CATALOG = [
   },
   {
     id: 'popular-cycling-power-90-days',
-    prompt: 'Show my cycling power over time in the last 90 days.',
+    prompt: 'Show my cycling power over time this year.',
     category: 'Progress over time',
     featured: true,
     surfaces: ['hero', 'picker'],
     metricKey: 'power',
+  },
+  {
+    id: 'popular-running-pace-trend-this-year',
+    prompt: 'Show my average pace trend for running this year.',
+    category: 'Progress over time',
+    featured: true,
+    surfaces: ['hero', 'picker'],
+    metricKey: 'pace',
   },
   {
     id: 'popular-cadence-power-cycling-3-months',
@@ -463,6 +471,14 @@ export const AI_INSIGHTS_CURATED_PROMPT_CATALOG = [
     category: 'Compare & explore',
     featured: true,
     surfaces: ['hero', 'picker'],
+  },
+  {
+    id: 'popular-weekly-distance-last-8-weeks',
+    prompt: 'Compare my weekly distance for the last 8 weeks.',
+    category: 'Compare & explore',
+    featured: true,
+    surfaces: ['hero', 'picker'],
+    metricKey: 'distance',
   },
   {
     id: 'popular-compare-heart-rate-2024-vs-2025',
@@ -495,6 +511,14 @@ export const AI_INSIGHTS_CURATED_PROMPT_CATALOG = [
     featured: false,
     surfaces: ['picker'],
     metricKey: 'jump_distance',
+  },
+  {
+    id: 'popular-highest-power-rides-this-month',
+    prompt: 'Which rides had my highest power output this month?',
+    category: 'Best efforts',
+    featured: true,
+    surfaces: ['hero', 'picker'],
+    metricKey: 'power',
   },
 ] as const satisfies readonly AiInsightsPromptDefinition[];
 

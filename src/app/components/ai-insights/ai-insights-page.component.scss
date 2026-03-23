@@ -210,6 +210,29 @@
   --mat-chip-label-text-font: 'Barlow Condensed', sans-serif;
 }
 
+.result-status-chip-label {
+  margin-right: 4px;
+}
+
+.result-status-info-button {
+  width: 18px;
+  height: 18px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.result-status-info-button mat-icon {
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+}
+
 .result-card-title-text::before,
 .result-card-title-text::after {
   color: color-mix(in srgb, var(--mat-sys-primary) 82%, var(--mat-sys-on-surface));
@@ -561,8 +584,7 @@
 }
 
 .prompt-quota-line,
-.prompt-quota-note,
-.prompt-support-note {
+.prompt-quota-note {
   margin: 0;
   color: var(--mat-sys-on-surface-variant);
   line-height: 1.45;
@@ -578,10 +600,6 @@
 
 .prompt-quota-line a {
   color: var(--mat-sys-primary);
-}
-
-.prompt-card-footer {
-  padding: 0 24px 24px;
 }
 
 .section-heading {

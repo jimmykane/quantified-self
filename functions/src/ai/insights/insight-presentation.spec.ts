@@ -73,7 +73,7 @@ describe('insight-presentation', () => {
       sourceText: 'show average power per lap',
     })).toEqual(expect.objectContaining({
       suggestedPrompts: expect.arrayContaining([
-        'Show my average power over time for cycling in the last 90 days.',
+        'Show my average power over time for cycling this year.',
       ]),
     }));
 

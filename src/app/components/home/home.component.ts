@@ -2,7 +2,7 @@ import { Component, AfterViewInit, OnDestroy, ElementRef } from '@angular/core';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { Router } from '@angular/router';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-
+import { getAiInsightsHeroPrompts } from '@shared/ai-insights-prompts';
 
 @Component({
   selector: 'app-home',
@@ -15,6 +15,7 @@ export class HomeComponent implements AfterViewInit, OnDestroy {
   public serviceNames = ServiceNames;
   public currentYear = new Date().getFullYear();
   private observer: IntersectionObserver | undefined;
+  public readonly aiPromptExamples: readonly string[] = getAiInsightsHeroPrompts();
 
   constructor(
     public authService: AppAuthService,
@@ -44,6 +45,7 @@ export class HomeComponent implements AfterViewInit, OnDestroy {
       const elements = this.elementRef.nativeElement.querySelectorAll('.animate-on-scroll');
       elements.forEach((el: Element) => this.observer?.observe(el));
     }
+
   }
 
   ngOnDestroy() {
@@ -58,4 +60,5 @@ export class HomeComponent implements AfterViewInit, OnDestroy {
       await this.router.navigate(['/login']);
     }
   }
+
 }

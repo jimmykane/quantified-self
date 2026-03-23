@@ -9,6 +9,10 @@ import {
 } from '@sports-alliance/sports-lib';
 import type { AiInsightsResponse } from './ai-insights.types';
 import type { AiInsightsPromptMetricKey } from './ai-insights-prompts';
+import {
+  AI_INSIGHTS_TOP_RESULTS_MAX,
+  AI_INSIGHTS_TOP_RESULTS_MIN,
+} from './ai-insights-ranking.constants';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -54,6 +58,11 @@ const NormalizedInsightQueryBaseSchema = z.object({
   chartType: z.nativeEnum(ChartTypes),
 });
 
+const TopResultsLimitSchema = z.number()
+  .int()
+  .min(AI_INSIGHTS_TOP_RESULTS_MIN)
+  .max(AI_INSIGHTS_TOP_RESULTS_MAX);
+
 export const NormalizedInsightMetricSelectionSchema = z.object({
   metricKey: AiInsightsPromptMetricKeySchema,
   dataType: z.string().min(1),
@@ -65,12 +74,14 @@ export const NormalizedInsightQuerySchema = z.discriminatedUnion('resultKind', [
     resultKind: z.literal('aggregate'),
     dataType: z.string().min(1),
     valueType: z.nativeEnum(ChartDataValueTypes),
+    topResultsLimit: TopResultsLimitSchema.optional(),
   }),
   NormalizedInsightQueryBaseSchema.extend({
     resultKind: z.literal('event_lookup'),
     dataType: z.string().min(1),
     valueType: z.nativeEnum(ChartDataValueTypes),
     categoryType: z.literal(ChartDataCategoryTypes.DateType),
+    topResultsLimit: TopResultsLimitSchema.optional(),
   }),
   NormalizedInsightQueryBaseSchema.extend({
     resultKind: z.literal('latest_event'),
@@ -88,6 +99,7 @@ export const NormalizedInsightAggregateQuerySchema = NormalizedInsightQueryBaseS
   resultKind: z.literal('aggregate'),
   dataType: z.string().min(1),
   valueType: z.nativeEnum(ChartDataValueTypes),
+  topResultsLimit: TopResultsLimitSchema.optional(),
 });
 
 export const NormalizedInsightEventLookupQuerySchema = NormalizedInsightQueryBaseSchema.extend({
@@ -95,6 +107,7 @@ export const NormalizedInsightEventLookupQuerySchema = NormalizedInsightQueryBas
   dataType: z.string().min(1),
   valueType: z.nativeEnum(ChartDataValueTypes),
   categoryType: z.literal(ChartDataCategoryTypes.DateType),
+  topResultsLimit: TopResultsLimitSchema.optional(),
 });
 
 export const NormalizedInsightMultiMetricAggregateQuerySchema = NormalizedInsightQueryBaseSchema.extend({
@@ -192,7 +205,7 @@ export const AiInsightSummarySchema = z.object({
 
 export const AiInsightEventLookupSchema = z.object({
   primaryEventId: z.string().min(1),
-  topEventIds: z.array(z.string().min(1)).max(10),
+  topEventIds: z.array(z.string().min(1)).max(AI_INSIGHTS_TOP_RESULTS_MAX),
   matchedEventCount: z.number().int().nonnegative(),
 });
 
