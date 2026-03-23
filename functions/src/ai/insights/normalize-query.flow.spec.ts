@@ -747,6 +747,41 @@ describe('normalizeInsightQuery', () => {
     });
   });
 
+  it('treats "Which rides had my highest power output this month?" as ranked event lookup', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-19T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'power',
+        aggregation: 'maximum',
+        category: 'date',
+        activityTypes: ['Cycling'],
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Which rides had my highest power output this month?',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('power');
+    expect(result.query.resultKind).toBe('event_lookup');
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Maximum);
+    expect(result.query.activityTypes).toEqual([ActivityTypes.Cycling]);
+    expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
+      startDate: '2026-03-01T00:00:00.000Z',
+      endDate: '2026-03-19T23:59:59.999Z',
+      timezone: 'UTC',
+      source: 'prompt',
+    });
+  });
+
   it('parses explicit top-N limits for event lookup prompts', async () => {
     setNormalizeQueryDependenciesForTesting({
       now: () => new Date('2026-03-19T12:00:00.000Z'),

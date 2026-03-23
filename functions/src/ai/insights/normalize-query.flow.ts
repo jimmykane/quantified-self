@@ -222,6 +222,7 @@ const DATE_ACTIVITY_STACKED_TIME_AXIS_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
 ];
 const EVENT_LOOKUP_SUBJECT_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
   /\b(when did i have|when i had|when was|which event|what workout|which workout|which session)\b/i,
+  /\bwhich\s+(ride|rides|run|runs|swim|swims|workout|workouts|session|sessions|activity|activities|event|events)\s+had\b/i,
   /\bi want to know when i had\b/i,
 ];
 const LATEST_EVENT_SUBJECT_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
