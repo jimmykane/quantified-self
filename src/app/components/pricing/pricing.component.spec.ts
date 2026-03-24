@@ -489,6 +489,7 @@ describe('PricingComponent', () => {
 
         const content = fixture.nativeElement.textContent as string;
         expect(content).toContain('your first month is free for new members');
+        expect(content).toContain('No card needed');
     });
 
     it('should not render first-month-free copy for returning users with paid history', async () => {
@@ -525,6 +526,7 @@ describe('PricingComponent', () => {
 
         const content = fixture.nativeElement.textContent as string;
         expect(content).not.toContain('your first month is free for new members');
+        expect(content).not.toContain('No card needed');
     });
 
     it('should render the current free plan state as a disabled button', async () => {

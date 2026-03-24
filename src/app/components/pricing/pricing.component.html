@@ -175,7 +175,7 @@
 
           @if (shouldShowFirstMonthFreeCopy(product, price)) {
           <p class="trial-offer-copy">
-            Start with confidence: your first month is free for new members. Applied automatically at checkout.
+            Start with confidence: your first month is free for new members. No card needed to begin.
           </p>
           }
 
@@ -216,6 +216,9 @@
             {{ price.recurring ? 'Choose ' + (product.metadata['role'] | titlecase) : 'Buy Now' }}
             }
           </button>
+          @if (shouldShowFirstMonthFreeCopy(product, price)) {
+          <p class="trial-cta-note">No card needed to start your free month.</p>
+          }
           }
           }
 
