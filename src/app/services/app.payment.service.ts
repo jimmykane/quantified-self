@@ -225,7 +225,7 @@ export class AppPaymentService {
     ): Promise<void> {
         const checkoutInput = this.resolveCheckoutInput(price);
         const resolvedPromotionCodeId = await this.resolvePromotionCodeIdForCheckout(price, checkoutInput);
-        const hasPaidHistory = resolvedPromotionCodeId ? await this.hasPaidSubscriptionHistory() : false;
+        const hasPaidHistory = resolvedPromotionCodeId ? await this.hasPaidSubscriptionHistoryForCheckoutEligibility() : false;
         const promotionCodeId = hasPaidHistory ? null : resolvedPromotionCodeId;
 
         await this.runPreCheckoutLinkCheck(user);
@@ -563,6 +563,14 @@ export class AppPaymentService {
     }
 
     async hasPaidSubscriptionHistory(): Promise<boolean> {
+        return this.checkPaidSubscriptionHistory('fail-open');
+    }
+
+    private async hasPaidSubscriptionHistoryForCheckoutEligibility(): Promise<boolean> {
+        return this.checkPaidSubscriptionHistory('fail-closed');
+    }
+
+    private async checkPaidSubscriptionHistory(onError: 'fail-open' | 'fail-closed'): Promise<boolean> {
         const user = this.auth.currentUser;
         if (!user) {
             return false;
@@ -579,6 +587,11 @@ export class AppPaymentService {
             const snapshot = await runInInjectionContext(this.injector, () => getDocs(historyQuery));
             return snapshot.docs.length > 0;
         } catch (error) {
+            if (onError === 'fail-closed') {
+                this.logger.warn('Could not verify subscription history for checkout gating. Blocking auto promo application (fail-closed).', error);
+                return true;
+            }
+
             this.logger.warn('Could not verify subscription history. Proceeding with trial messaging (fail-open).', error);
             return false;
         }

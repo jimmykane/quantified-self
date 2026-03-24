@@ -260,6 +260,31 @@ describe('AppPaymentService', () => {
             expect(payload.allow_promotion_codes).toBe(true);
         });
 
+        it('should not set promotion_code when history lookup fails during checkout gating (fail-closed)', async () => {
+            const recurringPriceWithPromo = {
+                id: 'price_recurring_promo_history_error',
+                type: 'recurring',
+                active: true,
+                currency: 'usd',
+                unit_amount: 1000,
+                description: 'Monthly with promo when history lookup fails',
+                metadata: {
+                    promotion_code_id: 'promo_123456789'
+                }
+            } as any;
+
+            mockGetDocs.mockRejectedValueOnce(new Error('Firestore unavailable'));
+
+            await service.appendCheckoutSession(recurringPriceWithPromo);
+
+            expect(mockAddDoc).toHaveBeenCalled();
+            const args = mockAddDoc.mock.calls[0];
+            const payload = args[1];
+
+            expect(payload.promotion_code).toBeUndefined();
+            expect(payload.allow_promotion_codes).toBe(true);
+        });
+
         it('should ignore non-ID promotion code metadata and keep manual promotion codes enabled', async () => {
             const recurringPriceWithInvalidPromo = {
                 id: 'price_recurring_invalid_promo',
