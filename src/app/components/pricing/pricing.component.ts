@@ -30,6 +30,7 @@ interface SubscriptionSummary {
     cancelAtPeriodEnd: boolean;
     currentPeriodEnd: Date | null;
     isTrialing: boolean;
+    renewalAmountDisplay: string | null;
 }
 
 @Component({
@@ -463,8 +464,85 @@ export class PricingComponent implements OnInit, OnDestroy {
             status: primary.sub.status,
             cancelAtPeriodEnd: !!primary.sub.cancel_at_period_end,
             currentPeriodEnd: primary.periodEnd,
-            isTrialing: primary.sub.status === 'trialing'
+            isTrialing: primary.sub.status === 'trialing',
+            renewalAmountDisplay: this.resolveRenewalAmountDisplay(primary.sub)
         };
+    }
+
+    private resolveRenewalAmountDisplay(subscription: StripeSubscription): string | null {
+        const subscriptionAny = subscription as any;
+        const invoiceLikeSources: any[] = [
+            subscriptionAny?.upcoming_invoice,
+            subscriptionAny?.next_invoice,
+            subscriptionAny?.latest_invoice,
+            subscriptionAny
+        ];
+
+        for (const source of invoiceLikeSources) {
+            const amountMinor = this.extractAmountMinor(source);
+            const currency = this.extractCurrencyCode(source);
+
+            if (amountMinor === null || !currency) {
+                continue;
+            }
+
+            return this.formatCurrencyFromMinor(amountMinor, currency);
+        }
+
+        return null;
+    }
+
+    private extractAmountMinor(source: any): number | null {
+        if (!source || typeof source !== 'object') {
+            return null;
+        }
+
+        const candidates = [
+            source.amount,
+            source.amount_due,
+            source.total,
+            source.subtotal
+        ];
+
+        for (const candidate of candidates) {
+            if (typeof candidate === 'number' && Number.isFinite(candidate)) {
+                return Math.round(candidate);
+            }
+            if (typeof candidate === 'string' && candidate.trim() !== '') {
+                const parsed = Number(candidate);
+                if (Number.isFinite(parsed)) {
+                    return Math.round(parsed);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private extractCurrencyCode(source: any): string | null {
+        if (!source || typeof source !== 'object') {
+            return null;
+        }
+
+        const rawCurrency = source.currency;
+        if (typeof rawCurrency !== 'string' || !rawCurrency.trim()) {
+            return null;
+        }
+
+        return rawCurrency.toUpperCase();
+    }
+
+    private formatCurrencyFromMinor(amountMinor: number, currencyCode: string): string {
+        const amountMajor = amountMinor / 100;
+        const hasNoCents = amountMinor % 100 === 0;
+        const formatter = new Intl.NumberFormat(undefined, {
+            style: 'currency',
+            currency: currencyCode,
+            minimumFractionDigits: hasNoCents ? 0 : 2,
+            maximumFractionDigits: 2
+        });
+
+        return formatter.format(amountMajor);
     }
 
     private normalizeToDate(value: unknown): Date | null {

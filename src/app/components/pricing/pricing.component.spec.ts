@@ -790,6 +790,14 @@ describe('PricingComponent', () => {
             current_period_start: new Date('2025-01-01T00:00:00Z'),
             cancel_at_period_end: false
         };
+        (subscription as any).items = {
+            data: [{
+                price: {
+                    unit_amount: 1200,
+                    currency: 'usd'
+                }
+            }]
+        };
 
         vi.spyOn(userService, 'getSubscriptionRole').mockResolvedValue('pro');
         vi.spyOn(paymentService, 'getUserSubscriptions').mockReturnValue(of([subscription]));
@@ -801,6 +809,8 @@ describe('PricingComponent', () => {
         expect(content).toContain('Pro Membership');
         expect(content).toContain('Renews on');
         expect(content).toContain('Manage Subscription');
+        expect(content).toContain('Next renewal');
+        expect(content).toContain('Amount unavailable');
     });
 
     it('should render basic subscription details inside manage container', async () => {
@@ -825,6 +835,70 @@ describe('PricingComponent', () => {
         expect(content).toContain('Trialing');
         expect(content).toContain('Ends on');
         expect(content).toContain('Ends at period end');
+        expect(content).toContain('Amount unavailable');
+    });
+
+    it('should render renewal amount when invoice-like data exists on subscription', async () => {
+        const paymentService = TestBed.inject(AppPaymentService);
+        const userService = TestBed.inject(AppUserService);
+        const subscription: StripeSubscription = {
+            id: 'sub_invoice',
+            status: 'active',
+            current_period_end: new Date('2026-02-01T00:00:00Z'),
+            current_period_start: new Date('2026-01-01T00:00:00Z'),
+            cancel_at_period_end: false
+        };
+        (subscription as any).latest_invoice = {
+            amount_due: 2000,
+            currency: 'usd'
+        };
+        (subscription as any).items = {
+            data: [{
+                price: {
+                    unit_amount: 2000,
+                    currency: 'usd'
+                }
+            }]
+        };
+
+        vi.spyOn(userService, 'getSubscriptionRole').mockResolvedValue('pro');
+        vi.spyOn(paymentService, 'getUserSubscriptions').mockReturnValue(of([subscription]));
+
+        await component.ngOnInit();
+        fixture.detectChanges();
+
+        const content = fixture.nativeElement.textContent as string;
+        expect(content).toContain('Next renewal');
+        expect(content).toContain('$20');
+    });
+
+    it('should hide list-price renewal amount when no invoice-like amount exists', async () => {
+        const paymentService = TestBed.inject(AppPaymentService);
+        const userService = TestBed.inject(AppUserService);
+        const subscription: StripeSubscription = {
+            id: 'sub_discounted',
+            status: 'active',
+            current_period_end: new Date('2026-02-01T00:00:00Z'),
+            current_period_start: new Date('2026-01-01T00:00:00Z'),
+            cancel_at_period_end: false
+        };
+        (subscription as any).items = {
+            data: [{
+                price: {
+                    unit_amount: 2000,
+                    currency: 'usd'
+                }
+            }]
+        };
+        vi.spyOn(userService, 'getSubscriptionRole').mockResolvedValue('pro');
+        vi.spyOn(paymentService, 'getUserSubscriptions').mockReturnValue(of([subscription]));
+
+        await component.ngOnInit();
+        fixture.detectChanges();
+
+        const content = fixture.nativeElement.textContent as string;
+        expect(content).toContain('Amount unavailable');
+        expect(content).not.toContain('$20');
     });
 
 });

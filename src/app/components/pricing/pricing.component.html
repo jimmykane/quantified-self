@@ -49,6 +49,10 @@
             <div class="meta-label">Cancellation</div>
             <div class="meta-value">{{ summary.cancelAtPeriodEnd ? 'Will end at period end' : 'Renews automatically' }}</div>
           </div>
+          <div class="meta-item">
+            <div class="meta-label">Next renewal</div>
+            <div class="meta-value">{{ summary.renewalAmountDisplay || 'Amount unavailable' }}</div>
+          </div>
         </div>
         } @else {
         <p class="subscription-unavailable">Subscription details are syncing. Refresh in a moment.</p>

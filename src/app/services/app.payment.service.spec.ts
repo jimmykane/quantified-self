@@ -136,7 +136,7 @@ describe('AppPaymentService', () => {
     });
 
     describe('appendCheckoutSession', () => {
-        it('should add metadata.firebaseUID to the session payload and subscription_data when mode is subscription', async () => {
+        it('should add subscription checkout metadata, trial settings, and if_required payment collection when mode is subscription', async () => {
             const priceId = 'price_123';
             // Force mode to be subscription for this test by passing a price object with recurring type
             // or just rely on the string -> mode logic.
@@ -162,12 +162,19 @@ describe('AppPaymentService', () => {
 
             // CHECK 2: Automatic Tax
             expect(payload.automatic_tax).toEqual({ enabled: true });
+            expect(payload.payment_method_collection).toBe('if_required');
 
             // CHECK 3: Subscription data metadata
             expect(payload.subscription_data).toBeDefined();
             expect(payload.subscription_data.metadata).toEqual({
                 firebaseUID: 'test_user_uid'
             });
+            expect(payload.subscription_data.trial_settings).toEqual({
+                end_behavior: {
+                    missing_payment_method: 'cancel'
+                }
+            });
+            expect(payload).not.toHaveProperty('payment_method_types');
         });
 
         it('should add metadata.firebaseUID to the session payload but NOT subscription_data when mode is payment', async () => {
@@ -199,9 +206,11 @@ describe('AppPaymentService', () => {
 
             // CHECK 3: Subscription data must NOT be present
             expect(payload.subscription_data).toBeUndefined();
+            expect(payload.payment_method_collection).toBeUndefined();
+            expect(payload).not.toHaveProperty('payment_method_types');
         });
 
-        it('should set promotion_code and disable manual promotion codes when price metadata contains a valid promotion code ID', async () => {
+        it('should set promotion_code and keep manual promotion code entry enabled when price metadata contains a valid promotion code ID', async () => {
             const recurringPriceWithPromo = {
                 id: 'price_recurring_promo',
                 type: 'recurring',
@@ -221,7 +230,7 @@ describe('AppPaymentService', () => {
             const payload = args[1];
 
             expect(payload.promotion_code).toBe('promo_123456789');
-            expect(payload.allow_promotion_codes).toBe(false);
+            expect(payload.allow_promotion_codes).toBe(true);
         });
 
         it('should not set promotion_code when user has paid subscription history', async () => {
@@ -315,7 +324,7 @@ describe('AppPaymentService', () => {
             const payload = args[1];
 
             expect(payload.promotion_code).toBe('promo_987654321');
-            expect(payload.allow_promotion_codes).toBe(false);
+            expect(payload.allow_promotion_codes).toBe(true);
         });
 
         it('should restore and short-circuit checkout when an existing subscription is linked', async () => {
@@ -411,7 +420,7 @@ describe('AppPaymentService', () => {
             const args = mockAddDoc.mock.calls[0];
             const payload = args[1];
             expect(payload.promotion_code).toBe('promo_firestore_123');
-            expect(payload.allow_promotion_codes).toBe(false);
+            expect(payload.allow_promotion_codes).toBe(true);
             expect(mockGetDocs).toHaveBeenCalledTimes(1);
         });
 
@@ -442,7 +451,7 @@ describe('AppPaymentService', () => {
             const args = mockAddDoc.mock.calls[0];
             const payload = args[1];
             expect(payload.promotion_code).toBe('promo_firestore_scan');
-            expect(payload.allow_promotion_codes).toBe(false);
+            expect(payload.allow_promotion_codes).toBe(true);
             expect(mockGetDocs).toHaveBeenCalledTimes(2);
         });
     });
@@ -480,12 +489,12 @@ describe('AppPaymentService', () => {
             expect(mockLimit).toHaveBeenCalledWith(1);
         });
 
-        it('should return true when the history query fails (fail-closed for trial messaging)', async () => {
+        it('should return false when the history query fails (fail-open for trial messaging)', async () => {
             mockGetDocs.mockRejectedValueOnce(new Error('Firestore unavailable'));
 
             const hasHistory = await service.hasPaidSubscriptionHistory();
 
-            expect(hasHistory).toBe(true);
+            expect(hasHistory).toBe(false);
         });
     });
 });

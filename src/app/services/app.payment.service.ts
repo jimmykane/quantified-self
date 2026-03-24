@@ -67,8 +67,16 @@ interface CheckoutSessionPayload {
     mode: CheckoutMode;
     automatic_tax: { enabled: true };
     metadata: { firebaseUID: string };
+    payment_method_collection?: 'if_required';
     promotion_code?: string;
-    subscription_data?: { metadata: { firebaseUID: string } };
+    subscription_data?: {
+        metadata: { firebaseUID: string };
+        trial_settings?: {
+            end_behavior: {
+                missing_payment_method: 'cancel';
+            };
+        };
+    };
 }
 
 interface CheckoutSessionDocumentData {
@@ -374,7 +382,7 @@ export class AppPaymentService {
             price: checkoutInput.priceId,
             success_url: successUrl,
             cancel_url: cancelUrl,
-            allow_promotion_codes: !promotionCodeId,
+            allow_promotion_codes: true,
             mode: checkoutInput.mode,
             automatic_tax: { enabled: true },
             metadata: { firebaseUID: userId }
@@ -385,8 +393,14 @@ export class AppPaymentService {
         }
 
         if (checkoutInput.mode === 'subscription') {
+            payload.payment_method_collection = 'if_required';
             payload.subscription_data = {
-                metadata: { firebaseUID: userId }
+                metadata: { firebaseUID: userId },
+                trial_settings: {
+                    end_behavior: {
+                        missing_payment_method: 'cancel'
+                    }
+                }
             };
         }
 
@@ -563,8 +577,8 @@ export class AppPaymentService {
             const snapshot = await runInInjectionContext(this.injector, () => getDocs(historyQuery));
             return snapshot.docs.length > 0;
         } catch (error) {
-            this.logger.warn('Could not verify subscription history. Hiding trial messaging by default.', error);
-            return true;
+            this.logger.warn('Could not verify subscription history. Proceeding with trial messaging (fail-open).', error);
+            return false;
         }
     }
 
