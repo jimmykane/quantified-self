@@ -108,6 +108,24 @@ describe('MapboxStartPointLayerService', () => {
     expect(mockMap.off).toHaveBeenCalled();
   });
 
+  it('should not throw when clear runs during style teardown', () => {
+    mockMap.getLayer.mockImplementation(() => {
+      throw new TypeError('undefined is not an object (evaluating "this.style.getOwnLayer")');
+    });
+    mockMap.getSource.mockImplementation(() => {
+      throw new TypeError('undefined is not an object (evaluating "this.style.getOwnSource")');
+    });
+
+    expect(() => service.clear(mockMap, {
+      sourceId: 'track-start-source',
+      layerId: 'track-start-layer',
+      hitLayerId: 'track-start-hit-layer'
+    })).not.toThrow();
+
+    expect(mockMap.removeLayer).not.toHaveBeenCalled();
+    expect(mockMap.removeSource).not.toHaveBeenCalled();
+  });
+
   it('should defer rendering until style is ready', () => {
     mockMap.isStyleLoaded.mockReturnValue(false);
 
