@@ -13,10 +13,11 @@ import { AppUserService } from '../../services/app.user.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { Auth } from '@angular/fire/auth';
 import { LoggerService } from '../../services/logger.service';
-import { Observable, firstValueFrom, map, take } from 'rxjs';
+import { BehaviorSubject, Observable, Subscription, firstValueFrom, map, take } from 'rxjs';
 import { StripeRole } from '../../models/stripe-role.model';
 import { Router } from '@angular/router';
 import { User } from '@sports-alliance/sports-lib';
+import { UpcomingRenewalAmountResult } from '@shared/stripe-renewal';
 
 import { environment } from '../../../environments/environment';
 
@@ -30,7 +31,7 @@ interface SubscriptionSummary {
     cancelAtPeriodEnd: boolean;
     currentPeriodEnd: Date | null;
     isTrialing: boolean;
-    renewalAmountDisplay: string | null;
+    renewalAmountDisplay: string;
 }
 
 @Component({
@@ -51,9 +52,12 @@ export class PricingComponent implements OnInit, OnDestroy {
     isLoading = false;
     loadingPriceId: string | null = null;
     activeSubscriptions$: Observable<StripeSubscription[]> | null = null;
-    subscriptionSummary$: Observable<SubscriptionSummary | null> | null = null;
+    private readonly subscriptionSummarySubject = new BehaviorSubject<SubscriptionSummary | null>(null);
+    subscriptionSummary$: Observable<SubscriptionSummary | null> = this.subscriptionSummarySubject.asObservable();
     hasPaidSubscriptionHistory: boolean | null = null;
     private readonly requiredPolicies = POLICY_CONTENT.filter((policy) => !!policy.checkboxLabel && !policy.isOptional);
+    private subscriptionsListener: Subscription | null = null;
+    private renewalSummarySequence = 0;
 
     private platformId = inject(PLATFORM_ID);
     private authService = inject(AppAuthService);
@@ -126,9 +130,10 @@ export class PricingComponent implements OnInit, OnDestroy {
         );
 
         this.activeSubscriptions$ = subscriptions$;
-        this.subscriptionSummary$ = subscriptions$.pipe(
-            map(subs => this.buildSubscriptionSummary(subs))
-        );
+        this.subscriptionsListener?.unsubscribe();
+        this.subscriptionsListener = subscriptions$.subscribe((subs) => {
+            void this.refreshSubscriptionSummary(subs);
+        });
 
         // Reset loading state if user returns to the tab (e.g. from Stripe Checkout via back button)
         if (isPlatformBrowser(this.platformId)) {
@@ -137,6 +142,8 @@ export class PricingComponent implements OnInit, OnDestroy {
     }
 
     ngOnDestroy() {
+        this.renewalSummarySequence++;
+        this.subscriptionsListener?.unsubscribe();
         if (isPlatformBrowser(this.platformId)) {
             document.removeEventListener('visibilitychange', this.handleVisibilityChange);
         }
@@ -444,92 +451,77 @@ export class PricingComponent implements OnInit, OnDestroy {
         return formControlName.replace(/^accept/, 'accepted');
     }
 
-    private buildSubscriptionSummary(subscriptions: StripeSubscription[]): SubscriptionSummary | null {
+    private buildBaseSubscriptionSummary(
+        subscriptions: StripeSubscription[]
+    ): Omit<SubscriptionSummary, 'renewalAmountDisplay'> | null {
         if (!subscriptions.length) {
             return null;
         }
 
-        const withPeriodEnd = subscriptions.map(sub => ({
+        const withSortKeys = subscriptions.map(sub => ({
             sub,
+            createdAt: this.normalizeToDate(sub.created),
             periodEnd: this.normalizeToDate(sub.current_period_end)
         }));
 
-        const primary = withPeriodEnd.sort((a, b) => {
-            const aTime = a.periodEnd ? a.periodEnd.getTime() : 0;
-            const bTime = b.periodEnd ? b.periodEnd.getTime() : 0;
-            return bTime - aTime;
+        const primary = withSortKeys.sort((a, b) => {
+            const aCreated = a.createdAt ? a.createdAt.getTime() : Number.NEGATIVE_INFINITY;
+            const bCreated = b.createdAt ? b.createdAt.getTime() : Number.NEGATIVE_INFINITY;
+            if (aCreated !== bCreated) {
+                return bCreated - aCreated;
+            }
+
+            const aPeriodEnd = a.periodEnd ? a.periodEnd.getTime() : 0;
+            const bPeriodEnd = b.periodEnd ? b.periodEnd.getTime() : 0;
+            if (aPeriodEnd !== bPeriodEnd) {
+                return bPeriodEnd - aPeriodEnd;
+            }
+
+            return b.sub.id.localeCompare(a.sub.id);
         })[0];
 
         return {
             status: primary.sub.status,
             cancelAtPeriodEnd: !!primary.sub.cancel_at_period_end,
             currentPeriodEnd: primary.periodEnd,
-            isTrialing: primary.sub.status === 'trialing',
-            renewalAmountDisplay: this.resolveRenewalAmountDisplay(primary.sub)
+            isTrialing: primary.sub.status === 'trialing'
         };
     }
 
-    private resolveRenewalAmountDisplay(subscription: StripeSubscription): string | null {
-        const subscriptionAny = subscription as any;
-        const invoiceLikeSources: any[] = [
-            subscriptionAny?.upcoming_invoice,
-            subscriptionAny?.next_invoice,
-            subscriptionAny?.latest_invoice,
-            subscriptionAny
-        ];
-
-        for (const source of invoiceLikeSources) {
-            const amountMinor = this.extractAmountMinor(source);
-            const currency = this.extractCurrencyCode(source);
-
-            if (amountMinor === null || !currency) {
-                continue;
-            }
-
-            return this.formatCurrencyFromMinor(amountMinor, currency);
+    private async refreshSubscriptionSummary(subscriptions: StripeSubscription[]): Promise<void> {
+        const requestId = ++this.renewalSummarySequence;
+        const baseSummary = this.buildBaseSubscriptionSummary(subscriptions);
+        if (!baseSummary) {
+            this.subscriptionSummarySubject.next(null);
+            return;
         }
 
-        return null;
+        this.subscriptionSummarySubject.next({
+            ...baseSummary,
+            renewalAmountDisplay: 'Calculating…'
+        });
+
+        const renewalAmountResult = await this.paymentService.getUpcomingRenewalAmount();
+        if (requestId !== this.renewalSummarySequence) {
+            return;
+        }
+
+        this.subscriptionSummarySubject.next({
+            ...baseSummary,
+            renewalAmountDisplay: this.mapRenewalAmountDisplay(renewalAmountResult)
+        });
     }
 
-    private extractAmountMinor(source: any): number | null {
-        if (!source || typeof source !== 'object') {
-            return null;
+    private mapRenewalAmountDisplay(result: UpcomingRenewalAmountResult): string {
+        if (result.status === 'ready') {
+            return this.formatCurrencyFromMinor(result.amountMinor, result.currency);
         }
 
-        const candidates = [
-            source.amount,
-            source.amount_due,
-            source.total,
-            source.subtotal
-        ];
-
-        for (const candidate of candidates) {
-            if (typeof candidate === 'number' && Number.isFinite(candidate)) {
-                return Math.round(candidate);
-            }
-            if (typeof candidate === 'string' && candidate.trim() !== '') {
-                const parsed = Number(candidate);
-                if (Number.isFinite(parsed)) {
-                    return Math.round(parsed);
-                }
-            }
+        if (result.status === 'no_upcoming_charge') {
+            return 'No upcoming charge';
         }
 
-        return null;
-    }
-
-    private extractCurrencyCode(source: any): string | null {
-        if (!source || typeof source !== 'object') {
-            return null;
-        }
-
-        const rawCurrency = source.currency;
-        if (typeof rawCurrency !== 'string' || !rawCurrency.trim()) {
-            return null;
-        }
-
-        return rawCurrency.toUpperCase();
+        return 'Amount unavailable';
     }
 
     private formatCurrencyFromMinor(amountMinor: number, currencyCode: string): string {

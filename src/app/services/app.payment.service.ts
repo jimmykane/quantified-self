@@ -12,6 +12,7 @@ import { Observable, from, switchMap, filter, take, map, timeout, firstValueFrom
 import { AppWindowService } from './app.window.service';
 import { LoggerService } from './logger.service';
 import { AppFunctionsService } from './app.functions.service';
+import { UpcomingRenewalAmountResult } from '@shared/stripe-renewal';
 
 export interface StripeProduct {
     id: string;
@@ -49,6 +50,7 @@ export interface StripeSubscription {
     current_period_end: any;
     current_period_start: any;
     cancel_at_period_end: boolean;
+    created?: any;
 }
 
 type CheckoutMode = 'subscription' | 'payment';
@@ -580,6 +582,51 @@ export class AppPaymentService {
             this.logger.warn('Could not verify subscription history. Proceeding with trial messaging (fail-open).', error);
             return false;
         }
+    }
+
+    async getUpcomingRenewalAmount(): Promise<UpcomingRenewalAmountResult> {
+        if (!this.auth.currentUser) {
+            return { status: 'unavailable' };
+        }
+
+        try {
+            const result = await this.functionsService.call<void, unknown>('getUpcomingRenewalAmount');
+            return this.normalizeUpcomingRenewalAmountResult(result.data);
+        } catch (error) {
+            this.logger.warn('Could not fetch upcoming renewal amount. Falling back to unavailable state.', error);
+            return { status: 'unavailable' };
+        }
+    }
+
+    private normalizeUpcomingRenewalAmountResult(raw: unknown): UpcomingRenewalAmountResult {
+        if (!raw || typeof raw !== 'object') {
+            return { status: 'unavailable' };
+        }
+
+        const status = (raw as { status?: unknown }).status;
+        if (status === 'no_upcoming_charge') {
+            return { status: 'no_upcoming_charge' };
+        }
+
+        if (status === 'unavailable') {
+            return { status: 'unavailable' };
+        }
+
+        if (status !== 'ready') {
+            return { status: 'unavailable' };
+        }
+
+        const amountMinor = (raw as { amountMinor?: unknown }).amountMinor;
+        const currency = (raw as { currency?: unknown }).currency;
+        if (typeof amountMinor !== 'number' || !Number.isFinite(amountMinor) || typeof currency !== 'string' || !currency.trim()) {
+            return { status: 'unavailable' };
+        }
+
+        return {
+            status: 'ready',
+            amountMinor: Math.round(amountMinor),
+            currency: currency.toUpperCase(),
+        };
     }
 
     /**

@@ -136,6 +136,7 @@ export { reprocessEvent } from './events/reprocess-event';
 export { mergeEvents } from './events/merge-events';
 export { aiInsights, getAiInsightsQuotaStatus } from './ai/insights/callable';
 export { restoreUserClaims, linkExistingStripeCustomer } from './stripe/claims';
+export { getUpcomingRenewalAmount } from './stripe/get-upcoming-renewal-amount';
 export { onSubscriptionUpdated } from './stripe/subscriptions';
 export { enforceSubscriptionLimits } from './schedule/enforce-subscription-limits';
 export { checkSubscriptionNotifications } from './schedule/notifications';

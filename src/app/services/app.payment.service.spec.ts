@@ -455,6 +455,71 @@ describe('AppPaymentService', () => {
             expect(mockGetDocs).toHaveBeenCalledTimes(2);
         });
     });
+
+    describe('getUpcomingRenewalAmount', () => {
+        it('should call getUpcomingRenewalAmount callable and return ready state', async () => {
+            mockFunctionsService.call.mockResolvedValueOnce({
+                data: {
+                    status: 'ready',
+                    amountMinor: 2499,
+                    currency: 'eur'
+                }
+            });
+
+            const result = await service.getUpcomingRenewalAmount();
+
+            expect(mockFunctionsService.call).toHaveBeenCalledWith('getUpcomingRenewalAmount');
+            expect(result).toEqual({
+                status: 'ready',
+                amountMinor: 2499,
+                currency: 'EUR'
+            });
+        });
+
+        it('should return no_upcoming_charge state from callable result', async () => {
+            mockFunctionsService.call.mockResolvedValueOnce({
+                data: {
+                    status: 'no_upcoming_charge'
+                }
+            });
+
+            const result = await service.getUpcomingRenewalAmount();
+
+            expect(result).toEqual({ status: 'no_upcoming_charge' });
+        });
+
+        it('should return unavailable for malformed callable result', async () => {
+            mockFunctionsService.call.mockResolvedValueOnce({
+                data: {
+                    status: 'ready',
+                    amountMinor: 'invalid',
+                    currency: 123
+                }
+            });
+
+            const result = await service.getUpcomingRenewalAmount();
+
+            expect(result).toEqual({ status: 'unavailable' });
+        });
+
+        it('should return unavailable when callable fails', async () => {
+            mockFunctionsService.call.mockRejectedValueOnce(new Error('network failed'));
+
+            const result = await service.getUpcomingRenewalAmount();
+
+            expect(result).toEqual({ status: 'unavailable' });
+        });
+
+        it('should return unavailable and skip callable when user is not authenticated', async () => {
+            mockAuth.currentUser = null;
+
+            const result = await service.getUpcomingRenewalAmount();
+
+            expect(result).toEqual({ status: 'unavailable' });
+            expect(mockFunctionsService.call).not.toHaveBeenCalled();
+        });
+    });
+
     describe('restorePurchases', () => {
         it('should return the role from the cloud function response', async () => {
             // Mock the callable function to return specific data
