@@ -223,6 +223,7 @@ const DATE_ACTIVITY_STACKED_TIME_AXIS_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
 const EVENT_LOOKUP_SUBJECT_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
   /\b(when did i have|when i had|when was|which event|what workout|which workout|which session)\b/i,
   /\bwhich\s+(ride|rides|run|runs|swim|swims|workout|workouts|session|sessions|activity|activities|event|events)\s+had\b/i,
+  /\bwhich\s+(ride|rides|run|runs|swim|swims|workout|workouts|session|sessions|activity|activities|event|events)\s+(was|were)\b/i,
   /\bi want to know when i had\b/i,
 ];
 const LATEST_EVENT_SUBJECT_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
@@ -249,7 +250,7 @@ const PROMPT_ACTIVITY_TYPE_ALIAS_PATTERNS: ReadonlyArray<{
   {
     // Keep singular "run" as an activity alias only in noun contexts
     // so command-verb phrasing like "run a comparison" is not misclassified.
-    pattern: /\b(runs|(?:last|latest|most recent|my|a|an|the)\s+run)\b/i,
+    pattern: /\b(runs|(?:last|latest|most recent|my|a|an|the|which|what)\s+run)\b/i,
     activityTypes: [ActivityTypes.Running],
   },
   {
@@ -1325,6 +1326,25 @@ function resolvePromptAggregation(prompt: string): ModelAggregationCode | undefi
   return undefined;
 }
 
+function resolveImplicitEventLookupMetricAlias(prompt: string): string | null {
+  if (!promptImpliesEventLookup(prompt)) {
+    return null;
+  }
+
+  const normalizedPrompt = normalizePromptSearchText(prompt);
+  if (!normalizedPrompt) {
+    return null;
+  }
+
+  const hasActivitySubject = /\b(ride|rides|run|runs|swim|swims|workout|workouts|session|sessions|activity|activities|event|events)\b/.test(normalizedPrompt);
+  const hasDistanceSuperlative = /\b(longest|shortest|farthest|furthest)\b/.test(normalizedPrompt);
+  if (!hasActivitySubject || !hasDistanceSuperlative) {
+    return null;
+  }
+
+  return 'distance';
+}
+
 function resolvePromptAggregationCodes(prompt: string): ModelAggregationCode[] {
   const normalizedPrompt = normalizePromptSearchText(prompt);
   if (!normalizedPrompt) {
@@ -1731,8 +1751,13 @@ function resolvePromptDateRangeIntent(prompt: string): DateRangeIntent | undefin
 }
 
 function buildDeterministicIntent(prompt: string): ModelInsightIntent {
-  const metricMatch = findInsightMetricAliasMatch(canonicalizeInsightPrompt(prompt));
-  if (!metricMatch) {
+  const canonicalPrompt = canonicalizeInsightPrompt(prompt);
+  const metricMatch = findInsightMetricAliasMatch(canonicalPrompt);
+  const fallbackMetricAlias = metricMatch ? null : resolveImplicitEventLookupMetricAlias(prompt);
+  const resolvedMetric = metricMatch?.metric || (fallbackMetricAlias ? resolveInsightMetric(fallbackMetricAlias) : null);
+  const resolvedMetricAlias = metricMatch?.alias || fallbackMetricAlias;
+
+  if (!resolvedMetric || !resolvedMetricAlias) {
     return {
       status: 'unsupported',
       unsupportedReasonCode: 'unsupported_metric',
@@ -1744,13 +1769,13 @@ function buildDeterministicIntent(prompt: string): ModelInsightIntent {
 
   const promptAggregation = resolvePromptAggregationForMetric(
     prompt,
-    metricMatch.metric.key,
+    resolvedMetric.key,
     resolvePromptAggregation(prompt),
   );
 
   return ModelInsightIntentSchema.parse({
     status: 'supported',
-    metric: metricMatch.alias,
+    metric: resolvedMetricAlias,
     aggregation: promptAggregation,
     category: resolvePromptCategory(prompt),
     requestedTimeInterval: resolvePromptRequestedTimeInterval(prompt),

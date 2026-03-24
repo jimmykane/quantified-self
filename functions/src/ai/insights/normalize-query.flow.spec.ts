@@ -794,6 +794,36 @@ describe('normalizeInsightQuery', () => {
     });
   });
 
+  it('deterministically resolves "which run was my longest in 2026?" to a running distance event lookup', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-24T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'which run was my longest in 2026?',
+      clientTimezone: 'Europe/Rome',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('distance');
+    expect(result.query.resultKind).toBe('event_lookup');
+    expect(result.query.dataType).toBe(DataDistance.type);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Maximum);
+    expect(result.query.categoryType).toBe(ChartDataCategoryTypes.DateType);
+    expect(result.query.activityTypes).toEqual([ActivityTypes.Running]);
+    expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
+      startDate: '2025-12-31T23:00:00.000Z',
+      endDate: '2026-12-31T22:59:59.999Z',
+      timezone: 'Europe/Rome',
+      source: 'prompt',
+    });
+  });
+
   it('treats "Which rides had my highest power output this month?" as ranked event lookup', async () => {
     setNormalizeQueryDependenciesForTesting({
       now: () => new Date('2026-03-19T12:00:00.000Z'),
