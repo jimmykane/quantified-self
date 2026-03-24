@@ -7,6 +7,7 @@ const EXPECTED_RESULT_KINDS = [
   'event_lookup',
   'latest_event',
   'multi_metric_aggregate',
+  'power_curve',
 ] as const;
 
 describe('AI insights result-kind registries', () => {

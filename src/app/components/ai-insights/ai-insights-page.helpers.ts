@@ -701,6 +701,11 @@ const RESULT_CARD_SUBTITLE_BY_RESULT_KIND: {
   aggregate: () => 'Insight summary and chart for this prompt.',
   event_lookup: () => 'Winning event and top matches for this prompt.',
   latest_event: () => 'Most recent matching event for this prompt.',
+  power_curve: (response) => (
+    response.query.mode === 'compare_over_time'
+      ? 'Power-curve envelopes compared over time for this prompt.'
+      : 'Best power-curve envelope for this prompt.'
+  ),
   multi_metric_aggregate: (response) => (
     response.query.groupingMode === 'date'
       ? 'Combined chart and merged metric summaries for this prompt.'

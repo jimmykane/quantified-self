@@ -355,6 +355,28 @@ describe('EventTableComponent', () => {
         expect(component.data.filterPredicate(row, 'missing,unknown')).toBe(false);
     });
 
+    it('should treat all filtered rows as selected even when full data has additional hidden rows', () => {
+        const visibleRow = { Event: new MockEvent('visible') } as any;
+        const hiddenRow = { Event: new MockEvent('hidden') } as any;
+        component.data.data = [visibleRow, hiddenRow];
+        (component.data as any).filteredData = [visibleRow];
+        component.selection.select(visibleRow);
+
+        expect(component.isAllSelected()).toBe(true);
+    });
+
+    it('should only select filtered rows when masterToggle is used', () => {
+        const visibleRow = { Event: new MockEvent('visible') } as any;
+        const hiddenRow = { Event: new MockEvent('hidden') } as any;
+        component.data.data = [visibleRow, hiddenRow];
+        (component.data as any).filteredData = [visibleRow];
+
+        component.masterToggle();
+
+        expect(component.selection.isSelected(visibleRow)).toBe(true);
+        expect(component.selection.isSelected(hiddenRow)).toBe(false);
+    });
+
     it('should patch-save event description via updateEventProperties', async () => {
         const event = new MockEvent('event-description') as any;
 

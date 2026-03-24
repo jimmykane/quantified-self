@@ -7,6 +7,7 @@ import {
   type ActivityTypes,
 } from '@sports-alliance/sports-lib';
 import type {
+  AiInsightsPowerCurveMode,
   NormalizedInsightBoundedDateRange,
   NormalizedInsightDateRange,
   NormalizedInsightMetricSelection,
@@ -108,5 +109,29 @@ export function buildMultiMetricInsightQuery(
     periodMode: input.periodMode,
     chartType: input.chartType,
     metricSelections: input.metricSelections,
+  };
+}
+
+interface BuildPowerCurveQueryInput extends BuildQueryCommonInput {
+  mode: AiInsightsPowerCurveMode;
+  requestedTimeInterval?: TimeIntervals;
+  defaultedToCycling: boolean;
+}
+
+export function buildPowerCurveInsightQuery(
+  input: BuildPowerCurveQueryInput,
+): Extract<NormalizedInsightQuery, { resultKind: 'power_curve' }> {
+  return {
+    resultKind: 'power_curve',
+    mode: input.mode,
+    categoryType: ChartDataCategoryTypes.DateType,
+    requestedTimeInterval: input.requestedTimeInterval,
+    activityTypeGroups: input.activityTypeGroups,
+    activityTypes: input.activityTypes,
+    dateRange: input.dateRange,
+    requestedDateRanges: input.requestedDateRanges,
+    periodMode: input.periodMode,
+    chartType: input.chartType,
+    defaultedToCycling: input.defaultedToCycling,
   };
 }

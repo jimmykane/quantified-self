@@ -92,6 +92,14 @@ export function resolveAiInsightsDisplayTitle(
     return toSentenceCase(`latest event${activitySuffix}`);
   }
 
+  if (response.query.resultKind === 'power_curve') {
+    return toSentenceCase(
+      response.query.mode === 'compare_over_time'
+        ? `power curve over time${activitySuffix}`
+        : `best power curve${activitySuffix}`,
+    );
+  }
+
   if (response.query.resultKind === 'multi_metric_aggregate') {
     const defaultValueType = response.query.metricSelections[0]?.valueType ?? ChartDataValueTypes.Total;
     const incomingLabels = (options?.metricLabels ?? [])

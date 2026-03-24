@@ -254,6 +254,27 @@ export const AI_INSIGHTS_PROMPT_CATALOG = [
     metricKey: 'power_work',
   },
   {
+    id: 'best-power-curve',
+    prompt: 'What is my best power curve?',
+    category: 'Power & Load',
+    featured: false,
+    surfaces: ['picker'],
+  },
+  {
+    id: 'compare-power-curve-last-3-months',
+    prompt: 'Compare my power curve over the last 3 months.',
+    category: 'Power & Load',
+    featured: false,
+    surfaces: ['picker'],
+  },
+  {
+    id: 'power-curve-over-time-this-year',
+    prompt: 'Show my power curve over time this year.',
+    category: 'Power & Load',
+    featured: false,
+    surfaces: ['picker'],
+  },
+  {
     id: 'vo2max-running-90-days',
     prompt: 'Show my average VO2 max over time for running this year.',
     category: 'Recovery & Performance',
@@ -468,6 +489,20 @@ export const AI_INSIGHTS_CURATED_PROMPT_CATALOG = [
   {
     id: 'popular-cadence-power-cycling-3-months',
     prompt: 'Show cadence vs power over time in the last 3 months for cycling.',
+    category: 'Compare & explore',
+    featured: true,
+    surfaces: ['hero', 'picker'],
+  },
+  {
+    id: 'popular-best-power-curve',
+    prompt: 'What is my best power curve?',
+    category: 'Best efforts',
+    featured: true,
+    surfaces: ['hero', 'picker'],
+  },
+  {
+    id: 'popular-compare-power-curve-3-months',
+    prompt: 'Compare my power curve over the last 3 months.',
     category: 'Compare & explore',
     featured: true,
     surfaces: ['hero', 'picker'],

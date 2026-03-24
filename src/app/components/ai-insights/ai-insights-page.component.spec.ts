@@ -27,6 +27,7 @@ import type {
   AiInsightsLatestEventOkResponse,
   AiInsightsMultiMetricAggregateOkResponse,
   AiInsightsOkResponse,
+  AiInsightsPowerCurveOkResponse,
   AiInsightsQuotaStatus,
   AiInsightsResponse,
   AiInsightsUnsupportedResponse,
@@ -45,6 +46,7 @@ import { AppUserSettingsQueryService } from '../../services/app.user-settings-qu
 import { LoggerService } from '../../services/logger.service';
 import { AiInsightsChartComponent } from './ai-insights-chart.component';
 import { AiInsightsMultiMetricChartComponent } from './ai-insights-multi-metric-chart.component';
+import { AiInsightsPowerCurveChartComponent } from './ai-insights-power-curve-chart.component';
 import { AiInsightsPageComponent } from './ai-insights-page.component';
 import {
   AI_INSIGHTS_DEFAULT_PICKER_PROMPTS,
@@ -76,6 +78,18 @@ class MockAiInsightsMultiMetricChartComponent {
   readonly darkTheme = input(false);
   readonly useAnimations = input(false);
   readonly userUnitSettings = input<any>(null);
+}
+
+@Component({
+  selector: 'app-ai-insights-power-curve-chart',
+  standalone: true,
+  imports: [CommonModule],
+  template: '<div class="power-curve-chart-stub">{{ response().presentation.title }}</div>',
+})
+class MockAiInsightsPowerCurveChartComponent {
+  readonly response = input.required<AiInsightsPowerCurveOkResponse>();
+  readonly darkTheme = input(false);
+  readonly useAnimations = input(false);
 }
 
 function buildQuotaStatus(overrides: Partial<AiInsightsQuotaStatus> = {}): AiInsightsQuotaStatus {
@@ -901,6 +915,61 @@ function buildLatestEventResponse(): AiInsightsLatestEventOkResponse {
   };
 }
 
+function buildPowerCurveResponse(): AiInsightsPowerCurveOkResponse {
+  return {
+    status: 'ok',
+    resultKind: 'power_curve',
+    narrative: 'I built your best power curve for cycling as the max-power envelope across 4 matching events.',
+    query: {
+      resultKind: 'power_curve',
+      mode: 'best',
+      categoryType: ChartDataCategoryTypes.DateType,
+      requestedTimeInterval: TimeIntervals.Monthly,
+      activityTypeGroups: [],
+      activityTypes: [ActivityTypes.Cycling],
+      dateRange: {
+        kind: 'bounded',
+        startDate: '2026-01-01T00:00:00.000Z',
+        endDate: '2026-03-18T23:59:59.999Z',
+        timezone: 'Europe/Helsinki',
+        source: 'default',
+      },
+      chartType: ChartTypes.LinesVertical,
+      defaultedToCycling: true,
+    },
+    powerCurve: {
+      mode: 'best',
+      resolvedTimeInterval: TimeIntervals.Auto,
+      matchedEventCount: 4,
+      requestedSeriesCount: 1,
+      returnedSeriesCount: 1,
+      safetyGuardApplied: false,
+      safetyGuardMaxSeries: null,
+      trimmedSeriesCount: 0,
+      series: [
+        {
+          seriesKey: 'best',
+          label: 'Best power curve',
+          matchedEventCount: 4,
+          bucketStartDate: null,
+          bucketEndDate: null,
+          points: [
+            { duration: 5, power: 640, wattsPerKg: 8.9 },
+            { duration: 60, power: 420, wattsPerKg: 5.7 },
+          ],
+        },
+      ],
+    },
+    presentation: {
+      title: 'Best power curve for Cycling',
+      chartType: ChartTypes.LinesVertical,
+      warnings: [
+        'No activity filter was specified, so this power-curve result defaults to Cycling.',
+      ],
+    },
+  };
+}
+
 function buildMockEvent(options: {
   id: string;
   startDate: string;
@@ -988,10 +1057,14 @@ describe('AiInsightsPageComponent', () => {
     })
       .overrideComponent(AiInsightsPageComponent, {
         remove: {
-          imports: [AiInsightsChartComponent, AiInsightsMultiMetricChartComponent],
+          imports: [AiInsightsChartComponent, AiInsightsMultiMetricChartComponent, AiInsightsPowerCurveChartComponent],
         },
         add: {
-          imports: [MockAiInsightsChartComponent, MockAiInsightsMultiMetricChartComponent],
+          imports: [
+            MockAiInsightsChartComponent,
+            MockAiInsightsMultiMetricChartComponent,
+            MockAiInsightsPowerCurveChartComponent,
+          ],
         },
       })
       .compileComponents();
@@ -1272,6 +1345,29 @@ describe('AiInsightsPageComponent', () => {
       configurable: true,
       value: originalScrollTo,
     });
+  });
+
+  it('should render power-curve results with the dedicated chart and no aggregate summary cards', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue(buildPowerCurveResponse());
+    component.promptControl.setValue('What is my best power curve?');
+
+    await component.submitPrompt();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const powerCurveChart = fixture.debugElement.query(By.css('.power-curve-chart-stub'))?.nativeElement as HTMLElement | undefined;
+    const aggregateChart = fixture.debugElement.query(By.css('.chart-stub'));
+    const multiMetricChart = fixture.debugElement.query(By.css('.multi-chart-stub'));
+    const summaryCards = fixture.debugElement.queryAll(By.css('.summary-card'));
+    const warningChips = fixture.debugElement.queryAll(By.css('.warning-chips mat-chip'));
+    const resultTitle = fixture.debugElement.query(By.css('.result-card-title'))?.nativeElement as HTMLElement | undefined;
+
+    expect(powerCurveChart?.textContent).toContain('Best power curve for Cycling');
+    expect(aggregateChart).toBeNull();
+    expect(multiMetricChart).toBeNull();
+    expect(summaryCards).toHaveLength(0);
+    expect(warningChips.some((chip) => chip.nativeElement.textContent.includes('defaults to Cycling'))).toBe(true);
+    expect(resultTitle?.textContent?.toLowerCase()).toContain('best power curve');
   });
 
   it('should trigger haptics on submit, processing start, and successful response', async () => {

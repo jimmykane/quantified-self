@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   type ActivityTypeGroup,
+  ActivityTypeGroups,
   ActivityTypes,
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -10,6 +11,7 @@ import {
 
 import type {
   AiInsightsRequest,
+  AiInsightsPowerCurveMode,
   AiInsightsMultiMetricGroupingMode,
   AiInsightsUnsupportedReasonCode,
   NormalizedInsightBoundedDateRange,
@@ -44,6 +46,7 @@ import {
   buildEventLookupInsightQuery,
   buildLatestEventInsightQuery,
   buildMultiMetricInsightQuery,
+  buildPowerCurveInsightQuery,
 } from './normalize-query.result-kind-query-builders';
 import { AiInsightsRequestSchema, NormalizedInsightQuerySchema } from './schemas';
 
@@ -1304,6 +1307,32 @@ function promptImpliesLatestEventLookup(prompt: string): boolean {
   return LATEST_EVENT_SUBJECT_PROMPT_PATTERNS.some(pattern => pattern.test(normalizedPrompt));
 }
 
+function promptImpliesPowerCurve(prompt: string): boolean {
+  const normalizedPrompt = normalizePromptSearchText(prompt);
+  if (!normalizedPrompt) {
+    return false;
+  }
+
+  if (/\bpower\s*-?\s*curve\b/.test(normalizedPrompt) || /\bpowercurve\b/.test(normalizedPrompt)) {
+    return true;
+  }
+
+  return /\bpower\b/.test(normalizedPrompt) && /\bcurve\b/.test(normalizedPrompt);
+}
+
+function resolvePowerCurveMode(prompt: string): AiInsightsPowerCurveMode {
+  const normalizedPrompt = normalizePromptSearchText(prompt);
+  if (!normalizedPrompt) {
+    return 'best';
+  }
+
+  if (/\b(compare|comparison|vs|versus|evolv(?:e|ed|ing)|chang(?:e|ed|ing)|over time|timeline|trend)\b/.test(normalizedPrompt)) {
+    return 'compare_over_time';
+  }
+
+  return 'best';
+}
+
 function resolvePromptAggregation(prompt: string): ModelAggregationCode | undefined {
   const normalizedPrompt = normalizePromptSearchText(prompt);
   if (!normalizedPrompt) {
@@ -2101,6 +2130,83 @@ export function createNormalizeQuery(
       promptRequestedTimeInterval,
     } = promptContext;
     const promptDateRangeIntent = promptDateSelection.effectiveDateRangeIntent;
+    if (promptImpliesPowerCurve(prompt)) {
+      const promptWithoutActivityExclusions = stripPromptActivityExclusionClauses(prompt);
+      const promptExcludedActivityTypeGroups = extractPromptActivityExclusionClauses(prompt)
+        .flatMap((clause) => resolvePromptActivityTypeGroups(clause));
+      const promptExcludedActivityTypes = extractPromptActivityExclusionClauses(prompt)
+        .flatMap((clause) => {
+          const clauseGroups = resolvePromptActivityTypeGroups(clause);
+          return [
+            ...resolvePromptActivityTypes(clause, clauseGroups),
+            ...resolveKeywordActivityTypeExclusions(clause),
+          ];
+        });
+      const excludedActivityTypeSet = new Set<ActivityTypes>([
+        ...promptExcludedActivityTypes,
+        ...expandActivityTypeGroups(promptExcludedActivityTypeGroups),
+      ]);
+      const promptActivityTypeGroups = resolvePromptActivityTypeGroups(promptWithoutActivityExclusions);
+      const promptActivityTypes = resolvePromptActivityTypes(promptWithoutActivityExclusions, promptActivityTypeGroups);
+      const filteredResolvedActivityTypes = excludeActivityTypes(
+        promptActivityTypes,
+        excludedActivityTypeSet,
+      );
+      const filteredResolvedActivityTypeGroups = promptActivityTypeGroups
+        .filter(activityTypeGroup => !promptExcludedActivityTypeGroups.includes(activityTypeGroup));
+      const explicitActivityTypeGroups = filteredResolvedActivityTypes.length > 0 ? [] : filteredResolvedActivityTypeGroups;
+      const expandedActivityTypes = explicitActivityTypeGroups.length > 0
+        ? excludeActivityTypes(expandActivityTypeGroups(explicitActivityTypeGroups), excludedActivityTypeSet)
+        : [];
+      const resolvedActivityTypes = filteredResolvedActivityTypes.length > 0
+        ? filteredResolvedActivityTypes
+        : expandedActivityTypes;
+      const defaultedToCycling = resolvedActivityTypes.length === 0 && explicitActivityTypeGroups.length === 0;
+      const defaultCyclingActivityTypeGroups = [ActivityTypeGroups.CyclingGroup];
+      const finalActivityTypeGroups = defaultedToCycling
+        ? defaultCyclingActivityTypeGroups
+        : explicitActivityTypeGroups;
+      const finalActivityTypes = defaultedToCycling
+        ? (() => {
+          const expandedDefaultActivityTypes = excludeActivityTypes(
+            expandActivityTypeGroups(defaultCyclingActivityTypeGroups),
+            excludedActivityTypeSet,
+          );
+          return expandedDefaultActivityTypes.length > 0
+            ? expandedDefaultActivityTypes
+            : [ActivityTypes.Cycling];
+        })()
+        : resolvedActivityTypes;
+      const mode = resolvePowerCurveMode(prompt);
+      const dateRange = resolveDateRange(promptDateRangeIntent, input.clientTimezone, resolvedDependencies.now());
+      const requestedDateRanges = resolveRequestedDateRanges(
+        promptDateSelection.requestedDateRangeIntents,
+        input.clientTimezone,
+        resolvedDependencies.now(),
+      );
+
+      return {
+        status: 'ok',
+        query: buildPowerCurveInsightQuery({
+          mode,
+          requestedTimeInterval: mode === 'compare_over_time'
+            ? toRequestedTimeInterval(
+              ChartDataCategoryTypes.DateType,
+              promptRequestedTimeInterval,
+              promptDateRangeIntent,
+            )
+            : undefined,
+          activityTypeGroups: finalActivityTypeGroups,
+          activityTypes: finalActivityTypes,
+          dateRange,
+          requestedDateRanges,
+          periodMode: promptDateSelection.periodMode,
+          chartType: ChartTypes.LinesVertical,
+          defaultedToCycling,
+        }),
+      };
+    }
+
     const multiMetricIntent = resolveMultiMetricIntent(prompt, promptContext);
     if (multiMetricIntent && 'status' in multiMetricIntent) {
       return multiMetricIntent;

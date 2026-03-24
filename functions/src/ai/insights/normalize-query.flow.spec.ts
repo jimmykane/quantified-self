@@ -1409,6 +1409,107 @@ describe('normalizeInsightQuery', () => {
     expect(result.query.dataType).toBe(DataCadenceAvg.type);
   });
 
+  it('normalizes best power curve prompts to power_curve best mode with cycling default', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-19T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'What is my best power curve?',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBeUndefined();
+    expect(result.query.resultKind).toBe('power_curve');
+    if (result.query.resultKind !== 'power_curve') {
+      return;
+    }
+
+    expect(result.query.mode).toBe('best');
+    expect(result.query.activityTypeGroups).toEqual([ActivityTypeGroups.CyclingGroup]);
+    expect(result.query.activityTypes).toEqual([...new Set(getActivityTypesForGroup(ActivityTypeGroups.CyclingGroup))]);
+    expect(result.query.activityTypes).toContain(ActivityTypes.Cycling);
+    expect(result.query.activityTypes).toContain(ActivityTypes.VirtualCycling);
+    expect(result.query.defaultedToCycling).toBe(true);
+    expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
+      startDate: '2026-01-01T00:00:00.000Z',
+      endDate: '2026-03-19T23:59:59.999Z',
+      timezone: 'UTC',
+      source: 'default',
+    });
+  });
+
+  it('normalizes compare power curve prompts to power_curve compare mode with auto interval', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-19T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Compare my power curve over the last 3 months.',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.resultKind).toBe('power_curve');
+    if (result.query.resultKind !== 'power_curve') {
+      return;
+    }
+
+    expect(result.query.mode).toBe('compare_over_time');
+    expect(result.query.activityTypeGroups).toEqual([ActivityTypeGroups.CyclingGroup]);
+    expect(result.query.activityTypes).toEqual([...new Set(getActivityTypesForGroup(ActivityTypeGroups.CyclingGroup))]);
+    expect(result.query.activityTypes).toContain(ActivityTypes.Cycling);
+    expect(result.query.activityTypes).toContain(ActivityTypes.VirtualCycling);
+    expect(result.query.defaultedToCycling).toBe(true);
+    expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Monthly);
+    expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
+      startDate: '2025-12-19T00:00:00.000Z',
+      endDate: '2026-03-19T23:59:59.999Z',
+      timezone: 'UTC',
+      source: 'prompt',
+    });
+  });
+
+  it('keeps explicit activity/date overrides for power curve prompts', async () => {
+    const result = await normalizeInsightQuery({
+      prompt: 'Compare my running power curve in 2024 by month.',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.resultKind).toBe('power_curve');
+    if (result.query.resultKind !== 'power_curve') {
+      return;
+    }
+
+    expect(result.query.mode).toBe('compare_over_time');
+    expect(result.query.activityTypes).toEqual([ActivityTypes.Running]);
+    expect(result.query.defaultedToCycling).toBe(false);
+    expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Monthly);
+    expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
+      startDate: '2024-01-01T00:00:00.000Z',
+      endDate: '2024-12-31T23:59:59.999Z',
+      timezone: 'UTC',
+      source: 'prompt',
+    });
+  });
+
   it('does not treat verb "run" as an activity type alias', async () => {
     const result = await normalizeInsightQuery({
       prompt: 'run a distance comparison by activity type',

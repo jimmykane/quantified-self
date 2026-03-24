@@ -53,6 +53,12 @@ function resolveInsightTitle(query: NormalizedInsightQuery, metricLabelOrLabels:
       : `${metricLabel}${activityLabel}`;
   }
 
+  if (query.resultKind === 'power_curve') {
+    return query.mode === 'compare_over_time'
+      ? `Power curve over time${activityLabel}`
+      : `Best power curve${activityLabel}`;
+  }
+
   if (query.categoryType === ChartDataCategoryTypes.ActivityType) {
     return `${query.valueType} ${metricLabel} by activity type${activityLabel}`;
   }
@@ -66,6 +72,10 @@ function resolvePresentationWarnings(query: NormalizedInsightQuery): string[] | 
   }
 
   if (query.resultKind === 'latest_event') {
+    return undefined;
+  }
+
+  if (query.resultKind === 'power_curve') {
     return undefined;
   }
 
@@ -96,11 +106,15 @@ export function buildEmptyAggregation(query: NormalizedInsightQuery) {
     ? (query.metricSelections[0]?.dataType ?? 'Unknown')
     : query.resultKind === 'latest_event'
       ? 'Latest Event'
+      : query.resultKind === 'power_curve'
+        ? 'Power Curve'
     : query.dataType;
   const valueType = query.resultKind === 'multi_metric_aggregate'
     ? (query.metricSelections[0]?.valueType ?? null)
     : query.resultKind === 'latest_event'
       ? ChartDataValueTypes.Total
+      : query.resultKind === 'power_curve'
+        ? ChartDataValueTypes.Maximum
     : query.valueType;
 
   return {

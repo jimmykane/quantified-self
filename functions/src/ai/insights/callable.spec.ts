@@ -246,6 +246,18 @@ const multiMetricQuery = {
   ],
 };
 
+const powerCurveQuery = {
+  resultKind: 'power_curve' as const,
+  mode: 'best' as const,
+  categoryType: ChartDataCategoryTypes.DateType,
+  requestedTimeInterval: TimeIntervals.Monthly,
+  activityTypeGroups: [],
+  activityTypes: [ActivityTypes.Cycling],
+  dateRange: normalizedQuery.dateRange,
+  chartType: ChartTypes.LinesVertical,
+  defaultedToCycling: true,
+};
+
 const summary = {
   matchedEventCount: 2,
   overallAggregateValue: 123,
@@ -959,6 +971,134 @@ describe('aiInsights callable', () => {
       status: 'empty',
       query: latestEventQuery,
       narrative: 'I found no matching cycling events in this range.',
+      presentation: expect.objectContaining({
+        emptyState: expect.any(String),
+      }),
+    }));
+  });
+
+  it('returns a power_curve response with deterministic fallback narrative and warnings', async () => {
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'ok',
+      query: powerCurveQuery,
+    });
+    hoisted.executeAiInsightsQuery.mockResolvedValue({
+      resultKind: 'power_curve',
+      matchedEventsCount: 3,
+      matchedActivityTypeCounts: [
+        {
+          activityType: ActivityTypes.Cycling,
+          eventCount: 3,
+        },
+      ],
+      powerCurve: {
+        mode: 'best',
+        resolvedTimeInterval: TimeIntervals.Auto,
+        matchedEventCount: 3,
+        requestedSeriesCount: 1,
+        returnedSeriesCount: 1,
+        safetyGuardApplied: false,
+        safetyGuardMaxSeries: null,
+        trimmedSeriesCount: 0,
+        series: [
+          {
+            seriesKey: 'best',
+            label: 'Best power curve',
+            matchedEventCount: 3,
+            bucketStartDate: null,
+            bucketEndDate: null,
+            points: [
+              { duration: 5, power: 640, wattsPerKg: 8.9 },
+              { duration: 60, power: 420, wattsPerKg: 5.7 },
+            ],
+          },
+        ],
+      },
+    });
+
+    const result = await aiInsights({
+      prompt: 'What is my best power curve?',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(hoisted.summarizeAiInsightResult).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      status: 'ok',
+      resultKind: 'power_curve',
+      narrative: 'I built your best power curve for cycling as the max-power envelope across 3 matching events.',
+      quota: quotaStatus,
+      query: powerCurveQuery,
+      powerCurve: {
+        mode: 'best',
+        resolvedTimeInterval: TimeIntervals.Auto,
+        matchedEventCount: 3,
+        requestedSeriesCount: 1,
+        returnedSeriesCount: 1,
+        safetyGuardApplied: false,
+        safetyGuardMaxSeries: null,
+        trimmedSeriesCount: 0,
+        series: [
+          {
+            seriesKey: 'best',
+            label: 'Best power curve',
+            matchedEventCount: 3,
+            bucketStartDate: null,
+            bucketEndDate: null,
+            points: [
+              { duration: 5, power: 640, wattsPerKg: 8.9 },
+              { duration: 60, power: 420, wattsPerKg: 5.7 },
+            ],
+          },
+        ],
+      },
+      presentation: expect.objectContaining({
+        title: 'Best power curve for Cycling',
+        chartType: ChartTypes.LinesVertical,
+        warnings: [
+          'No activity filter was specified, so this power-curve result defaults to Cycling.',
+          'Best power curve means the max-power envelope across matching events, not one single event curve.',
+        ],
+      }),
+    });
+  });
+
+  it('returns empty for power_curve prompts when no curve points match', async () => {
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'ok',
+      query: {
+        ...powerCurveQuery,
+        mode: 'compare_over_time',
+      },
+    });
+    hoisted.executeAiInsightsQuery.mockResolvedValue({
+      resultKind: 'power_curve',
+      matchedEventsCount: 0,
+      matchedActivityTypeCounts: [],
+      powerCurve: {
+        mode: 'compare_over_time',
+        resolvedTimeInterval: TimeIntervals.Monthly,
+        matchedEventCount: 0,
+        requestedSeriesCount: 0,
+        returnedSeriesCount: 0,
+        safetyGuardApplied: false,
+        safetyGuardMaxSeries: null,
+        trimmedSeriesCount: 0,
+        series: [],
+      },
+    });
+
+    const result = await aiInsights({
+      prompt: 'Compare my power curve over the last 3 months',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(result).toEqual(expect.objectContaining({
+      status: 'empty',
+      query: {
+        ...powerCurveQuery,
+        mode: 'compare_over_time',
+      },
+      narrative: 'I found no power-curve data for cycling in this range.',
       presentation: expect.objectContaining({
         emptyState: expect.any(String),
       }),

@@ -15,8 +15,6 @@ import type { EChartsType } from 'echarts/core';
 
 import {
   ActivityInterface,
-  DataDuration,
-  DataPower,
 } from '@sports-alliance/sports-lib';
 import { AppBreakpoints } from '../../../constants/breakpoints';
 import { AppColors } from '../../../services/color/app.colors';
@@ -42,15 +40,15 @@ import {
   resolveEChartsTooltipTriggerOn
 } from '../../../helpers/echarts-tooltip-interaction.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
+import {
+  buildPowerCurveVisibleDurationLabelSet,
+  formatPowerCurveDurationLabel,
+  formatPowerCurvePowerLabel,
+} from '../../../helpers/power-curve-chart.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 
 const KEY_POWER_DURATION_MARKERS = [5, 15, 30, 60, 300, 1200, 3600, 7200];
-const MOBILE_MAX_LABEL_CONFIG = [
-  { width: 360, count: 5 },
-  { width: 430, count: 6 },
-  { width: 600, count: 8 },
-];
 
 @Component({
   selector: 'app-event-power-curve',
@@ -161,7 +159,10 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
     const powerPoints = powerSeries.flatMap((seriesEntry) => seriesEntry.points);
     const xDurations = [...new Set(powerPoints.map((point) => point.duration))]
       .sort((left, right) => left - right);
-    const visibleDurationLabels = this.buildVisibleDurationLabelSet(xDurations);
+    const visibleDurationLabels = buildPowerCurveVisibleDurationLabelSet(xDurations, {
+      isMobile: this.isMobile,
+      chartWidth: this.chartDiv?.nativeElement?.clientWidth ?? 0,
+    });
     const powerValues = powerPoints.map((point) => point.power);
     const [powerMin, powerMax] = calculateEventEChartsAxisRange(powerValues, {
       minFloor: 0,
@@ -278,7 +279,7 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
             if (this.isMobile && !visibleDurationLabels.has(duration)) {
               return '';
             }
-            return this.formatDurationLabel(duration);
+            return formatPowerCurveDurationLabel(duration);
           },
         },
       },
@@ -301,7 +302,7 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
         axisLabel: {
           fontSize: axisLabelFontSize,
           color: textColor,
-          formatter: (value: number) => this.formatPowerLabel(value),
+          formatter: (value: number) => formatPowerCurvePowerLabel(value),
         },
       },
       tooltip: {
@@ -373,7 +374,7 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
             const shouldUsePlusLabel = chartMax >= 7200 && existing.label.includes('02h');
             existing.label = shouldUsePlusLabel
               ? '02h+'
-              : this.formatDurationLabel(nearest.duration);
+              : formatPowerCurveDurationLabel(nearest.duration);
             selected.set(nearest.duration, existing);
           }
         }
@@ -383,7 +384,7 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
       const labelDuration = targetDuration === chartMax ? nearest.duration : targetDuration;
       selected.set(nearest.duration, {
         coord: [nearest.duration, nearest.power],
-        label: this.formatDurationLabel(labelDuration),
+        label: formatPowerCurveDurationLabel(labelDuration),
       });
     });
 
@@ -394,7 +395,7 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
         if (nearestTwoHourPoint) {
           selected.set(nearestTwoHourPoint.duration, {
             coord: [nearestTwoHourPoint.duration, nearestTwoHourPoint.power],
-            label: this.formatDurationLabel(7200),
+            label: formatPowerCurveDurationLabel(7200),
           });
         }
       }
@@ -444,156 +445,7 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
       ? ` (${wattsPerKg.toFixed(2)} W/kg)`
       : '';
 
-    return `<b>${this.formatDurationLabel(duration)}</b><br/>${activityPrefix}Power: <b>${this.formatPowerLabel(power, true)}</b>${wattsPerKgLabel}`;
-  }
-
-  private formatDurationLabel(seconds: number): string {
-    if (!Number.isFinite(seconds) || seconds <= 0) {
-      return '';
-    }
-    return new DataDuration(seconds).getDisplayValue(false, false).trim();
-  }
-
-  private formatPowerLabel(power: number, includeUnit = false): string {
-    if (!Number.isFinite(power)) {
-      return '';
-    }
-
-    const dataPower = new DataPower(power);
-    const value = `${dataPower.getDisplayValue()}`.trim();
-    if (!includeUnit) {
-      return value;
-    }
-
-    const unit = `${dataPower.getDisplayUnit()}`.trim();
-    return unit.length > 0
-      ? `${value} ${unit}`
-      : value;
-  }
-
-  private buildVisibleDurationLabelSet(durations: number[]): Set<number> {
-    if (!this.isMobile || durations.length === 0) {
-      return new Set(durations);
-    }
-
-    const mandatoryIndexes = new Set<number>([0, durations.length - 1]);
-
-    [1, 5, 15, 30, 60, 300, 1200, 3600, 7200].forEach((anchorDuration) => {
-      const directIndex = durations.indexOf(anchorDuration);
-      if (directIndex >= 0) {
-        mandatoryIndexes.add(directIndex);
-        return;
-      }
-
-      const nearestIndex = this.findNearestDurationIndex(durations, anchorDuration);
-      if (nearestIndex !== null) {
-        mandatoryIndexes.add(nearestIndex);
-      }
-    });
-
-    const maxLabels = Math.max(this.getMobileMaxLabelCount(), mandatoryIndexes.size);
-    if (durations.length <= maxLabels) {
-      return new Set(durations);
-    }
-
-    const selectedIndexes = new Set<number>(mandatoryIndexes);
-
-    while (selectedIndexes.size < maxLabels) {
-      const nextIndex = this.findLargestGapMidpointIndex(durations, selectedIndexes);
-      if (nextIndex === null) {
-        break;
-      }
-      selectedIndexes.add(nextIndex);
-    }
-
-    return new Set(
-      [...selectedIndexes]
-        .sort((left, right) => left - right)
-        .map((index) => durations[index])
-    );
-  }
-
-  private getMobileMaxLabelCount(): number {
-    const rawWidth = this.chartDiv?.nativeElement?.clientWidth ?? 0;
-    const effectiveWidth = rawWidth > 0
-      ? rawWidth
-      : (this.isMobile ? 360 : 960);
-
-    const config = MOBILE_MAX_LABEL_CONFIG.find((entry) => effectiveWidth <= entry.width);
-    return config?.count ?? 8;
-  }
-
-  private findLargestGapMidpointIndex(durations: number[], selectedIndexes: Set<number>): number | null {
-    const sorted = [...selectedIndexes].sort((left, right) => left - right);
-    if (sorted.length < 2) {
-      return null;
-    }
-
-    let bestStart = -1;
-    let bestEnd = -1;
-    let bestGap = -1;
-
-    for (let i = 0; i < sorted.length - 1; i += 1) {
-      const start = sorted[i];
-      const end = sorted[i + 1];
-      if (end - start <= 1) {
-        continue;
-      }
-
-      const gap = Math.log10(Math.max(1, durations[end])) - Math.log10(Math.max(1, durations[start]));
-      if (gap > bestGap) {
-        bestGap = gap;
-        bestStart = start;
-        bestEnd = end;
-      }
-    }
-
-    if (bestStart === -1 || bestEnd === -1) {
-      return null;
-    }
-
-    const targetLog = (
-      Math.log10(Math.max(1, durations[bestStart]))
-      + Math.log10(Math.max(1, durations[bestEnd]))
-    ) / 2;
-
-    let midpointIndex = bestStart + 1;
-    let midpointDistance = Number.POSITIVE_INFINITY;
-    for (let index = bestStart + 1; index < bestEnd; index += 1) {
-      const distance = Math.abs(Math.log10(Math.max(1, durations[index])) - targetLog);
-      if (distance < midpointDistance) {
-        midpointDistance = distance;
-        midpointIndex = index;
-      }
-    }
-
-    return midpointIndex;
-  }
-
-  private findNearestDurationIndex(durations: number[], target: number): number | null {
-    if (!durations.length) {
-      return null;
-    }
-
-    let nearestIndex = 0;
-    let nearestLogDistance = Number.POSITIVE_INFINITY;
-
-    for (let index = 0; index < durations.length; index += 1) {
-      const candidate = durations[index];
-      const logDistance = Math.abs(Math.log10(Math.max(1, candidate)) - Math.log10(Math.max(1, target)));
-      if (logDistance < nearestLogDistance) {
-        nearestLogDistance = logDistance;
-        nearestIndex = index;
-      }
-    }
-
-    const nearestDuration = durations[nearestIndex];
-    const ratio = Math.abs(nearestDuration - target) / Math.max(target, 1);
-    if (ratio > 0.45) {
-      return null;
-    }
-
-    return nearestIndex;
+    return `<b>${formatPowerCurveDurationLabel(duration)}</b><br/>${activityPrefix}Power: <b>${formatPowerCurvePowerLabel(power, true)}</b>${wattsPerKgLabel}`;
   }
 
 }

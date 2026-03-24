@@ -376,12 +376,14 @@ export async function runAiInsights(
   const eventLookupQueryInput = effectiveQuery.resultKind === 'event_lookup' ? effectiveQuery : null;
   const latestEventQueryInput = effectiveQuery.resultKind === 'latest_event' ? effectiveQuery : null;
   const multiMetricQueryInput = effectiveQuery.resultKind === 'multi_metric_aggregate' ? effectiveQuery : null;
+  const powerCurveQueryInput = effectiveQuery.resultKind === 'power_curve' ? effectiveQuery : null;
   const metric = normalizeResult.metricKey
     ? getInsightMetricDefinition(normalizeResult.metricKey)
     : null;
   if (
     effectiveQuery.resultKind !== 'multi_metric_aggregate'
     && effectiveQuery.resultKind !== 'latest_event'
+    && effectiveQuery.resultKind !== 'power_curve'
     && !metric
   ) {
     logger.warn('[aiInsights] Unsupported metric key after normalization', {
@@ -437,12 +439,14 @@ export async function runAiInsights(
       dataType: (
         effectiveQuery.resultKind === 'multi_metric_aggregate'
         || effectiveQuery.resultKind === 'latest_event'
+        || effectiveQuery.resultKind === 'power_curve'
       )
         ? null
         : effectiveQuery.dataType,
       valueType: (
         effectiveQuery.resultKind === 'multi_metric_aggregate'
         || effectiveQuery.resultKind === 'latest_event'
+        || effectiveQuery.resultKind === 'power_curve'
       )
         ? null
         : effectiveQuery.valueType,
@@ -454,6 +458,7 @@ export async function runAiInsights(
       metricSelectionCount: effectiveQuery.resultKind === 'multi_metric_aggregate'
         ? effectiveQuery.metricSelections.length
         : effectiveQuery.resultKind === 'latest_event'
+          || effectiveQuery.resultKind === 'power_curve'
           ? 0
         : 1,
     },
@@ -466,10 +471,29 @@ export async function runAiInsights(
       ? multiMetricDefinitions.map(entry => entry.metric.label)
       : effectiveQuery.resultKind === 'latest_event'
         ? 'latest event'
+      : effectiveQuery.resultKind === 'power_curve'
+        ? 'power curve'
       : (metric as NonNullable<typeof metric>).label,
   );
+  const presentationWithPowerCurveWarnings = executionResult.resultKind === 'power_curve'
+    ? {
+      ...presentation,
+      warnings: [
+        ...(presentation.warnings ?? []),
+        ...(powerCurveQueryInput?.defaultedToCycling
+          ? ['No activity filter was specified, so this power-curve result defaults to Cycling.']
+          : []),
+        ...(executionResult.powerCurve.mode === 'best'
+          ? ['Best power curve means the max-power envelope across matching events, not one single event curve.']
+          : []),
+        ...(executionResult.powerCurve.safetyGuardApplied
+          ? [`Series count was very high, so only the latest ${executionResult.powerCurve.returnedSeriesCount} period envelopes are shown.`]
+          : []),
+      ],
+    }
+    : presentation;
   const emptyPresentation = {
-    ...presentation,
+    ...presentationWithPowerCurveWarnings,
     emptyState: DEFAULT_EMPTY_STATE,
   };
 
@@ -520,7 +544,7 @@ export async function runAiInsights(
       userID,
       input,
       effectivePrompt,
-      presentation,
+      presentation: presentationWithPowerCurveWarnings,
       emptyPresentation,
       summarizeAiInsightResult: aiInsightsRuntime.summarizeAiInsightResult,
       unitSettings,
@@ -564,6 +588,19 @@ export async function runAiInsights(
         ...contextBase,
         resultKind: 'latest_event',
         query: latestEventQueryInput,
+        executionResult,
+      };
+    }
+
+    if (executionResult.resultKind === 'power_curve') {
+      if (!powerCurveQueryInput) {
+        throw new HttpsError('internal', 'Could not summarize AI insights.');
+      }
+
+      return {
+        ...contextBase,
+        resultKind: 'power_curve',
+        query: powerCurveQueryInput,
         executionResult,
       };
     }

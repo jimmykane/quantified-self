@@ -16,6 +16,7 @@ import type {
   AiInsightsLatestEventOkResponse,
   AiInsightsMultiMetricAggregateOkResponse,
   AiInsightsOkResponse,
+  AiInsightsPowerCurveOkResponse,
   AiInsightsQuotaStatus,
   AiInsightsRequest,
   AiInsightsResponse,
@@ -39,6 +40,7 @@ import { resolveAiInsightsDisplayTitle } from '../../helpers/ai-insights-title.h
 import { AiInsightsChartComponent } from './ai-insights-chart.component';
 import { AiInsightsLoadingStateComponent } from './ai-insights-loading-state.component';
 import { AiInsightsMultiMetricChartComponent } from './ai-insights-multi-metric-chart.component';
+import { AiInsightsPowerCurveChartComponent } from './ai-insights-power-curve-chart.component';
 import { AiInsightsPromptPickerDialogComponent } from './ai-insights-prompt-picker-dialog.component';
 import {
   buildAggregateSummaryCards,
@@ -120,6 +122,7 @@ const AI_INSIGHTS_SUPPORT_SUBJECTS = {
     AiInsightsChartComponent,
     AiInsightsLoadingStateComponent,
     AiInsightsMultiMetricChartComponent,
+    AiInsightsPowerCurveChartComponent,
   ],
   templateUrl: './ai-insights-page.component.html',
   styleUrls: ['./ai-insights-page.component.scss'],
@@ -238,6 +241,10 @@ export class AiInsightsPageComponent {
   readonly latestEventOkResponse = computed<AiInsightsLatestEventOkResponse | null>(() => {
     const response = this.okResponse();
     return response?.resultKind === 'latest_event' ? response : null;
+  });
+  readonly powerCurveOkResponse = computed<AiInsightsPowerCurveOkResponse | null>(() => {
+    const response = this.okResponse();
+    return response?.resultKind === 'power_curve' ? response : null;
   });
   readonly emptyResponse = computed<AiInsightsEmptyResponse | null>(() => {
     const response = this.response();
@@ -667,7 +674,10 @@ export class AiInsightsPageComponent {
     this.aggregationContextLine()
   ));
   readonly resultHeaderContextRows = computed<Array<{ label: string; value: string }>>(() => {
-    const response = this.aggregateOkResponse() || this.multiMetricOkResponse() || this.emptyResponse();
+    const response = this.aggregateOkResponse()
+      || this.multiMetricOkResponse()
+      || this.powerCurveOkResponse()
+      || this.emptyResponse();
     if (!response) {
       return [];
     }
@@ -675,7 +685,7 @@ export class AiInsightsPageComponent {
     const rows: Array<{ label: string; value: string }> = [];
     const valueType = response.query.resultKind === 'multi_metric_aggregate'
       ? response.query.metricSelections[0]?.valueType
-      : response.query.resultKind === 'latest_event'
+      : response.query.resultKind === 'latest_event' || response.query.resultKind === 'power_curve'
         ? null
       : response.query.valueType;
 
@@ -705,14 +715,17 @@ export class AiInsightsPageComponent {
     return rows;
   });
   readonly aggregationContextLine = computed(() => {
-    const response = this.aggregateOkResponse() || this.multiMetricOkResponse() || this.emptyResponse();
+    const response = this.aggregateOkResponse()
+      || this.multiMetricOkResponse()
+      || this.powerCurveOkResponse()
+      || this.emptyResponse();
     if (!response) {
       return null;
     }
 
     const valueType = response.query.resultKind === 'multi_metric_aggregate'
       ? response.query.metricSelections[0]?.valueType
-      : response.query.resultKind === 'latest_event'
+      : response.query.resultKind === 'latest_event' || response.query.resultKind === 'power_curve'
         ? null
       : response.query.valueType;
     if (!valueType) {
@@ -732,6 +745,7 @@ export class AiInsightsPageComponent {
   readonly resultWarnings = computed(() => (
     this.aggregateOkResponse()?.presentation.warnings
     ?? this.multiMetricOkResponse()?.presentation.warnings
+    ?? this.powerCurveOkResponse()?.presentation.warnings
     ?? []
   ));
   readonly resultSummaryCards = computed<InsightSummaryCard[]>(() => {

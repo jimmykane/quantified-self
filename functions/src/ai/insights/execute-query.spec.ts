@@ -58,7 +58,7 @@ function createMockEvent(options: {
   id: string;
   startDate: Date;
   activityTypes: ActivityTypes[];
-  stats: Record<string, number | null | undefined>;
+  stats: Record<string, unknown>;
   isMerge?: boolean;
 }) {
   return {
@@ -145,6 +145,29 @@ function createLatestEventQuery(): Extract<NormalizedInsightQuery, { resultKind:
       source: 'prompt',
     },
     chartType: ChartTypes.LinesVertical,
+  };
+}
+
+function createPowerCurveQuery(
+  overrides: Partial<Extract<NormalizedInsightQuery, { resultKind: 'power_curve' }>> = {},
+): Extract<NormalizedInsightQuery, { resultKind: 'power_curve' }> {
+  return {
+    resultKind: 'power_curve',
+    mode: 'best',
+    categoryType: ChartDataCategoryTypes.DateType,
+    requestedTimeInterval: TimeIntervals.Monthly,
+    activityTypeGroups: [],
+    activityTypes: [ActivityTypes.Cycling],
+    dateRange: {
+      kind: 'bounded',
+      startDate: '2026-01-01T00:00:00.000Z',
+      endDate: '2026-03-31T23:59:59.999Z',
+      timezone: 'UTC',
+      source: 'prompt',
+    },
+    chartType: ChartTypes.LinesVertical,
+    defaultedToCycling: false,
+    ...overrides,
   };
 }
 
@@ -413,6 +436,263 @@ describe('execute-query', () => {
     expect(result.matchedEventsCount).toBe(0);
     expect(result.latestEvent.eventId).toBeNull();
     expect(result.latestEvent.startDate).toBeNull();
+  });
+
+  it('builds a best power-curve envelope across matching events', async () => {
+    const fetchEventDocs = vi.fn(async () => [
+      { id: 'e1', data: () => ({ startDate: new Date('2026-01-10T12:00:00.000Z') }) },
+      { id: 'e2', data: () => ({ startDate: new Date('2026-01-12T12:00:00.000Z') }) },
+    ]);
+    const importEvent = vi
+      .fn()
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'e1',
+        startDate: new Date('2026-01-10T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: {
+          PowerCurve: [
+            { duration: 5, power: 300, wattsPerKg: 4.1 },
+            { duration: 60, power: 250, wattsPerKg: 3.6 },
+          ],
+        },
+      }))
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'e2',
+        startDate: new Date('2026-01-12T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: {
+          PowerCurve: [
+            { duration: 5, power: 320, wattsPerKg: 4.3 },
+            { duration: 60, power: 240, wattsPerKg: 3.4 },
+            { duration: 120, power: 205, wattsPerKg: 3.1 },
+          ],
+        },
+      }));
+
+    setExecuteQueryDependenciesForTesting({
+      fetchEventDocs,
+      fetchDebugEventSnapshot: vi.fn(async () => ({
+        totalEventsCount: 2,
+        recentEventsSample: [],
+      })),
+      importEvent,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+    });
+
+    const result = await executeAiInsightsQuery(
+      'user-1',
+      createPowerCurveQuery({ mode: 'best' }),
+      'what is my best power curve',
+    );
+
+    expect(result.resultKind).toBe('power_curve');
+    if (result.resultKind !== 'power_curve') {
+      return;
+    }
+
+    expect(result.powerCurve.mode).toBe('best');
+    expect(result.powerCurve.matchedEventCount).toBe(2);
+    expect(result.powerCurve.returnedSeriesCount).toBe(1);
+    expect(result.powerCurve.series[0]?.points).toEqual([
+      { duration: 5, power: 320, wattsPerKg: 4.3 },
+      { duration: 60, power: 250, wattsPerKg: 3.6 },
+      { duration: 120, power: 205, wattsPerKg: 3.1 },
+    ]);
+  });
+
+  it('builds compare-over-time power-curve envelopes by requested interval', async () => {
+    const fetchEventDocs = vi.fn(async () => [
+      { id: 'e1', data: () => ({ startDate: new Date('2026-01-10T12:00:00.000Z') }) },
+      { id: 'e2', data: () => ({ startDate: new Date('2026-02-10T12:00:00.000Z') }) },
+      { id: 'e3', data: () => ({ startDate: new Date('2026-03-10T12:00:00.000Z') }) },
+    ]);
+    const importEvent = vi
+      .fn()
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'e1',
+        startDate: new Date('2026-01-10T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: {
+          PowerCurve: [{ duration: 60, power: 260 }],
+        },
+      }))
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'e2',
+        startDate: new Date('2026-02-10T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: {
+          PowerCurve: [{ duration: 60, power: 280 }],
+        },
+      }))
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'e3',
+        startDate: new Date('2026-03-10T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: {
+          PowerCurve: [{ duration: 60, power: 300 }],
+        },
+      }));
+
+    setExecuteQueryDependenciesForTesting({
+      fetchEventDocs,
+      fetchDebugEventSnapshot: vi.fn(async () => ({
+        totalEventsCount: 3,
+        recentEventsSample: [],
+      })),
+      importEvent,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+    });
+
+    const result = await executeAiInsightsQuery(
+      'user-1',
+      createPowerCurveQuery({
+        mode: 'compare_over_time',
+        requestedTimeInterval: TimeIntervals.Monthly,
+      }),
+      'compare my power curve over the last 3 months',
+    );
+
+    expect(result.resultKind).toBe('power_curve');
+    if (result.resultKind !== 'power_curve') {
+      return;
+    }
+
+    expect(result.powerCurve.mode).toBe('compare_over_time');
+    expect(result.powerCurve.resolvedTimeInterval).toBe(TimeIntervals.Monthly);
+    expect(result.powerCurve.requestedSeriesCount).toBe(3);
+    expect(result.powerCurve.returnedSeriesCount).toBe(3);
+    expect(result.powerCurve.series).toHaveLength(3);
+    expect(result.powerCurve.series.map(series => series.points[0]?.power)).toEqual([260, 280, 300]);
+    const expectedMonthlyBucketKeys = [
+      new Date(2026, 0, 1).getTime(),
+      new Date(2026, 1, 1).getTime(),
+      new Date(2026, 2, 1).getTime(),
+    ];
+    expect(result.powerCurve.series.map(series => Number(series.seriesKey))).toEqual(expectedMonthlyBucketKeys);
+  });
+
+  it('supports sports-lib wrapped numeric values inside PowerCurve points', async () => {
+    const fetchEventDocs = vi.fn(async () => [
+      { id: 'e1', data: () => ({ startDate: new Date('2026-01-10T12:00:00.000Z') }) },
+      { id: 'e2', data: () => ({ startDate: new Date('2026-01-12T12:00:00.000Z') }) },
+    ]);
+    const importEvent = vi
+      .fn()
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'e1',
+        startDate: new Date('2026-01-10T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: {
+          PowerCurve: [
+            {
+              duration: { Duration: 5 },
+              power: { Power: 300 },
+              wattsPerKg: { PowerWattsPerKg: 4.1 },
+            },
+            {
+              duration: { Duration: 60 },
+              power: { Power: 250 },
+              wattsPerKg: { PowerWattsPerKg: 3.6 },
+            },
+          ],
+        },
+      }))
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'e2',
+        startDate: new Date('2026-01-12T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: {
+          PowerCurve: [
+            {
+              duration: { Duration: 5 },
+              power: { Power: 320 },
+              wattsPerKg: { PowerWattsPerKg: 4.3 },
+            },
+          ],
+        },
+      }));
+
+    setExecuteQueryDependenciesForTesting({
+      fetchEventDocs,
+      fetchDebugEventSnapshot: vi.fn(async () => ({
+        totalEventsCount: 2,
+        recentEventsSample: [],
+      })),
+      importEvent,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+    });
+
+    const result = await executeAiInsightsQuery(
+      'user-1',
+      createPowerCurveQuery({ mode: 'best' }),
+      'what is my best power curve',
+    );
+
+    expect(result.resultKind).toBe('power_curve');
+    if (result.resultKind !== 'power_curve') {
+      return;
+    }
+
+    expect(result.powerCurve.matchedEventCount).toBe(2);
+    expect(result.powerCurve.series[0]?.points).toEqual([
+      { duration: 5, power: 320, wattsPerKg: 4.3 },
+      { duration: 60, power: 250, wattsPerKg: 3.6 },
+    ]);
+  });
+
+  it('applies the power-curve safety guard when compare series exceed the technical threshold', async () => {
+    const totalSeries = 130;
+    const docs = Array.from({ length: totalSeries }, (_, index) => ({
+      id: `e${index + 1}`,
+      data: () => ({ startDate: new Date(Date.UTC(2026, 0, index + 1, 12, 0, 0)) }),
+    }));
+    const fetchEventDocs = vi.fn(async () => docs);
+    const importEvent = vi.fn((eventJSON: { startDate?: Date }, eventID: string) => createMockEvent({
+      id: eventID,
+      startDate: eventJSON.startDate ?? new Date('2026-01-01T12:00:00.000Z'),
+      activityTypes: [ActivityTypes.Cycling],
+      stats: {
+        PowerCurve: [{ duration: 60, power: 200 }],
+      },
+    }));
+
+    setExecuteQueryDependenciesForTesting({
+      fetchEventDocs,
+      fetchDebugEventSnapshot: vi.fn(async () => ({
+        totalEventsCount: totalSeries,
+        recentEventsSample: [],
+      })),
+      importEvent,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+    });
+
+    const result = await executeAiInsightsQuery(
+      'user-1',
+      createPowerCurveQuery({
+        mode: 'compare_over_time',
+        requestedTimeInterval: TimeIntervals.Daily,
+      }),
+      'compare my power curve over time',
+    );
+
+    expect(result.resultKind).toBe('power_curve');
+    if (result.resultKind !== 'power_curve') {
+      return;
+    }
+
+    expect(result.powerCurve.requestedSeriesCount).toBe(totalSeries);
+    expect(result.powerCurve.safetyGuardApplied).toBe(true);
+    expect(result.powerCurve.safetyGuardMaxSeries).toBe(120);
+    expect(result.powerCurve.trimmedSeriesCount).toBe(10);
+    expect(result.powerCurve.returnedSeriesCount).toBe(120);
+    const expectedDailyBucketKeys = docs
+      .map((doc) => {
+        const startDate = doc.data().startDate as Date;
+        return new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate()).getTime();
+      })
+      .sort((left, right) => left - right)
+      .slice(-120);
+    expect(result.powerCurve.series.map(series => Number(series.seriesKey))).toEqual(expectedDailyBucketKeys);
   });
 
   it('scopes dependency overrides and restores previous test dependencies', async () => {

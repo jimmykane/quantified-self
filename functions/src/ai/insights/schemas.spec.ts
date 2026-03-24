@@ -72,6 +72,60 @@ describe('AiInsightsResponseSchema', () => {
     expect(parsed.success).toBe(true);
   });
 
+  it('parses power_curve responses through the result-kind discriminator', () => {
+    const parsed = AiInsightsResponseSchema.safeParse({
+      status: 'ok',
+      resultKind: 'power_curve',
+      narrative: 'Best power curve summary.',
+      query: {
+        resultKind: 'power_curve',
+        mode: 'best',
+        categoryType: ChartDataCategoryTypes.DateType,
+        requestedTimeInterval: TimeIntervals.Monthly,
+        activityTypeGroups: [],
+        activityTypes: [ActivityTypes.Cycling],
+        dateRange: {
+          kind: 'bounded',
+          startDate: '2026-01-01T00:00:00.000Z',
+          endDate: '2026-03-18T23:59:59.999Z',
+          timezone: 'UTC',
+          source: 'prompt',
+        },
+        chartType: ChartTypes.LinesVertical,
+        defaultedToCycling: true,
+      },
+      powerCurve: {
+        mode: 'best',
+        resolvedTimeInterval: TimeIntervals.Auto,
+        matchedEventCount: 4,
+        requestedSeriesCount: 1,
+        returnedSeriesCount: 1,
+        safetyGuardApplied: false,
+        safetyGuardMaxSeries: null,
+        trimmedSeriesCount: 0,
+        series: [
+          {
+            seriesKey: 'best',
+            label: 'Best power curve',
+            matchedEventCount: 4,
+            bucketStartDate: null,
+            bucketEndDate: null,
+            points: [
+              { duration: 5, power: 640, wattsPerKg: 8.4 },
+              { duration: 60, power: 420, wattsPerKg: 5.5 },
+            ],
+          },
+        ],
+      },
+      presentation: {
+        title: 'Best power curve for Cycling',
+        chartType: ChartTypes.LinesVertical,
+      },
+    });
+
+    expect(parsed.success).toBe(true);
+  });
+
   it('rejects invalid aggregate query fields for strict response contracts', () => {
     const parsed = AiInsightsResponseSchema.safeParse({
       status: 'ok',
