@@ -640,6 +640,69 @@ describe('execute-query', () => {
     ]);
   });
 
+  it('logs warning diagnostics when malformed power-curve points are dropped', async () => {
+    const loggerStub = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any;
+    const fetchEventDocs = vi.fn(async () => [
+      { id: 'e1', data: () => ({ startDate: new Date('2026-01-10T12:00:00.000Z') }) },
+    ]);
+    const importEvent = vi.fn(() => createMockEvent({
+      id: 'e1',
+      startDate: new Date('2026-01-10T12:00:00.000Z'),
+      activityTypes: [ActivityTypes.Cycling],
+      stats: {
+        PowerCurve: [
+          { duration: 5, power: 300 },
+          { duration: 'bad-value', power: 320 },
+          { duration: 30, power: 0 },
+          42,
+        ],
+      },
+    }));
+
+    setExecuteQueryDependenciesForTesting({
+      fetchEventDocs,
+      fetchDebugEventSnapshot: vi.fn(async () => ({
+        totalEventsCount: 1,
+        recentEventsSample: [],
+      })),
+      importEvent,
+      logger: loggerStub,
+    });
+
+    const result = await executeAiInsightsQuery(
+      'user-1',
+      createPowerCurveQuery({ mode: 'best' }),
+      'what is my best power curve',
+    );
+
+    expect(result.resultKind).toBe('power_curve');
+    if (result.resultKind !== 'power_curve') {
+      return;
+    }
+
+    expect(result.powerCurve.series[0]?.points).toEqual([
+      { duration: 5, power: 300 },
+    ]);
+    expect(loggerStub.warn).toHaveBeenCalledWith(
+      '[aiInsights] Dropped malformed power-curve points during normalization',
+      expect.objectContaining({
+        userID: 'user-1',
+        droppedPointCount: 3,
+        affectedEventCount: 1,
+        droppedPointSamples: expect.arrayContaining([
+          expect.objectContaining({
+            rawPointType: 'object',
+            durationType: 'string',
+            powerType: 'number',
+          }),
+          expect.objectContaining({
+            rawPointType: 'number',
+          }),
+        ]),
+      }),
+    );
+  });
+
   it('applies the power-curve safety guard when compare series exceed the technical threshold', async () => {
     const totalSeries = 130;
     const docs = Array.from({ length: totalSeries }, (_, index) => ({

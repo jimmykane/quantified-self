@@ -6,6 +6,7 @@ import {
   ChartTypes,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
+import { AI_INSIGHTS_POWER_CURVE_COMPARE_SERIES_SAFETY_MAX } from '../../../../shared/ai-insights-power-curve.constants';
 import { AiInsightsResponseSchema } from './schemas';
 
 vi.mock('@sports-alliance/sports-lib', async (importOriginal) => await importOriginal());
@@ -124,6 +125,56 @@ describe('AiInsightsResponseSchema', () => {
     });
 
     expect(parsed.success).toBe(true);
+  });
+
+  it('rejects power_curve responses when series exceed the safety max', () => {
+    const seriesCount = AI_INSIGHTS_POWER_CURVE_COMPARE_SERIES_SAFETY_MAX + 1;
+    const parsed = AiInsightsResponseSchema.safeParse({
+      status: 'ok',
+      resultKind: 'power_curve',
+      narrative: 'Power curve summary.',
+      query: {
+        resultKind: 'power_curve',
+        mode: 'compare_over_time',
+        categoryType: ChartDataCategoryTypes.DateType,
+        requestedTimeInterval: TimeIntervals.Monthly,
+        activityTypeGroups: [],
+        activityTypes: [ActivityTypes.Cycling],
+        dateRange: {
+          kind: 'bounded',
+          startDate: '2026-01-01T00:00:00.000Z',
+          endDate: '2026-03-18T23:59:59.999Z',
+          timezone: 'UTC',
+          source: 'prompt',
+        },
+        chartType: ChartTypes.LinesVertical,
+        defaultedToCycling: true,
+      },
+      powerCurve: {
+        mode: 'compare_over_time',
+        resolvedTimeInterval: TimeIntervals.Monthly,
+        matchedEventCount: seriesCount,
+        requestedSeriesCount: seriesCount,
+        returnedSeriesCount: seriesCount,
+        safetyGuardApplied: true,
+        safetyGuardMaxSeries: AI_INSIGHTS_POWER_CURVE_COMPARE_SERIES_SAFETY_MAX,
+        trimmedSeriesCount: 0,
+        series: Array.from({ length: seriesCount }, (_, index) => ({
+          seriesKey: `series-${index + 1}`,
+          label: `Series ${index + 1}`,
+          matchedEventCount: 1,
+          bucketStartDate: '2026-01-01T00:00:00.000Z',
+          bucketEndDate: '2026-01-31T23:59:59.999Z',
+          points: [{ duration: 60, power: 300 }],
+        })),
+      },
+      presentation: {
+        title: 'Power curve',
+        chartType: ChartTypes.LinesVertical,
+      },
+    });
+
+    expect(parsed.success).toBe(false);
   });
 
   it('rejects invalid aggregate query fields for strict response contracts', () => {

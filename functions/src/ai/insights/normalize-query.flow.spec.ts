@@ -1510,6 +1510,34 @@ describe('normalizeInsightQuery', () => {
     });
   });
 
+  it('does not default to cycling when power-curve prompts explicitly exclude cycling', async () => {
+    const result = await normalizeInsightQuery({
+      prompt: 'Compare my power curve excluding cycling in 2026.',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.resultKind).toBe('power_curve');
+    if (result.query.resultKind !== 'power_curve') {
+      return;
+    }
+
+    expect(result.query.defaultedToCycling).toBe(false);
+    expect(result.query.activityTypeGroups).toEqual([]);
+    expect(result.query.activityTypes).not.toContain(ActivityTypes.Cycling);
+    expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
+      startDate: '2026-01-01T00:00:00.000Z',
+      endDate: '2026-12-31T23:59:59.999Z',
+      timezone: 'UTC',
+      source: 'prompt',
+    });
+  });
+
   it('does not treat verb "run" as an activity type alias', async () => {
     const result = await normalizeInsightQuery({
       prompt: 'run a distance comparison by activity type',

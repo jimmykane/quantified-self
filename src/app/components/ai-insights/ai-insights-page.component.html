@@ -315,8 +315,11 @@
                 </div>
               </div>
             </div>
-          } @else if (latestEventOkResponse(); as result) {
-            <div class="result-content">
+          } @else if (okResponse(); as okResult) {
+            @switch (okResult.resultKind) {
+              @case ('latest_event') {
+                @if (latestEventOkResponse(); as result) {
+                  <div class="result-content">
               <div class="result-header">
                 @if (resultDateRangeNote(); as dateRangeNote) {
                   <div class="result-date-range-note">
@@ -381,9 +384,12 @@
                   </div>
                 </section>
               }
-            </div>
-          } @else if (eventLookupOkResponse(); as result) {
-            <div class="result-content">
+                  </div>
+                }
+              }
+              @case ('event_lookup') {
+                @if (eventLookupOkResponse(); as result) {
+                  <div class="result-content">
               <div class="result-header">
                 @if (resultDateRangeNote(); as dateRangeNote) {
                   <div class="result-date-range-note">
@@ -481,9 +487,12 @@
                   }
                 </div>
               }
-            </div>
-          } @else if (multiMetricOkResponse(); as result) {
-            <div class="result-content">
+                  </div>
+                }
+              }
+              @case ('multi_metric_aggregate') {
+                @if (multiMetricOkResponse(); as result) {
+                  <div class="result-content">
               <div class="result-header">
                 @if (resultDateRangeNote(); as dateRangeNote) {
                   <div class="result-date-range-note">
@@ -609,9 +618,12 @@
                   </div>
                 }
               }
-            </div>
-          } @else if (powerCurveOkResponse(); as result) {
-            <div class="result-content">
+                  </div>
+                }
+              }
+              @case ('power_curve') {
+                @if (powerCurveOkResponse(); as result) {
+                  <div class="result-content">
               <div class="result-header">
                 @if (resultDateRangeNote(); as dateRangeNote) {
                   <div class="result-date-range-note">
@@ -646,14 +658,17 @@
                 </mat-chip-set>
               }
 
-              <app-ai-insights-power-curve-chart
-                [response]="result"
-                [darkTheme]="isDarkTheme()"
-                [useAnimations]="useAnimations()">
-              </app-ai-insights-power-curve-chart>
-            </div>
-          } @else if (aggregateOkResponse(); as result) {
-            <div class="result-content">
+                  <app-ai-insights-power-curve-chart
+                    [response]="result"
+                    [darkTheme]="isDarkTheme()"
+                    [useAnimations]="useAnimations()">
+                  </app-ai-insights-power-curve-chart>
+                  </div>
+                }
+              }
+              @case ('aggregate') {
+                @if (aggregateOkResponse(); as result) {
+                  <div class="result-content">
               <div class="result-header">
                 @if (resultDateRangeNote(); as dateRangeNote) {
                   <div class="result-date-range-note">
@@ -823,7 +838,19 @@
                   </div>
                 }
               }
-            </div>
+                  </div>
+                }
+              }
+              @default {
+                <div class="state-panel state-panel-placeholder qs-glass-card-panel">
+                  <mat-icon>query_stats</mat-icon>
+                  <div>
+                    <p class="mat-title-medium state-title">Ready for your first question</p>
+                    <p class="mat-body-medium state-copy">Start with one metric and one date range, then refine from there.</p>
+                  </div>
+                </div>
+              }
+            }
           } @else {
             <div class="state-panel state-panel-placeholder qs-glass-card-panel">
               <mat-icon>query_stats</mat-icon>

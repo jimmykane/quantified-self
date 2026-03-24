@@ -2161,8 +2161,16 @@ export function createNormalizeQuery(
       const resolvedActivityTypes = filteredResolvedActivityTypes.length > 0
         ? filteredResolvedActivityTypes
         : expandedActivityTypes;
-      const defaultedToCycling = resolvedActivityTypes.length === 0 && explicitActivityTypeGroups.length === 0;
       const defaultCyclingActivityTypeGroups = [ActivityTypeGroups.CyclingGroup];
+      const hasExplicitCyclingExclusion = (
+        promptExcludedActivityTypeGroups.includes(ActivityTypeGroups.CyclingGroup)
+        || promptExcludedActivityTypes.includes(ActivityTypes.Cycling)
+      );
+      const defaultedToCycling = (
+        resolvedActivityTypes.length === 0
+        && explicitActivityTypeGroups.length === 0
+        && !hasExplicitCyclingExclusion
+      );
       const finalActivityTypeGroups = defaultedToCycling
         ? defaultCyclingActivityTypeGroups
         : explicitActivityTypeGroups;
@@ -2176,7 +2184,11 @@ export function createNormalizeQuery(
             ? expandedDefaultActivityTypes
             : [ActivityTypes.Cycling];
         })()
-        : resolvedActivityTypes;
+        : resolvedActivityTypes.length > 0
+          ? resolvedActivityTypes
+          : excludedActivityTypeSet.size > 0
+            ? excludeActivityTypes(CANONICAL_ACTIVITY_TYPES, excludedActivityTypeSet)
+            : [];
       const mode = resolvePowerCurveMode(prompt);
       const dateRange = resolveDateRange(promptDateRangeIntent, input.clientTimezone, resolvedDependencies.now());
       const requestedDateRanges = resolveRequestedDateRanges(

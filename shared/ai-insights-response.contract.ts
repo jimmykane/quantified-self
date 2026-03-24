@@ -13,6 +13,9 @@ import {
   AI_INSIGHTS_TOP_RESULTS_MAX,
   AI_INSIGHTS_TOP_RESULTS_MIN,
 } from './ai-insights-ranking.constants';
+import {
+  AI_INSIGHTS_POWER_CURVE_COMPARE_SERIES_SAFETY_MAX,
+} from './ai-insights-power-curve.constants';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -254,7 +257,7 @@ export const AiInsightPowerCurveSchema = z.object({
   safetyGuardApplied: z.boolean(),
   safetyGuardMaxSeries: z.number().int().positive().nullable(),
   trimmedSeriesCount: z.number().int().nonnegative(),
-  series: z.array(AiInsightPowerCurveSeriesSchema),
+  series: z.array(AiInsightPowerCurveSeriesSchema).max(AI_INSIGHTS_POWER_CURVE_COMPARE_SERIES_SAFETY_MAX),
 });
 
 export const AiInsightsMultiMetricAggregateMetricResultSchema = z.object({
