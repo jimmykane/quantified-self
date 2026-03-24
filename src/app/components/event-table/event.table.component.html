@@ -25,9 +25,9 @@
           matBadgeOverlap="true">compare_arrows</mat-icon>
       </button>
       }
-      <button mat-icon-button [disabled]="selection.selected.length > 20"
+      <button mat-icon-button
         class="action-icon-button"
-        matTooltip="{{ selection.selected.length > 20 ? 'Selection limit reached (max 20)' : 'Download as csv ' + selection.selected.length + ' events' }}"
+        matTooltip="Download as csv {{ selection.selected.length }} events"
         (click)="$event.preventDefault(); $event.stopPropagation(); downloadAsCSV($event)">
         <mat-icon
           class="qs-app-badge qs-app-badge--large"
@@ -36,9 +36,9 @@
           matBadgePosition="above after"
           matBadgeOverlap="true">csv</mat-icon>
       </button>
-      <button mat-icon-button [disabled]="selection.selected.length > 20"
+      <button mat-icon-button
         class="action-icon-button"
-        matTooltip="{{ selection.selected.length > 20 ? 'Selection limit reached (max 20)' : 'Download original files' }}"
+        matTooltip="Download original files"
         (click)="$event.preventDefault(); $event.stopPropagation(); downloadOriginals()">
         <mat-icon
           class="qs-app-badge qs-app-badge--large"
