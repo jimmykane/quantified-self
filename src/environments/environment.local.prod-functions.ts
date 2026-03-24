@@ -1,23 +1,20 @@
-// The file contents for the current environment will overwrite these during build.
-// The build system defaults to the dev environment which uses `environment.ts`, but if you do
-// `ng build --env=beta` then `environment.beta.ts` will be used instead.
-// The list of which env maps to which file can be found in `.angular-cli.json`.
+import { mapboxAccessToken } from './mapbox-token';
 declare function require(moduleName: string): any;
 const appVersion = require('../../package.json').version;
 
 export const environment = {
   appVersion: appVersion,
   supportEmail: 'support@quantified-self.io',
-  appUrl: 'https://beta.quantified-self.io',
+  appUrl: 'http://localhost:4200',
   production: false,
-  beta: true,
-  localhost: false,
+  beta: false,
+  localhost: true,
   forceAnalyticsCollection: true,
   useAuthEmulator: false,
   useFunctionsEmulator: false,
   firebase: {
     apiKey: 'AIzaSyBdR4jbTKmm_P4L7t26IFAgFn6Eoo02aU0',
-    authDomain: 'beta.quantified-self.io',
+    authDomain: 'quantified-self.io',
     databaseURL: 'https://quantified-self-io.firebaseio.com',
     projectId: 'quantified-self-io',
     storageBucket: 'quantified-self-io',
@@ -27,5 +24,5 @@ export const environment = {
     recaptchaSiteKey: '6Lfi_EwsAAAAACWwUUff0cd4E-92EJnXEwFuOSzz'
   },
   googleMapsMapId: '1192252b0032f7559388bd8a',
-  mapboxAccessToken: 'pk.eyJ1IjoiamltbXlrYW5lIiwiYSI6ImNta3Y2bXZrdjAyZWozZHBja2hsd3kxbmYifQ.LMMjdYEmiiKr7CtIQT66uQ',
+  mapboxAccessToken,
 };

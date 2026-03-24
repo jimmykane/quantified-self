@@ -124,6 +124,18 @@
                   "with": "src/environments/mapbox-token.local.ts"
                 }
               ]
+            },
+            "local-prod-functions": {
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.local.prod-functions.ts"
+                },
+                {
+                  "replace": "src/environments/mapbox-token.ts",
+                  "with": "src/environments/mapbox-token.local.ts"
+                }
+              ]
             }
           },
           "defaultConfiguration": ""
@@ -142,6 +154,9 @@
             },
             "local": {
               "buildTarget": "track-tools:build:local"
+            },
+            "local-prod-functions": {
+              "buildTarget": "track-tools:build:local-prod-functions"
             }
           }
         },

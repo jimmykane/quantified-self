@@ -5,6 +5,8 @@
   "scripts": {
     "ng": "ng",
     "start": "ng serve --configuration local --port 4200",
+    "start:functions:emu": "ng serve --configuration local --port 4200",
+    "start:functions:prod": "ng serve --configuration local-prod-functions --port 4200",
     "start:default": "ng serve --port 4200",
     "clean": "rm -rf dist",
     "build": "ng build --verbose",

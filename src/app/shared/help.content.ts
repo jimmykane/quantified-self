@@ -266,7 +266,7 @@ The app accepts these file types for manual activity upload:
 ## Export and backup options
 
 - You can export dashboard activity tables to CSV.
-- From selected dashboard rows, CSV export and original-file download actions support up to **20 events** per action.
+- From selected dashboard rows, CSV export and original-file download actions support your current multi-selection.
 - From an activity action menu, you can download **JSON**.
 - If an activity has positional data, you can download **GPX**.
 - If original source files are stored for an activity, you can download the original file or files.

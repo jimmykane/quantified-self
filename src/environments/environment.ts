@@ -16,6 +16,7 @@ export const environment = {
   localhost: true,
   forceAnalyticsCollection: true,
   useAuthEmulator: false, // Use Firebase Auth Emulator in local development
+  useFunctionsEmulator: true, // Route callable functions to local Functions emulator
   firebase: {
     apiKey: 'AIzaSyBdR4jbTKmm_P4L7t26IFAgFn6Eoo02aU0',
     authDomain: 'quantified-self.io',
