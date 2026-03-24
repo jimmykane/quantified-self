@@ -1,10 +1,12 @@
 {
   "name": "quantified-self",
-  "version": "8.0.0",
+  "version": "8.0.1",
   "license": "SEE LICENSE IN LICENSE.md",
   "scripts": {
     "ng": "ng",
     "start": "ng serve --configuration local --port 4200",
+    "start:functions:emu": "ng serve --configuration local --port 4200",
+    "start:functions:prod": "ng serve --configuration local-prod-functions --port 4200",
     "start:default": "ng serve --port 4200",
     "clean": "rm -rf dist",
     "build": "ng build --verbose",
@@ -43,7 +45,7 @@
     "@fontsource/inter": "^5.2.8",
     "@fontsource/material-symbols-rounded": "^5.2.38",
     "@sentry/angular": "^10.43.0",
-    "@sports-alliance/sports-lib": "^9.4.2",
+    "@sports-alliance/sports-lib": "^9.4.3",
     "@types/file-saver": "^2.0.7",
     "@zumer/snapdom": "^2.1.0",
     "buffer": "^6.0.3",

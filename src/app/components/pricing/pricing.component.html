@@ -9,9 +9,10 @@
 
   @if (currentRole === 'pro' || currentRole === 'basic') {
   <div class="manage-subscription-container">
-    <mat-card class="product-card" [class.pro-card]="currentRole === 'pro'" [class.basic-card]="currentRole === 'basic'">
+    <mat-card class="product-card subscription-card qs-glass-card-panel" [class.pro-card]="currentRole === 'pro'" [class.basic-card]="currentRole === 'basic'">
       <div class="manage-header">
         <div class="manage-heading">
+          <div class="manage-kicker">Membership overview</div>
           <div class="manage-title">{{ currentRole === 'pro' ? 'Pro Membership' : 'Basic Membership' }}</div>
           <div class="manage-subtitle">{{ currentRole === 'pro' ? 'Full access plan' : 'Essential access plan' }}</div>
         </div>
@@ -28,15 +29,24 @@
       </div>
       <mat-card-content class="manage-content">
         @if (currentRole === 'pro') {
-        <p class="manage-description">Your Pro membership does more than unlock features. It helps fund faster updates and keeps Quantified Self a strong alternative to big-tech platforms.</p>
+        <div class="manage-description">
+          <p class="manage-description-main">Your Pro membership does more than unlock features. It helps fund faster updates and keeps Quantified Self a strong alternative to big-tech platforms.</p>
+          <p class="manage-description-help">Use the billing portal to change your payment method, update your plan, or cancel anytime.</p>
+        </div>
         } @else {
-        <p class="manage-description">Your Basic membership gives you room to upload and check your analysis while supporting independent, privacy-first development.</p>
+        <div class="manage-description">
+          <p class="manage-description-main">Your Basic membership gives you room to upload and check your analysis while supporting independent, privacy-first development.</p>
+          <p class="manage-description-help">Need more headroom? You can upgrade to Pro instantly from this page or in the billing portal.</p>
+        </div>
         }
 
         @if (subscriptionSummary$ | async; as summary) {
         <div class="subscription-meta-grid">
           <div class="meta-item">
-            <div class="meta-label">{{ summary.cancelAtPeriodEnd ? 'Ends on' : 'Renews on' }}</div>
+            <div class="meta-label">
+              <mat-icon>event</mat-icon>
+              {{ summary.cancelAtPeriodEnd ? 'Ends on' : 'Renews on' }}
+            </div>
             <div class="meta-value">
               @if (summary.currentPeriodEnd) {
               {{ summary.currentPeriodEnd | date:'mediumDate' }}
@@ -46,8 +56,19 @@
             </div>
           </div>
           <div class="meta-item">
-            <div class="meta-label">Cancellation</div>
+            <div class="meta-label">
+              <mat-icon>sync_alt</mat-icon>
+              Cancellation
+            </div>
             <div class="meta-value">{{ summary.cancelAtPeriodEnd ? 'Will end at period end' : 'Renews automatically' }}</div>
+          </div>
+          <div class="meta-item meta-item-highlight">
+            <div class="meta-label">
+              <mat-icon>payments</mat-icon>
+              Next renewal
+            </div>
+            <div class="meta-value">{{ summary.renewalAmountDisplay }}</div>
+            <div class="meta-helper">Based on your Stripe billing setup.</div>
           </div>
         </div>
         } @else {
@@ -55,6 +76,7 @@
         }
 
         <div class="price-section manage-actions">
+          <p class="manage-actions-help">Manage billing securely to update your payment method, invoices, and subscription status.</p>
           @if (currentRole === 'basic') {
           <p class="upgrade-hint">Unlock unlimited activities and watch auto-sync with Pro.</p>
           <div class="manage-actions-buttons">

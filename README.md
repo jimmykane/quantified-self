@@ -64,6 +64,17 @@ npm start
 # Access at http://localhost:4200/
 ```
 
+Functions target toggle on localhost:
+```bash
+# Localhost app + Functions emulator (default)
+npm run start:functions:emu
+
+# Localhost app + production Cloud Functions
+npm run start:functions:prod
+```
+
+Note: In emulator mode, callable requests target the local Functions emulator, but backend code can still reach real external APIs depending on `functions/.env` or bound secrets.
+
 ### 4. Run Locally (Backend Environment)
 To run Cloud Functions and other Firebase services locally:
 ```bash

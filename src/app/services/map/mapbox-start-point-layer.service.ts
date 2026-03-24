@@ -86,7 +86,7 @@ export class MapboxStartPointLayerService {
       }))
     };
 
-    const source = map.getSource?.(config.sourceId);
+    const source = this.getSourceSafely(map, config.sourceId);
     if (!source) {
       map.addSource(config.sourceId, {
         type: 'geojson',
@@ -115,9 +115,7 @@ export class MapboxStartPointLayerService {
 
     this.ensureLayer(map, markerLayer, config.beforeLayerId);
     // Ensure any legacy hit layer is removed so it cannot appear as a visual artifact.
-    if (map.getLayer?.(config.hitLayerId)) {
-      map.removeLayer(config.hitLayerId);
-    }
+    this.removeLayerIfPresent(map, config.hitLayerId);
   }
 
   public bindInteraction(map: any, config: MapboxStartPointInteractionConfig): void {
@@ -222,19 +220,13 @@ export class MapboxStartPointLayerService {
     this.cancelDeferredRender(map, `${ids.sourceId}:${ids.layerId}:${ids.hitLayerId}`);
     this.unbindInteraction(map);
 
-    if (map.getLayer?.(ids.hitLayerId)) {
-      map.removeLayer(ids.hitLayerId);
-    }
-    if (map.getLayer?.(ids.layerId)) {
-      map.removeLayer(ids.layerId);
-    }
-    if (map.getSource?.(ids.sourceId)) {
-      map.removeSource(ids.sourceId);
-    }
+    this.removeLayerIfPresent(map, ids.hitLayerId);
+    this.removeLayerIfPresent(map, ids.layerId);
+    this.removeSourceIfPresent(map, ids.sourceId);
   }
 
   private ensureLayer(map: any, layer: any, beforeLayerId?: string): void {
-    if (!map.getLayer?.(layer.id)) {
+    if (!this.getLayerSafely(map, layer.id)) {
       if (beforeLayerId) {
         map.addLayer(layer, beforeLayerId);
       } else {
@@ -263,13 +255,17 @@ export class MapboxStartPointLayerService {
 
   private isStyleReady(map: any): boolean {
     if (!map) return false;
-    if (typeof map.isStyleLoaded === 'function') {
-      return map.isStyleLoaded();
+    try {
+      if (typeof map.isStyleLoaded === 'function') {
+        return map.isStyleLoaded();
+      }
+      if (typeof map.loaded === 'function') {
+        return map.loaded();
+      }
+      return true;
+    } catch {
+      return false;
     }
-    if (typeof map.loaded === 'function') {
-      return map.loaded();
-    }
-    return true;
   }
 
   private deferRender(map: any, key: string, callback: () => void): void {
@@ -338,5 +334,45 @@ export class MapboxStartPointLayerService {
     if (minzoom < 0) return 0;
     if (minzoom > 24) return 24;
     return minzoom;
+  }
+
+  private getLayerSafely(map: any, layerId: string): any {
+    if (!map?.getLayer || !layerId) return null;
+    try {
+      return map.getLayer(layerId);
+    } catch {
+      // Mapbox can throw here during style teardown/reload.
+      return null;
+    }
+  }
+
+  private getSourceSafely(map: any, sourceId: string): any {
+    if (!map?.getSource || !sourceId) return null;
+    try {
+      return map.getSource(sourceId);
+    } catch {
+      // Mapbox can throw here during style teardown/reload.
+      return null;
+    }
+  }
+
+  private removeLayerIfPresent(map: any, layerId: string): void {
+    if (!map?.removeLayer || !layerId) return;
+    if (!this.getLayerSafely(map, layerId)) return;
+    try {
+      map.removeLayer(layerId);
+    } catch {
+      // Ignore teardown races; cleanup is best-effort.
+    }
+  }
+
+  private removeSourceIfPresent(map: any, sourceId: string): void {
+    if (!map?.removeSource || !sourceId) return;
+    if (!this.getSourceSafely(map, sourceId)) return;
+    try {
+      map.removeSource(sourceId);
+    } catch {
+      // Ignore teardown races; cleanup is best-effort.
+    }
   }
 }

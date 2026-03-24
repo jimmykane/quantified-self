@@ -194,20 +194,6 @@
                 <span class="result-loading-skeleton result-loading-skeleton--line result-loading-skeleton--line-short"></span>
               </div>
 
-              <div class="summary-grid summary-grid--loading" aria-hidden="true">
-                @for (item of loadingSummarySkeletonItems; track item) {
-                  <section class="summary-card summary-card--loading qs-glass-card-panel">
-                    <div class="summary-label-row">
-                      <span class="result-loading-skeleton result-loading-skeleton--summary-label"></span>
-                    </div>
-                    <span class="result-loading-skeleton result-loading-skeleton--summary-value"></span>
-                    <span class="result-loading-skeleton result-loading-skeleton--summary-meta"></span>
-                  </section>
-                }
-              </div>
-
-              <mat-divider></mat-divider>
-
               <div class="result-loading-chart-shell" aria-hidden="true">
                 <div class="result-loading-chart-frame">
                   <div class="result-loading-chart-y-axis">
@@ -245,6 +231,20 @@
                   </div>
                 </div>
               </div>
+
+              <mat-divider></mat-divider>
+
+              <div class="summary-grid summary-grid--loading" aria-hidden="true">
+                @for (item of loadingSummarySkeletonItems; track item) {
+                  <section class="summary-card summary-card--loading qs-glass-card-panel">
+                    <div class="summary-label-row">
+                      <span class="result-loading-skeleton result-loading-skeleton--summary-label"></span>
+                    </div>
+                    <span class="result-loading-skeleton result-loading-skeleton--summary-value"></span>
+                    <span class="result-loading-skeleton result-loading-skeleton--summary-meta"></span>
+                  </section>
+                }
+              </div>
             </div>
           } @else if (errorMessage(); as errorMessage) {
             <div class="state-panel state-panel-error qs-glass-card-panel">
@@ -252,6 +252,13 @@
               <div>
                 <p class="mat-title-medium state-title">Could not generate this insight</p>
                 <p class="mat-body-medium state-copy">{{ errorMessage }}</p>
+                <a
+                  mat-stroked-button
+                  class="state-support-button"
+                  [href]="errorResultSupportMailtoHref()">
+                  <mat-icon>mail</mat-icon>
+                  <span>Contact us</span>
+                </a>
               </div>
             </div>
           } @else if (unsupportedResponse(); as unsupported) {
@@ -298,6 +305,13 @@
                 <div>
                   <p class="mat-title-medium state-title">No matching data</p>
                   <p class="mat-body-medium state-copy">{{ empty.presentation.emptyState }}</p>
+                  <a
+                    mat-stroked-button
+                    class="state-support-button"
+                    [href]="emptyResultSupportMailtoHref()">
+                    <mat-icon>mail</mat-icon>
+                    <span>Contact us</span>
+                  </a>
                 </div>
               </div>
             </div>

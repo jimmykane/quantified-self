@@ -254,7 +254,7 @@ const PROMPT_ACTIVITY_TYPE_ALIAS_PATTERNS: ReadonlyArray<{
   },
   {
     pattern: /\b(swim|swims)\b/i,
-    activityTypes: [ActivityTypes.Swimming],
+    activityTypes: [ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming],
   },
 ];
 
@@ -579,15 +579,60 @@ function resolveMultiPeriodMode(
     return 'combined';
   }
 
-  if (/\b(total|sum|combined)\b/.test(normalizedPrompt) || aggregation === 'total') {
-    return 'combined';
-  }
-
   if (/\b(compare|vs|versus|by year|per year|separately)\b/.test(normalizedPrompt)) {
     return 'compare';
   }
 
+  if (/\b(total|sum|combined)\b/.test(normalizedPrompt) || aggregation === 'total') {
+    return 'combined';
+  }
+
   return 'combined';
+}
+
+interface ResolvePromptDateSelectionOptions {
+  timeZone: string;
+  now: Date;
+}
+
+function resolvePromptRelativeYearComparisonDateSelection(
+  prompt: string,
+  category: ModelCategoryCode | undefined,
+  aggregation: ModelAggregationCode | undefined,
+  options: ResolvePromptDateSelectionOptions,
+): PromptDateSelectionIntent | null {
+  const normalizedPrompt = normalizePromptSearchText(prompt);
+  if (!normalizedPrompt) {
+    return null;
+  }
+
+  if (!/\b(compare|vs|versus)\b/.test(normalizedPrompt)) {
+    return null;
+  }
+
+  if (!/\bthis year\b/.test(normalizedPrompt) || !/\blast year\b/.test(normalizedPrompt)) {
+    return null;
+  }
+
+  const today = getZonedDateParts(options.now, options.timeZone);
+  const currentYear = today.year;
+  const previousYear = currentYear - 1;
+  const periodMode = resolveMultiPeriodMode(prompt, category, aggregation);
+
+  return {
+    effectiveDateRangeIntent: buildNormalizedAbsoluteRange(
+      { year: previousYear, month: 1, day: 1 },
+      { year: currentYear, month: 12, day: 31 },
+    ),
+    requestedDateRangeIntents: [
+      resolveCalendarYearAbsoluteRange(previousYear),
+      resolveCalendarYearAbsoluteRange(currentYear),
+    ],
+    periodMode,
+    compareRequestedTimeInterval: category === 'activity' || periodMode !== 'compare'
+      ? undefined
+      : 'yearly',
+  };
 }
 
 function resolvePromptYearListDateSelection(
@@ -663,7 +708,21 @@ function resolvePromptDateSelection(
   prompt: string,
   category: ModelCategoryCode | undefined,
   aggregation: ModelAggregationCode | undefined,
+  options: ResolvePromptDateSelectionOptions = {
+    timeZone: 'UTC',
+    now: new Date(),
+  },
 ): PromptDateSelectionIntent {
+  const relativeYearComparisonSelection = resolvePromptRelativeYearComparisonDateSelection(
+    prompt,
+    category,
+    aggregation,
+    options,
+  );
+  if (relativeYearComparisonSelection) {
+    return relativeYearComparisonSelection;
+  }
+
   const multiYearSelection = resolvePromptYearListDateSelection(prompt, category, aggregation);
   if (multiYearSelection) {
     return multiYearSelection;
@@ -1365,7 +1424,10 @@ function resolveMultiMetricGroupingMode(
   return 'overall';
 }
 
-function resolveMultiMetricIntent(prompt: string): MultiMetricIntent | NormalizeInsightQueryUnsupportedResult | null {
+function resolveMultiMetricIntent(
+  prompt: string,
+  promptContext: NormalizeQueryPromptContext | null = null,
+): MultiMetricIntent | NormalizeInsightQueryUnsupportedResult | null {
   const normalizedPrompt = normalizePromptSearchText(prompt);
   const metricMatches = findInsightMetricAliasMatches(canonicalizeInsightPrompt(prompt));
   if (metricMatches.length <= 1) {
@@ -1380,10 +1442,12 @@ function resolveMultiMetricIntent(prompt: string): MultiMetricIntent | Normalize
     return buildUnsupportedResult('unsupported_multi_metric_combination', prompt);
   }
 
-  const category = resolvePromptCategory(prompt);
-  const aggregation = resolvePromptAggregation(prompt);
-  const promptDateSelection = resolvePromptDateSelection(prompt, category, aggregation);
-  const requestedTimeInterval = resolvePromptRequestedTimeInterval(prompt)
+  const category = promptContext?.promptCategory ?? resolvePromptCategory(prompt);
+  const aggregation = promptContext?.promptAggregation ?? resolvePromptAggregation(prompt);
+  const promptDateSelection = promptContext?.promptDateSelection
+    ?? resolvePromptDateSelection(prompt, category, aggregation);
+  const requestedTimeInterval = promptContext?.promptRequestedTimeInterval
+    ?? resolvePromptRequestedTimeInterval(prompt)
     ?? promptDateSelection.compareRequestedTimeInterval;
   const dateRangeIntent = promptDateSelection.effectiveDateRangeIntent;
   if (
@@ -1956,10 +2020,19 @@ export async function withNormalizeQueryDependenciesForTesting<T>(
 
 export function buildNormalizeQueryPromptContext(
   prompt: string,
+  options: Partial<ResolvePromptDateSelectionOptions> = {},
 ): NormalizeQueryPromptContext {
   const promptAggregation = resolvePromptAggregation(prompt);
   const promptCategory = resolvePromptCategory(prompt);
-  const promptDateSelection = resolvePromptDateSelection(prompt, promptCategory, promptAggregation);
+  const promptDateSelection = resolvePromptDateSelection(
+    prompt,
+    promptCategory,
+    promptAggregation,
+    {
+      timeZone: options.timeZone ?? 'UTC',
+      now: options.now ?? new Date(),
+    },
+  );
   const promptRequestedTimeInterval = resolvePromptRequestedTimeInterval(prompt)
     ?? promptDateSelection.compareRequestedTimeInterval;
   const promptChartPreference = resolvePromptChartPreference(prompt);
@@ -1994,13 +2067,16 @@ export function createNormalizeQuery(
       return buildUnsupportedResult('unsupported_capability', prompt);
     }
 
-    const promptContext = buildNormalizeQueryPromptContext(prompt);
+    const promptContext = buildNormalizeQueryPromptContext(prompt, {
+      timeZone: input.clientTimezone,
+      now: resolvedDependencies.now(),
+    });
     const {
       promptDateSelection,
       promptRequestedTimeInterval,
     } = promptContext;
     const promptDateRangeIntent = promptDateSelection.effectiveDateRangeIntent;
-    const multiMetricIntent = resolveMultiMetricIntent(prompt);
+    const multiMetricIntent = resolveMultiMetricIntent(prompt, promptContext);
     if (multiMetricIntent && 'status' in multiMetricIntent) {
       return multiMetricIntent;
     }

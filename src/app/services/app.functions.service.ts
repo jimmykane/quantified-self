@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { FirebaseApp } from '@angular/fire/app';
-import { Functions, getFunctions, httpsCallable, httpsCallableFromURL } from '@angular/fire/functions';
+import { Functions, connectFunctionsEmulator, getFunctions, httpsCallable } from '@angular/fire/functions';
 import { environment } from '../../environments/environment';
 import { FunctionName, FUNCTIONS_MANIFEST } from '@shared/functions-manifest';
 
@@ -11,6 +11,7 @@ export class AppFunctionsService {
     private app = inject(FirebaseApp);
     private static readonly LOCAL_FUNCTIONS_EMULATOR_HOST = '127.0.0.1';
     private static readonly LOCAL_FUNCTIONS_EMULATOR_PORT = 5001;
+    private functionsByRegion = new Map<string, Functions>();
     /**
      * Map of pre-initialized callable functions.
      * We initialize these in the constructor to capture the current Injection Context.
@@ -22,13 +23,8 @@ export class AppFunctionsService {
     constructor() {
         // Initialize all functions immediately to bind them to the current injection context.
         Object.entries(FUNCTIONS_MANIFEST).forEach(([key, config]) => {
-            const functionsInstance = getFunctions(this.app, config.region);
-            const callable = this.shouldUseLocalAiInsightsEmulator(key as FunctionName)
-                ? httpsCallableFromURL(
-                    functionsInstance,
-                    this.buildLocalCallableUrl(config.region, config.name),
-                )
-                : httpsCallable(functionsInstance, config.name);
+            const functionsInstance = this.getOrCreateFunctionsForRegion(config.region);
+            const callable = httpsCallable(functionsInstance, config.name);
             this.callables.set(key as FunctionName, callable);
         });
     }
@@ -44,12 +40,26 @@ export class AppFunctionsService {
         return callable(data);
     }
 
-    private shouldUseLocalAiInsightsEmulator(functionKey: FunctionName): boolean {
-        return environment.localhost === true
-            && (functionKey === 'aiInsights' || functionKey === 'getAiInsightsQuotaStatus');
+    private getOrCreateFunctionsForRegion(region: string): Functions {
+        const existing = this.functionsByRegion.get(region);
+        if (existing) {
+            return existing;
+        }
+
+        const functions = getFunctions(this.app, region);
+        if (this.shouldUseFunctionsEmulator()) {
+            connectFunctionsEmulator(
+                functions,
+                AppFunctionsService.LOCAL_FUNCTIONS_EMULATOR_HOST,
+                AppFunctionsService.LOCAL_FUNCTIONS_EMULATOR_PORT,
+            );
+        }
+
+        this.functionsByRegion.set(region, functions);
+        return functions;
     }
 
-    private buildLocalCallableUrl(region: string, functionName: string): string {
-        return `http://${AppFunctionsService.LOCAL_FUNCTIONS_EMULATOR_HOST}:${AppFunctionsService.LOCAL_FUNCTIONS_EMULATOR_PORT}/${environment.firebase.projectId}/${region}/${functionName}`;
+    private shouldUseFunctionsEmulator(): boolean {
+        return environment.localhost === true && environment.useFunctionsEmulator === true;
     }
 }

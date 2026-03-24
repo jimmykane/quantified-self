@@ -12,6 +12,7 @@ import { Observable, from, switchMap, filter, take, map, timeout, firstValueFrom
 import { AppWindowService } from './app.window.service';
 import { LoggerService } from './logger.service';
 import { AppFunctionsService } from './app.functions.service';
+import { UpcomingRenewalAmountResult } from '@shared/stripe-renewal';
 
 export interface StripeProduct {
     id: string;
@@ -49,6 +50,7 @@ export interface StripeSubscription {
     current_period_end: any;
     current_period_start: any;
     cancel_at_period_end: boolean;
+    created?: any;
 }
 
 type CheckoutMode = 'subscription' | 'payment';
@@ -67,8 +69,16 @@ interface CheckoutSessionPayload {
     mode: CheckoutMode;
     automatic_tax: { enabled: true };
     metadata: { firebaseUID: string };
+    payment_method_collection?: 'if_required';
     promotion_code?: string;
-    subscription_data?: { metadata: { firebaseUID: string } };
+    subscription_data?: {
+        metadata: { firebaseUID: string };
+        trial_settings?: {
+            end_behavior: {
+                missing_payment_method: 'cancel';
+            };
+        };
+    };
 }
 
 interface CheckoutSessionDocumentData {
@@ -215,7 +225,7 @@ export class AppPaymentService {
     ): Promise<void> {
         const checkoutInput = this.resolveCheckoutInput(price);
         const resolvedPromotionCodeId = await this.resolvePromotionCodeIdForCheckout(price, checkoutInput);
-        const hasPaidHistory = resolvedPromotionCodeId ? await this.hasPaidSubscriptionHistory() : false;
+        const hasPaidHistory = resolvedPromotionCodeId ? await this.hasPaidSubscriptionHistoryForCheckoutEligibility() : false;
         const promotionCodeId = hasPaidHistory ? null : resolvedPromotionCodeId;
 
         await this.runPreCheckoutLinkCheck(user);
@@ -374,7 +384,7 @@ export class AppPaymentService {
             price: checkoutInput.priceId,
             success_url: successUrl,
             cancel_url: cancelUrl,
-            allow_promotion_codes: !promotionCodeId,
+            allow_promotion_codes: true,
             mode: checkoutInput.mode,
             automatic_tax: { enabled: true },
             metadata: { firebaseUID: userId }
@@ -385,8 +395,14 @@ export class AppPaymentService {
         }
 
         if (checkoutInput.mode === 'subscription') {
+            payload.payment_method_collection = 'if_required';
             payload.subscription_data = {
-                metadata: { firebaseUID: userId }
+                metadata: { firebaseUID: userId },
+                trial_settings: {
+                    end_behavior: {
+                        missing_payment_method: 'cancel'
+                    }
+                }
             };
         }
 
@@ -547,6 +563,14 @@ export class AppPaymentService {
     }
 
     async hasPaidSubscriptionHistory(): Promise<boolean> {
+        return this.checkPaidSubscriptionHistory('fail-open');
+    }
+
+    private async hasPaidSubscriptionHistoryForCheckoutEligibility(): Promise<boolean> {
+        return this.checkPaidSubscriptionHistory('fail-closed');
+    }
+
+    private async checkPaidSubscriptionHistory(onError: 'fail-open' | 'fail-closed'): Promise<boolean> {
         const user = this.auth.currentUser;
         if (!user) {
             return false;
@@ -563,9 +587,59 @@ export class AppPaymentService {
             const snapshot = await runInInjectionContext(this.injector, () => getDocs(historyQuery));
             return snapshot.docs.length > 0;
         } catch (error) {
-            this.logger.warn('Could not verify subscription history. Hiding trial messaging by default.', error);
-            return true;
+            if (onError === 'fail-closed') {
+                this.logger.warn('Could not verify subscription history for checkout gating. Blocking auto promo application (fail-closed).', error);
+                return true;
+            }
+
+            this.logger.warn('Could not verify subscription history. Proceeding with trial messaging (fail-open).', error);
+            return false;
         }
+    }
+
+    async getUpcomingRenewalAmount(): Promise<UpcomingRenewalAmountResult> {
+        if (!this.auth.currentUser) {
+            return { status: 'unavailable' };
+        }
+
+        try {
+            const result = await this.functionsService.call<void, unknown>('getUpcomingRenewalAmount');
+            return this.normalizeUpcomingRenewalAmountResult(result.data);
+        } catch (error) {
+            this.logger.warn('Could not fetch upcoming renewal amount. Falling back to unavailable state.', error);
+            return { status: 'unavailable' };
+        }
+    }
+
+    private normalizeUpcomingRenewalAmountResult(raw: unknown): UpcomingRenewalAmountResult {
+        if (!raw || typeof raw !== 'object') {
+            return { status: 'unavailable' };
+        }
+
+        const status = (raw as { status?: unknown }).status;
+        if (status === 'no_upcoming_charge') {
+            return { status: 'no_upcoming_charge' };
+        }
+
+        if (status === 'unavailable') {
+            return { status: 'unavailable' };
+        }
+
+        if (status !== 'ready') {
+            return { status: 'unavailable' };
+        }
+
+        const amountMinor = (raw as { amountMinor?: unknown }).amountMinor;
+        const currency = (raw as { currency?: unknown }).currency;
+        if (typeof amountMinor !== 'number' || !Number.isFinite(amountMinor) || typeof currency !== 'string' || !currency.trim()) {
+            return { status: 'unavailable' };
+        }
+
+        return {
+            status: 'ready',
+            amountMinor: Math.round(amountMinor),
+            currency: currency.toUpperCase(),
+        };
     }
 
     /**

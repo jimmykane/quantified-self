@@ -3,7 +3,7 @@ import { PricingComponent } from './pricing.component';
 import { AppUserService } from '../../services/app.user.service';
 import { AppPaymentService, StripePrice, StripeProduct, StripeSubscription } from '../../services/app.payment.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
-import { of } from 'rxjs';
+import { Subject, of } from 'rxjs';
 import { Auth } from '@angular/fire/auth';
 import { Analytics } from '@angular/fire/analytics';
 import { Router } from '@angular/router';
@@ -11,6 +11,7 @@ import { By } from '@angular/platform-browser';
 
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AI_INSIGHTS_REQUEST_LIMITS, USAGE_LIMITS } from '@shared/limits';
+import { UpcomingRenewalAmountResult } from '@shared/stripe-renewal';
 
 class MockAppPaymentService {
     getProducts() {
@@ -30,6 +31,9 @@ class MockAppPaymentService {
     }
     hasPaidSubscriptionHistory() {
         return Promise.resolve(false);
+    }
+    getUpcomingRenewalAmount(): Promise<UpcomingRenewalAmountResult> {
+        return Promise.resolve({ status: 'unavailable' });
     }
 }
 
@@ -790,17 +794,29 @@ describe('PricingComponent', () => {
             current_period_start: new Date('2025-01-01T00:00:00Z'),
             cancel_at_period_end: false
         };
+        (subscription as any).items = {
+            data: [{
+                price: {
+                    unit_amount: 1200,
+                    currency: 'usd'
+                }
+            }]
+        };
 
         vi.spyOn(userService, 'getSubscriptionRole').mockResolvedValue('pro');
         vi.spyOn(paymentService, 'getUserSubscriptions').mockReturnValue(of([subscription]));
 
         await component.ngOnInit();
         fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
 
         const content = fixture.nativeElement.textContent as string;
         expect(content).toContain('Pro Membership');
         expect(content).toContain('Renews on');
         expect(content).toContain('Manage Subscription');
+        expect(content).toContain('Next renewal');
+        expect(content).toContain('Amount unavailable');
     });
 
     it('should render basic subscription details inside manage container', async () => {
@@ -819,12 +835,218 @@ describe('PricingComponent', () => {
 
         await component.ngOnInit();
         fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
 
         const content = fixture.nativeElement.textContent as string;
         expect(content).toContain('Basic Membership');
         expect(content).toContain('Trialing');
         expect(content).toContain('Ends on');
         expect(content).toContain('Ends at period end');
+        expect(content).toContain('Amount unavailable');
+    });
+
+    it('should render Calculating… while renewal callable is pending, then render exact amount', async () => {
+        const paymentService = TestBed.inject(AppPaymentService);
+        const userService = TestBed.inject(AppUserService);
+        let resolveRenewalAmount: ((value: UpcomingRenewalAmountResult) => void) | null = null;
+        const renewalPromise = new Promise<UpcomingRenewalAmountResult>((resolve) => {
+            resolveRenewalAmount = resolve;
+        });
+        const subscription: StripeSubscription = {
+            id: 'sub_invoice',
+            status: 'active',
+            current_period_end: new Date('2026-02-01T00:00:00Z'),
+            current_period_start: new Date('2026-01-01T00:00:00Z'),
+            cancel_at_period_end: false
+        };
+
+        vi.spyOn(userService, 'getSubscriptionRole').mockResolvedValue('pro');
+        vi.spyOn(paymentService, 'getUserSubscriptions').mockReturnValue(of([subscription]));
+        vi.spyOn(paymentService, 'getUpcomingRenewalAmount').mockReturnValue(renewalPromise);
+
+        await component.ngOnInit();
+        fixture.detectChanges();
+
+        expect(fixture.nativeElement.textContent as string).toContain('Calculating…');
+
+        resolveRenewalAmount?.({
+            status: 'ready',
+            amountMinor: 2000,
+            currency: 'USD'
+        });
+        await fixture.whenStable();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect(fixture.nativeElement.textContent as string).toContain('$20');
+    });
+
+    it('should render No upcoming charge when callable returns no_upcoming_charge', async () => {
+        const paymentService = TestBed.inject(AppPaymentService);
+        const userService = TestBed.inject(AppUserService);
+        const subscription: StripeSubscription = {
+            id: 'sub_discounted',
+            status: 'active',
+            current_period_end: new Date('2026-02-01T00:00:00Z'),
+            current_period_start: new Date('2026-01-01T00:00:00Z'),
+            cancel_at_period_end: false
+        };
+        vi.spyOn(userService, 'getSubscriptionRole').mockResolvedValue('pro');
+        vi.spyOn(paymentService, 'getUserSubscriptions').mockReturnValue(of([subscription]));
+        vi.spyOn(paymentService, 'getUpcomingRenewalAmount').mockResolvedValue({ status: 'no_upcoming_charge' });
+
+        await component.ngOnInit();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        const content = fixture.nativeElement.textContent as string;
+        expect(content).toContain('No upcoming charge');
+    });
+
+    it('should render Amount unavailable when callable returns unavailable', async () => {
+        const paymentService = TestBed.inject(AppPaymentService);
+        const userService = TestBed.inject(AppUserService);
+        const subscription: StripeSubscription = {
+            id: 'sub_unavailable',
+            status: 'active',
+            current_period_end: new Date('2026-02-01T00:00:00Z'),
+            current_period_start: new Date('2026-01-01T00:00:00Z'),
+            cancel_at_period_end: false
+        };
+        vi.spyOn(userService, 'getSubscriptionRole').mockResolvedValue('pro');
+        vi.spyOn(paymentService, 'getUserSubscriptions').mockReturnValue(of([subscription]));
+        vi.spyOn(paymentService, 'getUpcomingRenewalAmount').mockResolvedValue({ status: 'unavailable' });
+
+        await component.ngOnInit();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect(fixture.nativeElement.textContent as string).toContain('Amount unavailable');
+    });
+
+    it('should ignore stale renewal result after subscriptions become empty', async () => {
+        const paymentService = TestBed.inject(AppPaymentService);
+        const userService = TestBed.inject(AppUserService);
+        let resolveRenewalAmount: ((value: UpcomingRenewalAmountResult) => void) | null = null;
+        const renewalPromise = new Promise<UpcomingRenewalAmountResult>((resolve) => {
+            resolveRenewalAmount = resolve;
+        });
+        const subscriptions$ = new Subject<StripeSubscription[]>();
+
+        vi.spyOn(userService, 'getSubscriptionRole').mockResolvedValue('pro');
+        vi.spyOn(paymentService, 'getUserSubscriptions').mockReturnValue(subscriptions$.asObservable());
+        vi.spyOn(paymentService, 'getUpcomingRenewalAmount').mockReturnValue(renewalPromise);
+
+        await component.ngOnInit();
+        subscriptions$.next([{
+            id: 'sub_pending',
+            status: 'active',
+            current_period_end: new Date('2026-06-15T12:00:00Z'),
+            current_period_start: new Date('2026-05-15T12:00:00Z'),
+            cancel_at_period_end: false
+        }]);
+        fixture.detectChanges();
+        expect(fixture.nativeElement.textContent as string).toContain('Calculating…');
+
+        subscriptions$.next([]);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+        expect(fixture.nativeElement.textContent as string).toContain('Subscription details are syncing. Refresh in a moment.');
+
+        resolveRenewalAmount?.({
+            status: 'ready',
+            amountMinor: 2500,
+            currency: 'USD'
+        });
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        const content = fixture.nativeElement.textContent as string;
+        expect(content).toContain('Subscription details are syncing. Refresh in a moment.');
+        expect(content).not.toContain('$25');
+    });
+
+    it('should select summary using latest created timestamp before period-end fallback', async () => {
+        const paymentService = TestBed.inject(AppPaymentService);
+        const userService = TestBed.inject(AppUserService);
+
+        vi.spyOn(userService, 'getSubscriptionRole').mockResolvedValue('pro');
+        vi.spyOn(paymentService, 'getUserSubscriptions').mockReturnValue(of([
+            {
+                id: 'sub_older_created_later_period',
+                status: 'active',
+                created: new Date('2026-01-01T12:00:00Z'),
+                current_period_end: new Date('2026-12-31T12:00:00Z'),
+                current_period_start: new Date('2026-12-01T12:00:00Z'),
+                cancel_at_period_end: false
+            },
+            {
+                id: 'sub_newer_created_earlier_period',
+                status: 'active',
+                created: new Date('2026-02-01T12:00:00Z'),
+                current_period_end: new Date('2026-06-15T12:00:00Z'),
+                current_period_start: new Date('2026-05-15T12:00:00Z'),
+                cancel_at_period_end: false
+            }
+        ] as StripeSubscription[]));
+        vi.spyOn(paymentService, 'getUpcomingRenewalAmount').mockResolvedValue({
+            status: 'ready',
+            amountMinor: 2000,
+            currency: 'USD'
+        });
+
+        await component.ngOnInit();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        const content = fixture.nativeElement.textContent as string;
+        expect(content).toContain('Jun 15, 2026');
+        expect(content).not.toContain('Dec 31, 2026');
+    });
+
+    it('should use latest period end when created timestamps are tied', async () => {
+        const paymentService = TestBed.inject(AppPaymentService);
+        const userService = TestBed.inject(AppUserService);
+
+        vi.spyOn(userService, 'getSubscriptionRole').mockResolvedValue('pro');
+        vi.spyOn(paymentService, 'getUserSubscriptions').mockReturnValue(of([
+            {
+                id: 'sub_lower_period',
+                status: 'active',
+                created: new Date('2026-02-01T12:00:00Z'),
+                current_period_end: new Date('2026-06-01T12:00:00Z'),
+                current_period_start: new Date('2026-05-01T12:00:00Z'),
+                cancel_at_period_end: false
+            },
+            {
+                id: 'sub_higher_period',
+                status: 'active',
+                created: new Date('2026-02-01T12:00:00Z'),
+                current_period_end: new Date('2026-07-01T12:00:00Z'),
+                current_period_start: new Date('2026-06-01T12:00:00Z'),
+                cancel_at_period_end: false
+            }
+        ] as StripeSubscription[]));
+        vi.spyOn(paymentService, 'getUpcomingRenewalAmount').mockResolvedValue({
+            status: 'ready',
+            amountMinor: 2000,
+            currency: 'USD'
+        });
+
+        await component.ngOnInit();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        const content = fixture.nativeElement.textContent as string;
+        expect(content).toContain('Jul 1, 2026');
+        expect(content).not.toContain('Jun 1, 2026');
     });
 
 });

@@ -103,6 +103,11 @@ const AI_INSIGHTS_LOADING_CHART_SKELETON_BARS = [
   '56%',
   '88%',
 ] as const;
+const AI_INSIGHTS_SUPPORT_SUBJECTS = {
+  quotaReset: 'Renew tokens',
+  noPromptResults: 'AI Insights - No prompt results',
+  promptError: 'AI Insights - Prompt error',
+} as const;
 
 @Component({
   selector: 'app-ai-insights-page',
@@ -162,6 +167,7 @@ export class AiInsightsPageComponent {
   readonly latestSnapshotRestored = signal(false);
   readonly latestSnapshotPersistenceNotice = signal<string | null>(null);
   readonly latestSnapshotSavedAt = signal<string | null>(null);
+  readonly shouldAutoScrollOnCompletedResponse = signal(false);
   readonly quotaStatus = signal<AiInsightsQuotaStatus | null>(null);
   readonly quotaStatusLoadFailed = signal(false);
   readonly resultPrompt = signal('');
@@ -350,7 +356,15 @@ export class AiInsightsPageComponent {
       && quotaStatus.isEligible
       && quotaStatus.resetMode === 'next_successful_payment';
   });
-  readonly quotaSupportMailtoHref = computed(() => `mailto:${this.supportEmail}`);
+  readonly quotaSupportMailtoHref = computed(() => (
+    this.buildSupportMailtoHref(AI_INSIGHTS_SUPPORT_SUBJECTS.quotaReset)
+  ));
+  readonly emptyResultSupportMailtoHref = computed(() => (
+    this.buildSupportMailtoHref(AI_INSIGHTS_SUPPORT_SUBJECTS.noPromptResults)
+  ));
+  readonly errorResultSupportMailtoHref = computed(() => (
+    this.buildSupportMailtoHref(AI_INSIGHTS_SUPPORT_SUBJECTS.promptError)
+  ));
   readonly quotaBlockedMessage = computed(() => {
     const quotaStatus = this.quotaStatus();
     if (!quotaStatus || (quotaStatus.isEligible && quotaStatus.remainingCount > 0)) {
@@ -488,6 +502,7 @@ export class AiInsightsPageComponent {
     this.rankedEventResolvedEvents.set([]);
     this.rankedEventLoading.set(false);
     this.rankedEventLoadError.set(null);
+    this.shouldAutoScrollOnCompletedResponse.set(false);
     this.promptControl.setValue('');
 
     if (!userID) {
@@ -538,6 +553,10 @@ export class AiInsightsPageComponent {
     });
   });
   private readonly completedResultAutoScrollEffect = effect(() => {
+    if (!this.shouldAutoScrollOnCompletedResponse()) {
+      return;
+    }
+
     const response = this.response();
     if (!response || !this.isCompletedResponse(response)) {
       return;
@@ -548,6 +567,7 @@ export class AiInsightsPageComponent {
     }
 
     this.lastAutoScrolledResponse = response;
+    this.shouldAutoScrollOnCompletedResponse.set(false);
     this.scrollResultCardIntoView();
   });
   readonly rankedEventResponse = computed<RankedEventResponse | null>(() => {
@@ -884,6 +904,7 @@ export class AiInsightsPageComponent {
     this.latestSnapshotSavedAt.set(null);
     this.errorMessage.set(null);
     this.response.set(null);
+    this.shouldAutoScrollOnCompletedResponse.set(true);
     this.scrollResultCardIntoView();
 
     try {
@@ -893,6 +914,7 @@ export class AiInsightsPageComponent {
       this.quotaStatus.set(response.quota ?? this.quotaStatus());
       this.resultPrompt.set(prompt);
     } catch (error) {
+      this.shouldAutoScrollOnCompletedResponse.set(false);
       const nextQuotaStatus = await this.aiInsightsQuotaService.loadQuotaStatus();
       if (nextQuotaStatus) {
         this.quotaStatus.set(nextQuotaStatus);
@@ -1033,6 +1055,10 @@ export class AiInsightsPageComponent {
       clientTimezone: getClientTimeZone(),
       clientLocale: this.locale,
     };
+  }
+
+  private buildSupportMailtoHref(subject: string): string {
+    return `mailto:${this.supportEmail}?subject=${encodeURIComponent(subject)}`;
   }
 
   private isCompletedResponse(response: AiInsightsResponse): boolean {

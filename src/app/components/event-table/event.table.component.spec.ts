@@ -786,29 +786,9 @@ describe('EventTableComponent', () => {
         });
     });
 
-    describe('Selection Limits', () => {
-        it('should prevent downloadOriginals and show snackbar if more than 20 events are selected', async () => {
+    describe('Selection actions', () => {
+        it('should allow downloadOriginals when more than 20 events are selected', async () => {
             const events = Array.from({ length: 21 }, (_, i) => new MockEvent(`event${i}`));
-            events.forEach(e => component.selection.select({ 'Event': e } as any));
-
-            await component.downloadOriginals();
-
-            expect(mockSnackBar.open).toHaveBeenCalledWith('Cannot download more than 20 events at once', 'Close', { duration: 3000 });
-            expect(mockProcessingService.addJob).not.toHaveBeenCalled();
-        });
-
-        it('should prevent downloadAsCSV and show snackbar if more than 20 events are selected', () => {
-            const events = Array.from({ length: 21 }, (_, i) => new MockEvent(`event${i}`));
-            events.forEach(e => component.selection.select({ 'Event': e } as any));
-
-            component.downloadAsCSV(new Event('click'));
-
-            expect(mockSnackBar.open).toHaveBeenCalledWith('Cannot download more than 20 events at once', 'Close', { duration: 3000 });
-            expect(mockDialog.open).not.toHaveBeenCalled();
-        });
-
-        it('should allow downloadOriginals if 20 or fewer events are selected', async () => {
-            const events = Array.from({ length: 20 }, (_, i) => new MockEvent(`event${i}`));
             events.forEach(e => {
                 e.originalFiles = [{ path: `path/to/${e.id}.fit` }];
                 component.selection.select({ 'Event': e } as any);
@@ -819,8 +799,8 @@ describe('EventTableComponent', () => {
             expect(mockProcessingService.addJob).toHaveBeenCalled();
         });
 
-        it('should allow downloadAsCSV if 20 or fewer events are selected', () => {
-            const events = Array.from({ length: 20 }, (_, i) => new MockEvent(`event${i}`));
+        it('should allow downloadAsCSV when more than 20 events are selected', () => {
+            const events = Array.from({ length: 21 }, (_, i) => new MockEvent(`event${i}`));
             events.forEach(e => component.selection.select({ 'Event': e } as any));
 
             component.downloadAsCSV(new Event('click'));
