@@ -10,6 +10,7 @@ Shared library path (keep stable for antigravity and other apps/agents): `.agent
 Always-on rules:
 - `.agent/rules/verify-changes-with-tests.md`
 - `.agent/rules/firestore-write-sanitization.md` for any frontend/functions write path that persists event or activity data
+- When building a feature, review the app help page and update or add help content when needed.
 
 Layer entry points:
 - Frontend: `src/AGENTS.md`
