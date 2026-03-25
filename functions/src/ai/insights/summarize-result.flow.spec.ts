@@ -849,7 +849,7 @@ describe('summarizeAiInsightResult', () => {
     expect(result.narrative).not.toContain('time buckets');
   });
 
-  it('builds deterministic compare summary for increase, decrease, and no-change periods', async () => {
+  it('builds compact deterministic compare summary with net change, extremes, and period deltas', async () => {
     setSummarizeInsightDependenciesForTesting({
       generateNarrative: async () => ({
         source: 'genkit',
@@ -861,11 +861,12 @@ describe('summarizeAiInsightResult', () => {
 
     expect(result.source).toBe('genkit');
     expect(result.narrative).toBe('Base narrative.');
-    expect(result.deterministicCompareSummary).toContain('power increased by');
-    expect(result.deterministicCompareSummary).toContain('power decreased by');
-    expect(result.deterministicCompareSummary).toContain('power did not change');
-    expect(result.deterministicCompareSummary).toContain('Likely contributors:');
-    expect(result.deterministicCompareSummary).toContain(ActivityTypes.Cycling);
-    expect(result.deterministicCompareSummary).toContain('Event evidence is linked below.');
+    expect(result.deterministicCompareSummary).toContain('From 2025 to 2028, power increased by');
+    expect(result.deterministicCompareSummary).toContain('Largest increase: 2025 to 2026');
+    expect(result.deterministicCompareSummary).toContain('Largest decrease: 2026 to 2027');
+    expect(result.deterministicCompareSummary).toContain('Period deltas:');
+    expect(result.deterministicCompareSummary).toContain('2027 to 2028 (no change)');
+    expect(result.deterministicCompareSummary).not.toContain('Likely contributors:');
+    expect(result.deterministicCompareSummary).not.toContain('Event evidence is linked below.');
   });
 });

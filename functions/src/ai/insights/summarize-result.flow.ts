@@ -225,21 +225,22 @@ function formatPeriodDeltaDirection(
     : `decreased by ${absoluteDisplayValue}`;
 }
 
-function formatContributorDirection(
+function formatSignedDeltaDisplayValue(
   dataType: string,
   deltaAggregateValue: number,
-  absoluteDisplayValue: string,
+  unitSettings?: UserUnitSettingsInterface,
 ): string {
-  const semantics = resolveMetricSemantics(dataType);
-  if (semantics.direction === 'inverse') {
-    return deltaAggregateValue < 0
-      ? `faster by ${absoluteDisplayValue}`
-      : `slower by ${absoluteDisplayValue}`;
+  if (deltaAggregateValue === 0) {
+    return 'no change';
   }
 
-  return deltaAggregateValue > 0
-    ? `up by ${absoluteDisplayValue}`
-    : `down by ${absoluteDisplayValue}`;
+  const absoluteDisplayValue = formatInsightAggregateDisplay(
+    dataType,
+    Math.abs(deltaAggregateValue),
+    unitSettings,
+  );
+
+  return `${deltaAggregateValue > 0 ? '+' : '-'}${absoluteDisplayValue}`;
 }
 
 function buildDeterministicCompareDeltaNarrative(
@@ -260,11 +261,59 @@ function buildDeterministicCompareDeltaNarrative(
   if (!periodDeltas.length) {
     return null;
   }
-  const hasEventEvidence = periodDeltas.some(
-    periodDelta => (periodDelta.eventContributors?.length ?? 0) > 0,
+  const firstPeriod = periodDeltas[0];
+  const lastPeriod = periodDeltas[periodDeltas.length - 1];
+  if (!firstPeriod || !lastPeriod) {
+    return null;
+  }
+
+  const rangeStartLabel = formatCompareBucketLabel(
+    firstPeriod.fromBucket,
+    input.query,
+    input.aggregation.resolvedTimeInterval,
+    input.clientLocale,
+  );
+  const rangeEndLabel = formatCompareBucketLabel(
+    lastPeriod.toBucket,
+    input.query,
+    input.aggregation.resolvedTimeInterval,
+    input.clientLocale,
+  );
+  const netDeltaAggregateValue = periodDeltas.reduce(
+    (sum, periodDelta) => sum + periodDelta.deltaAggregateValue,
+    0,
+  );
+  const absoluteNetDeltaDisplayValue = formatInsightAggregateDisplay(
+    input.query.dataType,
+    Math.abs(netDeltaAggregateValue),
+    input.unitSettings,
+  );
+  const netDirectionText = formatPeriodDeltaDirection(
+    input.query.dataType,
+    netDeltaAggregateValue,
+    absoluteNetDeltaDisplayValue,
   );
 
-  const periodSentences = periodDeltas.map((periodDelta) => {
+  const increasePeriod = periodDeltas.reduce<typeof periodDeltas[number] | null>((current, periodDelta) => {
+    if (periodDelta.deltaAggregateValue <= 0) {
+      return current;
+    }
+    if (!current || periodDelta.deltaAggregateValue > current.deltaAggregateValue) {
+      return periodDelta;
+    }
+    return current;
+  }, null);
+  const decreasePeriod = periodDeltas.reduce<typeof periodDeltas[number] | null>((current, periodDelta) => {
+    if (periodDelta.deltaAggregateValue >= 0) {
+      return current;
+    }
+    if (!current || periodDelta.deltaAggregateValue < current.deltaAggregateValue) {
+      return periodDelta;
+    }
+    return current;
+  }, null);
+
+  const formatPeriodSpan = (periodDelta: typeof periodDeltas[number]): string => {
     const fromLabel = formatCompareBucketLabel(
       periodDelta.fromBucket,
       input.query,
@@ -277,47 +326,44 @@ function buildDeterministicCompareDeltaNarrative(
       input.aggregation.resolvedTimeInterval,
       input.clientLocale,
     );
-    const absoluteDeltaDisplayValue = formatInsightAggregateDisplay(
-      input.query.dataType,
-      Math.abs(periodDelta.deltaAggregateValue),
-      input.unitSettings,
-    );
-    const directionText = formatPeriodDeltaDirection(
+
+    return `${fromLabel} to ${toLabel}`;
+  };
+
+  const periodDeltaSegments = periodDeltas.map((periodDelta) => {
+    const span = formatPeriodSpan(periodDelta);
+    const signedDeltaValue = formatSignedDeltaDisplayValue(
       input.query.dataType,
       periodDelta.deltaAggregateValue,
-      absoluteDeltaDisplayValue,
+      input.unitSettings,
     );
-    const baseSentence = `From ${fromLabel} to ${toLabel}, ${input.metricLabel} ${directionText}.`;
-    if (periodDelta.deltaAggregateValue === 0 || !periodDelta.contributors.length) {
-      return baseSentence;
-    }
-
-    const contributorSentence = periodDelta.contributors
-      .map((contributor) => {
-        const absoluteContributorDisplayValue = formatInsightAggregateDisplay(
-          input.query.dataType,
-          Math.abs(contributor.deltaAggregateValue),
-          input.unitSettings,
-        );
-        const contributorDirection = formatContributorDirection(
-          input.query.dataType,
-          contributor.deltaAggregateValue,
-          absoluteContributorDisplayValue,
-        );
-        return `${contributor.seriesKey} (${contributorDirection})`;
-      })
-      .join(', ');
-
-    return `${baseSentence} Likely contributors: ${contributorSentence}.`;
+    return `${span} (${signedDeltaValue})`;
   });
 
-  if (!periodSentences.length) {
-    return null;
+  const narrativeParts: string[] = [
+    `From ${rangeStartLabel} to ${rangeEndLabel}, ${input.metricLabel} ${netDirectionText}.`,
+  ];
+  if (increasePeriod) {
+    narrativeParts.push(
+      `Largest increase: ${formatPeriodSpan(increasePeriod)} (${formatSignedDeltaDisplayValue(
+        input.query.dataType,
+        increasePeriod.deltaAggregateValue,
+        input.unitSettings,
+      )}).`,
+    );
   }
+  if (decreasePeriod) {
+    narrativeParts.push(
+      `Largest decrease: ${formatPeriodSpan(decreasePeriod)} (${formatSignedDeltaDisplayValue(
+        input.query.dataType,
+        decreasePeriod.deltaAggregateValue,
+        input.unitSettings,
+      )}).`,
+    );
+  }
+  narrativeParts.push(`Period deltas: ${periodDeltaSegments.join('; ')}.`);
 
-  return hasEventEvidence
-    ? `${periodSentences.join(' ')} Event evidence is linked below.`
-    : periodSentences.join(' ');
+  return narrativeParts.join(' ');
 }
 
 function withDeterministicCompareDeltaNarrative(
