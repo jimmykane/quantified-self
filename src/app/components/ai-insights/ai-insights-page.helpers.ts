@@ -73,6 +73,12 @@ export interface EventLookupDisplayItem {
   isAvailable: boolean;
 }
 
+export function formatAiInsightsNarrativeForDisplay(
+  narrative: string | null | undefined,
+): string {
+  return `${narrative ?? ''}`.trim();
+}
+
 export function resolveAggregationLabel(valueType: ChartDataValueTypes): string {
   switch (valueType) {
     case ChartDataValueTypes.Average:

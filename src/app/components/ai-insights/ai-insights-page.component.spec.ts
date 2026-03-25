@@ -48,6 +48,7 @@ import { AiInsightsChartComponent } from './ai-insights-chart.component';
 import { AiInsightsMultiMetricChartComponent } from './ai-insights-multi-metric-chart.component';
 import { AiInsightsPowerCurveChartComponent } from './ai-insights-power-curve-chart.component';
 import { AiInsightsPageComponent } from './ai-insights-page.component';
+import { formatAiInsightsNarrativeForDisplay } from './ai-insights-page.helpers';
 import {
   AI_INSIGHTS_DEFAULT_PICKER_PROMPTS,
   AI_INSIGHTS_DEFAULT_PROMPT_SECTIONS,
@@ -91,6 +92,14 @@ class MockAiInsightsPowerCurveChartComponent {
   readonly darkTheme = input(false);
   readonly useAnimations = input(false);
 }
+
+describe('formatAiInsightsNarrativeForDisplay', () => {
+  it('returns a trimmed narrative without marker parsing', () => {
+    expect(
+      formatAiInsightsNarrativeForDisplay('  Base narrative. Deterministic compare summary: From 2025 to 2026, distance increased by 10 km.  '),
+    ).toBe('Base narrative. Deterministic compare summary: From 2025 to 2026, distance increased by 10 km.');
+  });
+});
 
 function buildQuotaStatus(overrides: Partial<AiInsightsQuotaStatus> = {}): AiInsightsQuotaStatus {
   return {
@@ -1338,6 +1347,7 @@ describe('AiInsightsPageComponent', () => {
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Latest bucket'))).toBe(false);
     expect(summaryHelpButtons).toHaveLength(5);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes(expectedOverall ?? ''))).toBe(true);
+    expect(fixture.debugElement.query(By.css('.narrative-info--secondary'))).toBeNull();
     const calledWindowScroll = scrollToSpy.mock.calls.length > 0;
     const calledElementScroll = scrollIntoViewSpy.mock.calls.length > 0;
     expect(calledWindowScroll || calledElementScroll).toBe(true);
@@ -1345,6 +1355,33 @@ describe('AiInsightsPageComponent', () => {
       configurable: true,
       value: originalScrollTo,
     });
+  });
+
+  it('should render deterministic compare summary in a dedicated aggregate section', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue({
+      ...buildOkResponse(),
+      query: {
+        ...buildOkResponse().query,
+        periodMode: 'compare',
+      },
+      deterministicCompareSummary: 'From 2025 to 2026, cadence increased by 7 rpm. Likely contributors: Cycling (up by 7 rpm).',
+    });
+    component.promptControl.setValue('compare my cadence this year vs last year');
+
+    await component.submitPrompt();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compareSection = fixture.debugElement.query(By.css('.narrative-info--secondary'))?.nativeElement as HTMLElement | undefined;
+    const compareTitle = fixture.debugElement.query(By.css('.narrative-section-title'))?.nativeElement as HTMLElement | undefined;
+    const compareNarrative = compareSection?.querySelector('.narrative') as HTMLElement | null;
+    const mainNarrative = fixture.debugElement.queryAll(By.css('.narrative-info .narrative'))[0]?.nativeElement as HTMLElement | undefined;
+
+    expect(compareSection).toBeTruthy();
+    expect(compareTitle?.textContent).toContain('Deterministic compare summary');
+    expect(compareNarrative?.textContent).toContain('cadence increased by 7 rpm');
+    expect(mainNarrative?.textContent).toContain('trended up');
+    expect(mainNarrative?.textContent).not.toContain('Deterministic compare summary');
   });
 
   it('should render power-curve results with the dedicated chart and no aggregate summary cards', async () => {

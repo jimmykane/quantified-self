@@ -210,6 +210,22 @@ export const AiInsightSummaryTrendSchema = z.object({
   deltaAggregateValue: z.number(),
 });
 
+const AiInsightSummaryDeltaDirectionSchema = z.enum(['increase', 'decrease', 'no_change']);
+
+const AiInsightSummaryPeriodDeltaContributorSchema = z.object({
+  seriesKey: z.string().min(1),
+  deltaAggregateValue: z.number(),
+  direction: AiInsightSummaryDeltaDirectionSchema,
+});
+
+const AiInsightSummaryPeriodDeltaSchema = z.object({
+  fromBucket: AiInsightSummaryBucketSchema,
+  toBucket: AiInsightSummaryBucketSchema,
+  deltaAggregateValue: z.number(),
+  direction: AiInsightSummaryDeltaDirectionSchema,
+  contributors: z.array(AiInsightSummaryPeriodDeltaContributorSchema),
+});
+
 export const AiInsightSummarySchema = z.object({
   matchedEventCount: z.number().int().nonnegative(),
   overallAggregateValue: z.number().nullable(),
@@ -219,6 +235,7 @@ export const AiInsightSummarySchema = z.object({
   activityMix: AiInsightSummaryActivityMixSchema.nullable(),
   bucketCoverage: AiInsightSummaryCoverageSchema.nullable(),
   trend: AiInsightSummaryTrendSchema.nullable(),
+  periodDeltas: z.array(AiInsightSummaryPeriodDeltaSchema).nullable().optional(),
 });
 
 export const AiInsightEventLookupSchema = z.object({
@@ -289,6 +306,7 @@ const AiInsightsAggregateOkResponseSchema = AiInsightsOkResponseBaseSchema.exten
   query: NormalizedInsightAggregateQuerySchema,
   aggregation: EventStatAggregationResultSchema,
   summary: AiInsightSummarySchema,
+  deterministicCompareSummary: z.string().min(1).optional(),
   eventRanking: AiInsightEventLookupSchema.optional(),
   presentation: AiInsightPresentationSchema,
 });
@@ -398,6 +416,9 @@ function resolveResponseValidationReason(value: unknown, firstIssuePathKey: stri
   }
   if (firstIssuePathKey === 'summary') {
     return 'summary_invalid';
+  }
+  if (firstIssuePathKey === 'deterministicCompareSummary') {
+    return 'deterministic_compare_summary_invalid';
   }
   if (firstIssuePathKey === 'eventLookup') {
     return 'event_lookup_invalid';

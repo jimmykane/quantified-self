@@ -293,6 +293,7 @@ const summary = {
     totalBucketCount: 3,
   },
   trend: null,
+  periodDeltas: null,
 };
 
 describe('aiInsights callable', () => {
@@ -676,6 +677,93 @@ describe('aiInsights callable', () => {
       'show distance',
       result,
     );
+  });
+
+  it('includes deterministic period deltas in compare-mode aggregate responses', async () => {
+    const compareQuery = {
+      ...normalizedQuery,
+      periodMode: 'compare' as const,
+      requestedTimeInterval: TimeIntervals.Yearly,
+    };
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'ok',
+      metricKey: 'distance',
+      query: compareQuery,
+    });
+    hoisted.executeAiInsightsQuery.mockResolvedValue({
+      resultKind: 'aggregate',
+      matchedEventsCount: 4,
+      matchedActivityTypeCounts: [
+        {
+          activityType: ActivityTypes.Cycling,
+          eventCount: 4,
+        },
+      ],
+      aggregation: {
+        dataType: 'Distance',
+        valueType: ChartDataValueTypes.Total,
+        categoryType: ChartDataCategoryTypes.DateType,
+        resolvedTimeInterval: TimeIntervals.Yearly,
+        buckets: [
+          {
+            bucketKey: '2025',
+            time: Date.parse('2025-01-01T00:00:00.000Z'),
+            totalCount: 2,
+            aggregateValue: 250,
+            seriesValues: { [ActivityTypes.Cycling]: 250 },
+            seriesCounts: { [ActivityTypes.Cycling]: 2 },
+          },
+          {
+            bucketKey: '2026',
+            time: Date.parse('2026-01-01T00:00:00.000Z'),
+            totalCount: 2,
+            aggregateValue: 300,
+            seriesValues: { [ActivityTypes.Cycling]: 300 },
+            seriesCounts: { [ActivityTypes.Cycling]: 2 },
+          },
+        ],
+      },
+    });
+    hoisted.summarizeAiInsightResult.mockResolvedValueOnce({
+      narrative: 'Narrative',
+      source: 'genkit',
+      deterministicCompareSummary: 'From 2025 to 2026, distance increased by 50 km.',
+    });
+
+    const result = await aiInsights({
+      prompt: 'compare my total distance this year vs last year',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(hoisted.summarizeAiInsightResult).toHaveBeenCalledWith(expect.objectContaining({
+      summary: expect.objectContaining({
+        periodDeltas: [
+          expect.objectContaining({
+            direction: 'increase',
+            deltaAggregateValue: 50,
+            contributors: [
+              expect.objectContaining({
+                seriesKey: ActivityTypes.Cycling,
+                deltaAggregateValue: 50,
+              }),
+            ],
+          }),
+        ],
+      }),
+    }));
+    expect(result).toMatchObject({
+      status: 'ok',
+      resultKind: 'aggregate',
+      deterministicCompareSummary: 'From 2025 to 2026, distance increased by 50 km.',
+      summary: {
+        periodDeltas: [
+          expect.objectContaining({
+            direction: 'increase',
+            deltaAggregateValue: 50,
+          }),
+        ],
+      },
+    });
   });
 
   it('logs prompt metadata without storing raw prompt text', async () => {
@@ -1204,6 +1292,7 @@ describe('aiInsights callable', () => {
           totalBucketCount: 90,
         },
         trend: null,
+        periodDeltas: null,
       },
       presentation: expect.objectContaining({
         emptyState: 'No matching events were found for this insight in the requested range.',

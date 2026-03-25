@@ -199,6 +199,9 @@ const CALLABLE_RESULT_KIND_REGISTRY = {
       query: context.query,
       aggregation: context.executionResult.aggregation,
       summary: context.aggregateSummary,
+      ...(narrativeResult.deterministicCompareSummary
+        ? { deterministicCompareSummary: narrativeResult.deterministicCompareSummary }
+        : {}),
       ...(context.executionResult.eventRanking
         ? {
           eventRanking: {

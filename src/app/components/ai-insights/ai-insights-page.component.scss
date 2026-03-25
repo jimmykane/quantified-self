@@ -654,6 +654,7 @@
 
 .narrative {
   color: var(--mat-sys-on-surface);
+  white-space: pre-line;
 }
 
 .description-text {
@@ -676,6 +677,10 @@
   width: 100%;
 }
 
+.narrative-info.narrative-info--secondary::before {
+  background: var(--mat-sys-secondary);
+}
+
 .narrative-info::before {
   content: '';
   position: absolute;
@@ -683,6 +688,13 @@
   width: 4px;
   border-radius: 0 999px 999px 0;
   background: var(--mat-sys-primary);
+}
+
+.narrative-section-title {
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+  letter-spacing: 0.02em;
+  text-transform: none;
 }
 
 .result-date-range-note {

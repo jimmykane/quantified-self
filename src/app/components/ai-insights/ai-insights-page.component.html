@@ -266,7 +266,7 @@
               <mat-icon>info</mat-icon>
               <div>
                 <p class="mat-title-medium state-title">Unsupported request</p>
-                <p class="mat-body-medium state-copy">{{ unsupported.narrative }}</p>
+                <p class="mat-body-medium state-copy">{{ unsupportedNarrative() }}</p>
                 <p class="mat-body-small state-support-note">English-only prompts are supported right now.</p>
               </div>
             </div>
@@ -295,7 +295,7 @@
               </div>
 
               <div class="narrative-info qs-glass-card-panel">
-                <p class="description-text narrative">{{ empty.narrative }}</p>
+                <p class="description-text narrative">{{ emptyNarrative() }}</p>
               </div>
 
               <mat-divider></mat-divider>
@@ -343,7 +343,7 @@
               </div>
 
               <div class="narrative-info qs-glass-card-panel">
-                <p class="description-text narrative">{{ result.narrative }}</p>
+                <p class="description-text narrative">{{ latestEventNarrative() }}</p>
               </div>
 
               @if (rankedEventLoadError(); as rankedEventLoadError) {
@@ -413,7 +413,7 @@
               </div>
 
               <div class="narrative-info qs-glass-card-panel">
-                <p class="description-text narrative">{{ result.narrative }}</p>
+                <p class="description-text narrative">{{ eventLookupNarrative() }}</p>
               </div>
 
               @if (rankedEventLoadError(); as rankedEventLoadError) {
@@ -516,7 +516,7 @@
               </div>
 
               <div class="narrative-info qs-glass-card-panel">
-                <p class="description-text narrative">{{ result.narrative }}</p>
+                <p class="description-text narrative">{{ multiMetricNarrative() }}</p>
               </div>
 
               @if (resultWarnings().length) {
@@ -647,7 +647,7 @@
               </div>
 
               <div class="narrative-info qs-glass-card-panel">
-                <p class="description-text narrative">{{ result.narrative }}</p>
+                <p class="description-text narrative">{{ powerCurveNarrative() }}</p>
               </div>
 
               @if (resultWarnings().length) {
@@ -692,8 +692,15 @@
               </div>
 
               <div class="narrative-info qs-glass-card-panel">
-                <p class="description-text narrative">{{ result.narrative }}</p>
+                <p class="description-text narrative">{{ aggregateNarrative() }}</p>
               </div>
+
+              @if (aggregateDeterministicCompareSummary(); as deterministicCompareSummary) {
+                <div class="narrative-info narrative-info--secondary qs-glass-card-panel">
+                  <p class="mat-label-medium narrative-section-title">Deterministic compare summary</p>
+                  <p class="description-text narrative">{{ deterministicCompareSummary }}</p>
+                </div>
+              }
 
               @if (resultWarnings().length) {
                 <mat-chip-set class="warning-chips" aria-label="Insight warnings">

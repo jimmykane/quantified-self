@@ -45,6 +45,7 @@ import { AiInsightsPromptPickerDialogComponent } from './ai-insights-prompt-pick
 import {
   buildAggregateSummaryCards,
   buildMergedMultiMetricSummaryCards,
+  formatAiInsightsNarrativeForDisplay,
   formatDateRangeNote,
   formatDateSelectionSummary,
   formatEventLookupActivityLabel,
@@ -254,6 +255,30 @@ export class AiInsightsPageComponent {
     const response = this.response();
     return response?.status === 'unsupported' ? response : null;
   });
+  readonly aggregateNarrative = computed(() => (
+    formatAiInsightsNarrativeForDisplay(this.aggregateOkResponse()?.narrative)
+  ));
+  readonly aggregateDeterministicCompareSummary = computed(() => (
+    formatAiInsightsNarrativeForDisplay(this.aggregateOkResponse()?.deterministicCompareSummary)
+  ));
+  readonly multiMetricNarrative = computed(() => (
+    formatAiInsightsNarrativeForDisplay(this.multiMetricOkResponse()?.narrative)
+  ));
+  readonly eventLookupNarrative = computed(() => (
+    formatAiInsightsNarrativeForDisplay(this.eventLookupOkResponse()?.narrative)
+  ));
+  readonly latestEventNarrative = computed(() => (
+    formatAiInsightsNarrativeForDisplay(this.latestEventOkResponse()?.narrative)
+  ));
+  readonly powerCurveNarrative = computed(() => (
+    formatAiInsightsNarrativeForDisplay(this.powerCurveOkResponse()?.narrative)
+  ));
+  readonly emptyNarrative = computed(() => (
+    formatAiInsightsNarrativeForDisplay(this.emptyResponse()?.narrative)
+  ));
+  readonly unsupportedNarrative = computed(() => (
+    formatAiInsightsNarrativeForDisplay(this.unsupportedResponse()?.narrative)
+  ));
   readonly hasCompletedResponse = computed(() => {
     const response = this.response();
     return response?.status === 'ok'

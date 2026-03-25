@@ -56,6 +56,7 @@ describe('insight-summary', () => {
       },
       deltaAggregateValue: 4,
     });
+    expect(summary.periodDeltas).toBeNull();
   });
 
   it('prefers query valueType over aggregation valueType for single-metric summaries', () => {
@@ -87,6 +88,7 @@ describe('insight-summary', () => {
     }, 6, [{ activityType: ActivityTypes.Cycling, eventCount: 6 }]);
 
     expect(summary.overallAggregateValue).toBeCloseTo(82.6666666667);
+    expect(summary.periodDeltas).toBeNull();
   });
 
   it('omits latest bucket for non-date grouped summaries and preserves activity mix', () => {
@@ -131,6 +133,126 @@ describe('insight-summary', () => {
       ],
       remainingActivityTypeCount: 1,
     });
+    expect(summary.periodDeltas).toBeNull();
+  });
+
+  it('builds compare-mode period deltas with deterministic activity contributors', () => {
+    const query = {
+      resultKind: 'aggregate' as const,
+      dataType: 'Average Power',
+      valueType: ChartDataValueTypes.Average,
+      categoryType: ChartDataCategoryTypes.DateType,
+      requestedTimeInterval: TimeIntervals.Monthly,
+      activityTypeGroups: [],
+      activityTypes: [ActivityTypes.Cycling, ActivityTypes.Running],
+      dateRange: {
+        kind: 'bounded' as const,
+        startDate: '2026-01-01T00:00:00.000Z',
+        endDate: '2026-03-31T23:59:59.999Z',
+        timezone: 'UTC',
+        source: 'prompt' as const,
+      },
+      periodMode: 'compare' as const,
+      chartType: ChartTypes.LinesVertical,
+    };
+
+    const summary = buildInsightSummary(query, {
+      resolvedTimeInterval: TimeIntervals.Monthly,
+      buckets: [
+        {
+          bucketKey: '2026-01',
+          time: 1,
+          aggregateValue: 220,
+          totalCount: 3,
+          seriesValues: {
+            [ActivityTypes.Cycling]: 210,
+            [ActivityTypes.Running]: 240,
+          },
+        },
+        {
+          bucketKey: '2026-02',
+          time: 2,
+          aggregateValue: 230,
+          totalCount: 4,
+          seriesValues: {
+            [ActivityTypes.Cycling]: 225,
+            [ActivityTypes.Running]: 235,
+          },
+        },
+        {
+          bucketKey: '2026-03',
+          time: 3,
+          aggregateValue: 230,
+          totalCount: 4,
+          seriesValues: {
+            [ActivityTypes.Cycling]: 240,
+            [ActivityTypes.Running]: 220,
+          },
+        },
+      ],
+    }, 11, [
+      { activityType: ActivityTypes.Cycling, eventCount: 8 },
+      { activityType: ActivityTypes.Running, eventCount: 3 },
+    ]);
+
+    expect(summary.periodDeltas).toEqual([
+      {
+        fromBucket: {
+          bucketKey: '2026-01',
+          time: 1,
+          aggregateValue: 220,
+          totalCount: 3,
+        },
+        toBucket: {
+          bucketKey: '2026-02',
+          time: 2,
+          aggregateValue: 230,
+          totalCount: 4,
+        },
+        deltaAggregateValue: 10,
+        direction: 'increase',
+        contributors: [
+          {
+            seriesKey: ActivityTypes.Cycling,
+            deltaAggregateValue: 15,
+            direction: 'increase',
+          },
+          {
+            seriesKey: ActivityTypes.Running,
+            deltaAggregateValue: -5,
+            direction: 'decrease',
+          },
+        ],
+      },
+      {
+        fromBucket: {
+          bucketKey: '2026-02',
+          time: 2,
+          aggregateValue: 230,
+          totalCount: 4,
+        },
+        toBucket: {
+          bucketKey: '2026-03',
+          time: 3,
+          aggregateValue: 230,
+          totalCount: 4,
+        },
+        deltaAggregateValue: 0,
+        direction: 'no_change',
+        contributors: [
+          {
+            seriesKey: ActivityTypes.Cycling,
+            deltaAggregateValue: 15,
+            direction: 'increase',
+          },
+          {
+            seriesKey: ActivityTypes.Running,
+            deltaAggregateValue: -15,
+            direction: 'decrease',
+          },
+        ],
+      },
+    ]);
   });
 
   it('returns a null-filled non-aggregate empty summary helper', () => {
@@ -143,6 +265,7 @@ describe('insight-summary', () => {
       activityMix: null,
       bucketCoverage: null,
       trend: null,
+      periodDeltas: null,
     });
   });
 });

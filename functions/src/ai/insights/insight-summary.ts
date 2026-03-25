@@ -1,10 +1,29 @@
 import { ChartDataCategoryTypes, ChartDataValueTypes, TimeIntervals } from '@sports-alliance/sports-lib';
 import type {
+  AiInsightSummaryBucket,
+  AiInsightSummaryDeltaDirection,
+  AiInsightSummaryPeriodDeltaContributor,
   AiInsightSummary,
   AiInsightSummaryActivityMix,
   NormalizedInsightQuery,
 } from '../../../../shared/ai-insights.types';
 import { buildBucketCoverage } from './insight-bucket-coverage';
+
+const PERIOD_DELTA_TOP_CONTRIBUTORS_MAX = 2;
+
+interface SummaryAggregationBucket {
+  bucketKey: string | number;
+  time?: number;
+  aggregateValue: number;
+  totalCount: number;
+  seriesValues?: Record<string, number>;
+}
+
+interface SummaryAggregationInput {
+  valueType?: ChartDataValueTypes;
+  resolvedTimeInterval: TimeIntervals;
+  buckets: SummaryAggregationBucket[];
+}
 
 function buildActivityMix(
   matchedActivityTypeCounts: Array<{ activityType: string; eventCount: number }>,
@@ -19,16 +38,99 @@ function buildActivityMix(
   };
 }
 
+function toSummaryBucket(bucket: SummaryAggregationBucket): AiInsightSummaryBucket {
+  return {
+    bucketKey: bucket.bucketKey,
+    time: bucket.time,
+    aggregateValue: bucket.aggregateValue,
+    totalCount: bucket.totalCount,
+  };
+}
+
+function resolveDeltaDirection(deltaAggregateValue: number): AiInsightSummaryDeltaDirection {
+  if (deltaAggregateValue > 0) {
+    return 'increase';
+  }
+  if (deltaAggregateValue < 0) {
+    return 'decrease';
+  }
+  return 'no_change';
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function buildPeriodDeltaContributors(
+  fromBucket: SummaryAggregationBucket,
+  toBucket: SummaryAggregationBucket,
+): AiInsightSummaryPeriodDeltaContributor[] {
+  const fromSeriesValues = fromBucket.seriesValues ?? {};
+  const toSeriesValues = toBucket.seriesValues ?? {};
+  const seriesKeys = Array.from(new Set([
+    ...Object.keys(fromSeriesValues),
+    ...Object.keys(toSeriesValues),
+  ]));
+
+  return seriesKeys
+    .map((seriesKey) => {
+      const fromValue = toFiniteNumber(fromSeriesValues[seriesKey]);
+      const toValue = toFiniteNumber(toSeriesValues[seriesKey]);
+      if (fromValue === null || toValue === null) {
+        return null;
+      }
+
+      const deltaAggregateValue = toValue - fromValue;
+      if (!Number.isFinite(deltaAggregateValue) || deltaAggregateValue === 0) {
+        return null;
+      }
+
+      return {
+        seriesKey,
+        deltaAggregateValue,
+        direction: resolveDeltaDirection(deltaAggregateValue),
+      } satisfies AiInsightSummaryPeriodDeltaContributor;
+    })
+    .filter((contributor): contributor is AiInsightSummaryPeriodDeltaContributor => contributor !== null)
+    .sort((left, right) => (
+      Math.abs(right.deltaAggregateValue) - Math.abs(left.deltaAggregateValue)
+      || left.seriesKey.localeCompare(right.seriesKey)
+    ))
+    .slice(0, PERIOD_DELTA_TOP_CONTRIBUTORS_MAX);
+}
+
+function buildPeriodDeltas(
+  query: NormalizedInsightQuery,
+  aggregation: SummaryAggregationInput,
+): AiInsightSummary['periodDeltas'] {
+  if (
+    query.resultKind !== 'aggregate'
+    || query.categoryType !== ChartDataCategoryTypes.DateType
+    || query.periodMode !== 'compare'
+    || aggregation.buckets.length < 2
+  ) {
+    return null;
+  }
+
+  const periodDeltas = aggregation.buckets.slice(1).map((bucket, index) => {
+    const previousBucket = aggregation.buckets[index];
+    const deltaAggregateValue = bucket.aggregateValue - previousBucket.aggregateValue;
+
+    return {
+      fromBucket: toSummaryBucket(previousBucket),
+      toBucket: toSummaryBucket(bucket),
+      deltaAggregateValue,
+      direction: resolveDeltaDirection(deltaAggregateValue),
+      contributors: buildPeriodDeltaContributors(previousBucket, bucket),
+    };
+  });
+
+  return periodDeltas.length ? periodDeltas : null;
+}
+
 function buildTrend(
   query: NormalizedInsightQuery,
-  aggregation: {
-    buckets: Array<{
-      bucketKey: string | number;
-      time?: number;
-      aggregateValue: number;
-      totalCount: number;
-    }>;
-  },
+  aggregation: SummaryAggregationInput,
 ): AiInsightSummary['trend'] {
   if (
     query.categoryType !== ChartDataCategoryTypes.DateType
@@ -45,21 +147,14 @@ function buildTrend(
   }
 
   return {
-    previousBucket: {
-      bucketKey: previousBucket.bucketKey,
-      time: previousBucket.time,
-      aggregateValue: previousBucket.aggregateValue,
-      totalCount: previousBucket.totalCount,
-    },
+    previousBucket: toSummaryBucket(previousBucket),
     deltaAggregateValue: latestBucket.aggregateValue - previousBucket.aggregateValue,
   };
 }
 
 function resolveOverallAggregateValue(
   valueType: ChartDataValueTypes,
-  aggregation: {
-    buckets: Array<{ aggregateValue: number; totalCount: number }>;
-  },
+  aggregation: SummaryAggregationInput,
 ): number | null {
   const buckets = aggregation.buckets.filter((bucket) => Number.isFinite(bucket.aggregateValue));
   if (!buckets.length) {
@@ -115,21 +210,13 @@ export function buildNonAggregateEmptySummary(): AiInsightSummary {
     activityMix: null,
     bucketCoverage: null,
     trend: null,
+    periodDeltas: null,
   };
 }
 
 export function buildInsightSummary(
   query: NormalizedInsightQuery,
-  aggregation: {
-    valueType?: ChartDataValueTypes;
-    resolvedTimeInterval: TimeIntervals;
-    buckets: Array<{
-      bucketKey: string | number;
-      time?: number;
-      aggregateValue: number;
-      totalCount: number;
-    }>;
-  },
+  aggregation: SummaryAggregationInput,
   matchedEventCount: number,
   matchedActivityTypeCounts: Array<{ activityType: string; eventCount: number }>,
 ): AiInsightSummary {
@@ -148,32 +235,12 @@ export function buildInsightSummary(
   return {
     matchedEventCount,
     overallAggregateValue: resolvedValueType ? resolveOverallAggregateValue(resolvedValueType, aggregation) : null,
-    peakBucket: peakBucket
-      ? {
-        bucketKey: peakBucket.bucketKey,
-        time: peakBucket.time,
-        aggregateValue: peakBucket.aggregateValue,
-        totalCount: peakBucket.totalCount,
-      }
-      : null,
-    lowestBucket: lowestBucket
-      ? {
-        bucketKey: lowestBucket.bucketKey,
-        time: lowestBucket.time,
-        aggregateValue: lowestBucket.aggregateValue,
-        totalCount: lowestBucket.totalCount,
-      }
-      : null,
-    latestBucket: latestBucket
-      ? {
-        bucketKey: latestBucket.bucketKey,
-        time: latestBucket.time,
-        aggregateValue: latestBucket.aggregateValue,
-        totalCount: latestBucket.totalCount,
-      }
-      : null,
+    peakBucket: peakBucket ? toSummaryBucket(peakBucket) : null,
+    lowestBucket: lowestBucket ? toSummaryBucket(lowestBucket) : null,
+    latestBucket: latestBucket ? toSummaryBucket(latestBucket) : null,
     activityMix: buildActivityMix(matchedActivityTypeCounts),
     bucketCoverage: isOverallMultiMetric ? null : buildBucketCoverage(query, aggregation),
     trend: isOverallMultiMetric ? null : buildTrend(query, aggregation),
+    periodDeltas: isOverallMultiMetric ? null : buildPeriodDeltas(query, aggregation),
   };
 }

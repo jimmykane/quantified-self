@@ -177,6 +177,25 @@ export interface AiInsightSummaryTrend {
   deltaAggregateValue: number;
 }
 
+export type AiInsightSummaryDeltaDirection =
+  | 'increase'
+  | 'decrease'
+  | 'no_change';
+
+export interface AiInsightSummaryPeriodDeltaContributor {
+  seriesKey: string;
+  deltaAggregateValue: number;
+  direction: AiInsightSummaryDeltaDirection;
+}
+
+export interface AiInsightSummaryPeriodDelta {
+  fromBucket: AiInsightSummaryBucket;
+  toBucket: AiInsightSummaryBucket;
+  deltaAggregateValue: number;
+  direction: AiInsightSummaryDeltaDirection;
+  contributors: AiInsightSummaryPeriodDeltaContributor[];
+}
+
 export interface AiInsightSummary {
   matchedEventCount: number;
   overallAggregateValue: number | null;
@@ -186,6 +205,7 @@ export interface AiInsightSummary {
   activityMix: AiInsightSummaryActivityMix | null;
   bucketCoverage: AiInsightSummaryCoverage | null;
   trend: AiInsightSummaryTrend | null;
+  periodDeltas?: AiInsightSummaryPeriodDelta[] | null;
 }
 
 export interface AiInsightEventLookup {
@@ -245,6 +265,7 @@ export interface AiInsightsAggregateOkResponse {
   };
   aggregation: EventStatAggregationResult;
   summary: AiInsightSummary;
+  deterministicCompareSummary?: string;
   eventRanking?: AiInsightEventLookup;
   presentation: AiInsightPresentation;
 }

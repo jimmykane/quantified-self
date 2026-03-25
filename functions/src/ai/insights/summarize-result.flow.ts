@@ -3,11 +3,13 @@ import * as logger from 'firebase-functions/logger';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
+  TimeIntervals,
   type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
 
 import type {
   AiInsightPresentation,
+  AiInsightSummaryBucket,
   AiInsightSummary,
   AiInsightsMultiMetricAggregateMetricResult,
   NormalizedInsightAggregateQuery,
@@ -25,6 +27,7 @@ import type { EventStatAggregationResult } from '../../../../shared/event-stat-a
 import { resolveMetricSemantics, resolveMetricSummarySemantics } from '../../../../shared/metric-semantics';
 import { formatUnitAwareDataValue } from '../../../../shared/unit-aware-display';
 import { aiInsightsGenkit } from './genkit';
+import { buildExecutionPromptLogContext } from './execute-query.logging';
 
 interface SummarizeInsightEventLookupFact {
   eventId: string;
@@ -72,6 +75,7 @@ export type SummarizeInsightResultInput =
 export interface SummarizeInsightNarrativeResult {
   narrative: string;
   source: 'genkit' | 'fallback';
+  deterministicCompareSummary?: string;
 }
 
 export interface SummarizeInsightDependencies {
@@ -93,6 +97,7 @@ const SummarizeInsightResultOutputSchema = z.object({
 const SummarizeInsightNarrativeResultSchema = z.object({
   narrative: z.string().min(1),
   source: z.enum(['genkit', 'fallback']),
+  deterministicCompareSummary: z.string().min(1).optional(),
 });
 
 function formatSemanticDate(
@@ -147,6 +152,180 @@ function formatNumber(value: number): string {
     return value.toFixed(1);
   }
   return value.toFixed(2);
+}
+
+function formatCompareBucketLabel(
+  bucket: AiInsightSummaryBucket,
+  query: NormalizedInsightAggregateQuery,
+  resolvedTimeInterval: TimeIntervals,
+  locale: string | undefined,
+): string {
+  if (Number.isFinite(bucket.time)) {
+    const bucketDate = new Date(bucket.time as number);
+    if (Number.isFinite(bucketDate.getTime())) {
+      switch (resolvedTimeInterval) {
+        case TimeIntervals.Yearly:
+          return new Intl.DateTimeFormat(locale || 'en-US', {
+            year: 'numeric',
+            timeZone: query.dateRange.timezone,
+          }).format(bucketDate);
+        case TimeIntervals.Monthly:
+        case TimeIntervals.Quarterly:
+        case TimeIntervals.Semesterly:
+          return new Intl.DateTimeFormat(locale || 'en-US', {
+            month: 'short',
+            year: 'numeric',
+            timeZone: query.dateRange.timezone,
+          }).format(bucketDate);
+        case TimeIntervals.Hourly:
+          return new Intl.DateTimeFormat(locale || 'en-US', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            timeZone: query.dateRange.timezone,
+          }).format(bucketDate);
+        case TimeIntervals.Daily:
+        case TimeIntervals.Weekly:
+        case TimeIntervals.BiWeekly:
+        case TimeIntervals.Auto:
+        default:
+          return new Intl.DateTimeFormat(locale || 'en-US', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            timeZone: query.dateRange.timezone,
+          }).format(bucketDate);
+      }
+    }
+  }
+
+  return `${bucket.bucketKey}`;
+}
+
+function formatPeriodDeltaDirection(
+  dataType: string,
+  deltaAggregateValue: number,
+  absoluteDisplayValue: string,
+): string {
+  if (deltaAggregateValue === 0) {
+    return 'did not change';
+  }
+
+  const semantics = resolveMetricSemantics(dataType);
+  if (semantics.direction === 'inverse') {
+    return deltaAggregateValue < 0
+      ? `improved by ${absoluteDisplayValue}`
+      : `slowed by ${absoluteDisplayValue}`;
+  }
+
+  return deltaAggregateValue > 0
+    ? `increased by ${absoluteDisplayValue}`
+    : `decreased by ${absoluteDisplayValue}`;
+}
+
+function formatContributorDirection(
+  dataType: string,
+  deltaAggregateValue: number,
+  absoluteDisplayValue: string,
+): string {
+  const semantics = resolveMetricSemantics(dataType);
+  if (semantics.direction === 'inverse') {
+    return deltaAggregateValue < 0
+      ? `faster by ${absoluteDisplayValue}`
+      : `slower by ${absoluteDisplayValue}`;
+  }
+
+  return deltaAggregateValue > 0
+    ? `up by ${absoluteDisplayValue}`
+    : `down by ${absoluteDisplayValue}`;
+}
+
+function buildDeterministicCompareDeltaNarrative(
+  input: SummarizeInsightResultInput,
+): string | null {
+  if (
+    !('aggregation' in input)
+    || !('summary' in input)
+    || input.query.resultKind !== 'aggregate'
+    || input.query.periodMode !== 'compare'
+    || input.query.categoryType !== ChartDataCategoryTypes.DateType
+    || input.status !== 'ok'
+  ) {
+    return null;
+  }
+
+  const periodDeltas = input.summary.periodDeltas ?? [];
+  if (!periodDeltas.length) {
+    return null;
+  }
+
+  const periodSentences = periodDeltas.map((periodDelta) => {
+    const fromLabel = formatCompareBucketLabel(
+      periodDelta.fromBucket,
+      input.query,
+      input.aggregation.resolvedTimeInterval,
+      input.clientLocale,
+    );
+    const toLabel = formatCompareBucketLabel(
+      periodDelta.toBucket,
+      input.query,
+      input.aggregation.resolvedTimeInterval,
+      input.clientLocale,
+    );
+    const absoluteDeltaDisplayValue = formatInsightAggregateDisplay(
+      input.query.dataType,
+      Math.abs(periodDelta.deltaAggregateValue),
+      input.unitSettings,
+    );
+    const directionText = formatPeriodDeltaDirection(
+      input.query.dataType,
+      periodDelta.deltaAggregateValue,
+      absoluteDeltaDisplayValue,
+    );
+    const baseSentence = `From ${fromLabel} to ${toLabel}, ${input.metricLabel} ${directionText}.`;
+    if (periodDelta.deltaAggregateValue === 0 || !periodDelta.contributors.length) {
+      return baseSentence;
+    }
+
+    const contributorSentence = periodDelta.contributors
+      .map((contributor) => {
+        const absoluteContributorDisplayValue = formatInsightAggregateDisplay(
+          input.query.dataType,
+          Math.abs(contributor.deltaAggregateValue),
+          input.unitSettings,
+        );
+        const contributorDirection = formatContributorDirection(
+          input.query.dataType,
+          contributor.deltaAggregateValue,
+          absoluteContributorDisplayValue,
+        );
+        return `${contributor.seriesKey} (${contributorDirection})`;
+      })
+      .join(', ');
+
+    return `${baseSentence} Likely contributors: ${contributorSentence}.`;
+  });
+
+  return periodSentences.length
+    ? periodSentences.join(' ')
+    : null;
+}
+
+function withDeterministicCompareDeltaNarrative(
+  input: SummarizeInsightResultInput,
+  narrativeResult: SummarizeInsightNarrativeResult,
+): SummarizeInsightNarrativeResult {
+  const deterministicCompareNarrative = buildDeterministicCompareDeltaNarrative(input);
+  if (!deterministicCompareNarrative || narrativeResult.deterministicCompareSummary) {
+    return narrativeResult;
+  }
+
+  return {
+    ...narrativeResult,
+    deterministicCompareSummary: deterministicCompareNarrative,
+  };
 }
 
 export function formatInsightAggregateDisplay(
@@ -577,31 +756,31 @@ export function createSummarizeInsight(
 
         const overrideReason = resolveNarrativeOverrideReason(input, generatedNarrative.narrative);
         if (overrideReason === 'empty_result') {
-          return {
+          return withDeterministicCompareDeltaNarrative(input, {
             ...generatedNarrative,
             narrative: buildNarrativeFallback(input),
-          };
+          });
         }
 
         if (overrideReason) {
           logger.debug('[aiInsights] Replaced inconsistent default-range narrative.', {
-            prompt: input.prompt,
+            ...buildExecutionPromptLogContext(input.prompt),
             resultKind: input.query.resultKind,
             reason: overrideReason,
             dateRangeLabel: formatLocalizedDateRange(input.query, input.clientLocale),
           });
-          return {
+          return withDeterministicCompareDeltaNarrative(input, {
             ...generatedNarrative,
             narrative: buildNarrativeFallback(input),
-          };
+          });
         }
 
-        return generatedNarrative;
-      } catch (_error) {
-        return {
+        return withDeterministicCompareDeltaNarrative(input, generatedNarrative);
+      } catch {
+        return withDeterministicCompareDeltaNarrative(input, {
           narrative: buildNarrativeFallback(input),
           source: 'fallback',
-        };
+        });
       }
     },
   };

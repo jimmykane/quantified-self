@@ -15,6 +15,7 @@ describe('Ai insights shared response contract', () => {
       status: 'ok',
       resultKind: 'aggregate',
       narrative: 'ok',
+      deterministicCompareSummary: 'From 2025 to 2026, distance increased by 10 km.',
       query: {
         resultKind: 'aggregate',
         dataType: 'Distance',
@@ -48,6 +49,31 @@ describe('Ai insights shared response contract', () => {
         activityMix: null,
         bucketCoverage: null,
         trend: null,
+        periodDeltas: [
+          {
+            fromBucket: {
+              bucketKey: '2025',
+              time: Date.parse('2025-01-01T00:00:00.000Z'),
+              aggregateValue: 120,
+              totalCount: 3,
+            },
+            toBucket: {
+              bucketKey: '2026',
+              time: Date.parse('2026-01-01T00:00:00.000Z'),
+              aggregateValue: 130,
+              totalCount: 4,
+            },
+            deltaAggregateValue: 10,
+            direction: 'increase',
+            contributors: [
+              {
+                seriesKey: ActivityTypes.Cycling,
+                deltaAggregateValue: 10,
+                direction: 'increase',
+              },
+            ],
+          },
+        ],
       },
       presentation: {
         title: 'Total distance',
@@ -378,5 +404,129 @@ describe('Ai insights shared response contract', () => {
       return;
     }
     expect(invalidResult.reason).toBe('event_lookup_invalid');
+  });
+
+  it('rejects invalid period delta directions in aggregate summaries', () => {
+    const result = validateAiInsightsResponse({
+      status: 'ok',
+      resultKind: 'aggregate',
+      narrative: 'ok',
+      query: {
+        resultKind: 'aggregate',
+        dataType: 'Distance',
+        valueType: ChartDataValueTypes.Total,
+        categoryType: ChartDataCategoryTypes.DateType,
+        requestedTimeInterval: TimeIntervals.Monthly,
+        activityTypeGroups: [],
+        activityTypes: [ActivityTypes.Cycling],
+        dateRange: {
+          kind: 'bounded',
+          startDate: '2026-01-01T00:00:00.000Z',
+          endDate: '2026-03-22T23:59:59.999Z',
+          timezone: 'UTC',
+          source: 'prompt',
+        },
+        chartType: ChartTypes.ColumnsVertical,
+      },
+      aggregation: {
+        dataType: 'Distance',
+        valueType: ChartDataValueTypes.Total,
+        categoryType: ChartDataCategoryTypes.DateType,
+        resolvedTimeInterval: TimeIntervals.Monthly,
+        buckets: [],
+      },
+      summary: {
+        matchedEventCount: 0,
+        overallAggregateValue: null,
+        peakBucket: null,
+        lowestBucket: null,
+        latestBucket: null,
+        activityMix: null,
+        bucketCoverage: null,
+        trend: null,
+        periodDeltas: [
+          {
+            fromBucket: {
+              bucketKey: '2025',
+              time: Date.parse('2025-01-01T00:00:00.000Z'),
+              aggregateValue: 120,
+              totalCount: 3,
+            },
+            toBucket: {
+              bucketKey: '2026',
+              time: Date.parse('2026-01-01T00:00:00.000Z'),
+              aggregateValue: 130,
+              totalCount: 4,
+            },
+            deltaAggregateValue: 10,
+            direction: 'not-valid',
+            contributors: [],
+          },
+        ],
+      },
+      presentation: {
+        title: 'Total distance',
+        chartType: ChartTypes.ColumnsVertical,
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.reason).toBe('summary_invalid');
+  });
+
+  it('rejects non-string deterministic compare summary values for aggregate responses', () => {
+    const result = validateAiInsightsResponse({
+      status: 'ok',
+      resultKind: 'aggregate',
+      narrative: 'ok',
+      deterministicCompareSummary: 42,
+      query: {
+        resultKind: 'aggregate',
+        dataType: 'Distance',
+        valueType: ChartDataValueTypes.Total,
+        categoryType: ChartDataCategoryTypes.DateType,
+        requestedTimeInterval: TimeIntervals.Monthly,
+        activityTypeGroups: [],
+        activityTypes: [ActivityTypes.Cycling],
+        dateRange: {
+          kind: 'bounded',
+          startDate: '2026-01-01T00:00:00.000Z',
+          endDate: '2026-03-22T23:59:59.999Z',
+          timezone: 'UTC',
+          source: 'prompt',
+        },
+        chartType: ChartTypes.ColumnsVertical,
+      },
+      aggregation: {
+        dataType: 'Distance',
+        valueType: ChartDataValueTypes.Total,
+        categoryType: ChartDataCategoryTypes.DateType,
+        resolvedTimeInterval: TimeIntervals.Monthly,
+        buckets: [],
+      },
+      summary: {
+        matchedEventCount: 0,
+        overallAggregateValue: null,
+        peakBucket: null,
+        lowestBucket: null,
+        latestBucket: null,
+        activityMix: null,
+        bucketCoverage: null,
+        trend: null,
+      },
+      presentation: {
+        title: 'Total distance',
+        chartType: ChartTypes.ColumnsVertical,
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.reason).toBe('deterministic_compare_summary_invalid');
   });
 });
