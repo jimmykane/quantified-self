@@ -782,17 +782,26 @@
   gap: 10px;
 }
 
-.compare-evidence-intro {
-  margin: 0;
-  color: var(--mat-sys-on-surface-variant);
-  font-size: 0.76rem;
-  line-height: 1.35;
+.compare-evidence-panel {
+  margin-top: 2px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--mat-sys-outline-variant) 44%, transparent);
+  background: color-mix(in srgb, var(--mat-sys-surface-container-low) 72%, transparent);
+  box-shadow: none;
 }
 
-.compare-evidence-deterministic-note {
+.compare-evidence-panel-title {
+  color: var(--mat-sys-on-surface);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.compare-evidence-intro {
   margin: 0;
+  padding-top: 6px;
   color: var(--mat-sys-on-surface-variant);
-  font-size: 0.74rem;
+  font-size: 0.76rem;
   line-height: 1.35;
 }
 
