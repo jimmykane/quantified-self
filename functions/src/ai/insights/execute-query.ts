@@ -13,14 +13,23 @@ import {
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
 
-import type { NormalizedInsightQuery } from '../../../../shared/ai-insights.types';
+import type {
+  AiInsightPowerCurve,
+  AiInsightPowerCurvePoint,
+  AiInsightPowerCurveSeries,
+  NormalizedInsightQuery,
+} from '../../../../shared/ai-insights.types';
 import type { FirestoreEventJSON } from '../../../../shared/app-event.interface';
 import {
   AI_INSIGHTS_TOP_RESULTS_DEFAULT,
   clampAiInsightsTopResultsLimit,
 } from '../../../../shared/ai-insights-ranking.constants';
 import {
+  AI_INSIGHTS_POWER_CURVE_COMPARE_SERIES_SAFETY_MAX,
+} from '../../../../shared/ai-insights-power-curve.constants';
+import {
   resolveAggregationCategoryKey,
+  resolveAutoAggregationTimeInterval,
 } from '../../../../shared/event-stat-aggregation';
 import type { EventStatAggregationResult } from '../../../../shared/event-stat-aggregation.types';
 import { serializeErrorForLogging } from './error-logging';
@@ -128,11 +137,22 @@ interface LatestEventExecutionResult {
   };
 }
 
+interface PowerCurveExecutionResult {
+  resultKind: 'power_curve';
+  matchedEventsCount: number;
+  matchedActivityTypeCounts: Array<{
+    activityType: string;
+    eventCount: number;
+  }>;
+  powerCurve: AiInsightPowerCurve;
+}
+
 export type AiInsightsExecutionResult =
   | AggregateExecutionResult
   | EventLookupExecutionResult
   | LatestEventExecutionResult
-  | MultiMetricAggregateExecutionResult;
+  | MultiMetricAggregateExecutionResult
+  | PowerCurveExecutionResult;
 
 type ActivityPrefilterMode = 'none' | 'contains' | 'contains_any' | 'chunked';
 
@@ -145,6 +165,28 @@ interface FetchEventDocsPrefilterDiagnostics {
 interface FetchEventDocsResult {
   docs: FirestoreEventDocumentLike[];
   prefilterDiagnostics: FetchEventDocsPrefilterDiagnostics;
+}
+
+const POWER_CURVE_STAT_TYPE = 'PowerCurve';
+const POWER_CURVE_DROPPED_POINT_SAMPLE_LIMIT = 5;
+
+interface DroppedPowerCurvePointSample {
+  rawPointType: string;
+  durationType?: string;
+  powerType?: string;
+  wattsPerKgType?: string;
+}
+
+interface ResolvedPowerCurvePointsResult {
+  points: AiInsightPowerCurvePoint[];
+  droppedPointCount: number;
+  droppedPointSamples: DroppedPowerCurvePointSample[];
+}
+
+interface PowerCurveBuildLogContext {
+  logger: ExecuteQueryDependencies['logger'];
+  userID: string;
+  prompt?: string;
 }
 
 function chunkValues<T>(values: readonly T[], chunkSize: number): T[][] {
@@ -467,6 +509,356 @@ function resolveRequestedStatValue(event: EventInterface, dataType: string): num
   const stat = event.getStat?.(dataType);
   const rawValue = stat?.getValue?.();
   return typeof rawValue === 'number' && Number.isFinite(rawValue) ? rawValue : null;
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  const resolve = (candidate: unknown, seenObjects: Set<object>): number | null => {
+    if (candidate === null || candidate === undefined || candidate === '') {
+      return null;
+    }
+
+    if (typeof candidate === 'number') {
+      return Number.isFinite(candidate) ? candidate : null;
+    }
+
+    if (typeof candidate === 'string') {
+      const numericValue = Number(candidate);
+      return Number.isFinite(numericValue) ? numericValue : null;
+    }
+
+    if (Array.isArray(candidate)) {
+      for (const nestedCandidate of candidate) {
+        const resolvedValue = resolve(nestedCandidate, seenObjects);
+        if (resolvedValue !== null) {
+          return resolvedValue;
+        }
+      }
+      return null;
+    }
+
+    if (typeof candidate === 'object') {
+      if (seenObjects.has(candidate)) {
+        return null;
+      }
+      seenObjects.add(candidate);
+
+      for (const nestedCandidate of Object.values(candidate as Record<string, unknown>)) {
+        const resolvedValue = resolve(nestedCandidate, seenObjects);
+        if (resolvedValue !== null) {
+          return resolvedValue;
+        }
+      }
+      return null;
+    }
+
+    return null;
+  };
+
+  return resolve(value, new Set<object>());
+}
+
+function describePowerCurveValueType(value: unknown): string {
+  if (value === null) {
+    return 'null';
+  }
+  if (Array.isArray(value)) {
+    return 'array';
+  }
+  if (value instanceof Date) {
+    return 'date';
+  }
+  return typeof value;
+}
+
+function pushDroppedPowerCurvePointSample(
+  samples: DroppedPowerCurvePointSample[],
+  sample: DroppedPowerCurvePointSample,
+): void {
+  if (samples.length >= POWER_CURVE_DROPPED_POINT_SAMPLE_LIMIT) {
+    return;
+  }
+  samples.push(sample);
+}
+
+function resolvePowerCurvePoints(event: EventInterface): ResolvedPowerCurvePointsResult {
+  const stat = event.getStat?.(POWER_CURVE_STAT_TYPE) as { getValue?: () => unknown } | null | undefined;
+  const statValue = stat?.getValue?.();
+  if (!Array.isArray(statValue)) {
+    if (statValue === null || statValue === undefined) {
+      return {
+        points: [],
+        droppedPointCount: 0,
+        droppedPointSamples: [],
+      };
+    }
+
+    return {
+      points: [],
+      droppedPointCount: 1,
+      droppedPointSamples: [{
+        rawPointType: `stat_value_${describePowerCurveValueType(statValue)}`,
+      }],
+    };
+  }
+
+  const pointsByDuration = new Map<number, AiInsightPowerCurvePoint>();
+  const droppedPointSamples: DroppedPowerCurvePointSample[] = [];
+  let droppedPointCount = 0;
+  for (const rawPoint of statValue) {
+    if (!rawPoint || typeof rawPoint !== 'object' || Array.isArray(rawPoint)) {
+      droppedPointCount += 1;
+      pushDroppedPowerCurvePointSample(droppedPointSamples, {
+        rawPointType: describePowerCurveValueType(rawPoint),
+      });
+      continue;
+    }
+
+    const point = rawPoint as { duration?: unknown; power?: unknown; wattsPerKg?: unknown };
+    const duration = toFiniteNumber(point.duration);
+    const power = toFiniteNumber(point.power);
+    const wattsPerKg = toFiniteNumber(point.wattsPerKg);
+    if (!duration || duration <= 0 || !power || power <= 0) {
+      droppedPointCount += 1;
+      pushDroppedPowerCurvePointSample(droppedPointSamples, {
+        rawPointType: 'object',
+        durationType: describePowerCurveValueType(point.duration),
+        powerType: describePowerCurveValueType(point.power),
+        wattsPerKgType: describePowerCurveValueType(point.wattsPerKg),
+      });
+      continue;
+    }
+
+    const normalizedDuration = Number(duration);
+    const normalizedPoint: AiInsightPowerCurvePoint = {
+      duration: normalizedDuration,
+      power: Number(power),
+    };
+    if (wattsPerKg && wattsPerKg > 0) {
+      normalizedPoint.wattsPerKg = Number(wattsPerKg);
+    }
+
+    const existingPoint = pointsByDuration.get(normalizedDuration);
+    if (!existingPoint || normalizedPoint.power > existingPoint.power) {
+      pointsByDuration.set(normalizedDuration, normalizedPoint);
+      continue;
+    }
+
+    if (
+      normalizedPoint.power === existingPoint.power
+      && (normalizedPoint.wattsPerKg ?? 0) > (existingPoint.wattsPerKg ?? 0)
+    ) {
+      pointsByDuration.set(normalizedDuration, normalizedPoint);
+    }
+  }
+
+  return {
+    points: [...pointsByDuration.values()].sort((left, right) => left.duration - right.duration),
+    droppedPointCount,
+    droppedPointSamples,
+  };
+}
+
+function buildPowerCurveEnvelope(pointsCollection: readonly AiInsightPowerCurvePoint[][]): AiInsightPowerCurvePoint[] {
+  const pointsByDuration = new Map<number, AiInsightPowerCurvePoint>();
+
+  pointsCollection.forEach((points) => {
+    points.forEach((point) => {
+      const existingPoint = pointsByDuration.get(point.duration);
+      if (!existingPoint || point.power > existingPoint.power) {
+        pointsByDuration.set(point.duration, point);
+        return;
+      }
+
+      if (
+        point.power === existingPoint.power
+        && (point.wattsPerKg ?? 0) > (existingPoint.wattsPerKg ?? 0)
+      ) {
+        pointsByDuration.set(point.duration, point);
+      }
+    });
+  });
+
+  return [...pointsByDuration.values()]
+    .sort((left, right) => left.duration - right.duration)
+    .map((point) => ({ ...point }));
+}
+
+function resolveBucketEndDate(bucketStartDate: Date, timeInterval: TimeIntervals): Date {
+  const bucketEndDate = new Date(bucketStartDate.getTime());
+  switch (timeInterval) {
+    case TimeIntervals.Hourly:
+      bucketEndDate.setHours(bucketEndDate.getHours() + 1);
+      break;
+    case TimeIntervals.Daily:
+      bucketEndDate.setDate(bucketEndDate.getDate() + 1);
+      break;
+    case TimeIntervals.Weekly:
+      bucketEndDate.setDate(bucketEndDate.getDate() + 7);
+      break;
+    case TimeIntervals.BiWeekly:
+      bucketEndDate.setDate(bucketEndDate.getDate() + 14);
+      break;
+    case TimeIntervals.Monthly:
+      bucketEndDate.setMonth(bucketEndDate.getMonth() + 1);
+      break;
+    case TimeIntervals.Quarterly:
+      bucketEndDate.setMonth(bucketEndDate.getMonth() + 3);
+      break;
+    case TimeIntervals.Semesterly:
+      bucketEndDate.setMonth(bucketEndDate.getMonth() + 6);
+      break;
+    case TimeIntervals.Yearly:
+      bucketEndDate.setFullYear(bucketEndDate.getFullYear() + 1);
+      break;
+    case TimeIntervals.Auto:
+    default:
+      return bucketEndDate;
+  }
+
+  bucketEndDate.setMilliseconds(bucketEndDate.getMilliseconds() - 1);
+  return bucketEndDate;
+}
+
+function buildPowerCurve(
+  query: Extract<NormalizedInsightQuery, { resultKind: 'power_curve' }>,
+  events: EventInterface[],
+  logContext?: PowerCurveBuildLogContext,
+): AiInsightPowerCurve {
+  const eventPowerCurveResolution = events
+    .map((event) => {
+      const { points, droppedPointCount, droppedPointSamples } = resolvePowerCurvePoints(event);
+      return {
+        event,
+        points,
+        droppedPointCount,
+        droppedPointSamples,
+      };
+    });
+  const droppedPointCount = eventPowerCurveResolution
+    .reduce((total, entry) => total + entry.droppedPointCount, 0);
+  if (droppedPointCount > 0 && logContext) {
+    const droppedPointSamples = eventPowerCurveResolution
+      .flatMap(entry => entry.droppedPointSamples)
+      .slice(0, POWER_CURVE_DROPPED_POINT_SAMPLE_LIMIT);
+    const affectedEventCount = eventPowerCurveResolution
+      .filter(entry => entry.droppedPointCount > 0)
+      .length;
+    logContext.logger.warn('[aiInsights] Dropped malformed power-curve points during normalization', {
+      ...buildExecutionPromptLogContext(logContext.prompt),
+      userID: logContext.userID,
+      droppedPointCount,
+      affectedEventCount,
+      droppedPointSamples,
+    });
+  }
+
+  const eventPowerCurves = eventPowerCurveResolution
+    .filter(entry => entry.points.length > 0);
+
+  const matchedEventCount = eventPowerCurves.length;
+  if (!matchedEventCount) {
+    return {
+      mode: query.mode,
+      resolvedTimeInterval: TimeIntervals.Auto,
+      matchedEventCount: 0,
+      requestedSeriesCount: 0,
+      returnedSeriesCount: 0,
+      safetyGuardApplied: false,
+      safetyGuardMaxSeries: null,
+      trimmedSeriesCount: 0,
+      series: [],
+    };
+  }
+
+  if (query.mode === 'best') {
+    const envelope = buildPowerCurveEnvelope(eventPowerCurves.map(entry => entry.points));
+    return {
+      mode: query.mode,
+      resolvedTimeInterval: TimeIntervals.Auto,
+      matchedEventCount,
+      requestedSeriesCount: envelope.length ? 1 : 0,
+      returnedSeriesCount: envelope.length ? 1 : 0,
+      safetyGuardApplied: false,
+      safetyGuardMaxSeries: null,
+      trimmedSeriesCount: 0,
+      series: envelope.length
+        ? [{
+          seriesKey: 'best',
+          label: 'Best power curve',
+          matchedEventCount,
+          bucketStartDate: null,
+          bucketEndDate: null,
+          points: envelope,
+        } satisfies AiInsightPowerCurveSeries]
+        : [],
+    };
+  }
+
+  const resolvedTimeInterval = (
+    query.requestedTimeInterval === undefined || query.requestedTimeInterval === TimeIntervals.Auto
+  )
+    ? resolveAutoAggregationTimeInterval(eventPowerCurves.map(entry => entry.event))
+    : query.requestedTimeInterval;
+  const bucketEntries = new Map<number, {
+    time: number;
+    pointsCollection: AiInsightPowerCurvePoint[][];
+    eventCount: number;
+  }>();
+
+  eventPowerCurves.forEach((eventPowerCurve) => {
+    const bucketKey = resolveAggregationCategoryKey(
+      eventPowerCurve.event,
+      ChartDataCategoryTypes.DateType,
+      resolvedTimeInterval,
+    );
+    if (typeof bucketKey !== 'number' || !Number.isFinite(bucketKey)) {
+      return;
+    }
+
+    const existingEntry = bucketEntries.get(bucketKey) ?? {
+      time: bucketKey,
+      pointsCollection: [],
+      eventCount: 0,
+    };
+    existingEntry.pointsCollection.push(eventPowerCurve.points);
+    existingEntry.eventCount += 1;
+    bucketEntries.set(bucketKey, existingEntry);
+  });
+
+  const orderedSeries = [...bucketEntries.values()]
+    .sort((left, right) => left.time - right.time)
+    .map((bucketEntry) => {
+      const bucketStartDate = new Date(bucketEntry.time);
+      const bucketEndDate = resolveBucketEndDate(bucketStartDate, resolvedTimeInterval);
+      const points = buildPowerCurveEnvelope(bucketEntry.pointsCollection);
+
+      return {
+        seriesKey: `${bucketEntry.time}`,
+        label: bucketStartDate.toISOString(),
+        matchedEventCount: bucketEntry.eventCount,
+        bucketStartDate: bucketStartDate.toISOString(),
+        bucketEndDate: bucketEndDate.toISOString(),
+        points,
+      } satisfies AiInsightPowerCurveSeries;
+    })
+    .filter(seriesEntry => seriesEntry.points.length > 0);
+  const requestedSeriesCount = orderedSeries.length;
+  const safetyGuardApplied = requestedSeriesCount > AI_INSIGHTS_POWER_CURVE_COMPARE_SERIES_SAFETY_MAX;
+  const returnedSeries = safetyGuardApplied
+    ? orderedSeries.slice(-AI_INSIGHTS_POWER_CURVE_COMPARE_SERIES_SAFETY_MAX)
+    : orderedSeries;
+
+  return {
+    mode: query.mode,
+    resolvedTimeInterval,
+    matchedEventCount,
+    requestedSeriesCount,
+    returnedSeriesCount: returnedSeries.length,
+    safetyGuardApplied,
+    safetyGuardMaxSeries: safetyGuardApplied ? AI_INSIGHTS_POWER_CURVE_COMPARE_SERIES_SAFETY_MAX : null,
+    trimmedSeriesCount: Math.max(0, requestedSeriesCount - returnedSeries.length),
+    series: returnedSeries,
+  };
 }
 
 function buildMatchedActivityTypeCounts(
@@ -832,7 +1224,7 @@ export function createExecuteQuery(
         eventsWithRequestedStatCount,
         metricSelectionCount: query.resultKind === 'multi_metric_aggregate'
           ? query.metricSelections.length
-          : query.resultKind === 'latest_event'
+          : query.resultKind === 'latest_event' || query.resultKind === 'power_curve'
             ? 0
             : 1,
         matchedEventIDsSample: matchedEvents.slice(0, 10).map(event => event.getID?.()),
@@ -850,6 +1242,15 @@ export function createExecuteQuery(
         dependencies,
         helpers: {
           buildLatestEvent,
+          buildPowerCurve: (powerCurveQuery, powerCurveEvents) => buildPowerCurve(
+            powerCurveQuery,
+            powerCurveEvents,
+            {
+              logger: dependencies.logger,
+              userID,
+              prompt,
+            },
+          ),
           buildMatchedActivityTypeCounts,
           buildOverallAggregation,
           buildRankedEvents,

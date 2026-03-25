@@ -37,7 +37,12 @@ export type AiInsightsResultKind =
   | 'aggregate'
   | 'event_lookup'
   | 'latest_event'
-  | 'multi_metric_aggregate';
+  | 'multi_metric_aggregate'
+  | 'power_curve';
+
+export type AiInsightsPowerCurveMode =
+  | 'best'
+  | 'compare_over_time';
 
 export type AiInsightsMultiMetricGroupingMode =
   | 'overall'
@@ -92,11 +97,19 @@ export interface NormalizedInsightMultiMetricAggregateQuery extends NormalizedIn
   metricSelections: NormalizedInsightMetricSelection[];
 }
 
+export interface NormalizedInsightPowerCurveQuery extends NormalizedInsightQueryBase {
+  resultKind: 'power_curve';
+  mode: AiInsightsPowerCurveMode;
+  categoryType: ChartDataCategoryTypes.DateType;
+  defaultedToCycling: boolean;
+}
+
 export type NormalizedInsightQuery =
   | NormalizedInsightAggregateQuery
   | NormalizedInsightEventLookupQuery
   | NormalizedInsightLatestEventQuery
-  | NormalizedInsightMultiMetricAggregateQuery;
+  | NormalizedInsightMultiMetricAggregateQuery
+  | NormalizedInsightPowerCurveQuery;
 
 export type AiInsightsQuotaPeriodKind =
   | 'subscription'
@@ -187,6 +200,33 @@ export interface AiInsightLatestEvent {
   matchedEventCount: number;
 }
 
+export interface AiInsightPowerCurvePoint {
+  duration: number;
+  power: number;
+  wattsPerKg?: number;
+}
+
+export interface AiInsightPowerCurveSeries {
+  seriesKey: string;
+  label: string;
+  matchedEventCount: number;
+  bucketStartDate: string | null;
+  bucketEndDate: string | null;
+  points: AiInsightPowerCurvePoint[];
+}
+
+export interface AiInsightPowerCurve {
+  mode: AiInsightsPowerCurveMode;
+  resolvedTimeInterval: TimeIntervals;
+  matchedEventCount: number;
+  requestedSeriesCount: number;
+  returnedSeriesCount: number;
+  safetyGuardApplied: boolean;
+  safetyGuardMaxSeries: number | null;
+  trimmedSeriesCount: number;
+  series: AiInsightPowerCurveSeries[];
+}
+
 export type AiInsightsUnsupportedReasonCode =
   | 'invalid_prompt'
   | 'unsupported_metric'
@@ -248,11 +288,22 @@ export interface AiInsightsMultiMetricAggregateOkResponse {
   presentation: AiInsightPresentation;
 }
 
+export interface AiInsightsPowerCurveOkResponse {
+  status: 'ok';
+  resultKind: 'power_curve';
+  narrative: string;
+  quota?: AiInsightsQuotaStatus;
+  query: NormalizedInsightPowerCurveQuery;
+  powerCurve: AiInsightPowerCurve;
+  presentation: AiInsightPresentation;
+}
+
 export type AiInsightsOkResponse =
   | AiInsightsAggregateOkResponse
   | AiInsightsEventLookupOkResponse
   | AiInsightsLatestEventOkResponse
-  | AiInsightsMultiMetricAggregateOkResponse;
+  | AiInsightsMultiMetricAggregateOkResponse
+  | AiInsightsPowerCurveOkResponse;
 
 export interface AiInsightsEmptyResponse {
   status: 'empty';

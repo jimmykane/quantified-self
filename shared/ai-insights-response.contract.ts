@@ -13,6 +13,9 @@ import {
   AI_INSIGHTS_TOP_RESULTS_MAX,
   AI_INSIGHTS_TOP_RESULTS_MIN,
 } from './ai-insights-ranking.constants';
+import {
+  AI_INSIGHTS_POWER_CURVE_COMPARE_SERIES_SAFETY_MAX,
+} from './ai-insights-power-curve.constants';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -69,6 +72,8 @@ export const NormalizedInsightMetricSelectionSchema = z.object({
   valueType: z.nativeEnum(ChartDataValueTypes),
 });
 
+const NormalizedInsightPowerCurveModeSchema = z.enum(['best', 'compare_over_time']);
+
 export const NormalizedInsightQuerySchema = z.discriminatedUnion('resultKind', [
   NormalizedInsightQueryBaseSchema.extend({
     resultKind: z.literal('aggregate'),
@@ -92,6 +97,12 @@ export const NormalizedInsightQuerySchema = z.discriminatedUnion('resultKind', [
     groupingMode: z.enum(['overall', 'date']),
     categoryType: z.literal(ChartDataCategoryTypes.DateType),
     metricSelections: z.array(NormalizedInsightMetricSelectionSchema).min(2).max(3),
+  }),
+  NormalizedInsightQueryBaseSchema.extend({
+    resultKind: z.literal('power_curve'),
+    mode: NormalizedInsightPowerCurveModeSchema,
+    categoryType: z.literal(ChartDataCategoryTypes.DateType),
+    defaultedToCycling: z.boolean(),
   }),
 ]);
 
@@ -120,6 +131,13 @@ export const NormalizedInsightMultiMetricAggregateQuerySchema = NormalizedInsigh
 export const NormalizedInsightLatestEventQuerySchema = NormalizedInsightQueryBaseSchema.extend({
   resultKind: z.literal('latest_event'),
   categoryType: z.literal(ChartDataCategoryTypes.DateType),
+});
+
+export const NormalizedInsightPowerCurveQuerySchema = NormalizedInsightQueryBaseSchema.extend({
+  resultKind: z.literal('power_curve'),
+  mode: NormalizedInsightPowerCurveModeSchema,
+  categoryType: z.literal(ChartDataCategoryTypes.DateType),
+  defaultedToCycling: z.boolean(),
 });
 
 const BucketKeySchema: z.ZodType<string | number> = z.custom<string | number>(
@@ -215,6 +233,33 @@ export const AiInsightLatestEventSchema = z.object({
   matchedEventCount: z.number().int().nonnegative(),
 });
 
+export const AiInsightPowerCurvePointSchema = z.object({
+  duration: z.number().positive(),
+  power: z.number().finite(),
+  wattsPerKg: z.number().finite().optional(),
+});
+
+export const AiInsightPowerCurveSeriesSchema = z.object({
+  seriesKey: z.string().min(1),
+  label: z.string().min(1),
+  matchedEventCount: z.number().int().nonnegative(),
+  bucketStartDate: z.string().datetime().nullable(),
+  bucketEndDate: z.string().datetime().nullable(),
+  points: z.array(AiInsightPowerCurvePointSchema),
+});
+
+export const AiInsightPowerCurveSchema = z.object({
+  mode: NormalizedInsightPowerCurveModeSchema,
+  resolvedTimeInterval: z.nativeEnum(TimeIntervals),
+  matchedEventCount: z.number().int().nonnegative(),
+  requestedSeriesCount: z.number().int().nonnegative(),
+  returnedSeriesCount: z.number().int().nonnegative(),
+  safetyGuardApplied: z.boolean(),
+  safetyGuardMaxSeries: z.number().int().positive().nullable(),
+  trimmedSeriesCount: z.number().int().nonnegative(),
+  series: z.array(AiInsightPowerCurveSeriesSchema).max(AI_INSIGHTS_POWER_CURVE_COMPARE_SERIES_SAFETY_MAX),
+});
+
 export const AiInsightsMultiMetricAggregateMetricResultSchema = z.object({
   metricKey: AiInsightsPromptMetricKeySchema,
   metricLabel: z.string().min(1),
@@ -269,11 +314,19 @@ const AiInsightsMultiMetricAggregateOkResponseSchema = AiInsightsOkResponseBaseS
   presentation: AiInsightPresentationSchema,
 });
 
+const AiInsightsPowerCurveOkResponseSchema = AiInsightsOkResponseBaseSchema.extend({
+  resultKind: z.literal('power_curve'),
+  query: NormalizedInsightPowerCurveQuerySchema,
+  powerCurve: AiInsightPowerCurveSchema,
+  presentation: AiInsightPresentationSchema,
+});
+
 const AiInsightsOkStrictSchema = z.discriminatedUnion('resultKind', [
   AiInsightsAggregateOkResponseSchema,
   AiInsightsEventLookupOkResponseSchema,
   AiInsightsLatestEventOkResponseSchema,
   AiInsightsMultiMetricAggregateOkResponseSchema,
+  AiInsightsPowerCurveOkResponseSchema,
 ]);
 
 const AiInsightsEmptyResponseSchema = z.object({
@@ -351,6 +404,9 @@ function resolveResponseValidationReason(value: unknown, firstIssuePathKey: stri
   }
   if (firstIssuePathKey === 'latestEvent') {
     return 'latest_event_invalid';
+  }
+  if (firstIssuePathKey === 'powerCurve') {
+    return 'power_curve_invalid';
   }
   if (firstIssuePathKey === 'metricResults') {
     return 'metric_results_invalid';

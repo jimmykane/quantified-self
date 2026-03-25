@@ -5,6 +5,9 @@ import {
   AiInsightsQuotaStatusSchema,
   AiInsightEventLookupSchema,
   AiInsightLatestEventSchema,
+  AiInsightPowerCurveSchema,
+  AiInsightPowerCurvePointSchema,
+  AiInsightPowerCurveSeriesSchema,
   AiInsightPresentationSchema,
   AiInsightSummarySchema,
   AiInsightsMultiMetricAggregateMetricResultSchema,
@@ -16,6 +19,7 @@ import {
   NormalizedInsightLatestEventQuerySchema,
   NormalizedInsightMetricSelectionSchema,
   NormalizedInsightMultiMetricAggregateQuerySchema,
+  NormalizedInsightPowerCurveQuerySchema,
   NormalizedInsightQuerySchema,
 } from '../../../../shared/ai-insights-response.contract';
 
@@ -26,6 +30,9 @@ export {
   AiInsightsQuotaStatusSchema,
   AiInsightEventLookupSchema,
   AiInsightLatestEventSchema,
+  AiInsightPowerCurveSchema,
+  AiInsightPowerCurvePointSchema,
+  AiInsightPowerCurveSeriesSchema,
   AiInsightPresentationSchema,
   AiInsightSummarySchema,
   AiInsightsMultiMetricAggregateMetricResultSchema,
@@ -37,5 +44,6 @@ export {
   NormalizedInsightLatestEventQuerySchema,
   NormalizedInsightMetricSelectionSchema,
   NormalizedInsightMultiMetricAggregateQuerySchema,
+  NormalizedInsightPowerCurveQuerySchema,
   NormalizedInsightQuerySchema,
 };

@@ -258,14 +258,31 @@ export class EventCardMapManager {
     if (!this.map || !this.mapboxgl) {
       return;
     }
-    const incomingActivityIds = new Set((this.currentTracks || []).map((track) => track.activityId));
-    this.activeLayersByActivityId.forEach((_ids, activityId) => {
-      if (!incomingActivityIds.has(activityId)) {
-        this.removeTrack(activityId);
-      }
-    });
+    if (!isStyleReady(this.map)) {
+      this.logger.log('[EventCardMapManager] renderTracks skipped because style is not ready.', {
+        trackCount: this.currentTracks.length,
+      });
+      return;
+    }
+    try {
+      const incomingActivityIds = new Set((this.currentTracks || []).map((track) => track.activityId));
+      this.activeLayersByActivityId.forEach((_ids, activityId) => {
+        if (!incomingActivityIds.has(activityId)) {
+          this.removeTrack(activityId);
+        }
+      });
 
-    this.currentTracks.forEach((track) => this.renderSingleTrack(track));
+      this.currentTracks.forEach((track) => this.renderSingleTrack(track));
+    } catch (error: any) {
+      const message = String(error?.message || '');
+      if (message.includes('Style is not done loading') || !isStyleReady(this.map)) {
+        this.logger.log('[EventCardMapManager] renderTracks interrupted because style is not ready.', {
+          trackCount: this.currentTracks.length,
+        });
+        return;
+      }
+      throw error;
+    }
   }
 
   private renderSingleTrack(track: EventTrackRenderData): void {

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   type ActivityTypeGroup,
+  ActivityTypeGroups,
   ActivityTypes,
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -10,6 +11,7 @@ import {
 
 import type {
   AiInsightsRequest,
+  AiInsightsPowerCurveMode,
   AiInsightsMultiMetricGroupingMode,
   AiInsightsUnsupportedReasonCode,
   NormalizedInsightBoundedDateRange,
@@ -44,6 +46,7 @@ import {
   buildEventLookupInsightQuery,
   buildLatestEventInsightQuery,
   buildMultiMetricInsightQuery,
+  buildPowerCurveInsightQuery,
 } from './normalize-query.result-kind-query-builders';
 import { AiInsightsRequestSchema, NormalizedInsightQuerySchema } from './schemas';
 
@@ -223,6 +226,7 @@ const DATE_ACTIVITY_STACKED_TIME_AXIS_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
 const EVENT_LOOKUP_SUBJECT_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
   /\b(when did i have|when i had|when was|which event|what workout|which workout|which session)\b/i,
   /\bwhich\s+(ride|rides|run|runs|swim|swims|workout|workouts|session|sessions|activity|activities|event|events)\s+had\b/i,
+  /\bwhich\s+(ride|rides|run|runs|swim|swims|workout|workouts|session|sessions|activity|activities|event|events)\s+(was|were)\b/i,
   /\bi want to know when i had\b/i,
 ];
 const LATEST_EVENT_SUBJECT_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
@@ -249,7 +253,7 @@ const PROMPT_ACTIVITY_TYPE_ALIAS_PATTERNS: ReadonlyArray<{
   {
     // Keep singular "run" as an activity alias only in noun contexts
     // so command-verb phrasing like "run a comparison" is not misclassified.
-    pattern: /\b(runs|(?:last|latest|most recent|my|a|an|the)\s+run)\b/i,
+    pattern: /\b(runs|(?:last|latest|most recent|my|a|an|the|which|what)\s+run)\b/i,
     activityTypes: [ActivityTypes.Running],
   },
   {
@@ -1303,6 +1307,32 @@ function promptImpliesLatestEventLookup(prompt: string): boolean {
   return LATEST_EVENT_SUBJECT_PROMPT_PATTERNS.some(pattern => pattern.test(normalizedPrompt));
 }
 
+function promptImpliesPowerCurve(prompt: string): boolean {
+  const normalizedPrompt = normalizePromptSearchText(prompt);
+  if (!normalizedPrompt) {
+    return false;
+  }
+
+  if (/\bpower\s*-?\s*curve\b/.test(normalizedPrompt) || /\bpowercurve\b/.test(normalizedPrompt)) {
+    return true;
+  }
+
+  return /\bpower\b/.test(normalizedPrompt) && /\bcurve\b/.test(normalizedPrompt);
+}
+
+function resolvePowerCurveMode(prompt: string): AiInsightsPowerCurveMode {
+  const normalizedPrompt = normalizePromptSearchText(prompt);
+  if (!normalizedPrompt) {
+    return 'best';
+  }
+
+  if (/\b(compare|comparison|vs|versus|evolv(?:e|ed|ing)|chang(?:e|ed|ing)|over time|timeline|trend)\b/.test(normalizedPrompt)) {
+    return 'compare_over_time';
+  }
+
+  return 'best';
+}
+
 function resolvePromptAggregation(prompt: string): ModelAggregationCode | undefined {
   const normalizedPrompt = normalizePromptSearchText(prompt);
   if (!normalizedPrompt) {
@@ -1323,6 +1353,25 @@ function resolvePromptAggregation(prompt: string): ModelAggregationCode | undefi
   }
 
   return undefined;
+}
+
+function resolveImplicitEventLookupMetricAlias(prompt: string): string | null {
+  if (!promptImpliesEventLookup(prompt)) {
+    return null;
+  }
+
+  const normalizedPrompt = normalizePromptSearchText(prompt);
+  if (!normalizedPrompt) {
+    return null;
+  }
+
+  const hasActivitySubject = /\b(ride|rides|run|runs|swim|swims|workout|workouts|session|sessions|activity|activities|event|events)\b/.test(normalizedPrompt);
+  const hasDistanceSuperlative = /\b(longest|shortest|farthest|furthest)\b/.test(normalizedPrompt);
+  if (!hasActivitySubject || !hasDistanceSuperlative) {
+    return null;
+  }
+
+  return 'distance';
 }
 
 function resolvePromptAggregationCodes(prompt: string): ModelAggregationCode[] {
@@ -1731,8 +1780,13 @@ function resolvePromptDateRangeIntent(prompt: string): DateRangeIntent | undefin
 }
 
 function buildDeterministicIntent(prompt: string): ModelInsightIntent {
-  const metricMatch = findInsightMetricAliasMatch(canonicalizeInsightPrompt(prompt));
-  if (!metricMatch) {
+  const canonicalPrompt = canonicalizeInsightPrompt(prompt);
+  const metricMatch = findInsightMetricAliasMatch(canonicalPrompt);
+  const fallbackMetricAlias = metricMatch ? null : resolveImplicitEventLookupMetricAlias(prompt);
+  const resolvedMetric = metricMatch?.metric || (fallbackMetricAlias ? resolveInsightMetric(fallbackMetricAlias) : null);
+  const resolvedMetricAlias = metricMatch?.alias || fallbackMetricAlias;
+
+  if (!resolvedMetric || !resolvedMetricAlias) {
     return {
       status: 'unsupported',
       unsupportedReasonCode: 'unsupported_metric',
@@ -1744,13 +1798,13 @@ function buildDeterministicIntent(prompt: string): ModelInsightIntent {
 
   const promptAggregation = resolvePromptAggregationForMetric(
     prompt,
-    metricMatch.metric.key,
+    resolvedMetric.key,
     resolvePromptAggregation(prompt),
   );
 
   return ModelInsightIntentSchema.parse({
     status: 'supported',
-    metric: metricMatch.alias,
+    metric: resolvedMetricAlias,
     aggregation: promptAggregation,
     category: resolvePromptCategory(prompt),
     requestedTimeInterval: resolvePromptRequestedTimeInterval(prompt),
@@ -2076,6 +2130,99 @@ export function createNormalizeQuery(
       promptRequestedTimeInterval,
     } = promptContext;
     const promptDateRangeIntent = promptDateSelection.effectiveDateRangeIntent;
+    if (promptImpliesPowerCurve(prompt)) {
+      const promptWithoutActivityExclusions = stripPromptActivityExclusionClauses(prompt);
+      const promptExcludedActivityTypeGroups = extractPromptActivityExclusionClauses(prompt)
+        .flatMap((clause) => resolvePromptActivityTypeGroups(clause));
+      const promptExcludedActivityTypes = extractPromptActivityExclusionClauses(prompt)
+        .flatMap((clause) => {
+          const clauseGroups = resolvePromptActivityTypeGroups(clause);
+          return [
+            ...resolvePromptActivityTypes(clause, clauseGroups),
+            ...resolveKeywordActivityTypeExclusions(clause),
+          ];
+        });
+      const defaultCyclingActivityTypeGroups = [ActivityTypeGroups.CyclingGroup];
+      const hasExplicitCyclingExclusion = (
+        promptExcludedActivityTypeGroups.includes(ActivityTypeGroups.CyclingGroup)
+        || promptExcludedActivityTypes.includes(ActivityTypes.Cycling)
+      );
+      const excludedActivityTypeSet = new Set<ActivityTypes>([
+        ...promptExcludedActivityTypes,
+        ...expandActivityTypeGroups(promptExcludedActivityTypeGroups),
+      ]);
+      if (hasExplicitCyclingExclusion) {
+        expandActivityTypeGroups(defaultCyclingActivityTypeGroups)
+          .forEach(activityType => excludedActivityTypeSet.add(activityType));
+      }
+      const promptActivityTypeGroups = resolvePromptActivityTypeGroups(promptWithoutActivityExclusions);
+      const promptActivityTypes = resolvePromptActivityTypes(promptWithoutActivityExclusions, promptActivityTypeGroups);
+      const filteredResolvedActivityTypes = excludeActivityTypes(
+        promptActivityTypes,
+        excludedActivityTypeSet,
+      );
+      const filteredResolvedActivityTypeGroups = promptActivityTypeGroups
+        .filter(activityTypeGroup => !promptExcludedActivityTypeGroups.includes(activityTypeGroup));
+      const explicitActivityTypeGroups = filteredResolvedActivityTypes.length > 0 ? [] : filteredResolvedActivityTypeGroups;
+      const expandedActivityTypes = explicitActivityTypeGroups.length > 0
+        ? excludeActivityTypes(expandActivityTypeGroups(explicitActivityTypeGroups), excludedActivityTypeSet)
+        : [];
+      const resolvedActivityTypes = filteredResolvedActivityTypes.length > 0
+        ? filteredResolvedActivityTypes
+        : expandedActivityTypes;
+      const defaultedToCycling = (
+        resolvedActivityTypes.length === 0
+        && explicitActivityTypeGroups.length === 0
+        && !hasExplicitCyclingExclusion
+      );
+      const finalActivityTypeGroups = defaultedToCycling
+        ? defaultCyclingActivityTypeGroups
+        : explicitActivityTypeGroups;
+      const finalActivityTypes = defaultedToCycling
+        ? (() => {
+          const expandedDefaultActivityTypes = excludeActivityTypes(
+            expandActivityTypeGroups(defaultCyclingActivityTypeGroups),
+            excludedActivityTypeSet,
+          );
+          return expandedDefaultActivityTypes.length > 0
+            ? expandedDefaultActivityTypes
+            : [ActivityTypes.Cycling];
+        })()
+        : resolvedActivityTypes.length > 0
+          ? resolvedActivityTypes
+          : excludedActivityTypeSet.size > 0
+            ? excludeActivityTypes(CANONICAL_ACTIVITY_TYPES, excludedActivityTypeSet)
+            : [];
+      const mode = resolvePowerCurveMode(prompt);
+      const dateRange = resolveDateRange(promptDateRangeIntent, input.clientTimezone, resolvedDependencies.now());
+      const requestedDateRanges = resolveRequestedDateRanges(
+        promptDateSelection.requestedDateRangeIntents,
+        input.clientTimezone,
+        resolvedDependencies.now(),
+      );
+
+      return {
+        status: 'ok',
+        query: buildPowerCurveInsightQuery({
+          mode,
+          requestedTimeInterval: mode === 'compare_over_time'
+            ? toRequestedTimeInterval(
+              ChartDataCategoryTypes.DateType,
+              promptRequestedTimeInterval,
+              promptDateRangeIntent,
+            )
+            : undefined,
+          activityTypeGroups: finalActivityTypeGroups,
+          activityTypes: finalActivityTypes,
+          dateRange,
+          requestedDateRanges,
+          periodMode: promptDateSelection.periodMode,
+          chartType: ChartTypes.LinesVertical,
+          defaultedToCycling,
+        }),
+      };
+    }
+
     const multiMetricIntent = resolveMultiMetricIntent(prompt, promptContext);
     if (multiMetricIntent && 'status' in multiMetricIntent) {
       return multiMetricIntent;

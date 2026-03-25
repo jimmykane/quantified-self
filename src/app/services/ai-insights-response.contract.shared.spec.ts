@@ -193,11 +193,61 @@ describe('Ai insights shared response contract', () => {
         chartType: ChartTypes.LinesVertical,
       },
     });
+    const powerCurve = validateAiInsightsResponse({
+      status: 'ok',
+      resultKind: 'power_curve',
+      narrative: 'Best power curve',
+      query: {
+        resultKind: 'power_curve',
+        mode: 'best',
+        categoryType: ChartDataCategoryTypes.DateType,
+        requestedTimeInterval: TimeIntervals.Monthly,
+        activityTypeGroups: [],
+        activityTypes: [ActivityTypes.Cycling],
+        dateRange: {
+          kind: 'bounded',
+          startDate: '2026-01-01T00:00:00.000Z',
+          endDate: '2026-03-22T23:59:59.999Z',
+          timezone: 'UTC',
+          source: 'prompt',
+        },
+        chartType: ChartTypes.LinesVertical,
+        defaultedToCycling: true,
+      },
+      powerCurve: {
+        mode: 'best',
+        resolvedTimeInterval: TimeIntervals.Auto,
+        matchedEventCount: 2,
+        requestedSeriesCount: 1,
+        returnedSeriesCount: 1,
+        safetyGuardApplied: false,
+        safetyGuardMaxSeries: null,
+        trimmedSeriesCount: 0,
+        series: [
+          {
+            seriesKey: 'best',
+            label: 'Best power curve',
+            matchedEventCount: 2,
+            bucketStartDate: null,
+            bucketEndDate: null,
+            points: [
+              { duration: 5, power: 620, wattsPerKg: 8.1 },
+              { duration: 60, power: 410, wattsPerKg: 5.4 },
+            ],
+          },
+        ],
+      },
+      presentation: {
+        title: 'Best power curve for Cycling',
+        chartType: ChartTypes.LinesVertical,
+      },
+    });
 
     expect(aggregate.ok).toBe(true);
     expect(eventLookup.ok).toBe(true);
     expect(latestEvent.ok).toBe(true);
     expect(multiMetric.ok).toBe(true);
+    expect(powerCurve.ok).toBe(true);
   });
 
   it('rejects invalid query combinations with deterministic reason', () => {

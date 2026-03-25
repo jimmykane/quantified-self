@@ -1,4 +1,4 @@
-import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { TimeIntervals, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import type {
   AiInsightPresentation,
   AiInsightSummary,
@@ -8,6 +8,7 @@ import type {
   AiInsightsMultiMetricAggregateMetricResult,
   AiInsightsMultiMetricAggregateOkResponse,
   AiInsightsOkResponse,
+  AiInsightsPowerCurveOkResponse,
   AiInsightsQuotaStatusResponse,
   AiInsightsRequest,
   AiInsightsResultKind,
@@ -15,6 +16,7 @@ import type {
   NormalizedInsightEventLookupQuery,
   NormalizedInsightLatestEventQuery,
   NormalizedInsightMultiMetricAggregateQuery,
+  NormalizedInsightPowerCurveQuery,
 } from '../../../../shared/ai-insights.types';
 import { resolveAiInsightsActivityFilterLabel } from '../../../../shared/ai-insights-activity-filter';
 import type { AiInsightsExecutionResult } from './execute-query';
@@ -64,17 +66,25 @@ interface MultiMetricCallableResultKindContext extends CallableResultKindContext
   executionResult: Extract<AiInsightsExecutionResult, { resultKind: 'multi_metric_aggregate' }>;
 }
 
+interface PowerCurveCallableResultKindContext extends CallableResultKindContextBase {
+  resultKind: 'power_curve';
+  query: NormalizedInsightPowerCurveQuery;
+  executionResult: Extract<AiInsightsExecutionResult, { resultKind: 'power_curve' }>;
+}
+
 export type CallableResultKindContext =
   | AggregateCallableResultKindContext
   | EventLookupCallableResultKindContext
   | LatestEventCallableResultKindContext
-  | MultiMetricCallableResultKindContext;
+  | MultiMetricCallableResultKindContext
+  | PowerCurveCallableResultKindContext;
 
 interface CallableResultKindContextMap {
   aggregate: AggregateCallableResultKindContext;
   event_lookup: EventLookupCallableResultKindContext;
   latest_event: LatestEventCallableResultKindContext;
   multi_metric_aggregate: MultiMetricCallableResultKindContext;
+  power_curve: PowerCurveCallableResultKindContext;
 }
 
 export type InsightNarrativeResult = SummarizeInsightNarrativeResult;
@@ -123,6 +133,48 @@ function buildLatestEventNarrative(params: {
     : params.latestEventStartDate;
 
   return `Your latest ${activityText} event was on ${eventDateLabel}. I matched ${params.matchedEventCount} ${matchedNoun}.`;
+}
+
+function resolveTimeIntervalLabel(timeInterval: TimeIntervals): string {
+  switch (timeInterval) {
+    case TimeIntervals.Hourly:
+      return 'hour';
+    case TimeIntervals.Daily:
+      return 'day';
+    case TimeIntervals.Weekly:
+      return 'week';
+    case TimeIntervals.BiWeekly:
+      return 'two-week period';
+    case TimeIntervals.Monthly:
+      return 'month';
+    case TimeIntervals.Quarterly:
+      return 'quarter';
+    case TimeIntervals.Semesterly:
+      return 'half-year period';
+    case TimeIntervals.Yearly:
+      return 'year';
+    default:
+      return 'period';
+  }
+}
+
+function buildPowerCurveNarrative(context: PowerCurveCallableResultKindContext): string {
+  const powerCurve = context.executionResult.powerCurve;
+  const activityLabel = resolveAiInsightsActivityFilterLabel(context.query);
+  const activitySuffix = activityLabel === 'All activities'
+    ? ''
+    : ` for ${activityLabel.toLowerCase()}`;
+  if (!powerCurve.series.length) {
+    return `I found no power-curve data${activitySuffix} in this range.`;
+  }
+
+  if (powerCurve.mode === 'best') {
+    const eventNoun = powerCurve.matchedEventCount === 1 ? 'event' : 'events';
+    return `I built your best power curve${activitySuffix} as the max-power envelope across ${powerCurve.matchedEventCount} matching ${eventNoun}.`;
+  }
+
+  const intervalLabel = resolveTimeIntervalLabel(powerCurve.resolvedTimeInterval);
+  return `I compared your power curve${activitySuffix} over time by building one envelope per ${intervalLabel}.`;
 }
 
 const CALLABLE_RESULT_KIND_REGISTRY = {
@@ -235,6 +287,22 @@ const CALLABLE_RESULT_KIND_REGISTRY = {
       metricResults: context.metricResults,
       presentation: context.presentation,
     } satisfies AiInsightsMultiMetricAggregateOkResponse),
+  },
+  power_curve: {
+    isEmpty: (context) => context.executionResult.powerCurve.series.length === 0,
+    summarize: async (context) => ({
+      narrative: buildPowerCurveNarrative(context),
+      source: 'fallback',
+    }),
+    buildOkResponse: (context, narrativeResult, quota) => ({
+      status: 'ok',
+      resultKind: 'power_curve',
+      narrative: narrativeResult.narrative,
+      quota,
+      query: context.query,
+      powerCurve: context.executionResult.powerCurve,
+      presentation: context.presentation,
+    } satisfies AiInsightsPowerCurveOkResponse),
   },
 } satisfies CallableResultKindRegistry;
 

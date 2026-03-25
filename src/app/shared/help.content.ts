@@ -128,6 +128,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 - AI Insights is available for **Basic** and **Pro** accounts.
 - Free accounts are redirected to the subscription flow for AI Insights access.
 - Prompts are currently **English only**.
+- For AI Insights, we do **not** share your raw activities, routes, or uploaded files with AI providers.
+- We only send the minimum derived stats needed to generate answers.
 - Request limits per billing period:
   - Basic: up to **${AI_INSIGHTS_REQUEST_LIMITS.basic}** requests
   - Pro: up to **${AI_INSIGHTS_REQUEST_LIMITS.pro}** requests
@@ -219,7 +221,7 @@ If you downgrade from a paid plan, the app keeps your access through the current
 After the grace period:
 
 - Pro-only sync connections can be disconnected.
-- Activities above the new plan limit can be permanently removed.
+- Existing activities are retained. New uploads follow your current plan limit.
 
 ## When to contact support
 
@@ -335,6 +337,8 @@ Suunto and COROS history imports are queued jobs. Large ranges can take hours or
 - Your profile and activity visibility can be controlled from Settings.
 - Sharing a profile or activity can make it public and copy a share link.
 - Privacy settings should be reviewed before sharing data externally.
+- For AI Insights, we do **not** share your raw activity data with AI providers.
+- Only the minimum derived stats required to answer your prompt are sent.
 
 ## Settings you can change yourself
 

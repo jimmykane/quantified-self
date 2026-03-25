@@ -94,7 +94,11 @@ function resolveSummaryValueType(
   query: NormalizedInsightQuery,
   aggregationValueType: ChartDataValueTypes | undefined,
 ): ChartDataValueTypes | null {
-  if (query.resultKind === 'multi_metric_aggregate' || query.resultKind === 'latest_event') {
+  if (
+    query.resultKind === 'multi_metric_aggregate'
+    || query.resultKind === 'latest_event'
+    || query.resultKind === 'power_curve'
+  ) {
     return aggregationValueType ?? null;
   }
 

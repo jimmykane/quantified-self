@@ -315,8 +315,11 @@
                 </div>
               </div>
             </div>
-          } @else if (latestEventOkResponse(); as result) {
-            <div class="result-content">
+          } @else if (okResponse(); as okResult) {
+            @switch (okResult.resultKind) {
+              @case ('latest_event') {
+                @if (latestEventOkResponse(); as result) {
+                  <div class="result-content">
               <div class="result-header">
                 @if (resultDateRangeNote(); as dateRangeNote) {
                   <div class="result-date-range-note">
@@ -381,9 +384,12 @@
                   </div>
                 </section>
               }
-            </div>
-          } @else if (eventLookupOkResponse(); as result) {
-            <div class="result-content">
+                  </div>
+                }
+              }
+              @case ('event_lookup') {
+                @if (eventLookupOkResponse(); as result) {
+                  <div class="result-content">
               <div class="result-header">
                 @if (resultDateRangeNote(); as dateRangeNote) {
                   <div class="result-date-range-note">
@@ -481,9 +487,12 @@
                   }
                 </div>
               }
-            </div>
-          } @else if (multiMetricOkResponse(); as result) {
-            <div class="result-content">
+                  </div>
+                }
+              }
+              @case ('multi_metric_aggregate') {
+                @if (multiMetricOkResponse(); as result) {
+                  <div class="result-content">
               <div class="result-header">
                 @if (resultDateRangeNote(); as dateRangeNote) {
                   <div class="result-date-range-note">
@@ -609,9 +618,57 @@
                   </div>
                 }
               }
-            </div>
-          } @else if (aggregateOkResponse(); as result) {
-            <div class="result-content">
+                  </div>
+                }
+              }
+              @case ('power_curve') {
+                @if (powerCurveOkResponse(); as result) {
+                  <div class="result-content">
+              <div class="result-header">
+                @if (resultDateRangeNote(); as dateRangeNote) {
+                  <div class="result-date-range-note">
+                    <mat-icon>info</mat-icon>
+                    <p class="mat-body-small">{{ dateRangeNote }}</p>
+                  </div>
+                }
+                @if (canRefreshResult()) {
+                  <div class="result-actions">
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      class="result-refresh-button"
+                      [disabled]="isSubmitting()"
+                      (click)="refreshCurrentResult()">
+                      <mat-icon>refresh</mat-icon>
+                      <span>Refresh with latest data &amp; dates</span>
+                    </button>
+                  </div>
+                }
+              </div>
+
+              <div class="narrative-info qs-glass-card-panel">
+                <p class="description-text narrative">{{ result.narrative }}</p>
+              </div>
+
+              @if (resultWarnings().length) {
+                <mat-chip-set class="warning-chips" aria-label="Insight warnings">
+                  @for (warning of resultWarnings(); track warning) {
+                    <mat-chip disableRipple>{{ warning }}</mat-chip>
+                  }
+                </mat-chip-set>
+              }
+
+                  <app-ai-insights-power-curve-chart
+                    [response]="result"
+                    [darkTheme]="isDarkTheme()"
+                    [useAnimations]="useAnimations()">
+                  </app-ai-insights-power-curve-chart>
+                  </div>
+                }
+              }
+              @case ('aggregate') {
+                @if (aggregateOkResponse(); as result) {
+                  <div class="result-content">
               <div class="result-header">
                 @if (resultDateRangeNote(); as dateRangeNote) {
                   <div class="result-date-range-note">
@@ -781,7 +838,19 @@
                   </div>
                 }
               }
-            </div>
+                  </div>
+                }
+              }
+              @default {
+                <div class="state-panel state-panel-placeholder qs-glass-card-panel">
+                  <mat-icon>query_stats</mat-icon>
+                  <div>
+                    <p class="mat-title-medium state-title">Ready for your first question</p>
+                    <p class="mat-body-medium state-copy">Start with one metric and one date range, then refine from there.</p>
+                  </div>
+                </div>
+              }
+            }
           } @else {
             <div class="state-panel state-panel-placeholder qs-glass-card-panel">
               <mat-icon>query_stats</mat-icon>

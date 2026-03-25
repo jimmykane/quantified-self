@@ -272,8 +272,8 @@ export class PricingComponent implements OnInit, OnDestroy {
             const isPro = this.currentRole === 'pro';
             const message = `You will be redirected to our secure billing portal where you can manage your plan and payment methods.<br><br>` +
                 `<span style="color: var(--mat-sys-error); font-weight: bold;">Important:</span> If you decide to downgrade your plan, you will keep your features for a 30-day grace period. ` +
-                (isPro ? `After that, your device sync will be disconnected, and any activities exceeding your new plan's limit will be permanently deleted.` :
-                    `After that, any activities exceeding your new plan's limit will be permanently deleted.`);
+                (isPro ? `After that, your device sync will be disconnected, and your new plan limits will apply to future uploads. Existing activities are not automatically deleted.` :
+                    `After that, your new plan limits will apply to future uploads. Existing activities are not automatically deleted.`);
 
             const confirmed = await firstValueFrom(
                 this.dialog.open(ConfirmationDialogComponent, {

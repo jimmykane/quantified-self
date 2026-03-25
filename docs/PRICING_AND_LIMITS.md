@@ -32,8 +32,8 @@ The application defines three primary user roles based on subscription status:
 Limits are enforced through a scheduled background process (`enforceSubscriptionLimits`) that runs every 24 hours (Europe/London time).
 
 ### Activity Counters
-*   If a user exceeds their tier's limit (e.g., a Free user has 15 events), the system will automatically **delete the oldest events** until the count matches the limit.
-*   **Deletion Policy:** Recursive deletion (removes the event and all its subcollections).
+*   If a user is at their tier's limit, future uploads are blocked by upload-time limit checks.
+*   Existing event history is retained; there is no automatic event pruning on grace-period expiry.
 
 ### Device Synchronization
 *   Sync is exclusively a **Pro** feature.
@@ -43,28 +43,28 @@ Limits are enforced through a scheduled background process (`enforceSubscription
 
 ## Grace Period Policy
 
-To prevent immediate data loss or service interruption upon payment failure or subscription cancellation, the system implements a **30-Day Grace Period**.
+To prevent immediate service interruption upon payment failure or subscription cancellation, the system implements a **30-Day Grace Period**.
 
 ### Triggers
 *   **Subscription Cancellation/Expiration:** When the system detects no active or trialing subscription for a previously paid user, a grace period is started.
 *   **Duration:** 30 Days from the moment the active subscription is lost.
 
 ### During Grace Period
-*   The user effectively retains their previous privileges (services remain connected, data is not pruned).
+*   The user effectively retains their previous privileges (services remain connected, existing data is retained).
 *   The UI may display downgrade warnings.
 
 ### Expiration
 Once the 30-day window expires:
 1.  **Role Reversion:** The user's role is set to `free`.
 2.  **Service Disconnection:** External APIs (Garmin, etc.) are deauthorized.
-3.  **Data Pruning:** The enforcement job will reduce the user's event history to the Free limit (100 events), deleting the oldest entries first.
+3.  **Limit Enforcement:** Plan limits continue to apply to future uploads; historical events are retained.
 
 ## User Notifications (Frontend)
 
 The application provides visibility into the grace period status to keep the user informed:
 
 *   **Global Banner:** If a user is currently in a grace period, a persistent banner appears at the top of the application (implemented in `AppComponent`).
-    *   **Message:** "Your Pro plan has ended. You have until [DATE] before your device sync is disconnected and newest activities are deleted."
+    *   **Message:** "Your Pro plan has ended. You have until [DATE] before your device sync is disconnected and plan limits apply to new uploads."
     *   **Action:** Includes a direct link to the Pricing page to "Upgrade now".
 *   **Downgrade Warning:** When a Pro user explicitly chooses to downgrade in the UI, they are presented with a confirmation dialog explaining the 30-day grace period ahead of time.
 

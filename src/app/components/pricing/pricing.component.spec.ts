@@ -153,6 +153,11 @@ describe('PricingComponent', () => {
                 message: expect.stringContaining('device sync will be disconnected')
             })
         }));
+        expect(dialogSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+            data: expect.objectContaining({
+                message: expect.stringContaining('Existing activities are not automatically deleted')
+            })
+        }));
     });
 
     it('should show downgrade warning for basic users without sync mention', async () => {
@@ -489,6 +494,7 @@ describe('PricingComponent', () => {
 
         const content = fixture.nativeElement.textContent as string;
         expect(content).toContain('your first month is free for new members');
+        expect(content).toContain('No card needed');
     });
 
     it('should not render first-month-free copy for returning users with paid history', async () => {
@@ -525,6 +531,7 @@ describe('PricingComponent', () => {
 
         const content = fixture.nativeElement.textContent as string;
         expect(content).not.toContain('your first month is free for new members');
+        expect(content).not.toContain('No card needed');
     });
 
     it('should render the current free plan state as a disabled button', async () => {

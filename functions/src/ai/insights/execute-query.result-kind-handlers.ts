@@ -17,6 +17,10 @@ import { buildExecutionPromptLogContext } from './execute-query.logging';
 
 interface ExecuteQueryResultKindHelpers {
   buildLatestEvent: (events: EventInterface[]) => { eventId: string; startDate: string } | null;
+  buildPowerCurve: (
+    query: Extract<NormalizedInsightQuery, { resultKind: 'power_curve' }>,
+    events: EventInterface[],
+  ) => Extract<AiInsightsExecutionResult, { resultKind: 'power_curve' }>['powerCurve'];
   buildMatchedActivityTypeCounts: (
     events: EventInterface[],
     log: ExecuteQueryDependencies['logger'],
@@ -128,6 +132,39 @@ const EXECUTE_QUERY_RESULT_KIND_REGISTRY = {
           eventId: latestEvent?.eventId ?? null,
           startDate: latestEvent?.startDate ?? null,
         },
+      };
+    },
+  },
+  power_curve: {
+    execute: (context) => {
+      const {
+        dependencies,
+        helpers,
+        matchedEvents,
+        prompt,
+        query,
+        userID,
+      } = context;
+      const powerCurve = helpers.buildPowerCurve(query, matchedEvents);
+
+      dependencies.logger.info('[aiInsights] Power curve summary', {
+        ...buildExecutionPromptLogContext(prompt),
+        userID,
+        mode: powerCurve.mode,
+        resolvedTimeInterval: powerCurve.resolvedTimeInterval,
+        matchedEventCount: powerCurve.matchedEventCount,
+        requestedSeriesCount: powerCurve.requestedSeriesCount,
+        returnedSeriesCount: powerCurve.returnedSeriesCount,
+        safetyGuardApplied: powerCurve.safetyGuardApplied,
+        safetyGuardMaxSeries: powerCurve.safetyGuardMaxSeries,
+        trimmedSeriesCount: powerCurve.trimmedSeriesCount,
+      });
+
+      return {
+        resultKind: 'power_curve',
+        matchedEventsCount: powerCurve.matchedEventCount,
+        matchedActivityTypeCounts: helpers.buildMatchedActivityTypeCounts(matchedEvents, dependencies.logger),
+        powerCurve,
       };
     },
   },

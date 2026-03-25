@@ -302,18 +302,27 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     return event?.getID ? event.getID() : index;
   }
 
+  private getSelectableRows(): any[] {
+    return Array.isArray(this.data.filteredData) ? this.data.filteredData : this.data.data;
+  }
+
   isAllSelected() {
-    const numSelected = this.selection.selected.length;
-    const numRows = this.data.data.length;
-    return numSelected === numRows;
+    const selectableRows = this.getSelectableRows();
+    if (selectableRows.length === 0) {
+      return false;
+    }
+    return selectableRows.every(row => this.selection.isSelected(row));
   }
 
 
   /** Selects all rows if they are not all selected; otherwise clear selection. */
   masterToggle() {
-    this.isAllSelected() ?
-      this.selection.clear() :
-      this.data.data.forEach(row => this.selection.select(row));
+    const selectableRows = this.getSelectableRows();
+    if (this.isAllSelected()) {
+      selectableRows.forEach(row => this.selection.deselect(row));
+      return;
+    }
+    selectableRows.forEach(row => this.selection.select(row));
   }
 
   async mergeSelection(event) {
