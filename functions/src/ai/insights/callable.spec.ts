@@ -294,6 +294,7 @@ const summary = {
   },
   trend: null,
   periodDeltas: null,
+  anomalyCallouts: null,
 };
 
 describe('aiInsights callable', () => {
@@ -662,6 +663,7 @@ describe('aiInsights callable', () => {
       resultKind: 'aggregate',
       narrative: 'Narrative',
       quota: quotaStatus,
+      statementChips: expect.any(Array),
       query: normalizedQuery,
       aggregation: expect.objectContaining({
         buckets: expect.any(Array),
@@ -671,6 +673,14 @@ describe('aiInsights callable', () => {
         title: 'Total distance over time for Cycling',
         chartType: ChartTypes.ColumnsVertical,
       }),
+    });
+    expect(result).toMatchObject({
+      statementChips: expect.arrayContaining([
+        expect.objectContaining({
+          statementId: 'aggregate:narrative',
+          chipType: 'confidence',
+        }),
+      ]),
     });
     expect(hoisted.persistLatestAiInsightsSnapshot).toHaveBeenCalledWith(
       'user-1',
@@ -920,6 +930,7 @@ describe('aiInsights callable', () => {
       resultKind: 'event_lookup',
       narrative: 'Narrative',
       quota: quotaStatus,
+      statementChips: expect.any(Array),
       query: eventLookupQuery,
       eventLookup: {
         primaryEventId: 'event-3',
@@ -930,6 +941,18 @@ describe('aiInsights callable', () => {
         title: 'Top distance events for Cycling',
         chartType: ChartTypes.LinesVertical,
       }),
+    });
+    expect(result).toMatchObject({
+      statementChips: expect.arrayContaining([
+        expect.objectContaining({
+          statementId: 'event_lookup:narrative',
+          chipType: 'confidence',
+        }),
+        expect.objectContaining({
+          statementId: 'event_lookup:narrative',
+          chipType: 'evidence',
+        }),
+      ]),
     });
   });
 
@@ -1022,6 +1045,7 @@ describe('aiInsights callable', () => {
       resultKind: 'latest_event',
       narrative: 'Your latest cycling event was on Mar 18, 2026. I matched 4 events.',
       quota: quotaStatus,
+      statementChips: expect.any(Array),
       query: latestEventQuery,
       latestEvent: {
         eventId: 'event-9',
@@ -1115,6 +1139,7 @@ describe('aiInsights callable', () => {
       resultKind: 'power_curve',
       narrative: 'I built your best power curve for cycling as the max-power envelope across 3 matching events.',
       quota: quotaStatus,
+      statementChips: expect.any(Array),
       query: powerCurveQuery,
       powerCurve: {
         mode: 'best',
@@ -1240,6 +1265,7 @@ describe('aiInsights callable', () => {
       resultKind: 'event_lookup',
       narrative: 'Narrative',
       quota: quotaStatus,
+      statementChips: expect.any(Array),
       query: jumpEventLookupQuery,
       eventLookup: {
         primaryEventId: 'jump-event-2',
@@ -1293,6 +1319,7 @@ describe('aiInsights callable', () => {
         },
         trend: null,
         periodDeltas: null,
+        anomalyCallouts: null,
       },
       presentation: expect.objectContaining({
         emptyState: 'No matching events were found for this insight in the requested range.',

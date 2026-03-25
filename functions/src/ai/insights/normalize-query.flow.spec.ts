@@ -696,6 +696,61 @@ describe('normalizeInsightQuery', () => {
     ]);
   });
 
+  it('resolves month-year to now ranges for compare prompts', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-25T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'compare cadence for cycling from nov 2025 to now',
+      clientTimezone: 'Europe/Helsinki',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('cadence');
+    expect(result.query.resultKind).toBe('aggregate');
+    expect(result.query.categoryType).toBe(ChartDataCategoryTypes.DateType);
+    expect(result.query.activityTypes).toEqual([ActivityTypes.Cycling]);
+    expect(result.query.periodMode).toBe('compare');
+    expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Monthly);
+    expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
+      startDate: '2025-10-31T22:00:00.000Z',
+      endDate: '2026-03-25T21:59:59.999Z',
+      timezone: 'Europe/Helsinki',
+      source: 'prompt',
+    });
+  });
+
+  it('resolves month-year to now ranges for between-and-now phrasing', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-25T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'compare cadence for cycling between nov 2025 and now',
+      clientTimezone: 'Europe/Helsinki',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('cadence');
+    expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
+      startDate: '2025-10-31T22:00:00.000Z',
+      endDate: '2026-03-25T21:59:59.999Z',
+      timezone: 'Europe/Helsinki',
+      source: 'prompt',
+    });
+  });
+
   it('normalizes explicit month-year prompts such as "in January 2024"', async () => {
     setNormalizeQueryDependenciesForTesting({
       now: () => new Date('2026-03-20T12:00:00.000Z'),

@@ -1385,6 +1385,188 @@ describe('AiInsightsPageComponent', () => {
     expect(fixture.debugElement.query(By.css('.compare-evidence-group'))).toBeNull();
   });
 
+  it('should render confidence and evidence chips for ok responses', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue({
+      ...buildOkResponse(),
+      statementChips: [
+        {
+          statementId: 'aggregate:narrative',
+          chipType: 'confidence',
+          label: 'High confidence',
+          confidenceTier: 'high',
+        },
+        {
+          statementId: 'aggregate:narrative',
+          chipType: 'evidence',
+          label: 'Evidence linked',
+          evidenceRefs: [
+            {
+              kind: 'bucket',
+              label: 'Bucket 2026-01',
+              bucketKey: '2026-01',
+            },
+          ],
+        },
+      ],
+    });
+    component.promptControl.setValue('show my cadence trend');
+
+    await component.submitPrompt();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const chipSet = fixture.debugElement.query(By.css('.statement-chip-set'))?.nativeElement as HTMLElement | undefined;
+    const chips = fixture.debugElement.queryAll(By.css('.statement-chip'));
+
+    expect(chipSet).toBeTruthy();
+    expect(chips.some((chip) => chip.nativeElement.textContent.includes('High confidence'))).toBe(true);
+    expect(chips.some((chip) => chip.nativeElement.textContent.includes('Evidence linked'))).toBe(true);
+  });
+
+  it('should not render statement chips for empty responses', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue(buildEmptyResponse());
+    component.promptControl.setValue('show a metric with no results');
+
+    await component.submitPrompt();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(fixture.debugElement.query(By.css('.statement-chip-set'))).toBeNull();
+  });
+
+  it('should render aggregate anomaly callouts with kind, confidence, and evidence chips', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue({
+      ...buildOkResponse(),
+      summary: {
+        ...buildOkResponse().summary,
+        anomalyCallouts: [
+          {
+            id: 'callout:spike:cadence:2026-01',
+            statementId: 'anomaly:spike:cadence:2026-01',
+            kind: 'spike',
+            snippet: 'Unusual spike at 2026-01: Average Cadence was 110.',
+            confidenceTier: 'high',
+            score: 4.4,
+            evidenceRefs: [
+              {
+                kind: 'bucket',
+                label: 'Bucket 2026-01',
+                bucketKey: '2026-01',
+              },
+            ],
+          },
+        ],
+      },
+      statementChips: [
+        {
+          statementId: 'anomaly:spike:cadence:2026-01',
+          chipType: 'confidence',
+          label: 'High confidence',
+          confidenceTier: 'high',
+        },
+        {
+          statementId: 'anomaly:spike:cadence:2026-01',
+          chipType: 'evidence',
+          label: 'Evidence linked',
+          evidenceRefs: [
+            {
+              kind: 'bucket',
+              label: 'Bucket 2026-01',
+              bucketKey: '2026-01',
+            },
+          ],
+        },
+      ],
+    });
+    component.promptControl.setValue('show unusual cadence changes');
+
+    await component.submitPrompt();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const anomalySection = fixture.debugElement
+      .queryAll(By.css('.narrative-section-title'))
+      .find((node) => node.nativeElement.textContent.includes('Anomaly callouts'));
+    const anomalySnippet = fixture.debugElement.query(By.css('.anomaly-callout-snippet'))?.nativeElement as HTMLElement | undefined;
+    const anomalyEvidence = fixture.debugElement.query(By.css('.anomaly-callout-evidence'))?.nativeElement as HTMLElement | undefined;
+
+    expect(anomalySection).toBeTruthy();
+    expect(anomalySnippet?.textContent).toContain('Unusual spike');
+    expect(fixture.debugElement.queryAll(By.css('.anomaly-callout-chip-set .statement-chip')).some((chip) => chip.nativeElement.textContent.includes('Spike'))).toBe(true);
+    expect(fixture.debugElement.queryAll(By.css('.anomaly-callout-chip-set .statement-chip')).some((chip) => chip.nativeElement.textContent.includes('High confidence'))).toBe(true);
+    expect(fixture.debugElement.queryAll(By.css('.anomaly-callout-chip-set .statement-chip')).some((chip) => chip.nativeElement.textContent.includes('Evidence linked'))).toBe(true);
+    expect(anomalyEvidence?.textContent).toContain('Bucket 2026-01');
+  });
+
+  it('should render grouped multi-metric anomaly callouts by metric', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue({
+      ...buildMultiMetricResponse(),
+      metricResults: [
+        {
+          ...buildMultiMetricResponse().metricResults[0],
+          summary: {
+            ...buildMultiMetricResponse().metricResults[0].summary,
+            anomalyCallouts: [
+              {
+                id: 'callout:drop:average_cadence:2026-01',
+                statementId: 'anomaly:drop:average_cadence:2026-01',
+                kind: 'drop',
+                snippet: 'Unusual drop at 2026-01 for cadence.',
+                confidenceTier: 'medium',
+                score: 2.8,
+                evidenceRefs: [
+                  {
+                    kind: 'bucket',
+                    label: 'Bucket 2026-01',
+                    bucketKey: '2026-01',
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        {
+          ...buildMultiMetricResponse().metricResults[1],
+        },
+      ],
+      statementChips: [
+        {
+          statementId: 'anomaly:drop:average_cadence:2026-01',
+          chipType: 'confidence',
+          label: 'Medium confidence',
+          confidenceTier: 'medium',
+        },
+        {
+          statementId: 'anomaly:drop:average_cadence:2026-01',
+          chipType: 'evidence',
+          label: 'Evidence linked',
+          evidenceRefs: [
+            {
+              kind: 'bucket',
+              label: 'Bucket 2026-01',
+              bucketKey: '2026-01',
+            },
+          ],
+        },
+      ],
+    });
+    component.promptControl.setValue('show unusual cadence and power changes');
+
+    await component.submitPrompt();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const sectionHeadings = fixture.debugElement.queryAll(By.css('.anomaly-section-heading'));
+    const anomalySnippets = fixture.debugElement.queryAll(By.css('.anomaly-callout-snippet'));
+    const anomalyChipLabels = fixture.debugElement.queryAll(By.css('.anomaly-callout-chip-set .statement-chip'));
+
+    expect(sectionHeadings).toHaveLength(1);
+    expect(sectionHeadings[0]?.nativeElement.textContent).toContain('Cadence');
+    expect(anomalySnippets[0]?.nativeElement.textContent).toContain('Unusual drop');
+    expect(anomalyChipLabels.some((chip) => chip.nativeElement.textContent.includes('Drop'))).toBe(true);
+    expect(anomalyChipLabels.some((chip) => chip.nativeElement.textContent.includes('Medium confidence'))).toBe(true);
+  });
+
   it('should render grouped clickable compare evidence rows for all period deltas', async () => {
     aiInsightsServiceMock.runInsight.mockResolvedValue({
       ...buildOkResponse(),

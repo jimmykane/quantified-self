@@ -622,6 +622,7 @@ describe('insight-summary', () => {
       bucketCoverage: null,
       trend: null,
       periodDeltas: null,
+      anomalyCallouts: null,
     });
   });
 });

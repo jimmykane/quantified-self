@@ -708,6 +708,47 @@ function resolvePromptRelativePeriodComparisonDateSelection(
   return null;
 }
 
+function resolvePromptMonthYearToNowDateSelection(
+  prompt: string,
+  category: ModelCategoryCode | undefined,
+  aggregation: ModelAggregationCode | undefined,
+  options: ResolvePromptDateSelectionOptions,
+): PromptDateSelectionIntent | null {
+  const normalizedPrompt = normalizePromptSearchText(prompt);
+  if (!normalizedPrompt) {
+    return null;
+  }
+
+  const monthNamePattern = '(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
+  const monthYearToNowMatch = normalizedPrompt.match(
+    new RegExp(`\\b(?:from|since)\\s+${monthNamePattern}\\s+(${YEAR_PATTERN.source})\\s+(?:(?:to|through|until|till|-)\\s+)?(?:now|today)\\b`),
+  ) || normalizedPrompt.match(
+    new RegExp(`\\bbetween\\s+${monthNamePattern}\\s+(${YEAR_PATTERN.source})\\s+and\\s+(?:now|today)\\b`),
+  );
+  if (!monthYearToNowMatch) {
+    return null;
+  }
+
+  const startMonth = resolveMonthNameToNumber(monthYearToNowMatch[1] || '');
+  const startYear = Number(monthYearToNowMatch[2]);
+  if (!startMonth || !Number.isInteger(startYear)) {
+    return null;
+  }
+
+  const today = getZonedDateParts(options.now, options.timeZone);
+  const periodMode = resolveMultiPeriodMode(prompt, category, aggregation);
+  return {
+    effectiveDateRangeIntent: buildNormalizedAbsoluteRange(
+      { year: startYear, month: startMonth, day: 1 },
+      today,
+    ),
+    periodMode,
+    compareRequestedTimeInterval: category === 'activity' || periodMode !== 'compare'
+      ? undefined
+      : 'monthly',
+  };
+}
+
 function resolvePromptYearListDateSelection(
   prompt: string,
   category: ModelCategoryCode | undefined,
@@ -804,6 +845,16 @@ function resolvePromptDateSelection(
   );
   if (relativePeriodComparisonSelection) {
     return relativePeriodComparisonSelection;
+  }
+
+  const monthYearToNowSelection = resolvePromptMonthYearToNowDateSelection(
+    prompt,
+    category,
+    aggregation,
+    options,
+  );
+  if (monthYearToNowSelection) {
+    return monthYearToNowSelection;
   }
 
   const multiYearSelection = resolvePromptYearListDateSelection(prompt, category, aggregation);

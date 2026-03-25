@@ -697,6 +697,83 @@
   text-transform: none;
 }
 
+.statement-chip-set {
+  margin-top: -4px;
+}
+
+.statement-chip {
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.statement-chip.statement-chip--kind {
+  color: var(--mat-sys-primary);
+}
+
+.statement-chip.statement-chip--evidence {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.statement-chip.statement-chip--confidence {
+  font-weight: 600;
+}
+
+.statement-chip.statement-chip--confidence-low {
+  color: var(--mat-sys-error);
+}
+
+.statement-chip.statement-chip--confidence-medium {
+  color: var(--mat-sys-tertiary);
+}
+
+.statement-chip.statement-chip--confidence-high {
+  color: var(--mat-sys-primary);
+}
+
+.anomaly-section-list {
+  display: grid;
+  gap: 12px;
+}
+
+.anomaly-section-group {
+  display: grid;
+  gap: 8px;
+}
+
+.anomaly-section-heading {
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.anomaly-callout-list {
+  display: grid;
+  gap: 8px;
+}
+
+.anomaly-callout-item {
+  display: grid;
+  gap: 6px;
+}
+
+.anomaly-callout-snippet {
+  margin: 0;
+  color: var(--mat-sys-on-surface);
+  line-height: 1.45;
+}
+
+.anomaly-callout-chip-set {
+  margin-top: -2px;
+}
+
+.anomaly-callout-evidence {
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+
 .compare-evidence-groups {
   display: grid;
   gap: 10px;

@@ -130,6 +130,9 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Prompts are currently **English only**.
 - For AI Insights, we do **not** share your raw activities, routes, or uploaded files with AI providers.
 - We only send the minimum derived stats needed to generate answers.
+- **Why do I get the same answer for the same prompt?**
+  - AI Insights is mostly deterministic for the same prompt and same data scope.
+  - Answers change when the underlying stats change, like new activities, a different date range, or a changed prompt.
 - Request limits per billing period:
   - Basic: up to **${AI_INSIGHTS_REQUEST_LIMITS.basic}** requests
   - Pro: up to **${AI_INSIGHTS_REQUEST_LIMITS.pro}** requests
@@ -150,8 +153,16 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Event lookup**: best matching event plus top-ranked matching events.
 - **Latest event**: most recent matching event in scope (single primary event card).
 - **Multi-metric aggregate**: combined chart for multiple metrics with merged summary cards.
+- **Anomaly callouts**: deterministic spike/drop/activity-mix shift callouts for aggregate and date-grouped multi-metric results.
+- **Confidence & evidence chips**: compact chips under supported AI result narratives and callouts that show confidence tier and linked deterministic evidence.
 - **Empty**: the request shape is valid but no matching data was found in scope.
 - **Unsupported**: the request could not be mapped confidently; suggested prompts are returned.
+
+## Confidence and anomaly guardrails
+
+- Confidence tiers are deterministic and based on coverage, sample size, and signal strength.
+- Evidence chips only render when deterministic references exist (for example buckets, series, or event IDs).
+- Low-signal ranges suppress anomaly callouts so weak/noisy ranges do not produce alerts.
 
 ## Saved latest result behavior
 

@@ -182,6 +182,56 @@ export type AiInsightSummaryDeltaDirection =
   | 'decrease'
   | 'no_change';
 
+export type AiInsightConfidenceTier =
+  | 'low'
+  | 'medium'
+  | 'high';
+
+export type AiInsightAnomalyKind =
+  | 'spike'
+  | 'drop'
+  | 'activity_mix_shift';
+
+export interface AiInsightBucketEvidenceRef {
+  kind: 'bucket';
+  label: string;
+  bucketKey: string | number;
+}
+
+export interface AiInsightEventEvidenceRef {
+  kind: 'event';
+  label: string;
+  eventId: string;
+}
+
+export interface AiInsightSeriesEvidenceRef {
+  kind: 'series';
+  label: string;
+  seriesKey: string;
+}
+
+export interface AiInsightMetricEvidenceRef {
+  kind: 'metric';
+  label: string;
+  metricKey: AiInsightsPromptMetricKey;
+}
+
+export type AiInsightEvidenceRef =
+  | AiInsightBucketEvidenceRef
+  | AiInsightEventEvidenceRef
+  | AiInsightSeriesEvidenceRef
+  | AiInsightMetricEvidenceRef;
+
+export interface AiInsightSummaryAnomalyCallout {
+  id: string;
+  statementId: string;
+  kind: AiInsightAnomalyKind;
+  snippet: string;
+  confidenceTier: AiInsightConfidenceTier;
+  score: number;
+  evidenceRefs: AiInsightEvidenceRef[];
+}
+
 export interface AiInsightSummaryPeriodDeltaContributor {
   seriesKey: string;
   deltaAggregateValue: number;
@@ -216,6 +266,7 @@ export interface AiInsightSummary {
   bucketCoverage: AiInsightSummaryCoverage | null;
   trend: AiInsightSummaryTrend | null;
   periodDeltas?: AiInsightSummaryPeriodDelta[] | null;
+  anomalyCallouts?: AiInsightSummaryAnomalyCallout[] | null;
 }
 
 export interface AiInsightEventLookup {
@@ -257,6 +308,18 @@ export interface AiInsightPowerCurve {
   series: AiInsightPowerCurveSeries[];
 }
 
+export type AiInsightStatementChipType =
+  | 'confidence'
+  | 'evidence';
+
+export interface AiInsightStatementChip {
+  statementId: string;
+  chipType: AiInsightStatementChipType;
+  label: string;
+  confidenceTier?: AiInsightConfidenceTier;
+  evidenceRefs?: AiInsightEvidenceRef[];
+}
+
 export type AiInsightsUnsupportedReasonCode =
   | 'invalid_prompt'
   | 'unsupported_metric'
@@ -270,6 +333,7 @@ export interface AiInsightsAggregateOkResponse {
   resultKind: 'aggregate';
   narrative: string;
   quota?: AiInsightsQuotaStatus;
+  statementChips?: AiInsightStatementChip[];
   query: NormalizedInsightQuery & {
     resultKind: 'aggregate';
   };
@@ -285,6 +349,7 @@ export interface AiInsightsEventLookupOkResponse {
   resultKind: 'event_lookup';
   narrative: string;
   quota?: AiInsightsQuotaStatus;
+  statementChips?: AiInsightStatementChip[];
   query: NormalizedInsightEventLookupQuery;
   eventLookup: AiInsightEventLookup;
   presentation: AiInsightPresentation;
@@ -295,6 +360,7 @@ export interface AiInsightsLatestEventOkResponse {
   resultKind: 'latest_event';
   narrative: string;
   quota?: AiInsightsQuotaStatus;
+  statementChips?: AiInsightStatementChip[];
   query: NormalizedInsightLatestEventQuery;
   latestEvent: AiInsightLatestEvent;
   presentation: AiInsightPresentation;
@@ -314,6 +380,7 @@ export interface AiInsightsMultiMetricAggregateOkResponse {
   resultKind: 'multi_metric_aggregate';
   narrative: string;
   quota?: AiInsightsQuotaStatus;
+  statementChips?: AiInsightStatementChip[];
   query: NormalizedInsightMultiMetricAggregateQuery;
   metricResults: AiInsightsMultiMetricAggregateMetricResult[];
   presentation: AiInsightPresentation;
@@ -324,6 +391,7 @@ export interface AiInsightsPowerCurveOkResponse {
   resultKind: 'power_curve';
   narrative: string;
   quota?: AiInsightsQuotaStatus;
+  statementChips?: AiInsightStatementChip[];
   query: NormalizedInsightPowerCurveQuery;
   powerCurve: AiInsightPowerCurve;
   presentation: AiInsightPresentation;

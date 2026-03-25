@@ -6,11 +6,17 @@ import {
   type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
 import type {
+  AiInsightAnomalyKind,
+  AiInsightConfidenceTier,
+  AiInsightEvidenceRef,
+  AiInsightStatementChip,
+  AiInsightSummaryAnomalyCallout,
   AiInsightSummaryBucket,
   AiInsightsAggregateOkResponse,
   AiInsightsEmptyResponse,
   AiInsightsEventLookupOkResponse,
   AiInsightsLatestEventOkResponse,
+  AiInsightsMultiMetricAggregateOkResponse,
   AiInsightsMultiMetricAggregateMetricResult,
   AiInsightsOkResponse,
   AiInsightsQuotaStatus,
@@ -90,6 +96,147 @@ export interface AggregateCompareEvidenceGroup {
   impactSummary: string | null;
   downwardContributors: AggregateCompareEvidenceItem[];
   upwardContributors: AggregateCompareEvidenceItem[];
+}
+
+export interface StatementChipDisplay {
+  statementId: string;
+  chipKind: 'confidence' | 'evidence' | 'kind';
+  label: string;
+  confidenceTier?: AiInsightConfidenceTier;
+}
+
+export interface AnomalyCalloutDisplay {
+  id: string;
+  snippet: string;
+  chips: StatementChipDisplay[];
+  evidenceSummary: string | null;
+}
+
+export interface MultiMetricAnomalyCalloutSection {
+  metricKey: string;
+  metricTitle: string;
+  callouts: AnomalyCalloutDisplay[];
+}
+
+function resolveAnomalyKindLabel(kind: AiInsightAnomalyKind): string {
+  switch (kind) {
+    case 'spike':
+      return 'Spike';
+    case 'drop':
+      return 'Drop';
+    case 'activity_mix_shift':
+      return 'Activity mix shift';
+    default:
+      return 'Anomaly';
+  }
+}
+
+function formatEvidenceSummary(
+  evidenceRefs: AiInsightEvidenceRef[] | null | undefined,
+): string | null {
+  if (!evidenceRefs?.length) {
+    return null;
+  }
+
+  return evidenceRefs
+    .slice(0, 3)
+    .map(evidenceRef => evidenceRef.label)
+    .join(' • ');
+}
+
+function toStatementChipDisplay(chip: AiInsightStatementChip): StatementChipDisplay {
+  return {
+    statementId: chip.statementId,
+    chipKind: chip.chipType === 'confidence' ? 'confidence' : 'evidence',
+    label: chip.label,
+    ...(chip.chipType === 'confidence'
+      ? { confidenceTier: chip.confidenceTier }
+      : {}),
+  };
+}
+
+function buildAnomalyCalloutDisplays(
+  anomalyCallouts: AiInsightSummaryAnomalyCallout[] | null | undefined,
+  statementChips: AiInsightStatementChip[] | null | undefined,
+): AnomalyCalloutDisplay[] {
+  if (!anomalyCallouts?.length) {
+    return [];
+  }
+
+  const chips = statementChips ?? [];
+
+  return anomalyCallouts.map((callout) => {
+    const linkedChips = chips
+      .filter(chip => chip.statementId === callout.statementId)
+      .map(toStatementChipDisplay);
+    const hasConfidenceChip = linkedChips.some(chip => chip.chipKind === 'confidence');
+    const hasEvidenceChip = linkedChips.some(chip => chip.chipKind === 'evidence');
+
+    const calloutChips: StatementChipDisplay[] = [
+      {
+        statementId: callout.statementId,
+        chipKind: 'kind',
+        label: resolveAnomalyKindLabel(callout.kind),
+      },
+      ...(hasConfidenceChip
+        ? []
+        : [{
+          statementId: callout.statementId,
+          chipKind: 'confidence' as const,
+          label: `${callout.confidenceTier[0]?.toUpperCase() || ''}${callout.confidenceTier.slice(1)} confidence`,
+          confidenceTier: callout.confidenceTier,
+        }]),
+      ...(hasEvidenceChip
+        ? []
+        : [{
+          statementId: callout.statementId,
+          chipKind: 'evidence' as const,
+          label: 'Evidence linked',
+        }]),
+      ...linkedChips,
+    ];
+
+    return {
+      id: callout.id,
+      snippet: callout.snippet,
+      chips: calloutChips,
+      evidenceSummary: formatEvidenceSummary(callout.evidenceRefs),
+    };
+  });
+}
+
+export function buildStatementChipDisplays(
+  response: AiInsightsOkResponse | null | undefined,
+): StatementChipDisplay[] {
+  return (response?.statementChips ?? []).map(toStatementChipDisplay);
+}
+
+export function buildAggregateAnomalyCallouts(
+  response: AiInsightsAggregateOkResponse | null | undefined,
+): AnomalyCalloutDisplay[] {
+  return buildAnomalyCalloutDisplays(
+    response?.summary.anomalyCallouts,
+    response?.statementChips,
+  );
+}
+
+export function buildMultiMetricAnomalyCalloutSections(
+  response: AiInsightsMultiMetricAggregateOkResponse | null | undefined,
+): MultiMetricAnomalyCalloutSection[] {
+  if (!response) {
+    return [];
+  }
+
+  return response.metricResults
+    .map((metricResult) => ({
+      metricKey: metricResult.metricKey,
+      metricTitle: resolveShortMetricLabel(metricResult.metricLabel, metricResult.query.valueType) || metricResult.metricLabel,
+      callouts: buildAnomalyCalloutDisplays(
+        metricResult.summary.anomalyCallouts,
+        response.statementChips,
+      ),
+    }))
+    .filter(section => section.callouts.length > 0);
 }
 
 export function formatAiInsightsNarrativeForDisplay(

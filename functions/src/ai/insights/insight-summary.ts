@@ -15,6 +15,7 @@ import type {
 } from '../../../../shared/ai-insights.types';
 import { AI_INSIGHTS_COMPARE_EVENT_CONTRIBUTORS_MAX } from '../../../../shared/ai-insights-compare.constants';
 import { resolveAggregationCategoryKey } from '../../../../shared/event-stat-aggregation';
+import { buildSummaryAnomalyCallouts } from './anomaly-callouts';
 import { buildBucketCoverage } from './insight-bucket-coverage';
 
 const PERIOD_DELTA_TOP_CONTRIBUTORS_MAX = 2;
@@ -25,6 +26,7 @@ interface SummaryAggregationBucket {
   aggregateValue: number;
   totalCount: number;
   seriesValues?: Record<string, number>;
+  seriesCounts?: Record<string, number>;
 }
 
 interface SummaryAggregationInput {
@@ -575,6 +577,7 @@ export function buildNonAggregateEmptySummary(): AiInsightSummary {
     bucketCoverage: null,
     trend: null,
     periodDeltas: null,
+    anomalyCallouts: null,
   };
 }
 
@@ -607,5 +610,12 @@ export function buildInsightSummary(
     bucketCoverage: isOverallMultiMetric ? null : buildBucketCoverage(query, aggregation),
     trend: isOverallMultiMetric ? null : buildTrend(query, aggregation),
     periodDeltas: isOverallMultiMetric ? null : buildPeriodDeltas(query, aggregation, matchedEventsWithRequestedStat),
+    anomalyCallouts: isOverallMultiMetric
+      ? null
+      : buildSummaryAnomalyCallouts({
+        query,
+        matchedEventCount,
+        buckets: aggregation.buckets,
+      }),
   };
 }
