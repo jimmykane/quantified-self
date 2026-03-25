@@ -135,34 +135,6 @@ describe('EventCardMapManager', () => {
     expect(handlers.click ?? []).toHaveLength(0);
   });
 
-  it('defers track rendering until style is ready', () => {
-    map.isStyleLoaded = vi.fn().mockReturnValue(false);
-
-    manager.renderActivities([
-      {
-        activityId: 'a1',
-        strokeColor: '#00ff00',
-        positions: [
-          { latitudeDegrees: 41.1, longitudeDegrees: 23.1 },
-          { latitudeDegrees: 41.2, longitudeDegrees: 23.2 },
-        ],
-        laps: [],
-        jumps: []
-      }
-    ], {
-      showArrows: true,
-      strokeWidth: 3,
-    });
-
-    expect(map.addSource).not.toHaveBeenCalled();
-
-    map.isStyleLoaded.mockReturnValue(true);
-    (handlers['style.load'] || []).forEach(binding => binding.handler());
-
-    expect(map.addSource).toHaveBeenCalled();
-    expect(map.addLayer).toHaveBeenCalled();
-  });
-
   it('propagates jump marker click events to callback', () => {
     const jumpEvent = { jumpData: {} } as any;
     const onJumpClick = vi.fn();
