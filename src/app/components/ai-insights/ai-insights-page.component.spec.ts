@@ -1378,10 +1378,125 @@ describe('AiInsightsPageComponent', () => {
     const mainNarrative = fixture.debugElement.queryAll(By.css('.narrative-info .narrative'))[0]?.nativeElement as HTMLElement | undefined;
 
     expect(compareSection).toBeTruthy();
-    expect(compareTitle?.textContent).toContain('Deterministic compare summary');
+    expect(compareTitle?.textContent).toContain('Delta explanation');
     expect(compareNarrative?.textContent).toContain('cadence increased by 7 rpm');
     expect(mainNarrative?.textContent).toContain('trended up');
-    expect(mainNarrative?.textContent).not.toContain('Deterministic compare summary');
+    expect(mainNarrative?.textContent).not.toContain('Delta explanation');
+    expect(fixture.debugElement.query(By.css('.compare-evidence-group'))).toBeNull();
+  });
+
+  it('should render grouped clickable compare evidence rows for all period deltas', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue({
+      ...buildOkResponse(),
+      query: {
+        ...buildOkResponse().query,
+        dataType: DataDistance.type,
+        valueType: ChartDataValueTypes.Total,
+        periodMode: 'compare',
+      },
+      summary: {
+        ...buildOkResponse().summary,
+        periodDeltas: [
+          {
+            fromBucket: {
+              bucketKey: '2025',
+              time: Date.parse('2025-01-01T00:00:00.000Z'),
+              aggregateValue: 3200,
+              totalCount: 18,
+            },
+            toBucket: {
+              bucketKey: '2026',
+              time: Date.parse('2026-01-01T00:00:00.000Z'),
+              aggregateValue: 2800,
+              totalCount: 16,
+            },
+            deltaAggregateValue: -400,
+            direction: 'decrease',
+            contributors: [],
+            eventContributors: [
+              {
+                eventId: 'event-a',
+                startDate: '2026-02-11T08:00:00.000Z',
+                activityType: ActivityTypes.Cycling,
+                eventStatValue: 142,
+                deltaContributionValue: -142,
+                direction: 'decrease',
+              },
+              {
+                eventId: 'event-b',
+                startDate: '2026-01-20T08:00:00.000Z',
+                activityType: ActivityTypes.MountainBiking,
+                eventStatValue: 128,
+                deltaContributionValue: -128,
+                direction: 'decrease',
+              },
+            ],
+          },
+          {
+            fromBucket: {
+              bucketKey: '2024',
+              time: Date.parse('2024-01-01T00:00:00.000Z'),
+              aggregateValue: 3000,
+              totalCount: 14,
+            },
+            toBucket: {
+              bucketKey: '2025',
+              time: Date.parse('2025-01-01T00:00:00.000Z'),
+              aggregateValue: 3200,
+              totalCount: 18,
+            },
+            deltaAggregateValue: 200,
+            direction: 'increase',
+            contributors: [],
+            eventContributors: [
+              {
+                eventId: 'event-c',
+                startDate: '2025-06-15T08:00:00.000Z',
+                activityType: ActivityTypes.Cycling,
+                eventStatValue: 95,
+                deltaContributionValue: 95,
+                direction: 'increase',
+              },
+            ],
+          },
+        ],
+      },
+      deterministicCompareSummary: 'From 2025 to 2026, distance decreased by 400 km. Event evidence is linked below.',
+    });
+    component.promptControl.setValue('compare my total distance this year vs last year');
+
+    await component.submitPrompt();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const evidenceGroups = fixture.debugElement.queryAll(By.css('.compare-evidence-group'));
+    const evidenceRows = fixture.debugElement.queryAll(By.css('.compare-evidence-link'));
+    const evidenceActionLinks = fixture.debugElement.queryAll(By.css('.compare-evidence-link-action'));
+    const downwardColumns = fixture.debugElement.queryAll(By.css('.compare-evidence-column .compare-evidence-link--downward'));
+    const upwardColumns = fixture.debugElement.queryAll(By.css('.compare-evidence-column .compare-evidence-link--upward'));
+    const evidenceLegend = fixture.debugElement.query(By.css('.compare-evidence-legend'))?.nativeElement as HTMLElement | undefined;
+    const compareNarrative = fixture.debugElement.query(By.css('.narrative-info--secondary .narrative'))?.nativeElement as HTMLElement | undefined;
+    const evidenceSummary = fixture.debugElement.query(By.css('.compare-evidence-summary'))?.nativeElement as HTMLElement | undefined;
+
+    expect(evidenceGroups).toHaveLength(2);
+    expect(evidenceGroups[0]?.nativeElement.textContent).toContain('From Jan 2025 to Jan 2026');
+    expect(evidenceGroups[1]?.nativeElement.textContent).toContain('From Jan 2024 to Jan 2025');
+    expect(evidenceRows).toHaveLength(3);
+    expect(evidenceActionLinks).toHaveLength(3);
+    expect(downwardColumns).toHaveLength(2);
+    expect(upwardColumns).toHaveLength(1);
+    expect(evidenceLegend?.textContent).toContain('from period');
+    expect(evidenceLegend?.textContent).toContain('to period');
+    expect(evidenceGroups[0]?.nativeElement.textContent).toContain('Downward contributors (from Jan 2025)');
+    expect(evidenceGroups[1]?.nativeElement.textContent).toContain('Upward contributors (to Jan 2025)');
+    expect(compareNarrative?.textContent).not.toContain('Event evidence is linked below');
+    expect(evidenceSummary?.textContent).toContain('Shown events account for');
+    expect(evidenceSummary?.textContent).toContain('% of the net');
+    expect(evidenceRows[0]?.nativeElement.tagName).toBe('DIV');
+    expect(evidenceRows[0]?.nativeElement.textContent).toContain(ActivityTypes.Cycling);
+    expect(evidenceRows[0]?.nativeElement.textContent).toContain('% of net delta');
+    expect(evidenceActionLinks[0]?.nativeElement.textContent).toContain('Review event');
+    expect(evidenceActionLinks[0]?.nativeElement.getAttribute('href')).toContain('/user/user-1/event/event-a');
   });
 
   it('should render power-curve results with the dedicated chart and no aggregate summary cards', async () => {

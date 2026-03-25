@@ -188,12 +188,22 @@ export interface AiInsightSummaryPeriodDeltaContributor {
   direction: AiInsightSummaryDeltaDirection;
 }
 
+export interface AiInsightSummaryPeriodDeltaEventContributor {
+  eventId: string;
+  startDate: string;
+  activityType: string;
+  eventStatValue: number;
+  deltaContributionValue: number;
+  direction: AiInsightSummaryDeltaDirection;
+}
+
 export interface AiInsightSummaryPeriodDelta {
   fromBucket: AiInsightSummaryBucket;
   toBucket: AiInsightSummaryBucket;
   deltaAggregateValue: number;
   direction: AiInsightSummaryDeltaDirection;
   contributors: AiInsightSummaryPeriodDeltaContributor[];
+  eventContributors?: AiInsightSummaryPeriodDeltaEventContributor[];
 }
 
 export interface AiInsightSummary {

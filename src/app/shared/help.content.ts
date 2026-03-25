@@ -142,6 +142,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Browse prompts** opens the prompt picker dialog. Selecting a prompt there runs it immediately.
 - If your prompt does not include a date range, AI Insights defaults to **current year to date**.
 - Add **all time** to query your full history.
+- For power-curve prompts, **excluding cycling** removes the whole cycling family (Cycling, Indoor Cycling, Virtual Cycling, and E-Biking).
 
 ## Supported result modes
 

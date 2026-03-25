@@ -697,8 +697,87 @@
 
               @if (aggregateDeterministicCompareSummary(); as deterministicCompareSummary) {
                 <div class="narrative-info narrative-info--secondary qs-glass-card-panel">
-                  <p class="mat-label-medium narrative-section-title">Deterministic compare summary</p>
+                  <p class="mat-label-medium narrative-section-title">Delta explanation</p>
                   <p class="description-text narrative">{{ deterministicCompareSummary }}</p>
+
+                  @if (aggregateCompareEvidenceGroups().length) {
+                    <p class="mat-body-small compare-evidence-intro">
+                      Event-level examples that contributed to each period delta.
+                    </p>
+                    <p class="mat-body-small compare-evidence-legend">
+                      <span><strong>-</strong> = from period</span>
+                      <span><strong>+</strong> = to period</span>
+                    </p>
+
+                    <div class="compare-evidence-groups">
+                      @for (evidenceGroup of aggregateCompareEvidenceGroups(); track evidenceGroup.heading + $index) {
+                        <section class="compare-evidence-group">
+                          <p class="mat-label-small compare-evidence-heading">{{ evidenceGroup.heading }}</p>
+                          @if (evidenceGroup.impactSummary; as impactSummary) {
+                            <p class="mat-body-small compare-evidence-summary">{{ impactSummary }}</p>
+                          }
+
+                          <div class="compare-evidence-columns">
+                            @if (evidenceGroup.downwardContributors.length) {
+                              <section class="compare-evidence-column">
+                                <p class="mat-label-small compare-evidence-column-title">
+                                  Downward contributors (from {{ evidenceGroup.fromLabel }})
+                                </p>
+                                <div class="compare-evidence-links">
+                                  @for (contributor of evidenceGroup.downwardContributors; track contributor.eventId) {
+                                    <div class="compare-evidence-link compare-evidence-link--downward">
+                                      <span class="compare-evidence-cell compare-evidence-cell--date">{{ contributor.dateLabel }}</span>
+                                      <span class="compare-evidence-cell compare-evidence-cell--activity">{{ contributor.activityLabel }}</span>
+                                      <span class="compare-evidence-cell compare-evidence-cell--contribution">
+                                        {{ contributor.contributionLabel }}
+                                        @if (contributor.contributionShareLabel; as contributionShareLabel) {
+                                          <span class="compare-evidence-share">({{ contributionShareLabel }})</span>
+                                        }
+                                      </span>
+                                      <a
+                                        class="compare-evidence-link-action"
+                                        [routerLink]="['/user', currentUserID(), 'event', contributor.eventId]">
+                                        <span>Review event</span>
+                                        <mat-icon>open_in_new</mat-icon>
+                                      </a>
+                                    </div>
+                                  }
+                                </div>
+                              </section>
+                            }
+
+                            @if (evidenceGroup.upwardContributors.length) {
+                              <section class="compare-evidence-column">
+                                <p class="mat-label-small compare-evidence-column-title">
+                                  Upward contributors (to {{ evidenceGroup.toLabel }})
+                                </p>
+                                <div class="compare-evidence-links">
+                                  @for (contributor of evidenceGroup.upwardContributors; track contributor.eventId) {
+                                    <div class="compare-evidence-link compare-evidence-link--upward">
+                                      <span class="compare-evidence-cell compare-evidence-cell--date">{{ contributor.dateLabel }}</span>
+                                      <span class="compare-evidence-cell compare-evidence-cell--activity">{{ contributor.activityLabel }}</span>
+                                      <span class="compare-evidence-cell compare-evidence-cell--contribution">
+                                        {{ contributor.contributionLabel }}
+                                        @if (contributor.contributionShareLabel; as contributionShareLabel) {
+                                          <span class="compare-evidence-share">({{ contributionShareLabel }})</span>
+                                        }
+                                      </span>
+                                      <a
+                                        class="compare-evidence-link-action"
+                                        [routerLink]="['/user', currentUserID(), 'event', contributor.eventId]">
+                                        <span>Review event</span>
+                                        <mat-icon>open_in_new</mat-icon>
+                                      </a>
+                                    </div>
+                                  }
+                                </div>
+                              </section>
+                            }
+                          </div>
+                        </section>
+                      }
+                    </div>
+                  }
                 </div>
               }
 

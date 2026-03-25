@@ -44,8 +44,10 @@ import { AiInsightsPowerCurveChartComponent } from './ai-insights-power-curve-ch
 import { AiInsightsPromptPickerDialogComponent } from './ai-insights-prompt-picker-dialog.component';
 import {
   buildAggregateSummaryCards,
+  buildAggregateCompareEvidenceGroups,
   buildMergedMultiMetricSummaryCards,
   formatAiInsightsNarrativeForDisplay,
+  formatDeterministicCompareSummaryForDisplay,
   formatDateRangeNote,
   formatDateSelectionSummary,
   formatEventLookupActivityLabel,
@@ -64,6 +66,7 @@ import {
   resolveRankedEventSectionTitle,
   resolveResultCardSubtitle,
   resolveShortMetricLabel,
+  type AggregateCompareEvidenceGroup,
   type EventLookupDisplayItem,
   type EventLookupResolvedEvent,
   type InsightSummaryCard,
@@ -259,7 +262,14 @@ export class AiInsightsPageComponent {
     formatAiInsightsNarrativeForDisplay(this.aggregateOkResponse()?.narrative)
   ));
   readonly aggregateDeterministicCompareSummary = computed(() => (
-    formatAiInsightsNarrativeForDisplay(this.aggregateOkResponse()?.deterministicCompareSummary)
+    formatDeterministicCompareSummaryForDisplay(this.aggregateOkResponse()?.deterministicCompareSummary)
+  ));
+  readonly aggregateCompareEvidenceGroups = computed<AggregateCompareEvidenceGroup[]>(() => (
+    buildAggregateCompareEvidenceGroups(
+      this.aggregateOkResponse(),
+      this.userUnitSettings(),
+      this.locale,
+    )
   ));
   readonly multiMetricNarrative = computed(() => (
     formatAiInsightsNarrativeForDisplay(this.multiMetricOkResponse()?.narrative)

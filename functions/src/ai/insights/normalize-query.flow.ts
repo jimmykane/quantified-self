@@ -639,6 +639,75 @@ function resolvePromptRelativeYearComparisonDateSelection(
   };
 }
 
+function resolvePromptRelativePeriodComparisonDateSelection(
+  prompt: string,
+  category: ModelCategoryCode | undefined,
+  aggregation: ModelAggregationCode | undefined,
+  options: ResolvePromptDateSelectionOptions,
+): PromptDateSelectionIntent | null {
+  const normalizedPrompt = normalizePromptSearchText(prompt);
+  if (!normalizedPrompt) {
+    return null;
+  }
+
+  if (!/\b(compare|vs|versus)\b/.test(normalizedPrompt)) {
+    return null;
+  }
+
+  const periodMode = resolveMultiPeriodMode(prompt, category, aggregation);
+  const compareRequestedTimeInterval = category === 'activity' || periodMode !== 'compare'
+    ? undefined
+    : /\bthis week\b/.test(normalizedPrompt) && /\blast week\b/.test(normalizedPrompt)
+      ? 'weekly'
+      : /\bthis month\b/.test(normalizedPrompt) && /\blast month\b/.test(normalizedPrompt)
+        ? 'monthly'
+        : undefined;
+
+  if (/\bthis month\b/.test(normalizedPrompt) && /\blast month\b/.test(normalizedPrompt)) {
+    const today = getZonedDateParts(options.now, options.timeZone);
+    const currentMonthStart = { year: today.year, month: today.month, day: 1 };
+    const previousMonthStart = addMonths(currentMonthStart, -1);
+
+    return {
+      effectiveDateRangeIntent: buildNormalizedAbsoluteRange(
+        { year: previousMonthStart.year, month: previousMonthStart.month, day: 1 },
+        { year: currentMonthStart.year, month: currentMonthStart.month, day: getDaysInMonth(currentMonthStart.year, currentMonthStart.month) },
+      ),
+      requestedDateRangeIntents: [
+        resolveCalendarMonthAbsoluteRange(previousMonthStart.month, previousMonthStart.year),
+        resolveCalendarMonthAbsoluteRange(currentMonthStart.month, currentMonthStart.year),
+      ],
+      periodMode,
+      compareRequestedTimeInterval,
+    };
+  }
+
+  if (/\bthis week\b/.test(normalizedPrompt) && /\blast week\b/.test(normalizedPrompt)) {
+    const today = getZonedDateParts(options.now, options.timeZone);
+    const weekday = getWeekday(today);
+    const mondayOffset = weekday === 0 ? 6 : weekday - 1;
+    const currentWeekStart = addDays(today, -mondayOffset);
+    const currentWeekEnd = addDays(currentWeekStart, 6);
+    const previousWeekStart = addDays(currentWeekStart, -7);
+    const previousWeekEnd = addDays(currentWeekStart, -1);
+
+    return {
+      effectiveDateRangeIntent: buildNormalizedAbsoluteRange(
+        previousWeekStart,
+        currentWeekEnd,
+      ),
+      requestedDateRangeIntents: [
+        buildNormalizedAbsoluteRange(previousWeekStart, previousWeekEnd),
+        buildNormalizedAbsoluteRange(currentWeekStart, currentWeekEnd),
+      ],
+      periodMode,
+      compareRequestedTimeInterval,
+    };
+  }
+
+  return null;
+}
+
 function resolvePromptYearListDateSelection(
   prompt: string,
   category: ModelCategoryCode | undefined,
@@ -725,6 +794,16 @@ function resolvePromptDateSelection(
   );
   if (relativeYearComparisonSelection) {
     return relativeYearComparisonSelection;
+  }
+
+  const relativePeriodComparisonSelection = resolvePromptRelativePeriodComparisonDateSelection(
+    prompt,
+    category,
+    aggregation,
+    options,
+  );
+  if (relativePeriodComparisonSelection) {
+    return relativePeriodComparisonSelection;
   }
 
   const multiYearSelection = resolvePromptYearListDateSelection(prompt, category, aggregation);

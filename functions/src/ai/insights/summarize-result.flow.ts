@@ -260,6 +260,9 @@ function buildDeterministicCompareDeltaNarrative(
   if (!periodDeltas.length) {
     return null;
   }
+  const hasEventEvidence = periodDeltas.some(
+    periodDelta => (periodDelta.eventContributors?.length ?? 0) > 0,
+  );
 
   const periodSentences = periodDeltas.map((periodDelta) => {
     const fromLabel = formatCompareBucketLabel(
@@ -308,9 +311,13 @@ function buildDeterministicCompareDeltaNarrative(
     return `${baseSentence} Likely contributors: ${contributorSentence}.`;
   });
 
-  return periodSentences.length
-    ? periodSentences.join(' ')
-    : null;
+  if (!periodSentences.length) {
+    return null;
+  }
+
+  return hasEventEvidence
+    ? `${periodSentences.join(' ')} Event evidence is linked below.`
+    : periodSentences.join(' ');
 }
 
 function withDeterministicCompareDeltaNarrative(

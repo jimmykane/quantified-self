@@ -72,6 +72,16 @@ describe('Ai insights shared response contract', () => {
                 direction: 'increase',
               },
             ],
+            eventContributors: [
+              {
+                eventId: 'event-123',
+                startDate: '2026-02-10T08:00:00.000Z',
+                activityType: ActivityTypes.Cycling,
+                eventStatValue: 130,
+                deltaContributionValue: 10,
+                direction: 'increase',
+              },
+            ],
           },
         ],
       },
@@ -461,6 +471,87 @@ describe('Ai insights shared response contract', () => {
             deltaAggregateValue: 10,
             direction: 'not-valid',
             contributors: [],
+          },
+        ],
+      },
+      presentation: {
+        title: 'Total distance',
+        chartType: ChartTypes.ColumnsVertical,
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.reason).toBe('summary_invalid');
+  });
+
+  it('rejects invalid period-delta event contributor fields', () => {
+    const result = validateAiInsightsResponse({
+      status: 'ok',
+      resultKind: 'aggregate',
+      narrative: 'ok',
+      query: {
+        resultKind: 'aggregate',
+        dataType: 'Distance',
+        valueType: ChartDataValueTypes.Total,
+        categoryType: ChartDataCategoryTypes.DateType,
+        requestedTimeInterval: TimeIntervals.Monthly,
+        activityTypeGroups: [],
+        activityTypes: [ActivityTypes.Cycling],
+        dateRange: {
+          kind: 'bounded',
+          startDate: '2026-01-01T00:00:00.000Z',
+          endDate: '2026-03-22T23:59:59.999Z',
+          timezone: 'UTC',
+          source: 'prompt',
+        },
+        chartType: ChartTypes.ColumnsVertical,
+      },
+      aggregation: {
+        dataType: 'Distance',
+        valueType: ChartDataValueTypes.Total,
+        categoryType: ChartDataCategoryTypes.DateType,
+        resolvedTimeInterval: TimeIntervals.Monthly,
+        buckets: [],
+      },
+      summary: {
+        matchedEventCount: 0,
+        overallAggregateValue: null,
+        peakBucket: null,
+        lowestBucket: null,
+        latestBucket: null,
+        activityMix: null,
+        bucketCoverage: null,
+        trend: null,
+        periodDeltas: [
+          {
+            fromBucket: {
+              bucketKey: '2025',
+              time: Date.parse('2025-01-01T00:00:00.000Z'),
+              aggregateValue: 120,
+              totalCount: 3,
+            },
+            toBucket: {
+              bucketKey: '2026',
+              time: Date.parse('2026-01-01T00:00:00.000Z'),
+              aggregateValue: 130,
+              totalCount: 4,
+            },
+            deltaAggregateValue: 10,
+            direction: 'increase',
+            contributors: [],
+            eventContributors: [
+              {
+                eventId: 42,
+                startDate: '2026-02-10T08:00:00.000Z',
+                activityType: ActivityTypes.Cycling,
+                eventStatValue: 130,
+                deltaContributionValue: 10,
+                direction: 'increase',
+              },
+            ],
           },
         ],
       },

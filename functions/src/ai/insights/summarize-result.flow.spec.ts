@@ -306,6 +306,16 @@ const compareDeltaInput = {
             direction: 'increase' as const,
           },
         ],
+        eventContributors: [
+          {
+            eventId: 'event-2026-1',
+            startDate: '2026-02-10T08:00:00.000Z',
+            activityType: ActivityTypes.Cycling,
+            eventStatValue: 235,
+            deltaContributionValue: 47,
+            direction: 'increase' as const,
+          },
+        ],
       },
       {
         fromBucket: {
@@ -856,5 +866,6 @@ describe('summarizeAiInsightResult', () => {
     expect(result.deterministicCompareSummary).toContain('power did not change');
     expect(result.deterministicCompareSummary).toContain('Likely contributors:');
     expect(result.deterministicCompareSummary).toContain(ActivityTypes.Cycling);
+    expect(result.deterministicCompareSummary).toContain('Event evidence is linked below.');
   });
 });

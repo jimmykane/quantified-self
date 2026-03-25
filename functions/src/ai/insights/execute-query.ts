@@ -28,6 +28,7 @@ import {
   AI_INSIGHTS_POWER_CURVE_COMPARE_SERIES_SAFETY_MAX,
 } from '../../../../shared/ai-insights-power-curve.constants';
 import {
+  filterEventStatsForAggregation,
   resolveAggregationCategoryKey,
   resolveAutoAggregationTimeInterval,
 } from '../../../../shared/event-stat-aggregation';
@@ -78,6 +79,7 @@ interface AggregateExecutionResult {
   resultKind: 'aggregate';
   aggregation: EventStatAggregationResult;
   matchedEventsCount: number;
+  matchedEventsWithRequestedStat?: EventInterface[];
   matchedActivityTypeCounts: Array<{
     activityType: string;
     eventCount: number;
@@ -503,6 +505,13 @@ function eventMatchesRequestedDateRanges(
 
 function hasRequestedStat(event: EventInterface, dataType: string): boolean {
   return resolveRequestedStatValue(event, dataType) !== null;
+}
+
+function filterEventsForAggregationMetric(
+  events: readonly EventInterface[],
+  dataType: string,
+): EventInterface[] {
+  return filterEventStatsForAggregation(events, dataType);
 }
 
 function resolveRequestedStatValue(event: EventInterface, dataType: string): number | null {
@@ -1161,7 +1170,8 @@ export function createExecuteQuery(
         query.resultKind === 'aggregate'
         || query.resultKind === 'event_lookup'
       )
-        ? matchedEvents.filter(event => hasRequestedStat(event, query.dataType)).length
+        ? filterEventsForAggregationMetric(matchedEvents, query.dataType)
+          .filter(event => hasRequestedStat(event, query.dataType)).length
         : null;
       const firestoreEmulatorHost = process.env.FIRESTORE_EMULATOR_HOST || null;
       const debugEventSnapshot = docs.length === 0
@@ -1256,6 +1266,7 @@ export function createExecuteQuery(
           buildRankedEvents,
           resolveRankedTopResultsLimit,
           hasRequestedStat,
+          filterEventsForAggregationMetric,
         },
       });
     },

@@ -16,6 +16,9 @@ import {
 import {
   AI_INSIGHTS_POWER_CURVE_COMPARE_SERIES_SAFETY_MAX,
 } from './ai-insights-power-curve.constants';
+import {
+  AI_INSIGHTS_COMPARE_EVENT_CONTRIBUTORS_MAX,
+} from './ai-insights-compare.constants';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -218,12 +221,24 @@ const AiInsightSummaryPeriodDeltaContributorSchema = z.object({
   direction: AiInsightSummaryDeltaDirectionSchema,
 });
 
+const AiInsightSummaryPeriodDeltaEventContributorSchema = z.object({
+  eventId: z.string().min(1),
+  startDate: z.string().datetime(),
+  activityType: z.string().min(1),
+  eventStatValue: z.number(),
+  deltaContributionValue: z.number(),
+  direction: AiInsightSummaryDeltaDirectionSchema,
+});
+
 const AiInsightSummaryPeriodDeltaSchema = z.object({
   fromBucket: AiInsightSummaryBucketSchema,
   toBucket: AiInsightSummaryBucketSchema,
   deltaAggregateValue: z.number(),
   direction: AiInsightSummaryDeltaDirectionSchema,
   contributors: z.array(AiInsightSummaryPeriodDeltaContributorSchema),
+  eventContributors: z.array(AiInsightSummaryPeriodDeltaEventContributorSchema)
+    .max(AI_INSIGHTS_COMPARE_EVENT_CONTRIBUTORS_MAX)
+    .optional(),
 });
 
 export const AiInsightSummarySchema = z.object({
