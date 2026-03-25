@@ -467,6 +467,98 @@ describe('normalizeInsightQuery', () => {
     ]);
   });
 
+  it('resolves relative month comparisons (this month vs last month) in compare mode', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-20T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'compare cadence for cycling this month vs last month',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('cadence');
+    expect(result.query.resultKind).toBe('aggregate');
+    expect(result.query.categoryType).toBe(ChartDataCategoryTypes.DateType);
+    expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Monthly);
+    expect(result.query.periodMode).toBe('compare');
+    expect(result.query.activityTypes).toEqual([ActivityTypes.Cycling]);
+    expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
+      startDate: '2026-02-01T00:00:00.000Z',
+      endDate: '2026-03-31T23:59:59.999Z',
+      timezone: 'UTC',
+      source: 'prompt',
+    });
+    expect(result.query.requestedDateRanges).toEqual([
+      {
+        kind: 'bounded',
+        startDate: '2026-02-01T00:00:00.000Z',
+        endDate: '2026-02-28T23:59:59.999Z',
+        timezone: 'UTC',
+        source: 'prompt',
+      },
+      {
+        kind: 'bounded',
+        startDate: '2026-03-01T00:00:00.000Z',
+        endDate: '2026-03-31T23:59:59.999Z',
+        timezone: 'UTC',
+        source: 'prompt',
+      },
+    ]);
+  });
+
+  it('resolves relative week comparisons (this week vs last week) in compare mode', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-20T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'compare cadence for cycling this week vs last week',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('cadence');
+    expect(result.query.resultKind).toBe('aggregate');
+    expect(result.query.categoryType).toBe(ChartDataCategoryTypes.DateType);
+    expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Weekly);
+    expect(result.query.periodMode).toBe('compare');
+    expect(result.query.activityTypes).toEqual([ActivityTypes.Cycling]);
+    expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
+      startDate: '2026-03-09T00:00:00.000Z',
+      endDate: '2026-03-22T23:59:59.999Z',
+      timezone: 'UTC',
+      source: 'prompt',
+    });
+    expect(result.query.requestedDateRanges).toEqual([
+      {
+        kind: 'bounded',
+        startDate: '2026-03-09T00:00:00.000Z',
+        endDate: '2026-03-15T23:59:59.999Z',
+        timezone: 'UTC',
+        source: 'prompt',
+      },
+      {
+        kind: 'bounded',
+        startDate: '2026-03-16T00:00:00.000Z',
+        endDate: '2026-03-22T23:59:59.999Z',
+        timezone: 'UTC',
+        source: 'prompt',
+      },
+    ]);
+  });
+
   it('honors explicit column chart wording for sparse multi-year comparisons', async () => {
     setNormalizeQueryDependenciesForTesting({
       now: () => new Date('2026-03-20T12:00:00.000Z'),
@@ -602,6 +694,61 @@ describe('normalizeInsightQuery', () => {
         source: 'prompt',
       },
     ]);
+  });
+
+  it('resolves month-year to now ranges for compare prompts', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-25T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'compare cadence for cycling from nov 2025 to now',
+      clientTimezone: 'Europe/Helsinki',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('cadence');
+    expect(result.query.resultKind).toBe('aggregate');
+    expect(result.query.categoryType).toBe(ChartDataCategoryTypes.DateType);
+    expect(result.query.activityTypes).toEqual([ActivityTypes.Cycling]);
+    expect(result.query.periodMode).toBe('compare');
+    expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Monthly);
+    expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
+      startDate: '2025-10-31T22:00:00.000Z',
+      endDate: '2026-03-25T21:59:59.999Z',
+      timezone: 'Europe/Helsinki',
+      source: 'prompt',
+    });
+  });
+
+  it('resolves month-year to now ranges for between-and-now phrasing', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-25T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'compare cadence for cycling between nov 2025 and now',
+      clientTimezone: 'Europe/Helsinki',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('cadence');
+    expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
+      startDate: '2025-10-31T22:00:00.000Z',
+      endDate: '2026-03-25T21:59:59.999Z',
+      timezone: 'Europe/Helsinki',
+      source: 'prompt',
+    });
   });
 
   it('normalizes explicit month-year prompts such as "in January 2024"', async () => {

@@ -48,6 +48,7 @@ import { AiInsightsChartComponent } from './ai-insights-chart.component';
 import { AiInsightsMultiMetricChartComponent } from './ai-insights-multi-metric-chart.component';
 import { AiInsightsPowerCurveChartComponent } from './ai-insights-power-curve-chart.component';
 import { AiInsightsPageComponent } from './ai-insights-page.component';
+import { formatAiInsightsNarrativeForDisplay } from './ai-insights-page.helpers';
 import {
   AI_INSIGHTS_DEFAULT_PICKER_PROMPTS,
   AI_INSIGHTS_DEFAULT_PROMPT_SECTIONS,
@@ -91,6 +92,14 @@ class MockAiInsightsPowerCurveChartComponent {
   readonly darkTheme = input(false);
   readonly useAnimations = input(false);
 }
+
+describe('formatAiInsightsNarrativeForDisplay', () => {
+  it('returns a trimmed narrative without marker parsing', () => {
+    expect(
+      formatAiInsightsNarrativeForDisplay('  Base narrative. Deterministic compare summary: From 2025 to 2026, distance increased by 10 km.  '),
+    ).toBe('Base narrative. Deterministic compare summary: From 2025 to 2026, distance increased by 10 km.');
+  });
+});
 
 function buildQuotaStatus(overrides: Partial<AiInsightsQuotaStatus> = {}): AiInsightsQuotaStatus {
   return {
@@ -1338,6 +1347,7 @@ describe('AiInsightsPageComponent', () => {
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes('Latest bucket'))).toBe(false);
     expect(summaryHelpButtons).toHaveLength(5);
     expect(summaryCards.some((card) => card.nativeElement.textContent.includes(expectedOverall ?? ''))).toBe(true);
+    expect(fixture.debugElement.query(By.css('.narrative-info--secondary'))).toBeNull();
     const calledWindowScroll = scrollToSpy.mock.calls.length > 0;
     const calledElementScroll = scrollIntoViewSpy.mock.calls.length > 0;
     expect(calledWindowScroll || calledElementScroll).toBe(true);
@@ -1345,6 +1355,418 @@ describe('AiInsightsPageComponent', () => {
       configurable: true,
       value: originalScrollTo,
     });
+  });
+
+  it('should render deterministic compare summary in a dedicated aggregate section', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue({
+      ...buildOkResponse(),
+      query: {
+        ...buildOkResponse().query,
+        periodMode: 'compare',
+      },
+      deterministicCompareSummary: 'From 2025 to 2026, cadence increased by 7 rpm. Likely contributors: Cycling (up by 7 rpm).',
+    });
+    component.promptControl.setValue('compare my cadence this year vs last year');
+
+    await component.submitPrompt();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compareSection = fixture.debugElement.query(By.css('.narrative-info--secondary'))?.nativeElement as HTMLElement | undefined;
+    const compareTitle = fixture.debugElement.query(By.css('.narrative-section-title'))?.nativeElement as HTMLElement | undefined;
+    const compareNarrative = compareSection?.querySelector('.narrative') as HTMLElement | null;
+    const mainNarrative = fixture.debugElement.queryAll(By.css('.narrative-info .narrative'))[0]?.nativeElement as HTMLElement | undefined;
+
+    expect(compareSection).toBeTruthy();
+    expect(compareTitle?.textContent).toContain('Delta explanation');
+    expect(compareNarrative?.textContent).toContain('cadence increased by 7 rpm');
+    expect(mainNarrative?.textContent).toContain('trended up');
+    expect(mainNarrative?.textContent).not.toContain('Delta explanation');
+    expect(fixture.debugElement.query(By.css('.compare-evidence-group'))).toBeNull();
+  });
+
+  it('should render confidence and evidence chips for ok responses', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue({
+      ...buildOkResponse(),
+      statementChips: [
+        {
+          statementId: 'aggregate:narrative',
+          chipType: 'confidence',
+          label: 'High confidence',
+          confidenceTier: 'high',
+        },
+        {
+          statementId: 'aggregate:narrative',
+          chipType: 'evidence',
+          label: 'Evidence linked',
+          evidenceRefs: [
+            {
+              kind: 'bucket',
+              label: 'Bucket 2026-01',
+              bucketKey: '2026-01',
+            },
+          ],
+        },
+      ],
+    });
+    component.promptControl.setValue('show my cadence trend');
+
+    await component.submitPrompt();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const chipSet = fixture.debugElement.query(By.css('.statement-chip-set'))?.nativeElement as HTMLElement | undefined;
+    const chips = fixture.debugElement.queryAll(By.css('.statement-chip'));
+
+    expect(chipSet).toBeTruthy();
+    expect(chips.some((chip) => chip.nativeElement.textContent.includes('High confidence'))).toBe(true);
+    expect(chips.some((chip) => chip.nativeElement.textContent.includes('Evidence linked'))).toBe(true);
+  });
+
+  it('should collapse duplicate narrative chip labels into a single display chip', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue({
+      ...buildOkResponse(),
+      statementChips: [
+        {
+          statementId: 'aggregate:narrative',
+          chipType: 'confidence',
+          label: 'Medium confidence',
+          confidenceTier: 'medium',
+        },
+        {
+          statementId: 'aggregate:narrative',
+          chipType: 'confidence',
+          label: 'Medium confidence',
+          confidenceTier: 'medium',
+        },
+        {
+          statementId: 'aggregate:narrative',
+          chipType: 'confidence',
+          label: 'Medium confidence',
+          confidenceTier: 'medium',
+        },
+        {
+          statementId: 'aggregate:narrative',
+          chipType: 'evidence',
+          label: 'Evidence linked',
+          evidenceRefs: [
+            {
+              kind: 'bucket',
+              label: 'Previous 2026-01',
+              bucketKey: '2026-01',
+            },
+          ],
+        },
+        {
+          statementId: 'aggregate:narrative',
+          chipType: 'evidence',
+          label: 'Evidence linked',
+          evidenceRefs: [
+            {
+              kind: 'bucket',
+              label: 'To 2026-02',
+              bucketKey: '2026-02',
+            },
+          ],
+        },
+      ],
+    });
+    component.promptControl.setValue('show my cadence trend');
+
+    await component.submitPrompt();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const chips = fixture.debugElement
+      .queryAll(By.css('.statement-chip'))
+      .map(chip => (chip.nativeElement.textContent || '').trim());
+    const mediumConfidenceCount = chips.filter(label => label.includes('Medium confidence')).length;
+    const evidenceLinkedCount = chips.filter(label => label.includes('Evidence linked')).length;
+
+    expect(mediumConfidenceCount).toBe(1);
+    expect(evidenceLinkedCount).toBe(1);
+  });
+
+  it('should only render narrative-linked chips in the narrative chip row', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue({
+      ...buildOkResponse(),
+      statementChips: [
+        {
+          statementId: 'aggregate:trend',
+          chipType: 'confidence',
+          label: 'Medium confidence',
+          confidenceTier: 'medium',
+        },
+      ],
+    });
+    component.promptControl.setValue('show my cadence trend');
+
+    await component.submitPrompt();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(fixture.debugElement.query(By.css('.statement-chip-set'))).toBeNull();
+  });
+
+  it('should not render statement chips for empty responses', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue(buildEmptyResponse());
+    component.promptControl.setValue('show a metric with no results');
+
+    await component.submitPrompt();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(fixture.debugElement.query(By.css('.statement-chip-set'))).toBeNull();
+  });
+
+  it('should render aggregate anomaly callouts with kind, confidence, and evidence chips', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue({
+      ...buildOkResponse(),
+      summary: {
+        ...buildOkResponse().summary,
+        anomalyCallouts: [
+          {
+            id: 'callout:spike:cadence:2026-01',
+            statementId: 'anomaly:spike:cadence:2026-01',
+            kind: 'spike',
+            snippet: 'Unusual spike at 2026-01: Average Cadence was 110.',
+            confidenceTier: 'high',
+            score: 4.4,
+            evidenceRefs: [
+              {
+                kind: 'bucket',
+                label: 'Bucket 2026-01',
+                bucketKey: '2026-01',
+              },
+            ],
+          },
+        ],
+      },
+      statementChips: [
+        {
+          statementId: 'anomaly:spike:cadence:2026-01',
+          chipType: 'confidence',
+          label: 'High confidence',
+          confidenceTier: 'high',
+        },
+        {
+          statementId: 'anomaly:spike:cadence:2026-01',
+          chipType: 'evidence',
+          label: 'Evidence linked',
+          evidenceRefs: [
+            {
+              kind: 'bucket',
+              label: 'Bucket 2026-01',
+              bucketKey: '2026-01',
+            },
+          ],
+        },
+      ],
+    });
+    component.promptControl.setValue('show unusual cadence changes');
+
+    await component.submitPrompt();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const anomalySection = fixture.debugElement
+      .queryAll(By.css('.narrative-section-title'))
+      .find((node) => node.nativeElement.textContent.includes('Anomaly callouts'));
+    const anomalySnippet = fixture.debugElement.query(By.css('.anomaly-callout-snippet'))?.nativeElement as HTMLElement | undefined;
+    const anomalyEvidence = fixture.debugElement.query(By.css('.anomaly-callout-evidence'))?.nativeElement as HTMLElement | undefined;
+
+    expect(anomalySection).toBeTruthy();
+    expect(anomalySnippet?.textContent).toContain('Unusual spike');
+    expect(fixture.debugElement.queryAll(By.css('.anomaly-callout-chip-set .statement-chip')).some((chip) => chip.nativeElement.textContent.includes('Spike'))).toBe(true);
+    expect(fixture.debugElement.queryAll(By.css('.anomaly-callout-chip-set .statement-chip')).some((chip) => chip.nativeElement.textContent.includes('High confidence'))).toBe(true);
+    expect(fixture.debugElement.queryAll(By.css('.anomaly-callout-chip-set .statement-chip')).some((chip) => chip.nativeElement.textContent.includes('Evidence linked'))).toBe(true);
+    expect(anomalyEvidence?.textContent).toContain('Bucket 2026-01');
+  });
+
+  it('should render grouped multi-metric anomaly callouts by metric', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue({
+      ...buildMultiMetricResponse(),
+      metricResults: [
+        {
+          ...buildMultiMetricResponse().metricResults[0],
+          summary: {
+            ...buildMultiMetricResponse().metricResults[0].summary,
+            anomalyCallouts: [
+              {
+                id: 'callout:drop:average_cadence:2026-01',
+                statementId: 'anomaly:drop:average_cadence:2026-01',
+                kind: 'drop',
+                snippet: 'Unusual drop at 2026-01 for cadence.',
+                confidenceTier: 'medium',
+                score: 2.8,
+                evidenceRefs: [
+                  {
+                    kind: 'bucket',
+                    label: 'Bucket 2026-01',
+                    bucketKey: '2026-01',
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        {
+          ...buildMultiMetricResponse().metricResults[1],
+        },
+      ],
+      statementChips: [
+        {
+          statementId: 'anomaly:drop:average_cadence:2026-01',
+          chipType: 'confidence',
+          label: 'Medium confidence',
+          confidenceTier: 'medium',
+        },
+        {
+          statementId: 'anomaly:drop:average_cadence:2026-01',
+          chipType: 'evidence',
+          label: 'Evidence linked',
+          evidenceRefs: [
+            {
+              kind: 'bucket',
+              label: 'Bucket 2026-01',
+              bucketKey: '2026-01',
+            },
+          ],
+        },
+      ],
+    });
+    component.promptControl.setValue('show unusual cadence and power changes');
+
+    await component.submitPrompt();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const sectionHeadings = fixture.debugElement.queryAll(By.css('.anomaly-section-heading'));
+    const anomalySnippets = fixture.debugElement.queryAll(By.css('.anomaly-callout-snippet'));
+    const anomalyChipLabels = fixture.debugElement.queryAll(By.css('.anomaly-callout-chip-set .statement-chip'));
+
+    expect(sectionHeadings).toHaveLength(1);
+    expect(sectionHeadings[0]?.nativeElement.textContent).toContain('Cadence');
+    expect(anomalySnippets[0]?.nativeElement.textContent).toContain('Unusual drop');
+    expect(anomalyChipLabels.some((chip) => chip.nativeElement.textContent.includes('Drop'))).toBe(true);
+    expect(anomalyChipLabels.some((chip) => chip.nativeElement.textContent.includes('Medium confidence'))).toBe(true);
+  });
+
+  it('should render grouped clickable compare evidence rows for all period deltas', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue({
+      ...buildOkResponse(),
+      query: {
+        ...buildOkResponse().query,
+        dataType: DataDistance.type,
+        valueType: ChartDataValueTypes.Total,
+        periodMode: 'compare',
+      },
+      summary: {
+        ...buildOkResponse().summary,
+        periodDeltas: [
+          {
+            fromBucket: {
+              bucketKey: '2025',
+              time: Date.parse('2025-01-01T00:00:00.000Z'),
+              aggregateValue: 3200,
+              totalCount: 18,
+            },
+            toBucket: {
+              bucketKey: '2026',
+              time: Date.parse('2026-01-01T00:00:00.000Z'),
+              aggregateValue: 2800,
+              totalCount: 16,
+            },
+            deltaAggregateValue: -400,
+            direction: 'decrease',
+            contributors: [],
+            eventContributors: [
+              {
+                eventId: 'event-a',
+                startDate: '2026-02-11T08:00:00.000Z',
+                activityType: ActivityTypes.Cycling,
+                eventStatValue: 142,
+                deltaContributionValue: -142,
+                direction: 'decrease',
+              },
+              {
+                eventId: 'event-b',
+                startDate: '2026-01-20T08:00:00.000Z',
+                activityType: ActivityTypes.MountainBiking,
+                eventStatValue: 128,
+                deltaContributionValue: -128,
+                direction: 'decrease',
+              },
+            ],
+          },
+          {
+            fromBucket: {
+              bucketKey: '2024',
+              time: Date.parse('2024-01-01T00:00:00.000Z'),
+              aggregateValue: 3000,
+              totalCount: 14,
+            },
+            toBucket: {
+              bucketKey: '2025',
+              time: Date.parse('2025-01-01T00:00:00.000Z'),
+              aggregateValue: 3200,
+              totalCount: 18,
+            },
+            deltaAggregateValue: 200,
+            direction: 'increase',
+            contributors: [],
+            eventContributors: [
+              {
+                eventId: 'event-c',
+                startDate: '2025-06-15T08:00:00.000Z',
+                activityType: ActivityTypes.Cycling,
+                eventStatValue: 95,
+                deltaContributionValue: 95,
+                direction: 'increase',
+              },
+            ],
+          },
+        ],
+      },
+      deterministicCompareSummary: 'From 2025 to 2026, distance decreased by 400 km. Event evidence is linked below.',
+    });
+    component.promptControl.setValue('compare my total distance this year vs last year');
+
+    await component.submitPrompt();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const evidenceGroups = fixture.debugElement.queryAll(By.css('.compare-evidence-group'));
+    const evidenceColumns = fixture.debugElement.queryAll(By.css('.compare-evidence-column'));
+    const evidenceRows = fixture.debugElement.queryAll(By.css('.compare-evidence-link'));
+    const evidenceActionLinks = fixture.debugElement.queryAll(By.css('.compare-evidence-link-action'));
+    const downwardColumns = fixture.debugElement.queryAll(By.css('.compare-evidence-column .compare-evidence-link--downward'));
+    const upwardColumns = fixture.debugElement.queryAll(By.css('.compare-evidence-column .compare-evidence-link--upward'));
+    const emptyEvidenceMessages = fixture.debugElement.queryAll(By.css('.compare-evidence-empty'));
+    const compareNarrative = fixture.debugElement.query(By.css('.narrative-info--secondary .narrative'))?.nativeElement as HTMLElement | undefined;
+    const evidenceSummary = fixture.debugElement.query(By.css('.compare-evidence-summary'))?.nativeElement as HTMLElement | undefined;
+
+    expect(evidenceGroups).toHaveLength(2);
+    expect(evidenceColumns).toHaveLength(4);
+    expect(evidenceGroups[0]?.nativeElement.textContent).toContain('From Jan 2025 to Jan 2026');
+    expect(evidenceGroups[1]?.nativeElement.textContent).toContain('From Jan 2024 to Jan 2025');
+    expect(evidenceRows).toHaveLength(3);
+    expect(evidenceActionLinks).toHaveLength(3);
+    expect(downwardColumns).toHaveLength(2);
+    expect(upwardColumns).toHaveLength(1);
+    expect(emptyEvidenceMessages).toHaveLength(2);
+    expect(emptyEvidenceMessages.some((message) => message.nativeElement.textContent.includes('No upward contributors in this period pair.'))).toBe(true);
+    expect(emptyEvidenceMessages.some((message) => message.nativeElement.textContent.includes('No downward contributors in this period pair.'))).toBe(true);
+    expect(evidenceGroups[0]?.nativeElement.textContent).toContain('Downward contributors (from Jan 2025)');
+    expect(evidenceGroups[1]?.nativeElement.textContent).toContain('Upward contributors (to Jan 2025)');
+    expect(compareNarrative?.textContent).not.toContain('Event evidence is linked below');
+    expect(evidenceSummary?.textContent).toContain('Shown events account for');
+    expect(evidenceSummary?.textContent).toContain('% of the net');
+    expect(evidenceRows[0]?.nativeElement.tagName).toBe('DIV');
+    expect(evidenceRows[0]?.nativeElement.textContent).toContain(ActivityTypes.Cycling);
+    expect(evidenceRows[0]?.nativeElement.textContent).toContain('% of net delta');
+    expect(evidenceActionLinks[0]?.nativeElement.textContent).toContain('Review event');
+    expect(evidenceActionLinks[0]?.nativeElement.getAttribute('href')).toContain('/user/user-1/event/event-a');
   });
 
   it('should render power-curve results with the dedicated chart and no aggregate summary cards', async () => {

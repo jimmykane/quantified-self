@@ -39,6 +39,7 @@ interface ExecuteQueryResultKindHelpers {
     query: Extract<NormalizedInsightQuery, { resultKind: 'event_lookup' | 'aggregate' }>,
   ) => number;
   hasRequestedStat: (event: EventInterface, dataType: string) => boolean;
+  filterEventsForAggregationMetric: (events: readonly EventInterface[], dataType: string) => EventInterface[];
 }
 
 interface ExecuteQueryResultKindContextBase {
@@ -76,7 +77,8 @@ const EXECUTE_QUERY_RESULT_KIND_REGISTRY = {
         query,
         userID,
       } = context;
-      const eventsWithRequestedStat = matchedEvents
+      const metricEligibleEvents = helpers.filterEventsForAggregationMetric(matchedEvents, query.dataType);
+      const eventsWithRequestedStat = metricEligibleEvents
         .filter(event => helpers.hasRequestedStat(event, query.dataType));
       const topResultsLimit = helpers.resolveRankedTopResultsLimit(query);
       const rankedEvents = helpers.buildRankedEvents(eventsWithRequestedStat, query, topResultsLimit);
@@ -179,7 +181,11 @@ const EXECUTE_QUERY_RESULT_KIND_REGISTRY = {
         userID,
       } = context;
       const metricResults = query.metricSelections.map((metricSelection) => {
-        const metricMatchedEvents = matchedEvents
+        const metricEligibleEvents = helpers.filterEventsForAggregationMetric(
+          matchedEvents,
+          metricSelection.dataType,
+        );
+        const metricMatchedEvents = metricEligibleEvents
           .filter(event => helpers.hasRequestedStat(event, metricSelection.dataType));
         const aggregation = query.groupingMode === 'date'
           ? buildEventStatAggregation(metricMatchedEvents, {
@@ -235,7 +241,8 @@ const EXECUTE_QUERY_RESULT_KIND_REGISTRY = {
         userID,
       } = context;
 
-      const eventsWithRequestedStat = matchedEvents
+      const metricEligibleEvents = helpers.filterEventsForAggregationMetric(matchedEvents, query.dataType);
+      const eventsWithRequestedStat = metricEligibleEvents
         .filter(event => helpers.hasRequestedStat(event, query.dataType));
       const aggregation = buildEventStatAggregation(matchedEvents, {
         dataType: query.dataType,
@@ -281,6 +288,7 @@ const EXECUTE_QUERY_RESULT_KIND_REGISTRY = {
         resultKind: 'aggregate',
         aggregation,
         matchedEventsCount: matchedEvents.length,
+        matchedEventsWithRequestedStat: eventsWithRequestedStat,
         matchedActivityTypeCounts: helpers.buildMatchedActivityTypeCounts(matchedEvents, dependencies.logger),
         ...(eventRanking ? { eventRanking } : {}),
       };

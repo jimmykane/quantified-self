@@ -24,6 +24,13 @@ import type {
   SummarizeInsightApi,
   SummarizeInsightNarrativeResult,
 } from './summarize-result.flow';
+import {
+  buildAggregateStatementChips,
+  buildEventLookupStatementChips,
+  buildLatestEventStatementChips,
+  buildMultiMetricStatementChips,
+  buildPowerCurveStatementChips,
+} from './statement-chips';
 
 type SummarizeAiInsightResult = SummarizeInsightApi['summarizeAiInsightResult'];
 
@@ -191,25 +198,34 @@ const CALLABLE_RESULT_KIND_REGISTRY = {
       clientLocale: context.input.clientLocale,
       unitSettings: context.unitSettings,
     }),
-    buildOkResponse: (context, narrativeResult, quota) => ({
-      status: 'ok',
-      resultKind: 'aggregate',
-      narrative: narrativeResult.narrative,
-      quota,
-      query: context.query,
-      aggregation: context.executionResult.aggregation,
-      summary: context.aggregateSummary,
-      ...(context.executionResult.eventRanking
+    buildOkResponse: (context, narrativeResult, quota) => {
+      const eventRanking = context.executionResult.eventRanking
         ? {
-          eventRanking: {
-            primaryEventId: context.executionResult.eventRanking.primaryEventId as string,
-            topEventIds: context.executionResult.eventRanking.topEventIds,
-            matchedEventCount: context.executionResult.eventRanking.matchedEventCount,
-          },
+          primaryEventId: context.executionResult.eventRanking.primaryEventId as string,
+          topEventIds: context.executionResult.eventRanking.topEventIds,
+          matchedEventCount: context.executionResult.eventRanking.matchedEventCount,
         }
-        : {}),
-      presentation: context.presentation,
-    } satisfies AiInsightsAggregateOkResponse),
+        : undefined;
+
+      return {
+        status: 'ok',
+        resultKind: 'aggregate',
+        narrative: narrativeResult.narrative,
+        quota,
+        statementChips: buildAggregateStatementChips({
+          summary: context.aggregateSummary,
+          eventRanking,
+        }),
+        query: context.query,
+        aggregation: context.executionResult.aggregation,
+        summary: context.aggregateSummary,
+        ...(narrativeResult.deterministicCompareSummary
+          ? { deterministicCompareSummary: narrativeResult.deterministicCompareSummary }
+          : {}),
+        ...(eventRanking ? { eventRanking } : {}),
+        presentation: context.presentation,
+      } satisfies AiInsightsAggregateOkResponse;
+    },
   },
   event_lookup: {
     isEmpty: (context) => !context.executionResult.eventLookup.primaryEventId,
@@ -227,19 +243,24 @@ const CALLABLE_RESULT_KIND_REGISTRY = {
       clientLocale: context.input.clientLocale,
       unitSettings: context.unitSettings,
     }),
-    buildOkResponse: (context, narrativeResult, quota) => ({
-      status: 'ok',
-      resultKind: 'event_lookup',
-      narrative: narrativeResult.narrative,
-      quota,
-      query: context.query,
-      eventLookup: {
+    buildOkResponse: (context, narrativeResult, quota) => {
+      const eventLookup = {
         primaryEventId: context.executionResult.eventLookup.primaryEventId as string,
         topEventIds: context.executionResult.eventLookup.topEventIds,
         matchedEventCount: context.executionResult.matchedEventsCount,
-      },
-      presentation: context.presentation,
-    } satisfies AiInsightsEventLookupOkResponse),
+      };
+
+      return {
+        status: 'ok',
+        resultKind: 'event_lookup',
+        narrative: narrativeResult.narrative,
+        quota,
+        statementChips: buildEventLookupStatementChips(eventLookup),
+        query: context.query,
+        eventLookup,
+        presentation: context.presentation,
+      } satisfies AiInsightsEventLookupOkResponse;
+    },
   },
   latest_event: {
     isEmpty: (context) => !context.executionResult.latestEvent.eventId,
@@ -252,19 +273,24 @@ const CALLABLE_RESULT_KIND_REGISTRY = {
       }),
       source: 'fallback',
     }),
-    buildOkResponse: (context, narrativeResult, quota) => ({
-      status: 'ok',
-      resultKind: 'latest_event',
-      narrative: narrativeResult.narrative,
-      quota,
-      query: context.query,
-      latestEvent: {
+    buildOkResponse: (context, narrativeResult, quota) => {
+      const latestEvent = {
         eventId: context.executionResult.latestEvent.eventId as string,
         startDate: context.executionResult.latestEvent.startDate as string,
         matchedEventCount: context.executionResult.matchedEventsCount,
-      },
-      presentation: context.presentation,
-    } satisfies AiInsightsLatestEventOkResponse),
+      };
+
+      return {
+        status: 'ok',
+        resultKind: 'latest_event',
+        narrative: narrativeResult.narrative,
+        quota,
+        statementChips: buildLatestEventStatementChips(latestEvent),
+        query: context.query,
+        latestEvent,
+        presentation: context.presentation,
+      } satisfies AiInsightsLatestEventOkResponse;
+    },
   },
   multi_metric_aggregate: {
     isEmpty: (context) => context.metricResults.every(metricResult => metricResult.aggregation.buckets.length === 0),
@@ -283,6 +309,9 @@ const CALLABLE_RESULT_KIND_REGISTRY = {
       resultKind: 'multi_metric_aggregate',
       narrative: narrativeResult.narrative,
       quota,
+      statementChips: buildMultiMetricStatementChips({
+        metricResults: context.metricResults,
+      }),
       query: context.query,
       metricResults: context.metricResults,
       presentation: context.presentation,
@@ -299,6 +328,7 @@ const CALLABLE_RESULT_KIND_REGISTRY = {
       resultKind: 'power_curve',
       narrative: narrativeResult.narrative,
       quota,
+      statementChips: buildPowerCurveStatementChips(context.executionResult.powerCurve),
       query: context.query,
       powerCurve: context.executionResult.powerCurve,
       presentation: context.presentation,

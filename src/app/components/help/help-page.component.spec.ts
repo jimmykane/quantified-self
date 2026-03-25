@@ -72,6 +72,22 @@ describe('HelpPageComponent', () => {
     expect(selectedTitle?.textContent).toContain(HELP_SECTIONS[2].title);
   });
 
+  it('should render deterministic AI FAQ guidance in the AI Insights help section', async () => {
+    component.onSectionTabChange(1);
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      fixture.detectChanges();
+      if (component.renderedSectionContent['ai-insights']) {
+        break;
+      }
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+
+    const sectionCopy = fixture.debugElement.query(By.css('#help-section-content .section-copy'))?.nativeElement as HTMLElement | undefined;
+    expect(sectionCopy?.innerHTML).toContain('Why do I get the same answer for the same prompt?');
+    expect(sectionCopy?.innerHTML).toContain('mostly deterministic');
+    expect(sectionCopy?.innerHTML).toContain('new activities');
+  });
+
   it('should render internal links without target blank and external links with target blank', () => {
     component.onSectionTabChange(0);
     fixture.detectChanges();

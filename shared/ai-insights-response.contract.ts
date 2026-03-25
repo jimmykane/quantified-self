@@ -16,6 +16,12 @@ import {
 import {
   AI_INSIGHTS_POWER_CURVE_COMPARE_SERIES_SAFETY_MAX,
 } from './ai-insights-power-curve.constants';
+import {
+  AI_INSIGHTS_COMPARE_EVENT_CONTRIBUTORS_MAX,
+} from './ai-insights-compare.constants';
+import {
+  AI_INSIGHTS_ANOMALY_MAX_CALLOUTS,
+} from './ai-insights-anomaly.constants';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -210,6 +216,92 @@ export const AiInsightSummaryTrendSchema = z.object({
   deltaAggregateValue: z.number(),
 });
 
+const AiInsightSummaryDeltaDirectionSchema = z.enum(['increase', 'decrease', 'no_change']);
+const AiInsightConfidenceTierSchema = z.enum(['low', 'medium', 'high']);
+const AiInsightAnomalyKindSchema = z.enum(['spike', 'drop', 'activity_mix_shift']);
+
+const AiInsightBucketEvidenceRefSchema = z.object({
+  kind: z.literal('bucket'),
+  label: z.string().min(1),
+  bucketKey: BucketKeySchema,
+});
+
+const AiInsightEventEvidenceRefSchema = z.object({
+  kind: z.literal('event'),
+  label: z.string().min(1),
+  eventId: z.string().min(1),
+});
+
+const AiInsightSeriesEvidenceRefSchema = z.object({
+  kind: z.literal('series'),
+  label: z.string().min(1),
+  seriesKey: z.string().min(1),
+});
+
+const AiInsightMetricEvidenceRefSchema = z.object({
+  kind: z.literal('metric'),
+  label: z.string().min(1),
+  metricKey: AiInsightsPromptMetricKeySchema,
+});
+
+const AiInsightEvidenceRefSchema = z.discriminatedUnion('kind', [
+  AiInsightBucketEvidenceRefSchema,
+  AiInsightEventEvidenceRefSchema,
+  AiInsightSeriesEvidenceRefSchema,
+  AiInsightMetricEvidenceRefSchema,
+]);
+
+const AiInsightSummaryAnomalyCalloutSchema = z.object({
+  id: z.string().min(1),
+  statementId: z.string().min(1),
+  kind: AiInsightAnomalyKindSchema,
+  snippet: z.string().min(1),
+  confidenceTier: AiInsightConfidenceTierSchema,
+  score: z.number().finite(),
+  evidenceRefs: z.array(AiInsightEvidenceRefSchema).min(1).max(8),
+});
+
+const AiInsightStatementChipSchema = z.discriminatedUnion('chipType', [
+  z.object({
+    statementId: z.string().min(1),
+    chipType: z.literal('confidence'),
+    label: z.string().min(1),
+    confidenceTier: AiInsightConfidenceTierSchema,
+  }),
+  z.object({
+    statementId: z.string().min(1),
+    chipType: z.literal('evidence'),
+    label: z.string().min(1),
+    evidenceRefs: z.array(AiInsightEvidenceRefSchema).min(1).max(8),
+  }),
+]);
+
+const AiInsightSummaryPeriodDeltaContributorSchema = z.object({
+  seriesKey: z.string().min(1),
+  deltaAggregateValue: z.number(),
+  direction: AiInsightSummaryDeltaDirectionSchema,
+});
+
+const AiInsightSummaryPeriodDeltaEventContributorSchema = z.object({
+  eventId: z.string().min(1),
+  startDate: z.string().datetime(),
+  activityType: z.string().min(1),
+  eventStatValue: z.number(),
+  deltaContributionValue: z.number(),
+  direction: AiInsightSummaryDeltaDirectionSchema,
+});
+
+const AiInsightSummaryPeriodDeltaSchema = z.object({
+  fromBucket: AiInsightSummaryBucketSchema,
+  toBucket: AiInsightSummaryBucketSchema,
+  deltaAggregateValue: z.number(),
+  direction: AiInsightSummaryDeltaDirectionSchema,
+  contributors: z.array(AiInsightSummaryPeriodDeltaContributorSchema),
+  eventContributors: z.array(AiInsightSummaryPeriodDeltaEventContributorSchema)
+    .max(AI_INSIGHTS_COMPARE_EVENT_CONTRIBUTORS_MAX)
+    .optional(),
+});
+
 export const AiInsightSummarySchema = z.object({
   matchedEventCount: z.number().int().nonnegative(),
   overallAggregateValue: z.number().nullable(),
@@ -219,6 +311,8 @@ export const AiInsightSummarySchema = z.object({
   activityMix: AiInsightSummaryActivityMixSchema.nullable(),
   bucketCoverage: AiInsightSummaryCoverageSchema.nullable(),
   trend: AiInsightSummaryTrendSchema.nullable(),
+  periodDeltas: z.array(AiInsightSummaryPeriodDeltaSchema).nullable().optional(),
+  anomalyCallouts: z.array(AiInsightSummaryAnomalyCalloutSchema).max(AI_INSIGHTS_ANOMALY_MAX_CALLOUTS).nullable().optional(),
 });
 
 export const AiInsightEventLookupSchema = z.object({
@@ -282,6 +376,7 @@ const AiInsightsOkResponseBaseSchema = z.object({
   status: z.literal('ok'),
   narrative: z.string().min(1),
   quota: AiInsightsQuotaStatusSchema.optional(),
+  statementChips: z.array(AiInsightStatementChipSchema).optional(),
 });
 
 const AiInsightsAggregateOkResponseSchema = AiInsightsOkResponseBaseSchema.extend({
@@ -289,6 +384,7 @@ const AiInsightsAggregateOkResponseSchema = AiInsightsOkResponseBaseSchema.exten
   query: NormalizedInsightAggregateQuerySchema,
   aggregation: EventStatAggregationResultSchema,
   summary: AiInsightSummarySchema,
+  deterministicCompareSummary: z.string().min(1).optional(),
   eventRanking: AiInsightEventLookupSchema.optional(),
   presentation: AiInsightPresentationSchema,
 });
@@ -355,6 +451,8 @@ export const AiInsightsResponseSchema = z.union([
   AiInsightsUnsupportedResponseSchema,
 ]);
 
+type ParsedAiInsightsOkResponse = z.infer<typeof AiInsightsOkStrictSchema>;
+
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -371,7 +469,21 @@ function describeValueType(value: unknown): string {
   return typeof value;
 }
 
-function resolveResponseValidationReason(value: unknown, firstIssuePathKey: string | undefined): string {
+function resolveResponseValidationReason(
+  value: unknown,
+  firstIssuePath: PropertyKey[] | undefined,
+): string {
+  const firstIssuePathKey = typeof firstIssuePath?.[0] === 'string'
+    ? firstIssuePath[0]
+    : undefined;
+  const secondIssuePathKey = typeof firstIssuePath?.[1] === 'string'
+    ? firstIssuePath[1]
+    : undefined;
+  const hasSummaryAnomalyCalloutPath = firstIssuePath?.some((pathSegment, index) => (
+    pathSegment === 'summary'
+    && firstIssuePath[index + 1] === 'anomalyCallouts'
+  )) ?? false;
+
   if (!isRecord(value)) {
     return 'not_object';
   }
@@ -397,7 +509,13 @@ function resolveResponseValidationReason(value: unknown, firstIssuePathKey: stri
     return 'aggregation_invalid';
   }
   if (firstIssuePathKey === 'summary') {
+    if (secondIssuePathKey === 'anomalyCallouts') {
+      return 'anomaly_callouts_invalid';
+    }
     return 'summary_invalid';
+  }
+  if (firstIssuePathKey === 'deterministicCompareSummary') {
+    return 'deterministic_compare_summary_invalid';
   }
   if (firstIssuePathKey === 'eventLookup') {
     return 'event_lookup_invalid';
@@ -409,13 +527,86 @@ function resolveResponseValidationReason(value: unknown, firstIssuePathKey: stri
     return 'power_curve_invalid';
   }
   if (firstIssuePathKey === 'metricResults') {
+    if (hasSummaryAnomalyCalloutPath) {
+      return 'anomaly_callouts_invalid';
+    }
     return 'metric_results_invalid';
+  }
+  if (firstIssuePathKey === 'statementChips') {
+    return 'statement_chips_invalid';
   }
   if (firstIssuePathKey === 'narrative') {
     return 'narrative_invalid';
   }
 
   return 'shape_invalid';
+}
+
+function collectSummaryAnomalyStatementIds(
+  summary: {
+    anomalyCallouts?: Array<{ statementId: string }> | null;
+  },
+): Set<string> {
+  return new Set(
+    (summary.anomalyCallouts ?? [])
+      .map(callout => callout.statementId),
+  );
+}
+
+function resolveAllowedStatementIds(response: ParsedAiInsightsOkResponse): Set<string> {
+  if (response.resultKind === 'aggregate') {
+    const ids = new Set([
+      'aggregate:narrative',
+      'aggregate:trend',
+      'aggregate:compare',
+    ]);
+    collectSummaryAnomalyStatementIds(response.summary).forEach(id => ids.add(id));
+    return ids;
+  }
+
+  if (response.resultKind === 'multi_metric_aggregate') {
+    const ids = new Set<string>(['multi_metric:narrative']);
+    response.metricResults.forEach((metricResult) => {
+      ids.add(`multi_metric:${metricResult.metricKey}`);
+      collectSummaryAnomalyStatementIds(metricResult.summary).forEach(id => ids.add(id));
+    });
+    return ids;
+  }
+
+  if (response.resultKind === 'event_lookup') {
+    return new Set(['event_lookup:narrative']);
+  }
+
+  if (response.resultKind === 'latest_event') {
+    return new Set(['latest_event:narrative']);
+  }
+
+  return new Set(['power_curve:narrative']);
+}
+
+function validateStatementChipLinkage(
+  response: ParsedAiInsightsOkResponse,
+): AiInsightsResponseValidationResult | null {
+  const statementChips = response.statementChips ?? [];
+  if (!statementChips.length) {
+    return null;
+  }
+
+  const allowedStatementIds = resolveAllowedStatementIds(response);
+  const invalidChip = statementChips.find(chip => !allowedStatementIds.has(chip.statementId));
+  if (!invalidChip) {
+    return null;
+  }
+
+  return {
+    ok: false,
+    reason: 'statement_chips_invalid',
+    details: {
+      resultKind: response.resultKind,
+      invalidStatementId: invalidChip.statementId,
+      allowedStatementIds: [...allowedStatementIds].sort(),
+    },
+  };
 }
 
 function buildResponseValidationDetails(value: unknown, parsedError: z.ZodError): UnknownRecord {
@@ -454,18 +645,23 @@ export function validateAiInsightsResponse(value: unknown): AiInsightsResponseVa
   if (value.status === 'ok') {
     const parsedOk = AiInsightsOkStrictSchema.safeParse(value);
     if (parsedOk.success) {
+      const linkageValidation = validateStatementChipLinkage(parsedOk.data);
+      if (linkageValidation) {
+        return linkageValidation;
+      }
+
       return {
         ok: true,
         data: parsedOk.data as unknown as AiInsightsResponse,
       };
     }
 
-    const firstIssuePathKey = parsedOk.error.issues[0]?.path?.[0];
+    const firstIssuePath = parsedOk.error.issues[0]?.path;
     return {
       ok: false,
       reason: resolveResponseValidationReason(
         value,
-        typeof firstIssuePathKey === 'string' ? firstIssuePathKey : undefined,
+        firstIssuePath,
       ),
       details: buildResponseValidationDetails(value, parsedOk.error),
     };
@@ -480,12 +676,12 @@ export function validateAiInsightsResponse(value: unknown): AiInsightsResponseVa
       };
     }
 
-    const firstIssuePathKey = parsedEmpty.error.issues[0]?.path?.[0];
+    const firstIssuePath = parsedEmpty.error.issues[0]?.path;
     return {
       ok: false,
       reason: resolveResponseValidationReason(
         value,
-        typeof firstIssuePathKey === 'string' ? firstIssuePathKey : undefined,
+        firstIssuePath,
       ),
       details: buildResponseValidationDetails(value, parsedEmpty.error),
     };
@@ -500,12 +696,12 @@ export function validateAiInsightsResponse(value: unknown): AiInsightsResponseVa
       };
     }
 
-    const firstIssuePathKey = parsedUnsupported.error.issues[0]?.path?.[0];
+    const firstIssuePath = parsedUnsupported.error.issues[0]?.path;
     return {
       ok: false,
       reason: resolveResponseValidationReason(
         value,
-        typeof firstIssuePathKey === 'string' ? firstIssuePathKey : undefined,
+        firstIssuePath,
       ),
       details: buildResponseValidationDetails(value, parsedUnsupported.error),
     };

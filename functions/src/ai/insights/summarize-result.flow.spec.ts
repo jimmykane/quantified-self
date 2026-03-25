@@ -9,6 +9,17 @@ import {
 
 vi.mock('@sports-alliance/sports-lib', async (importOriginal) => await importOriginal());
 
+const hoisted = vi.hoisted(() => ({
+  loggerDebug: vi.fn(),
+}));
+
+vi.mock('firebase-functions/logger', () => ({
+  debug: (...args: unknown[]) => hoisted.loggerDebug(...args),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}));
+
 vi.mock('./genkit', () => ({
   aiInsightsGenkit: {
     defineFlow: (_config: unknown, handler: unknown) => handler,
@@ -170,6 +181,197 @@ const eventLookupInput = {
   },
 };
 
+const compareDeltaInput = {
+  ...paceInput,
+  metricLabel: 'power',
+  query: {
+    ...paceInput.query,
+    resultKind: 'aggregate' as const,
+    dataType: 'Average Power',
+    periodMode: 'compare' as const,
+    requestedTimeInterval: TimeIntervals.Yearly,
+    dateRange: {
+      kind: 'bounded' as const,
+      startDate: '2025-01-01T00:00:00.000Z',
+      endDate: '2028-12-31T23:59:59.999Z',
+      timezone: 'UTC',
+      source: 'prompt' as const,
+    },
+  },
+  aggregation: {
+    dataType: 'Average Power',
+    valueType: ChartDataValueTypes.Average,
+    categoryType: ChartDataCategoryTypes.DateType,
+    resolvedTimeInterval: TimeIntervals.Yearly,
+    buckets: [
+      {
+        bucketKey: '2025',
+        time: Date.parse('2025-01-01T00:00:00.000Z'),
+        totalCount: 5,
+        aggregateValue: 215,
+        seriesValues: {
+          [ActivityTypes.Cycling]: 220,
+          [ActivityTypes.Running]: 190,
+        },
+        seriesCounts: {
+          [ActivityTypes.Cycling]: 4,
+          [ActivityTypes.Running]: 1,
+        },
+      },
+      {
+        bucketKey: '2026',
+        time: Date.parse('2026-01-01T00:00:00.000Z'),
+        totalCount: 5,
+        aggregateValue: 230,
+        seriesValues: {
+          [ActivityTypes.Cycling]: 235,
+          [ActivityTypes.Running]: 200,
+        },
+        seriesCounts: {
+          [ActivityTypes.Cycling]: 4,
+          [ActivityTypes.Running]: 1,
+        },
+      },
+      {
+        bucketKey: '2027',
+        time: Date.parse('2027-01-01T00:00:00.000Z'),
+        totalCount: 5,
+        aggregateValue: 220,
+        seriesValues: {
+          [ActivityTypes.Cycling]: 225,
+          [ActivityTypes.Running]: 195,
+        },
+        seriesCounts: {
+          [ActivityTypes.Cycling]: 4,
+          [ActivityTypes.Running]: 1,
+        },
+      },
+      {
+        bucketKey: '2028',
+        time: Date.parse('2028-01-01T00:00:00.000Z'),
+        totalCount: 5,
+        aggregateValue: 220,
+        seriesValues: {
+          [ActivityTypes.Cycling]: 235,
+          [ActivityTypes.Running]: 185,
+        },
+        seriesCounts: {
+          [ActivityTypes.Cycling]: 4,
+          [ActivityTypes.Running]: 1,
+        },
+      },
+    ],
+  },
+  summary: {
+    ...paceSummary,
+    overallAggregateValue: 220,
+    peakBucket: {
+      bucketKey: '2026',
+      time: Date.parse('2026-01-01T00:00:00.000Z'),
+      aggregateValue: 230,
+      totalCount: 5,
+    },
+    lowestBucket: {
+      bucketKey: '2025',
+      time: Date.parse('2025-01-01T00:00:00.000Z'),
+      aggregateValue: 215,
+      totalCount: 5,
+    },
+    latestBucket: {
+      bucketKey: '2028',
+      time: Date.parse('2028-01-01T00:00:00.000Z'),
+      aggregateValue: 220,
+      totalCount: 5,
+    },
+    periodDeltas: [
+      {
+        fromBucket: {
+          bucketKey: '2025',
+          time: Date.parse('2025-01-01T00:00:00.000Z'),
+          aggregateValue: 215,
+          totalCount: 5,
+        },
+        toBucket: {
+          bucketKey: '2026',
+          time: Date.parse('2026-01-01T00:00:00.000Z'),
+          aggregateValue: 230,
+          totalCount: 5,
+        },
+        deltaAggregateValue: 15,
+        direction: 'increase' as const,
+        contributors: [
+          {
+            seriesKey: ActivityTypes.Cycling,
+            deltaAggregateValue: 15,
+            direction: 'increase' as const,
+          },
+        ],
+        eventContributors: [
+          {
+            eventId: 'event-2026-1',
+            startDate: '2026-02-10T08:00:00.000Z',
+            activityType: ActivityTypes.Cycling,
+            eventStatValue: 235,
+            deltaContributionValue: 47,
+            direction: 'increase' as const,
+          },
+        ],
+      },
+      {
+        fromBucket: {
+          bucketKey: '2026',
+          time: Date.parse('2026-01-01T00:00:00.000Z'),
+          aggregateValue: 230,
+          totalCount: 5,
+        },
+        toBucket: {
+          bucketKey: '2027',
+          time: Date.parse('2027-01-01T00:00:00.000Z'),
+          aggregateValue: 220,
+          totalCount: 5,
+        },
+        deltaAggregateValue: -10,
+        direction: 'decrease' as const,
+        contributors: [
+          {
+            seriesKey: ActivityTypes.Cycling,
+            deltaAggregateValue: -10,
+            direction: 'decrease' as const,
+          },
+        ],
+      },
+      {
+        fromBucket: {
+          bucketKey: '2027',
+          time: Date.parse('2027-01-01T00:00:00.000Z'),
+          aggregateValue: 220,
+          totalCount: 5,
+        },
+        toBucket: {
+          bucketKey: '2028',
+          time: Date.parse('2028-01-01T00:00:00.000Z'),
+          aggregateValue: 220,
+          totalCount: 5,
+        },
+        deltaAggregateValue: 0,
+        direction: 'no_change' as const,
+        contributors: [
+          {
+            seriesKey: ActivityTypes.Cycling,
+            deltaAggregateValue: 10,
+            direction: 'increase' as const,
+          },
+          {
+            seriesKey: ActivityTypes.Running,
+            deltaAggregateValue: -10,
+            direction: 'decrease' as const,
+          },
+        ],
+      },
+    ],
+  },
+};
+
 describe('summarizeAiInsightResult', () => {
   afterEach(() => {
     setSummarizeInsightDependenciesForTesting();
@@ -315,6 +517,8 @@ describe('summarizeAiInsightResult', () => {
   });
 
   it('replaces successful default-range narratives that claim no matching data', async () => {
+    hoisted.loggerDebug.mockClear();
+
     setSummarizeInsightDependenciesForTesting({
       generateNarrative: async () => ({
         source: 'genkit',
@@ -341,6 +545,16 @@ describe('summarizeAiInsightResult', () => {
     expect(result.narrative).toContain('07:02 min/km');
     expect(result.narrative).not.toContain('No matching data was found');
     expect(result.narrative).not.toContain('2024');
+
+    const debugLogCall = hoisted.loggerDebug.mock.calls.find(
+      (call) => call[0] === '[aiInsights] Replaced inconsistent default-range narrative.',
+    );
+    expect(debugLogCall).toBeDefined();
+    const debugPayload = debugLogCall?.[1] as Record<string, unknown>;
+
+    expect(debugPayload.prompt).toBeUndefined();
+    expect(debugPayload.promptLength).toBe(paceInput.prompt.length);
+    expect(debugPayload.promptPreview).toBe(paceInput.prompt.slice(0, 60));
   });
 
   it('replaces successful default-range narratives that omit the effective range', async () => {
@@ -633,5 +847,26 @@ describe('summarizeAiInsightResult', () => {
     expect(result.narrative).toMatch(/km/i);
     expect(result.narrative).toContain('I ranked 3 matching events');
     expect(result.narrative).not.toContain('time buckets');
+  });
+
+  it('builds compact deterministic compare summary with net change, extremes, and period deltas', async () => {
+    setSummarizeInsightDependenciesForTesting({
+      generateNarrative: async () => ({
+        source: 'genkit',
+        narrative: 'Base narrative.',
+      }),
+    });
+
+    const result = await summarizeAiInsightResult(compareDeltaInput);
+
+    expect(result.source).toBe('genkit');
+    expect(result.narrative).toBe('Base narrative.');
+    expect(result.deterministicCompareSummary).toContain('From 2025 to 2028, power increased by');
+    expect(result.deterministicCompareSummary).toContain('Largest increase: 2025 to 2026');
+    expect(result.deterministicCompareSummary).toContain('Largest decrease: 2026 to 2027');
+    expect(result.deterministicCompareSummary).toContain('Period deltas:');
+    expect(result.deterministicCompareSummary).toContain('2027 to 2028 (no change)');
+    expect(result.deterministicCompareSummary).not.toContain('Likely contributors:');
+    expect(result.deterministicCompareSummary).not.toContain('Event evidence is linked below.');
   });
 });

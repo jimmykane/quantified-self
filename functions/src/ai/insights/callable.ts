@@ -502,8 +502,9 @@ export async function runAiInsights(
     ? buildInsightSummary(
       aggregateQueryInput,
       executionResult.aggregation,
-      executionResult.matchedEventsCount,
+      executionResult.matchedEventsWithRequestedStat?.length ?? executionResult.matchedEventsCount,
       executionResult.matchedActivityTypeCounts,
+      executionResult.matchedEventsWithRequestedStat ?? [],
     )
     : null;
   const multiMetricResultGroups = executionResult.resultKind === 'multi_metric_aggregate'

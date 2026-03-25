@@ -293,6 +293,8 @@ const summary = {
     totalBucketCount: 3,
   },
   trend: null,
+  periodDeltas: null,
+  anomalyCallouts: null,
 };
 
 describe('aiInsights callable', () => {
@@ -661,6 +663,7 @@ describe('aiInsights callable', () => {
       resultKind: 'aggregate',
       narrative: 'Narrative',
       quota: quotaStatus,
+      statementChips: expect.any(Array),
       query: normalizedQuery,
       aggregation: expect.objectContaining({
         buckets: expect.any(Array),
@@ -671,11 +674,106 @@ describe('aiInsights callable', () => {
         chartType: ChartTypes.ColumnsVertical,
       }),
     });
+    expect(result).toMatchObject({
+      statementChips: expect.arrayContaining([
+        expect.objectContaining({
+          statementId: 'aggregate:narrative',
+          chipType: 'confidence',
+        }),
+      ]),
+    });
     expect(hoisted.persistLatestAiInsightsSnapshot).toHaveBeenCalledWith(
       'user-1',
       'show distance',
       result,
     );
+  });
+
+  it('includes deterministic period deltas in compare-mode aggregate responses', async () => {
+    const compareQuery = {
+      ...normalizedQuery,
+      periodMode: 'compare' as const,
+      requestedTimeInterval: TimeIntervals.Yearly,
+    };
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'ok',
+      metricKey: 'distance',
+      query: compareQuery,
+    });
+    hoisted.executeAiInsightsQuery.mockResolvedValue({
+      resultKind: 'aggregate',
+      matchedEventsCount: 4,
+      matchedActivityTypeCounts: [
+        {
+          activityType: ActivityTypes.Cycling,
+          eventCount: 4,
+        },
+      ],
+      aggregation: {
+        dataType: 'Distance',
+        valueType: ChartDataValueTypes.Total,
+        categoryType: ChartDataCategoryTypes.DateType,
+        resolvedTimeInterval: TimeIntervals.Yearly,
+        buckets: [
+          {
+            bucketKey: '2025',
+            time: Date.parse('2025-01-01T00:00:00.000Z'),
+            totalCount: 2,
+            aggregateValue: 250,
+            seriesValues: { [ActivityTypes.Cycling]: 250 },
+            seriesCounts: { [ActivityTypes.Cycling]: 2 },
+          },
+          {
+            bucketKey: '2026',
+            time: Date.parse('2026-01-01T00:00:00.000Z'),
+            totalCount: 2,
+            aggregateValue: 300,
+            seriesValues: { [ActivityTypes.Cycling]: 300 },
+            seriesCounts: { [ActivityTypes.Cycling]: 2 },
+          },
+        ],
+      },
+    });
+    hoisted.summarizeAiInsightResult.mockResolvedValueOnce({
+      narrative: 'Narrative',
+      source: 'genkit',
+      deterministicCompareSummary: 'From 2025 to 2026, distance increased by 50 km.',
+    });
+
+    const result = await aiInsights({
+      prompt: 'compare my total distance this year vs last year',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(hoisted.summarizeAiInsightResult).toHaveBeenCalledWith(expect.objectContaining({
+      summary: expect.objectContaining({
+        periodDeltas: [
+          expect.objectContaining({
+            direction: 'increase',
+            deltaAggregateValue: 50,
+            contributors: [
+              expect.objectContaining({
+                seriesKey: ActivityTypes.Cycling,
+                deltaAggregateValue: 50,
+              }),
+            ],
+          }),
+        ],
+      }),
+    }));
+    expect(result).toMatchObject({
+      status: 'ok',
+      resultKind: 'aggregate',
+      deterministicCompareSummary: 'From 2025 to 2026, distance increased by 50 km.',
+      summary: {
+        periodDeltas: [
+          expect.objectContaining({
+            direction: 'increase',
+            deltaAggregateValue: 50,
+          }),
+        ],
+      },
+    });
   });
 
   it('logs prompt metadata without storing raw prompt text', async () => {
@@ -832,6 +930,7 @@ describe('aiInsights callable', () => {
       resultKind: 'event_lookup',
       narrative: 'Narrative',
       quota: quotaStatus,
+      statementChips: expect.any(Array),
       query: eventLookupQuery,
       eventLookup: {
         primaryEventId: 'event-3',
@@ -842,6 +941,18 @@ describe('aiInsights callable', () => {
         title: 'Top distance events for Cycling',
         chartType: ChartTypes.LinesVertical,
       }),
+    });
+    expect(result).toMatchObject({
+      statementChips: expect.arrayContaining([
+        expect.objectContaining({
+          statementId: 'event_lookup:narrative',
+          chipType: 'confidence',
+        }),
+        expect.objectContaining({
+          statementId: 'event_lookup:narrative',
+          chipType: 'evidence',
+        }),
+      ]),
     });
   });
 
@@ -934,6 +1045,7 @@ describe('aiInsights callable', () => {
       resultKind: 'latest_event',
       narrative: 'Your latest cycling event was on Mar 18, 2026. I matched 4 events.',
       quota: quotaStatus,
+      statementChips: expect.any(Array),
       query: latestEventQuery,
       latestEvent: {
         eventId: 'event-9',
@@ -1027,6 +1139,7 @@ describe('aiInsights callable', () => {
       resultKind: 'power_curve',
       narrative: 'I built your best power curve for cycling as the max-power envelope across 3 matching events.',
       quota: quotaStatus,
+      statementChips: expect.any(Array),
       query: powerCurveQuery,
       powerCurve: {
         mode: 'best',
@@ -1152,6 +1265,7 @@ describe('aiInsights callable', () => {
       resultKind: 'event_lookup',
       narrative: 'Narrative',
       quota: quotaStatus,
+      statementChips: expect.any(Array),
       query: jumpEventLookupQuery,
       eventLookup: {
         primaryEventId: 'jump-event-2',
@@ -1204,6 +1318,8 @@ describe('aiInsights callable', () => {
           totalBucketCount: 90,
         },
         trend: null,
+        periodDeltas: null,
+        anomalyCallouts: null,
       },
       presentation: expect.objectContaining({
         emptyState: 'No matching events were found for this insight in the requested range.',
@@ -1331,6 +1447,52 @@ describe('aiInsights callable', () => {
           aggregateValue: 45,
         }),
       },
+    });
+  });
+
+  it('uses stat-matched event count when building aggregate summaries', async () => {
+    hoisted.executeAiInsightsQuery.mockResolvedValue({
+      resultKind: 'aggregate',
+      matchedEventsCount: 5,
+      matchedEventsWithRequestedStat: [
+        {
+          getID: () => 'event-with-stat-1',
+        },
+      ],
+      matchedActivityTypeCounts: [
+        {
+          activityType: ActivityTypes.Cycling,
+          eventCount: 5,
+        },
+      ],
+      aggregation: {
+        dataType: 'Distance',
+        valueType: ChartDataValueTypes.Total,
+        categoryType: ChartDataCategoryTypes.DateType,
+        resolvedTimeInterval: TimeIntervals.Monthly,
+        buckets: [
+          {
+            bucketKey: 1,
+            time: 1,
+            totalCount: 5,
+            aggregateValue: 123,
+            seriesValues: { Cycling: 123 },
+            seriesCounts: { Cycling: 5 },
+          },
+        ],
+      },
+    });
+
+    const result = await aiInsights({
+      prompt: 'show distance',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(result).toMatchObject({
+      status: 'ok',
+      summary: expect.objectContaining({
+        matchedEventCount: 1,
+      }),
     });
   });
 

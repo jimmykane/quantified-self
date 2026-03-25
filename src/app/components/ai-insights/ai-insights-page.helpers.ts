@@ -6,17 +6,24 @@ import {
   type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
 import type {
+  AiInsightAnomalyKind,
+  AiInsightConfidenceTier,
+  AiInsightEvidenceRef,
+  AiInsightStatementChip,
+  AiInsightSummaryAnomalyCallout,
   AiInsightSummaryBucket,
   AiInsightsAggregateOkResponse,
   AiInsightsEmptyResponse,
   AiInsightsEventLookupOkResponse,
   AiInsightsLatestEventOkResponse,
+  AiInsightsMultiMetricAggregateOkResponse,
   AiInsightsMultiMetricAggregateMetricResult,
   AiInsightsOkResponse,
   AiInsightsQuotaStatus,
   NormalizedInsightDateRange,
 } from '@shared/ai-insights.types';
 import { formatAiInsightsSelectedDateRanges } from '@shared/ai-insights-date-selection';
+import { AI_INSIGHTS_COMPARE_EVENT_CONTRIBUTORS_MAX } from '@shared/ai-insights-compare.constants';
 import { AI_INSIGHTS_TOP_RESULTS_MAX } from '@shared/ai-insights-ranking.constants';
 import { resolveMetricSemantics, resolveMetricSummarySemantics } from '@shared/metric-semantics';
 import { formatUnitAwareDataValue } from '@shared/unit-aware-display';
@@ -71,6 +78,326 @@ export interface EventLookupDisplayItem {
   date: string;
   activityLabel: string | null;
   isAvailable: boolean;
+}
+
+export interface AggregateCompareEvidenceItem {
+  eventId: string;
+  dateLabel: string;
+  activityLabel: string;
+  contributionLabel: string;
+  contributionShareLabel: string | null;
+  direction: 'upward' | 'downward';
+}
+
+export interface AggregateCompareEvidenceGroup {
+  heading: string;
+  fromLabel: string;
+  toLabel: string;
+  impactSummary: string | null;
+  downwardContributors: AggregateCompareEvidenceItem[];
+  upwardContributors: AggregateCompareEvidenceItem[];
+}
+
+export interface StatementChipDisplay {
+  statementId: string;
+  chipKind: 'confidence' | 'evidence' | 'kind';
+  label: string;
+  confidenceTier?: AiInsightConfidenceTier;
+}
+
+export interface AnomalyCalloutDisplay {
+  id: string;
+  snippet: string;
+  chips: StatementChipDisplay[];
+  evidenceSummary: string | null;
+}
+
+export interface MultiMetricAnomalyCalloutSection {
+  metricKey: string;
+  metricTitle: string;
+  callouts: AnomalyCalloutDisplay[];
+}
+
+function resolveAnomalyKindLabel(kind: AiInsightAnomalyKind): string {
+  switch (kind) {
+    case 'spike':
+      return 'Spike';
+    case 'drop':
+      return 'Drop';
+    case 'activity_mix_shift':
+      return 'Activity mix shift';
+    default:
+      return 'Anomaly';
+  }
+}
+
+function formatEvidenceSummary(
+  evidenceRefs: AiInsightEvidenceRef[] | null | undefined,
+): string | null {
+  if (!evidenceRefs?.length) {
+    return null;
+  }
+
+  return evidenceRefs
+    .slice(0, 3)
+    .map(evidenceRef => evidenceRef.label)
+    .join(' • ');
+}
+
+function toStatementChipDisplay(chip: AiInsightStatementChip): StatementChipDisplay {
+  return {
+    statementId: chip.statementId,
+    chipKind: chip.chipType === 'confidence' ? 'confidence' : 'evidence',
+    label: chip.label,
+    ...(chip.chipType === 'confidence'
+      ? { confidenceTier: chip.confidenceTier }
+      : {}),
+  };
+}
+
+function buildAnomalyCalloutDisplays(
+  anomalyCallouts: AiInsightSummaryAnomalyCallout[] | null | undefined,
+  statementChips: AiInsightStatementChip[] | null | undefined,
+): AnomalyCalloutDisplay[] {
+  if (!anomalyCallouts?.length) {
+    return [];
+  }
+
+  const chips = statementChips ?? [];
+
+  return anomalyCallouts.map((callout) => {
+    const linkedChips = chips
+      .filter(chip => chip.statementId === callout.statementId)
+      .map(toStatementChipDisplay);
+    const hasConfidenceChip = linkedChips.some(chip => chip.chipKind === 'confidence');
+    const hasEvidenceChip = linkedChips.some(chip => chip.chipKind === 'evidence');
+
+    const calloutChips: StatementChipDisplay[] = [
+      {
+        statementId: callout.statementId,
+        chipKind: 'kind',
+        label: resolveAnomalyKindLabel(callout.kind),
+      },
+      ...(hasConfidenceChip
+        ? []
+        : [{
+          statementId: callout.statementId,
+          chipKind: 'confidence' as const,
+          label: `${callout.confidenceTier[0]?.toUpperCase() || ''}${callout.confidenceTier.slice(1)} confidence`,
+          confidenceTier: callout.confidenceTier,
+        }]),
+      ...(hasEvidenceChip
+        ? []
+        : [{
+          statementId: callout.statementId,
+          chipKind: 'evidence' as const,
+          label: 'Evidence linked',
+        }]),
+      ...linkedChips,
+    ];
+
+    return {
+      id: callout.id,
+      snippet: callout.snippet,
+      chips: calloutChips,
+      evidenceSummary: formatEvidenceSummary(callout.evidenceRefs),
+    };
+  });
+}
+
+export function buildStatementChipDisplays(
+  response: AiInsightsOkResponse | null | undefined,
+): StatementChipDisplay[] {
+  if (!response?.statementChips?.length) {
+    return [];
+  }
+
+  const narrativeStatementId = (() => {
+    if (response.resultKind === 'aggregate') {
+      return 'aggregate:narrative';
+    }
+    if (response.resultKind === 'event_lookup') {
+      return 'event_lookup:narrative';
+    }
+    if (response.resultKind === 'latest_event') {
+      return 'latest_event:narrative';
+    }
+    if (response.resultKind === 'multi_metric_aggregate') {
+      return 'multi_metric:narrative';
+    }
+    return 'power_curve:narrative';
+  })();
+
+  const seenDisplayKeys = new Set<string>();
+  return response.statementChips
+    .filter(chip => chip.statementId === narrativeStatementId)
+    .map(toStatementChipDisplay)
+    .filter((displayChip) => {
+      const displayKey = `${displayChip.chipKind}:${displayChip.label}:${displayChip.confidenceTier ?? ''}`;
+      if (seenDisplayKeys.has(displayKey)) {
+        return false;
+      }
+      seenDisplayKeys.add(displayKey);
+      return true;
+    });
+}
+
+export function buildAggregateAnomalyCallouts(
+  response: AiInsightsAggregateOkResponse | null | undefined,
+): AnomalyCalloutDisplay[] {
+  return buildAnomalyCalloutDisplays(
+    response?.summary.anomalyCallouts,
+    response?.statementChips,
+  );
+}
+
+export function buildMultiMetricAnomalyCalloutSections(
+  response: AiInsightsMultiMetricAggregateOkResponse | null | undefined,
+): MultiMetricAnomalyCalloutSection[] {
+  if (!response) {
+    return [];
+  }
+
+  return response.metricResults
+    .map((metricResult) => ({
+      metricKey: metricResult.metricKey,
+      metricTitle: resolveShortMetricLabel(metricResult.metricLabel, metricResult.query.valueType) || metricResult.metricLabel,
+      callouts: buildAnomalyCalloutDisplays(
+        metricResult.summary.anomalyCallouts,
+        response.statementChips,
+      ),
+    }))
+    .filter(section => section.callouts.length > 0);
+}
+
+export function formatAiInsightsNarrativeForDisplay(
+  narrative: string | null | undefined,
+): string {
+  return `${narrative ?? ''}`.trim();
+}
+
+export function formatDeterministicCompareSummaryForDisplay(
+  summary: string | null | undefined,
+): string {
+  return `${summary ?? ''}`
+    .replace(/\s*Event evidence is linked below\.?\s*$/i, '')
+    .trim();
+}
+
+function formatCompareEvidenceEventDate(
+  startDate: string,
+  locale: string,
+  timeZone: string,
+): string {
+  const date = new Date(startDate);
+  if (!Number.isFinite(date.getTime())) {
+    return startDate;
+  }
+
+  return date.toLocaleDateString(locale || undefined, {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    timeZone,
+  });
+}
+
+function formatDeltaContributionLabel(
+  response: AiInsightsAggregateOkResponse,
+  deltaContributionValue: number,
+  unitSettings?: UserUnitSettingsInterface,
+): string {
+  const absoluteValue = Math.abs(deltaContributionValue);
+  const formattedValue = formatUnitAwareDataValue(
+    response.query.dataType,
+    absoluteValue,
+    unitSettings,
+    { stripRepeatedUnit: true },
+  ) ?? absoluteValue.toLocaleString(undefined, {
+    maximumFractionDigits: 2,
+  });
+
+  return `${deltaContributionValue >= 0 ? '+' : '-'}${formattedValue}`;
+}
+
+export function buildAggregateCompareEvidenceGroups(
+  response: AiInsightsAggregateOkResponse | null | undefined,
+  unitSettings?: UserUnitSettingsInterface,
+  locale = 'en-US',
+): AggregateCompareEvidenceGroup[] {
+  if (!response || response.query.periodMode !== 'compare') {
+    return [];
+  }
+
+  const percentFormatter = new Intl.NumberFormat(locale || undefined, {
+    maximumFractionDigits: 1,
+  });
+
+  return (response.summary.periodDeltas ?? [])
+    .map((periodDelta) => {
+      const fromLabel = formatBucketMeta(response, periodDelta.fromBucket, locale)
+        ?? `${periodDelta.fromBucket.bucketKey}`;
+      const toLabel = formatBucketMeta(response, periodDelta.toBucket, locale)
+        ?? `${periodDelta.toBucket.bucketKey}`;
+      const totalDeltaMagnitude = Math.abs(periodDelta.deltaAggregateValue);
+
+      const contributorsWithMagnitude = (periodDelta.eventContributors ?? [])
+        .slice(0, AI_INSIGHTS_COMPARE_EVENT_CONTRIBUTORS_MAX)
+        .map((eventContributor) => {
+          const dateLabel = formatCompareEvidenceEventDate(
+            eventContributor.startDate,
+            locale,
+            response.query.dateRange.timezone,
+          );
+          const contributionLabel = formatDeltaContributionLabel(
+            response,
+            eventContributor.deltaContributionValue,
+            unitSettings,
+          );
+          const contributionShareLabel = totalDeltaMagnitude > 0
+            ? `${percentFormatter.format((Math.abs(eventContributor.deltaContributionValue) / totalDeltaMagnitude) * 100)}% of net delta`
+            : null;
+          const direction: AggregateCompareEvidenceItem['direction'] = eventContributor.deltaContributionValue >= 0
+            ? 'upward'
+            : 'downward';
+
+          return {
+            item: {
+              eventId: eventContributor.eventId,
+              dateLabel,
+              activityLabel: eventContributor.activityType,
+              contributionLabel,
+              contributionShareLabel,
+              direction,
+            } satisfies AggregateCompareEvidenceItem,
+            absContribution: Math.abs(eventContributor.deltaContributionValue),
+          };
+        });
+      const contributors = contributorsWithMagnitude.map(contributor => contributor.item);
+
+      const downwardContributors = contributors.filter(contributor => contributor.direction === 'downward');
+      const upwardContributors = contributors.filter(contributor => contributor.direction === 'upward');
+      const explainedMagnitude = contributorsWithMagnitude
+        .reduce((sum, contributor) => sum + contributor.absContribution, 0);
+      const directionLabel = periodDelta.deltaAggregateValue > 0
+        ? 'increase'
+        : periodDelta.deltaAggregateValue < 0
+          ? 'decrease'
+          : 'change';
+      const impactSummary = totalDeltaMagnitude <= 0
+        ? 'No net change; these are offsetting event-level examples.'
+        : `Shown events account for ${percentFormatter.format((explainedMagnitude / totalDeltaMagnitude) * 100)}% of the net ${directionLabel}.`;
+
+      return {
+        heading: `From ${fromLabel} to ${toLabel}`,
+        fromLabel,
+        toLabel,
+        impactSummary,
+        downwardContributors,
+        upwardContributors,
+      };
+    })
+    .filter(group => group.downwardContributors.length > 0 || group.upwardContributors.length > 0);
 }
 
 export function resolveAggregationLabel(valueType: ChartDataValueTypes): string {

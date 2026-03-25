@@ -44,7 +44,13 @@ import { AiInsightsPowerCurveChartComponent } from './ai-insights-power-curve-ch
 import { AiInsightsPromptPickerDialogComponent } from './ai-insights-prompt-picker-dialog.component';
 import {
   buildAggregateSummaryCards,
+  buildAggregateAnomalyCallouts,
+  buildAggregateCompareEvidenceGroups,
   buildMergedMultiMetricSummaryCards,
+  buildMultiMetricAnomalyCalloutSections,
+  buildStatementChipDisplays,
+  formatAiInsightsNarrativeForDisplay,
+  formatDeterministicCompareSummaryForDisplay,
   formatDateRangeNote,
   formatDateSelectionSummary,
   formatEventLookupActivityLabel,
@@ -63,12 +69,16 @@ import {
   resolveRankedEventSectionTitle,
   resolveResultCardSubtitle,
   resolveShortMetricLabel,
+  type AnomalyCalloutDisplay,
+  type AggregateCompareEvidenceGroup,
   type EventLookupDisplayItem,
   type EventLookupResolvedEvent,
   type InsightSummaryCard,
+  type MultiMetricAnomalyCalloutSection,
   type MultiMetricSection,
   type RankedEventResponse,
   type ResultNote,
+  type StatementChipDisplay,
 } from './ai-insights-page.helpers';
 import {
   AI_INSIGHTS_DEFAULT_PICKER_PROMPTS,
@@ -254,6 +264,43 @@ export class AiInsightsPageComponent {
     const response = this.response();
     return response?.status === 'unsupported' ? response : null;
   });
+  readonly aggregateNarrative = computed(() => (
+    formatAiInsightsNarrativeForDisplay(this.aggregateOkResponse()?.narrative)
+  ));
+  readonly aggregateDeterministicCompareSummary = computed(() => (
+    formatDeterministicCompareSummaryForDisplay(this.aggregateOkResponse()?.deterministicCompareSummary)
+  ));
+  readonly aggregateCompareEvidenceGroups = computed<AggregateCompareEvidenceGroup[]>(() => (
+    buildAggregateCompareEvidenceGroups(
+      this.aggregateOkResponse(),
+      this.userUnitSettings(),
+      this.locale,
+    )
+  ));
+  readonly multiMetricNarrative = computed(() => (
+    formatAiInsightsNarrativeForDisplay(this.multiMetricOkResponse()?.narrative)
+  ));
+  readonly eventLookupNarrative = computed(() => (
+    formatAiInsightsNarrativeForDisplay(this.eventLookupOkResponse()?.narrative)
+  ));
+  readonly latestEventNarrative = computed(() => (
+    formatAiInsightsNarrativeForDisplay(this.latestEventOkResponse()?.narrative)
+  ));
+  readonly powerCurveNarrative = computed(() => (
+    formatAiInsightsNarrativeForDisplay(this.powerCurveOkResponse()?.narrative)
+  ));
+  readonly emptyNarrative = computed(() => (
+    formatAiInsightsNarrativeForDisplay(this.emptyResponse()?.narrative)
+  ));
+  readonly unsupportedNarrative = computed(() => (
+    formatAiInsightsNarrativeForDisplay(this.unsupportedResponse()?.narrative)
+  ));
+  readonly resultStatementChips = computed<StatementChipDisplay[]>(() => (
+    buildStatementChipDisplays(this.okResponse())
+  ));
+  readonly aggregateAnomalyCallouts = computed<AnomalyCalloutDisplay[]>(() => (
+    buildAggregateAnomalyCallouts(this.aggregateOkResponse())
+  ));
   readonly hasCompletedResponse = computed(() => {
     const response = this.response();
     return response?.status === 'ok'
@@ -791,6 +838,9 @@ export class AiInsightsPageComponent {
   });
   readonly multiMetricMergedSummaryCards = computed<InsightSummaryCard[]>(() => (
     buildMergedMultiMetricSummaryCards(this.multiMetricSections())
+  ));
+  readonly multiMetricAnomalySections = computed<MultiMetricAnomalyCalloutSection[]>(() => (
+    buildMultiMetricAnomalyCalloutSections(this.multiMetricOkResponse())
   ));
   readonly multiMetricEmptySections = computed<MultiMetricSection[]>(() => (
     this.multiMetricSections().filter(section => section.isEmpty)
