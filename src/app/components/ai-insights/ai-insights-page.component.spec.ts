@@ -1743,7 +1743,6 @@ describe('AiInsightsPageComponent', () => {
     const downwardColumns = fixture.debugElement.queryAll(By.css('.compare-evidence-column .compare-evidence-link--downward'));
     const upwardColumns = fixture.debugElement.queryAll(By.css('.compare-evidence-column .compare-evidence-link--upward'));
     const emptyEvidenceMessages = fixture.debugElement.queryAll(By.css('.compare-evidence-empty'));
-    const evidenceLegend = fixture.debugElement.query(By.css('.compare-evidence-legend'))?.nativeElement as HTMLElement | undefined;
     const compareNarrative = fixture.debugElement.query(By.css('.narrative-info--secondary .narrative'))?.nativeElement as HTMLElement | undefined;
     const evidenceSummary = fixture.debugElement.query(By.css('.compare-evidence-summary'))?.nativeElement as HTMLElement | undefined;
 
@@ -1758,8 +1757,6 @@ describe('AiInsightsPageComponent', () => {
     expect(emptyEvidenceMessages).toHaveLength(2);
     expect(emptyEvidenceMessages.some((message) => message.nativeElement.textContent.includes('No upward contributors in this period pair.'))).toBe(true);
     expect(emptyEvidenceMessages.some((message) => message.nativeElement.textContent.includes('No downward contributors in this period pair.'))).toBe(true);
-    expect(evidenceLegend?.textContent).toContain('from period');
-    expect(evidenceLegend?.textContent).toContain('to period');
     expect(evidenceGroups[0]?.nativeElement.textContent).toContain('Downward contributors (from Jan 2025)');
     expect(evidenceGroups[1]?.nativeElement.textContent).toContain('Upward contributors (to Jan 2025)');
     expect(compareNarrative?.textContent).not.toContain('Event evidence is linked below');

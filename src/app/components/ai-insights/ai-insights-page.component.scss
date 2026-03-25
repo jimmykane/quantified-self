@@ -779,7 +779,7 @@
 
 .compare-evidence-groups {
   display: grid;
-  gap: 10px;
+  gap: 0;
 }
 
 .compare-evidence-panel {
@@ -797,31 +797,15 @@
   letter-spacing: 0.01em;
 }
 
-.compare-evidence-intro {
-  margin: 0;
-  padding-top: 6px;
-  color: var(--mat-sys-on-surface-variant);
-  font-size: 0.76rem;
-  line-height: 1.35;
-}
-
-.compare-evidence-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin: 0;
-  color: var(--mat-sys-on-surface-variant);
-  font-size: 0.74rem;
-  line-height: 1.35;
-}
-
 .compare-evidence-group {
   display: grid;
   gap: 8px;
-  padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--mat-sys-outline-variant) 44%, transparent);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--mat-sys-surface-container-low) 64%, transparent);
+  padding-block: 8px;
+}
+
+.compare-evidence-group-divider {
+  margin-block: 2px;
+  border-top-color: color-mix(in srgb, var(--mat-sys-outline-variant) 52%, transparent);
 }
 
 .compare-evidence-heading {

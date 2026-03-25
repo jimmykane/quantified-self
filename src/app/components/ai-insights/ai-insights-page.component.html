@@ -831,16 +831,8 @@
                         </mat-panel-title>
                       </mat-expansion-panel-header>
 
-                      <p class="mat-body-small compare-evidence-intro">
-                        Event-level examples that contributed to each period delta.
-                      </p>
-                      <p class="mat-body-small compare-evidence-legend">
-                        <span><strong>-</strong> = from period</span>
-                        <span><strong>+</strong> = to period</span>
-                      </p>
-
                       <div class="compare-evidence-groups">
-                        @for (evidenceGroup of aggregateCompareEvidenceGroups(); track evidenceGroup.heading + $index) {
+                        @for (evidenceGroup of aggregateCompareEvidenceGroups(); track evidenceGroup.heading + $index; let isLast = $last) {
                           <section class="compare-evidence-group">
                             <p class="mat-label-small compare-evidence-heading">{{ evidenceGroup.heading }}</p>
                             @if (evidenceGroup.impactSummary; as impactSummary) {
@@ -917,6 +909,9 @@
                               </section>
                             </div>
                           </section>
+                          @if (!isLast) {
+                            <mat-divider class="compare-evidence-group-divider"></mat-divider>
+                          }
                         }
                       </div>
                     </mat-expansion-panel>
