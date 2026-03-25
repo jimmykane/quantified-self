@@ -344,25 +344,24 @@
 
               <div class="narrative-info qs-glass-card-panel">
                 <p class="description-text narrative">{{ latestEventNarrative() }}</p>
+                @if (resultStatementChips().length) {
+                  <mat-chip-set class="statement-chip-set" aria-label="Confidence and evidence chips">
+                    @for (chip of resultStatementChips(); track chip.statementId + ':' + chip.chipKind + ':' + chip.label + ':' + $index) {
+                      <mat-chip
+                        disableRipple
+                        class="statement-chip"
+                        [class.statement-chip--confidence]="chip.chipKind === 'confidence'"
+                        [class.statement-chip--evidence]="chip.chipKind === 'evidence'"
+                        [class.statement-chip--kind]="chip.chipKind === 'kind'"
+                        [class.statement-chip--confidence-low]="chip.confidenceTier === 'low'"
+                        [class.statement-chip--confidence-medium]="chip.confidenceTier === 'medium'"
+                        [class.statement-chip--confidence-high]="chip.confidenceTier === 'high'">
+                        {{ chip.label }}
+                      </mat-chip>
+                    }
+                  </mat-chip-set>
+                }
               </div>
-
-              @if (resultStatementChips().length) {
-                <mat-chip-set class="statement-chip-set" aria-label="Confidence and evidence chips">
-                  @for (chip of resultStatementChips(); track chip.statementId + ':' + chip.chipKind + ':' + chip.label + ':' + $index) {
-                    <mat-chip
-                      disableRipple
-                      class="statement-chip"
-                      [class.statement-chip--confidence]="chip.chipKind === 'confidence'"
-                      [class.statement-chip--evidence]="chip.chipKind === 'evidence'"
-                      [class.statement-chip--kind]="chip.chipKind === 'kind'"
-                      [class.statement-chip--confidence-low]="chip.confidenceTier === 'low'"
-                      [class.statement-chip--confidence-medium]="chip.confidenceTier === 'medium'"
-                      [class.statement-chip--confidence-high]="chip.confidenceTier === 'high'">
-                      {{ chip.label }}
-                    </mat-chip>
-                  }
-                </mat-chip-set>
-              }
 
               @if (rankedEventLoadError(); as rankedEventLoadError) {
                 <div class="result-date-range-note">
@@ -432,25 +431,24 @@
 
               <div class="narrative-info qs-glass-card-panel">
                 <p class="description-text narrative">{{ eventLookupNarrative() }}</p>
+                @if (resultStatementChips().length) {
+                  <mat-chip-set class="statement-chip-set" aria-label="Confidence and evidence chips">
+                    @for (chip of resultStatementChips(); track chip.statementId + ':' + chip.chipKind + ':' + chip.label + ':' + $index) {
+                      <mat-chip
+                        disableRipple
+                        class="statement-chip"
+                        [class.statement-chip--confidence]="chip.chipKind === 'confidence'"
+                        [class.statement-chip--evidence]="chip.chipKind === 'evidence'"
+                        [class.statement-chip--kind]="chip.chipKind === 'kind'"
+                        [class.statement-chip--confidence-low]="chip.confidenceTier === 'low'"
+                        [class.statement-chip--confidence-medium]="chip.confidenceTier === 'medium'"
+                        [class.statement-chip--confidence-high]="chip.confidenceTier === 'high'">
+                        {{ chip.label }}
+                      </mat-chip>
+                    }
+                  </mat-chip-set>
+                }
               </div>
-
-              @if (resultStatementChips().length) {
-                <mat-chip-set class="statement-chip-set" aria-label="Confidence and evidence chips">
-                  @for (chip of resultStatementChips(); track chip.statementId + ':' + chip.chipKind + ':' + chip.label + ':' + $index) {
-                    <mat-chip
-                      disableRipple
-                      class="statement-chip"
-                      [class.statement-chip--confidence]="chip.chipKind === 'confidence'"
-                      [class.statement-chip--evidence]="chip.chipKind === 'evidence'"
-                      [class.statement-chip--kind]="chip.chipKind === 'kind'"
-                      [class.statement-chip--confidence-low]="chip.confidenceTier === 'low'"
-                      [class.statement-chip--confidence-medium]="chip.confidenceTier === 'medium'"
-                      [class.statement-chip--confidence-high]="chip.confidenceTier === 'high'">
-                      {{ chip.label }}
-                    </mat-chip>
-                  }
-                </mat-chip-set>
-              }
 
               @if (rankedEventLoadError(); as rankedEventLoadError) {
                 <div class="result-date-range-note">
@@ -553,25 +551,24 @@
 
               <div class="narrative-info qs-glass-card-panel">
                 <p class="description-text narrative">{{ multiMetricNarrative() }}</p>
+                @if (resultStatementChips().length) {
+                  <mat-chip-set class="statement-chip-set" aria-label="Confidence and evidence chips">
+                    @for (chip of resultStatementChips(); track chip.statementId + ':' + chip.chipKind + ':' + chip.label + ':' + $index) {
+                      <mat-chip
+                        disableRipple
+                        class="statement-chip"
+                        [class.statement-chip--confidence]="chip.chipKind === 'confidence'"
+                        [class.statement-chip--evidence]="chip.chipKind === 'evidence'"
+                        [class.statement-chip--kind]="chip.chipKind === 'kind'"
+                        [class.statement-chip--confidence-low]="chip.confidenceTier === 'low'"
+                        [class.statement-chip--confidence-medium]="chip.confidenceTier === 'medium'"
+                        [class.statement-chip--confidence-high]="chip.confidenceTier === 'high'">
+                        {{ chip.label }}
+                      </mat-chip>
+                    }
+                  </mat-chip-set>
+                }
               </div>
-
-              @if (resultStatementChips().length) {
-                <mat-chip-set class="statement-chip-set" aria-label="Confidence and evidence chips">
-                  @for (chip of resultStatementChips(); track chip.statementId + ':' + chip.chipKind + ':' + chip.label + ':' + $index) {
-                    <mat-chip
-                      disableRipple
-                      class="statement-chip"
-                      [class.statement-chip--confidence]="chip.chipKind === 'confidence'"
-                      [class.statement-chip--evidence]="chip.chipKind === 'evidence'"
-                      [class.statement-chip--kind]="chip.chipKind === 'kind'"
-                      [class.statement-chip--confidence-low]="chip.confidenceTier === 'low'"
-                      [class.statement-chip--confidence-medium]="chip.confidenceTier === 'medium'"
-                      [class.statement-chip--confidence-high]="chip.confidenceTier === 'high'">
-                      {{ chip.label }}
-                    </mat-chip>
-                  }
-                </mat-chip-set>
-              }
 
               @if (multiMetricAnomalySections().length) {
                 <div class="narrative-info narrative-info--secondary qs-glass-card-panel">
@@ -740,25 +737,24 @@
 
               <div class="narrative-info qs-glass-card-panel">
                 <p class="description-text narrative">{{ powerCurveNarrative() }}</p>
+                @if (resultStatementChips().length) {
+                  <mat-chip-set class="statement-chip-set" aria-label="Confidence and evidence chips">
+                    @for (chip of resultStatementChips(); track chip.statementId + ':' + chip.chipKind + ':' + chip.label + ':' + $index) {
+                      <mat-chip
+                        disableRipple
+                        class="statement-chip"
+                        [class.statement-chip--confidence]="chip.chipKind === 'confidence'"
+                        [class.statement-chip--evidence]="chip.chipKind === 'evidence'"
+                        [class.statement-chip--kind]="chip.chipKind === 'kind'"
+                        [class.statement-chip--confidence-low]="chip.confidenceTier === 'low'"
+                        [class.statement-chip--confidence-medium]="chip.confidenceTier === 'medium'"
+                        [class.statement-chip--confidence-high]="chip.confidenceTier === 'high'">
+                        {{ chip.label }}
+                      </mat-chip>
+                    }
+                  </mat-chip-set>
+                }
               </div>
-
-              @if (resultStatementChips().length) {
-                <mat-chip-set class="statement-chip-set" aria-label="Confidence and evidence chips">
-                  @for (chip of resultStatementChips(); track chip.statementId + ':' + chip.chipKind + ':' + chip.label + ':' + $index) {
-                    <mat-chip
-                      disableRipple
-                      class="statement-chip"
-                      [class.statement-chip--confidence]="chip.chipKind === 'confidence'"
-                      [class.statement-chip--evidence]="chip.chipKind === 'evidence'"
-                      [class.statement-chip--kind]="chip.chipKind === 'kind'"
-                      [class.statement-chip--confidence-low]="chip.confidenceTier === 'low'"
-                      [class.statement-chip--confidence-medium]="chip.confidenceTier === 'medium'"
-                      [class.statement-chip--confidence-high]="chip.confidenceTier === 'high'">
-                      {{ chip.label }}
-                    </mat-chip>
-                  }
-                </mat-chip-set>
-              }
 
               @if (resultWarnings().length) {
                 <mat-chip-set class="warning-chips" aria-label="Insight warnings">
@@ -803,25 +799,24 @@
 
               <div class="narrative-info qs-glass-card-panel">
                 <p class="description-text narrative">{{ aggregateNarrative() }}</p>
+                @if (resultStatementChips().length) {
+                  <mat-chip-set class="statement-chip-set" aria-label="Confidence and evidence chips">
+                    @for (chip of resultStatementChips(); track chip.statementId + ':' + chip.chipKind + ':' + chip.label + ':' + $index) {
+                      <mat-chip
+                        disableRipple
+                        class="statement-chip"
+                        [class.statement-chip--confidence]="chip.chipKind === 'confidence'"
+                        [class.statement-chip--evidence]="chip.chipKind === 'evidence'"
+                        [class.statement-chip--kind]="chip.chipKind === 'kind'"
+                        [class.statement-chip--confidence-low]="chip.confidenceTier === 'low'"
+                        [class.statement-chip--confidence-medium]="chip.confidenceTier === 'medium'"
+                        [class.statement-chip--confidence-high]="chip.confidenceTier === 'high'">
+                        {{ chip.label }}
+                      </mat-chip>
+                    }
+                  </mat-chip-set>
+                }
               </div>
-
-              @if (resultStatementChips().length) {
-                <mat-chip-set class="statement-chip-set" aria-label="Confidence and evidence chips">
-                  @for (chip of resultStatementChips(); track chip.statementId + ':' + chip.chipKind + ':' + chip.label + ':' + $index) {
-                    <mat-chip
-                      disableRipple
-                      class="statement-chip"
-                      [class.statement-chip--confidence]="chip.chipKind === 'confidence'"
-                      [class.statement-chip--evidence]="chip.chipKind === 'evidence'"
-                      [class.statement-chip--kind]="chip.chipKind === 'kind'"
-                      [class.statement-chip--confidence-low]="chip.confidenceTier === 'low'"
-                      [class.statement-chip--confidence-medium]="chip.confidenceTier === 'medium'"
-                      [class.statement-chip--confidence-high]="chip.confidenceTier === 'high'">
-                      {{ chip.label }}
-                    </mat-chip>
-                  }
-                </mat-chip-set>
-              }
 
               @if (aggregateDeterministicCompareSummary(); as deterministicCompareSummary) {
                 <div class="narrative-info narrative-info--secondary qs-glass-card-panel">
@@ -831,6 +826,9 @@
                   @if (aggregateCompareEvidenceGroups().length) {
                     <p class="mat-body-small compare-evidence-intro">
                       Event-level examples that contributed to each period delta.
+                    </p>
+                    <p class="mat-body-small compare-evidence-deterministic-note">
+                      Deterministic evidence only: this section is computed from your saved event stats, not generated free-form text.
                     </p>
                     <p class="mat-body-small compare-evidence-legend">
                       <span><strong>-</strong> = from period</span>
@@ -846,22 +844,26 @@
                           }
 
                           <div class="compare-evidence-columns">
-                            @if (evidenceGroup.downwardContributors.length) {
-                              <section class="compare-evidence-column">
-                                <p class="mat-label-small compare-evidence-column-title">
-                                  Downward contributors (from {{ evidenceGroup.fromLabel }})
-                                </p>
+                            <section class="compare-evidence-column">
+                              <p class="mat-label-small compare-evidence-column-title">
+                                Downward contributors (from {{ evidenceGroup.fromLabel }})
+                              </p>
+                              @if (evidenceGroup.downwardContributors.length) {
                                 <div class="compare-evidence-links">
                                   @for (contributor of evidenceGroup.downwardContributors; track contributor.eventId) {
                                     <div class="compare-evidence-link compare-evidence-link--downward">
-                                      <span class="compare-evidence-cell compare-evidence-cell--date">{{ contributor.dateLabel }}</span>
-                                      <span class="compare-evidence-cell compare-evidence-cell--activity">{{ contributor.activityLabel }}</span>
-                                      <span class="compare-evidence-cell compare-evidence-cell--contribution">
-                                        {{ contributor.contributionLabel }}
-                                        @if (contributor.contributionShareLabel; as contributionShareLabel) {
-                                          <span class="compare-evidence-share">({{ contributionShareLabel }})</span>
-                                        }
-                                      </span>
+                                      <div class="compare-evidence-link-main">
+                                        <div class="compare-evidence-link-meta">
+                                          <span class="compare-evidence-cell compare-evidence-cell--date">{{ contributor.dateLabel }}</span>
+                                          <span class="compare-evidence-cell compare-evidence-cell--activity">{{ contributor.activityLabel }}</span>
+                                        </div>
+                                        <span class="compare-evidence-cell compare-evidence-cell--contribution">
+                                          {{ contributor.contributionLabel }}
+                                          @if (contributor.contributionShareLabel; as contributionShareLabel) {
+                                            <span class="compare-evidence-share">({{ contributionShareLabel }})</span>
+                                          }
+                                        </span>
+                                      </div>
                                       <a
                                         class="compare-evidence-link-action"
                                         [routerLink]="['/user', currentUserID(), 'event', contributor.eventId]">
@@ -871,25 +873,31 @@
                                     </div>
                                   }
                                 </div>
-                              </section>
-                            }
+                              } @else {
+                                <p class="mat-body-small compare-evidence-empty">No downward contributors in this period pair.</p>
+                              }
+                            </section>
 
-                            @if (evidenceGroup.upwardContributors.length) {
-                              <section class="compare-evidence-column">
-                                <p class="mat-label-small compare-evidence-column-title">
-                                  Upward contributors (to {{ evidenceGroup.toLabel }})
-                                </p>
+                            <section class="compare-evidence-column">
+                              <p class="mat-label-small compare-evidence-column-title">
+                                Upward contributors (to {{ evidenceGroup.toLabel }})
+                              </p>
+                              @if (evidenceGroup.upwardContributors.length) {
                                 <div class="compare-evidence-links">
                                   @for (contributor of evidenceGroup.upwardContributors; track contributor.eventId) {
                                     <div class="compare-evidence-link compare-evidence-link--upward">
-                                      <span class="compare-evidence-cell compare-evidence-cell--date">{{ contributor.dateLabel }}</span>
-                                      <span class="compare-evidence-cell compare-evidence-cell--activity">{{ contributor.activityLabel }}</span>
-                                      <span class="compare-evidence-cell compare-evidence-cell--contribution">
-                                        {{ contributor.contributionLabel }}
-                                        @if (contributor.contributionShareLabel; as contributionShareLabel) {
-                                          <span class="compare-evidence-share">({{ contributionShareLabel }})</span>
-                                        }
-                                      </span>
+                                      <div class="compare-evidence-link-main">
+                                        <div class="compare-evidence-link-meta">
+                                          <span class="compare-evidence-cell compare-evidence-cell--date">{{ contributor.dateLabel }}</span>
+                                          <span class="compare-evidence-cell compare-evidence-cell--activity">{{ contributor.activityLabel }}</span>
+                                        </div>
+                                        <span class="compare-evidence-cell compare-evidence-cell--contribution">
+                                          {{ contributor.contributionLabel }}
+                                          @if (contributor.contributionShareLabel; as contributionShareLabel) {
+                                            <span class="compare-evidence-share">({{ contributionShareLabel }})</span>
+                                          }
+                                        </span>
+                                      </div>
                                       <a
                                         class="compare-evidence-link-action"
                                         [routerLink]="['/user', currentUserID(), 'event', contributor.eventId]">
@@ -899,8 +907,10 @@
                                     </div>
                                   }
                                 </div>
-                              </section>
-                            }
+                              } @else {
+                                <p class="mat-body-small compare-evidence-empty">No upward contributors in this period pair.</p>
+                              }
+                            </section>
                           </div>
                         </section>
                       }

@@ -471,7 +471,7 @@ function describeValueType(value: unknown): string {
 
 function resolveResponseValidationReason(
   value: unknown,
-  firstIssuePath: (string | number)[] | undefined,
+  firstIssuePath: PropertyKey[] | undefined,
 ): string {
   const firstIssuePathKey = typeof firstIssuePath?.[0] === 'string'
     ? firstIssuePath[0]

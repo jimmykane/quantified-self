@@ -502,7 +502,7 @@ export async function runAiInsights(
     ? buildInsightSummary(
       aggregateQueryInput,
       executionResult.aggregation,
-      executionResult.matchedEventsCount,
+      executionResult.matchedEventsWithRequestedStat?.length ?? executionResult.matchedEventsCount,
       executionResult.matchedActivityTypeCounts,
       executionResult.matchedEventsWithRequestedStat ?? [],
     )

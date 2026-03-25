@@ -162,37 +162,38 @@ function buildSpikeDropCallouts(
   const metricLabel = resolveMetricLabel(query);
   const metricSlug = resolveMetricSlug(query);
 
-  return candidateBuckets
-    .map((bucket) => {
-      const deltaFromMedian = bucket.aggregateValue - distributionMedian;
-      const robustZScore = Math.abs(deltaFromMedian / distributionScale);
-      const relativeDelta = Math.abs(deltaFromMedian) / denominator;
-      if (
-        robustZScore < AI_INSIGHTS_ANOMALY_SPIKE_DROP_MEDIUM_Z_SCORE
-        || relativeDelta < AI_INSIGHTS_ANOMALY_SPIKE_DROP_MIN_RELATIVE_DELTA
-      ) {
-        return null;
-      }
+  const callouts: AiInsightSummaryAnomalyCallout[] = [];
+  candidateBuckets.forEach((bucket) => {
+    const deltaFromMedian = bucket.aggregateValue - distributionMedian;
+    const robustZScore = Math.abs(deltaFromMedian / distributionScale);
+    const relativeDelta = Math.abs(deltaFromMedian) / denominator;
+    if (
+      robustZScore < AI_INSIGHTS_ANOMALY_SPIKE_DROP_MEDIUM_Z_SCORE
+      || relativeDelta < AI_INSIGHTS_ANOMALY_SPIKE_DROP_MIN_RELATIVE_DELTA
+    ) {
+      return;
+    }
 
-      const kind: AiInsightAnomalyKind = deltaFromMedian >= 0 ? 'spike' : 'drop';
-      const statementId = `anomaly:${kind}:${metricSlug}:${bucket.bucketKey}`;
-      return {
-        id: `callout:${kind}:${metricSlug}:${bucket.bucketKey}`,
-        statementId,
-        kind,
-        snippet: `Unusual ${kind} at ${bucket.bucketKey}: ${metricLabel} was ${formatNumber(bucket.aggregateValue)} (baseline ${formatNumber(distributionMedian)}).`,
-        confidenceTier: resolveConfidenceTier(robustZScore, AI_INSIGHTS_ANOMALY_SPIKE_DROP_HIGH_Z_SCORE),
-        score: Number((robustZScore * (1 + relativeDelta)).toFixed(6)),
-        evidenceRefs: [
-          {
-            kind: 'bucket',
-            label: `Bucket ${bucket.bucketKey}`,
-            bucketKey: bucket.bucketKey,
-          },
-        ],
-      } satisfies AiInsightSummaryAnomalyCallout;
-    })
-    .filter((callout): callout is AiInsightSummaryAnomalyCallout => callout !== null);
+    const kind: AiInsightAnomalyKind = deltaFromMedian >= 0 ? 'spike' : 'drop';
+    const statementId = `anomaly:${kind}:${metricSlug}:${bucket.bucketKey}`;
+    callouts.push({
+      id: `callout:${kind}:${metricSlug}:${bucket.bucketKey}`,
+      statementId,
+      kind,
+      snippet: `Unusual ${kind} at ${bucket.bucketKey}: ${metricLabel} was ${formatNumber(bucket.aggregateValue)} (baseline ${formatNumber(distributionMedian)}).`,
+      confidenceTier: resolveConfidenceTier(robustZScore, AI_INSIGHTS_ANOMALY_SPIKE_DROP_HIGH_Z_SCORE),
+      score: Number((robustZScore * (1 + relativeDelta)).toFixed(6)),
+      evidenceRefs: [
+        {
+          kind: 'bucket',
+          label: `Bucket ${bucket.bucketKey}`,
+          bucketKey: bucket.bucketKey,
+        },
+      ],
+    });
+  });
+
+  return callouts;
 }
 
 function resolveDistribution(

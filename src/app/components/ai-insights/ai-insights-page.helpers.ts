@@ -208,7 +208,38 @@ function buildAnomalyCalloutDisplays(
 export function buildStatementChipDisplays(
   response: AiInsightsOkResponse | null | undefined,
 ): StatementChipDisplay[] {
-  return (response?.statementChips ?? []).map(toStatementChipDisplay);
+  if (!response?.statementChips?.length) {
+    return [];
+  }
+
+  const narrativeStatementId = (() => {
+    if (response.resultKind === 'aggregate') {
+      return 'aggregate:narrative';
+    }
+    if (response.resultKind === 'event_lookup') {
+      return 'event_lookup:narrative';
+    }
+    if (response.resultKind === 'latest_event') {
+      return 'latest_event:narrative';
+    }
+    if (response.resultKind === 'multi_metric_aggregate') {
+      return 'multi_metric:narrative';
+    }
+    return 'power_curve:narrative';
+  })();
+
+  const seenDisplayKeys = new Set<string>();
+  return response.statementChips
+    .filter(chip => chip.statementId === narrativeStatementId)
+    .map(toStatementChipDisplay)
+    .filter((displayChip) => {
+      const displayKey = `${displayChip.chipKind}:${displayChip.label}:${displayChip.confidenceTier ?? ''}`;
+      if (seenDisplayKeys.has(displayKey)) {
+        return false;
+      }
+      seenDisplayKeys.add(displayKey);
+      return true;
+    });
 }
 
 export function buildAggregateAnomalyCallouts(

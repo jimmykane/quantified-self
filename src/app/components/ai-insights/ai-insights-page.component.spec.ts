@@ -1423,6 +1423,91 @@ describe('AiInsightsPageComponent', () => {
     expect(chips.some((chip) => chip.nativeElement.textContent.includes('Evidence linked'))).toBe(true);
   });
 
+  it('should collapse duplicate narrative chip labels into a single display chip', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue({
+      ...buildOkResponse(),
+      statementChips: [
+        {
+          statementId: 'aggregate:narrative',
+          chipType: 'confidence',
+          label: 'Medium confidence',
+          confidenceTier: 'medium',
+        },
+        {
+          statementId: 'aggregate:narrative',
+          chipType: 'confidence',
+          label: 'Medium confidence',
+          confidenceTier: 'medium',
+        },
+        {
+          statementId: 'aggregate:narrative',
+          chipType: 'confidence',
+          label: 'Medium confidence',
+          confidenceTier: 'medium',
+        },
+        {
+          statementId: 'aggregate:narrative',
+          chipType: 'evidence',
+          label: 'Evidence linked',
+          evidenceRefs: [
+            {
+              kind: 'bucket',
+              label: 'Previous 2026-01',
+              bucketKey: '2026-01',
+            },
+          ],
+        },
+        {
+          statementId: 'aggregate:narrative',
+          chipType: 'evidence',
+          label: 'Evidence linked',
+          evidenceRefs: [
+            {
+              kind: 'bucket',
+              label: 'To 2026-02',
+              bucketKey: '2026-02',
+            },
+          ],
+        },
+      ],
+    });
+    component.promptControl.setValue('show my cadence trend');
+
+    await component.submitPrompt();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const chips = fixture.debugElement
+      .queryAll(By.css('.statement-chip'))
+      .map(chip => (chip.nativeElement.textContent || '').trim());
+    const mediumConfidenceCount = chips.filter(label => label.includes('Medium confidence')).length;
+    const evidenceLinkedCount = chips.filter(label => label.includes('Evidence linked')).length;
+
+    expect(mediumConfidenceCount).toBe(1);
+    expect(evidenceLinkedCount).toBe(1);
+  });
+
+  it('should only render narrative-linked chips in the narrative chip row', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue({
+      ...buildOkResponse(),
+      statementChips: [
+        {
+          statementId: 'aggregate:trend',
+          chipType: 'confidence',
+          label: 'Medium confidence',
+          confidenceTier: 'medium',
+        },
+      ],
+    });
+    component.promptControl.setValue('show my cadence trend');
+
+    await component.submitPrompt();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(fixture.debugElement.query(By.css('.statement-chip-set'))).toBeNull();
+  });
+
   it('should not render statement chips for empty responses', async () => {
     aiInsightsServiceMock.runInsight.mockResolvedValue(buildEmptyResponse());
     component.promptControl.setValue('show a metric with no results');
@@ -1652,21 +1737,27 @@ describe('AiInsightsPageComponent', () => {
     fixture.detectChanges();
 
     const evidenceGroups = fixture.debugElement.queryAll(By.css('.compare-evidence-group'));
+    const evidenceColumns = fixture.debugElement.queryAll(By.css('.compare-evidence-column'));
     const evidenceRows = fixture.debugElement.queryAll(By.css('.compare-evidence-link'));
     const evidenceActionLinks = fixture.debugElement.queryAll(By.css('.compare-evidence-link-action'));
     const downwardColumns = fixture.debugElement.queryAll(By.css('.compare-evidence-column .compare-evidence-link--downward'));
     const upwardColumns = fixture.debugElement.queryAll(By.css('.compare-evidence-column .compare-evidence-link--upward'));
+    const emptyEvidenceMessages = fixture.debugElement.queryAll(By.css('.compare-evidence-empty'));
     const evidenceLegend = fixture.debugElement.query(By.css('.compare-evidence-legend'))?.nativeElement as HTMLElement | undefined;
     const compareNarrative = fixture.debugElement.query(By.css('.narrative-info--secondary .narrative'))?.nativeElement as HTMLElement | undefined;
     const evidenceSummary = fixture.debugElement.query(By.css('.compare-evidence-summary'))?.nativeElement as HTMLElement | undefined;
 
     expect(evidenceGroups).toHaveLength(2);
+    expect(evidenceColumns).toHaveLength(4);
     expect(evidenceGroups[0]?.nativeElement.textContent).toContain('From Jan 2025 to Jan 2026');
     expect(evidenceGroups[1]?.nativeElement.textContent).toContain('From Jan 2024 to Jan 2025');
     expect(evidenceRows).toHaveLength(3);
     expect(evidenceActionLinks).toHaveLength(3);
     expect(downwardColumns).toHaveLength(2);
     expect(upwardColumns).toHaveLength(1);
+    expect(emptyEvidenceMessages).toHaveLength(2);
+    expect(emptyEvidenceMessages.some((message) => message.nativeElement.textContent.includes('No upward contributors in this period pair.'))).toBe(true);
+    expect(emptyEvidenceMessages.some((message) => message.nativeElement.textContent.includes('No downward contributors in this period pair.'))).toBe(true);
     expect(evidenceLegend?.textContent).toContain('from period');
     expect(evidenceLegend?.textContent).toContain('to period');
     expect(evidenceGroups[0]?.nativeElement.textContent).toContain('Downward contributors (from Jan 2025)');

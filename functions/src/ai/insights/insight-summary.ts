@@ -94,13 +94,15 @@ function buildPeriodDeltaContributors(
 
   return seriesKeys
     .map((seriesKey) => {
+      const hasFromValue = Object.prototype.hasOwnProperty.call(fromSeriesValues, seriesKey);
+      const hasToValue = Object.prototype.hasOwnProperty.call(toSeriesValues, seriesKey);
       const fromValue = toFiniteNumber(fromSeriesValues[seriesKey]);
       const toValue = toFiniteNumber(toSeriesValues[seriesKey]);
-      if (fromValue === null || toValue === null) {
+      if ((hasFromValue && fromValue === null) || (hasToValue && toValue === null)) {
         return null;
       }
 
-      const deltaAggregateValue = toValue - fromValue;
+      const deltaAggregateValue = (toValue ?? 0) - (fromValue ?? 0);
       if (!Number.isFinite(deltaAggregateValue) || deltaAggregateValue === 0) {
         return null;
       }

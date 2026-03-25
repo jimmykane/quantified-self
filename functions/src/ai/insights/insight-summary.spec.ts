@@ -457,6 +457,68 @@ describe('insight-summary', () => {
     ]);
   });
 
+  it('includes one-sided activity series in compare-mode period contributors', () => {
+    const query = {
+      resultKind: 'aggregate' as const,
+      dataType: 'Distance',
+      valueType: ChartDataValueTypes.Total,
+      categoryType: ChartDataCategoryTypes.DateType,
+      requestedTimeInterval: TimeIntervals.Monthly,
+      activityTypeGroups: [],
+      activityTypes: [ActivityTypes.Cycling, ActivityTypes.Running],
+      dateRange: {
+        kind: 'bounded' as const,
+        startDate: '2026-01-01T00:00:00.000Z',
+        endDate: '2026-02-28T23:59:59.999Z',
+        timezone: 'UTC',
+        source: 'prompt' as const,
+      },
+      periodMode: 'compare' as const,
+      chartType: ChartTypes.LinesVertical,
+    };
+
+    const summary = buildInsightSummary(query, {
+      resolvedTimeInterval: TimeIntervals.Monthly,
+      buckets: [
+        {
+          bucketKey: '2026-01',
+          time: Date.parse('2026-01-01T00:00:00.000Z'),
+          aggregateValue: 100,
+          totalCount: 1,
+          seriesValues: {
+            [ActivityTypes.Cycling]: 100,
+          },
+        },
+        {
+          bucketKey: '2026-02',
+          time: Date.parse('2026-02-01T00:00:00.000Z'),
+          aggregateValue: 160,
+          totalCount: 2,
+          seriesValues: {
+            [ActivityTypes.Cycling]: 110,
+            [ActivityTypes.Running]: 50,
+          },
+        },
+      ],
+    }, 2, [
+      { activityType: ActivityTypes.Cycling, eventCount: 1 },
+      { activityType: ActivityTypes.Running, eventCount: 1 },
+    ]);
+
+    expect(summary.periodDeltas?.[0]?.contributors).toEqual([
+      {
+        seriesKey: ActivityTypes.Running,
+        deltaAggregateValue: 50,
+        direction: 'increase',
+      },
+      {
+        seriesKey: ActivityTypes.Cycling,
+        deltaAggregateValue: 10,
+        direction: 'increase',
+      },
+    ]);
+  });
+
   it('builds compare-mode event contributors for maximum and minimum aggregations', () => {
     const maxQuery = {
       resultKind: 'aggregate' as const,

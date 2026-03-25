@@ -1450,6 +1450,52 @@ describe('aiInsights callable', () => {
     });
   });
 
+  it('uses stat-matched event count when building aggregate summaries', async () => {
+    hoisted.executeAiInsightsQuery.mockResolvedValue({
+      resultKind: 'aggregate',
+      matchedEventsCount: 5,
+      matchedEventsWithRequestedStat: [
+        {
+          getID: () => 'event-with-stat-1',
+        },
+      ],
+      matchedActivityTypeCounts: [
+        {
+          activityType: ActivityTypes.Cycling,
+          eventCount: 5,
+        },
+      ],
+      aggregation: {
+        dataType: 'Distance',
+        valueType: ChartDataValueTypes.Total,
+        categoryType: ChartDataCategoryTypes.DateType,
+        resolvedTimeInterval: TimeIntervals.Monthly,
+        buckets: [
+          {
+            bucketKey: 1,
+            time: 1,
+            totalCount: 5,
+            aggregateValue: 123,
+            seriesValues: { Cycling: 123 },
+            seriesCounts: { Cycling: 5 },
+          },
+        ],
+      },
+    });
+
+    const result = await aiInsights({
+      prompt: 'show distance',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(result).toMatchObject({
+      status: 'ok',
+      summary: expect.objectContaining({
+        matchedEventCount: 1,
+      }),
+    });
+  });
+
   it('returns unsupported responses without executing the query', async () => {
     hoisted.normalizeInsightQuery.mockResolvedValue({
       status: 'unsupported',
