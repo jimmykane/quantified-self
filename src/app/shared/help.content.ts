@@ -221,7 +221,7 @@ If you downgrade from a paid plan, the app keeps your access through the current
 After the grace period:
 
 - Pro-only sync connections can be disconnected.
-- Activities above the new plan limit can be permanently removed.
+- Existing activities are retained. New uploads follow your current plan limit.
 
 ## When to contact support
 

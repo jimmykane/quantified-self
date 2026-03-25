@@ -3,22 +3,17 @@ import * as admin from 'firebase-admin';
 
 // Mock dependencies using vi.hoisted for top-level access
 const {
-    mockBulkWriterClose,
     mockGetUser,
     mockSetCustomUserClaims,
     mockRecursiveDelete,
     mockFirestoreInstance,
     mockAuthInstance
 } = vi.hoisted(() => {
-    const bulkWriter = {
-        close: vi.fn().mockResolvedValue(undefined)
-    };
     const auth = {
         getUser: vi.fn().mockResolvedValue({ customClaims: {} }),
         setCustomUserClaims: vi.fn().mockResolvedValue(undefined)
     };
     const fs: any = {
-        bulkWriter: vi.fn(() => bulkWriter),
         collection: vi.fn(),
         doc: vi.fn(),
         recursiveDelete: vi.fn().mockResolvedValue(undefined),
@@ -43,7 +38,6 @@ const {
         documentId: vi.fn(() => '__name__')
     };
     return {
-        mockBulkWriterClose: bulkWriter.close,
         mockGetUser: auth.getUser,
         mockSetCustomUserClaims: auth.setCustomUserClaims,
         mockAuthInstance: auth,
@@ -75,7 +69,6 @@ import * as Claims from '../stripe/claims';
 
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { GARMIN_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
-import { USAGE_LIMITS } from '../../../shared/limits';
 
 describe('enforceSubscriptionLimits', () => {
     let deauthorizeServiceSpy: any;
@@ -255,25 +248,14 @@ describe('enforceSubscriptionLimits', () => {
         expect(Claims.reconcileClaims).toHaveBeenCalledWith('user1');
     });
 
-    it('should disconnect and prune (Free user, limits exceeded)', async () => {
+    it('should disconnect and clear claims when grace period has expired (free user)', async () => {
         const pastDate = new Date(Date.now() - 100000);
         const systemDoc = mockDoc({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(pastDate) });
 
-        const freeExcessCount = 2;
-
-        // Setup User1: Free, limit + excess events
         mockFirestoreInstance.collection.mockImplementation((path: string) => {
             if (path === GARMIN_API_TOKENS_COLLECTION_NAME) return mockQuery([{ id: 'user1' }]);
             if (path === 'users') return mockQuery([mockUserDoc('user1')]);
-            // single query for subs
             if (path.includes('subscriptions')) return mockQuery([]); // No active subs = Free
-            if (path.includes('events')) {
-                const docs = [
-                    { id: 'event1', ref: { id: 'event1' } },
-                    { id: 'event2', ref: { id: 'event2' } }
-                ];
-                return mockQuery(docs, USAGE_LIMITS.free + freeExcessCount);
-            }
             return mockQuery([]);
         });
 
@@ -294,15 +276,11 @@ describe('enforceSubscriptionLimits', () => {
             gracePeriodUntil: 'DELETE_SENTINEL',
             lastDowngradedAt: 'DELETE_SENTINEL'
         }, { merge: true });
-
-        // Verify pruning matches older events logic
-        expect(mockRecursiveDelete).toHaveBeenCalledTimes(2);
-        expect(mockBulkWriterClose).toHaveBeenCalledTimes(1);
+        expect(mockRecursiveDelete).not.toHaveBeenCalled();
     });
 
-    it('should respect the configured Basic limit', async () => {
+    it('should disconnect basic users when grace period has expired', async () => {
         const pastDate = new Date(Date.now() - 100000);
-        const basicExcessCount = 5;
 
         mockFirestoreInstance.collection.mockImplementation((path: string) => {
             if (path === GARMIN_API_TOKENS_COLLECTION_NAME) return mockQuery([{ id: 'user1' }]);
@@ -311,17 +289,9 @@ describe('enforceSubscriptionLimits', () => {
                 // Return Basic subscription
                 return mockQuery([{ data: () => ({ role: 'basic' }) }]);
             }
-            if (path.includes('events')) {
-                const docs = Array(basicExcessCount).fill(0).map((_, i) => ({ id: `ev${i}`, ref: { id: `ev${i}` } }));
-                return mockQuery(docs, USAGE_LIMITS.basic + basicExcessCount);
-            }
             return mockQuery([]);
         });
 
-        // Basic users logic implies they are NOT pro, so if their grace period expires, they ALSO get disconnected?
-        // Logic check: "if (!isPro) { ... disconnect ... }"
-        // Yes, current code disconnects Basic users if they have no grace period.
-        // We will give them a valid grace period to test ONLY pruning logic here.
         mockFirestoreInstance.doc.mockImplementation((path: string) => {
             if (path === 'users/user1/system/status') {
                 return mockDoc({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(pastDate) });
@@ -336,51 +306,32 @@ describe('enforceSubscriptionLimits', () => {
         expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.SuuntoApp);
         expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.COROSAPI);
         expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.GarminAPI);
-
-        expect(mockRecursiveDelete).toHaveBeenCalledTimes(basicExcessCount);
-        expect(mockBulkWriterClose).toHaveBeenCalledTimes(1);
+        expect(mockRecursiveDelete).not.toHaveBeenCalled();
     });
 
-    it('should skip pruning for Pro users', async () => {
-        // Pro users have limit = Infinity
+    it('should skip deauthorization and event cleanup for Pro users', async () => {
         mockFirestoreInstance.collection.mockImplementation((path: string) => {
             if (path === GARMIN_API_TOKENS_COLLECTION_NAME) return mockQuery([{ id: 'user1' }]);
             if (path === 'users') return mockQuery([mockUserDoc('user1', { hasSubscribedOnce: true })]);
             if (path.includes('subscriptions')) {
                 return mockQuery([{ data: () => ({ role: 'pro' }) }]);
             }
-            if (path.includes('events')) {
-                // 1000 events
-                return mockQuery([], 1000);
-            }
             return mockQuery([]);
         });
 
-        mockFirestoreInstance.doc.mockImplementation(() => mockDoc({})); // No system doc needed really
+        mockFirestoreInstance.doc.mockImplementation(() => mockDoc({}));
 
         const wrapped = enforceSubscriptionLimits as any;
         await wrapped({});
 
-        // Pro users are excluded from disconnect logic
         expect(deauthorizeServiceSpy).not.toHaveBeenCalled();
-        // Limit infinity -> no pruning
         expect(mockRecursiveDelete).not.toHaveBeenCalled();
     });
 
-    it('should prune non-connected free users without deauthorizing services or rewriting claims', async () => {
-        const event1Ref = { id: 'event1' };
-        const event2Ref = { id: 'event2' };
-
+    it('should skip disconnect/claim rewrites for non-connected free users', async () => {
         mockFirestoreInstance.collection.mockImplementation((path: string) => {
             if (path === 'users') return mockQuery([mockUserDoc('user2')]);
             if (path.includes('subscriptions')) return mockQuery([]);
-            if (path.includes('events')) {
-                const docs = [
-                    { id: 'event1', ref: event1Ref },
-                    { id: 'event2', ref: event2Ref }
-                ];
-                return mockQuery(docs, USAGE_LIMITS.free + 2);
-            }
             return mockQuery([]);
         });
 
@@ -392,18 +343,9 @@ describe('enforceSubscriptionLimits', () => {
         const wrapped = enforceSubscriptionLimits as any;
         await wrapped({});
 
-        expect(mockRecursiveDelete).toHaveBeenCalledTimes(2);
-        expect(mockFirestoreInstance.bulkWriter).toHaveBeenCalledTimes(1);
-        expect(mockBulkWriterClose).toHaveBeenCalledTimes(1);
-
-        const [firstRef, firstWriter] = mockRecursiveDelete.mock.calls[0];
-        const [secondRef, secondWriter] = mockRecursiveDelete.mock.calls[1];
-        expect(firstRef).toBe(event1Ref);
-        expect(secondRef).toBe(event2Ref);
-        expect(firstWriter).toBe(secondWriter);
-
         expect(deauthorizeServiceSpy).not.toHaveBeenCalled();
         expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
+        expect(mockRecursiveDelete).not.toHaveBeenCalled();
     });
 
     it('should initialize grace period for non-connected users with paid history and no active subscription', async () => {
@@ -417,7 +359,6 @@ describe('enforceSubscriptionLimits', () => {
         mockFirestoreInstance.collection.mockImplementation((path: string) => {
             if (path === 'users') return mockQuery([mockUserDoc('user3', { hasSubscribedOnce: true })]);
             if (path.includes('subscriptions')) return mockQuery([]);
-            if (path.includes('events')) return mockQuery([], 50);
             return mockQuery([]);
         });
 
@@ -472,7 +413,6 @@ describe('enforceSubscriptionLimits', () => {
                 };
             }
             if (path.includes('subscriptions')) return mockQuery([]);
-            if (path.includes('events')) return mockQuery([], 0);
             return mockQuery([]);
         });
 
@@ -484,28 +424,13 @@ describe('enforceSubscriptionLimits', () => {
         expect(startAfterSpy).toHaveBeenCalledTimes(1);
     });
 
-    it('should stop pruning gracefully when count exceeds the limit but no event docs are returned', async () => {
+    it('should not query events collection for over-limit free users', async () => {
         const pastDate = new Date(Date.now() - 100000);
-
-        const eventsQuery = {
-            count: vi.fn().mockReturnValue({
-                get: vi.fn().mockResolvedValue({ data: () => ({ count: 102 }) })
-            }),
-            orderBy: vi.fn().mockReturnThis(),
-            limit: vi.fn().mockReturnThis(),
-            get: vi.fn().mockResolvedValue({
-                empty: true,
-                docs: [],
-                forEach: vi.fn(),
-                data: () => ({ count: USAGE_LIMITS.free + 2 })
-            })
-        };
-
         mockFirestoreInstance.collection.mockImplementation((path: string) => {
             if (path === GARMIN_API_TOKENS_COLLECTION_NAME) return mockQuery([{ id: 'user1' }]);
             if (path === 'users') return mockQuery([mockUserDoc('user1', { hasSubscribedOnce: true })]);
             if (path.includes('subscriptions')) return mockQuery([]);
-            if (path.includes('events')) return eventsQuery;
+            if (path.includes('events')) throw new Error('events query should not be called');
             return mockQuery([]);
         });
 
@@ -520,95 +445,6 @@ describe('enforceSubscriptionLimits', () => {
         await wrapped({});
 
         expect(mockRecursiveDelete).not.toHaveBeenCalled();
-        expect(eventsQuery.get).toHaveBeenCalledTimes(1);
-    });
-
-    it('should handle pruning delete failures without aborting the scheduler run', async () => {
-        const pastDate = new Date(Date.now() - 100000);
-        mockRecursiveDelete.mockRejectedValueOnce(new Error('delete failed'));
-
-        mockFirestoreInstance.collection.mockImplementation((path: string) => {
-            if (path === GARMIN_API_TOKENS_COLLECTION_NAME) return mockQuery([{ id: 'user1' }]);
-            if (path === 'users') return mockQuery([mockUserDoc('user1', { hasSubscribedOnce: true })]);
-            if (path.includes('subscriptions')) return mockQuery([]);
-            if (path.includes('events')) {
-                return mockQuery([{ id: 'event1', ref: { id: 'event1' } }], USAGE_LIMITS.free + 1);
-            }
-            return mockQuery([]);
-        });
-
-        mockFirestoreInstance.doc.mockImplementation((path: string) => {
-            if (path === 'users/user1/system/status') {
-                return mockDoc({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(pastDate) });
-            }
-            return mockDoc({});
-        });
-
-        const wrapped = enforceSubscriptionLimits as any;
-        await wrapped({});
-
-        expect(mockBulkWriterClose).toHaveBeenCalled();
-    });
-
-    it('should close each chunk bulkWriter when a later chunk fails during delete scheduling', async () => {
-        const pastDate = new Date(Date.now() - 100000);
-        const chunkOneDocs = Array.from({ length: 250 }, (_, index) => ({
-            id: `event-${index}`,
-            ref: { id: `event-${index}` }
-        }));
-        const chunkTwoDocs = [{ id: 'event-250', ref: { id: 'event-250' } }];
-        const excess = chunkOneDocs.length + chunkTwoDocs.length;
-
-        const eventsQuery = {
-            orderBy: vi.fn().mockReturnThis(),
-            limit: vi.fn().mockReturnThis(),
-            get: vi.fn()
-                .mockResolvedValueOnce({
-                    empty: false,
-                    docs: chunkOneDocs
-                })
-                .mockResolvedValueOnce({
-                    empty: false,
-                    docs: chunkTwoDocs
-                }),
-            count: vi.fn().mockReturnValue({
-                get: vi.fn().mockResolvedValue({
-                    data: () => ({ count: USAGE_LIMITS.free + excess })
-                })
-            })
-        };
-
-        let deleteCalls = 0;
-        mockRecursiveDelete.mockImplementation(() => {
-            deleteCalls += 1;
-            if (deleteCalls === excess) {
-                throw new Error('sync delete scheduling failure');
-            }
-
-            return Promise.resolve(undefined);
-        });
-
-        mockFirestoreInstance.collection.mockImplementation((path: string) => {
-            if (path === GARMIN_API_TOKENS_COLLECTION_NAME) return mockQuery([{ id: 'user1' }]);
-            if (path === 'users') return mockQuery([mockUserDoc('user1', { hasSubscribedOnce: true })]);
-            if (path.includes('subscriptions')) return mockQuery([]);
-            if (path.includes('events')) return eventsQuery;
-            return mockQuery([]);
-        });
-
-        mockFirestoreInstance.doc.mockImplementation((path: string) => {
-            if (path === 'users/user1/system/status') {
-                return mockDoc({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(pastDate) });
-            }
-            return mockDoc({});
-        });
-
-        const wrapped = enforceSubscriptionLimits as any;
-        await wrapped({});
-
-        expect(eventsQuery.get).toHaveBeenCalledTimes(2);
-        expect(mockFirestoreInstance.bulkWriter).toHaveBeenCalledTimes(2);
-        expect(mockBulkWriterClose).toHaveBeenCalledTimes(2);
     });
 
     it('should handle errors gracefully during user processing', async () => {

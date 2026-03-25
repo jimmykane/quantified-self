@@ -8,9 +8,8 @@ import { reconcileClaims } from '../stripe/claims';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../suunto/constants';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../coros/constants';
 import { GARMIN_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
-import { GRACE_PERIOD_DAYS, getUsageLimitForRole } from '../../../shared/limits';
+import { GRACE_PERIOD_DAYS } from '../../../shared/limits';
 
-const EVENT_PRUNE_BATCH_SIZE = 250;
 const USER_PROCESS_BATCH_SIZE = 10;
 const USER_SCAN_PAGE_SIZE = 500;
 
@@ -206,51 +205,5 @@ async function processUser(uid: string, hasConnectedServices: boolean, hasPaidHi
         try { await deauthorizeServiceForUser(uid, ServiceNames.GarminAPI); } catch (e) { logger.error(`Error deauthorizing Garmin for ${uid}`, e); }
     }
 
-    // 5. Activity Pruning (Destructive - Delete OLDEST)
-    const limit = getUsageLimitForRole(activeRole);
-
-    if (limit !== null) {
-        const eventsRef = admin.firestore().collection(`users/${uid}/events`);
-        const countSnapshot = await eventsRef.count().get();
-        const actualCount = countSnapshot.data().count;
-
-
-        if (actualCount > limit) {
-            const excess = actualCount - limit;
-
-            logger.info(`User ${uid} has ${actualCount} events (limit: ${limit}). Deleting ${excess} oldest events.`);
-            let remainingToDelete = excess;
-
-            while (remainingToDelete > 0) {
-                const chunkSize = Math.min(EVENT_PRUNE_BATCH_SIZE, remainingToDelete);
-                const excessSnapshot = await eventsRef
-                    .orderBy('startDate', 'asc') // Oldest first
-                    .limit(chunkSize)
-                    .get();
-
-                if (excessSnapshot.empty) {
-                    logger.warn(`Expected ${remainingToDelete} more events to prune for ${uid}, but no more events were found.`);
-                    break;
-                }
-
-                const bulkWriter = admin.firestore().bulkWriter();
-                try {
-                    const deletePromises = excessSnapshot.docs.map((eventDoc) => {
-                        logger.info(`Deleting excess event ${eventDoc.id}`);
-                        return admin.firestore().recursiveDelete(eventDoc.ref, bulkWriter);
-                    });
-
-                    const deleteResults = await Promise.allSettled(deletePromises);
-                    const firstFailure = deleteResults.find((result): result is PromiseRejectedResult => result.status === 'rejected');
-                    if (firstFailure) {
-                        throw firstFailure.reason;
-                    }
-                } finally {
-                    await bulkWriter.close();
-                }
-
-                remainingToDelete -= excessSnapshot.docs.length;
-            }
-        }
-    }
+    // Event pruning disabled: we retain historical events after grace-period expiry.
 }

@@ -153,6 +153,11 @@ describe('PricingComponent', () => {
                 message: expect.stringContaining('device sync will be disconnected')
             })
         }));
+        expect(dialogSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+            data: expect.objectContaining({
+                message: expect.stringContaining('Existing activities are not automatically deleted')
+            })
+        }));
     });
 
     it('should show downgrade warning for basic users without sync mention', async () => {

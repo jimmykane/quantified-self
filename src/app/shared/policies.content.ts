@@ -36,7 +36,7 @@ export const POLICY_CONTENT: PolicyItem[] = [
             '<strong>Best Effort:</strong> While we employ best endeavors, we don\'t promise to keep your files and data accessible at all times.',
             '<strong>Backups:</strong> It\'s best advised to keep your own private copies of critical data.',
             '<strong>Portability:</strong> You have the right to request an export of your personal data stored on our platform.',
-            '<strong>Retention:</strong> We retain your data while your account is active and has a valid subscription. For expired subscriptions, data may be permanently removed after a grace period of 30 days of inactivity.'
+            '<strong>Retention:</strong> We retain your data while your account is active and has a valid subscription. After a 30-day grace period, plan limits and feature restrictions apply. Existing activities are not automatically deleted due to downgrade alone.'
         ],
         checkboxLabel: 'I have read and agree to the Data Availability Policy.',
         formControlName: 'acceptDataPolicy'
@@ -80,7 +80,7 @@ export const POLICY_CONTENT: PolicyItem[] = [
             '<strong>Cancellation:</strong> You may cancel your subscription at any time through your account settings. Cancellation will take effect at the end of the current billing period, and you will retain access to pro features until then.',
             '<strong>Refunds & EU Withdrawal Right:</strong> Under EU law, you have a 14-day right of withdrawal for digital services. However, by accepting these terms and gaining immediate access to premium features, you acknowledge that you waive this right of withdrawal. Partial refunds for unused periods are not provided.',
             '<strong>Changes to Pricing:</strong> We reserve the right to change our pricing. Any price changes will be communicated to you in advance and will take effect at the start of the next billing cycle.',
-            '<strong>Data Deletion:</strong> Upon expiration or cancellation of a subscription, we may delete your stored data (including activities and tracks) after a grace period of 30 days of inactivity. It is your responsibility to export your data if you wish to keep it.'
+            '<strong>Plan Changes After Cancellation:</strong> Upon expiration or cancellation of a subscription, your account moves to the applicable plan limits after any grace period. Stored activities are not automatically deleted due to plan expiration or cancellation. It is still your responsibility to keep your own backups of critical data.'
         ],
         checkboxLabel: 'I have read and agree to the Terms of Service and Subscription Policy.',
         formControlName: 'acceptTos'

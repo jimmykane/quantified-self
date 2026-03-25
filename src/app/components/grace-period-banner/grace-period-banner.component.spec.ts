@@ -51,7 +51,8 @@ describe('GracePeriodBannerComponent', () => {
         const banner = fixture.nativeElement.querySelector('.grace-period-banner');
         expect(banner).toBeTruthy();
         expect(banner.textContent).toContain('Your Pro plan has ended');
-        expect(banner.textContent).toContain(`reduced to ${USAGE_LIMITS.free}`);
+        expect(banner.textContent).toContain(`(${USAGE_LIMITS.free} on Free)`);
+        expect(banner.textContent).toContain('existing activities stay in your account');
     });
 
     it('should hide banner when grace period date is null', () => {
