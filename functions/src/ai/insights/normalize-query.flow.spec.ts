@@ -1528,7 +1528,8 @@ describe('normalizeInsightQuery', () => {
 
     expect(result.query.defaultedToCycling).toBe(false);
     expect(result.query.activityTypeGroups).toEqual([]);
-    expect(result.query.activityTypes).not.toContain(ActivityTypes.Cycling);
+    const cyclingFamily = new Set(getActivityTypesForGroup(ActivityTypeGroups.CyclingGroup));
+    expect(result.query.activityTypes.some(activityType => cyclingFamily.has(activityType))).toBe(false);
     expect(result.query.dateRange).toEqual({
       kind: 'bounded',
       startDate: '2026-01-01T00:00:00.000Z',

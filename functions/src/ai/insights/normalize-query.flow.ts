@@ -2142,10 +2142,19 @@ export function createNormalizeQuery(
             ...resolveKeywordActivityTypeExclusions(clause),
           ];
         });
+      const defaultCyclingActivityTypeGroups = [ActivityTypeGroups.CyclingGroup];
+      const hasExplicitCyclingExclusion = (
+        promptExcludedActivityTypeGroups.includes(ActivityTypeGroups.CyclingGroup)
+        || promptExcludedActivityTypes.includes(ActivityTypes.Cycling)
+      );
       const excludedActivityTypeSet = new Set<ActivityTypes>([
         ...promptExcludedActivityTypes,
         ...expandActivityTypeGroups(promptExcludedActivityTypeGroups),
       ]);
+      if (hasExplicitCyclingExclusion) {
+        expandActivityTypeGroups(defaultCyclingActivityTypeGroups)
+          .forEach(activityType => excludedActivityTypeSet.add(activityType));
+      }
       const promptActivityTypeGroups = resolvePromptActivityTypeGroups(promptWithoutActivityExclusions);
       const promptActivityTypes = resolvePromptActivityTypes(promptWithoutActivityExclusions, promptActivityTypeGroups);
       const filteredResolvedActivityTypes = excludeActivityTypes(
@@ -2161,11 +2170,6 @@ export function createNormalizeQuery(
       const resolvedActivityTypes = filteredResolvedActivityTypes.length > 0
         ? filteredResolvedActivityTypes
         : expandedActivityTypes;
-      const defaultCyclingActivityTypeGroups = [ActivityTypeGroups.CyclingGroup];
-      const hasExplicitCyclingExclusion = (
-        promptExcludedActivityTypeGroups.includes(ActivityTypeGroups.CyclingGroup)
-        || promptExcludedActivityTypes.includes(ActivityTypes.Cycling)
-      );
       const defaultedToCycling = (
         resolvedActivityTypes.length === 0
         && explicitActivityTypeGroups.length === 0
