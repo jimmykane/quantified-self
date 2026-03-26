@@ -202,6 +202,28 @@ describe('Firestore Security Rules', () => {
                     privacy: 'public'
                 }));
             });
+
+            it('should deny unauthenticated read of user document even when privacy is public', async () => {
+                const db = testEnv.unauthenticatedContext().firestore();
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().collection('users').doc(userId).set({
+                        privacy: 'public'
+                    });
+                });
+
+                await assertFails(db.collection('users').doc(userId).get());
+            });
+
+            it('should deny other authenticated users from reading a public user document', async () => {
+                const db = testEnv.authenticatedContext(otherId).firestore();
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().collection('users').doc(userId).set({
+                        privacy: 'public'
+                    });
+                });
+
+                await assertFails(db.collection('users').doc(userId).get());
+            });
         });
 
         describe('Legal Agreements (users/{uid}/legal/agreements)', () => {
@@ -544,6 +566,30 @@ describe('Firestore Security Rules', () => {
                 }));
             });
 
+            it('should deny unauthenticated read of public event', async () => {
+                const db = testEnv.unauthenticatedContext().firestore();
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/events/${eventId}`).set({
+                        name: 'Morning Run',
+                        privacy: 'public'
+                    });
+                });
+
+                await assertFails(db.collection(`users/${userId}/events`).doc(eventId).get());
+            });
+
+            it('should deny other authenticated users from reading a public event', async () => {
+                const db = testEnv.authenticatedContext(otherId).firestore();
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/events/${eventId}`).set({
+                        name: 'Morning Run',
+                        privacy: 'public'
+                    });
+                });
+
+                await assertFails(db.collection(`users/${userId}/events`).doc(eventId).get());
+            });
+
             it('should allow owner updating event when original file metadata is untouched', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
                 await testEnv.withSecurityRulesDisabled(async (context) => {
@@ -815,7 +861,7 @@ describe('Firestore Security Rules', () => {
             await assertFails(db.collection(`users/${userId}/activities`).doc(activityId).get());
         });
 
-        it('should ALLOW unauthenticated users to read PUBLIC activities', async () => {
+        it('should deny unauthenticated users from reading public activities', async () => {
             const db = testEnv.unauthenticatedContext().firestore();
             await testEnv.withSecurityRulesDisabled(async (context) => {
                 await context.firestore().collection(`users/${userId}/activities`).doc('public_activity').set({
@@ -823,10 +869,10 @@ describe('Firestore Security Rules', () => {
                     privacy: 'public'
                 });
             });
-            await assertSucceeds(db.collection(`users/${userId}/activities`).doc('public_activity').get());
+            await assertFails(db.collection(`users/${userId}/activities`).doc('public_activity').get());
         });
 
-        it('should ALLOW other authenticated users to read PUBLIC activities', async () => {
+        it('should deny other authenticated users from reading public activities', async () => {
             const db = testEnv.authenticatedContext(otherId).firestore();
             await testEnv.withSecurityRulesDisabled(async (context) => {
                 await context.firestore().collection(`users/${userId}/activities`).doc('public_activity_2').set({
@@ -834,7 +880,7 @@ describe('Firestore Security Rules', () => {
                     privacy: 'public'
                 });
             });
-            await assertSucceeds(db.collection(`users/${userId}/activities`).doc('public_activity_2').get());
+            await assertFails(db.collection(`users/${userId}/activities`).doc('public_activity_2').get());
         });
 
     });

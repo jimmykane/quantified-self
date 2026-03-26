@@ -13,7 +13,6 @@ service cloud.firestore {
         return request.auth != null && request.auth.uid == userID;
       }
 
-      allow read: if resource.data.privacy == 'public';
       allow read: if isOwner();
       allow create: if isOwner()
         && (
@@ -92,7 +91,6 @@ service cloud.firestore {
       }
 
         match /events/{eventID} {
-          allow read: if resource.data.privacy == 'public';
           // RESTRICTED ACCESS: Must be owner AND have a valid role (Free, Basic, or PRO)
           // TEMPORARILY DISABLED FOR TESTING - Re-enable when ready to enforce paywall
           // allow read, write: if request.auth.uid == userID && isSubscribed();
@@ -124,7 +122,6 @@ service cloud.firestore {
               );
             }
 
-            allow read: if resource.data.privacy == 'public';
             allow read: if request.auth.uid == userID;
             allow create: if false;
             allow delete: if false;
