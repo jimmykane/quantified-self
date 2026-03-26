@@ -129,6 +129,30 @@ describe('Firestore Security Rules', () => {
         const otherId = 'other_user';
         const eventId = 'event_123';
 
+        describe('User Root Document (users/{uid})', () => {
+            it('should allow user to create their own user document', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertSucceeds(db.collection('users').doc(userId).set({
+                    privacy: 'private'
+                }));
+            });
+
+            it('should deny user from creating another user document', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertFails(db.collection('users').doc(otherId).set({
+                    privacy: 'public',
+                    displayName: 'IDOR_TEST'
+                }));
+            });
+
+            it('should deny unauthenticated create on user document', async () => {
+                const db = testEnv.unauthenticatedContext().firestore();
+                await assertFails(db.collection('users').doc(userId).set({
+                    privacy: 'public'
+                }));
+            });
+        });
+
         describe('Legal Agreements (users/{uid}/legal/agreements)', () => {
             it('should allow user to read their own agreements', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
