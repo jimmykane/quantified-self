@@ -11,7 +11,15 @@ export interface EventXAxisFormatOptions {
   locale?: string;
 }
 
+export interface EventXAxisScaleOptions {
+  splitNumber: number;
+  interval?: number;
+  minInterval?: number;
+  maxInterval?: number;
+}
+
 const EVENT_X_AXIS_TARGET_TICK_COUNT = 6;
+const EVENT_X_AXIS_MOBILE_TARGET_TICK_COUNT = 4;
 const CANONICAL_DURATION_INTERVALS_SECONDS = [
   1,
   2,
@@ -82,9 +90,30 @@ export function formatEventXAxisValue(value: number, axisType: XAxisTypes, optio
 
 export function buildEventCanonicalXAxisScaleOptions(
   axisType: XAxisTypes,
-  range: EventChartRange | null | undefined
-): { interval: number; minInterval: number; maxInterval: number; splitNumber: number } | null {
-  const interval = getCanonicalEventXAxisInterval(axisType, range);
+  range: EventChartRange | null | undefined,
+  isMobile = false
+): EventXAxisScaleOptions | null {
+  const normalizedRange = normalizeEventRange(range);
+  if (!normalizedRange) {
+    return null;
+  }
+
+  const span = normalizedRange.end - normalizedRange.start;
+  if (!Number.isFinite(span) || span <= 0) {
+    return null;
+  }
+
+  if (isMobile) {
+    if (axisType !== XAxisTypes.Time && axisType !== XAxisTypes.Duration && axisType !== XAxisTypes.Distance) {
+      return null;
+    }
+
+    return {
+      splitNumber: EVENT_X_AXIS_MOBILE_TARGET_TICK_COUNT,
+    };
+  }
+
+  const interval = getCanonicalEventXAxisInterval(axisType, normalizedRange);
   if (!Number.isFinite(interval)) {
     return null;
   }
