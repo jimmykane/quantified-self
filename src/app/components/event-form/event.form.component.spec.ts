@@ -25,7 +25,6 @@ describe('EventFormComponent', () => {
         };
         mockEvent = {
             name: 'Morning ride',
-            privacy: 'private',
             isMerge: false,
             getID: vi.fn(() => 'event-1')
         };
@@ -43,23 +42,8 @@ describe('EventFormComponent', () => {
         component.ngOnInit();
     });
 
-    it('onSubmit should not update event when the form is invalid', async () => {
-        const submitEvent = { preventDefault: vi.fn() };
-        const validateAllSpy = vi.spyOn(component, 'validateAllFormFields');
-        component.eventFormGroup.get('privacy')?.setValue(null);
-        component.eventFormGroup.get('privacy')?.updateValueAndValidity();
-
-        await component.onSubmit(submitEvent);
-
-        expect(submitEvent.preventDefault).toHaveBeenCalledTimes(1);
-        expect(validateAllSpy).toHaveBeenCalledWith(component.eventFormGroup);
-        expect(mockEventService.updateEventProperties).not.toHaveBeenCalled();
-        expect(mockDialogRef.close).not.toHaveBeenCalled();
-    });
-
     it('onSubmit should update event and show success snackbar when save succeeds', async () => {
         const submitEvent = { preventDefault: vi.fn() };
-        component.eventFormGroup.get('privacy')?.setValue('public');
         component.eventFormGroup.get('isMerge')?.setValue(true);
         mockEventService.updateEventProperties.mockResolvedValue(undefined);
 
@@ -69,7 +53,6 @@ describe('EventFormComponent', () => {
             mockUser,
             'event-1',
             {
-                privacy: 'public',
                 isMerge: true
             }
         );
@@ -98,4 +81,3 @@ describe('EventFormComponent', () => {
         expect(mockDialogRef.close).toHaveBeenCalledTimes(1);
     });
 });
-

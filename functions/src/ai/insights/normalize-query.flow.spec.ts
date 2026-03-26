@@ -302,6 +302,36 @@ describe('normalizeInsightQuery', () => {
     });
   });
 
+  it('normalizes current year aliases to the current-year date range', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'distance',
+        aggregation: 'total',
+        category: 'date',
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'show my total distance current year',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
+      startDate: '2026-01-01T00:00:00.000Z',
+      endDate: '2026-03-18T23:59:59.999Z',
+      timezone: 'UTC',
+      source: 'prompt',
+    });
+  });
+
   it('normalizes explicit calendar-year prompts such as "in year 2024"', async () => {
     setNormalizeQueryDependenciesForTesting({
       now: () => new Date('2026-03-20T12:00:00.000Z'),
@@ -427,6 +457,53 @@ describe('normalizeInsightQuery', () => {
 
     const result = await normalizeInsightQuery({
       prompt: 'duration this year vs last year',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('duration');
+    expect(result.query.resultKind).toBe('aggregate');
+    expect(result.query.dataType).toBe(DataDuration.type);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Total);
+    expect(result.query.categoryType).toBe(ChartDataCategoryTypes.DateType);
+    expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Yearly);
+    expect(result.query.periodMode).toBe('compare');
+    expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
+      startDate: '2025-01-01T00:00:00.000Z',
+      endDate: '2026-12-31T23:59:59.999Z',
+      timezone: 'UTC',
+      source: 'prompt',
+    });
+    expect(result.query.requestedDateRanges).toEqual([
+      {
+        kind: 'bounded',
+        startDate: '2025-01-01T00:00:00.000Z',
+        endDate: '2025-12-31T23:59:59.999Z',
+        timezone: 'UTC',
+        source: 'prompt',
+      },
+      {
+        kind: 'bounded',
+        startDate: '2026-01-01T00:00:00.000Z',
+        endDate: '2026-12-31T23:59:59.999Z',
+        timezone: 'UTC',
+        source: 'prompt',
+      },
+    ]);
+  });
+
+  it('resolves relative year comparisons (current year vs last year) in compare mode', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-20T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'duration current year vs last year',
       clientTimezone: 'UTC',
     });
 
@@ -689,6 +766,117 @@ describe('normalizeInsightQuery', () => {
       {
         kind: 'bounded',
         startDate: '2026-01-01T00:00:00.000Z',
+        endDate: '2026-12-31T23:59:59.999Z',
+        timezone: 'UTC',
+        source: 'prompt',
+      },
+    ]);
+  });
+
+  it('includes current year when explicit year lists mention "current year"', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-20T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'show my max heart rate in 2022, 2023, 2024, 2025, and current year',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.requestedDateRanges).toEqual([
+      {
+        kind: 'bounded',
+        startDate: '2022-01-01T00:00:00.000Z',
+        endDate: '2026-12-31T23:59:59.999Z',
+        timezone: 'UTC',
+        source: 'prompt',
+      },
+    ]);
+  });
+
+  it('includes current year when explicit year lists mention "this year"', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-20T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'show my max heart rate in 2022, 2023, 2024, and this year',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.requestedDateRanges).toEqual([
+      {
+        kind: 'bounded',
+        startDate: '2022-01-01T00:00:00.000Z',
+        endDate: '2024-12-31T23:59:59.999Z',
+        timezone: 'UTC',
+        source: 'prompt',
+      },
+      {
+        kind: 'bounded',
+        startDate: '2026-01-01T00:00:00.000Z',
+        endDate: '2026-12-31T23:59:59.999Z',
+        timezone: 'UTC',
+        source: 'prompt',
+      },
+    ]);
+  });
+
+  it('includes current year when explicit year lists mention "year-to-date"', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-20T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'show my max heart rate in 2024, 2025 and year-to-date',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.requestedDateRanges).toEqual([
+      {
+        kind: 'bounded',
+        startDate: '2024-01-01T00:00:00.000Z',
+        endDate: '2026-12-31T23:59:59.999Z',
+        timezone: 'UTC',
+        source: 'prompt',
+      },
+    ]);
+  });
+
+  it('does not duplicate requested ranges when the prompt already includes the current year numerically', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-20T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'show my max heart rate in 2024, 2025, 2026, and current year',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.requestedDateRanges).toEqual([
+      {
+        kind: 'bounded',
+        startDate: '2024-01-01T00:00:00.000Z',
         endDate: '2026-12-31T23:59:59.999Z',
         timezone: 'UTC',
         source: 'prompt',
@@ -2924,6 +3112,114 @@ describe('normalizeInsightQuery', () => {
     expect(result.query.activityTypes).not.toContain(ActivityTypes.IndoorCycling);
     expect(result.query.activityTypes).not.toContain(ActivityTypes.IndoorRunning);
     expect(result.query.activityTypes).not.toContain(ActivityTypes.IndoorTraining);
+  });
+
+  it('routes weekly digest prompts to digest multi-metric mode', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-22T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Give me a weekly digest for cycling this year.',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.resultKind).toBe('multi_metric_aggregate');
+    if (result.query.resultKind !== 'multi_metric_aggregate') {
+      return;
+    }
+
+    expect(result.query.digestMode).toBe('weekly');
+    expect(result.query.groupingMode).toBe('date');
+    expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Weekly);
+    expect(result.query.metricSelections).toEqual([
+      {
+        metricKey: 'distance',
+        dataType: DataDistance.type,
+        valueType: ChartDataValueTypes.Total,
+      },
+      {
+        metricKey: 'duration',
+        dataType: DataDuration.type,
+        valueType: ChartDataValueTypes.Total,
+      },
+      {
+        metricKey: 'ascent',
+        dataType: DataAscent.type,
+        valueType: ChartDataValueTypes.Total,
+      },
+    ]);
+    expect(result.query.activityTypes).toEqual([ActivityTypes.Cycling]);
+    expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
+      startDate: '2026-01-01T00:00:00.000Z',
+      endDate: '2026-03-22T23:59:59.999Z',
+      timezone: 'UTC',
+      source: 'prompt',
+    });
+  });
+
+  it('defaults digest prompts without an explicit period to monthly mode', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-22T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Give me a digest for running.',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok' || result.query.resultKind !== 'multi_metric_aggregate') {
+      return;
+    }
+
+    expect(result.query.digestMode).toBe('monthly');
+    expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Monthly);
+    expect(result.query.activityTypes).toEqual([ActivityTypes.Running]);
+  });
+
+  it('supports yearly digest prompts', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-22T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Give me a yearly recap for all activities.',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok' || result.query.resultKind !== 'multi_metric_aggregate') {
+      return;
+    }
+
+    expect(result.query.digestMode).toBe('yearly');
+    expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Yearly);
+    expect(result.query.metricSelections).toHaveLength(3);
+  });
+
+  it('does not route summary-only prompts to digest mode without period hints', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-22T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show me a summary of my distance.',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.resultKind).toBe('aggregate');
   });
 
   it('rejects unsupported split prompts before calling the model', async () => {

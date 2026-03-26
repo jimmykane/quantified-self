@@ -11,7 +11,7 @@ import { DeleteAccountDialogComponent } from '../delete-account-dialog/delete-ac
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AbstractControl, UntypedFormControl, UntypedFormGroup, ValidationErrors, ValidatorFn, Validators } from '@angular/forms';
 import { LoggerService } from '../../services/logger.service';
-import { Privacy, User, UserSettingsInterface } from '@sports-alliance/sports-lib';
+import { User, UserSettingsInterface } from '@sports-alliance/sports-lib';
 import {
   ChartCursorBehaviours,
   XAxisTypes,
@@ -48,7 +48,6 @@ export class UserSettingsComponent implements OnChanges {
   public mandatoryDescentExclusions = ACTIVITIES_EXCLUDED_FROM_DESCENT;
 
   @Input() user: AppUserInterface;
-  public privacy = Privacy;
   public isSaving: boolean;
   public isDeleting: boolean;
   public consentToDelete: boolean;
@@ -109,7 +108,6 @@ export class UserSettingsComponent implements OnChanges {
   private initializedUserUID: string | null = null;
   private readonly controlLabels: Record<string, string> = {
     displayName: 'Public Name',
-    privacy: 'Profile Visibility',
     appTheme: 'Interface Theme',
     dataTypesToUse: 'Visible Metrics',
     xAxisType: 'Data Scaling (X-Axis)',
@@ -195,9 +193,6 @@ export class UserSettingsComponent implements OnChanges {
 
     this.userSettingsFormGroup = new UntypedFormGroup({
       displayName: new UntypedFormControl(this.user.displayName, [
-        Validators.required,
-      ]),
-      privacy: new UntypedFormControl(this.user.privacy || Privacy.Private, [
         Validators.required,
       ]),
       description: new UntypedFormControl(this.user.description, []),
@@ -384,7 +379,6 @@ export class UserSettingsComponent implements OnChanges {
 
       const propertiesToUpdate: any = {
         displayName: this.userSettingsFormGroup.get('displayName').value,
-        privacy: this.userSettingsFormGroup.get('privacy').value,
         description: this.userSettingsFormGroup.get('description').value,
         acceptedTrackingPolicy: this.userSettingsFormGroup.get('acceptedTrackingPolicy').value,
         acceptedMarketingPolicy: this.userSettingsFormGroup.get('acceptedMarketingPolicy').value,

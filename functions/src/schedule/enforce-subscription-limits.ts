@@ -4,6 +4,7 @@ import * as logger from 'firebase-functions/logger';
 import { deauthorizeServiceForUser } from '../OAuth2';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { reconcileClaims } from '../stripe/claims';
+import { TokenNotFoundError } from '../utils';
 
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../suunto/constants';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../coros/constants';
@@ -12,6 +13,11 @@ import { GRACE_PERIOD_DAYS } from '../../../shared/limits';
 
 const USER_PROCESS_BATCH_SIZE = 10;
 const USER_SCAN_PAGE_SIZE = 500;
+const SERVICES_TO_DEAUTHORIZE: ReadonlyArray<ServiceNames> = [
+    ServiceNames.SuuntoApp,
+    ServiceNames.COROSAPI,
+    ServiceNames.GarminAPI
+];
 
 /**
  * Disconnects external services (Garmin, Suunto, COROS) for users who have no active pro subscription.
@@ -140,6 +146,101 @@ function isGracePeriodActive(gracePeriodUntil?: FirebaseFirestore.Timestamp): bo
     return gracePeriodUntil.toMillis() > admin.firestore.Timestamp.now().toMillis();
 }
 
+function isAuthUserNotFoundError(error: unknown): boolean {
+    if (!error || typeof error !== 'object') {
+        return false;
+    }
+
+    const authError = error as {
+        code?: string;
+        errorInfo?: {
+            code?: string;
+        };
+    };
+
+    return authError.code === 'auth/user-not-found' || authError.errorInfo?.code === 'auth/user-not-found';
+}
+
+function isTokenNotFoundError(error: unknown): boolean {
+    if (error instanceof TokenNotFoundError) {
+        return true;
+    }
+
+    if (!error || typeof error !== 'object') {
+        return false;
+    }
+
+    return (error as { name?: string }).name === 'TokenNotFoundError';
+}
+
+async function deauthorizeConnectedServicesBestEffort(uid: string): Promise<void> {
+    for (const serviceName of SERVICES_TO_DEAUTHORIZE) {
+        try {
+            await deauthorizeServiceForUser(uid, serviceName);
+        } catch (error) {
+            if (isTokenNotFoundError(error)) {
+                logger.info(`[enforceSubscriptionLimits] No ${serviceName} tokens found for ${uid} during cleanup.`);
+                continue;
+            }
+
+            logger.error(`[enforceSubscriptionLimits] Error deauthorizing ${serviceName} for ${uid}`, error);
+        }
+    }
+}
+
+async function cleanupOrphanedUserRoots(uid: string): Promise<void> {
+    const db = admin.firestore();
+    const roots = [
+        db.doc(`users/${uid}`),
+        db.doc(`customers/${uid}`)
+    ];
+
+    for (const root of roots) {
+        try {
+            await db.recursiveDelete(root);
+            logger.info(`[enforceSubscriptionLimits] Recursively deleted orphaned path ${root.path} for missing Auth user ${uid}.`);
+        } catch (error) {
+            logger.error(`[enforceSubscriptionLimits] Error recursively deleting orphaned path ${root.path} for ${uid}`, error);
+        }
+    }
+}
+
+async function reconcileClaimsWithMissingAuthCleanup(uid: string, hasConnectedServices: boolean): Promise<boolean> {
+    try {
+        await reconcileClaims(uid);
+        return true;
+    } catch (error) {
+        if (!isAuthUserNotFoundError(error)) {
+            throw error;
+        }
+
+        logger.warn(`[enforceSubscriptionLimits] Auth user ${uid} not found during claim reconciliation. Cleaning orphaned Firestore roots.`);
+        if (hasConnectedServices) {
+            await deauthorizeConnectedServicesBestEffort(uid);
+        }
+        await cleanupOrphanedUserRoots(uid);
+        return false;
+    }
+}
+
+async function ensureAuthUserExistsForFailSafe(uid: string, hasConnectedServices: boolean): Promise<boolean> {
+    try {
+        await admin.auth().getUser(uid);
+        return true;
+    } catch (error) {
+        if (!isAuthUserNotFoundError(error)) {
+            throw error;
+        }
+
+        logger.warn(`[enforceSubscriptionLimits] Auth user ${uid} not found before fail-safe grace write. Cleaning orphaned Firestore roots.`);
+        if (hasConnectedServices) {
+            await deauthorizeConnectedServicesBestEffort(uid);
+        }
+        await cleanupOrphanedUserRoots(uid);
+        return false;
+    }
+}
+
 async function processUser(uid: string, hasConnectedServices: boolean, hasPaidHistory: boolean, userExists: boolean) {
     const { activeRole, hasActiveSubscription, gracePeriodUntil } = await getUserEntitlementState(uid);
     const isPro = activeRole === 'pro';
@@ -150,11 +251,16 @@ async function processUser(uid: string, hasConnectedServices: boolean, hasPaidHi
             logger.info(`User ${uid} in grace period until ${gracePeriodUntil!.toDate().toISOString()}. Skipping cleanup.`);
             // Ensure claims are synced so backend checks recognize the grace period
             // This prevents "soft-lock" where a user has a grace period doc but missing Auth claims
-            await reconcileClaims(uid);
+            await reconcileClaimsWithMissingAuthCleanup(uid, hasConnectedServices);
             return;
         }
 
         if (userExists && !gracePeriodUntil && (hasConnectedServices || (!hasActiveSubscription && hasPaidHistory))) {
+            const authUserExists = await ensureAuthUserExistsForFailSafe(uid, hasConnectedServices);
+            if (!authUserExists) {
+                return;
+            }
+
             // FAIL-SAFE: Trigger might have failed. Initialize grace period now.
             const newGracePeriodUntil = admin.firestore.Timestamp.fromDate(
                 new Date(Date.now() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000)
@@ -166,7 +272,7 @@ async function processUser(uid: string, hasConnectedServices: boolean, hasPaidHi
             }, { merge: true });
 
             // Ensure claims are synced so backend checks recognize the grace period
-            await reconcileClaims(uid);
+            await reconcileClaimsWithMissingAuthCleanup(uid, hasConnectedServices);
 
             return; // Skip cleanup for this run, let them have their 30 days
         }
@@ -193,16 +299,19 @@ async function processUser(uid: string, hasConnectedServices: boolean, hasPaidHi
                 delete nextClaims.gracePeriodUntil;
                 await admin.auth().setCustomUserClaims(uid, nextClaims);
             } catch (e) {
-                logger.error(`Error clearing claims for ${uid}`, e);
+                if (isAuthUserNotFoundError(e)) {
+                    logger.warn(`[enforceSubscriptionLimits] Auth user ${uid} not found while clearing claims. Cleaning orphaned Firestore roots.`);
+                    await cleanupOrphanedUserRoots(uid);
+                } else {
+                    logger.error(`Error clearing claims for ${uid}`, e);
+                }
             }
         } else {
             logger.info(`User ${uid} has connected services but no users/{uid} document. Skipping status/claims updates and deauthorizing services.`);
         }
 
         // Disconnect sync
-        try { await deauthorizeServiceForUser(uid, ServiceNames.SuuntoApp); } catch (e) { logger.error(`Error deauthorizing Suunto for ${uid}`, e); }
-        try { await deauthorizeServiceForUser(uid, ServiceNames.COROSAPI); } catch (e) { logger.error(`Error deauthorizing COROS for ${uid}`, e); }
-        try { await deauthorizeServiceForUser(uid, ServiceNames.GarminAPI); } catch (e) { logger.error(`Error deauthorizing Garmin for ${uid}`, e); }
+        await deauthorizeConnectedServicesBestEffort(uid);
     }
 
     // Event pruning disabled: we retain historical events after grace-period expiry.

@@ -52,9 +52,35 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
       return;
     }
 
-    this.uploadCount = await this.eventService.getEventCount(this.user);
+    const authUser = this.authService.currentUser;
+    if (!authUser || authUser.uid !== this.user.uid) {
+      return;
+    }
+
+    try {
+      this.uploadCount = await this.eventService.getEventCount(this.user);
+    } catch (error: unknown) {
+      if (this.isPermissionDeniedError(error)) {
+        const currentAuthUser = this.authService.currentUser;
+        if (!currentAuthUser || currentAuthUser.uid !== this.user.uid) {
+          this.logger.warn('[UploadActivitiesComponent] Skipping upload count during auth transition', {
+            requestedUid: this.user.uid,
+            authUid: currentAuthUser?.uid || null,
+          });
+          return;
+        }
+      }
+
+      throw error;
+    }
+
     const role = await this.userService.getSubscriptionRole() || 'free';
     this.uploadLimit = USAGE_LIMITS[role] || USAGE_LIMITS['free'];
+  }
+
+  private isPermissionDeniedError(error: unknown): boolean {
+    const code = (error as { code?: unknown } | null)?.code;
+    return code === 'permission-denied' || code === 'firestore/permission-denied';
   }
 
   private hasGzipMagic(data: ArrayBuffer): boolean {

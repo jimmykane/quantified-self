@@ -10,6 +10,7 @@ import {
 } from '@sports-alliance/sports-lib';
 
 import type {
+  AiInsightsDigestGranularity,
   AiInsightsRequest,
   AiInsightsPowerCurveMode,
   AiInsightsMultiMetricGroupingMode,
@@ -123,6 +124,7 @@ interface MultiMetricIntent {
   valueType: ChartDataValueTypes;
   metricSelections: NormalizedInsightMetricSelection[];
   groupingMode: AiInsightsMultiMetricGroupingMode;
+  digestMode?: AiInsightsDigestGranularity;
 }
 
 interface PromptDateSelectionIntent {
@@ -167,7 +169,9 @@ interface ZonedDateParts {
 const ABSOLUTE_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const SUPPORTED_ACTIVITY_TYPE_GROUPS = [...CANONICAL_ACTIVITY_TYPE_GROUPS];
 const MAX_MULTI_METRICS = 3;
+const DIGEST_METRIC_KEYS = ['distance', 'duration', 'ascent'] as const;
 const YEAR_PATTERN = /(?:19|20)\d{2}/;
+const CURRENT_YEAR_PROMPT_PATTERN = /\b(?:(?:this|current|present|ongoing)(?:\s+calendar)?\s+year|year\s+to\s+date|ytd)\b/;
 const MONTH_NAME_TO_NUMBER: Readonly<Record<string, number>> = {
   jan: 1,
   january: 1,
@@ -599,6 +603,12 @@ interface ResolvePromptDateSelectionOptions {
   now: Date;
 }
 
+function includesCurrentYearPromptToken(
+  normalizedPrompt: string,
+): boolean {
+  return CURRENT_YEAR_PROMPT_PATTERN.test(normalizedPrompt);
+}
+
 function resolvePromptRelativeYearComparisonDateSelection(
   prompt: string,
   category: ModelCategoryCode | undefined,
@@ -614,7 +624,7 @@ function resolvePromptRelativeYearComparisonDateSelection(
     return null;
   }
 
-  if (!/\bthis year\b/.test(normalizedPrompt) || !/\blast year\b/.test(normalizedPrompt)) {
+  if (!includesCurrentYearPromptToken(normalizedPrompt) || !/\blast year\b/.test(normalizedPrompt)) {
     return null;
   }
 
@@ -753,8 +763,10 @@ function resolvePromptYearListDateSelection(
   prompt: string,
   category: ModelCategoryCode | undefined,
   aggregation: ModelAggregationCode | undefined,
+  options: ResolvePromptDateSelectionOptions,
 ): PromptDateSelectionIntent | null {
   const normalizedPrompt = canonicalizeInsightPrompt(prompt);
+  const normalizedPromptSearch = normalizePromptSearchText(prompt);
   if (!normalizedPrompt) {
     return null;
   }
@@ -774,7 +786,16 @@ function resolvePromptYearListDateSelection(
     [...yearListSource.matchAll(new RegExp(`\\b(${YEAR_PATTERN.source})\\b`, 'g'))]
       .map(match => Number(match[1]))
       .filter(year => Number.isInteger(year)),
-  )).sort((left, right) => left - right);
+  ));
+
+  if (includesCurrentYearPromptToken(normalizedPromptSearch)) {
+    const currentYear = getZonedDateParts(options.now, options.timeZone).year;
+    if (!years.includes(currentYear)) {
+      years.push(currentYear);
+    }
+  }
+
+  years.sort((left, right) => left - right);
   if (years.length < 2) {
     return null;
   }
@@ -857,7 +878,7 @@ function resolvePromptDateSelection(
     return monthYearToNowSelection;
   }
 
-  const multiYearSelection = resolvePromptYearListDateSelection(prompt, category, aggregation);
+  const multiYearSelection = resolvePromptYearListDateSelection(prompt, category, aggregation, options);
   if (multiYearSelection) {
     return multiYearSelection;
   }
@@ -1311,6 +1332,70 @@ function resolvePromptRequestedTimeInterval(prompt: string): ModelTimeIntervalCo
   }
 
   return undefined;
+}
+
+function resolveDigestMode(
+  prompt: string,
+): AiInsightsDigestGranularity | null {
+  const normalizedPrompt = normalizePromptSearchText(prompt);
+  if (!normalizedPrompt) {
+    return null;
+  }
+
+  const hasDigestKeyword = /\b(digest|recap)\b/.test(normalizedPrompt);
+  const hasSummaryKeyword = /\bsummary\b/.test(normalizedPrompt);
+  const hasWeeklyHint = /\b(weekly|week|by week|per week)\b/.test(normalizedPrompt);
+  const hasMonthlyHint = /\b(monthly|month|by month|per month)\b/.test(normalizedPrompt);
+  const hasYearlyHint = /\b(yearly|annual|annually|year|by year|per year)\b/.test(normalizedPrompt);
+
+  if ((hasDigestKeyword || hasSummaryKeyword) && hasWeeklyHint) {
+    return 'weekly';
+  }
+  if ((hasDigestKeyword || hasSummaryKeyword) && hasMonthlyHint) {
+    return 'monthly';
+  }
+  if ((hasDigestKeyword || hasSummaryKeyword) && hasYearlyHint) {
+    return 'yearly';
+  }
+
+  if (hasDigestKeyword) {
+    return 'monthly';
+  }
+
+  return null;
+}
+
+function resolveDigestRequestedTimeInterval(
+  digestMode: AiInsightsDigestGranularity,
+): TimeIntervals {
+  switch (digestMode) {
+    case 'weekly':
+      return TimeIntervals.Weekly;
+    case 'yearly':
+      return TimeIntervals.Yearly;
+    case 'monthly':
+    default:
+      return TimeIntervals.Monthly;
+  }
+}
+
+function resolveDigestMetricSelections(): NormalizedInsightMetricSelection[] | null {
+  const resolvedSelections = DIGEST_METRIC_KEYS.map((metricKey) => {
+    const metric = resolveInsightMetric(metricKey, ChartDataValueTypes.Total);
+    if (!metric) {
+      return null;
+    }
+
+    return {
+      metricKey,
+      dataType: metric.dataType,
+      valueType: ChartDataValueTypes.Total,
+    } satisfies NormalizedInsightMetricSelection;
+  });
+
+  return resolvedSelections.every(selection => selection !== null)
+    ? resolvedSelections as NormalizedInsightMetricSelection[]
+    : null;
 }
 
 function resolveStackedDateDefaultInterval(dateRangeIntent: DateRangeIntent | undefined): TimeIntervals {
@@ -1902,7 +1987,7 @@ function resolvePromptDateRangeIntent(prompt: string): DateRangeIntent | undefin
     return { kind: 'current_period', unit: 'month' };
   }
 
-  if (/\bthis year\b/.test(normalizedPrompt)) {
+  if (includesCurrentYearPromptToken(normalizedPrompt)) {
     return { kind: 'current_period', unit: 'year' };
   }
 
@@ -2353,6 +2438,84 @@ export function createNormalizeQuery(
       };
     }
 
+    const digestMode = resolveDigestMode(prompt);
+    if (digestMode) {
+      const digestMetricSelections = resolveDigestMetricSelections();
+      if (!digestMetricSelections) {
+        return buildUnsupportedResult('unsupported_metric', prompt);
+      }
+
+      const activityTypes = normalizeActivityTypes(undefined);
+      const activityTypeGroups = normalizeActivityTypeGroups(undefined);
+      if (!activityTypes || !activityTypeGroups) {
+        return buildUnsupportedResult('invalid_prompt', prompt);
+      }
+
+      const promptWithoutActivityExclusions = stripPromptActivityExclusionClauses(prompt);
+      const promptExcludedActivityTypeGroups = extractPromptActivityExclusionClauses(prompt)
+        .flatMap((clause) => resolvePromptActivityTypeGroups(clause));
+      const promptExcludedActivityTypes = extractPromptActivityExclusionClauses(prompt)
+        .flatMap((clause) => {
+          const clauseGroups = resolvePromptActivityTypeGroups(clause);
+          return [
+            ...resolvePromptActivityTypes(clause, clauseGroups),
+            ...resolveKeywordActivityTypeExclusions(clause),
+          ];
+        });
+      const excludedActivityTypeSet = new Set<ActivityTypes>([
+        ...promptExcludedActivityTypes,
+        ...expandActivityTypeGroups(promptExcludedActivityTypeGroups),
+      ]);
+      const promptActivityTypeGroups = resolvePromptActivityTypeGroups(promptWithoutActivityExclusions);
+      const promptActivityTypes = resolvePromptActivityTypes(promptWithoutActivityExclusions, promptActivityTypeGroups);
+      const resolvedActivityTypeGroups = activityTypeGroups.length > 0
+        ? activityTypeGroups
+        : promptActivityTypeGroups;
+      const resolvedActivityTypes = activityTypes.length > 0
+        ? activityTypes
+        : promptActivityTypes;
+      const filteredResolvedActivityTypes = excludeActivityTypes(
+        resolvedActivityTypes,
+        excludedActivityTypeSet,
+      );
+      const filteredResolvedActivityTypeGroups = resolvedActivityTypeGroups
+        .filter(activityTypeGroup => !promptExcludedActivityTypeGroups.includes(activityTypeGroup));
+      const finalActivityTypeGroups = filteredResolvedActivityTypes.length > 0 ? [] : filteredResolvedActivityTypeGroups;
+      const expandedActivityTypes = finalActivityTypeGroups.length > 0
+        ? excludeActivityTypes(expandActivityTypeGroups(finalActivityTypeGroups), excludedActivityTypeSet)
+        : [];
+      const finalActivityTypes = filteredResolvedActivityTypes.length > 0
+        ? filteredResolvedActivityTypes
+        : expandedActivityTypes.length > 0
+          ? expandedActivityTypes
+          : excludedActivityTypeSet.size > 0
+            ? excludeActivityTypes(CANONICAL_ACTIVITY_TYPES, excludedActivityTypeSet)
+            : [];
+
+      const dateRange = resolveDateRange(promptDateRangeIntent, input.clientTimezone, resolvedDependencies.now());
+      const requestedDateRanges = resolveRequestedDateRanges(
+        promptDateSelection.requestedDateRangeIntents,
+        input.clientTimezone,
+        resolvedDependencies.now(),
+      );
+
+      return {
+        status: 'ok',
+        query: buildMultiMetricInsightQuery({
+          groupingMode: 'date',
+          requestedTimeInterval: resolveDigestRequestedTimeInterval(digestMode),
+          activityTypeGroups: finalActivityTypeGroups,
+          activityTypes: finalActivityTypes,
+          dateRange,
+          requestedDateRanges,
+          periodMode: promptDateSelection.periodMode,
+          chartType: ChartTypes.LinesVertical,
+          metricSelections: digestMetricSelections,
+          digestMode,
+        }),
+      };
+    }
+
     const multiMetricIntent = resolveMultiMetricIntent(prompt, promptContext);
     if (multiMetricIntent && 'status' in multiMetricIntent) {
       return multiMetricIntent;
@@ -2432,6 +2595,7 @@ export function createNormalizeQuery(
           periodMode: promptDateSelection.periodMode,
           chartType: ChartTypes.LinesVertical,
           metricSelections: multiMetricIntent.metricSelections,
+          digestMode: multiMetricIntent.digestMode,
         }),
       };
     }

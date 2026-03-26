@@ -7,6 +7,7 @@ import {
   type ActivityTypes,
 } from '@sports-alliance/sports-lib';
 import type {
+  AiInsightsDigestGranularity,
   AiInsightsPowerCurveMode,
   NormalizedInsightBoundedDateRange,
   NormalizedInsightDateRange,
@@ -92,6 +93,7 @@ interface BuildMultiMetricQueryInput extends BuildQueryCommonInput {
   groupingMode: Extract<NormalizedInsightQuery, { resultKind: 'multi_metric_aggregate' }>['groupingMode'];
   requestedTimeInterval?: TimeIntervals;
   metricSelections: NormalizedInsightMetricSelection[];
+  digestMode?: AiInsightsDigestGranularity;
 }
 
 export function buildMultiMetricInsightQuery(
@@ -109,6 +111,7 @@ export function buildMultiMetricInsightQuery(
     periodMode: input.periodMode,
     chartType: input.chartType,
     metricSelections: input.metricSelections,
+    ...(input.digestMode ? { digestMode: input.digestMode } : {}),
   };
 }
 

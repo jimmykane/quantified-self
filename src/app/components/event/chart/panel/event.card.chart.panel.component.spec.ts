@@ -270,6 +270,37 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.tooltip?.appendTo).toBeUndefined();
     expect(option?.tooltip?.position).toBeUndefined();
     expect(option?.tooltip?.confine).toBe(true);
+    expect(option?.xAxis?.splitNumber).toBe(4);
+    expect(option?.xAxis?.interval).toBeUndefined();
+    expect(option?.xAxis?.minInterval).toBeUndefined();
+    expect(option?.xAxis?.maxInterval).toBeUndefined();
+    expect(option?.xAxis?.axisLabel?.hideOverlap).toBe(true);
+  });
+
+  it('uses adaptive mobile x-axis scaling for distance mode', async () => {
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      writable: true,
+      value: vi.fn().mockImplementation(() => ({
+        matches: true,
+        media: '',
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+
+    component.xAxisType = XAxisTypes.Distance;
+    component.xDomain = { start: 0, end: 5_000 };
+    await renderComponent();
+
+    const option = getRenderedOption();
+    expect(option?.xAxis?.splitNumber).toBe(4);
+    expect(option?.xAxis?.interval).toBeUndefined();
+    expect(option?.xAxis?.axisLabel?.hideOverlap).toBe(true);
   });
 
   it('connects sparse battery series across missing values and normalizes NaN points to null', async () => {
@@ -591,6 +622,63 @@ describe('EventCardChartPanelComponent', () => {
           minInterval: 60,
           maxInterval: 60,
           splitNumber: 6,
+        },
+        yAxis: {
+          inverse: false,
+          interval: 5,
+          min: 95,
+          max: 125,
+        }
+      },
+      {
+        notMerge: false,
+        lazyUpdate: true,
+        silent: true,
+      }
+    );
+  });
+
+  it('recomputes adaptive mobile x-axis scale from the zoomed visible range without forcing intervals', async () => {
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      writable: true,
+      value: vi.fn().mockImplementation(() => ({
+        matches: true,
+        media: '',
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+    component.xDomain = { start: 0, end: 3600 };
+    chart.getOption.mockReturnValue({
+      dataZoom: [
+        {
+          startValue: 0,
+          endValue: 300,
+        }
+      ]
+    });
+
+    await renderComponent();
+
+    const dataZoomHandler = chart.on.mock.calls.find(([eventName]) => eventName === 'datazoom')?.[1] as (() => void);
+    expect(dataZoomHandler).toBeTypeOf('function');
+
+    eChartsLoaderMock.setOption.mockClear();
+    dataZoomHandler();
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+
+    expect(eChartsLoaderMock.setOption).toHaveBeenCalledTimes(1);
+    expect(eChartsLoaderMock.setOption).toHaveBeenNthCalledWith(
+      1,
+      chart,
+      {
+        xAxis: {
+          splitNumber: 4,
         },
         yAxis: {
           inverse: false,

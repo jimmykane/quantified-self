@@ -196,7 +196,6 @@ describe('AppAuthService', () => {
             displayName: 'New User',
             photoURL: 'photo-url',
             emailVerified: true,
-            isAnonymous: false,
             metadata: {
                 creationTime: new Date().toISOString(),
                 lastSignInTime: new Date().toISOString(),

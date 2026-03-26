@@ -29,7 +29,7 @@ describe('pricingRedirectGuard', () => {
     });
 
     it('should redirect authenticated users to /subscriptions', async () => {
-        authServiceStub.authState$ = of({ uid: '123', isAnonymous: false } as any);
+        authServiceStub.authState$ = of({ uid: '123' } as any);
 
         const result = await firstValueFrom(
             TestBed.runInInjectionContext(() => pricingRedirectGuard({} as any, []))
@@ -39,7 +39,7 @@ describe('pricingRedirectGuard', () => {
         expect(result).toEqual({ redirectedTo: '/subscriptions' });
     });
 
-    it('should allow anonymous users to access /pricing', async () => {
+    it('should allow signed-out users to access /pricing', async () => {
         authServiceStub.authState$ = of(null);
 
         const result = await firstValueFrom(
@@ -50,14 +50,4 @@ describe('pricingRedirectGuard', () => {
         expect(router.parseUrl).not.toHaveBeenCalled();
     });
 
-    it('should allow anonymous auth sessions to access /pricing', async () => {
-        authServiceStub.authState$ = of({ uid: 'anon', isAnonymous: true } as any);
-
-        const result = await firstValueFrom(
-            TestBed.runInInjectionContext(() => pricingRedirectGuard({} as any, []))
-        );
-
-        expect(result).toBe(true);
-        expect(router.parseUrl).not.toHaveBeenCalled();
-    });
 });

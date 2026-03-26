@@ -173,10 +173,10 @@ export class AiInsightsPowerCurveChartComponent implements AfterViewInit, OnChan
           : '';
 
         return `
-          <div style="display:flex;align-items:center;gap:8px;">
+          <div style="display:flex;align-items:flex-start;gap:8px;min-width:0;">
             <span style="width:8px;height:8px;border-radius:999px;background:${entry.color};display:inline-block;"></span>
-            <span>${entry.seriesName ?? ''}</span>
-            <span style="margin-left:auto;font-weight:600;">${formatPowerCurvePowerLabel(value, true)}${wattsPerKgLabel}</span>
+            <span style="min-width:0;overflow-wrap:anywhere;">${entry.seriesName ?? ''}</span>
+            <span style="margin-left:auto;font-weight:600;white-space:nowrap;">${formatPowerCurvePowerLabel(value, true)}${wattsPerKgLabel}</span>
           </div>
         `;
       })
@@ -184,7 +184,7 @@ export class AiInsightsPowerCurveChartComponent implements AfterViewInit, OnChan
       .join('');
 
     return `
-      <div style="display:flex;flex-direction:column;gap:6px;min-width:200px;">
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0;max-width:min(220px, calc(100vw - 28px));">
         <div style="font-weight:600;">${title}</div>
         ${rows}
       </div>

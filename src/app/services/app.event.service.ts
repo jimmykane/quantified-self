@@ -9,7 +9,6 @@ import { ActivityJSONInterface } from '@sports-alliance/sports-lib';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
 import { EventExporterJSON } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
-import { Privacy } from '@sports-alliance/sports-lib';
 import { AppUserUtilities } from '../utils/app.user.utilities';
 import { AppWindowService } from './app.window.service';
 import {
@@ -869,10 +868,6 @@ export class AppEventService implements OnDestroy {
       [gpxString],
       { type: new EventExporterGPX().fileType },
     ));
-  }
-
-  public async setEventPrivacy(user: User, eventID: string, privacy: Privacy) {
-    return this.updateEventProperties(user, eventID, { privacy: privacy });
   }
 
   public ngOnDestroy() {

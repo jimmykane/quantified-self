@@ -85,7 +85,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 - **Dashboard** is your main activity overview.
 - **Services** is where you connect Garmin, Suunto, and COROS.
-- **Settings** is where you manage profile, privacy, charts, maps, and units.
+- **Settings** is where you manage profile details, consent options, charts, maps, and units.
 - **Subscription** is where you review your current plan.
 - **Release Notes** shows product updates and fixes.
 
@@ -153,6 +153,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Event lookup**: best matching event plus top-ranked matching events.
 - **Latest event**: most recent matching event in scope (single primary event card).
 - **Multi-metric aggregate**: combined chart for multiple metrics with merged summary cards.
+- **Digest narrative**: ask for a weekly, monthly, or yearly digest to get deterministic period-by-period summaries with explicit no-data periods.
 - **Anomaly callouts**: deterministic spike/drop/activity-mix shift callouts for aggregate and date-grouped multi-metric results.
 - **Confidence & evidence chips**: compact chips under supported AI result narratives and callouts that show confidence tier and linked deterministic evidence.
 - **Empty**: the request shape is valid but no matching data was found in scope.
@@ -343,12 +344,11 @@ Suunto and COROS history imports are queued jobs. Large ranges can take hours or
     id: 'data-and-privacy',
     icon: 'shield',
     title: 'Data & Privacy',
-    summary: 'Control visibility, analytics consent, account deletion, and privacy-related requests.',
+    summary: 'Manage analytics consent, account deletion, and privacy-related requests.',
     content: `## Privacy controls
 
-- Your profile and activity visibility can be controlled from Settings.
-- Sharing a profile or activity can make it public and copy a share link.
-- Privacy settings should be reviewed before sharing data externally.
+- Profile and activity visibility is managed by the platform and is not configurable in the app UI.
+- Share actions that auto-change visibility are disabled.
 - For AI Insights, we do **not** share your raw activity data with AI providers.
 - Only the minimum derived stats required to answer your prompt are sent.
 
@@ -356,7 +356,6 @@ Suunto and COROS history imports are queued jobs. Large ranges can take hours or
 
 In Settings you can:
 
-- change profile visibility,
 - turn anonymous usage statistics on or off,
 - turn marketing emails on or off,
 - and customize charts, maps, and units.

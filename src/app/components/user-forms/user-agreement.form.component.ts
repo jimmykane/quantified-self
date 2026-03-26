@@ -4,7 +4,6 @@ import { ErrorStateMatcher } from '@angular/material/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { LoggerService } from '../../services/logger.service';
-import { Privacy } from '@sports-alliance/sports-lib';
 import { AppUserInterface } from '../../models/app-user.interface';
 import { AppUserService } from '../../services/app.user.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
@@ -24,7 +23,6 @@ import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 
 export class UserAgreementFormComponent implements OnInit {
 
-  public privacy = Privacy;
   public user: AppUserInterface;
   public originalValues: {
     displayName: string;

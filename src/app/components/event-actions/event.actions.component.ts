@@ -5,15 +5,12 @@ import { AppEventService } from '../../services/app.event.service';
 import { AppFileService } from '../../services/app.file.service';
 import { EventFormComponent } from '../event-form/event.form.component';
 import { EventExporterJSON } from '@sports-alliance/sports-lib';
-import { Privacy } from '@sports-alliance/sports-lib';
-import { AppSharingService } from '../../services/app.sharing.service';
 import { User } from '@sports-alliance/sports-lib';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
 import { take } from 'rxjs/operators';
 import { Subscription } from 'rxjs';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
-import { Clipboard } from '@angular/cdk/clipboard';
 import { MatIconModule } from '@angular/material/icon';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 
@@ -65,8 +62,6 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     private changeDetectorRef: ChangeDetectorRef,
     private router: Router,
     private snackBar: MatSnackBar,
-    private clipboardService: Clipboard,
-    private sharingService: AppSharingService,
     private fileService: AppFileService,
     private http: HttpClient,
     private windowService: AppWindowService,
@@ -91,16 +86,6 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     this.changeDetectorRef.detectChanges();
   }
 
-  async share() {
-    if (this.event.privacy !== Privacy.Public) {
-      await this.eventService.setEventPrivacy(this.user, this.event.getID(), Privacy.Public);
-    }
-    this.clipboardService.copy(this.sharingService.getShareURLForEvent(this.user.uid, this.event.getID()));
-    this.analyticsService.logEvent('share', { method: 'event_actions', content_type: 'event', item_id: this.event.getID() });
-    this.snackBar.open('Privacy is changed to public and link copied to your clipboard', undefined, {
-      duration: 20000,
-    })
-  }
   isHydrated() {
     const activities = this.event.getActivities();
     return activities.some(activity => activity.getAllStreams().length > 0);

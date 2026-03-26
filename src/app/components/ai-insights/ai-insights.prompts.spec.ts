@@ -60,9 +60,12 @@ describe('ai-insights prompts', () => {
       'Show my running heart rate over time this year.',
       'Show my cycling power over time this year.',
       'Show my average pace trend for running this year.',
+      'Give me a yearly summary for all activities in the last 5 years.',
       'Show cadence vs power over time in the last 3 months for cycling.',
       'Compare my power curve over the last 3 months.',
       'Compare my weekly distance for the last 8 weeks.',
+      'Give me a yearly summary for all activities in 2022, 2023, 2024, 2025.',
+      'Give me a yearly summary for all activities in 2022, 2023, 2024, 2025, and current year.',
       'Compare my max heart rate in 2024 vs 2025.',
       'What is my best power curve?',
       'What was my maximum heartrate all time?',
@@ -103,6 +106,9 @@ describe('ai-insights prompts', () => {
     expect(pickerPromptSet.has('Show cadence vs power over time in the last 3 months for cycling.')).toBe(true);
     expect(pickerPromptSet.has('Show my average pace trend for running this year.')).toBe(true);
     expect(pickerPromptSet.has('Compare my weekly distance for the last 8 weeks.')).toBe(true);
+    expect(pickerPromptSet.has('Give me a yearly summary for all activities in the last 5 years.')).toBe(true);
+    expect(pickerPromptSet.has('Give me a yearly summary for all activities in 2022, 2023, 2024, 2025.')).toBe(true);
+    expect(pickerPromptSet.has('Give me a yearly summary for all activities in 2022, 2023, 2024, 2025, and current year.')).toBe(true);
     expect(pickerPromptSet.has('Compare my max heart rate in 2024 vs 2025.')).toBe(true);
     expect(pickerPromptSet.has('Compare my power curve over the last 3 months.')).toBe(true);
     expect(pickerPromptSet.has('What is my best power curve?')).toBe(true);

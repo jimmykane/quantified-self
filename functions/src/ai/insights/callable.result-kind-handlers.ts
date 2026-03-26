@@ -1,5 +1,6 @@
 import { TimeIntervals, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import type {
+  AiInsightsDigest,
   AiInsightPresentation,
   AiInsightSummary,
   AiInsightsAggregateOkResponse,
@@ -70,6 +71,7 @@ interface MultiMetricCallableResultKindContext extends CallableResultKindContext
   query: NormalizedInsightMultiMetricAggregateQuery;
   metricLabels: string[];
   metricResults: AiInsightsMultiMetricAggregateMetricResult[];
+  digest: AiInsightsDigest | null;
   executionResult: Extract<AiInsightsExecutionResult, { resultKind: 'multi_metric_aggregate' }>;
 }
 
@@ -300,6 +302,7 @@ const CALLABLE_RESULT_KIND_REGISTRY = {
       query: context.query,
       metricLabels: context.metricLabels,
       metricResults: context.metricResults,
+      digest: context.digest ?? undefined,
       presentation: isEmpty ? context.emptyPresentation : context.presentation,
       clientLocale: context.input.clientLocale,
       unitSettings: context.unitSettings,
@@ -314,6 +317,7 @@ const CALLABLE_RESULT_KIND_REGISTRY = {
       }),
       query: context.query,
       metricResults: context.metricResults,
+      ...(context.digest ? { digest: context.digest } : {}),
       presentation: context.presentation,
     } satisfies AiInsightsMultiMetricAggregateOkResponse),
   },

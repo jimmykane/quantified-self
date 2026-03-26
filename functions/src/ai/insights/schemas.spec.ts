@@ -127,6 +127,130 @@ describe('AiInsightsResponseSchema', () => {
     expect(parsed.success).toBe(true);
   });
 
+  it('parses multi-metric digest responses with period-level payloads', () => {
+    const parsed = AiInsightsResponseSchema.safeParse({
+      status: 'ok',
+      resultKind: 'multi_metric_aggregate',
+      narrative: 'Weekly digest summary.',
+      query: {
+        resultKind: 'multi_metric_aggregate',
+        groupingMode: 'date',
+        categoryType: ChartDataCategoryTypes.DateType,
+        requestedTimeInterval: TimeIntervals.Weekly,
+        activityTypeGroups: [],
+        activityTypes: [ActivityTypes.Cycling],
+        dateRange: {
+          kind: 'bounded',
+          startDate: '2026-01-01T00:00:00.000Z',
+          endDate: '2026-03-18T23:59:59.999Z',
+          timezone: 'UTC',
+          source: 'prompt',
+        },
+        chartType: ChartTypes.LinesVertical,
+        digestMode: 'weekly',
+        metricSelections: [
+          {
+            metricKey: 'distance',
+            dataType: 'Distance',
+            valueType: ChartDataValueTypes.Total,
+          },
+          {
+            metricKey: 'duration',
+            dataType: 'Duration',
+            valueType: ChartDataValueTypes.Total,
+          },
+        ],
+      },
+      metricResults: [
+        {
+          metricKey: 'distance',
+          metricLabel: 'Distance',
+          query: {
+            resultKind: 'aggregate',
+            dataType: 'Distance',
+            valueType: ChartDataValueTypes.Total,
+            categoryType: ChartDataCategoryTypes.DateType,
+            requestedTimeInterval: TimeIntervals.Weekly,
+            activityTypeGroups: [],
+            activityTypes: [ActivityTypes.Cycling],
+            dateRange: {
+              kind: 'bounded',
+              startDate: '2026-01-01T00:00:00.000Z',
+              endDate: '2026-03-18T23:59:59.999Z',
+              timezone: 'UTC',
+              source: 'prompt',
+            },
+            chartType: ChartTypes.LinesVertical,
+          },
+          aggregation: {
+            dataType: 'Distance',
+            valueType: ChartDataValueTypes.Total,
+            categoryType: ChartDataCategoryTypes.DateType,
+            resolvedTimeInterval: TimeIntervals.Weekly,
+            buckets: [],
+          },
+          summary: {
+            matchedEventCount: 0,
+            overallAggregateValue: null,
+            peakBucket: null,
+            lowestBucket: null,
+            latestBucket: null,
+            activityMix: null,
+            bucketCoverage: null,
+            trend: null,
+          },
+          presentation: {
+            title: 'Distance',
+            chartType: ChartTypes.LinesVertical,
+          },
+        },
+      ],
+      digest: {
+        granularity: 'weekly',
+        periodCount: 2,
+        nonEmptyPeriodCount: 1,
+        periods: [
+          {
+            bucketKey: '2026-W09',
+            time: Date.parse('2026-02-23T00:00:00.000Z'),
+            hasData: true,
+            metrics: [
+              {
+                metricKey: 'distance',
+                metricLabel: 'Distance',
+                dataType: 'Distance',
+                valueType: ChartDataValueTypes.Total,
+                aggregateValue: 40000,
+                totalCount: 2,
+              },
+            ],
+          },
+          {
+            bucketKey: '2026-W10',
+            time: Date.parse('2026-03-02T00:00:00.000Z'),
+            hasData: false,
+            metrics: [
+              {
+                metricKey: 'distance',
+                metricLabel: 'Distance',
+                dataType: 'Distance',
+                valueType: ChartDataValueTypes.Total,
+                aggregateValue: null,
+                totalCount: 0,
+              },
+            ],
+          },
+        ],
+      },
+      presentation: {
+        title: 'Digest',
+        chartType: ChartTypes.LinesVertical,
+      },
+    });
+
+    expect(parsed.success).toBe(true);
+  });
+
   it('rejects power_curve responses when series exceed the safety max', () => {
     const seriesCount = AI_INSIGHTS_POWER_CURVE_COMPARE_SERIES_SAFETY_MAX + 1;
     const parsed = AiInsightsResponseSchema.safeParse({

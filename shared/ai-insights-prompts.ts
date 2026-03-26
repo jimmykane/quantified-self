@@ -487,6 +487,13 @@ export const AI_INSIGHTS_CURATED_PROMPT_CATALOG = [
     metricKey: 'pace',
   },
   {
+    id: 'popular-yearly-summary-all-activities-last-5-years',
+    prompt: 'Give me a yearly summary for all activities in the last 5 years.',
+    category: 'Progress over time',
+    featured: false,
+    surfaces: ['picker'],
+  },
+  {
     id: 'popular-cadence-power-cycling-3-months',
     prompt: 'Show cadence vs power over time in the last 3 months for cycling.',
     category: 'Compare & explore',
@@ -514,6 +521,20 @@ export const AI_INSIGHTS_CURATED_PROMPT_CATALOG = [
     featured: true,
     surfaces: ['hero', 'picker'],
     metricKey: 'distance',
+  },
+  {
+    id: 'popular-yearly-summary-all-activities-2022-2025',
+    prompt: 'Give me a yearly summary for all activities in 2022, 2023, 2024, 2025.',
+    category: 'Compare & explore',
+    featured: false,
+    surfaces: ['picker'],
+  },
+  {
+    id: 'popular-yearly-summary-all-activities-2022-current-year',
+    prompt: 'Give me a yearly summary for all activities in 2022, 2023, 2024, 2025, and current year.',
+    category: 'Compare & explore',
+    featured: false,
+    surfaces: ['picker'],
   },
   {
     id: 'popular-compare-heart-rate-2024-vs-2025',

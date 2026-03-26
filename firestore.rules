@@ -9,9 +9,21 @@ service cloud.firestore {
     // document. The wildcard expression {userId} makes the userId variable
     // available in rules.
     match /users/{userID} {
-      allow read: if resource.data.privacy == 'public';
-      allow read, write: if request.auth.uid == userID;
-      allow create: if request.auth.uid != null;
+      function isOwner() {
+        return request.auth != null && request.auth.uid == userID;
+      }
+
+      allow read: if isOwner();
+      allow create: if isOwner()
+        && (
+          !('creationDate' in request.resource.data)
+          || request.resource.data.creationDate is timestamp
+        );
+      allow update: if isOwner()
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'creationDate'
+        ]);
+      allow delete: if false;
       
       // Legal Agreements (Write-Once / Monotonic)
       match /legal/agreements {
@@ -79,7 +91,6 @@ service cloud.firestore {
       }
 
         match /events/{eventID} {
-          allow read: if resource.data.privacy == 'public';
           // RESTRICTED ACCESS: Must be owner AND have a valid role (Free, Basic, or PRO)
           // TEMPORARILY DISABLED FOR TESTING - Re-enable when ready to enforce paywall
           // allow read, write: if request.auth.uid == userID && isSubscribed();
@@ -111,7 +122,6 @@ service cloud.firestore {
               );
             }
 
-            allow read: if resource.data.privacy == 'public';
             allow read: if request.auth.uid == userID;
             allow create: if false;
             allow delete: if false;

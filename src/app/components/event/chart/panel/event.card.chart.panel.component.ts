@@ -614,7 +614,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       },
       brush: this.buildBrushOption(chartStyle),
       xAxis: {
-        ...(buildEventCanonicalXAxisScaleOptions(this.xAxisType, domain) || {}),
+        ...(buildEventCanonicalXAxisScaleOptions(this.xAxisType, domain, this.isMobile) || {}),
         type: this.xAxisType === XAxisTypes.Time ? 'time' : 'value',
         min: domain.start,
         max: domain.end,
@@ -631,6 +631,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           color: axisLabelColor,
           fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
           fontSize: axisLabelFontSize,
+          hideOverlap: true,
           margin: this.isMobile ? 10 : 12,
           formatter: (value: number) => formatEventXAxisValue(
             Number(value),
@@ -1471,7 +1472,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return;
     }
 
-    const scaleOptions = buildEventCanonicalXAxisScaleOptions(this.xAxisType, this.getVisibleXAxisRange());
+    const scaleOptions = buildEventCanonicalXAxisScaleOptions(this.xAxisType, this.getVisibleXAxisRange(), this.isMobile);
     const yAxisConfig = buildEventPanelYAxisConfig({
       panel: this.panel,
       visibleRange: this.getVisibleXAxisRange(),

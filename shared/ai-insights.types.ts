@@ -95,6 +95,7 @@ export interface NormalizedInsightMultiMetricAggregateQuery extends NormalizedIn
   groupingMode: AiInsightsMultiMetricGroupingMode;
   categoryType: ChartDataCategoryTypes.DateType;
   metricSelections: NormalizedInsightMetricSelection[];
+  digestMode?: AiInsightsDigestGranularity;
 }
 
 export interface NormalizedInsightPowerCurveQuery extends NormalizedInsightQueryBase {
@@ -308,6 +309,34 @@ export interface AiInsightPowerCurve {
   series: AiInsightPowerCurveSeries[];
 }
 
+export type AiInsightsDigestGranularity =
+  | 'weekly'
+  | 'monthly'
+  | 'yearly';
+
+export interface AiInsightsDigestMetric {
+  metricKey: AiInsightsPromptMetricKey;
+  metricLabel: string;
+  dataType: string;
+  valueType: ChartDataValueTypes;
+  aggregateValue: number | null;
+  totalCount: number;
+}
+
+export interface AiInsightsDigestPeriod {
+  bucketKey: string | number;
+  time: number;
+  hasData: boolean;
+  metrics: AiInsightsDigestMetric[];
+}
+
+export interface AiInsightsDigest {
+  granularity: AiInsightsDigestGranularity;
+  periodCount: number;
+  nonEmptyPeriodCount: number;
+  periods: AiInsightsDigestPeriod[];
+}
+
 export type AiInsightStatementChipType =
   | 'confidence'
   | 'evidence';
@@ -383,6 +412,7 @@ export interface AiInsightsMultiMetricAggregateOkResponse {
   statementChips?: AiInsightStatementChip[];
   query: NormalizedInsightMultiMetricAggregateQuery;
   metricResults: AiInsightsMultiMetricAggregateMetricResult[];
+  digest?: AiInsightsDigest;
   presentation: AiInsightPresentation;
 }
 
@@ -411,6 +441,7 @@ export interface AiInsightsEmptyResponse {
   query: NormalizedInsightQuery;
   aggregation: EventStatAggregationResult;
   summary: AiInsightSummary;
+  digest?: AiInsightsDigest;
   presentation: AiInsightPresentation & {
     emptyState: string;
   };

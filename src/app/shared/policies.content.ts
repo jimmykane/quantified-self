@@ -18,8 +18,8 @@ export const POLICY_CONTENT: PolicyItem[] = [
         icon: 'lock_outline',
         content: [
             '<strong>Encryption:</strong> Your data are stored and held encrypted by Google (Google Cloud).',
-            '<strong>Control:</strong> You choose what part of your data to make public or private (profile, individual data).',
-            '<strong>Default Privacy:</strong> We provide all default privacy settings to private; only seen by you unless you choose otherwise.',
+            '<strong>Control:</strong> Profile and activity visibility is managed by platform policy and is not configurable in the app UI.',
+            '<strong>Default Privacy:</strong> Visibility defaults to private and is only seen by your account unless platform policy changes.',
             '<strong>No Data Sales:</strong> We don\'t sell or send your data to any other 3rd party nor do we process your private data in any other way rather than allowing you to visualize them.',
             '<strong>Legal Basis:</strong> We process your data based on: (a) your consent for optional features like analytics, (b) contractual necessity to provide the service you subscribed to, and (c) our legitimate interest in maintaining service security.',
             '<strong>Third-Party Processors:</strong> Your data is processed by: Google Cloud (hosting, EU region), Stripe (payments), and the fitness service providers you connect (Garmin, Suunto, COROS, Polar) solely to sync your activity data.'

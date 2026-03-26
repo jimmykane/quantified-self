@@ -129,6 +129,103 @@ describe('Firestore Security Rules', () => {
         const otherId = 'other_user';
         const eventId = 'event_123';
 
+        describe('User Root Document (users/{uid})', () => {
+            it('should allow user to create their own user document', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertSucceeds(db.collection('users').doc(userId).set({
+                    privacy: 'private'
+                }));
+            });
+
+            it('should allow user to create their own user document with creationDate', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertSucceeds(db.collection('users').doc(userId).set({
+                    privacy: 'private',
+                    creationDate: new Date('2026-03-26T00:00:00.000Z')
+                }));
+            });
+
+            it('should deny user from updating creationDate after the document exists', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().collection('users').doc(userId).set({
+                        privacy: 'private',
+                        creationDate: new Date('2026-03-01T00:00:00.000Z')
+                    });
+                });
+
+                await assertFails(db.collection('users').doc(userId).update({
+                    creationDate: new Date('2026-03-15T00:00:00.000Z')
+                }));
+            });
+
+            it('should allow user to update non-creationDate fields after creationDate is set', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().collection('users').doc(userId).set({
+                        privacy: 'private',
+                        creationDate: new Date('2026-03-01T00:00:00.000Z')
+                    });
+                });
+
+                await assertSucceeds(db.collection('users').doc(userId).update({
+                    displayName: 'Updated Name'
+                }));
+            });
+
+            it('should deny user from deleting their own user document', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().collection('users').doc(userId).set({
+                        privacy: 'private',
+                        displayName: 'Delete Attempt'
+                    });
+                });
+
+                await assertFails(db.collection('users').doc(userId).delete());
+            });
+
+            it('should deny user from creating another user document', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertFails(db.collection('users').doc(otherId).set({
+                    privacy: 'public',
+                    displayName: 'IDOR_TEST'
+                }));
+            });
+
+            it('should deny unauthenticated create on user document', async () => {
+                const db = testEnv.unauthenticatedContext().firestore();
+                await assertFails(db.collection('users').doc(userId).set({
+                    privacy: 'public'
+                }));
+            });
+
+            it('should deny unauthenticated read of user document even when privacy is public', async () => {
+                const db = testEnv.unauthenticatedContext().firestore();
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().collection('users').doc(userId).set({
+                        privacy: 'public'
+                    });
+                });
+
+                await assertFails(db.collection('users').doc(userId).get());
+            });
+
+            it('should deny other authenticated users from reading a public user document', async () => {
+                const db = testEnv.authenticatedContext(otherId).firestore();
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().collection('users').doc(userId).set({
+                        privacy: 'public'
+                    });
+                });
+
+                await assertFails(db.collection('users').doc(userId).get());
+            });
+        });
+
         describe('Legal Agreements (users/{uid}/legal/agreements)', () => {
             it('should allow user to read their own agreements', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
@@ -469,6 +566,30 @@ describe('Firestore Security Rules', () => {
                 }));
             });
 
+            it('should deny unauthenticated read of public event', async () => {
+                const db = testEnv.unauthenticatedContext().firestore();
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/events/${eventId}`).set({
+                        name: 'Morning Run',
+                        privacy: 'public'
+                    });
+                });
+
+                await assertFails(db.collection(`users/${userId}/events`).doc(eventId).get());
+            });
+
+            it('should deny other authenticated users from reading a public event', async () => {
+                const db = testEnv.authenticatedContext(otherId).firestore();
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/events/${eventId}`).set({
+                        name: 'Morning Run',
+                        privacy: 'public'
+                    });
+                });
+
+                await assertFails(db.collection(`users/${userId}/events`).doc(eventId).get());
+            });
+
             it('should allow owner updating event when original file metadata is untouched', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
                 await testEnv.withSecurityRulesDisabled(async (context) => {
@@ -740,7 +861,7 @@ describe('Firestore Security Rules', () => {
             await assertFails(db.collection(`users/${userId}/activities`).doc(activityId).get());
         });
 
-        it('should ALLOW unauthenticated users to read PUBLIC activities', async () => {
+        it('should deny unauthenticated users from reading public activities', async () => {
             const db = testEnv.unauthenticatedContext().firestore();
             await testEnv.withSecurityRulesDisabled(async (context) => {
                 await context.firestore().collection(`users/${userId}/activities`).doc('public_activity').set({
@@ -748,10 +869,10 @@ describe('Firestore Security Rules', () => {
                     privacy: 'public'
                 });
             });
-            await assertSucceeds(db.collection(`users/${userId}/activities`).doc('public_activity').get());
+            await assertFails(db.collection(`users/${userId}/activities`).doc('public_activity').get());
         });
 
-        it('should ALLOW other authenticated users to read PUBLIC activities', async () => {
+        it('should deny other authenticated users from reading public activities', async () => {
             const db = testEnv.authenticatedContext(otherId).firestore();
             await testEnv.withSecurityRulesDisabled(async (context) => {
                 await context.firestore().collection(`users/${userId}/activities`).doc('public_activity_2').set({
@@ -759,7 +880,7 @@ describe('Firestore Security Rules', () => {
                     privacy: 'public'
                 });
             });
-            await assertSucceeds(db.collection(`users/${userId}/activities`).doc('public_activity_2').get());
+            await assertFails(db.collection(`users/${userId}/activities`).doc('public_activity_2').get());
         });
 
     });

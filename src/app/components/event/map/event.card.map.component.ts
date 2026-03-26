@@ -53,6 +53,7 @@ import {
   EventTrackRenderData,
 } from './event-card-map.manager';
 import { isEventLapTypeAllowed } from '../../../helpers/event-lap-type.helper';
+import { isStyleReady } from '../../../services/map/mapbox-style-ready.utils';
 
 interface MapViewSettingsState {
   showLaps: boolean;
@@ -494,33 +495,58 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
         unit: 'metric'
       }), 'bottom-left');
 
-      let styleReadyHandled = false;
-      const applyInitialMapState = (source: 'style.load' | 'load') => {
-        if (styleReadyHandled) {
+      type StyleReadySource = 'style.load' | 'style.import.load' | 'styledata' | 'idle' | 'load';
+      let initialStyleReadyHandled = false;
+      const applyStyleReadyState = (source: StyleReadySource) => {
+        if (!this.isMapStyleReady(map)) {
           return;
         }
-        styleReadyHandled = true;
-        this.logPerformance('initializeMap:styleReady', initializeStartedAt, {
-          source,
-          activitiesPrepared: this.activitiesMapData.length,
-        });
-        this.logMapSettingsState(`map-${source}`, {
-          remoteSettings: this.userSettingsQuery.mapSettings(),
-          localSettings: this.mapViewSettings(),
-          applyingTerrain: this.is3D,
-        });
+
+        const wasReady = this.mapReady;
         this.mapReady = true;
-        const flushedDeferred = this.flushDeferredMapActivities(`styleReady:${source}`);
-        if (!flushedDeferred) {
-          this.renderMapData(true);
+        if (!wasReady) {
+          this.logger.log('[EventCardMapPerf] mapStyle:ready', {
+            source,
+            deferredRequests: this.deferredMapActivities?.requestCount || 0,
+            activitiesPrepared: this.activitiesMapData.length,
+          });
         }
-        this.mapManager.toggleTerrain(this.is3D, false);
-        this.apiLoaded.set(true);
-        this.changeDetectorRef.markForCheck();
+
+        const flushedDeferred = this.flushDeferredMapActivities(`styleReady:${source}`);
+        if (!initialStyleReadyHandled) {
+          initialStyleReadyHandled = true;
+          this.logPerformance('initializeMap:styleReady', initializeStartedAt, {
+            source,
+            activitiesPrepared: this.activitiesMapData.length,
+          });
+          this.logMapSettingsState(`map-${source}`, {
+            remoteSettings: this.userSettingsQuery.mapSettings(),
+            localSettings: this.mapViewSettings(),
+            applyingTerrain: this.is3D,
+          });
+          if (!flushedDeferred) {
+            this.renderMapData(true);
+          }
+          this.mapManager.toggleTerrain(this.is3D, false);
+          this.apiLoaded.set(true);
+          this.changeDetectorRef.markForCheck();
+        }
       };
 
       map.on('style.load', () => {
-        this.zone.run(() => applyInitialMapState('style.load'));
+        this.zone.run(() => applyStyleReadyState('style.load'));
+      });
+
+      map.on('style.import.load', () => {
+        this.zone.run(() => applyStyleReadyState('style.import.load'));
+      });
+
+      map.on('styledata', () => {
+        this.zone.run(() => applyStyleReadyState('styledata'));
+      });
+
+      map.on('idle', () => {
+        this.zone.run(() => applyStyleReadyState('idle'));
       });
 
       map.on('load', () => {
@@ -528,7 +554,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
           this.logPerformance('initializeMap:mapLoadEvent', initializeStartedAt, {
             activitiesPrepared: this.activitiesMapData.length,
           });
-          applyInitialMapState('load');
+          applyStyleReadyState('load');
         });
       });
 
@@ -700,10 +726,19 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
 
   private renderMapData(shouldFitBounds: boolean) {
     const renderStartedAt = this.nowMs();
-    if (!this.mapReady || !this.mapInstance()) {
+    const map = this.mapInstance();
+    if (!this.mapReady || !map) {
       this.logger.log('[EventCardMapPerf] renderMapData:skipped', {
         mapReady: this.mapReady,
-        hasMapInstance: !!this.mapInstance(),
+        hasMapInstance: !!map,
+        shouldFitBounds,
+      });
+      return;
+    }
+    if (!this.isMapStyleReady(map)) {
+      this.mapReady = false;
+      this.deferMapActivitiesRequest(shouldFitBounds, 'renderMapData:style-not-ready');
+      this.logger.log('[EventCardMapPerf] renderMapData:skippedStyleNotReady', {
         shouldFitBounds,
       });
       return;
@@ -1071,20 +1106,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
 
   private requestMapActivities(shouldFitBounds: boolean, reason: string): void {
     if (!this.mapReady) {
-      const previous = this.deferredMapActivities;
-      this.deferredMapActivities = {
-        shouldFitBounds: (previous?.shouldFitBounds || false) || shouldFitBounds,
-        requestCount: (previous?.requestCount || 0) + 1,
-        lastReason: reason,
-      };
-      this.logger.log('[EventCardMapPerf] mapActivities:deferred', {
-        reason,
-        shouldFitBounds,
-        mergedShouldFitBounds: this.deferredMapActivities.shouldFitBounds,
-        requestCount: this.deferredMapActivities.requestCount,
-        hasMapInstance: !!this.mapInstance(),
-        mapReady: this.mapReady,
-      });
+      this.deferMapActivitiesRequest(shouldFitBounds, reason);
       return;
     }
 
@@ -1106,6 +1128,27 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     });
     this.mapActivities(++this.processSequence, deferred.shouldFitBounds);
     return true;
+  }
+
+  private deferMapActivitiesRequest(shouldFitBounds: boolean, reason: string): void {
+    const previous = this.deferredMapActivities;
+    this.deferredMapActivities = {
+      shouldFitBounds: (previous?.shouldFitBounds || false) || shouldFitBounds,
+      requestCount: (previous?.requestCount || 0) + 1,
+      lastReason: reason,
+    };
+    this.logger.log('[EventCardMapPerf] mapActivities:deferred', {
+      reason,
+      shouldFitBounds,
+      mergedShouldFitBounds: this.deferredMapActivities.shouldFitBounds,
+      requestCount: this.deferredMapActivities.requestCount,
+      hasMapInstance: !!this.mapInstance(),
+      mapReady: this.mapReady,
+    });
+  }
+
+  private isMapStyleReady(map: any): boolean {
+    return isStyleReady(map);
   }
 
   private resolveLapPositionByIndex(

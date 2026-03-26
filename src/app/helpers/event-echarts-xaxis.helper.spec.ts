@@ -85,4 +85,16 @@ describe('event-echarts-xaxis.helper', () => {
       splitNumber: 6,
     });
   });
+
+  it('builds adaptive split-only mobile scale options for all event axis modes', () => {
+    expect(buildEventCanonicalXAxisScaleOptions(XAxisTypes.Time, { start: 0, end: 120_000 }, true)).toEqual({
+      splitNumber: 4,
+    });
+    expect(buildEventCanonicalXAxisScaleOptions(XAxisTypes.Duration, { start: 0, end: 120 }, true)).toEqual({
+      splitNumber: 4,
+    });
+    expect(buildEventCanonicalXAxisScaleOptions(XAxisTypes.Distance, { start: 0, end: 1000 }, true)).toEqual({
+      splitNumber: 4,
+    });
+  });
 });

@@ -246,6 +246,36 @@ const multiMetricQuery = {
   ],
 };
 
+const yearlyDigestMultiMetricQuery = {
+  ...multiMetricQuery,
+  requestedTimeInterval: TimeIntervals.Yearly,
+  dateRange: {
+    kind: 'bounded' as const,
+    startDate: '2024-01-01T00:00:00.000Z',
+    endDate: '2026-12-31T23:59:59.999Z',
+    timezone: 'UTC',
+    source: 'prompt' as const,
+  },
+  metricSelections: [
+    {
+      metricKey: 'distance',
+      dataType: 'Distance',
+      valueType: ChartDataValueTypes.Total,
+    },
+    {
+      metricKey: 'duration',
+      dataType: 'Duration',
+      valueType: ChartDataValueTypes.Total,
+    },
+    {
+      metricKey: 'ascent',
+      dataType: 'Ascent',
+      valueType: ChartDataValueTypes.Total,
+    },
+  ],
+  digestMode: 'yearly' as const,
+};
+
 const powerCurveQuery = {
   resultKind: 'power_curve' as const,
   mode: 'best' as const,
@@ -637,6 +667,140 @@ describe('aiInsights callable', () => {
     });
     expect(hoisted.reserveAiInsightsQuotaForRequest).toHaveBeenCalledTimes(1);
     expect(hoisted.summarizeAiInsightResult).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns yearly digest payloads for multi-metric digest responses', async () => {
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'ok',
+      query: yearlyDigestMultiMetricQuery,
+    });
+    hoisted.getInsightMetricDefinition.mockImplementation((metricKey: string) => {
+      if (metricKey === 'distance') {
+        return { key: 'distance', label: 'distance' };
+      }
+      if (metricKey === 'duration') {
+        return { key: 'duration', label: 'duration' };
+      }
+      if (metricKey === 'ascent') {
+        return { key: 'ascent', label: 'ascent' };
+      }
+      return null;
+    });
+    hoisted.executeAiInsightsQuery.mockResolvedValue({
+      resultKind: 'multi_metric_aggregate',
+      matchedEventsCount: 4,
+      matchedActivityTypeCounts: [
+        {
+          activityType: ActivityTypes.Cycling,
+          eventCount: 4,
+        },
+      ],
+      metricResults: [
+        {
+          metricKey: 'distance',
+          matchedEventsCount: 2,
+          matchedActivityTypeCounts: [
+            {
+              activityType: ActivityTypes.Cycling,
+              eventCount: 2,
+            },
+          ],
+          aggregation: {
+            dataType: 'Distance',
+            valueType: ChartDataValueTypes.Total,
+            categoryType: ChartDataCategoryTypes.DateType,
+            resolvedTimeInterval: TimeIntervals.Yearly,
+            buckets: [
+              {
+                bucketKey: '2025',
+                time: Date.parse('2025-01-01T00:00:00.000Z'),
+                totalCount: 2,
+                aggregateValue: 310_000,
+                seriesValues: { Cycling: 310_000 },
+                seriesCounts: { Cycling: 2 },
+              },
+            ],
+          },
+        },
+        {
+          metricKey: 'duration',
+          matchedEventsCount: 2,
+          matchedActivityTypeCounts: [
+            {
+              activityType: ActivityTypes.Cycling,
+              eventCount: 2,
+            },
+          ],
+          aggregation: {
+            dataType: 'Duration',
+            valueType: ChartDataValueTypes.Total,
+            categoryType: ChartDataCategoryTypes.DateType,
+            resolvedTimeInterval: TimeIntervals.Yearly,
+            buckets: [
+              {
+                bucketKey: '2026',
+                time: Date.parse('2026-01-01T00:00:00.000Z'),
+                totalCount: 2,
+                aggregateValue: 42_000,
+                seriesValues: { Cycling: 42_000 },
+                seriesCounts: { Cycling: 2 },
+              },
+            ],
+          },
+        },
+        {
+          metricKey: 'ascent',
+          matchedEventsCount: 0,
+          matchedActivityTypeCounts: [],
+          aggregation: {
+            dataType: 'Ascent',
+            valueType: ChartDataValueTypes.Total,
+            categoryType: ChartDataCategoryTypes.DateType,
+            resolvedTimeInterval: TimeIntervals.Yearly,
+            buckets: [],
+          },
+        },
+      ],
+    });
+
+    const result = await aiInsights({
+      prompt: 'Give me a yearly digest for cycling.',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(hoisted.summarizeAiInsightResult).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'ok',
+      query: yearlyDigestMultiMetricQuery,
+      digest: expect.objectContaining({
+        granularity: 'yearly',
+        periodCount: 3,
+        nonEmptyPeriodCount: 2,
+      }),
+    }));
+    expect(result).toMatchObject({
+      status: 'ok',
+      resultKind: 'multi_metric_aggregate',
+      query: yearlyDigestMultiMetricQuery,
+      digest: {
+        granularity: 'yearly',
+        periodCount: 3,
+        nonEmptyPeriodCount: 2,
+        periods: [
+          {
+            time: Date.parse('2024-01-01T00:00:00.000Z'),
+            hasData: false,
+          },
+          {
+            time: Date.parse('2025-01-01T00:00:00.000Z'),
+            hasData: true,
+          },
+          {
+            time: Date.parse('2026-01-01T00:00:00.000Z'),
+            hasData: true,
+          },
+        ],
+      },
+    });
   });
 
   it('returns an ok response when aggregation buckets exist', async () => {
@@ -1324,6 +1488,178 @@ describe('aiInsights callable', () => {
       presentation: expect.objectContaining({
         emptyState: 'No matching events were found for this insight in the requested range.',
       }),
+    });
+  });
+
+  it('returns yearly digest payloads on empty multi-metric digest responses', async () => {
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'ok',
+      query: yearlyDigestMultiMetricQuery,
+    });
+    hoisted.getInsightMetricDefinition.mockImplementation((metricKey: string) => {
+      if (metricKey === 'distance') {
+        return { key: 'distance', label: 'distance' };
+      }
+      if (metricKey === 'duration') {
+        return { key: 'duration', label: 'duration' };
+      }
+      if (metricKey === 'ascent') {
+        return { key: 'ascent', label: 'ascent' };
+      }
+      return null;
+    });
+    hoisted.executeAiInsightsQuery.mockResolvedValue({
+      resultKind: 'multi_metric_aggregate',
+      matchedEventsCount: 0,
+      matchedActivityTypeCounts: [],
+      metricResults: [
+        {
+          metricKey: 'distance',
+          matchedEventsCount: 0,
+          matchedActivityTypeCounts: [],
+          aggregation: {
+            dataType: 'Distance',
+            valueType: ChartDataValueTypes.Total,
+            categoryType: ChartDataCategoryTypes.DateType,
+            resolvedTimeInterval: TimeIntervals.Yearly,
+            buckets: [],
+          },
+        },
+        {
+          metricKey: 'duration',
+          matchedEventsCount: 0,
+          matchedActivityTypeCounts: [],
+          aggregation: {
+            dataType: 'Duration',
+            valueType: ChartDataValueTypes.Total,
+            categoryType: ChartDataCategoryTypes.DateType,
+            resolvedTimeInterval: TimeIntervals.Yearly,
+            buckets: [],
+          },
+        },
+        {
+          metricKey: 'ascent',
+          matchedEventsCount: 0,
+          matchedActivityTypeCounts: [],
+          aggregation: {
+            dataType: 'Ascent',
+            valueType: ChartDataValueTypes.Total,
+            categoryType: ChartDataCategoryTypes.DateType,
+            resolvedTimeInterval: TimeIntervals.Yearly,
+            buckets: [],
+          },
+        },
+      ],
+    });
+
+    const result = await aiInsights({
+      prompt: 'Give me a yearly digest for cycling.',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(hoisted.summarizeAiInsightResult).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'empty',
+      query: yearlyDigestMultiMetricQuery,
+      digest: expect.objectContaining({
+        granularity: 'yearly',
+        periodCount: 3,
+        nonEmptyPeriodCount: 0,
+      }),
+    }));
+    expect(result).toMatchObject({
+      status: 'empty',
+      query: yearlyDigestMultiMetricQuery,
+      digest: {
+        granularity: 'yearly',
+        periodCount: 3,
+        nonEmptyPeriodCount: 0,
+      },
+    });
+  });
+
+  it('returns an explicit empty digest payload for all-time yearly digest requests without buckets', async () => {
+    const allTimeYearlyDigestQuery = {
+      ...yearlyDigestMultiMetricQuery,
+      dateRange: {
+        kind: 'all_time' as const,
+        timezone: 'UTC',
+        source: 'prompt' as const,
+      },
+    };
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'ok',
+      query: allTimeYearlyDigestQuery,
+    });
+    hoisted.getInsightMetricDefinition.mockImplementation((metricKey: string) => {
+      if (metricKey === 'distance') {
+        return { key: 'distance', label: 'distance' };
+      }
+      if (metricKey === 'duration') {
+        return { key: 'duration', label: 'duration' };
+      }
+      if (metricKey === 'ascent') {
+        return { key: 'ascent', label: 'ascent' };
+      }
+      return null;
+    });
+    hoisted.executeAiInsightsQuery.mockResolvedValue({
+      resultKind: 'multi_metric_aggregate',
+      matchedEventsCount: 0,
+      matchedActivityTypeCounts: [],
+      metricResults: [
+        {
+          metricKey: 'distance',
+          matchedEventsCount: 0,
+          matchedActivityTypeCounts: [],
+          aggregation: {
+            dataType: 'Distance',
+            valueType: ChartDataValueTypes.Total,
+            categoryType: ChartDataCategoryTypes.DateType,
+            resolvedTimeInterval: TimeIntervals.Yearly,
+            buckets: [],
+          },
+        },
+        {
+          metricKey: 'duration',
+          matchedEventsCount: 0,
+          matchedActivityTypeCounts: [],
+          aggregation: {
+            dataType: 'Duration',
+            valueType: ChartDataValueTypes.Total,
+            categoryType: ChartDataCategoryTypes.DateType,
+            resolvedTimeInterval: TimeIntervals.Yearly,
+            buckets: [],
+          },
+        },
+        {
+          metricKey: 'ascent',
+          matchedEventsCount: 0,
+          matchedActivityTypeCounts: [],
+          aggregation: {
+            dataType: 'Ascent',
+            valueType: ChartDataValueTypes.Total,
+            categoryType: ChartDataCategoryTypes.DateType,
+            resolvedTimeInterval: TimeIntervals.Yearly,
+            buckets: [],
+          },
+        },
+      ],
+    });
+
+    const result = await aiInsights({
+      prompt: 'Give me a yearly digest for all activities all time.',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(result).toMatchObject({
+      status: 'empty',
+      query: allTimeYearlyDigestQuery,
+      digest: {
+        granularity: 'yearly',
+        periodCount: 0,
+        nonEmptyPeriodCount: 0,
+        periods: [],
+      },
     });
   });
 

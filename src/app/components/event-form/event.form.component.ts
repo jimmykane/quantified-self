@@ -1,12 +1,10 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, Input, OnInit } from '@angular/core';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../services/app.event.service';
-import { FormBuilder, UntypedFormControl, UntypedFormGroup, FormGroupDirective, NgForm, Validators } from '@angular/forms';
-import { ErrorStateMatcher } from '@angular/material/core';
+import { UntypedFormControl, UntypedFormGroup } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { LoggerService } from '../../services/logger.service';
-import { Privacy } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
 
 
@@ -22,7 +20,6 @@ import { User } from '@sports-alliance/sports-lib';
 
 export class EventFormComponent implements OnInit {
 
-  public privacy = Privacy;
   public event: EventInterface;
   public user: User;
   public originalValues: {
@@ -56,10 +53,6 @@ export class EventFormComponent implements OnInit {
       //   // Validators.required,
       //   // Validators.minLength(4),
       // ]),
-      privacy: new UntypedFormControl(this.event.privacy, [
-        Validators.required,
-        // Validators.minLength(4),
-      ]),
       isMerge: new UntypedFormControl(this.event.isMerge, [
         // Validators.required,
         // Validators.minLength(4),
@@ -80,7 +73,6 @@ export class EventFormComponent implements OnInit {
     try {
       await this.eventService.updateEventProperties(this.user, this.event.getID(), {
         // name: this.eventFormGroup.get('name').value,
-        privacy: this.eventFormGroup.get('privacy').value,
         // description: this.eventFormGroup.get('description').value,
         isMerge: this.eventFormGroup.get('isMerge').value,
       });

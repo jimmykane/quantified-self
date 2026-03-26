@@ -89,6 +89,7 @@ describe('reconcileClaims', () => {
         mockWhere.mockReturnValue({ orderBy: mockOrderBy });
         mockOrderBy.mockReturnValue({ limit: mockLimit });
         mockLimit.mockReturnValue({ get: mockGet });
+        mockGetDoc.mockResolvedValue({ exists: true, data: () => ({}) });
 
         // Explicitly reset collection mock to clear any mockImplementationOnce
         mockCollection.mockReset();
@@ -199,6 +200,27 @@ describe('reconcileClaims', () => {
 
         // Should set claims
         expect(mockSetCustomUserClaims).toHaveBeenCalledWith('user1', expect.objectContaining({ stripeRole: 'pro' }));
+    });
+
+    it('should skip users/{uid}/system/status reads and writes when users/{uid} is missing', async () => {
+        mockGet.mockResolvedValue({
+            empty: false,
+            docs: [{
+                data: () => ({
+                    status: 'active',
+                    role: 'basic'
+                })
+            }]
+        });
+
+        mockGetDoc.mockResolvedValueOnce({ exists: false, data: () => undefined });
+
+        const result = await reconcileClaims('missingUser');
+
+        expect(result.role).toBe('basic');
+        expect(mockSetCustomUserClaims).toHaveBeenCalledWith('missingUser', { stripeRole: 'basic' });
+        expect(mockDoc.mock.calls.map((call) => call[0])).not.toContain('users/missingUser/system/status');
+        expect(mockSet).not.toHaveBeenCalled();
     });
 
     it('should default to "free" role if no firebaseRole OR role found in subscription', async () => {
@@ -459,5 +481,4 @@ describe('reconcileClaims (Complex Scenarios)', () => {
         expect(mockSetCustomUserClaims).toHaveBeenCalledWith('user1', { stripeRole: 'basic' });
     });
 });
-
 

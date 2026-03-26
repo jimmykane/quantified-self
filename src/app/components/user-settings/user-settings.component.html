@@ -30,9 +30,6 @@
           }
         </div>
       </div>
-      <div class="header-actions">
-        <app-user-actions [user]="user"></app-user-actions>
-      </div>
     </div>
   </div>
 
@@ -71,7 +68,7 @@
       <mat-card class="settings-card">
         <div style="padding: 24px; padding-bottom: 0;">
           <h1 style="margin: 0 0 8px 0; font-size: 1.8rem; font-weight: 800;">Profile Settings</h1>
-          <p style="margin: 0; opacity: 0.7; font-size: 1rem;">Manage your public persona and account visibility.</p>
+          <p style="margin: 0; opacity: 0.7; font-size: 1rem;">Manage your profile details and account controls.</p>
         </div>
         <div class="card-content">
           <mat-form-field appearance="outline">
@@ -81,15 +78,6 @@
             @if (hasError('displayName')) {
             <mat-error>Public name is required</mat-error>
             }
-          </mat-form-field>
-
-          <mat-form-field appearance="outline">
-            <mat-label>Profile Visibility</mat-label>
-            <mat-select formControlName="privacy">
-              <mat-option [value]="privacy.Public">Public</mat-option>
-              <mat-option [value]="privacy.Private">Private</mat-option>
-            </mat-select>
-            <mat-hint>Choose who can see your activities and profile stats.</mat-hint>
           </mat-form-field>
 
           <mat-form-field appearance="outline">
