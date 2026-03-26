@@ -139,4 +139,28 @@ describe('TileMapActionsComponent', () => {
         expect(emittedStates).toEqual([true, false]);
         expect(userMock.updateUserProperties).toHaveBeenCalled();
     });
+
+    it('should expose move boundaries for the first tile', () => {
+        expect(component.canMoveTileBackward()).toBe(false);
+        expect(component.canMoveTileForward()).toBe(true);
+    });
+
+    it('should move a tile forward and persist the new order', async () => {
+        await component.moveTileForward();
+
+        expect(analyticsMock.logEvent).toHaveBeenCalledWith('dashboard_tile_action', { method: 'moveTileForward' });
+        expect(userMock.settings.dashboardSettings.tiles.map((tile: any) => tile.order)).toEqual([0, 1]);
+        expect(userMock.settings.dashboardSettings.tiles[0].mapStyle).toBe('satellite');
+        expect(userMock.settings.dashboardSettings.tiles[1].mapStyle).toBe('default');
+        expect(userMock.updateUserProperties).toHaveBeenCalled();
+    });
+
+    it('should not persist when trying to move the first tile backward', async () => {
+        await component.moveTileBackward();
+
+        expect(userMock.settings.dashboardSettings.tiles.map((tile: any) => tile.order)).toEqual([0, 1]);
+        expect(userMock.settings.dashboardSettings.tiles[0].mapStyle).toBe('default');
+        expect(userMock.settings.dashboardSettings.tiles[1].mapStyle).toBe('satellite');
+        expect(userMock.updateUserProperties).not.toHaveBeenCalled();
+    });
 });

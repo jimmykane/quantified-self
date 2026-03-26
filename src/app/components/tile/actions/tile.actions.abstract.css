@@ -4,6 +4,11 @@ section[mat-menu-item] {
   display: flex;
 }
 
+section.tile-move-actions {
+  gap: 8px;
+  width: 100%;
+}
+
 /* "Add New" Header Section */
 .first {
   padding: 12px 16px;

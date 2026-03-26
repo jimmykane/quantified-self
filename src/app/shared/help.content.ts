@@ -96,6 +96,12 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 ## Core dashboard features
 
+### Reorder dashboard tiles
+
+- Open any dashboard tile menu with the three-dot button.
+- Use **Move earlier** or **Move later** to change tile position.
+- Tile order is saved automatically to your account.
+
 ### Merge events
 
 - In the dashboard event table, select at least two events and use the merge action.

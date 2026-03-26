@@ -75,6 +75,52 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
     return this.persistUserSettings();
   }
 
+  canMoveTileBackward(): boolean {
+    const orderedTiles = this.getOrderedTiles();
+    const currentIndex = orderedTiles.findIndex(tile => tile.order === this.order);
+    return currentIndex > 0;
+  }
+
+  canMoveTileForward(): boolean {
+    const orderedTiles = this.getOrderedTiles();
+    const currentIndex = orderedTiles.findIndex(tile => tile.order === this.order);
+    return currentIndex >= 0 && currentIndex < orderedTiles.length - 1;
+  }
+
+  async moveTileBackward() {
+    return this.moveTileByOffset(-1, 'moveTileBackward');
+  }
+
+  async moveTileForward() {
+    return this.moveTileByOffset(1, 'moveTileForward');
+  }
+
+  private async moveTileByOffset(offset: number, analyticsMethod: 'moveTileBackward' | 'moveTileForward') {
+    const orderedTiles = this.getOrderedTiles();
+    const currentIndex = orderedTiles.findIndex(tile => tile.order === this.order);
+    const targetIndex = currentIndex + offset;
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= orderedTiles.length) {
+      return;
+    }
+
+    this.analyticsService.logEvent('dashboard_tile_action', { method: analyticsMethod });
+    const currentTile = orderedTiles[currentIndex];
+    orderedTiles[currentIndex] = orderedTiles[targetIndex];
+    orderedTiles[targetIndex] = currentTile;
+    orderedTiles.forEach((tile, index) => {
+      tile.order = index;
+    });
+
+    this.user.settings.dashboardSettings.tiles = orderedTiles;
+    this.order = targetIndex;
+    return this.persistUserSettings();
+  }
+
+  private getOrderedTiles(): TileSettingsInterface[] {
+    return [...(this.user?.settings?.dashboardSettings?.tiles || [])]
+      .sort((left, right) => left.order - right.order);
+  }
+
   /**
    * see https://github.com/angular/components/issues/11677
    */
