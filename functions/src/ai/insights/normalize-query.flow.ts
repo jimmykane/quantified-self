@@ -171,6 +171,7 @@ const SUPPORTED_ACTIVITY_TYPE_GROUPS = [...CANONICAL_ACTIVITY_TYPE_GROUPS];
 const MAX_MULTI_METRICS = 3;
 const DIGEST_METRIC_KEYS = ['distance', 'duration', 'ascent'] as const;
 const YEAR_PATTERN = /(?:19|20)\d{2}/;
+const CURRENT_YEAR_PROMPT_PATTERN = /\b(?:(?:this|current|present|ongoing)(?:\s+calendar)?\s+year|year\s+to\s+date|ytd)\b/;
 const MONTH_NAME_TO_NUMBER: Readonly<Record<string, number>> = {
   jan: 1,
   january: 1,
@@ -602,6 +603,12 @@ interface ResolvePromptDateSelectionOptions {
   now: Date;
 }
 
+function includesCurrentYearPromptToken(
+  normalizedPrompt: string,
+): boolean {
+  return CURRENT_YEAR_PROMPT_PATTERN.test(normalizedPrompt);
+}
+
 function resolvePromptRelativeYearComparisonDateSelection(
   prompt: string,
   category: ModelCategoryCode | undefined,
@@ -617,7 +624,7 @@ function resolvePromptRelativeYearComparisonDateSelection(
     return null;
   }
 
-  if (!/\bthis year\b/.test(normalizedPrompt) || !/\blast year\b/.test(normalizedPrompt)) {
+  if (!includesCurrentYearPromptToken(normalizedPrompt) || !/\blast year\b/.test(normalizedPrompt)) {
     return null;
   }
 
@@ -756,8 +763,10 @@ function resolvePromptYearListDateSelection(
   prompt: string,
   category: ModelCategoryCode | undefined,
   aggregation: ModelAggregationCode | undefined,
+  options: ResolvePromptDateSelectionOptions,
 ): PromptDateSelectionIntent | null {
   const normalizedPrompt = canonicalizeInsightPrompt(prompt);
+  const normalizedPromptSearch = normalizePromptSearchText(prompt);
   if (!normalizedPrompt) {
     return null;
   }
@@ -777,7 +786,13 @@ function resolvePromptYearListDateSelection(
     [...yearListSource.matchAll(new RegExp(`\\b(${YEAR_PATTERN.source})\\b`, 'g'))]
       .map(match => Number(match[1]))
       .filter(year => Number.isInteger(year)),
-  )).sort((left, right) => left - right);
+  ));
+
+  if (includesCurrentYearPromptToken(normalizedPromptSearch)) {
+    years.push(getZonedDateParts(options.now, options.timeZone).year);
+  }
+
+  years.sort((left, right) => left - right);
   if (years.length < 2) {
     return null;
   }
@@ -860,7 +875,7 @@ function resolvePromptDateSelection(
     return monthYearToNowSelection;
   }
 
-  const multiYearSelection = resolvePromptYearListDateSelection(prompt, category, aggregation);
+  const multiYearSelection = resolvePromptYearListDateSelection(prompt, category, aggregation, options);
   if (multiYearSelection) {
     return multiYearSelection;
   }
@@ -1969,7 +1984,7 @@ function resolvePromptDateRangeIntent(prompt: string): DateRangeIntent | undefin
     return { kind: 'current_period', unit: 'month' };
   }
 
-  if (/\bthis year\b/.test(normalizedPrompt)) {
+  if (includesCurrentYearPromptToken(normalizedPrompt)) {
     return { kind: 'current_period', unit: 'year' };
   }
 
