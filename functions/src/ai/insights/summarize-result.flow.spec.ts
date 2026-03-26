@@ -766,6 +766,340 @@ describe('summarizeAiInsightResult', () => {
     expect(result.narrative).not.toContain('2026-03-18');
   });
 
+  it('builds digest fallback narratives with explicit no-data period counts', async () => {
+    setSummarizeInsightDependenciesForTesting({
+      generateNarrative: async () => {
+        throw new Error('generation failed');
+      },
+    });
+
+    const result = await summarizeAiInsightResult({
+      status: 'ok',
+      prompt: 'Give me a weekly digest for cycling this year',
+      query: {
+        ...paceInput.query,
+        resultKind: 'multi_metric_aggregate',
+        groupingMode: 'date',
+        requestedTimeInterval: TimeIntervals.Weekly,
+        digestMode: 'weekly',
+        metricSelections: [
+          {
+            metricKey: 'distance',
+            dataType: 'Distance',
+            valueType: ChartDataValueTypes.Total,
+          },
+          {
+            metricKey: 'duration',
+            dataType: 'Duration',
+            valueType: ChartDataValueTypes.Total,
+          },
+        ],
+      },
+      metricLabels: ['distance', 'duration'],
+      metricResults: [
+        {
+          metricKey: 'distance',
+          metricLabel: 'distance',
+          query: {
+            ...paceInput.query,
+            resultKind: 'aggregate',
+            dataType: 'Distance',
+            valueType: ChartDataValueTypes.Total,
+          },
+          aggregation: {
+            ...paceInput.aggregation,
+            dataType: 'Distance',
+            valueType: ChartDataValueTypes.Total,
+            resolvedTimeInterval: TimeIntervals.Weekly,
+            buckets: [],
+          },
+          summary: {
+            ...paceSummary,
+            overallAggregateValue: null,
+            latestBucket: null,
+          },
+          presentation: {
+            title: 'Distance',
+            chartType: ChartTypes.LinesVertical,
+          },
+        },
+      ],
+      digest: {
+        granularity: 'weekly',
+        periodCount: 3,
+        nonEmptyPeriodCount: 2,
+        periods: [
+          {
+            bucketKey: '2026-W09',
+            time: Date.parse('2026-02-23T00:00:00.000Z'),
+            hasData: true,
+            metrics: [
+              {
+                metricKey: 'distance',
+                metricLabel: 'Distance',
+                dataType: 'Distance',
+                valueType: ChartDataValueTypes.Total,
+                aggregateValue: 54000,
+                totalCount: 3,
+              },
+              {
+                metricKey: 'duration',
+                metricLabel: 'Duration',
+                dataType: 'Duration',
+                valueType: ChartDataValueTypes.Total,
+                aggregateValue: 12400,
+                totalCount: 3,
+              },
+            ],
+          },
+          {
+            bucketKey: '2026-W10',
+            time: Date.parse('2026-03-02T00:00:00.000Z'),
+            hasData: false,
+            metrics: [
+              {
+                metricKey: 'distance',
+                metricLabel: 'Distance',
+                dataType: 'Distance',
+                valueType: ChartDataValueTypes.Total,
+                aggregateValue: null,
+                totalCount: 0,
+              },
+              {
+                metricKey: 'duration',
+                metricLabel: 'Duration',
+                dataType: 'Duration',
+                valueType: ChartDataValueTypes.Total,
+                aggregateValue: null,
+                totalCount: 0,
+              },
+            ],
+          },
+          {
+            bucketKey: '2026-W11',
+            time: Date.parse('2026-03-09T00:00:00.000Z'),
+            hasData: true,
+            metrics: [
+              {
+                metricKey: 'distance',
+                metricLabel: 'Distance',
+                dataType: 'Distance',
+                valueType: ChartDataValueTypes.Total,
+                aggregateValue: 32000,
+                totalCount: 2,
+              },
+              {
+                metricKey: 'duration',
+                metricLabel: 'Duration',
+                dataType: 'Duration',
+                valueType: ChartDataValueTypes.Total,
+                aggregateValue: 8600,
+                totalCount: 2,
+              },
+            ],
+          },
+        ],
+      },
+      presentation: {
+        title: 'Weekly digest',
+        chartType: ChartTypes.LinesVertical,
+      },
+    });
+
+    expect(result.source).toBe('fallback');
+    expect(result.narrative).toContain('Digest summary');
+    expect(result.narrative).toContain('data in 2 of 3 weeks');
+    expect(result.narrative).toContain('No data in 1 week');
+  });
+
+  it('builds digest fallback narratives without 0-period wording when no digest periods exist', async () => {
+    setSummarizeInsightDependenciesForTesting({
+      generateNarrative: async () => {
+        throw new Error('generation failed');
+      },
+    });
+
+    const result = await summarizeAiInsightResult({
+      status: 'empty',
+      prompt: 'Give me a yearly digest for all activities all time',
+      query: {
+        ...paceInput.query,
+        resultKind: 'multi_metric_aggregate',
+        groupingMode: 'date',
+        requestedTimeInterval: TimeIntervals.Yearly,
+        digestMode: 'yearly',
+        dateRange: {
+          kind: 'all_time',
+          timezone: 'UTC',
+          source: 'prompt',
+        },
+        metricSelections: [
+          {
+            metricKey: 'distance',
+            dataType: 'Distance',
+            valueType: ChartDataValueTypes.Total,
+          },
+          {
+            metricKey: 'duration',
+            dataType: 'Duration',
+            valueType: ChartDataValueTypes.Total,
+          },
+        ],
+      },
+      metricLabels: ['distance', 'duration'],
+      metricResults: [
+        {
+          metricKey: 'distance',
+          metricLabel: 'distance',
+          query: {
+            ...paceInput.query,
+            resultKind: 'aggregate',
+            dataType: 'Distance',
+            valueType: ChartDataValueTypes.Total,
+          },
+          aggregation: {
+            ...paceInput.aggregation,
+            dataType: 'Distance',
+            valueType: ChartDataValueTypes.Total,
+            resolvedTimeInterval: TimeIntervals.Yearly,
+            buckets: [],
+          },
+          summary: {
+            ...paceSummary,
+            overallAggregateValue: null,
+            latestBucket: null,
+          },
+          presentation: {
+            title: 'Distance',
+            chartType: ChartTypes.LinesVertical,
+          },
+        },
+      ],
+      digest: {
+        granularity: 'yearly',
+        periodCount: 0,
+        nonEmptyPeriodCount: 0,
+        periods: [],
+      },
+      presentation: {
+        title: 'Yearly digest',
+        chartType: ChartTypes.LinesVertical,
+      },
+    });
+
+    expect(result.source).toBe('fallback');
+    expect(result.narrative).toContain('Digest summary');
+    expect(result.narrative).toContain('no matching data was found for this range');
+    expect(result.narrative).not.toContain('0 years');
+  });
+
+  it('includes digest facts in narrative generation payloads', () => {
+    const facts = buildNarrativeFacts({
+      status: 'empty',
+      prompt: 'Give me a weekly digest',
+      query: {
+        ...paceInput.query,
+        resultKind: 'multi_metric_aggregate',
+        groupingMode: 'date',
+        requestedTimeInterval: TimeIntervals.Weekly,
+        digestMode: 'weekly',
+        metricSelections: [
+          {
+            metricKey: 'distance',
+            dataType: 'Distance',
+            valueType: ChartDataValueTypes.Total,
+          },
+          {
+            metricKey: 'duration',
+            dataType: 'Duration',
+            valueType: ChartDataValueTypes.Total,
+          },
+        ],
+      },
+      metricLabels: ['distance', 'duration'],
+      metricResults: [
+        {
+          metricKey: 'distance',
+          metricLabel: 'distance',
+          query: {
+            ...paceInput.query,
+            resultKind: 'aggregate',
+            dataType: 'Distance',
+            valueType: ChartDataValueTypes.Total,
+          },
+          aggregation: {
+            ...paceInput.aggregation,
+            dataType: 'Distance',
+            valueType: ChartDataValueTypes.Total,
+            resolvedTimeInterval: TimeIntervals.Weekly,
+            buckets: [],
+          },
+          summary: {
+            ...paceSummary,
+            overallAggregateValue: null,
+            latestBucket: null,
+          },
+          presentation: {
+            title: 'Distance',
+            chartType: ChartTypes.LinesVertical,
+          },
+        },
+      ],
+      digest: {
+        granularity: 'weekly',
+        periodCount: 2,
+        nonEmptyPeriodCount: 0,
+        periods: [
+          {
+            bucketKey: '2026-W09',
+            time: Date.parse('2026-02-23T00:00:00.000Z'),
+            hasData: false,
+            metrics: [
+              {
+                metricKey: 'distance',
+                metricLabel: 'Distance',
+                dataType: 'Distance',
+                valueType: ChartDataValueTypes.Total,
+                aggregateValue: null,
+                totalCount: 0,
+              },
+            ],
+          },
+          {
+            bucketKey: '2026-W10',
+            time: Date.parse('2026-03-02T00:00:00.000Z'),
+            hasData: false,
+            metrics: [
+              {
+                metricKey: 'distance',
+                metricLabel: 'Distance',
+                dataType: 'Distance',
+                valueType: ChartDataValueTypes.Total,
+                aggregateValue: null,
+                totalCount: 0,
+              },
+            ],
+          },
+        ],
+      },
+      presentation: {
+        title: 'Weekly digest',
+        chartType: ChartTypes.LinesVertical,
+      },
+    }) as {
+      narrativeMode?: string;
+      digest?: {
+        granularity: string;
+        periods: Array<{ label: string; hasData: boolean }>;
+      };
+    };
+
+    expect(facts.narrativeMode).toBe('digest');
+    expect(facts.digest?.granularity).toBe('weekly');
+    expect(facts.digest?.periods).toHaveLength(2);
+    expect(facts.digest?.periods.every(period => period.hasData === false)).toBe(true);
+  });
+
   it('builds localized dateRangeLabel facts for model generation', () => {
     const facts = buildNarrativeFacts({
       ...paceInput,

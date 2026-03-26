@@ -298,6 +298,38 @@
                 <p class="description-text narrative">{{ emptyNarrative() }}</p>
               </div>
 
+              @if (emptyResponse()?.digest) {
+                <div class="narrative-info narrative-info--secondary qs-glass-card-panel">
+                  <p class="mat-label-medium narrative-section-title">Digest timeline</p>
+                  @if (emptyDigestPeriods().length) {
+                    <div class="digest-period-list">
+                      @for (period of emptyDigestPeriods(); track period.label + ':' + $index) {
+                        <section class="digest-period-row">
+                          <div class="digest-period-header">
+                            <p class="mat-label-small digest-period-label">{{ period.label }}</p>
+                            @if (!period.hasData) {
+                              <span class="mat-body-small digest-period-badge">No data</span>
+                            }
+                          </div>
+
+                          @if (period.hasData) {
+                            <div class="digest-metric-list">
+                              @for (metric of period.metrics; track metric.label + ':' + (metric.value ?? '')) {
+                                <p class="mat-body-small digest-metric-row">{{ metric.label }}: {{ metric.value ?? 'No data' }}</p>
+                              }
+                            </div>
+                          } @else {
+                            <p class="mat-body-small digest-period-empty">No matching events in this period.</p>
+                          }
+                        </section>
+                      }
+                    </div>
+                  } @else {
+                    <p class="mat-body-small digest-empty-state">No period timeline is available yet for this digest range.</p>
+                  }
+                </div>
+              }
+
               <mat-divider></mat-divider>
 
               <div class="state-panel qs-glass-card-panel">
@@ -569,6 +601,38 @@
                   </mat-chip-set>
                 }
               </div>
+
+              @if (multiMetricOkResponse()?.digest) {
+                <div class="narrative-info narrative-info--secondary qs-glass-card-panel">
+                  <p class="mat-label-medium narrative-section-title">Digest timeline</p>
+                  @if (multiMetricDigestPeriods().length) {
+                    <div class="digest-period-list">
+                      @for (period of multiMetricDigestPeriods(); track period.label + ':' + $index) {
+                        <section class="digest-period-row">
+                          <div class="digest-period-header">
+                            <p class="mat-label-small digest-period-label">{{ period.label }}</p>
+                            @if (!period.hasData) {
+                              <span class="mat-body-small digest-period-badge">No data</span>
+                            }
+                          </div>
+
+                          @if (period.hasData) {
+                            <div class="digest-metric-list">
+                              @for (metric of period.metrics; track metric.label + ':' + (metric.value ?? '')) {
+                                <p class="mat-body-small digest-metric-row">{{ metric.label }}: {{ metric.value ?? 'No data' }}</p>
+                              }
+                            </div>
+                          } @else {
+                            <p class="mat-body-small digest-period-empty">No matching events in this period.</p>
+                          }
+                        </section>
+                      }
+                    </div>
+                  } @else {
+                    <p class="mat-body-small digest-empty-state">No period timeline is available yet for this digest range.</p>
+                  }
+                </div>
+              }
 
               @if (multiMetricAnomalySections().length) {
                 <div class="narrative-info narrative-info--secondary qs-glass-card-panel">

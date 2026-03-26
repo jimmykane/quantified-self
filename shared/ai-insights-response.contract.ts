@@ -79,6 +79,7 @@ export const NormalizedInsightMetricSelectionSchema = z.object({
 });
 
 const NormalizedInsightPowerCurveModeSchema = z.enum(['best', 'compare_over_time']);
+const AiInsightsDigestGranularitySchema = z.enum(['weekly', 'monthly', 'yearly']);
 
 export const NormalizedInsightQuerySchema = z.discriminatedUnion('resultKind', [
   NormalizedInsightQueryBaseSchema.extend({
@@ -103,6 +104,7 @@ export const NormalizedInsightQuerySchema = z.discriminatedUnion('resultKind', [
     groupingMode: z.enum(['overall', 'date']),
     categoryType: z.literal(ChartDataCategoryTypes.DateType),
     metricSelections: z.array(NormalizedInsightMetricSelectionSchema).min(2).max(3),
+    digestMode: AiInsightsDigestGranularitySchema.optional(),
   }),
   NormalizedInsightQueryBaseSchema.extend({
     resultKind: z.literal('power_curve'),
@@ -132,6 +134,7 @@ export const NormalizedInsightMultiMetricAggregateQuerySchema = NormalizedInsigh
   groupingMode: z.enum(['overall', 'date']),
   categoryType: z.literal(ChartDataCategoryTypes.DateType),
   metricSelections: z.array(NormalizedInsightMetricSelectionSchema).min(2).max(3),
+  digestMode: AiInsightsDigestGranularitySchema.optional(),
 });
 
 export const NormalizedInsightLatestEventQuerySchema = NormalizedInsightQueryBaseSchema.extend({
@@ -363,6 +366,29 @@ export const AiInsightsMultiMetricAggregateMetricResultSchema = z.object({
   presentation: AiInsightPresentationSchema,
 });
 
+export const AiInsightsDigestMetricSchema = z.object({
+  metricKey: AiInsightsPromptMetricKeySchema,
+  metricLabel: z.string().min(1),
+  dataType: z.string().min(1),
+  valueType: z.nativeEnum(ChartDataValueTypes),
+  aggregateValue: z.number().nullable(),
+  totalCount: z.number().int().nonnegative(),
+});
+
+export const AiInsightsDigestPeriodSchema = z.object({
+  bucketKey: BucketKeySchema,
+  time: z.number(),
+  hasData: z.boolean(),
+  metrics: z.array(AiInsightsDigestMetricSchema).min(1).max(3),
+});
+
+export const AiInsightsDigestSchema = z.object({
+  granularity: AiInsightsDigestGranularitySchema,
+  periodCount: z.number().int().nonnegative(),
+  nonEmptyPeriodCount: z.number().int().nonnegative(),
+  periods: z.array(AiInsightsDigestPeriodSchema),
+});
+
 export const AiInsightsUnsupportedReasonCodeSchema = z.enum([
   'invalid_prompt',
   'unsupported_metric',
@@ -407,6 +433,7 @@ const AiInsightsMultiMetricAggregateOkResponseSchema = AiInsightsOkResponseBaseS
   resultKind: z.literal('multi_metric_aggregate'),
   query: NormalizedInsightMultiMetricAggregateQuerySchema,
   metricResults: z.array(AiInsightsMultiMetricAggregateMetricResultSchema).min(1).max(3),
+  digest: AiInsightsDigestSchema.optional(),
   presentation: AiInsightPresentationSchema,
 });
 
@@ -432,6 +459,7 @@ const AiInsightsEmptyResponseSchema = z.object({
   query: NormalizedInsightQuerySchema,
   aggregation: EventStatAggregationResultSchema,
   summary: AiInsightSummarySchema,
+  digest: AiInsightsDigestSchema.optional(),
   presentation: AiInsightPresentationSchema.extend({
     emptyState: z.string().min(1),
   }),
@@ -531,6 +559,9 @@ function resolveResponseValidationReason(
       return 'anomaly_callouts_invalid';
     }
     return 'metric_results_invalid';
+  }
+  if (firstIssuePathKey === 'digest') {
+    return 'digest_invalid';
   }
   if (firstIssuePathKey === 'statementChips') {
     return 'statement_chips_invalid';

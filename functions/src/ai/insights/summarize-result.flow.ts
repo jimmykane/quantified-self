@@ -8,6 +8,7 @@ import {
 } from '@sports-alliance/sports-lib';
 
 import type {
+  AiInsightsDigest,
   AiInsightPresentation,
   AiInsightSummaryBucket,
   AiInsightSummary,
@@ -65,6 +66,7 @@ export interface SummarizeInsightMultiMetricAggregateInput extends SummarizeInsi
   query: NormalizedInsightMultiMetricAggregateQuery;
   metricLabels: string[];
   metricResults: AiInsightsMultiMetricAggregateMetricResult[];
+  digest?: AiInsightsDigest;
 }
 
 export type SummarizeInsightResultInput =
@@ -202,6 +204,54 @@ function formatCompareBucketLabel(
   }
 
   return `${bucket.bucketKey}`;
+}
+
+function resolveDigestPeriodNoun(
+  digestGranularity: NonNullable<SummarizeInsightMultiMetricAggregateInput['digest']>['granularity'],
+): string {
+  switch (digestGranularity) {
+    case 'weekly':
+      return 'week';
+    case 'yearly':
+      return 'year';
+    case 'monthly':
+    default:
+      return 'month';
+  }
+}
+
+function formatDigestPeriodLabel(
+  digestGranularity: NonNullable<SummarizeInsightMultiMetricAggregateInput['digest']>['granularity'],
+  periodTime: number,
+  locale: string | undefined,
+  timeZone: string,
+): string {
+  const periodDate = new Date(periodTime);
+  if (!Number.isFinite(periodDate.getTime())) {
+    return `${periodTime}`;
+  }
+
+  switch (digestGranularity) {
+    case 'weekly':
+      return new Intl.DateTimeFormat(locale || 'en-US', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        timeZone,
+      }).format(periodDate);
+    case 'yearly':
+      return new Intl.DateTimeFormat(locale || 'en-US', {
+        year: 'numeric',
+        timeZone,
+      }).format(periodDate);
+    case 'monthly':
+    default:
+      return new Intl.DateTimeFormat(locale || 'en-US', {
+        month: 'short',
+        year: 'numeric',
+        timeZone,
+      }).format(periodDate);
+  }
 }
 
 function formatPeriodDeltaDirection(
@@ -580,6 +630,53 @@ function resolveNarrativeOverrideReason(
   return null;
 }
 
+function buildDigestNarrativeFallback(
+  input: SummarizeInsightMultiMetricAggregateInput,
+): string {
+  if (!input.digest) {
+    return '';
+  }
+
+  const dateRangeText = formatLocalizedDateRange(input.query, input.clientLocale);
+  const activityText = formatActivityFilter(input.query);
+  if (input.digest.periodCount <= 0) {
+    return `Digest summary for ${activityText} in ${dateRangeText}: no matching data was found for this range.`;
+  }
+
+  const periodNoun = resolveDigestPeriodNoun(input.digest.granularity);
+  const periodNounPlural = input.digest.periodCount === 1 ? periodNoun : `${periodNoun}s`;
+  const nonEmptyPeriods = input.digest.periods.filter(period => period.hasData);
+  const noDataPeriodCount = Math.max(0, input.digest.periodCount - input.digest.nonEmptyPeriodCount);
+
+  if (input.status === 'empty' || nonEmptyPeriods.length === 0) {
+    return `Digest summary for ${activityText} in ${dateRangeText}: no matching data in all ${input.digest.periodCount} ${periodNounPlural}.`;
+  }
+
+  const latestPeriodWithData = nonEmptyPeriods[nonEmptyPeriods.length - 1];
+  const latestMetricWithData = latestPeriodWithData?.metrics.find(metric => metric.aggregateValue !== null) ?? null;
+  const latestMetricSummary = latestMetricWithData
+    ? `${latestMetricWithData.metricLabel} ${formatInsightAggregateDisplay(
+      latestMetricWithData.dataType,
+      latestMetricWithData.aggregateValue as number,
+      input.unitSettings,
+    )}`
+    : null;
+  const latestPeriodLabel = latestPeriodWithData
+    ? formatDigestPeriodLabel(
+      input.digest.granularity,
+      latestPeriodWithData.time,
+      input.clientLocale,
+      input.query.dateRange.timezone,
+    )
+    : null;
+
+  const noDataSuffix = noDataPeriodCount > 0
+    ? ` No data in ${noDataPeriodCount} ${noDataPeriodCount === 1 ? periodNoun : `${periodNoun}s`}.`
+    : '';
+
+  return `Digest summary for ${activityText} in ${dateRangeText}: data in ${input.digest.nonEmptyPeriodCount} of ${input.digest.periodCount} ${periodNounPlural}.${latestPeriodLabel && latestMetricSummary ? ` Latest ${periodNoun} with data: ${latestPeriodLabel} (${latestMetricSummary}).` : ''}${noDataSuffix}`;
+}
+
 function buildNarrativeFallback(input: SummarizeInsightResultInput): string {
   const dateRangeText = formatLocalizedDateRange(input.query, input.clientLocale);
   const activityText = formatActivityFilter(input.query);
@@ -587,6 +684,10 @@ function buildNarrativeFallback(input: SummarizeInsightResultInput): string {
   const metricLabelText = 'metricResults' in input
     ? joinMetricLabels(input.metricLabels)
     : input.metricLabel;
+
+  if ('metricResults' in input && input.digest) {
+    return buildDigestNarrativeFallback(input);
+  }
 
   if (input.status === 'empty') {
     const defaultRangePrefix = input.query.dateRange.source === 'default' && !isAllTime
@@ -668,17 +769,46 @@ function buildNarrativeFallback(input: SummarizeInsightResultInput): string {
 export function buildNarrativeFacts(input: SummarizeInsightResultInput): Record<string, unknown> {
   if ('metricResults' in input) {
     const metricSummaryFacts = buildMultiMetricSummaryFacts(input);
+    const digest = input.digest;
+    const digestFacts = digest
+      ? {
+        granularity: digest.granularity,
+        periodCount: digest.periodCount,
+        nonEmptyPeriodCount: digest.nonEmptyPeriodCount,
+        periods: digest.periods.map(period => ({
+          bucketKey: period.bucketKey,
+          time: period.time,
+          label: formatDigestPeriodLabel(
+            digest.granularity,
+            period.time,
+            input.clientLocale,
+            input.query.dateRange.timezone,
+          ),
+          hasData: period.hasData,
+          metrics: period.metrics.map(metric => ({
+            metricKey: metric.metricKey,
+            metricLabel: metric.metricLabel,
+            aggregateDisplayValue: metric.aggregateValue === null
+              ? null
+              : formatInsightAggregateDisplay(metric.dataType, metric.aggregateValue, input.unitSettings),
+            totalCount: metric.totalCount,
+          })),
+        })),
+      }
+      : null;
 
     return {
       status: input.status,
       prompt: input.prompt,
       resultKind: 'multi_metric_aggregate',
+      ...(digest ? { narrativeMode: 'digest' as const } : {}),
       groupingMode: input.query.groupingMode,
       title: input.presentation.title,
       chartType: input.presentation.chartType,
       metricLabels: input.metricLabels,
       dateRangeLabel: formatLocalizedDateRange(input.query, input.clientLocale),
       activityFilterLabel: formatActivityFilter(input.query),
+      ...(digestFacts ? { digest: digestFacts } : {}),
       metrics: input.metricResults.map((metricResult, index) => ({
         metricKey: metricResult.metricKey,
         metricLabel: metricResult.metricLabel,

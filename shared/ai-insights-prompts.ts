@@ -487,6 +487,27 @@ export const AI_INSIGHTS_CURATED_PROMPT_CATALOG = [
     metricKey: 'pace',
   },
   {
+    id: 'popular-monthly-recap-running-this-year',
+    prompt: 'Show a monthly recap of my running this year.',
+    category: 'Progress over time',
+    featured: false,
+    surfaces: ['picker'],
+  },
+  {
+    id: 'popular-yearly-summary-all-activities',
+    prompt: 'Give me a yearly summary for all activities.',
+    category: 'Progress over time',
+    featured: false,
+    surfaces: ['picker'],
+  },
+  {
+    id: 'popular-monthly-digest-hiking-last-6-months',
+    prompt: 'Monthly digest for hiking in the last 6 months.',
+    category: 'Progress over time',
+    featured: false,
+    surfaces: ['picker'],
+  },
+  {
     id: 'popular-cadence-power-cycling-3-months',
     prompt: 'Show cadence vs power over time in the last 3 months for cycling.',
     category: 'Compare & explore',
@@ -514,6 +535,20 @@ export const AI_INSIGHTS_CURATED_PROMPT_CATALOG = [
     featured: true,
     surfaces: ['hero', 'picker'],
     metricKey: 'distance',
+  },
+  {
+    id: 'popular-weekly-digest-all-activities-last-8-weeks',
+    prompt: 'Give me a weekly digest for all activities in the last 8 weeks.',
+    category: 'Compare & explore',
+    featured: false,
+    surfaces: ['picker'],
+  },
+  {
+    id: 'popular-weekly-digest-cycling-excluding-indoor',
+    prompt: 'Weekly digest for cycling this year, excluding indoor rides.',
+    category: 'Compare & explore',
+    featured: false,
+    surfaces: ['picker'],
   },
   {
     id: 'popular-compare-heart-rate-2024-vs-2025',

@@ -787,6 +787,56 @@ app-ai-insights-power-curve-chart {
   line-height: 1.35;
 }
 
+.digest-period-list {
+  display: grid;
+  gap: 10px;
+}
+
+.digest-period-row {
+  display: grid;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--mat-sys-surface-container) 72%, transparent);
+}
+
+.digest-period-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.digest-period-label {
+  margin: 0;
+  color: var(--mat-sys-on-surface);
+}
+
+.digest-period-badge {
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.digest-metric-list {
+  display: grid;
+  gap: 4px;
+}
+
+.digest-metric-row,
+.digest-period-empty {
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.74rem;
+  line-height: 1.4;
+}
+
+.digest-empty-state {
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+  line-height: 1.4;
+}
+
 .compare-evidence-groups {
   display: grid;
   gap: 0;

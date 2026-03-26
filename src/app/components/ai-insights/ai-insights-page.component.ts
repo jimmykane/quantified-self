@@ -46,6 +46,7 @@ import {
   buildAggregateSummaryCards,
   buildAggregateAnomalyCallouts,
   buildAggregateCompareEvidenceGroups,
+  buildDigestPeriodDisplays,
   buildMergedMultiMetricSummaryCards,
   buildMultiMetricAnomalyCalloutSections,
   buildStatementChipDisplays,
@@ -71,6 +72,7 @@ import {
   resolveShortMetricLabel,
   type AnomalyCalloutDisplay,
   type AggregateCompareEvidenceGroup,
+  type DigestPeriodDisplay,
   type EventLookupDisplayItem,
   type EventLookupResolvedEvent,
   type InsightSummaryCard,
@@ -280,6 +282,19 @@ export class AiInsightsPageComponent {
   readonly multiMetricNarrative = computed(() => (
     formatAiInsightsNarrativeForDisplay(this.multiMetricOkResponse()?.narrative)
   ));
+  readonly multiMetricDigestPeriods = computed<DigestPeriodDisplay[]>(() => {
+    const response = this.multiMetricOkResponse();
+    if (!response?.digest) {
+      return [];
+    }
+
+    return buildDigestPeriodDisplays(
+      response.digest,
+      response.query.dateRange.timezone,
+      this.userUnitSettings(),
+      this.locale,
+    );
+  });
   readonly eventLookupNarrative = computed(() => (
     formatAiInsightsNarrativeForDisplay(this.eventLookupOkResponse()?.narrative)
   ));
@@ -292,6 +307,19 @@ export class AiInsightsPageComponent {
   readonly emptyNarrative = computed(() => (
     formatAiInsightsNarrativeForDisplay(this.emptyResponse()?.narrative)
   ));
+  readonly emptyDigestPeriods = computed<DigestPeriodDisplay[]>(() => {
+    const response = this.emptyResponse();
+    if (!response?.digest) {
+      return [];
+    }
+
+    return buildDigestPeriodDisplays(
+      response.digest,
+      response.query.dateRange.timezone,
+      this.userUnitSettings(),
+      this.locale,
+    );
+  });
   readonly unsupportedNarrative = computed(() => (
     formatAiInsightsNarrativeForDisplay(this.unsupportedResponse()?.narrative)
   ));

@@ -224,6 +224,43 @@ describe('Ai insights shared response contract', () => {
           },
         },
       ],
+      digest: {
+        granularity: 'weekly',
+        periodCount: 2,
+        nonEmptyPeriodCount: 1,
+        periods: [
+          {
+            bucketKey: '2026-W09',
+            time: Date.parse('2026-02-23T00:00:00.000Z'),
+            hasData: true,
+            metrics: [
+              {
+                metricKey: 'cadence',
+                metricLabel: 'Cadence',
+                dataType: 'Average Cadence',
+                valueType: ChartDataValueTypes.Average,
+                aggregateValue: 86,
+                totalCount: 4,
+              },
+            ],
+          },
+          {
+            bucketKey: '2026-W10',
+            time: Date.parse('2026-03-02T00:00:00.000Z'),
+            hasData: false,
+            metrics: [
+              {
+                metricKey: 'cadence',
+                metricLabel: 'Cadence',
+                dataType: 'Average Cadence',
+                valueType: ChartDataValueTypes.Average,
+                aggregateValue: null,
+                totalCount: 0,
+              },
+            ],
+          },
+        ],
+      },
       presentation: {
         title: 'Cadence and power',
         chartType: ChartTypes.LinesVertical,
@@ -284,6 +321,110 @@ describe('Ai insights shared response contract', () => {
     expect(latestEvent.ok).toBe(true);
     expect(multiMetric.ok).toBe(true);
     expect(powerCurve.ok).toBe(true);
+  });
+
+  it('rejects malformed digest payloads with a dedicated reason', () => {
+    const invalidDigestResponse = validateAiInsightsResponse({
+      status: 'ok',
+      resultKind: 'multi_metric_aggregate',
+      narrative: 'ok',
+      query: {
+        resultKind: 'multi_metric_aggregate',
+        groupingMode: 'date',
+        categoryType: ChartDataCategoryTypes.DateType,
+        requestedTimeInterval: TimeIntervals.Weekly,
+        activityTypeGroups: [],
+        activityTypes: [ActivityTypes.Cycling],
+        dateRange: {
+          kind: 'bounded',
+          startDate: '2026-01-01T00:00:00.000Z',
+          endDate: '2026-03-22T23:59:59.999Z',
+          timezone: 'UTC',
+          source: 'prompt',
+        },
+        chartType: ChartTypes.LinesVertical,
+        metricSelections: [
+          {
+            metricKey: 'cadence',
+            dataType: 'Average Cadence',
+            valueType: ChartDataValueTypes.Average,
+          },
+          {
+            metricKey: 'power',
+            dataType: 'Average Power',
+            valueType: ChartDataValueTypes.Average,
+          },
+        ],
+      },
+      metricResults: [
+        {
+          metricKey: 'cadence',
+          metricLabel: 'Cadence',
+          query: {
+            resultKind: 'aggregate',
+            dataType: 'Average Cadence',
+            valueType: ChartDataValueTypes.Average,
+            categoryType: ChartDataCategoryTypes.DateType,
+            requestedTimeInterval: TimeIntervals.Weekly,
+            activityTypeGroups: [],
+            activityTypes: [ActivityTypes.Cycling],
+            dateRange: {
+              kind: 'bounded',
+              startDate: '2026-01-01T00:00:00.000Z',
+              endDate: '2026-03-22T23:59:59.999Z',
+              timezone: 'UTC',
+              source: 'prompt',
+            },
+            chartType: ChartTypes.LinesVertical,
+          },
+          aggregation: {
+            dataType: 'Average Cadence',
+            valueType: ChartDataValueTypes.Average,
+            categoryType: ChartDataCategoryTypes.DateType,
+            resolvedTimeInterval: TimeIntervals.Weekly,
+            buckets: [],
+          },
+          summary: {
+            matchedEventCount: 0,
+            overallAggregateValue: null,
+            peakBucket: null,
+            lowestBucket: null,
+            latestBucket: null,
+            activityMix: null,
+            bucketCoverage: null,
+            trend: null,
+          },
+          presentation: {
+            title: 'Cadence',
+            chartType: ChartTypes.LinesVertical,
+          },
+        },
+      ],
+      digest: {
+        granularity: 'weekly',
+        periodCount: 1,
+        nonEmptyPeriodCount: 0,
+        periods: [
+          {
+            bucketKey: '2026-W09',
+            time: Date.parse('2026-02-23T00:00:00.000Z'),
+            hasData: false,
+            metrics: [],
+          },
+        ],
+      },
+      presentation: {
+        title: 'Digest',
+        chartType: ChartTypes.LinesVertical,
+      },
+    });
+
+    expect(invalidDigestResponse.ok).toBe(false);
+    if (invalidDigestResponse.ok) {
+      return;
+    }
+
+    expect(invalidDigestResponse.reason).toBe('digest_invalid');
   });
 
   it('rejects invalid query combinations with deterministic reason', () => {

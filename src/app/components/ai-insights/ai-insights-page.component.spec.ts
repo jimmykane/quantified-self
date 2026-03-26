@@ -501,6 +501,338 @@ function buildMultiMetricResponse(): AiInsightsMultiMetricAggregateOkResponse {
   };
 }
 
+function buildMultiMetricDigestResponse(): AiInsightsMultiMetricAggregateOkResponse {
+  const baseResponse = buildMultiMetricResponse();
+  return {
+    ...baseResponse,
+    narrative: 'Weekly digest with 2 active weeks and 1 no-data week.',
+    query: {
+      ...baseResponse.query,
+      requestedTimeInterval: TimeIntervals.Weekly,
+      digestMode: 'weekly',
+    },
+    digest: {
+      granularity: 'weekly',
+      periodCount: 3,
+      nonEmptyPeriodCount: 2,
+      periods: [
+        {
+          bucketKey: '2026-W09',
+          time: Date.UTC(2026, 1, 23),
+          hasData: true,
+          metrics: [
+            {
+              metricKey: 'distance',
+              metricLabel: 'Distance',
+              dataType: DataDistance.type,
+              valueType: ChartDataValueTypes.Total,
+              aggregateValue: 54000,
+              totalCount: 3,
+            },
+            {
+              metricKey: 'duration',
+              metricLabel: 'Duration',
+              dataType: 'Duration',
+              valueType: ChartDataValueTypes.Total,
+              aggregateValue: 12400,
+              totalCount: 3,
+            },
+            {
+              metricKey: 'ascent',
+              metricLabel: 'Ascent',
+              dataType: 'Ascent',
+              valueType: ChartDataValueTypes.Total,
+              aggregateValue: 900,
+              totalCount: 3,
+            },
+          ],
+        },
+        {
+          bucketKey: '2026-W10',
+          time: Date.UTC(2026, 2, 2),
+          hasData: false,
+          metrics: [
+            {
+              metricKey: 'distance',
+              metricLabel: 'Distance',
+              dataType: DataDistance.type,
+              valueType: ChartDataValueTypes.Total,
+              aggregateValue: null,
+              totalCount: 0,
+            },
+            {
+              metricKey: 'duration',
+              metricLabel: 'Duration',
+              dataType: 'Duration',
+              valueType: ChartDataValueTypes.Total,
+              aggregateValue: null,
+              totalCount: 0,
+            },
+            {
+              metricKey: 'ascent',
+              metricLabel: 'Ascent',
+              dataType: 'Ascent',
+              valueType: ChartDataValueTypes.Total,
+              aggregateValue: null,
+              totalCount: 0,
+            },
+          ],
+        },
+        {
+          bucketKey: '2026-W11',
+          time: Date.UTC(2026, 2, 9),
+          hasData: true,
+          metrics: [
+            {
+              metricKey: 'distance',
+              metricLabel: 'Distance',
+              dataType: DataDistance.type,
+              valueType: ChartDataValueTypes.Total,
+              aggregateValue: 32000,
+              totalCount: 2,
+            },
+            {
+              metricKey: 'duration',
+              metricLabel: 'Duration',
+              dataType: 'Duration',
+              valueType: ChartDataValueTypes.Total,
+              aggregateValue: 8600,
+              totalCount: 2,
+            },
+            {
+              metricKey: 'ascent',
+              metricLabel: 'Ascent',
+              dataType: 'Ascent',
+              valueType: ChartDataValueTypes.Total,
+              aggregateValue: 620,
+              totalCount: 2,
+            },
+          ],
+        },
+      ],
+    },
+  };
+}
+
+function buildYearlyDigestResponse(): AiInsightsMultiMetricAggregateOkResponse {
+  const baseResponse = buildMultiMetricDigestResponse();
+  return {
+    ...baseResponse,
+    narrative: 'Yearly digest with one active year and two no-data years.',
+    query: {
+      ...baseResponse.query,
+      requestedTimeInterval: TimeIntervals.Yearly,
+      digestMode: 'yearly',
+      dateRange: {
+        kind: 'bounded',
+        startDate: '2024-01-01T00:00:00.000Z',
+        endDate: '2026-12-31T23:59:59.999Z',
+        timezone: 'UTC',
+        source: 'prompt',
+      },
+    },
+    digest: {
+      granularity: 'yearly',
+      periodCount: 3,
+      nonEmptyPeriodCount: 1,
+      periods: [
+        {
+          bucketKey: '2024',
+          time: Date.UTC(2024, 0, 1),
+          hasData: false,
+          metrics: [
+            {
+              metricKey: 'distance',
+              metricLabel: 'Distance',
+              dataType: DataDistance.type,
+              valueType: ChartDataValueTypes.Total,
+              aggregateValue: null,
+              totalCount: 0,
+            },
+            {
+              metricKey: 'duration',
+              metricLabel: 'Duration',
+              dataType: 'Duration',
+              valueType: ChartDataValueTypes.Total,
+              aggregateValue: null,
+              totalCount: 0,
+            },
+            {
+              metricKey: 'ascent',
+              metricLabel: 'Ascent',
+              dataType: 'Ascent',
+              valueType: ChartDataValueTypes.Total,
+              aggregateValue: null,
+              totalCount: 0,
+            },
+          ],
+        },
+        {
+          bucketKey: '2025',
+          time: Date.UTC(2025, 0, 1),
+          hasData: true,
+          metrics: [
+            {
+              metricKey: 'distance',
+              metricLabel: 'Distance',
+              dataType: DataDistance.type,
+              valueType: ChartDataValueTypes.Total,
+              aggregateValue: 126000,
+              totalCount: 8,
+            },
+            {
+              metricKey: 'duration',
+              metricLabel: 'Duration',
+              dataType: 'Duration',
+              valueType: ChartDataValueTypes.Total,
+              aggregateValue: 41000,
+              totalCount: 8,
+            },
+            {
+              metricKey: 'ascent',
+              metricLabel: 'Ascent',
+              dataType: 'Ascent',
+              valueType: ChartDataValueTypes.Total,
+              aggregateValue: 2800,
+              totalCount: 8,
+            },
+          ],
+        },
+        {
+          bucketKey: '2026',
+          time: Date.UTC(2026, 0, 1),
+          hasData: false,
+          metrics: [
+            {
+              metricKey: 'distance',
+              metricLabel: 'Distance',
+              dataType: DataDistance.type,
+              valueType: ChartDataValueTypes.Total,
+              aggregateValue: null,
+              totalCount: 0,
+            },
+            {
+              metricKey: 'duration',
+              metricLabel: 'Duration',
+              dataType: 'Duration',
+              valueType: ChartDataValueTypes.Total,
+              aggregateValue: null,
+              totalCount: 0,
+            },
+            {
+              metricKey: 'ascent',
+              metricLabel: 'Ascent',
+              dataType: 'Ascent',
+              valueType: ChartDataValueTypes.Total,
+              aggregateValue: null,
+              totalCount: 0,
+            },
+          ],
+        },
+      ],
+    },
+  };
+}
+
+function buildEmptyDigestResponse(): AiInsightsEmptyResponse {
+  const baseResponse = buildEmptyResponse();
+  const digestQuery = buildMultiMetricDigestResponse().query;
+  return {
+    ...baseResponse,
+    query: digestQuery,
+    digest: {
+      granularity: 'weekly',
+      periodCount: 2,
+      nonEmptyPeriodCount: 0,
+      periods: [
+        {
+          bucketKey: '2026-W09',
+          time: Date.UTC(2026, 1, 23),
+          hasData: false,
+          metrics: [
+            {
+              metricKey: 'distance',
+              metricLabel: 'Distance',
+              dataType: DataDistance.type,
+              valueType: ChartDataValueTypes.Total,
+              aggregateValue: null,
+              totalCount: 0,
+            },
+            {
+              metricKey: 'duration',
+              metricLabel: 'Duration',
+              dataType: 'Duration',
+              valueType: ChartDataValueTypes.Total,
+              aggregateValue: null,
+              totalCount: 0,
+            },
+            {
+              metricKey: 'ascent',
+              metricLabel: 'Ascent',
+              dataType: 'Ascent',
+              valueType: ChartDataValueTypes.Total,
+              aggregateValue: null,
+              totalCount: 0,
+            },
+          ],
+        },
+        {
+          bucketKey: '2026-W10',
+          time: Date.UTC(2026, 2, 2),
+          hasData: false,
+          metrics: [
+            {
+              metricKey: 'distance',
+              metricLabel: 'Distance',
+              dataType: DataDistance.type,
+              valueType: ChartDataValueTypes.Total,
+              aggregateValue: null,
+              totalCount: 0,
+            },
+            {
+              metricKey: 'duration',
+              metricLabel: 'Duration',
+              dataType: 'Duration',
+              valueType: ChartDataValueTypes.Total,
+              aggregateValue: null,
+              totalCount: 0,
+            },
+            {
+              metricKey: 'ascent',
+              metricLabel: 'Ascent',
+              dataType: 'Ascent',
+              valueType: ChartDataValueTypes.Total,
+              aggregateValue: null,
+              totalCount: 0,
+            },
+          ],
+        },
+      ],
+    },
+  };
+}
+
+function buildEmptyDigestWithoutPeriodsResponse(): AiInsightsEmptyResponse {
+  const baseResponse = buildEmptyResponse();
+  return {
+    ...baseResponse,
+    query: {
+      ...buildYearlyDigestResponse().query,
+      dateRange: {
+        kind: 'all_time',
+        timezone: 'UTC',
+        source: 'prompt',
+      },
+    },
+    digest: {
+      granularity: 'yearly',
+      periodCount: 0,
+      nonEmptyPeriodCount: 0,
+      periods: [],
+    },
+  };
+}
+
 function buildPaceResponse(): AiInsightsAggregateOkResponse {
   return {
     status: 'ok',
@@ -1893,6 +2225,36 @@ describe('AiInsightsPageComponent', () => {
     expect(metricSections).toHaveLength(0);
   });
 
+  it('should render digest periods for multi-metric digest responses, including no-data periods', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue(buildMultiMetricDigestResponse());
+
+    await component.applySuggestedPrompt('Give me a weekly digest for cycling this year.');
+    fixture.detectChanges();
+
+    const digestTitle = fixture.debugElement.queryAll(By.css('.narrative-section-title'))
+      .map((element) => element.nativeElement.textContent?.trim());
+    const digestRows = fixture.debugElement.queryAll(By.css('.digest-period-row'));
+    const noDataBadges = fixture.debugElement.queryAll(By.css('.digest-period-badge'));
+    const metricRows = fixture.debugElement.queryAll(By.css('.digest-metric-row'));
+
+    expect(digestTitle).toContain('Digest timeline');
+    expect(digestRows.length).toBeGreaterThanOrEqual(3);
+    expect(noDataBadges.some((badge) => badge.nativeElement.textContent.includes('No data'))).toBe(true);
+    expect(metricRows.some((row) => row.nativeElement.textContent.includes('Distance'))).toBe(true);
+  });
+
+  it('should render yearly digest labels as calendar years', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue(buildYearlyDigestResponse());
+
+    await component.applySuggestedPrompt('Give me a yearly digest for cycling this year.');
+    fixture.detectChanges();
+
+    const digestLabels = fixture.debugElement.queryAll(By.css('.digest-period-label'))
+      .map((element) => `${element.nativeElement.textContent || ''}`.trim());
+
+    expect(digestLabels).toEqual(expect.arrayContaining(['2024', '2025', '2026']));
+  });
+
   it('should render the richer AI loading state while an insight request is in flight', async () => {
     let resolveResponse: ((response: AiInsightsResponse) => void) | null = null;
     aiInsightsServiceMock.runInsight.mockReturnValue(new Promise<AiInsightsResponse>((resolve) => {
@@ -2426,6 +2788,37 @@ describe('AiInsightsPageComponent', () => {
     expect(stateTitle?.textContent).toContain('No matching data');
     expect(supportLink?.getAttribute('href')).toBe('mailto:support@quantified-self.io?subject=AI%20Insights%20-%20No%20prompt%20results');
     expect(chart).toBeNull();
+  });
+
+  it('should render digest periods for empty digest responses', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue(buildEmptyDigestResponse());
+
+    await component.applySuggestedPrompt('Give me a weekly digest for cycling this year');
+    fixture.detectChanges();
+
+    const digestRows = fixture.debugElement.queryAll(By.css('.digest-period-row'));
+    const digestBadges = fixture.debugElement.queryAll(By.css('.digest-period-badge'));
+    const emptyCopy = fixture.debugElement.queryAll(By.css('.digest-period-empty'));
+
+    expect(digestRows.length).toBe(2);
+    expect(digestBadges.every((badge) => badge.nativeElement.textContent.includes('No data'))).toBe(true);
+    expect(emptyCopy.every((row) => row.nativeElement.textContent.includes('No matching events in this period.'))).toBe(true);
+  });
+
+  it('should render digest empty-state copy when digest exists without period rows', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue(buildEmptyDigestWithoutPeriodsResponse());
+
+    await component.applySuggestedPrompt('Give me a yearly digest for all activities all time');
+    fixture.detectChanges();
+
+    const digestTitle = fixture.debugElement.queryAll(By.css('.narrative-section-title'))
+      .map((element) => element.nativeElement.textContent?.trim());
+    const digestRows = fixture.debugElement.queryAll(By.css('.digest-period-row'));
+    const digestEmptyState = fixture.debugElement.query(By.css('.digest-empty-state'))?.nativeElement as HTMLElement | undefined;
+
+    expect(digestTitle).toContain('Digest timeline');
+    expect(digestRows).toHaveLength(0);
+    expect(digestEmptyState?.textContent).toContain('No period timeline is available yet for this digest range.');
   });
 
   it('should render the mapped error message when the request fails', async () => {

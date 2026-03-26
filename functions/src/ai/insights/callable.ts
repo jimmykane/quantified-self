@@ -35,6 +35,7 @@ import {
   buildInsightSummary,
   buildNonAggregateEmptySummary,
 } from './insight-summary';
+import { buildAiInsightsDigest } from './digest';
 import {
   type CallableResultKindContext,
   resolveCallableResultKindHandler,
@@ -540,6 +541,14 @@ export async function runAiInsights(
       } satisfies AiInsightsMultiMetricAggregateMetricResult;
     })
     : [];
+  const digest = executionResult.resultKind === 'multi_metric_aggregate'
+    && multiMetricQueryInput?.digestMode
+    ? buildAiInsightsDigest({
+      digestMode: multiMetricQueryInput.digestMode,
+      dateRange: multiMetricQueryInput.dateRange,
+      metricResults: multiMetricResultGroups,
+    })
+    : null;
   const callableResultKindContext: CallableResultKindContext = (() => {
     const contextBase = {
       userID,
@@ -617,6 +626,7 @@ export async function runAiInsights(
         query: multiMetricQueryInput,
         metricLabels: multiMetricDefinitions.map(entry => entry.metric.label),
         metricResults: multiMetricResultGroups,
+        digest,
         executionResult,
       };
     }
@@ -656,6 +666,7 @@ export async function runAiInsights(
         ? executionResult.aggregation
         : buildEmptyAggregation(effectiveQuery),
       summary: aggregateSummary ?? buildNonAggregateEmptySummary(),
+      ...(digest ? { digest } : {}),
       presentation: emptyPresentation,
     });
   }

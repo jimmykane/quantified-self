@@ -153,6 +153,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Event lookup**: best matching event plus top-ranked matching events.
 - **Latest event**: most recent matching event in scope (single primary event card).
 - **Multi-metric aggregate**: combined chart for multiple metrics with merged summary cards.
+- **Digest narrative**: ask for a weekly, monthly, or yearly digest to get deterministic period-by-period summaries with explicit no-data periods.
 - **Anomaly callouts**: deterministic spike/drop/activity-mix shift callouts for aggregate and date-grouped multi-metric results.
 - **Confidence & evidence chips**: compact chips under supported AI result narratives and callouts that show confidence tier and linked deterministic evidence.
 - **Empty**: the request shape is valid but no matching data was found in scope.

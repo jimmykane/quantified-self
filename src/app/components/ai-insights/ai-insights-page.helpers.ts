@@ -6,6 +6,7 @@ import {
   type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
 import type {
+  AiInsightsDigest,
   AiInsightAnomalyKind,
   AiInsightConfidenceTier,
   AiInsightEvidenceRef,
@@ -116,6 +117,17 @@ export interface MultiMetricAnomalyCalloutSection {
   metricKey: string;
   metricTitle: string;
   callouts: AnomalyCalloutDisplay[];
+}
+
+export interface DigestMetricDisplay {
+  label: string;
+  value: string | null;
+}
+
+export interface DigestPeriodDisplay {
+  label: string;
+  hasData: boolean;
+  metrics: DigestMetricDisplay[];
 }
 
 function resolveAnomalyKindLabel(kind: AiInsightAnomalyKind): string {
@@ -593,6 +605,60 @@ function formatSummaryValue(
   return formatUnitAwareDataValue(dataType, value, unitSettings, {
     stripRepeatedUnit: true,
   });
+}
+
+function formatDigestPeriodLabel(
+  digest: AiInsightsDigest,
+  period: AiInsightsDigest['periods'][number],
+  locale: string,
+  timezone: string,
+): string {
+  const date = new Date(period.time);
+  if (!Number.isFinite(date.getTime())) {
+    return `${period.bucketKey}`;
+  }
+
+  switch (digest.granularity) {
+    case 'weekly':
+      return new Intl.DateTimeFormat(locale || undefined, {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        timeZone: timezone,
+      }).format(date);
+    case 'yearly':
+      return new Intl.DateTimeFormat(locale || undefined, {
+        year: 'numeric',
+        timeZone: timezone,
+      }).format(date);
+    case 'monthly':
+    default:
+      return new Intl.DateTimeFormat(locale || undefined, {
+        month: 'short',
+        year: 'numeric',
+        timeZone: timezone,
+      }).format(date);
+  }
+}
+
+export function buildDigestPeriodDisplays(
+  digest: AiInsightsDigest | null | undefined,
+  timezone: string,
+  unitSettings: UserUnitSettingsInterface,
+  locale: string,
+): DigestPeriodDisplay[] {
+  if (!digest?.periods.length) {
+    return [];
+  }
+
+  return digest.periods.map((period) => ({
+    label: formatDigestPeriodLabel(digest, period, locale, timezone),
+    hasData: period.hasData,
+    metrics: period.metrics.map(metric => ({
+      label: metric.metricLabel,
+      value: formatSummaryValue(metric.dataType, metric.aggregateValue, unitSettings),
+    })),
+  }));
 }
 
 function buildActivityMixDetails(
