@@ -268,9 +268,15 @@ export const restoreUserClaims = onCall({
  */
 export async function reconcileClaims(uid: string): Promise<{ role: string }> {
     const db = admin.firestore();
+    const userDocRef = db.doc(`users/${uid}`);
     const subscriptionsRef = db.collection(`customers/${uid}/subscriptions`);
 
     let role = 'free';
+    const userDoc = await userDocRef.get();
+    const hasUserDocument = userDoc.exists;
+    if (!hasUserDocument) {
+        logger.warn(`[reconcileClaims] users/${uid} is missing. Skipping system/status reads and writes to avoid orphan recreation.`);
+    }
 
     // Check for any active or trialing subscription
     const snapshot = await subscriptionsRef
@@ -301,10 +307,13 @@ export async function reconcileClaims(uid: string): Promise<{ role: string }> {
     const user = await admin.auth().getUser(uid);
     const existingClaims = user.customClaims || {};
 
-    // Check for grace period in system status
-    const systemDoc = await db.doc(`users/${uid}/system/status`).get();
-    const systemData = systemDoc.data();
-    const gracePeriodUntil = systemData?.gracePeriodUntil ? Math.floor(systemData.gracePeriodUntil.toMillis()) : undefined;
+    let gracePeriodUntil: number | undefined;
+    if (hasUserDocument) {
+        // Check for grace period in system status
+        const systemDoc = await db.doc(`users/${uid}/system/status`).get();
+        const systemData = systemDoc.data();
+        gracePeriodUntil = systemData?.gracePeriodUntil ? Math.floor(systemData.gracePeriodUntil.toMillis()) : undefined;
+    }
 
     const newClaims = {
         ...existingClaims,
@@ -319,10 +328,12 @@ export async function reconcileClaims(uid: string): Promise<{ role: string }> {
 
     await admin.auth().setCustomUserClaims(uid, newClaims);
 
-    // Semantic update: Signal that claims have been updated so the client can refresh
-    await db.doc(`users/${uid}/system/status`).set({
-        claimsUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
-    }, { merge: true });
+    if (hasUserDocument) {
+        // Semantic update: Signal that claims have been updated so the client can refresh
+        await db.doc(`users/${uid}/system/status`).set({
+            claimsUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+    }
 
     return { role };
 }

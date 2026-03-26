@@ -214,6 +214,34 @@ describe('enforceSubscriptionLimits', () => {
         // Verify logs contain error for user1 (implicitly handled by the catch block in the function)
     });
 
+    it('should clean orphaned roots when reconcileClaims fails with auth/user-not-found in grace period', async () => {
+        const futureDate = new Date(Date.now() + 100000);
+
+        mockFirestoreInstance.collection.mockImplementation((path: string) => {
+            if (path === GARMIN_API_TOKENS_COLLECTION_NAME) return mockQuery([{ id: 'user1' }]);
+            if (path === 'users') return mockQuery([mockUserDoc('user1')]);
+            if (path.includes('subscriptions')) return mockQuery([]);
+            return mockQuery([]);
+        });
+
+        mockFirestoreInstance.doc.mockImplementation((path: string) => {
+            if (path === 'users/user1/system/status') return mockDoc({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(futureDate) });
+            return mockDoc({});
+        });
+
+        vi.spyOn(Claims, 'reconcileClaims').mockRejectedValueOnce({ code: 'auth/user-not-found' } as any);
+
+        const wrapped = enforceSubscriptionLimits as any;
+        await wrapped({});
+
+        expect(mockFirestoreInstance.doc).toHaveBeenCalledWith('users/user1');
+        expect(mockFirestoreInstance.doc).toHaveBeenCalledWith('customers/user1');
+        expect(mockRecursiveDelete).toHaveBeenCalledTimes(2);
+        expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.SuuntoApp);
+        expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.COROSAPI);
+        expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.GarminAPI);
+    });
+
     it('should initialize grace period if missing (Fail-safe)', async () => {
         mockFirestoreInstance.collection.mockImplementation((path: string) => {
             if (path === GARMIN_API_TOKENS_COLLECTION_NAME) return mockQuery([{ id: 'user1' }]);
@@ -246,6 +274,41 @@ describe('enforceSubscriptionLimits', () => {
 
         // Verify reconcileClaims is called
         expect(Claims.reconcileClaims).toHaveBeenCalledWith('user1');
+    });
+
+    it('should skip fail-safe writes and clean orphaned roots when auth user is missing', async () => {
+        mockGetUser.mockRejectedValueOnce({ code: 'auth/user-not-found' } as any);
+
+        mockFirestoreInstance.collection.mockImplementation((path: string) => {
+            if (path === GARMIN_API_TOKENS_COLLECTION_NAME) return mockQuery([{ id: 'user1' }]);
+            if (path === 'users') return mockQuery([mockUserDoc('user1', { hasSubscribedOnce: true })]);
+            if (path.includes('subscriptions')) return mockQuery([]);
+            return mockQuery([]);
+        });
+
+        const systemDocSetSpy = vi.fn().mockResolvedValue({});
+        const systemDocMock = {
+            get: vi.fn().mockResolvedValue({ exists: false, data: () => ({}) }),
+            set: systemDocSetSpy,
+            ref: { id: 'status' }
+        };
+
+        mockFirestoreInstance.doc.mockImplementation((path: string) => {
+            if (path === 'users/user1/system/status') return systemDocMock;
+            return mockDoc({});
+        });
+
+        const wrapped = enforceSubscriptionLimits as any;
+        await wrapped({});
+
+        expect(systemDocSetSpy).not.toHaveBeenCalled();
+        expect(Claims.reconcileClaims).not.toHaveBeenCalled();
+        expect(mockFirestoreInstance.doc).toHaveBeenCalledWith('users/user1');
+        expect(mockFirestoreInstance.doc).toHaveBeenCalledWith('customers/user1');
+        expect(mockRecursiveDelete).toHaveBeenCalledTimes(2);
+        expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.SuuntoApp);
+        expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.COROSAPI);
+        expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.GarminAPI);
     });
 
     it('should disconnect and clear claims when grace period has expired (free user)', async () => {
@@ -526,6 +589,35 @@ describe('enforceSubscriptionLimits', () => {
         await wrapped({});
 
         expect(systemDoc.set).toHaveBeenCalled();
+        expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.SuuntoApp);
+        expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.COROSAPI);
+        expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.GarminAPI);
+    });
+
+    it('should clean orphaned roots and continue deauthorization when clearing claims hits auth/user-not-found', async () => {
+        const pastDate = new Date(Date.now() - 100000);
+        const systemDoc = mockDoc({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(pastDate) });
+
+        mockGetUser.mockRejectedValueOnce({ code: 'auth/user-not-found' } as any);
+
+        mockFirestoreInstance.collection.mockImplementation((path: string) => {
+            if (path === GARMIN_API_TOKENS_COLLECTION_NAME) return mockQuery([{ id: 'user1' }]);
+            if (path === 'users') return mockQuery([mockUserDoc('user1', { hasSubscribedOnce: true })]);
+            if (path.includes('subscriptions')) return mockQuery([]);
+            return mockQuery([]);
+        });
+
+        mockFirestoreInstance.doc.mockImplementation((path: string) => {
+            if (path === 'users/user1/system/status') return systemDoc;
+            return mockDoc({});
+        });
+
+        const wrapped = enforceSubscriptionLimits as any;
+        await wrapped({});
+
+        expect(mockFirestoreInstance.doc).toHaveBeenCalledWith('users/user1');
+        expect(mockFirestoreInstance.doc).toHaveBeenCalledWith('customers/user1');
+        expect(mockRecursiveDelete).toHaveBeenCalledTimes(2);
         expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.SuuntoApp);
         expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.COROSAPI);
         expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.GarminAPI);
