@@ -259,6 +259,22 @@ describe('AppUserService', () => {
             expect(acceptOrder).toBeLessThan(updateOrder);
         });
 
+        it('should preserve creationDate during create-or-update onboarding upserts', async () => {
+            const user = {
+                uid: 'u1',
+                acceptedPrivacyPolicy: true,
+                acceptedDataPolicy: true,
+                displayName: 'New User',
+                creationDate: new Date('2026-01-01T00:00:00.000Z'),
+            } as AppUserInterface;
+
+            await service.createOrUpdateUser(user);
+
+            const mainUserDocWrite = (setDoc as any).mock.calls.find(([, payload]: [unknown, any]) => payload?.displayName === 'New User');
+            expect(mainUserDocWrite).toBeDefined();
+            expect(mainUserDocWrite[1].creationDate).toEqual(new Date('2026-01-01T00:00:00.000Z'));
+        });
+
         it('acceptPolicies should persist only legal fields explicitly set to true', async () => {
             const policies = {
                 uid: 'u1',
