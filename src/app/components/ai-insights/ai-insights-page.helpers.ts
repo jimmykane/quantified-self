@@ -597,6 +597,10 @@ function formatSummaryValue(
   dataType: string,
   value: number | null,
   unitSettings: UserUnitSettingsInterface,
+  options?: {
+    compactAscentDescent?: boolean;
+    locale?: string;
+  },
 ): string | null {
   if (!Number.isFinite(value)) {
     return null;
@@ -604,6 +608,8 @@ function formatSummaryValue(
 
   return formatUnitAwareDataValue(dataType, value, unitSettings, {
     stripRepeatedUnit: true,
+    compactAscentDescent: options?.compactAscentDescent,
+    locale: options?.locale,
   });
 }
 
@@ -656,7 +662,10 @@ export function buildDigestPeriodDisplays(
     hasData: period.hasData,
     metrics: period.metrics.map(metric => ({
       label: metric.metricLabel,
-      value: formatSummaryValue(metric.dataType, metric.aggregateValue, unitSettings),
+      value: formatSummaryValue(metric.dataType, metric.aggregateValue, unitSettings, {
+        compactAscentDescent: true,
+        locale,
+      }),
     })),
   }));
 }

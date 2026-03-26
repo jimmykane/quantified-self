@@ -144,6 +144,13 @@ describe('EventCardMapComponent', () => {
     await fixture.whenStable();
   });
 
+  const emitMapEvent = (eventName: string, payload?: any) => {
+    const handlers = mockMap.on.mock.calls
+      .filter((call: any[]) => call[0] === eventName)
+      .map((call: any[]) => call[1]);
+    handlers.forEach((handler: any) => handler(payload));
+  };
+
   it('should create', () => {
     expect(component).toBeTruthy();
   });
@@ -153,6 +160,83 @@ describe('EventCardMapComponent', () => {
     expect(mockMapboxLoader.createMap).toHaveBeenCalled();
     expect(mockMapboxLoader.loadMapbox).toHaveBeenCalled();
     expect(mockMapStyleService.createSynchronizer).toHaveBeenCalled();
+  });
+
+  it('should flush deferred map activities once style becomes ready', async () => {
+    await component.ngAfterViewInit();
+    mockMap.isStyleLoaded = vi.fn().mockReturnValue(true);
+    emitMapEvent('style.load');
+
+    const mapActivitiesSpy = vi.spyOn(component as any, 'mapActivities');
+    mapActivitiesSpy.mockClear();
+
+    (component as any).mapReady = false;
+    (component as any).requestMapActivities(true, 'test-style-loading');
+    expect(mapActivitiesSpy).not.toHaveBeenCalled();
+
+    mockMap.isStyleLoaded.mockReturnValue(true);
+    emitMapEvent('style.load');
+    expect(mapActivitiesSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('should skip and defer renderMapData when style is not ready', async () => {
+    await component.ngAfterViewInit();
+    mockMap.isStyleLoaded = vi.fn().mockReturnValue(true);
+    emitMapEvent('styledata');
+
+    (component as any).activitiesMapData = [{
+      activity: { getID: () => 'activity-1' },
+      positions: [
+        { latitudeDegrees: 40.1, longitudeDegrees: 22.1 },
+        { latitudeDegrees: 40.2, longitudeDegrees: 22.2 },
+      ],
+      strokeColor: '#ff0000',
+      laps: [],
+      jumps: [],
+    }];
+    const renderActivitiesSpy = vi.spyOn((component as any).mapManager, 'renderActivities');
+
+    mockMap.isStyleLoaded.mockReturnValue(false);
+    (component as any).renderMapData(false);
+
+    expect(renderActivitiesSpy).not.toHaveBeenCalled();
+    expect((component as any).mapReady).toBe(false);
+    expect((component as any).deferredMapActivities).toEqual(expect.objectContaining({
+      lastReason: 'renderMapData:style-not-ready'
+    }));
+  });
+
+  it('should call fitBoundsToTracks after initial render path with bounds', async () => {
+    vi.useFakeTimers();
+    try {
+      await component.ngAfterViewInit();
+      mockMap.isStyleLoaded = vi.fn().mockReturnValue(true);
+      emitMapEvent('style.load');
+
+      (component as any).activitiesMapData = [{
+        activity: { getID: () => 'activity-1' },
+        positions: [
+          { latitudeDegrees: 40.1, longitudeDegrees: 22.1 },
+          { latitudeDegrees: 40.2, longitudeDegrees: 22.2 },
+        ],
+        strokeColor: '#ff0000',
+        laps: [],
+        jumps: [],
+      }];
+
+      const fitBoundsSpy = vi
+        .spyOn((component as any).mapManager, 'fitBoundsToTracks')
+        .mockReturnValue(true);
+
+      (component as any).renderMapData(true);
+
+      expect(fitBoundsSpy).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(251);
+      expect(fitBoundsSpy).toHaveBeenCalledTimes(1);
+      expect(fitBoundsSpy).toHaveBeenCalledWith(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('should not persist default mapStyle during init when missing', async () => {

@@ -1,4 +1,6 @@
 import {
+  DataAscent,
+  DataDescent,
   DataDuration,
   type DataInterface,
   DaysOfTheWeek,
@@ -15,6 +17,11 @@ import {
 } from '@sports-alliance/sports-lib';
 
 const SECONDS_PER_DAY = 24 * 60 * 60;
+
+interface AscentDescentDisplayOptions {
+  locale?: string | null;
+  compact?: boolean;
+}
 
 export interface UnitAwareStatDisplay {
   type: string;
@@ -158,6 +165,24 @@ export function normalizeUserUnitSettings(raw: unknown): UserUnitSettingsInterfa
 interface ResolveUnitAwareDisplayOptions {
   preferredType?: string | null;
   stripRepeatedUnit?: boolean;
+  compactAscentDescent?: boolean;
+  locale?: string | null;
+}
+
+function resolveAscentDescentDisplayValue(
+  stat: DataInterface,
+  dataType: string,
+  options?: ResolveUnitAwareDisplayOptions,
+): string | number | undefined {
+  if (dataType !== DataAscent.type && dataType !== DataDescent.type) {
+    return undefined;
+  }
+
+  const getDisplayValue = stat.getDisplayValue as ((this: DataInterface, opts?: AscentDescentDisplayOptions) => unknown) | undefined;
+  return getDisplayValue?.call(stat, {
+    compact: options?.compactAscentDescent === true,
+    locale: options?.locale,
+  }) as string | number | undefined;
 }
 
 export function resolveUnitAwareDisplayStat(
@@ -184,9 +209,10 @@ export function resolveUnitAwareDisplayStat(
 
   const rawValue = typeof selectedStat.getValue === 'function' ? Number(selectedStat.getValue()) : null;
   const isDuration = selectedStat instanceof DataDuration;
+  const ascentDescentDisplayValue = resolveAscentDescentDisplayValue(selectedStat, selectedType, options);
   const displayValueRaw = isDuration && rawValue !== null && Number.isFinite(rawValue) && rawValue >= SECONDS_PER_DAY
     ? selectedStat.getDisplayValue(true, false)
-    : selectedStat.getDisplayValue?.();
+    : ascentDescentDisplayValue ?? selectedStat.getDisplayValue?.();
   const displayUnitRaw = selectedStat.getDisplayUnit?.();
   const displayUnit = toDisplayText(displayUnitRaw).trim();
   const displayValue = options?.stripRepeatedUnit === true

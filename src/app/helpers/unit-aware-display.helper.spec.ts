@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DataAscent,
+  DataDescent,
   DataDuration,
   DataHeartRateMax,
   DataPaceAvg,
@@ -96,5 +98,43 @@ describe('unit-aware-display', () => {
     expect(formatUnitAwareDataValue(DataDuration.type, (24 * 60 * 60) + (2 * 60 * 60) + (15 * 60), unitSettings, {
       stripRepeatedUnit: true,
     })).toBe('1d 02h 15m');
+  });
+
+  it('should format ascent and descent values with dot grouping by default', () => {
+    const unitSettings = getDefaultUserUnitSettings();
+
+    expect(formatUnitAwareDataValue(DataAscent.type, 12345, unitSettings, {
+      stripRepeatedUnit: true,
+    })).toBe('12.345 m');
+    expect(formatUnitAwareDataValue(DataDescent.type, 12345, unitSettings, {
+      stripRepeatedUnit: true,
+    })).toBe('12.345 m');
+  });
+
+  it('should format ascent and descent values with locale-aware grouping when locale is provided', () => {
+    const unitSettings = getDefaultUserUnitSettings();
+
+    expect(formatUnitAwareDataValue(DataAscent.type, 12345, unitSettings, {
+      stripRepeatedUnit: true,
+      locale: 'en-US',
+    })).toBe('12,345 m');
+    expect(formatUnitAwareDataValue(DataDescent.type, 12345, unitSettings, {
+      stripRepeatedUnit: true,
+      locale: 'de-DE',
+    })).toBe('12.345 m');
+  });
+
+  it('should support compact mode for ascent and descent when requested', () => {
+    const unitSettings = getDefaultUserUnitSettings();
+
+    expect(formatUnitAwareDataValue(DataAscent.type, 12345, unitSettings, {
+      stripRepeatedUnit: true,
+      compactAscentDescent: true,
+    })).toBe('12.3k m');
+    expect(formatUnitAwareDataValue(DataDescent.type, 12345, unitSettings, {
+      stripRepeatedUnit: true,
+      compactAscentDescent: true,
+      locale: 'en-US',
+    })).toBe('12.3K m');
   });
 });
