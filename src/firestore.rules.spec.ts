@@ -137,6 +137,57 @@ describe('Firestore Security Rules', () => {
                 }));
             });
 
+            it('should allow user to create their own user document with creationDate', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertSucceeds(db.collection('users').doc(userId).set({
+                    privacy: 'private',
+                    creationDate: new Date('2026-03-26T00:00:00.000Z')
+                }));
+            });
+
+            it('should deny user from updating creationDate after the document exists', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().collection('users').doc(userId).set({
+                        privacy: 'private',
+                        creationDate: new Date('2026-03-01T00:00:00.000Z')
+                    });
+                });
+
+                await assertFails(db.collection('users').doc(userId).update({
+                    creationDate: new Date('2026-03-15T00:00:00.000Z')
+                }));
+            });
+
+            it('should allow user to update non-creationDate fields after creationDate is set', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().collection('users').doc(userId).set({
+                        privacy: 'private',
+                        creationDate: new Date('2026-03-01T00:00:00.000Z')
+                    });
+                });
+
+                await assertSucceeds(db.collection('users').doc(userId).update({
+                    displayName: 'Updated Name'
+                }));
+            });
+
+            it('should deny user from deleting their own user document', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().collection('users').doc(userId).set({
+                        privacy: 'private',
+                        displayName: 'Delete Attempt'
+                    });
+                });
+
+                await assertFails(db.collection('users').doc(userId).delete());
+            });
+
             it('should deny user from creating another user document', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
                 await assertFails(db.collection('users').doc(otherId).set({
