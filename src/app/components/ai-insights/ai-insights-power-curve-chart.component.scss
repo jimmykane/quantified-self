@@ -1,4 +1,13 @@
+:host {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
 .ai-insights-power-curve-chart {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   min-height: 22rem;
 }

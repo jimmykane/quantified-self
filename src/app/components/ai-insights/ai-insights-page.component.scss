@@ -335,6 +335,16 @@
   width: 100%;
 }
 
+.result-content > * {
+  min-width: 0;
+}
+
+app-ai-insights-power-curve-chart {
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
 .result-content--loading {
   gap: 18px;
 }
@@ -1005,6 +1015,17 @@
 
 .warning-chips {
   margin-top: -4px;
+  max-width: 100%;
+}
+
+.warning-chips mat-chip {
+  max-width: 100%;
+  height: auto;
+}
+
+:host ::ng-deep .warning-chips .mdc-evolution-chip__text-label {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .result-note-list {
