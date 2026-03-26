@@ -34,6 +34,7 @@ describe('UploadActivitiesComponent', () => {
   beforeEach(async () => {
     authServiceMock = {
       getUser: vi.fn().mockResolvedValue({ uid: 'u1' }),
+      currentUser: { uid: 'u1' },
     };
     eventServiceMock = {
       getEventCount: vi.fn().mockResolvedValue(5),
@@ -65,6 +66,7 @@ describe('UploadActivitiesComponent', () => {
     loggerMock = {
       log: vi.fn(),
       error: vi.fn(),
+      warn: vi.fn(),
     };
     snackBarMock = { open: vi.fn() };
 
@@ -144,6 +146,40 @@ describe('UploadActivitiesComponent', () => {
     expect(eventServiceMock.getEventCount).not.toHaveBeenCalled();
     expect(component.uploadCount).toBeNull();
     expect(component.uploadLimit).toBeNull();
+  });
+
+  it('should skip upload count when auth user does not match component user', async () => {
+    component.user = { uid: 'u1' } as any;
+    authServiceMock.currentUser = { uid: 'u2' };
+
+    await component.calculateRemainingUploads();
+
+    expect(eventServiceMock.getEventCount).not.toHaveBeenCalled();
+    expect(userServiceMock.getSubscriptionRole).not.toHaveBeenCalled();
+  });
+
+  it('should swallow permission-denied when auth transitions away mid-count', async () => {
+    component.user = { uid: 'u1' } as any;
+    eventServiceMock.getEventCount.mockImplementation(async () => {
+      authServiceMock.currentUser = null;
+      throw { code: 'permission-denied' };
+    });
+
+    await expect(component.calculateRemainingUploads()).resolves.toBeUndefined();
+
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      '[UploadActivitiesComponent] Skipping upload count during auth transition',
+      { requestedUid: 'u1', authUid: null },
+    );
+    expect(userServiceMock.getSubscriptionRole).not.toHaveBeenCalled();
+  });
+
+  it('should rethrow permission-denied when auth user is still current', async () => {
+    component.user = { uid: 'u1' } as any;
+    const error = { code: 'permission-denied' };
+    eventServiceMock.getEventCount.mockRejectedValue(error);
+
+    await expect(component.calculateRemainingUploads()).rejects.toBe(error);
   });
 
   it('should reject unsupported files', async () => {
