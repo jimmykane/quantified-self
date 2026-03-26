@@ -96,6 +96,10 @@ import { FunctionName } from '@shared/functions-manifest';
   providedIn: 'root',
 })
 export class AppUserService implements OnDestroy {
+  private static readonly authManagedDateFields = [
+    'creationDate',
+    'lastSignInDate',
+  ];
 
   private firestore = inject(Firestore);
   private auth = inject(Auth);
@@ -152,7 +156,6 @@ export class AppUserService implements OnDestroy {
       acceptedTrackingPolicy: false,
       acceptedDiagnosticsPolicy: true,
       privacy: Privacy.Private,
-      isAnonymous: false,
       creationDate: authCreationDate ?? new Date(),
       lastSignInDate: authLastSignInDate ?? authCreationDate ?? new Date()
     } as any;
@@ -591,6 +594,15 @@ export class AppUserService implements OnDestroy {
         delete propertiesToUpdate.impersonatedBy;
       }
 
+      // Keep auth metadata timestamps out of partial profile updates.
+      // creationDate is intentionally written only through the full create flow.
+      AppUserService.authManagedDateFields.forEach(field => {
+        if (field in propertiesToUpdate) {
+          this.logger.warn(`[AppUserService] Stripping auth-managed field '${field}' from update payload.`);
+          delete propertiesToUpdate[field];
+        }
+      });
+
       if (Object.keys(propertiesToUpdate).length > 0) {
         const userDocRef = doc(this.firestore, 'users', user.uid);
         promises.push(updateDoc(userDocRef, propertiesToUpdate)
@@ -629,6 +641,7 @@ export class AppUserService implements OnDestroy {
       'lastDowngradedAt',
       'stripeRole',
       'isPro',
+      'lastSignInDate',
       'impersonatedBy',
       ...AppUserService.legalFields
     ];
@@ -650,10 +663,6 @@ export class AppUserService implements OnDestroy {
 
       await Promise.all(promises);
     });
-  }
-
-  public async setUserPrivacy(user: User, privacy: Privacy) {
-    return this.updateUserProperties(user, { privacy: privacy });
   }
 
   public async setFreeTier(user: User) {

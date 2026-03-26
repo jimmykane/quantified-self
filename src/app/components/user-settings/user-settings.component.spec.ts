@@ -15,7 +15,7 @@ import { MaterialModule } from '../../modules/material.module';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { of } from 'rxjs';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
-import { Privacy, User, ACTIVITIES_EXCLUDED_FROM_ASCENT, ACTIVITIES_EXCLUDED_FROM_DESCENT } from '@sports-alliance/sports-lib';
+import { User, ACTIVITIES_EXCLUDED_FROM_ASCENT, ACTIVITIES_EXCLUDED_FROM_DESCENT } from '@sports-alliance/sports-lib';
 
 
 
@@ -127,18 +127,6 @@ describe('UserSettingsComponent', () => {
         expect(component.tabsStickyHeader).toBe(true);
         expect(component.tabsTopOffset).toBe('0px');
         expect(component.tabsLazyContent).toBe(false);
-    });
-
-    it('should default privacy to Private if user.privacy is missing', () => {
-        // mockUser has no privacy property
-        component.ngOnChanges();
-        expect(component.userSettingsFormGroup.get('privacy').value).toBe(Privacy.Private);
-    });
-
-    it('should use user.privacy if available', () => {
-        component.user.privacy = Privacy.Public;
-        component.ngOnChanges();
-        expect(component.userSettingsFormGroup.get('privacy').value).toBe(Privacy.Public);
     });
 
     it('should initialize acceptedTrackingPolicy from user data', () => {

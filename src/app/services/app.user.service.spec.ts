@@ -662,6 +662,22 @@ describe('AppUserService', () => {
                 { displayName: 'New Name' }
             );
         });
+
+        it('should strip auth-managed date fields from partial updates', async () => {
+            const user = { uid: 'test-uid' } as AppUserInterface;
+            const propertiesToUpdate = {
+                displayName: 'New Name',
+                creationDate: new Date('2026-01-01T00:00:00.000Z'),
+                lastSignInDate: new Date('2026-01-02T00:00:00.000Z')
+            };
+
+            await service.updateUserProperties(user, propertiesToUpdate);
+
+            expect(updateDoc).toHaveBeenCalledWith(
+                expect.anything(),
+                { displayName: 'New Name' }
+            );
+        });
     });
 
     describe('updateUser', () => {
@@ -669,17 +685,21 @@ describe('AppUserService', () => {
             service = TestBed.inject(AppUserService);
         });
 
-        it('should strip impersonatedBy from full user writes', async () => {
+        it('should strip impersonatedBy and lastSignInDate from full user writes', async () => {
             const user = {
                 uid: 'test-uid',
                 displayName: 'Test User',
-                impersonatedBy: 'admin-uid'
+                impersonatedBy: 'admin-uid',
+                creationDate: new Date('2026-01-01T00:00:00.000Z'),
+                lastSignInDate: new Date('2026-01-02T00:00:00.000Z')
             } as AppUserInterface;
 
             await service.updateUser(user);
 
             const [, writtenData] = (setDoc as any).mock.calls[0];
             expect(writtenData.displayName).toBe('Test User');
+            expect(writtenData.creationDate).toEqual(new Date('2026-01-01T00:00:00.000Z'));
+            expect(writtenData.lastSignInDate).toBeUndefined();
             expect(writtenData.impersonatedBy).toBeUndefined();
         });
     });

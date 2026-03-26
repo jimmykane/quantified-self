@@ -4,7 +4,6 @@ import {
   User,
   ActivityInterface,
   UserUnitSettingsInterface,
-  Privacy,
   DataDistance,
   DataDuration,
   DataSpeedAvg,
@@ -13,7 +12,6 @@ import {
   Feelings,
   RPEBorgCR10SCale,
 } from '@sports-alliance/sports-lib';
-import { AppEventService } from '../../services/app.event.service';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { EventDetailsSummaryBottomSheetComponent } from './event-details-summary-bottom-sheet/event-details-summary-bottom-sheet.component';
 import { EventStatsBottomSheetComponent } from '../event/stats-table/event-stats-bottom-sheet/event-stats-bottom-sheet.component';
@@ -61,7 +59,6 @@ export class EventSummaryComponent implements OnChanges {
   private templateStateInitialized = false;
 
   constructor(
-    private eventService: AppEventService,
     private cd: ChangeDetectorRef,
     private bottomSheet: MatBottomSheet,
     private benchmarkFlow: AppBenchmarkFlowService
@@ -72,19 +69,6 @@ export class EventSummaryComponent implements OnChanges {
     if (changes['event'] || changes['selectedActivities']) {
       this.rebuildTemplateState();
     }
-  }
-
-  async toggleEventPrivacy() {
-    const eventID = this.event.getID();
-    if (!this.user || !eventID) {
-      return
-    }
-    // Optimistically toggle locally
-    this.event.privacy = this.event.privacy === Privacy.Private ? Privacy.Public : Privacy.Private;
-    this.cd.markForCheck(); // Trigger detection immediately
-
-    // Then call service
-    await this.eventService.setEventPrivacy(this.user, eventID, this.event.privacy);
   }
 
   openEditDetails() {
