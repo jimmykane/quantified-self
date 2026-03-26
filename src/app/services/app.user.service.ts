@@ -639,7 +639,6 @@ export class AppUserService implements OnDestroy {
       'settings', // Now in config/settings
       'gracePeriodUntil',
       'lastDowngradedAt',
-      'creationDate',
       'stripeRole',
       'isPro',
       'lastSignInDate',
@@ -653,9 +652,27 @@ export class AppUserService implements OnDestroy {
     // This is critical for the "synthetic user" flow in onboarding where the doc might not exist yet.
     return runInInjectionContext(this.injector, async () => {
       const promises = [];
+      const userDocRef = doc(this.firestore, 'users', user.uid);
 
       // 1. Write Main User Doc
-      promises.push(setDoc(doc(this.firestore, 'users', user.uid), data, { merge: true }));
+      promises.push((async () => {
+        try {
+          await setDoc(userDocRef, data, { merge: true });
+        } catch (error) {
+          const code = (error as { code?: string })?.code;
+          const isPermissionDenied = code === 'permission-denied' || code === 'firestore/permission-denied';
+          if (!isPermissionDenied || !('creationDate' in data)) {
+            throw error;
+          }
+
+          // Legacy docs might reject merge writes that attempt to touch creationDate.
+          // Retry once without creationDate so onboarding/upsert can still succeed.
+          const fallbackData = { ...data } as Record<string, unknown>;
+          delete fallbackData.creationDate;
+          this.logger.warn('[AppUserService] Retrying user upsert without creationDate after permission-denied.');
+          await setDoc(userDocRef, fallbackData, { merge: true });
+        }
+      })());
 
       // 2. Write Settings to Subcollection
       if (user.settings) {

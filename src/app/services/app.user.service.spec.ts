@@ -685,7 +685,7 @@ describe('AppUserService', () => {
             service = TestBed.inject(AppUserService);
         });
 
-        it('should strip impersonatedBy and auth-managed date fields from full user writes', async () => {
+        it('should strip impersonatedBy and lastSignInDate from full user writes', async () => {
             const user = {
                 uid: 'test-uid',
                 displayName: 'Test User',
@@ -698,9 +698,27 @@ describe('AppUserService', () => {
 
             const [, writtenData] = (setDoc as any).mock.calls[0];
             expect(writtenData.displayName).toBe('Test User');
-            expect(writtenData.creationDate).toBeUndefined();
+            expect(writtenData.creationDate).toEqual(new Date('2026-01-01T00:00:00.000Z'));
             expect(writtenData.lastSignInDate).toBeUndefined();
             expect(writtenData.impersonatedBy).toBeUndefined();
+        });
+
+        it('should retry full user write without creationDate when merge write is permission-denied', async () => {
+            const user = {
+                uid: 'test-uid',
+                displayName: 'Retry User',
+                creationDate: new Date('2026-01-01T00:00:00.000Z'),
+            } as AppUserInterface;
+
+            (setDoc as any)
+                .mockRejectedValueOnce({ code: 'permission-denied' })
+                .mockResolvedValueOnce(undefined);
+
+            await service.updateUser(user);
+
+            expect(setDoc).toHaveBeenCalledTimes(2);
+            expect((setDoc as any).mock.calls[0][1].creationDate).toEqual(new Date('2026-01-01T00:00:00.000Z'));
+            expect((setDoc as any).mock.calls[1][1].creationDate).toBeUndefined();
         });
     });
 

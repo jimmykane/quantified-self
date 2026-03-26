@@ -789,7 +789,10 @@ function resolvePromptYearListDateSelection(
   ));
 
   if (includesCurrentYearPromptToken(normalizedPromptSearch)) {
-    years.push(getZonedDateParts(options.now, options.timeZone).year);
+    const currentYear = getZonedDateParts(options.now, options.timeZone).year;
+    if (!years.includes(currentYear)) {
+      years.push(currentYear);
+    }
   }
 
   years.sort((left, right) => left - right);

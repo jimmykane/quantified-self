@@ -858,6 +858,32 @@ describe('normalizeInsightQuery', () => {
     ]);
   });
 
+  it('does not duplicate requested ranges when the prompt already includes the current year numerically', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-20T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'show my max heart rate in 2024, 2025, 2026, and current year',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.query.requestedDateRanges).toEqual([
+      {
+        kind: 'bounded',
+        startDate: '2024-01-01T00:00:00.000Z',
+        endDate: '2026-12-31T23:59:59.999Z',
+        timezone: 'UTC',
+        source: 'prompt',
+      },
+    ]);
+  });
+
   it('resolves month-year to now ranges for compare prompts', async () => {
     setNormalizeQueryDependenciesForTesting({
       now: () => new Date('2026-03-25T12:00:00.000Z'),
