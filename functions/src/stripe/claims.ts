@@ -272,10 +272,20 @@ export async function reconcileClaims(uid: string): Promise<{ role: string }> {
     const subscriptionsRef = db.collection(`customers/${uid}/subscriptions`);
 
     let role = 'free';
-    const userDoc = await userDocRef.get();
-    const hasUserDocument = userDoc.exists;
+    let hasUserDocument = false;
+    try {
+        const userDoc = await userDocRef.get();
+        hasUserDocument = userDoc.exists;
+    } catch (error) {
+        logger.error(`[reconcileClaims] Failed to load users/${uid} root document.`, error);
+        throw error;
+    }
+
     if (!hasUserDocument) {
-        logger.warn(`[reconcileClaims] users/${uid} is missing. Skipping system/status reads and writes to avoid orphan recreation.`);
+        logger.error(`[reconcileClaims] users/${uid} is missing. Skipping users/${uid}/system/status reads/writes to avoid orphan recreation.`, {
+            uid,
+            guard: 'missing-user-root'
+        });
     }
 
     // Check for any active or trialing subscription
@@ -309,10 +319,15 @@ export async function reconcileClaims(uid: string): Promise<{ role: string }> {
 
     let gracePeriodUntil: number | undefined;
     if (hasUserDocument) {
-        // Check for grace period in system status
-        const systemDoc = await db.doc(`users/${uid}/system/status`).get();
-        const systemData = systemDoc.data();
-        gracePeriodUntil = systemData?.gracePeriodUntil ? Math.floor(systemData.gracePeriodUntil.toMillis()) : undefined;
+        try {
+            // Check for grace period in system status
+            const systemDoc = await db.doc(`users/${uid}/system/status`).get();
+            const systemData = systemDoc.data();
+            gracePeriodUntil = systemData?.gracePeriodUntil ? Math.floor(systemData.gracePeriodUntil.toMillis()) : undefined;
+        } catch (error) {
+            logger.error(`[reconcileClaims] Failed to read users/${uid}/system/status while reconciling claims.`, error);
+            throw error;
+        }
     }
 
     const newClaims = {
@@ -329,10 +344,15 @@ export async function reconcileClaims(uid: string): Promise<{ role: string }> {
     await admin.auth().setCustomUserClaims(uid, newClaims);
 
     if (hasUserDocument) {
-        // Semantic update: Signal that claims have been updated so the client can refresh
-        await db.doc(`users/${uid}/system/status`).set({
-            claimsUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
-        }, { merge: true });
+        try {
+            // Semantic update: Signal that claims have been updated so the client can refresh
+            await db.doc(`users/${uid}/system/status`).set({
+                claimsUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+        } catch (error) {
+            logger.error(`[reconcileClaims] Failed to write users/${uid}/system/status.claimsUpdatedAt.`, error);
+            throw error;
+        }
     }
 
     return { role };
