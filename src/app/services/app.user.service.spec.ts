@@ -685,7 +685,7 @@ describe('AppUserService', () => {
             service = TestBed.inject(AppUserService);
         });
 
-        it('should strip impersonatedBy and lastSignInDate from full user writes', async () => {
+        it('should strip impersonatedBy and auth-managed date fields from full user writes', async () => {
             const user = {
                 uid: 'test-uid',
                 displayName: 'Test User',
@@ -698,7 +698,7 @@ describe('AppUserService', () => {
 
             const [, writtenData] = (setDoc as any).mock.calls[0];
             expect(writtenData.displayName).toBe('Test User');
-            expect(writtenData.creationDate).toEqual(new Date('2026-01-01T00:00:00.000Z'));
+            expect(writtenData.creationDate).toBeUndefined();
             expect(writtenData.lastSignInDate).toBeUndefined();
             expect(writtenData.impersonatedBy).toBeUndefined();
         });

@@ -8,7 +8,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventsExportFormComponent } from './events-export.form.component';
 import { AppUserService } from '../../services/app.user.service';
 import { AppFileService } from '../../services/app.file.service';
-import { AppSharingService } from '../../services/app.sharing.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { LoggerService } from '../../services/logger.service';
 
@@ -72,7 +71,6 @@ describe('EventsExportFormComponent', () => {
                   averagePower: false,
                   maximumPower: false,
                   vO2Max: false,
-                  includeLink: false,
                 },
               },
             },
@@ -89,7 +87,6 @@ describe('EventsExportFormComponent', () => {
         { provide: MatSnackBar, useValue: { open: vi.fn() } },
         { provide: AppUserService, useValue: mockUserService },
         { provide: AppFileService, useValue: mockFileService },
-        { provide: AppSharingService, useValue: { getShareURLForEvent: vi.fn() } },
         { provide: AppAnalyticsService, useValue: mockAnalyticsService },
         { provide: LoggerService, useValue: mockLogger },
       ],

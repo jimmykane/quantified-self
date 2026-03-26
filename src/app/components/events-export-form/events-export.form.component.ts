@@ -20,7 +20,6 @@ import { DataHeartRateAvg } from '@sports-alliance/sports-lib';
 import { DataPowerAvg } from '@sports-alliance/sports-lib';
 import { DataPowerMax } from '@sports-alliance/sports-lib';
 import { DataVO2Max } from '@sports-alliance/sports-lib';
-import { AppSharingService } from '../../services/app.sharing.service';
 import { DataActivityTypes } from '@sports-alliance/sports-lib';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { DataPace } from '@sports-alliance/sports-lib';
@@ -57,7 +56,6 @@ export class EventsExportFormComponent extends FormsAbstract {
     protected snackBar: MatSnackBar,
     private userService: AppUserService,
     private fileService: AppFileService,
-    private sharingService: AppSharingService,
   ) {
     super(dialogRef, data, snackBar);
     this.user = data.user;
@@ -96,7 +94,6 @@ export class EventsExportFormComponent extends FormsAbstract {
       averagePower: new UntypedFormControl(this.user.settings.exportToCSVSettings.averagePower, []),
       maximumPower: new UntypedFormControl(this.user.settings.exportToCSVSettings.maximumPower, []),
       vO2Max: new UntypedFormControl(this.user.settings.exportToCSVSettings.vO2Max, []),
-      includeLink: new UntypedFormControl(this.user.settings.exportToCSVSettings.includeLink, []),
     }
     );
   }
@@ -125,7 +122,6 @@ export class EventsExportFormComponent extends FormsAbstract {
     this.user.settings.exportToCSVSettings.averagePower = this.exportFromGroup.get('averagePower').value;
     this.user.settings.exportToCSVSettings.maximumPower = this.exportFromGroup.get('maximumPower').value;
     this.user.settings.exportToCSVSettings.vO2Max = this.exportFromGroup.get('vO2Max').value;
-    this.user.settings.exportToCSVSettings.includeLink = this.exportFromGroup.get('includeLink').value;
 
     let csvString = ``;
     // Create a csv header
@@ -197,10 +193,6 @@ export class EventsExportFormComponent extends FormsAbstract {
     }
     if (this.user.settings.exportToCSVSettings.vO2Max) {
       headers.push(`VO2Max`);
-    }
-
-    if (this.user.settings.exportToCSVSettings.includeLink) {
-      headers.push(`Link`);
     }
 
     csvString += headers.join(',');
@@ -333,10 +325,6 @@ export class EventsExportFormComponent extends FormsAbstract {
       if (this.user.settings.exportToCSVSettings.vO2Max) {
         const stat = event.getStat(DataVO2Max.type);
         row.push(stat ? `"${stat.getDisplayValue()} ${stat.getDisplayUnit()}"` : '""');
-      }
-
-      if (this.user.settings.exportToCSVSettings.includeLink) {
-        row.push(`"${this.sharingService.getShareURLForEvent(this.user.uid, event.getID())}"`);
       }
 
       rows.push(row);

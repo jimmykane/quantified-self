@@ -639,6 +639,7 @@ export class AppUserService implements OnDestroy {
       'settings', // Now in config/settings
       'gracePeriodUntil',
       'lastDowngradedAt',
+      'creationDate',
       'stripeRole',
       'isPro',
       'lastSignInDate',

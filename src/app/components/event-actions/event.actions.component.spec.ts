@@ -8,7 +8,6 @@ import { Auth } from '@angular/fire/auth';
 import { Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
-import { AppSharingService } from '../../services/app.sharing.service';
 import { AppWindowService } from '../../services/app.window.service';
 import { Clipboard } from '@angular/cdk/clipboard';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
@@ -101,7 +100,6 @@ describe('EventActionsComponent', () => {
                 { provide: Router, useValue: { navigate: vi.fn() } },
                 { provide: MatDialog, useValue: mockDialog },
                 { provide: MatBottomSheet, useValue: { open: vi.fn() } },
-                { provide: AppSharingService, useValue: { getShareURLForEvent: vi.fn() } },
                 { provide: AppWindowService, useValue: { windowRef: { open: vi.fn() } } },
                 { provide: Clipboard, useValue: { copy: vi.fn() } },
                 { provide: AppAnalyticsService, useValue: { logEvent: vi.fn() } }
