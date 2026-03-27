@@ -78,8 +78,6 @@ describe('EventCardJumpsComponent', () => {
       hang_time: { getDisplayValue: vi.fn(() => '01.2s') },
       speed: createStat('12.4', 'm/s', 12.4),
       rotations: createStat('1.5', '', 1.5),
-      position_lat: createStat('40.123456', '', 40.123456),
-      position_long: createStat('22.654321', '', 22.654321),
     })]);
 
     component.selectedActivities = [jumpActivity];
@@ -95,8 +93,6 @@ describe('EventCardJumpsComponent', () => {
       'Jump Speed',
       'Jump Rotations',
       'Jump Score',
-      'Jump Latitude',
-      'Jump Longitude',
     ]);
   });
 

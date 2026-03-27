@@ -20,8 +20,6 @@ interface JumpTableRow {
   'Jump Speed': string;
   'Jump Rotations': string;
   'Jump Score': string;
-  'Jump Latitude': string;
-  'Jump Longitude': string;
 }
 
 @Component({
@@ -127,8 +125,6 @@ export class EventCardJumpsComponent implements OnChanges {
         'Jump Speed': this.formatUnitAwareStat(jumpData.speed),
         'Jump Rotations': this.formatUnitAwareStat(jumpData.rotations),
         'Jump Score': this.formatUnitAwareStat(jumpData.score),
-        'Jump Latitude': this.formatCoordinate(jumpData.position_lat),
-        'Jump Longitude': this.formatCoordinate(jumpData.position_long),
       });
 
       return rows;
@@ -227,23 +223,6 @@ export class EventCardJumpsComponent implements OnChanges {
     }
   }
 
-  private formatCoordinate(stat: DataInterface | null | undefined): string {
-    if (!stat) {
-      return '';
-    }
-
-    const numericValue = this.getNumericValue(stat);
-    if (!Number.isFinite(numericValue)) {
-      const displayValue = this.getDisplayValueSafe(stat);
-      return displayValue === '[object Object]' ? '' : displayValue;
-    }
-
-    return new Intl.NumberFormat(undefined, {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 6,
-    }).format(numericValue);
-  }
-
   private formatUnitAwareStat(stat: DataInterface | null | undefined): string {
     if (!stat) {
       return '';
@@ -290,15 +269,6 @@ export class EventCardJumpsComponent implements OnChanges {
     }
   }
 
-  private getNumericValue(stat: DataInterface): number {
-    try {
-      const value = stat.getValue();
-      return typeof value === 'number' ? value : Number.NaN;
-    } catch {
-      return Number.NaN;
-    }
-  }
-
   private calculateColumns(rows: JumpTableRow[]): string[] {
     const columns = this.getColumnsToDisplay();
     return columns.filter((column) => {
@@ -332,8 +302,6 @@ export class EventCardJumpsComponent implements OnChanges {
       'Jump Speed',
       'Jump Rotations',
       'Jump Score',
-      'Jump Latitude',
-      'Jump Longitude',
     ];
   }
 }

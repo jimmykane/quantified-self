@@ -397,9 +397,6 @@ export class DataTypeIconComponent {
         return 'autorenew';
       case 'Jump Score':
         return 'military_tech';
-      case 'Jump Latitude':
-      case 'Jump Longitude':
-        return 'place';
       case 'Distance (Stryd)':
         return 'route';
       case 'GNSS Distance':

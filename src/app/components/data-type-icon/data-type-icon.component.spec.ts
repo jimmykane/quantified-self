@@ -219,8 +219,6 @@ describe('DataTypeIconComponent', () => {
     expect(component.getColumnHeaderIcon('Jump Speed')).toBe('speed');
     expect(component.getColumnHeaderIcon('Jump Rotations')).toBe('autorenew');
     expect(component.getColumnHeaderIcon('Jump Score')).toBe('military_tech');
-    expect(component.getColumnHeaderIcon('Jump Latitude')).toBe('place');
-    expect(component.getColumnHeaderIcon('Jump Longitude')).toBe('place');
   });
 
   it('should provide icon mapping for Avg VAM', () => {
