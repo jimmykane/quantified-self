@@ -85,6 +85,57 @@ describe('location-filter', () => {
     });
   });
 
+  it('does not treat generic time clauses as prompt locations', async () => {
+    const geocodeLocation = vi.fn();
+    const inferLocationText = vi.fn();
+    const testSubject = createResolveLocationFilter({
+      geocodeLocation,
+      inferLocationText,
+    });
+
+    const result = await testSubject.resolveLocationFilter({
+      prompt: 'show my distance in the last 3 months',
+    });
+
+    expect(result).toBeNull();
+    expect(geocodeLocation).not.toHaveBeenCalled();
+    expect(inferLocationText).not.toHaveBeenCalled();
+  });
+
+  it('still extracts place-like in clauses with trailing time scopes', async () => {
+    const geocodeLocation = vi.fn().mockResolvedValue({
+      resolvedLabel: 'Paris, France',
+      center: {
+        latitudeDegrees: 48.8566,
+        longitudeDegrees: 2.3522,
+      },
+    });
+    const inferLocationText = vi.fn();
+    const testSubject = createResolveLocationFilter({
+      geocodeLocation,
+      inferLocationText,
+    });
+
+    const result = await testSubject.resolveLocationFilter({
+      prompt: 'show my distance in Paris in the last 3 months',
+    });
+
+    expect(geocodeLocation).toHaveBeenCalledWith('Paris');
+    expect(inferLocationText).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      requestedText: 'Paris',
+      effectiveText: 'Paris',
+      resolvedLabel: 'Paris, France',
+      source: 'prompt',
+      mode: 'radius',
+      radiusKm: 50,
+      center: {
+        latitudeDegrees: 48.8566,
+        longitudeDegrees: 2.3522,
+      },
+    });
+  });
+
   it('uses radius mode for place-level geocodes even when mapbox returns a bbox', async () => {
     const geocodeLocation = vi.fn().mockResolvedValue({
       resolvedLabel: 'Patra, West Greece, Greece',

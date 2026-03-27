@@ -978,6 +978,89 @@ describe('execute-query', () => {
     expect(result.aggregation.buckets[0]?.aggregateValue).toBe(40);
   });
 
+  it('filters events by anti-meridian bbox when west is greater than east', async () => {
+    const fetchEventDocs = vi.fn(async () => [
+      { id: 'inside-east', data: () => ({ startDate: 1768003200000 }) },
+      { id: 'inside-west', data: () => ({ startDate: 1768608000000 }) },
+      { id: 'outside', data: () => ({ startDate: 1769212800000 }) },
+    ]);
+
+    const importEvent = vi
+      .fn()
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'inside-east',
+        startDate: new Date('2026-01-10T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: {
+          [DataDistance.type]: 40,
+          [DataStartPosition.type]: {
+            latitudeDegrees: 0,
+            longitudeDegrees: 179.5,
+          },
+        },
+      }))
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'inside-west',
+        startDate: new Date('2026-01-11T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: {
+          [DataDistance.type]: 60,
+          [DataStartPosition.type]: {
+            latitudeDegrees: -1,
+            longitudeDegrees: -179.5,
+          },
+        },
+      }))
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'outside',
+        startDate: new Date('2026-01-12T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: {
+          [DataDistance.type]: 80,
+          [DataStartPosition.type]: {
+            latitudeDegrees: 0,
+            longitudeDegrees: 160,
+          },
+        },
+      }));
+
+    setExecuteQueryDependenciesForTesting({
+      fetchEventDocs,
+      fetchDebugEventSnapshot: vi.fn(async () => ({
+        totalEventsCount: 3,
+        recentEventsSample: [],
+      })),
+      importEvent,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+    });
+
+    const result = await executeAiInsightsQuery('user-1', createQuery({
+      locationFilter: {
+        requestedText: 'Dateline region',
+        effectiveText: 'Dateline region',
+        resolvedLabel: 'Dateline region',
+        source: 'input',
+        mode: 'bbox',
+        radiusKm: 50,
+        center: {
+          latitudeDegrees: 0,
+          longitudeDegrees: 180,
+        },
+        bbox: {
+          west: 170,
+          south: -10,
+          east: -170,
+          north: 10,
+        },
+      },
+    }), 'show my cycling distance near the dateline');
+
+    expect(result.matchedEventsCount).toBe(2);
+    const totalAggregate = result.aggregation.buckets
+      .reduce((total, bucket) => total + (bucket.aggregateValue ?? 0), 0);
+    expect(totalAggregate).toBe(100);
+  });
+
   it('filters events by radius and excludes missing or invalid start positions', async () => {
     const loggerStub = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any;
     const fetchEventDocs = vi.fn(async () => [

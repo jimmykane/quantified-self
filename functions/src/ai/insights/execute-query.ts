@@ -551,8 +551,11 @@ function isPositionWithinBoundingBox(
   position: { latitudeDegrees: number; longitudeDegrees: number },
   bbox: NonNullable<NonNullable<NormalizedInsightQuery['locationFilter']>['bbox']>,
 ): boolean {
-  return position.longitudeDegrees >= bbox.west
-    && position.longitudeDegrees <= bbox.east
+  const isLongitudeWithinBounds = bbox.west <= bbox.east
+    ? position.longitudeDegrees >= bbox.west && position.longitudeDegrees <= bbox.east
+    : position.longitudeDegrees >= bbox.west || position.longitudeDegrees <= bbox.east;
+
+  return isLongitudeWithinBounds
     && position.latitudeDegrees >= bbox.south
     && position.latitudeDegrees <= bbox.north;
 }

@@ -72,15 +72,72 @@ const LOCATION_WITH_RADIUS_PATTERN =
   /\bwithin\s+(\d{1,3}(?:\.\d+)?)\s*(km|kilometers?|kilometres?|mi|mile|miles)\s+(?:of|around|near)\s+([^,.!?;]+)/i;
 
 const LOCATION_KEYWORD_PATTERNS: ReadonlyArray<RegExp> = [
-  /\b(?:in|near|around|inside)\s+([^,.!?;]+)/i,
+  /\b(?:near|around|inside)\s+([^,.!?;]+)/i,
+  /\bin\s+(?!the\s+(?:last|past|current|this|next|previous)\b)(?!last\b)(?!past\b)(?!current\b)(?!this\b)(?!next\b)(?!previous\b)([^,.!?;]+)/i,
 ];
 
 const LOCATION_TRAILING_STOP_PATTERNS: ReadonlyArray<RegExp> = [
   /\s+(?:for|with|during|over|between|from|across|while|where)\b.*$/i,
+  /\s+in\s+(?:the\s+)?(?:last|past|current|this|next|previous|today|yesterday|tomorrow|tonight|ytd)\b.*$/i,
   /\s+(?:this|last|past|current|today|yesterday|tomorrow|tonight|ytd)\b.*$/i,
   /\s+(?:day|days|week|weeks|month|months|year|years|quarter|quarters|season|seasons)\b.*$/i,
   /\s+(?:by|per)\s+(?:day|week|month|year|activity|sport|date)\b.*$/i,
 ];
+
+const NON_LOCATION_SINGLE_TOKEN_PATTERN =
+  /^(?:the|a|an|my|our|your|his|her|their|its|this|that|these|those)$/i;
+
+const NON_LOCATION_TIME_CLAUSE_PATTERNS: ReadonlyArray<RegExp> = [
+  /^(?:the\s+)?(?:last|past|current|this|next|previous)(?:\s+\d+)?$/i,
+  /^(?:the\s+)?(?:last|past|current|this|next|previous)(?:\s+\d+)?\s+(?:day|days|week|weeks|month|months|year|years|quarter|quarters|season|seasons)\b/i,
+  /^(?:\d+\s+)?(?:day|days|week|weeks|month|months|year|years|quarter|quarters|season|seasons)\b/i,
+  /^(?:ytd|mtd|qtd)$/i,
+];
+
+const NON_LOCATION_TOKENS = new Set([
+  'the',
+  'a',
+  'an',
+  'my',
+  'our',
+  'your',
+  'his',
+  'her',
+  'their',
+  'its',
+  'this',
+  'that',
+  'these',
+  'those',
+  'last',
+  'past',
+  'current',
+  'next',
+  'previous',
+  'today',
+  'yesterday',
+  'tomorrow',
+  'tonight',
+  'morning',
+  'afternoon',
+  'evening',
+  'night',
+  'day',
+  'days',
+  'week',
+  'weeks',
+  'month',
+  'months',
+  'year',
+  'years',
+  'quarter',
+  'quarters',
+  'season',
+  'seasons',
+  'ytd',
+  'mtd',
+  'qtd',
+]);
 
 function normalizeLocationText(value: string | null | undefined): string {
   return `${value || ''}`
@@ -169,7 +226,41 @@ function trimPromptLocationCandidate(value: string): string {
     return '';
   }
 
+  if (!isLikelyPromptLocationText(normalized)) {
+    return '';
+  }
+
   return normalized;
+}
+
+function isLikelyPromptLocationText(value: string): boolean {
+  const normalized = normalizeLocationText(value);
+  if (!normalized) {
+    return false;
+  }
+
+  if (!/[a-z]/i.test(normalized)) {
+    return false;
+  }
+
+  if (NON_LOCATION_SINGLE_TOKEN_PATTERN.test(normalized)) {
+    return false;
+  }
+
+  if (NON_LOCATION_TIME_CLAUSE_PATTERNS.some(pattern => pattern.test(normalized))) {
+    return false;
+  }
+
+  const tokens = normalized.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!tokens.length) {
+    return false;
+  }
+
+  if (tokens.every(token => NON_LOCATION_TOKENS.has(token) || /^\d+$/.test(token))) {
+    return false;
+  }
+
+  return true;
 }
 
 function resolvePromptLocationCandidate(
