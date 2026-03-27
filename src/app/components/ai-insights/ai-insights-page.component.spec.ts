@@ -205,6 +205,33 @@ function buildOkResponse(): AiInsightsAggregateOkResponse {
   };
 }
 
+function buildLocationScopedResponse(): AiInsightsAggregateOkResponse {
+  return {
+    ...buildOkResponse(),
+    query: {
+      ...buildOkResponse().query,
+      locationFilter: {
+        requestedText: 'Greece',
+        effectiveText: 'Greece',
+        resolvedLabel: 'Greece',
+        source: 'input',
+        mode: 'bbox',
+        radiusKm: 50,
+        center: {
+          latitudeDegrees: 39.0742,
+          longitudeDegrees: 21.8243,
+        },
+        bbox: {
+          west: 19.3736,
+          south: 34.8021,
+          east: 28.2471,
+          north: 41.7485,
+        },
+      },
+    },
+  };
+}
+
 function buildAggregateMaxBySportResponse(): AiInsightsAggregateOkResponse {
   return {
     ...buildOkResponse(),
@@ -1689,6 +1716,51 @@ describe('AiInsightsPageComponent', () => {
     });
   });
 
+  it('should include the optional location and radius controls in the request payload', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue(buildLocationScopedResponse());
+    component.promptControl.setValue('Show my total distance this year');
+    component.locationControl.setValue('Greece');
+    component.radiusKmControl.setValue(75);
+
+    await component.submitPrompt();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(aiInsightsServiceMock.runInsight).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: 'Show my total distance this year',
+      locationFilter: {
+        locationText: 'Greece',
+        radiusKm: 75,
+      },
+    }));
+  });
+
+  it('should clear the implicit radius when the location input is cleared', () => {
+    component.locationControl.setValue('Greece');
+
+    expect(component.radiusKmControl.getRawValue()).toBe(50);
+
+    component.locationControl.setValue('');
+    const request = component['buildInsightRequest']('Show my total distance this year');
+
+    expect(component.radiusKmControl.getRawValue()).toBeNull();
+    expect(request?.locationFilter).toBeUndefined();
+  });
+
+  it('should render the resolved location scope in the result context rows', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue(buildLocationScopedResponse());
+    component.promptControl.setValue('Show my total distance this year');
+    component.locationControl.setValue('Greece');
+
+    await component.submitPrompt();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const resultContextRows = fixture.debugElement.queryAll(By.css('.result-card-context-row'));
+
+    expect(resultContextRows.some((row) => row.nativeElement.textContent.includes('Location') && row.nativeElement.textContent.includes('Greece') && row.nativeElement.textContent.includes('region bbox'))).toBe(true);
+  });
+
   it('should render deterministic compare summary in a dedicated aggregate section', async () => {
     aiInsightsServiceMock.runInsight.mockResolvedValue({
       ...buildOkResponse(),
@@ -2327,7 +2399,8 @@ describe('AiInsightsPageComponent', () => {
     );
 
     expect(chart).toBeNull();
-    expect(contextRows).toHaveLength(0);
+    expect(contextRows.some((row) => row.nativeElement.textContent.includes('Date range'))).toBe(true);
+    expect(contextRows.some((row) => row.nativeElement.textContent.includes('Activities'))).toBe(true);
     expect(primaryCard?.textContent).toContain('Winning event');
     expect(primaryCard?.textContent).toContain(expectedPrimaryValue ?? '');
     expect(primaryCard?.textContent).toContain('Mar 10, 2026');
@@ -2469,9 +2542,10 @@ describe('AiInsightsPageComponent', () => {
     expect(appEventServiceMock.getEventsOnceByIds).not.toHaveBeenCalled();
   });
 
-  it('should refresh the visible result with the same prompt even if the input was edited', async () => {
-    aiInsightsServiceMock.runInsight.mockResolvedValue(buildOkResponse());
+  it('should refresh the visible result with the same prompt and location even if the input was edited', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue(buildLocationScopedResponse());
     component.promptControl.setValue('Tell me my avg cadence for cycling the last 3 months');
+    component.locationControl.setValue('Greece');
 
     const submitEvent = {
       preventDefault: vi.fn(),
@@ -2481,6 +2555,7 @@ describe('AiInsightsPageComponent', () => {
     fixture.detectChanges();
 
     component.promptControl.setValue('A different prompt in the input');
+    component.locationControl.setValue('Italy');
     fixture.detectChanges();
 
     const refreshButton = fixture.debugElement.query(By.css('.result-refresh-button'))?.nativeElement as HTMLButtonElement | undefined;
@@ -2491,6 +2566,10 @@ describe('AiInsightsPageComponent', () => {
 
     expect(aiInsightsServiceMock.runInsight).toHaveBeenLastCalledWith(expect.objectContaining({
       prompt: 'Tell me my avg cadence for cycling the last 3 months',
+      locationFilter: {
+        locationText: 'Greece',
+        radiusKm: 50,
+      },
     }));
     expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('ai_insights_action', {
       method: 'refresh_result_click',
@@ -2639,6 +2718,23 @@ describe('AiInsightsPageComponent', () => {
       configurable: true,
       value: originalScrollTo,
     });
+  });
+
+  it('should restore location and radius controls from the latest snapshot query', async () => {
+    aiInsightsLatestSnapshotServiceMock.loadLatest.mockResolvedValueOnce({
+      version: 1,
+      savedAt: '2026-03-18T12:00:00.000Z',
+      prompt: 'Show my total distance all time',
+      response: buildLocationScopedResponse(),
+    });
+
+    authUserSubject.next({ uid: 'user-2' });
+    TestBed.flushEffects();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(component.locationControl.getRawValue()).toBe('Greece');
+    expect(component.radiusKmControl.getRawValue()).toBe(50);
   });
 
   it('should use pace-specific summary labels for inverse metrics', async () => {
@@ -2834,6 +2930,17 @@ describe('AiInsightsPageComponent', () => {
     expect(errorTitle?.textContent).toContain('Could not generate this insight');
     expect(errorCopy?.textContent).toContain('Could not generate AI insights.');
     expect(supportLink?.getAttribute('href')).toBe('mailto:support@quantified-self.io?subject=AI%20Insights%20-%20Prompt%20error');
+  });
+
+  it('should preserve location-specific invalid-argument errors from the backend', async () => {
+    aiInsightsServiceMock.runInsight.mockRejectedValue(new Error('Could not resolve the location "Grece". Try a city, region, country, or coordinates.'));
+
+    await component.applySuggestedPrompt('Tell me my avg cadence for cycling the last 3 months');
+    fixture.detectChanges();
+
+    const errorCopy = fixture.debugElement.query(By.css('.state-panel-error .state-copy'))?.nativeElement as HTMLElement | undefined;
+
+    expect(errorCopy?.textContent).toContain('Could not resolve the location "Grece". Try a city, region, country, or coordinates.');
   });
 
   it('should disable prompt submission surfaces when the quota is exhausted', async () => {

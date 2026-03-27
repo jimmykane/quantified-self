@@ -574,6 +574,18 @@ app-ai-insights-power-curve-chart {
   width: 100%;
 }
 
+.prompt-location-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  width: 100%;
+}
+
+.prompt-location-field,
+.prompt-radius-field {
+  width: 100%;
+}
+
 .prompt-form.qs-form {
   max-width: 100%;
   gap: 16px;
@@ -1355,6 +1367,11 @@ app-ai-insights-power-curve-chart {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .prompt-location-row {
+    grid-template-columns: minmax(0, 1fr) minmax(11rem, 14rem);
+    align-items: start;
+  }
+
   .prompt-toolbar {
     align-items: flex-start;
   }
@@ -1401,6 +1418,10 @@ app-ai-insights-power-curve-chart {
   }
 
   .prompt-card .prompt-form.qs-form {
+    grid-template-columns: 1fr;
+  }
+
+  .prompt-location-row {
     grid-template-columns: 1fr;
   }
 

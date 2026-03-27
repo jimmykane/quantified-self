@@ -21,6 +21,7 @@ const hoisted = vi.hoisted(() => {
 
   return {
     currentContext,
+    onCallGenkitOptions: null as Record<string, unknown> | null,
     loggerError: vi.fn(),
     loggerWarn: vi.fn(),
     loggerInfo: vi.fn(),
@@ -40,6 +41,7 @@ const hoisted = vi.hoisted(() => {
     getInsightMetricDefinition: vi.fn(),
     loadUserUnitSettings: vi.fn(),
     persistLatestAiInsightsSnapshot: vi.fn(),
+    resolveLocationFilter: vi.fn(),
   };
 });
 
@@ -52,7 +54,10 @@ vi.mock('firebase-functions/logger', () => ({
 
 vi.mock('firebase-functions/v2/https', () => ({
   onCall: (_options: unknown, handler: unknown) => handler,
-  onCallGenkit: (_options: unknown, flow: unknown) => flow,
+  onCallGenkit: (options: unknown, flow: unknown) => {
+    hoisted.onCallGenkitOptions = options as Record<string, unknown>;
+    return flow;
+  },
   HttpsError: class HttpsError extends Error {
     code: string;
 
@@ -92,6 +97,7 @@ vi.mock('./runtime', () => ({
     summarizeAiInsightResult: (...args: unknown[]) => hoisted.summarizeAiInsightResult(...args),
     loadUserUnitSettings: (...args: unknown[]) => hoisted.loadUserUnitSettings(...args),
     persistLatestAiInsightsSnapshot: (...args: unknown[]) => hoisted.persistLatestAiInsightsSnapshot(...args),
+    resolveLocationFilter: (...args: unknown[]) => hoisted.resolveLocationFilter(...args),
   },
 }));
 
@@ -421,6 +427,7 @@ describe('aiInsights callable', () => {
       source: 'genkit',
     });
     hoisted.persistLatestAiInsightsSnapshot.mockResolvedValue(undefined);
+    hoisted.resolveLocationFilter.mockResolvedValue(null);
   });
 
   it('rejects unauthenticated requests', async () => {
@@ -803,6 +810,13 @@ describe('aiInsights callable', () => {
     });
   });
 
+  it('binds the MAPBOX_ACCESS_TOKEN secret to the aiInsights callable', () => {
+    const configuredSecrets = hoisted.onCallGenkitOptions?.secrets;
+
+    expect(Array.isArray(configuredSecrets)).toBe(true);
+    expect((configuredSecrets as Array<{ name?: string }>).some((secret) => secret?.name === 'MAPBOX_ACCESS_TOKEN')).toBe(true);
+  });
+
   it('returns an ok response when aggregation buckets exist', async () => {
     const result = await aiInsights({
       prompt: 'show distance',
@@ -851,6 +865,94 @@ describe('aiInsights callable', () => {
       'show distance',
       result,
     );
+  });
+
+  it('resolves a location filter before query execution and persists it on the response query', async () => {
+    const resolvedLocationFilter = {
+      requestedText: 'Greece',
+      effectiveText: 'Greece',
+      resolvedLabel: 'Greece',
+      source: 'input' as const,
+      mode: 'bbox' as const,
+      radiusKm: 50,
+      center: {
+        latitudeDegrees: 39.0742,
+        longitudeDegrees: 21.8243,
+      },
+      bbox: {
+        west: 19.3736,
+        south: 34.8021,
+        east: 28.2471,
+        north: 41.7485,
+      },
+    };
+    hoisted.resolveLocationFilter.mockResolvedValue(resolvedLocationFilter);
+
+    const result = await aiInsights({
+      prompt: 'show distance',
+      clientTimezone: 'UTC',
+      locationFilter: {
+        locationText: 'Greece',
+      },
+    } as any);
+
+    expect(hoisted.resolveLocationFilter).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: 'show distance',
+      requestLocationFilter: {
+        locationText: 'Greece',
+      },
+      onAiFallbackAttempt: expect.any(Function),
+    }));
+    expect(hoisted.executeAiInsightsQuery).toHaveBeenCalledWith('user-1', {
+      ...normalizedQuery,
+      locationFilter: resolvedLocationFilter,
+    }, 'show distance');
+    expect(result).toMatchObject({
+      status: 'ok',
+      query: {
+        ...normalizedQuery,
+        locationFilter: resolvedLocationFilter,
+      },
+    });
+  });
+
+  it('treats AI location fallback as a quota-consuming AI attempt', async () => {
+    const resolvedLocationFilter = {
+      requestedText: 'Grece',
+      effectiveText: 'Greece',
+      resolvedLabel: 'Greece',
+      source: 'ai_fallback' as const,
+      mode: 'bbox' as const,
+      radiusKm: 50,
+      center: {
+        latitudeDegrees: 39.0742,
+        longitudeDegrees: 21.8243,
+      },
+      bbox: {
+        west: 19.3736,
+        south: 34.8021,
+        east: 28.2471,
+        north: 41.7485,
+      },
+    };
+    hoisted.resolveLocationFilter.mockImplementation(async ({ onAiFallbackAttempt }: { onAiFallbackAttempt?: () => Promise<void> }) => {
+      await onAiFallbackAttempt?.();
+      return resolvedLocationFilter;
+    });
+
+    await aiInsights({
+      prompt: 'show distance',
+      clientTimezone: 'UTC',
+      locationFilter: {
+        locationText: 'Grece',
+      },
+    } as any);
+
+    expect(hoisted.finalizeAiInsightsQuotaReservation).toHaveBeenCalledTimes(1);
+    expect(hoisted.executeAiInsightsQuery).toHaveBeenCalledWith('user-1', {
+      ...normalizedQuery,
+      locationFilter: resolvedLocationFilter,
+    }, 'show distance');
   });
 
   it('includes deterministic period deltas in compare-mode aggregate responses', async () => {

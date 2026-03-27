@@ -7,6 +7,7 @@ import {
   ChartDataValueTypes,
   ActivityTypesHelper,
   DataActivityTypes,
+  DataStartPosition,
   EventImporterJSON,
   EventJSONInterface,
   EventInterface,
@@ -518,6 +519,108 @@ function resolveRequestedStatValue(event: EventInterface, dataType: string): num
   const stat = event.getStat?.(dataType);
   const rawValue = stat?.getValue?.();
   return typeof rawValue === 'number' && Number.isFinite(rawValue) ? rawValue : null;
+}
+
+function resolveEventStartPosition(
+  event: EventInterface,
+): { latitudeDegrees: number; longitudeDegrees: number } | null {
+  const startPositionStat = event.getStat?.(DataStartPosition.type) as { getValue?: () => unknown } | null | undefined;
+  const rawStartPosition = startPositionStat?.getValue?.();
+  if (!rawStartPosition || typeof rawStartPosition !== 'object' || Array.isArray(rawStartPosition)) {
+    return null;
+  }
+
+  const latitudeDegrees = toFiniteNumber((rawStartPosition as Record<string, unknown>).latitudeDegrees);
+  const longitudeDegrees = toFiniteNumber((rawStartPosition as Record<string, unknown>).longitudeDegrees);
+  if (
+    latitudeDegrees === null
+    || longitudeDegrees === null
+    || Math.abs(latitudeDegrees) > 90
+    || Math.abs(longitudeDegrees) > 180
+  ) {
+    return null;
+  }
+
+  return {
+    latitudeDegrees,
+    longitudeDegrees,
+  };
+}
+
+function isPositionWithinBoundingBox(
+  position: { latitudeDegrees: number; longitudeDegrees: number },
+  bbox: NonNullable<NonNullable<NormalizedInsightQuery['locationFilter']>['bbox']>,
+): boolean {
+  return position.longitudeDegrees >= bbox.west
+    && position.longitudeDegrees <= bbox.east
+    && position.latitudeDegrees >= bbox.south
+    && position.latitudeDegrees <= bbox.north;
+}
+
+function haversineDistanceKm(
+  latitudeA: number,
+  longitudeA: number,
+  latitudeB: number,
+  longitudeB: number,
+): number {
+  const toRadians = (value: number) => value * (Math.PI / 180);
+  const earthRadiusKm = 6371;
+  const deltaLatitude = toRadians(latitudeB - latitudeA);
+  const deltaLongitude = toRadians(longitudeB - longitudeA);
+  const haversine = Math.sin(deltaLatitude / 2) ** 2
+    + Math.cos(toRadians(latitudeA))
+    * Math.cos(toRadians(latitudeB))
+    * Math.sin(deltaLongitude / 2) ** 2;
+  return 2 * earthRadiusKm * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+}
+
+interface LocationFilterEvaluationResult {
+  matchedEvents: EventInterface[];
+  missingStartPositionCount: number;
+  invalidStartPositionCount: number;
+}
+
+function filterEventsByLocation(
+  events: readonly EventInterface[],
+  locationFilter: NonNullable<NormalizedInsightQuery['locationFilter']>,
+): LocationFilterEvaluationResult {
+  let missingStartPositionCount = 0;
+  let invalidStartPositionCount = 0;
+  const matchedEvents: EventInterface[] = [];
+
+  events.forEach((event) => {
+    const startPositionStat = event.getStat?.(DataStartPosition.type) as { getValue?: () => unknown } | null | undefined;
+    const rawStartPosition = startPositionStat?.getValue?.();
+    if (!rawStartPosition || typeof rawStartPosition !== 'object' || Array.isArray(rawStartPosition)) {
+      missingStartPositionCount += 1;
+      return;
+    }
+
+    const position = resolveEventStartPosition(event);
+    if (!position) {
+      invalidStartPositionCount += 1;
+      return;
+    }
+
+    const matchesLocation = locationFilter.mode === 'bbox' && locationFilter.bbox
+      ? isPositionWithinBoundingBox(position, locationFilter.bbox)
+      : haversineDistanceKm(
+        locationFilter.center.latitudeDegrees,
+        locationFilter.center.longitudeDegrees,
+        position.latitudeDegrees,
+        position.longitudeDegrees,
+      ) <= locationFilter.radiusKm;
+
+    if (matchesLocation) {
+      matchedEvents.push(event);
+    }
+  });
+
+  return {
+    matchedEvents,
+    missingStartPositionCount,
+    invalidStartPositionCount,
+  };
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -1164,8 +1267,16 @@ export function createExecuteQuery(
         }
         return activitySelectionEvaluation.matchesSelection;
       });
-      const matchedEvents = activityMatchedEvents
+      const requestedDateRangeMatchedEvents = activityMatchedEvents
         .filter(event => eventMatchesRequestedDateRanges(event, query.requestedDateRanges));
+      const locationFilterResult = query.locationFilter
+        ? filterEventsByLocation(requestedDateRangeMatchedEvents, query.locationFilter)
+        : {
+          matchedEvents: requestedDateRangeMatchedEvents,
+          missingStartPositionCount: 0,
+          invalidStartPositionCount: 0,
+        };
+      const matchedEvents = locationFilterResult.matchedEvents;
       const eventsWithRequestedStatCount = (
         query.resultKind === 'aggregate'
         || query.resultKind === 'event_lookup'
@@ -1229,7 +1340,15 @@ export function createExecuteQuery(
         activityFilteredOutCount: nonMergedEvents.length - activityMatchedEvents.length,
         skippedMissingActivityTypeCount,
         normalizedNonCanonicalActivityTypeCount,
-        requestedDateRangeFilteredOutCount: activityMatchedEvents.length - matchedEvents.length,
+        requestedDateRangeFilteredOutCount: activityMatchedEvents.length - requestedDateRangeMatchedEvents.length,
+        locationFilterRequestedText: query.locationFilter?.requestedText ?? null,
+        locationFilterResolvedLabel: query.locationFilter?.resolvedLabel ?? null,
+        locationFilterSource: query.locationFilter?.source ?? null,
+        locationFilterMode: query.locationFilter?.mode ?? null,
+        locationFilterRadiusKm: query.locationFilter?.radiusKm ?? null,
+        locationFilteredOutCount: requestedDateRangeMatchedEvents.length - matchedEvents.length,
+        locationMissingStartPositionCount: locationFilterResult.missingStartPositionCount,
+        locationInvalidStartPositionCount: locationFilterResult.invalidStartPositionCount,
         matchedEventsCount: matchedEvents.length,
         eventsWithRequestedStatCount,
         metricSelectionCount: query.resultKind === 'multi_metric_aggregate'

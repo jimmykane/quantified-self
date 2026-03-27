@@ -70,8 +70,48 @@
                   <mat-icon>close</mat-icon>
                 </button>
               }
-              <mat-hint>If you omit a time range, AI Insights uses the current year to date. Say all time for your full history.</mat-hint>
+              <mat-hint>If you omit a time range, AI Insights uses the current year to date. Add an optional location below, or say all time for your full history.</mat-hint>
             </mat-form-field>
+
+            <div class="prompt-location-row">
+              <mat-form-field appearance="outline" subscriptSizing="dynamic" class="prompt-location-field">
+                <mat-label>Location (optional)</mat-label>
+                <input
+                  matInput
+                  type="text"
+                  [formControl]="locationControl"
+                  placeholder="City, region, country, or coordinates" />
+                @if (locationValue().trim().length > 0) {
+                  <button
+                    mat-icon-button
+                    matSuffix
+                    type="button"
+                    [disabled]="isPromptLocked()"
+                    (click)="clearLocation()"
+                    aria-label="Clear location">
+                    <mat-icon>close</mat-icon>
+                  </button>
+                }
+                <mat-hint>Mapbox geocodes this input. If you leave it blank, AI can still infer a location from the prompt when possible.</mat-hint>
+              </mat-form-field>
+
+              @if (hasLocationInput()) {
+                <mat-form-field appearance="outline" subscriptSizing="dynamic" class="prompt-radius-field">
+                  <mat-label>Radius (km)</mat-label>
+                  <input
+                    matInput
+                    type="number"
+                    min="1"
+                    max="500"
+                    [formControl]="radiusKmControl"
+                    placeholder="50" />
+                  <mat-hint>Used when the resolved place does not provide a bounding box.</mat-hint>
+                  @if (radiusKmControl.hasError('min') || radiusKmControl.hasError('max')) {
+                    <mat-error>Radius must be between 1 and 500 km.</mat-error>
+                  }
+                </mat-form-field>
+              }
+            </div>
 
             <div class="prompt-toolbar">
               <div class="prompt-actions">

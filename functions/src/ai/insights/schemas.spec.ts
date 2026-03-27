@@ -7,11 +7,25 @@ import {
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
 import { AI_INSIGHTS_POWER_CURVE_COMPARE_SERIES_SAFETY_MAX } from '../../../../shared/ai-insights-power-curve.constants';
-import { AiInsightsResponseSchema } from './schemas';
+import { AiInsightsRequestSchema, AiInsightsResponseSchema } from './schemas';
 
 vi.mock('@sports-alliance/sports-lib', async (importOriginal) => await importOriginal());
 
 describe('AiInsightsResponseSchema', () => {
+  it('parses request payloads with an optional location filter', () => {
+    const parsed = AiInsightsRequestSchema.safeParse({
+      prompt: 'Show my total distance this year',
+      clientTimezone: 'Europe/Helsinki',
+      clientLocale: 'en-US',
+      locationFilter: {
+        locationText: 'Greece',
+        radiusKm: 50,
+      },
+    });
+
+    expect(parsed.success).toBe(true);
+  });
+
   it('is defined as a union over all response variants', () => {
     const schemaDef = (AiInsightsResponseSchema as unknown as {
       _def?: { typeName?: string; type?: string };
@@ -58,6 +72,24 @@ describe('AiInsightsResponseSchema', () => {
           source: 'prompt',
         },
         chartType: ChartTypes.LinesVertical,
+        locationFilter: {
+          requestedText: 'Greece',
+          effectiveText: 'Greece',
+          resolvedLabel: 'Greece',
+          source: 'prompt',
+          mode: 'bbox',
+          radiusKm: 50,
+          center: {
+            latitudeDegrees: 39.0742,
+            longitudeDegrees: 21.8243,
+          },
+          bbox: {
+            west: 19.3736,
+            south: 34.8002,
+            east: 28.2471,
+            north: 41.7488,
+          },
+        },
       },
       latestEvent: {
         eventId: 'event-9',

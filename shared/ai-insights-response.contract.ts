@@ -51,6 +51,42 @@ const NormalizedInsightAllTimeDateRangeSchema = z.object({
   source: z.literal('prompt'),
 });
 
+const AiInsightsRequestLocationFilterSchema = z.object({
+  locationText: z.string().trim().min(1).max(200).optional(),
+  radiusKm: z.number().min(1).max(500).optional(),
+});
+
+const AiInsightsLocationCoordinateSchema = z.object({
+  latitudeDegrees: z.number().min(-90).max(90),
+  longitudeDegrees: z.number().min(-180).max(180),
+});
+
+const AiInsightsLocationBoundingBoxSchema = z.object({
+  west: z.number().min(-180).max(180),
+  south: z.number().min(-90).max(90),
+  east: z.number().min(-180).max(180),
+  north: z.number().min(-90).max(90),
+});
+
+const NormalizedInsightLocationFilterSchema = z.object({
+  requestedText: z.string().trim().min(1).max(200),
+  effectiveText: z.string().trim().min(1).max(200),
+  resolvedLabel: z.string().trim().min(1).max(240),
+  source: z.enum(['input', 'prompt', 'ai_fallback']),
+  mode: z.enum(['bbox', 'radius']),
+  radiusKm: z.number().min(1).max(500),
+  center: AiInsightsLocationCoordinateSchema,
+  bbox: AiInsightsLocationBoundingBoxSchema.optional(),
+}).superRefine((value, context) => {
+  if (value.mode === 'bbox' && !value.bbox) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['bbox'],
+      message: 'bbox is required when locationFilter.mode is bbox.',
+    });
+  }
+});
+
 export const NormalizedInsightDateRangeSchema = z.discriminatedUnion('kind', [
   NormalizedInsightBoundedDateRangeSchema,
   NormalizedInsightAllTimeDateRangeSchema,
@@ -65,6 +101,7 @@ const NormalizedInsightQueryBaseSchema = z.object({
   requestedDateRanges: z.array(NormalizedInsightBoundedDateRangeSchema).max(12).optional(),
   periodMode: z.enum(['combined', 'compare']).optional(),
   chartType: z.nativeEnum(ChartTypes),
+  locationFilter: NormalizedInsightLocationFilterSchema.optional(),
 });
 
 const TopResultsLimitSchema = z.number()
@@ -478,6 +515,9 @@ export const AiInsightsResponseSchema = z.union([
   AiInsightsEmptyResponseSchema,
   AiInsightsUnsupportedResponseSchema,
 ]);
+
+export const AiInsightsRequestLocationFilterContractSchema = AiInsightsRequestLocationFilterSchema;
+export const NormalizedInsightLocationFilterContractSchema = NormalizedInsightLocationFilterSchema;
 
 type ParsedAiInsightsOkResponse = z.infer<typeof AiInsightsOkStrictSchema>;
 
