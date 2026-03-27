@@ -104,6 +104,8 @@ class MockAiInsightsPowerCurveChartComponent {
 class MockEventsMapComponent {
   readonly events = input<any[]>([]);
   readonly user = input<any>(undefined);
+  readonly focusLocation = input<any>(undefined);
+  readonly searchScope = input<any>(undefined);
   readonly clusterMarkers = input(true);
 }
 
@@ -242,6 +244,21 @@ function buildLocationScopedResponse(): AiInsightsAggregateOkResponse {
           north: 41.7485,
         },
       },
+    },
+  };
+}
+
+function buildPatrasLocationFilter() {
+  return {
+    requestedText: 'Patras',
+    effectiveText: 'Patras',
+    resolvedLabel: 'Patra, West Greece, Greece',
+    source: 'prompt' as const,
+    mode: 'radius' as const,
+    radiusKm: 50,
+    center: {
+      latitudeDegrees: 38.245506,
+      longitudeDegrees: 21.734795,
     },
   };
 }
@@ -2390,7 +2407,14 @@ describe('AiInsightsPageComponent', () => {
       }),
     ]));
 
-    component.response.set(buildEventLookupResponse());
+    const eventLookupResponse = buildEventLookupResponse();
+    component.response.set({
+      ...eventLookupResponse,
+      query: {
+        ...eventLookupResponse.query,
+        locationFilter: buildPatrasLocationFilter(),
+      },
+    });
     component.resultPrompt.set('I want to know when I had my longest distance in cycling');
     fixture.detectChanges();
     TestBed.flushEffects();
@@ -2420,6 +2444,12 @@ describe('AiInsightsPageComponent', () => {
     expect(openButtons.length).toBeGreaterThanOrEqual(4);
     expect(mapComponent).toBeTruthy();
     expect(mapComponent?.events()).toHaveLength(3);
+    expect(mapComponent?.focusLocation()).toEqual(buildPatrasLocationFilter().center);
+    expect(mapComponent?.searchScope()).toEqual({
+      mode: 'radius',
+      center: buildPatrasLocationFilter().center,
+      radiusKm: 50,
+    });
     expect(mapComponent?.clusterMarkers()).toBe(false);
   });
 
@@ -2466,7 +2496,14 @@ describe('AiInsightsPageComponent', () => {
       }),
     ]));
 
-    component.response.set(buildLatestEventResponse());
+    const latestEventResponse = buildLatestEventResponse();
+    component.response.set({
+      ...latestEventResponse,
+      query: {
+        ...latestEventResponse.query,
+        locationFilter: buildPatrasLocationFilter(),
+      },
+    });
     component.resultPrompt.set('When was my last ride?');
     fixture.detectChanges();
     TestBed.flushEffects();
@@ -2481,6 +2518,12 @@ describe('AiInsightsPageComponent', () => {
     expect(primaryCard?.textContent).toContain('Mar 18, 2026');
     expect(rankingRows).toHaveLength(0);
     expect(mapComponent?.events()).toHaveLength(1);
+    expect(mapComponent?.focusLocation()).toEqual(buildPatrasLocationFilter().center);
+    expect(mapComponent?.searchScope()).toEqual({
+      mode: 'radius',
+      center: buildPatrasLocationFilter().center,
+      radiusKm: 50,
+    });
     expect(appEventServiceMock.getEventsOnceByIds.mock.calls.at(-1)?.[1]).toEqual(['event-9']);
   });
 
@@ -2531,7 +2574,14 @@ describe('AiInsightsPageComponent', () => {
       }),
     ]));
 
-    component.response.set(buildAggregateMaxBySportResponse());
+    const aggregateMaxResponse = buildAggregateMaxBySportResponse();
+    component.response.set({
+      ...aggregateMaxResponse,
+      query: {
+        ...aggregateMaxResponse.query,
+        locationFilter: buildPatrasLocationFilter(),
+      },
+    });
     component.resultPrompt.set('Show my longest distances by sport');
     fixture.detectChanges();
     TestBed.flushEffects();
@@ -2555,7 +2605,90 @@ describe('AiInsightsPageComponent', () => {
     expect(sectionCopy?.textContent).toContain('3 matching events ranked across all matched sports.');
     expect(rankingRows).toHaveLength(3);
     expect(mapComponent?.events()).toHaveLength(3);
+    expect(mapComponent?.focusLocation()).toEqual(buildPatrasLocationFilter().center);
+    expect(mapComponent?.searchScope()).toEqual({
+      mode: 'radius',
+      center: buildPatrasLocationFilter().center,
+      radiusKm: 50,
+    });
     expect(appEventServiceMock.getEventsOnceByIds).toHaveBeenCalledWith(expect.anything(), ['event-3', 'event-2', 'event-1']);
+  });
+
+  it('should pass bbox search scope to the result map when query location mode is bbox', async () => {
+    appEventServiceMock.getEventsOnceByIds.mockReturnValueOnce(of([
+      buildMockEvent({
+        id: 'event-3',
+        startDate: '2026-03-10T08:00:00.000Z',
+        activityTypes: [ActivityTypes.Cycling],
+        stats: {
+          [DataDistance.type]: 123400,
+          [DataStartPosition.type]: { latitudeDegrees: 38.2466, longitudeDegrees: 21.7346 },
+        },
+      }),
+      buildMockEvent({
+        id: 'event-2',
+        startDate: '2026-02-14T08:00:00.000Z',
+        activityTypes: [ActivityTypes.Cycling],
+        stats: {
+          [DataDistance.type]: 118200,
+          [DataStartPosition.type]: { latitudeDegrees: 38.25, longitudeDegrees: 21.74 },
+        },
+      }),
+      buildMockEvent({
+        id: 'event-1',
+        startDate: '2026-01-11T08:00:00.000Z',
+        activityTypes: [ActivityTypes.Running],
+        stats: {
+          [DataDistance.type]: 18700,
+          [DataStartPosition.type]: { latitudeDegrees: 38.24, longitudeDegrees: 21.72 },
+        },
+      }),
+    ]));
+
+    const aggregateMaxResponse = buildAggregateMaxBySportResponse();
+    const bboxLocationFilter = buildLocationScopedResponse().query.locationFilter;
+    component.response.set({
+      ...aggregateMaxResponse,
+      query: {
+        ...aggregateMaxResponse.query,
+        locationFilter: bboxLocationFilter,
+      },
+    });
+    fixture.detectChanges();
+    TestBed.flushEffects();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const mapComponent = fixture.debugElement.query(By.directive(MockEventsMapComponent))?.componentInstance as MockEventsMapComponent | undefined;
+    expect(mapComponent?.searchScope()).toEqual({
+      mode: 'bbox',
+      bbox: bboxLocationFilter?.bbox,
+    });
+  });
+
+  it('should not pass a map focus location when the query has no resolved location filter', async () => {
+    appEventServiceMock.getEventsOnceByIds.mockReturnValueOnce(of([
+      buildMockEvent({
+        id: 'event-9',
+        startDate: '2026-03-18T08:00:00.000Z',
+        activityTypes: [ActivityTypes.Cycling],
+        stats: {
+          [DataDistance.type]: 20000,
+          [DataStartPosition.type]: { latitudeDegrees: 37.9838, longitudeDegrees: 23.7275 },
+        },
+      }),
+    ]));
+
+    component.response.set(buildLatestEventResponse());
+    fixture.detectChanges();
+    TestBed.flushEffects();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const mapComponent = fixture.debugElement.query(By.directive(MockEventsMapComponent))?.componentInstance as MockEventsMapComponent | undefined;
+
+    expect(mapComponent?.focusLocation()).toBeUndefined();
+    expect(mapComponent?.searchScope()).toBeUndefined();
   });
 
   it('should not render the top-events section for average aggregate results', async () => {

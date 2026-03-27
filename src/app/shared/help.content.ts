@@ -163,7 +163,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 - The backend geocodes locations with **Mapbox** and, if needed, makes one AI fallback attempt to repair an unresolved location string.
 - Country and region requests use Mapbox's returned **bounding box** as a best-effort scope, not an exact border polygon.
 - City, locality, and place requests use the resolved center point plus your chosen **radius**.
-- Event-backed AI Insights results can show a **map** below the result when the surfaced events have recorded start positions.
+- Event-backed AI Insights results can show a **map** below the result when surfaced events have recorded start positions.
+- When a location is resolved, the map also draws the resolved search scope: a **radius** circle for point-based places or a **bbox** region for country/region matches, and camera framing includes both scope and surfaced event starts.
 - Add **all time** to query your full history.
 - For power-curve prompts, **excluding cycling** removes the whole cycling family (Cycling, Indoor Cycling, Virtual Cycling, and E-Biking).
 

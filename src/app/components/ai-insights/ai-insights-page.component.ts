@@ -44,7 +44,8 @@ import { AiInsightsLoadingStateComponent } from './ai-insights-loading-state.com
 import { AiInsightsMultiMetricChartComponent } from './ai-insights-multi-metric-chart.component';
 import { AiInsightsPowerCurveChartComponent } from './ai-insights-power-curve-chart.component';
 import { AiInsightsPromptPickerDialogComponent } from './ai-insights-prompt-picker-dialog.component';
-import { EventsMapComponent } from '../events-map/events-map.component';
+import { EventsMapComponent, type EventsMapFocusLocation } from '../events-map/events-map.component';
+import { type MapSearchScope } from '../../services/map/map-search-scope-overlay.utils';
 import {
   buildAggregateSummaryCards,
   buildAggregateAnomalyCallouts,
@@ -937,6 +938,72 @@ export class AiInsightsPageComponent {
       .map((entry) => entry.event)
       .filter((event): event is EventInterface => this.hasValidStartPosition(event))
   ));
+  readonly rankedMapFocusLocation = computed<EventsMapFocusLocation | null>(() => {
+    const locationCenter = this.rankedEventResponse()?.query.locationFilter?.center;
+    if (!locationCenter) {
+      return null;
+    }
+
+    if (
+      !Number.isFinite(locationCenter.latitudeDegrees)
+      || !Number.isFinite(locationCenter.longitudeDegrees)
+    ) {
+      return null;
+    }
+
+    return {
+      latitudeDegrees: locationCenter.latitudeDegrees,
+      longitudeDegrees: locationCenter.longitudeDegrees,
+    };
+  });
+  readonly rankedMapSearchScope = computed<MapSearchScope | null>(() => {
+    const locationFilter = this.rankedEventResponse()?.query.locationFilter;
+    if (!locationFilter) {
+      return null;
+    }
+
+    if (locationFilter.mode === 'radius') {
+      const center = locationFilter.center;
+      if (
+        !Number.isFinite(center.latitudeDegrees)
+        || !Number.isFinite(center.longitudeDegrees)
+        || !Number.isFinite(locationFilter.radiusKm)
+        || locationFilter.radiusKm <= 0
+      ) {
+        return null;
+      }
+
+      return {
+        mode: 'radius',
+        center: {
+          latitudeDegrees: center.latitudeDegrees,
+          longitudeDegrees: center.longitudeDegrees,
+        },
+        radiusKm: locationFilter.radiusKm,
+      };
+    }
+
+    const bbox = locationFilter.bbox;
+    if (
+      !bbox
+      || !Number.isFinite(bbox.west)
+      || !Number.isFinite(bbox.south)
+      || !Number.isFinite(bbox.east)
+      || !Number.isFinite(bbox.north)
+    ) {
+      return null;
+    }
+
+    return {
+      mode: 'bbox',
+      bbox: {
+        west: bbox.west,
+        south: bbox.south,
+        east: bbox.east,
+        north: bbox.north,
+      },
+    };
+  });
   readonly primaryRankedEventItem = computed<EventLookupDisplayItem | null>(() =>
     this.rankedEventItems()[0] ?? null
   );

@@ -61,6 +61,13 @@ import {
   buildReadableActivityMarkerPaint,
   resolveThemedActivityColor
 } from '../../services/map/map-activity-color.utils';
+import {
+  type MapSearchScope,
+  removeMapSearchScopeOverlay,
+  buildMapSearchScopeOverlayFeatureCollection,
+  resolveMapSearchScopeFitCoordinates,
+  upsertMapSearchScopeOverlay,
+} from '../../services/map/map-search-scope-overlay.utils';
 
 interface EventPointFeature {
   type: 'Feature';
@@ -72,6 +79,11 @@ interface EventPointFeature {
     eventId: string;
     color: string;
   };
+}
+
+export interface EventsMapFocusLocation {
+  latitudeDegrees: number;
+  longitudeDegrees: number;
 }
 
 @Component({
@@ -88,6 +100,9 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
   private static readonly EVENTS_UNCLUSTERED_LAYER_ID = 'events-map-events-unclustered';
   private static readonly EVENTS_CLUSTER_LAYER_ID = 'events-map-events-clusters';
   private static readonly EVENTS_CLUSTER_COUNT_LAYER_ID = 'events-map-events-cluster-count';
+  private static readonly SEARCH_SCOPE_SOURCE_ID = 'events-map-search-scope-source';
+  private static readonly SEARCH_SCOPE_FILL_LAYER_ID = 'events-map-search-scope-fill';
+  private static readonly SEARCH_SCOPE_OUTLINE_LAYER_ID = 'events-map-search-scope-outline';
   private static readonly SELECTED_TRACKS_SOURCE_ID = 'events-map-selected-event-tracks-source';
   private static readonly SELECTED_TRACKS_LAYER_ID = 'events-map-selected-event-tracks-layer';
 
@@ -95,6 +110,8 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
   @Input() events: EventInterface[] = [];
   @Input() user?: User;
   @Input() clusterMarkers = true;
+  @Input() focusLocation?: EventsMapFocusLocation | null;
+  @Input() searchScope?: MapSearchScope | null;
 
   @Input() set mapStyle(value: MapStyleName | undefined) {
     this.mapStyleSignal.set(this.mapStyleService.normalizeStyle(value));
@@ -168,7 +185,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes.events) {
+    if (changes.events || changes.focusLocation || changes.searchScope) {
       this.pendingEventsFitBounds = true;
     }
 
@@ -186,6 +203,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
     this.styleReadyHandlerCleanup?.();
     this.styleReadyHandlerCleanup = null;
     unbindLayerClicks(map, this.layerClickBindings);
+    this.removeSearchScopeOverlay();
 
     if (map?.remove) {
       map.remove();
@@ -305,8 +323,88 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
       return;
     }
 
+    this.renderSearchScopeOverlay();
     this.renderEventLayers();
     this.renderSelectedEventTracks();
+  }
+
+  private renderSearchScopeOverlay(): void {
+    const map = this.mapInstance();
+    if (!map) {
+      return;
+    }
+
+    const sourceData = buildMapSearchScopeOverlayFeatureCollection(this.searchScope);
+    if (!sourceData) {
+      this.removeSearchScopeOverlay();
+      return;
+    }
+
+    const beforeLayerId = this.resolveSearchScopeBeforeLayerId();
+    upsertMapSearchScopeOverlay(map, {
+      sourceId: EventsMapComponent.SEARCH_SCOPE_SOURCE_ID,
+      fillLayerId: EventsMapComponent.SEARCH_SCOPE_FILL_LAYER_ID,
+      outlineLayerId: EventsMapComponent.SEARCH_SCOPE_OUTLINE_LAYER_ID,
+      featureCollection: sourceData,
+      fillPaint: this.buildSearchScopeFillPaint(),
+      outlinePaint: this.buildSearchScopeOutlinePaint(),
+      beforeLayerId,
+    });
+  }
+
+  private removeSearchScopeOverlay(): void {
+    const map = this.mapInstance();
+    if (!map) {
+      return;
+    }
+
+    removeMapSearchScopeOverlay(
+      map,
+      EventsMapComponent.SEARCH_SCOPE_SOURCE_ID,
+      EventsMapComponent.SEARCH_SCOPE_FILL_LAYER_ID,
+      EventsMapComponent.SEARCH_SCOPE_OUTLINE_LAYER_ID,
+    );
+  }
+
+  private resolveSearchScopeBeforeLayerId(): string | undefined {
+    const map = this.mapInstance();
+    if (!map) {
+      return undefined;
+    }
+
+    if (map.getLayer?.(EventsMapComponent.EVENTS_UNCLUSTERED_LAYER_ID)) {
+      return EventsMapComponent.EVENTS_UNCLUSTERED_LAYER_ID;
+    }
+
+    if (map.getLayer?.(EventsMapComponent.EVENTS_CLUSTER_LAYER_ID)) {
+      return EventsMapComponent.EVENTS_CLUSTER_LAYER_ID;
+    }
+
+    if (map.getLayer?.(EventsMapComponent.EVENTS_CLUSTER_COUNT_LAYER_ID)) {
+      return EventsMapComponent.EVENTS_CLUSTER_COUNT_LAYER_ID;
+    }
+
+    return undefined;
+  }
+
+  private buildSearchScopeFillPaint(): Record<string, any> {
+    return {
+      'fill-color': '#22c55e',
+      'fill-opacity': this.isBusyMapStyle() || this.appTheme() === AppThemes.Dark ? 0.14 : 0.1,
+    };
+  }
+
+  private buildSearchScopeOutlinePaint(): Record<string, any> {
+    return {
+      'line-color': this.isBusyMapStyle() || this.appTheme() === AppThemes.Dark ? '#dcfce7' : '#15803d',
+      'line-width': this.isBusyMapStyle() ? 2.2 : 1.8,
+      'line-opacity': this.isBusyMapStyle() || this.appTheme() === AppThemes.Dark ? 0.88 : 0.72,
+      'line-dasharray': [2.2, 1.4],
+    };
+  }
+
+  private isBusyMapStyle(): boolean {
+    return this.mapStyle === 'satellite' || this.mapStyle === 'outdoors';
   }
 
   private renderEventLayers(): void {
@@ -681,19 +779,24 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
   }
 
   private fitBoundsToPointFeatures(pointFeatures: EventPointFeature[], animate: boolean): void {
-    if (!this.mapboxgl) {
-      return;
+    const coordinates: [number, number][] = [];
+
+    const focusCoordinates = this.resolveFocusCoordinates();
+    if (focusCoordinates) {
+      coordinates.push(focusCoordinates);
     }
 
-    const bounds = new this.mapboxgl.LngLatBounds();
-    let hasPoints = false;
-
-    pointFeatures.forEach((feature) => {
-      bounds.extend(feature.geometry.coordinates);
-      hasPoints = true;
+    const searchScopeFitCoordinates = this.resolveSearchScopeFitCoordinates();
+    searchScopeFitCoordinates.forEach((coordinate) => {
+      coordinates.push(coordinate);
     });
 
-    if (!hasPoints) {
+    pointFeatures.forEach((feature) => {
+      coordinates.push(feature.geometry.coordinates);
+    });
+
+    const bounds = this.resolveCameraBoundsFromCoordinates(coordinates);
+    if (!bounds) {
       return;
     }
 
@@ -755,26 +858,16 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
       .map((event) => this.resolveEventStartCoordinates(event))
       .filter((coordinate): coordinate is [number, number] => Array.isArray(coordinate));
 
-    if (coordinates.length < 2) {
-      return null;
+    const focusCoordinates = this.resolveFocusCoordinates();
+    if (focusCoordinates && coordinates.length > 0) {
+      coordinates.push(focusCoordinates);
     }
 
-    let minLongitude = Number.POSITIVE_INFINITY;
-    let minLatitude = Number.POSITIVE_INFINITY;
-    let maxLongitude = Number.NEGATIVE_INFINITY;
-    let maxLatitude = Number.NEGATIVE_INFINITY;
+    if (coordinates.length > 0) {
+      coordinates.push(...this.resolveSearchScopeFitCoordinates());
+    }
 
-    coordinates.forEach(([longitudeDegrees, latitudeDegrees]) => {
-      if (longitudeDegrees < minLongitude) minLongitude = longitudeDegrees;
-      if (longitudeDegrees > maxLongitude) maxLongitude = longitudeDegrees;
-      if (latitudeDegrees < minLatitude) minLatitude = latitudeDegrees;
-      if (latitudeDegrees > maxLatitude) maxLatitude = latitudeDegrees;
-    });
-
-    return [
-      [minLongitude, minLatitude],
-      [maxLongitude, maxLatitude],
-    ];
+    return this.resolveCameraBoundsFromCoordinates(coordinates);
   }
 
   private resolveEventStartCoordinates(event: EventInterface): [number, number] | null {
@@ -784,6 +877,96 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
       return null;
     }
     return [location.longitudeDegrees, location.latitudeDegrees];
+  }
+
+  private resolveFocusCoordinates(): [number, number] | null {
+    if (!this.focusLocation) {
+      return null;
+    }
+
+    const latitudeDegrees = this.focusLocation.latitudeDegrees;
+    const longitudeDegrees = this.focusLocation.longitudeDegrees;
+    if (
+      !Number.isFinite(latitudeDegrees)
+      || !Number.isFinite(longitudeDegrees)
+      || Math.abs(latitudeDegrees) > 90
+      || Math.abs(longitudeDegrees) > 180
+    ) {
+      return null;
+    }
+
+    return [longitudeDegrees, latitudeDegrees];
+  }
+
+  private resolveSearchScopeFitCoordinates(): [number, number][] {
+    const coordinates = resolveMapSearchScopeFitCoordinates(this.searchScope);
+    return coordinates.filter((coordinate): coordinate is [number, number] => (
+      Array.isArray(coordinate)
+      && coordinate.length === 2
+      && Number.isFinite(coordinate[0])
+      && Number.isFinite(coordinate[1])
+      && Math.abs(coordinate[0]) <= 180
+      && Math.abs(coordinate[1]) <= 90
+    ));
+  }
+
+  private resolveCameraBoundsFromCoordinates(
+    coordinates: [number, number][]
+  ): [[number, number], [number, number]] | null {
+    if (coordinates.length < 2) {
+      return null;
+    }
+
+    let minLatitude = Number.POSITIVE_INFINITY;
+    let maxLatitude = Number.NEGATIVE_INFINITY;
+    const longitudes: number[] = [];
+
+    coordinates.forEach(([longitudeDegrees, latitudeDegrees]) => {
+      if (!Number.isFinite(longitudeDegrees) || !Number.isFinite(latitudeDegrees)) {
+        return;
+      }
+
+      longitudes.push(longitudeDegrees);
+      if (latitudeDegrees < minLatitude) minLatitude = latitudeDegrees;
+      if (latitudeDegrees > maxLatitude) maxLatitude = latitudeDegrees;
+    });
+
+    if (!longitudes.length || !Number.isFinite(minLatitude) || !Number.isFinite(maxLatitude)) {
+      return null;
+    }
+
+    const longitudeBounds = this.resolveLongitudeBounds(longitudes);
+    if (!longitudeBounds) {
+      return null;
+    }
+
+    return [
+      [longitudeBounds[0], minLatitude],
+      [longitudeBounds[1], maxLatitude],
+    ];
+  }
+
+  private resolveLongitudeBounds(longitudes: number[]): [number, number] | null {
+    if (!longitudes.length) {
+      return null;
+    }
+
+    const minLongitude = Math.min(...longitudes);
+    const maxLongitude = Math.max(...longitudes);
+    const directSpan = maxLongitude - minLongitude;
+
+    const shiftedLongitudes = longitudes.map((longitudeDegrees) => (
+      longitudeDegrees < 0 ? longitudeDegrees + 360 : longitudeDegrees
+    ));
+    const shiftedMinLongitude = Math.min(...shiftedLongitudes);
+    const shiftedMaxLongitude = Math.max(...shiftedLongitudes);
+    const wrappedSpan = shiftedMaxLongitude - shiftedMinLongitude;
+
+    if (wrappedSpan < directSpan) {
+      return [shiftedMinLongitude, shiftedMaxLongitude];
+    }
+
+    return [minLongitude, maxLongitude];
   }
 
   private logPopupStatSnapshot(

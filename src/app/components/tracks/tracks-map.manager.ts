@@ -29,6 +29,11 @@ import {
     runWhenStyleReady
 } from '../../services/map/mapbox-style-ready.utils';
 import { resolveThemedActivityColor } from '../../services/map/map-activity-color.utils';
+import {
+    buildMapSearchScopeOverlayFeatureCollection,
+    removeMapSearchScopeOverlay,
+    upsertMapSearchScopeOverlay,
+} from '../../services/map/map-search-scope-overlay.utils';
 import { DetectedHomeArea, TripBounds } from '../../services/my-tracks-trip-detection.service';
 
 type TrackStyleMode = 'dark-glow' | 'light-contrast';
@@ -810,30 +815,37 @@ export class TracksMapManager {
     private renderHomeArea(): void {
         if (!this.map || !this.homeArea) return;
 
-        const sourceData = this.buildHomeAreaFeatureCollection(this.homeArea);
+        const sourceData = buildMapSearchScopeOverlayFeatureCollection({
+            mode: 'radius',
+            center: {
+                latitudeDegrees: this.homeArea.centroidLat,
+                longitudeDegrees: this.homeArea.centroidLng,
+            },
+            radiusKm: this.homeArea.radiusKm,
+        }, {
+            destinationId: this.homeArea.destinationId,
+            radiusKm: this.homeArea.radiusKm,
+            pointCount: this.homeArea.pointCount,
+            pointShare: this.homeArea.pointShare,
+        });
+        if (!sourceData) {
+            this.removeHomeAreaLayerAndSource();
+            return;
+        }
         const beforeLayerId = this.getFirstTrackLayerId();
         const fillPaint = this.buildHomeAreaFillPaint();
         const outlinePaint = this.buildHomeAreaOutlinePaint();
 
         this.zone.runOutsideAngular(() => {
-            upsertGeoJsonSource(this.map, TracksMapManager.HOME_AREA_SOURCE_ID, sourceData);
-
-            ensureLayer(this.map, {
-                id: TracksMapManager.HOME_AREA_FILL_LAYER_ID,
-                type: 'fill',
-                source: TracksMapManager.HOME_AREA_SOURCE_ID,
-                paint: fillPaint,
-            }, beforeLayerId);
-
-            ensureLayer(this.map, {
-                id: TracksMapManager.HOME_AREA_OUTLINE_LAYER_ID,
-                type: 'line',
-                source: TracksMapManager.HOME_AREA_SOURCE_ID,
-                paint: outlinePaint,
-            }, beforeLayerId);
-
-            setPaintIfLayerExists(this.map, TracksMapManager.HOME_AREA_FILL_LAYER_ID, fillPaint);
-            setPaintIfLayerExists(this.map, TracksMapManager.HOME_AREA_OUTLINE_LAYER_ID, outlinePaint);
+            upsertMapSearchScopeOverlay(this.map, {
+                sourceId: TracksMapManager.HOME_AREA_SOURCE_ID,
+                fillLayerId: TracksMapManager.HOME_AREA_FILL_LAYER_ID,
+                outlineLayerId: TracksMapManager.HOME_AREA_OUTLINE_LAYER_ID,
+                featureCollection: sourceData,
+                fillPaint,
+                outlinePaint,
+                beforeLayerId,
+            });
         });
     }
 
@@ -841,39 +853,48 @@ export class TracksMapManager {
         if (!this.map) return;
 
         this.zone.runOutsideAngular(() => {
-            removeLayerIfExists(this.map, TracksMapManager.HOME_AREA_OUTLINE_LAYER_ID);
-            removeLayerIfExists(this.map, TracksMapManager.HOME_AREA_FILL_LAYER_ID);
-            removeSourceIfExists(this.map, TracksMapManager.HOME_AREA_SOURCE_ID);
+            removeMapSearchScopeOverlay(
+                this.map,
+                TracksMapManager.HOME_AREA_SOURCE_ID,
+                TracksMapManager.HOME_AREA_FILL_LAYER_ID,
+                TracksMapManager.HOME_AREA_OUTLINE_LAYER_ID,
+            );
         });
     }
 
     private renderTripArea(): void {
         if (!this.map || !this.tripArea) return;
 
-        const sourceData = this.buildTripAreaFeatureCollection(this.tripArea);
+        const sourceData = buildMapSearchScopeOverlayFeatureCollection({
+            mode: 'radius',
+            center: {
+                latitudeDegrees: this.tripArea.centroidLat,
+                longitudeDegrees: this.tripArea.centroidLng,
+            },
+            radiusKm: this.estimateTripAreaRadiusKm(this.tripArea),
+        }, {
+            tripId: this.tripArea.tripId,
+            centroidLat: this.tripArea.centroidLat,
+            centroidLng: this.tripArea.centroidLng,
+        });
+        if (!sourceData) {
+            this.removeTripAreaLayerAndSource();
+            return;
+        }
         const beforeLayerId = this.getTripAreaBeforeLayerId();
         const fillPaint = this.buildTripAreaFillPaint();
         const outlinePaint = this.buildTripAreaOutlinePaint();
 
         this.zone.runOutsideAngular(() => {
-            upsertGeoJsonSource(this.map, TracksMapManager.TRIP_AREA_SOURCE_ID, sourceData);
-
-            ensureLayer(this.map, {
-                id: TracksMapManager.TRIP_AREA_FILL_LAYER_ID,
-                type: 'fill',
-                source: TracksMapManager.TRIP_AREA_SOURCE_ID,
-                paint: fillPaint,
-            }, beforeLayerId);
-
-            ensureLayer(this.map, {
-                id: TracksMapManager.TRIP_AREA_OUTLINE_LAYER_ID,
-                type: 'line',
-                source: TracksMapManager.TRIP_AREA_SOURCE_ID,
-                paint: outlinePaint,
-            }, beforeLayerId);
-
-            setPaintIfLayerExists(this.map, TracksMapManager.TRIP_AREA_FILL_LAYER_ID, fillPaint);
-            setPaintIfLayerExists(this.map, TracksMapManager.TRIP_AREA_OUTLINE_LAYER_ID, outlinePaint);
+            upsertMapSearchScopeOverlay(this.map, {
+                sourceId: TracksMapManager.TRIP_AREA_SOURCE_ID,
+                fillLayerId: TracksMapManager.TRIP_AREA_FILL_LAYER_ID,
+                outlineLayerId: TracksMapManager.TRIP_AREA_OUTLINE_LAYER_ID,
+                featureCollection: sourceData,
+                fillPaint,
+                outlinePaint,
+                beforeLayerId,
+            });
         });
     }
 
@@ -881,9 +902,12 @@ export class TracksMapManager {
         if (!this.map) return;
 
         this.zone.runOutsideAngular(() => {
-            removeLayerIfExists(this.map, TracksMapManager.TRIP_AREA_OUTLINE_LAYER_ID);
-            removeLayerIfExists(this.map, TracksMapManager.TRIP_AREA_FILL_LAYER_ID);
-            removeSourceIfExists(this.map, TracksMapManager.TRIP_AREA_SOURCE_ID);
+            removeMapSearchScopeOverlay(
+                this.map,
+                TracksMapManager.TRIP_AREA_SOURCE_ID,
+                TracksMapManager.TRIP_AREA_FILL_LAYER_ID,
+                TracksMapManager.TRIP_AREA_OUTLINE_LAYER_ID,
+            );
         });
     }
 
@@ -903,78 +927,6 @@ export class TracksMapManager {
         }
 
         return undefined;
-    }
-
-    private buildHomeAreaFeatureCollection(homeArea: DetectedHomeArea): any {
-        return {
-            type: 'FeatureCollection',
-            features: [{
-                type: 'Feature',
-                properties: {
-                    destinationId: homeArea.destinationId,
-                    radiusKm: homeArea.radiusKm,
-                    pointCount: homeArea.pointCount,
-                    pointShare: homeArea.pointShare,
-                },
-                geometry: {
-                    type: 'Polygon',
-                    coordinates: [this.buildGeodesicCircleCoordinates(
-                        homeArea.centroidLng,
-                        homeArea.centroidLat,
-                        homeArea.radiusKm,
-                    )],
-                },
-            }],
-        };
-    }
-
-    private buildTripAreaFeatureCollection(tripArea: TripAreaOverlay): any {
-        return {
-            type: 'FeatureCollection',
-            features: [{
-                type: 'Feature',
-                properties: {
-                    tripId: tripArea.tripId,
-                    centroidLat: tripArea.centroidLat,
-                    centroidLng: tripArea.centroidLng,
-                },
-                geometry: {
-                    type: 'Polygon',
-                    coordinates: [this.buildGeodesicCircleCoordinates(
-                        tripArea.centroidLng,
-                        tripArea.centroidLat,
-                        this.estimateTripAreaRadiusKm(tripArea),
-                    )],
-                },
-            }],
-        };
-    }
-
-    private buildGeodesicCircleCoordinates(centerLng: number, centerLat: number, radiusKm: number, steps: number = 48): number[][] {
-        const earthRadiusKm = 6371.0088;
-        const angularDistance = radiusKm / earthRadiusKm;
-        const centerLatRad = this.toRadians(centerLat);
-        const centerLngRad = this.toRadians(centerLng);
-        const coordinates: number[][] = [];
-
-        for (let step = 0; step <= steps; step++) {
-            const bearing = (2 * Math.PI * step) / steps;
-            const latitudeRad = Math.asin(
-                Math.sin(centerLatRad) * Math.cos(angularDistance)
-                + Math.cos(centerLatRad) * Math.sin(angularDistance) * Math.cos(bearing)
-            );
-            const longitudeRad = centerLngRad + Math.atan2(
-                Math.sin(bearing) * Math.sin(angularDistance) * Math.cos(centerLatRad),
-                Math.cos(angularDistance) - Math.sin(centerLatRad) * Math.sin(latitudeRad)
-            );
-
-            coordinates.push([
-                this.normalizeLongitude(this.toDegrees(longitudeRad)),
-                this.toDegrees(latitudeRad),
-            ]);
-        }
-
-        return coordinates;
     }
 
     private buildHomeAreaFillPaint(): Record<string, any> {
@@ -1365,14 +1317,6 @@ export class TracksMapManager {
 
     private toRadians(value: number): number {
         return (value * Math.PI) / 180;
-    }
-
-    private toDegrees(value: number): number {
-        return (value * 180) / Math.PI;
-    }
-
-    private normalizeLongitude(value: number): number {
-        return ((((value + 540) % 360) + 360) % 360) - 180;
     }
 
     private resolveMaterialColor(cssVariable: string, fallback: string): string {

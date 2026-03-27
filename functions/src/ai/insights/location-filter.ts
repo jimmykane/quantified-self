@@ -71,6 +71,11 @@ const COORDINATE_PAIR_PATTERNS: ReadonlyArray<RegExp> = [
 const LOCATION_WITH_RADIUS_PATTERN =
   /\bwithin\s+(\d{1,3}(?:\.\d+)?)\s*(km|kilometers?|kilometres?|mi|mile|miles)\s+(?:of|around|near)\s+([^,.!?;]+)/i;
 
+const LOCATION_RADIUS_PATTERNS: ReadonlyArray<RegExp> = [
+  /\bwith(?:in)?\s+(?:a\s+)?(\d{1,3}(?:\.\d+)?)\s*(km|kilometers?|kilometres?|mi|mile|miles)\s+radius\b/i,
+  /\bradius\s+(?:of\s+)?(\d{1,3}(?:\.\d+)?)\s*(km|kilometers?|kilometres?|mi|mile|miles)\b/i,
+];
+
 const LOCATION_KEYWORD_PATTERNS: ReadonlyArray<RegExp> = [
   /\b(?:near|around|inside)\s+([^,.!?;]+)/i,
   /\bin\s+(?!the\s+(?:last|past|current|this|next|previous)\b)(?!last\b)(?!past\b)(?!current\b)(?!this\b)(?!next\b)(?!previous\b)([^,.!?;]+)/i,
@@ -263,6 +268,24 @@ function isLikelyPromptLocationText(value: string): boolean {
   return true;
 }
 
+function resolvePromptRadiusKm(prompt: string): number | undefined {
+  const locationWithRadiusMatch = prompt.match(LOCATION_WITH_RADIUS_PATTERN);
+  if (locationWithRadiusMatch) {
+    return resolveRadiusKmFromMatch(locationWithRadiusMatch[1], locationWithRadiusMatch[2]);
+  }
+
+  for (const pattern of LOCATION_RADIUS_PATTERNS) {
+    const match = prompt.match(pattern);
+    if (!match) {
+      continue;
+    }
+
+    return resolveRadiusKmFromMatch(match[1], match[2]);
+  }
+
+  return undefined;
+}
+
 function resolvePromptLocationCandidate(
   prompt: string,
   requestLocationFilter?: AiInsightsRequestLocationFilter,
@@ -282,11 +305,13 @@ function resolvePromptLocationCandidate(
     };
   }
 
+  const promptRadiusKm = requestedRadiusKm ?? resolvePromptRadiusKm(prompt);
+
   const directCoordinate = parseDirectCoordinate(prompt);
   if (directCoordinate) {
     return {
       requestedText: formatCoordinateLabel(directCoordinate.latitudeDegrees, directCoordinate.longitudeDegrees),
-      radiusKm: requestedRadiusKm,
+      radiusKm: promptRadiusKm,
       source: 'prompt',
       directCoordinate,
     };
@@ -298,7 +323,7 @@ function resolvePromptLocationCandidate(
     if (promptLocationText) {
       return {
         requestedText: promptLocationText,
-        radiusKm: requestedRadiusKm ?? resolveRadiusKmFromMatch(radiusMatch[1], radiusMatch[2]),
+        radiusKm: promptRadiusKm ?? resolveRadiusKmFromMatch(radiusMatch[1], radiusMatch[2]),
         source: 'prompt',
       };
     }
@@ -317,7 +342,7 @@ function resolvePromptLocationCandidate(
 
     return {
       requestedText: promptLocationText,
-      radiusKm: requestedRadiusKm,
+      radiusKm: promptRadiusKm,
       source: 'prompt',
     };
   }

@@ -29,6 +29,9 @@ const EVENTS_SOURCE_ID = 'events-map-events-source';
 const EVENTS_UNCLUSTERED_LAYER_ID = 'events-map-events-unclustered';
 const EVENTS_CLUSTER_LAYER_ID = 'events-map-events-clusters';
 const EVENTS_CLUSTER_COUNT_LAYER_ID = 'events-map-events-cluster-count';
+const SEARCH_SCOPE_SOURCE_ID = 'events-map-search-scope-source';
+const SEARCH_SCOPE_FILL_LAYER_ID = 'events-map-search-scope-fill';
+const SEARCH_SCOPE_OUTLINE_LAYER_ID = 'events-map-search-scope-outline';
 const SELECTED_TRACKS_SOURCE_ID = 'events-map-selected-event-tracks-source';
 
 describe('EventsMapComponent', () => {
@@ -209,6 +212,7 @@ describe('EventsMapComponent', () => {
     component.events = [createEvent('event-1')];
     component.mapStyle = 'default';
     component.clusterMarkers = true;
+    component.searchScope = null;
   });
 
   it('should create', () => {
@@ -476,6 +480,196 @@ describe('EventsMapComponent', () => {
     ]);
     expect(mapOptions?.center).toBeUndefined();
     expect(mapOptions?.zoom).toBeUndefined();
+  });
+
+  it('should include focusLocation in initial bounds when events are present', async () => {
+    component.events = [createEvent('event-1', 40.64, 22.94)];
+    component.focusLocation = { latitudeDegrees: 41.05, longitudeDegrees: 23.77 };
+
+    fixture.detectChanges();
+    await flush();
+
+    const createMapCall = mockMapboxLoader.createMap.mock.calls[0];
+    const mapOptions = createMapCall?.[1];
+
+    expect(mapOptions?.bounds).toEqual([
+      [22.94, 40.64],
+      [23.77, 41.05],
+    ]);
+  });
+
+  it('should include focusLocation in fitBounds camera updates for event points', async () => {
+    component.events = [createEvent('event-1', 40.64, 22.94)];
+    component.focusLocation = { latitudeDegrees: 41.05, longitudeDegrees: 23.77 };
+
+    await initMap();
+
+    const fitBoundsCall = map.fitBounds.mock.calls.at(-1);
+    const bounds = fitBoundsCall?.[0] as [[number, number], [number, number]];
+
+    expect(bounds?.[0]?.[0]).toBeLessThanOrEqual(22.94);
+    expect(bounds?.[1]?.[0]).toBeGreaterThanOrEqual(23.77);
+    expect(bounds?.[0]?.[1]).toBeLessThanOrEqual(40.64);
+    expect(bounds?.[1]?.[1]).toBeGreaterThanOrEqual(41.05);
+  });
+
+  it('should render a radius search-scope overlay with fill and outline layers', async () => {
+    component.searchScope = {
+      mode: 'radius',
+      center: { latitudeDegrees: 41.05, longitudeDegrees: 23.77 },
+      radiusKm: 50,
+    };
+
+    await initMap();
+
+    const scopeSourceCall = map.addSource.mock.calls.find((call: any[]) => call[0] === SEARCH_SCOPE_SOURCE_ID);
+    expect(scopeSourceCall).toBeDefined();
+    expect(scopeSourceCall?.[1]?.data?.features?.[0]?.geometry?.type).toBe('Polygon');
+    expect(map.addLayer.mock.calls.some((call: any[]) => call[0]?.id === SEARCH_SCOPE_FILL_LAYER_ID)).toBe(true);
+    expect(map.addLayer.mock.calls.some((call: any[]) => call[0]?.id === SEARCH_SCOPE_OUTLINE_LAYER_ID)).toBe(true);
+  });
+
+  it('should render a wrapped bbox search-scope overlay as multipolygon', async () => {
+    component.searchScope = {
+      mode: 'bbox',
+      bbox: {
+        west: 170,
+        south: -10,
+        east: -170,
+        north: 10,
+      },
+    };
+
+    await initMap();
+
+    const scopeSourceCall = map.addSource.mock.calls.find((call: any[]) => call[0] === SEARCH_SCOPE_SOURCE_ID);
+    expect(scopeSourceCall).toBeDefined();
+    expect(scopeSourceCall?.[1]?.data?.features?.[0]?.geometry?.type).toBe('MultiPolygon');
+  });
+
+  it('should include searchScope geometry in initial bounds resolution', async () => {
+    component.events = [createEvent('event-1', 40.64, 22.94)];
+    component.searchScope = {
+      mode: 'radius',
+      center: { latitudeDegrees: 41.05, longitudeDegrees: 23.77 },
+      radiusKm: 50,
+    };
+
+    fixture.detectChanges();
+    await flush();
+
+    const createMapCall = mockMapboxLoader.createMap.mock.calls[0];
+    const mapOptions = createMapCall?.[1];
+
+    expect(mapOptions?.bounds).toBeDefined();
+    expect(mapOptions?.bounds?.[0]?.[0]).toBeLessThanOrEqual(22.94);
+    expect(mapOptions?.bounds?.[1]?.[0]).toBeGreaterThan(23.9);
+    expect(mapOptions?.center).toBeUndefined();
+  });
+
+  it('should include searchScope geometry in fitBounds camera updates', async () => {
+    component.events = [createEvent('event-1', 40.64, 22.94)];
+    component.searchScope = {
+      mode: 'radius',
+      center: { latitudeDegrees: 41.05, longitudeDegrees: 23.77 },
+      radiusKm: 50,
+    };
+
+    await initMap();
+
+    const fitBoundsCall = map.fitBounds.mock.calls.at(-1);
+    const bounds = fitBoundsCall?.[0] as [[number, number], [number, number]];
+
+    expect(bounds?.[0]?.[0]).toBeLessThanOrEqual(22.94);
+    expect(bounds?.[1]?.[0]).toBeGreaterThan(23.9);
+    expect(bounds?.[0]?.[1]).toBeLessThan(40.64);
+    expect(bounds?.[1]?.[1]).toBeGreaterThan(41.05);
+  });
+
+  it('should refit camera bounds when focusLocation changes after map initialization', async () => {
+    component.events = [createEvent('event-1', 40.64, 22.94)];
+    component.focusLocation = undefined;
+
+    await initMap();
+    const fitBoundsCallsBefore = map.fitBounds.mock.calls.length;
+
+    component.focusLocation = { latitudeDegrees: 41.05, longitudeDegrees: 23.77 };
+    component.ngOnChanges({
+      focusLocation: new SimpleChange(undefined, component.focusLocation, false),
+    });
+    await flush();
+
+    expect(map.fitBounds.mock.calls.length).toBeGreaterThan(fitBoundsCallsBefore);
+    const fitBoundsCall = map.fitBounds.mock.calls.at(-1);
+    const bounds = fitBoundsCall?.[0] as [[number, number], [number, number]];
+    expect(bounds?.[0]?.[0]).toBeLessThanOrEqual(22.94);
+    expect(bounds?.[1]?.[0]).toBeGreaterThanOrEqual(23.77);
+    expect(bounds?.[0]?.[1]).toBeLessThanOrEqual(40.64);
+    expect(bounds?.[1]?.[1]).toBeGreaterThanOrEqual(41.05);
+  });
+
+  it('should refit camera bounds when searchScope changes after map initialization', async () => {
+    component.events = [createEvent('event-1', 40.64, 22.94)];
+    component.searchScope = undefined;
+
+    await initMap();
+    const fitBoundsCallsBefore = map.fitBounds.mock.calls.length;
+
+    component.searchScope = {
+      mode: 'radius',
+      center: { latitudeDegrees: 41.05, longitudeDegrees: 23.77 },
+      radiusKm: 50,
+    };
+    component.ngOnChanges({
+      searchScope: new SimpleChange(undefined, component.searchScope, false),
+    });
+    await flush();
+
+    expect(map.fitBounds.mock.calls.length).toBeGreaterThan(fitBoundsCallsBefore);
+    const fitBoundsCall = map.fitBounds.mock.calls.at(-1);
+    const bounds = fitBoundsCall?.[0] as [[number, number], [number, number]];
+    expect(bounds?.[0]?.[0]).toBeLessThanOrEqual(22.94);
+    expect(bounds?.[1]?.[0]).toBeGreaterThan(23.9);
+    expect(bounds?.[0]?.[1]).toBeLessThan(40.64);
+    expect(bounds?.[1]?.[1]).toBeGreaterThan(41.05);
+  });
+
+  it('should use wrapped longitude bounds for anti-meridian search scopes', async () => {
+    component.events = [createEvent('event-1', -9, -175)];
+    component.searchScope = {
+      mode: 'bbox',
+      bbox: {
+        west: 170,
+        south: -10,
+        east: -170,
+        north: 10,
+      },
+    };
+
+    await initMap();
+
+    const fitBoundsCall = map.fitBounds.mock.calls.at(-1);
+    const bounds = fitBoundsCall?.[0] as [[number, number], [number, number]];
+
+    expect(bounds?.[0]?.[0]).toBe(170);
+    expect(bounds?.[1]?.[0]).toBe(190);
+    expect(bounds?.[0]?.[1]).toBe(-10);
+    expect(bounds?.[1]?.[1]).toBe(10);
+  });
+
+  it('should preserve event-only camera behavior when focusLocation is undefined', async () => {
+    component.events = [createEvent('event-1', 40.64, 22.94)];
+    component.focusLocation = undefined;
+
+    fixture.detectChanges();
+    await flush();
+
+    const createMapCall = mockMapboxLoader.createMap.mock.calls[0];
+    const mapOptions = createMapCall?.[1];
+
+    expect(mapOptions?.bounds).toBeUndefined();
+    expect(mapOptions?.center).toEqual([22.94, 40.64]);
+    expect(mapOptions?.zoom).toBe(10);
   });
 
   it('should use mytracks-like popup metric slots without activities count', () => {

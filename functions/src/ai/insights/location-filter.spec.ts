@@ -85,6 +85,38 @@ describe('location-filter', () => {
     });
   });
 
+  it('extracts radius from prompt clauses like "with a 10km radius"', async () => {
+    const geocodeLocation = vi.fn().mockResolvedValue({
+      resolvedLabel: 'Ano Chora, Greece',
+      center: {
+        latitudeDegrees: 38.8012,
+        longitudeDegrees: 21.5564,
+      },
+    });
+    const testSubject = createResolveLocationFilter({
+      geocodeLocation,
+      inferLocationText: vi.fn().mockResolvedValue(null),
+    });
+
+    const result = await testSubject.resolveLocationFilter({
+      prompt: 'show my biggest jump this year in ano chora with a 10km radius',
+    });
+
+    expect(geocodeLocation).toHaveBeenCalledWith('ano chora');
+    expect(result).toEqual({
+      requestedText: 'ano chora',
+      effectiveText: 'ano chora',
+      resolvedLabel: 'Ano Chora, Greece',
+      source: 'prompt',
+      mode: 'radius',
+      radiusKm: 10,
+      center: {
+        latitudeDegrees: 38.8012,
+        longitudeDegrees: 21.5564,
+      },
+    });
+  });
+
   it('does not treat generic time clauses as prompt locations', async () => {
     const geocodeLocation = vi.fn();
     const inferLocationText = vi.fn();
