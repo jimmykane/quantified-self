@@ -782,7 +782,7 @@ function resolvePromptMonthYearListDateSelection(
 
   const monthNamePattern = '(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
   const monthYearRangePattern = new RegExp(
-    `\\b(?:from|between)\\s+${monthNamePattern}\\s+(${YEAR_PATTERN.source})\\s+(?:to|through|and|-)\\s+${monthNamePattern}\\s+(${YEAR_PATTERN.source})\\b`,
+    `\\b(?:from|between)\\s+${monthNamePattern}\\s+(${YEAR_PATTERN.source})\\s+(?:to|through|until|till|and|-)\\s+${monthNamePattern}\\s+(${YEAR_PATTERN.source})\\b`,
   );
   if (monthYearRangePattern.test(normalizedPrompt)) {
     return null;
@@ -1931,7 +1931,7 @@ function resolvePromptDateRangeIntent(prompt: string): DateRangeIntent | undefin
 
   const monthNamePattern = '(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
   const monthYearRangeMatch = normalizedPrompt.match(
-    new RegExp(`\\b(?:from|between)\\s+${monthNamePattern}\\s+(${YEAR_PATTERN.source})\\s+(?:to|through|and|-)\\s+${monthNamePattern}\\s+(${YEAR_PATTERN.source})\\b`),
+    new RegExp(`\\b(?:from|between)\\s+${monthNamePattern}\\s+(${YEAR_PATTERN.source})\\s+(?:to|through|until|till|and|-)\\s+${monthNamePattern}\\s+(${YEAR_PATTERN.source})\\b`),
   );
   if (monthYearRangeMatch) {
     const startMonth = resolveMonthNameToNumber(monthYearRangeMatch[1] || '');

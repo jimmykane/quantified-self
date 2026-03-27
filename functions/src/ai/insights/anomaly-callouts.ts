@@ -186,7 +186,8 @@ function formatBucketLabel(
   try {
     return new Intl.DateTimeFormat(locale, {
       ...dateFormattingOptions,
-      timeZone: query.dateRange.timezone,
+      // Bucket timestamps are canonical period boundaries; keep labels stable in UTC.
+      timeZone: 'UTC',
     }).format(bucketDate);
   } catch {
     return new Intl.DateTimeFormat(locale, dateFormattingOptions).format(bucketDate);

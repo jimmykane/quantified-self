@@ -978,6 +978,32 @@ describe('normalizeInsightQuery', () => {
     });
   });
 
+  it('treats month-year ranges with until as continuous ranges instead of discrete month lists', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-25T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'show my average power by month from jan 2026 until mar 2026',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('power');
+    expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
+      startDate: '2026-01-01T00:00:00.000Z',
+      endDate: '2026-03-31T23:59:59.999Z',
+      timezone: 'UTC',
+      source: 'prompt',
+    });
+    expect(result.query.requestedDateRanges).toBeUndefined();
+  });
+
   it('normalizes explicit month-year prompts such as "in January 2024"', async () => {
     setNormalizeQueryDependenciesForTesting({
       now: () => new Date('2026-03-20T12:00:00.000Z'),
