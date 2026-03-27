@@ -58,6 +58,11 @@
 .jobs-list {
     display: flex;
     flex-direction: column;
+    max-height: min(52vh, 360px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
 }
 
 .job-item {
