@@ -30,6 +30,7 @@ import { DragDropModule } from '@angular/cdk/drag-drop';
         BenchmarkModule,
         DragDropModule,
         DashboardRoutingModule,
+        EventsMapComponent,
     ],
     exports: [],
     declarations: [
@@ -43,7 +44,6 @@ import { DragDropModule } from '@angular/cdk/drag-drop';
         EventTableComponent,
         MergeOptionsDialogComponent,
         EventTableActionsComponent,
-        EventsMapComponent,
         TileChartComponent,
         TileMapComponent,
 

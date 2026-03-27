@@ -1,14 +1,16 @@
 import { CommonModule, DOCUMENT } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, LOCALE_ID, NgZone, computed, effect, inject, signal, viewChild } from '@angular/core';
-import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
 import { RouterModule } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import {
   AppThemes,
+  DataStartPosition,
   User,
 } from '@sports-alliance/sports-lib';
+import type { EventInterface } from '@sports-alliance/sports-lib';
 import type {
   AiInsightsAggregateOkResponse,
   AiInsightsEmptyResponse,
@@ -42,6 +44,7 @@ import { AiInsightsLoadingStateComponent } from './ai-insights-loading-state.com
 import { AiInsightsMultiMetricChartComponent } from './ai-insights-multi-metric-chart.component';
 import { AiInsightsPowerCurveChartComponent } from './ai-insights-power-curve-chart.component';
 import { AiInsightsPromptPickerDialogComponent } from './ai-insights-prompt-picker-dialog.component';
+import { EventsMapComponent } from '../events-map/events-map.component';
 import {
   buildAggregateSummaryCards,
   buildAggregateAnomalyCallouts,
@@ -135,6 +138,7 @@ const AI_INSIGHTS_SUPPORT_SUBJECTS = {
     AiInsightsLoadingStateComponent,
     AiInsightsMultiMetricChartComponent,
     AiInsightsPowerCurveChartComponent,
+    EventsMapComponent,
   ],
   templateUrl: './ai-insights-page.component.html',
   styleUrls: ['./ai-insights-page.component.scss'],
@@ -172,17 +176,8 @@ export class AiInsightsPageComponent {
     nonNullable: true,
     validators: [Validators.required],
   });
-  readonly locationControl = new FormControl('', {
-    nonNullable: true,
-  });
-  readonly radiusKmControl = new FormControl<number | null>(null, {
-    validators: [Validators.min(1), Validators.max(500)],
-  });
   readonly promptValue = toSignal(this.promptControl.valueChanges, {
     initialValue: this.promptControl.getRawValue(),
-  });
-  readonly locationValue = toSignal(this.locationControl.valueChanges, {
-    initialValue: this.locationControl.getRawValue(),
   });
   readonly isSubmitting = signal(false);
   readonly isRestoringLatestSnapshot = signal(false);
@@ -243,9 +238,7 @@ export class AiInsightsPageComponent {
     !this.isPromptLocked()
     && this.promptValue().trim().length > 0
     && this.hasQuotaAvailable()
-    && this.radiusKmControl.valid
   );
-  readonly hasLocationInput = computed(() => this.locationValue().trim().length > 0);
   readonly okResponse = computed<AiInsightsOkResponse | null>(() => {
     const response = this.response();
     return response?.status === 'ok' ? response : null;
@@ -423,14 +416,10 @@ export class AiInsightsPageComponent {
   private readonly promptAvailabilityEffect = effect(() => {
     if (this.isPromptLocked()) {
       this.promptControl.disable({ emitEvent: false });
-      this.locationControl.disable({ emitEvent: false });
-      this.radiusKmControl.disable({ emitEvent: false });
       return;
     }
 
     this.promptControl.enable({ emitEvent: false });
-    this.locationControl.enable({ emitEvent: false });
-    this.radiusKmControl.enable({ emitEvent: false });
   });
   readonly quotaStatusText = computed(() => {
     const quotaStatus = this.quotaStatus();
@@ -603,8 +592,6 @@ export class AiInsightsPageComponent {
     this.rankedEventLoadError.set(null);
     this.shouldAutoScrollOnCompletedResponse.set(false);
     this.promptControl.setValue('');
-    this.locationControl.setValue('');
-    this.radiusKmControl.setValue(null);
 
     if (!userID) {
       return;
@@ -638,9 +625,6 @@ export class AiInsightsPageComponent {
         }
 
         this.promptControl.setValue(latestSnapshot.prompt);
-        this.applyLocationFilterToControls(
-          this.buildLocationFilterRequestFromResponse(latestSnapshot.response),
-        );
         this.response.set(latestSnapshot.response);
         this.resultPrompt.set(latestSnapshot.prompt);
         this.resultLocationFilter.set(
@@ -948,6 +932,11 @@ export class AiInsightsPageComponent {
       };
     });
   });
+  readonly rankedMapEvents = computed<EventInterface[]>(() => (
+    this.rankedEventResolvedEvents()
+      .map((entry) => entry.event)
+      .filter((event): event is EventInterface => this.hasValidStartPosition(event))
+  ));
   readonly primaryRankedEventItem = computed<EventLookupDisplayItem | null>(() =>
     this.rankedEventItems()[0] ?? null
   );
@@ -971,30 +960,6 @@ export class AiInsightsPageComponent {
   });
 
   constructor() {
-    this.locationControl.valueChanges
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((locationText) => {
-        const hasLocationInput = `${locationText || ''}`.trim().length > 0;
-        const radiusKm = this.radiusKmControl.getRawValue();
-
-        if (hasLocationInput && radiusKm === null) {
-          this.radiusKmControl.setValue(50, { emitEvent: false });
-          return;
-        }
-
-        if (!hasLocationInput && radiusKm !== null) {
-          this.radiusKmControl.setValue(null, { emitEvent: false });
-        }
-      });
-
-    this.radiusKmControl.valueChanges
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((radiusKm) => {
-        if (this.locationControl.getRawValue().trim() && radiusKm === null) {
-          this.radiusKmControl.setValue(50, { emitEvent: false });
-        }
-      });
-
     const windowRef = this.document.defaultView;
     if (!windowRef) {
       return;
@@ -1037,11 +1002,6 @@ export class AiInsightsPageComponent {
 
     if (prompt !== this.promptControl.getRawValue()) {
       this.promptControl.setValue(prompt);
-    }
-
-    if (this.radiusKmControl.invalid) {
-      this.radiusKmControl.markAsTouched();
-      return;
     }
 
     const quotaStatus = this.quotaStatus();
@@ -1168,19 +1128,6 @@ export class AiInsightsPageComponent {
     this.promptControl.markAsUntouched();
   }
 
-  clearLocation(): void {
-    if (this.isPromptLocked()) {
-      return;
-    }
-
-    this.locationControl.setValue('');
-    this.locationControl.markAsPristine();
-    this.locationControl.markAsUntouched();
-    this.radiusKmControl.setValue(null);
-    this.radiusKmControl.markAsPristine();
-    this.radiusKmControl.markAsUntouched();
-  }
-
   private logAiInsightsAction(
     method: string,
     params: {
@@ -1223,32 +1170,13 @@ export class AiInsightsPageComponent {
     prompt: string,
     locationFilterOverride?: AiInsightsRequest['locationFilter'] | null,
   ): AiInsightsRequest {
-    const resolvedLocationFilter = locationFilterOverride === undefined
-      ? this.resolveRequestedLocationFilter()
-      : (locationFilterOverride ?? undefined);
+    const resolvedLocationFilter = locationFilterOverride ?? undefined;
 
     return {
       prompt,
       clientTimezone: getClientTimeZone(),
       clientLocale: this.locale,
       ...(resolvedLocationFilter ? { locationFilter: resolvedLocationFilter } : {}),
-    };
-  }
-
-  private resolveRequestedLocationFilter(): AiInsightsRequest['locationFilter'] | undefined {
-    const locationText = this.locationControl.getRawValue().trim();
-    const radiusKmValue = this.radiusKmControl.getRawValue();
-    const radiusKm = typeof radiusKmValue === 'number' && Number.isFinite(radiusKmValue)
-      ? radiusKmValue
-      : (locationText ? 50 : undefined);
-
-    if (!locationText && radiusKm === undefined) {
-      return undefined;
-    }
-
-    return {
-      ...(locationText ? { locationText } : {}),
-      ...(radiusKm !== undefined ? { radiusKm } : {}),
     };
   }
 
@@ -1270,13 +1198,6 @@ export class AiInsightsPageComponent {
     };
   }
 
-  private applyLocationFilterToControls(
-    locationFilter: AiInsightsRequest['locationFilter'] | null,
-  ): void {
-    this.locationControl.setValue(locationFilter?.locationText?.trim() || '');
-    this.radiusKmControl.setValue(locationFilter?.radiusKm ?? null);
-  }
-
   private formatLocationScopeLabel(
     locationFilter: AiInsightsOkResponse['query']['locationFilter'] | AiInsightsEmptyResponse['query']['locationFilter'],
   ): string | null {
@@ -1289,6 +1210,12 @@ export class AiInsightsPageComponent {
     }
 
     return `${locationFilter.resolvedLabel} • region bbox`;
+  }
+
+  private hasValidStartPosition(event: EventInterface | null | undefined): event is EventInterface {
+    const startPosition = event?.getStat?.(DataStartPosition.type) as DataStartPosition | null | undefined;
+    const location = startPosition?.getValue?.();
+    return Number.isFinite(location?.latitudeDegrees) && Number.isFinite(location?.longitudeDegrees);
   }
 
   private buildSupportMailtoHref(subject: string): string {

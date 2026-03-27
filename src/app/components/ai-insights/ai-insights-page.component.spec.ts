@@ -17,6 +17,7 @@ import {
   DataCadenceAvg,
   DataDistance,
   DataPaceAvg,
+  DataStartPosition,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
 import type {
@@ -49,6 +50,7 @@ import { AiInsightsMultiMetricChartComponent } from './ai-insights-multi-metric-
 import { AiInsightsPowerCurveChartComponent } from './ai-insights-power-curve-chart.component';
 import { AiInsightsPageComponent } from './ai-insights-page.component';
 import { formatAiInsightsNarrativeForDisplay } from './ai-insights-page.helpers';
+import { EventsMapComponent } from '../events-map/events-map.component';
 import {
   AI_INSIGHTS_DEFAULT_PICKER_PROMPTS,
   AI_INSIGHTS_DEFAULT_PROMPT_SECTIONS,
@@ -91,6 +93,18 @@ class MockAiInsightsPowerCurveChartComponent {
   readonly response = input.required<AiInsightsPowerCurveOkResponse>();
   readonly darkTheme = input(false);
   readonly useAnimations = input(false);
+}
+
+@Component({
+  selector: 'app-events-map',
+  standalone: true,
+  imports: [CommonModule],
+  template: '<div class="events-map-stub">{{ events().length }}</div>',
+})
+class MockEventsMapComponent {
+  readonly events = input<any[]>([]);
+  readonly user = input<any>(undefined);
+  readonly clusterMarkers = input(true);
 }
 
 describe('formatAiInsightsNarrativeForDisplay', () => {
@@ -1342,7 +1356,7 @@ function buildMockEvent(options: {
   id: string;
   startDate: string;
   activityTypes: ActivityTypes[];
-  stats: Record<string, number>;
+  stats: Record<string, unknown>;
 }) {
   return {
     startDate: new Date(options.startDate),
@@ -1425,13 +1439,14 @@ describe('AiInsightsPageComponent', () => {
     })
       .overrideComponent(AiInsightsPageComponent, {
         remove: {
-          imports: [AiInsightsChartComponent, AiInsightsMultiMetricChartComponent, AiInsightsPowerCurveChartComponent],
+          imports: [AiInsightsChartComponent, AiInsightsMultiMetricChartComponent, AiInsightsPowerCurveChartComponent, EventsMapComponent],
         },
         add: {
           imports: [
             MockAiInsightsChartComponent,
             MockAiInsightsMultiMetricChartComponent,
             MockAiInsightsPowerCurveChartComponent,
+            MockEventsMapComponent,
           ],
         },
       })
@@ -1716,41 +1731,28 @@ describe('AiInsightsPageComponent', () => {
     });
   });
 
-  it('should include the optional location and radius controls in the request payload', async () => {
+  it('should submit prompt text without adding an explicit location filter payload', async () => {
     aiInsightsServiceMock.runInsight.mockResolvedValue(buildLocationScopedResponse());
-    component.promptControl.setValue('Show my total distance this year');
-    component.locationControl.setValue('Greece');
-    component.radiusKmControl.setValue(75);
+    component.promptControl.setValue('Show my total distance within 75 km of Greece this year');
 
     await component.submitPrompt();
     await fixture.whenStable();
     fixture.detectChanges();
 
     expect(aiInsightsServiceMock.runInsight).toHaveBeenCalledWith(expect.objectContaining({
-      prompt: 'Show my total distance this year',
-      locationFilter: {
-        locationText: 'Greece',
-        radiusKm: 75,
-      },
+      prompt: 'Show my total distance within 75 km of Greece this year',
     }));
+    expect(aiInsightsServiceMock.runInsight.mock.calls[0]?.[0]).not.toHaveProperty('locationFilter');
   });
 
-  it('should clear the implicit radius when the location input is cleared', () => {
-    component.locationControl.setValue('Greece');
-
-    expect(component.radiusKmControl.getRawValue()).toBe(50);
-
-    component.locationControl.setValue('');
-    const request = component['buildInsightRequest']('Show my total distance this year');
-
-    expect(component.radiusKmControl.getRawValue()).toBeNull();
-    expect(request?.locationFilter).toBeUndefined();
+  it('should not render separate location and radius controls in the prompt form', () => {
+    expect(fixture.debugElement.query(By.css('.prompt-location-field'))).toBeNull();
+    expect(fixture.debugElement.query(By.css('.prompt-radius-field'))).toBeNull();
   });
 
   it('should render the resolved location scope in the result context rows', async () => {
     aiInsightsServiceMock.runInsight.mockResolvedValue(buildLocationScopedResponse());
-    component.promptControl.setValue('Show my total distance this year');
-    component.locationControl.setValue('Greece');
+    component.promptControl.setValue('Show my total distance in Greece this year');
 
     await component.submitPrompt();
     await fixture.whenStable();
@@ -2363,19 +2365,28 @@ describe('AiInsightsPageComponent', () => {
         id: 'event-3',
         startDate: '2026-03-10T08:00:00.000Z',
         activityTypes: [ActivityTypes.Cycling],
-        stats: { [DataDistance.type]: 123400 },
+        stats: {
+          [DataDistance.type]: 123400,
+          [DataStartPosition.type]: { latitudeDegrees: 38.2466, longitudeDegrees: 21.7346 },
+        },
       }),
       buildMockEvent({
         id: 'event-2',
         startDate: '2026-02-14T08:00:00.000Z',
         activityTypes: [ActivityTypes.Cycling],
-        stats: { [DataDistance.type]: 118200 },
+        stats: {
+          [DataDistance.type]: 118200,
+          [DataStartPosition.type]: { latitudeDegrees: 38.25, longitudeDegrees: 21.74 },
+        },
       }),
       buildMockEvent({
         id: 'event-1',
         startDate: '2026-01-11T08:00:00.000Z',
         activityTypes: [ActivityTypes.Cycling],
-        stats: { [DataDistance.type]: 105700 },
+        stats: {
+          [DataDistance.type]: 105700,
+          [DataStartPosition.type]: { latitudeDegrees: 38.24, longitudeDegrees: 21.72 },
+        },
       }),
     ]));
 
@@ -2391,6 +2402,7 @@ describe('AiInsightsPageComponent', () => {
     const primaryCard = fixture.debugElement.query(By.css('.event-lookup-primary'))?.nativeElement as HTMLElement | undefined;
     const rankingRows = fixture.debugElement.queryAll(By.css('.event-lookup-row'));
     const openButtons = fixture.debugElement.queryAll(By.css('.event-lookup-actions button'));
+    const mapComponent = fixture.debugElement.query(By.directive(MockEventsMapComponent))?.componentInstance as MockEventsMapComponent | undefined;
     const expectedPrimaryValue = formatUnitAwareDataValue(
       DataDistance.type,
       123400,
@@ -2406,6 +2418,9 @@ describe('AiInsightsPageComponent', () => {
     expect(primaryCard?.textContent).toContain('Mar 10, 2026');
     expect(rankingRows).toHaveLength(3);
     expect(openButtons.length).toBeGreaterThanOrEqual(4);
+    expect(mapComponent).toBeTruthy();
+    expect(mapComponent?.events()).toHaveLength(3);
+    expect(mapComponent?.clusterMarkers()).toBe(false);
   });
 
   it('should fetch event details once when an event-lookup response becomes active', async () => {
@@ -2444,7 +2459,10 @@ describe('AiInsightsPageComponent', () => {
         id: 'event-9',
         startDate: '2026-03-18T08:00:00.000Z',
         activityTypes: [ActivityTypes.Cycling],
-        stats: { [DataDistance.type]: 20000 },
+        stats: {
+          [DataDistance.type]: 20000,
+          [DataStartPosition.type]: { latitudeDegrees: 37.9838, longitudeDegrees: 23.7275 },
+        },
       }),
     ]));
 
@@ -2457,10 +2475,12 @@ describe('AiInsightsPageComponent', () => {
 
     const primaryCard = fixture.debugElement.query(By.css('.event-lookup-primary'))?.nativeElement as HTMLElement | undefined;
     const rankingRows = fixture.debugElement.queryAll(By.css('.event-lookup-row'));
+    const mapComponent = fixture.debugElement.query(By.directive(MockEventsMapComponent))?.componentInstance as MockEventsMapComponent | undefined;
 
     expect(primaryCard?.textContent).toContain('Latest event');
     expect(primaryCard?.textContent).toContain('Mar 18, 2026');
     expect(rankingRows).toHaveLength(0);
+    expect(mapComponent?.events()).toHaveLength(1);
     expect(appEventServiceMock.getEventsOnceByIds.mock.calls.at(-1)?.[1]).toEqual(['event-9']);
   });
 
@@ -2486,19 +2506,28 @@ describe('AiInsightsPageComponent', () => {
         id: 'event-3',
         startDate: '2026-03-10T08:00:00.000Z',
         activityTypes: [ActivityTypes.Cycling],
-        stats: { [DataDistance.type]: 123400 },
+        stats: {
+          [DataDistance.type]: 123400,
+          [DataStartPosition.type]: { latitudeDegrees: 38.2466, longitudeDegrees: 21.7346 },
+        },
       }),
       buildMockEvent({
         id: 'event-2',
         startDate: '2026-02-14T08:00:00.000Z',
         activityTypes: [ActivityTypes.Cycling],
-        stats: { [DataDistance.type]: 118200 },
+        stats: {
+          [DataDistance.type]: 118200,
+          [DataStartPosition.type]: { latitudeDegrees: 38.25, longitudeDegrees: 21.74 },
+        },
       }),
       buildMockEvent({
         id: 'event-1',
         startDate: '2026-01-11T08:00:00.000Z',
         activityTypes: [ActivityTypes.Running],
-        stats: { [DataDistance.type]: 18700 },
+        stats: {
+          [DataDistance.type]: 18700,
+          [DataStartPosition.type]: { latitudeDegrees: 38.24, longitudeDegrees: 21.72 },
+        },
       }),
     ]));
 
@@ -2518,12 +2547,14 @@ describe('AiInsightsPageComponent', () => {
       .map(debugElement => debugElement.nativeElement as HTMLElement)
       .find(element => element.textContent?.includes('across all matched sports'));
     const rankingRows = fixture.debugElement.queryAll(By.css('.event-lookup-row'));
+    const mapComponent = fixture.debugElement.query(By.directive(MockEventsMapComponent))?.componentInstance as MockEventsMapComponent | undefined;
 
     expect(chart?.textContent).toContain('Maximum distance by activity type');
     expect(primaryCard?.textContent).toContain('Overall best event across all matched sports');
     expect(sectionHeading).toBeTruthy();
     expect(sectionCopy?.textContent).toContain('3 matching events ranked across all matched sports.');
     expect(rankingRows).toHaveLength(3);
+    expect(mapComponent?.events()).toHaveLength(3);
     expect(appEventServiceMock.getEventsOnceByIds).toHaveBeenCalledWith(expect.anything(), ['event-3', 'event-2', 'event-1']);
   });
 
@@ -2540,22 +2571,61 @@ describe('AiInsightsPageComponent', () => {
 
     expect(sectionHeading).toBeFalsy();
     expect(appEventServiceMock.getEventsOnceByIds).not.toHaveBeenCalled();
+    expect(fixture.debugElement.query(By.directive(MockEventsMapComponent))).toBeNull();
   });
 
-  it('should refresh the visible result with the same prompt and location even if the input was edited', async () => {
-    aiInsightsServiceMock.runInsight.mockResolvedValue(buildLocationScopedResponse());
-    component.promptControl.setValue('Tell me my avg cadence for cycling the last 3 months');
-    component.locationControl.setValue('Greece');
-
-    const submitEvent = {
-      preventDefault: vi.fn(),
-    };
-    fixture.debugElement.query(By.css('form')).triggerEventHandler('submit', submitEvent);
+  it('should not render the result map for multi-metric responses without surfaced events', async () => {
+    component.response.set(buildMultiMetricResponse());
+    fixture.detectChanges();
+    TestBed.flushEffects();
     await fixture.whenStable();
     fixture.detectChanges();
 
+    expect(fixture.debugElement.query(By.directive(MockEventsMapComponent))).toBeNull();
+  });
+
+  it('should not render the result map when surfaced events do not have valid start positions', async () => {
+    appEventServiceMock.getEventsOnceByIds.mockReturnValueOnce(of([
+      buildMockEvent({
+        id: 'event-3',
+        startDate: '2026-03-10T08:00:00.000Z',
+        activityTypes: [ActivityTypes.Cycling],
+        stats: { [DataDistance.type]: 123400 },
+      }),
+      buildMockEvent({
+        id: 'event-2',
+        startDate: '2026-02-14T08:00:00.000Z',
+        activityTypes: [ActivityTypes.Cycling],
+        stats: { [DataDistance.type]: 118200 },
+      }),
+      buildMockEvent({
+        id: 'event-1',
+        startDate: '2026-01-11T08:00:00.000Z',
+        activityTypes: [ActivityTypes.Cycling],
+        stats: { [DataDistance.type]: 105700 },
+      }),
+    ]));
+
+    component.response.set(buildEventLookupResponse());
+    fixture.detectChanges();
+    TestBed.flushEffects();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(fixture.debugElement.query(By.directive(MockEventsMapComponent))).toBeNull();
+  });
+
+  it('should refresh the visible result with the same prompt and legacy location filter even if the input was edited', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue(buildLocationScopedResponse());
+    component.response.set(buildLocationScopedResponse());
+    component.resultPrompt.set('Tell me my avg cadence for cycling the last 3 months');
+    component.resultLocationFilter.set({
+      locationText: 'Greece',
+      radiusKm: 50,
+    });
+    fixture.detectChanges();
+
     component.promptControl.setValue('A different prompt in the input');
-    component.locationControl.setValue('Italy');
     fixture.detectChanges();
 
     const refreshButton = fixture.debugElement.query(By.css('.result-refresh-button'))?.nativeElement as HTMLButtonElement | undefined;
@@ -2720,7 +2790,7 @@ describe('AiInsightsPageComponent', () => {
     });
   });
 
-  it('should restore location and radius controls from the latest snapshot query', async () => {
+  it('should restore the latest snapshot location filter for legacy refresh behavior', async () => {
     aiInsightsLatestSnapshotServiceMock.loadLatest.mockResolvedValueOnce({
       version: 1,
       savedAt: '2026-03-18T12:00:00.000Z',
@@ -2733,8 +2803,12 @@ describe('AiInsightsPageComponent', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    expect(component.locationControl.getRawValue()).toBe('Greece');
-    expect(component.radiusKmControl.getRawValue()).toBe(50);
+    expect(component.resultLocationFilter()).toEqual({
+      locationText: 'Greece',
+      radiusKm: 50,
+    });
+    expect(component.promptControl.getRawValue()).toBe('Show my total distance all time');
+    expect(fixture.debugElement.query(By.css('.prompt-location-field'))).toBeNull();
   });
 
   it('should use pace-specific summary labels for inverse metrics', async () => {

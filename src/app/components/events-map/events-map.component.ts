@@ -33,6 +33,7 @@ import {
   User,
 } from '@sports-alliance/sports-lib';
 import { MapAbstractDirective } from '../map/map-abstract.directive';
+import { SharedModule } from '../../modules/shared.module';
 import { LoggerService } from '../../services/logger.service';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { AppEventService } from '../../services/app.event.service';
@@ -75,11 +76,12 @@ interface EventPointFeature {
 
 @Component({
   selector: 'app-events-map',
+  imports: [SharedModule],
   templateUrl: './events-map.component.html',
   styleUrls: ['./events-map.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [DatePipe],
-  standalone: false
+  standalone: true
 })
 export class EventsMapComponent extends MapAbstractDirective implements OnChanges, AfterViewInit, OnInit, OnDestroy {
   private static readonly EVENTS_SOURCE_ID = 'events-map-events-source';

@@ -151,12 +151,13 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Hero rotating examples at the top now **fill the input only**. They do not run automatically.
 - **Browse prompts** opens the prompt picker dialog. Selecting a prompt there runs it immediately.
 - If your prompt does not include a date range, AI Insights defaults to **current year to date**.
-- You can add an optional **Location** and **Radius (km)** in the prompt card.
-- Location input accepts a city, region, country, or latitude/longitude coordinates.
-- If you leave the location input blank, AI Insights still tries to infer a location from the prompt when it can do so deterministically.
+- Mention an optional location directly in your prompt, such as a city, region, country, or latitude/longitude coordinates.
+- You can also mention a radius in the prompt, for example \`within 20 km of Athens\`.
+- AI Insights tries to infer a location from the prompt when it can do so deterministically.
 - The backend geocodes locations with **Mapbox** and, if needed, makes one AI fallback attempt to repair an unresolved location string.
 - Country and region requests use Mapbox's returned **bounding box** as a best-effort scope, not an exact border polygon.
 - City, locality, and place requests use the resolved center point plus your chosen **radius**.
+- Event-backed AI Insights results can show a **map** below the result when the surfaced events have recorded start positions.
 - Add **all time** to query your full history.
 - For power-curve prompts, **excluding cycling** removes the whole cycling family (Cycling, Indoor Cycling, Virtual Cycling, and E-Biking).
 

@@ -175,8 +175,7 @@ describe('EventsMapComponent', () => {
     };
 
     await TestBed.configureTestingModule({
-      declarations: [EventsMapComponent],
-      imports: [RouterTestingModule],
+      imports: [EventsMapComponent, RouterTestingModule],
       providers: [
         { provide: AppEventService, useValue: mockEventService },
         { provide: AppEventColorService, useValue: mockColorService },
