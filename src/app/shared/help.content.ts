@@ -98,8 +98,9 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 ### Reorder dashboard tiles
 
-- Open any dashboard tile menu with the three-dot button.
-- Use **Move earlier** or **Move later** to change tile position.
+- On desktop, drag dashboard tiles from the tile action area to reorder them.
+- On mobile and touch devices, open any tile menu with the three-dot button.
+- Use **Move earlier** or **Move later** when drag-and-drop is unavailable.
 - Tile order is saved automatically to your account.
 
 ### Merge events

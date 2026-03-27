@@ -13,6 +13,7 @@ import {
 import { Subscription } from 'rxjs';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
+import { CdkDragDrop, CdkDragSortEvent, moveItemInArray } from '@angular/cdk/drag-drop';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { LoggerService } from '../../services/logger.service';
@@ -32,6 +33,7 @@ import {
   type DashboardTileViewModel,
   isDashboardChartTileViewModel,
 } from '../../helpers/dashboard-tile-view-model.helper';
+import { AppUserService } from '../../services/app.user.service';
 
 @Component({
   selector: 'app-summaries',
@@ -42,6 +44,10 @@ import {
 })
 
 export class SummariesComponent extends LoadingAbstractDirective implements OnInit, OnDestroy, OnChanges, DoCheck {
+  private static readonly desktopMinWidthMediaQuery = '(min-width: 960px)';
+  private static readonly finePointerMediaQuery = '(pointer: fine)';
+  private static readonly hoverMediaQuery = '(hover: hover)';
+
   @Input() events: EventInterface[];
   @Input() user: User;
   @Input() showActions: boolean;
@@ -53,6 +59,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public tiles: DashboardTileViewModel[] = [];
 
   public tileTypes = TileTypes;
+  public desktopTileDragEnabled = false;
 
 
   private appThemeSubscription: Subscription;
@@ -62,6 +69,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   constructor(
     private themeService: AppThemeService,
+    private userService: AppUserService,
     changeDetector: ChangeDetectorRef,
     logger: LoggerService,
   ) {
@@ -76,12 +84,15 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   resizeOROrientationChange(event?) {
     this.numberOfCols = this.getNumberOfColumns();
     this.rowHeight = this.getRowHeight();
+    this.updateDesktopTileDragCapability();
   }
 
   ngOnInit() {
+    this.updateDesktopTileDragCapability();
   }
 
   async ngOnChanges(simpleChanges: SimpleChanges) {
+    this.updateDesktopTileDragCapability();
     if (simpleChanges.events || simpleChanges.user) {
       return this.unsubscribeAndCreateCharts();
     }
@@ -112,6 +123,65 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     return `${mapItem.clusterMarkers}${mapItem.mapTheme}${mapItem.mapStyle}${mapItem.name}${mapItem.order}${mapItem.showHeatMap}`;
   }
 
+  public async onTilesDrop(_event: CdkDragDrop<DashboardTileViewModel[]>): Promise<void> {
+    if (!this.desktopTileDragEnabled) {
+      return;
+    }
+
+    const dashboardSettings = this.user?.settings?.dashboardSettings;
+    if (!dashboardSettings?.tiles?.length || !this.showActions || this.tiles.length < 2) {
+      return;
+    }
+
+    const orderedSettingsTiles = this.getOrderedDashboardSettingsTiles();
+    if (!orderedSettingsTiles.length) {
+      return;
+    }
+    const currentViewOrder = this.tiles.map(tile => tile.order);
+    const currentSettingsOrder = orderedSettingsTiles.map(tile => tile.order);
+    if (this.getOrderSignature(currentViewOrder) === this.getOrderSignature(currentSettingsOrder)) {
+      return;
+    }
+
+    const settingsByOrder = new Map<number, TileSettingsInterface>(
+      orderedSettingsTiles.map(tile => [tile.order, tile])
+    );
+    const nextSettingsTiles = currentViewOrder
+      .map(order => settingsByOrder.get(order))
+      .filter((tile): tile is TileSettingsInterface => !!tile);
+    if (nextSettingsTiles.length !== orderedSettingsTiles.length) {
+      this.logger.warn('[SummariesComponent] Skipping dashboard tile drag persist because order mapping was incomplete.');
+      return;
+    }
+
+    const previousSettingsTiles = this.cloneTileSettings(dashboardSettings.tiles);
+    const previousRenderedTiles = this.cloneDashboardViewModels(this.tiles);
+    const previousRenderedTilesByPersistedOrder = [...previousRenderedTiles]
+      .sort((left, right) => left.order - right.order);
+    dashboardSettings.tiles = this.withSequentialOrder(nextSettingsTiles);
+    this.tiles = this.withSequentialOrder([...this.tiles]);
+    this.dashboardTileSettingsSnapshot = this.getDashboardTileSettingsSnapshot();
+
+    try {
+      await this.userService.updateUserProperties(this.user as any, { settings: this.user?.settings });
+      this.updateDesktopTileDragCapability();
+    } catch (error) {
+      dashboardSettings.tiles = this.cloneTileSettings(previousSettingsTiles);
+      this.tiles = this.withSequentialOrder(this.cloneDashboardViewModels(previousRenderedTilesByPersistedOrder));
+      this.dashboardTileSettingsSnapshot = this.getDashboardTileSettingsSnapshot();
+      this.updateDesktopTileDragCapability();
+      this.logger.error('[SummariesComponent] Failed to persist dashboard tile drag order update', error);
+    }
+  }
+
+  public onTilesSort(event: CdkDragSortEvent<DashboardTileViewModel[]>): void {
+    if (!this.desktopTileDragEnabled || !this.showActions || this.tiles.length < 2 || event.previousIndex === event.currentIndex) {
+      return;
+    }
+    moveItemInArray(this.tiles, event.previousIndex, event.currentIndex);
+    this.changeDetector.detectChanges();
+  }
+
   private async unsubscribeAndCreateCharts() {
     const buildStart = performance.now();
     this.unsubscribeFromAll();
@@ -134,6 +204,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     // if there are no current charts get and assign and get done
     if (!this.tiles.length && newTiles.length) {
       this.tiles = newTiles;
+      this.updateDesktopTileDragCapability();
       this.loaded();
       this.logger.log('[perf] summaries_commit_tiles', {
         durationMs: Number((performance.now() - buildStart).toFixed(2)),
@@ -162,6 +233,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     });
     // Here we need to remove non existing ones
     this.tiles = this.tiles.filter(chart => newTiles.find(newChart => newChart.order === chart.order));
+    this.updateDesktopTileDragCapability();
     this.loaded();
     this.logger.log('[perf] summaries_commit_tiles', {
       durationMs: Number((performance.now() - buildStart).toFixed(2)),
@@ -185,6 +257,48 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         dataTimeInterval: (tile as TileChartSettingsInterface).dataTimeInterval || TimeIntervals.Auto
       } as TileChartSettingsInterface;
     });
+  }
+
+  private getOrderedDashboardSettingsTiles(): TileSettingsInterface[] {
+    return [...(this.user?.settings?.dashboardSettings?.tiles ?? [])]
+      .sort((left, right) => left.order - right.order);
+  }
+
+  private updateDesktopTileDragCapability(): void {
+    this.desktopTileDragEnabled = this.showActions === true
+      && this.tiles.length > 1
+      && this.matchesMediaQuery(SummariesComponent.desktopMinWidthMediaQuery)
+      && this.matchesMediaQuery(SummariesComponent.finePointerMediaQuery)
+      && this.matchesMediaQuery(SummariesComponent.hoverMediaQuery);
+  }
+
+  private matchesMediaQuery(query: string): boolean {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return false;
+    }
+    return window.matchMedia(query).matches;
+  }
+
+  private cloneTileSettings(tiles: TileSettingsInterface[]): TileSettingsInterface[] {
+    return tiles.map((tile: TileSettingsInterface) => ({
+      ...tile,
+      size: tile.size ? { ...tile.size } : tile.size
+    }));
+  }
+
+  private cloneDashboardViewModels(tiles: DashboardTileViewModel[]): DashboardTileViewModel[] {
+    return tiles.map((tile: DashboardTileViewModel) => ({
+      ...tile,
+      size: tile.size ? { ...tile.size } : tile.size
+    })) as DashboardTileViewModel[];
+  }
+
+  private withSequentialOrder<T extends { order: number }>(tiles: T[]): T[] {
+    return tiles.map((tile, index) => ({ ...tile, order: index })) as T[];
+  }
+
+  private getOrderSignature(orders: number[]): string {
+    return orders.join(',');
   }
 
   private unsubscribeFromAll() {

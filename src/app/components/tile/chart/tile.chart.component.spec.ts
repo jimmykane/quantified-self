@@ -1,6 +1,8 @@
 import { Component, EventEmitter, Input, NO_ERRORS_SCHEMA, Output } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -173,5 +175,12 @@ describe('TileChartComponent', () => {
 
     const columns = getColumnsComponent();
     expect(columns.isLoading).toBe(true);
+  });
+
+  it('should render a visible drag handle button for desktop drag mode', () => {
+    const templatePath = resolve(process.cwd(), 'src/app/components/tile/chart/tile.chart.component.html');
+    const template = readFileSync(templatePath, 'utf8');
+    expect(template).toContain('button mat-icon-button cdkDragHandle class="drag-handle-indicator"');
+    expect(template).toContain('drag_indicator');
   });
 });

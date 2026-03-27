@@ -1,8 +1,15 @@
 <section>
   @if (showActions) {
-  <app-tile-map-actions class="actions" [user]="user" [order]="order" [size]="size" [type]="type" [mapStyle]="mapStyle"
-    [clusterMarkers]="clusterMarkers">
-  </app-tile-map-actions>
+  <div class="actions">
+    @if (enableDesktopDrag) {
+    <button mat-icon-button cdkDragHandle class="drag-handle-indicator" aria-label="Drag tile">
+      <mat-icon>drag_indicator</mat-icon>
+    </button>
+    }
+    <app-tile-map-actions [user]="user" [order]="order" [size]="size" [type]="type" [mapStyle]="mapStyle"
+      [clusterMarkers]="clusterMarkers">
+    </app-tile-map-actions>
+  </div>
   }
   @if (events) {
   <app-events-map [user]="user" [events]="events" [isLoading]="isLoading" [mapStyle]="mapStyle"

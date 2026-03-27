@@ -1,10 +1,17 @@
 <section>
   @if (showActions) {
-  <app-tile-chart-actions class="actions" [user]="user" [chartType]="chartType" [order]="order" [size]="size"
-    [type]="type" [chartDataType]="dataType" [chartDataCategoryType]="dataCategoryType"
-    [chartTimeInterval]="dataTimeInterval" [chartDataValueType]="dataValueType"
-    (savingChange)="onTileActionSaving($event)">
-  </app-tile-chart-actions>
+  <div class="actions">
+    @if (enableDesktopDrag) {
+    <button mat-icon-button cdkDragHandle class="drag-handle-indicator" aria-label="Drag tile">
+      <mat-icon>drag_indicator</mat-icon>
+    </button>
+    }
+    <app-tile-chart-actions [user]="user" [chartType]="chartType" [order]="order" [size]="size"
+      [type]="type" [chartDataType]="dataType" [chartDataCategoryType]="dataCategoryType"
+      [chartTimeInterval]="dataTimeInterval" [chartDataValueType]="dataValueType"
+      (savingChange)="onTileActionSaving($event)">
+    </app-tile-chart-actions>
+  </div>
   }
   @if (chartType === chartTypes.Pie) {
   <app-pie-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme" [chartDataType]="dataType"
