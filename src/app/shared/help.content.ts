@@ -117,7 +117,13 @@ export const HELP_SECTIONS: HelpSection[] = [
 - If a benchmark exists, that icon opens the saved report.
 - If no benchmark exists yet, it opens the benchmark selection flow.
 - Benchmark comparison uses exactly two activities, supports role swap, and can auto-align time.
-- Benchmark reports can be rerun, shared, and saved as an image.`,
+- Benchmark reports can be rerun, shared, and saved as an image.
+
+### Event jump tables
+
+- Event details now include a **Jumps** table when selected activities contain jump events.
+- The jump table appears in activity tabs and only shows columns with available data.
+- Jump metrics use your preferred units from **Settings** when unit conversion is supported.`,
     links: [
       { label: 'Login', icon: 'login', kind: 'route', target: '/login' },
       { label: 'Dashboard', icon: 'space_dashboard', kind: 'route', target: '/dashboard' },

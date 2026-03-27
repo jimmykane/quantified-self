@@ -45,6 +45,7 @@ import { reconcileEventDetailsLiveUpdate } from '../../utils/event-live-reconcil
 import { hasEventChartableData } from '../../helpers/event-echarts-data.helper';
 import { resolveEventChartXAxisType } from '../../helpers/event-echarts-xaxis.helper';
 import { hasVisibleEventLaps } from '../../helpers/event-lap-type.helper';
+import { hasVisibleEventJumps } from '../../helpers/event-jump-type.helper';
 @Component({
   selector: 'app-event-card',
   templateUrl: './event.card.component.html',
@@ -82,6 +83,10 @@ export class EventCardComponent implements OnInit {
   // Computed signals for template - replaces method calls
   public hasLapsFlag = computed(() =>
     hasVisibleEventLaps(this.event()?.getActivities() ?? [])
+  );
+
+  public hasJumpsFlag = computed(() =>
+    hasVisibleEventJumps(this.event()?.getActivities() ?? [])
   );
 
   public hasIntensityZonesFlag = computed(() =>

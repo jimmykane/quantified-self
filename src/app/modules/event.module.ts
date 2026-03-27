@@ -6,6 +6,7 @@ import { EventRoutingModule } from '../event.routing.module';
 import { EventCardComponent } from '../components/event/event.card.component';
 import { EventCardMapComponent } from '../components/event/map/event.card.map.component';
 import { EventCardLapsComponent } from '../components/event/laps/event.card.laps.component';
+import { EventCardJumpsComponent } from '../components/event/jumps/event.card.jumps.component';
 import { EventCardChartActionsComponent } from '../components/event/chart/actions/event.card.chart.actions.component';
 import { EventCardDevicesComponent } from '../components/event/devices/event.card.devices.component';
 import { EventSummaryComponent } from '../components/event-summary/event-summary.component';
@@ -46,6 +47,7 @@ import { BenchmarkModule } from './benchmark.module';
         EventCardStatsTableComponent,
         EventCardStatsGridComponent,
         EventCardLapsComponent,
+        EventCardJumpsComponent,
         EventCardChartComponent,
         EventCardChartPanelComponent,
         EventCardChartActionsComponent,

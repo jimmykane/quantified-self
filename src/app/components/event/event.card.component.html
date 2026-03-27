@@ -63,6 +63,13 @@
         </app-event-card-laps>
         }
 
+        @if (hasJumpsFlag()) {
+        <mat-divider></mat-divider>
+        <app-event-card-jumps [selectedActivities]="selectedActivitiesInstant()" [unitSettings]="userUnitSettings()"
+          [event]="activeEvent">
+        </app-event-card-jumps>
+        }
+
       </div>
     </div>
   </app-event-summary>

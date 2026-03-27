@@ -1,0 +1,26 @@
+@if (activitiesWithJumps.length > 0) {
+<app-event-section-header icon="flight" title="Jumps"></app-event-section-header>
+<mat-tab-group [dynamicHeight]="true" [preserveContent]="true">
+  @for (activity of activitiesWithJumps; track activity; let i = $index) {
+  <mat-tab [label]="getActivityTabLabel(activity, i)">
+    @if (getDataSource(activity)) {
+    <section class="table-container">
+      <table mat-table [dataSource]="getDataSource(activity)">
+        @for (column of getColumns(activity); track column) {
+        <ng-container [matColumnDef]="column" [sticky]="isSticky(column)">
+          <mat-header-cell *matHeaderCellDef>
+            <app-data-type-icon [dataType]="column"></app-data-type-icon>
+          </mat-header-cell>
+          <mat-cell *matCellDef="let row">{{ row[column] }}</mat-cell>
+        </ng-container>
+        }
+
+        <mat-header-row *matHeaderRowDef="getColumns(activity)"></mat-header-row>
+        <mat-row *matRowDef="let row; columns: getColumns(activity);"></mat-row>
+      </table>
+    </section>
+    }
+  </mat-tab>
+  }
+</mat-tab-group>
+}
