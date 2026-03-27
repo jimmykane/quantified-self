@@ -41,7 +41,6 @@ import {
   resolveCallableResultKindHandler,
 } from './callable.result-kind-handlers';
 import { stripUndefinedDeep } from './strip-undefined-deep';
-import { mapboxAccessTokenSecret } from './mapbox-config';
 
 interface AiInsightsCallableContext {
   auth?: {
@@ -773,7 +772,6 @@ export const aiInsights = onCallGenkit({
   memory: '2GiB',
   timeoutSeconds: 180,
   maxInstances: 10,
-  secrets: [mapboxAccessTokenSecret],
 }, aiInsightsFlow);
 
 export const getAiInsightsQuotaStatus = onCall({

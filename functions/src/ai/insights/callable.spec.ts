@@ -810,13 +810,6 @@ describe('aiInsights callable', () => {
     });
   });
 
-  it('binds the MAPBOX_ACCESS_TOKEN secret to the aiInsights callable', () => {
-    const configuredSecrets = hoisted.onCallGenkitOptions?.secrets;
-
-    expect(Array.isArray(configuredSecrets)).toBe(true);
-    expect((configuredSecrets as Array<{ name?: string }>).some((secret) => secret?.name === 'MAPBOX_ACCESS_TOKEN')).toBe(true);
-  });
-
   it('returns an ok response when aggregation buckets exist', async () => {
     const result = await aiInsights({
       prompt: 'show distance',
