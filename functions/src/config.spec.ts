@@ -49,7 +49,6 @@ describe('config.ts', () => {
         expect(config.cloudtasks.projectId).toBe('mock-project');
         expect(config.cloudtasks.workoutQueue).toBe('processWorkoutTask');
         expect(config.cloudtasks.sportsLibReparseQueue).toBe('processSportsLibReparseTask');
-        expect(config.cloudtasks.queue).toBe('processWorkoutTask');
         expect(config.cloudtasks.serviceAccountEmail).toBe('mock-project@appspot.gserviceaccount.com');
         expect(config.debug.bucketName).toBe('quantified-self-io-debug-files');
     });
