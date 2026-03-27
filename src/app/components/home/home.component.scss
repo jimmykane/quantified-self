@@ -27,14 +27,14 @@
 
 .animate-on-scroll {
     opacity: 0;
-    transform: translateY(40px) scale(0.95);
+    transform: translate3d(0, 40px, 0);
     transition: opacity 1s cubic-bezier(0.2, 0.8, 0.2, 1),
         transform 1s cubic-bezier(0.2, 0.8, 0.2, 1);
     will-change: opacity, transform;
 
     &.is-visible {
         opacity: 1;
-        transform: translateY(0) scale(1);
+        transform: translate3d(0, 0, 0);
     }
 }
 
@@ -410,9 +410,10 @@
     }
 
     .features-grid {
+        --features-grid-gap: 2rem;
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-        gap: 2rem;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--features-grid-gap);
 
         // Apply scroll animation to cards
         &>* {
@@ -433,6 +434,26 @@
 
         &>*:nth-child(4) {
             transition-delay: 0.4s;
+        }
+
+        @media only screen and (max-width: 1087.98px) {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+
+            // Keep odd final cards centered when grid collapses to two columns.
+            > :last-child:nth-child(odd) {
+                grid-column: 1 / -1;
+                width: min(100%, calc((100% - var(--features-grid-gap)) / 2));
+                justify-self: center;
+            }
+        }
+
+        @include bp.xsmall {
+            grid-template-columns: 1fr;
+
+            > :last-child:nth-child(odd) {
+                grid-column: auto;
+                width: 100%;
+            }
         }
     }
 
