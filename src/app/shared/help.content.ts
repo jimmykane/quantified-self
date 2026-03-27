@@ -156,6 +156,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 ## Supported result modes
 
 - **Aggregate**: narrative + summary cards + chart, with optional ranked event links.
+- **Compare delta explanation**: compare-mode aggregate results include deterministic period deltas with likely contributor series, and deterministic event evidence remains available in the expandable evidence panel.
 - **Event lookup**: best matching event plus top-ranked matching events.
 - **Latest event**: most recent matching event in scope (single primary event card).
 - **Multi-metric aggregate**: combined chart for multiple metrics with merged summary cards.

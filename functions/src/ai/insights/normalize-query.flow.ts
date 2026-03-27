@@ -759,6 +759,104 @@ function resolvePromptMonthYearToNowDateSelection(
   };
 }
 
+function areConsecutiveCalendarMonths(
+  left: { year: number; month: number },
+  right: { year: number; month: number },
+): boolean {
+  if (left.year === right.year) {
+    return right.month === left.month + 1;
+  }
+
+  return left.month === 12 && right.year === left.year + 1 && right.month === 1;
+}
+
+function resolvePromptMonthYearListDateSelection(
+  prompt: string,
+  category: ModelCategoryCode | undefined,
+  aggregation: ModelAggregationCode | undefined,
+): PromptDateSelectionIntent | null {
+  const normalizedPrompt = canonicalizeInsightPrompt(prompt);
+  if (!normalizedPrompt) {
+    return null;
+  }
+
+  const monthNamePattern = '(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
+  const monthYearRangePattern = new RegExp(
+    `\\b(?:from|between)\\s+${monthNamePattern}\\s+(${YEAR_PATTERN.source})\\s+(?:to|through|and|-)\\s+${monthNamePattern}\\s+(${YEAR_PATTERN.source})\\b`,
+  );
+  if (monthYearRangePattern.test(normalizedPrompt)) {
+    return null;
+  }
+
+  const monthYearEntries = Array.from(new Set(
+    [...normalizedPrompt.matchAll(new RegExp(`\\b(${monthNamePattern})\\s+(${YEAR_PATTERN.source})\\b`, 'g'))]
+      .map((match) => {
+        const month = resolveMonthNameToNumber(match[1] || '');
+        const year = Number(match[2]);
+        if (!month || !Number.isInteger(year)) {
+          return null;
+        }
+
+        return `${year}-${`${month}`.padStart(2, '0')}`;
+      })
+      .filter((entry): entry is string => entry !== null),
+  ))
+    .map((entry) => {
+      const [yearText, monthText] = entry.split('-');
+      return {
+        year: Number(yearText),
+        month: Number(monthText),
+      };
+    })
+    .filter((entry) => Number.isInteger(entry.year) && Number.isInteger(entry.month))
+    .sort((left, right) => (
+      left.year - right.year
+      || left.month - right.month
+    ));
+
+  if (monthYearEntries.length < 2) {
+    return null;
+  }
+
+  const requestedDateRangeIntents: AbsoluteDateRangeIntent[] = [];
+  let rangeStart = monthYearEntries[0];
+  let previous = monthYearEntries[0];
+  for (let index = 1; index < monthYearEntries.length; index += 1) {
+    const current = monthYearEntries[index];
+    if (areConsecutiveCalendarMonths(previous, current)) {
+      previous = current;
+      continue;
+    }
+
+    requestedDateRangeIntents.push(buildNormalizedAbsoluteRange(
+      { year: rangeStart.year, month: rangeStart.month, day: 1 },
+      { year: previous.year, month: previous.month, day: getDaysInMonth(previous.year, previous.month) },
+    ));
+    rangeStart = current;
+    previous = current;
+  }
+
+  requestedDateRangeIntents.push(buildNormalizedAbsoluteRange(
+    { year: rangeStart.year, month: rangeStart.month, day: 1 },
+    { year: previous.year, month: previous.month, day: getDaysInMonth(previous.year, previous.month) },
+  ));
+
+  const first = monthYearEntries[0];
+  const last = monthYearEntries[monthYearEntries.length - 1];
+  const periodMode = resolveMultiPeriodMode(prompt, category, aggregation);
+  return {
+    effectiveDateRangeIntent: buildNormalizedAbsoluteRange(
+      { year: first.year, month: first.month, day: 1 },
+      { year: last.year, month: last.month, day: getDaysInMonth(last.year, last.month) },
+    ),
+    requestedDateRangeIntents,
+    periodMode,
+    compareRequestedTimeInterval: category === 'activity' || periodMode !== 'compare'
+      ? undefined
+      : 'monthly',
+  };
+}
+
 function resolvePromptYearListDateSelection(
   prompt: string,
   category: ModelCategoryCode | undefined,
@@ -876,6 +974,15 @@ function resolvePromptDateSelection(
   );
   if (monthYearToNowSelection) {
     return monthYearToNowSelection;
+  }
+
+  const monthYearListSelection = resolvePromptMonthYearListDateSelection(
+    prompt,
+    category,
+    aggregation,
+  );
+  if (monthYearListSelection) {
+    return monthYearListSelection;
   }
 
   const multiYearSelection = resolvePromptYearListDateSelection(prompt, category, aggregation, options);

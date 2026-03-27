@@ -387,7 +387,27 @@ function buildDeterministicCompareDeltaNarrative(
       periodDelta.deltaAggregateValue,
       input.unitSettings,
     );
-    return `${span} (${signedDeltaValue})`;
+    const contributorSegments = periodDelta.contributors
+      .map((contributor) => (
+        `${contributor.seriesKey} (${formatSignedDeltaDisplayValue(
+          input.query.dataType,
+          contributor.deltaAggregateValue,
+          input.unitSettings,
+        )})`
+      ));
+    const contributorClause = (() => {
+      if (periodDelta.deltaAggregateValue === 0) {
+        return contributorSegments.length
+          ? `Likely contributors offset each other: ${contributorSegments.join(', ')}`
+          : 'No major contributor shifts detected';
+      }
+
+      return contributorSegments.length
+        ? `Likely contributors: ${contributorSegments.join(', ')}`
+        : 'No major contributor shifts detected';
+    })();
+
+    return `${span} (${signedDeltaValue}). ${contributorClause}`;
   });
 
   const narrativeParts: string[] = [

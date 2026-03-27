@@ -1200,7 +1200,42 @@ describe('summarizeAiInsightResult', () => {
     expect(result.deterministicCompareSummary).toContain('Largest decrease: 2026 to 2027');
     expect(result.deterministicCompareSummary).toContain('Period deltas:');
     expect(result.deterministicCompareSummary).toContain('2027 to 2028 (no change)');
-    expect(result.deterministicCompareSummary).not.toContain('Likely contributors:');
+    expect(result.deterministicCompareSummary).toMatch(
+      /2025 to 2026 \(\+15 (?:W|watt)\)\. Likely contributors: Cycling \(\+15 (?:W|watt)\)/i,
+    );
+    expect(result.deterministicCompareSummary).toMatch(
+      /2026 to 2027 \(-10 (?:W|watt)\)\. Likely contributors: Cycling \(-10 (?:W|watt)\)/i,
+    );
+    expect(result.deterministicCompareSummary).toMatch(
+      /2027 to 2028 \(no change\)\. Likely contributors offset each other: Cycling \(\+10 (?:W|watt)\), Running \(-10 (?:W|watt)\)/i,
+    );
     expect(result.deterministicCompareSummary).not.toContain('Event evidence is linked below.');
+  });
+
+  it('uses no-change contributor fallback copy when period deltas have no contributor shifts', async () => {
+    setSummarizeInsightDependenciesForTesting({
+      generateNarrative: async () => ({
+        source: 'genkit',
+        narrative: 'Base narrative.',
+      }),
+    });
+
+    const result = await summarizeAiInsightResult({
+      ...compareDeltaInput,
+      summary: {
+        ...compareDeltaInput.summary,
+        periodDeltas: [
+          {
+            ...compareDeltaInput.summary.periodDeltas[2],
+            contributors: [],
+          },
+        ],
+      },
+    });
+
+    expect(result.source).toBe('genkit');
+    expect(result.deterministicCompareSummary).toContain(
+      '2027 to 2028 (no change). No major contributor shifts detected',
+    );
   });
 });
