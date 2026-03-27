@@ -380,6 +380,8 @@ In Settings you can:
 
 You can delete your account from **Settings -> Profile -> Danger Zone**.
 
+If your account has an email address, self-deletion sends a confirmation email after the request completes.
+
 Deleting your account permanently removes:
 
 - activities and fitness data,

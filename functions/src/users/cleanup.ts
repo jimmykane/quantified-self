@@ -186,10 +186,22 @@ export const cleanupUserAccounts = functions.region('europe-west2').auth.user().
         }
 
         const docsToDelete = new Map<string, admin.firestore.DocumentReference>();
+        const accountDeletionMailDocId = `account_deleted_confirmation_${uid}`;
+        const accountDeletionTemplateName = 'account_deleted_confirmation';
 
-        uidSnapshot.docs.forEach(doc => docsToDelete.set(doc.id, doc.ref));
+        const addMailDocIfDeletable = (doc: admin.firestore.QueryDocumentSnapshot) => {
+            const templateName = doc.data()?.template?.name;
+            const isDeletionConfirmationEmail = doc.id === accountDeletionMailDocId || templateName === accountDeletionTemplateName;
+            if (isDeletionConfirmationEmail) {
+                logger.info(`[Cleanup] Preserving account deletion confirmation email ${doc.id} for user ${uid}`);
+                return;
+            }
+            docsToDelete.set(doc.id, doc.ref);
+        };
+
+        uidSnapshot.docs.forEach(addMailDocIfDeletable);
         if (emailSnapshot) {
-            emailSnapshot.docs.forEach(doc => docsToDelete.set(doc.id, doc.ref));
+            emailSnapshot.docs.forEach(addMailDocIfDeletable);
         }
 
         docsToDelete.forEach((ref) => {
