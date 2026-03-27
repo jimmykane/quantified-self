@@ -13,6 +13,35 @@ export interface AiInsightsRequest {
   prompt: string;
   clientTimezone: string;
   clientLocale?: string;
+  locationFilter?: AiInsightsRequestLocationFilter;
+}
+
+export interface AiInsightsRequestLocationFilter {
+  locationText?: string;
+  radiusKm?: number;
+}
+
+export interface AiInsightsLocationCoordinate {
+  latitudeDegrees: number;
+  longitudeDegrees: number;
+}
+
+export interface AiInsightsLocationBoundingBox {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+}
+
+export interface NormalizedInsightLocationFilter {
+  requestedText: string;
+  effectiveText: string;
+  resolvedLabel: string;
+  source: 'input' | 'prompt' | 'ai_fallback';
+  mode: 'bbox' | 'radius';
+  radiusKm: number;
+  center: AiInsightsLocationCoordinate;
+  bbox?: AiInsightsLocationBoundingBox;
 }
 
 export interface NormalizedInsightBoundedDateRange {
@@ -62,6 +91,7 @@ export interface NormalizedInsightQueryBase {
   requestedDateRanges?: NormalizedInsightBoundedDateRange[];
   periodMode?: NormalizedInsightPeriodMode;
   chartType: ChartTypes;
+  locationFilter?: NormalizedInsightLocationFilter;
 }
 
 export interface NormalizedInsightAggregateQuery extends NormalizedInsightQueryBase {

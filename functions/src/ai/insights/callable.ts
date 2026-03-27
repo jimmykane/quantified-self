@@ -199,7 +199,7 @@ export async function runAiInsights(
   );
 
   const consumeQuotaOnAiAttempt = async (
-    stage: 'sanitize' | 'repair' | 'summarize',
+    stage: 'sanitize' | 'repair' | 'location' | 'summarize',
   ): Promise<AiInsightsQuotaStatusResponse> => {
     if (consumedQuotaStatus) {
       return consumedQuotaStatus;
@@ -372,7 +372,20 @@ export async function runAiInsights(
     }
   }
 
-  const effectiveQuery = normalizeResult.query;
+  let effectiveQuery = normalizeResult.query;
+  const resolvedLocationFilter = await aiInsightsRuntime.resolveLocationFilter({
+    prompt: effectivePrompt,
+    requestLocationFilter: input.locationFilter,
+    onAiFallbackAttempt: async () => {
+      await consumeQuotaOnAiAttempt('location');
+    },
+  });
+  if (resolvedLocationFilter) {
+    effectiveQuery = {
+      ...effectiveQuery,
+      locationFilter: resolvedLocationFilter,
+    };
+  }
   const aggregateQueryInput = effectiveQuery.resultKind === 'aggregate' ? effectiveQuery : null;
   const eventLookupQueryInput = effectiveQuery.resultKind === 'event_lookup' ? effectiveQuery : null;
   const latestEventQueryInput = effectiveQuery.resultKind === 'latest_event' ? effectiveQuery : null;
@@ -436,6 +449,21 @@ export async function runAiInsights(
   logger.info('[aiInsights] Query normalization debug', {
     userID,
     ...buildPromptLogContext(prompt, effectivePrompt),
+    routing: normalizeResult.routing
+      ? {
+        routeId: normalizeResult.routing.routeId,
+        resultKind: normalizeResult.routing.resultKind ?? effectiveQuery.resultKind,
+        source: normalizeResult.routing.source,
+        reason: normalizeResult.routing.reason,
+        fallbackReasonCode: normalizeResult.routing.fallbackReasonCode ?? null,
+      }
+      : {
+        routeId: null,
+        resultKind: effectiveQuery.resultKind,
+        source: 'deterministic',
+        reason: 'Routing metadata unavailable.',
+        fallbackReasonCode: null,
+      },
     normalizedQuery: {
       dataType: (
         effectiveQuery.resultKind === 'multi_metric_aggregate'
@@ -454,6 +482,16 @@ export async function runAiInsights(
       categoryType: effectiveQuery.categoryType,
       requestedTimeInterval: effectiveQuery.requestedTimeInterval,
       chartType: effectiveQuery.chartType,
+      locationFilter: effectiveQuery.locationFilter
+        ? {
+          requestedText: effectiveQuery.locationFilter.requestedText,
+          effectiveText: effectiveQuery.locationFilter.effectiveText,
+          resolvedLabel: effectiveQuery.locationFilter.resolvedLabel,
+          source: effectiveQuery.locationFilter.source,
+          mode: effectiveQuery.locationFilter.mode,
+          radiusKm: effectiveQuery.locationFilter.radiusKm,
+        }
+        : null,
       activityTypesCount: effectiveQuery.activityTypes.length,
       activityTypeGroupsCount: effectiveQuery.activityTypeGroups.length,
       metricSelectionCount: effectiveQuery.resultKind === 'multi_metric_aggregate'
@@ -522,6 +560,9 @@ export async function runAiInsights(
         activityTypes: multiMetricQueryInput.activityTypes,
         dateRange: multiMetricQueryInput.dateRange,
         chartType: multiMetricQueryInput.chartType,
+        ...(multiMetricQueryInput.locationFilter
+          ? { locationFilter: multiMetricQueryInput.locationFilter }
+          : {}),
       };
 
       return {

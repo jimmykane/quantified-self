@@ -1,23 +1,55 @@
-
-import { describe, it, vi, expect, afterEach } from 'vitest';
+import { describe, it, vi, expect, afterEach, beforeEach } from 'vitest';
 import * as admin from 'firebase-admin';
-// We don't import the function directly because we need to mock its dependencies first if we were using require, 
-// but since we are using modules, we rely on vi.mock. 
-// However, typically to test onCall, we might use firebase-functions-test.
-// But following the suunto example, let's see. 
-// The suunto example tests an onRequest function. onCall is different.
-// Ideally we use firebase-functions-test.
-
 import firebaseFunctionsTest from 'firebase-functions-test';
+
+const {
+    deleteUserMock,
+    getUserMock,
+    mailSetMock,
+    mailDocMock,
+    mailCollectionMock,
+    loggerInfoMock,
+    loggerWarnMock,
+    loggerErrorMock
+} = vi.hoisted(() => {
+    const mailSetMock = vi.fn().mockResolvedValue(undefined);
+    const mailDocMock = vi.fn((_id?: string) => ({
+        set: mailSetMock
+    }));
+    const mailCollectionMock = vi.fn((_name?: string) => ({
+        doc: mailDocMock
+    }));
+
+    return {
+        deleteUserMock: vi.fn().mockResolvedValue(undefined),
+        getUserMock: vi.fn().mockResolvedValue({ email: 'test@example.com' }),
+        mailSetMock,
+        mailDocMock,
+        mailCollectionMock,
+        loggerInfoMock: vi.fn(),
+        loggerWarnMock: vi.fn(),
+        loggerErrorMock: vi.fn()
+    };
+});
+
 const testEnv = firebaseFunctionsTest();
 
 // Mock admin
 vi.mock('firebase-admin', () => {
-    const deleteUserMock = vi.fn();
+    const firestoreMock = Object.assign(vi.fn(() => ({
+        collection: mailCollectionMock
+    })), {
+        Timestamp: {
+            fromDate: vi.fn((date: Date) => ({ seconds: Math.floor(date.getTime() / 1000), nanoseconds: 0 }))
+        }
+    });
+
     return {
         auth: () => ({
-            deleteUser: deleteUserMock
+            deleteUser: deleteUserMock,
+            getUser: getUserMock
         }),
+        firestore: firestoreMock,
         initializeApp: vi.fn(),
     };
 });
@@ -45,6 +77,12 @@ vi.mock('firebase-functions/v1', () => {
     };
 });
 
+vi.mock('firebase-functions/logger', () => ({
+    info: loggerInfoMock,
+    warn: loggerWarnMock,
+    error: loggerErrorMock
+}));
+
 // Mock utils
 vi.mock('../utils', () => ({
     isCorsAllowed: vi.fn().mockReturnValue(true)
@@ -54,6 +92,11 @@ import { isCorsAllowed } from '../utils';
 import { deleteSelf } from './user';
 
 describe('deleteSelf Cloud Function', () => {
+    beforeEach(() => {
+        deleteUserMock.mockResolvedValue(undefined);
+        getUserMock.mockResolvedValue({ email: 'test@example.com' });
+        mailSetMock.mockResolvedValue(undefined);
+    });
 
     afterEach(() => {
         testEnv.cleanup();
@@ -62,7 +105,7 @@ describe('deleteSelf Cloud Function', () => {
 
     it('should throw "failed-precondition" error if called without authentication', async () => {
         try {
-            await (deleteSelf as any)({}, { auth: null });
+            await (deleteSelf as any)({}, { rawRequest: {}, auth: null });
             // Should fail
         } catch (e: any) {
             expect(e.code).to.equal('failed-precondition');
@@ -84,6 +127,7 @@ describe('deleteSelf Cloud Function', () => {
     it('should successfully delete the authenticated user', async () => {
         const uid = 'test-uid';
         const context = {
+            rawRequest: {},
             auth: {
                 uid,
                 token: {}
@@ -91,18 +135,77 @@ describe('deleteSelf Cloud Function', () => {
             app: { appId: 'mock-app-id' }
         };
 
-        const deleteUserMock = admin.auth().deleteUser as any; // Type assertion for mock
-        deleteUserMock.mockResolvedValue();
+        const result = await (deleteSelf as any)({}, context);
+
+        expect(deleteUserMock).toHaveBeenCalledWith(uid);
+        expect(getUserMock).toHaveBeenCalledWith(uid);
+        expect(admin.firestore().collection).toHaveBeenCalledWith('mail');
+        expect(mailDocMock).toHaveBeenCalledWith(`account_deleted_confirmation_${uid}`);
+        expect(mailSetMock).toHaveBeenCalledWith(expect.objectContaining({
+            to: 'test@example.com',
+            from: 'Quantified Self <hello@quantified-self.io>',
+            template: {
+                name: 'account_deleted_confirmation',
+                data: {}
+            },
+            expireAt: expect.any(Object)
+        }));
+        expect(result).toEqual({ success: true });
+    });
+
+    it('should skip confirmation email when user has no email', async () => {
+        const uid = 'test-uid';
+        const context = {
+            rawRequest: {},
+            auth: {
+                uid,
+                token: {}
+            },
+            app: { appId: 'mock-app-id' }
+        };
+
+        getUserMock.mockResolvedValue({ email: undefined });
 
         const result = await (deleteSelf as any)({}, context);
 
         expect(deleteUserMock).toHaveBeenCalledWith(uid);
+        expect(mailSetMock).not.toHaveBeenCalled();
+        expect(loggerInfoMock.mock.calls.some(([message]) =>
+            typeof message === 'string' &&
+            message.includes('Skipping account deletion confirmation email')
+        )).toBe(true);
+        expect(result).toEqual({ success: true });
+    });
+
+    it('should return success even when queuing confirmation email fails', async () => {
+        const uid = 'test-uid';
+        const context = {
+            rawRequest: {},
+            auth: {
+                uid,
+                token: {}
+            },
+            app: { appId: 'mock-app-id' }
+        };
+
+        const mailError = new Error('Mail queue write failed');
+        mailSetMock.mockRejectedValueOnce(mailError);
+
+        const result = await (deleteSelf as any)({}, context);
+
+        expect(deleteUserMock).toHaveBeenCalledWith(uid);
+        expect(mailSetMock).toHaveBeenCalled();
+        expect(loggerErrorMock).toHaveBeenCalledWith(
+            `Failed to queue account deletion confirmation email for user: ${uid}`,
+            mailError
+        );
         expect(result).toEqual({ success: true });
     });
 
     it('should throw "internal" error if deleteUser fails', async () => {
         const uid = 'test-uid';
         const context = {
+            rawRequest: {},
             auth: {
                 uid,
                 token: {}
@@ -110,7 +213,6 @@ describe('deleteSelf Cloud Function', () => {
             app: { appId: 'mock-app-id' }
         };
 
-        const deleteUserMock = admin.auth().deleteUser as any;
         deleteUserMock.mockRejectedValue(new Error('Firebase Auth Error'));
 
         try {
@@ -121,4 +223,3 @@ describe('deleteSelf Cloud Function', () => {
         }
     });
 });
-

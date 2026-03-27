@@ -463,6 +463,14 @@ export const AI_INSIGHTS_CURATED_PROMPT_CATALOG = [
     metricKey: 'distance',
   },
   {
+    id: 'popular-distance-by-activity-greece-this-year',
+    prompt: 'Show my total distance by activity type in Greece this year.',
+    category: 'Progress over time',
+    featured: false,
+    surfaces: ['picker'],
+    metricKey: 'distance',
+  },
+  {
     id: 'popular-running-heart-rate-90-days',
     prompt: 'Show my running heart rate over time this year.',
     category: 'Progress over time',
@@ -484,6 +492,14 @@ export const AI_INSIGHTS_CURATED_PROMPT_CATALOG = [
     category: 'Progress over time',
     featured: true,
     surfaces: ['hero', 'picker'],
+    metricKey: 'pace',
+  },
+  {
+    id: 'popular-running-pace-athens-monthly-this-year',
+    prompt: 'Show my average running pace within 20 km of Athens this year, by month.',
+    category: 'Progress over time',
+    featured: false,
+    surfaces: ['picker'],
     metricKey: 'pace',
   },
   {
@@ -567,6 +583,22 @@ export const AI_INSIGHTS_CURATED_PROMPT_CATALOG = [
     featured: false,
     surfaces: ['picker'],
     metricKey: 'jump_distance',
+  },
+  {
+    id: 'popular-top-3-longest-cycling-events-patras-last-year',
+    prompt: 'Show my top 3 longest cycling events within 40 km of Patras last year.',
+    category: 'Best efforts',
+    featured: false,
+    surfaces: ['picker'],
+    metricKey: 'distance',
+  },
+  {
+    id: 'popular-longest-cycling-event-paris-50km-last-year',
+    prompt: 'What was my longest cycling event within 50 km of Paris last year?',
+    category: 'Best efforts',
+    featured: true,
+    surfaces: ['hero', 'picker'],
+    metricKey: 'distance',
   },
   {
     id: 'popular-highest-power-rides-this-month',

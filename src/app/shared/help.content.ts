@@ -117,7 +117,13 @@ export const HELP_SECTIONS: HelpSection[] = [
 - If a benchmark exists, that icon opens the saved report.
 - If no benchmark exists yet, it opens the benchmark selection flow.
 - Benchmark comparison uses exactly two activities, supports role swap, and can auto-align time.
-- Benchmark reports can be rerun, shared, and saved as an image.`,
+- Benchmark reports can be rerun, shared, and saved as an image.
+
+### Event jump tables
+
+- Event details now include a **Jumps** table when selected activities contain jump events.
+- The jump table appears in activity tabs and only shows columns with available data.
+- Jump metrics use your preferred units from **Settings** when unit conversion is supported.`,
     links: [
       { label: 'Login', icon: 'login', kind: 'route', target: '/login' },
       { label: 'Dashboard', icon: 'space_dashboard', kind: 'route', target: '/dashboard' },
@@ -151,6 +157,14 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Hero rotating examples at the top now **fill the input only**. They do not run automatically.
 - **Browse prompts** opens the prompt picker dialog. Selecting a prompt there runs it immediately.
 - If your prompt does not include a date range, AI Insights defaults to **current year to date**.
+- Mention an optional location directly in your prompt, such as a city, region, country, or latitude/longitude coordinates.
+- You can also mention a radius in the prompt, for example \`within 20 km of Athens\`.
+- AI Insights tries to infer a location from the prompt when it can do so deterministically.
+- The backend geocodes locations with **Mapbox** and, if needed, makes one AI fallback attempt to repair an unresolved location string.
+- Country and region requests use Mapbox's returned **bounding box** as a best-effort scope, not an exact border polygon.
+- City, locality, and place requests use the resolved center point plus your chosen **radius**.
+- Event-backed AI Insights results can show a **map** below the result when surfaced events have recorded start positions.
+- When a location is resolved, the map also draws the resolved search scope: a **radius** circle for point-based places or a **bbox** region for country/region matches, and camera framing includes both scope and surfaced event starts.
 - Add **all time** to query your full history.
 - For power-curve prompts, **excluding cycling** removes the whole cycling family (Cycling, Indoor Cycling, Virtual Cycling, and E-Biking).
 
@@ -184,6 +198,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 - **App verification failed**: refresh and retry.
 - **Invalid request**: include one metric, an activity/sport, and a date scope.
+- **Location could not be resolved**: try a clearer city, region, country, or coordinate pair.
 - **Permission denied**: ensure your account has Basic or Pro access.
 - **Quota reached**: wait for reset or upgrade.
 - If you need a metric that is not currently supported, contact support.`,
@@ -371,6 +386,8 @@ In Settings you can:
 ## Account deletion
 
 You can delete your account from **Settings -> Profile -> Danger Zone**.
+
+If your account has an email address, self-deletion sends a confirmation email after the request completes.
 
 Deleting your account permanently removes:
 

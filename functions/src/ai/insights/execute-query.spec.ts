@@ -8,7 +8,9 @@ import {
   ChartTypes,
   DataCadenceAvg,
   DataDistance,
+  DataEndPosition,
   DataPowerAvg,
+  DataStartPosition,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
 
@@ -902,6 +904,253 @@ describe('execute-query', () => {
     });
     expect(result.matchedEventsCount).toBe(2);
     expect(result.aggregation.buckets.map(bucket => bucket.aggregateValue)).toEqual([40, 60]);
+  });
+
+  it('filters events by bbox using the stored start position only', async () => {
+    const fetchEventDocs = vi.fn(async () => [
+      { id: 'inside', data: () => ({ startDate: 1768003200000 }) },
+      { id: 'outside-start', data: () => ({ startDate: 1768608000000 }) },
+    ]);
+
+    const importEvent = vi
+      .fn()
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'inside',
+        startDate: new Date('2026-01-10T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: {
+          [DataDistance.type]: 40,
+          [DataStartPosition.type]: {
+            latitudeDegrees: 37.9838,
+            longitudeDegrees: 23.7275,
+          },
+        },
+      }))
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'outside-start',
+        startDate: new Date('2026-01-11T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: {
+          [DataDistance.type]: 60,
+          [DataStartPosition.type]: {
+            latitudeDegrees: 41.9028,
+            longitudeDegrees: 12.4964,
+          },
+          [DataEndPosition.type]: {
+            latitudeDegrees: 37.9838,
+            longitudeDegrees: 23.7275,
+          },
+        },
+      }));
+
+    setExecuteQueryDependenciesForTesting({
+      fetchEventDocs,
+      fetchDebugEventSnapshot: vi.fn(async () => ({
+        totalEventsCount: 2,
+        recentEventsSample: [],
+      })),
+      importEvent,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+    });
+
+    const result = await executeAiInsightsQuery('user-1', createQuery({
+      locationFilter: {
+        requestedText: 'Athens',
+        effectiveText: 'Athens',
+        resolvedLabel: 'Athens, Greece',
+        source: 'input',
+        mode: 'bbox',
+        radiusKm: 50,
+        center: {
+          latitudeDegrees: 37.9838,
+          longitudeDegrees: 23.7275,
+        },
+        bbox: {
+          west: 23.60,
+          south: 37.90,
+          east: 23.85,
+          north: 38.10,
+        },
+      },
+    }), 'show my cycling distance in Athens');
+
+    expect(result.matchedEventsCount).toBe(1);
+    expect(result.aggregation.buckets[0]?.aggregateValue).toBe(40);
+  });
+
+  it('filters events by anti-meridian bbox when west is greater than east', async () => {
+    const fetchEventDocs = vi.fn(async () => [
+      { id: 'inside-east', data: () => ({ startDate: 1768003200000 }) },
+      { id: 'inside-west', data: () => ({ startDate: 1768608000000 }) },
+      { id: 'outside', data: () => ({ startDate: 1769212800000 }) },
+    ]);
+
+    const importEvent = vi
+      .fn()
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'inside-east',
+        startDate: new Date('2026-01-10T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: {
+          [DataDistance.type]: 40,
+          [DataStartPosition.type]: {
+            latitudeDegrees: 0,
+            longitudeDegrees: 179.5,
+          },
+        },
+      }))
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'inside-west',
+        startDate: new Date('2026-01-11T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: {
+          [DataDistance.type]: 60,
+          [DataStartPosition.type]: {
+            latitudeDegrees: -1,
+            longitudeDegrees: -179.5,
+          },
+        },
+      }))
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'outside',
+        startDate: new Date('2026-01-12T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: {
+          [DataDistance.type]: 80,
+          [DataStartPosition.type]: {
+            latitudeDegrees: 0,
+            longitudeDegrees: 160,
+          },
+        },
+      }));
+
+    setExecuteQueryDependenciesForTesting({
+      fetchEventDocs,
+      fetchDebugEventSnapshot: vi.fn(async () => ({
+        totalEventsCount: 3,
+        recentEventsSample: [],
+      })),
+      importEvent,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+    });
+
+    const result = await executeAiInsightsQuery('user-1', createQuery({
+      locationFilter: {
+        requestedText: 'Dateline region',
+        effectiveText: 'Dateline region',
+        resolvedLabel: 'Dateline region',
+        source: 'input',
+        mode: 'bbox',
+        radiusKm: 50,
+        center: {
+          latitudeDegrees: 0,
+          longitudeDegrees: 180,
+        },
+        bbox: {
+          west: 170,
+          south: -10,
+          east: -170,
+          north: 10,
+        },
+      },
+    }), 'show my cycling distance near the dateline');
+
+    expect(result.matchedEventsCount).toBe(2);
+    const totalAggregate = result.aggregation.buckets
+      .reduce((total, bucket) => total + (bucket.aggregateValue ?? 0), 0);
+    expect(totalAggregate).toBe(100);
+  });
+
+  it('filters events by radius and excludes missing or invalid start positions', async () => {
+    const loggerStub = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any;
+    const fetchEventDocs = vi.fn(async () => [
+      { id: 'inside', data: () => ({ startDate: 1768003200000 }) },
+      { id: 'outside', data: () => ({ startDate: 1768608000000 }) },
+      { id: 'missing-position', data: () => ({ startDate: 1769212800000 }) },
+      { id: 'invalid-position', data: () => ({ startDate: 1769817600000 }) },
+    ]);
+
+    const importEvent = vi
+      .fn()
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'inside',
+        startDate: new Date('2026-01-10T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: {
+          [DataDistance.type]: 40,
+          [DataStartPosition.type]: {
+            latitudeDegrees: 37.9838,
+            longitudeDegrees: 23.7275,
+          },
+        },
+      }))
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'outside',
+        startDate: new Date('2026-01-11T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: {
+          [DataDistance.type]: 60,
+          [DataStartPosition.type]: {
+            latitudeDegrees: 40.6401,
+            longitudeDegrees: 22.9444,
+          },
+        },
+      }))
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'missing-position',
+        startDate: new Date('2026-01-12T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: {
+          [DataDistance.type]: 25,
+        },
+      }))
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'invalid-position',
+        startDate: new Date('2026-01-13T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: {
+          [DataDistance.type]: 25,
+          [DataStartPosition.type]: {
+            latitudeDegrees: 123,
+            longitudeDegrees: 22.9444,
+          },
+        },
+      }));
+
+    setExecuteQueryDependenciesForTesting({
+      fetchEventDocs,
+      fetchDebugEventSnapshot: vi.fn(async () => ({
+        totalEventsCount: 4,
+        recentEventsSample: [],
+      })),
+      importEvent,
+      logger: loggerStub,
+    });
+
+    const result = await executeAiInsightsQuery('user-1', createQuery({
+      locationFilter: {
+        requestedText: 'Athens',
+        effectiveText: 'Athens',
+        resolvedLabel: 'Athens, Greece',
+        source: 'input',
+        mode: 'radius',
+        radiusKm: 50,
+        center: {
+          latitudeDegrees: 37.9838,
+          longitudeDegrees: 23.7275,
+        },
+      },
+    }), 'show my cycling distance near Athens');
+
+    expect(result.matchedEventsCount).toBe(1);
+    expect(result.aggregation.buckets[0]?.aggregateValue).toBe(40);
+    expect(loggerStub.info).toHaveBeenCalledWith('[aiInsights] Query execution summary', expect.objectContaining({
+      locationFilterRequestedText: 'Athens',
+      locationFilterMode: 'radius',
+      locationFilteredOutCount: 3,
+      locationMissingStartPositionCount: 1,
+      locationInvalidStartPositionCount: 1,
+    }));
   });
 
   it('reuses one filtered event pool for multi-metric aggregations', async () => {

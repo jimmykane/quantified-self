@@ -11,6 +11,13 @@ import {
   type ModelInsightIntent,
   type NormalizeInsightQueryResult,
 } from './normalize-query.flow';
+import {
+  buildNormalizeQueryRouteCatalogPromptText,
+  NORMALIZE_QUERY_ROUTE_IDS,
+  NORMALIZE_QUERY_ROUTE_RESULT_KINDS,
+  resolveNormalizeQueryRouteDefinitionById,
+  type NormalizeQueryRoutingMetadata,
+} from './normalize-query.result-kind-router';
 import { CANONICAL_ACTIVITY_TYPES } from './canonical-activity-types';
 import { CANONICAL_ACTIVITY_TYPE_GROUPS } from './canonical-activity-type-groups';
 import {
@@ -21,6 +28,10 @@ import {
 import { canonicalizeInsightPrompt } from './prompt-normalization';
 
 type RepairUnsupportedResult = Extract<NormalizeInsightQueryResult, { status: 'unsupported' }>;
+
+interface RepairInsightIntent extends ModelInsightIntent {
+  routing: NormalizeQueryRoutingMetadata;
+}
 
 export interface RepairInsightQueryResult {
   result: NormalizeInsightQueryResult;
@@ -39,7 +50,9 @@ export interface RepairInsightQueryDependencies {
     metricCandidates: string[];
     activityTypeCandidates: string[];
     activityTypeGroupCandidates: string[];
-  }) => Promise<ModelInsightIntent | null>;
+    supportedRoutes: string[];
+    routeCatalog: string;
+  }) => Promise<RepairInsightIntent | null>;
 }
 
 export interface RepairInsightQueryApi {
@@ -94,6 +107,25 @@ const RepairInsightIntentSchema = z.object({
     'too_many_metrics',
     'unsupported_multi_metric_combination',
   ]).optional(),
+  routing: z.object({
+    routeId: z.enum([...NORMALIZE_QUERY_ROUTE_IDS] as [typeof NORMALIZE_QUERY_ROUTE_IDS[number], ...Array<typeof NORMALIZE_QUERY_ROUTE_IDS[number]>]),
+    resultKind: z.union([
+      z.enum([
+        ...NORMALIZE_QUERY_ROUTE_RESULT_KINDS,
+      ] as [typeof NORMALIZE_QUERY_ROUTE_RESULT_KINDS[number], ...Array<typeof NORMALIZE_QUERY_ROUTE_RESULT_KINDS[number]>]),
+      z.null(),
+    ]),
+    source: z.literal('ai_repair'),
+    reason: z.string().trim().min(1),
+    fallbackReasonCode: z.enum([
+      'invalid_prompt',
+      'unsupported_metric',
+      'ambiguous_metric',
+      'unsupported_capability',
+      'too_many_metrics',
+      'unsupported_multi_metric_combination',
+    ]).optional(),
+  }),
 });
 
 const defaultRepairInsightQueryDependencies: RepairInsightQueryDependencies = {
@@ -101,7 +133,10 @@ const defaultRepairInsightQueryDependencies: RepairInsightQueryDependencies = {
     const { output } = await aiInsightsGenkit.generate({
       system: [
         'You repair unsupported fitness insight prompts into a strict structured intent.',
+        'Always return a routing object with routeId, resultKind, source, and reason.',
+        'Set routing.source to ai_repair.',
         'Use only the provided metric catalog, supported aggregations, and supplied activity values.',
+        'Use only the provided supportedRoutes route IDs.',
         'If the prompt is still ambiguous or unsupported, return status unsupported.',
         'Do not invent metrics, activities, date ranges, or capabilities.',
         'Prefer leaving fields empty over guessing.',
@@ -122,11 +157,65 @@ const defaultRepairInsightQueryDependencies: RepairInsightQueryDependencies = {
 function buildUnsupportedResult(
   reasonCode: AiInsightsUnsupportedReasonCode,
   sourceText: string,
+  routing?: NormalizeQueryRoutingMetadata,
 ): RepairUnsupportedResult {
   return {
     status: 'unsupported',
     reasonCode,
     suggestedPrompts: getSuggestedInsightPrompts(3, sourceText),
+    ...(routing
+      ? {
+        routing: {
+          ...routing,
+          fallbackReasonCode: reasonCode,
+        },
+      }
+      : {}),
+  };
+}
+
+function isRepairRoutingMetadataValid(
+  routing: NormalizeQueryRoutingMetadata,
+  status: RepairInsightIntent['status'],
+): boolean {
+  const routeDefinition = resolveNormalizeQueryRouteDefinitionById(routing.routeId);
+  if (!routeDefinition) {
+    return false;
+  }
+
+  if (routing.resultKind !== routeDefinition.resultKind) {
+    return false;
+  }
+
+  if (status === 'supported' && routing.routeId === 'unsupported_capability') {
+    return false;
+  }
+
+  return true;
+}
+
+function attachRepairRoutingMetadata(
+  result: NormalizeInsightQueryResult,
+  routing: NormalizeQueryRoutingMetadata,
+): NormalizeInsightQueryResult {
+  if (result.status === 'ok') {
+    return {
+      ...result,
+      routing: {
+        ...routing,
+        source: 'ai_repair',
+        resultKind: result.query.resultKind,
+      },
+    };
+  }
+
+  return {
+    ...result,
+    routing: {
+      ...routing,
+      source: 'ai_repair',
+      fallbackReasonCode: result.reasonCode,
+    },
   };
 }
 
@@ -159,9 +248,22 @@ export function createRepairInsightQuery(
           metricCandidates: findInsightMetricAliasMatches(prompt).map(match => match.metric.key),
           activityTypeCandidates: [],
           activityTypeGroupCandidates: [],
+          supportedRoutes: [...NORMALIZE_QUERY_ROUTE_IDS],
+          routeCatalog: buildNormalizeQueryRouteCatalogPromptText(),
         });
 
         if (!repairedIntent) {
+          return {
+            result: deterministicResult,
+            source: 'none',
+          };
+        }
+
+        if (!isRepairRoutingMetadataValid(repairedIntent.routing, repairedIntent.status)) {
+          logger.warn('[aiInsights] Prompt repair returned an invalid route decision; falling back to deterministic unsupported result.', {
+            prompt: input.prompt,
+            routing: repairedIntent.routing,
+          });
           return {
             result: deterministicResult,
             source: 'none',
@@ -173,13 +275,17 @@ export function createRepairInsightQuery(
             result: buildUnsupportedResult(
               repairedIntent.unsupportedReasonCode || deterministicResult.reasonCode,
               prompt,
+              repairedIntent.routing,
             ),
             source: 'genkit',
           };
         }
 
         return {
-          result: resolveNormalizedInsightQueryFromIntent(input, promptContext, repairedIntent),
+          result: attachRepairRoutingMetadata(
+            resolveNormalizedInsightQueryFromIntent(input, promptContext, repairedIntent),
+            repairedIntent.routing,
+          ),
           source: 'genkit',
         };
       } catch (error) {

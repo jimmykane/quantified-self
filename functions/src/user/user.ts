@@ -5,6 +5,7 @@ import * as admin from 'firebase-admin';
 
 import { isCorsAllowed } from '../utils';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
+import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 
 export const deleteSelf = functions
     .runWith({
@@ -36,9 +37,36 @@ export const deleteSelf = functions
         logger.info(`Requesting deletion for user: ${uid} `);
 
         try {
+            let userEmail: string | undefined;
+            try {
+                const userRecord = await admin.auth().getUser(uid);
+                userEmail = userRecord.email ?? undefined;
+            } catch (lookupError) {
+                logger.warn(`Could not fetch user email before deletion for ${uid}. Continuing with deletion.`, lookupError);
+            }
+
             // Delete Auth User
             await admin.auth().deleteUser(uid);
             logger.info(`Successfully deleted user auth: ${uid} `);
+
+            if (userEmail) {
+                try {
+                    await admin.firestore().collection('mail').doc(`account_deleted_confirmation_${uid}`).set({
+                        to: userEmail,
+                        from: 'Quantified Self <hello@quantified-self.io>',
+                        template: {
+                            name: 'account_deleted_confirmation',
+                            data: {}
+                        },
+                        expireAt: getExpireAtTimestamp(TTL_CONFIG.MAIL_IN_DAYS),
+                    });
+                    logger.info(`Queued account deletion confirmation email for user: ${uid}`);
+                } catch (mailError) {
+                    logger.error(`Failed to queue account deletion confirmation email for user: ${uid}`, mailError);
+                }
+            } else {
+                logger.info(`No email found for deleted user ${uid}. Skipping account deletion confirmation email.`);
+            }
 
             return { success: true };
         } catch (error) {

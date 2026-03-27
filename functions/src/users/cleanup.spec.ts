@@ -26,8 +26,8 @@ const { authBuilderMock, deauthorizeServiceMock, firestoreMock, getServiceConfig
     // Define mocks first
     const querySnapshotMock = {
         docs: [
-            { id: 'doc1', ref: 'ref1' },
-            { id: 'doc2', ref: 'ref2' },
+            { id: 'doc1', ref: 'ref1', data: () => ({}) },
+            { id: 'doc2', ref: 'ref2', data: () => ({}) },
         ],
     };
 
@@ -194,8 +194,8 @@ describe('cleanupUserAccounts', () => {
         const wrapped = cleanupUserAccounts;
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123', email: 'test@example.com' });
 
-        const uidDocs = { docs: [{ id: 'mail1', ref: 'ref1' }] };
-        const emailDocs = { docs: [{ id: 'mail2', ref: 'ref2' }] };
+        const uidDocs = { docs: [{ id: 'mail1', ref: 'ref1', data: () => ({}) }] };
+        const emailDocs = { docs: [{ id: 'mail2', ref: 'ref2', data: () => ({}) }] };
 
         // Fix: where() returns an object with get(), which returns the promise.
         // The mock definition logic for whereMock was:
@@ -223,6 +223,56 @@ describe('cleanupUserAccounts', () => {
         // expect(firestoreMock().batch).toHaveBeenCalled(); // Removed as firestoreMock returns new instance with new batch spy each time
         expect(batchMock.delete).toHaveBeenCalledWith('ref1');
         expect(batchMock.delete).toHaveBeenCalledWith('ref2');
+        expect(batchMock.commit).toHaveBeenCalled();
+    });
+
+    it('should preserve account deletion confirmation emails during mail cleanup', async () => {
+        const wrapped = cleanupUserAccounts;
+        const uid = 'testUser123';
+        const user = testEnv.auth.makeUserRecord({ uid, email: 'test@example.com' });
+
+        const uidDocs = {
+            docs: [
+                {
+                    id: `account_deleted_confirmation_${uid}`,
+                    ref: 'preservedRefById',
+                    data: () => ({ template: { name: 'account_deleted_confirmation' } })
+                },
+                {
+                    id: 'mail1',
+                    ref: 'deleteRef1',
+                    data: () => ({ template: { name: 'subscription_upgrade' } })
+                }
+            ]
+        };
+        const emailDocs = {
+            docs: [
+                {
+                    id: 'mail2',
+                    ref: 'deleteRef2',
+                    data: () => ({ template: { name: 'welcome_email' } })
+                },
+                {
+                    id: 'mail3',
+                    ref: 'preservedRefByTemplate',
+                    data: () => ({ template: { name: 'account_deleted_confirmation' } })
+                }
+            ]
+        };
+
+        const getMock = vi.fn();
+        getMock
+            .mockResolvedValueOnce(uidDocs)
+            .mockResolvedValueOnce(emailDocs);
+
+        whereMock.mockReturnValue({ get: getMock });
+
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+
+        expect(batchMock.delete).toHaveBeenCalledWith('deleteRef1');
+        expect(batchMock.delete).toHaveBeenCalledWith('deleteRef2');
+        expect(batchMock.delete).not.toHaveBeenCalledWith('preservedRefById');
+        expect(batchMock.delete).not.toHaveBeenCalledWith('preservedRefByTemplate');
         expect(batchMock.commit).toHaveBeenCalled();
     });
 

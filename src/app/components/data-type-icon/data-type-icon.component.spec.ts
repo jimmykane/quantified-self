@@ -212,6 +212,13 @@ describe('DataTypeIconComponent', () => {
     expect(component.getColumnHeaderIcon(DataJumpScoreAvg.type)).toBe('military_tech');
     expect(component.getColumnHeaderIcon(DataJumpScoreMin.type)).toBe('military_tech');
     expect(component.getColumnHeaderIcon(DataJumpScoreMax.type)).toBe('military_tech');
+    expect(component.getColumnHeaderIcon('At')).toBe('schedule');
+    expect(component.getColumnHeaderIcon('Jump Distance')).toBe('straighten');
+    expect(component.getColumnHeaderIcon('Jump Height')).toBe('height');
+    expect(component.getColumnHeaderIcon('Jump Hang Time')).toBe('timer_arrow_up');
+    expect(component.getColumnHeaderIcon('Jump Speed')).toBe('speed');
+    expect(component.getColumnHeaderIcon('Jump Rotations')).toBe('autorenew');
+    expect(component.getColumnHeaderIcon('Jump Score')).toBe('military_tech');
   });
 
   it('should provide icon mapping for Avg VAM', () => {

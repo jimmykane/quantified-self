@@ -49,6 +49,11 @@ import {
   type AiInsightsLatestSnapshotStoreApi,
   type AiInsightsLatestSnapshotStoreDependencies,
 } from './latest-snapshot-store';
+import {
+  createResolveLocationFilter,
+  type ResolveLocationFilterApi,
+  type ResolveLocationFilterDependencies,
+} from './location-filter';
 
 interface AiInsightsRuntimeDependencies {
   normalizeQuery?: Partial<NormalizeQueryDependencies>;
@@ -60,6 +65,7 @@ interface AiInsightsRuntimeDependencies {
   summarizeInsight?: Partial<SummarizeInsightDependencies>;
   loadUserUnitSettings?: Partial<LoadUserUnitSettingsDependencies>;
   latestSnapshotStore?: Partial<AiInsightsLatestSnapshotStoreDependencies>;
+  resolveLocationFilter?: Partial<ResolveLocationFilterDependencies>;
 }
 
 interface RepairUnsupportedResult {
@@ -86,6 +92,7 @@ export interface AiInsightsRuntime {
   summarizeAiInsightResult: SummarizeInsightApi['summarizeAiInsightResult'];
   loadUserUnitSettings: LoadUserUnitSettingsApi['loadUserUnitSettings'];
   persistLatestAiInsightsSnapshot: AiInsightsLatestSnapshotStoreApi['persistLatestAiInsightsSnapshot'];
+  resolveLocationFilter: ResolveLocationFilterApi['resolveLocationFilter'];
 }
 
 export function createAiInsightsRuntime(
@@ -100,6 +107,7 @@ export function createAiInsightsRuntime(
   const summarizeInsight = createSummarizeInsight(dependencies.summarizeInsight);
   const loadUserUnitSettings = createLoadUserUnitSettings(dependencies.loadUserUnitSettings);
   const latestSnapshotStore = createAiInsightsLatestSnapshotStore(dependencies.latestSnapshotStore);
+  const resolveLocationFilter = createResolveLocationFilter(dependencies.resolveLocationFilter);
 
   return {
     normalizeInsightQuery: normalizeQuery.normalizeInsightQuery,
@@ -116,6 +124,7 @@ export function createAiInsightsRuntime(
     summarizeAiInsightResult: summarizeInsight.summarizeAiInsightResult,
     loadUserUnitSettings: loadUserUnitSettings.loadUserUnitSettings,
     persistLatestAiInsightsSnapshot: latestSnapshotStore.persistLatestAiInsightsSnapshot,
+    resolveLocationFilter: resolveLocationFilter.resolveLocationFilter,
   };
 }
 

@@ -7,8 +7,10 @@ import { RouterModule } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import {
   AppThemes,
+  DataStartPosition,
   User,
 } from '@sports-alliance/sports-lib';
+import type { EventInterface } from '@sports-alliance/sports-lib';
 import type {
   AiInsightsAggregateOkResponse,
   AiInsightsEmptyResponse,
@@ -42,6 +44,8 @@ import { AiInsightsLoadingStateComponent } from './ai-insights-loading-state.com
 import { AiInsightsMultiMetricChartComponent } from './ai-insights-multi-metric-chart.component';
 import { AiInsightsPowerCurveChartComponent } from './ai-insights-power-curve-chart.component';
 import { AiInsightsPromptPickerDialogComponent } from './ai-insights-prompt-picker-dialog.component';
+import { EventsMapComponent, type EventsMapFocusLocation } from '../events-map/events-map.component';
+import { type MapSearchScope } from '../../services/map/map-search-scope-overlay.utils';
 import {
   buildAggregateSummaryCards,
   buildAggregateAnomalyCallouts,
@@ -135,6 +139,7 @@ const AI_INSIGHTS_SUPPORT_SUBJECTS = {
     AiInsightsLoadingStateComponent,
     AiInsightsMultiMetricChartComponent,
     AiInsightsPowerCurveChartComponent,
+    EventsMapComponent,
   ],
   templateUrl: './ai-insights-page.component.html',
   styleUrls: ['./ai-insights-page.component.scss'],
@@ -186,6 +191,7 @@ export class AiInsightsPageComponent {
   readonly quotaStatus = signal<AiInsightsQuotaStatus | null>(null);
   readonly quotaStatusLoadFailed = signal(false);
   readonly resultPrompt = signal('');
+  readonly resultLocationFilter = signal<AiInsightsRequest['locationFilter'] | null>(null);
   readonly rankedEventResolvedEvents = signal<EventLookupResolvedEvent[]>([]);
   readonly rankedEventLoading = signal(false);
   readonly rankedEventLoadError = signal<string | null>(null);
@@ -581,6 +587,7 @@ export class AiInsightsPageComponent {
     this.errorMessage.set(null);
     this.response.set(null);
     this.resultPrompt.set('');
+    this.resultLocationFilter.set(null);
     this.rankedEventResolvedEvents.set([]);
     this.rankedEventLoading.set(false);
     this.rankedEventLoadError.set(null);
@@ -621,6 +628,9 @@ export class AiInsightsPageComponent {
         this.promptControl.setValue(latestSnapshot.prompt);
         this.response.set(latestSnapshot.response);
         this.resultPrompt.set(latestSnapshot.prompt);
+        this.resultLocationFilter.set(
+          this.buildLocationFilterRequestFromResponse(latestSnapshot.response),
+        );
         this.latestSnapshotSavedAt.set(latestSnapshot.savedAt);
         this.latestSnapshotRestored.set(true);
       } finally {
@@ -749,10 +759,7 @@ export class AiInsightsPageComponent {
     this.aggregationContextLine()
   ));
   readonly resultHeaderContextRows = computed<Array<{ label: string; value: string }>>(() => {
-    const response = this.aggregateOkResponse()
-      || this.multiMetricOkResponse()
-      || this.powerCurveOkResponse()
-      || this.emptyResponse();
+    const response = this.okResponse() || this.emptyResponse();
     if (!response) {
       return [];
     }
@@ -784,6 +791,14 @@ export class AiInsightsPageComponent {
       rows.push({
         label: 'Activities',
         value: activitySummary,
+      });
+    }
+
+    const locationSummary = this.formatLocationScopeLabel(response.query.locationFilter);
+    if (locationSummary) {
+      rows.push({
+        label: 'Location',
+        value: locationSummary,
       });
     }
 
@@ -918,6 +933,77 @@ export class AiInsightsPageComponent {
       };
     });
   });
+  readonly rankedMapEvents = computed<EventInterface[]>(() => (
+    this.rankedEventResolvedEvents()
+      .map((entry) => entry.event)
+      .filter((event): event is EventInterface => this.hasValidStartPosition(event))
+  ));
+  readonly rankedMapFocusLocation = computed<EventsMapFocusLocation | null>(() => {
+    const locationCenter = this.rankedEventResponse()?.query.locationFilter?.center;
+    if (!locationCenter) {
+      return null;
+    }
+
+    if (
+      !Number.isFinite(locationCenter.latitudeDegrees)
+      || !Number.isFinite(locationCenter.longitudeDegrees)
+    ) {
+      return null;
+    }
+
+    return {
+      latitudeDegrees: locationCenter.latitudeDegrees,
+      longitudeDegrees: locationCenter.longitudeDegrees,
+    };
+  });
+  readonly rankedMapSearchScope = computed<MapSearchScope | null>(() => {
+    const locationFilter = this.rankedEventResponse()?.query.locationFilter;
+    if (!locationFilter) {
+      return null;
+    }
+
+    if (locationFilter.mode === 'radius') {
+      const center = locationFilter.center;
+      if (
+        !Number.isFinite(center.latitudeDegrees)
+        || !Number.isFinite(center.longitudeDegrees)
+        || !Number.isFinite(locationFilter.radiusKm)
+        || locationFilter.radiusKm <= 0
+      ) {
+        return null;
+      }
+
+      return {
+        mode: 'radius',
+        center: {
+          latitudeDegrees: center.latitudeDegrees,
+          longitudeDegrees: center.longitudeDegrees,
+        },
+        radiusKm: locationFilter.radiusKm,
+      };
+    }
+
+    const bbox = locationFilter.bbox;
+    if (
+      !bbox
+      || !Number.isFinite(bbox.west)
+      || !Number.isFinite(bbox.south)
+      || !Number.isFinite(bbox.east)
+      || !Number.isFinite(bbox.north)
+    ) {
+      return null;
+    }
+
+    return {
+      mode: 'bbox',
+      bbox: {
+        west: bbox.west,
+        south: bbox.south,
+        east: bbox.east,
+        north: bbox.north,
+      },
+    };
+  });
   readonly primaryRankedEventItem = computed<EventLookupDisplayItem | null>(() =>
     this.rankedEventItems()[0] ?? null
   );
@@ -967,7 +1053,10 @@ export class AiInsightsPageComponent {
     void this.submitPrompt();
   }
 
-  async submitPrompt(promptOverride?: string): Promise<void> {
+  async submitPrompt(
+    promptOverride?: string,
+    locationFilterOverride?: AiInsightsRequest['locationFilter'] | null,
+  ): Promise<void> {
     if (this.isPromptLocked()) {
       return;
     }
@@ -988,6 +1077,8 @@ export class AiInsightsPageComponent {
       return;
     }
 
+    const request = this.buildInsightRequest(prompt, locationFilterOverride);
+
     this.hapticsService.selection();
     this.isSubmitting.set(true);
     this.scheduleProcessingHaptic();
@@ -1000,11 +1091,12 @@ export class AiInsightsPageComponent {
     this.scrollResultCardIntoView();
 
     try {
-      const response = await this.aiInsightsService.runInsight(this.buildInsightRequest(prompt));
+      const response = await this.aiInsightsService.runInsight(request);
       this.response.set(response);
       this.hapticsService.success();
       this.quotaStatus.set(response.quota ?? this.quotaStatus());
       this.resultPrompt.set(prompt);
+      this.resultLocationFilter.set(request.locationFilter ?? null);
     } catch (error) {
       this.shouldAutoScrollOnCompletedResponse.set(false);
       const nextQuotaStatus = await this.aiInsightsQuotaService.loadQuotaStatus();
@@ -1090,7 +1182,7 @@ export class AiInsightsPageComponent {
     this.logAiInsightsAction('refresh_result_click', {
       promptLength: prompt.length,
     });
-    await this.submitPrompt(prompt);
+    await this.submitPrompt(prompt, this.resultLocationFilter());
   }
 
   clearPrompt(): void {
@@ -1141,12 +1233,56 @@ export class AiInsightsPageComponent {
     };
   }
 
-  private buildInsightRequest(prompt: string): AiInsightsRequest {
+  private buildInsightRequest(
+    prompt: string,
+    locationFilterOverride?: AiInsightsRequest['locationFilter'] | null,
+  ): AiInsightsRequest {
+    const resolvedLocationFilter = locationFilterOverride ?? undefined;
+
     return {
       prompt,
       clientTimezone: getClientTimeZone(),
       clientLocale: this.locale,
+      ...(resolvedLocationFilter ? { locationFilter: resolvedLocationFilter } : {}),
     };
+  }
+
+  private buildLocationFilterRequestFromResponse(
+    response: AiInsightsResponse | null,
+  ): AiInsightsRequest['locationFilter'] | null {
+    if (!response || (response.status !== 'ok' && response.status !== 'empty')) {
+      return null;
+    }
+
+    const locationFilter = response.query.locationFilter;
+    if (!locationFilter) {
+      return null;
+    }
+
+    return {
+      locationText: locationFilter.requestedText,
+      radiusKm: locationFilter.radiusKm,
+    };
+  }
+
+  private formatLocationScopeLabel(
+    locationFilter: AiInsightsOkResponse['query']['locationFilter'] | AiInsightsEmptyResponse['query']['locationFilter'],
+  ): string | null {
+    if (!locationFilter) {
+      return null;
+    }
+
+    if (locationFilter.mode === 'radius') {
+      return `${locationFilter.resolvedLabel} • ${locationFilter.radiusKm} km radius`;
+    }
+
+    return `${locationFilter.resolvedLabel} • region bbox`;
+  }
+
+  private hasValidStartPosition(event: EventInterface | null | undefined): event is EventInterface {
+    const startPosition = event?.getStat?.(DataStartPosition.type) as DataStartPosition | null | undefined;
+    const location = startPosition?.getValue?.();
+    return Number.isFinite(location?.latitudeDegrees) && Number.isFinite(location?.longitudeDegrees);
   }
 
   private buildSupportMailtoHref(subject: string): string {

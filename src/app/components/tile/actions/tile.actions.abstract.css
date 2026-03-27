@@ -54,6 +54,12 @@ button {
   text-align: center;
 }
 
+button[mat-icon-button] {
+  flex: 0 0 auto;
+  padding: 8px;
+  align-self: center;
+}
+
 button.big {
   width: 100%;
 }

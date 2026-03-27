@@ -27,6 +27,10 @@ const EMAIL_TESTS: EmailTestConfig[] = [
         data: { role: 'pro' }
     },
     {
+        templateName: 'account_deleted_confirmation',
+        data: {}
+    },
+    {
         templateName: 'subscription_upgrade',
         data: { new_role: 'pro' }
     },
@@ -59,7 +63,7 @@ async function sendTestEmails(targetEmail: string) {
         process.exit(1);
     }
 
-    logger.info(`Queueing 6 test emails for: ${targetEmail}...`);
+    logger.info(`Queueing ${EMAIL_TESTS.length} test emails for: ${targetEmail}...`);
 
     const db = admin.firestore();
     const batch = db.batch();

@@ -57,9 +57,11 @@ describe('ai-insights prompts', () => {
       'When was my last swim?',
       'Show my training time over time this year.',
       'Show my distance by sport this year.',
+      'Show my total distance by activity type in Greece this year.',
       'Show my running heart rate over time this year.',
       'Show my cycling power over time this year.',
       'Show my average pace trend for running this year.',
+      'Show my average running pace within 20 km of Athens this year, by month.',
       'Give me a yearly summary for all activities in the last 5 years.',
       'Show cadence vs power over time in the last 3 months for cycling.',
       'Compare my power curve over the last 3 months.',
@@ -71,6 +73,8 @@ describe('ai-insights prompts', () => {
       'What was my maximum heartrate all time?',
       'When did I have my longest jump?',
       'When did I have my biggest jump?',
+      'Show my top 3 longest cycling events within 40 km of Patras last year.',
+      'What was my longest cycling event within 50 km of Paris last year?',
       'Which rides had my highest power output this month?',
     ]);
   });
@@ -105,6 +109,8 @@ describe('ai-insights prompts', () => {
     expect(pickerPromptSet.has('When was my last swim?')).toBe(true);
     expect(pickerPromptSet.has('Show cadence vs power over time in the last 3 months for cycling.')).toBe(true);
     expect(pickerPromptSet.has('Show my average pace trend for running this year.')).toBe(true);
+    expect(pickerPromptSet.has('Show my total distance by activity type in Greece this year.')).toBe(true);
+    expect(pickerPromptSet.has('Show my average running pace within 20 km of Athens this year, by month.')).toBe(true);
     expect(pickerPromptSet.has('Compare my weekly distance for the last 8 weeks.')).toBe(true);
     expect(pickerPromptSet.has('Give me a yearly summary for all activities in the last 5 years.')).toBe(true);
     expect(pickerPromptSet.has('Give me a yearly summary for all activities in 2022, 2023, 2024, 2025.')).toBe(true);
@@ -114,6 +120,8 @@ describe('ai-insights prompts', () => {
     expect(pickerPromptSet.has('What is my best power curve?')).toBe(true);
     expect(pickerPromptSet.has('What was my maximum heartrate all time?')).toBe(true);
     expect(pickerPromptSet.has('When did I have my biggest jump?')).toBe(true);
+    expect(pickerPromptSet.has('Show my top 3 longest cycling events within 40 km of Patras last year.')).toBe(true);
+    expect(pickerPromptSet.has('What was my longest cycling event within 50 km of Paris last year?')).toBe(true);
     expect(pickerPromptSet.has('Which rides had my highest power output this month?')).toBe(true);
 
     expect(featuredPromptSet.has('When was my last ride?')).toBe(true);
@@ -126,6 +134,7 @@ describe('ai-insights prompts', () => {
     expect(featuredPromptSet.has('What is my best power curve?')).toBe(true);
     expect(featuredPromptSet.has('Compare my weekly distance for the last 8 weeks.')).toBe(true);
     expect(featuredPromptSet.has('What was my maximum heartrate all time?')).toBe(true);
+    expect(featuredPromptSet.has('What was my longest cycling event within 50 km of Paris last year?')).toBe(true);
     expect(featuredPromptSet.has('Which rides had my highest power output this month?')).toBe(true);
     expect(AI_INSIGHTS_FEATURED_PROMPTS).toEqual([
       'When was my last ride?',
@@ -138,6 +147,7 @@ describe('ai-insights prompts', () => {
       'Compare my power curve over the last 3 months.',
       'Compare my weekly distance for the last 8 weeks.',
       'What was my maximum heartrate all time?',
+      'What was my longest cycling event within 50 km of Paris last year?',
       'Which rides had my highest power output this month?',
     ]);
   });

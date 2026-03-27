@@ -1155,6 +1155,28 @@ app-ai-insights-power-curve-chart {
   align-items: center;
 }
 
+.result-map-heading {
+  margin-top: 8px;
+}
+
+.result-map-panel {
+  --qs-glass-panel-radius: 16px;
+  --qs-glass-panel-blur: 10px;
+  --qs-glass-panel-bg: var(--mat-sys-surface-container-low);
+  --qs-glass-panel-shadow: none;
+  height: clamp(18rem, 42vw, 24rem);
+  min-height: 18rem;
+  overflow: hidden;
+  padding: 0;
+}
+
+.result-events-map {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+}
+
 .event-lookup-rank {
   width: 2rem;
   height: 2rem;
@@ -1425,5 +1447,9 @@ app-ai-insights-power-curve-chart {
 
   .event-lookup-actions {
     justify-content: flex-start;
+  }
+
+  .result-map-panel {
+    height: 18rem;
   }
 }

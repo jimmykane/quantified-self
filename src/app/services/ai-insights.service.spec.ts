@@ -175,6 +175,14 @@ describe('AiInsightsService', () => {
       .toBe('App verification failed. Refresh the page and try again.');
     expect(service.getErrorMessage(new AiInsightsError('PERMISSION_DENIED', 'AI Insights is available to Basic and Pro members.')))
       .toBe('AI Insights is available to Basic and Pro members.');
+    expect(service.getErrorMessage(new AiInsightsError(
+      'INVALID_ARGUMENT',
+      'Could not resolve the location "Grece". Try a city, region, country, or coordinates.',
+    ))).toBe('Could not resolve the location "Grece". Try a city, region, country, or coordinates.');
+    expect(service.getErrorMessage(new AiInsightsError(
+      'INTERNAL',
+      'Location filtering is unavailable because MAPBOX_ACCESS_TOKEN is not configured on the backend.',
+    ))).toBe('Location filtering is unavailable because MAPBOX_ACCESS_TOKEN is not configured on the backend.');
   });
 
   it('should map resource exhausted function errors into quota limit errors', async () => {

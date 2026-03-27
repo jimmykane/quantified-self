@@ -70,7 +70,7 @@
                   <mat-icon>close</mat-icon>
                 </button>
               }
-              <mat-hint>If you omit a time range, AI Insights uses the current year to date. Say all time for your full history.</mat-hint>
+              <mat-hint>If you omit a time range, AI Insights uses the current year to date. Add location and radius directly in the prompt, or say all time for your full history.</mat-hint>
             </mat-form-field>
 
             <div class="prompt-toolbar">
@@ -433,6 +433,26 @@
                   </div>
                 </section>
               }
+
+              @if (rankedMapEvents().length) {
+                <div class="section-heading result-map-heading">
+                  <div>
+                    <p class="mat-label-medium suggestions-title">Map</p>
+                    <p class="mat-body-small section-supporting-copy">Surfaced events with recorded start positions.</p>
+                  </div>
+                </div>
+
+                <section class="result-map-panel qs-glass-card-panel">
+                  <app-events-map
+                    class="result-events-map"
+                    [events]="rankedMapEvents()"
+                    [user]="user() ?? undefined"
+                    [focusLocation]="rankedMapFocusLocation() ?? undefined"
+                    [searchScope]="rankedMapSearchScope() ?? undefined"
+                    [clusterMarkers]="false">
+                  </app-events-map>
+                </section>
+              }
                   </div>
                 }
               }
@@ -552,6 +572,26 @@
                     </section>
                   }
                 </div>
+              }
+
+              @if (rankedMapEvents().length) {
+                <div class="section-heading result-map-heading">
+                  <div>
+                    <p class="mat-label-medium suggestions-title">Map</p>
+                    <p class="mat-body-small section-supporting-copy">Surfaced events with recorded start positions.</p>
+                  </div>
+                </div>
+
+                <section class="result-map-panel qs-glass-card-panel">
+                  <app-events-map
+                    class="result-events-map"
+                    [events]="rankedMapEvents()"
+                    [user]="user() ?? undefined"
+                    [focusLocation]="rankedMapFocusLocation() ?? undefined"
+                    [searchScope]="rankedMapSearchScope() ?? undefined"
+                    [clusterMarkers]="false">
+                  </app-events-map>
+                </section>
               }
                   </div>
                 }
@@ -1155,6 +1195,26 @@
                       </section>
                     }
                   </div>
+                }
+
+                @if (rankedMapEvents().length) {
+                  <div class="section-heading result-map-heading">
+                    <div>
+                      <p class="mat-label-medium suggestions-title">Map</p>
+                      <p class="mat-body-small section-supporting-copy">Surfaced events with recorded start positions.</p>
+                    </div>
+                  </div>
+
+                  <section class="result-map-panel qs-glass-card-panel">
+                    <app-events-map
+                      class="result-events-map"
+                      [events]="rankedMapEvents()"
+                      [user]="user() ?? undefined"
+                      [focusLocation]="rankedMapFocusLocation() ?? undefined"
+                      [searchScope]="rankedMapSearchScope() ?? undefined"
+                      [clusterMarkers]="false">
+                    </app-events-map>
+                  </section>
                 }
               }
                   </div>

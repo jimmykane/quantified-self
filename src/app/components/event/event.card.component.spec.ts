@@ -77,6 +77,7 @@ describe('EventCardComponent', () => {
         type: 'Running',
         getID: () => id,
         getLaps: () => hasData ? [{ type: 'Manual' }] as any : [],
+        getAllEvents: () => hasData ? [{ timestamp: 90, jumpData: { distance: { getDisplayValue: () => '10', getDisplayUnit: () => 'm' } } }] as any : [],
         intensityZones: hasData ? [{ zone: 1 }] as any : [],
         creator: hasData
             ? { devices: [{ name: 'HRM' }], name: `Device ${id}`, swInfo: '' }
@@ -303,6 +304,10 @@ describe('EventCardComponent', () => {
         expect(component.hasLapsFlag()).toBe(false);
     });
 
+    it('should compute hasJumpsFlag as false when no jumps', () => {
+        expect(component.hasJumpsFlag()).toBe(false);
+    });
+
     it('should compute hasIntensityZonesFlag as false when no zones', () => {
         expect(component.hasIntensityZonesFlag()).toBe(false);
     });
@@ -349,6 +354,7 @@ describe('EventCardComponent', () => {
         const activityWithData = {
             getID: () => 'act2',
             getLaps: () => [{ type: 'Manual' }],
+            getAllEvents: () => [{ timestamp: 75, jumpData: { distance: { getDisplayValue: () => '12', getDisplayUnit: () => 'm' } } }],
             intensityZones: [{ zone: 1 }],
             creator: { devices: [{ name: 'HRM' }], name: 'Device', swInfo: '' },
             hasPositionData: () => true
@@ -379,6 +385,10 @@ describe('EventCardComponent', () => {
 
         it('should compute hasLapsFlag as true when laps exist', () => {
             expect(component.hasLapsFlag()).toBe(true);
+        });
+
+        it('should compute hasJumpsFlag as true when jumps exist', () => {
+            expect(component.hasJumpsFlag()).toBe(true);
         });
 
         it('should compute hasLapsFlag as false when only session end laps exist', () => {

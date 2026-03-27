@@ -383,6 +383,20 @@ export class DataTypeIconComponent {
       case DataJumpScoreMin.type:
       case DataJumpScoreMax.type:
         return 'military_tech';
+      case 'At':
+        return 'schedule';
+      case 'Jump Distance':
+        return 'straighten';
+      case 'Jump Height':
+        return 'height';
+      case 'Jump Hang Time':
+        return 'timer_arrow_up';
+      case 'Jump Speed':
+        return 'speed';
+      case 'Jump Rotations':
+        return 'autorenew';
+      case 'Jump Score':
+        return 'military_tech';
       case 'Distance (Stryd)':
         return 'route';
       case 'GNSS Distance':

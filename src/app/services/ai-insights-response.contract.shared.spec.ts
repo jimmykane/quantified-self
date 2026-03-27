@@ -437,7 +437,7 @@ describe('Ai insights shared response contract', () => {
         dataType: 'Distance',
         valueType: 'not-valid',
         categoryType: ChartDataCategoryTypes.DateType,
-        requestedTimeInterval: null,
+        requestedTimeInterval: TimeIntervals.Monthly,
         activityTypeGroups: [],
         activityTypes: [ActivityTypes.Cycling],
         dateRange: {
@@ -482,6 +482,72 @@ describe('Ai insights shared response contract', () => {
     expect(result.details?.queryKeys).toContain('periodMode');
     expect(result.details?.queryKeys).toContain('requestedDateRanges');
     expect(result.details?.valueTypeType).toBe('string');
+  });
+
+  it('accepts responses with a resolved location filter in the normalized query', () => {
+    const result = validateAiInsightsResponse({
+      status: 'ok',
+      resultKind: 'aggregate',
+      narrative: 'ok',
+      query: {
+        resultKind: 'aggregate',
+        dataType: 'Distance',
+        valueType: ChartDataValueTypes.Total,
+        categoryType: ChartDataCategoryTypes.DateType,
+        requestedTimeInterval: TimeIntervals.Monthly,
+        activityTypeGroups: [],
+        activityTypes: [ActivityTypes.Cycling],
+        dateRange: {
+          kind: 'bounded',
+          startDate: '2026-01-01T00:00:00.000Z',
+          endDate: '2026-03-22T23:59:59.999Z',
+          timezone: 'UTC',
+          source: 'prompt',
+        },
+        chartType: ChartTypes.ColumnsVertical,
+        locationFilter: {
+          requestedText: 'Greece',
+          effectiveText: 'Greece',
+          resolvedLabel: 'Greece',
+          source: 'input',
+          mode: 'bbox',
+          radiusKm: 50,
+          center: {
+            latitudeDegrees: 39.0742,
+            longitudeDegrees: 21.8243,
+          },
+          bbox: {
+            west: 19.3736,
+            south: 34.8021,
+            east: 28.2471,
+            north: 41.7485,
+          },
+        },
+      },
+      aggregation: {
+        dataType: 'Distance',
+        valueType: ChartDataValueTypes.Total,
+        categoryType: ChartDataCategoryTypes.DateType,
+        resolvedTimeInterval: TimeIntervals.Monthly,
+        buckets: [],
+      },
+      summary: {
+        matchedEventCount: 0,
+        overallAggregateValue: null,
+        peakBucket: null,
+        lowestBucket: null,
+        latestBucket: null,
+        activityMix: null,
+        bucketCoverage: null,
+        trend: null,
+      },
+      presentation: {
+        title: 'Total distance',
+        chartType: ChartTypes.ColumnsVertical,
+      },
+    });
+
+    expect(result.ok).toBe(true);
   });
 
   it('accepts topEventIds up to the shared max cap and rejects values above it', () => {

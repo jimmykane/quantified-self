@@ -53,6 +53,9 @@ export class AiInsightsService {
     if (error instanceof AiInsightsError) {
       switch (error.code) {
         case 'INVALID_ARGUMENT':
+          if (this.isLocationResolutionMessage(error.message)) {
+            return error.message;
+          }
           return 'Try rephrasing the request with a metric, activity type, and time range.';
         case 'UNAUTHENTICATED':
           return 'You need to sign in before using AI Insights.';
@@ -63,8 +66,14 @@ export class AiInsightsService {
         case 'RESOURCE_EXHAUSTED':
           return 'AI Insights limit reached for this billing period.';
         case 'UNAVAILABLE':
+          if (this.isLocationInfrastructureMessage(error.message)) {
+            return error.message;
+          }
           return 'AI Insights is temporarily unavailable. Please try again in a moment.';
         default:
+          if (this.isLocationInfrastructureMessage(error.message)) {
+            return error.message;
+          }
           return 'Could not generate AI insights.';
       }
     }
@@ -74,6 +83,14 @@ export class AiInsightsService {
     }
 
     return 'Could not generate AI insights.';
+  }
+
+  private isLocationResolutionMessage(message: string): boolean {
+    return /^Could not resolve the location /i.test(message.trim());
+  }
+
+  private isLocationInfrastructureMessage(message: string): boolean {
+    return /^Location filtering is /i.test(message.trim());
   }
 
   private mapFunctionError(error: unknown): AiInsightsError {

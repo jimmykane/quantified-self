@@ -21,6 +21,7 @@ const hoisted = vi.hoisted(() => {
 
   return {
     currentContext,
+    onCallGenkitOptions: null as Record<string, unknown> | null,
     loggerError: vi.fn(),
     loggerWarn: vi.fn(),
     loggerInfo: vi.fn(),
@@ -40,6 +41,7 @@ const hoisted = vi.hoisted(() => {
     getInsightMetricDefinition: vi.fn(),
     loadUserUnitSettings: vi.fn(),
     persistLatestAiInsightsSnapshot: vi.fn(),
+    resolveLocationFilter: vi.fn(),
   };
 });
 
@@ -52,7 +54,10 @@ vi.mock('firebase-functions/logger', () => ({
 
 vi.mock('firebase-functions/v2/https', () => ({
   onCall: (_options: unknown, handler: unknown) => handler,
-  onCallGenkit: (_options: unknown, flow: unknown) => flow,
+  onCallGenkit: (options: unknown, flow: unknown) => {
+    hoisted.onCallGenkitOptions = options as Record<string, unknown>;
+    return flow;
+  },
   HttpsError: class HttpsError extends Error {
     code: string;
 
@@ -92,6 +97,7 @@ vi.mock('./runtime', () => ({
     summarizeAiInsightResult: (...args: unknown[]) => hoisted.summarizeAiInsightResult(...args),
     loadUserUnitSettings: (...args: unknown[]) => hoisted.loadUserUnitSettings(...args),
     persistLatestAiInsightsSnapshot: (...args: unknown[]) => hoisted.persistLatestAiInsightsSnapshot(...args),
+    resolveLocationFilter: (...args: unknown[]) => hoisted.resolveLocationFilter(...args),
   },
 }));
 
@@ -421,6 +427,7 @@ describe('aiInsights callable', () => {
       source: 'genkit',
     });
     hoisted.persistLatestAiInsightsSnapshot.mockResolvedValue(undefined);
+    hoisted.resolveLocationFilter.mockResolvedValue(null);
   });
 
   it('rejects unauthenticated requests', async () => {
@@ -853,6 +860,94 @@ describe('aiInsights callable', () => {
     );
   });
 
+  it('resolves a location filter before query execution and persists it on the response query', async () => {
+    const resolvedLocationFilter = {
+      requestedText: 'Greece',
+      effectiveText: 'Greece',
+      resolvedLabel: 'Greece',
+      source: 'input' as const,
+      mode: 'bbox' as const,
+      radiusKm: 50,
+      center: {
+        latitudeDegrees: 39.0742,
+        longitudeDegrees: 21.8243,
+      },
+      bbox: {
+        west: 19.3736,
+        south: 34.8021,
+        east: 28.2471,
+        north: 41.7485,
+      },
+    };
+    hoisted.resolveLocationFilter.mockResolvedValue(resolvedLocationFilter);
+
+    const result = await aiInsights({
+      prompt: 'show distance',
+      clientTimezone: 'UTC',
+      locationFilter: {
+        locationText: 'Greece',
+      },
+    } as any);
+
+    expect(hoisted.resolveLocationFilter).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: 'show distance',
+      requestLocationFilter: {
+        locationText: 'Greece',
+      },
+      onAiFallbackAttempt: expect.any(Function),
+    }));
+    expect(hoisted.executeAiInsightsQuery).toHaveBeenCalledWith('user-1', {
+      ...normalizedQuery,
+      locationFilter: resolvedLocationFilter,
+    }, 'show distance');
+    expect(result).toMatchObject({
+      status: 'ok',
+      query: {
+        ...normalizedQuery,
+        locationFilter: resolvedLocationFilter,
+      },
+    });
+  });
+
+  it('treats AI location fallback as a quota-consuming AI attempt', async () => {
+    const resolvedLocationFilter = {
+      requestedText: 'Grece',
+      effectiveText: 'Greece',
+      resolvedLabel: 'Greece',
+      source: 'ai_fallback' as const,
+      mode: 'bbox' as const,
+      radiusKm: 50,
+      center: {
+        latitudeDegrees: 39.0742,
+        longitudeDegrees: 21.8243,
+      },
+      bbox: {
+        west: 19.3736,
+        south: 34.8021,
+        east: 28.2471,
+        north: 41.7485,
+      },
+    };
+    hoisted.resolveLocationFilter.mockImplementation(async ({ onAiFallbackAttempt }: { onAiFallbackAttempt?: () => Promise<void> }) => {
+      await onAiFallbackAttempt?.();
+      return resolvedLocationFilter;
+    });
+
+    await aiInsights({
+      prompt: 'show distance',
+      clientTimezone: 'UTC',
+      locationFilter: {
+        locationText: 'Grece',
+      },
+    } as any);
+
+    expect(hoisted.finalizeAiInsightsQuotaReservation).toHaveBeenCalledTimes(1);
+    expect(hoisted.executeAiInsightsQuery).toHaveBeenCalledWith('user-1', {
+      ...normalizedQuery,
+      locationFilter: resolvedLocationFilter,
+    }, 'show distance');
+  });
+
   it('includes deterministic period deltas in compare-mode aggregate responses', async () => {
     const compareQuery = {
       ...normalizedQuery,
@@ -942,6 +1037,17 @@ describe('aiInsights callable', () => {
 
   it('logs prompt metadata without storing raw prompt text', async () => {
     const piiPrompt = 'what was my pace when I ran the day I had my knee surgery in ioannina';
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'ok',
+      metricKey: 'distance',
+      query: normalizedQuery,
+      routing: {
+        routeId: 'single_metric',
+        resultKind: 'aggregate',
+        source: 'deterministic',
+        reason: 'Default single-metric route selected.',
+      },
+    });
 
     await aiInsights({
       prompt: piiPrompt,
@@ -960,6 +1066,13 @@ describe('aiInsights callable', () => {
     expect(queryNormalizationPayload.promptPreview).toBe(piiPrompt.slice(0, 60));
     expect(queryNormalizationPayload.effectivePromptLength).toBe(piiPrompt.length);
     expect(queryNormalizationPayload.effectivePromptPreview).toBe(piiPrompt.slice(0, 60));
+    expect(queryNormalizationPayload.routing).toEqual({
+      routeId: 'single_metric',
+      resultKind: 'aggregate',
+      source: 'deterministic',
+      reason: 'Default single-metric route selected.',
+      fallbackReasonCode: null,
+    });
   });
 
   it('returns aggregate min/max responses with supplemental event ranking ids', async () => {
