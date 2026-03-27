@@ -86,6 +86,7 @@ describe('HelpPageComponent', () => {
     expect(sectionCopy?.innerHTML).toContain('Why do I get the same answer for the same prompt?');
     expect(sectionCopy?.innerHTML).toContain('mostly deterministic');
     expect(sectionCopy?.innerHTML).toContain('new activities');
+    expect(sectionCopy?.innerHTML).toContain('deterministic period deltas with likely contributor series');
   });
 
   it('should render internal links without target blank and external links with target blank', () => {

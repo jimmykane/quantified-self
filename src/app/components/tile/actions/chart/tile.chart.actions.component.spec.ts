@@ -111,4 +111,28 @@ describe('TileChartActionsComponent', () => {
         expect(component.chartTypeOptions.some(option => /^bri.*dev/i.test(option))).toBe(false);
         expect(component.chartTypeOptions.some(option => /^spiral$/i.test(option))).toBe(false);
     });
+
+    it('should expose move boundaries for the first tile', () => {
+        expect(component.canMoveTileBackward()).toBe(false);
+        expect(component.canMoveTileForward()).toBe(true);
+    });
+
+    it('should move a tile forward and persist the new order', async () => {
+        await component.moveTileForward();
+
+        expect(analyticsMock.logEvent).toHaveBeenCalledWith('dashboard_tile_action', { method: 'moveTileForward' });
+        expect(userMock.settings.dashboardSettings.tiles.map((tile: any) => tile.order)).toEqual([0, 1]);
+        expect(userMock.settings.dashboardSettings.tiles[0].chartType).toBe(ChartTypes.Line);
+        expect(userMock.settings.dashboardSettings.tiles[1].chartType).toBe(ChartTypes.Bar);
+        expect(userMock.updateUserProperties).toHaveBeenCalled();
+    });
+
+    it('should not persist when trying to move the first tile backward', async () => {
+        await component.moveTileBackward();
+
+        expect(userMock.settings.dashboardSettings.tiles.map((tile: any) => tile.order)).toEqual([0, 1]);
+        expect(userMock.settings.dashboardSettings.tiles[0].chartType).toBe(ChartTypes.Bar);
+        expect(userMock.settings.dashboardSettings.tiles[1].chartType).toBe(ChartTypes.Line);
+        expect(userMock.updateUserProperties).not.toHaveBeenCalled();
+    });
 });

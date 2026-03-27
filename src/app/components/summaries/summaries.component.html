@@ -1,24 +1,41 @@
 @if (tiles.length) {
 <section class="pie">
-  <mat-grid-list [cols]="numberOfCols" [rowHeight]="rowHeight" [gutterSize]="'1em'">
+  <div
+    class="dashboard-grid"
+    cdkDropList
+    cdkDropListOrientation="mixed"
+    [cdkDropListData]="tiles"
+    [cdkDropListDisabled]="!desktopTileDragEnabled"
+    [class.desktop-tile-drop-list]="desktopTileDragEnabled"
+    [style.--dashboard-cols]="numberOfCols"
+    [style.--dashboard-row-height]="rowHeight"
+    [style.--dashboard-grid-gap]="'1em'"
+    (cdkDropListSorted)="onTilesSort($event)"
+    (cdkDropListDropped)="onTilesDrop($event)">
     @for (tile of tiles; track trackByTile($index, tile)) {
-    <mat-grid-tile [colspan]="tile.size.columns > numberOfCols ? numberOfCols : tile.size.columns"
-      [rowspan]="tile.size.rows">
-      <!--      [rowspan]="(tile.size.rows >= tiles.length/numberOfCols) ? tiles.length/numberOfCols : tile.size.rows">-->
+    <div
+      class="dashboard-grid-tile"
+      cdkDrag
+      [cdkDragPreviewContainer]="'parent'"
+      [cdkDragDisabled]="!desktopTileDragEnabled"
+      [class.desktop-draggable-tile]="desktopTileDragEnabled"
+      [style.grid-column]="'span ' + (tile.size.columns > numberOfCols ? numberOfCols : tile.size.columns)"
+      [style.grid-row]="'span ' + tile.size.rows">
       @if (tile.type === tileTypes.Chart) {
       <app-tile-chart class="qs-glass-card-panel" [user]="user" [type]="tile.type" [chartType]="getChartTile(tile).chartType"
         [isLoading]="isLoading" [data]="getChartTile(tile).data" [showActions]="showActions" [darkTheme]="darkTheme"
         [dataType]="getChartTile(tile).dataType" [dataValueType]="getChartTile(tile).dataValueType"
         [dataCategoryType]="getChartTile(tile).dataCategoryType" [dataTimeInterval]="getChartTile(tile).timeInterval"
-        [size]="tile.size" [order]="tile.order"></app-tile-chart>
+        [size]="tile.size" [order]="tile.order" [enableDesktopDrag]="desktopTileDragEnabled"></app-tile-chart>
       }
       @if (tile.type === tileTypes.Map) {
       <app-tile-map class="qs-glass-card-panel" [user]="user" [type]="tile.type" [isLoading]="isLoading"
         [showActions]="showActions" [events]="getMapTile(tile).events" [mapStyle]="getMapTile(tile).mapStyle || 'default'"
-        [clusterMarkers]="getMapTile(tile).clusterMarkers" [size]="tile.size" [order]="tile.order"></app-tile-map>
+        [clusterMarkers]="getMapTile(tile).clusterMarkers" [size]="tile.size" [order]="tile.order"
+        [enableDesktopDrag]="desktopTileDragEnabled"></app-tile-map>
       }
-    </mat-grid-tile>
+    </div>
     }
-  </mat-grid-list>
+  </div>
 </section>
 }

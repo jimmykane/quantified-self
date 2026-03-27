@@ -9,4 +9,21 @@ section{
   right: 2px;
   top: 8px;
   z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.actions app-tile-chart-actions,
+.actions app-tile-map-actions {
+  display: inline-flex;
+  align-items: center;
+}
+
+.drag-handle-indicator {
+  cursor: grab;
+}
+
+.drag-handle-indicator:active {
+  cursor: grabbing;
 }

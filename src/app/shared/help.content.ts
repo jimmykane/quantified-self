@@ -96,6 +96,13 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 ## Core dashboard features
 
+### Reorder dashboard tiles
+
+- On desktop, drag dashboard tiles from the tile action area to reorder them.
+- On mobile and touch devices, open any tile menu with the three-dot button.
+- Use **Move earlier** or **Move later** when drag-and-drop is unavailable.
+- Tile order is saved automatically to your account.
+
 ### Merge events
 
 - In the dashboard event table, select at least two events and use the merge action.
@@ -150,6 +157,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 ## Supported result modes
 
 - **Aggregate**: narrative + summary cards + chart, with optional ranked event links.
+- **Compare delta explanation**: compare-mode aggregate results include deterministic period deltas with likely contributor series, and deterministic event evidence remains available in the expandable evidence panel.
 - **Event lookup**: best matching event plus top-ranked matching events.
 - **Latest event**: most recent matching event in scope (single primary event card).
 - **Multi-metric aggregate**: combined chart for multiple metrics with merged summary cards.

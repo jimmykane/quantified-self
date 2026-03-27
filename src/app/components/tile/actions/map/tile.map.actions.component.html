@@ -101,6 +101,16 @@
         </span>
       </mat-slide-toggle>
     </section>
+    <section mat-menu-item class="tile-move-actions">
+      <button mat-button (click)="moveTileBackward()" [disabled]="!canMoveTileBackward()">
+        <mat-icon>arrow_back</mat-icon>
+        <span>Move earlier</span>
+      </button>
+      <button mat-button (click)="moveTileForward()" [disabled]="!canMoveTileForward()">
+        <span>Move later</span>
+        <mat-icon iconPositionEnd>arrow_forward</mat-icon>
+      </button>
+    </section>
 
 
     @if (user.settings.dashboardSettings.tiles.length > 1) {

@@ -19,6 +19,7 @@ import { TileActionsFooterComponent } from '../components/tile/actions/footer/ti
 import { EventTableActionsComponent } from '../components/event-table/actions/event.table.actions.component';
 import { BenchmarkModule } from './benchmark.module';
 import { AppChartsModule } from './app-charts.module';
+import { DragDropModule } from '@angular/cdk/drag-drop';
 
 @NgModule({
     imports: [
@@ -27,6 +28,7 @@ import { AppChartsModule } from './app-charts.module';
         MaterialModule,
         AppChartsModule,
         BenchmarkModule,
+        DragDropModule,
         DashboardRoutingModule,
     ],
     exports: [],

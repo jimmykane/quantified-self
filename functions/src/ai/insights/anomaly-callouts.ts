@@ -1,4 +1,7 @@
-import { ChartDataCategoryTypes } from '@sports-alliance/sports-lib';
+import {
+  ChartDataCategoryTypes,
+  TimeIntervals,
+} from '@sports-alliance/sports-lib';
 import type {
   AiInsightAnomalyKind,
   AiInsightConfidenceTier,
@@ -110,6 +113,87 @@ function formatNumber(value: number): string {
   return value.toFixed(2);
 }
 
+function resolveDateFormattingOptions(query: NormalizedInsightQuery): Intl.DateTimeFormatOptions {
+  switch (query.requestedTimeInterval) {
+    case TimeIntervals.Yearly:
+      return {
+        year: 'numeric',
+      };
+    case TimeIntervals.Monthly:
+    case TimeIntervals.Quarterly:
+    case TimeIntervals.Semesterly:
+      return {
+        month: 'short',
+        year: 'numeric',
+      };
+    case TimeIntervals.Hourly:
+      return {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      };
+    case TimeIntervals.Daily:
+    case TimeIntervals.Weekly:
+    case TimeIntervals.BiWeekly:
+    case TimeIntervals.Auto:
+    default:
+      return {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      };
+  }
+}
+
+function resolveTimestampBucketKey(bucketKey: string | number): number | null {
+  if (typeof bucketKey === 'number' && Number.isFinite(bucketKey)) {
+    return bucketKey;
+  }
+
+  if (typeof bucketKey !== 'string') {
+    return null;
+  }
+
+  const trimmedBucketKey = bucketKey.trim();
+  if (!/^\d{11,}$/.test(trimmedBucketKey)) {
+    return null;
+  }
+
+  const timestamp = Number(trimmedBucketKey);
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function formatBucketLabel(
+  bucket: SummaryAggregationBucketInput,
+  query: NormalizedInsightQuery,
+): string {
+  const timestamp = typeof bucket.time === 'number' && Number.isFinite(bucket.time)
+    ? bucket.time
+    : resolveTimestampBucketKey(bucket.bucketKey);
+  if (timestamp === null) {
+    return `${bucket.bucketKey}`;
+  }
+
+  const bucketDate = new Date(timestamp);
+  if (!Number.isFinite(bucketDate.getTime())) {
+    return `${bucket.bucketKey}`;
+  }
+
+  const dateFormattingOptions = resolveDateFormattingOptions(query);
+  const locale = 'en-US';
+  try {
+    return new Intl.DateTimeFormat(locale, {
+      ...dateFormattingOptions,
+      // Bucket timestamps are canonical period boundaries; keep labels stable in UTC.
+      timeZone: 'UTC',
+    }).format(bucketDate);
+  } catch {
+    return new Intl.DateTimeFormat(locale, dateFormattingOptions).format(bucketDate);
+  }
+}
+
 function resolveConfidenceTier(score: number, highThreshold: number): AiInsightConfidenceTier {
   return score >= highThreshold ? 'high' : 'medium';
 }
@@ -176,17 +260,18 @@ function buildSpikeDropCallouts(
 
     const kind: AiInsightAnomalyKind = deltaFromMedian >= 0 ? 'spike' : 'drop';
     const statementId = `anomaly:${kind}:${metricSlug}:${bucket.bucketKey}`;
+    const bucketLabel = formatBucketLabel(bucket, query);
     callouts.push({
       id: `callout:${kind}:${metricSlug}:${bucket.bucketKey}`,
       statementId,
       kind,
-      snippet: `Unusual ${kind} at ${bucket.bucketKey}: ${metricLabel} was ${formatNumber(bucket.aggregateValue)} (baseline ${formatNumber(distributionMedian)}).`,
+      snippet: `Unusual ${kind} at ${bucketLabel}: ${metricLabel} was ${formatNumber(bucket.aggregateValue)} (baseline ${formatNumber(distributionMedian)}).`,
       confidenceTier: resolveConfidenceTier(robustZScore, AI_INSIGHTS_ANOMALY_SPIKE_DROP_HIGH_Z_SCORE),
       score: Number((robustZScore * (1 + relativeDelta)).toFixed(6)),
       evidenceRefs: [
         {
           kind: 'bucket',
-          label: `Bucket ${bucket.bucketKey}`,
+          label: `Bucket ${bucketLabel}`,
           bucketKey: bucket.bucketKey,
         },
       ],
@@ -268,15 +353,17 @@ function buildActivityMixShiftCallouts(
       continue;
     }
 
+    const previousBucketLabel = formatBucketLabel(previousBucket, query);
+    const currentBucketLabel = formatBucketLabel(currentBucket, query);
     const evidenceRefs = [
       {
         kind: 'bucket' as const,
-        label: `From ${previousBucket.bucketKey}`,
+        label: `From ${previousBucketLabel}`,
         bucketKey: previousBucket.bucketKey,
       },
       {
         kind: 'bucket' as const,
-        label: `To ${currentBucket.bucketKey}`,
+        label: `To ${currentBucketLabel}`,
         bucketKey: currentBucket.bucketKey,
       },
       ...deltas.slice(0, AI_INSIGHTS_ANOMALY_MIX_SHIFT_MAX_SERIES_EVIDENCE).map((entry) => ({
@@ -290,7 +377,7 @@ function buildActivityMixShiftCallouts(
       id: `callout:activity_mix_shift:${metricSlug}:${previousBucket.bucketKey}:${currentBucket.bucketKey}`,
       statementId: `anomaly:activity_mix_shift:${metricSlug}:${previousBucket.bucketKey}:${currentBucket.bucketKey}`,
       kind: 'activity_mix_shift',
-      snippet: `Activity mix shifted from ${previousBucket.bucketKey} to ${currentBucket.bucketKey} (${(totalVariationDistance * 100).toFixed(1)}% distribution change).`,
+      snippet: `Activity mix shifted from ${previousBucketLabel} to ${currentBucketLabel} (${(totalVariationDistance * 100).toFixed(1)}% distribution change).`,
       confidenceTier: resolveConfidenceTier(totalVariationDistance, AI_INSIGHTS_ANOMALY_MIX_SHIFT_HIGH_TVD),
       score: Number((totalVariationDistance * 10).toFixed(6)),
       evidenceRefs,

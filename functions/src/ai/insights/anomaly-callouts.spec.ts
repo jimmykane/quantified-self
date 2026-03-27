@@ -99,6 +99,62 @@ describe('buildSummaryAnomalyCallouts', () => {
     expect(mixShift?.confidenceTier).toBe('medium');
   });
 
+  it('formats timestamp bucket keys into readable dates in anomaly snippets and evidence', () => {
+    const callouts = buildSummaryAnomalyCallouts({
+      query: aggregateDateQuery,
+      matchedEventCount: 30,
+      buckets: [
+        { bucketKey: Date.UTC(2026, 0, 1), aggregateValue: 100, totalCount: 10, seriesCounts: { [ActivityTypes.Running]: 8, [ActivityTypes.Cycling]: 2 } },
+        { bucketKey: Date.UTC(2026, 1, 1), aggregateValue: 99, totalCount: 10, seriesCounts: { [ActivityTypes.Running]: 8, [ActivityTypes.Cycling]: 2 } },
+        { bucketKey: Date.UTC(2026, 2, 1), aggregateValue: 100, totalCount: 10, seriesCounts: { [ActivityTypes.Running]: 8, [ActivityTypes.Cycling]: 2 } },
+        { bucketKey: Date.UTC(2026, 3, 1), aggregateValue: 101, totalCount: 10, seriesCounts: { [ActivityTypes.Running]: 8, [ActivityTypes.Cycling]: 2 } },
+        { bucketKey: Date.UTC(2026, 4, 1), aggregateValue: 100, totalCount: 10, seriesCounts: { [ActivityTypes.Running]: 8, [ActivityTypes.Cycling]: 2 } },
+        { bucketKey: Date.UTC(2026, 5, 1), aggregateValue: 102, totalCount: 10, seriesCounts: { [ActivityTypes.Running]: 4, [ActivityTypes.Cycling]: 6 } },
+      ],
+    });
+
+    const mixShift = callouts?.find(callout => callout.kind === 'activity_mix_shift');
+    expect(mixShift).toBeTruthy();
+    expect(mixShift?.snippet).toContain('May 2026');
+    expect(mixShift?.snippet).toContain('Jun 2026');
+    expect(mixShift?.snippet).not.toMatch(/\d{11,}/);
+    expect(mixShift?.evidenceRefs.find(evidenceRef => evidenceRef.kind === 'bucket' && evidenceRef.label.startsWith('From '))?.label)
+      .toBe('From May 2026');
+    expect(mixShift?.evidenceRefs.find(evidenceRef => evidenceRef.kind === 'bucket' && evidenceRef.label.startsWith('To '))?.label)
+      .toBe('To Jun 2026');
+  });
+
+  it('formats timestamp bucket labels using UTC boundaries regardless of query timezone', () => {
+    const callouts = buildSummaryAnomalyCallouts({
+      query: {
+        ...aggregateDateQuery,
+        dateRange: {
+          ...aggregateDateQuery.dateRange,
+          timezone: 'America/Los_Angeles',
+        },
+      },
+      matchedEventCount: 30,
+      buckets: [
+        { bucketKey: Date.UTC(2026, 0, 1), aggregateValue: 100, totalCount: 10, seriesCounts: { [ActivityTypes.Running]: 8, [ActivityTypes.Cycling]: 2 } },
+        { bucketKey: Date.UTC(2026, 1, 1), aggregateValue: 99, totalCount: 10, seriesCounts: { [ActivityTypes.Running]: 8, [ActivityTypes.Cycling]: 2 } },
+        { bucketKey: Date.UTC(2026, 2, 1), aggregateValue: 100, totalCount: 10, seriesCounts: { [ActivityTypes.Running]: 8, [ActivityTypes.Cycling]: 2 } },
+        { bucketKey: Date.UTC(2026, 3, 1), aggregateValue: 101, totalCount: 10, seriesCounts: { [ActivityTypes.Running]: 8, [ActivityTypes.Cycling]: 2 } },
+        { bucketKey: Date.UTC(2026, 4, 1), aggregateValue: 100, totalCount: 10, seriesCounts: { [ActivityTypes.Running]: 8, [ActivityTypes.Cycling]: 2 } },
+        { bucketKey: Date.UTC(2026, 5, 1), aggregateValue: 102, totalCount: 10, seriesCounts: { [ActivityTypes.Running]: 4, [ActivityTypes.Cycling]: 6 } },
+      ],
+    });
+
+    const mixShift = callouts?.find(callout => callout.kind === 'activity_mix_shift');
+    expect(mixShift).toBeTruthy();
+    expect(mixShift?.snippet).toContain('May 2026');
+    expect(mixShift?.snippet).toContain('Jun 2026');
+    expect(mixShift?.snippet).not.toContain('Apr 2026');
+    expect(mixShift?.evidenceRefs.find(evidenceRef => evidenceRef.kind === 'bucket' && evidenceRef.label.startsWith('From '))?.label)
+      .toBe('From May 2026');
+    expect(mixShift?.evidenceRefs.find(evidenceRef => evidenceRef.kind === 'bucket' && evidenceRef.label.startsWith('To '))?.label)
+      .toBe('To Jun 2026');
+  });
+
   it('suppresses callouts for low-signal ranges', () => {
     const callouts = buildSummaryAnomalyCallouts({
       query: aggregateDateQuery,

@@ -14,6 +14,7 @@ import { MapStyleName } from '../../../services/map/map-style.types';
 export class TileMapComponent extends TileAbstractDirective {
   @Input() mapStyle: MapStyleName = 'default';
   @Input() showActions!: boolean;
+  @Input() enableDesktopDrag = false;
   @Input() clusterMarkers!: boolean;
   @Input() events: EventInterface[] = [];
 }

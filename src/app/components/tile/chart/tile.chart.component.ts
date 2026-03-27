@@ -21,6 +21,7 @@ export class TileChartComponent extends TileAbstractDirective {
   @Input() dataCategoryType: ChartDataCategoryTypes;
   @Input() darkTheme = false;
   @Input() showActions: boolean;
+  @Input() enableDesktopDrag = false;
   @Input() dataTimeInterval: TimeIntervals;
   @Input() data: any;
 
