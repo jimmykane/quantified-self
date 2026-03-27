@@ -1044,6 +1044,17 @@ describe('aiInsights callable', () => {
 
   it('logs prompt metadata without storing raw prompt text', async () => {
     const piiPrompt = 'what was my pace when I ran the day I had my knee surgery in ioannina';
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'ok',
+      metricKey: 'distance',
+      query: normalizedQuery,
+      routing: {
+        routeId: 'single_metric',
+        resultKind: 'aggregate',
+        source: 'deterministic',
+        reason: 'Default single-metric route selected.',
+      },
+    });
 
     await aiInsights({
       prompt: piiPrompt,
@@ -1062,6 +1073,13 @@ describe('aiInsights callable', () => {
     expect(queryNormalizationPayload.promptPreview).toBe(piiPrompt.slice(0, 60));
     expect(queryNormalizationPayload.effectivePromptLength).toBe(piiPrompt.length);
     expect(queryNormalizationPayload.effectivePromptPreview).toBe(piiPrompt.slice(0, 60));
+    expect(queryNormalizationPayload.routing).toEqual({
+      routeId: 'single_metric',
+      resultKind: 'aggregate',
+      source: 'deterministic',
+      reason: 'Default single-metric route selected.',
+      fallbackReasonCode: null,
+    });
   });
 
   it('returns aggregate min/max responses with supplemental event ranking ids', async () => {

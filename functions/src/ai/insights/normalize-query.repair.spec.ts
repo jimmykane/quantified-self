@@ -17,6 +17,12 @@ describe('repairUnsupportedInsightQuery', () => {
         metric: 'max heart rate',
         aggregation: 'maximum',
         category: 'date',
+        routing: {
+          routeId: 'single_metric',
+          resultKind: null,
+          source: 'ai_repair',
+          reason: 'Recovered as single-metric route.',
+        },
       }),
     });
 
@@ -49,6 +55,12 @@ describe('repairUnsupportedInsightQuery', () => {
         source: 'prompt',
       },
     ]);
+    expect(repaired.result.routing).toEqual({
+      routeId: 'single_metric',
+      resultKind: 'aggregate',
+      source: 'ai_repair',
+      reason: 'Recovered as single-metric route.',
+    });
   });
 
   it('falls back to the deterministic unsupported result when AI repair fails', async () => {
@@ -84,6 +96,12 @@ describe('repairUnsupportedInsightQuery', () => {
         metric: 'max heart rate',
         aggregation: 'maximum',
         category: 'date',
+        routing: {
+          routeId: 'single_metric',
+          resultKind: null,
+          source: 'ai_repair',
+          reason: 'Recovered as single-metric route.',
+        },
       }),
     });
 
@@ -103,5 +121,69 @@ describe('repairUnsupportedInsightQuery', () => {
     }
 
     expect(repaired.result.query.chartType).toBe(ChartTypes.ColumnsVertical);
+  });
+
+  it('falls back to deterministic unsupported when AI repair returns an invalid route contract', async () => {
+    const { repairUnsupportedInsightQuery } = createRepairInsightQuery({
+      repairIntent: async () => ({
+        status: 'supported',
+        metric: 'max heart rate',
+        aggregation: 'maximum',
+        category: 'date',
+        routing: {
+          routeId: 'power_curve',
+          resultKind: 'aggregate',
+          source: 'ai_repair',
+          reason: 'Invalid synthetic route contract for test.',
+        },
+      }),
+    });
+
+    const deterministicUnsupported = {
+      status: 'unsupported',
+      reasonCode: 'unsupported_metric',
+      suggestedPrompts: ['show my max heart rate by sport in 2024'],
+    } as const;
+
+    const repaired = await repairUnsupportedInsightQuery({
+      prompt: 'which sports had my max cardio in 2024 and 2025',
+      clientTimezone: 'UTC',
+    }, deterministicUnsupported);
+
+    expect(repaired).toEqual({
+      source: 'none',
+      result: deterministicUnsupported,
+    });
+  });
+
+  it('falls back to deterministic unsupported when AI repair returns a non-null result kind for null-kind route ids', async () => {
+    const { repairUnsupportedInsightQuery } = createRepairInsightQuery({
+      repairIntent: async () => ({
+        status: 'unsupported',
+        unsupportedReasonCode: 'unsupported_metric',
+        routing: {
+          routeId: 'unsupported_capability',
+          resultKind: 'aggregate',
+          source: 'ai_repair',
+          reason: 'Invalid null-kind route contract for test.',
+        },
+      }),
+    });
+
+    const deterministicUnsupported = {
+      status: 'unsupported',
+      reasonCode: 'unsupported_metric',
+      suggestedPrompts: ['show my max heart rate by sport in 2024'],
+    } as const;
+
+    const repaired = await repairUnsupportedInsightQuery({
+      prompt: 'which sports had my max cardio in 2024 and 2025',
+      clientTimezone: 'UTC',
+    }, deterministicUnsupported);
+
+    expect(repaired).toEqual({
+      source: 'none',
+      result: deterministicUnsupported,
+    });
   });
 });

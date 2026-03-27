@@ -49,6 +49,10 @@ import {
   buildMultiMetricInsightQuery,
   buildPowerCurveInsightQuery,
 } from './normalize-query.result-kind-query-builders';
+import {
+  resolveNormalizeQueryRouteDecision,
+  type NormalizeQueryRoutingMetadata,
+} from './normalize-query.result-kind-router';
 import { AiInsightsRequestSchema, NormalizedInsightQuerySchema } from './schemas';
 
 type ModelAggregationCode = 'total' | 'average' | 'minimum' | 'maximum';
@@ -69,12 +73,14 @@ interface NormalizeInsightQuerySupportedResult {
   status: 'ok';
   metricKey?: InsightMetricKey;
   query: NormalizedInsightQuery;
+  routing?: NormalizeQueryRoutingMetadata;
 }
 
 interface NormalizeInsightQueryUnsupportedResult {
   status: 'unsupported';
   reasonCode: AiInsightsUnsupportedReasonCode;
   suggestedPrompts: string[];
+  routing?: NormalizeQueryRoutingMetadata;
 }
 
 export type NormalizeInsightQueryResult =
@@ -370,11 +376,43 @@ const defaultNormalizeQueryDependencies: NormalizeQueryDependencies = {
 function buildUnsupportedResult(
   reasonCode: AiInsightsUnsupportedReasonCode,
   prompt: string,
+  routing?: NormalizeQueryRoutingMetadata,
 ): NormalizeInsightQueryUnsupportedResult {
   return {
     status: 'unsupported',
     reasonCode,
     suggestedPrompts: getSuggestedInsightPrompts(3, prompt),
+    ...(routing
+      ? {
+        routing: {
+          ...routing,
+          fallbackReasonCode: reasonCode,
+        },
+      }
+      : {}),
+  };
+}
+
+function attachRoutingToResult(
+  result: NormalizeInsightQueryResult,
+  routing: NormalizeQueryRoutingMetadata,
+): NormalizeInsightQueryResult {
+  if (result.status === 'ok') {
+    return {
+      ...result,
+      routing: {
+        ...routing,
+        resultKind: result.query.resultKind,
+      },
+    };
+  }
+
+  return {
+    ...result,
+    routing: {
+      ...routing,
+      fallbackReasonCode: result.reasonCode,
+    },
   };
 }
 
@@ -2439,8 +2477,16 @@ export function createNormalizeQuery(
       return buildUnsupportedResult('invalid_prompt', prompt);
     }
 
-    if (detectUnsupportedCapability(prompt)) {
-      return buildUnsupportedResult('unsupported_capability', prompt);
+    const hasUnsupportedCapability = detectUnsupportedCapability(prompt);
+    if (hasUnsupportedCapability) {
+      const routeDecision = resolveNormalizeQueryRouteDecision({
+        hasUnsupportedCapability: true,
+        hasPowerCurveIntent: false,
+        hasDigestIntent: false,
+        hasMultiMetricIntent: false,
+        hasLatestEventIntent: false,
+      });
+      return buildUnsupportedResult('unsupported_capability', prompt, routeDecision);
     }
 
     const promptContext = buildNormalizeQueryPromptContext(prompt, {
@@ -2452,7 +2498,21 @@ export function createNormalizeQuery(
       promptRequestedTimeInterval,
     } = promptContext;
     const promptDateRangeIntent = promptDateSelection.effectiveDateRangeIntent;
-    if (promptImpliesPowerCurve(prompt)) {
+    const digestMode = resolveDigestMode(prompt);
+    const multiMetricIntent = resolveMultiMetricIntent(prompt, promptContext);
+    const routeDecision = resolveNormalizeQueryRouteDecision({
+      hasUnsupportedCapability: false,
+      hasPowerCurveIntent: promptImpliesPowerCurve(prompt),
+      hasDigestIntent: digestMode !== null,
+      hasMultiMetricIntent: multiMetricIntent !== null,
+      hasLatestEventIntent: promptImpliesLatestEventLookup(prompt),
+    });
+
+    if (routeDecision.routeId === 'unsupported_capability') {
+      return buildUnsupportedResult('unsupported_capability', prompt, routeDecision);
+    }
+
+    if (routeDecision.routeId === 'power_curve') {
       const promptWithoutActivityExclusions = stripPromptActivityExclusionClauses(prompt);
       const promptExcludedActivityTypeGroups = extractPromptActivityExclusionClauses(prompt)
         .flatMap((clause) => resolvePromptActivityTypeGroups(clause));
@@ -2542,20 +2602,27 @@ export function createNormalizeQuery(
           chartType: ChartTypes.LinesVertical,
           defaultedToCycling,
         }),
+        routing: {
+          ...routeDecision,
+          resultKind: 'power_curve',
+        },
       };
     }
 
-    const digestMode = resolveDigestMode(prompt);
-    if (digestMode) {
+    if (routeDecision.routeId === 'digest') {
+      if (!digestMode) {
+        return buildUnsupportedResult('invalid_prompt', prompt, routeDecision);
+      }
+
       const digestMetricSelections = resolveDigestMetricSelections();
       if (!digestMetricSelections) {
-        return buildUnsupportedResult('unsupported_metric', prompt);
+        return buildUnsupportedResult('unsupported_metric', prompt, routeDecision);
       }
 
       const activityTypes = normalizeActivityTypes(undefined);
       const activityTypeGroups = normalizeActivityTypeGroups(undefined);
       if (!activityTypes || !activityTypeGroups) {
-        return buildUnsupportedResult('invalid_prompt', prompt);
+        return buildUnsupportedResult('invalid_prompt', prompt, routeDecision);
       }
 
       const promptWithoutActivityExclusions = stripPromptActivityExclusionClauses(prompt);
@@ -2620,19 +2687,26 @@ export function createNormalizeQuery(
           metricSelections: digestMetricSelections,
           digestMode,
         }),
+        routing: {
+          ...routeDecision,
+          resultKind: 'multi_metric_aggregate',
+        },
       };
     }
 
-    const multiMetricIntent = resolveMultiMetricIntent(prompt, promptContext);
-    if (multiMetricIntent && 'status' in multiMetricIntent) {
-      return multiMetricIntent;
-    }
+    if (routeDecision.routeId === 'multi_metric') {
+      if (!multiMetricIntent) {
+        return buildUnsupportedResult('invalid_prompt', prompt, routeDecision);
+      }
 
-    if (multiMetricIntent) {
+      if ('status' in multiMetricIntent) {
+        return attachRoutingToResult(multiMetricIntent, routeDecision);
+      }
+
       const activityTypes = normalizeActivityTypes(undefined);
       const activityTypeGroups = normalizeActivityTypeGroups(undefined);
       if (!activityTypes || !activityTypeGroups) {
-        return buildUnsupportedResult('invalid_prompt', prompt);
+        return buildUnsupportedResult('invalid_prompt', prompt, routeDecision);
       }
 
       const promptWithoutActivityExclusions = stripPromptActivityExclusionClauses(prompt);
@@ -2704,14 +2778,25 @@ export function createNormalizeQuery(
           metricSelections: multiMetricIntent.metricSelections,
           digestMode: multiMetricIntent.digestMode,
         }),
+        routing: {
+          ...routeDecision,
+          resultKind: 'multi_metric_aggregate',
+        },
       };
     }
 
-    const intent = await resolvedDependencies.generateIntent({
-      ...input,
-      prompt,
-    });
-    return resolveNormalizedInsightQueryFromIntent(input, promptContext, intent, resolvedDependencies);
+    if (routeDecision.routeId === 'latest_event' || routeDecision.routeId === 'single_metric') {
+      const intent = await resolvedDependencies.generateIntent({
+        ...input,
+        prompt,
+      });
+      return attachRoutingToResult(
+        resolveNormalizedInsightQueryFromIntent(input, promptContext, intent, resolvedDependencies),
+        routeDecision,
+      );
+    }
+
+    return buildUnsupportedResult('invalid_prompt', prompt, routeDecision);
   };
 
   const normalizeInsightQueryFlow = async (

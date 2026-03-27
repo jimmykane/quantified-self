@@ -103,7 +103,7 @@ describe('normalizeInsightQuery', () => {
       clientTimezone: 'UTC',
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       status: 'ok',
       metricKey: 'cadence',
       query: {
@@ -122,6 +122,11 @@ describe('normalizeInsightQuery', () => {
           source: 'prompt',
         },
         chartType: ChartTypes.LinesVertical,
+      },
+      routing: {
+        routeId: 'single_metric',
+        source: 'deterministic',
+        resultKind: 'aggregate',
       },
     });
   });
@@ -1552,10 +1557,14 @@ describe('normalizeInsightQuery', () => {
       clientTimezone: 'UTC',
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       status: 'unsupported',
       reasonCode: expect.any(String),
       suggestedPrompts: expect.any(Array),
+      routing: {
+        routeId: 'single_metric',
+        source: 'deterministic',
+      },
     });
   });
 
@@ -1579,10 +1588,14 @@ describe('normalizeInsightQuery', () => {
       prompt: 'When did I have my highest jump?',
       clientTimezone: 'UTC',
     });
-    expect(highestResult).toEqual({
+    expect(highestResult).toMatchObject({
       status: 'unsupported',
       reasonCode: expect.any(String),
       suggestedPrompts: expect.any(Array),
+      routing: {
+        routeId: 'single_metric',
+        source: 'deterministic',
+      },
     });
 
     const biggestResult = await normalizeInsightQuery({
@@ -1670,10 +1683,14 @@ describe('normalizeInsightQuery', () => {
       clientTimezone: 'UTC',
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       status: 'unsupported',
       reasonCode: expect.any(String),
       suggestedPrompts: expect.any(Array),
+      routing: {
+        routeId: 'single_metric',
+        source: 'deterministic',
+      },
     });
   });
 
@@ -2085,10 +2102,14 @@ describe('normalizeInsightQuery', () => {
       clientTimezone: 'UTC',
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       status: 'unsupported',
       reasonCode: 'too_many_metrics',
       suggestedPrompts: expect.any(Array),
+      routing: {
+        routeId: 'multi_metric',
+        source: 'deterministic',
+      },
     });
   });
 
@@ -2098,10 +2119,14 @@ describe('normalizeInsightQuery', () => {
       clientTimezone: 'UTC',
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       status: 'unsupported',
       reasonCode: 'unsupported_multi_metric_combination',
       suggestedPrompts: expect.any(Array),
+      routing: {
+        routeId: 'multi_metric',
+        source: 'deterministic',
+      },
     });
   });
 
@@ -3298,7 +3323,7 @@ describe('normalizeInsightQuery', () => {
       clientTimezone: 'UTC',
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       status: 'unsupported',
       reasonCode: 'unsupported_capability',
       suggestedPrompts: [
@@ -3306,8 +3331,28 @@ describe('normalizeInsightQuery', () => {
         'Show my total distance by activity type this year.',
         'Show my total training duration over time this year.',
       ],
+      routing: {
+        routeId: 'unsupported_capability',
+        source: 'deterministic',
+      },
     });
     expect(generateIntent).not.toHaveBeenCalled();
+  });
+
+  it('rejects unsupported capability prompts before prompt-context parsing for invalid timezones', async () => {
+    const result = await normalizeInsightQuery({
+      prompt: 'show cadence per kilometer splits',
+      clientTimezone: 'Invalid/Timezone',
+    });
+
+    expect(result).toMatchObject({
+      status: 'unsupported',
+      reasonCode: 'unsupported_capability',
+      routing: {
+        routeId: 'unsupported_capability',
+        source: 'deterministic',
+      },
+    });
   });
 
   it('rejects ambiguous metric responses from the model', async () => {
@@ -3323,10 +3368,14 @@ describe('normalizeInsightQuery', () => {
       clientTimezone: 'UTC',
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       status: 'unsupported',
       reasonCode: 'ambiguous_metric',
       suggestedPrompts: expect.any(Array),
+      routing: {
+        routeId: 'single_metric',
+        source: 'deterministic',
+      },
     });
   });
 

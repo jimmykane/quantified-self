@@ -450,6 +450,21 @@ export async function runAiInsights(
   logger.info('[aiInsights] Query normalization debug', {
     userID,
     ...buildPromptLogContext(prompt, effectivePrompt),
+    routing: normalizeResult.routing
+      ? {
+        routeId: normalizeResult.routing.routeId,
+        resultKind: normalizeResult.routing.resultKind ?? effectiveQuery.resultKind,
+        source: normalizeResult.routing.source,
+        reason: normalizeResult.routing.reason,
+        fallbackReasonCode: normalizeResult.routing.fallbackReasonCode ?? null,
+      }
+      : {
+        routeId: null,
+        resultKind: effectiveQuery.resultKind,
+        source: 'deterministic',
+        reason: 'Routing metadata unavailable.',
+        fallbackReasonCode: null,
+      },
     normalizedQuery: {
       dataType: (
         effectiveQuery.resultKind === 'multi_metric_aggregate'
