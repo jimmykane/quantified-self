@@ -1,5 +1,5 @@
 @if (activitiesWithJumps.length > 0) {
-<app-event-section-header icon="flight" title="Jumps"></app-event-section-header>
+<app-event-section-header icon="monitoring" title="Jumps"></app-event-section-header>
 <mat-tab-group [dynamicHeight]="true" [preserveContent]="true">
   @for (activity of activitiesWithJumps; track activity; let i = $index) {
   <mat-tab [label]="getActivityTabLabel(activity, i)">
