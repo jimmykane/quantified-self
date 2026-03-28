@@ -495,6 +495,9 @@ export class UserSettingsComponent implements OnChanges {
 
   public deleteUser(event: Event) {
     event.preventDefault();
+    if (this.isDeleting) {
+      return;
+    }
 
     // Check if user has an active paid subscription
     const stripeRole = (this.user as any).stripeRole;

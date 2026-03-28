@@ -139,6 +139,11 @@
   background: var(--mat-sys-primary-container);
   color: var(--mat-sys-on-primary-container);
   text-transform: uppercase;
+  padding-inline: 12px;
+  width: max-content;
+  max-width: 100%;
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .metrics-divider {
@@ -171,7 +176,7 @@
 
 .summary-primary-info--force-mobile .identity-section {
   gap: 12px;
-  padding-right: 104px;
+  padding-right: 0px;
 }
 
 .summary-primary-info--force-mobile .activity-icon-container {
@@ -232,7 +237,7 @@
 
   .summary-primary-info .identity-section {
     gap: 12px;
-    padding-right: 116px;
+    padding-right: 0px;
   }
 
   .summary-primary-info .activity-icon-container {
@@ -285,7 +290,7 @@
   }
 
   .summary-primary-info .identity-section {
-    padding-right: 104px;
+    padding-right: 0;
   }
 
   .summary-primary-info app-hero-metrics {

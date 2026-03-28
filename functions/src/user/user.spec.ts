@@ -202,6 +202,32 @@ describe('deleteSelf Cloud Function', () => {
         expect(result).toEqual({ success: true });
     });
 
+    it('should return success if auth user is already deleted', async () => {
+        const uid = 'test-uid';
+        const context = {
+            rawRequest: {},
+            auth: {
+                uid,
+                token: {}
+            },
+            app: { appId: 'mock-app-id' }
+        };
+        const userNotFoundError = {
+            errorInfo: {
+                code: 'auth/user-not-found',
+                message: 'There is no user record corresponding to the provided identifier.'
+            }
+        };
+        getUserMock.mockRejectedValueOnce(userNotFoundError);
+        deleteUserMock.mockRejectedValueOnce(userNotFoundError);
+
+        const result = await (deleteSelf as any)({}, context);
+
+        expect(deleteUserMock).toHaveBeenCalledWith(uid);
+        expect(mailSetMock).not.toHaveBeenCalled();
+        expect(result).toEqual({ success: true });
+    });
+
     it('should throw "internal" error if deleteUser fails', async () => {
         const uid = 'test-uid';
         const context = {
