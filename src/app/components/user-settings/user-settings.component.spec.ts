@@ -90,7 +90,14 @@ describe('UserSettingsComponent', () => {
                 { provide: Router, useValue: {} },
                 { provide: MatSnackBar, useValue: { open: vi.fn() } },
                 { provide: AppWindowService, useValue: {} },
-                { provide: MatDialog, useValue: {} },
+                {
+                    provide: MatDialog,
+                    useValue: {
+                        open: vi.fn(() => ({
+                            afterClosed: () => of(false)
+                        }))
+                    }
+                },
                 { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn() } },
                 { provide: AppAnalyticsService, useValue: { logEvent: vi.fn() } },
                 { provide: Analytics, useValue: null },
@@ -403,6 +410,15 @@ describe('UserSettingsComponent', () => {
         expect(mobileSaveButton).toBeTruthy();
         expect(desktopSaveButton.disabled).toBe(true);
         expect(mobileSaveButton.disabled).toBe(true);
+    });
+
+    it('should not open delete dialog when a deletion is already in progress', () => {
+        const dialog = TestBed.inject(MatDialog) as { open: ReturnType<typeof vi.fn> };
+        component.isDeleting = true;
+
+        component.deleteUser(new Event('click'));
+
+        expect(dialog.open).not.toHaveBeenCalled();
     });
 
     it('shows validation helper immediately on load when profile is already invalid', () => {

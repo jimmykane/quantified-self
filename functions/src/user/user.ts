@@ -7,6 +7,16 @@ import { isCorsAllowed } from '../utils';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 
+type FirebaseAuthErrorLike = {
+    errorInfo?: {
+        code?: string;
+    };
+};
+
+const isAuthUserNotFoundError = (error: unknown): boolean => {
+    return (error as FirebaseAuthErrorLike)?.errorInfo?.code === 'auth/user-not-found';
+};
+
 export const deleteSelf = functions
     .runWith({
         timeoutSeconds: 540,
@@ -45,9 +55,17 @@ export const deleteSelf = functions
                 logger.warn(`Could not fetch user email before deletion for ${uid}. Continuing with deletion.`, lookupError);
             }
 
-            // Delete Auth User
-            await admin.auth().deleteUser(uid);
-            logger.info(`Successfully deleted user auth: ${uid} `);
+            // Delete Auth User (idempotent if already deleted)
+            try {
+                await admin.auth().deleteUser(uid);
+                logger.info(`Successfully deleted user auth: ${uid} `);
+            } catch (deleteError) {
+                if (isAuthUserNotFoundError(deleteError)) {
+                    logger.warn(`User ${uid} was already deleted in auth. Treating deletion as successful.`, deleteError);
+                } else {
+                    throw deleteError;
+                }
+            }
 
             if (userEmail) {
                 try {

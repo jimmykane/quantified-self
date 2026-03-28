@@ -36,7 +36,7 @@ app-loading-overlay {
 }
 
 :host ::ng-deep .events-map-popup-anchor app-map-activity-popup .track-start-popup {
-  width: min(300px, calc(100vw - 20px));
+  width: min(250px, calc(100vw - 20px));
   --qs-glass-panel-bg: var(--mat-sys-surface);
   --qs-glass-panel-border: var(--mat-sys-outline-variant);
   --qs-glass-panel-shadow:

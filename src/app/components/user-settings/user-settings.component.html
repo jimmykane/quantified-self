@@ -126,7 +126,7 @@
           </p>
 
           <div style="margin-top: 16px;">
-            <button mat-stroked-button class="qs-mat-warn" (click)="deleteUser($event)">
+            <button mat-stroked-button class="qs-mat-warn" (click)="deleteUser($event)" [disabled]="isDeleting">
               <mat-icon>delete_forever</mat-icon>
               Delete My Account
             </button>
