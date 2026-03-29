@@ -2,12 +2,12 @@ import { Injectable, inject, Injector, runInInjectionContext } from '@angular/co
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../components/confirmation-dialog/confirmation-dialog.component';
 import { environment } from '../../environments/environment';
-import { Firestore, collection, collectionData, addDoc, doc, docData, getDoc, getDocs, getDocsFromServer, limit, query, where } from '@angular/fire/firestore';
+import { Firestore, collection, collectionData, addDoc, doc, docData, getDoc, getDocs, getDocsFromServer, limit, query, where } from 'app/firebase/firestore';
 
 // ... (other imports)
 
 
-import { Auth } from '@angular/fire/auth';
+import { Auth } from 'app/firebase/auth';
 import { Observable, from, switchMap, filter, take, map, timeout, firstValueFrom } from 'rxjs';
 import { AppWindowService } from './app.window.service';
 import { LoggerService } from './logger.service';

@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { WhatsNewItemComponent } from './whats-new-item.component';
-import { Timestamp } from '@angular/fire/firestore';
+import { Timestamp } from 'app/firebase/firestore';
 import { ChangelogPost } from '../../services/app.whats-new.service';
 import { By } from '@angular/platform-browser';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';

@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { AppUserService } from './app.user.service';
-import { Auth, authState, user } from '@angular/fire/auth';
-import { Firestore, collection, collectionData, docData, setDoc, updateDoc } from '@angular/fire/firestore';
+import { Auth, authState, user } from 'app/firebase/auth';
+import { Firestore, collection, collectionData, docData, setDoc, updateDoc } from 'app/firebase/firestore';
 
 import { HttpClient } from '@angular/common/http';
 import { AppEventService } from './app.event.service';
@@ -12,7 +12,7 @@ import { of, firstValueFrom, take, from, filter, throwError } from 'rxjs';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { DataAltitude, DataCadence, DataGradeAdjustedSpeed, DataHeartRate, DataPace, DataPower, DataSpeed, DynamicDataLoader, ServiceNames } from '@sports-alliance/sports-lib';
 
-vi.mock('@angular/fire/auth', async (importOriginal) => {
+vi.mock('app/firebase/auth', async (importOriginal) => {
     const actual: any = await importOriginal();
     return {
         ...actual,
@@ -21,7 +21,7 @@ vi.mock('@angular/fire/auth', async (importOriginal) => {
     };
 });
 
-vi.mock('@angular/fire/firestore', async (importOriginal) => {
+vi.mock('app/firebase/firestore', async (importOriginal) => {
     const actual: any = await importOriginal();
     const { of } = await import('rxjs');
     return {

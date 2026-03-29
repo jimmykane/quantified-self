@@ -8,16 +8,16 @@ import { provideAnimations } from '@angular/platform-browser/animations';
 import { SideNavComponent } from './components/sidenav/sidenav.component';
 import { environment } from '../environments/environment';
 import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
-import { provideFirebaseApp, initializeApp } from '@angular/fire/app';
-import { provideAuth, getAuth } from '@angular/fire/auth';
-import { provideFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from '@angular/fire/firestore';
-import { getApp } from '@angular/fire/app';
-import { provideFunctions, getFunctions } from '@angular/fire/functions';
-import { provideAppCheck, initializeAppCheck, ReCaptchaV3Provider } from '@angular/fire/app-check';
-import { providePerformance, getPerformance } from '@angular/fire/performance';
-import { provideAnalytics, getAnalytics, ScreenTrackingService, UserTrackingService, setAnalyticsCollectionEnabled, initializeAnalytics } from '@angular/fire/analytics';
-import { provideRemoteConfig, getRemoteConfig } from '@angular/fire/remote-config';
-import { provideStorage, getStorage } from '@angular/fire/storage';
+import { provideFirebaseApp, initializeApp } from 'app/firebase/app';
+import { provideAuth, getAuth } from 'app/firebase/auth';
+import { provideFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'app/firebase/firestore';
+import { getApp } from 'app/firebase/app';
+import { provideFunctions, getFunctions } from 'app/firebase/functions';
+import { provideAppCheck, initializeAppCheck, ReCaptchaV3Provider } from 'app/firebase/app-check';
+import { providePerformance, getPerformance } from 'app/firebase/performance';
+import { provideAnalytics, initializeAnalytics } from 'app/firebase/analytics';
+import { provideRemoteConfig, getRemoteConfig } from 'app/firebase/remote-config';
+import { provideStorage, getStorage } from 'app/firebase/storage';
 import { MaterialModule } from './modules/material.module';
 import { SharedModule } from './modules/shared.module';
 import { ClipboardModule } from '@angular/cdk/clipboard';
@@ -29,7 +29,6 @@ import { MAT_ICON_DEFAULT_OPTIONS } from '@angular/material/icon';
 import { MAT_MENU_DEFAULT_OPTIONS, MatMenuDefaultOptions } from '@angular/material/menu';
 import { ServiceWorkerModule } from '@angular/service-worker';
 import { UploadActivitiesComponent } from './components/upload/upload-activities/upload-activities.component';
-import { LoggerService } from './services/logger.service';
 import { maybeConnectAuthEmulator } from './authentication/auth-emulator.config';
 
 import { AppUpdateService } from './services/app.update.service';
@@ -42,7 +41,7 @@ import { ImpersonationBannerComponent } from './components/impersonation-banner/
 import { MetricLoaderComponent } from './components/metric-loader/metric-loader.component';
 import { AppShellHeaderComponent } from './components/app-shell-header/app-shell-header.component';
 import { AppRemoteConfigService } from './services/app.remote-config.service';
-import { firstValueFrom } from 'rxjs';
+import { FirebaseAnalyticsTrackingService } from './services/firebase-analytics-tracking.service';
 
 import { MAT_DATE_LOCALE_PROVIDER, getBrowserLocale } from './shared/adapters/date-locale.config';
 import { APP_STORAGE } from './services/storage/app.storage.token';
@@ -57,6 +56,9 @@ export const QS_MENU_DEFAULT_OPTIONS: MatMenuDefaultOptions = {
 };
 
 const enableAppCheck = environment.production || environment.beta || environment.localhost;
+type FirestoreInitSettings = Parameters<typeof initializeFirestore>[1] & {
+  useFetchStreams?: boolean;
+};
 
 @NgModule({
   declarations: [
@@ -84,8 +86,6 @@ const enableAppCheck = environment.production || environment.beta || environment
   ],
   providers: [
     provideAnimations(),
-    ScreenTrackingService,
-    UserTrackingService,
     {
       provide: ErrorHandler,
       useClass: GlobalErrorHandler,
@@ -105,16 +105,15 @@ const enableAppCheck = environment.production || environment.beta || environment
     // in activity/event data (e.g., TCX files may have undefined creator.manufacturer).
     // This is the official Firebase approach - undefined fields are silently skipped, not stored.
     provideFirestore(() => {
-      return initializeFirestore(getApp(), {
+      const firestoreSettings: FirestoreInitSettings = {
         ignoreUndefinedProperties: true,
-        // @ts-ignore
         useFetchStreams: true,
         localCache: persistentLocalCache({
           tabManager: persistentMultipleTabManager(),
           cacheSizeBytes: 1073741824 // 1 GB
         }),
-
-      });
+      };
+      return initializeFirestore(getApp(), firestoreSettings);
     }),
     provideStorage(() => getStorage()),
     provideFunctions(() => {
@@ -146,9 +145,10 @@ const enableAppCheck = environment.production || environment.beta || environment
       useFactory: () => localStorage
     },
     provideAppInitializer(() => {
-      const remoteConfigService = inject(AppRemoteConfigService);
       // Just inject to ensure initialization
+      inject(AppRemoteConfigService);
       inject(AppUpdateService); // Check if we can move this from constructor
+      inject(FirebaseAnalyticsTrackingService);
     }),
   ]
 })

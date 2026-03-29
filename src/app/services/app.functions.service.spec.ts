@@ -1,8 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { AppFunctionsService } from './app.functions.service';
-import { Functions, connectFunctionsEmulator, getFunctions, httpsCallable } from '@angular/fire/functions';
-import { FirebaseApp } from '@angular/fire/app';
+import { Functions, connectFunctionsEmulator, getFunctions, httpsCallable } from 'app/firebase/functions';
+import { FirebaseApp } from 'app/firebase/app';
 
 const mocks = vi.hoisted(() => {
     const callableSpy = vi.fn().mockResolvedValue({ data: 'success' });
@@ -28,7 +28,7 @@ const mocks = vi.hoisted(() => {
 });
 
 // Mock getFunctions/connectFunctionsEmulator/httpsCallable
-vi.mock('@angular/fire/functions', () => ({
+vi.mock('app/firebase/functions', () => ({
     Functions: class { },
     getFunctions: mocks.getFunctionsMock,
     connectFunctionsEmulator: mocks.connectFunctionsEmulatorMock,

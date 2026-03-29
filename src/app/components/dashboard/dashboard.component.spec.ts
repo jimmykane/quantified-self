@@ -11,7 +11,7 @@ import { of } from 'rxjs';
 import { User } from '@sports-alliance/sports-lib';
 import { DateRanges } from '@sports-alliance/sports-lib';
 import { AppUserInterface } from '../../models/app-user.interface';
-import { Analytics } from '@angular/fire/analytics';
+import { Analytics } from 'app/firebase/analytics';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { BehaviorSubject } from 'rxjs';
 import { EventInterface } from '@sports-alliance/sports-lib';

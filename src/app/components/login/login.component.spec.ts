@@ -7,15 +7,15 @@ import { LoggerService } from '../../services/logger.service';
 import { Router } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
-import { Auth } from '@angular/fire/auth';
-import { Analytics } from '@angular/fire/analytics';
+import { Auth } from 'app/firebase/auth';
+import { Analytics } from 'app/firebase/analytics';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { of, throwError, BehaviorSubject } from 'rxjs';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 // Mock Firebase Auth functions
-vi.mock('@angular/fire/auth', async () => {
-    const actual = await vi.importActual('@angular/fire/auth');
+vi.mock('app/firebase/auth', async () => {
+    const actual = await vi.importActual('app/firebase/auth');
     return {
         ...actual as any,
         signInWithPopup: vi.fn(),
@@ -26,7 +26,7 @@ vi.mock('@angular/fire/auth', async () => {
     };
 });
 
-import { signInWithPopup, OAuthProvider, authState } from '@angular/fire/auth';
+import { signInWithPopup, OAuthProvider, authState } from 'app/firebase/auth';
 
 describe('LoginComponent', () => {
     let component: LoginComponent;

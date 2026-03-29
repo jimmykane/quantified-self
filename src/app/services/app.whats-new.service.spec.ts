@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { AppWhatsNewService, ChangelogPost, coerceChangelogPostDate } from './app.whats-new.service';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { AppUserService } from './app.user.service';
-import { Firestore, collectionData, Timestamp } from '@angular/fire/firestore';
+import { Firestore, collectionData, Timestamp } from 'app/firebase/firestore';
 import { LoggerService } from './logger.service';
 import { of, BehaviorSubject } from 'rxjs';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
@@ -12,7 +12,7 @@ import { AppUserInterface } from '../models/app-user.interface';
 import { AppWhatsNewLocalStorageService } from './storage/app.whats-new.local.storage.service';
 
 // Mock Firestore functions
-vi.mock('@angular/fire/firestore', () => {
+vi.mock('app/firebase/firestore', () => {
     class MockFirestore { }
     class MockTimestamp {
         constructor(

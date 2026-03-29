@@ -4,7 +4,7 @@ import {
   deleteDoc,
   doc,
   getDoc,
-} from '@angular/fire/firestore';
+} from 'app/firebase/firestore';
 import type { AiInsightsLatestSnapshot } from '@shared/ai-insights.types';
 import { validateAiInsightsLatestSnapshot } from '@shared/ai-insights-latest-snapshot.validation';
 import { LoggerService } from './logger.service';

@@ -11,7 +11,7 @@ import { AppPaymentService, StripeProduct, StripeSubscription, StripePrice } fro
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppUserService } from '../../services/app.user.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
-import { Auth } from '@angular/fire/auth';
+import { Auth } from 'app/firebase/auth';
 import { LoggerService } from '../../services/logger.service';
 import { BehaviorSubject, Observable, Subscription, firstValueFrom, map, take } from 'rxjs';
 import { StripeRole } from '../../models/stripe-role.model';

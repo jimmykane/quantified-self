@@ -17,7 +17,7 @@ import { MatTabsModule } from '@angular/material/tabs';
 import { TextFieldModule } from '@angular/cdk/text-field';
 import { RouterModule } from '@angular/router';
 import { AppWhatsNewService, ChangelogPost } from '../../../services/app.whats-new.service';
-import { Timestamp } from '@angular/fire/firestore';
+import { Timestamp } from 'app/firebase/firestore';
 import { LoggerService } from '../../../services/logger.service';
 import { WhatsNewItemComponent } from '../../whats-new/whats-new-item.component';
 

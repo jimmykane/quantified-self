@@ -1,10 +1,10 @@
 import { TestBed } from '@angular/core/testing';
 import { AppPaymentService } from './app.payment.service';
-import { Firestore } from '@angular/fire/firestore';
-import { Auth } from '@angular/fire/auth';
-import { Functions } from '@angular/fire/functions';
+import { Firestore } from 'app/firebase/firestore';
+import { Auth } from 'app/firebase/auth';
+import { Functions } from 'app/firebase/functions';
 import { MatDialog } from '@angular/material/dialog';
-import { FirebaseApp } from '@angular/fire/app';
+import { FirebaseApp } from 'app/firebase/app';
 import { AppWindowService } from './app.window.service';
 import { AppFunctionsService } from './app.functions.service';
 import { of } from 'rxjs';
@@ -17,8 +17,8 @@ const { mockHttpsCallableFromURL } = vi.hoisted(() => {
 });
 
 // Mock functions module
-vi.mock('@angular/fire/functions', async () => {
-    const actual = await vi.importActual('@angular/fire/functions');
+vi.mock('app/firebase/functions', async () => {
+    const actual = await vi.importActual('app/firebase/functions');
     return {
         ...actual,
         httpsCallableFromURL: mockHttpsCallableFromURL
@@ -55,8 +55,8 @@ const {
 });
 
 // Mock the module
-vi.mock('@angular/fire/firestore', async () => {
-    const actual = await vi.importActual('@angular/fire/firestore');
+vi.mock('app/firebase/firestore', async () => {
+    const actual = await vi.importActual('app/firebase/firestore');
     return {
         ...actual,
         addDoc: mockAddDoc,

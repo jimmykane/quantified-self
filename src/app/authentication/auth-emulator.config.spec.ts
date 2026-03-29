@@ -1,13 +1,13 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Auth } from '@angular/fire/auth';
+import type { Auth } from 'app/firebase/auth';
 import { environment } from '../../environments/environment';
 
 const { connectAuthEmulatorMock } = vi.hoisted(() => ({
   connectAuthEmulatorMock: vi.fn(),
 }));
 
-vi.mock('@angular/fire/auth', async () => {
-  const actual = await vi.importActual('@angular/fire/auth');
+vi.mock('app/firebase/auth', async () => {
+  const actual = await vi.importActual('app/firebase/auth');
   return {
     ...actual,
     connectAuthEmulator: connectAuthEmulatorMock,

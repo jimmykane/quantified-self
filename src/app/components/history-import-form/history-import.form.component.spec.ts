@@ -18,7 +18,7 @@ import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { LoggerService } from '../../services/logger.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { APP_STORAGE } from '../../services/storage/app.storage.token';
-import { Firestore } from '@angular/fire/firestore';
+import { Firestore } from 'app/firebase/firestore';
 import { of } from 'rxjs';
 import { ServiceNames, UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';

@@ -9,12 +9,13 @@ export default defineConfig({
     resolve: {
         alias: {
             '@shared': resolve(__dirname, 'shared'),
+            'app': resolve(__dirname, 'src/app'),
         }
     },
     test: {
         server: {
             deps: {
-                inline: ['rxfire', '@angular/fire', 'firebase', '@sports-alliance/sports-lib']
+                inline: ['firebase', '@sports-alliance/sports-lib']
             }
         },
         globals: true,

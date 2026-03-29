@@ -1,4 +1,5 @@
-import { Auth, connectAuthEmulator } from '@angular/fire/auth';
+import { connectAuthEmulator } from 'app/firebase/auth';
+import type { Auth } from 'firebase/auth';
 import { environment } from '../../environments/environment';
 
 export function maybeConnectAuthEmulator(auth: Auth): Auth {

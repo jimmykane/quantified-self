@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { PaymentSuccessComponent } from './payment-success.component';
 import { ActivatedRoute } from '@angular/router';
-import { Auth } from '@angular/fire/auth';
+import { Auth } from 'app/firebase/auth';
 import { of } from 'rxjs';
 
 describe('PaymentSuccessComponent', () => {

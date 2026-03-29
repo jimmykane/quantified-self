@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
-import { FirebaseApp } from '@angular/fire/app';
-import { AppCheck, getToken as getAppCheckToken } from '@angular/fire/app-check';
-import { Auth } from '@angular/fire/auth';
+import { FirebaseApp } from 'app/firebase/app';
+import { AppCheck, getToken as getAppCheckToken } from 'app/firebase/app-check';
+import { Auth } from 'app/firebase/auth';
 import { FUNCTIONS_MANIFEST } from '@shared/functions-manifest';
 
 export interface UploadActivityFromFitResponse {
