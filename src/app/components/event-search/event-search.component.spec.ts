@@ -1,6 +1,7 @@
 import { ChangeDetectorRef } from '@angular/core';
 import { DateRanges, DaysOfTheWeek } from '@sports-alliance/sports-lib';
 import { describe, expect, it, vi } from 'vitest';
+import { getDatesForDateRange } from '../../helpers/date-range-helper';
 import { EventSearchComponent } from './event-search.component';
 
 describe('EventSearchComponent', () => {
@@ -52,6 +53,16 @@ describe('EventSearchComponent', () => {
     expect(searchSpy).not.toHaveBeenCalled();
   });
 
+  it('should not auto-search when end date input is invalid', async () => {
+    const component = createComponent();
+    const searchSpy = vi.spyOn(component, 'search').mockResolvedValue(undefined);
+    component.endDateControl.setErrors({ matEndDateInvalid: true });
+
+    await component.onDateChange({ value: new Date('2025-02-05T00:00:00.000Z') } as any);
+
+    expect(searchSpy).not.toHaveBeenCalled();
+  });
+
   it('should set selected date range to custom when clicking date input area', () => {
     const component = createComponent();
     component.selectedDateRange = DateRanges.lastThirtyDays;
@@ -59,6 +70,41 @@ describe('EventSearchComponent', () => {
     component.setCustomDateRange();
 
     expect(component.selectedDateRange).toBe(DateRanges.custom);
+  });
+
+  it('should block submit when end date is before start date', async () => {
+    const component = createComponent();
+    const emitSpy = vi.spyOn(component.searchChange, 'emit');
+    component.selectedDateRange = DateRanges.custom;
+    component.startDateControl.setValue(new Date('2025-02-10T00:00:00.000Z'));
+    component.endDateControl.setValue(new Date('2025-02-01T00:00:00.000Z'));
+    component.searchFormGroup.updateValueAndValidity();
+
+    await component.search();
+
+    expect(component.searchFormGroup.hasError('endDateSmallerThanStartDate')).toBe(true);
+    expect(emitSpy).not.toHaveBeenCalled();
+  });
+
+  it('should keep the helper end date for preset ranges', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-29T12:00:00.000Z'));
+    try {
+      const component = createComponent();
+      const emitSpy = vi.spyOn(component.searchChange, 'emit');
+      const event = {
+        source: { value: DateRanges.lastSevenDays },
+      } as any;
+
+      await component.dateToggleChange(event);
+
+      const expected = getDatesForDateRange(DateRanges.lastSevenDays, DaysOfTheWeek.Monday);
+      expect(emitSpy).toHaveBeenCalledTimes(1);
+      expect(emitSpy.mock.calls[0][0].startDate?.getTime()).toBe(expected.startDate?.getTime());
+      expect(emitSpy.mock.calls[0][0].endDate?.getTime()).toBe(expected.endDate?.getTime());
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('should include merged events when merged toggle changes', async () => {

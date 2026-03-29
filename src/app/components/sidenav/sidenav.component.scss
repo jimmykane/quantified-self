@@ -202,6 +202,12 @@ mat-list-item {
   width: 100%;
 }
 
+:host ::ng-deep mat-list-item:not(.theme-toggle-item) .mat-mdc-list-item-unscoped-content {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
 mat-list-item:not(.theme-toggle-item):hover {
   background-color: var(--mat-sys-state-hover, rgba(0, 0, 0, 0.04)) !important;
 }
@@ -241,6 +247,10 @@ mat-list-item.active:hover {
 
 /* Icon Styling */
 mat-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
   vertical-align: middle;
   margin-right: 16px;
   margin-left: 8px;

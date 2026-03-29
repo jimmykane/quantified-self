@@ -18,6 +18,7 @@ import { DateRanges } from '@sports-alliance/sports-lib';
 import { getDatesForDateRange } from '../../helpers/date-range-helper';
 import { MatDatepickerInputEvent } from '@angular/material/datepicker';
 import dayjs from 'dayjs';
+import type { Dayjs } from 'dayjs';
 
 @Component({
   selector: 'app-event-search',
@@ -74,17 +75,23 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   }
 
   ngOnInit(): void {
+    const { startDate, endDate } = this.resolveCurrentRangeDates();
     this.searchFormGroup = new UntypedFormGroup({
       search: new UntypedFormControl(null, [
         // Validators.required,
         // Validators.minLength(4),
       ]),
-      startDate: new UntypedFormControl(this.selectedDateRange === DateRanges.custom ? this.selectedStartDate : getDatesForDateRange(this.selectedDateRange, this.startOfTheWeek).startDate, [
+      startDate: new UntypedFormControl(startDate, [
         // Validators.required,
       ]),
-      endDate: new UntypedFormControl(this.selectedDateRange === DateRanges.custom ? this.selectedEndDate : getDatesForDateRange(this.selectedDateRange, this.startOfTheWeek).endDate, [
+      endDate: new UntypedFormControl(endDate, [
         // Validators.required,
       ])
+    }, {
+      validators: [
+        startDateToEndDateValidator,
+        maxDateDistanceValidator,
+      ],
     });
   }
 
@@ -92,10 +99,18 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     if (!this.searchFormGroup) {
       return;
     }
-    const startDate = this.selectedDateRange === DateRanges.custom ? this.selectedStartDate : getDatesForDateRange(this.selectedDateRange, this.startOfTheWeek).startDate;
-    const endDate = this.selectedDateRange === DateRanges.custom ? this.selectedEndDate : getDatesForDateRange(this.selectedDateRange, this.startOfTheWeek).endDate;
-    this.startDateControl?.setValue(startDate);
-    this.endDateControl?.setValue(endDate);
+
+    if (!changes['selectedDateRange']
+      && !changes['selectedStartDate']
+      && !changes['selectedEndDate']
+      && !changes['startOfTheWeek']) {
+      return;
+    }
+
+    const { startDate, endDate } = this.resolveCurrentRangeDates();
+    this.startDateControl?.setValue(startDate, { emitEvent: false });
+    this.endDateControl?.setValue(endDate, { emitEvent: false });
+    this.searchFormGroup.updateValueAndValidity({ emitEvent: false });
   }
 
 
@@ -113,18 +128,11 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
       return;
     }
 
-    let startDate: Date = this.startDateControl.value;
-    let endDate: Date = this.endDateControl.value;
-    if (dayjs.isDayjs(startDate)) {
-      startDate = (startDate as any).toDate();
-    }
+    const startDate = this.coerceDate(this.startDateControl.value);
+    const endDate = this.coerceDate(this.endDateControl.value);
 
-    if (dayjs.isDayjs(endDate)) {
-      endDate = (endDate as any).toDate();
-    }
-
-    this.selectedStartDate = startDate ? new Date(new Date(startDate).setHours(0, 0, 0, 0)) : (null as any);
-    this.selectedEndDate = endDate ? new Date(new Date(endDate).setHours(23, 59, 59, 999)) : (null as any);
+    this.selectedStartDate = startDate ? this.normalizeStartDate(startDate) : (null as any);
+    this.selectedEndDate = endDate ? this.normalizeEndDate(endDate) : (null as any);
 
     this.searchChange.emit({
       searchTerm: this.searchFormGroup.get('search')?.value,
@@ -159,7 +167,10 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     if (!this.startDateControl?.value || !this.endDateControl?.value) {
       return;
     }
-    if (this.startDateControl.hasError('matStartDateInvalid') || this.endDateControl.hasError('matStartDateInvalid')) {
+    if (this.startDateControl.hasError('matStartDateInvalid') || this.endDateControl.hasError('matEndDateInvalid')) {
+      return;
+    }
+    if (this.searchFormGroup.hasError('endDateSmallerThanStartDate') || this.searchFormGroup.hasError('dateRange')) {
       return;
     }
     this.selectedDateRange = this.dateRanges.custom;
@@ -182,6 +193,56 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     const selected = Array.isArray(event.value) ? event.value : [];
     this.includeMergedEvents = selected.includes('merged');
     return this.search();
+  }
+
+  private resolveCurrentRangeDates(): { startDate: Date | null; endDate: Date | null } {
+    if (this.selectedDateRange === DateRanges.custom) {
+      return {
+        startDate: this.selectedStartDate ?? null,
+        endDate: this.selectedEndDate ?? null,
+      };
+    }
+    const range = getDatesForDateRange(this.selectedDateRange, this.startOfTheWeek);
+    return {
+      startDate: range.startDate ?? null,
+      endDate: range.endDate ?? null,
+    };
+  }
+
+  private coerceDate(value: unknown): Date | null {
+    if (!value) {
+      return null;
+    }
+    if (value instanceof Date) {
+      return Number.isFinite(value.getTime()) ? value : null;
+    }
+    if (dayjs.isDayjs(value)) {
+      const dayJsValue = value as Dayjs;
+      const dateValue = dayJsValue.toDate();
+      return Number.isFinite(dateValue.getTime()) ? dateValue : null;
+    }
+    const dateValue = new Date(value as string | number);
+    return Number.isFinite(dateValue.getTime()) ? dateValue : null;
+  }
+
+  private normalizeStartDate(date: Date): Date {
+    const normalizedStartDate = new Date(date);
+    normalizedStartDate.setHours(0, 0, 0, 0);
+    return normalizedStartDate;
+  }
+
+  private normalizeEndDate(date: Date): Date {
+    const normalizedEndDate = new Date(date);
+    const isStartOfDay = normalizedEndDate.getHours() === 0
+      && normalizedEndDate.getMinutes() === 0
+      && normalizedEndDate.getSeconds() === 0
+      && normalizedEndDate.getMilliseconds() === 0;
+
+    if (this.selectedDateRange !== DateRanges.custom && isStartOfDay) {
+      return normalizedEndDate;
+    }
+    normalizedEndDate.setHours(23, 59, 59, 999);
+    return normalizedEndDate;
   }
 
   validateAllFormFields(formGroup: UntypedFormGroup) {

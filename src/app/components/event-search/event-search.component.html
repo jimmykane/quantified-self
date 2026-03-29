@@ -15,13 +15,22 @@
         </mat-date-range-input>
         <mat-datepicker-toggle [disabled]='false' matSuffix [for]="picker"></mat-datepicker-toggle>
         <mat-date-range-picker #picker></mat-date-range-picker>
-        @if (!startDateControl.hasError('matStartDateInvalid') &&
-        !endDateControl.hasError('matStartDateInvalid') && selectedDateRange === dateRanges.custom) {
+        @if (!startDateControl.hasError('matStartDateInvalid')
+        && !endDateControl.hasError('matEndDateInvalid')
+        && !searchFormGroup.hasError('endDateSmallerThanStartDate')
+        && !searchFormGroup.hasError('dateRange')
+        && selectedDateRange === dateRanges.custom) {
         <mat-hint>Select a date range</mat-hint>
         }
         @if (startDateControl.hasError('matStartDateInvalid') ||
-        endDateControl.hasError('matStartDateInvalid')) {
+        endDateControl.hasError('matEndDateInvalid')) {
         <mat-error>Invalid date range</mat-error>
+        }
+        @if (searchFormGroup.hasError('endDateSmallerThanStartDate')) {
+        <mat-error>End date must be on or after start date</mat-error>
+        }
+        @if (searchFormGroup.hasError('dateRange')) {
+        <mat-error>Select a date range up to 5 years</mat-error>
         }
       </mat-form-field>
       }
@@ -29,12 +38,6 @@
       <app-activity-types-multi-select class="big" [selectedActivityTypes]="selectedActivityTypes"
         (selectedActivityTypesChange)="onActivityTypesChange($event)"></app-activity-types-multi-select>
       }
-      <!--    <mat-error *ngIf="hasError() && searchFormGroup.errors && searchFormGroup.errors.endDateSmallerThanStartDate">-->
-      <!--      There is something wrong with the date range-->
-      <!--    </mat-error>-->
-      <!--    <mat-error *ngIf="hasError() && searchFormGroup.errors && searchFormGroup.errors.dateRange">You can select-->
-      <!--      a range up to 3 months-->
-      <!--    </mat-error>-->
     </section>
     <section class="button-groups">
       <mat-button-toggle-group appearance="standard" hideSingleSelectionIndicator [value]="selectedDateRange"
