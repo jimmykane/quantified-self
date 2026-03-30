@@ -37,14 +37,26 @@ export class FirebaseAnalyticsTrackingService {
       .subscribe((event) => {
         try {
           const screenClass = this.resolveScreenClassName();
+          const screenPath = this.sanitizeScreenPath(event.urlAfterRedirects);
           logEvent(this.analytics!, 'screen_view', {
-            firebase_screen: event.urlAfterRedirects,
+            firebase_screen: screenPath,
             firebase_screen_class: screenClass,
           });
         } catch (error) {
           this.logger.warn('[FirebaseAnalyticsTrackingService] Failed to track screen view', error);
         }
       });
+  }
+
+  private sanitizeScreenPath(urlAfterRedirects: string): string {
+    if (!urlAfterRedirects) {
+      return '/';
+    }
+
+    const withoutFragment = urlAfterRedirects.split('#')[0] || '';
+    const pathOnly = withoutFragment.split('?')[0] || '';
+
+    return pathOnly || '/';
   }
 
   private resolveScreenClassName(): string {

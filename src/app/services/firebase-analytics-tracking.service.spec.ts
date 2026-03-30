@@ -84,11 +84,11 @@ describe('FirebaseAnalyticsTrackingService', () => {
     const service = TestBed.inject(FirebaseAnalyticsTrackingService);
     expect(service).toBeTruthy();
 
-    routerEvents$.next(new NavigationEnd(1, '/dashboard', '/dashboard?tab=all'));
+    routerEvents$.next(new NavigationEnd(1, '/dashboard', '/dashboard?tab=all#details'));
     authUser$.next({ uid: 'user-123' });
 
     expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'screen_view', {
-      firebase_screen: '/dashboard?tab=all',
+      firebase_screen: '/dashboard',
       firebase_screen_class: 'DashboardPageComponent',
     });
     expect(setUserId).toHaveBeenCalledWith(expect.anything(), 'user-123');
