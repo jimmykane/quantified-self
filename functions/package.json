@@ -47,7 +47,7 @@
     "replace-stripe-price": "ts-node -r dotenv/config src/scripts/replace-stripe-price.ts"
   },
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "devDependencies": {
     "@types/bs58": "^4.0.1",
