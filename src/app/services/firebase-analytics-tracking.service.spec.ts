@@ -34,6 +34,8 @@ describe('FirebaseAnalyticsTrackingService', () => {
   let routerEvents$: Subject<unknown>;
   let logger: Pick<LoggerService, 'warn' | 'error' | 'log'>;
 
+  class DashboardPageComponent { }
+
   beforeEach(() => {
     vi.clearAllMocks();
     authUser$ = new BehaviorSubject<{ uid: string } | null>(null);
@@ -61,6 +63,18 @@ describe('FirebaseAnalyticsTrackingService', () => {
           provide: Router,
           useValue: {
             events: routerEvents$.asObservable(),
+            routerState: {
+              snapshot: {
+                root: {
+                  firstChild: {
+                    firstChild: {
+                      firstChild: null,
+                      routeConfig: { component: DashboardPageComponent },
+                    },
+                  },
+                },
+              },
+            },
           },
         },
         { provide: LoggerService, useValue: logger },
@@ -75,9 +89,46 @@ describe('FirebaseAnalyticsTrackingService', () => {
 
     expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'screen_view', {
       firebase_screen: '/dashboard?tab=all',
-      firebase_screen_class: 'AppComponent',
+      firebase_screen_class: 'DashboardPageComponent',
     });
     expect(setUserId).toHaveBeenCalledWith(expect.anything(), 'user-123');
+  });
+
+  it('falls back to AppComponent screen class when route component is unavailable', () => {
+    TestBed.configureTestingModule({
+      providers: [
+        FirebaseAnalyticsTrackingService,
+        { provide: Analytics, useValue: {} },
+        { provide: Auth, useValue: {} },
+        {
+          provide: Router,
+          useValue: {
+            events: routerEvents$.asObservable(),
+            routerState: {
+              snapshot: {
+                root: {
+                  firstChild: {
+                    firstChild: null,
+                    routeConfig: {},
+                  },
+                },
+              },
+            },
+          },
+        },
+        { provide: LoggerService, useValue: logger },
+      ],
+    });
+
+    const service = TestBed.inject(FirebaseAnalyticsTrackingService);
+    expect(service).toBeTruthy();
+
+    routerEvents$.next(new NavigationEnd(1, '/dashboard', '/dashboard'));
+
+    expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'screen_view', {
+      firebase_screen: '/dashboard',
+      firebase_screen_class: 'AppComponent',
+    });
   });
 
   it('does nothing when analytics is not provided', () => {

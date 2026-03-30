@@ -56,6 +56,9 @@ export const QS_MENU_DEFAULT_OPTIONS: MatMenuDefaultOptions = {
 };
 
 const enableAppCheck = environment.production || environment.beta || environment.localhost;
+// `useFetchStreams` is an internal/unsupported Firestore Web SDK option.
+// We scope it behind this local type instead of `@ts-ignore` so usage is explicit and searchable.
+// If Firebase drops or changes this flag in a future release, remove it and re-validate Firestore-heavy flows.
 type FirestoreInitSettings = Parameters<typeof initializeFirestore>[1] & {
   useFetchStreams?: boolean;
 };
@@ -107,6 +110,7 @@ type FirestoreInitSettings = Parameters<typeof initializeFirestore>[1] & {
     provideFirestore(() => {
       const firestoreSettings: FirestoreInitSettings = {
         ignoreUndefinedProperties: true,
+        // Internal flag: keep as best-effort optimization, not as a contract we rely on.
         useFetchStreams: true,
         localCache: persistentLocalCache({
           tabManager: persistentMultipleTabManager(),

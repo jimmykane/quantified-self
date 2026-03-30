@@ -2,7 +2,8 @@ import { EnvironmentProviders, InjectionToken, makeEnvironmentProviders } from '
 import type { Analytics as FirebaseAnalytics } from 'firebase/analytics';
 import { FirebaseApp } from './app';
 
-export * from 'firebase/analytics';
+export { getAnalytics, initializeAnalytics } from 'firebase/analytics';
+export type { Analytics as FirebaseAnalyticsType } from 'firebase/analytics';
 
 export const Analytics = new InjectionToken<FirebaseAnalytics>('Analytics');
 
@@ -10,6 +11,7 @@ export function provideAnalytics(factory: () => FirebaseAnalytics): EnvironmentP
   return makeEnvironmentProviders([
     {
       provide: Analytics,
+      // `deps` forces FirebaseApp initialization before resolving Analytics.
       useFactory: (_firebaseApp: unknown) => factory(),
       deps: [FirebaseApp]
     }

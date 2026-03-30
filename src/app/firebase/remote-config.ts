@@ -2,7 +2,8 @@ import { EnvironmentProviders, InjectionToken, makeEnvironmentProviders } from '
 import type { RemoteConfig as FirebaseRemoteConfig } from 'firebase/remote-config';
 import { FirebaseApp } from './app';
 
-export * from 'firebase/remote-config';
+export { getRemoteConfig } from 'firebase/remote-config';
+export type { RemoteConfig as FirebaseRemoteConfigType } from 'firebase/remote-config';
 
 export const RemoteConfig = new InjectionToken<FirebaseRemoteConfig>('RemoteConfig');
 
@@ -10,6 +11,7 @@ export function provideRemoteConfig(factory: () => FirebaseRemoteConfig): Enviro
   return makeEnvironmentProviders([
     {
       provide: RemoteConfig,
+      // `deps` forces FirebaseApp initialization before resolving RemoteConfig.
       useFactory: (_firebaseApp: unknown) => factory(),
       deps: [FirebaseApp]
     }

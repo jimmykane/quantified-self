@@ -1,6 +1,6 @@
 import { DestroyRef, Injectable, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { NavigationEnd, Router } from '@angular/router';
+import { ActivatedRouteSnapshot, NavigationEnd, Router } from '@angular/router';
 import { filter } from 'rxjs/operators';
 import { Analytics } from 'app/firebase/analytics';
 import { Auth, user } from 'app/firebase/auth';
@@ -36,14 +36,51 @@ export class FirebaseAnalyticsTrackingService {
       )
       .subscribe((event) => {
         try {
+          const screenClass = this.resolveScreenClassName();
           logEvent(this.analytics!, 'screen_view', {
             firebase_screen: event.urlAfterRedirects,
-            firebase_screen_class: 'AppComponent',
+            firebase_screen_class: screenClass,
           });
         } catch (error) {
           this.logger.warn('[FirebaseAnalyticsTrackingService] Failed to track screen view', error);
         }
       });
+  }
+
+  private resolveScreenClassName(): string {
+    if (!this.router?.routerState?.snapshot?.root) {
+      return 'AppComponent';
+    }
+
+    const leafRoute = this.getLeafRoute(this.router.routerState.snapshot.root);
+    const routeComponent = leafRoute.routeConfig?.component ?? leafRoute.component;
+    const resolvedName = this.getComponentName(routeComponent);
+
+    return resolvedName ?? 'AppComponent';
+  }
+
+  private getLeafRoute(route: ActivatedRouteSnapshot): ActivatedRouteSnapshot {
+    let current = route;
+    while (current.firstChild) {
+      current = current.firstChild;
+    }
+    return current;
+  }
+
+  private getComponentName(component: unknown): string | null {
+    if (!component) {
+      return null;
+    }
+
+    if (typeof component === 'string') {
+      return component;
+    }
+
+    if (typeof component === 'function') {
+      return component.name || null;
+    }
+
+    return null;
   }
 
   private initializeUserTracking(): void {

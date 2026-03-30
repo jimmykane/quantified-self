@@ -2,7 +2,8 @@ import { EnvironmentProviders, InjectionToken, makeEnvironmentProviders } from '
 import type { FirebaseStorage } from 'firebase/storage';
 import { FirebaseApp } from './app';
 
-export * from 'firebase/storage';
+export { getBytes, getMetadata, getStorage, ref } from 'firebase/storage';
+export type { FirebaseStorage as FirebaseStorageType } from 'firebase/storage';
 
 export const Storage = new InjectionToken<FirebaseStorage>('Storage');
 
@@ -10,6 +11,7 @@ export function provideStorage(factory: () => FirebaseStorage): EnvironmentProvi
   return makeEnvironmentProviders([
     {
       provide: Storage,
+      // `deps` forces FirebaseApp initialization before resolving Storage.
       useFactory: (_firebaseApp: unknown) => factory(),
       deps: [FirebaseApp]
     }

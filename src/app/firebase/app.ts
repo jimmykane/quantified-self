@@ -8,11 +8,14 @@ import {
 import {
   FirebaseApp as FirebaseAppInstance,
   FirebaseOptions,
+  deleteApp,
   getApp as getFirebaseApp,
+  getApps,
   initializeApp as initializeFirebaseApp
 } from 'firebase/app';
 
-export * from 'firebase/app';
+export type { FirebaseApp as FirebaseAppType, FirebaseOptions } from 'firebase/app';
+export { deleteApp, getApps };
 
 export const FirebaseApp = new InjectionToken<FirebaseAppInstance>('FirebaseApp');
 

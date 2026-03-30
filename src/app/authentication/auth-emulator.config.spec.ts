@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Auth } from 'app/firebase/auth';
+import type { FirebaseAuthType } from 'app/firebase/auth';
 import { environment } from '../../environments/environment';
 
 const { connectAuthEmulatorMock } = vi.hoisted(() => ({
@@ -30,7 +30,7 @@ describe('maybeConnectAuthEmulator', () => {
 
   it('should connect to auth emulator when enabled', () => {
     environment.useAuthEmulator = true;
-    const mockAuth = {} as Auth;
+    const mockAuth = {} as FirebaseAuthType;
 
     const result = maybeConnectAuthEmulator(mockAuth);
 
@@ -44,7 +44,7 @@ describe('maybeConnectAuthEmulator', () => {
 
   it('should not connect to auth emulator when disabled', () => {
     environment.useAuthEmulator = false;
-    const mockAuth = {} as Auth;
+    const mockAuth = {} as FirebaseAuthType;
 
     const result = maybeConnectAuthEmulator(mockAuth);
 
