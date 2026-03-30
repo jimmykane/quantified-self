@@ -17,7 +17,7 @@ import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { DataDistance } from '@sports-alliance/sports-lib';
 import { environment } from '../../../environments/environment';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { Auth, getIdToken } from '@angular/fire/auth';
+import { Auth, getIdToken } from 'app/firebase/auth';
 
 import { ServiceNames, GarminAPIEventMetaData } from '@sports-alliance/sports-lib';
 import { EventExporterGPX } from '@sports-alliance/sports-lib';

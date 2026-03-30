@@ -3,8 +3,8 @@ import { EventActionsComponent } from './event.actions.component';
 import { AppEventService } from '../../services/app.event.service';
 import { AppFileService } from '../../services/app.file.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { Analytics } from '@angular/fire/analytics';
-import { Auth } from '@angular/fire/auth';
+import { Analytics } from 'app/firebase/analytics';
+import { Auth } from 'app/firebase/auth';
 import { Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
@@ -19,7 +19,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { MatMenuModule } from '@angular/material/menu';
 import { of } from 'rxjs';
 
-vi.mock('@angular/fire/analytics', () => ({
+vi.mock('app/firebase/analytics', () => ({
     Analytics: class { },
     logEvent: vi.fn(),
     setAnalyticsCollectionEnabled: vi.fn()

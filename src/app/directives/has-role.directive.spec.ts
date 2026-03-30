@@ -7,7 +7,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 import { signal } from '@angular/core';
 import { LoggerService } from '../services/logger.service';
-import { Firestore } from '@angular/fire/firestore';
+import { Firestore } from 'app/firebase/firestore';
 
 @Component({
     standalone: true,

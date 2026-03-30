@@ -3,7 +3,7 @@ import { ServiceNames, Auth2ServiceTokenInterface, Auth1ServiceTokenInterface } 
 import { HttpClient } from '@angular/common/http';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { Router, ActivatedRoute } from '@angular/router';
-import { Analytics } from '@angular/fire/analytics';
+import { Analytics } from 'app/firebase/analytics';
 import { LoggerService } from '../../../services/logger.service';
 import { AppFileService } from '../../../services/app.file.service';
 import { AppEventService } from '../../../services/app.event.service';

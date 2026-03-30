@@ -17,7 +17,7 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { of, Subject, delay } from 'rxjs';
 import { User, EventInterface, DataPace, DataGradeAdjustedPace, DataSpeedAvg, ActivityTypes } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { Analytics } from '@angular/fire/analytics';
+import { Analytics } from 'app/firebase/analytics';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 
 // Mock MatTableDataSource
@@ -33,7 +33,7 @@ vi.mock('@angular/material/table', () => ({
     }
 }));
 // Mock Analytics module
-vi.mock('@angular/fire/analytics', () => ({
+vi.mock('app/firebase/analytics', () => ({
     Analytics: class { },
     logEvent: vi.fn()
 }));

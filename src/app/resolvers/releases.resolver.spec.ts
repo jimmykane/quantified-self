@@ -4,7 +4,7 @@ import { of } from 'rxjs';
 import { AppWhatsNewService, ChangelogPost } from '../services/app.whats-new.service';
 import { releasesResolver } from './releases.resolver';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { Timestamp } from '@angular/fire/firestore';
+import { Timestamp } from 'app/firebase/firestore';
 
 describe('releasesResolver', () => {
     const executeResolver: ResolveFn<ChangelogPost[]> = (...resolverParameters) =>

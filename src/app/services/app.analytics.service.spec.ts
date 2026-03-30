@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { AppAnalyticsService } from './app.analytics.service';
-import { Analytics } from '@angular/fire/analytics';
+import { Analytics } from 'app/firebase/analytics';
 import { logEvent, setAnalyticsCollectionEnabled } from 'firebase/analytics';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { BehaviorSubject } from 'rxjs';
@@ -8,7 +8,7 @@ import { User } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { LoggerService } from './logger.service';
 
-// Mock firebase/analytics (not @angular/fire/analytics)
+// Mock firebase/analytics (not app/firebase/analytics)
 vi.mock('firebase/analytics', async (importOriginal) => {
     const actual = await importOriginal<any>();
     return {

@@ -8,7 +8,7 @@ import {
   EventInterface,
   EventUtilities,
 } from '@sports-alliance/sports-lib';
-import { Storage, getBytes, getMetadata, ref } from '@angular/fire/storage';
+import { Storage, getBytes, getMetadata, ref } from 'app/firebase/storage';
 import { AppFileService } from './app.file.service';
 import { LoggerService } from './logger.service';
 import { AppEventUtilities } from '../utils/app.event.utilities';

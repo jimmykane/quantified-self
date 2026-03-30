@@ -31,7 +31,7 @@ import {
   UserUnitSettingsInterface,
   VerticalSpeedUnits
 } from '@sports-alliance/sports-lib';
-import { Auth, authState, user } from '@angular/fire/auth';
+import { Auth, authState, user } from 'app/firebase/auth';
 import { HttpClient } from '@angular/common/http';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import {
@@ -82,7 +82,7 @@ import { DataDeviceNames } from '@sports-alliance/sports-lib';
 import { DataPeakEPOC } from '@sports-alliance/sports-lib';
 import { DataAerobicTrainingEffect } from '@sports-alliance/sports-lib';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib';
-import { Firestore, doc, docData, collection, collectionData, setDoc, updateDoc } from '@angular/fire/firestore';
+import { Firestore, doc, docData, collection, collectionData, setDoc, updateDoc } from 'app/firebase/firestore';
 import { AppFunctionsService } from './app.functions.service';
 import { FunctionName } from '@shared/functions-manifest';
 
@@ -239,6 +239,68 @@ export class AppUserService implements OnDestroy {
     return code === 'permission-denied' || code === 'firestore/permission-denied';
   }
 
+  private buildFirestoreReadErrorContext(userID: string, path: string, error: unknown) {
+    const authUID = this.auth.currentUser?.uid ?? null;
+    const code = (error as { code?: unknown } | null)?.code;
+    const message = (error as { message?: unknown } | null)?.message;
+
+    return {
+      userID,
+      path,
+      code: typeof code === 'string' ? code : null,
+      message: typeof message === 'string' ? message : null,
+      authUID,
+      authUidMatchesRequestedUser: authUID === userID,
+      projectID: this.firestore.app?.options?.projectId ?? null,
+    };
+  }
+
+  private async logPermissionDeniedReadDiagnostics(userID: string, path: string, sourceError: unknown): Promise<void> {
+    const currentUser = this.auth.currentUser;
+    if (!currentUser) {
+      this.logger.error('[AppUserService] Permission-denied diagnostics: no current auth user', {
+        userID,
+        path,
+      }, sourceError);
+      return;
+    }
+
+    try {
+      const tokenResult = await currentUser.getIdTokenResult();
+      const claims = tokenResult?.claims ?? {};
+
+      this.logger.error('[AppUserService] Permission-denied diagnostics snapshot', {
+        userID,
+        path,
+        authUID: currentUser.uid,
+        authUidMatchesRequestedUser: currentUser.uid === userID,
+        issuedAtTime: tokenResult?.issuedAtTime ?? null,
+        authTime: tokenResult?.authTime ?? null,
+        expirationTime: tokenResult?.expirationTime ?? null,
+        claims: {
+          admin: claims['admin'] === true,
+          stripeRole: typeof claims['stripeRole'] === 'string' ? claims['stripeRole'] : null,
+          impersonatedBy: typeof claims['impersonatedBy'] === 'string' ? claims['impersonatedBy'] : null,
+        },
+        claimKeys: Object.keys(claims).sort(),
+      }, sourceError);
+    } catch (diagnosticsError) {
+      this.logger.error('[AppUserService] Failed to capture permission-denied diagnostics snapshot', {
+        userID,
+        path,
+      }, diagnosticsError);
+    }
+  }
+
+  private logUserSubDocumentReadError(docLabel: 'legal' | 'system' | 'settings', userID: string, path: string, error: unknown): void {
+    const errorContext = this.buildFirestoreReadErrorContext(userID, path, error);
+    this.logger.error(`[AppUserService] Error fetching ${docLabel} doc`, errorContext, error);
+
+    if (this.isFirestorePermissionDenied(error)) {
+      void this.logPermissionDeniedReadDiagnostics(userID, path, error);
+    }
+  }
+
   public readonly user = toSignal(this.user$,
     { initialValue: null, injector: this.injector }
   );
@@ -348,30 +410,15 @@ export class AppUserService implements OnDestroy {
           catchError((err) => throwError(() => err))
         ),
         legal: (docData(legalDoc) as Observable<any>).pipe(catchError((err) => {
-          this.logger.error('[AppUserService] Error fetching legal doc', {
-            userID,
-            path: `users/${userID}/legal/agreements`,
-            code: err?.code ?? null,
-            message: err?.message ?? null
-          }, err);
+          this.logUserSubDocumentReadError('legal', userID, `users/${userID}/legal/agreements`, err);
           return of({});
         })),
         system: (docData(systemDoc) as Observable<any>).pipe(catchError((err) => {
-          this.logger.error('[AppUserService] Error fetching system doc', {
-            userID,
-            path: `users/${userID}/system/status`,
-            code: err?.code ?? null,
-            message: err?.message ?? null
-          }, err);
+          this.logUserSubDocumentReadError('system', userID, `users/${userID}/system/status`, err);
           return of({});
         })),
         settings: (docData(settingsDoc) as Observable<any>).pipe(catchError((err) => {
-          this.logger.error('[AppUserService] Error fetching settings doc', {
-            userID,
-            path: `users/${userID}/config/settings`,
-            code: err?.code ?? null,
-            message: err?.message ?? null
-          }, err);
+          this.logUserSubDocumentReadError('settings', userID, `users/${userID}/config/settings`, err);
           return of({});
         }))
       }).pipe(

@@ -2,16 +2,16 @@ import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AppFitUploadService } from './app.fit-upload.service';
-import { FirebaseApp } from '@angular/fire/app';
-import { Auth } from '@angular/fire/auth';
-import { AppCheck } from '@angular/fire/app-check';
+import { FirebaseApp } from 'app/firebase/app';
+import { Auth } from 'app/firebase/auth';
+import { AppCheck } from 'app/firebase/app-check';
 
 const hoisted = vi.hoisted(() => ({
   mockGetAppCheckToken: vi.fn(),
 }));
 
-vi.mock('@angular/fire/app-check', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@angular/fire/app-check')>();
+vi.mock('app/firebase/app-check', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('app/firebase/app-check')>();
   return {
     ...actual,
     getToken: (...args: unknown[]) => hoisted.mockGetAppCheckToken(...args),

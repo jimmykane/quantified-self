@@ -2,8 +2,9 @@ import { inject, Injectable, EnvironmentInjector, runInInjectionContext, NgZone 
 import { Observable, of } from 'rxjs';
 import { map, shareReplay, switchMap, take } from 'rxjs/operators';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { Auth, authState, user, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, sendPasswordResetEmail, GoogleAuthProvider, GithubAuthProvider, FacebookAuthProvider, TwitterAuthProvider, OAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, fetchSignInMethodsForEmail, linkWithCredential, AuthCredential, linkWithPopup, AuthProvider, signInWithCustomToken, User as FirebaseAuthUser } from '@angular/fire/auth';
-import { Firestore, clearIndexedDbPersistence, terminate } from '@angular/fire/firestore';
+import { Auth, authState, user, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, sendPasswordResetEmail, GoogleAuthProvider, GithubAuthProvider, FacebookAuthProvider, TwitterAuthProvider, OAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, fetchSignInMethodsForEmail, linkWithCredential, linkWithPopup, signInWithCustomToken } from 'app/firebase/auth';
+import type { AuthCredential, AuthProvider, FirebaseUserType } from 'app/firebase/auth';
+import { Firestore, clearIndexedDbPersistence, terminate } from 'app/firebase/firestore';
 import { Privacy, User } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../services/app.user.service';
 import { LocalStorageService } from '../services/storage/app.local.storage.service';
@@ -23,7 +24,7 @@ import { AppUserInterface } from '../models/app-user.interface';
 })
 export class AppAuthService {
   public user$: Observable<AppUserInterface | null>;
-  public authState$: Observable<FirebaseAuthUser | null>;
+  public authState$: Observable<FirebaseUserType | null>;
   // store the URL so we can redirect after logging in
   redirectUrl: string = '';
 

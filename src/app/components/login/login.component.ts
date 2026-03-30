@@ -6,7 +6,7 @@ import { AppAuthService } from '../../authentication/app.auth.service';
 import { User } from '@sports-alliance/sports-lib';
 import { take, filter } from 'rxjs/operators';
 import { AppUserService } from '../../services/app.user.service';
-import { OAuthProvider } from '@angular/fire/auth';
+import { OAuthProvider } from 'app/firebase/auth';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
 import { LoggerService } from '../../services/logger.service';

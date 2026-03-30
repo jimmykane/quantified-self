@@ -4,7 +4,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { RouterModule } from '@angular/router';
-import { Auth } from '@angular/fire/auth';
+import { Auth } from 'app/firebase/auth';
 import { LoggerService } from '../../services/logger.service';
 
 @Component({

@@ -1,4 +1,4 @@
-import { Timestamp } from '@angular/fire/firestore';
+import { Timestamp } from 'app/firebase/firestore';
 
 export interface AppFirestoreTimestampLike {
     seconds: number;

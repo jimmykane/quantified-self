@@ -1,5 +1,5 @@
 import { inject, Injectable, EnvironmentInjector } from '@angular/core';
-import { Firestore } from '@angular/fire/firestore';
+import { Firestore } from 'app/firebase/firestore';
 import { from, Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { AppFunctionsService } from './app.functions.service';
