@@ -13,7 +13,6 @@ import {
   effect,
   inject,
   Injector,
-  runInInjectionContext,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { throttleTime } from 'rxjs/operators';
@@ -281,20 +280,18 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   private zoomRangeOwnerEventID: string | null = null;
 
   constructor() {
-    runInInjectionContext(this.injector, () => {
-      effect(() => {
-        const chartSettings = this.userSettingsQuery.chartSettings();
-        this.userSettingsQuery.unitSettings();
-        if (
-          this.fillOpacityOverride !== null
-          && Math.abs(AppUserUtilities.getResolvedChartFillOpacity(chartSettings) - this.fillOpacityOverride) < 0.0001
-        ) {
-          this.fillOpacityOverride = null;
-          this.cdr.markForCheck();
-        }
-        this.queueRebuild('settings-effect');
-      }, { injector: this.injector });
-    });
+    effect(() => {
+      const chartSettings = this.userSettingsQuery.chartSettings();
+      this.userSettingsQuery.unitSettings();
+      if (
+        this.fillOpacityOverride !== null
+        && Math.abs(AppUserUtilities.getResolvedChartFillOpacity(chartSettings) - this.fillOpacityOverride) < 0.0001
+      ) {
+        this.fillOpacityOverride = null;
+        this.cdr.markForCheck();
+      }
+      this.queueRebuild('settings-effect');
+    }, { injector: this.injector });
   }
 
   ngOnInit(): void {

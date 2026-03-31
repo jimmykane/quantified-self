@@ -1,4 +1,4 @@
-import { inject, Injectable, Injector, OnDestroy, runInInjectionContext } from '@angular/core';
+import { inject, Injectable, OnDestroy } from '@angular/core';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { EventImporterJSON } from '@sports-alliance/sports-lib';
 import { combineLatest, from, Observable, of, throwError, zip } from 'rxjs';
@@ -75,7 +75,6 @@ export type StreamHydrationMode = 'attach_streams_only' | 'replace_activities';
 export class AppEventService implements OnDestroy {
 
   private firestore = inject(Firestore);
-  private injector = inject(Injector);
   private fileService = inject(AppFileService);
   private logger = inject(LoggerService);
   private appEventUtilities = inject(AppEventUtilities);
@@ -96,12 +95,6 @@ export class AppEventService implements OnDestroy {
   private static reportedSanitizerIssues = new Map<string, number>();
   private static reportedSanitizerEvents = new Map<string, number>();
 
-  /**
-   * NOTE: We use `runInInjectionContext(this.injector, ...)` for Firebase SDK calls (doc, collection, etc.).
-   * This is required because AngularFire v7+ needs an active injection context to correctly integrate 
-   * with Zone.js, Change Detection, and Hydration. Without this wrapper, calls made after construction 
-   * time (like in async methods) would lose context and cause console warnings or hydration bugs.
-   */
   constructor(
     private windowService: AppWindowService) {
   }
@@ -419,9 +412,9 @@ export class AppEventService implements OnDestroy {
 
   private getActivitiesForEventDetailsLive(user: User, eventID: string): Observable<ActivityInterface[]> {
     this.logger.log('[AppEventService] getActivitiesForEventDetailsLive subscribed', { userID: user.uid, eventID });
-    const activitiesCollection = runInInjectionContext(this.injector, () => collection(this.firestore, 'users', user.uid, 'activities'));
-    const q = runInInjectionContext(this.injector, () => query(activitiesCollection, where('eventID', '==', eventID)));
-    return (runInInjectionContext(this.injector, () => collectionData(q, { idField: 'id' })) as Observable<any[]>).pipe(
+    const activitiesCollection = collection(this.firestore, 'users', user.uid, 'activities');
+    const q = query(activitiesCollection, where('eventID', '==', eventID));
+    return (collectionData(q, { idField: 'id' }) as Observable<any[]>).pipe(
       distinctUntilChanged((previousSnapshots, currentSnapshots) =>
         this.buildSnapshotFingerprint(previousSnapshots) === this.buildSnapshotFingerprint(currentSnapshots)
       ),
@@ -446,9 +439,9 @@ export class AppEventService implements OnDestroy {
     this.logger.log('[AppEventService] getEventAndActivities subscribed', { userID: user.uid, eventID });
     // See
     // https://stackoverflow.com/questions/42939978/avoiding-nested-subscribes-with-combine-latest-when-one-observable-depends-on-th
-    const eventDoc = runInInjectionContext(this.injector, () => doc(this.firestore, 'users', user.uid, 'events', eventID));
+    const eventDoc = doc(this.firestore, 'users', user.uid, 'events', eventID);
     return combineLatest([
-      runInInjectionContext(this.injector, () => docData(eventDoc)).pipe(
+      docData(eventDoc).pipe(
         map(eventSnapshot => this.buildEventFromSnapshot(eventSnapshot, eventID))),
       this.getActivities(user, eventID),
     ]).pipe(
@@ -513,9 +506,9 @@ export class AppEventService implements OnDestroy {
    */
   public getEventDetailsLive(user: User, eventID: string): Observable<AppEventInterface | null> {
     this.logger.log('[AppEventService] getEventDetailsLive subscribed', { userID: user.uid, eventID });
-    const eventDoc = runInInjectionContext(this.injector, () => doc(this.firestore, 'users', user.uid, 'events', eventID));
+    const eventDoc = doc(this.firestore, 'users', user.uid, 'events', eventID);
     return combineLatest([
-      runInInjectionContext(this.injector, () => docData(eventDoc)).pipe(
+      docData(eventDoc).pipe(
         distinctUntilChanged((previousSnapshot, currentSnapshot) =>
           this.buildSnapshotFingerprint(previousSnapshot) === this.buildSnapshotFingerprint(currentSnapshot)
         ),
@@ -646,9 +639,9 @@ export class AppEventService implements OnDestroy {
 
   public getActivities(user: User, eventID: string): Observable<ActivityInterface[]> {
     this.logger.log(`[AppEventService] getActivities called for event: ${eventID}`);
-    const activitiesCollection = runInInjectionContext(this.injector, () => collection(this.firestore, 'users', user.uid, 'activities'));
-    const q = runInInjectionContext(this.injector, () => query(activitiesCollection, where('eventID', '==', eventID)));
-    return (runInInjectionContext(this.injector, () => collectionData(q, { idField: 'id' })) as Observable<any[]>).pipe(
+    const activitiesCollection = collection(this.firestore, 'users', user.uid, 'activities');
+    const q = query(activitiesCollection, where('eventID', '==', eventID));
+    return (collectionData(q, { idField: 'id' }) as Observable<any[]>).pipe(
       map((activitySnapshots: any[]) => {
         this.logger.log(`[AppEventService] getActivities emitted ${activitySnapshots?.length || 0} activity snapshots for event: ${eventID}`);
         return this.parseActivitiesFromSnapshots(eventID, activitySnapshots);
@@ -669,8 +662,8 @@ export class AppEventService implements OnDestroy {
     options: GetEventsOnceOptions = {},
   ): Observable<ActivityInterface[]> {
     this.logger.log(`[AppEventService] getActivitiesOnceByEvent called for event: ${eventID}`);
-    const activitiesCollection = runInInjectionContext(this.injector, () => collection(this.firestore, 'users', user.uid, 'activities'));
-    const q = runInInjectionContext(this.injector, () => query(activitiesCollection, where('eventID', '==', eventID)));
+    const activitiesCollection = collection(this.firestore, 'users', user.uid, 'activities');
+    const q = query(activitiesCollection, where('eventID', '==', eventID));
     const queryStart = performance.now();
     const preferCache = options.preferCache === true;
     const warmServer = options.warmServer === true;
@@ -702,10 +695,7 @@ export class AppEventService implements OnDestroy {
       queryChunkCount: Math.ceil(normalizedEventIDs.length / AppEventService.FIRESTORE_IN_QUERY_MAX_IDS),
     });
 
-    const eventsCollection = runInInjectionContext(
-      this.injector,
-      () => collection(this.firestore, 'users', user.uid, 'events'),
-    );
+    const eventsCollection = collection(this.firestore, 'users', user.uid, 'events');
     const eventIDChunks = this.chunkValues(
       normalizedEventIDs,
       AppEventService.FIRESTORE_IN_QUERY_MAX_IDS,
@@ -713,11 +703,8 @@ export class AppEventService implements OnDestroy {
 
     return from(Promise.all(eventIDChunks.map(async (eventIDChunk) => {
       try {
-        const chunkQuery = runInInjectionContext(
-          this.injector,
-          () => query(eventsCollection, where(documentId(), 'in', eventIDChunk)),
-        );
-        const querySnapshot = await runInInjectionContext(this.injector, () => getDocs(chunkQuery));
+        const chunkQuery = query(eventsCollection, where(documentId(), 'in', eventIDChunk));
+        const querySnapshot = await getDocs(chunkQuery);
         return querySnapshot.docs
           .map((snapshot) => this.buildEventFromSnapshot(snapshot.data(), snapshot.id))
           .filter((event): event is AppEventInterface => !!event);
@@ -747,8 +734,8 @@ export class AppEventService implements OnDestroy {
   }
 
   public getEventMetaData(user: User, eventID: string, serviceName: ServiceNames): Observable<EventMetaDataInterface> {
-    const metaDataDoc = runInInjectionContext(this.injector, () => doc(this.firestore, 'users', user.uid, 'events', eventID, 'metaData', serviceName));
-    return runInInjectionContext(this.injector, () => docData(metaDataDoc)).pipe(
+    const metaDataDoc = doc(this.firestore, 'users', user.uid, 'events', eventID, 'metaData', serviceName);
+    return docData(metaDataDoc).pipe(
       map(metaDataSnapshot => {
         return <EventMetaDataInterface>metaDataSnapshot;
       }),
@@ -756,8 +743,8 @@ export class AppEventService implements OnDestroy {
   }
 
   public getEventMetaDataKeys(user: User, eventID: string): Observable<string[]> {
-    const metaDataCollection = runInInjectionContext(this.injector, () => collection(this.firestore, 'users', user.uid, 'events', eventID, 'metaData'));
-    return from(runInInjectionContext(this.injector, () => getDocs(metaDataCollection))).pipe(
+    const metaDataCollection = collection(this.firestore, 'users', user.uid, 'events', eventID, 'metaData');
+    return from(getDocs(metaDataCollection)).pipe(
       map((querySnapshot) => querySnapshot.docs.map(doc => doc.id))
     );
   }
@@ -770,10 +757,7 @@ export class AppEventService implements OnDestroy {
       );
     }
 
-    return runInInjectionContext(
-      this.injector,
-      () => updateDoc(doc(this.firestore, 'users', user.uid, 'activities', activityID), sanitizedProperties)
-    );
+    return updateDoc(doc(this.firestore, 'users', user.uid, 'activities', activityID), sanitizedProperties);
   }
 
   /**
@@ -801,27 +785,25 @@ export class AppEventService implements OnDestroy {
       );
     }
 
-    return runInInjectionContext(this.injector, async () => {
-      const activityPatchIsObject = !!sanitizedActivityPatch && typeof sanitizedActivityPatch === 'object' && !Array.isArray(sanitizedActivityPatch);
-      const eventPatchIsObject = !!sanitizedEventPatch && typeof sanitizedEventPatch === 'object' && !Array.isArray(sanitizedEventPatch);
-      const hasActivityPatch = activityPatchIsObject && Object.keys(sanitizedActivityPatch as Record<string, unknown>).length > 0;
-      const hasEventPatch = eventPatchIsObject && Object.keys(sanitizedEventPatch as Record<string, unknown>).length > 0;
+    const activityPatchIsObject = !!sanitizedActivityPatch && typeof sanitizedActivityPatch === 'object' && !Array.isArray(sanitizedActivityPatch);
+    const eventPatchIsObject = !!sanitizedEventPatch && typeof sanitizedEventPatch === 'object' && !Array.isArray(sanitizedEventPatch);
+    const hasActivityPatch = activityPatchIsObject && Object.keys(sanitizedActivityPatch as Record<string, unknown>).length > 0;
+    const hasEventPatch = eventPatchIsObject && Object.keys(sanitizedEventPatch as Record<string, unknown>).length > 0;
 
-      if (!hasActivityPatch && !hasEventPatch) {
-        return;
-      }
+    if (!hasActivityPatch && !hasEventPatch) {
+      return;
+    }
 
-      const batch = writeBatch(this.firestore);
-      if (hasActivityPatch) {
-        const activityRef = doc(this.firestore, 'users', user.uid, 'activities', activityID);
-        batch.update(activityRef, sanitizedActivityPatch);
-      }
-      if (hasEventPatch) {
-        const eventRef = doc(this.firestore, 'users', user.uid, 'events', eventID);
-        batch.update(eventRef, sanitizedEventPatch);
-      }
-      await batch.commit();
-    });
+    const batch = writeBatch(this.firestore);
+    if (hasActivityPatch) {
+      const activityRef = doc(this.firestore, 'users', user.uid, 'activities', activityID);
+      batch.update(activityRef, sanitizedActivityPatch);
+    }
+    if (hasEventPatch) {
+      const eventRef = doc(this.firestore, 'users', user.uid, 'events', eventID);
+      batch.update(eventRef, sanitizedEventPatch);
+    }
+    await batch.commit();
   }
 
   public async updateEventProperties(user: User, eventID: string, propertiesToUpdate: any) {
@@ -834,10 +816,7 @@ export class AppEventService implements OnDestroy {
       );
     }
 
-    return runInInjectionContext(
-      this.injector,
-      () => updateDoc(doc(this.firestore, 'users', user.uid, 'events', eventID), sanitizedProperties)
-    );
+    return updateDoc(doc(this.firestore, 'users', user.uid, 'events', eventID), sanitizedProperties);
   }
 
   /**
@@ -848,7 +827,7 @@ export class AppEventService implements OnDestroy {
    * on document deletion. See: functions/src/events/cleanup.ts
    */
   public async deleteAllEventData(user: User, eventID: string): Promise<boolean> {
-    await runInInjectionContext(this.injector, () => deleteDoc(doc(this.firestore, 'users', user.uid, 'events', eventID)));
+    await deleteDoc(doc(this.firestore, 'users', user.uid, 'events', eventID));
     return true;
   }
 
@@ -1183,12 +1162,12 @@ export class AppEventService implements OnDestroy {
     const observables: Observable<DocumentSnapshot>[] = [];
     if (startAfterDoc) {
       observables.push(
-        from(runInInjectionContext(this.injector, () => getDoc(doc(this.firestore, 'users', user.uid, 'events', startAfterDoc.getID()))))
+        from(getDoc(doc(this.firestore, 'users', user.uid, 'events', startAfterDoc.getID())))
       )
     }
     if (endBeforeDoc) {
       observables.push(
-        from(runInInjectionContext(this.injector, () => getDoc(doc(this.firestore, 'users', user.uid, 'events', endBeforeDoc.getID()))))
+        from(getDoc(doc(this.firestore, 'users', user.uid, 'events', endBeforeDoc.getID())))
       )
     }
     return zip(...observables).pipe(switchMap(([resultA, resultB]) => {
@@ -1291,7 +1270,7 @@ export class AppEventService implements OnDestroy {
         }
       };
 
-      const unsubscribe = runInInjectionContext(this.injector, () => onSnapshot(
+      const unsubscribe = onSnapshot(
         q,
         { includeMetadataChanges: false },
         (querySnapshot: QuerySnapshot<DocumentData>) => {
@@ -1358,7 +1337,7 @@ export class AppEventService implements OnDestroy {
           subscriber.next(events);
         },
         (error) => subscriber.error(error)
-      ));
+      );
 
       return { unsubscribe };
     });
@@ -1374,7 +1353,7 @@ export class AppEventService implements OnDestroy {
   ): Promise<GetEventsOnceResult> {
     const cacheStart = performance.now();
     try {
-      const cacheSnapshot = await runInInjectionContext(this.injector, () => getDocsFromCache(q));
+      const cacheSnapshot = await getDocsFromCache(q);
       const cacheEvents = this.deserializeEventsFromQueryDocs(cacheSnapshot.docs, userID, 'app_event_service_get_events_once_cache_deserialize', cacheSnapshot.size);
       this.logger.info('[perf] app_event_service_get_events_once_cache_first_hit', {
         durationMs: Number((performance.now() - cacheStart).toFixed(2)),
@@ -1418,7 +1397,7 @@ export class AppEventService implements OnDestroy {
     queryKey: string,
     seedLiveQuery: boolean,
   ): Promise<GetEventsOnceResult> {
-    const querySnapshot = await runInInjectionContext(this.injector, () => getDocs(q));
+    const querySnapshot = await getDocs(q);
     this.logger.info('[perf] app_event_service_get_events_once_get_docs', {
       durationMs: Number((performance.now() - queryStart).toFixed(2)),
       snapshots: querySnapshot?.size || 0,
@@ -1438,7 +1417,7 @@ export class AppEventService implements OnDestroy {
 
   private warmEventsOnceServerQuery(q: any, userID: string): void {
     const warmStart = performance.now();
-    void runInInjectionContext(this.injector, () => getDocs(q)).then((snapshot) => {
+    void getDocs(q).then((snapshot) => {
       this.logger.info('[perf] app_event_service_get_events_once_warm_server', {
         durationMs: Number((performance.now() - warmStart).toFixed(2)),
         snapshots: snapshot?.size || 0,
@@ -1465,7 +1444,7 @@ export class AppEventService implements OnDestroy {
   ): Promise<ActivityInterface[]> {
     const cacheStart = performance.now();
     try {
-      const cacheSnapshot = await runInInjectionContext(this.injector, () => getDocsFromCache(q));
+      const cacheSnapshot = await getDocsFromCache(q);
       const cacheActivities = this.parseActivitiesFromQueryDocs(eventID, cacheSnapshot.docs);
       this.logger.info('[perf] app_event_service_get_activities_once_cache_first_hit', {
         durationMs: Number((performance.now() - cacheStart).toFixed(2)),
@@ -1505,7 +1484,7 @@ export class AppEventService implements OnDestroy {
     eventID: string,
     queryStart: number,
   ): Promise<ActivityInterface[]> {
-    const querySnapshot = await runInInjectionContext(this.injector, () => getDocs(q));
+    const querySnapshot = await getDocs(q);
     this.logger.info('[perf] app_event_service_get_activities_once_get_docs', {
       durationMs: Number((performance.now() - queryStart).toFixed(2)),
       snapshots: querySnapshot?.size || 0,
@@ -1519,7 +1498,7 @@ export class AppEventService implements OnDestroy {
 
   private warmActivitiesOnceServerQuery(q: any, userID: string, eventID: string): void {
     const warmStart = performance.now();
-    void runInInjectionContext(this.injector, () => getDocs(q)).then((snapshot) => {
+    void getDocs(q).then((snapshot) => {
       this.logger.info('[perf] app_event_service_get_activities_once_warm_server', {
         durationMs: Number((performance.now() - warmStart).toFixed(2)),
         snapshots: snapshot?.size || 0,
@@ -1673,7 +1652,7 @@ export class AppEventService implements OnDestroy {
   private _getEventsAndActivities(user: User, whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [], orderByField: string = 'startDate', asc: boolean = false, limitCount: number = 10, startAfterDoc?: any, endBeforeDoc?: any): Observable<EventInterface[]> {
     const q = this.getEventQueryForUser(user, whereClauses, orderByField, asc, limitCount, startAfterDoc, endBeforeDoc);
 
-    return runInInjectionContext(this.injector, () => collectionData(q, { idField: 'id' })).pipe(
+    return (collectionData(q, { idField: 'id' }) as Observable<any[]>).pipe(
       distinctUntilChanged((p, c) => JSON.stringify(p) === JSON.stringify(c)),
       map((eventSnapshots: any[]) => {
         this.logger.log(`[AppEventService] _getEventsAndActivities emitted ${eventSnapshots?.length || 0} event snapshots for user: ${user.uid}`);
@@ -1721,39 +1700,37 @@ export class AppEventService implements OnDestroy {
   }
 
   private getEventQueryForUser(user: User, whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [], orderByField: string = 'startDate', asc: boolean = false, limitCount: number = 10, startAfterDoc?: any, endBeforeDoc?: any) {
-    return runInInjectionContext(this.injector, () => {
-      const eventsRef = collection(this.firestore, `users/${user.uid}/events`);
-      const constraints: any[] = [];
+    const eventsRef = collection(this.firestore, `users/${user.uid}/events`);
+    const constraints: any[] = [];
 
-      // Replicate legacy logic for startDate ordering when filtering
-      if (whereClauses.length) {
-        whereClauses.forEach(clause => {
-          if (clause.fieldPath === 'startDate' && (orderByField !== 'startDate')) {
-            constraints.push(orderBy('startDate', 'asc'));
-          }
-        });
-      }
-
-      // Main Sort
-      constraints.push(orderBy(orderByField, asc ? 'asc' : 'desc'));
-
-      // Filters
+    // Replicate legacy logic for startDate ordering when filtering
+    if (whereClauses.length) {
       whereClauses.forEach(clause => {
-        constraints.push(where(clause.fieldPath, clause.opStr, clause.value));
+        if (clause.fieldPath === 'startDate' && (orderByField !== 'startDate')) {
+          constraints.push(orderBy('startDate', 'asc'));
+        }
       });
+    }
 
-      if (limitCount > 0) {
-        constraints.push(limit(limitCount));
-      }
-      if (startAfterDoc) {
-        constraints.push(startAfter(startAfterDoc));
-      }
-      if (endBeforeDoc) {
-        constraints.push(endBefore(endBeforeDoc));
-      }
+    // Main Sort
+    constraints.push(orderBy(orderByField, asc ? 'asc' : 'desc'));
 
-      return query(eventsRef, ...constraints);
+    // Filters
+    whereClauses.forEach(clause => {
+      constraints.push(where(clause.fieldPath, clause.opStr, clause.value));
     });
+
+    if (limitCount > 0) {
+      constraints.push(limit(limitCount));
+    }
+    if (startAfterDoc) {
+      constraints.push(startAfter(startAfterDoc));
+    }
+    if (endBeforeDoc) {
+      constraints.push(endBefore(endBeforeDoc));
+    }
+
+    return query(eventsRef, ...constraints);
   }
 
   // Legacy method kept for other consumers if any (though _getEvents was main one)
@@ -1777,8 +1754,8 @@ export class AppEventService implements OnDestroy {
    * @todo Cache this result (e.g., in a Signal or BehaviorSubject) to avoid unnecessary server calls on every navigation.
    */
   public async getEventCount(user: User): Promise<number> {
-    const eventsRef = runInInjectionContext(this.injector, () => collection(this.firestore, `users/${user.uid}/events`));
-    const snapshot = await runInInjectionContext(this.injector, () => getCountFromServer(query(eventsRef)));
+    const eventsRef = collection(this.firestore, `users/${user.uid}/events`);
+    const snapshot = await getCountFromServer(query(eventsRef));
     return snapshot.data().count;
   }
 }
