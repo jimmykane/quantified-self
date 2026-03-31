@@ -59,12 +59,22 @@ export interface FirestoreDataOptions {
   idField?: string;
 }
 
+const firestoreZoneRegistry = new WeakMap<FirebaseFirestore, NgZone | null>();
+
+function rememberFirestoreZone(firestore: FirebaseFirestore, zone: NgZone | null): void {
+  firestoreZoneRegistry.set(firestore, zone);
+}
+
 export function provideFirestore(factory: () => FirebaseFirestore): EnvironmentProviders {
   return makeEnvironmentProviders([
     {
       provide: Firestore,
       // `deps` forces FirebaseApp initialization before resolving Firestore.
-      useFactory: (_firebaseApp: unknown) => factory(),
+      useFactory: (_firebaseApp: unknown) => {
+        const firestore = factory();
+        rememberFirestoreZone(firestore, inject(NgZone, { optional: true }));
+        return firestore;
+      },
       deps: [FirebaseApp]
     }
   ]);
@@ -76,6 +86,10 @@ function tryInjectNgZone(): NgZone | null {
   } catch {
     return null;
   }
+}
+
+function resolveNgZoneForSource(source: Query<unknown> | DocumentReference<unknown>): NgZone | null {
+  return tryInjectNgZone() ?? firestoreZoneRegistry.get(source.firestore) ?? null;
 }
 
 function runInAngularZone(zone: NgZone | null, callback: () => void): void {
@@ -103,7 +117,7 @@ export function collectionData<T = DocumentData>(
   query: Query<T>,
   options?: FirestoreDataOptions
 ): Observable<T[]> {
-  const zone = tryInjectNgZone();
+  const zone = resolveNgZoneForSource(query);
 
   return new Observable<T[]>((subscriber) => {
     const unsubscribe = onSnapshot(
@@ -125,7 +139,7 @@ export function docData<T = DocumentData>(
   reference: DocumentReference<T>,
   options?: FirestoreDataOptions
 ): Observable<T | undefined> {
-  const zone = tryInjectNgZone();
+  const zone = resolveNgZoneForSource(reference);
 
   return new Observable<T | undefined>((subscriber) => {
     const unsubscribe = onSnapshot(

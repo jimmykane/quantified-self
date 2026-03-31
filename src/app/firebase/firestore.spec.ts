@@ -1,8 +1,9 @@
 import { NgZone } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { collectionData, docData } from './firestore';
-import type { DocumentReference, Query } from './firestore';
+import { FirebaseApp } from './app';
+import { Firestore, collectionData, docData, provideFirestore } from './firestore';
+import type { DocumentReference, FirebaseFirestoreType, Query } from './firestore';
 
 const firebaseFirestoreMocks = vi.hoisted(() => {
   return {
@@ -177,6 +178,44 @@ describe('Firebase firestore observables', () => {
     });
 
     expect(emittedValues).toEqual([undefined]);
+    expect(zoneStates).toEqual([true]);
+    subscription.unsubscribe();
+  });
+
+  it('uses provider-registered zone when collectionData is created outside injection context', () => {
+    let nextListener: SnapshotListener<QuerySnapshot<{ name: string }>> | undefined;
+    const firestoreInstance = {} as FirebaseFirestoreType;
+
+    firebaseFirestoreMocks.onSnapshot.mockImplementation(
+      (_source: unknown, next: SnapshotListener<QuerySnapshot<{ name: string }>>) => {
+        nextListener = next;
+        return vi.fn();
+      }
+    );
+
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: FirebaseApp, useValue: {} },
+        provideFirestore(() => firestoreInstance),
+      ],
+    });
+    TestBed.inject(Firestore);
+
+    const emittedValues: Array<Array<{ name: string }>> = [];
+    const zoneStates: boolean[] = [];
+    const querySource = { firestore: firestoreInstance } as Query<{ name: string }>;
+    const subscription = collectionData(querySource).subscribe((value) => {
+      emittedValues.push(value);
+      zoneStates.push(NgZone.isInAngularZone());
+    });
+
+    TestBed.inject(NgZone).runOutsideAngular(() => {
+      nextListener?.({
+        docs: [{ id: 'd-provider-zone', data: () => ({ name: 'Provider Zone' }) }]
+      });
+    });
+
+    expect(emittedValues).toEqual([[{ name: 'Provider Zone' }]]);
     expect(zoneStates).toEqual([true]);
     subscription.unsubscribe();
   });

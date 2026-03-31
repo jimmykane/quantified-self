@@ -1,7 +1,8 @@
 import { NgZone } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { authState, user } from './auth';
+import { FirebaseApp } from './app';
+import { Auth, authState, provideAuth, user } from './auth';
 import type { FirebaseAuthType, FirebaseUserType } from './auth';
 
 const firebaseAuthMocks = vi.hoisted(() => {
@@ -116,6 +117,42 @@ describe('Firebase auth observables', () => {
     });
 
     const emittedUser = { uid: 'u2' } as FirebaseUserType;
+    TestBed.inject(NgZone).runOutsideAngular(() => {
+      nextListener?.(emittedUser);
+    });
+
+    expect(emittedValues).toEqual([emittedUser]);
+    expect(zoneStates).toEqual([true]);
+    subscription.unsubscribe();
+  });
+
+  it('uses provider-registered zone when authState is created outside injection context', () => {
+    let nextListener: NextListener | undefined;
+    const authInstance = {} as FirebaseAuthType;
+
+    firebaseAuthMocks.onAuthStateChanged.mockImplementation(
+      (_auth: FirebaseAuthType, next: NextListener) => {
+        nextListener = next;
+        return vi.fn();
+      }
+    );
+
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: FirebaseApp, useValue: {} },
+        provideAuth(() => authInstance),
+      ],
+    });
+    TestBed.inject(Auth);
+
+    const emittedValues: Array<FirebaseUserType | null> = [];
+    const zoneStates: boolean[] = [];
+    const subscription = authState(authInstance).subscribe((value) => {
+      emittedValues.push(value);
+      zoneStates.push(NgZone.isInAngularZone());
+    });
+
+    const emittedUser = { uid: 'u-provider-zone' } as FirebaseUserType;
     TestBed.inject(NgZone).runOutsideAngular(() => {
       nextListener?.(emittedUser);
     });

@@ -43,12 +43,22 @@ export type {
 
 export const Auth = new InjectionToken<FirebaseAuth>('FirebaseAuth');
 
+const authZoneRegistry = new WeakMap<FirebaseAuth, NgZone | null>();
+
+function rememberAuthZone(auth: FirebaseAuth, zone: NgZone | null): void {
+  authZoneRegistry.set(auth, zone);
+}
+
 export function provideAuth(factory: () => FirebaseAuth): EnvironmentProviders {
   return makeEnvironmentProviders([
     {
       provide: Auth,
       // `deps` forces FirebaseApp initialization before resolving Auth.
-      useFactory: (_firebaseApp: unknown) => factory(),
+      useFactory: (_firebaseApp: unknown) => {
+        const auth = factory();
+        rememberAuthZone(auth, inject(NgZone, { optional: true }));
+        return auth;
+      },
       deps: [FirebaseApp]
     }
   ]);
@@ -62,6 +72,10 @@ function tryInjectNgZone(): NgZone | null {
   }
 }
 
+function resolveNgZoneForAuth(auth: FirebaseAuth): NgZone | null {
+  return tryInjectNgZone() ?? authZoneRegistry.get(auth) ?? null;
+}
+
 function runInAngularZone(zone: NgZone | null, callback: () => void): void {
   if (!zone) {
     callback();
@@ -73,7 +87,7 @@ function runInAngularZone(zone: NgZone | null, callback: () => void): void {
 }
 
 export function authState(auth: FirebaseAuth): Observable<FirebaseUser | null> {
-  const zone = tryInjectNgZone();
+  const zone = resolveNgZoneForAuth(auth);
 
   return new Observable<FirebaseUser | null>((subscriber) => {
     const unsubscribe = onAuthStateChanged(
@@ -86,7 +100,7 @@ export function authState(auth: FirebaseAuth): Observable<FirebaseUser | null> {
 }
 
 export function user(auth: FirebaseAuth): Observable<FirebaseUser | null> {
-  const zone = tryInjectNgZone();
+  const zone = resolveNgZoneForAuth(auth);
 
   return new Observable<FirebaseUser | null>((subscriber) => {
     const unsubscribe = onIdTokenChanged(

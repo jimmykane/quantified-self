@@ -300,9 +300,7 @@ export class AppUserService implements OnDestroy {
     }
   }
 
-  public readonly user = toSignal(this.user$,
-    { initialValue: null, injector: this.injector }
-  );
+  public readonly user = toSignal(this.user$, { initialValue: null });
 
   public readonly stripeRoleSignal = computed(() => this.user()?.stripeRole || null);
   public readonly isAdminSignal = computed(() => this.user()?.admin === true);
