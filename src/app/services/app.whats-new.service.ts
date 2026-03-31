@@ -1,4 +1,4 @@
-import { Injectable, Injector, computed, inject, runInInjectionContext, signal } from '@angular/core';
+import { Injectable, Injector, computed, inject, signal } from '@angular/core';
 import { Firestore, collection, collectionData, query, orderBy, where, Timestamp, addDoc, doc, updateDoc, deleteDoc } from 'app/firebase/firestore';
 import { AppWhatsNewLocalStorageService } from './storage/app.whats-new.local.storage.service';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
@@ -72,9 +72,8 @@ export class AppWhatsNewService {
 
     private _isAdminMode = signal(false);
 
-    // Derived query that changes based on admin mode
-    // Must run Firebase API calls in injection context to avoid zone issues
-    private changelogsQuery = computed(() => runInInjectionContext(this.injector, () => {
+    // Derived query that changes based on admin mode.
+    private changelogsQuery = computed(() => {
         if (this._isAdminMode()) {
             // Admin mode: Show all, ordered by date
             return query(this.changelogsCollection, orderBy('date', 'desc'));
@@ -82,11 +81,11 @@ export class AppWhatsNewService {
             // User mode: Show only published
             return query(this.changelogsCollection, where('published', '==', true), orderBy('date', 'desc'));
         }
-    }));
+    });
 
     // Re-create observable stream based on the computed query
     public changelogs$ = toObservable(this.changelogsQuery, { injector: this.injector }).pipe(
-        switchMap(q => runInInjectionContext(this.injector, () => collectionData(q, { idField: 'id' }))),
+        switchMap(q => collectionData(q, { idField: 'id' })),
         map(changelogs => changelogs as ChangelogPost[]),
         shareReplay(1)
     );

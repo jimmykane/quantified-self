@@ -1,4 +1,4 @@
-import { EnvironmentInjector, Injectable, inject, runInInjectionContext } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import {
   Firestore,
   deleteDoc,
@@ -17,13 +17,11 @@ const AI_INSIGHTS_LATEST_SNAPSHOT_VERSION = 1;
 })
 export class AiInsightsLatestSnapshotService {
   private readonly firestore = inject(Firestore);
-  private readonly injector = inject(EnvironmentInjector);
   private readonly logger = inject(LoggerService);
 
   async loadLatest(userID: string): Promise<AiInsightsLatestSnapshot | null> {
     try {
-      const latestSnapshot = await runInInjectionContext(this.injector, () =>
-        getDoc(doc(this.firestore, 'users', userID, 'aiInsightsRequests', AI_INSIGHTS_LATEST_DOC_ID)));
+      const latestSnapshot = await getDoc(doc(this.firestore, 'users', userID, 'aiInsightsRequests', AI_INSIGHTS_LATEST_DOC_ID));
       if (!latestSnapshot.exists()) {
         return null;
       }
@@ -51,8 +49,7 @@ export class AiInsightsLatestSnapshotService {
 
   private async deleteLatest(userID: string): Promise<void> {
     try {
-      await runInInjectionContext(this.injector, () =>
-        deleteDoc(doc(this.firestore, 'users', userID, 'aiInsightsRequests', AI_INSIGHTS_LATEST_DOC_ID)));
+      await deleteDoc(doc(this.firestore, 'users', userID, 'aiInsightsRequests', AI_INSIGHTS_LATEST_DOC_ID));
     } catch (error) {
       this.logger.error('[AiInsightsLatestSnapshotService] Failed to delete invalid latest AI insight snapshot.', { userID, error });
     }

@@ -1,4 +1,4 @@
-import { inject, Injector, runInInjectionContext } from '@angular/core';
+import { inject } from '@angular/core';
 import { ActivatedRouteSnapshot, ResolveFn, Router, RouterStateSnapshot } from '@angular/router';
 import { AppEventService, type EventsOnceSource } from '../services/app.event.service';
 import { AppUserService } from '../services/app.user.service';
@@ -32,7 +32,6 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
     const router = inject(Router);
     const snackBar = inject(MatSnackBar);
     const logger = inject(LoggerService);
-    const injector = inject(Injector);
     const runId = ++dashboardResolverRunCounter;
     const resolverStart = performance.now();
 
@@ -46,7 +45,7 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
 
     return authService.user$.pipe(
         take(1),
-        switchMap((user: AppUserInterface | null) => runInInjectionContext(injector, async () => {
+        switchMap(async (user: AppUserInterface | null) => {
             if (!user) {
                 // If user is not authenticated, redirect to login and return empty data
                 router.navigate(['login']);
@@ -194,7 +193,7 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
                 hasMergedEvents,
                 eventsSource: eventsResult?.source
             };
-        })),
+        }),
         map((result) => {
             return result as DashboardResolverData;
         })

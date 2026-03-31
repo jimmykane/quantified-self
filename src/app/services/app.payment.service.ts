@@ -1,4 +1,4 @@
-import { Injectable, inject, Injector, runInInjectionContext } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../components/confirmation-dialog/confirmation-dialog.component';
 import { environment } from '../../environments/environment';
@@ -94,7 +94,6 @@ export class AppPaymentService {
     private auth = inject(Auth);
     private functionsService = inject(AppFunctionsService);
     private dialog = inject(MatDialog);
-    private injector = inject(Injector);
     private readonly userCancelledPortalMessage = 'User cancelled redirection to portal.';
     private readonly maxCheckoutRetryAttempts = 1;
     private readonly subscriptionStatuses: StripeSubscription['status'][] = ['active', 'trialing', 'canceled', 'incomplete', 'incomplete_expired', 'past_due', 'unpaid'];
@@ -112,7 +111,7 @@ export class AppPaymentService {
     private async getProductsFromServer(): Promise<StripeProduct[]> {
         const productsRef = collection(this.firestore, 'products');
         const activeProductsQuery = query(productsRef, where('active', '==', true));
-        const productsSnapshot = await runInInjectionContext(this.injector, () => getDocsFromServer(activeProductsQuery));
+        const productsSnapshot = await getDocsFromServer(activeProductsQuery);
         const products = productsSnapshot.docs.map((productDoc) => ({
             id: productDoc.id,
             ...(productDoc.data() as Omit<StripeProduct, 'id'>)
@@ -126,7 +125,7 @@ export class AppPaymentService {
         const pricesRef = collection(this.firestore, `products/${product.id}/prices`);
         const activePricesQuery = query(pricesRef, where('active', '==', true));
 
-        const pricesSnapshot = await runInInjectionContext(this.injector, () => getDocsFromServer(activePricesQuery));
+        const pricesSnapshot = await getDocsFromServer(activePricesQuery);
         const prices = pricesSnapshot.docs.map((priceDoc) => ({
             id: priceDoc.id,
             ...(priceDoc.data() as Omit<StripePrice, 'id'>)
@@ -241,7 +240,7 @@ export class AppPaymentService {
 
         let checkoutSessionDocId = '';
         try {
-            const sessionDoc = await runInInjectionContext(this.injector, () => addDoc(checkoutSessionsRef, sessionPayload));
+            const sessionDoc = await addDoc(checkoutSessionsRef, sessionPayload);
             checkoutSessionDocId = sessionDoc.id;
             this.logger.log('Checkout session created with ID:', checkoutSessionDocId);
         } catch (error) {
@@ -339,7 +338,7 @@ export class AppPaymentService {
 
         try {
             const activeSubs = await firstValueFrom(
-                runInInjectionContext(this.injector, () => collectionData(activeQuery).pipe(take(1)))
+                collectionData(activeQuery).pipe(take(1))
             );
 
             if (!activeSubs.length) {
@@ -412,7 +411,7 @@ export class AppPaymentService {
     private async waitForCheckoutSessionUpdate(userId: string, checkoutSessionDocId: string): Promise<CheckoutSessionDocumentData> {
         const sessionRef = doc(this.firestore, `customers/${userId}/checkout_sessions/${checkoutSessionDocId}`);
         const session = await firstValueFrom(
-            runInInjectionContext(this.injector, () => docData(sessionRef)).pipe(
+            docData(sessionRef).pipe(
                 filter((sessionData): sessionData is CheckoutSessionDocumentData => {
                     const data = sessionData as CheckoutSessionDocumentData | null | undefined;
                     return !!data && (!!data.url || !!data.error);
@@ -476,7 +475,7 @@ export class AppPaymentService {
             if (!candidatePaths.length) {
                 const productsRef = collection(this.firestore, 'products');
                 const activeProductsQuery = query(productsRef, where('active', '==', true));
-                const productsSnapshot = await runInInjectionContext(this.injector, () => getDocs(activeProductsQuery));
+                const productsSnapshot = await getDocs(activeProductsQuery);
                 for (const productDoc of productsSnapshot.docs) {
                     candidatePaths.push(`products/${productDoc.id}/prices/${priceId}`);
                 }
@@ -484,7 +483,7 @@ export class AppPaymentService {
 
             for (const path of candidatePaths) {
                 const priceRef = doc(this.firestore, path);
-                const priceSnapshot = await runInInjectionContext(this.injector, () => getDoc(priceRef));
+                const priceSnapshot = await getDoc(priceRef);
                 if (!priceSnapshot.exists()) {
                     continue;
                 }
@@ -527,7 +526,7 @@ export class AppPaymentService {
         const subscriptionsRef = collection(this.firestore, `customers/${user.uid}/subscriptions`);
         const activeQuery = query(subscriptionsRef, where('status', 'in', ['active', 'trialing']));
 
-        return runInInjectionContext(this.injector, () => collectionData(activeQuery, { idField: 'id' })).pipe(
+        return collectionData(activeQuery, { idField: 'id' }).pipe(
             map(docs => docs as StripeSubscription[]),
             switchMap((subscriptions: StripeSubscription[]) => {
                 if (subscriptions.length === 0) return from([[]]);
@@ -584,7 +583,7 @@ export class AppPaymentService {
         );
 
         try {
-            const snapshot = await runInInjectionContext(this.injector, () => getDocs(historyQuery));
+            const snapshot = await getDocs(historyQuery);
             return snapshot.docs.length > 0;
         } catch (error) {
             if (onError === 'fail-closed') {
