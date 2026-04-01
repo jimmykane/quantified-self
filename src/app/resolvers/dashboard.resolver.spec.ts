@@ -35,6 +35,18 @@ describe('dashboardResolver', () => {
     } as any;
 
     beforeEach(() => {
+        mockUser.settings = {
+            dashboardSettings: {
+                dateRange: DateRanges.all,
+                activityTypes: ['Run'],
+                includeMergedEvents: true,
+                startDate: null,
+                endDate: null,
+            },
+            unitSettings: {
+                startOfTheWeek: DaysOfTheWeek.Monday
+            }
+        } as any;
         eventServiceSpy = { getEventsBy: vi.fn(), getEventsOnceByWithMeta: vi.fn() };
         userServiceSpy = { getUserByID: vi.fn() };
         authServiceSpy = { user$: of(mockUser) };
@@ -58,8 +70,7 @@ describe('dashboardResolver', () => {
         expect(executeResolver).toBeTruthy();
     });
 
-    it('should resolve with user and empty events when date range is all and no events returned', () => new Promise<void>(done => {
-        eventServiceSpy.getEventsOnceByWithMeta.mockReturnValue(of({ events: [], source: 'cache' }));
+    it('should skip one-shot event prefetch when dashboard date range is all', () => new Promise<void>(done => {
 
         const route = new ActivatedRouteSnapshot();
         vi.spyOn(route.paramMap, 'get').mockReturnValue(null);
@@ -69,25 +80,19 @@ describe('dashboardResolver', () => {
         (executeResolver(route, state) as any).subscribe((result: DashboardResolverData) => {
             expect(result.user).toEqual(mockUser);
             expect(result.events).toEqual([]);
-            expect(result.eventsSource).toBe('cache');
+            expect(result.eventsPrefetchSkipped).toBe(true);
+            expect(result.eventsSource).toBeUndefined();
             expect(result.targetUser).toBeUndefined(); // or null depending on impl
-            expect(eventServiceSpy.getEventsOnceByWithMeta).toHaveBeenCalledWith(
-                mockUser,
-                [],
-                'startDate',
-                false,
-                0,
-                {
-                    preferCache: true,
-                    seedLiveQuery: true,
-                    warmServer: false
-                }
-            );
+            expect(eventServiceSpy.getEventsOnceByWithMeta).not.toHaveBeenCalled();
             done();
         });
     }));
 
     it('should resolve with targetUser when userID is present', () => new Promise<void>(done => {
+        mockUser.settings.dashboardSettings.dateRange = DateRanges.custom;
+        mockUser.settings.dashboardSettings.startDate = new Date('2024-01-01T00:00:00.000Z').getTime();
+        mockUser.settings.dashboardSettings.endDate = new Date('2024-01-31T23:59:59.000Z').getTime();
+        mockUser.settings.dashboardSettings.activityTypes = [];
         const mockTargetUser = new User('targetUser');
         userServiceSpy.getUserByID.mockReturnValue(of(mockTargetUser));
         eventServiceSpy.getEventsOnceByWithMeta.mockReturnValue(of({ events: [], source: 'server' }));
@@ -111,6 +116,9 @@ describe('dashboardResolver', () => {
 
     it('should filter out merged events when includeMergedEvents is false', () => new Promise<void>(done => {
         mockUser.settings.dashboardSettings.includeMergedEvents = false;
+        mockUser.settings.dashboardSettings.dateRange = DateRanges.custom;
+        mockUser.settings.dashboardSettings.startDate = new Date('2024-01-01T00:00:00.000Z').getTime();
+        mockUser.settings.dashboardSettings.endDate = new Date('2024-01-31T23:59:59.000Z').getTime();
         mockUser.settings.dashboardSettings.activityTypes = [];
         const mergedEvent = { isMerge: true, getActivityTypesAsArray: () => [] } as any;
         const normalEvent = { isMerge: false, getActivityTypesAsArray: () => [] } as any;

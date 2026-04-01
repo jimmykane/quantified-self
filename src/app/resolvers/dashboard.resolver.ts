@@ -18,6 +18,8 @@ export interface DashboardResolverData {
     targetUser?: AppUserInterface | null;
     hasMergedEvents?: boolean;
     eventsSource?: EventsOnceSource;
+    // True when resolver intentionally skips one-shot event prefetch and relies on live stream hydration.
+    eventsPrefetchSkipped?: boolean;
 }
 
 let dashboardResolverRunCounter = 0;
@@ -126,6 +128,26 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
                     opStr: <WhereFilterOp>'<=',
                     value: searchEndDate.getTime()
                 });
+            }
+
+            // For all-time dashboards, one-shot prefetch can spend tens of seconds deserializing thousands
+            // of events before first paint. Skip this read and let the live listener hydrate initial data.
+            const shouldSkipEventsPrefetch = dashboardSettings.dateRange === DateRanges.all;
+            if (shouldSkipEventsPrefetch) {
+                logger.info('[perf] dashboard_resolver_skip_events_prefetch', {
+                    runId,
+                    durationMs: Number((performance.now() - resolverStart).toFixed(2)),
+                    reason: 'date_range_all',
+                    whereClauses: where.length,
+                    userContextUID: (targetUser ? targetUser : user)?.uid || null,
+                });
+                return {
+                    events: [],
+                    user: user,
+                    targetUser,
+                    hasMergedEvents: false,
+                    eventsPrefetchSkipped: true,
+                };
             }
 
             // Fetch events

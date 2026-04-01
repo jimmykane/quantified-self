@@ -150,6 +150,18 @@ export class AppEventService implements OnDestroy {
     }
   }
 
+  private buildQueryKeyDigest(queryKey: string | null): string | null {
+    if (!queryKey) {
+      return null;
+    }
+
+    let hash = 0;
+    for (let index = 0; index < queryKey.length; index += 1) {
+      hash = ((hash * 31) + queryKey.charCodeAt(index)) >>> 0;
+    }
+    return `${queryKey.length}:${hash.toString(16)}`;
+  }
+
   private buildEventQueryKey(
     userID: string,
     whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [],
@@ -587,6 +599,16 @@ export class AppEventService implements OnDestroy {
     const warmServer = options.warmServer === true;
     const seedLiveQuery = options.seedLiveQuery === true;
     const queryKey = this.buildEventQueryKey(user.uid, whereClauses, orderByField, asc, limitCount);
+    const queryKeyDigest = this.buildQueryKeyDigest(queryKey);
+
+    this.logger.log('[perf] app_event_service_get_events_once_query', {
+      userID: user.uid,
+      preferCache,
+      warmServer,
+      seedLiveQuery,
+      whereClauses: whereClauses.length,
+      queryKeyDigest,
+    });
 
     if (!preferCache) {
       return from(this.fetchEventsOnceFromServer(q, user.uid, queryStart, queryKey, seedLiveQuery));
@@ -1185,6 +1207,15 @@ export class AppEventService implements OnDestroy {
     const queryKey = (!startAfterDoc && !endBeforeDoc)
       ? this.buildEventQueryKey(user.uid, whereClauses, orderByField, asc, limitCount)
       : null;
+    const queryKeyDigest = this.buildQueryKeyDigest(queryKey);
+    this.logger.log('[perf] app_event_service_get_events_live_query', {
+      userID: user.uid,
+      whereClauses: whereClauses.length,
+      orderByField,
+      asc,
+      limitCount,
+      queryKeyDigest,
+    });
 
     return this.listenToEventQueryData(q, user.uid, queryStart, queryKey).pipe(
       tap((events: AppEventInterface[]) => {
@@ -1205,8 +1236,20 @@ export class AppEventService implements OnDestroy {
       const initialSeed = this.consumeEventQuerySeed(queryKey);
       const seedEventsById = initialSeed?.eventsById ?? new Map<string, AppEventInterface>();
       const seedFingerprintsById = initialSeed?.fingerprintsById ?? new Map<string, string>();
+      const queryKeyDigest = this.buildQueryKeyDigest(queryKey);
       const eventsById = new Map<string, AppEventInterface>();
       let orderedIds: string[] = [];
+      let seedMatchCount = 0;
+      let seedMismatchCount = 0;
+      let seedMissingCount = 0;
+
+      this.logger.log('[perf] app_event_service_live_query_seed_context', {
+        userID,
+        queryKeyDigest,
+        hasSeed: !!initialSeed,
+        seedEventCount: seedEventsById.size,
+        seedFingerprintCount: seedFingerprintsById.size,
+      });
 
       const hydrateEventForDoc = (
         doc: QueryDocumentSnapshot<DocumentData>,
@@ -1214,7 +1257,13 @@ export class AppEventService implements OnDestroy {
         const seedEvent = seedEventsById.get(doc.id);
         const docFingerprint = this.buildEventDocFingerprint(doc.id, doc.data());
         if (seedEvent && seedFingerprintsById.get(doc.id) === docFingerprint) {
+          seedMatchCount += 1;
           return { event: seedEvent, reusedSeed: true };
+        }
+        if (seedEvent) {
+          seedMismatchCount += 1;
+        } else {
+          seedMissingCount += 1;
         }
         return {
           event: this.deserializeEventFromDoc(doc, 'Unknown Data Types in _getEvents'),
@@ -1274,6 +1323,7 @@ export class AppEventService implements OnDestroy {
               snapshots: querySnapshot?.size || 0,
               userID,
               reason: 'no_doc_changes',
+              queryKeyDigest,
             });
             return;
           }
@@ -1285,6 +1335,7 @@ export class AppEventService implements OnDestroy {
             emissionCount,
             snapshots: querySnapshot?.size || 0,
             userID,
+            queryKeyDigest,
           });
 
           const deserializeStart = performance.now();
@@ -1321,6 +1372,11 @@ export class AppEventService implements OnDestroy {
             snapshots: querySnapshot?.size || 0,
             changedDocs: updateCount.changedDocs,
             reusedSeedDocs: updateCount.reusedSeedDocs,
+            seedMatchDocs: seedMatchCount,
+            seedMismatchDocs: seedMismatchCount,
+            seedMissingDocs: seedMissingCount,
+            seedEventCount: seedEventsById.size,
+            queryKeyDigest,
             userID,
           });
 
@@ -1600,6 +1656,12 @@ export class AppEventService implements OnDestroy {
       fingerprintsById,
       expiresAt,
     });
+    this.logger.log('[perf] app_event_service_seed_store', {
+      queryKeyDigest: this.buildQueryKeyDigest(queryKey),
+      storedCount,
+      expiresInMs: AppEventService.EVENT_QUERY_SEED_TTL_MS,
+      totalSeedsAfterStore: this.eventQuerySeeds.size,
+    });
     const cleanupTimer = setTimeout(() => {
       this.deleteEventQuerySeed(queryKey);
     }, AppEventService.EVENT_QUERY_SEED_TTL_MS);
@@ -1612,12 +1674,25 @@ export class AppEventService implements OnDestroy {
     }
     const seed = this.eventQuerySeeds.get(queryKey) || null;
     if (!seed) {
+      this.logger.log('[perf] app_event_service_seed_consume_miss', {
+        queryKeyDigest: this.buildQueryKeyDigest(queryKey),
+        totalSeedsAvailable: this.eventQuerySeeds.size,
+      });
       return null;
     }
     if (seed.expiresAt <= Date.now()) {
+      this.logger.log('[perf] app_event_service_seed_consume_expired', {
+        queryKeyDigest: this.buildQueryKeyDigest(queryKey),
+        seedEventCount: seed.eventsById.size,
+      });
       this.deleteEventQuerySeed(queryKey);
       return null;
     }
+    this.logger.log('[perf] app_event_service_seed_consume_hit', {
+      queryKeyDigest: this.buildQueryKeyDigest(queryKey),
+      seedEventCount: seed.eventsById.size,
+      seedFingerprintCount: seed.fingerprintsById.size,
+    });
     this.deleteEventQuerySeed(queryKey);
     return seed;
   }
