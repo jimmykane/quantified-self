@@ -21,14 +21,21 @@ import {
   type AggregatedChartRow,
 } from './aggregated-chart-row.helper';
 import {
+  buildDashboardFormPoints,
+  type DashboardFormPoint,
+} from './dashboard-form.helper';
+import {
   resolveLatestRecoveryNowContext,
   type DashboardRecoveryNowContext,
 } from './dashboard-recovery-now.helper';
-import { isDashboardRecoveryNowChartType } from './dashboard-special-chart-types';
+import {
+  isDashboardFormChartType,
+  isDashboardRecoveryNowChartType,
+} from './dashboard-special-chart-types';
 
 export interface DashboardChartTileViewModel extends TileChartSettingsInterface {
   timeInterval: TimeIntervals;
-  data: AggregatedChartRow[] | EventInterface[];
+  data: AggregatedChartRow[] | EventInterface[] | DashboardFormPoint[];
   recoveryNow?: DashboardRecoveryNowContext;
 }
 
@@ -81,6 +88,15 @@ export function buildDashboardTileViewModels(
 
     const chartTile = tile as TileChartSettingsInterface;
     const requestedTimeInterval = chartTile.dataTimeInterval || TimeIntervals.Auto;
+    if (isDashboardFormChartType(chartTile.chartType)) {
+      viewModels.push({
+        ...chartTile,
+        timeInterval: TimeIntervals.Daily,
+        data: buildDashboardFormPoints(normalizedEvents),
+      });
+      return viewModels;
+    }
+
     if (chartTile.chartType === ChartTypes.IntensityZones) {
       viewModels.push({
         ...chartTile,

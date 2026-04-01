@@ -112,6 +112,20 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Remaining recovery updates every minute while the tile is visible.
 - You can still move or remove this tile from the tile menu.
 
+### Form tile (CTL / ATL / TSB)
+
+- Add the dashboard **Form** tile from chart type options.
+- The tile derives daily load from **Training Stress Score** and falls back to **Power Training Stress Score** for backward compatibility.
+- It shows three headline stats: **Fitness (CTL)**, **Fatigue (ATL)**, and **Form (TSB)**.
+- The tile includes a mode toggle:
+  - **Same-day** uses CTL - ATL for each day.
+  - **Prior-day** shows readiness using the prior day CTL - ATL.
+- The status title updates dynamically from current Form bands:
+  - **High fatigue** at very negative Form values,
+  - **Building fitness** while carrying meaningful load,
+  - **Maintaining fitness** around neutral Form,
+  - **Fresh** when Form is clearly positive.
+
 ### Merge events
 
 - In the dashboard event table, select at least two events and use the merge action.

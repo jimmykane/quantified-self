@@ -25,6 +25,10 @@
     [chartDataTimeInterval]="dataTimeInterval" [userUnitSettings]="user?.settings?.unitSettings" [recoveryNow]="recoveryNow">
   </app-pie-chart>
   }
+  @if (chartType === formChartType) {
+  <app-form-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme">
+  </app-form-chart>
+  }
   @if (chartType === chartTypes.LinesHorizontal
   || chartType === chartTypes.LinesVertical) {
   <app-xy-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme" [chartDataType]="dataType"

@@ -39,10 +39,13 @@ import { TileActionsAbstractDirective } from '../tile-actions-abstract.directive
 import { DataRecoveryTime } from '@sports-alliance/sports-lib';
 import { SpeedUnitsToGradeAdjustedSpeedUnits } from '@sports-alliance/sports-lib';
 import {
+  DASHBOARD_FORM_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   type DashboardChartType,
+  isDashboardFormChartType,
   isDashboardRecoveryNowChartType,
 } from '../../../../helpers/dashboard-special-chart-types';
+import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from '../../../../helpers/dashboard-form.helper';
 
 
 @Component({
@@ -67,11 +70,13 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
 
   public chartTypes = ChartTypes;
   public isCuratedRecoveryNowChart = false;
+  public isFormChart = false;
   public chartTypeOptions = [
     ...Object.values(ChartTypes).filter(chartType =>
       !TileChartActionsComponent.excludedChartTypePatterns.some(pattern => pattern.test(`${chartType}`))
     ),
     DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+    DASHBOARD_FORM_CHART_TYPE,
   ];
   public chartValueTypes = ChartDataValueTypes;
   public chartCategoryTypes = ChartDataCategoryTypes;
@@ -158,6 +163,13 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
       chart.dataTimeInterval = TimeIntervals.Auto;
       (this.user.settings.dashboardSettings as { dismissedCuratedRecoveryNowTile?: boolean }).dismissedCuratedRecoveryNowTile = false;
     }
+    if (isDashboardFormChartType(event.value)) {
+      chart.name = 'Form';
+      chart.dataType = DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE;
+      chart.dataCategoryType = ChartDataCategoryTypes.DateType;
+      chart.dataValueType = ChartDataValueTypes.Total;
+      chart.dataTimeInterval = TimeIntervals.Daily;
+    }
     // If its pie show only totals
     if (event.value === ChartTypes.Pie) {
       chart.dataValueType = ChartDataValueTypes.Total;
@@ -226,6 +238,7 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
 
   private syncChartModeFlags(): void {
     this.isCuratedRecoveryNowChart = isDashboardRecoveryNowChartType(this.chartType);
+    this.isFormChart = isDashboardFormChartType(this.chartType);
   }
 }
 

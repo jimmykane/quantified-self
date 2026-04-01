@@ -15,7 +15,10 @@ import { buildAggregatedChartRows } from './aggregated-chart-row.helper';
 import {
   buildDashboardTileViewModels,
 } from './dashboard-tile-view-model.helper';
-import { DASHBOARD_RECOVERY_NOW_CHART_TYPE } from './dashboard-special-chart-types';
+import {
+  DASHBOARD_FORM_CHART_TYPE,
+  DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+} from './dashboard-special-chart-types';
 import type { EventStatAggregationResult } from '@shared/event-stat-aggregation.types';
 
 function makeEvent(options: {
@@ -178,6 +181,82 @@ describe('dashboard-tile-view-model.helper', () => {
     expect(data).toHaveLength(2);
     expect(data[0].getID()).toBe('earlier');
     expect(data[1].getID()).toBe('later');
+  });
+
+  it('should build form chart tiles as contiguous daily CTL/ATL/TSB points from dashboard events', () => {
+    const formTile = {
+      type: TileTypes.Chart,
+      order: 0,
+      chartType: DASHBOARD_FORM_CHART_TYPE as any,
+      dataType: 'Training Stress Score',
+      dataValueType: ChartDataValueTypes.Total,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataTimeInterval: TimeIntervals.Monthly,
+      size: { columns: 1, rows: 1 },
+    } as any;
+
+    const viewModels = buildDashboardTileViewModels({
+      tiles: [formTile],
+      events: [
+        makeEvent({
+          id: 'e-1',
+          startDate: '2024-01-01T10:00:00.000Z',
+          activityTypes: [ActivityTypes.Running],
+          stats: { 'Training Stress Score': 40 },
+        }),
+        makeEvent({
+          id: 'e-2',
+          startDate: '2024-01-03T10:00:00.000Z',
+          activityTypes: [ActivityTypes.Running],
+          stats: { 'Power Training Stress Score': 20 },
+        }),
+      ],
+    });
+
+    const formChart = viewModels[0] as any;
+    expect(formChart.timeInterval).toBe(TimeIntervals.Daily);
+    expect(Array.isArray(formChart.data)).toBe(true);
+    expect(formChart.data).toHaveLength(3);
+    expect(formChart.data.map((point: any) => point.trainingStressScore)).toEqual([40, 0, 20]);
+    expect(formChart.data.every((point: any) => typeof point.ctl === 'number')).toBe(true);
+    expect(formChart.data.every((point: any) => typeof point.atl === 'number')).toBe(true);
+    expect(formChart.data.every((point: any) => typeof point.formSameDay === 'number')).toBe(true);
+    expect(formChart.data[0].formPriorDay).toBeNull();
+  });
+
+  it('should return empty form data when dashboard events have no training stress score stats', () => {
+    const formTile = {
+      type: TileTypes.Chart,
+      order: 0,
+      chartType: DASHBOARD_FORM_CHART_TYPE as any,
+      dataType: 'Training Stress Score',
+      dataValueType: ChartDataValueTypes.Total,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataTimeInterval: TimeIntervals.Monthly,
+      size: { columns: 1, rows: 1 },
+    } as any;
+
+    const viewModels = buildDashboardTileViewModels({
+      tiles: [formTile],
+      events: [
+        makeEvent({
+          id: 'e-1',
+          startDate: '2024-01-01T10:00:00.000Z',
+          activityTypes: [ActivityTypes.Running],
+          stats: { [DataDistance.type]: 8 },
+        }),
+        makeEvent({
+          id: 'e-2',
+          startDate: '2024-01-03T10:00:00.000Z',
+          activityTypes: [ActivityTypes.Running],
+          stats: {},
+        }),
+      ],
+    });
+
+    const formChart = viewModels[0] as any;
+    expect(formChart.timeInterval).toBe(TimeIntervals.Daily);
+    expect(formChart.data).toEqual([]);
   });
 
   it('should build map tiles from filtered sorted events and preserve mixed tile ordering and sizes', () => {

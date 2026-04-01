@@ -54,4 +54,14 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Recovery Left Now');
     expect(gettingStartedSection?.content).toContain('Total recovery');
   });
+
+  it('should document the dashboard form tile CTL/ATL/TSB behavior', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+
+    expect(gettingStartedSection?.content).toContain('Form tile (CTL / ATL / TSB)');
+    expect(gettingStartedSection?.content).toContain('Training Stress Score');
+    expect(gettingStartedSection?.content).toContain('Form (TSB)');
+    expect(gettingStartedSection?.content).toContain('Same-day');
+    expect(gettingStartedSection?.content).toContain('Prior-day');
+  });
 });

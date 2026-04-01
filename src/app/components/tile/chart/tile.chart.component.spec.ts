@@ -12,7 +12,10 @@ import {
 import { describe, expect, it, beforeEach } from 'vitest';
 import { TileChartComponent } from './tile.chart.component';
 import type { DashboardRecoveryNowContext } from '../../../helpers/dashboard-recovery-now.helper';
-import { DASHBOARD_RECOVERY_NOW_CHART_TYPE } from '../../../helpers/dashboard-special-chart-types';
+import {
+  DASHBOARD_FORM_CHART_TYPE,
+  DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+} from '../../../helpers/dashboard-special-chart-types';
 
 @Component({
   selector: 'app-columns-chart',
@@ -39,7 +42,7 @@ class MockColumnsChartComponent {
 })
 class MockTileChartActionsComponent {
   @Input() user: any;
-  @Input() chartType?: ChartTypes;
+  @Input() chartType?: any;
   @Input() order?: number;
   @Input() size: any;
   @Input() type: any;
@@ -83,6 +86,17 @@ class MockPieChartComponent {
   @Input() recoveryNow?: DashboardRecoveryNowContext | null;
 }
 
+@Component({
+  selector: 'app-form-chart',
+  template: '',
+  standalone: false
+})
+class MockFormChartComponent {
+  @Input() isLoading = false;
+  @Input() data: any;
+  @Input() darkTheme = false;
+}
+
 describe('TileChartComponent', () => {
   let fixture: ComponentFixture<TileChartComponent>;
   let component: TileChartComponent;
@@ -95,6 +109,7 @@ describe('TileChartComponent', () => {
         MockTileChartActionsComponent,
         MockXYChartComponent,
         MockPieChartComponent,
+        MockFormChartComponent,
       ],
       schemas: [NO_ERRORS_SCHEMA]
     }).compileComponents();
@@ -128,6 +143,11 @@ describe('TileChartComponent', () => {
   const getPieComponent = (): MockPieChartComponent => {
     const pieDebugElement = fixture.debugElement.query(By.directive(MockPieChartComponent));
     return pieDebugElement.componentInstance as MockPieChartComponent;
+  };
+
+  const getFormComponent = (): MockFormChartComponent => {
+    const formDebugElement = fixture.debugElement.query(By.directive(MockFormChartComponent));
+    return formDebugElement.componentInstance as MockFormChartComponent;
   };
 
   it('should set vertical=false for LinesHorizontal', () => {
@@ -248,6 +268,16 @@ describe('TileChartComponent', () => {
 
     const pie = getPieComponent();
     expect(pie).toBeTruthy();
+  });
+
+  it('should render form chart type using form renderer', () => {
+    component.chartType = DASHBOARD_FORM_CHART_TYPE as any;
+
+    fixture.detectChanges();
+
+    const form = getFormComponent();
+    expect(form).toBeTruthy();
+    expect(form.data).toBe(component.data);
   });
 
   it('should render a visible drag handle button for desktop drag mode', () => {

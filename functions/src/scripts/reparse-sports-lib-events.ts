@@ -44,6 +44,10 @@ function configureFirestoreIgnoreUndefinedProperties(): void {
     }
 }
 
+function writeRealtimeProgressLine(payload: Record<string, unknown>): void {
+    process.stdout.write(`[sports-lib-reparse-script] Progress ${JSON.stringify(payload)}\n`);
+}
+
 function extractFirestoreIndexUrl(errorMessage: string): string | undefined {
     const match = errorMessage.match(/https:\/\/console\.firebase\.google\.com\/\S+/);
     return match?.[0];
@@ -278,7 +282,7 @@ export async function runSportsLibReparseScript(argv: string[]): Promise<ScriptS
                 lastError: errorMessage,
             });
         } finally {
-            logger.info('[sports-lib-reparse-script] Progress', {
+            const progressPayload = {
                 uid,
                 eventId,
                 outcome: progressOutcome,
@@ -286,7 +290,9 @@ export async function runSportsLibReparseScript(argv: string[]): Promise<ScriptS
                 completed: summary.completed,
                 failed: summary.failed,
                 skippedNoSourceFiles: summary.skippedNoSourceFiles,
-            });
+            };
+            writeRealtimeProgressLine(progressPayload);
+            logger.info('[sports-lib-reparse-script] Progress', progressPayload);
         }
     };
 

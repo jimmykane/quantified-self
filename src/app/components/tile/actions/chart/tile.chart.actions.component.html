@@ -36,7 +36,7 @@
       </mat-form-field>
     </section>
     }
-    @if (chartType !== chartTypes.IntensityZones && !isCuratedRecoveryNowChart) {
+    @if (chartType !== chartTypes.IntensityZones && !isCuratedRecoveryNowChart && !isFormChart) {
     <section mat-menu-item>
       <mat-form-field>
         <mat-label>What data to look at</mat-label>
@@ -55,7 +55,7 @@
       </mat-form-field>
     </section>
     }
-    @if (chartType !== chartTypes.Pie && chartType !== chartTypes.IntensityZones && !isCuratedRecoveryNowChart) {
+    @if (chartType !== chartTypes.Pie && chartType !== chartTypes.IntensityZones && !isCuratedRecoveryNowChart && !isFormChart) {
     <section mat-menu-item>
       <mat-form-field>
         <mat-label>How to look at the data</mat-label>
@@ -72,7 +72,7 @@
       </mat-form-field>
     </section>
     }
-    @if (chartType !== chartTypes.IntensityZones && !isCuratedRecoveryNowChart) {
+    @if (chartType !== chartTypes.IntensityZones && !isCuratedRecoveryNowChart && !isFormChart) {
     <section mat-menu-item>
       <mat-form-field>
         <mat-label>Base data on</mat-label>
@@ -90,7 +90,7 @@
     </section>
     }
 
-    @if (chartDataCategoryType === chartCategoryTypes.DateType && chartType !== chartTypes.IntensityZones && !isCuratedRecoveryNowChart) {
+    @if (chartDataCategoryType === chartCategoryTypes.DateType && chartType !== chartTypes.IntensityZones && !isCuratedRecoveryNowChart && !isFormChart) {
     <section mat-menu-item>
       <mat-form-field>
         <mat-label>Time interval</mat-label>

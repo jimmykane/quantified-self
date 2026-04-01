@@ -7,6 +7,7 @@ import {
 import { TileAbstractDirective } from '../tile-abstract.directive';
 import type { DashboardRecoveryNowContext } from '../../../helpers/dashboard-recovery-now.helper';
 import {
+  DASHBOARD_FORM_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   type DashboardChartType,
 } from '../../../helpers/dashboard-special-chart-types';
@@ -33,6 +34,7 @@ export class TileChartComponent extends TileAbstractDirective {
 
   public chartTypes = ChartTypes;
   public recoveryNowChartType = DASHBOARD_RECOVERY_NOW_CHART_TYPE;
+  public formChartType = DASHBOARD_FORM_CHART_TYPE;
   public isTileActionSaving = false;
 
   onTileActionSaving(isSaving: boolean): void {
