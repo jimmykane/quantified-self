@@ -156,7 +156,8 @@
       </table>
     </div>
 
-    <mat-paginator (page)="pageChanges($event)" [length]="data ? data.data.length : 0"
+    <mat-paginator (page)="pageChanges($event)" [length]="filteredEventCount"
+      [pageIndex]="pageIndex"
       [pageSize]="user.settings.dashboardSettings.tableSettings.eventsPerPage" [showFirstLastButtons]="true"
       [pageSizeOptions]="[10, 25, 50, 100, 250]"></mat-paginator>
   </app-loading-overlay>
