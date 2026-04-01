@@ -15,6 +15,8 @@ import {
   ActivityTypesHelper,
   ChartDataCategoryTypes,
   ChartDataValueTypes,
+  DataDuration,
+  DataRecoveryTime,
   TimeIntervals,
   type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
@@ -49,6 +51,10 @@ import {
   getDashboardDataInstanceOrNull,
   getDashboardSummaryMetaLabel
 } from '../../../helpers/dashboard-chart-data.helper';
+import {
+  resolveRemainingRecoverySeconds,
+  type DashboardRecoveryNowContext,
+} from '../../../helpers/dashboard-recovery-now.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type ChartSetOptionSettings = Parameters<EChartsType['setOption']>[1];
@@ -61,6 +67,8 @@ type ChartSetOptionSettings = Parameters<EChartsType['setOption']>[1];
   standalone: false
 })
 export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
+  private static readonly RECOVERY_REFRESH_INTERVAL_MS = 60 * 1000;
+
   @Input() data: any;
   @Input() chartDataType?: string;
   @Input() chartDataValueType?: ChartDataValueTypes;
@@ -70,6 +78,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() useAnimations = false;
   @Input() isLoading = false;
   @Input() userUnitSettings?: UserUnitSettingsInterface | null;
+  @Input() recoveryNow?: DashboardRecoveryNowContext | null;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
@@ -90,6 +99,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
     notMerge: true,
     lazyUpdate: false
   };
+  private recoveryRefreshIntervalHandle: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private eChartsLoader: EChartsLoaderService,
@@ -120,13 +130,16 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
       changes.chartDataValueType ||
       changes.chartDataCategoryType ||
       changes.chartDataTimeInterval ||
-      changes.userUnitSettings
+      changes.userUnitSettings ||
+      changes.recoveryNow
     ) {
+      this.updateRecoveryRefreshTimer();
       void this.refreshChart();
     }
   }
 
   ngOnDestroy(): void {
+    this.clearRecoveryRefreshTimer();
     this.chartHost.dispose();
   }
 
@@ -160,11 +173,12 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
     this.chartHost.hideTooltip();
     this.chartHost.setOption(
       option,
-      seriesHasData(pieData)
+      hasRenderableSeries(option)
         ? ECHARTS_SERIES_IMMEDIATE_UPDATE_SETTINGS
         : ChartsPieComponent.EMPTY_DATA_UPDATE_SETTINGS
     );
     this.chartHost.scheduleResize();
+    this.updateRecoveryRefreshTimer();
   }
 
   private buildChartOption(
@@ -179,8 +193,8 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
     const tooltipBorderColor = chartStyle.tooltipBorderColor;
     const isCompactLayout = chartStyle.isCompactLayout;
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
-
-    const seriesData = pieData.slices.map((slice, index) => ({
+    const recoverySeriesData = this.buildRecoverySeriesData(chartStyle.subtleBorderColor);
+    const seriesData = recoverySeriesData || pieData.slices.map((slice, index) => ({
       name: getDashboardPieSliceDisplayLabel(
         slice,
         this.chartDataCategoryType,
@@ -208,11 +222,12 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
       };
     }
 
-    const centerLabel = aggregateData
+    const recoverySummary = this.getRecoverySummaryOverride();
+    const centerLabel = recoverySummary?.label ?? (aggregateData
       ? normalizeUnitDerivedTypeLabel(aggregateData.getType(), aggregateData.getDisplayType())
-      : (this.chartDataValueType || 'Value');
-    const centerValue = formatDashboardDataDisplay(aggregateData, this.getNormalizedUnitSettings());
-    const centerSubLabel = getDashboardSummaryMetaLabel(
+      : (this.chartDataValueType || 'Value'));
+    const centerValue = recoverySummary?.value ?? formatDashboardDataDisplay(aggregateData, this.getNormalizedUnitSettings());
+    const centerSubLabel = recoverySummary?.meta ?? getDashboardSummaryMetaLabel(
       this.chartDataCategoryType,
       this.chartDataValueType,
       this.chartDataTimeInterval
@@ -340,6 +355,70 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
     };
   }
 
+  private getRecoverySummaryOverride(): { label: string; value: string; meta: string } | null {
+    if (this.chartDataType !== DataRecoveryTime.type) {
+      return null;
+    }
+
+    const context = this.recoveryNow;
+    const totalSeconds = Number(context?.totalSeconds);
+    const remainingSeconds = resolveRemainingRecoverySeconds(context, Date.now());
+    if (!Number.isFinite(totalSeconds) || totalSeconds <= 0 || remainingSeconds === null) {
+      return null;
+    }
+
+    const normalizedUnitSettings = this.getNormalizedUnitSettings();
+    const totalText = formatDashboardNumericValue(
+      DataDuration.type,
+      totalSeconds,
+      this.logger,
+      normalizedUnitSettings,
+    );
+    const remainingText = formatDashboardNumericValue(
+      DataDuration.type,
+      remainingSeconds,
+      this.logger,
+      normalizedUnitSettings,
+    );
+
+    return {
+      label: 'Recovery Left Now',
+      value: remainingText,
+      meta: `Total recovery: ${totalText}`,
+    };
+  }
+
+  private shouldEnableRecoveryRefreshTimer(): boolean {
+    if (this.chartDataType !== DataRecoveryTime.type) {
+      return false;
+    }
+    const remainingSeconds = resolveRemainingRecoverySeconds(this.recoveryNow, Date.now());
+    return remainingSeconds !== null && remainingSeconds > 0;
+  }
+
+  private updateRecoveryRefreshTimer(): void {
+    if (!this.shouldEnableRecoveryRefreshTimer()) {
+      this.clearRecoveryRefreshTimer();
+      return;
+    }
+
+    if (this.recoveryRefreshIntervalHandle !== null) {
+      return;
+    }
+
+    this.recoveryRefreshIntervalHandle = setInterval(() => {
+      void this.refreshChart();
+    }, ChartsPieComponent.RECOVERY_REFRESH_INTERVAL_MS);
+  }
+
+  private clearRecoveryRefreshTimer(): void {
+    if (this.recoveryRefreshIntervalHandle === null) {
+      return;
+    }
+    clearInterval(this.recoveryRefreshIntervalHandle);
+    this.recoveryRefreshIntervalHandle = null;
+  }
+
   private getSliceColor(slice: DashboardPieSlice, index: number): string {
     if (this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType) {
       if (slice.isOther) {
@@ -358,8 +437,57 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
   private getNormalizedUnitSettings(): UserUnitSettingsInterface {
     return normalizeUserUnitSettings(this.userUnitSettings);
   }
+
+  private buildRecoverySeriesData(subtleBorderColor: string): Array<{
+    name: string;
+    value: number;
+    count: number;
+    percent: number;
+    itemStyle: { color: string; borderColor: string; borderWidth: number };
+  }> | null {
+    if (this.chartDataType !== DataRecoveryTime.type) {
+      return null;
+    }
+
+    const context = this.recoveryNow;
+    const totalSeconds = Number(context?.totalSeconds);
+    const remainingSeconds = resolveRemainingRecoverySeconds(context, Date.now());
+    if (!Number.isFinite(totalSeconds) || totalSeconds <= 0 || remainingSeconds === null) {
+      return null;
+    }
+
+    const elapsedSeconds = Math.max(0, totalSeconds - remainingSeconds);
+    const leftPercent = totalSeconds > 0 ? (remainingSeconds / totalSeconds) * 100 : 0;
+    const elapsedPercent = totalSeconds > 0 ? (elapsedSeconds / totalSeconds) * 100 : 0;
+
+    return [
+      {
+        name: 'Left now',
+        value: remainingSeconds,
+        count: 0,
+        percent: leftPercent,
+        itemStyle: {
+          color: AppColors.Green,
+          borderColor: subtleBorderColor,
+          borderWidth: 1.2
+        }
+      },
+      {
+        name: 'Elapsed',
+        value: elapsedSeconds,
+        count: 0,
+        percent: elapsedPercent,
+        itemStyle: {
+          color: AppColors.DarkGray,
+          borderColor: subtleBorderColor,
+          borderWidth: 1.2
+        }
+      }
+    ];
+  }
 }
 
-function seriesHasData(pieData: DashboardPieChartData): boolean {
-  return Array.isArray(pieData.slices) && pieData.slices.length > 0;
+function hasRenderableSeries(option: ChartOption): boolean {
+  const series = (option as { series?: unknown }).series;
+  return Array.isArray(series) && series.length > 0;
 }

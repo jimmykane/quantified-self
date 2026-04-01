@@ -5,6 +5,11 @@ import {
   ChartTypes, TimeIntervals
 } from '@sports-alliance/sports-lib';
 import { TileAbstractDirective } from '../tile-abstract.directive';
+import type { DashboardRecoveryNowContext } from '../../../helpers/dashboard-recovery-now.helper';
+import {
+  DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+  type DashboardChartType,
+} from '../../../helpers/dashboard-special-chart-types';
 
 @Component({
   selector: 'app-tile-chart',
@@ -15,7 +20,7 @@ import { TileAbstractDirective } from '../tile-abstract.directive';
 })
 
 export class TileChartComponent extends TileAbstractDirective {
-  @Input() chartType: ChartTypes;
+  @Input() chartType: DashboardChartType;
   @Input() dataType: string;
   @Input() dataValueType: ChartDataValueTypes;
   @Input() dataCategoryType: ChartDataCategoryTypes;
@@ -24,8 +29,10 @@ export class TileChartComponent extends TileAbstractDirective {
   @Input() enableDesktopDrag = false;
   @Input() dataTimeInterval: TimeIntervals;
   @Input() data: any;
+  @Input() recoveryNow?: DashboardRecoveryNowContext | null;
 
   public chartTypes = ChartTypes;
+  public recoveryNowChartType = DASHBOARD_RECOVERY_NOW_CHART_TYPE;
   public isTileActionSaving = false;
 
   onTileActionSaving(isSaving: boolean): void {

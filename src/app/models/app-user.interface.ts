@@ -30,6 +30,7 @@ export interface AppMyTracksSettings extends UserMyTracksSettingsInterface {
 
 export interface AppDashboardSettingsInterface extends UserDashboardSettingsInterface {
     includeMergedEvents?: boolean;
+    dismissedCuratedRecoveryNowTile?: boolean;
 }
 
 export interface AppChartSettingsInterface extends Omit<UserChartSettingsInterface, 'theme' | 'extraMaxForPower' | 'extraMaxForPace'> {

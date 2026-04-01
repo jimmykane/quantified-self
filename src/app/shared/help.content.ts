@@ -103,6 +103,15 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Use **Move earlier** or **Move later** when drag-and-drop is unavailable.
 - Tile order is saved automatically to your account.
 
+### Recovery tile summary
+
+- The curated **Recovery** pie tile is optional and not added automatically.
+- You can add it from tile chart type options as **RecoveryNowPie**.
+- The tile shows live recovery split between **Left now** and **Elapsed**.
+- When recovery data is available for your current dashboard filters, the summary shows **Recovery Left Now** and **Total recovery** from the latest recovery-enabled event.
+- Remaining recovery updates every minute while the tile is visible.
+- You can still move or remove this tile from the tile menu.
+
 ### Merge events
 
 - In the dashboard event table, select at least two events and use the merge action.
@@ -305,7 +314,6 @@ The app accepts these file types for manual activity upload:
 
 - You can export dashboard activity tables to CSV.
 - From selected dashboard rows, CSV export and original-file download actions support your current multi-selection.
-- From an activity action menu, you can download **JSON**.
 - If an activity has positional data, you can download **GPX**.
 - If original source files are stored for an activity, you can download the original file or files.
 

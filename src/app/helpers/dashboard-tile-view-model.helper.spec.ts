@@ -6,6 +6,7 @@ import {
   ChartTypes,
   DataAscent,
   DataDistance,
+  DataRecoveryTime,
   TileTypes,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
@@ -14,21 +15,37 @@ import { buildAggregatedChartRows } from './aggregated-chart-row.helper';
 import {
   buildDashboardTileViewModels,
 } from './dashboard-tile-view-model.helper';
+import { DASHBOARD_RECOVERY_NOW_CHART_TYPE } from './dashboard-special-chart-types';
 import type { EventStatAggregationResult } from '@shared/event-stat-aggregation.types';
 
 function makeEvent(options: {
   id: string;
   startDate: string;
+  endDate?: string;
+  durationSeconds?: number;
   activityTypes: ActivityTypes[];
   stats?: Record<string, number | undefined>;
   isMerge?: boolean;
 }): any {
   const stats = options.stats || {};
+  const startTimeMs = new Date(options.startDate).getTime();
+  const endDate = options.endDate
+    ? new Date(options.endDate)
+    : (Number.isFinite(options.durationSeconds)
+      ? new Date(startTimeMs + (Number(options.durationSeconds) * 1000))
+      : new Date(options.startDate));
+
   return {
     startDate: new Date(options.startDate),
+    endDate,
     isMerge: options.isMerge === true,
     getID: () => options.id,
     getActivityTypesAsArray: () => [...options.activityTypes],
+    getDuration: () => ({
+      getValue: () => Number.isFinite(options.durationSeconds)
+        ? Number(options.durationSeconds)
+        : Math.max(0, Math.round((endDate.getTime() - startTimeMs) / 1000)),
+    }),
     getStat: (type: string) => {
       if (type === 'activityTypes') {
         return {
@@ -275,5 +292,104 @@ describe('dashboard-tile-view-model.helper', () => {
 
     expect(events[0]).toBe(first);
     expect(events[1]).toBe(second);
+  });
+
+  it('should attach recovery context to recovery chart tiles from the latest recovery-enabled event', () => {
+    const viewModels = buildDashboardTileViewModels({
+      tiles: [{
+        type: TileTypes.Chart,
+        order: 0,
+        chartType: ChartTypes.LinesVertical,
+        dataType: DataRecoveryTime.type,
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        dataTimeInterval: TimeIntervals.Daily,
+        size: { columns: 1, rows: 1 },
+      } as any],
+      events: [
+        makeEvent({
+          id: 'first',
+          startDate: '2024-01-01T08:00:00.000Z',
+          endDate: '2024-01-01T09:00:00.000Z',
+          activityTypes: [ActivityTypes.Running],
+          stats: { [DataRecoveryTime.type]: 1800 },
+        }),
+        makeEvent({
+          id: 'second',
+          startDate: '2024-01-02T08:00:00.000Z',
+          endDate: '2024-01-02T09:00:00.000Z',
+          activityTypes: [ActivityTypes.Running],
+          stats: { [DataRecoveryTime.type]: 3600 },
+        }),
+      ],
+    });
+
+    const recoveryTile = viewModels[0] as any;
+    expect(recoveryTile.recoveryNow).toEqual({
+      totalSeconds: 3600,
+      endTimeMs: Date.UTC(2024, 0, 2, 9, 0, 0),
+    });
+  });
+
+  it('should keep recovery context undefined for non-recovery chart tiles', () => {
+    const viewModels = buildDashboardTileViewModels({
+      tiles: [{
+        type: TileTypes.Chart,
+        order: 0,
+        chartType: ChartTypes.ColumnsVertical,
+        dataType: DataDistance.type,
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        dataTimeInterval: TimeIntervals.Daily,
+        size: { columns: 1, rows: 1 },
+      } as any],
+      events: [
+        makeEvent({
+          id: 'recovery-event',
+          startDate: '2024-01-02T08:00:00.000Z',
+          endDate: '2024-01-02T09:00:00.000Z',
+          activityTypes: [ActivityTypes.Running],
+          stats: {
+            [DataRecoveryTime.type]: 3600,
+            [DataDistance.type]: 10,
+          },
+        }),
+      ],
+    });
+
+    expect((viewModels[0] as any).recoveryNow).toBeUndefined();
+  });
+
+  it('should attach recovery context for curated recovery chart types even when dataType differs', () => {
+    const tiles = [
+      {
+        type: TileTypes.Chart,
+        chartType: DASHBOARD_RECOVERY_NOW_CHART_TYPE as any,
+        dataType: 'Distance',
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        dataTimeInterval: TimeIntervals.Auto,
+        order: 0,
+        size: { columns: 1, rows: 1 },
+        name: 'Recovery',
+      } as TileChartSettingsInterface,
+    ];
+    const events = [
+      makeEvent({
+        id: 'e-recovery-curated',
+        startDate: new Date(Date.UTC(2024, 0, 1, 12, 0, 0)).toISOString(),
+        endDate: new Date(Date.UTC(2024, 0, 1, 13, 0, 0)).toISOString(),
+        activityTypes: [ActivityTypes.Running],
+        stats: { [DataRecoveryTime.type]: 7200 },
+      }),
+    ];
+
+    const viewModels = buildDashboardTileViewModels({ tiles, events });
+    const recoveryTile = viewModels[0] as DashboardChartTileViewModel;
+
+    expect(recoveryTile.recoveryNow).toEqual({
+      totalSeconds: 7200,
+      endTimeMs: Date.UTC(2024, 0, 1, 13, 0, 0),
+    });
   });
 });

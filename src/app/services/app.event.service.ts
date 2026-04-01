@@ -7,7 +7,6 @@ import { catchError, map, switchMap, take, distinctUntilChanged, tap } from 'rxj
 import { EventJSONInterface } from '@sports-alliance/sports-lib';
 import { ActivityJSONInterface } from '@sports-alliance/sports-lib';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
-import { EventExporterJSON } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
 import { AppUserUtilities } from '../utils/app.user.utilities';
 import { AppWindowService } from './app.window.service';
@@ -829,15 +828,6 @@ export class AppEventService implements OnDestroy {
   public async deleteAllEventData(user: User, eventID: string): Promise<boolean> {
     await deleteDoc(doc(this.firestore, 'users', user.uid, 'events', eventID));
     return true;
-  }
-
-  public async getEventAsJSONBloB(user: User, event: AppEventInterface): Promise<Blob> {
-    const populatedEvent = await this.attachStreamsToEventWithActivities(user, event, undefined, false).pipe(take(1)).toPromise();
-    const jsonString = await new EventExporterJSON().getAsString(populatedEvent);
-    return (new Blob(
-      [jsonString],
-      { type: new EventExporterJSON().fileType },
-    ));
   }
 
   public async getEventAsGPXBloB(user: User, event: AppEventInterface): Promise<Blob> {

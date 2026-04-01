@@ -1,6 +1,7 @@
 import type { EventInterface } from '@sports-alliance/sports-lib';
 import {
   ChartTypes,
+  DataRecoveryTime,
   TileChartSettingsInterface,
   TileMapSettingsInterface,
   TileSettingsInterface,
@@ -19,10 +20,16 @@ import {
   buildAggregatedChartRows,
   type AggregatedChartRow,
 } from './aggregated-chart-row.helper';
+import {
+  resolveLatestRecoveryNowContext,
+  type DashboardRecoveryNowContext,
+} from './dashboard-recovery-now.helper';
+import { isDashboardRecoveryNowChartType } from './dashboard-special-chart-types';
 
 export interface DashboardChartTileViewModel extends TileChartSettingsInterface {
   timeInterval: TimeIntervals;
   data: AggregatedChartRow[] | EventInterface[];
+  recoveryNow?: DashboardRecoveryNowContext;
 }
 
 export type DashboardMapTileSettings = Omit<TileMapSettingsInterface, 'mapType'> & {
@@ -56,6 +63,7 @@ export function buildDashboardTileViewModels(
   input: BuildDashboardTileViewModelsInput,
 ): DashboardTileViewModel[] {
   const normalizedEvents = normalizeDashboardTileEvents(input.events);
+  const latestRecoveryNowContext = resolveLatestRecoveryNowContext(normalizedEvents);
 
   return (input.tiles || []).reduce<DashboardTileViewModel[]>((viewModels, tile) => {
     if (tile.type === TileTypes.Map) {
@@ -94,6 +102,10 @@ export function buildDashboardTileViewModels(
       ...chartTile,
       timeInterval: aggregation.resolvedTimeInterval,
       data: buildAggregatedChartRows(aggregation),
+      ...((chartTile.dataType === DataRecoveryTime.type || isDashboardRecoveryNowChartType(chartTile.chartType))
+        && latestRecoveryNowContext
+        ? { recoveryNow: latestRecoveryNowContext }
+        : {}),
     });
     return viewModels;
   }, []);

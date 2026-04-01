@@ -39,7 +39,6 @@ describe('EventActionsComponent', () => {
         mockEventService = {
             downloadFile: vi.fn(),
             getEventMetaData: vi.fn(),
-            getEventAsJSONBloB: vi.fn(),
             getEventAsGPXBloB: vi.fn(),
         };
         mockEventReprocessService = {
@@ -184,34 +183,6 @@ describe('EventActionsComponent', () => {
             await component.downloadOriginals();
 
             expect(mockSnackBar.open).toHaveBeenCalledWith('No original files found.', undefined, { duration: 3000 });
-        });
-    });
-
-    describe('downloadJSON', () => {
-        it('should call getEventAsJSONBloB with the event object', async () => {
-            const mockBlob = new Blob(['{}'], { type: 'application/json' });
-            mockEventService.getEventAsJSONBloB.mockResolvedValue(mockBlob);
-
-            await component.downloadJSON();
-
-            expect(mockEventService.getEventAsJSONBloB).toHaveBeenCalledWith(component.user, component.event);
-            expect(mockFileService.downloadFile).toHaveBeenCalled();
-            const args = mockFileService.downloadFile.mock.calls[0];
-            expect(args[0]).toBe(mockBlob);
-            expect(args[2]).toBe('json');
-        });
-
-        it('should show snackbar and avoid file download when JSON generation fails', async () => {
-            mockEventService.getEventAsJSONBloB.mockRejectedValue(new Error('hydrate failed'));
-
-            await component.downloadJSON();
-
-            expect(mockFileService.downloadFile).not.toHaveBeenCalled();
-            expect(mockSnackBar.open).toHaveBeenCalledWith(
-                'Could not download JSON file',
-                undefined,
-                { duration: 3000 },
-            );
         });
     });
 

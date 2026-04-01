@@ -13,10 +13,16 @@
     </app-tile-chart-actions>
   </div>
   }
+  @if (chartType === recoveryNowChartType) {
+  <app-pie-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme" [chartDataType]="dataType"
+    [chartDataValueType]="dataValueType" [chartDataCategoryType]="dataCategoryType"
+    [chartDataTimeInterval]="dataTimeInterval" [userUnitSettings]="user?.settings?.unitSettings" [recoveryNow]="recoveryNow">
+  </app-pie-chart>
+  }
   @if (chartType === chartTypes.Pie) {
   <app-pie-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme" [chartDataType]="dataType"
     [chartDataValueType]="dataValueType" [chartDataCategoryType]="dataCategoryType"
-    [chartDataTimeInterval]="dataTimeInterval" [userUnitSettings]="user?.settings?.unitSettings">
+    [chartDataTimeInterval]="dataTimeInterval" [userUnitSettings]="user?.settings?.unitSettings" [recoveryNow]="recoveryNow">
   </app-pie-chart>
   }
   @if (chartType === chartTypes.LinesHorizontal
@@ -24,7 +30,7 @@
   <app-xy-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme" [chartDataType]="dataType"
     [chartDataValueType]="dataValueType" [chartDataCategoryType]="dataCategoryType"
     [chartDataTimeInterval]="dataTimeInterval" [vertical]="chartType !== chartTypes.LinesHorizontal"
-    [userUnitSettings]="user?.settings?.unitSettings">
+    [userUnitSettings]="user?.settings?.unitSettings" [recoveryNow]="recoveryNow">
   </app-xy-chart>
   }
   @if (chartType === chartTypes.ColumnsHorizontal
@@ -34,7 +40,7 @@
       ? 'columns'
       : 'pyramids'" [vertical]="chartType !== chartTypes.ColumnsHorizontal" [chartDataType]="dataType" [chartDataValueType]="dataValueType"
     [chartDataCategoryType]="dataCategoryType" [chartDataTimeInterval]="dataTimeInterval"
-    [userUnitSettings]="user?.settings?.unitSettings">
+    [userUnitSettings]="user?.settings?.unitSettings" [recoveryNow]="recoveryNow">
   </app-columns-chart>
   }
 

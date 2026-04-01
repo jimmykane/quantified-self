@@ -14,6 +14,8 @@ import {
   ActivityTypes,
   ChartDataCategoryTypes,
   ChartDataValueTypes,
+  DataDuration,
+  DataRecoveryTime,
   TimeIntervals,
   type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
@@ -46,6 +48,10 @@ import {
   DashboardCartesianPoint
 } from '../../../helpers/dashboard-echarts-cartesian.helper';
 import { normalizeUnitDerivedTypeLabel } from '../../../helpers/stat-label.helper';
+import {
+  resolveRemainingRecoverySeconds,
+  type DashboardRecoveryNowContext,
+} from '../../../helpers/dashboard-recovery-now.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type ChartSetOptionSettings = Parameters<EChartsType['setOption']>[1];
@@ -58,6 +64,8 @@ type ChartSetOptionSettings = Parameters<EChartsType['setOption']>[1];
   standalone: false
 })
 export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
+  private static readonly RECOVERY_REFRESH_INTERVAL_MS = 60 * 1000;
+
   @Input() data: any;
   @Input() chartDataType?: string;
   @Input() chartDataValueType?: ChartDataValueTypes;
@@ -68,6 +76,7 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() isLoading = false;
   @Input() vertical = true;
   @Input() userUnitSettings?: UserUnitSettingsInterface | null;
+  @Input() recoveryNow?: DashboardRecoveryNowContext | null;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
@@ -88,6 +97,7 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
     notMerge: true,
     lazyUpdate: false
   };
+  private recoveryRefreshIntervalHandle: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private eChartsLoader: EChartsLoaderService,
@@ -119,13 +129,16 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
       changes.chartDataCategoryType ||
       changes.chartDataTimeInterval ||
       changes.vertical ||
-      changes.userUnitSettings
+      changes.userUnitSettings ||
+      changes.recoveryNow
     ) {
+      this.updateRecoveryRefreshTimer();
       void this.refreshChart();
     }
   }
 
   ngOnDestroy(): void {
+    this.clearRecoveryRefreshTimer();
     this.chartHost.dispose();
   }
 
@@ -159,6 +172,7 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
         : ChartsXYComponent.EMPTY_DATA_UPDATE_SETTINGS
     );
     this.chartHost.scheduleResize();
+    this.updateRecoveryRefreshTimer();
   }
 
   private buildChartOption(
@@ -212,11 +226,12 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
       ? this.buildTrendSeries(points, chartStyle.trendLineColor)
       : null;
 
-    const summaryLabel = aggregate
+    const recoverySummary = this.getRecoverySummaryOverride();
+    const summaryLabel = recoverySummary?.label ?? (aggregate
       ? normalizeUnitDerivedTypeLabel(aggregate.getType(), aggregate.getDisplayType())
-      : (this.chartDataValueType || 'Value');
-    const summaryValue = formatDashboardDataDisplay(aggregate, this.getNormalizedUnitSettings());
-    const summaryMeta = getDashboardSummaryMetaLabel(
+      : (this.chartDataValueType || 'Value'));
+    const summaryValue = recoverySummary?.value ?? formatDashboardDataDisplay(aggregate, this.getNormalizedUnitSettings());
+    const summaryMeta = recoverySummary?.meta ?? getDashboardSummaryMetaLabel(
       this.chartDataCategoryType,
       this.chartDataValueType,
       this.chartDataTimeInterval
@@ -450,5 +465,69 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
 
   private getNormalizedUnitSettings(): UserUnitSettingsInterface {
     return normalizeUserUnitSettings(this.userUnitSettings);
+  }
+
+  private getRecoverySummaryOverride(): { label: string; value: string; meta: string } | null {
+    if (this.chartDataType !== DataRecoveryTime.type) {
+      return null;
+    }
+
+    const context = this.recoveryNow;
+    const totalSeconds = Number(context?.totalSeconds);
+    const remainingSeconds = resolveRemainingRecoverySeconds(context, Date.now());
+    if (!Number.isFinite(totalSeconds) || totalSeconds <= 0 || remainingSeconds === null) {
+      return null;
+    }
+
+    const normalizedUnitSettings = this.getNormalizedUnitSettings();
+    const totalText = formatDashboardNumericValue(
+      DataDuration.type,
+      totalSeconds,
+      this.logger,
+      normalizedUnitSettings,
+    );
+    const remainingText = formatDashboardNumericValue(
+      DataDuration.type,
+      remainingSeconds,
+      this.logger,
+      normalizedUnitSettings,
+    );
+
+    return {
+      label: 'Recovery Left Now',
+      value: remainingText,
+      meta: `Total recovery: ${totalText}`,
+    };
+  }
+
+  private shouldEnableRecoveryRefreshTimer(): boolean {
+    if (this.chartDataType !== DataRecoveryTime.type) {
+      return false;
+    }
+    const remainingSeconds = resolveRemainingRecoverySeconds(this.recoveryNow, Date.now());
+    return remainingSeconds !== null && remainingSeconds > 0;
+  }
+
+  private updateRecoveryRefreshTimer(): void {
+    if (!this.shouldEnableRecoveryRefreshTimer()) {
+      this.clearRecoveryRefreshTimer();
+      return;
+    }
+
+    if (this.recoveryRefreshIntervalHandle !== null) {
+      return;
+    }
+
+    this.recoveryRefreshIntervalHandle = setInterval(() => {
+      void this.refreshChart();
+    }, ChartsXYComponent.RECOVERY_REFRESH_INTERVAL_MS);
+  }
+
+  private clearRecoveryRefreshTimer(): void {
+    if (this.recoveryRefreshIntervalHandle === null) {
+      return;
+    }
+    clearInterval(this.recoveryRefreshIntervalHandle);
+    this.recoveryRefreshIntervalHandle = null;
   }
 }

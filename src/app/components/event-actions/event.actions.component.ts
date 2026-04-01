@@ -4,7 +4,6 @@ import { EventInterface } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../services/app.event.service';
 import { AppFileService } from '../../services/app.file.service';
 import { EventFormComponent } from '../event-form/event.form.component';
-import { EventExporterJSON } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
 import { take } from 'rxjs/operators';
@@ -294,25 +293,6 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   //   //   });
   //   // });
   // }
-
-  async downloadJSON() {
-    try {
-      const blob = await this.eventService.getEventAsJSONBloB(this.user, this.event as any);
-      this.fileService.downloadFile(
-        blob,
-        this.getFileName(this.event),
-        new EventExporterJSON().fileExtension,
-      );
-      this.snackBar.open('JSON file served', undefined, {
-        duration: 2000,
-      });
-    } catch (error) {
-      this.logger.error('[EventActionsComponent] Failed to download JSON from original files', error);
-      this.snackBar.open('Could not download JSON file', undefined, {
-        duration: 3000,
-      });
-    }
-  }
 
   async downloadGPX() {
     try {

@@ -62,6 +62,10 @@ import {
     AppUserSettingsInterface
 } from '../models/app-user.interface';
 import { StripeRole } from '../models/stripe-role.model';
+import {
+    DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+    isDashboardRecoveryNowChartType,
+} from '../helpers/dashboard-special-chart-types';
 
 /**
  * Utility class for AppUser related static methods and default settings.
@@ -167,6 +171,36 @@ export class AppUserUtilities {
             dataValueType: ChartDataValueTypes.Total,
             size: { columns: 1, rows: 1 },
         }]
+    }
+
+    private static getDefaultUserDashboardRecoveryTile(order: number): TileChartSettingsInterface {
+        return {
+            name: 'Recovery',
+            order,
+            type: TileTypes.Chart,
+            chartType: DASHBOARD_RECOVERY_NOW_CHART_TYPE as unknown as ChartTypes,
+            dataCategoryType: ChartDataCategoryTypes.DateType,
+            dataType: DataRecoveryTime.type,
+            dataTimeInterval: TimeIntervals.Auto,
+            dataValueType: ChartDataValueTypes.Total,
+            size: { columns: 1, rows: 1 },
+        };
+    }
+
+    private static isRecoveryDashboardChartTile(tile: TileSettingsInterface): boolean {
+        return tile.type === TileTypes.Chart && (
+            isDashboardRecoveryNowChartType((tile as TileChartSettingsInterface).chartType)
+            || (tile as TileChartSettingsInterface).dataType === DataRecoveryTime.type
+        );
+    }
+
+    private static normalizeRecoveryDashboardChartTile(tile: TileChartSettingsInterface): TileChartSettingsInterface {
+        return {
+            ...tile,
+            ...AppUserUtilities.getDefaultUserDashboardRecoveryTile(tile.order),
+            order: Number.isFinite(Number(tile.order)) ? Number(tile.order) : 0,
+            size: tile.size || { columns: 1, rows: 1 },
+        };
     }
 
     static getDefaultMapLapTypes(): LapTypes[] {
@@ -383,12 +417,23 @@ export class AppUserUtilities {
         settings.dashboardSettings.endDate = settings.dashboardSettings.endDate || null;
         settings.dashboardSettings.activityTypes = settings.dashboardSettings.activityTypes || [];
         settings.dashboardSettings.includeMergedEvents = settings.dashboardSettings.includeMergedEvents !== false;
+        settings.dashboardSettings.dismissedCuratedRecoveryNowTile = settings.dashboardSettings.dismissedCuratedRecoveryNowTile === true;
         settings.dashboardSettings.tiles = settings.dashboardSettings.tiles || AppUserUtilities.getDefaultUserDashboardTiles();
-        settings.dashboardSettings.tiles = settings.dashboardSettings.tiles.map((tile: TileSettingsInterface) => {
+        let hasNormalizedRecoveryDashboardTile = false;
+        settings.dashboardSettings.tiles = settings.dashboardSettings.tiles
+            .map((tile: TileSettingsInterface) => {
             if (tile.type === TileTypes.Chart) {
                 const chartTile = tile as TileChartSettingsInterface;
                 if (chartTile.chartType === ChartTypes.Spiral) {
                     chartTile.chartType = ChartTypes.LinesVertical;
+                }
+
+                if (AppUserUtilities.isRecoveryDashboardChartTile(chartTile)) {
+                    if (hasNormalizedRecoveryDashboardTile) {
+                        return null;
+                    }
+                    hasNormalizedRecoveryDashboardTile = true;
+                    return AppUserUtilities.normalizeRecoveryDashboardChartTile(chartTile);
                 }
                 return chartTile;
             }
@@ -401,7 +446,11 @@ export class AppUserUtilities {
             mapTile.mapStyle = mapTile.mapStyle || AppUserUtilities.getDefaultDashboardMapStyle();
             delete mapTile.mapType;
             return mapTile;
-        });
+        })
+            .filter((tile): tile is TileSettingsInterface => tile !== null);
+        if (hasNormalizedRecoveryDashboardTile) {
+            settings.dashboardSettings.dismissedCuratedRecoveryNowTile = false;
+        }
         // Patch missing defaults
         settings.dashboardSettings.tableSettings = settings.dashboardSettings.tableSettings || defaultTableSettings;
         settings.dashboardSettings.tableSettings.active = settings.dashboardSettings.tableSettings.active || defaultTableSettings.active;
