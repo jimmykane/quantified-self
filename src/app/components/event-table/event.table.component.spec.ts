@@ -94,18 +94,15 @@ describe('EventTableComponent', () => {
     let mockEventMergeService: any;
     let mockAnalyticsService: any;
 
-const mockUser = new User('testUser');
-mockUser.settings = {
-    dashboardSettings: {
-        tableSettings: {
-            selectedColumns: [],
-            active: 'Start Date',
-            direction: 'desc',
-            eventsPerPage: 10,
-        }
-    },
-    unitSettings: { startOfTheWeek: 1 }
-} as any;
+    const mockUser = new User('testUser');
+    mockUser.settings = {
+        dashboardSettings: {
+            tableSettings: {
+                selectedColumns: []
+            }
+        },
+        unitSettings: { startOfTheWeek: 1 }
+    } as any;
 
     beforeEach(async () => {
         mockEventService = {
@@ -231,10 +228,7 @@ mockUser.settings = {
 
         component.paginator = {
             _changePageSize: vi.fn(),
-            page: new Subject(),
-            pageIndex: 0,
-            pageSize: 10,
-            length: 0,
+            page: new Subject()
         } as any;
 
         fixture.detectChanges();
@@ -316,7 +310,6 @@ mockUser.settings = {
         const initialRows = [...component.data.data];
         const updatedEvent = new MockEvent('event2') as any;
         updatedEvent.name = 'Updated Event 2';
-        updatedEvent.startDate = (component.events[1] as any).startDate;
         const getStatsRowElementSpy = vi.spyOn(component, 'getStatsRowElement');
 
         component.events = [
@@ -353,99 +346,35 @@ mockUser.settings = {
         expect((component.data.data[1] as any)['Has Benchmark']).toBeTruthy();
     });
 
-    it('should support comma-separated search terms at event level', () => {
-        const manyEvents = Array.from({ length: 15 }, (_, index) => {
-            const event = new MockEvent(`event${index + 1}`) as any;
-            event.name = `Run ${index + 1}`;
-            event.description = `Description ${index + 1}`;
-            return event;
-        });
-        manyEvents[14].name = 'Special Tempo';
-        manyEvents[14].description = 'Very specific marker';
-        component.events = manyEvents;
-        (component as any).pageSize = 10;
+    it('should support comma-separated search terms', () => {
+        component.ngAfterViewInit();
+        const row = component.data.data[0] as any;
 
-        (component as any).processChanges('spec_event_level_search_init', { resetPageIndex: true, clearSelection: true });
-        expect(component.data.data.some((row: any) => row.Name === 'Special Tempo')).toBe(false);
-
-        component.search('missing,special tempo');
-        expect(component.filteredEventCount).toBe(1);
-        expect(component.data.data).toHaveLength(1);
-        expect((component.data.data[0] as any).Name).toBe('Special Tempo');
+        expect(component.data.filterPredicate(row, 'test run,missing')).toBe(true);
+        expect(component.data.filterPredicate(row, 'missing,test description')).toBe(true);
+        expect(component.data.filterPredicate(row, 'missing,unknown')).toBe(false);
     });
 
-    it('should treat all visible page rows as selected even when off-page rows stay selected', () => {
+    it('should treat all filtered rows as selected even when full data has additional hidden rows', () => {
         const visibleRow = { Event: new MockEvent('visible') } as any;
-        const offPageRow = { Event: new MockEvent('off-page') } as any;
-        component.data.data = [visibleRow];
+        const hiddenRow = { Event: new MockEvent('hidden') } as any;
+        component.data.data = [visibleRow, hiddenRow];
+        (component.data as any).filteredData = [visibleRow];
         component.selection.select(visibleRow);
-        component.selection.select(offPageRow);
 
         expect(component.isAllSelected()).toBe(true);
     });
 
-    it('should only select visible page rows when masterToggle is used', () => {
+    it('should only select filtered rows when masterToggle is used', () => {
         const visibleRow = { Event: new MockEvent('visible') } as any;
-        const offPageRow = { Event: new MockEvent('off-page') } as any;
-        component.data.data = [visibleRow];
-        component.selection.select(offPageRow);
+        const hiddenRow = { Event: new MockEvent('hidden') } as any;
+        component.data.data = [visibleRow, hiddenRow];
+        (component.data as any).filteredData = [visibleRow];
 
         component.masterToggle();
 
         expect(component.selection.isSelected(visibleRow)).toBe(true);
-        expect(component.selection.isSelected(offPageRow)).toBe(true);
-    });
-
-    it('should globally sort all filtered events before pagination', async () => {
-        const reverseOrderedEvents = Array.from({ length: 15 }, (_, index) => {
-            const eventIndex = 15 - index;
-            const event = new MockEvent(`event${eventIndex}`) as any;
-            event.startDate = new Date(`2024-01-${String(eventIndex).padStart(2, '0')}T00:00:00.000Z`);
-            event.name = `Event ${eventIndex}`;
-            return event;
-        });
-
-        component.events = reverseOrderedEvents;
-        (component as any).activeSort = 'Start Date';
-        (component as any).sortDirection = 'asc';
-        (component as any).pageSize = 10;
-
-        (component as any).processChanges('spec_global_sort_before_pagination', { resetPageIndex: true, clearSelection: true });
-        expect(((component.data.data[0] as any).Event as MockEvent).id).toBe('event1');
-        expect(((component.data.data[9] as any).Event as MockEvent).id).toBe('event10');
-
-        await component.pageChanges({ pageIndex: 1, pageSize: 10 } as any);
-        expect(((component.data.data[0] as any).Event as MockEvent).id).toBe('event11');
-    });
-
-    it('should build only the current page rows and clear selection on page changes', async () => {
-        const events = Array.from({ length: 25 }, (_, index) => {
-            const event = new MockEvent(`event${index + 1}`) as any;
-            event.name = `Event ${index + 1}`;
-            return event;
-        });
-        component.events = events;
-        (component as any).pageSize = 10;
-
-        const getStatsRowElementSpy = vi.spyOn(component, 'getStatsRowElement');
-        const loadingSpy = vi.spyOn(component as any, 'loading');
-        const loadedSpy = vi.spyOn(component as any, 'loaded');
-
-        (component as any).processChanges('spec_first_page_only', { resetPageIndex: true, clearSelection: true });
-        expect(component.data.data).toHaveLength(10);
-        expect(component.filteredEventCount).toBe(25);
-        expect(getStatsRowElementSpy).toHaveBeenCalledTimes(10);
-
-        component.selection.select(component.data.data[0]);
-        getStatsRowElementSpy.mockClear();
-        await component.pageChanges({ pageIndex: 1, pageSize: 10 } as any);
-
-        expect(component.selection.selected).toHaveLength(0);
-        expect(component.data.data).toHaveLength(10);
-        expect(((component.data.data[0] as any).Event as MockEvent).id).toBe('event11');
-        expect(getStatsRowElementSpy).toHaveBeenCalledTimes(10);
-        expect(loadingSpy).toHaveBeenCalled();
-        expect(loadedSpy).toHaveBeenCalled();
+        expect(component.selection.isSelected(hiddenRow)).toBe(false);
     });
 
     it('should patch-save event description via updateEventProperties', async () => {

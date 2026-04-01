@@ -20,7 +20,7 @@ import { Router } from '@angular/router';
 import { MatCard } from '@angular/material/card';
 import { MatPaginator, MatPaginatorIntl, PageEvent } from '@angular/material/paginator';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { MatSort, Sort } from '@angular/material/sort';
+import { MatSort } from '@angular/material/sort';
 import { AppEventInterface, BenchmarkResult } from '@shared/app-event.interface';
 import { MatTableDataSource } from '@angular/material/table';
 import { SelectionModel } from '@angular/cdk/collections';
@@ -48,11 +48,6 @@ import { AppEventUtilities } from '../../utils/app.event.utilities';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 import { MergeOptionsDialogComponent } from './merge-options-dialog/merge-options-dialog.component';
 import { AppEventMergeService, MergeType } from '../../services/app.event-merge.service';
-import {
-  eventMatchesSearchTerms,
-  sortEventsForTable,
-  tokenizeEventTableSearchTerms,
-} from '../../helpers/event-table-query.helper';
 
 interface EventTableRowCacheEntry {
   event: EventInterface;
@@ -83,7 +78,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   @ViewChild(MatPaginator, { static: true }) paginator!: MatPaginator;
   @ViewChild(MatCard, { static: true }) table!: MatCard;
 
-  data: MatTableDataSource<StatRowElement> = new MatTableDataSource<StatRowElement>();
+  data: MatTableDataSource<any> = new MatTableDataSource<StatRowElement>();
   selection = new SelectionModel(true, []);
 
   selectedColumns = AppUserUtilities.getDefaultSelectedTableColumns();
@@ -97,15 +92,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   private breakpointSubscription!: Subscription;
   private isHandset = false;
   private readonly defaultSelectedColumns = AppUserUtilities.getDefaultSelectedTableColumns();
+  private readonly nonSearchableRowKeys = new Set(['Color', 'Gradient', 'Event']);
   private rowCache = new Map<string, EventTableRowCacheEntry>();
-  filteredEventCount = 0;
-  private filteredSortedEvents: EventInterface[] = [];
-  private currentPageEvents: EventInterface[] = [];
-  pageIndex = 0;
-  private pageSize = 10;
-  private activeSort = 'Start Date';
-  private sortDirection: Sort['direction'] = 'desc';
-  private isViewInitialized = false;
 
 
   private searchSubject: Subject<string> = new Subject();
@@ -132,31 +120,20 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     this.isLoading ? this.loading() : this.loaded();
     if (!this.events) {
       this.rowCache.clear();
-      this.filteredSortedEvents = [];
-      this.currentPageEvents = [];
-      this.filteredEventCount = 0;
-      this.data.data = [];
       this.loading();
       return;
     }
-
+    if (this.events && simpleChanges.events && this.data.paginator && this.data.sort) { // If there is no paginator and sort then the compoenent is not initialized on view
+      this.processChanges('on_changes_events');
+    }
     if (this.user && simpleChanges.user) {
       this.selectedColumns = this.user.settings?.dashboardSettings?.tableSettings?.selectedColumns || AppUserUtilities.getDefaultSelectedTableColumns();
-      this.initializeQueryStateFromUserSettings();
-      const nextPageSize = this.pageSize;
+      const nextPageSize = this.user.settings?.dashboardSettings?.tableSettings?.eventsPerPage || 10;
       if (this.paginator && this.paginator.pageSize !== nextPageSize) {
         this.paginator._changePageSize(nextPageSize);
       }
       this.updateDisplayedColumns();
-      if (this.isViewInitialized) {
-        this.processChanges('on_changes_user', { resetPageIndex: false, clearSelection: true });
-      }
     }
-
-    if (this.events && simpleChanges.events && this.isViewInitialized) {
-      this.processChanges('on_changes_events', { resetPageIndex: true, clearSelection: true });
-    }
-
     if (simpleChanges.showActions) {
       this.updateDisplayedColumns();
     }
@@ -166,7 +143,6 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     if (!this.user) {
       throw new Error(`Component needs user`)
     }
-    this.initializeQueryStateFromUserSettings();
     this.updateDisplayedColumns();
     this.searchSubscription = this.searchSubject.pipe(
       debounceTime(250)
@@ -182,33 +158,49 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
           return;
         }
         this.isHandset = nextIsHandset;
-        if (this.events && this.isViewInitialized) {
-          this.processChanges('breakpoint_change', { resetPageIndex: false, clearSelection: true });
+        if (this.events && this.data.paginator && this.data.sort) {
+          this.processChanges('breakpoint_change');
         }
         this.changeDetector.markForCheck();
       });
   }
 
   ngAfterViewInit() {
-    this.isViewInitialized = true;
-    this.sortSubscription = this.sort.sortChange.subscribe(async (sortChange: Sort) => {
-      this.activeSort = sortChange.active || this.activeSort;
-      this.sortDirection = sortChange.direction || this.sortDirection;
-      this.processChanges('sort_change', { resetPageIndex: false, clearSelection: true });
+    this.data.paginator = this.paginator;
+    this.data.sort = this.sort;
+    this.data.sortingDataAccessor = (statRowElement: StatRowElement, header) => {
+      return (statRowElement as any)[`sort.${header}`];
+    };
+    this.data.filterPredicate = (row: any, filter: string) => {
+      const terms = filter
+        .split(',')
+        .map(term => term.trim())
+        .filter(term => term.length > 0);
 
+      if (terms.length === 0) {
+        return true;
+      }
+
+      const rowText = Object.entries(row)
+        .filter(([key, value]) => !key.startsWith('sort.') && !this.nonSearchableRowKeys.has(key) && value != null && typeof value !== 'object')
+        .map(([, value]) => String(value).toLowerCase())
+        .join(' ');
+
+      return terms.some(term => rowText.includes(term));
+    };
+    this.sortSubscription = this.sort.sortChange.subscribe(async (sort) => {
       const tableSettings = this.user?.settings?.dashboardSettings?.tableSettings;
       if (!tableSettings) {
         return;
       }
-      if (tableSettings.active !== this.activeSort || tableSettings.direction !== this.sortDirection) {
-        tableSettings.active = this.activeSort;
-        tableSettings.direction = this.sortDirection as OrderByDirection;
+      if (tableSettings.active !== sort.active || tableSettings.direction !== sort.direction) {
+        tableSettings.active = sort.active;
+        tableSettings.direction = sort.direction as OrderByDirection;
         await this.userService.updateUserProperties(this.user, { settings: this.user.settings })
       }
     });
-
     if (this.events) {
-      this.processChanges('after_view_init', { resetPageIndex: false, clearSelection: true });
+      this.processChanges('after_view_init');
     }
   }
 
@@ -311,7 +303,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   private getSelectableRows(): any[] {
-    return Array.isArray(this.data.data) ? this.data.data : [];
+    return Array.isArray(this.data.filteredData) ? this.data.filteredData : this.data.data;
   }
 
   isAllSelected() {
@@ -596,9 +588,6 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     this.snackBar.open('Event saved', undefined, {
       duration: 2000,
     });
-    if (this.isViewInitialized) {
-      this.processChanges('save_event_description', { resetPageIndex: false, clearSelection: false });
-    }
   }
 
   async saveEventName(name: string, event: EventInterface) {
@@ -610,16 +599,11 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     this.snackBar.open('Event saved', undefined, {
       duration: 2000,
     });
-    if (this.isViewInitialized) {
-      this.processChanges('save_event_name', { resetPageIndex: false, clearSelection: false });
-    }
   }
 
+  // Noop due to bugs
   async pageChanges(pageEvent: PageEvent) {
-    this.pageIndex = pageEvent.pageIndex || 0;
-    this.pageSize = pageEvent.pageSize || this.pageSize;
-    this.processChanges('page_change', { resetPageIndex: false, clearSelection: true });
-
+    // @important This is nasty because it's called if anything almost changes
     if (this.user.settings?.dashboardSettings?.tableSettings) {
       if (this.user.settings.dashboardSettings.tableSettings.eventsPerPage === pageEvent.pageSize) {
         return;
@@ -633,8 +617,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   search(searchTerm: string) {
     this.searchTerm = searchTerm;
-    this.pageIndex = 0;
-    this.processChanges('search_change', { resetPageIndex: false, clearSelection: true });
+    this.data.filter = searchTerm.trim().toLowerCase();
   }
 
   onSearchInput(event: Event) {
@@ -676,80 +659,17 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     return false
   }
 
-  private processChanges(
-    trigger: string = 'unknown',
-    options: { resetPageIndex?: boolean; clearSelection?: boolean } = {},
-  ) {
+  private processChanges(trigger: string = 'unknown') {
     if (!this.events || !this.user) {
       return;
     }
-    this.loading();
-    if (options.resetPageIndex) {
-      this.pageIndex = 0;
-    }
-
-    const queryStart = performance.now();
-    const normalizedTerms = tokenizeEventTableSearchTerms(this.searchTerm);
-    const allEvents = this.events.filter((event): event is EventInterface => !!event);
-    const filterStart = performance.now();
-    const filteredEvents = normalizedTerms.length
-      ? allEvents.filter(event => eventMatchesSearchTerms(event, normalizedTerms))
-      : allEvents;
-    const filterDurationMs = Number((performance.now() - filterStart).toFixed(2));
-
-    const sortStart = performance.now();
-    const sortedEvents = sortEventsForTable(filteredEvents, this.activeSort, this.sortDirection);
-    const sortDurationMs = Number((performance.now() - sortStart).toFixed(2));
-
-    this.filteredSortedEvents = sortedEvents;
-    this.filteredEventCount = this.filteredSortedEvents.length;
-    this.pageSize = this.resolvePageSize();
-
-    const maxPageIndex = this.filteredEventCount > 0
-      ? Math.floor((this.filteredEventCount - 1) / this.pageSize)
-      : 0;
-    if (this.pageIndex > maxPageIndex) {
-      this.pageIndex = maxPageIndex;
-    }
-    if (this.pageIndex < 0) {
-      this.pageIndex = 0;
-    }
-
-    const paginateStart = performance.now();
-    const startIndex = this.pageIndex * this.pageSize;
-    const endIndex = startIndex + this.pageSize;
-    this.currentPageEvents = this.filteredSortedEvents.slice(startIndex, endIndex);
-    const paginateDurationMs = Number((performance.now() - paginateStart).toFixed(2));
-
-    this.logger.info('[perf] event_table_query_stage', {
-      durationMs: Number((performance.now() - queryStart).toFixed(2)),
-      trigger,
-      inputEvents: allEvents.length,
-      searchTerms: normalizedTerms.length,
-      filteredEvents: this.filteredEventCount,
-      activeSort: this.activeSort,
-      sortDirection: this.sortDirection,
-      pageIndex: this.pageIndex,
-      pageSize: this.pageSize,
-      pageEvents: this.currentPageEvents.length,
-      filterDurationMs,
-      sortDurationMs,
-      paginateDurationMs,
-    });
-
-    if (options.clearSelection !== false) {
-      this.selection.clear();
-    }
-
-    this.pruneRowCacheForCurrentEvents(allEvents);
-
     const processStart = performance.now();
     const dateFormat = this.isHandset ? 'd MMM yy' : 'EEEEEE d MMM yy HH:mm';
     const removedAscentTypes = new Set((this.user.settings.summariesSettings?.removeAscentForEventTypes || []) as ActivityTypes[]);
     const removedDescentTypes = new Set((((this.user.settings.summariesSettings as any)?.removeDescentForEventTypes || [])) as ActivityTypes[]);
     const renderContextKey = this.buildRowRenderContextKey(dateFormat);
     const previousRowCacheSize = this.rowCache.size;
-    const nextRowCache = new Map<string, EventTableRowCacheEntry>(this.rowCache);
+    const nextRowCache = new Map<string, EventTableRowCacheEntry>();
     const rows: StatRowElement[] = [];
     let reusedRows = 0;
     let rebuiltRows = 0;
@@ -758,24 +678,12 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     let cacheReferenceMismatches = 0;
     let cacheContextMismatches = 0;
     let cacheContentMismatches = 0;
-    let stalePageCacheEntriesRemoved = 0;
 
-    const currentPageEventIDs = new Set<string>();
-    for (const event of this.currentPageEvents) {
-      const pageEventID = this.getEventID(event);
-      if (pageEventID) {
-        currentPageEventIDs.add(pageEventID);
+    this.selection.clear();
+    for (const event of this.events) {
+      if (!event) {
+        continue;
       }
-    }
-
-    for (const cachedEventID of Array.from(nextRowCache.keys())) {
-      if (!currentPageEventIDs.has(cachedEventID)) {
-        nextRowCache.delete(cachedEventID);
-        stalePageCacheEntriesRemoved += 1;
-      }
-    }
-
-    for (const event of this.currentPageEvents) {
 
       const eventID = this.getEventID(event);
       const cachedEntry = eventID ? this.rowCache.get(eventID) : null;
@@ -830,56 +738,21 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     this.logger.info('[perf] event_table_process_changes', {
       durationMs: Number((performance.now() - processStart).toFixed(2)),
       trigger,
-      inputEvents: allEvents.length,
-      filteredEvents: this.filteredEventCount,
-      pageEvents: this.currentPageEvents.length,
+      inputEvents: this.events.length,
       outputRows: this.data.data.length,
       reusedRows,
       rebuiltRows,
       previousRowCacheSize,
-      stalePageCacheEntriesRemoved,
       cacheEntriesFound,
       cacheReferenceMatches,
       cacheReferenceMismatches,
       cacheContextMismatches,
       cacheContentMismatches,
       isHandset: this.isHandset,
-      pageSize: this.pageSize,
-      pageIndex: this.pageIndex,
+      pageSize: this.paginator?.pageSize || this.user.settings?.dashboardSettings?.tableSettings?.eventsPerPage || 0,
     });
     this.loaded();
 
-  }
-
-  private initializeQueryStateFromUserSettings(): void {
-    const tableSettings = this.user?.settings?.dashboardSettings?.tableSettings;
-    if (!tableSettings) {
-      return;
-    }
-    this.activeSort = tableSettings.active || this.activeSort;
-    this.sortDirection = (tableSettings.direction as Sort['direction']) || this.sortDirection;
-    this.pageSize = tableSettings.eventsPerPage || this.pageSize;
-  }
-
-  private resolvePageSize(): number {
-    const candidate = this.pageSize
-      || this.paginator?.pageSize
-      || this.user?.settings?.dashboardSettings?.tableSettings?.eventsPerPage
-      || 10;
-    return candidate > 0 ? candidate : 10;
-  }
-
-  private pruneRowCacheForCurrentEvents(events: EventInterface[]): void {
-    const validEventIDs = new Set(
-      events
-        .map(event => this.getEventID(event))
-        .filter((eventID): eventID is string => !!eventID),
-    );
-    for (const cachedEventID of Array.from(this.rowCache.keys())) {
-      if (!validEventIDs.has(cachedEventID)) {
-        this.rowCache.delete(cachedEventID);
-      }
-    }
   }
 
   private buildRowElement(
