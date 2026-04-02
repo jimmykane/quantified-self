@@ -22,10 +22,11 @@ describe('AdminQueueMonitorComponent', () => {
         stuck: 1,
         providers: [],
         cloudTasks: {
-            pending: 5,
+            pending: 11,
             queues: {
                 workout: { queueId: 'processWorkoutTask', pending: 3 },
-                sportsLibReparse: { queueId: 'processSportsLibReparseTask', pending: 2 }
+                sportsLibReparse: { queueId: 'processSportsLibReparseTask', pending: 2 },
+                derivedMetrics: { queueId: 'processDerivedMetricsTask', pending: 6 }
             }
         },
         reparse: {
@@ -48,10 +49,15 @@ describe('AdminQueueMonitorComponent', () => {
             maxLagMs: 0,
             retryHistogram: { '0-3': 0, '4-7': 0, '8-9': 0 },
             topErrors: []
+        },
+        derivedMetrics: {
+            coordinators: { idle: 1, queued: 1, processing: 1, failed: 0, total: 3 },
+            recentFailures: []
         }
     };
 
     beforeEach(async () => {
+        routeData.queueView = 'workout';
         adminServiceSpy = {
             getQueueStats: vi.fn().mockReturnValue(of(mockQueueStats))
         };
@@ -115,11 +121,22 @@ describe('AdminQueueMonitorComponent', () => {
         expect(fallbackComponent.pageTitle).toContain('Queue Monitoring');
     });
 
+    it('should configure derived queue view from route data', () => {
+        routeData.queueView = 'derived';
+        const derivedFixture = TestBed.createComponent(AdminQueueMonitorComponent);
+        const derivedComponent = derivedFixture.componentInstance;
+        derivedFixture.detectChanges();
+
+        expect(derivedComponent.queueView).toBe('derived');
+        expect(derivedComponent.pageTitle).toContain('Derived Metrics Queue');
+    });
+
     it('should render route navigation buttons', () => {
         const host: HTMLElement = fixture.nativeElement;
         const text = host.textContent || '';
         expect(text).toContain('Back To Dashboard');
         expect(text).toContain('Workout Queue');
         expect(text).toContain('Reparse Queue');
+        expect(text).toContain('Derived Metrics Queue');
     });
 });

@@ -17,6 +17,10 @@
             <mat-icon>autorenew</mat-icon>
             Reparse Queue
         </button>
+        <button mat-stroked-button class="qs-mat-primary" routerLink="/admin/queues/derived-metrics" [disabled]="queueView === 'derived'">
+            <mat-icon>monitor_heart</mat-icon>
+            Derived Metrics Queue
+        </button>
     </div>
 
     <app-admin-queue-stats [stats]="queueStats" [loading]="isLoadingStats" [queueView]="queueView">

@@ -13,6 +13,7 @@ import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME, COROSAPI_WORKOUT_QUEUE_COLLECTI
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { config } from '../config';
 import { SPORTS_LIB_REPARSE_TARGET_VERSION } from '../reparse/sports-lib-reparse.config';
+import { DERIVED_METRICS_COORDINATOR_DOC_ID, normalizeDerivedMetricKindsStrict } from '../../../shared/derived-metrics';
 
 /**
  * Normalizes error messages by replacing dynamic values (numbers, IDs) with placeholders.
@@ -28,6 +29,10 @@ function normalizeError(error: string): string {
 const SPORTS_LIB_REPARSE_JOBS_COLLECTION = 'sportsLibReparseJobs';
 const SPORTS_LIB_REPARSE_CHECKPOINT_DOC_PATH = 'systemJobs/sportsLibReparse';
 const SPORTS_LIB_REPARSE_FAILURE_PREVIEW_LIMIT = 10;
+const DERIVED_METRICS_FAILURE_PREVIEW_LIMIT = 10;
+
+const DERIVED_METRICS_COORDINATOR_STATUSES = ['idle', 'queued', 'processing', 'failed'] as const;
+type DerivedMetricsCoordinatorStatus = typeof DERIVED_METRICS_COORDINATOR_STATUSES[number];
 
 interface SportsLibReparseJobDocData {
     uid?: string;
@@ -39,9 +44,37 @@ interface SportsLibReparseJobDocData {
     targetSportsLibVersion?: string;
 }
 
+interface DerivedMetricsCoordinatorDocData {
+    status?: unknown;
+    generation?: unknown;
+    dirtyMetricKinds?: unknown;
+    updatedAtMs?: unknown;
+    lastError?: unknown;
+}
+
+interface DerivedMetricsFailurePreview {
+    uid: string;
+    generation: number;
+    dirtyMetricKinds: string[];
+    lastError: string;
+    updatedAtMs: number;
+}
+
+interface DerivedMetricsCoordinatorStats {
+    idle: number;
+    queued: number;
+    processing: number;
+    failed: number;
+    total: number;
+}
+
 function toSafeNumber(value: unknown, fallback: number = 0): number {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function isDerivedMetricsCoordinatorStatus(value: unknown): value is DerivedMetricsCoordinatorStatus {
+    return DERIVED_METRICS_COORDINATOR_STATUSES.includes(`${value}` as DerivedMetricsCoordinatorStatus);
 }
 
 const DEFAULT_SUBSCRIPTION_HISTORY_MONTHS = 12;
@@ -977,8 +1010,8 @@ export const getQueueStats = onAdminCall<{ includeAnalysis?: boolean }, any>({
 
     try {
         const db = admin.firestore();
-        const { workoutQueue, sportsLibReparseQueue } = config.cloudtasks;
-        const [workoutCloudTaskDepth, sportsLibReparseCloudTaskDepth] = await Promise.all([
+        const { workoutQueue, sportsLibReparseQueue, derivedMetricsQueue } = config.cloudtasks;
+        const [workoutCloudTaskDepth, sportsLibReparseCloudTaskDepth, derivedMetricsCloudTaskDepth] = await Promise.all([
             getCloudTaskQueueDepthForQueue(workoutQueue).catch(e => {
                 logger.error(`Error getting Cloud Task depth for queue ${workoutQueue}:`, e);
                 return 0;
@@ -987,8 +1020,12 @@ export const getQueueStats = onAdminCall<{ includeAnalysis?: boolean }, any>({
                 logger.error(`Error getting Cloud Task depth for queue ${sportsLibReparseQueue}:`, e);
                 return 0;
             }),
+            getCloudTaskQueueDepthForQueue(derivedMetricsQueue).catch(e => {
+                logger.error(`Error getting Cloud Task depth for queue ${derivedMetricsQueue}:`, e);
+                return 0;
+            }),
         ]);
-        const totalCloudTaskDepth = workoutCloudTaskDepth + sportsLibReparseCloudTaskDepth;
+        const totalCloudTaskDepth = workoutCloudTaskDepth + sportsLibReparseCloudTaskDepth + derivedMetricsCloudTaskDepth;
         const reparseJobsCollection = db.collection(SPORTS_LIB_REPARSE_JOBS_COLLECTION);
 
         const [
@@ -1019,6 +1056,58 @@ export const getQueueStats = onAdminCall<{ includeAnalysis?: boolean }, any>({
                 return null;
             }),
         ]);
+
+        // Querying the `meta` collection group by coordinator doc ID gives one coordinator snapshot per user.
+        const derivedMetricsCoordinatorSnapshot = await db.collectionGroup('meta')
+            .where(admin.firestore.FieldPath.documentId(), '==', DERIVED_METRICS_COORDINATOR_DOC_ID)
+            .get()
+            .catch(e => {
+                // Keep queue observability available even if coordinator aggregation fails (e.g. missing index/transient read issue).
+                logger.error('[admin/getQueueStats] Failed to query derived metrics coordinators:', e);
+                return null;
+            });
+
+        const derivedCoordinatorCounts: DerivedMetricsCoordinatorStats = {
+            idle: 0,
+            queued: 0,
+            processing: 0,
+            failed: 0,
+            total: 0,
+        };
+        const derivedFailures: DerivedMetricsFailurePreview[] = [];
+
+        (derivedMetricsCoordinatorSnapshot?.docs || []).forEach((doc) => {
+            const rawData = doc.data() as DerivedMetricsCoordinatorDocData;
+            const rawStatus = `${rawData.status || ''}`.trim();
+            const status = isDerivedMetricsCoordinatorStatus(rawStatus) ? rawStatus : null;
+            const generation = Math.max(0, Math.floor(toSafeNumber(rawData.generation)));
+            const updatedAtMs = Math.max(
+                0,
+                toEpochMillis(rawData.updatedAtMs) ?? toSafeNumber(rawData.updatedAtMs),
+            );
+            const dirtyMetricKinds = normalizeDerivedMetricKindsStrict(
+                Array.isArray(rawData.dirtyMetricKinds) ? rawData.dirtyMetricKinds : [],
+            );
+            const lastError = `${rawData.lastError || ''}`.trim();
+            const uid = `${doc.ref.parent?.parent?.id || ''}`.trim();
+
+            derivedCoordinatorCounts.total += 1;
+            if (status) {
+                derivedCoordinatorCounts[status] += 1;
+            }
+
+            if (status === 'failed') {
+                derivedFailures.push({
+                    uid,
+                    generation,
+                    dirtyMetricKinds,
+                    lastError,
+                    updatedAtMs,
+                });
+            }
+        });
+
+        derivedFailures.sort((left, right) => right.updatedAtMs - left.updatedAtMs);
 
         const checkpointSnapshot = await admin.firestore().doc(SPORTS_LIB_REPARSE_CHECKPOINT_DOC_PATH).get().catch(e => {
             logger.error('[admin/getQueueStats] Failed to read sports-lib reparse checkpoint:', e);
@@ -1198,6 +1287,10 @@ export const getQueueStats = onAdminCall<{ includeAnalysis?: boolean }, any>({
                         queueId: sportsLibReparseQueue,
                         pending: sportsLibReparseCloudTaskDepth,
                     },
+                    derivedMetrics: {
+                        queueId: derivedMetricsQueue,
+                        pending: derivedMetricsCloudTaskDepth,
+                    },
                 },
             },
             reparse: {
@@ -1220,6 +1313,10 @@ export const getQueueStats = onAdminCall<{ includeAnalysis?: boolean }, any>({
                     overrideUsersInProgress,
                 },
                 recentFailures: recentReparseFailures,
+            },
+            derivedMetrics: {
+                coordinators: derivedCoordinatorCounts,
+                recentFailures: derivedFailures.slice(0, DERIVED_METRICS_FAILURE_PREVIEW_LIMIT),
             },
             providers,
             dlq,

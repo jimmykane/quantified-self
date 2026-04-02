@@ -62,6 +62,9 @@ const {
         if (queueId === 'processSportsLibReparseTask') {
             return 8;
         }
+        if (queueId === 'processDerivedMetricsTask') {
+            return 6;
+        }
         return 0;
     });
 
@@ -122,6 +125,9 @@ vi.mock('firebase-admin', () => {
     firestoreMock.FieldValue = {
         serverTimestamp: vi.fn().mockReturnValue('mock-timestamp')
     };
+    firestoreMock.FieldPath = {
+        documentId: vi.fn(() => '__name__')
+    };
 
     return {
         auth: () => mockAuth,
@@ -155,6 +161,7 @@ vi.mock('../config', () => ({
         cloudtasks: {
             workoutQueue: 'processWorkoutTask',
             sportsLibReparseQueue: 'processSportsLibReparseTask',
+            derivedMetricsQueue: 'processDerivedMetricsTask',
             queue: 'processWorkoutTask',
         },
     },
@@ -1068,6 +1075,65 @@ describe('getQueueStats Cloud Function', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        mockCollection.mockImplementation((collectionName: string) => {
+            const mockCount = vi.fn().mockReturnValue({
+                get: vi.fn().mockResolvedValue({
+                    data: () => ({ count: 5 })
+                })
+            });
+
+            if (collectionName === 'meta') {
+                const docs = [
+                    {
+                        data: () => ({
+                            status: 'failed',
+                            generation: 3,
+                            dirtyMetricKinds: ['form'],
+                            lastError: 'Coordinator failed',
+                            updatedAtMs: 1700000001000
+                        }),
+                        ref: { parent: { parent: { id: 'uid-default-failed' } } }
+                    }
+                ];
+                return {
+                    where: vi.fn().mockReturnValue({
+                        get: vi.fn().mockResolvedValue({ docs })
+                    })
+                };
+            }
+
+            if (collectionName === 'failed_jobs') {
+                const failedJobsMock: any = {
+                    count: mockCount,
+                    orderBy: vi.fn().mockReturnValue({
+                        limit: vi.fn().mockReturnValue({
+                            get: vi.fn().mockResolvedValue({
+                                size: 0,
+                                docs: []
+                            })
+                        })
+                    }),
+                    get: vi.fn().mockResolvedValue({
+                        size: 0,
+                        docs: []
+                    })
+                };
+                failedJobsMock.where = vi.fn().mockReturnValue(failedJobsMock);
+                return failedJobsMock;
+            }
+
+            return {
+                where: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockReturnThis(),
+                count: mockCount,
+                get: vi.fn().mockResolvedValue({
+                    empty: false,
+                    docs: [{ data: () => ({ dateCreated: Date.now() - 10000 }) }],
+                    data: () => ({ count: 5 })
+                })
+            };
+        });
         mockDoc.mockReturnValue({
             get: vi.fn().mockResolvedValue({
                 exists: true,
@@ -1139,6 +1205,56 @@ describe('getQueueStats Cloud Function', () => {
                 failedJobsMock.where = vi.fn().mockReturnValue(failedJobsMock);
                 return failedJobsMock;
             }
+
+            if (collectionName === 'meta') {
+                const docs = [
+                    {
+                        data: () => ({
+                            status: 'queued',
+                            generation: 7,
+                            dirtyMetricKinds: ['form', 'recovery_now'],
+                            lastError: '',
+                            updatedAtMs: 1700000004000
+                        }),
+                        ref: { parent: { parent: { id: 'uid-queued' } } }
+                    },
+                    {
+                        data: () => ({
+                            status: 'processing',
+                            generation: 6,
+                            dirtyMetricKinds: ['form'],
+                            lastError: '',
+                            updatedAtMs: 1700000003000
+                        }),
+                        ref: { parent: { parent: { id: 'uid-processing' } } }
+                    },
+                    {
+                        data: () => ({
+                            status: 'idle',
+                            generation: 5,
+                            dirtyMetricKinds: [],
+                            lastError: '',
+                            updatedAtMs: 1700000002000
+                        }),
+                        ref: { parent: { parent: { id: 'uid-idle' } } }
+                    },
+                    {
+                        data: () => ({
+                            status: 'failed',
+                            generation: 4,
+                            dirtyMetricKinds: ['form'],
+                            lastError: 'Derived metrics failed',
+                            updatedAtMs: 1700000001000
+                        }),
+                        ref: { parent: { parent: { id: 'uid-failed' } } }
+                    }
+                ];
+                return {
+                    where: vi.fn().mockReturnValue({
+                        get: vi.fn().mockResolvedValue({ docs })
+                    })
+                };
+            }
             return mockQuery;
         });
 
@@ -1172,7 +1288,7 @@ describe('getQueueStats Cloud Function', () => {
 
         // Check Cloud Tasks stats
         expect(result.cloudTasks).toEqual({
-            pending: 50,
+            pending: 56,
             queues: {
                 workout: {
                     queueId: 'processWorkoutTask',
@@ -1181,6 +1297,10 @@ describe('getQueueStats Cloud Function', () => {
                 sportsLibReparse: {
                     queueId: 'processSportsLibReparseTask',
                     pending: 8,
+                },
+                derivedMetrics: {
+                    queueId: 'processDerivedMetricsTask',
+                    pending: 6,
                 },
             },
         });
@@ -1200,15 +1320,34 @@ describe('getQueueStats Cloud Function', () => {
                 overrideUsersInProgress: 1,
             }),
         }));
+        expect(result.derivedMetrics).toEqual({
+            coordinators: {
+                idle: 1,
+                queued: 1,
+                processing: 1,
+                failed: 1,
+                total: 4,
+            },
+            recentFailures: [
+                {
+                    uid: 'uid-failed',
+                    generation: 4,
+                    dirtyMetricKinds: ['form'],
+                    lastError: 'Derived metrics failed',
+                    updatedAtMs: 1700000001000,
+                }
+            ],
+        });
     });
 
     it('should handle single-queue Cloud Task depth error and return 0 for that queue', async () => {
         mockGetCloudTaskQueueDepthForQueue
             .mockResolvedValueOnce(42)
-            .mockRejectedValueOnce(new Error('Queue depth error'));
+            .mockRejectedValueOnce(new Error('Queue depth error'))
+            .mockResolvedValueOnce(6);
         const result = await (getQueueStats as any)(request);
         expect(result.cloudTasks).toEqual({
-            pending: 42,
+            pending: 48,
             queues: {
                 workout: {
                     queueId: 'processWorkoutTask',
@@ -1218,7 +1357,77 @@ describe('getQueueStats Cloud Function', () => {
                     queueId: 'processSportsLibReparseTask',
                     pending: 0,
                 },
+                derivedMetrics: {
+                    queueId: 'processDerivedMetricsTask',
+                    pending: 6,
+                },
             },
+        });
+    });
+
+    it('should return safe derived coordinator defaults when coordinator query fails', async () => {
+        mockCollection.mockImplementation((collectionName: string) => {
+            const mockCount = vi.fn().mockReturnValue({
+                get: vi.fn().mockResolvedValue({
+                    data: () => ({ count: 5 })
+                })
+            });
+
+            if (collectionName === 'meta') {
+                return {
+                    where: vi.fn().mockReturnValue({
+                        get: vi.fn().mockRejectedValue(new Error('Missing index'))
+                    })
+                };
+            }
+
+            if (collectionName === 'failed_jobs') {
+                const failedJobsMock: any = {
+                    count: mockCount,
+                    orderBy: vi.fn().mockReturnValue({
+                        limit: vi.fn().mockReturnValue({
+                            get: vi.fn().mockResolvedValue({
+                                size: 0,
+                                docs: []
+                            })
+                        })
+                    }),
+                    get: vi.fn().mockResolvedValue({
+                        size: 0,
+                        docs: []
+                    })
+                };
+                failedJobsMock.where = vi.fn().mockReturnValue(failedJobsMock);
+                return failedJobsMock;
+            }
+
+            return {
+                where: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockReturnThis(),
+                count: mockCount,
+                get: vi.fn().mockResolvedValue({
+                    empty: false,
+                    docs: [{ data: () => ({ dateCreated: Date.now() - 10000 }) }],
+                    data: () => ({ count: 5 })
+                })
+            };
+        });
+
+        const result = await (getQueueStats as any)(request);
+        expect(result.cloudTasks.queues.derivedMetrics).toEqual({
+            queueId: 'processDerivedMetricsTask',
+            pending: 6,
+        });
+        expect(result.derivedMetrics).toEqual({
+            coordinators: {
+                idle: 0,
+                queued: 0,
+                processing: 0,
+                failed: 0,
+                total: 0,
+            },
+            recentFailures: [],
         });
     });
 
