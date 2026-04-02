@@ -25,6 +25,7 @@ export class EventCardChartActionsComponent implements OnChanges {
   @Input() user: User;
   @Input() event: EventInterface;
   @Input() xAxisType: XAxisTypes;
+  @Input() canSelectDistanceXAxis = true;
   @Input() showAllData: boolean;
   @Input() showLaps: boolean;
   @Input() cursorBehaviour: ChartCursorBehaviours = ChartCursorBehaviours.ZoomX;
@@ -70,6 +71,7 @@ export class EventCardChartActionsComponent implements OnChanges {
     return Object.entries(this.xAxisTypes).map(([label, value]) => ({
       label,
       value: value as XAxisTypes,
+      disabled: value === XAxisTypes.Distance && !this.canSelectDistanceXAxis,
     }));
   }
 
@@ -101,6 +103,9 @@ export class EventCardChartActionsComponent implements OnChanges {
   }
 
   async onXAxisTypeChange(value: XAxisTypes) {
+    if (value === XAxisTypes.Distance && !this.canSelectDistanceXAxis) {
+      return;
+    }
     this.xAxisType = value;
     await this.somethingChanged('xAxisType');
   }

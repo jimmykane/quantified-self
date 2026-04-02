@@ -43,6 +43,7 @@ import {
 } from '../../../helpers/event-echarts-data.helper';
 import { resolveEventSeriesColor } from '../../../helpers/event-echarts-style.helper';
 import {
+  canSelectEventChartDistanceXAxis,
   clampEventRange,
   EventChartRange,
   normalizeEventRange,
@@ -133,6 +134,14 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
         this.xAxisTypeOverride = null;
         this.queueRebuild('xAxisType-revert');
       });
+  }
+
+  public get displayedXAxisType(): XAxisTypes {
+    return resolveEventChartXAxisType(this.event, this.xAxisType, this.selectedActivities);
+  }
+
+  public get canSelectDistanceXAxis(): boolean {
+    return canSelectEventChartDistanceXAxis(this.selectedActivities);
   }
 
   public get cursorBehaviour() {
@@ -328,6 +337,10 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     this.cursorPositionSubject.next(axisValue);
   }
 
+  public onXAxisTypeChange(value: XAxisTypes): void {
+    this.xAxisType = value;
+  }
+
   public onDataTypeLegendSelectionChange(dataType: string, visible: boolean): void {
     if (!dataType) {
       return;
@@ -450,7 +463,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   private rebuildPanels(source: string): void {
     const allActivities = this.event?.getActivities?.() || this.selectedActivities || [];
     const selectedActivities = this.selectedActivities || [];
-    const effectiveXAxisType = resolveEventChartXAxisType(this.event, this.xAxisType);
+    const effectiveXAxisType = resolveEventChartXAxisType(this.event, this.xAxisType, selectedActivities);
     const nextEventID = this.event?.getID?.() || null;
     const panelRebuildKey = this.buildPanelRebuildKey(selectedActivities, allActivities, effectiveXAxisType);
     const lapMarkersKey = this.buildLapMarkersRebuildKey(selectedActivities, allActivities, effectiveXAxisType);
@@ -516,7 +529,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       this.zoomRange = null;
       this.zoomBarOverviewData = [];
       this.showDateOnTimeAxis = false;
-      this.renderedXAxisType = resolveEventChartXAxisType(this.event, this.xAxisType);
+      this.renderedXAxisType = resolveEventChartXAxisType(this.event, this.xAxisType, this.selectedActivities);
       this.zoomRangeOwnerEventID = this.event?.getID?.() || null;
       this.lastPanelRebuildKey = null;
       this.lastLapMarkersKey = null;
@@ -747,7 +760,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       return;
     }
 
-    const effectiveXAxisType = resolveEventChartXAxisType(this.event, this.xAxisType);
+    const effectiveXAxisType = resolveEventChartXAxisType(this.event, this.xAxisType, this.selectedActivities);
 
     this.selectedActivities.forEach((activity) => {
       const activityID = activity.getID() || '';

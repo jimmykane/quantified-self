@@ -77,6 +77,26 @@ describe('EventCardChartActionsComponent', () => {
     expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('event_chart_settings_change', { property: 'xAxisType' });
   });
 
+  it('disables distance x-axis option when unavailable', () => {
+    component.canSelectDistanceXAxis = false;
+
+    const distanceOption = component.xAxisOptions.find((option) => option.value === XAxisTypes.Distance);
+
+    expect(distanceOption?.disabled).toBe(true);
+  });
+
+  it('ignores distance x-axis changes when distance is unavailable', async () => {
+    component.canSelectDistanceXAxis = false;
+    component.xAxisType = XAxisTypes.Duration;
+    const xAxisTypeEmitSpy = vi.spyOn(component.xAxisTypeChange, 'emit');
+
+    await component.onXAxisTypeChange(XAxisTypes.Distance);
+
+    expect(component.xAxisType).toBe(XAxisTypes.Duration);
+    expect(xAxisTypeEmitSpy).not.toHaveBeenCalled();
+    expect(analyticsServiceMock.logEvent).not.toHaveBeenCalledWith('event_chart_settings_change', { property: 'xAxisType' });
+  });
+
   it('should emit cursorBehaviour changes and log analytics', async () => {
     const emitSpy = vi.spyOn(component.cursorBehaviourChange, 'emit');
 

@@ -9,7 +9,16 @@ import { AppActivitySelectionService } from '../../services/activity-selection-s
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppThemeService } from '../../services/app.theme.service';
 import { NO_ERRORS_SCHEMA, signal } from '@angular/core';
-import { EventInterface, User, ActivityInterface, AppThemes, XAxisTypes, DataSpeed, LapTypes } from '@sports-alliance/sports-lib';
+import {
+    ActivityTypes,
+    EventInterface,
+    User,
+    ActivityInterface,
+    AppThemes,
+    XAxisTypes,
+    DataSpeed,
+    LapTypes
+} from '@sports-alliance/sports-lib';
 import { LoggerService } from '../../services/logger.service';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { shouldRenderIntensityZonesChart } from '../../helpers/intensity-zones-chart-data-helper';
@@ -459,6 +468,54 @@ describe('EventCardComponent', () => {
 
             expect(component.hasChartDataFlag()).toBe(true);
             expect(fixture.nativeElement.querySelector('app-event-card-chart')).not.toBeNull();
+        });
+
+        it('keeps hasChartDataFlag true when distance axis is configured but selected indoor activity has no distance stream', () => {
+            const previousXAxisType = mockUser.settings.chartSettings.xAxisType;
+            mockUser.settings.chartSettings.xAxisType = XAxisTypes.Distance;
+
+            try {
+                const speedStream = {
+                    type: DataSpeed.type,
+                    getData: () => [3, 4, 5],
+                };
+                const timeStream = {
+                    type: XAxisTypes.Time,
+                    getData: () => [0, 10, 20],
+                };
+                const indoorChartableActivity = {
+                    ...activityWithData,
+                    type: ActivityTypes.IndoorRunning,
+                    getID: () => 'indoor-activity-1',
+                    getAllStreams: () => [speedStream, timeStream],
+                    getStream: (type: string) => {
+                        if (type === DataSpeed.type) {
+                            return speedStream;
+                        }
+                        if (type === XAxisTypes.Time) {
+                            return timeStream;
+                        }
+                        return null;
+                    },
+                } as unknown as ActivityInterface;
+                const chartableEvent = {
+                    ...eventWithData,
+                    getActivities: () => [indoorChartableActivity],
+                } as unknown as EventInterface;
+
+                routeData$.next({ event: chartableEvent });
+                fixture = TestBed.createComponent(EventCardComponent);
+                component = fixture.componentInstance;
+                fixture.detectChanges();
+                component.selectedActivitiesInstant.set([indoorChartableActivity]);
+                component.selectedActivitiesDebounced.set([indoorChartableActivity]);
+                fixture.detectChanges();
+
+                expect(component.hasChartDataFlag()).toBe(true);
+                expect(fixture.nativeElement.querySelector('app-event-card-chart')).not.toBeNull();
+            } finally {
+                mockUser.settings.chartSettings.xAxisType = previousXAxisType;
+            }
         });
 
         it('should compute hasPowerCurveFlag as true when performance curve data exists', () => {

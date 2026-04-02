@@ -1,5 +1,14 @@
-import { DataDistance, DynamicDataLoader, EventInterface, XAxisTypes } from '@sports-alliance/sports-lib';
+import {
+  ActivityInterface,
+  ActivityTypes,
+  DataDistance,
+  DataStrydDistance,
+  DynamicDataLoader,
+  EventInterface,
+  XAxisTypes,
+} from '@sports-alliance/sports-lib';
 import { getBrowserLocale } from '../shared/adapters/date-locale.config';
+import { isIndoorActivityType } from '@shared/activity-type-group.metadata';
 
 export interface EventChartRange {
   start: number;
@@ -43,11 +52,28 @@ const CANONICAL_DURATION_INTERVALS_SECONDS = [
   604800,
 ];
 
-export function resolveEventChartXAxisType(event: EventInterface | null | undefined, configuredType: XAxisTypes): XAxisTypes {
+export function resolveEventChartXAxisType(
+  event: EventInterface | null | undefined,
+  configuredType: XAxisTypes,
+  selectedActivities: ActivityInterface[] | null | undefined = []
+): XAxisTypes {
   if (event?.isMultiSport && event.isMultiSport()) {
     return XAxisTypes.Time;
   }
+
+  if (configuredType === XAxisTypes.Distance && !canSelectEventChartDistanceXAxis(selectedActivities)) {
+    return XAxisTypes.Duration;
+  }
+
   return configuredType;
+}
+
+export function canSelectEventChartDistanceXAxis(activities: ActivityInterface[] | null | undefined): boolean {
+  const selectedActivities = Array.isArray(activities) ? activities : [];
+  return !selectedActivities.some((activity) => (
+    isActivityIndoor(activity)
+    && !activityHasFiniteDistanceData(activity)
+  ));
 }
 
 export function formatEventXAxisValue(value: number, axisType: XAxisTypes, options?: EventXAxisFormatOptions): string {
@@ -249,4 +275,77 @@ function pickCanonicalInterval(span: number, candidates: number[]): number | nul
   }
 
   return bestCandidate;
+}
+
+function isActivityIndoor(activity: ActivityInterface | null | undefined): boolean {
+  const activityType = `${(activity as { type?: unknown } | null)?.type || ''}`.trim();
+  if (!activityType) {
+    return false;
+  }
+
+  return isIndoorActivityType(activityType as ActivityTypes);
+}
+
+function activityHasFiniteDistanceData(activity: ActivityInterface | null | undefined): boolean {
+  if (!activity) {
+    return false;
+  }
+
+  const distanceStream = getActivityStream(activity, DataDistance.type);
+  const strydDistanceStream = getActivityStream(activity, DataStrydDistance.type);
+  return streamHasFiniteData(distanceStream?.getData?.()) || streamHasFiniteData(strydDistanceStream?.getData?.());
+}
+
+function getActivityStream(activity: ActivityInterface, streamType: string): { getData?: () => unknown } | null {
+  if (!activity || !streamType) {
+    return null;
+  }
+
+  if (typeof activity.getStream === 'function') {
+    try {
+      const stream = activity.getStream(streamType);
+      if (stream) {
+        return stream as { getData?: () => unknown };
+      }
+    } catch {
+      // Providers may throw for unavailable streams.
+    }
+  }
+
+  const streams = activity.getAllStreams?.() || [];
+  const matchingStream = streams.find((stream) => stream?.type === streamType);
+  return matchingStream
+    ? matchingStream as { getData?: () => unknown }
+    : null;
+}
+
+function streamHasFiniteData(rawData: unknown): boolean {
+  if (!Array.isArray(rawData) || rawData.length === 0) {
+    return false;
+  }
+
+  for (let index = 0; index < rawData.length; index += 1) {
+    const numericValue = normalizeNumber(rawData[index] as unknown);
+    if (Number.isFinite(numericValue)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function normalizeNumber(value: unknown): number {
+  if (typeof value === 'number') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed.length) {
+      return Number.NaN;
+    }
+    return Number(trimmed);
+  }
+
+  return Number.NaN;
 }

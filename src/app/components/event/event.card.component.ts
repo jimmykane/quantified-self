@@ -139,7 +139,8 @@ export class EventCardComponent implements OnInit {
     const dataTypesToUse = this.userService.getUserChartDataTypesToUse(user);
     const xAxisType = resolveEventChartXAxisType(
       event,
-      chartSettings?.xAxisType ?? XAxisTypes.Duration
+      chartSettings?.xAxisType ?? XAxisTypes.Duration,
+      selectedActivities
     );
 
     return hasEventChartableData(selectedActivities, xAxisType);
