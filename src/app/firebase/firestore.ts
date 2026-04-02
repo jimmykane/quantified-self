@@ -11,7 +11,7 @@ import type {
   Firestore as FirebaseFirestore,
   Query
 } from 'firebase/firestore';
-import { onSnapshot } from 'firebase/firestore';
+import { onSnapshot as firebaseOnSnapshot } from 'firebase/firestore';
 import { Observable } from 'rxjs';
 import { FirebaseApp } from './app';
 
@@ -31,7 +31,6 @@ export {
   getDocsFromServer,
   initializeFirestore,
   limit,
-  onSnapshot,
   orderBy,
   persistentLocalCache,
   persistentMultipleTabManager,
@@ -102,6 +101,66 @@ function runInAngularZone(zone: NgZone | null, callback: () => void): void {
   zone.run(callback);
 }
 
+type SnapshotObserverLike = {
+  next?: (...args: unknown[]) => void;
+  error?: (...args: unknown[]) => void;
+  complete?: (...args: unknown[]) => void;
+};
+
+function isSnapshotObserverLike(value: unknown): value is SnapshotObserverLike {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  return 'next' in value || 'error' in value || 'complete' in value;
+}
+
+function wrapSnapshotCallback<T extends (...args: unknown[]) => void>(
+  zone: NgZone | null,
+  callback: T
+): T {
+  return ((...args: unknown[]) => {
+    runInAngularZone(zone, () => callback(...args));
+  }) as T;
+}
+
+function wrapSnapshotObserver(zone: NgZone | null, observer: SnapshotObserverLike): SnapshotObserverLike {
+  return {
+    ...observer,
+    next: observer.next ? wrapSnapshotCallback(zone, observer.next) : observer.next,
+    error: observer.error ? wrapSnapshotCallback(zone, observer.error) : observer.error,
+    complete: observer.complete ? wrapSnapshotCallback(zone, observer.complete) : observer.complete,
+  };
+}
+
+export const onSnapshot: typeof firebaseOnSnapshot = ((source: unknown, ...rest: unknown[]) => {
+  const zone = resolveNgZoneForSource(source as Query<unknown> | DocumentReference<unknown>);
+  const wrappedArgs = [...rest];
+  const firstArgIsCallbackOrObserver = typeof wrappedArgs[0] === 'function' || isSnapshotObserverLike(wrappedArgs[0]);
+  const callbackStartIndex = firstArgIsCallbackOrObserver ? 0 : 1;
+
+  const nextOrObserver = wrappedArgs[callbackStartIndex];
+  if (typeof nextOrObserver === 'function') {
+    wrappedArgs[callbackStartIndex] = wrapSnapshotCallback(
+      zone,
+      nextOrObserver as (...args: unknown[]) => void
+    );
+  } else if (isSnapshotObserverLike(nextOrObserver)) {
+    wrappedArgs[callbackStartIndex] = wrapSnapshotObserver(zone, nextOrObserver);
+  }
+
+  const errorCallbackIndex = callbackStartIndex + 1;
+  if (typeof wrappedArgs[errorCallbackIndex] === 'function') {
+    wrappedArgs[errorCallbackIndex] = wrapSnapshotCallback(zone, wrappedArgs[errorCallbackIndex] as (...args: unknown[]) => void);
+  }
+
+  const completeCallbackIndex = callbackStartIndex + 2;
+  if (typeof wrappedArgs[completeCallbackIndex] === 'function') {
+    wrappedArgs[completeCallbackIndex] = wrapSnapshotCallback(zone, wrappedArgs[completeCallbackIndex] as (...args: unknown[]) => void);
+  }
+
+  return (firebaseOnSnapshot as (...args: unknown[]) => ReturnType<typeof firebaseOnSnapshot>)(source, ...wrappedArgs);
+}) as typeof firebaseOnSnapshot;
+
 function withOptionalID<T>(payload: T, id: string, options?: FirestoreDataOptions): T {
   if (!options?.idField) {
     return payload;
@@ -120,7 +179,7 @@ export function collectionData<T = DocumentData>(
   const zone = resolveNgZoneForSource(query);
 
   return new Observable<T[]>((subscriber) => {
-    const unsubscribe = onSnapshot(
+    const unsubscribe = firebaseOnSnapshot(
       query,
       (snapshot) => {
         const values = snapshot.docs.map((documentSnapshot) => {
@@ -142,7 +201,7 @@ export function docData<T = DocumentData>(
   const zone = resolveNgZoneForSource(reference);
 
   return new Observable<T | undefined>((subscriber) => {
-    const unsubscribe = onSnapshot(
+    const unsubscribe = firebaseOnSnapshot(
       reference,
       (snapshot) => {
         if (!snapshot.exists()) {

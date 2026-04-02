@@ -2,7 +2,7 @@ import { NgZone } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FirebaseApp } from './app';
-import { Firestore, collectionData, docData, provideFirestore } from './firestore';
+import { Firestore, collectionData, docData, onSnapshot, provideFirestore } from './firestore';
 import type { DocumentReference, FirebaseFirestoreType, Query } from './firestore';
 
 const firebaseFirestoreMocks = vi.hoisted(() => {
@@ -218,6 +218,55 @@ describe('Firebase firestore observables', () => {
     expect(emittedValues).toEqual([[{ name: 'Provider Zone' }]]);
     expect(zoneStates).toEqual([true]);
     subscription.unsubscribe();
+  });
+
+  it('wraps raw onSnapshot callbacks inside Angular zone outside injection context', () => {
+    let nextListener: SnapshotListener<QuerySnapshot<{ name: string }>> | undefined;
+    let errorListener: ErrorListener | undefined;
+    const firestoreInstance = {} as FirebaseFirestoreType;
+
+    firebaseFirestoreMocks.onSnapshot.mockImplementation(
+      (_source: unknown, firstArg: unknown, secondArg?: unknown, thirdArg?: unknown) => {
+        const hasOptionsArg = typeof firstArg !== 'function';
+        const nextArg = hasOptionsArg ? secondArg : firstArg;
+        const errorArg = hasOptionsArg ? thirdArg : secondArg;
+        nextListener = nextArg as SnapshotListener<QuerySnapshot<{ name: string }>>;
+        errorListener = errorArg as ErrorListener | undefined;
+        return vi.fn();
+      }
+    );
+
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: FirebaseApp, useValue: {} },
+        provideFirestore(() => firestoreInstance),
+      ],
+    });
+    TestBed.inject(Firestore);
+
+    const nextZoneStates: boolean[] = [];
+    const errorZoneStates: boolean[] = [];
+    const querySource = { firestore: firestoreInstance } as Query<{ name: string }>;
+    const unsubscribe = onSnapshot(
+      querySource,
+      { includeMetadataChanges: false },
+      (_snapshot) => {
+        nextZoneStates.push(NgZone.isInAngularZone());
+      },
+      (_error) => {
+        errorZoneStates.push(NgZone.isInAngularZone());
+      }
+    );
+
+    const emittedError = new Error('raw listener failure');
+    TestBed.inject(NgZone).runOutsideAngular(() => {
+      nextListener?.({ docs: [{ id: 'd-raw', data: () => ({ name: 'Raw' }) }] });
+      errorListener?.(emittedError);
+    });
+
+    expect(nextZoneStates).toEqual([true]);
+    expect(errorZoneStates).toEqual([true]);
+    unsubscribe();
   });
 
   it('falls back gracefully when no injection context exists', () => {
