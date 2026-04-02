@@ -209,7 +209,7 @@ describe('dashboard-tile-view-model.helper', () => {
           id: 'e-2',
           startDate: '2024-01-03T10:00:00.000Z',
           activityTypes: [ActivityTypes.Running],
-          stats: { 'Power Training Stress Score': 20 },
+          stats: { 'Training Stress Score': 20 },
         }),
       ],
     });

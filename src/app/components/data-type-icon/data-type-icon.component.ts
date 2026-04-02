@@ -9,6 +9,7 @@ import { DataPowerAvg } from '@sports-alliance/sports-lib';
 import { DataPowerMax } from '@sports-alliance/sports-lib';
 import { DataPowerMin } from '@sports-alliance/sports-lib';
 import { DataPower } from '@sports-alliance/sports-lib';
+import { DataPowerTrainingStressScore } from '@sports-alliance/sports-lib';
 import { DataPowerLeft } from '@sports-alliance/sports-lib';
 import { DataPowerRight } from '@sports-alliance/sports-lib';
 import { DataAccumulatedPower } from '@sports-alliance/sports-lib';
@@ -172,7 +173,7 @@ export class DataTypeIconComponent {
         return 'electric_bolt';
       case 'Power Intensity Factor':
         return 'multiline_chart';
-      case 'Power Training Stress Score':
+      case DataPowerTrainingStressScore.type:
         return 'monitor_heart';
       case 'PowerWattsPerKg':
         return 'monitor_weight';

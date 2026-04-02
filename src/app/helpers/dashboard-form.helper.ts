@@ -5,12 +5,6 @@ const ATL_TIME_CONSTANT_DAYS = 7;
 const THIRTY_ONE_DAYS_MS = 31 * 24 * 60 * 60 * 1000;
 
 export const DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE = 'Training Stress Score';
-export const DASHBOARD_FORM_LEGACY_POWER_TRAINING_STRESS_SCORE_TYPE = 'Power Training Stress Score';
-
-const DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPES = [
-  DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
-  DASHBOARD_FORM_LEGACY_POWER_TRAINING_STRESS_SCORE_TYPE,
-] as const;
 
 export type DashboardFormMode = 'same-day' | 'prior-day';
 
@@ -47,15 +41,10 @@ function resolveDayStartLocalTime(date: Date): number {
 }
 
 export function resolveDashboardFormTrainingStressScore(event: EventInterface): number | null {
-  for (const statType of DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPES) {
-    const stat = event?.getStat?.(statType) as { getValue?: () => unknown } | null | undefined;
-    const value = toFiniteNumber(stat?.getValue?.());
-    if (value !== null && value >= 0) {
-      return value;
-    }
-  }
-
-  return null;
+  const stat = event?.getStat?.(DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE) as
+    { getValue?: () => unknown } | null | undefined;
+  const value = toFiniteNumber(stat?.getValue?.());
+  return value !== null && value >= 0 ? value : null;
 }
 
 export function buildDashboardFormPoints(events: readonly EventInterface[] | null | undefined): DashboardFormPoint[] {

@@ -8,7 +8,6 @@ import {
   resolveDashboardFormStatus,
   resolveDashboardFormTrainingStressScore,
   resolveDashboardFormValue,
-  DASHBOARD_FORM_LEGACY_POWER_TRAINING_STRESS_SCORE_TYPE,
   DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
 } from './dashboard-form.helper';
 
@@ -24,17 +23,17 @@ function buildEvent(startTimeMs: number, stats: Record<string, unknown>): any {
 }
 
 describe('dashboard-form.helper', () => {
-  it('should resolve training stress score from preferred and legacy stat types', () => {
+  it('should resolve training stress score from the current stat type only', () => {
     const preferredEvent = buildEvent(Date.UTC(2024, 0, 1), {
       [DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE]: 44.5,
-      [DASHBOARD_FORM_LEGACY_POWER_TRAINING_STRESS_SCORE_TYPE]: 12,
+      ['Power Training Stress Score']: 12,
     });
-    const legacyEvent = buildEvent(Date.UTC(2024, 0, 1), {
-      [DASHBOARD_FORM_LEGACY_POWER_TRAINING_STRESS_SCORE_TYPE]: 13.7,
+    const legacyOnlyEvent = buildEvent(Date.UTC(2024, 0, 1), {
+      ['Power Training Stress Score']: 13.7,
     });
 
     expect(resolveDashboardFormTrainingStressScore(preferredEvent)).toBe(44.5);
-    expect(resolveDashboardFormTrainingStressScore(legacyEvent)).toBe(13.7);
+    expect(resolveDashboardFormTrainingStressScore(legacyOnlyEvent)).toBeNull();
   });
 
   it('should return null training stress score when no finite stat value exists', () => {
@@ -47,18 +46,18 @@ describe('dashboard-form.helper', () => {
     expect(resolveDashboardFormTrainingStressScore(emptyEvent)).toBeNull();
   });
 
-  it('should build contiguous daily points and fill missing days with zero stress score', () => {
+  it('should ignore legacy-only stress stats when building daily points', () => {
     const points = buildDashboardFormPoints([
       buildEvent(Date.UTC(2024, 0, 1, 10, 0, 0), {
         [DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE]: 10,
       }),
       buildEvent(Date.UTC(2024, 0, 3, 16, 0, 0), {
-        [DASHBOARD_FORM_LEGACY_POWER_TRAINING_STRESS_SCORE_TYPE]: 20,
+        ['Power Training Stress Score']: 20,
       }),
     ]);
 
-    expect(points).toHaveLength(3);
-    expect(points.map(point => point.trainingStressScore)).toEqual([10, 0, 20]);
+    expect(points).toHaveLength(1);
+    expect(points.map(point => point.trainingStressScore)).toEqual([10]);
   });
 
   it('should bucket training stress by local calendar day instead of UTC day', () => {
