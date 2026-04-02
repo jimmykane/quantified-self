@@ -1,8 +1,14 @@
 import { DataDuration, DataRecoveryTime, type EventInterface } from '@sports-alliance/sports-lib';
 
+export interface DashboardRecoveryNowSegment {
+  totalSeconds: number;
+  endTimeMs: number;
+}
+
 export interface DashboardRecoveryNowContext {
   totalSeconds: number;
   endTimeMs: number;
+  segments?: DashboardRecoveryNowSegment[];
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -70,11 +76,12 @@ export function resolveRecoveryEventEndTimeMs(event: EventInterface): number | n
   return null;
 }
 
-export function resolveLatestRecoveryNowContext(
+export function resolveAggregatedRecoveryNowContext(
   events: readonly EventInterface[] | null | undefined,
 ): DashboardRecoveryNowContext | null {
   const safeEvents = Array.isArray(events) ? events : [];
-  let latestContext: DashboardRecoveryNowContext | null = null;
+  const segments: DashboardRecoveryNowSegment[] = [];
+  let totalRecoverySeconds = 0;
   let latestEndTimeMs = Number.NEGATIVE_INFINITY;
 
   for (const event of safeEvents) {
@@ -88,15 +95,29 @@ export function resolveLatestRecoveryNowContext(
       continue;
     }
 
-    if (endTimeMs < latestEndTimeMs) {
-      continue;
-    }
-
-    latestEndTimeMs = endTimeMs;
-    latestContext = { totalSeconds, endTimeMs };
+    totalRecoverySeconds += totalSeconds;
+    latestEndTimeMs = Math.max(latestEndTimeMs, endTimeMs);
+    segments.push({ totalSeconds, endTimeMs });
   }
 
-  return latestContext;
+  if (!segments.length || !Number.isFinite(totalRecoverySeconds) || totalRecoverySeconds <= 0) {
+    return null;
+  }
+
+  return {
+    totalSeconds: totalRecoverySeconds,
+    endTimeMs: latestEndTimeMs,
+    segments,
+  };
+}
+
+/**
+ * @deprecated Use resolveAggregatedRecoveryNowContext instead.
+ */
+export function resolveLatestRecoveryNowContext(
+  events: readonly EventInterface[] | null | undefined,
+): DashboardRecoveryNowContext | null {
+  return resolveAggregatedRecoveryNowContext(events);
 }
 
 export function resolveRemainingRecoverySeconds(
@@ -105,6 +126,35 @@ export function resolveRemainingRecoverySeconds(
 ): number | null {
   if (!context) {
     return null;
+  }
+
+  const segments = Array.isArray(context.segments) ? context.segments : [];
+  if (segments.length > 0) {
+    let totalRemainingSeconds = 0;
+    let hasValidSegment = false;
+
+    for (const segment of segments) {
+      const segmentTotalSeconds = toFinitePositiveNumber(segment?.totalSeconds);
+      const segmentEndTimeMs = toFiniteNumber(segment?.endTimeMs);
+      if (segmentTotalSeconds === null || segmentEndTimeMs === null) {
+        continue;
+      }
+
+      hasValidSegment = true;
+      const elapsedSeconds = Math.max(0, (nowMs - segmentEndTimeMs) / 1000);
+      const remainingSeconds = segmentTotalSeconds - elapsedSeconds;
+      if (!Number.isFinite(remainingSeconds)) {
+        continue;
+      }
+
+      totalRemainingSeconds += Math.max(0, remainingSeconds);
+    }
+
+    if (!hasValidSegment || !Number.isFinite(totalRemainingSeconds)) {
+      return null;
+    }
+
+    return Math.max(0, Math.floor(totalRemainingSeconds));
   }
 
   const totalSeconds = toFinitePositiveNumber(context.totalSeconds);

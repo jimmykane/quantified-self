@@ -16,6 +16,9 @@
       @if (user) {
       @defer (on idle) {
       <app-summaries [isLoading]="isLoading" [user]="user" [showActions]="!targetUser || targetUser.uid === user.uid"
+        [dashboardDateRange]="user.settings.dashboardSettings.dateRange"
+        [dashboardStartDate]="searchStartDate"
+        [dashboardEndDate]="searchEndDate"
         [events]="events">
       </app-summaries>
       } @placeholder {

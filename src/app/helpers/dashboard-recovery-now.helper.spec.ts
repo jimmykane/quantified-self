@@ -1,6 +1,7 @@
 import { DataDuration, DataRecoveryTime } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import {
+  resolveAggregatedRecoveryNowContext,
   resolveLatestRecoveryNowContext,
   resolveRecoveryEventEndTimeMs,
   resolveRemainingRecoverySeconds,
@@ -43,8 +44,8 @@ function buildEvent(options: {
 }
 
 describe('dashboard-recovery-now.helper', () => {
-  it('resolves the latest valid recovery context from the event list', () => {
-    const context = resolveLatestRecoveryNowContext([
+  it('resolves aggregated recovery context from all valid events in the list', () => {
+    const context = resolveAggregatedRecoveryNowContext([
       buildEvent({
         startDate: Date.UTC(2024, 0, 1, 9, 0, 0),
         endDate: Date.UTC(2024, 0, 1, 10, 0, 0),
@@ -62,8 +63,18 @@ describe('dashboard-recovery-now.helper', () => {
     ] as any);
 
     expect(context).toEqual({
-      totalSeconds: 5400,
+      totalSeconds: 6600,
       endTimeMs: Date.UTC(2024, 0, 3, 10, 0, 0),
+      segments: [
+        {
+          totalSeconds: 1200,
+          endTimeMs: Date.UTC(2024, 0, 1, 10, 0, 0),
+        },
+        {
+          totalSeconds: 5400,
+          endTimeMs: Date.UTC(2024, 0, 3, 10, 0, 0),
+        },
+      ],
     });
   });
 
@@ -89,7 +100,7 @@ describe('dashboard-recovery-now.helper', () => {
     expect(endTimeMs).toBe(startTime + (2700 * 1000));
   });
 
-  it('computes remaining recovery with clamp-to-zero behavior', () => {
+  it('computes remaining recovery with clamp-to-zero behavior for a single recovery window', () => {
     const context = {
       totalSeconds: 3600,
       endTimeMs: 1_000_000,
@@ -99,10 +110,30 @@ describe('dashboard-recovery-now.helper', () => {
     expect(resolveRemainingRecoverySeconds(context, 4_700_000)).toBe(0);
   });
 
+  it('computes summed remaining recovery across multiple recovery windows', () => {
+    const context = {
+      totalSeconds: 7200,
+      endTimeMs: 2_000_000,
+      segments: [
+        {
+          totalSeconds: 3600,
+          endTimeMs: 1_000_000,
+        },
+        {
+          totalSeconds: 3600,
+          endTimeMs: 2_000_000,
+        },
+      ],
+    };
+
+    expect(resolveRemainingRecoverySeconds(context, 2_800_000)).toBe(4600);
+    expect(resolveRemainingRecoverySeconds(context, 8_000_000)).toBe(0);
+  });
+
   it('returns null for invalid or missing recovery contexts', () => {
-    expect(resolveLatestRecoveryNowContext(null)).toBeNull();
-    expect(resolveLatestRecoveryNowContext([] as any)).toBeNull();
-    expect(resolveLatestRecoveryNowContext([
+    expect(resolveAggregatedRecoveryNowContext(null)).toBeNull();
+    expect(resolveAggregatedRecoveryNowContext([] as any)).toBeNull();
+    expect(resolveAggregatedRecoveryNowContext([
       buildEvent({
         startDate: Date.UTC(2024, 0, 1, 9, 0, 0),
         endDate: Date.UTC(2024, 0, 1, 10, 0, 0),
@@ -115,5 +146,24 @@ describe('dashboard-recovery-now.helper', () => {
       totalSeconds: NaN,
       endTimeMs: Date.UTC(2024, 0, 1, 10, 0, 0),
     })).toBeNull();
+  });
+
+  it('keeps legacy latest helper as a compatibility alias to aggregated behavior', () => {
+    const events = [
+      buildEvent({
+        startDate: Date.UTC(2024, 0, 1, 9, 0, 0),
+        endDate: Date.UTC(2024, 0, 1, 10, 0, 0),
+        recoverySeconds: 1200,
+      }),
+      buildEvent({
+        startDate: Date.UTC(2024, 0, 2, 9, 0, 0),
+        endDate: Date.UTC(2024, 0, 2, 10, 0, 0),
+        recoverySeconds: 1800,
+      }),
+    ] as any;
+
+    expect(resolveLatestRecoveryNowContext(events)).toEqual(
+      resolveAggregatedRecoveryNowContext(events),
+    );
   });
 });

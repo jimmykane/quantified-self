@@ -108,7 +108,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - The curated **Recovery** pie tile is optional and not added automatically.
 - You can add it from tile chart type options as **RecoveryNowPie**.
 - The tile shows live recovery split between **Left now** and **Elapsed**.
-- When recovery data is available for your current dashboard filters, the summary shows **Recovery Left Now** and **Total recovery** from the latest recovery-enabled event.
+- When recovery data is available for your current dashboard filters, the summary shows **Recovery Left Now** and **Total recovery** summed across all recovery-enabled events in the filtered range.
 - Remaining recovery updates every minute while the tile is visible.
 - You can still move or remove this tile from the tile menu.
 

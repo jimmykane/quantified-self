@@ -7,6 +7,7 @@ import {
   DataAscent,
   DataDistance,
   DataRecoveryTime,
+  DateRanges,
   TileTypes,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
@@ -373,7 +374,7 @@ describe('dashboard-tile-view-model.helper', () => {
     expect(events[1]).toBe(second);
   });
 
-  it('should attach recovery context to recovery chart tiles from the latest recovery-enabled event', () => {
+  it('should attach aggregated recovery context to recovery chart tiles from all recovery-enabled events', () => {
     const viewModels = buildDashboardTileViewModels({
       tiles: [{
         type: TileTypes.Chart,
@@ -405,8 +406,18 @@ describe('dashboard-tile-view-model.helper', () => {
 
     const recoveryTile = viewModels[0] as any;
     expect(recoveryTile.recoveryNow).toEqual({
-      totalSeconds: 3600,
+      totalSeconds: 5400,
       endTimeMs: Date.UTC(2024, 0, 2, 9, 0, 0),
+      segments: [
+        {
+          totalSeconds: 1800,
+          endTimeMs: Date.UTC(2024, 0, 1, 9, 0, 0),
+        },
+        {
+          totalSeconds: 3600,
+          endTimeMs: Date.UTC(2024, 0, 2, 9, 0, 0),
+        },
+      ],
     });
   });
 
@@ -469,6 +480,64 @@ describe('dashboard-tile-view-model.helper', () => {
     expect(recoveryTile.recoveryNow).toEqual({
       totalSeconds: 7200,
       endTimeMs: Date.UTC(2024, 0, 1, 13, 0, 0),
+      segments: [
+        {
+          totalSeconds: 7200,
+          endTimeMs: Date.UTC(2024, 0, 1, 13, 0, 0),
+        },
+      ],
+    });
+  });
+
+  it('should resolve recovery context from events inside the provided dashboard date range', () => {
+    const tiles = [
+      {
+        type: TileTypes.Chart,
+        chartType: DASHBOARD_RECOVERY_NOW_CHART_TYPE as any,
+        dataType: DataRecoveryTime.type,
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        dataTimeInterval: TimeIntervals.Auto,
+        order: 0,
+        size: { columns: 1, rows: 1 },
+        name: 'Recovery',
+      } as TileChartSettingsInterface,
+    ];
+    const oldEvent = makeEvent({
+      id: 'old-event',
+      startDate: '2024-01-02T08:00:00.000Z',
+      endDate: '2024-01-02T09:00:00.000Z',
+      activityTypes: [ActivityTypes.Running],
+      stats: { [DataRecoveryTime.type]: 1800 },
+    });
+    const recentEvent = makeEvent({
+      id: 'recent-event',
+      startDate: '2024-03-05T08:00:00.000Z',
+      endDate: '2024-03-05T09:00:00.000Z',
+      activityTypes: [ActivityTypes.Running],
+      stats: { [DataRecoveryTime.type]: 7200 },
+    });
+
+    const viewModels = buildDashboardTileViewModels({
+      tiles,
+      events: [oldEvent, recentEvent],
+      dashboardDateRange: {
+        dateRange: DateRanges.custom,
+        startDate: new Date('2024-01-01T00:00:00.000Z'),
+        endDate: new Date('2024-01-31T23:59:59.999Z'),
+      },
+    });
+    const recoveryTile = viewModels[0] as DashboardChartTileViewModel;
+
+    expect(recoveryTile.recoveryNow).toEqual({
+      totalSeconds: 1800,
+      endTimeMs: Date.UTC(2024, 0, 2, 9, 0, 0),
+      segments: [
+        {
+          totalSeconds: 1800,
+          endTimeMs: Date.UTC(2024, 0, 2, 9, 0, 0),
+        },
+      ],
     });
   });
 });
