@@ -1,16 +1,17 @@
 import { ChangeDetectorRef } from '@angular/core';
 import { DateRanges, DaysOfTheWeek } from '@sports-alliance/sports-lib';
 import { describe, expect, it, vi } from 'vitest';
+import { of } from 'rxjs';
 import { getDatesForDateRange } from '../../helpers/date-range-helper';
 import { EventSearchComponent } from './event-search.component';
 
 describe('EventSearchComponent', () => {
-  const createComponent = () => {
+  const createComponent = (dialog?: { open: ReturnType<typeof vi.fn> }) => {
     const changeDetectorRef = {
       markForCheck: vi.fn(),
       detectChanges: vi.fn(),
     } as unknown as ChangeDetectorRef;
-    const component = new EventSearchComponent(changeDetectorRef);
+    const component = new EventSearchComponent(changeDetectorRef, dialog as any);
     component.selectedDateRange = DateRanges.thisWeek;
     component.selectedStartDate = new Date('2025-01-01T00:00:00.000Z');
     component.selectedEndDate = new Date('2025-01-31T23:59:59.999Z');
@@ -131,5 +132,71 @@ describe('EventSearchComponent', () => {
     await component.onMergedEventsToggleChange(event);
 
     expect(searchSpy).not.toHaveBeenCalled();
+  });
+
+  it('should show a performance warning dialog when selecting all date range and continue on confirm', async () => {
+    const dialog = {
+      open: vi.fn().mockReturnValue({
+        afterClosed: () => of(true),
+      }),
+    };
+    const component = createComponent(dialog);
+    const searchSpy = vi.spyOn(component, 'search').mockResolvedValue(undefined);
+
+    await component.dateToggleChange({
+      source: { value: DateRanges.all },
+    } as any);
+
+    expect(dialog.open).toHaveBeenCalledTimes(1);
+    expect(searchSpy).toHaveBeenCalledTimes(1);
+    expect(component.selectedDateRange).toBe(DateRanges.all);
+  });
+
+  it('should keep previous date range and skip search when all date range warning is cancelled', async () => {
+    const dialog = {
+      open: vi.fn().mockReturnValue({
+        afterClosed: () => of(false),
+      }),
+    };
+    const component = createComponent(dialog);
+    const searchSpy = vi.spyOn(component, 'search').mockResolvedValue(undefined);
+    const previousRange = component.selectedDateRange;
+    const previousStartMs = component.startDateControl.value?.getTime?.();
+    const previousEndMs = component.endDateControl.value?.getTime?.();
+
+    await component.dateToggleChange({
+      source: { value: DateRanges.all },
+    } as any);
+
+    expect(dialog.open).toHaveBeenCalledTimes(1);
+    expect(searchSpy).not.toHaveBeenCalled();
+    expect(component.selectedDateRange).toBe(previousRange);
+    expect(component.startDateControl.value?.getTime?.()).toBe(previousStartMs);
+    expect(component.endDateControl.value?.getTime?.()).toBe(previousEndMs);
+  });
+
+  it('should keep custom start/end dates when all date range warning is cancelled', async () => {
+    const dialog = {
+      open: vi.fn().mockReturnValue({
+        afterClosed: () => of(false),
+      }),
+    };
+    const component = createComponent(dialog);
+    component.selectedDateRange = DateRanges.custom;
+    component.selectedStartDate = new Date('2025-02-01T00:00:00.000Z');
+    component.selectedEndDate = new Date('2025-02-28T23:59:59.999Z');
+    component.startDateControl.setValue(component.selectedStartDate);
+    component.endDateControl.setValue(component.selectedEndDate);
+    const searchSpy = vi.spyOn(component, 'search').mockResolvedValue(undefined);
+
+    await component.dateToggleChange({
+      source: { value: DateRanges.all },
+    } as any);
+
+    expect(dialog.open).toHaveBeenCalledTimes(1);
+    expect(searchSpy).not.toHaveBeenCalled();
+    expect(component.selectedDateRange).toBe(DateRanges.custom);
+    expect(component.startDateControl.value?.getTime?.()).toBe(component.selectedStartDate.getTime());
+    expect(component.endDateControl.value?.getTime?.()).toBe(component.selectedEndDate.getTime());
   });
 });

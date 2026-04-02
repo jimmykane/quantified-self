@@ -19,6 +19,10 @@ import { getDatesForDateRange } from '../../helpers/date-range-helper';
 import { MatDatepickerInputEvent } from '@angular/material/datepicker';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
+import { MatDialog } from '@angular/material/dialog';
+import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
+import { firstValueFrom } from 'rxjs';
+import { take } from 'rxjs/operators';
 
 @Component({
   selector: 'app-event-search',
@@ -62,7 +66,10 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   public activityTypes = ActivityTypesHelper.getActivityTypesAsUniqueArray();
 
 
-  constructor(changeDetector: ChangeDetectorRef) {
+  constructor(
+    changeDetector: ChangeDetectorRef,
+    private dialog?: MatDialog,
+  ) {
     super(changeDetector);
   }
 
@@ -151,8 +158,20 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     this.searchFormGroup.markAsPristine();
   }
 
-  dateToggleChange(event: MatButtonToggleChange) {
+  async dateToggleChange(event: MatButtonToggleChange) {
     const nextRange = event.source.value;
+    const previousRange = this.selectedDateRange;
+    if (nextRange === DateRanges.all && previousRange !== DateRanges.all) {
+      const confirmed = await this.confirmAllRangeSelection();
+      if (!confirmed) {
+        this.selectedDateRange = previousRange;
+        const previousRangeDates = this.resolveCurrentRangeDates();
+        this.startDateControl?.setValue(previousRangeDates.startDate);
+        this.endDateControl?.setValue(previousRangeDates.endDate);
+        return;
+      }
+    }
+
     const computedRange = getDatesForDateRange(nextRange, this.startOfTheWeek);
     this.startDateControl?.setValue(computedRange.startDate);
     this.endDateControl?.setValue(computedRange.endDate);
@@ -243,6 +262,24 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     }
     normalizedEndDate.setHours(23, 59, 59, 999);
     return normalizedEndDate;
+  }
+
+  private async confirmAllRangeSelection(): Promise<boolean> {
+    if (!this.dialog) {
+      return true;
+    }
+
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: 'Load all events?',
+        message: 'Selecting All may degrade app performance and increase loading times. Continue?',
+        confirmLabel: 'OK',
+        cancelLabel: 'Cancel',
+        confirmColor: 'warn',
+      },
+    });
+    const confirmed = await firstValueFrom(dialogRef.afterClosed().pipe(take(1)));
+    return confirmed === true;
   }
 
   validateAllFormFields(formGroup: UntypedFormGroup) {
