@@ -60,7 +60,11 @@ describe('help.content', () => {
 
     expect(gettingStartedSection?.content).toContain('Form tile (CTL / ATL / TSB)');
     expect(gettingStartedSection?.content).toContain('Training Stress Score');
+    expect(gettingStartedSection?.content).toContain('Power Training Stress Score');
     expect(gettingStartedSection?.content).toContain('Form (TSB)');
     expect(gettingStartedSection?.content).toContain('prior-day readiness');
+    expect(gettingStartedSection?.content).toContain('full history');
+    expect(gettingStartedSection?.content).toContain('asynchronously');
+    expect(gettingStartedSection?.content).toContain('status notice');
   });
 });

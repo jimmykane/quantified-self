@@ -114,10 +114,13 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 ### Form tile (CTL / ATL / TSB)
 
-- New dashboard **Form** tiles are temporarily disabled from chart type options.
 - The tile derives daily load from **Training Stress Score**.
+- Legacy **Power Training Stress Score** is used automatically when current TSS is missing.
 - It shows three headline stats: **Fitness (CTL)**, **Fatigue (ATL)**, and **Form (TSB)**.
 - **Form (TSB)** is shown as **prior-day readiness** using the prior day CTL - ATL.
+- Form and RecoveryNow tiles use precomputed derived snapshots from your full history (UTC day buckets), not only the currently selected dashboard date range.
+- When snapshots are missing or stale, they rebuild asynchronously; refresh usually follows within a few minutes.
+- While rebuilding, the dashboard shows a small training-metrics status notice above tiles.
 - The status title updates dynamically from current Form bands:
   - **High fatigue** at very negative Form values,
   - **Building fitness** while carrying meaningful load,

@@ -135,6 +135,8 @@ export { uploadActivity } from './events/upload-activity';
 export { reprocessEvent } from './events/reprocess-event';
 export { mergeEvents } from './events/merge-events';
 export { aiInsights, getAiInsightsQuotaStatus } from './ai/insights/callable';
+export { ensureDerivedMetrics } from './derived-metrics/ensure-derived-metrics';
+export { onDashboardDerivedMetricsEventWrite } from './derived-metrics/derived-metrics.trigger';
 export { restoreUserClaims, linkExistingStripeCustomer } from './stripe/claims';
 export { getUpcomingRenewalAmount } from './stripe/get-upcoming-renewal-amount';
 export { onSubscriptionUpdated } from './stripe/subscriptions';
@@ -148,6 +150,7 @@ export { listUsers, getQueueStats, getUserCount, getSubscriptionHistoryTrend, ge
 // Tasks
 export { processWorkoutTask } from './tasks/workout-processor';
 export { processSportsLibReparseTask } from './tasks/sports-lib-reparse-worker';
+export { processDerivedMetricsTask } from './tasks/derived-metrics-worker';
 
 // Stripe Cleanup
 export { cleanupStripeCustomer } from './stripe/cleanup';

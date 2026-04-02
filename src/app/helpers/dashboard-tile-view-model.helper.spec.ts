@@ -260,6 +260,44 @@ describe('dashboard-tile-view-model.helper', () => {
     expect(formChart.data).toEqual([]);
   });
 
+  it('should prefer precomputed derived form points when provided', () => {
+    const precomputedPoints = [
+      {
+        time: Date.UTC(2024, 0, 1),
+        trainingStressScore: 50,
+        ctl: 1,
+        atl: 5,
+        formSameDay: -4,
+        formPriorDay: null,
+      },
+    ];
+    const viewModels = buildDashboardTileViewModels({
+      tiles: [{
+        type: TileTypes.Chart,
+        order: 0,
+        chartType: DASHBOARD_FORM_CHART_TYPE as any,
+        dataType: 'Training Stress Score',
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        dataTimeInterval: TimeIntervals.Daily,
+        size: { columns: 1, rows: 1 },
+      } as any],
+      events: [
+        makeEvent({
+          id: 'stress-event',
+          startDate: '2024-01-01T10:00:00.000Z',
+          activityTypes: [ActivityTypes.Running],
+          stats: { 'Training Stress Score': 20 },
+        }),
+      ],
+      derivedMetrics: {
+        formPoints: precomputedPoints as any,
+      },
+    });
+
+    expect((viewModels[0] as any).data).toEqual(precomputedPoints);
+  });
+
   it('should build map tiles from filtered sorted events and preserve mixed tile ordering and sizes', () => {
     const tiles = [
       {
@@ -530,6 +568,68 @@ describe('dashboard-tile-view-model.helper', () => {
     const recoveryTile = viewModels[0] as DashboardChartTileViewModel;
 
     expect(recoveryTile.recoveryNow).toEqual({
+      totalSeconds: 1800,
+      endTimeMs: Date.UTC(2024, 0, 2, 9, 0, 0),
+      segments: [
+        {
+          totalSeconds: 1800,
+          endTimeMs: Date.UTC(2024, 0, 2, 9, 0, 0),
+        },
+      ],
+    });
+  });
+
+  it('should prefer derived recovery context for curated recovery chart types only', () => {
+    const derivedRecoveryContext = {
+      totalSeconds: 999,
+      endTimeMs: Date.UTC(2024, 0, 10, 9, 0, 0),
+      segments: [
+        {
+          totalSeconds: 999,
+          endTimeMs: Date.UTC(2024, 0, 10, 9, 0, 0),
+        },
+      ],
+    };
+    const events = [
+      makeEvent({
+        id: 'event',
+        startDate: '2024-01-02T08:00:00.000Z',
+        endDate: '2024-01-02T09:00:00.000Z',
+        activityTypes: [ActivityTypes.Running],
+        stats: { [DataRecoveryTime.type]: 1800 },
+      }),
+    ];
+    const viewModels = buildDashboardTileViewModels({
+      tiles: [
+        {
+          type: TileTypes.Chart,
+          chartType: DASHBOARD_RECOVERY_NOW_CHART_TYPE as any,
+          dataType: DataRecoveryTime.type,
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+          dataTimeInterval: TimeIntervals.Auto,
+          order: 0,
+          size: { columns: 1, rows: 1 },
+        } as any,
+        {
+          type: TileTypes.Chart,
+          chartType: ChartTypes.LinesVertical,
+          dataType: DataRecoveryTime.type,
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+          dataTimeInterval: TimeIntervals.Auto,
+          order: 1,
+          size: { columns: 1, rows: 1 },
+        } as any,
+      ],
+      events,
+      derivedMetrics: {
+        recoveryNow: derivedRecoveryContext as any,
+      },
+    });
+
+    expect((viewModels[0] as any).recoveryNow).toEqual(derivedRecoveryContext);
+    expect((viewModels[1] as any).recoveryNow).toEqual({
       totalSeconds: 1800,
       endTimeMs: Date.UTC(2024, 0, 2, 9, 0, 0),
       segments: [

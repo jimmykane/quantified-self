@@ -1,5 +1,17 @@
 @if (tiles.length) {
 <section class="pie">
+  @if (derivedMetricsBanner) {
+  <div class="derived-metrics-banner" [class.pending]="derivedMetricsBanner.type === 'pending'"
+    [class.warning]="derivedMetricsBanner.type === 'warning'">
+    <div class="derived-metrics-banner-content">
+      <div class="derived-metrics-banner-title">{{derivedMetricsBanner.title}}</div>
+      <div class="derived-metrics-banner-description">{{derivedMetricsBanner.description}}</div>
+    </div>
+    @if (derivedMetricsBanner.showRetry) {
+    <button type="button" class="derived-metrics-banner-action" (click)="retryDerivedMetricsRebuild()">Retry</button>
+    }
+  </div>
+  }
   <div
     class="dashboard-grid"
     cdkDropList

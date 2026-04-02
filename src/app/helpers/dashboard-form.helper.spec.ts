@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildDashboardFormRenderPoints,
   buildDashboardFormPoints,
+  buildDashboardFormPointsFromDailyLoads,
   resolveDashboardFormLatestPoint,
   resolveDashboardFormRenderTimeInterval,
   resolveDashboardFormStatus,
@@ -23,7 +24,7 @@ function buildEvent(startTimeMs: number, stats: Record<string, unknown>): any {
 }
 
 describe('dashboard-form.helper', () => {
-  it('should resolve training stress score from the current stat type only', () => {
+  it('should resolve training stress score from current and legacy stat types', () => {
     const preferredEvent = buildEvent(Date.UTC(2024, 0, 1), {
       [DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE]: 44.5,
       ['Power Training Stress Score']: 12,
@@ -33,7 +34,7 @@ describe('dashboard-form.helper', () => {
     });
 
     expect(resolveDashboardFormTrainingStressScore(preferredEvent)).toBe(44.5);
-    expect(resolveDashboardFormTrainingStressScore(legacyOnlyEvent)).toBeNull();
+    expect(resolveDashboardFormTrainingStressScore(legacyOnlyEvent)).toBe(13.7);
   });
 
   it('should return null training stress score when no finite stat value exists', () => {
@@ -46,7 +47,7 @@ describe('dashboard-form.helper', () => {
     expect(resolveDashboardFormTrainingStressScore(emptyEvent)).toBeNull();
   });
 
-  it('should ignore legacy-only stress stats when building daily points', () => {
+  it('should include legacy-only stress stats when building daily points', () => {
     const points = buildDashboardFormPoints([
       buildEvent(Date.UTC(2024, 0, 1, 10, 0, 0), {
         [DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE]: 10,
@@ -56,8 +57,23 @@ describe('dashboard-form.helper', () => {
       }),
     ]);
 
-    expect(points).toHaveLength(1);
-    expect(points.map(point => point.trainingStressScore)).toEqual([10]);
+    expect(points).toHaveLength(3);
+    expect(points.map(point => point.trainingStressScore)).toEqual([10, 0, 20]);
+  });
+
+  it('should build form points from UTC daily-load series with contiguous zero-filled days', () => {
+    const points = buildDashboardFormPointsFromDailyLoads([
+      [Date.UTC(2024, 0, 1), 30],
+      [Date.UTC(2024, 0, 3), 10],
+    ]);
+
+    expect(points).toHaveLength(3);
+    expect(points.map(point => point.time)).toEqual([
+      Date.UTC(2024, 0, 1),
+      Date.UTC(2024, 0, 2),
+      Date.UTC(2024, 0, 3),
+    ]);
+    expect(points.map(point => point.trainingStressScore)).toEqual([30, 0, 10]);
   });
 
   it('should bucket training stress by runtime local calendar day boundaries', () => {

@@ -60,6 +60,10 @@ interface BuildDashboardTileViewModelsInput {
   } | null;
   preferences?: EventStatAggregationPreferences;
   logger?: EventStatAggregationLogger;
+  derivedMetrics?: {
+    formPoints?: DashboardFormPoint[] | null;
+    recoveryNow?: DashboardRecoveryNowContext | null;
+  } | null;
 }
 
 function resolveEventStartDateTimeMs(event: EventInterface): number | null {
@@ -130,7 +134,9 @@ export function buildDashboardTileViewModels(
   input: BuildDashboardTileViewModelsInput,
 ): DashboardTileViewModel[] {
   const normalizedEvents = normalizeDashboardTileEvents(input.events, input.dashboardDateRange);
-  const aggregatedRecoveryNowContext = resolveAggregatedRecoveryNowContext(normalizedEvents);
+  const fallbackRecoveryNowContext = resolveAggregatedRecoveryNowContext(normalizedEvents);
+  const derivedFormPoints = Array.isArray(input.derivedMetrics?.formPoints) ? input.derivedMetrics?.formPoints : null;
+  const derivedRecoveryNowContext = input.derivedMetrics?.recoveryNow || null;
 
   return (input.tiles || []).reduce<DashboardTileViewModel[]>((viewModels, tile) => {
     if (tile.type === TileTypes.Map) {
@@ -152,7 +158,7 @@ export function buildDashboardTileViewModels(
       viewModels.push({
         ...chartTile,
         timeInterval: TimeIntervals.Daily,
-        data: buildDashboardFormPoints(normalizedEvents),
+        data: derivedFormPoints || buildDashboardFormPoints(normalizedEvents),
       });
       return viewModels;
     }
@@ -174,13 +180,17 @@ export function buildDashboardTileViewModels(
       preferences: input.preferences,
     }, input.logger);
 
+    const recoveryNowContextForTile = isDashboardRecoveryNowChartType(chartTile.chartType)
+      ? (derivedRecoveryNowContext || fallbackRecoveryNowContext)
+      : fallbackRecoveryNowContext;
+
     viewModels.push({
       ...chartTile,
       timeInterval: aggregation.resolvedTimeInterval,
       data: buildAggregatedChartRows(aggregation),
       ...((chartTile.dataType === DataRecoveryTime.type || isDashboardRecoveryNowChartType(chartTile.chartType))
-        && aggregatedRecoveryNowContext
-        ? { recoveryNow: aggregatedRecoveryNowContext }
+        && recoveryNowContextForTile
+        ? { recoveryNow: recoveryNowContextForTile }
         : {}),
     });
     return viewModels;
