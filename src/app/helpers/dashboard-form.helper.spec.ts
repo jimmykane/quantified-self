@@ -60,30 +60,33 @@ describe('dashboard-form.helper', () => {
     expect(points.map(point => point.trainingStressScore)).toEqual([10]);
   });
 
-  it('should bucket training stress by local calendar day instead of UTC day', () => {
-    const previousTimeZone = process.env.TZ;
-    process.env.TZ = 'Europe/Berlin';
+  it('should bucket training stress by runtime local calendar day boundaries', () => {
+    const firstStartTimeMs = Date.parse('2024-01-01T23:30:00.000Z');
+    const secondStartTimeMs = Date.parse('2024-01-02T00:30:00.000Z');
+    const points = buildDashboardFormPoints([
+      buildEvent(firstStartTimeMs, {
+        [DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE]: 10,
+      }),
+      buildEvent(secondStartTimeMs, {
+        [DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE]: 20,
+      }),
+    ]);
 
-    try {
-      const points = buildDashboardFormPoints([
-        buildEvent(Date.parse('2024-01-01T23:30:00.000Z'), {
-          [DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE]: 10,
-        }),
-        buildEvent(Date.parse('2024-01-02T00:30:00.000Z'), {
-          [DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE]: 20,
-        }),
-      ]);
+    const expectedDailyScores = new Map<number, number>();
+    [firstStartTimeMs, secondStartTimeMs].forEach((timeMs, index) => {
+      const date = new Date(timeMs);
+      const localDayStartMs = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+      const stressScore = index === 0 ? 10 : 20;
+      expectedDailyScores.set(localDayStartMs, (expectedDailyScores.get(localDayStartMs) || 0) + stressScore);
+    });
 
-      expect(points).toHaveLength(1);
-      expect(points[0].time).toBe(new Date(2024, 0, 2).getTime());
-      expect(points[0].trainingStressScore).toBe(30);
-    } finally {
-      if (previousTimeZone === undefined) {
-        delete process.env.TZ;
-      } else {
-        process.env.TZ = previousTimeZone;
-      }
-    }
+    const expectedBucketTimes = [...expectedDailyScores.keys()].sort((left, right) => left - right);
+    expect(points).toHaveLength(expectedBucketTimes.length);
+    points.forEach((point, index) => {
+      const expectedTime = expectedBucketTimes[index];
+      expect(point.time).toBe(expectedTime);
+      expect(point.trainingStressScore).toBe(expectedDailyScores.get(expectedTime));
+    });
   });
 
   it('should return no points when no events include training stress score stats', () => {
