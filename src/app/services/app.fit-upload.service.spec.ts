@@ -4,25 +4,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppFitUploadService } from './app.fit-upload.service';
 import { FirebaseApp } from 'app/firebase/app';
 import { Auth } from 'app/firebase/auth';
-import { AppCheck } from 'app/firebase/app-check';
-
-const hoisted = vi.hoisted(() => ({
-  mockGetAppCheckToken: vi.fn(),
-}));
-
-vi.mock('app/firebase/app-check', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('app/firebase/app-check')>();
-  return {
-    ...actual,
-    getToken: (...args: unknown[]) => hoisted.mockGetAppCheckToken(...args),
-  };
-});
+import { AppCheckReadinessService } from './app-check-readiness.service';
 
 describe('AppFitUploadService', () => {
   let service: AppFitUploadService;
   let authMock: any;
   let appMock: any;
-  let appCheckMock: any;
+  let appCheckReadinessMock: Pick<AppCheckReadinessService, 'getToken'>;
   let fetchMock: any;
 
   beforeEach(() => {
@@ -39,16 +27,16 @@ describe('AppFitUploadService', () => {
         projectId: 'quantified-self-io',
       },
     };
-    appCheckMock = {};
-
-    hoisted.mockGetAppCheckToken.mockResolvedValue({ token: 'app-check-token' });
+    appCheckReadinessMock = {
+      getToken: vi.fn().mockResolvedValue('app-check-token'),
+    };
 
     TestBed.configureTestingModule({
       providers: [
         AppFitUploadService,
         { provide: Auth, useValue: authMock },
         { provide: FirebaseApp, useValue: appMock },
-        { provide: AppCheck, useValue: appCheckMock },
+        { provide: AppCheckReadinessService, useValue: appCheckReadinessMock },
       ]
     });
 
@@ -71,7 +59,7 @@ describe('AppFitUploadService', () => {
     const result = await service.uploadActivityFile(payload, 'gpx.gz', 'run.gpx');
 
     expect(authMock.currentUser.getIdToken).toHaveBeenCalledWith(true);
-    expect(hoisted.mockGetAppCheckToken).toHaveBeenCalledWith(appCheckMock, false);
+    expect(appCheckReadinessMock.getToken).toHaveBeenCalledWith();
     expect(fetchMock).toHaveBeenCalledWith(
       'https://europe-west2-quantified-self-io.cloudfunctions.net/uploadActivity',
       expect.objectContaining({
@@ -187,18 +175,32 @@ describe('AppFitUploadService', () => {
   });
 
   it('should throw when app check token cannot be retrieved', async () => {
-    hoisted.mockGetAppCheckToken.mockResolvedValueOnce({ token: '' });
-
-    await expect(service.uploadFitFile(new Uint8Array([1]).buffer)).rejects.toThrow('App Check');
-  });
-
-  it('should throw when app check service is not configured', async () => {
+    appCheckReadinessMock.getToken = vi.fn().mockRejectedValueOnce(new Error('Could not retrieve App Check token.'));
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       providers: [
         AppFitUploadService,
         { provide: Auth, useValue: authMock },
         { provide: FirebaseApp, useValue: appMock },
+        { provide: AppCheckReadinessService, useValue: appCheckReadinessMock },
+      ],
+    });
+    service = TestBed.inject(AppFitUploadService);
+
+    await expect(service.uploadFitFile(new Uint8Array([1]).buffer)).rejects.toThrow('App Check');
+  });
+
+  it('should throw when app check service is not configured', async () => {
+    TestBed.resetTestingModule();
+    const missingAppCheckReadiness = {
+      getToken: vi.fn().mockRejectedValue(new Error('App Check is not configured for this app.')),
+    };
+    TestBed.configureTestingModule({
+      providers: [
+        AppFitUploadService,
+        { provide: Auth, useValue: authMock },
+        { provide: FirebaseApp, useValue: appMock },
+        { provide: AppCheckReadinessService, useValue: missingAppCheckReadiness },
       ],
     });
     const serviceWithoutAppCheck = TestBed.inject(AppFitUploadService);

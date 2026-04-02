@@ -4,12 +4,14 @@ import { Functions, connectFunctionsEmulator, getFunctions, httpsCallable } from
 import type { Functions as FirebaseFunctions } from 'firebase/functions';
 import { environment } from '../../environments/environment';
 import { FunctionName, FUNCTIONS_MANIFEST } from '@shared/functions-manifest';
+import { AppCheckReadinessService } from './app-check-readiness.service';
 
 @Injectable({
     providedIn: 'root'
 })
 export class AppFunctionsService {
     private app = inject(FirebaseApp);
+    private appCheckReadiness = inject(AppCheckReadinessService);
     private static readonly LOCAL_FUNCTIONS_EMULATOR_HOST = '127.0.0.1';
     private static readonly LOCAL_FUNCTIONS_EMULATOR_PORT = 5001;
     private functionsByRegion = new Map<string, FirebaseFunctions>();
@@ -38,7 +40,19 @@ export class AppFunctionsService {
         if (!callable) {
             throw new Error(`Function ${functionKey} not initialized`);
         }
-        return callable(data);
+
+        await this.appCheckReadiness.ensureReady();
+
+        try {
+            return await callable(data);
+        } catch (error) {
+            if (!this.shouldRetryAfterAppCheckFailure(error)) {
+                throw error;
+            }
+
+            await this.appCheckReadiness.ensureReady(true);
+            return callable(data);
+        }
     }
 
     private getOrCreateFunctionsForRegion(region: string): FirebaseFunctions {
@@ -62,5 +76,22 @@ export class AppFunctionsService {
 
     private shouldUseFunctionsEmulator(): boolean {
         return environment.localhost === true && environment.useFunctionsEmulator === true;
+    }
+
+    private shouldRetryAfterAppCheckFailure(error: unknown): boolean {
+        if (!this.appCheckReadiness.isConfigured()) {
+            return false;
+        }
+
+        const code = (error as { code?: unknown } | null)?.code;
+        const message = (error as { message?: unknown } | null)?.message;
+
+        const normalizedCode = typeof code === 'string' ? code : '';
+        const normalizedMessage = typeof message === 'string' ? message : '';
+
+        const isFailedPrecondition = normalizedCode === 'functions/failed-precondition'
+            || normalizedCode === 'failed-precondition';
+
+        return isFailedPrecondition && /app check verification failed/i.test(normalizedMessage);
     }
 }

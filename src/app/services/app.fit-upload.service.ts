@@ -1,8 +1,8 @@
 import { Injectable, inject } from '@angular/core';
 import { FirebaseApp } from 'app/firebase/app';
-import { AppCheck, getToken as getAppCheckToken } from 'app/firebase/app-check';
 import { Auth } from 'app/firebase/auth';
 import { FUNCTIONS_MANIFEST } from '@shared/functions-manifest';
+import { AppCheckReadinessService } from './app-check-readiness.service';
 
 export interface UploadActivityFromFitResponse {
     eventId: string;
@@ -45,7 +45,7 @@ function mapFallbackUploadErrorMessage(statusCode: number): string {
 export class AppFitUploadService {
     private app = inject(FirebaseApp);
     private auth = inject(Auth);
-    private appCheck = inject(AppCheck, { optional: true });
+    private appCheckReadiness = inject(AppCheckReadinessService);
 
     async uploadActivityFile(
         fileBytes: ArrayBuffer,
@@ -56,16 +56,8 @@ export class AppFitUploadService {
             throw new Error('User must be authenticated to upload activities.');
         }
 
-        if (!this.appCheck) {
-            throw new Error('App Check is not configured for this app.');
-        }
-
         const idToken = await this.auth.currentUser.getIdToken(true);
-        const appCheckResult = await getAppCheckToken(this.appCheck, false);
-        const appCheckToken = appCheckResult?.token;
-        if (!appCheckToken) {
-            throw new Error('Could not retrieve App Check token.');
-        }
+        const appCheckToken = await this.appCheckReadiness.getToken();
 
         const projectID = this.app.options.projectId;
         if (!projectID) {
