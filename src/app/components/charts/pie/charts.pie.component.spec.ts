@@ -3,8 +3,10 @@ import { NO_ERRORS_SCHEMA, SimpleChange } from '@angular/core';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
+  DataDuration,
   DataDistance,
   DataPaceAvg,
+  DataRecoveryTime,
   PaceUnits,
   TimeIntervals
 } from '@sports-alliance/sports-lib';
@@ -222,6 +224,46 @@ describe('ChartsPieComponent', () => {
     expect(option.graphic[0].children[2].style.text).toBe('Total per month');
   });
 
+  it('should override center summary with recovery left now and total recovery meta when context is available', async () => {
+    const nowMs = Date.UTC(2024, 0, 3, 12, 0, 0);
+    const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(nowMs);
+    component.chartDataType = DataRecoveryTime.type;
+    component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.chartDataTimeInterval = TimeIntervals.Daily;
+    component.data = [
+      { type: Date.UTC(2024, 0, 3), time: Date.UTC(2024, 0, 3), [ChartDataValueTypes.Total]: 5400, count: 1 },
+    ];
+    component.recoveryNow = {
+      totalSeconds: 5400,
+      endTimeMs: nowMs - (10 * 60 * 1000),
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    const option = mockLoader.setOption.mock.calls.at(-1)?.[1] as Record<string, any>;
+    const expectedRemaining = formatDashboardNumericValue(
+      DataDuration.type,
+      4800,
+      undefined as any,
+      component.userUnitSettings,
+    );
+    const expectedTotal = formatDashboardNumericValue(
+      DataDuration.type,
+      5400,
+      undefined as any,
+      component.userUnitSettings,
+    );
+    const recoverySliceNames = option.series[0].data.map((entry: { name: string }) => entry.name);
+    expect(option.graphic[0].children[0].style.text).toBe('Recovery Left Now');
+    expect(option.graphic[0].children[1].style.text).toBe(expectedRemaining);
+    expect(option.graphic[0].children[2].style.text).toBe(`Total recovery: ${expectedTotal}`);
+    expect(recoverySliceNames).toEqual(['Left now', 'Elapsed']);
+
+    dateNowSpy.mockRestore();
+  });
+
   it('should format pie center and tooltip values using passed unit settings', async () => {
     component.chartDataType = DataPaceAvg.type;
     component.chartDataValueType = ChartDataValueTypes.Average;
@@ -291,6 +333,35 @@ describe('ChartsPieComponent', () => {
     });
 
     expect(mockLoader.setOption).not.toHaveBeenCalled();
+  });
+
+  it('should start a one-minute refresh timer only for active recovery contexts and clear it on destroy', async () => {
+    const nowMs = Date.UTC(2024, 0, 3, 12, 0, 0);
+    const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(nowMs);
+    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval').mockImplementation(() => 789 as any);
+    const clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval').mockImplementation(() => undefined);
+    component.chartDataType = DataRecoveryTime.type;
+    component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.chartDataTimeInterval = TimeIntervals.Daily;
+    component.data = [
+      { type: Date.UTC(2024, 0, 3), time: Date.UTC(2024, 0, 3), [ChartDataValueTypes.Total]: 3600, count: 1 },
+    ];
+    component.recoveryNow = {
+      totalSeconds: 3600,
+      endTimeMs: nowMs - (300 * 1000),
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 60 * 1000);
+    fixture.destroy();
+    expect(clearIntervalSpy).toHaveBeenCalledWith(789);
+
+    clearIntervalSpy.mockRestore();
+    setIntervalSpy.mockRestore();
+    dateNowSpy.mockRestore();
   });
 
   it('should fully reset chart option when there is no data', async () => {

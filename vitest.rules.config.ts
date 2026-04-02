@@ -8,7 +8,7 @@ export default defineConfig({
     test: {
         server: {
             deps: {
-                inline: ['rxfire', '@angular/fire', 'firebase']
+                inline: ['firebase']
             }
         },
         globals: true,

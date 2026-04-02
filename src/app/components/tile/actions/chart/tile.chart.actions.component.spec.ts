@@ -11,8 +11,12 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatIconModule } from '@angular/material/icon';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { FormsModule } from '@angular/forms';
-import { ChartTypes, ChartDataValueTypes, ChartDataCategoryTypes } from '@sports-alliance/sports-lib';
+import { ChartTypes, ChartDataValueTypes, ChartDataCategoryTypes, TimeIntervals } from '@sports-alliance/sports-lib';
 import { vi } from 'vitest';
+import {
+    DASHBOARD_FORM_CHART_TYPE,
+    DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+} from '../../../../helpers/dashboard-special-chart-types';
 
 describe('TileChartActionsComponent', () => {
     let component: TileChartActionsComponent;
@@ -112,6 +116,14 @@ describe('TileChartActionsComponent', () => {
         expect(component.chartTypeOptions.some(option => /^spiral$/i.test(option))).toBe(false);
     });
 
+    it('should not expose curated recovery chart type in chart type options', () => {
+        expect(component.chartTypeOptions).not.toContain(DASHBOARD_RECOVERY_NOW_CHART_TYPE);
+    });
+
+    it('should not expose form chart type in chart type options', () => {
+        expect(component.chartTypeOptions).not.toContain(DASHBOARD_FORM_CHART_TYPE);
+    });
+
     it('should expose move boundaries for the first tile', () => {
         expect(component.canMoveTileBackward()).toBe(false);
         expect(component.canMoveTileForward()).toBe(true);
@@ -134,5 +146,75 @@ describe('TileChartActionsComponent', () => {
         expect(userMock.settings.dashboardSettings.tiles[0].chartType).toBe(ChartTypes.Bar);
         expect(userMock.settings.dashboardSettings.tiles[1].chartType).toBe(ChartTypes.Line);
         expect(userMock.updateUserProperties).not.toHaveBeenCalled();
+    });
+
+    it('should persist curated recovery tile dismissal when deleting it', async () => {
+        userMock.settings.dashboardSettings.dismissedCuratedRecoveryNowTile = false;
+        userMock.settings.dashboardSettings.tiles = [
+            {
+                order: 0,
+                chartType: DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+                dataType: 'Recovery Time',
+                dataValueType: ChartDataValueTypes.Total,
+                dataCategoryType: ChartDataCategoryTypes.DateType,
+                size: { columns: 1, rows: 1 }
+            },
+            { order: 1, chartType: ChartTypes.Line, size: { columns: 1, rows: 1 } }
+        ];
+        component.chartType = DASHBOARD_RECOVERY_NOW_CHART_TYPE as any;
+        component.order = 0;
+        fixture.detectChanges();
+
+        await component.deleteTile({} as any);
+
+        expect(userMock.settings.dashboardSettings.dismissedCuratedRecoveryNowTile).toBe(true);
+        expect(userMock.settings.dashboardSettings.tiles).toHaveLength(1);
+        expect(userMock.updateUserProperties).toHaveBeenCalled();
+    });
+
+    it('should normalize chart fields when switched to curated recovery chart type', async () => {
+        userMock.settings.dashboardSettings.dismissedCuratedRecoveryNowTile = true;
+        component.order = 0;
+
+        await component.changeChartType({ value: DASHBOARD_RECOVERY_NOW_CHART_TYPE } as any);
+
+        const updatedTile = userMock.settings.dashboardSettings.tiles[0];
+        expect(updatedTile.chartType).toBe(DASHBOARD_RECOVERY_NOW_CHART_TYPE);
+        expect(updatedTile.name).toBe('Recovery');
+        expect(updatedTile.dataType).toBe('Recovery Time');
+        expect(updatedTile.dataCategoryType).toBe(ChartDataCategoryTypes.DateType);
+        expect(updatedTile.dataValueType).toBe(ChartDataValueTypes.Total);
+        expect(userMock.settings.dashboardSettings.dismissedCuratedRecoveryNowTile).toBe(false);
+        expect(userMock.updateUserProperties).toHaveBeenCalled();
+    });
+
+    it('should normalize chart fields when switched to form chart type', async () => {
+        userMock.settings.dashboardSettings.dismissedCuratedRecoveryNowTile = true;
+        component.order = 0;
+
+        await component.changeChartType({ value: DASHBOARD_FORM_CHART_TYPE } as any);
+
+        const updatedTile = userMock.settings.dashboardSettings.tiles[0];
+        expect(updatedTile.chartType).toBe(DASHBOARD_FORM_CHART_TYPE);
+        expect(updatedTile.name).toBe('Form');
+        expect(updatedTile.dataType).toBe('Training Stress Score');
+        expect(updatedTile.dataCategoryType).toBe(ChartDataCategoryTypes.DateType);
+        expect(updatedTile.dataValueType).toBe(ChartDataValueTypes.Total);
+        expect(updatedTile.dataTimeInterval).toBe(TimeIntervals.Daily);
+        expect(userMock.updateUserProperties).toHaveBeenCalled();
+    });
+
+    it('should hide form-incompatible controls for the form chart mode', () => {
+        const templatePath = resolve(process.cwd(), 'src/app/components/tile/actions/chart/tile.chart.actions.component.html');
+        const template = readFileSync(templatePath, 'utf8');
+
+        expect(template).toContain('!isCuratedRecoveryNowChart && !isFormChart');
+    });
+
+    it('should hide add-tile action for form chart mode', () => {
+        const templatePath = resolve(process.cwd(), 'src/app/components/tile/actions/chart/tile.chart.actions.component.html');
+        const template = readFileSync(templatePath, 'utf8');
+
+        expect(template).toContain('tiles.length <= 11 && !isCuratedRecoveryNowChart && !isFormChart');
     });
 });

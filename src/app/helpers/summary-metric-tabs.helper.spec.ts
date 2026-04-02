@@ -32,6 +32,7 @@ import {
   DataHeartRateMin,
   DataPaceAvg,
   DataPowerAvg,
+  DataPowerTrainingStressScore,
   DataRecoveryTime,
   DataRPE,
   DataSpeedAvg,
@@ -105,7 +106,7 @@ describe('buildSummaryMetricTabs', () => {
     const tabs = buildSummaryMetricTabs([
       'Power Normalized',
       'CriticalPower',
-      'Power Training Stress Score',
+      DataPowerTrainingStressScore.type,
       'Power Zone Four Duration',
       'Speed Zone Two Duration',
     ]);
@@ -120,7 +121,7 @@ describe('buildSummaryMetricTabs', () => {
     const performanceTab = tabs.find((tab) => tab.id === 'performance');
     expect(performanceTab?.metricTypes).toEqual([
       'Power Normalized',
-      'Power Training Stress Score',
+      DataPowerTrainingStressScore.type,
       'CriticalPower',
     ]);
 

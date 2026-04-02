@@ -3,7 +3,7 @@ import { AdminService } from './admin.service';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { firstValueFrom } from 'rxjs';
 import { AppFunctionsService } from './app.functions.service';
-import { Firestore } from '@angular/fire/firestore';
+import { Firestore } from 'app/firebase/firestore';
 import { EnvironmentInjector } from '@angular/core';
 
 describe('AdminService', () => {

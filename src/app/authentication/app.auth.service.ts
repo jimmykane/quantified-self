@@ -1,9 +1,10 @@
-import { inject, Injectable, EnvironmentInjector, runInInjectionContext, NgZone } from '@angular/core';
+import { inject, Injectable } from '@angular/core';
 import { Observable, of } from 'rxjs';
 import { map, shareReplay, switchMap, take } from 'rxjs/operators';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { Auth, authState, user, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, sendPasswordResetEmail, GoogleAuthProvider, GithubAuthProvider, FacebookAuthProvider, TwitterAuthProvider, OAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, fetchSignInMethodsForEmail, linkWithCredential, AuthCredential, linkWithPopup, AuthProvider, signInWithCustomToken, User as FirebaseAuthUser } from '@angular/fire/auth';
-import { Firestore, clearIndexedDbPersistence, terminate } from '@angular/fire/firestore';
+import { Auth, authState, user, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, sendPasswordResetEmail, GoogleAuthProvider, GithubAuthProvider, FacebookAuthProvider, TwitterAuthProvider, OAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, fetchSignInMethodsForEmail, linkWithCredential, linkWithPopup, signInWithCustomToken } from 'app/firebase/auth';
+import type { AuthCredential, AuthProvider, FirebaseUserType } from 'app/firebase/auth';
+import { Firestore, clearIndexedDbPersistence, terminate } from 'app/firebase/firestore';
 import { Privacy, User } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../services/app.user.service';
 import { LocalStorageService } from '../services/storage/app.local.storage.service';
@@ -23,14 +24,12 @@ import { AppUserInterface } from '../models/app-user.interface';
 })
 export class AppAuthService {
   public user$: Observable<AppUserInterface | null>;
-  public authState$: Observable<FirebaseAuthUser | null>;
+  public authState$: Observable<FirebaseUserType | null>;
   // store the URL so we can redirect after logging in
   redirectUrl: string = '';
 
   private firestore = inject(Firestore);
   private auth = inject(Auth);
-  private injector = inject(EnvironmentInjector);
-  private zone = inject(NgZone);
 
   get currentUser() {
     return this.auth.currentUser;
@@ -42,13 +41,6 @@ export class AppAuthService {
     public localStorageService: LocalStorageService,
     private logger: LoggerService
   ) {
-    /* 
-     * NOTE on runInInjectionContext:
-     * Firebase v9+ Modular SDK methods (signInWithPopup, etc.) must be called within an Injection Context
-     * to allow AngularFire to correctly track Zones for change detection.
-     * Since these methods are often called asynchronously from user actions (outside constructor),
-     * we manually wrap them.
-     */
     this.authState$ = authState(this.auth);
 
     // Use modular user observable to react to token refreshes too
@@ -84,12 +76,12 @@ export class AppAuthService {
     try {
       if (environment.localhost) {
         this.logger.log('[Auth] Using popup...');
-        const result = await runInInjectionContext(this.injector, () => signInWithPopup(this.auth, provider));
+        const result = await signInWithPopup(this.auth, provider);
         this.logger.log('[Auth] Popup succeeded:', result);
         return result;
       } else {
         this.logger.log('[Auth] Using redirect...');
-        return await runInInjectionContext(this.injector, () => signInWithRedirect(this.auth, provider));
+        return await signInWithRedirect(this.auth, provider);
       }
     } catch (error: any) {
       this.logger.error('[Auth] signInWithProvider error:', error);
@@ -100,7 +92,7 @@ export class AppAuthService {
   }
 
   public async signInWithPopup(provider: AuthProvider) {
-    return runInInjectionContext(this.injector, () => signInWithPopup(this.auth, provider));
+    return signInWithPopup(this.auth, provider);
   }
 
   async googleLogin() {
@@ -114,7 +106,7 @@ export class AppAuthService {
   }
 
   async getRedirectResult() {
-    return runInInjectionContext(this.injector, () => getRedirectResult(this.auth));
+    return getRedirectResult(this.auth);
   }
 
 
@@ -127,7 +119,7 @@ export class AppAuthService {
     const actionCodeSettings = this.buildActionCodeSettings(true);
 
     try {
-      await runInInjectionContext(this.injector, () => sendSignInLinkToEmail(this.auth, email, actionCodeSettings));
+      await sendSignInLinkToEmail(this.auth, email, actionCodeSettings);
       this.localStorageService.setItem('emailForSignIn', email);
       this.snackBar.open(`Magic link sent to ${email} `, 'Close', {
         duration: 5000
@@ -140,12 +132,12 @@ export class AppAuthService {
   }
 
   isSignInWithEmailLink(url: string): boolean {
-    return runInInjectionContext(this.injector, () => isSignInWithEmailLink(this.auth, url));
+    return isSignInWithEmailLink(this.auth, url);
   }
 
   async signInWithEmailLink(email: string, url: string) {
     try {
-      const result = await runInInjectionContext(this.injector, () => signInWithEmailLink(this.auth, email, url));
+      const result = await signInWithEmailLink(this.auth, email, url);
       this.localStorageService.removeItem('emailForSignIn');
       return result;
     } catch (error: any) {
@@ -158,7 +150,7 @@ export class AppAuthService {
 
   async emailSignUp(email: string, password: string) {
     try {
-      return await runInInjectionContext(this.injector, () => createUserWithEmailAndPassword(this.auth, email, password));
+      return await createUserWithEmailAndPassword(this.auth, email, password);
     } catch (e: any) {
       this.handleError(e);
       throw e;
@@ -167,7 +159,7 @@ export class AppAuthService {
 
   async emailLogin(email: string, password: string) {
     try {
-      return await runInInjectionContext(this.injector, () => signInWithEmailAndPassword(this.auth, email, password));
+      return await signInWithEmailAndPassword(this.auth, email, password);
     } catch (e: any) {
       this.handleError(e);
       throw e;
@@ -176,7 +168,7 @@ export class AppAuthService {
 
   async loginWithCustomToken(token: string) {
     try {
-      return await runInInjectionContext(this.injector, () => signInWithCustomToken(this.auth, token));
+      return await signInWithCustomToken(this.auth, token);
     } catch (e: any) {
       this.handleError(e);
       throw e;
@@ -188,7 +180,7 @@ export class AppAuthService {
     const actionCodeSettings = this.buildActionCodeSettings(false);
 
     try {
-      await runInInjectionContext(this.injector, () => sendPasswordResetEmail(this.auth, email, actionCodeSettings));
+      await sendPasswordResetEmail(this.auth, email, actionCodeSettings);
       this.snackBar.open(`Password update email sent`, undefined, {
         duration: 2000
       });
@@ -198,23 +190,23 @@ export class AppAuthService {
   }
 
   async signOut(): Promise<void> {
-    await runInInjectionContext(this.injector, () => signOut(this.auth));
-    await runInInjectionContext(this.injector, () => terminate(this.firestore));
+    await signOut(this.auth);
+    await terminate(this.firestore);
     this.localStorageService.clearAllStorage();
-    await runInInjectionContext(this.injector, () => clearIndexedDbPersistence(this.firestore));
+    await clearIndexedDbPersistence(this.firestore);
     this.redirectToLogin();
   }
 
   async fetchSignInMethods(email: string) {
-    return runInInjectionContext(this.injector, () => fetchSignInMethodsForEmail(this.auth, email));
+    return fetchSignInMethodsForEmail(this.auth, email);
   }
 
   async linkCredential(user: any, credential: AuthCredential) {
-    return runInInjectionContext(this.injector, () => linkWithCredential(user, credential));
+    return linkWithCredential(user, credential);
   }
 
   async linkWithPopup(user: any, provider: AuthProvider) {
-    return runInInjectionContext(this.injector, () => linkWithPopup(user, provider));
+    return linkWithPopup(user, provider);
   }
 
   getProviderForId(providerId: string) {

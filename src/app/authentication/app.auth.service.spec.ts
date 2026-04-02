@@ -28,9 +28,9 @@ const {
     };
 });
 
-// Mock @angular/fire/auth modular functions MUST be at the top level
-vi.mock('@angular/fire/auth', async () => {
-    const actual = await vi.importActual('@angular/fire/auth');
+// Mock app/firebase/auth modular functions MUST be at the top level
+vi.mock('app/firebase/auth', async () => {
+    const actual = await vi.importActual('app/firebase/auth');
     return {
         ...actual,
         user: mockUserFunction,
@@ -48,8 +48,8 @@ vi.mock('@angular/fire/auth', async () => {
     };
 });
 
-vi.mock('@angular/fire/firestore', async () => {
-    const actual = await vi.importActual('@angular/fire/firestore');
+vi.mock('app/firebase/firestore', async () => {
+    const actual = await vi.importActual('app/firebase/firestore');
     return {
         ...actual,
         terminate: vi.fn(),
@@ -87,9 +87,9 @@ import {
     GoogleAuthProvider,
     TwitterAuthProvider,
     user as fireAuthUser
-} from '@angular/fire/auth';
-import { Firestore } from '@angular/fire/firestore';
-import { Analytics } from '@angular/fire/analytics';
+} from 'app/firebase/auth';
+import { Firestore } from 'app/firebase/firestore';
+import { Analytics } from 'app/firebase/analytics';
 import { EnvironmentInjector } from '@angular/core';
 import { of, BehaviorSubject } from 'rxjs';
 import { Privacy } from '@sports-alliance/sports-lib';
@@ -164,8 +164,8 @@ describe('AppAuthService', () => {
 
     it('signOut should clear storage, purge Firestore persistence, and redirect', async () => {
         const redirectSpy = vi.spyOn(service as any, 'redirectToLogin').mockImplementation(() => { });
-        const { signOut } = await import('@angular/fire/auth');
-        const { terminate, clearIndexedDbPersistence } = await import('@angular/fire/firestore');
+        const { signOut } = await import('app/firebase/auth');
+        const { terminate, clearIndexedDbPersistence } = await import('app/firebase/firestore');
 
         await service.signOut();
 
@@ -292,7 +292,7 @@ describe('AppAuthService', () => {
 
     describe('signInWithProvider branching logic', () => {
         it('should use signInWithPopup on localhost', async () => {
-            const { signInWithPopup, signInWithRedirect } = await import('@angular/fire/auth');
+            const { signInWithPopup, signInWithRedirect } = await import('app/firebase/auth');
             const provider = new GoogleAuthProvider();
             const popupResult = { user: { uid: 'popup-user' } };
             setMockEnvironmentLocalhost(true);
@@ -306,7 +306,7 @@ describe('AppAuthService', () => {
         });
 
         it('should use signInWithRedirect on non-localhost', async () => {
-            const { signInWithPopup, signInWithRedirect } = await import('@angular/fire/auth');
+            const { signInWithPopup, signInWithRedirect } = await import('app/firebase/auth');
             const provider = new GoogleAuthProvider();
             const redirectResult = { redirected: true };
             setMockEnvironmentLocalhost(false);
@@ -320,7 +320,7 @@ describe('AppAuthService', () => {
         });
 
         it('should log details and rethrow when provider sign-in fails', async () => {
-            const { signInWithPopup } = await import('@angular/fire/auth');
+            const { signInWithPopup } = await import('app/firebase/auth');
             const provider = new GoogleAuthProvider();
             const authError = { code: 'auth/popup-blocked', message: 'Popup blocked by browser' };
             const loggerErrorSpy = vi.spyOn((service as any).logger, 'error').mockImplementation(() => { });
@@ -337,7 +337,7 @@ describe('AppAuthService', () => {
 
     describe('email link auth', () => {
         it('sendEmailLink should persist email and show success snackbar', async () => {
-            const { sendSignInLinkToEmail } = await import('@angular/fire/auth');
+            const { sendSignInLinkToEmail } = await import('app/firebase/auth');
             const email = 'test@example.com';
             (sendSignInLinkToEmail as Mock).mockResolvedValueOnce(undefined);
 
@@ -361,7 +361,7 @@ describe('AppAuthService', () => {
         });
 
         it('sendEmailLink should return false and show error snackbar when send fails', async () => {
-            const { sendSignInLinkToEmail } = await import('@angular/fire/auth');
+            const { sendSignInLinkToEmail } = await import('app/firebase/auth');
             const email = 'test@example.com';
             const authError = new Error('send failed');
             const loggerErrorSpy = vi.spyOn((service as any).logger, 'error').mockImplementation(() => { });
@@ -380,7 +380,7 @@ describe('AppAuthService', () => {
         });
 
         it('sendEmailLink should include linkDomain outside localhost', async () => {
-            const { sendSignInLinkToEmail } = await import('@angular/fire/auth');
+            const { sendSignInLinkToEmail } = await import('app/firebase/auth');
             const email = 'prod-like@example.com';
             setMockEnvironmentLocalhost(false);
             (sendSignInLinkToEmail as Mock).mockResolvedValueOnce(undefined);
@@ -400,7 +400,7 @@ describe('AppAuthService', () => {
         });
 
         it('signInWithEmailLink should remove cached email after successful sign-in', async () => {
-            const { signInWithEmailLink: signInWithEmailLinkFn } = await import('@angular/fire/auth');
+            const { signInWithEmailLink: signInWithEmailLinkFn } = await import('app/firebase/auth');
             const email = 'test@example.com';
             const link = 'https://quantified-self.io/login?mode=signIn&code=test';
             const authResult = { user: { uid: 'email-link-user' } };
@@ -414,7 +414,7 @@ describe('AppAuthService', () => {
         });
 
         it('signInWithEmailLink should surface error and rethrow when sign-in fails', async () => {
-            const { signInWithEmailLink: signInWithEmailLinkFn } = await import('@angular/fire/auth');
+            const { signInWithEmailLink: signInWithEmailLinkFn } = await import('app/firebase/auth');
             const email = 'test@example.com';
             const link = 'https://quantified-self.io/login?mode=signIn&code=test';
             const authError = new Error('invalid-action-code');
@@ -448,7 +448,7 @@ describe('AppAuthService', () => {
 
     describe('email/password auth', () => {
         it('emailSignUp should call Firebase createUserWithEmailAndPassword and return result', async () => {
-            const { createUserWithEmailAndPassword } = await import('@angular/fire/auth');
+            const { createUserWithEmailAndPassword } = await import('app/firebase/auth');
             const result = { user: { uid: 'signup-user' } };
             (createUserWithEmailAndPassword as Mock).mockResolvedValueOnce(result as any);
 
@@ -457,7 +457,7 @@ describe('AppAuthService', () => {
         });
 
         it('emailSignUp should handle errors and rethrow', async () => {
-            const { createUserWithEmailAndPassword } = await import('@angular/fire/auth');
+            const { createUserWithEmailAndPassword } = await import('app/firebase/auth');
             const authError = new Error('signup failed');
             const loggerErrorSpy = vi.spyOn((service as any).logger, 'error').mockImplementation(() => { });
             (createUserWithEmailAndPassword as Mock).mockRejectedValueOnce(authError);
@@ -473,7 +473,7 @@ describe('AppAuthService', () => {
         });
 
         it('emailLogin should call Firebase signInWithEmailAndPassword and return result', async () => {
-            const { signInWithEmailAndPassword } = await import('@angular/fire/auth');
+            const { signInWithEmailAndPassword } = await import('app/firebase/auth');
             const result = { user: { uid: 'login-user' } };
             (signInWithEmailAndPassword as Mock).mockResolvedValueOnce(result as any);
 
@@ -482,7 +482,7 @@ describe('AppAuthService', () => {
         });
 
         it('emailLogin should handle errors and rethrow', async () => {
-            const { signInWithEmailAndPassword } = await import('@angular/fire/auth');
+            const { signInWithEmailAndPassword } = await import('app/firebase/auth');
             const authError = new Error('login failed');
             const loggerErrorSpy = vi.spyOn((service as any).logger, 'error').mockImplementation(() => { });
             (signInWithEmailAndPassword as Mock).mockRejectedValueOnce(authError);
@@ -498,7 +498,7 @@ describe('AppAuthService', () => {
         });
 
         it('resetPassword should send reset email and show success snackbar', async () => {
-            const { sendPasswordResetEmail } = await import('@angular/fire/auth');
+            const { sendPasswordResetEmail } = await import('app/firebase/auth');
             (sendPasswordResetEmail as Mock).mockResolvedValueOnce(undefined);
 
             await service.resetPassword('reset@example.com');
@@ -518,7 +518,7 @@ describe('AppAuthService', () => {
         });
 
         it('resetPassword should handle errors without throwing', async () => {
-            const { sendPasswordResetEmail } = await import('@angular/fire/auth');
+            const { sendPasswordResetEmail } = await import('app/firebase/auth');
             const authError = new Error('reset failed');
             const loggerErrorSpy = vi.spyOn((service as any).logger, 'error').mockImplementation(() => { });
             (sendPasswordResetEmail as Mock).mockRejectedValueOnce(authError);
@@ -534,7 +534,7 @@ describe('AppAuthService', () => {
         });
 
         it('resetPassword should include linkDomain outside localhost', async () => {
-            const { sendPasswordResetEmail } = await import('@angular/fire/auth');
+            const { sendPasswordResetEmail } = await import('app/firebase/auth');
             setMockEnvironmentLocalhost(false);
             (sendPasswordResetEmail as Mock).mockResolvedValueOnce(undefined);
 
@@ -553,7 +553,7 @@ describe('AppAuthService', () => {
 
     describe('loginWithCustomToken', () => {
         it('should call signInWithCustomToken with correct params', async () => {
-            const { signInWithCustomToken } = await import('@angular/fire/auth');
+            const { signInWithCustomToken } = await import('app/firebase/auth');
             const token = 'test-token-123';
 
             await service.loginWithCustomToken(token);

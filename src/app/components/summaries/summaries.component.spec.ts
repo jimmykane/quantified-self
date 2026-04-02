@@ -130,6 +130,11 @@ describe('SummariesComponent', () => {
     expect(buildDashboardTileViewModelsSpy).toHaveBeenCalledWith({
       tiles: component.user.settings.dashboardSettings.tiles,
       events: component.events,
+      dashboardDateRange: {
+        dateRange: null,
+        startDate: null,
+        endDate: null,
+      },
       preferences: {
         removeAscentForEventTypes: [ActivityTypes.Running],
         removeDescentForEventTypes: [ActivityTypes.Cycling],
@@ -137,6 +142,69 @@ describe('SummariesComponent', () => {
       logger: mockLogger,
     });
     expect(component.tiles).toBe(builtTiles);
+  });
+
+  it('should pass dashboard date-range input values to tile view-model building', async () => {
+    const builtTiles = [{
+      type: TileTypes.Chart,
+      order: 0,
+      chartType: ChartTypes.ColumnsVertical,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataValueType: ChartDataValueTypes.Total,
+      data: [],
+      timeInterval: TimeIntervals.Daily,
+      size: { columns: 1, rows: 1 },
+    }] as any[];
+    buildDashboardTileViewModelsSpy.mockReturnValue(builtTiles as any);
+
+    component.user = {
+      settings: {
+        dashboardSettings: {
+          tiles: [{
+            type: TileTypes.Chart,
+            order: 0,
+            chartType: ChartTypes.ColumnsVertical,
+            dataType: DataAscent.type,
+            dataValueType: ChartDataValueTypes.Total,
+            dataCategoryType: ChartDataCategoryTypes.DateType,
+            size: { columns: 1, rows: 1 },
+          }],
+        },
+      },
+    } as any;
+    component.events = [{ id: 'event-1' }] as any;
+    component.dashboardDateRange = 2 as any;
+    component.dashboardStartDate = new Date('2026-03-01T00:00:00.000Z');
+    component.dashboardEndDate = new Date('2026-03-31T23:59:59.999Z');
+
+    await component.ngOnChanges({
+      dashboardDateRange: {
+        currentValue: component.dashboardDateRange,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+      dashboardStartDate: {
+        currentValue: component.dashboardStartDate,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+      dashboardEndDate: {
+        currentValue: component.dashboardEndDate,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+    });
+
+    expect(buildDashboardTileViewModelsSpy).toHaveBeenCalledWith(expect.objectContaining({
+      dashboardDateRange: {
+        dateRange: component.dashboardDateRange,
+        startDate: component.dashboardStartDate,
+        endDate: component.dashboardEndDate,
+      },
+    }));
   });
 
   it('should rebuild tiles when dashboard settings mutate in place', async () => {

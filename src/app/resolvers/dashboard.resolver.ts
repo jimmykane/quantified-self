@@ -1,4 +1,4 @@
-import { inject, Injector, runInInjectionContext } from '@angular/core';
+import { inject } from '@angular/core';
 import { ActivatedRouteSnapshot, ResolveFn, Router, RouterStateSnapshot } from '@angular/router';
 import { AppEventService, type EventsOnceSource } from '../services/app.event.service';
 import { AppUserService } from '../services/app.user.service';
@@ -18,6 +18,8 @@ export interface DashboardResolverData {
     targetUser?: AppUserInterface | null;
     hasMergedEvents?: boolean;
     eventsSource?: EventsOnceSource;
+    // True when resolver intentionally skips one-shot event prefetch and relies on live stream hydration.
+    eventsPrefetchSkipped?: boolean;
 }
 
 let dashboardResolverRunCounter = 0;
@@ -32,7 +34,6 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
     const router = inject(Router);
     const snackBar = inject(MatSnackBar);
     const logger = inject(LoggerService);
-    const injector = inject(Injector);
     const runId = ++dashboardResolverRunCounter;
     const resolverStart = performance.now();
 
@@ -46,7 +47,7 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
 
     return authService.user$.pipe(
         take(1),
-        switchMap((user: AppUserInterface | null) => runInInjectionContext(injector, async () => {
+        switchMap(async (user: AppUserInterface | null) => {
             if (!user) {
                 // If user is not authenticated, redirect to login and return empty data
                 router.navigate(['login']);
@@ -129,6 +130,26 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
                 });
             }
 
+            // For all-time dashboards, one-shot prefetch can spend tens of seconds deserializing thousands
+            // of events before first paint. Skip this read and let the live listener hydrate initial data.
+            const shouldSkipEventsPrefetch = dashboardSettings.dateRange === DateRanges.all;
+            if (shouldSkipEventsPrefetch) {
+                logger.info('[perf] dashboard_resolver_skip_events_prefetch', {
+                    runId,
+                    durationMs: Number((performance.now() - resolverStart).toFixed(2)),
+                    reason: 'date_range_all',
+                    whereClauses: where.length,
+                    userContextUID: (targetUser ? targetUser : user)?.uid || null,
+                });
+                return {
+                    events: [],
+                    user: user,
+                    targetUser,
+                    hasMergedEvents: false,
+                    eventsPrefetchSkipped: true,
+                };
+            }
+
             // Fetch events
             // We use targetUser if present, otherwise user
             const userContext = targetUser ? targetUser : user;
@@ -194,7 +215,7 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
                 hasMergedEvents,
                 eventsSource: eventsResult?.source
             };
-        })),
+        }),
         map((result) => {
             return result as DashboardResolverData;
         })

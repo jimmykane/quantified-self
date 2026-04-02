@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { Storage } from '@angular/fire/storage';
+import { Storage } from 'app/firebase/storage';
 import { AppOriginalFileHydrationService } from './app.original-file-hydration.service';
 import { AppFileService } from './app.file.service';
 import { LoggerService } from './logger.service';
@@ -21,8 +21,8 @@ const storageMocks = vi.hoisted(() => ({
   getBytes: vi.fn(),
 }));
 
-vi.mock('@angular/fire/storage', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@angular/fire/storage')>();
+vi.mock('app/firebase/storage', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('app/firebase/storage')>();
   return {
     ...actual,
     ref: storageMocks.ref,

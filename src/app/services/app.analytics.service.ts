@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Analytics } from '@angular/fire/analytics';
+import { Analytics } from 'app/firebase/analytics';
 import { logEvent, setAnalyticsCollectionEnabled } from 'firebase/analytics';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';

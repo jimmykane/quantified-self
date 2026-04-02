@@ -5,7 +5,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { UPLOAD_STATUS } from '../upload-status/upload.status';
 import { Router } from '@angular/router';
-import { Auth } from '@angular/fire/auth';
+import { Auth } from 'app/firebase/auth';
 import { LoggerService } from '../../../services/logger.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { AppProcessingService } from '../../../services/app.processing.service';

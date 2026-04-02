@@ -16,6 +16,7 @@ import {
   DataJumpSpeedMax,
   DataPaceAvg,
   DataPowerMax,
+  DataPowerTrainingStressScore,
   DataRPE,
   DataSpeedAvg,
   DataTemperatureMax,
@@ -34,7 +35,7 @@ describe('getDefaultSummaryStatTypes', () => {
     expect(stats).toContain(DataFeeling.type);
     expect(stats).toContain(DataRPE.type);
     expect(stats).toContain('Power Normalized');
-    expect(stats).toContain('Power Training Stress Score');
+    expect(stats).toContain(DataPowerTrainingStressScore.type);
     expect(stats).toContain('Ascent Time');
     expect(stats).toContain('Descent Time');
     expect(stats).toContain('Average Absolute Pressure');

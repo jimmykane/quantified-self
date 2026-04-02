@@ -5,7 +5,7 @@ import { AppUserService } from './app.user.service';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { APP_STORAGE } from './storage/app.storage.token';
 import { PLATFORM_ID } from '@angular/core';
-import { RemoteConfig } from '@angular/fire/remote-config';
+import { RemoteConfig } from 'app/firebase/remote-config';
 import { fetchAndActivate, getString } from 'firebase/remote-config';
 
 // Mock the environment
@@ -17,7 +17,7 @@ vi.mock('../../environments/environment', () => ({
     }
 }));
 
-// Mock firebase/remote-config (not @angular/fire/remote-config)
+// Mock firebase/remote-config (not app/firebase/remote-config)
 vi.mock('firebase/remote-config', async (importOriginal) => {
     const actual = await importOriginal<any>();
     return {

@@ -7,7 +7,7 @@ import { LoggerService } from '../services/logger.service';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { User } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../services/app.user.service';
-import { Firestore } from '@angular/fire/firestore';
+import { Firestore } from 'app/firebase/firestore';
 import { signal } from '@angular/core';
 
 describe('onboardingGuard', () => {

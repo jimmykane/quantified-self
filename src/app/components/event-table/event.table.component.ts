@@ -668,10 +668,16 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     const removedAscentTypes = new Set((this.user.settings.summariesSettings?.removeAscentForEventTypes || []) as ActivityTypes[]);
     const removedDescentTypes = new Set((((this.user.settings.summariesSettings as any)?.removeDescentForEventTypes || [])) as ActivityTypes[]);
     const renderContextKey = this.buildRowRenderContextKey(dateFormat);
+    const previousRowCacheSize = this.rowCache.size;
     const nextRowCache = new Map<string, EventTableRowCacheEntry>();
     const rows: StatRowElement[] = [];
     let reusedRows = 0;
     let rebuiltRows = 0;
+    let cacheEntriesFound = 0;
+    let cacheReferenceMatches = 0;
+    let cacheReferenceMismatches = 0;
+    let cacheContextMismatches = 0;
+    let cacheContentMismatches = 0;
 
     this.selection.clear();
     for (const event of this.events) {
@@ -682,6 +688,20 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       const eventID = this.getEventID(event);
       const cachedEntry = eventID ? this.rowCache.get(eventID) : null;
       const eventRowContentKey = this.buildEventRowContentKey(event);
+      if (cachedEntry && eventID) {
+        cacheEntriesFound += 1;
+        if (cachedEntry.event === event) {
+          cacheReferenceMatches += 1;
+        } else {
+          cacheReferenceMismatches += 1;
+        }
+        if (cachedEntry.renderContextKey !== renderContextKey) {
+          cacheContextMismatches += 1;
+        }
+        if (cachedEntry.eventRowContentKey !== eventRowContentKey) {
+          cacheContentMismatches += 1;
+        }
+      }
       if (
         cachedEntry &&
         eventID &&
@@ -722,6 +742,12 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       outputRows: this.data.data.length,
       reusedRows,
       rebuiltRows,
+      previousRowCacheSize,
+      cacheEntriesFound,
+      cacheReferenceMatches,
+      cacheReferenceMismatches,
+      cacheContextMismatches,
+      cacheContentMismatches,
       isHandset: this.isHandset,
       pageSize: this.paginator?.pageSize || this.user.settings?.dashboardSettings?.tableSettings?.eventsPerPage || 0,
     });

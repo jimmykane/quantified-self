@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { AppUserService } from './app.user.service';
-import { Auth, authState, user } from '@angular/fire/auth';
-import { Firestore, collection, collectionData, docData, setDoc, updateDoc } from '@angular/fire/firestore';
+import { Auth, authState, user } from 'app/firebase/auth';
+import { Firestore, collection, collectionData, docData, setDoc, updateDoc } from 'app/firebase/firestore';
 
 import { HttpClient } from '@angular/common/http';
 import { AppEventService } from './app.event.service';
@@ -11,8 +11,9 @@ import { AppUserUtilities } from '../utils/app.user.utilities';
 import { of, firstValueFrom, take, from, filter, throwError } from 'rxjs';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { DataAltitude, DataCadence, DataGradeAdjustedSpeed, DataHeartRate, DataPace, DataPower, DataSpeed, DynamicDataLoader, ServiceNames } from '@sports-alliance/sports-lib';
+import { LoggerService } from './logger.service';
 
-vi.mock('@angular/fire/auth', async (importOriginal) => {
+vi.mock('app/firebase/auth', async (importOriginal) => {
     const actual: any = await importOriginal();
     return {
         ...actual,
@@ -21,7 +22,7 @@ vi.mock('@angular/fire/auth', async (importOriginal) => {
     };
 });
 
-vi.mock('@angular/fire/firestore', async (importOriginal) => {
+vi.mock('app/firebase/firestore', async (importOriginal) => {
     const actual: any = await importOriginal();
     const { of } = await import('rxjs');
     return {
@@ -165,6 +166,72 @@ describe('AppUserService', () => {
         expect(mergedUser.emailVerified).toBe(true);
         expect(mergedUser.email).toBe('test@example.com');
         expect(mergedUser.acceptedPrivacyPolicy).toBe(false);
+    });
+
+    it('should log permission-denied diagnostics as error events for legal sub-document reads', async () => {
+        const permissionDeniedError = Object.assign(new Error('Missing or insufficient permissions.'), {
+            code: 'permission-denied'
+        });
+        const logger = TestBed.inject(LoggerService);
+        const loggerErrorSpy = vi.spyOn(logger, 'error');
+        const issuedAtTime = '2026-03-29T19:28:12.000Z';
+        const authTime = '2026-03-29T19:28:11.000Z';
+        const expirationTime = '2026-03-29T20:28:12.000Z';
+
+        mockAuth.currentUser.uid = 'u1';
+        mockAuth.currentUser.getIdTokenResult
+            .mockResolvedValueOnce({
+                claims: {}
+            })
+            .mockResolvedValueOnce({
+                issuedAtTime,
+                authTime,
+                expirationTime,
+                claims: {
+                    admin: false,
+                    stripeRole: 'pro'
+                }
+            });
+
+        (docData as any)
+            .mockReturnValueOnce(of({ uid: 'u1' }))
+            .mockReturnValueOnce(throwError(() => permissionDeniedError))
+            .mockReturnValueOnce(of({}))
+            .mockReturnValueOnce(of({}));
+
+        service = TestBed.inject(AppUserService);
+        await firstValueFrom(service.getUserByID('u1').pipe(take(1)));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(loggerErrorSpy).toHaveBeenCalledWith(
+            '[AppUserService] Error fetching legal doc',
+            expect.objectContaining({
+                userID: 'u1',
+                path: 'users/u1/legal/agreements',
+                code: 'permission-denied',
+                authUID: 'u1',
+                authUidMatchesRequestedUser: true
+            }),
+            expect.objectContaining({
+                code: 'permission-denied'
+            })
+        );
+        expect(loggerErrorSpy).toHaveBeenCalledWith(
+            '[AppUserService] Permission-denied diagnostics snapshot',
+            expect.objectContaining({
+                userID: 'u1',
+                path: 'users/u1/legal/agreements',
+                authUID: 'u1',
+                authUidMatchesRequestedUser: true,
+                issuedAtTime,
+                authTime,
+                expirationTime,
+                claimKeys: ['admin', 'stripeRole']
+            }),
+            expect.objectContaining({
+                code: 'permission-denied'
+            })
+        );
     });
 
     it('returns enabled chart data types in canonical order with event chart priority overrides', () => {

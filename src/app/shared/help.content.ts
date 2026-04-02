@@ -103,6 +103,27 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Use **Move earlier** or **Move later** when drag-and-drop is unavailable.
 - Tile order is saved automatically to your account.
 
+### Recovery tile summary
+
+- The curated **Recovery** pie tile is optional and not added automatically.
+- New **Recovery** tiles are temporarily disabled from chart type options.
+- The tile shows live recovery split between **Left now** and **Elapsed**.
+- When recovery data is available for your current dashboard filters, the summary shows **Recovery Left Now** and **Total recovery** summed across all recovery-enabled events in the filtered range.
+- Remaining recovery updates every minute while the tile is visible.
+- You can still move or remove this tile from the tile menu.
+
+### Form tile (CTL / ATL / TSB)
+
+- New dashboard **Form** tiles are temporarily disabled from chart type options.
+- The tile derives daily load from **Training Stress Score**.
+- It shows three headline stats: **Fitness (CTL)**, **Fatigue (ATL)**, and **Form (TSB)**.
+- **Form (TSB)** is shown as **prior-day readiness** using the prior day CTL - ATL.
+- The status title updates dynamically from current Form bands:
+  - **High fatigue** at very negative Form values,
+  - **Building fitness** while carrying meaningful load,
+  - **Maintaining fitness** around neutral Form,
+  - **Fresh** when Form is clearly positive.
+
 ### Merge events
 
 - In the dashboard event table, select at least two events and use the merge action.
@@ -123,7 +144,12 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 - Event details now include a **Jumps** table when selected activities contain jump events.
 - The jump table appears in activity tabs and only shows columns with available data.
-- Jump metrics use your preferred units from **Settings** when unit conversion is supported.`,
+- Jump metrics use your preferred units from **Settings** when unit conversion is supported.
+
+### Event chart x-axis fallback
+
+- In Event details, if selected indoor activities do not include distance data, the chart automatically falls back to a **Duration** x-axis.
+- In that case, the **Distance** x-axis option stays visible but is disabled until a compatible activity selection is active.`,
     links: [
       { label: 'Login', icon: 'login', kind: 'route', target: '/login' },
       { label: 'Dashboard', icon: 'space_dashboard', kind: 'route', target: '/dashboard' },
@@ -305,7 +331,6 @@ The app accepts these file types for manual activity upload:
 
 - You can export dashboard activity tables to CSV.
 - From selected dashboard rows, CSV export and original-file download actions support your current multi-selection.
-- From an activity action menu, you can download **JSON**.
 - If an activity has positional data, you can download **GPX**.
 - If original source files are stored for an activity, you can download the original file or files.
 

@@ -27,10 +27,25 @@ export interface ScriptSummary {
     targetSportsLibVersion: string;
     scanned: number;
     candidates: number;
+    parsedEvents: number;
     skippedNoAccess: number;
     skippedNoSourceFiles: number;
     completed: number;
     failed: number;
+}
+
+function configureFirestoreIgnoreUndefinedProperties(): void {
+    try {
+        admin.firestore().settings({ ignoreUndefinedProperties: true });
+    } catch (error) {
+        logger.warn('[sports-lib-reparse-script] Firestore settings already configured; keeping existing settings.', {
+            error: `${error}`,
+        });
+    }
+}
+
+function writeRealtimeProgressLine(payload: Record<string, unknown>): void {
+    process.stdout.write(`[sports-lib-reparse-script] Progress ${JSON.stringify(payload)}\n`);
 }
 
 function extractFirestoreIndexUrl(errorMessage: string): string | undefined {
@@ -185,6 +200,7 @@ export async function runSportsLibReparseScript(argv: string[]): Promise<ScriptS
         targetSportsLibVersion,
         scanned: 0,
         candidates: 0,
+        parsedEvents: 0,
         skippedNoAccess: 0,
         skippedNoSourceFiles: 0,
         completed: 0,
@@ -194,6 +210,7 @@ export async function runSportsLibReparseScript(argv: string[]): Promise<ScriptS
     if (!admin.apps.length) {
         admin.initializeApp();
     }
+    configureFirestoreIgnoreUndefinedProperties();
 
     const processEventCandidate = async (
         uid: string,
@@ -219,12 +236,16 @@ export async function runSportsLibReparseScript(argv: string[]): Promise<ScriptS
             return;
         }
 
+        let progressOutcome: 'completed' | 'skipped_no_source_files' | 'failed' = 'failed';
+        summary.parsedEvents++;
+
         try {
             const result = await reparseEventFromOriginalFiles(uid, eventId, {
                 mode: 'reimport',
                 targetSportsLibVersion,
             });
             if (result.status === 'skipped' && result.reason === SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES) {
+                progressOutcome = 'skipped_no_source_files';
                 summary.skippedNoSourceFiles++;
                 await writeReparseStatus(uid, eventId, {
                     status: 'skipped',
@@ -233,6 +254,7 @@ export async function runSportsLibReparseScript(argv: string[]): Promise<ScriptS
                     checkedAt: admin.firestore.FieldValue.serverTimestamp(),
                 });
             } else {
+                progressOutcome = 'completed';
                 summary.completed++;
                 await writeReparseStatus(uid, eventId, {
                     status: 'completed',
@@ -259,6 +281,18 @@ export async function runSportsLibReparseScript(argv: string[]): Promise<ScriptS
                 checkedAt: admin.firestore.FieldValue.serverTimestamp(),
                 lastError: errorMessage,
             });
+        } finally {
+            const progressPayload = {
+                uid,
+                eventId,
+                outcome: progressOutcome,
+                parsedEvents: summary.parsedEvents,
+                completed: summary.completed,
+                failed: summary.failed,
+                skippedNoSourceFiles: summary.skippedNoSourceFiles,
+            };
+            writeRealtimeProgressLine(progressPayload);
+            logger.info('[sports-lib-reparse-script] Progress', progressPayload);
         }
     };
 

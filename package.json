@@ -1,6 +1,6 @@
 {
   "name": "quantified-self",
-  "version": "8.0.7",
+  "version": "8.1.0",
   "license": "SEE LICENSE IN LICENSE.md",
   "scripts": {
     "ng": "ng",
@@ -34,7 +34,6 @@
     "@angular/common": "20.3.17",
     "@angular/compiler": "20.3.17",
     "@angular/core": "20.3.17",
-    "@angular/fire": "^20.0.1",
     "@angular/forms": "20.3.17",
     "@angular/material": "^20.2.14",
     "@angular/platform-browser": "20.3.17",
@@ -45,7 +44,7 @@
     "@fontsource/inter": "^5.2.8",
     "@fontsource/material-symbols-rounded": "^5.2.38",
     "@sentry/angular": "^10.43.0",
-    "@sports-alliance/sports-lib": "^9.5.0",
+    "@sports-alliance/sports-lib": "^11.0.0",
     "@types/file-saver": "^2.0.7",
     "@zumer/snapdom": "^2.1.0",
     "buffer": "^6.0.3",

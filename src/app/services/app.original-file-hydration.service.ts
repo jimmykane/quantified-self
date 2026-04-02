@@ -1,4 +1,4 @@
-import { Injectable, Injector, inject, runInInjectionContext } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import {
   EventImporterFIT,
   EventImporterGPX,
@@ -8,7 +8,7 @@ import {
   EventInterface,
   EventUtilities,
 } from '@sports-alliance/sports-lib';
-import { Storage, getBytes, getMetadata, ref } from '@angular/fire/storage';
+import { Storage, getBytes, getMetadata, ref } from 'app/firebase/storage';
 import { AppFileService } from './app.file.service';
 import { LoggerService } from './logger.service';
 import { AppEventUtilities } from '../utils/app.event.utilities';
@@ -50,7 +50,6 @@ export class AppOriginalFileHydrationService {
   private static readonly DEFAULT_METADATA_CACHE_TTL_MS = 30000;
 
   private storage = inject(Storage);
-  private injector = inject(Injector);
   private fileService = inject(AppFileService);
   private logger = inject(LoggerService);
   private appEventUtilities = inject(AppEventUtilities);
@@ -60,7 +59,7 @@ export class AppOriginalFileHydrationService {
   private inFlightMetadataTtlByPath = new Map<string, number>();
 
   public async downloadFile(path: string, options?: DownloadFileOptions): Promise<ArrayBuffer> {
-    const fileRef = runInInjectionContext(this.injector, () => ref(this.storage, path));
+    const fileRef = ref(this.storage, path);
     const metadataCacheTtlMs = this.getMetadataCacheTtlMs(options);
 
     try {
@@ -73,18 +72,18 @@ export class AppOriginalFileHydrationService {
       }
 
       this.logger.log(`[AppOriginalFileHydrationService] Cache MISS/STALE for ${path} (Cloud Gen: ${generation}, Cached Gen: ${cached?.generation})`);
-      const buffer = await runInInjectionContext(this.injector, () => getBytes(fileRef));
+      const buffer = await getBytes(fileRef);
       await this.cacheService.setFile(path, { buffer, generation });
       return this.fileService.decompressIfNeeded(buffer, path);
     } catch (e) {
       this.logger.error(`[AppOriginalFileHydrationService] Error downloading/caching file ${path}`, e);
-      const buffer = await runInInjectionContext(this.injector, () => getBytes(fileRef));
+      const buffer = await getBytes(fileRef);
       return this.fileService.decompressIfNeeded(buffer, path);
     }
   }
 
   public async getFileGeneration(path: string, options?: DownloadFileOptions): Promise<string> {
-    const fileRef = runInInjectionContext(this.injector, () => ref(this.storage, path));
+    const fileRef = ref(this.storage, path);
     return this.getGeneration(path, fileRef, this.getMetadataCacheTtlMs(options));
   }
 
@@ -129,7 +128,7 @@ export class AppOriginalFileHydrationService {
     }
 
     const metadataPromise = (async (): Promise<string> => {
-      const metadata = await runInInjectionContext(this.injector, () => getMetadata(fileRef));
+      const metadata = await getMetadata(fileRef);
       const generation = metadata.generation;
       const effectiveTtlMs = this.inFlightMetadataTtlByPath.get(path) ?? metadataCacheTtlMs;
 

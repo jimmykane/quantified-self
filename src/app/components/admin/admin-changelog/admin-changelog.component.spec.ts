@@ -4,7 +4,7 @@ import { AppWhatsNewService, ChangelogPost } from '../../../services/app.whats-n
 import { LoggerService } from '../../../services/logger.service';
 import { provideAnimations } from '@angular/platform-browser/animations';
 import { signal, WritableSignal } from '@angular/core';
-import { Timestamp } from '@angular/fire/firestore';
+import { Timestamp } from 'app/firebase/firestore';
 import { ActivatedRoute } from '@angular/router';
 import { of } from 'rxjs';
 

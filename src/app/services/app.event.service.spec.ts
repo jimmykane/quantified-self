@@ -1,8 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { AppEventService } from './app.event.service';
-import { Firestore, doc, docData, collection, collectionData, deleteDoc, updateDoc, writeBatch, query, where, getDocs, getDocsFromCache, onSnapshot, documentId } from '@angular/fire/firestore';
-import { Storage } from '@angular/fire/storage';
-import { Auth } from '@angular/fire/auth';
+import { Firestore, doc, docData, collection, collectionData, deleteDoc, updateDoc, writeBatch, query, where, getDocs, getDocsFromCache, onSnapshot, documentId } from 'app/firebase/firestore';
+import { Storage } from 'app/firebase/storage';
+import { Auth } from 'app/firebase/auth';
 import { AppAnalyticsService } from './app.analytics.service';
 import { AppUserService } from './app.user.service';
 import { LoggerService } from './logger.service';
@@ -12,7 +12,7 @@ import { AppEventUtilities } from '../utils/app.event.utilities';
 import { vi, describe, it, expect, beforeEach, afterEach, Mock } from 'vitest';
 import { of, firstValueFrom, Subject } from 'rxjs';
 import { AppCacheService } from './app.cache.service';
-import { getMetadata } from '@angular/fire/storage';
+import { getMetadata } from 'app/firebase/storage';
 import { webcrypto } from 'node:crypto';
 
 // Polyfill crypto for JSDOM environment
@@ -100,9 +100,9 @@ function createMockEvent(json: Record<string, unknown>) {
     };
 }
 
-// Mock @angular/fire/firestore
-vi.mock('@angular/fire/firestore', async (importOriginal) => {
-    const actual = await importOriginal<typeof import('@angular/fire/firestore')>();
+// Mock app/firebase/firestore
+vi.mock('app/firebase/firestore', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('app/firebase/firestore')>();
     return {
         ...actual,
         doc: vi.fn(),
@@ -126,9 +126,9 @@ vi.mock('@angular/fire/firestore', async (importOriginal) => {
     };
 });
 
-// Mock @angular/fire/storage
-vi.mock('@angular/fire/storage', async (importOriginal) => {
-    const actual = await importOriginal<typeof import('@angular/fire/storage')>();
+// Mock app/firebase/storage
+vi.mock('app/firebase/storage', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('app/firebase/storage')>();
     return {
         ...actual,
         ref: vi.fn((_storage: unknown, path: string) => ({ bucket: 'quantified-self-io', fullPath: path })),

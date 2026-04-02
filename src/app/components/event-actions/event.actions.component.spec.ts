@@ -3,8 +3,8 @@ import { EventActionsComponent } from './event.actions.component';
 import { AppEventService } from '../../services/app.event.service';
 import { AppFileService } from '../../services/app.file.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { Analytics } from '@angular/fire/analytics';
-import { Auth } from '@angular/fire/auth';
+import { Analytics } from 'app/firebase/analytics';
+import { Auth } from 'app/firebase/auth';
 import { Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
@@ -19,7 +19,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { MatMenuModule } from '@angular/material/menu';
 import { of } from 'rxjs';
 
-vi.mock('@angular/fire/analytics', () => ({
+vi.mock('app/firebase/analytics', () => ({
     Analytics: class { },
     logEvent: vi.fn(),
     setAnalyticsCollectionEnabled: vi.fn()
@@ -39,7 +39,6 @@ describe('EventActionsComponent', () => {
         mockEventService = {
             downloadFile: vi.fn(),
             getEventMetaData: vi.fn(),
-            getEventAsJSONBloB: vi.fn(),
             getEventAsGPXBloB: vi.fn(),
         };
         mockEventReprocessService = {
@@ -184,34 +183,6 @@ describe('EventActionsComponent', () => {
             await component.downloadOriginals();
 
             expect(mockSnackBar.open).toHaveBeenCalledWith('No original files found.', undefined, { duration: 3000 });
-        });
-    });
-
-    describe('downloadJSON', () => {
-        it('should call getEventAsJSONBloB with the event object', async () => {
-            const mockBlob = new Blob(['{}'], { type: 'application/json' });
-            mockEventService.getEventAsJSONBloB.mockResolvedValue(mockBlob);
-
-            await component.downloadJSON();
-
-            expect(mockEventService.getEventAsJSONBloB).toHaveBeenCalledWith(component.user, component.event);
-            expect(mockFileService.downloadFile).toHaveBeenCalled();
-            const args = mockFileService.downloadFile.mock.calls[0];
-            expect(args[0]).toBe(mockBlob);
-            expect(args[2]).toBe('json');
-        });
-
-        it('should show snackbar and avoid file download when JSON generation fails', async () => {
-            mockEventService.getEventAsJSONBloB.mockRejectedValue(new Error('hydrate failed'));
-
-            await component.downloadJSON();
-
-            expect(mockFileService.downloadFile).not.toHaveBeenCalled();
-            expect(mockSnackBar.open).toHaveBeenCalledWith(
-                'Could not download JSON file',
-                undefined,
-                { duration: 3000 },
-            );
         });
     });
 

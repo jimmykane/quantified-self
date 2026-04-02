@@ -3,9 +3,10 @@
   <mat-icon>more_vert</mat-icon>
 </button>
 <mat-menu #chartOptions="matMenu" class="qs-menu-panel qs-menu-panel-form qs-config-menu">
-  @if (user.settings.dashboardSettings.tiles.length <= 11) { <app-tile-actions-header (add)="addNewTile($event)">
+  @if (user.settings.dashboardSettings.tiles.length <= 11 && !isCuratedRecoveryNowChart && !isFormChart) { <app-tile-actions-header (add)="addNewTile($event)">
     </app-tile-actions-header>
     }
+    @if (!isCuratedRecoveryNowChart) {
     <section mat-menu-item>
       <mat-form-field>
         <mat-label>Type</mat-label>
@@ -19,6 +20,8 @@
         </mat-select>
       </mat-form-field>
     </section>
+    }
+    @if (!isCuratedRecoveryNowChart) {
     <section mat-menu-item>
       <mat-form-field>
         <mat-label>Chart type</mat-label>
@@ -32,7 +35,8 @@
         </mat-select>
       </mat-form-field>
     </section>
-    @if (chartType !== chartTypes.IntensityZones) {
+    }
+    @if (chartType !== chartTypes.IntensityZones && !isCuratedRecoveryNowChart && !isFormChart) {
     <section mat-menu-item>
       <mat-form-field>
         <mat-label>What data to look at</mat-label>
@@ -51,7 +55,7 @@
       </mat-form-field>
     </section>
     }
-    @if (chartType !== chartTypes.Pie && chartType !== chartTypes.IntensityZones) {
+    @if (chartType !== chartTypes.Pie && chartType !== chartTypes.IntensityZones && !isCuratedRecoveryNowChart && !isFormChart) {
     <section mat-menu-item>
       <mat-form-field>
         <mat-label>How to look at the data</mat-label>
@@ -68,7 +72,7 @@
       </mat-form-field>
     </section>
     }
-    @if (chartType !== chartTypes.IntensityZones) {
+    @if (chartType !== chartTypes.IntensityZones && !isCuratedRecoveryNowChart && !isFormChart) {
     <section mat-menu-item>
       <mat-form-field>
         <mat-label>Base data on</mat-label>
@@ -86,7 +90,7 @@
     </section>
     }
 
-    @if (chartDataCategoryType === chartCategoryTypes.DateType && chartType !== chartTypes.IntensityZones) {
+    @if (chartDataCategoryType === chartCategoryTypes.DateType && chartType !== chartTypes.IntensityZones && !isCuratedRecoveryNowChart && !isFormChart) {
     <section mat-menu-item>
       <mat-form-field>
         <mat-label>Time interval</mat-label>

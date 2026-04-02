@@ -7,11 +7,11 @@ import { Router, ActivatedRoute } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
-import { of } from 'rxjs';
+import { of, Subject } from 'rxjs';
 import { User } from '@sports-alliance/sports-lib';
 import { DateRanges } from '@sports-alliance/sports-lib';
 import { AppUserInterface } from '../../models/app-user.interface';
-import { Analytics } from '@angular/fire/analytics';
+import { Analytics } from 'app/firebase/analytics';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { BehaviorSubject } from 'rxjs';
 import { EventInterface } from '@sports-alliance/sports-lib';
@@ -123,6 +123,29 @@ describe('DashboardComponent', () => {
         await fixture.whenStable();
 
         expect(mockEventService.getEventsBy).toHaveBeenCalled();
+        expect(component.events.length).toBe(1);
+    });
+
+    it('should keep loading until live events arrive when resolver skipped event prefetch', async () => {
+        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
+        mockActivatedRoute.snapshot.data.dashboardData.events = [];
+        mockActivatedRoute.snapshot.data.dashboardData.eventsPrefetchSkipped = true;
+
+        const eventsSubject = new Subject<any[]>();
+        mockEventService.getEventsBy.mockReturnValue(eventsSubject.asObservable());
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.isInitialized).toBe(true);
+        expect(component.isLoading).toBe(true);
+        expect(component.events).toEqual([]);
+
+        eventsSubject.next([{ id: 'event1' }]);
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.isLoading).toBe(false);
         expect(component.events.length).toBe(1);
     });
 

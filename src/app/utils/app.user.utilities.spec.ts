@@ -8,10 +8,12 @@ import {
     ChartDataCategoryTypes,
     ChartDataValueTypes,
     ChartTypes,
+    DataRecoveryTime,
     TileTypes,
     TimeIntervals
 } from '@sports-alliance/sports-lib';
 import { AppUserInterface } from '../models/app-user.interface';
+import { DASHBOARD_RECOVERY_NOW_CHART_TYPE } from '../helpers/dashboard-special-chart-types';
 
 describe('AppUserUtilities', () => {
     const mockUser = { uid: 'u1', settings: {} } as any;
@@ -168,6 +170,15 @@ describe('AppUserUtilities', () => {
     });
 
     describe('fillMissingAppSettings', () => {
+        it('should not include recovery tile in default dashboard tiles', () => {
+            const tiles = AppUserUtilities.getDefaultUserDashboardTiles();
+            const recoveryTiles = tiles.filter((tile: any) => (
+                tile?.type === TileTypes.Chart && tile?.dataType === DataRecoveryTime.type
+            ));
+
+            expect(recoveryTiles).toHaveLength(0);
+        });
+
         it('should fill defaults for empty settings', () => {
             const user = { settings: {} } as User;
             const settings = AppUserUtilities.fillMissingAppSettings(user);
@@ -242,6 +253,101 @@ describe('AppUserUtilities', () => {
 
             const settings = AppUserUtilities.fillMissingAppSettings(user);
             expect((settings.dashboardSettings?.tiles?.[0] as any)?.chartType).toBe(ChartTypes.LinesVertical);
+        });
+
+        it('should not auto-append a recovery tile for existing users missing one', () => {
+            const user = {
+                settings: {
+                    dashboardSettings: {
+                        tiles: [
+                            {
+                                type: TileTypes.Chart,
+                                chartType: ChartTypes.ColumnsHorizontal,
+                                dataType: 'distance',
+                                dataValueType: ChartDataValueTypes.Total,
+                                dataCategoryType: ChartDataCategoryTypes.ActivityType,
+                                dataTimeInterval: TimeIntervals.Auto,
+                                name: 'Distance',
+                                order: 0,
+                                size: { columns: 1, rows: 1 }
+                            }
+                        ]
+                    }
+                }
+            } as unknown as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+            const firstPassRecoveryTiles = settings.dashboardSettings?.tiles?.filter((tile: any) => (
+                tile?.type === TileTypes.Chart && tile?.dataType === DataRecoveryTime.type
+            )) || [];
+
+            expect(firstPassRecoveryTiles).toHaveLength(0);
+
+            const secondPassSettings = AppUserUtilities.fillMissingAppSettings({ settings } as User);
+            const secondPassRecoveryTiles = secondPassSettings.dashboardSettings?.tiles?.filter((tile: any) => (
+                tile?.type === TileTypes.Chart && tile?.dataType === DataRecoveryTime.type
+            )) || [];
+            expect(secondPassRecoveryTiles).toHaveLength(0);
+        });
+
+        it('should migrate legacy recovery metric chart tiles to curated recovery chart type', () => {
+            const user = {
+                settings: {
+                    dashboardSettings: {
+                        tiles: [
+                            {
+                                type: TileTypes.Chart,
+                                chartType: ChartTypes.LinesVertical,
+                                dataType: DataRecoveryTime.type,
+                                dataValueType: ChartDataValueTypes.Total,
+                                dataCategoryType: ChartDataCategoryTypes.DateType,
+                                dataTimeInterval: TimeIntervals.Auto,
+                                name: 'Recovery',
+                                order: 0,
+                                size: { columns: 1, rows: 1 }
+                            }
+                        ]
+                    }
+                }
+            } as unknown as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+            const recoveryTile = settings.dashboardSettings?.tiles?.find((tile: any) => tile?.dataType === DataRecoveryTime.type) as any;
+
+            expect(recoveryTile).toBeDefined();
+            expect(recoveryTile.chartType).toBe(DASHBOARD_RECOVERY_NOW_CHART_TYPE);
+            expect(settings.dashboardSettings?.dismissedCuratedRecoveryNowTile).toBe(false);
+        });
+
+        it('should still not auto-add curated recovery tile when it has been dismissed', () => {
+            const user = {
+                settings: {
+                    dashboardSettings: {
+                        dismissedCuratedRecoveryNowTile: true,
+                        tiles: [
+                            {
+                                type: TileTypes.Chart,
+                                chartType: ChartTypes.ColumnsHorizontal,
+                                dataType: 'distance',
+                                dataValueType: ChartDataValueTypes.Total,
+                                dataCategoryType: ChartDataCategoryTypes.ActivityType,
+                                dataTimeInterval: TimeIntervals.Auto,
+                                name: 'Distance',
+                                order: 0,
+                                size: { columns: 1, rows: 1 }
+                            }
+                        ]
+                    }
+                }
+            } as unknown as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+            const recoveryTiles = settings.dashboardSettings?.tiles?.filter((tile: any) => (
+                tile?.type === TileTypes.Chart && tile?.dataType === DataRecoveryTime.type
+            )) || [];
+
+            expect(recoveryTiles).toHaveLength(0);
+            expect(settings.dashboardSettings?.dismissedCuratedRecoveryNowTile).toBe(true);
         });
 
         it('should normalize malformed legacy chart, unit, and table settings', () => {

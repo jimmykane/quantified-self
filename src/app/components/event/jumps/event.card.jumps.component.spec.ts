@@ -72,6 +72,17 @@ describe('EventCardJumpsComponent', () => {
     expect(fixture.nativeElement.querySelectorAll('mat-tab')).toHaveLength(1);
   });
 
+  it('uses the stats-grid performance icon for the jumps section header', () => {
+    const jumpActivity = createActivity('activity-1', 'Skiing', [createJumpEvent(90)]);
+
+    component.selectedActivities = [jumpActivity];
+    component.ngOnChanges();
+    fixture.detectChanges();
+
+    const sectionHeader = fixture.nativeElement.querySelector('app-event-section-header');
+    expect(sectionHeader?.getAttribute('icon')).toBe('monitoring');
+  });
+
   it('shows all supported jump columns when values exist', () => {
     const jumpActivity = createActivity('activity-1', 'Snowboarding', [createJumpEvent(120, {
       height: createStat('3.1', 'm', 3.1),

@@ -7,7 +7,7 @@ import { AppUserService } from '../../../services/app.user.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { LoggerService } from '../../../services/logger.service';
 import { environment } from '../../../../environments/environment';
-import { Auth, getIdToken } from '@angular/fire/auth';
+import { Auth, getIdToken } from 'app/firebase/auth';
 import { UploadAbstractDirective } from '../upload-abstract.directive';
 import { FileInterface } from '../file.interface';
 import { AppProcessingService } from '../../../services/app.processing.service';

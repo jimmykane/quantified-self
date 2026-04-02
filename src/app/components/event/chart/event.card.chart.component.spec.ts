@@ -5,8 +5,10 @@ import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  ActivityTypes,
   ChartCursorBehaviours,
   DataDistance,
+  DataSpeed,
   DataStrydDistance,
   XAxisTypes,
 } from '@sports-alliance/sports-lib';
@@ -244,6 +246,100 @@ describe('EventCardChartComponent', () => {
     component.xAxisType = XAxisTypes.Distance;
 
     expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith({ xAxisType: XAxisTypes.Distance });
+  });
+
+  it('falls back to duration axis when distance is configured and selected indoor activity has no distance stream', async () => {
+    chartSettingsSignal.set({
+      ...chartSettingsSignal(),
+      xAxisType: XAxisTypes.Distance,
+    });
+
+    const speedStream = { type: DataSpeed.type, getData: () => [3, 4, 5] };
+    const timeStream = { type: XAxisTypes.Time, getData: () => [0, 10, 20] };
+    const activity = {
+      type: ActivityTypes.IndoorRunning,
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      getID: () => 'indoor-a1',
+      getAllStreams: () => [speedStream, timeStream],
+      getStream: (type: string) => {
+        if (type === DataSpeed.type) {
+          return speedStream;
+        }
+        if (type === XAxisTypes.Time) {
+          return timeStream;
+        }
+        return null;
+      },
+    } as any;
+
+    const buildPanelsSpy = vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
+      {
+        dataType: 'speed',
+        displayName: 'Speed',
+        unit: 'm/s',
+        colorGroupKey: 'Speed',
+        minX: 0,
+        maxX: 20,
+        series: [],
+      },
+    ] as any);
+
+    component.selectedActivities = [activity];
+    component.event = {
+      isMultiSport: () => false,
+      getActivities: () => [activity],
+      getID: () => 'event-1',
+    } as any;
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.renderedXAxisType).toBe(XAxisTypes.Duration);
+    expect(component.displayedXAxisType).toBe(XAxisTypes.Duration);
+    expect(component.canSelectDistanceXAxis).toBe(false);
+    expect(buildPanelsSpy).toHaveBeenCalledWith(expect.objectContaining({ xAxisType: XAxisTypes.Duration }));
+  });
+
+  it('keeps distance axis selectable when selected indoor activity has finite distance stream data', async () => {
+    chartSettingsSignal.set({
+      ...chartSettingsSignal(),
+      xAxisType: XAxisTypes.Distance,
+    });
+
+    const speedStream = { type: DataSpeed.type, getData: () => [3, 4, 5] };
+    const timeStream = { type: XAxisTypes.Time, getData: () => [0, 10, 20] };
+    const distanceStream = { type: DataDistance.type, getData: () => [0, 25, 50] };
+    const activity = {
+      type: ActivityTypes.IndoorCycling,
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      getID: () => 'indoor-a1',
+      getAllStreams: () => [speedStream, timeStream, distanceStream],
+      getStream: (type: string) => {
+        if (type === DataSpeed.type) {
+          return speedStream;
+        }
+        if (type === XAxisTypes.Time) {
+          return timeStream;
+        }
+        if (type === DataDistance.type) {
+          return distanceStream;
+        }
+        return null;
+      },
+    } as any;
+
+    component.selectedActivities = [activity];
+    component.event = {
+      isMultiSport: () => false,
+      getActivities: () => [activity],
+      getID: () => 'event-1',
+    } as any;
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.canSelectDistanceXAxis).toBe(true);
+    expect(component.displayedXAxisType).toBe(XAxisTypes.Distance);
   });
 
   it('should persist cursorBehaviour changes and keep selection when returning to zoom mode', async () => {

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { XAxisTypes } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DataDistance, XAxisTypes } from '@sports-alliance/sports-lib';
 import {
   buildEventCanonicalXAxisScaleOptions,
+  canSelectEventChartDistanceXAxis,
   clampEventRange,
   formatDurationSeconds,
   formatEventXAxisValue,
@@ -19,6 +20,53 @@ describe('event-echarts-xaxis.helper', () => {
   it('keeps configured axis for normal events', () => {
     const resolved = resolveEventChartXAxisType({ isMultiSport: () => false } as any, XAxisTypes.Duration);
     expect(resolved).toBe(XAxisTypes.Duration);
+  });
+
+  it('falls back to duration when distance is configured and a selected indoor activity has no distance stream', () => {
+    const indoorActivityWithoutDistance = {
+      type: ActivityTypes.IndoorRunning,
+      getStream: (streamType: string) => (streamType === XAxisTypes.Time
+        ? { getData: () => [0, 30, 60] }
+        : null),
+      getAllStreams: () => [{ type: XAxisTypes.Time, getData: () => [0, 30, 60] }],
+    } as any;
+
+    const resolved = resolveEventChartXAxisType(
+      { isMultiSport: () => false } as any,
+      XAxisTypes.Distance,
+      [indoorActivityWithoutDistance]
+    );
+
+    expect(resolved).toBe(XAxisTypes.Duration);
+    expect(canSelectEventChartDistanceXAxis([indoorActivityWithoutDistance])).toBe(false);
+  });
+
+  it('keeps distance axis when selected indoor activities include finite distance data', () => {
+    const indoorActivityWithDistance = {
+      type: ActivityTypes.IndoorCycling,
+      getStream: (streamType: string) => {
+        if (streamType === DataDistance.type) {
+          return { getData: () => [0, 100, 250] };
+        }
+        if (streamType === XAxisTypes.Time) {
+          return { getData: () => [0, 10, 20] };
+        }
+        return null;
+      },
+      getAllStreams: () => [
+        { type: DataDistance.type, getData: () => [0, 100, 250] },
+        { type: XAxisTypes.Time, getData: () => [0, 10, 20] },
+      ],
+    } as any;
+
+    const resolved = resolveEventChartXAxisType(
+      { isMultiSport: () => false } as any,
+      XAxisTypes.Distance,
+      [indoorActivityWithDistance]
+    );
+
+    expect(resolved).toBe(XAxisTypes.Distance);
+    expect(canSelectEventChartDistanceXAxis([indoorActivityWithDistance])).toBe(true);
   });
 
   it('formats duration values', () => {

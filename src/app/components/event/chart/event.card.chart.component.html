@@ -1,11 +1,13 @@
 <app-event-section-header icon="show_chart">
-  <app-event-card-chart-actions [(xAxisType)]="xAxisType" [(showAllData)]="showAllData" [(showLaps)]="showLaps"
+  <app-event-card-chart-actions [xAxisType]="displayedXAxisType" [(showAllData)]="showAllData" [(showLaps)]="showLaps"
     [(cursorBehaviour)]="cursorBehaviour" [(syncChartHoverToMap)]="syncChartHoverToMap" [(fillOpacity)]="fillOpacity"
     [event]="event" [user]="user"
+    [canSelectDistanceXAxis]="canSelectDistanceXAxis"
     [showResetChartState]="hasResettableChartState"
     [showSeriesMenu]="dataTypeLegendItems.length > 0"
     [seriesMenuSummary]="seriesMenuSummary"
     [seriesMenuItems]="dataTypeLegendItems"
+    (xAxisTypeChange)="onXAxisTypeChange($event)"
     (seriesVisibilityToggle)="onDataTypeLegendSelectionChange($event.dataType, $event.visible)"
     (showAllSeries)="onShowAllDataTypes()"
     (resetChartState)="onResetChartStateRequested()">

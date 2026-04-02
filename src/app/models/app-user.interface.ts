@@ -9,7 +9,7 @@ import {
     UserDashboardSettingsInterface,
     UserMapSettingsInterface
 } from '@sports-alliance/sports-lib';
-import { Timestamp } from '@angular/fire/firestore';
+import { Timestamp } from 'app/firebase/firestore';
 import { StripeRole } from './stripe-role.model';
 import { AppThemePreference } from './app-theme-preference.type';
 import { AppDateValue } from './app-date-value.type';
@@ -30,6 +30,7 @@ export interface AppMyTracksSettings extends UserMyTracksSettingsInterface {
 
 export interface AppDashboardSettingsInterface extends UserDashboardSettingsInterface {
     includeMergedEvents?: boolean;
+    dismissedCuratedRecoveryNowTile?: boolean;
 }
 
 export interface AppChartSettingsInterface extends Omit<UserChartSettingsInterface, 'theme' | 'extraMaxForPower' | 'extraMaxForPace'> {

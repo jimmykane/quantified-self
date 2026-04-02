@@ -4,8 +4,8 @@ import { AppUserService } from '../../services/app.user.service';
 import { AppPaymentService, StripePrice, StripeProduct, StripeSubscription } from '../../services/app.payment.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { Subject, of } from 'rxjs';
-import { Auth } from '@angular/fire/auth';
-import { Analytics } from '@angular/fire/analytics';
+import { Auth } from 'app/firebase/auth';
+import { Analytics } from 'app/firebase/analytics';
 import { Router } from '@angular/router';
 import { By } from '@angular/platform-browser';
 

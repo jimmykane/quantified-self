@@ -21,6 +21,7 @@ import {
   TileChartSettingsInterface,
   TileSettingsInterface,
   TileTypes,
+  DateRanges,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
@@ -51,6 +52,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   @Input() events: EventInterface[];
   @Input() user: User;
   @Input() showActions: boolean;
+  @Input() dashboardDateRange: DateRanges | null = null;
+  @Input() dashboardStartDate: Date | number | null = null;
+  @Input() dashboardEndDate: Date | number | null = null;
 
   public rowHeight;
   public numberOfCols: number;
@@ -93,7 +97,13 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   async ngOnChanges(simpleChanges: SimpleChanges) {
     this.updateDesktopTileDragCapability();
-    if (simpleChanges.events || simpleChanges.user) {
+    if (
+      simpleChanges.events
+      || simpleChanges.user
+      || simpleChanges.dashboardDateRange
+      || simpleChanges.dashboardStartDate
+      || simpleChanges.dashboardEndDate
+    ) {
       return this.unsubscribeAndCreateCharts();
     }
   }
@@ -192,6 +202,11 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     const newTiles = buildDashboardTileViewModels({
       tiles: this.user?.settings?.dashboardSettings?.tiles ?? [],
       events: this.events,
+      dashboardDateRange: {
+        dateRange: this.dashboardDateRange,
+        startDate: this.dashboardStartDate,
+        endDate: this.dashboardEndDate,
+      },
       preferences: this.getAggregationPreferences(),
       logger: this.logger,
     });

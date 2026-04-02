@@ -1,4 +1,4 @@
-import { inject, Injectable, OnDestroy, EnvironmentInjector, runInInjectionContext, computed } from '@angular/core';
+import { inject, Injectable, OnDestroy, computed } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 
 
@@ -31,7 +31,7 @@ import {
   UserUnitSettingsInterface,
   VerticalSpeedUnits
 } from '@sports-alliance/sports-lib';
-import { Auth, authState, user } from '@angular/fire/auth';
+import { Auth, authState, user } from 'app/firebase/auth';
 import { HttpClient } from '@angular/common/http';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import {
@@ -82,7 +82,7 @@ import { DataDeviceNames } from '@sports-alliance/sports-lib';
 import { DataPeakEPOC } from '@sports-alliance/sports-lib';
 import { DataAerobicTrainingEffect } from '@sports-alliance/sports-lib';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib';
-import { Firestore, doc, docData, collection, collectionData, setDoc, updateDoc } from '@angular/fire/firestore';
+import { Firestore, doc, docData, collection, collectionData, setDoc, updateDoc } from 'app/firebase/firestore';
 import { AppFunctionsService } from './app.functions.service';
 import { FunctionName } from '@shared/functions-manifest';
 
@@ -104,13 +104,12 @@ export class AppUserService implements OnDestroy {
   private firestore = inject(Firestore);
   private auth = inject(Auth);
   private functionsService = inject(AppFunctionsService);
-  private injector = inject(EnvironmentInjector);
   private logger = inject(LoggerService);
   private eventService = inject(AppEventService);
   private http = inject(HttpClient);
   private windowService = inject(AppWindowService);
 
-  public readonly user$ = runInInjectionContext(this.injector, () => user(this.auth).pipe(
+  public readonly user$ = user(this.auth).pipe(
     switchMap(u => {
       if (!u) {
         return of(null);
@@ -122,7 +121,7 @@ export class AppUserService implements OnDestroy {
     }),
     distinctUntilChanged((p, c) => JSON.stringify(p) === JSON.stringify(c)),
     shareReplay(1)
-  ));
+  );
 
   /**
    * Merges Firebase Auth User claims (stripeRole, gracePeriodUntil) with Firestore database data.
@@ -239,9 +238,69 @@ export class AppUserService implements OnDestroy {
     return code === 'permission-denied' || code === 'firestore/permission-denied';
   }
 
-  public readonly user = toSignal(this.user$,
-    { initialValue: null, injector: this.injector }
-  );
+  private buildFirestoreReadErrorContext(userID: string, path: string, error: unknown) {
+    const authUID = this.auth.currentUser?.uid ?? null;
+    const code = (error as { code?: unknown } | null)?.code;
+    const message = (error as { message?: unknown } | null)?.message;
+
+    return {
+      userID,
+      path,
+      code: typeof code === 'string' ? code : null,
+      message: typeof message === 'string' ? message : null,
+      authUID,
+      authUidMatchesRequestedUser: authUID === userID,
+      projectID: this.firestore.app?.options?.projectId ?? null,
+    };
+  }
+
+  private async logPermissionDeniedReadDiagnostics(userID: string, path: string, sourceError: unknown): Promise<void> {
+    const currentUser = this.auth.currentUser;
+    if (!currentUser) {
+      this.logger.error('[AppUserService] Permission-denied diagnostics: no current auth user', {
+        userID,
+        path,
+      }, sourceError);
+      return;
+    }
+
+    try {
+      const tokenResult = await currentUser.getIdTokenResult();
+      const claims = tokenResult?.claims ?? {};
+
+      this.logger.error('[AppUserService] Permission-denied diagnostics snapshot', {
+        userID,
+        path,
+        authUID: currentUser.uid,
+        authUidMatchesRequestedUser: currentUser.uid === userID,
+        issuedAtTime: tokenResult?.issuedAtTime ?? null,
+        authTime: tokenResult?.authTime ?? null,
+        expirationTime: tokenResult?.expirationTime ?? null,
+        claims: {
+          admin: claims['admin'] === true,
+          stripeRole: typeof claims['stripeRole'] === 'string' ? claims['stripeRole'] : null,
+          impersonatedBy: typeof claims['impersonatedBy'] === 'string' ? claims['impersonatedBy'] : null,
+        },
+        claimKeys: Object.keys(claims).sort(),
+      }, sourceError);
+    } catch (diagnosticsError) {
+      this.logger.error('[AppUserService] Failed to capture permission-denied diagnostics snapshot', {
+        userID,
+        path,
+      }, diagnosticsError);
+    }
+  }
+
+  private logUserSubDocumentReadError(docLabel: 'legal' | 'system' | 'settings', userID: string, path: string, error: unknown): void {
+    const errorContext = this.buildFirestoreReadErrorContext(userID, path, error);
+    this.logger.error(`[AppUserService] Error fetching ${docLabel} doc`, errorContext, error);
+
+    if (this.isFirestorePermissionDenied(error)) {
+      void this.logPermissionDeniedReadDiagnostics(userID, path, error);
+    }
+  }
+
+  public readonly user = toSignal(this.user$, { initialValue: null });
 
   public readonly stripeRoleSignal = computed(() => this.user()?.stripeRole || null);
   public readonly isAdminSignal = computed(() => this.user()?.admin === true);
@@ -337,64 +396,47 @@ export class AppUserService implements OnDestroy {
   }
 
   public getUserByID(userID: string): Observable<AppUserInterface | null> {
-    return runInInjectionContext(this.injector, () => {
-      const userDoc = doc(this.firestore, 'users', userID) as any;
-      const legalDoc = doc(this.firestore, `users/${userID}/legal/agreements`) as any;
-      const systemDoc = doc(this.firestore, `users/${userID}/system/status`) as any;
-      const settingsDoc = doc(this.firestore, `users/${userID}/config/settings`) as any;
+    const userDoc = doc(this.firestore, 'users', userID) as any;
+    const legalDoc = doc(this.firestore, `users/${userID}/legal/agreements`) as any;
+    const systemDoc = doc(this.firestore, `users/${userID}/system/status`) as any;
+    const settingsDoc = doc(this.firestore, `users/${userID}/config/settings`) as any;
 
-      return combineLatest({
-        user: (docData(userDoc) as Observable<AppUserInterface | null>).pipe(
-          catchError((err) => throwError(() => err))
-        ),
-        legal: (docData(legalDoc) as Observable<any>).pipe(catchError((err) => {
-          this.logger.error('[AppUserService] Error fetching legal doc', {
-            userID,
-            path: `users/${userID}/legal/agreements`,
-            code: err?.code ?? null,
-            message: err?.message ?? null
-          }, err);
-          return of({});
-        })),
-        system: (docData(systemDoc) as Observable<any>).pipe(catchError((err) => {
-          this.logger.error('[AppUserService] Error fetching system doc', {
-            userID,
-            path: `users/${userID}/system/status`,
-            code: err?.code ?? null,
-            message: err?.message ?? null
-          }, err);
-          return of({});
-        })),
-        settings: (docData(settingsDoc) as Observable<any>).pipe(catchError((err) => {
-          this.logger.error('[AppUserService] Error fetching settings doc', {
-            userID,
-            path: `users/${userID}/config/settings`,
-            code: err?.code ?? null,
-            message: err?.message ?? null
-          }, err);
-          return of({});
-        }))
-      }).pipe(
-        distinctUntilChanged((prev, curr) => JSON.stringify(prev) === JSON.stringify(curr)),
-        map(({ user, legal, system, settings }) => {
-          if (!user) {
-            return null;
-          }
+    return combineLatest({
+      user: (docData(userDoc) as Observable<AppUserInterface | null>).pipe(
+        catchError((err) => throwError(() => err))
+      ),
+      legal: (docData(legalDoc) as Observable<any>).pipe(catchError((err) => {
+        this.logUserSubDocumentReadError('legal', userID, `users/${userID}/legal/agreements`, err);
+        return of({});
+      })),
+      system: (docData(systemDoc) as Observable<any>).pipe(catchError((err) => {
+        this.logUserSubDocumentReadError('system', userID, `users/${userID}/system/status`, err);
+        return of({});
+      })),
+      settings: (docData(settingsDoc) as Observable<any>).pipe(catchError((err) => {
+        this.logUserSubDocumentReadError('settings', userID, `users/${userID}/config/settings`, err);
+        return of({});
+      }))
+    }).pipe(
+      distinctUntilChanged((prev, curr) => JSON.stringify(prev) === JSON.stringify(curr)),
+      map(({ user, legal, system, settings }) => {
+        if (!user) {
+          return null;
+        }
 
-          // Merge all sources
-          // Merge order: Main Doc -> Legal -> System (System overrides if overlap)
-          const u = { ...user, ...(legal || {}), ...(system || {}) } as AppUserInterface;
+        // Merge all sources
+        // Merge order: Main Doc -> Legal -> System (System overrides if overlap)
+        const u = { ...user, ...(legal || {}), ...(system || {}) } as AppUserInterface;
 
-          // Settings is a special case (nested object)
-          if (settings && Object.keys(settings).length > 0) {
-            u.settings = settings as any;
-          }
+        // Settings is a special case (nested object)
+        if (settings && Object.keys(settings).length > 0) {
+          u.settings = settings as any;
+        }
 
-          u.settings = AppUserUtilities.fillMissingAppSettings(u);
+        u.settings = AppUserUtilities.fillMissingAppSettings(u);
 
-          return u;
-        }));
-    });
+        return u;
+      }));
   }
 
   public async createOrUpdateUser(user: AppUserInterface) {
@@ -419,10 +461,8 @@ export class AppUserService implements OnDestroy {
     });
 
     if (hasChanges) {
-      return runInInjectionContext(this.injector, async () => {
-        // Use set with merge true to allow "upsert" of the agreements doc
-        await setDoc(doc(this.firestore, `users/${policies.uid}/legal/agreements`), dataToWrite, { merge: true });
-      });
+      // Use set with merge true to allow "upsert" of the agreements doc
+      await setDoc(doc(this.firestore, `users/${policies.uid}/legal/agreements`), dataToWrite, { merge: true });
     }
   }
 
@@ -439,12 +479,10 @@ export class AppUserService implements OnDestroy {
   }
 
   public getUserMetaForService(user: User, serviceName: string): Observable<UserServiceMetaInterface> {
-    return runInInjectionContext(this.injector, () => {
-      const metaDoc = doc(this.firestore, 'users', user.uid, 'meta', serviceName);
-      return docData(metaDoc).pipe(map((d) => {
-        return <UserServiceMetaInterface>d;
-      }));
-    });
+    const metaDoc = doc(this.firestore, 'users', user.uid, 'meta', serviceName);
+    return docData(metaDoc).pipe(map((d) => {
+      return <UserServiceMetaInterface>d;
+    }));
   }
 
 
@@ -550,84 +588,82 @@ export class AppUserService implements OnDestroy {
   }
 
   public async updateUserProperties(user: AppUserInterface, propertiesToUpdate: any) {
-    return runInInjectionContext(this.injector, async () => {
-      const promises = [];
-      if (propertiesToUpdate.settings) {
-        promises.push(setDoc(doc(this.firestore, `users/${user.uid}/config/settings`), propertiesToUpdate.settings, { merge: true })
-          .catch(err => {
-            this.logger.error('[AppUserService] Settings update FAILED', err);
-            throw err;
-          })
-        );
-        delete propertiesToUpdate.settings;
-      }
+    const promises = [];
+    if (propertiesToUpdate.settings) {
+      promises.push(setDoc(doc(this.firestore, `users/${user.uid}/config/settings`), propertiesToUpdate.settings, { merge: true })
+        .catch(err => {
+          this.logger.error('[AppUserService] Settings update FAILED', err);
+          throw err;
+        })
+      );
+      delete propertiesToUpdate.settings;
+    }
 
-      // Handle legal fields separately
-      const legalUpdates: any = {};
-      const allowedLegalUpdates = ['acceptedTrackingPolicy', 'acceptedMarketingPolicy'];
+    // Handle legal fields separately
+    const legalUpdates: any = {};
+    const allowedLegalUpdates = ['acceptedTrackingPolicy', 'acceptedMarketingPolicy'];
 
-      // First strip all legal fields from propertiesToUpdate to ensure they don't land in the main doc
-      AppUserService.legalFields.forEach(field => {
-        if (field in propertiesToUpdate) {
-          // Only allow specific legal fields to be updated via this method
-          if (allowedLegalUpdates.includes(field)) {
-            legalUpdates[field] = propertiesToUpdate[field];
-          } else {
-            this.logger.warn(`[AppUserService] Stripping restricted legal field '${field}' from update payload.`);
-          }
-          delete propertiesToUpdate[field];
+    // First strip all legal fields from propertiesToUpdate to ensure they don't land in the main doc
+    AppUserService.legalFields.forEach(field => {
+      if (field in propertiesToUpdate) {
+        // Only allow specific legal fields to be updated via this method
+        if (allowedLegalUpdates.includes(field)) {
+          legalUpdates[field] = propertiesToUpdate[field];
+        } else {
+          this.logger.warn(`[AppUserService] Stripping restricted legal field '${field}' from update payload.`);
         }
-      });
-
-      if (Object.keys(legalUpdates).length > 0) {
-        promises.push(setDoc(doc(this.firestore, `users/${user.uid}/legal/agreements`), legalUpdates, { merge: true })
-          .catch(err => {
-            this.logger.error('[AppUserService] Legal update FAILED', err);
-            throw err;
-          })
-        );
-      }
-
-      // Keep auth-claim state out of the main profile doc.
-      if ('impersonatedBy' in propertiesToUpdate) {
-        this.logger.warn('[AppUserService] Stripping claim-managed field \'impersonatedBy\' from update payload.');
-        delete propertiesToUpdate.impersonatedBy;
-      }
-
-      // Keep auth metadata timestamps out of partial profile updates.
-      // creationDate is intentionally written only through the full create flow.
-      AppUserService.authManagedDateFields.forEach(field => {
-        if (field in propertiesToUpdate) {
-          this.logger.warn(`[AppUserService] Stripping auth-managed field '${field}' from update payload.`);
-          delete propertiesToUpdate[field];
-        }
-      });
-
-      if (Object.keys(propertiesToUpdate).length > 0) {
-        const userDocRef = doc(this.firestore, 'users', user.uid);
-        promises.push(updateDoc(userDocRef, propertiesToUpdate)
-          .catch(async err => {
-            const code = (err as { code?: string })?.code;
-            const isMissingDoc = code === 'not-found' || code === 'firestore/not-found';
-            if (isMissingDoc) {
-              this.logger.warn('[AppUserService] Main user doc missing; falling back to upsert merge.');
-              await setDoc(userDocRef, propertiesToUpdate, { merge: true });
-              return;
-            }
-
-            this.logger.error('[AppUserService] Main user doc update FAILED', err);
-            throw err;
-          })
-        );
-      }
-
-      try {
-        await Promise.all(promises);
-      } catch (e) {
-        this.logger.error('[AppUserService] One or more updates failed', e);
-        throw e;
+        delete propertiesToUpdate[field];
       }
     });
+
+    if (Object.keys(legalUpdates).length > 0) {
+      promises.push(setDoc(doc(this.firestore, `users/${user.uid}/legal/agreements`), legalUpdates, { merge: true })
+        .catch(err => {
+          this.logger.error('[AppUserService] Legal update FAILED', err);
+          throw err;
+        })
+      );
+    }
+
+    // Keep auth-claim state out of the main profile doc.
+    if ('impersonatedBy' in propertiesToUpdate) {
+      this.logger.warn('[AppUserService] Stripping claim-managed field \'impersonatedBy\' from update payload.');
+      delete propertiesToUpdate.impersonatedBy;
+    }
+
+    // Keep auth metadata timestamps out of partial profile updates.
+    // creationDate is intentionally written only through the full create flow.
+    AppUserService.authManagedDateFields.forEach(field => {
+      if (field in propertiesToUpdate) {
+        this.logger.warn(`[AppUserService] Stripping auth-managed field '${field}' from update payload.`);
+        delete propertiesToUpdate[field];
+      }
+    });
+
+    if (Object.keys(propertiesToUpdate).length > 0) {
+      const userDocRef = doc(this.firestore, 'users', user.uid);
+      promises.push(updateDoc(userDocRef, propertiesToUpdate)
+        .catch(async err => {
+          const code = (err as { code?: string })?.code;
+          const isMissingDoc = code === 'not-found' || code === 'firestore/not-found';
+          if (isMissingDoc) {
+            this.logger.warn('[AppUserService] Main user doc missing; falling back to upsert merge.');
+            await setDoc(userDocRef, propertiesToUpdate, { merge: true });
+            return;
+          }
+
+          this.logger.error('[AppUserService] Main user doc update FAILED', err);
+          throw err;
+        })
+      );
+    }
+
+    try {
+      await Promise.all(promises);
+    } catch (e) {
+      this.logger.error('[AppUserService] One or more updates failed', e);
+      throw e;
+    }
   }
 
   public async updateUser(user: AppUserInterface) {
@@ -650,37 +686,35 @@ export class AppUserService implements OnDestroy {
 
     // Use setDoc with merge: true to handle both update and create (upsert) scenarios
     // This is critical for the "synthetic user" flow in onboarding where the doc might not exist yet.
-    return runInInjectionContext(this.injector, async () => {
-      const promises = [];
-      const userDocRef = doc(this.firestore, 'users', user.uid);
+    const promises = [];
+    const userDocRef = doc(this.firestore, 'users', user.uid);
 
-      // 1. Write Main User Doc
-      promises.push((async () => {
-        try {
-          await setDoc(userDocRef, data, { merge: true });
-        } catch (error) {
-          const code = (error as { code?: string })?.code;
-          const isPermissionDenied = code === 'permission-denied' || code === 'firestore/permission-denied';
-          if (!isPermissionDenied || !('creationDate' in data)) {
-            throw error;
-          }
-
-          // Legacy docs might reject merge writes that attempt to touch creationDate.
-          // Retry once without creationDate so onboarding/upsert can still succeed.
-          const fallbackData = { ...data } as Record<string, unknown>;
-          delete fallbackData.creationDate;
-          this.logger.warn('[AppUserService] Retrying user upsert without creationDate after permission-denied.');
-          await setDoc(userDocRef, fallbackData, { merge: true });
+    // 1. Write Main User Doc
+    promises.push((async () => {
+      try {
+        await setDoc(userDocRef, data, { merge: true });
+      } catch (error) {
+        const code = (error as { code?: string })?.code;
+        const isPermissionDenied = code === 'permission-denied' || code === 'firestore/permission-denied';
+        if (!isPermissionDenied || !('creationDate' in data)) {
+          throw error;
         }
-      })());
 
-      // 2. Write Settings to Subcollection
-      if (user.settings) {
-        promises.push(setDoc(doc(this.firestore, `users/${user.uid}/config/settings`), user.settings, { merge: true }));
+        // Legacy docs might reject merge writes that attempt to touch creationDate.
+        // Retry once without creationDate so onboarding/upsert can still succeed.
+        const fallbackData = { ...data } as Record<string, unknown>;
+        delete fallbackData.creationDate;
+        this.logger.warn('[AppUserService] Retrying user upsert without creationDate after permission-denied.');
+        await setDoc(userDocRef, fallbackData, { merge: true });
       }
+    })());
 
-      await Promise.all(promises);
-    });
+    // 2. Write Settings to Subcollection
+    if (user.settings) {
+      promises.push(setDoc(doc(this.firestore, `users/${user.uid}/config/settings`), user.settings, { merge: true }));
+    }
+
+    await Promise.all(promises);
   }
 
   public async setFreeTier(user: User) {
@@ -774,26 +808,22 @@ export class AppUserService implements OnDestroy {
     const collectionName = serviceNamesToCollectionName[serviceName];
     if (!collectionName) return of([]);
 
-    return runInInjectionContext(this.injector, () => {
-      const collectionRef = collection(this.firestore, collectionName, user.uid, 'tokens');
-      return collectionData(collectionRef).pipe(
-        catchError(() => {
-          return of([]);
-        })
-      );
-    });
+    const collectionRef = collection(this.firestore, collectionName, user.uid, 'tokens');
+    return collectionData(collectionRef).pipe(
+      catchError(() => {
+        return of([]);
+      })
+    );
   }
 
   private getGarminAPITokens(user: User): Observable<any[]> {
-    return runInInjectionContext(this.injector, () => {
-      // Garmin tokens are stored in: garminAPITokens/{userID}/tokens/{garminUserID}
-      const collectionRef = collection(this.firestore, 'garminAPITokens', user.uid, 'tokens');
-      return collectionData(collectionRef).pipe(
-        catchError(() => {
-          return of([]);
-        })
-      );
-    });
+    // Garmin tokens are stored in: garminAPITokens/{userID}/tokens/{garminUserID}
+    const collectionRef = collection(this.firestore, 'garminAPITokens', user.uid, 'tokens');
+    return collectionData(collectionRef).pipe(
+      catchError(() => {
+        return of([]);
+      })
+    );
   }
 
 }

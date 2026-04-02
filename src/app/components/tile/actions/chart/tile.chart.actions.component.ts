@@ -1,4 +1,4 @@
-import { Component, Input, OnInit } from '@angular/core';
+import { Component, Input, OnChanges, OnInit, SimpleChanges } from '@angular/core';
 import { DataDistance } from '@sports-alliance/sports-lib';
 import { DataAerobicTrainingEffect } from '@sports-alliance/sports-lib';
 import { DataDuration } from '@sports-alliance/sports-lib';
@@ -38,6 +38,12 @@ import { DataRPE } from '@sports-alliance/sports-lib';
 import { TileActionsAbstractDirective } from '../tile-actions-abstract.directive';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib';
 import { SpeedUnitsToGradeAdjustedSpeedUnits } from '@sports-alliance/sports-lib';
+import {
+  type DashboardChartType,
+  isDashboardFormChartType,
+  isDashboardRecoveryNowChartType,
+} from '../../../../helpers/dashboard-special-chart-types';
+import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from '../../../../helpers/dashboard-form.helper';
 
 
 @Component({
@@ -47,13 +53,13 @@ import { SpeedUnitsToGradeAdjustedSpeedUnits } from '@sports-alliance/sports-lib
   providers: [],
   standalone: false
 })
-export class TileChartActionsComponent extends TileActionsAbstractDirective implements OnInit {
+export class TileChartActionsComponent extends TileActionsAbstractDirective implements OnInit, OnChanges {
   private static readonly excludedChartTypePatterns = [
     /^bri.*dev/i,
     /^spiral$/i
   ];
 
-  @Input() chartType: ChartTypes;
+  @Input() chartType: DashboardChartType;
   @Input() chartDataType: string;
   @Input() chartDataValueType: ChartDataValueTypes;
   @Input() chartDataCategoryType: ChartDataCategoryTypes;
@@ -61,9 +67,13 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
   @Input() chartOrder: number;
 
   public chartTypes = ChartTypes;
-  public chartTypeOptions = Object.values(ChartTypes).filter(chartType =>
-    !TileChartActionsComponent.excludedChartTypePatterns.some(pattern => pattern.test(`${chartType}`))
-  );
+  public isCuratedRecoveryNowChart = false;
+  public isFormChart = false;
+  public chartTypeOptions = [
+    ...Object.values(ChartTypes).filter(chartType =>
+      !TileChartActionsComponent.excludedChartTypePatterns.some(pattern => pattern.test(`${chartType}`))
+    ),
+  ];
   public chartValueTypes = ChartDataValueTypes;
   public chartCategoryTypes = ChartDataCategoryTypes;
 
@@ -127,8 +137,7 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
         DataRPE.type,
         DataVO2Max.type,
         DataAerobicTrainingEffect.type,
-        DataPeakEPOC.type,
-        DataRecoveryTime.type
+        DataPeakEPOC.type
       ]
     }
   ];
@@ -142,6 +151,21 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
     this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeChartType' });
     const chart = (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order));
     chart.chartType = event.value;
+    if (isDashboardRecoveryNowChartType(event.value)) {
+      chart.name = 'Recovery';
+      chart.dataType = DataRecoveryTime.type;
+      chart.dataCategoryType = ChartDataCategoryTypes.DateType;
+      chart.dataValueType = ChartDataValueTypes.Total;
+      chart.dataTimeInterval = TimeIntervals.Auto;
+      (this.user.settings.dashboardSettings as { dismissedCuratedRecoveryNowTile?: boolean }).dismissedCuratedRecoveryNowTile = false;
+    }
+    if (isDashboardFormChartType(event.value)) {
+      chart.name = 'Form';
+      chart.dataType = DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE;
+      chart.dataCategoryType = ChartDataCategoryTypes.DateType;
+      chart.dataValueType = ChartDataValueTypes.Total;
+      chart.dataTimeInterval = TimeIntervals.Daily;
+    }
     // If its pie show only totals
     if (event.value === ChartTypes.Pie) {
       chart.dataValueType = ChartDataValueTypes.Total;
@@ -173,6 +197,17 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
     return this.persistUserSettings();
   }
 
+  override async deleteTile(event) {
+    if (isDashboardRecoveryNowChartType(this.chartType)) {
+      (this.user.settings.dashboardSettings as { dismissedCuratedRecoveryNowTile?: boolean }).dismissedCuratedRecoveryNowTile = true;
+    }
+    return super.deleteTile(event);
+  }
+
+  ngOnChanges(_: SimpleChanges): void {
+    this.syncChartModeFlags();
+  }
+
   ngOnInit(): void {
     if (!this.user) {
       throw new Error('Component needs user');
@@ -194,6 +229,12 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
     } catch (e) {
       // Noop
     }
+    this.syncChartModeFlags();
+  }
+
+  private syncChartModeFlags(): void {
+    this.isCuratedRecoveryNowChart = isDashboardRecoveryNowChartType(this.chartType);
+    this.isFormChart = isDashboardFormChartType(this.chartType);
   }
 }
 

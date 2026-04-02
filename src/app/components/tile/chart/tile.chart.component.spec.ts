@@ -11,6 +11,11 @@ import {
 } from '@sports-alliance/sports-lib';
 import { describe, expect, it, beforeEach } from 'vitest';
 import { TileChartComponent } from './tile.chart.component';
+import type { DashboardRecoveryNowContext } from '../../../helpers/dashboard-recovery-now.helper';
+import {
+  DASHBOARD_FORM_CHART_TYPE,
+  DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+} from '../../../helpers/dashboard-special-chart-types';
 
 @Component({
   selector: 'app-columns-chart',
@@ -27,6 +32,7 @@ class MockColumnsChartComponent {
   @Input() chartDataValueType?: ChartDataValueTypes;
   @Input() chartDataCategoryType?: ChartDataCategoryTypes;
   @Input() chartDataTimeInterval?: TimeIntervals;
+  @Input() recoveryNow?: DashboardRecoveryNowContext | null;
 }
 
 @Component({
@@ -36,7 +42,7 @@ class MockColumnsChartComponent {
 })
 class MockTileChartActionsComponent {
   @Input() user: any;
-  @Input() chartType?: ChartTypes;
+  @Input() chartType?: any;
   @Input() order?: number;
   @Input() size: any;
   @Input() type: any;
@@ -61,6 +67,34 @@ class MockXYChartComponent {
   @Input() chartDataCategoryType?: ChartDataCategoryTypes;
   @Input() chartDataTimeInterval?: TimeIntervals;
   @Input() vertical = true;
+  @Input() recoveryNow?: DashboardRecoveryNowContext | null;
+}
+
+@Component({
+  selector: 'app-pie-chart',
+  template: '',
+  standalone: false
+})
+class MockPieChartComponent {
+  @Input() isLoading = false;
+  @Input() data: any;
+  @Input() darkTheme = false;
+  @Input() chartDataType?: string;
+  @Input() chartDataValueType?: ChartDataValueTypes;
+  @Input() chartDataCategoryType?: ChartDataCategoryTypes;
+  @Input() chartDataTimeInterval?: TimeIntervals;
+  @Input() recoveryNow?: DashboardRecoveryNowContext | null;
+}
+
+@Component({
+  selector: 'app-form-chart',
+  template: '',
+  standalone: false
+})
+class MockFormChartComponent {
+  @Input() isLoading = false;
+  @Input() data: any;
+  @Input() darkTheme = false;
 }
 
 describe('TileChartComponent', () => {
@@ -69,7 +103,14 @@ describe('TileChartComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [TileChartComponent, MockColumnsChartComponent, MockTileChartActionsComponent, MockXYChartComponent],
+      declarations: [
+        TileChartComponent,
+        MockColumnsChartComponent,
+        MockTileChartActionsComponent,
+        MockXYChartComponent,
+        MockPieChartComponent,
+        MockFormChartComponent,
+      ],
       schemas: [NO_ERRORS_SCHEMA]
     }).compileComponents();
 
@@ -97,6 +138,16 @@ describe('TileChartComponent', () => {
   const getActionsComponent = (): MockTileChartActionsComponent => {
     const actionsDebugElement = fixture.debugElement.query(By.directive(MockTileChartActionsComponent));
     return actionsDebugElement.componentInstance as MockTileChartActionsComponent;
+  };
+
+  const getPieComponent = (): MockPieChartComponent => {
+    const pieDebugElement = fixture.debugElement.query(By.directive(MockPieChartComponent));
+    return pieDebugElement.componentInstance as MockPieChartComponent;
+  };
+
+  const getFormComponent = (): MockFormChartComponent => {
+    const formDebugElement = fixture.debugElement.query(By.directive(MockFormChartComponent));
+    return formDebugElement.componentInstance as MockFormChartComponent;
   };
 
   it('should set vertical=false for LinesHorizontal', () => {
@@ -175,6 +226,58 @@ describe('TileChartComponent', () => {
 
     const columns = getColumnsComponent();
     expect(columns.isLoading).toBe(true);
+  });
+
+  it('should pass recovery context through to line charts', () => {
+    const recoveryNow = { totalSeconds: 3600, endTimeMs: Date.UTC(2024, 0, 1, 12, 0, 0) };
+    component.chartType = ChartTypes.LinesVertical;
+    component.recoveryNow = recoveryNow as any;
+
+    fixture.detectChanges();
+
+    const xy = getXYComponent();
+    expect(xy.recoveryNow).toEqual(recoveryNow);
+  });
+
+  it('should pass recovery context through to columns charts', () => {
+    const recoveryNow = { totalSeconds: 5400, endTimeMs: Date.UTC(2024, 0, 2, 14, 0, 0) };
+    component.chartType = ChartTypes.ColumnsVertical;
+    component.recoveryNow = recoveryNow as any;
+
+    fixture.detectChanges();
+
+    const columns = getColumnsComponent();
+    expect(columns.recoveryNow).toEqual(recoveryNow);
+  });
+
+  it('should pass recovery context through to pie charts', () => {
+    const recoveryNow = { totalSeconds: 4800, endTimeMs: Date.UTC(2024, 0, 3, 10, 0, 0) };
+    component.chartType = ChartTypes.Pie;
+    component.recoveryNow = recoveryNow as any;
+
+    fixture.detectChanges();
+
+    const pie = getPieComponent();
+    expect(pie.recoveryNow).toEqual(recoveryNow);
+  });
+
+  it('should render curated recovery chart type using pie renderer', () => {
+    component.chartType = DASHBOARD_RECOVERY_NOW_CHART_TYPE as any;
+
+    fixture.detectChanges();
+
+    const pie = getPieComponent();
+    expect(pie).toBeTruthy();
+  });
+
+  it('should render form chart type using form renderer', () => {
+    component.chartType = DASHBOARD_FORM_CHART_TYPE as any;
+
+    fixture.detectChanges();
+
+    const form = getFormComponent();
+    expect(form).toBeTruthy();
+    expect(form.data).toBe(component.data);
   });
 
   it('should render a visible drag handle button for desktop drag mode', () => {

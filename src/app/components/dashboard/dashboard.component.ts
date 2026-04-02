@@ -65,14 +65,18 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
     const resolvedData = this.route.snapshot.data['dashboardData'];
     if (resolvedData) {
       const resolvedDataStart = performance.now();
+      // Resolver may skip one-shot prefetch for all-time ranges; in that case we start empty and
+      // keep loading until the first live listener emission arrives.
+      const isEventsPrefetchSkipped = resolvedData.eventsPrefetchSkipped === true;
       this.events = resolvedData.events || [];
       this.user = resolvedData.user;
-      this.initialLiveReconcilePending = !!resolvedData.user;
+      // Reconcile is only needed when resolver and first live emission may duplicate the same payload.
+      this.initialLiveReconcilePending = !!resolvedData.user && !isEventsPrefetchSkipped;
       this.initialResolvedEventsForReconcile = this.events || [];
-      this.initialResolvedUserIDForReconcile = resolvedData.user?.uid || null;
+      this.initialResolvedUserIDForReconcile = isEventsPrefetchSkipped ? null : (resolvedData.user?.uid || null);
       this.targetUser = resolvedData.targetUser;
       this.hasMergedEvents = resolvedData.hasMergedEvents ?? this.events?.some(event => event.isMerge) ?? false;
-      this.isLoading = false;
+      this.isLoading = isEventsPrefetchSkipped;
       this.isInitialized = true;
 
 
@@ -87,7 +91,10 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         }
         this.startOfTheWeek = this.user.settings.unitSettings?.startOfTheWeek;
       }
-      this.logPerf('resolved_dashboard_data', resolvedDataStart, { events: this.events?.length || 0 });
+      this.logPerf('resolved_dashboard_data', resolvedDataStart, {
+        events: this.events?.length || 0,
+        eventsPrefetchSkipped: isEventsPrefetchSkipped,
+      });
     }
 
     this.shouldSearch = false;
@@ -221,6 +228,10 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
                 });
                 return { eventsArray, skipInitialStateUpdate: true };
               }
+              this.logger.info('[perf] dashboard_initial_live_reconcile_mismatch', {
+                userID: user.uid,
+                ...this.buildEventsIdentityMismatchSummary(this.initialResolvedEventsForReconcile, eventsArray),
+              });
             }
 
             return { eventsArray, skipInitialStateUpdate: false };
@@ -364,6 +375,66 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         && previousEvent?.name === currentEvent?.name
         && this.getEventStableStartDate(previousEvent) === this.getEventStableStartDate(currentEvent);
     });
+  }
+
+  private buildEventsIdentityMismatchSummary(
+    previousEvents: EventInterface[] = [],
+    currentEvents: EventInterface[] = [],
+  ): Record<string, unknown> {
+    const previousLength = previousEvents?.length || 0;
+    const currentLength = currentEvents?.length || 0;
+    if (previousLength !== currentLength) {
+      return {
+        mismatchKind: 'length',
+        previousLength,
+        currentLength,
+      };
+    }
+
+    let mismatchedIdCount = 0;
+    let mismatchedNameCount = 0;
+    let mismatchedStartDateCount = 0;
+    let firstMismatchIndex = -1;
+    let firstPreviousID: string | null = null;
+    let firstCurrentID: string | null = null;
+
+    for (let index = 0; index < previousEvents.length; index += 1) {
+      const previousEvent = previousEvents[index];
+      const currentEvent = currentEvents[index];
+      const previousID = this.getEventStableID(previousEvent);
+      const currentID = this.getEventStableID(currentEvent);
+      const hasIdMismatch = previousID !== currentID;
+      const hasNameMismatch = previousEvent?.name !== currentEvent?.name;
+      const hasStartDateMismatch = this.getEventStableStartDate(previousEvent) !== this.getEventStableStartDate(currentEvent);
+
+      if (hasIdMismatch) {
+        mismatchedIdCount += 1;
+      }
+      if (hasNameMismatch) {
+        mismatchedNameCount += 1;
+      }
+      if (hasStartDateMismatch) {
+        mismatchedStartDateCount += 1;
+      }
+
+      if (firstMismatchIndex < 0 && (hasIdMismatch || hasNameMismatch || hasStartDateMismatch)) {
+        firstMismatchIndex = index;
+        firstPreviousID = previousID;
+        firstCurrentID = currentID;
+      }
+    }
+
+    return {
+      mismatchKind: (mismatchedIdCount || mismatchedNameCount || mismatchedStartDateCount) ? 'identity_fields' : 'none',
+      previousLength,
+      currentLength,
+      mismatchedIdCount,
+      mismatchedNameCount,
+      mismatchedStartDateCount,
+      firstMismatchIndex,
+      firstPreviousID,
+      firstCurrentID,
+    };
   }
 
   private getEventStableID(event: EventInterface | undefined): string | null {

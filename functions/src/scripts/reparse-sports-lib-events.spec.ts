@@ -153,6 +153,7 @@ const hoisted = vi.hoisted(() => {
             get: vi.fn(async () => ({ exists: false, data: () => ({}) })),
         };
     });
+    const firestoreSettings = vi.fn();
     const initializeApp = vi.fn();
     const loggerInfo = vi.fn();
     const loggerWarn = vi.fn();
@@ -180,6 +181,7 @@ const hoisted = vi.hoisted(() => {
         collectionGroup,
         resetProcessingCollectionState,
         firestoreDoc,
+        firestoreSettings,
         initializeApp,
         loggerInfo,
         loggerWarn,
@@ -207,6 +209,7 @@ vi.mock('firebase-admin', () => {
         collection: hoisted.collection,
         collectionGroup: hoisted.collectionGroup,
         doc: hoisted.firestoreDoc,
+        settings: hoisted.firestoreSettings,
     }));
     Object.assign(firestoreFn, {
         FieldValue: {
@@ -344,8 +347,23 @@ describe('reparse-sports-lib-events script', () => {
 
         const summary = await runSportsLibReparseScript(['--uid', 'u1', '--execute']);
         expect(summary.completed).toBe(1);
+        expect(summary.parsedEvents).toBe(1);
         expect(hoisted.collectionGroup).not.toHaveBeenCalled();
         expect(hoisted.shouldEventBeReparsed).toHaveBeenCalledTimes(1);
+        expect(hoisted.loggerInfo).toHaveBeenCalledWith(
+            '[sports-lib-reparse-script] Progress',
+            expect.objectContaining({
+                uid: 'u1',
+                eventId: 'e1',
+                outcome: 'completed',
+                parsedEvents: 1,
+            }),
+        );
+    });
+
+    it('should configure Firestore to ignore undefined properties before scanning', async () => {
+        await runSportsLibReparseScript([]);
+        expect(hoisted.firestoreSettings).toHaveBeenCalledWith({ ignoreUndefinedProperties: true });
     });
 
     it('single UID mode should support --uid=<uid> and --limit=<n> in execution path', async () => {
@@ -716,10 +734,20 @@ describe('reparse-sports-lib-events script', () => {
 
         const summary = await runSportsLibReparseScript(['--execute']);
         expect(summary.failed).toBe(1);
+        expect(summary.parsedEvents).toBe(1);
         expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
             status: 'failed',
             reason: 'REPARSE_FAILED',
         }));
+        expect(hoisted.loggerInfo).toHaveBeenCalledWith(
+            '[sports-lib-reparse-script] Progress',
+            expect.objectContaining({
+                uid: 'u1',
+                eventId: 'e1',
+                outcome: 'failed',
+                parsedEvents: 1,
+            }),
+        );
         expect(hoisted.loggerError).toHaveBeenCalledWith(
             '[sports-lib-reparse-script] Reparse failed',
             expect.objectContaining({

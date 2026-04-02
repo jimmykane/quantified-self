@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { Firestore, deleteDoc, doc, getDoc } from '@angular/fire/firestore';
+import { Firestore, deleteDoc, doc, getDoc } from 'app/firebase/firestore';
 import { describe, beforeEach, expect, it, vi } from 'vitest';
 import {
   ActivityTypes,
@@ -21,8 +21,8 @@ import {
   AiInsightsLatestSnapshotService,
 } from './ai-insights-latest-snapshot.service';
 
-vi.mock('@angular/fire/firestore', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@angular/fire/firestore')>();
+vi.mock('app/firebase/firestore', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('app/firebase/firestore')>();
   class MockFirestore {}
 
     return {

@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
-import { FirebaseApp } from '@angular/fire/app';
-import { Functions, connectFunctionsEmulator, getFunctions, httpsCallable } from '@angular/fire/functions';
+import { FirebaseApp } from 'app/firebase/app';
+import { Functions, connectFunctionsEmulator, getFunctions, httpsCallable } from 'app/firebase/functions';
+import type { Functions as FirebaseFunctions } from 'firebase/functions';
 import { environment } from '../../environments/environment';
 import { FunctionName, FUNCTIONS_MANIFEST } from '@shared/functions-manifest';
 
@@ -11,7 +12,7 @@ export class AppFunctionsService {
     private app = inject(FirebaseApp);
     private static readonly LOCAL_FUNCTIONS_EMULATOR_HOST = '127.0.0.1';
     private static readonly LOCAL_FUNCTIONS_EMULATOR_PORT = 5001;
-    private functionsByRegion = new Map<string, Functions>();
+    private functionsByRegion = new Map<string, FirebaseFunctions>();
     /**
      * Map of pre-initialized callable functions.
      * We initialize these in the constructor to capture the current Injection Context.
@@ -40,7 +41,7 @@ export class AppFunctionsService {
         return callable(data);
     }
 
-    private getOrCreateFunctionsForRegion(region: string): Functions {
+    private getOrCreateFunctionsForRegion(region: string): FirebaseFunctions {
         const existing = this.functionsByRegion.get(region);
         if (existing) {
             return existing;
