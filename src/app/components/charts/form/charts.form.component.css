@@ -20,7 +20,7 @@
 .form-status-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 12px;
   margin-bottom: 8px;
 }
@@ -47,12 +47,6 @@
 
 .form-status-title[data-status='fresh'] {
   color: var(--mat-sys-tertiary);
-}
-
-.form-mode-toggle {
-  --mat-standard-button-toggle-height: 30px;
-  --mat-standard-button-toggle-shape: 999px;
-  --mat-standard-button-toggle-label-text-size: 0.72rem;
 }
 
 .form-stats-row {

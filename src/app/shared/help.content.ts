@@ -117,9 +117,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Add the dashboard **Form** tile from chart type options.
 - The tile derives daily load from **Training Stress Score** and falls back to **Power Training Stress Score** for backward compatibility.
 - It shows three headline stats: **Fitness (CTL)**, **Fatigue (ATL)**, and **Form (TSB)**.
-- The tile includes a mode toggle:
-  - **Same-day** uses CTL - ATL for each day.
-  - **Prior-day** shows readiness using the prior day CTL - ATL.
+- **Form (TSB)** is shown as **prior-day readiness** using the prior day CTL - ATL.
 - The status title updates dynamically from current Form bands:
   - **High fatigue** at very negative Form values,
   - **Building fitness** while carrying meaningful load,

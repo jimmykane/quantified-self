@@ -61,7 +61,6 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Form tile (CTL / ATL / TSB)');
     expect(gettingStartedSection?.content).toContain('Training Stress Score');
     expect(gettingStartedSection?.content).toContain('Form (TSB)');
-    expect(gettingStartedSection?.content).toContain('Same-day');
-    expect(gettingStartedSection?.content).toContain('Prior-day');
+    expect(gettingStartedSection?.content).toContain('prior-day readiness');
   });
 });

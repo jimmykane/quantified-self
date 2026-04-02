@@ -31,7 +31,6 @@ import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../he
 import { formatDashboardDateByInterval } from '../../../helpers/dashboard-chart-data.helper';
 import {
   buildDashboardFormRenderPoints,
-  DashboardFormMode,
   DashboardFormPoint,
   resolveDashboardFormLatestPoint,
   resolveDashboardFormRenderTimeInterval,
@@ -49,6 +48,8 @@ type ChartOption = Parameters<EChartsType['setOption']>[0];
   standalone: false,
 })
 export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy {
+  private static readonly FORM_MODE = 'prior-day' as const;
+
   @Input() darkTheme = false;
   @Input() isLoading = false;
   @Input() set data(value: DashboardFormPoint[] | null | undefined) {
@@ -62,12 +63,10 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
 
   private readonly chartHost: EChartsHostController;
   private readonly pointsSignal = signal<DashboardFormPoint[]>([]);
-  private readonly modeSignal = signal<DashboardFormMode>('same-day');
 
   readonly hasData = computed(() => this.pointsSignal().length > 0);
-  readonly formMode = computed(() => this.modeSignal());
   readonly latestPoint = computed(() => resolveDashboardFormLatestPoint(this.pointsSignal()));
-  readonly selectedFormValue = computed(() => resolveDashboardFormValue(this.latestPoint(), this.modeSignal()));
+  readonly selectedFormValue = computed(() => resolveDashboardFormValue(this.latestPoint(), ChartsFormComponent.FORM_MODE));
   readonly status = computed(() => resolveDashboardFormStatus(this.selectedFormValue()));
   readonly headlineStats = computed(() => {
     const latest = this.latestPoint();
@@ -107,17 +106,6 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
     this.chartHost.dispose();
   }
 
-  onFormModeChange(mode: DashboardFormMode): void {
-    if (mode !== 'same-day' && mode !== 'prior-day') {
-      return;
-    }
-    if (mode === this.modeSignal()) {
-      return;
-    }
-    this.modeSignal.set(mode);
-    void this.refreshChart();
-  }
-
   private async refreshChart(): Promise<void> {
     const chart = await this.chartHost.init(
       this.chartDiv?.nativeElement,
@@ -151,7 +139,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
     const labels = points.map(point => formatDashboardDateByInterval(point.time, renderTimeInterval));
     const ctlValues = points.map(point => point.ctl);
     const atlValues = points.map(point => point.atl);
-    const formValues = points.map(point => resolveDashboardFormValue(point, this.modeSignal()));
+    const formValues = points.map(point => resolveDashboardFormValue(point, ChartsFormComponent.FORM_MODE));
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
 
     const topAxisConfig = buildDashboardValueAxisConfig([...ctlValues, ...atlValues]);
@@ -368,8 +356,8 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
       return '';
     }
 
-    const formValue = resolveDashboardFormValue(point, this.modeSignal());
-    const formLabel = this.modeSignal() === 'prior-day' ? 'Form (TSB prior-day)' : 'Form (TSB)';
+    const formValue = resolveDashboardFormValue(point, ChartsFormComponent.FORM_MODE);
+    const formLabel = 'Form (TSB prior-day)';
 
     return [
       formatDashboardDateByInterval(point.time, renderTimeInterval),

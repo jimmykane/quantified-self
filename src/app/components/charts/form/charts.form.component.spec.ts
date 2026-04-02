@@ -138,7 +138,7 @@ describe('ChartsFormComponent', () => {
     return mockLoader.setOption.mock.calls.at(-1)?.[1] as Record<string, any>;
   };
 
-  it('should initialize echarts with two panes and default same-day form series', async () => {
+  it('should initialize echarts with two panes and default prior-day form series', async () => {
     fixture.detectChanges();
     await waitForChartStabilization();
 
@@ -156,22 +156,6 @@ describe('ChartsFormComponent', () => {
     expect(topGrid.height).toBe(bottomGrid.height);
     expect(topGrid.outerBoundsMode).toBe('none');
     expect(bottomGrid.outerBoundsMode).toBe('none');
-    expect(formSeries.data).toEqual(points.map(point => point.formSameDay));
-    expect(component.formMode()).toBe('same-day');
-  });
-
-  it('should switch to prior-day mode and rerender the form series', async () => {
-    fixture.detectChanges();
-    await waitForChartStabilization();
-
-    component.onFormModeChange('prior-day');
-    fixture.detectChanges();
-    await waitForChartStabilization();
-
-    const option = getLastOption();
-    const formSeries = option.series.find((entry: { name?: string }) => entry.name === 'Form (TSB)');
-
-    expect(component.formMode()).toBe('prior-day');
     expect(formSeries.data).toEqual(points.map(point => point.formPriorDay));
   });
 
@@ -183,7 +167,7 @@ describe('ChartsFormComponent', () => {
     expect(component.headlineStats()).toEqual({
       fitness: '11',
       fatigue: '12',
-      form: '-2',
+      form: '-3',
     });
   });
 
