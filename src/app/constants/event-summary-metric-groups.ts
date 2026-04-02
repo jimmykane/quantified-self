@@ -398,14 +398,6 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
     ],
   },
   {
-    id: 'device',
-    label: 'Device',
-    metricTypes: [
-      ...DEVICE_EXTRA_TYPE_STRINGS,
-      ...DEVICE_SIGNAL_EXTRA_TYPE_STRINGS,
-    ],
-  },
-  {
     id: 'physiological',
     label: 'Physiological',
     metricTypes: [
@@ -424,6 +416,14 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
     id: 'other',
     label: 'Other',
     metricTypes: [],
+  },
+  {
+    id: 'device',
+    label: 'Device',
+    metricTypes: [
+      ...DEVICE_EXTRA_TYPE_STRINGS,
+      ...DEVICE_SIGNAL_EXTRA_TYPE_STRINGS,
+    ],
   },
 ];
 
