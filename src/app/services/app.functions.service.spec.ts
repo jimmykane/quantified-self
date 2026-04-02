@@ -3,12 +3,15 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { AppFunctionsService } from './app.functions.service';
 import { Functions, connectFunctionsEmulator, getFunctions, httpsCallable } from 'app/firebase/functions';
 import { FirebaseApp } from 'app/firebase/app';
+import { AppCheckReadinessService } from './app-check-readiness.service';
 
 const mocks = vi.hoisted(() => {
     const callableSpy = vi.fn().mockResolvedValue({ data: 'success' });
     const httpsCallableMock = vi.fn(() => callableSpy);
     const connectFunctionsEmulatorMock = vi.fn();
     const getFunctionsMock = vi.fn((_app: any, region: string) => ({ region }));
+    const ensureReadyMock = vi.fn().mockResolvedValue(undefined);
+    const isConfiguredMock = vi.fn().mockReturnValue(true);
     let localhost = false;
     let useFunctionsEmulator = false;
     return {
@@ -16,6 +19,8 @@ const mocks = vi.hoisted(() => {
         httpsCallableMock,
         connectFunctionsEmulatorMock,
         getFunctionsMock,
+        ensureReadyMock,
+        isConfiguredMock,
         getLocalhost: () => localhost,
         getUseFunctionsEmulator: () => useFunctionsEmulator,
         setLocalhost: (value: boolean) => {
@@ -59,14 +64,18 @@ vi.mock('@shared/functions-manifest', () => ({
 describe('AppFunctionsService', () => {
     let service: AppFunctionsService;
     let mockApp: any;
+    let appCheckReadinessMock: Pick<AppCheckReadinessService, 'ensureReady' | 'isConfigured'>;
 
     function configureTestingModule(): AppFunctionsService {
+        const providers: any[] = [
+            AppFunctionsService,
+            { provide: Functions, useValue: { region: 'europe-west2-instance' } },
+            { provide: FirebaseApp, useValue: mockApp },
+            { provide: AppCheckReadinessService, useValue: appCheckReadinessMock }
+        ];
+
         TestBed.configureTestingModule({
-            providers: [
-                AppFunctionsService,
-                { provide: Functions, useValue: { region: 'europe-west2-instance' } },
-                { provide: FirebaseApp, useValue: mockApp }
-            ]
+            providers
         });
         return TestBed.inject(AppFunctionsService);
     }
@@ -76,10 +85,18 @@ describe('AppFunctionsService', () => {
         mocks.connectFunctionsEmulatorMock.mockClear();
         mocks.httpsCallableMock.mockClear();
         mocks.callableSpy.mockClear();
+        mocks.ensureReadyMock.mockClear();
+        mocks.ensureReadyMock.mockResolvedValue(undefined);
+        mocks.isConfiguredMock.mockClear();
+        mocks.isConfiguredMock.mockReturnValue(true);
         mocks.setLocalhost(false);
         mocks.setUseFunctionsEmulator(false);
 
         mockApp = { name: '[DEFAULT]' };
+        appCheckReadinessMock = {
+            ensureReady: mocks.ensureReadyMock,
+            isConfigured: mocks.isConfiguredMock,
+        };
 
         service = configureTestingModule();
     });
@@ -102,7 +119,62 @@ describe('AppFunctionsService', () => {
         await service.call('defaultRegionFunc' as any);
 
         // Check our stable spy
+        expect(mocks.ensureReadyMock).toHaveBeenCalledWith();
         expect(mocks.callableSpy).toHaveBeenCalled();
+    });
+
+    it('should wait for App Check readiness only once across successful calls', async () => {
+        await service.call('defaultRegionFunc' as any);
+        await service.call('defaultRegionFunc' as any);
+
+        expect(mocks.ensureReadyMock).toHaveBeenCalledTimes(2);
+        expect(mocks.callableSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('should not issue the callable when App Check readiness fails', async () => {
+        mocks.ensureReadyMock.mockRejectedValueOnce({ message: 'App Check bootstrap failed' });
+
+        await expect(service.call('defaultRegionFunc' as any)).rejects.toMatchObject({ message: 'App Check bootstrap failed' });
+        expect(mocks.callableSpy).not.toHaveBeenCalled();
+    });
+
+    it('should retry once after an App Check verification failure', async () => {
+        mocks.callableSpy
+            .mockRejectedValueOnce({
+                code: 'functions/failed-precondition',
+                message: 'App Check verification failed.'
+            })
+            .mockResolvedValueOnce({ data: 'retried-success' });
+
+        await expect(service.call('defaultRegionFunc' as any)).resolves.toEqual({ data: 'retried-success' });
+
+        expect(mocks.ensureReadyMock).toHaveBeenNthCalledWith(1);
+        expect(mocks.ensureReadyMock).toHaveBeenNthCalledWith(2, true);
+        expect(mocks.callableSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('should not retry non App Check callable failures', async () => {
+        mocks.callableSpy.mockRejectedValueOnce({
+            code: 'functions/internal',
+            message: 'Unexpected failure'
+        });
+
+        await expect(service.call('defaultRegionFunc' as any)).rejects.toMatchObject({
+            code: 'functions/internal',
+            message: 'Unexpected failure'
+        });
+
+        expect(mocks.ensureReadyMock).toHaveBeenCalledTimes(1);
+        expect(mocks.callableSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should skip App Check coordination when the provider is unavailable', async () => {
+        mocks.isConfiguredMock.mockReturnValue(false);
+
+        await service.call('defaultRegionFunc' as any);
+
+        expect(mocks.ensureReadyMock).toHaveBeenCalledTimes(1);
+        expect(mocks.callableSpy).toHaveBeenCalledTimes(1);
     });
 
     it('should throw error for invalid function key', async () => {
