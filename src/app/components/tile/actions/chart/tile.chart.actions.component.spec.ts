@@ -116,12 +116,12 @@ describe('TileChartActionsComponent', () => {
         expect(component.chartTypeOptions.some(option => /^spiral$/i.test(option))).toBe(false);
     });
 
-    it('should expose curated recovery chart type in chart type options', () => {
-        expect(component.chartTypeOptions).toContain(DASHBOARD_RECOVERY_NOW_CHART_TYPE);
+    it('should not expose curated recovery chart type in chart type options', () => {
+        expect(component.chartTypeOptions).not.toContain(DASHBOARD_RECOVERY_NOW_CHART_TYPE);
     });
 
-    it('should expose form chart type in chart type options', () => {
-        expect(component.chartTypeOptions).toContain(DASHBOARD_FORM_CHART_TYPE);
+    it('should not expose form chart type in chart type options', () => {
+        expect(component.chartTypeOptions).not.toContain(DASHBOARD_FORM_CHART_TYPE);
     });
 
     it('should expose move boundaries for the first tile', () => {
@@ -209,5 +209,12 @@ describe('TileChartActionsComponent', () => {
         const template = readFileSync(templatePath, 'utf8');
 
         expect(template).toContain('!isCuratedRecoveryNowChart && !isFormChart');
+    });
+
+    it('should hide add-tile action for form chart mode', () => {
+        const templatePath = resolve(process.cwd(), 'src/app/components/tile/actions/chart/tile.chart.actions.component.html');
+        const template = readFileSync(templatePath, 'utf8');
+
+        expect(template).toContain('tiles.length <= 11 && !isCuratedRecoveryNowChart && !isFormChart');
     });
 });

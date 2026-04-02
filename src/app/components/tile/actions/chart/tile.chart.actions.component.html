@@ -3,7 +3,7 @@
   <mat-icon>more_vert</mat-icon>
 </button>
 <mat-menu #chartOptions="matMenu" class="qs-menu-panel qs-menu-panel-form qs-config-menu">
-  @if (user.settings.dashboardSettings.tiles.length <= 11 && !isCuratedRecoveryNowChart) { <app-tile-actions-header (add)="addNewTile($event)">
+  @if (user.settings.dashboardSettings.tiles.length <= 11 && !isCuratedRecoveryNowChart && !isFormChart) { <app-tile-actions-header (add)="addNewTile($event)">
     </app-tile-actions-header>
     }
     @if (!isCuratedRecoveryNowChart) {

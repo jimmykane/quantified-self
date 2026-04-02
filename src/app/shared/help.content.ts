@@ -106,7 +106,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 ### Recovery tile summary
 
 - The curated **Recovery** pie tile is optional and not added automatically.
-- You can add it from tile chart type options as **RecoveryNowPie**.
+- New **Recovery** tiles are temporarily disabled from chart type options.
 - The tile shows live recovery split between **Left now** and **Elapsed**.
 - When recovery data is available for your current dashboard filters, the summary shows **Recovery Left Now** and **Total recovery** summed across all recovery-enabled events in the filtered range.
 - Remaining recovery updates every minute while the tile is visible.
@@ -114,7 +114,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 ### Form tile (CTL / ATL / TSB)
 
-- Add the dashboard **Form** tile from chart type options.
+- New dashboard **Form** tiles are temporarily disabled from chart type options.
 - The tile derives daily load from **Training Stress Score** and falls back to **Power Training Stress Score** for backward compatibility.
 - It shows three headline stats: **Fitness (CTL)**, **Fatigue (ATL)**, and **Form (TSB)**.
 - **Form (TSB)** is shown as **prior-day readiness** using the prior day CTL - ATL.

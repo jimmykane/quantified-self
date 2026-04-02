@@ -39,8 +39,6 @@ import { TileActionsAbstractDirective } from '../tile-actions-abstract.directive
 import { DataRecoveryTime } from '@sports-alliance/sports-lib';
 import { SpeedUnitsToGradeAdjustedSpeedUnits } from '@sports-alliance/sports-lib';
 import {
-  DASHBOARD_FORM_CHART_TYPE,
-  DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   type DashboardChartType,
   isDashboardFormChartType,
   isDashboardRecoveryNowChartType,
@@ -75,8 +73,6 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
     ...Object.values(ChartTypes).filter(chartType =>
       !TileChartActionsComponent.excludedChartTypePatterns.some(pattern => pattern.test(`${chartType}`))
     ),
-    DASHBOARD_RECOVERY_NOW_CHART_TYPE,
-    DASHBOARD_FORM_CHART_TYPE,
   ];
   public chartValueTypes = ChartDataValueTypes;
   public chartCategoryTypes = ChartDataCategoryTypes;
