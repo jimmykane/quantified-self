@@ -15,6 +15,7 @@ import {
     type EnsureDerivedMetricsResponse,
 } from '../../../shared/derived-metrics';
 import { enqueueDerivedMetricsTask } from '../shared/cloud-tasks';
+import { getDerivedMetricsUidAllowlistEnvKey, isDerivedMetricsUidAllowed } from './derived-metrics-uid-gate';
 
 const FORM_STAT_TYPE = 'Training Stress Score';
 const LEGACY_FORM_STAT_TYPE = 'Power Training Stress Score';
@@ -344,6 +345,19 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
     requestedMetricKinds: readonly unknown[] | null | undefined,
 ): Promise<EnsureDerivedMetricsResponse> {
     const metricKinds = normalizeDerivedMetricKinds(requestedMetricKinds);
+    if (!isDerivedMetricsUidAllowed(uid)) {
+        logger.info('[derived-metrics] Skipping dirty-mark enqueue due to UID allowlist gate.', {
+            uid,
+            envKey: getDerivedMetricsUidAllowlistEnvKey(),
+        });
+        return {
+            accepted: false,
+            queued: false,
+            generation: null,
+            metricKinds,
+        };
+    }
+
     const coordinatorRef = getCoordinatorDocRef(uid);
     const nowMs = Date.now();
 
