@@ -578,6 +578,39 @@ describe('sports-lib-reparse.service', () => {
         expect(firstKeys.get('Ride|2026-01-01T12:00:00.000Z')).toMatch(/^[a-f0-9]{64}:/);
     });
 
+    it('parseFromOriginalFilesStrict should leave keys unset for unresolved indistinguishable duplicates', async () => {
+        const buildDuplicateActivity = () => ({
+            setID: vi.fn(),
+            getID: vi.fn(() => null),
+            creator: { name: 'same-device' },
+            startDate: new Date('2026-01-01T10:00:00.000Z'),
+            endDate: new Date('2026-01-01T10:30:00.000Z'),
+            type: 'Run',
+            getStat: vi.fn((statType: string) => {
+                if (statType === 'duration') {
+                    return { getValue: () => 1800 };
+                }
+                if (statType === 'distance') {
+                    return { getValue: () => 5000 };
+                }
+                return null;
+            }),
+        });
+
+        const parsedEvent = {
+            setID: vi.fn(),
+            getActivities: vi.fn(() => [buildDuplicateActivity(), buildDuplicateActivity()]),
+        };
+        hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent as any);
+
+        const result = await parseFromOriginalFilesStrict([{ path: 'users/u1/events/e1/original.fit' }]);
+        const activities = result.finalEvent.getActivities() as any[];
+
+        expect(activities).toHaveLength(2);
+        expect(activities[0].sourceActivityKey).toBeUndefined();
+        expect(activities[1].sourceActivityKey).toBeUndefined();
+    });
+
     it('parseFromOriginalFilesStrict should fail for unsupported extensions', async () => {
         await expect(parseFromOriginalFilesStrict([
             { path: 'unsupported.zip' }
@@ -828,8 +861,9 @@ describe('sports-lib-reparse.service', () => {
     });
 
     it('assignReimportActivityIds should always assign deterministic ids by sourceActivityKey', async () => {
-        const sourceKeyOne = `${'a'.repeat(64)}:sig:1`;
-        const sourceKeyTwo = `${'b'.repeat(64)}:sig:2`;
+        const combinedHash = 'a'.repeat(64);
+        const sourceKeyOne = `${combinedHash}:${'1'.repeat(64)}:0`;
+        const sourceKeyTwo = `${combinedHash}:${'2'.repeat(64)}:0`;
         const activityOne = {
             setID: vi.fn(),
             getID: vi.fn(() => 'old-id-1'),
@@ -844,7 +878,9 @@ describe('sports-lib-reparse.service', () => {
             getActivities: () => [activityOne, activityTwo],
         } as any;
 
-        await assignReimportActivityIds(parsedEvent, 'event-1');
+        await assignReimportActivityIds(parsedEvent, 'event-1', {
+            combinedSourceContentHash: combinedHash,
+        });
 
         expect(hoisted.mockGenerateActivityIDFromSourceKey).toHaveBeenNthCalledWith(1, 'event-1', sourceKeyOne);
         expect(hoisted.mockGenerateActivityIDFromSourceKey).toHaveBeenNthCalledWith(2, 'event-1', sourceKeyTwo);
@@ -853,8 +889,9 @@ describe('sports-lib-reparse.service', () => {
     });
 
     it('assignReimportActivityIds should keep key-based ids stable even when parsed order changes', async () => {
-        const sourceKeyA = `${'c'.repeat(64)}:sig:a`;
-        const sourceKeyB = `${'d'.repeat(64)}:sig:b`;
+        const combinedHash = 'c'.repeat(64);
+        const sourceKeyA = `${combinedHash}:${'a'.repeat(64)}:0`;
+        const sourceKeyB = `${combinedHash}:${'b'.repeat(64)}:0`;
         const firstOrder = [
             { setID: vi.fn(), sourceActivityKey: sourceKeyA },
             { setID: vi.fn(), sourceActivityKey: sourceKeyB },
@@ -864,8 +901,12 @@ describe('sports-lib-reparse.service', () => {
             { setID: vi.fn(), sourceActivityKey: sourceKeyA },
         ];
 
-        await assignReimportActivityIds({ getActivities: () => firstOrder } as any, 'event-2');
-        await assignReimportActivityIds({ getActivities: () => secondOrder } as any, 'event-2');
+        await assignReimportActivityIds({ getActivities: () => firstOrder } as any, 'event-2', {
+            combinedSourceContentHash: combinedHash,
+        });
+        await assignReimportActivityIds({ getActivities: () => secondOrder } as any, 'event-2', {
+            combinedSourceContentHash: combinedHash,
+        });
 
         const idsByKeyFirst = new Map(firstOrder.map((activity: any) => [activity.sourceActivityKey, activity.setID.mock.calls[0][0]]));
         const idsByKeySecond = new Map(secondOrder.map((activity: any) => [activity.sourceActivityKey, activity.setID.mock.calls[0][0]]));
@@ -874,20 +915,91 @@ describe('sports-lib-reparse.service', () => {
         expect(idsByKeyFirst.get(sourceKeyB)).toBe(idsByKeySecond.get(sourceKeyB));
     });
 
-    it('assignReimportActivityIds should fail when sourceActivityKey is missing or non-SHA', async () => {
-        const missingKeyEvent = {
-            getActivities: () => [{ setID: vi.fn() }],
-        } as any;
-        await expect(assignReimportActivityIds(missingKeyEvent, 'event-3'))
-            .rejects
-            .toThrow('Missing or invalid SHA-derived sourceActivityKey');
+    it('assignReimportActivityIds should restamp missing or non-SHA keys before assigning ids', async () => {
+        const combinedHash = 'd'.repeat(64);
+        const parsedActivities = [
+            {
+                setID: vi.fn(),
+                startDate: new Date('2026-01-01T10:00:00.000Z'),
+                endDate: new Date('2026-01-01T10:30:00.000Z'),
+                type: 'Run',
+                creator: { name: 'first' },
+                getStat: vi.fn(() => null),
+            },
+            {
+                setID: vi.fn(),
+                sourceActivityKey: 'legacy-key',
+                startDate: new Date('2026-01-01T12:00:00.000Z'),
+                endDate: new Date('2026-01-01T12:30:00.000Z'),
+                type: 'Ride',
+                creator: { name: 'second' },
+                getStat: vi.fn(() => null),
+            },
+        ];
 
-        const invalidKeyEvent = {
-            getActivities: () => [{ setID: vi.fn(), sourceActivityKey: 'legacy-key' }],
+        await assignReimportActivityIds({
+            getActivities: () => parsedActivities,
+        } as any, 'event-3', {
+            combinedSourceContentHash: combinedHash,
+        });
+
+        expect(hoisted.mockGenerateActivityIDFromSourceKey).toHaveBeenCalledTimes(2);
+        const firstKey = hoisted.mockGenerateActivityIDFromSourceKey.mock.calls[0]?.[1] as string;
+        const secondKey = hoisted.mockGenerateActivityIDFromSourceKey.mock.calls[1]?.[1] as string;
+        expect(firstKey).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}:[0-9]+$/);
+        expect(secondKey).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}:[0-9]+$/);
+        expect(firstKey.startsWith(`${combinedHash}:`)).toBe(true);
+        expect(secondKey.startsWith(`${combinedHash}:`)).toBe(true);
+    });
+
+    it('assignReimportActivityIds should fail when combinedSourceContentHash is missing or invalid', async () => {
+        const missingHashEvent = {
+            getActivities: () => [{ setID: vi.fn(), sourceActivityKey: `${'e'.repeat(64)}:${'1'.repeat(64)}:0` }],
         } as any;
-        await expect(assignReimportActivityIds(invalidKeyEvent, 'event-3'))
+        await expect(assignReimportActivityIds(missingHashEvent, 'event-3', {
+            combinedSourceContentHash: '',
+        }))
             .rejects
-            .toThrow('Missing or invalid SHA-derived sourceActivityKey');
+            .toThrow('Missing or invalid combinedSourceContentHash');
+
+        const invalidHashEvent = {
+            getActivities: () => [{ setID: vi.fn(), sourceActivityKey: `${'f'.repeat(64)}:${'2'.repeat(64)}:0` }],
+        } as any;
+        await expect(assignReimportActivityIds(invalidHashEvent, 'event-3', {
+            combinedSourceContentHash: 'not-a-sha',
+        }))
+            .rejects
+            .toThrow('Missing or invalid combinedSourceContentHash');
+    });
+
+    it('assignReimportActivityIds should fail on strict ambiguity after restamp', async () => {
+        const combinedHash = 'f'.repeat(64);
+        const ambiguousActivities = [
+            {
+                setID: vi.fn(),
+                startDate: new Date('2026-01-01T10:00:00.000Z'),
+                endDate: new Date('2026-01-01T10:30:00.000Z'),
+                type: 'Run',
+                creator: { name: 'same' },
+                getStat: vi.fn(() => null),
+            },
+            {
+                setID: vi.fn(),
+                startDate: new Date('2026-01-01T10:00:00.000Z'),
+                endDate: new Date('2026-01-01T10:30:00.000Z'),
+                type: 'Run',
+                creator: { name: 'same' },
+                getStat: vi.fn(() => null),
+            },
+        ];
+
+        await expect(assignReimportActivityIds({
+            getActivities: () => ambiguousActivities,
+        } as any, 'event-3', {
+            combinedSourceContentHash: combinedHash,
+        }))
+            .rejects
+            .toThrow('Ambiguous sourceActivityKey stamping');
     });
 
     it('persistReparsedEvent should delete stale activities and write processing metadata', async () => {
@@ -1325,6 +1437,72 @@ describe('sports-lib-reparse.service', () => {
                 unmatchedExisting: expect.any(Array),
             }),
         );
+    });
+
+    it('reparseEventFromOriginalFiles should fail fast when duplicate fingerprints remain ambiguous', async () => {
+        const sharedStart = new Date('2026-01-01T10:00:00.000Z');
+        const sharedEnd = new Date('2026-01-01T10:30:00.000Z');
+        const buildDuplicateActivity = () => ({
+            getID: vi.fn(() => null),
+            setID: vi.fn(),
+            creator: { name: 'same-device' },
+            startDate: sharedStart,
+            endDate: sharedEnd,
+            type: 'Run',
+            getStat: vi.fn((statType: string) => {
+                if (statType === 'duration') {
+                    return { getValue: () => 1800 };
+                }
+                if (statType === 'distance') {
+                    return { getValue: () => 5000 };
+                }
+                return null;
+            }),
+        });
+
+        const parsedEvent = makeEvent({
+            getActivities: vi.fn(() => [buildDuplicateActivity(), buildDuplicateActivity()]),
+        });
+        hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent);
+
+        await expect(
+            reparseEventFromOriginalFiles('u1', 'e1', {
+                eventData: {
+                    originalFile: { path: 'users/u1/events/e1/original.fit' },
+                },
+                activityDocs: [
+                    {
+                        id: 'old-a',
+                        data: () => ({
+                            sourceActivityKey: `${'a'.repeat(64)}:legacy-signature:0`,
+                            creator: { name: 'same-device' },
+                            startDate: sharedStart,
+                            endDate: sharedEnd,
+                            type: 'Run',
+                            stats: {
+                                duration: { _value: 1800 },
+                                distance: { _value: 5000 },
+                            },
+                        }),
+                    } as any,
+                    {
+                        id: 'old-b',
+                        data: () => ({
+                            sourceActivityKey: `${'b'.repeat(64)}:legacy-signature:1`,
+                            creator: { name: 'same-device' },
+                            startDate: sharedStart,
+                            endDate: sharedEnd,
+                            type: 'Run',
+                            stats: {
+                                duration: { _value: 1800 },
+                                distance: { _value: 5000 },
+                            },
+                        }),
+                    } as any,
+                ],
+                targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,
+            }),
+        ).rejects.toThrow('Ambiguous sourceActivityKey stamping');
     });
 
     it('reparseEventFromOriginalFiles should run activity-level sports-lib regeneration in regenerate mode', async () => {

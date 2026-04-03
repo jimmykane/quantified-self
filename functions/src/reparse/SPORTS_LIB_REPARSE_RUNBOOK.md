@@ -140,7 +140,7 @@ Preserved user-editable fields:
 Activity identity strategy:
 - regenerate activity IDs deterministically on every reparse (eventId + sourceActivityKey)
 - derive sourceActivityKey from source-content hash + activity signature (order-independent)
-- fail fast if a parsed activity is missing a SHA-derived sourceActivityKey (no fallback key generation)
+- `assignReimportActivityIds(...)` performs strict sourceActivityKey restamping and fails fast if any activity still lacks a valid SHA-derived key (no fallback key generation)
 - use deterministic matching for creator-name carryover (prefer sourceActivityKey, then signatures)
 - delete stale old activities not present in the new parsed ID set
 

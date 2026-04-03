@@ -90,6 +90,7 @@ export interface ParseFromSourceResult {
     parsedEvents: EventInterface[];
     sourceFilesCount: number;
     resolvedSourceBuckets: ResolvedSourceBucketInfo[];
+    combinedSourceContentHash: string;
 }
 
 interface ResolvedSourceBucketInfo {
@@ -437,13 +438,16 @@ export async function parseFromOriginalFilesStrict(sourceFiles: SourceFileMeta[]
     const combinedSourceContentHash = createHash('sha256')
         .update(sourceContentHashes.slice().sort().join('|'))
         .digest('hex');
-    stampSourceActivityKeysForActivities(finalEvent.getActivities() as ActivityIdentityLike[], combinedSourceContentHash);
+    stampSourceActivityKeysForActivities(finalEvent.getActivities() as ActivityIdentityLike[], combinedSourceContentHash, {
+        strictAmbiguity: false,
+    });
 
     return {
         finalEvent,
         parsedEvents,
         sourceFilesCount: sourceFiles.length,
         resolvedSourceBuckets,
+        combinedSourceContentHash,
     };
 }
 
@@ -549,12 +553,14 @@ export function applyPreservedFields(parsedEvent: EventInterface, existingEventD
 type ActivityIdentityLike = {
     getID?: () => string | null | undefined;
     setID?: (id: string) => unknown;
+    toJSON?: () => unknown;
     startDate?: unknown;
     endDate?: unknown;
     type?: unknown;
     creator?: { name?: string };
     getStat?: (statType: string) => { getValue?: () => unknown } | null;
     sourceActivityKey?: string;
+    fingerprintPayload?: unknown;
 };
 
 export interface ActivityEditCarryoverResult {
@@ -684,67 +690,251 @@ function getStartIdentitySignature(activity: ActivityIdentityLike): string | nul
     return [startMs, type].join('|');
 }
 
-function getSourceActivityBaseSignature(activity: ActivityIdentityLike): string {
-    const startMs = toTimestampMs(activity.startDate);
-    const endMs = toTimestampMs(activity.endDate);
-    const type = normalizeIdentityType(activity.type);
-    const roundedDuration = getRoundedStat(activity, DataDuration.type);
-    const roundedDistance = getRoundedStat(activity, DataDistance.type);
-    return [startMs ?? 'na', endMs ?? 'na', type, roundedDuration, roundedDistance].join('|');
-}
-
-function getSourceKeySortToken(activity: ActivityIdentityLike, index: number): string {
-    const creatorName = normalizeText(activity.creator?.name).toLowerCase() || 'na';
-    const timeTypeSignature = getTimeTypeIdentitySignature(activity) || 'na';
-    return [timeTypeSignature, creatorName, index].join('|');
-}
-
-function buildSourceActivityKey(sourceContentHash: string, baseSignature: string, occurrence: number): string {
+function buildSourceActivityKey(sourceContentHash: string, sourceActivityFingerprint: string, occurrence: number): string {
     const normalizedHash = normalizeText(sourceContentHash).toLowerCase();
-    const normalizedBaseSignature = normalizeText(baseSignature);
+    const normalizedFingerprint = normalizeText(sourceActivityFingerprint).toLowerCase();
     const normalizedOccurrence = Number.isFinite(occurrence) && occurrence >= 0
         ? Math.floor(occurrence)
         : 0;
-    return `${normalizedHash}:${normalizedBaseSignature}:${normalizedOccurrence}`;
+    return `${normalizedHash}:${normalizedFingerprint}:${normalizedOccurrence}`;
 }
 
 function isShaDerivedSourceActivityKey(sourceActivityKey: string): boolean {
     return /^[a-f0-9]{64}:/.test(normalizeText(sourceActivityKey).toLowerCase());
 }
 
-function stampSourceActivityKeysForActivities(activities: ActivityIdentityLike[], sourceContentHash: string): void {
+function toRecord(value: unknown): Record<string, unknown> | null {
+    return value && typeof value === 'object' ? value as Record<string, unknown> : null;
+}
+
+function resolveRawActivityFingerprintPayload(activity: ActivityIdentityLike): Record<string, unknown> | null {
+    const explicitPayload = toRecord(activity.fingerprintPayload);
+    if (explicitPayload) {
+        return explicitPayload;
+    }
+    if (typeof activity.toJSON === 'function') {
+        try {
+            const serialized = activity.toJSON();
+            return toRecord(serialized);
+        } catch (_error) {
+            return null;
+        }
+    }
+    return null;
+}
+
+function getActivityFingerprintStats(
+    activity: ActivityIdentityLike,
+    rawPayload: Record<string, unknown> | null,
+): Record<string, string> {
+    const statsEntries = new Map<string, string>();
+    const rawStats = rawPayload ? toRecord(rawPayload.stats) : null;
+    if (rawStats) {
+        Object.keys(rawStats).sort().forEach((statType) => {
+            const value = getStatValueFromJson(rawStats, statType);
+            if (value === null) {
+                return;
+            }
+            statsEntries.set(statType, `${Math.round(value)}`);
+        });
+    }
+
+    const roundedDuration = getRoundedStat(activity, DataDuration.type);
+    if (roundedDuration !== 'na') {
+        statsEntries.set(DataDuration.type, roundedDuration);
+    }
+    const roundedDistance = getRoundedStat(activity, DataDistance.type);
+    if (roundedDistance !== 'na') {
+        statsEntries.set(DataDistance.type, roundedDistance);
+    }
+
+    return Object.fromEntries([...statsEntries.entries()].sort(([a], [b]) => a.localeCompare(b)));
+}
+
+type SourceActivityFingerprintDescriptor = {
+    primary: string;
+    secondary: string;
+};
+
+function getSourceActivityFingerprintDescriptor(activity: ActivityIdentityLike): SourceActivityFingerprintDescriptor {
+    const rawPayload = resolveRawActivityFingerprintPayload(activity);
+    const startMs = toTimestampMs(rawPayload?.startDate ?? activity.startDate);
+    const endMs = toTimestampMs(rawPayload?.endDate ?? activity.endDate);
+    const type = normalizeIdentityType(rawPayload?.type ?? activity.type);
+    const creatorRecord = toRecord(rawPayload?.creator);
+    const creatorName = normalizeText(creatorRecord?.name ?? activity.creator?.name).toLowerCase() || 'na';
+    const stats = getActivityFingerprintStats(activity, rawPayload);
+
+    const primaryPayload = {
+        startMs: startMs ?? 'na',
+        endMs: endMs ?? 'na',
+        type,
+        stats,
+    };
+    const secondaryPayload = {
+        ...primaryPayload,
+        creatorName,
+    };
+
+    return {
+        primary: createHash('sha256').update(JSON.stringify(primaryPayload)).digest('hex'),
+        secondary: createHash('sha256').update(JSON.stringify(secondaryPayload)).digest('hex'),
+    };
+}
+
+function addUniqueMapValue(map: Map<string, string[]>, key: string, value: string): void {
+    const current = map.get(key) || [];
+    if (!current.includes(value)) {
+        current.push(value);
+        current.sort();
+        map.set(key, current);
+    }
+}
+
+function parseFingerprintOccurrenceFromKey(
+    sourceActivityKey: string,
+    sourceContentHash: string,
+    sourceActivityFingerprint: string,
+): number | null {
+    const match = normalizeText(sourceActivityKey).toLowerCase().match(/^([a-f0-9]{64}):([a-f0-9]{64}):([0-9]+)$/);
+    if (!match) {
+        return null;
+    }
+    if (match[1] !== sourceContentHash || match[2] !== sourceActivityFingerprint) {
+        return null;
+    }
+    const occurrence = Number(match[3]);
+    return Number.isFinite(occurrence) ? occurrence : null;
+}
+
+function getNextOccurrenceForFingerprint(
+    reservedKeys: Iterable<string>,
+    sourceContentHash: string,
+    sourceActivityFingerprint: string,
+): number {
+    const usedOccurrences = new Set<number>();
+    for (const key of reservedKeys) {
+        const occurrence = parseFingerprintOccurrenceFromKey(key, sourceContentHash, sourceActivityFingerprint);
+        if (occurrence !== null) {
+            usedOccurrences.add(occurrence);
+        }
+    }
+    let candidate = 0;
+    while (usedOccurrences.has(candidate)) {
+        candidate++;
+    }
+    return candidate;
+}
+
+type SourceActivityKeyStampOptions = {
+    existingActivities?: ActivityIdentityLike[];
+    strictAmbiguity?: boolean;
+};
+
+function stampSourceActivityKeysForActivities(
+    activities: ActivityIdentityLike[],
+    sourceContentHash: string,
+    options: SourceActivityKeyStampOptions = {},
+): void {
     const normalizedHash = normalizeText(sourceContentHash).toLowerCase();
     if (!normalizedHash || !Array.isArray(activities) || activities.length === 0) {
         return;
     }
+    const strictAmbiguity = options.strictAmbiguity ?? true;
 
-    const sortedEntries = activities
-        .map((activity, index) => ({
-            activity,
-            index,
-            baseSignature: getSourceActivityBaseSignature(activity),
-            sortToken: getSourceKeySortToken(activity, index),
-        }))
-        .sort((a, b) => {
-            const signatureCompare = a.baseSignature.localeCompare(b.baseSignature);
-            if (signatureCompare !== 0) {
-                return signatureCompare;
+    const parsedEntries = activities.map((activity, index) => ({
+        activity,
+        index,
+        ...getSourceActivityFingerprintDescriptor(activity),
+    }));
+
+    const existingEntries = (options.existingActivities || []).map((activity) => ({
+        activity,
+        ...getSourceActivityFingerprintDescriptor(activity),
+    }));
+    const existingKeysByFingerprint = new Map<string, string[]>();
+    const existingKeysByPrimary = new Map<string, string[]>();
+    existingEntries.forEach((entry) => {
+        const sourceActivityKey = getActivitySourceActivityKey(entry.activity);
+        if (!sourceActivityKey || !isShaDerivedSourceActivityKey(sourceActivityKey)) {
+            return;
+        }
+        addUniqueMapValue(existingKeysByPrimary, entry.primary, sourceActivityKey);
+        addUniqueMapValue(existingKeysByFingerprint, `${entry.primary}|${entry.secondary}`, sourceActivityKey);
+    });
+
+    const parsedByPrimary = new Map<string, Array<typeof parsedEntries[number]>>();
+    parsedEntries.forEach((entry) => {
+        const group = parsedByPrimary.get(entry.primary) || [];
+        group.push(entry);
+        parsedByPrimary.set(entry.primary, group);
+    });
+
+    Array.from(parsedByPrimary.keys()).sort().forEach((primaryFingerprint) => {
+        const primaryGroup = parsedByPrimary.get(primaryFingerprint) || [];
+        const usedKeys = new Set<string>();
+        for (const entry of primaryGroup) {
+            const sourceActivityKey = getActivitySourceActivityKey(entry.activity);
+            if (!sourceActivityKey || !isShaDerivedSourceActivityKey(sourceActivityKey)) {
+                continue;
             }
-            const tokenCompare = a.sortToken.localeCompare(b.sortToken);
-            if (tokenCompare !== 0) {
-                return tokenCompare;
+            if (usedKeys.has(sourceActivityKey)) {
+                if (strictAmbiguity) {
+                    throw new Error(
+                        `[sports-lib-reparse] Duplicate sourceActivityKey detected for fingerprint ${primaryFingerprint}`,
+                    );
+                }
+                continue;
             }
-            return a.index - b.index;
+            usedKeys.add(sourceActivityKey);
+        }
+
+        const parsedBySecondary = new Map<string, Array<typeof primaryGroup[number]>>();
+        primaryGroup.forEach((entry) => {
+            const group = parsedBySecondary.get(entry.secondary) || [];
+            group.push(entry);
+            parsedBySecondary.set(entry.secondary, group);
         });
 
-    const occurrenceBySignature = new Map<string, number>();
-    sortedEntries.forEach(({ activity, baseSignature }) => {
-        const occurrence = occurrenceBySignature.get(baseSignature) || 0;
-        occurrenceBySignature.set(baseSignature, occurrence + 1);
-        setActivitySourceActivityKey(
-            activity,
-            buildSourceActivityKey(normalizedHash, baseSignature, occurrence),
-        );
+        Array.from(parsedBySecondary.keys()).sort().forEach((secondaryFingerprint) => {
+            const secondaryGroup = parsedBySecondary.get(secondaryFingerprint) || [];
+            const missingEntries = secondaryGroup.filter((entry) => {
+                const key = getActivitySourceActivityKey(entry.activity);
+                return !key || !isShaDerivedSourceActivityKey(key);
+            });
+            if (missingEntries.length === 0) {
+                return;
+            }
+
+            const existingBucketKeys = (existingKeysByFingerprint.get(`${primaryFingerprint}|${secondaryFingerprint}`) || [])
+                .filter(key => !usedKeys.has(key));
+
+            if (missingEntries.length > 1) {
+                if (strictAmbiguity) {
+                    throw new Error(
+                        `[sports-lib-reparse] Ambiguous sourceActivityKey stamping for fingerprint ${primaryFingerprint} (${missingEntries.length} indistinguishable activities)`,
+                    );
+                }
+                return;
+            }
+
+            const entry = missingEntries[0];
+            let resolvedKey = existingBucketKeys[0];
+            if (!resolvedKey) {
+                const reservedKeys = new Set<string>([
+                    ...Array.from(usedKeys),
+                    ...(existingKeysByPrimary.get(primaryFingerprint) || []),
+                ]);
+                const occurrence = getNextOccurrenceForFingerprint(
+                    reservedKeys,
+                    normalizedHash,
+                    primaryFingerprint,
+                );
+                resolvedKey = buildSourceActivityKey(normalizedHash, primaryFingerprint, occurrence);
+            }
+            setActivitySourceActivityKey(entry.activity, resolvedKey);
+            usedKeys.add(resolvedKey);
+        });
     });
 }
 
@@ -865,6 +1055,7 @@ function toComparableExistingActivity(existingDoc: Pick<admin.firestore.QueryDoc
         type: raw.type,
         creator: raw.creator as { name?: string } | undefined,
         sourceActivityKey: normalizeText(raw.sourceActivityKey) || undefined,
+        fingerprintPayload: raw,
         getStat: (statType: string) => {
             const value = getStatValueFromJson(stats, statType);
             if (value === null) {
@@ -924,8 +1115,27 @@ export function resolveActivityEditCarryover(
     return assignmentResult;
 }
 
-export async function assignReimportActivityIds(parsedEvent: EventInterface, eventID: string): Promise<void> {
-    const activities = parsedEvent.getActivities();
+export interface AssignReimportActivityIdsOptions {
+    combinedSourceContentHash: string;
+    existingActivities?: ActivityIdentityLike[];
+}
+
+export async function assignReimportActivityIds(
+    parsedEvent: EventInterface,
+    eventID: string,
+    options: AssignReimportActivityIdsOptions,
+): Promise<void> {
+    const normalizedCombinedSourceContentHash = normalizeText(options.combinedSourceContentHash).toLowerCase();
+    if (!/^[a-f0-9]{64}$/.test(normalizedCombinedSourceContentHash)) {
+        throw new Error('[sports-lib-reparse] Missing or invalid combinedSourceContentHash for activity ID assignment');
+    }
+
+    const activities = parsedEvent.getActivities() as ActivityIdentityLike[];
+    stampSourceActivityKeysForActivities(activities, normalizedCombinedSourceContentHash, {
+        existingActivities: options.existingActivities || [],
+        strictAmbiguity: true,
+    });
+
     for (let index = 0; index < activities.length; index++) {
         const activity = activities[index] as ActivityIdentityLike;
         const sourceActivityKey = getActivitySourceActivityKey(activity);
@@ -1189,13 +1399,13 @@ export async function reparseEventFromOriginalFiles(
     const reparsedEvent = parseResult.finalEvent;
     reparsedEvent.setID(eventId);
     applyPreservedFields(reparsedEvent, autoHealResult.eventData);
+    const existingComparableActivities = eventAndActivities.activityDocs.map(toComparableExistingActivity);
     const activityEditCarryoverResult = resolveActivityEditCarryover(reparsedEvent, eventAndActivities.activityDocs);
     if (
         activityEditCarryoverResult.unmatchedParsedIndexes.length > 0
         || activityEditCarryoverResult.unmatchedExistingIndexes.length > 0
     ) {
         const parsedActivities = reparsedEvent.getActivities();
-        const existingComparableActivities = eventAndActivities.activityDocs.map(toComparableExistingActivity);
         logger.warn('[sports-lib-reparse] Activity edit carryover skipped for unmatched identities', {
             eventID: eventId,
             parsedCount: parsedActivities.length,
@@ -1207,7 +1417,10 @@ export async function reparseEventFromOriginalFiles(
                 .map((index) => describeActivityIdentity(existingComparableActivities[index], index)),
         });
     }
-    await assignReimportActivityIds(reparsedEvent, eventId);
+    await assignReimportActivityIds(reparsedEvent, eventId, {
+        combinedSourceContentHash: parseResult.combinedSourceContentHash,
+        existingActivities: existingComparableActivities,
+    });
     if (mode === 'regenerate') {
         reparsedEvent.getActivities().forEach((activity) => {
             const activityAny = activity as any;
