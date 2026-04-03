@@ -122,6 +122,128 @@ describe('AppOriginalFileHydrationService', () => {
     expect(parsedActivity.creator.name).toBe('User renamed device');
   });
 
+  it('should preserve identity by deterministic signatures when parsed activity order changes', async () => {
+    const firstStart = new Date('2026-01-01T10:00:00.000Z');
+    const secondStart = new Date('2026-01-01T12:30:00.000Z');
+    const firstEnd = new Date('2026-01-01T11:00:00.000Z');
+    const secondEnd = new Date('2026-01-01T13:00:00.000Z');
+
+    const existingFirst = {
+      getID: () => 'existing-a',
+      startDate: firstStart,
+      endDate: firstEnd,
+      type: 'Run',
+      creator: { name: 'Renamed Device A' },
+      getStat: vi.fn().mockReturnValue(null),
+    };
+    const existingSecond = {
+      getID: () => 'existing-b',
+      startDate: secondStart,
+      endDate: secondEnd,
+      type: 'Ride',
+      creator: { name: 'Renamed Device B' },
+      getStat: vi.fn().mockReturnValue(null),
+    };
+
+    const parsedSecond = {
+      getID: () => '',
+      setID: vi.fn(),
+      startDate: secondStart,
+      endDate: secondEnd,
+      type: 'Ride',
+      creator: { name: 'Parser Device B' },
+      getStat: vi.fn().mockReturnValue(null),
+    };
+    const parsedFirst = {
+      getID: () => '',
+      setID: vi.fn(),
+      startDate: firstStart,
+      endDate: firstEnd,
+      type: 'Run',
+      creator: { name: 'Parser Device A' },
+      getStat: vi.fn().mockReturnValue(null),
+    };
+
+    const event = {
+      getID: () => 'event-identity',
+      originalFile: { path: 'users/u/events/e/original.fit' },
+      getActivities: () => [existingFirst, existingSecond],
+    } as any;
+    const parsedEvent = {
+      getActivities: () => [parsedSecond, parsedFirst],
+    } as any;
+    vi.spyOn(service as any, 'fetchAndParseOneFile').mockResolvedValue({ event: parsedEvent });
+
+    await service.parseEventFromOriginalFiles(event);
+
+    expect(parsedSecond.setID).toHaveBeenCalledWith('existing-b');
+    expect(parsedFirst.setID).toHaveBeenCalledWith('existing-a');
+    expect(parsedSecond.creator.name).toBe('Renamed Device B');
+    expect(parsedFirst.creator.name).toBe('Renamed Device A');
+  });
+
+  it('should avoid identity reassignment when multiple candidates are ambiguous', async () => {
+    const sharedStart = new Date('2026-01-01T10:00:00.000Z');
+
+    const existingA = {
+      getID: () => 'existing-a',
+      startDate: sharedStart,
+      type: 'Run',
+      creator: { name: 'Renamed Device A' },
+      getStat: vi.fn().mockReturnValue(null),
+    };
+    const existingB = {
+      getID: () => 'existing-b',
+      startDate: sharedStart,
+      type: 'Run',
+      creator: { name: 'Renamed Device B' },
+      getStat: vi.fn().mockReturnValue(null),
+    };
+
+    const parsedA = {
+      getID: () => '',
+      setID: vi.fn(),
+      startDate: sharedStart,
+      type: 'Run',
+      creator: { name: 'Parser Device A' },
+      getStat: vi.fn().mockReturnValue(null),
+    };
+    const parsedB = {
+      getID: () => '',
+      setID: vi.fn(),
+      startDate: sharedStart,
+      type: 'Run',
+      creator: { name: 'Parser Device B' },
+      getStat: vi.fn().mockReturnValue(null),
+    };
+
+    const event = {
+      getID: () => 'event-ambiguous',
+      originalFile: { path: 'users/u/events/e/original.fit' },
+      getActivities: () => [existingA, existingB],
+    } as any;
+    const parsedEvent = {
+      getActivities: () => [parsedA, parsedB],
+    } as any;
+    vi.spyOn(service as any, 'fetchAndParseOneFile').mockResolvedValue({ event: parsedEvent });
+
+    await service.parseEventFromOriginalFiles(event);
+
+    expect(parsedA.setID).not.toHaveBeenCalled();
+    expect(parsedB.setID).not.toHaveBeenCalled();
+    expect(parsedA.creator.name).toBe('Parser Device A');
+    expect(parsedB.creator.name).toBe('Parser Device B');
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      '[AppOriginalFileHydrationService] Could not deterministically map all parsed activities to existing identities',
+      expect.objectContaining({
+        eventID: 'event-ambiguous',
+        parsedCount: 2,
+        existingCount: 2,
+        assignedCount: 0,
+      }),
+    );
+  });
+
   it('should parse multi-file events and merge parsed results', async () => {
     const event = {
       originalFiles: [
