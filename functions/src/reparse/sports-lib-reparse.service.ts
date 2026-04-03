@@ -700,7 +700,7 @@ function buildSourceActivityKey(sourceContentHash: string, sourceActivityFingerp
 }
 
 function isShaDerivedSourceActivityKey(sourceActivityKey: string): boolean {
-    return /^[a-f0-9]{64}:/.test(normalizeText(sourceActivityKey).toLowerCase());
+    return /^([a-f0-9]{64}):([a-f0-9]{64}):([0-9]+)$/.test(normalizeText(sourceActivityKey).toLowerCase());
 }
 
 function toRecord(value: unknown): Record<string, unknown> | null {

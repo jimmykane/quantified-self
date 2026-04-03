@@ -952,6 +952,34 @@ describe('sports-lib-reparse.service', () => {
         expect(secondKey.startsWith(`${combinedHash}:`)).toBe(true);
     });
 
+    it('assignReimportActivityIds should restamp malformed sha-prefix keys before assigning ids', async () => {
+        const combinedHash = 'e'.repeat(64);
+        const malformedKey = `${'a'.repeat(64)}:legacy-signature:0`;
+        const parsedActivities = [
+            {
+                setID: vi.fn(),
+                sourceActivityKey: malformedKey,
+                startDate: new Date('2026-01-01T09:00:00.000Z'),
+                endDate: new Date('2026-01-01T09:30:00.000Z'),
+                type: 'Run',
+                creator: { name: 'legacy' },
+                getStat: vi.fn(() => null),
+            },
+        ];
+
+        await assignReimportActivityIds({
+            getActivities: () => parsedActivities,
+        } as any, 'event-legacy', {
+            combinedSourceContentHash: combinedHash,
+        });
+
+        expect(hoisted.mockGenerateActivityIDFromSourceKey).toHaveBeenCalledTimes(1);
+        const assignedKey = hoisted.mockGenerateActivityIDFromSourceKey.mock.calls[0]?.[1] as string;
+        expect(assignedKey).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}:[0-9]+$/);
+        expect(assignedKey).not.toBe(malformedKey);
+        expect(assignedKey.startsWith(`${combinedHash}:`)).toBe(true);
+    });
+
     it('assignReimportActivityIds should fail when combinedSourceContentHash is missing or invalid', async () => {
         const missingHashEvent = {
             getActivities: () => [{ setID: vi.fn(), sourceActivityKey: `${'e'.repeat(64)}:${'1'.repeat(64)}:0` }],
