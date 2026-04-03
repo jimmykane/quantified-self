@@ -184,7 +184,7 @@ describe('dashboard-tile-view-model.helper', () => {
     expect(data[1].getID()).toBe('later');
   });
 
-  it('should build form chart tiles as contiguous daily CTL/ATL/TSB points from dashboard events', () => {
+  it('should return empty form chart data when derived form points are missing', () => {
     const formTile = {
       type: TileTypes.Chart,
       order: 0,
@@ -216,13 +216,7 @@ describe('dashboard-tile-view-model.helper', () => {
 
     const formChart = viewModels[0] as any;
     expect(formChart.timeInterval).toBe(TimeIntervals.Daily);
-    expect(Array.isArray(formChart.data)).toBe(true);
-    expect(formChart.data).toHaveLength(3);
-    expect(formChart.data.map((point: any) => point.trainingStressScore)).toEqual([40, 0, 20]);
-    expect(formChart.data.every((point: any) => typeof point.ctl === 'number')).toBe(true);
-    expect(formChart.data.every((point: any) => typeof point.atl === 'number')).toBe(true);
-    expect(formChart.data.every((point: any) => typeof point.formSameDay === 'number')).toBe(true);
-    expect(formChart.data[0].formPriorDay).toBeNull();
+    expect(formChart.data).toEqual([]);
   });
 
   it('should return empty form data when dashboard events have no training stress score stats', () => {
@@ -296,6 +290,63 @@ describe('dashboard-tile-view-model.helper', () => {
     });
 
     expect((viewModels[0] as any).data).toEqual(precomputedPoints);
+  });
+
+  it('should use derived form points for curated form charts regardless of dashboard date range', () => {
+    const derivedPoints = [
+      {
+        time: Date.UTC(2024, 0, 2),
+        trainingStressScore: 20,
+        ctl: 1.5,
+        atl: 2.5,
+        formSameDay: -1,
+        formPriorDay: null,
+      },
+      {
+        time: Date.UTC(2024, 2, 5),
+        trainingStressScore: 30,
+        ctl: 2.1,
+        atl: 3.5,
+        formSameDay: -1.4,
+        formPriorDay: -1,
+      },
+    ];
+    const viewModels = buildDashboardTileViewModels({
+      tiles: [{
+        type: TileTypes.Chart,
+        order: 0,
+        chartType: DASHBOARD_FORM_CHART_TYPE as any,
+        dataType: 'Training Stress Score',
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        dataTimeInterval: TimeIntervals.Daily,
+        size: { columns: 1, rows: 1 },
+      } as any],
+      events: [
+        makeEvent({
+          id: 'january',
+          startDate: '2024-01-02T12:00:00.000Z',
+          activityTypes: [ActivityTypes.Running],
+          stats: { 'Training Stress Score': 20 },
+        }),
+        makeEvent({
+          id: 'march',
+          startDate: '2024-03-05T12:00:00.000Z',
+          activityTypes: [ActivityTypes.Running],
+          stats: { 'Training Stress Score': 30 },
+        }),
+      ],
+      dashboardDateRange: {
+        dateRange: DateRanges.custom,
+        startDate: new Date('2024-01-01T00:00:00.000Z'),
+        endDate: new Date('2024-01-31T23:59:59.999Z'),
+      },
+      derivedMetrics: {
+        formPoints: derivedPoints as any,
+      },
+    });
+
+    expect((viewModels[0] as any).data).toEqual(derivedPoints);
   });
 
   it('should build map tiles from filtered sorted events and preserve mixed tile ordering and sizes', () => {
@@ -488,7 +539,7 @@ describe('dashboard-tile-view-model.helper', () => {
     expect((viewModels[0] as any).recoveryNow).toBeUndefined();
   });
 
-  it('should attach recovery context for curated recovery chart types even when dataType differs', () => {
+  it('should not infer curated recovery context from dashboard events when derived context is missing', () => {
     const tiles = [
       {
         type: TileTypes.Chart,
@@ -515,19 +566,11 @@ describe('dashboard-tile-view-model.helper', () => {
     const viewModels = buildDashboardTileViewModels({ tiles, events });
     const recoveryTile = viewModels[0] as DashboardChartTileViewModel;
 
-    expect(recoveryTile.recoveryNow).toEqual({
-      totalSeconds: 7200,
-      endTimeMs: Date.UTC(2024, 0, 1, 13, 0, 0),
-      segments: [
-        {
-          totalSeconds: 7200,
-          endTimeMs: Date.UTC(2024, 0, 1, 13, 0, 0),
-        },
-      ],
-    });
+    expect(recoveryTile.recoveryNow).toBeUndefined();
+    expect(recoveryTile.data).toEqual([]);
   });
 
-  it('should resolve recovery context from events inside the provided dashboard date range', () => {
+  it('should use derived recovery context for curated recovery charts regardless of dashboard date range', () => {
     const tiles = [
       {
         type: TileTypes.Chart,
@@ -556,6 +599,66 @@ describe('dashboard-tile-view-model.helper', () => {
       stats: { [DataRecoveryTime.type]: 7200 },
     });
 
+    const derivedRecoveryContext = {
+      totalSeconds: 9000,
+      endTimeMs: Date.UTC(2024, 2, 5, 9, 0, 0),
+      segments: [
+        {
+          totalSeconds: 1800,
+          endTimeMs: Date.UTC(2024, 0, 2, 9, 0, 0),
+        },
+        {
+          totalSeconds: 7200,
+          endTimeMs: Date.UTC(2024, 2, 5, 9, 0, 0),
+        },
+      ],
+    };
+
+    const viewModels = buildDashboardTileViewModels({
+      tiles,
+      events: [oldEvent, recentEvent],
+      dashboardDateRange: {
+        dateRange: DateRanges.custom,
+        startDate: new Date('2024-01-01T00:00:00.000Z'),
+        endDate: new Date('2024-01-31T23:59:59.999Z'),
+      },
+      derivedMetrics: {
+        recoveryNow: derivedRecoveryContext as any,
+      },
+    });
+    const recoveryTile = viewModels[0] as DashboardChartTileViewModel;
+
+    expect(recoveryTile.recoveryNow).toEqual(derivedRecoveryContext);
+  });
+
+  it('should resolve custom recovery context from events inside the provided dashboard date range', () => {
+    const tiles = [
+      {
+        type: TileTypes.Chart,
+        chartType: ChartTypes.LinesVertical,
+        dataType: DataRecoveryTime.type,
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        dataTimeInterval: TimeIntervals.Auto,
+        order: 0,
+        size: { columns: 1, rows: 1 },
+      } as any,
+    ];
+    const oldEvent = makeEvent({
+      id: 'old-event',
+      startDate: '2024-01-02T08:00:00.000Z',
+      endDate: '2024-01-02T09:00:00.000Z',
+      activityTypes: [ActivityTypes.Running],
+      stats: { [DataRecoveryTime.type]: 1800 },
+    });
+    const recentEvent = makeEvent({
+      id: 'recent-event',
+      startDate: '2024-03-05T08:00:00.000Z',
+      endDate: '2024-03-05T09:00:00.000Z',
+      activityTypes: [ActivityTypes.Running],
+      stats: { [DataRecoveryTime.type]: 7200 },
+    });
+
     const viewModels = buildDashboardTileViewModels({
       tiles,
       events: [oldEvent, recentEvent],
@@ -565,9 +668,8 @@ describe('dashboard-tile-view-model.helper', () => {
         endDate: new Date('2024-01-31T23:59:59.999Z'),
       },
     });
-    const recoveryTile = viewModels[0] as DashboardChartTileViewModel;
 
-    expect(recoveryTile.recoveryNow).toEqual({
+    expect((viewModels[0] as any).recoveryNow).toEqual({
       totalSeconds: 1800,
       endTimeMs: Date.UTC(2024, 0, 2, 9, 0, 0),
       segments: [

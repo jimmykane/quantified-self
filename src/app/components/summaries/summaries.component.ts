@@ -10,7 +10,7 @@ import {
   OnInit,
   SimpleChanges,
 } from '@angular/core';
-import { Subscription } from 'rxjs';
+import { firstValueFrom, Subscription, take } from 'rxjs';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
 import { CdkDragDrop, CdkDragSortEvent, moveItemInArray } from '@angular/cdk/drag-drop';
@@ -43,6 +43,8 @@ import {
   isDashboardFormChartType,
   isDashboardRecoveryNowChartType,
 } from '../../helpers/dashboard-special-chart-types';
+import { MatDialog } from '@angular/material/dialog';
+import { DashboardChartManagerDialogComponent } from './chart-manager-dialog/chart-manager-dialog.component';
 
 type DashboardDerivedMetricStatus = DerivedMetricSnapshotStatus | 'missing';
 
@@ -81,6 +83,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   public tileTypes = TileTypes;
   public desktopTileDragEnabled = false;
+  public isChartManagerOpen = false;
 
 
   private appThemeSubscription: Subscription | null = null;
@@ -99,6 +102,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     private themeService: AppThemeService,
     private userService: AppUserService,
     private dashboardDerivedMetricsService: DashboardDerivedMetricsService,
+    private dialog: MatDialog,
     changeDetector: ChangeDetectorRef,
     logger: LoggerService,
   ) {
@@ -215,6 +219,30 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
     moveItemInArray(this.tiles, event.previousIndex, event.currentIndex);
     this.changeDetector.detectChanges();
+  }
+
+  public async openChartManagerDialog(): Promise<void> {
+    if (!this.showActions || !this.user || this.isChartManagerOpen) {
+      return;
+    }
+
+    this.isChartManagerOpen = true;
+    this.changeDetector.markForCheck();
+
+    try {
+      const dialogRef = this.dialog.open(DashboardChartManagerDialogComponent, {
+        data: { user: this.user },
+        width: '680px',
+        maxWidth: '95vw',
+      });
+      const result = await firstValueFrom(dialogRef.afterClosed().pipe(take(1)));
+      if (result?.saved === true) {
+        await this.rebuildTilesFromCurrentState();
+      }
+    } finally {
+      this.isChartManagerOpen = false;
+      this.changeDetector.markForCheck();
+    }
   }
 
   private async unsubscribeAndCreateCharts() {

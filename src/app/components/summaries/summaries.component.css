@@ -6,6 +6,12 @@
   gap: var(--dashboard-grid-gap, 1em);
 }
 
+.dashboard-summary-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 0.75rem;
+}
+
 .derived-metrics-banner {
   align-items: center;
   border-left: 4px solid var(--mat-sys-secondary);

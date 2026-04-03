@@ -3,40 +3,37 @@
   <mat-icon>more_vert</mat-icon>
 </button>
 <mat-menu #menu="matMenu" class="qs-menu-panel qs-menu-panel-form qs-config-menu">
-  @if (user.settings.dashboardSettings.tiles.length <= 11) { <app-tile-actions-header (add)="addNewTile($event)">
-    </app-tile-actions-header>
-    }
-    <section mat-menu-item>
-      <mat-form-field>
-        <mat-label>Type {{type}}</mat-label>
-        <mat-select placeholder="Type of tile" [value]="type" panelClass="qs-config-submenu"
-          (selectionChange)="changeTileType($event)">
-          <mat-select-trigger>
-            @if (type === tileTypes.Map) {
-            <span>
-              <mat-icon>map</mat-icon>&nbsp;{{tileTypes.Map}}
-            </span>
-            }
-            @if (type === tileTypes.Chart) {
-            <span>
-              <mat-icon>show_chart</mat-icon>&nbsp;{{tileTypes.Chart}}
-            </span>
-            }
-          </mat-select-trigger>
-          @for (tileType of tileTypes | keyvalue; track tileType) {
-          <mat-option [value]="tileType.value">
-            @if (tileType.key === tileTypes.Map) {
-            <mat-icon>map</mat-icon>
-            }
-            @if (tileType.key === tileTypes.Chart) {
-            <mat-icon>show_chart</mat-icon>
-            }
-            {{tileType.value}}
-          </mat-option>
+  <section mat-menu-item>
+    <mat-form-field>
+      <mat-label>Type {{type}}</mat-label>
+      <mat-select placeholder="Type of tile" [value]="type" panelClass="qs-config-submenu"
+        (selectionChange)="changeTileType($event)">
+        <mat-select-trigger>
+          @if (type === tileTypes.Map) {
+          <span>
+            <mat-icon>map</mat-icon>&nbsp;{{tileTypes.Map}}
+          </span>
           }
-        </mat-select>
-      </mat-form-field>
-    </section>
+          @if (type === tileTypes.Chart) {
+          <span>
+            <mat-icon>show_chart</mat-icon>&nbsp;{{tileTypes.Chart}}
+          </span>
+          }
+        </mat-select-trigger>
+        @for (tileType of tileTypes | keyvalue; track tileType) {
+        <mat-option [value]="tileType.value">
+          @if (tileType.key === tileTypes.Map) {
+          <mat-icon>map</mat-icon>
+          }
+          @if (tileType.key === tileTypes.Chart) {
+          <mat-icon>show_chart</mat-icon>
+          }
+          {{tileType.value}}
+        </mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+  </section>
     <section mat-menu-item>
       <mat-form-field>
         <mat-label>Map Style</mat-label>

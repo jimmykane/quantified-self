@@ -96,6 +96,14 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 ## Core dashboard features
 
+### Chart manager
+
+- Use the **Chart manager** button above dashboard tiles to add or edit chart tiles.
+- You can choose between **Curated** and **Custom** chart categories.
+- **Curated** charts (Recovery, Form/TSS) are fixed insights and do not react to dashboard date-range changes.
+- **Custom** charts keep the existing configurable behavior and react to dashboard filters/date range.
+- Curated chart types are unique: only one Recovery and one Form tile can exist at a time.
+
 ### Reorder dashboard tiles
 
 - On desktop, drag dashboard tiles from the tile action area to reorder them.
@@ -106,9 +114,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 ### Recovery tile summary
 
 - The curated **Recovery** pie tile is optional and not added automatically.
-- New **Recovery** tiles are temporarily disabled from chart type options.
 - The tile shows live recovery split between **Left now** and **Elapsed**.
-- When recovery data is available for your current dashboard filters, the summary shows **Recovery Left Now** and **Total recovery** summed across all recovery-enabled events in the filtered range.
+- The summary shows **Recovery Left Now** and **Total recovery** summed across all recovery-enabled events.
 - Remaining recovery updates every minute while the tile is visible.
 - You can still move or remove this tile from the tile menu.
 

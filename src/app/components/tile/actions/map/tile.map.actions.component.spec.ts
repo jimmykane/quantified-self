@@ -4,7 +4,6 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { TileMapActionsComponent } from './tile.map.actions.component';
 import { AppUserService } from '../../../../services/app.user.service';
 import { AppAnalyticsService } from '../../../../services/app.analytics.service';
-import { TileActionsHeaderComponent } from '../header/tile.actions.header.component';
 import { TileActionsFooterComponent } from '../footer/tile.actions.footer.component';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatSelectModule } from '@angular/material/select';
@@ -48,7 +47,7 @@ describe('TileMapActionsComponent', () => {
         };
 
         await TestBed.configureTestingModule({
-            declarations: [TileMapActionsComponent, TileActionsHeaderComponent, TileActionsFooterComponent],
+            declarations: [TileMapActionsComponent, TileActionsFooterComponent],
             imports: [
                 MatMenuModule,
                 MatSelectModule,
@@ -98,28 +97,11 @@ describe('TileMapActionsComponent', () => {
         expect(template).not.toMatch(/<mat-slide-toggle[^>]*\s\[color\]\s*=\s*"['"]accent['"]"/);
     });
 
-    it('should render header component', () => {
-        // Check if the header component is present in the template logic
-        // We simulate the menu trigger click to ensure content is rendered if lazy
-        const trigger = fixture.nativeElement.querySelector('button');
-        trigger.click();
-        fixture.detectChanges();
+    it('should remove add-new action from the map tile menu', () => {
+        const templatePath = resolve(process.cwd(), 'src/app/components/tile/actions/map/tile.map.actions.component.html');
+        const template = readFileSync(templatePath, 'utf8');
 
-        // MatMenu content is rendered in an overlay, elusive to query directly from fixture.nativeElement sometimes
-        // But since the logic is conditional in the template, we can check the directives/component instance
-        // Or we can just call the method directly to ensure logic works, and trust Angular rendering.
-
-        // Let's verify instance method call
-        const spy = vi.spyOn(component, 'addNewTile');
-        component.addNewTile({} as any);
-        expect(spy).toHaveBeenCalled();
-    });
-
-    it('should call addNewTile logic directly', async () => {
-        await component.addNewTile({} as any);
-        expect(analyticsMock.logEvent).toHaveBeenCalledWith('dashboard_tile_action', { method: 'addNewTile' });
-        expect(userMock.settings.dashboardSettings.tiles.length).toBe(3);
-        expect(userMock.updateUserProperties).toHaveBeenCalled();
+        expect(template).not.toContain('app-tile-actions-header');
     });
 
     it('should persist tile mapStyle and stop writing legacy mapType', async () => {
