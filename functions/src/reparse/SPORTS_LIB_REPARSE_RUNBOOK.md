@@ -138,9 +138,11 @@ Preserved user-editable fields:
 - `feeling`
 
 Activity identity strategy:
-- preserve activity IDs by index
-- preserve creator name when present
-- delete stale old activities not present in new parsed set
+- regenerate activity IDs deterministically on every reparse (eventId + sourceActivityKey)
+- derive sourceActivityKey from source-content hash + activity signature (order-independent)
+- fail fast if a parsed activity is missing a SHA-derived sourceActivityKey (no fallback key generation)
+- use deterministic matching for creator-name carryover (prefer sourceActivityKey, then signatures)
+- delete stale old activities not present in the new parsed ID set
 
 ## Bucket Fallback + Auto-Heal
 To handle legacy or incorrect bucket metadata safely, reparse download tries multiple bucket candidates and auto-heals metadata when fallback succeeds.

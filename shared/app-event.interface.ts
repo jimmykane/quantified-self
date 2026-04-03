@@ -109,6 +109,8 @@ export interface FirestoreActivityJSON {
     eventID: string;
     /** Denormalized event start date for sorting across all user activities */
     eventStartDate?: Date;
+    /** Deterministic source-derived activity identity key */
+    sourceActivityKey?: string;
 }
 
 /**

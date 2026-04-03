@@ -27,7 +27,6 @@ export interface ReprocessOptions {
 
 export interface ReprocessResult {
   event: AppEventInterface;
-  updatedActivityId?: string;
   sourceFilesCount: number;
   wasMultiFileSource: boolean;
   preservedIsMerge: boolean;
@@ -37,7 +36,6 @@ export type ReprocessErrorCode =
   | 'NO_ORIGINAL_FILES'
   | 'PARSE_FAILED'
   | 'MULTI_FILE_INCOMPLETE'
-  | 'ACTIVITY_NOT_FOUND_AFTER_REHYDRATE'
   | 'PERSIST_FAILED';
 
 export class ReprocessError extends Error {
@@ -76,27 +74,6 @@ export class AppEventReprocessService {
     options?: ReprocessOptions,
   ): Promise<ReprocessResult> {
     return this.executeReprocess(user, event, 'regenerate', options);
-  }
-
-  public async regenerateActivityStatistics(
-    user: User,
-    event: AppEventInterface,
-    activityId: string,
-    options?: ReprocessOptions,
-  ): Promise<ReprocessResult> {
-    const result = await this.executeReprocess(user, event, 'regenerate', options);
-    const updatedActivity = event.getActivities().find(activity => activity.getID() === activityId);
-    if (!updatedActivity) {
-      throw new ReprocessError(
-        'ACTIVITY_NOT_FOUND_AFTER_REHYDRATE',
-        `Activity ${activityId} was not found after rehydrating source files.`,
-      );
-    }
-
-    return {
-      ...result,
-      updatedActivityId: updatedActivity.getID(),
-    };
   }
 
   public async reimportEventFromOriginalFiles(

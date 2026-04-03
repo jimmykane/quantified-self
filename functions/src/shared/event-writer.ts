@@ -160,6 +160,10 @@ export class EventWriter {
                     eventID: event.getID() as string,
                     ...(event.startDate ? { eventStartDate: event.startDate } : {}),
                 };
+                const sourceActivityKey = `${(activity as any)?.sourceActivityKey || ''}`.trim();
+                if (sourceActivityKey) {
+                    activityJSON.sourceActivityKey = sourceActivityKey;
+                }
 
 
                 const activityPath = ['users', userID, 'activities', <string>activity.getID()];

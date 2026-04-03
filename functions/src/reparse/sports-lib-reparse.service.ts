@@ -6,6 +6,8 @@ import * as xmldom from 'xmldom';
 import semver from 'semver';
 import {
     ActivityUtilities,
+    DataDistance,
+    DataDuration,
     EventImporterFIT,
     EventImporterGPX,
     EventImporterSuuntoJSON,
@@ -17,6 +19,7 @@ import {
 import { FirestoreEventJSON, OriginalFileMetaData } from '../../../shared/app-event.interface';
 import { createParsingOptions } from '../../../shared/parsing-options';
 import { FirestoreAdapter, LogAdapter, EventWriter } from '../shared/event-writer';
+import { generateActivityIDFromSourceKey } from '../shared/id-generator';
 import { ProcessingMetaData } from '../shared/processing-metadata.interface';
 import { SPORTS_LIB_REPARSE_TARGET_VERSION } from './sports-lib-reparse.config';
 
@@ -376,6 +379,7 @@ export async function parseFromOriginalFilesStrict(sourceFiles: SourceFileMeta[]
     const parsedEvents: EventInterface[] = [];
     const failedFiles: { path: string; reason: string }[] = [];
     const resolvedSourceBuckets: ResolvedSourceBucketInfo[] = [];
+    const sourceContentHashes: string[] = [];
 
     for (const sourceFile of sourceFiles) {
         try {
@@ -390,6 +394,8 @@ export async function parseFromOriginalFilesStrict(sourceFiles: SourceFileMeta[]
             }
             const rawBytes = downloadResult.rawBytes;
             const fileBytes = isGzip(sourceFile.path) ? gunzipSync(rawBytes) : rawBytes;
+            const sourceContentHash = createHash('sha256').update(fileBytes).digest('hex');
+            sourceContentHashes.push(sourceContentHash);
             const extension = normalizeExtension(sourceFile.path);
             const options = createParsingOptions();
 
@@ -428,6 +434,11 @@ export async function parseFromOriginalFilesStrict(sourceFiles: SourceFileMeta[]
     }
 
     const finalEvent = parsedEvents.length > 1 ? EventUtilities.mergeEvents(parsedEvents) : parsedEvents[0];
+    const combinedSourceContentHash = createHash('sha256')
+        .update(sourceContentHashes.slice().sort().join('|'))
+        .digest('hex');
+    stampSourceActivityKeysForActivities(finalEvent.getActivities() as ActivityIdentityLike[], combinedSourceContentHash);
+
     return {
         finalEvent,
         parsedEvents,
@@ -535,27 +546,399 @@ export function applyPreservedFields(parsedEvent: EventInterface, existingEventD
     }
 }
 
-export function mapActivityIdentity(
-    parsedEvent: EventInterface,
-    existingActivityDocs: Array<Pick<admin.firestore.QueryDocumentSnapshot, 'id' | 'data'>>,
+type ActivityIdentityLike = {
+    getID?: () => string | null | undefined;
+    setID?: (id: string) => unknown;
+    startDate?: unknown;
+    endDate?: unknown;
+    type?: unknown;
+    creator?: { name?: string };
+    getStat?: (statType: string) => { getValue?: () => unknown } | null;
+    sourceActivityKey?: string;
+};
+
+export interface ActivityEditCarryoverResult {
+    assignments: Map<number, number>;
+    unmatchedParsedIndexes: number[];
+    unmatchedExistingIndexes: number[];
+}
+
+function toTimestampMs(value: unknown): number | null {
+    const date = toDateOrUndefined(value);
+    if (!date) {
+        return null;
+    }
+    const timestamp = date.getTime();
+    return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function normalizeIdentityType(type: unknown): string {
+    return `${type || ''}`.trim().toLowerCase() || 'unknown';
+}
+
+function normalizeText(value: unknown): string {
+    return `${value || ''}`.trim();
+}
+
+function getActivitySourceActivityKey(activity: ActivityIdentityLike): string | null {
+    const key = normalizeText(activity.sourceActivityKey);
+    return key.length > 0 ? key : null;
+}
+
+function setActivitySourceActivityKey(activity: ActivityIdentityLike, sourceActivityKey: string): void {
+    const normalizedKey = normalizeText(sourceActivityKey);
+    if (!normalizedKey) {
+        return;
+    }
+    (activity as Record<string, unknown>).sourceActivityKey = normalizedKey;
+}
+
+function parseFiniteNumber(value: unknown): number | null {
+    if (typeof value === 'number') {
+        return Number.isFinite(value) ? value : null;
+    }
+    if (typeof value === 'string') {
+        const asNumber = Number(value);
+        return Number.isFinite(asNumber) ? asNumber : null;
+    }
+    return null;
+}
+
+function getStatValueFromJson(stats: Record<string, unknown>, statType: string): number | null {
+    const raw = stats?.[statType];
+    if (raw === null || raw === undefined) {
+        return null;
+    }
+
+    const directValue = parseFiniteNumber(raw);
+    if (directValue !== null) {
+        return directValue;
+    }
+
+    if (typeof raw === 'object') {
+        const rawAny = raw as Record<string, unknown>;
+        const getValue = rawAny.getValue;
+        if (typeof getValue === 'function') {
+            const value = parseFiniteNumber(getValue.call(rawAny));
+            if (value !== null) {
+                return value;
+            }
+        }
+        const valueField = parseFiniteNumber(rawAny.value);
+        if (valueField !== null) {
+            return valueField;
+        }
+        const privateValueField = parseFiniteNumber(rawAny._value);
+        if (privateValueField !== null) {
+            return privateValueField;
+        }
+    }
+    return null;
+}
+
+function getActivityStatValue(activity: ActivityIdentityLike, statType: string): number | null {
+    if (typeof activity.getStat !== 'function') {
+        return null;
+    }
+    const stat = activity.getStat(statType);
+    if (!stat || typeof stat.getValue !== 'function') {
+        return null;
+    }
+    const value = Number(stat.getValue.call(stat));
+    return Number.isFinite(value) ? value : null;
+}
+
+function getRoundedStat(activity: ActivityIdentityLike, statType: string): string {
+    const value = getActivityStatValue(activity, statType);
+    return value === null ? 'na' : `${Math.round(value)}`;
+}
+
+function getStrictIdentitySignature(activity: ActivityIdentityLike): string | null {
+    const startMs = toTimestampMs(activity.startDate);
+    if (startMs === null) {
+        return null;
+    }
+    const endMs = toTimestampMs(activity.endDate);
+    const type = normalizeIdentityType(activity.type);
+    const roundedDuration = getRoundedStat(activity, DataDuration.type);
+    const roundedDistance = getRoundedStat(activity, DataDistance.type);
+    return [startMs, endMs ?? 'na', type, roundedDuration, roundedDistance].join('|');
+}
+
+function getTimeTypeIdentitySignature(activity: ActivityIdentityLike): string | null {
+    const startMs = toTimestampMs(activity.startDate);
+    if (startMs === null) {
+        return null;
+    }
+    const endMs = toTimestampMs(activity.endDate);
+    const type = normalizeIdentityType(activity.type);
+    return [startMs, endMs ?? 'na', type].join('|');
+}
+
+function getStartIdentitySignature(activity: ActivityIdentityLike): string | null {
+    const startMs = toTimestampMs(activity.startDate);
+    if (startMs === null) {
+        return null;
+    }
+    const type = normalizeIdentityType(activity.type);
+    return [startMs, type].join('|');
+}
+
+function getSourceActivityBaseSignature(activity: ActivityIdentityLike): string {
+    const startMs = toTimestampMs(activity.startDate);
+    const endMs = toTimestampMs(activity.endDate);
+    const type = normalizeIdentityType(activity.type);
+    const roundedDuration = getRoundedStat(activity, DataDuration.type);
+    const roundedDistance = getRoundedStat(activity, DataDistance.type);
+    return [startMs ?? 'na', endMs ?? 'na', type, roundedDuration, roundedDistance].join('|');
+}
+
+function getSourceKeySortToken(activity: ActivityIdentityLike, index: number): string {
+    const creatorName = normalizeText(activity.creator?.name).toLowerCase() || 'na';
+    const timeTypeSignature = getTimeTypeIdentitySignature(activity) || 'na';
+    return [timeTypeSignature, creatorName, index].join('|');
+}
+
+function buildSourceActivityKey(sourceContentHash: string, baseSignature: string, occurrence: number): string {
+    const normalizedHash = normalizeText(sourceContentHash).toLowerCase();
+    const normalizedBaseSignature = normalizeText(baseSignature);
+    const normalizedOccurrence = Number.isFinite(occurrence) && occurrence >= 0
+        ? Math.floor(occurrence)
+        : 0;
+    return `${normalizedHash}:${normalizedBaseSignature}:${normalizedOccurrence}`;
+}
+
+function isShaDerivedSourceActivityKey(sourceActivityKey: string): boolean {
+    return /^[a-f0-9]{64}:/.test(normalizeText(sourceActivityKey).toLowerCase());
+}
+
+function stampSourceActivityKeysForActivities(activities: ActivityIdentityLike[], sourceContentHash: string): void {
+    const normalizedHash = normalizeText(sourceContentHash).toLowerCase();
+    if (!normalizedHash || !Array.isArray(activities) || activities.length === 0) {
+        return;
+    }
+
+    const sortedEntries = activities
+        .map((activity, index) => ({
+            activity,
+            index,
+            baseSignature: getSourceActivityBaseSignature(activity),
+            sortToken: getSourceKeySortToken(activity, index),
+        }))
+        .sort((a, b) => {
+            const signatureCompare = a.baseSignature.localeCompare(b.baseSignature);
+            if (signatureCompare !== 0) {
+                return signatureCompare;
+            }
+            const tokenCompare = a.sortToken.localeCompare(b.sortToken);
+            if (tokenCompare !== 0) {
+                return tokenCompare;
+            }
+            return a.index - b.index;
+        });
+
+    const occurrenceBySignature = new Map<string, number>();
+    sortedEntries.forEach(({ activity, baseSignature }) => {
+        const occurrence = occurrenceBySignature.get(baseSignature) || 0;
+        occurrenceBySignature.set(baseSignature, occurrence + 1);
+        setActivitySourceActivityKey(
+            activity,
+            buildSourceActivityKey(normalizedHash, baseSignature, occurrence),
+        );
+    });
+}
+
+function assignUniqueMatchesBySignature(
+    existingActivities: ActivityIdentityLike[],
+    parsedActivities: ActivityIdentityLike[],
+    assignments: Map<number, number>,
+    usedExistingIndexes: Set<number>,
+    signatureResolver: (activity: ActivityIdentityLike) => string | null,
 ): void {
-    const activities = parsedEvent.getActivities();
-    activities.forEach((activity, index) => {
-        const existing = existingActivityDocs[index];
-        if (!existing) {
+    const existingBySignature = new Map<string, number[]>();
+    existingActivities.forEach((activity, index) => {
+        if (usedExistingIndexes.has(index)) {
             return;
         }
-        activity.setID(existing.id);
+        const signature = signatureResolver(activity);
+        if (!signature) {
+            return;
+        }
+        const existingIndexes = existingBySignature.get(signature) || [];
+        existingIndexes.push(index);
+        existingBySignature.set(signature, existingIndexes);
+    });
 
-        const existingCreatorName = `${existing.data()?.creator?.name ?? ''}`.trim();
+    const parsedBySignature = new Map<string, number[]>();
+    parsedActivities.forEach((activity, index) => {
+        if (assignments.has(index)) {
+            return;
+        }
+        const signature = signatureResolver(activity);
+        if (!signature) {
+            return;
+        }
+        const parsedIndexes = parsedBySignature.get(signature) || [];
+        parsedIndexes.push(index);
+        parsedBySignature.set(signature, parsedIndexes);
+    });
+
+    parsedBySignature.forEach((parsedIndexes, signature) => {
+        const existingIndexes = existingBySignature.get(signature) || [];
+        if (parsedIndexes.length !== 1 || existingIndexes.length !== 1) {
+            return;
+        }
+        const parsedIndex = parsedIndexes[0];
+        const existingIndex = existingIndexes[0];
+        assignments.set(parsedIndex, existingIndex);
+        usedExistingIndexes.add(existingIndex);
+    });
+}
+
+function resolveActivityEditAssignments(
+    existingActivities: ActivityIdentityLike[],
+    parsedActivities: ActivityIdentityLike[],
+): ActivityEditCarryoverResult {
+    const assignments = new Map<number, number>();
+    const usedExistingIndexes = new Set<number>();
+
+    assignUniqueMatchesBySignature(
+        existingActivities,
+        parsedActivities,
+        assignments,
+        usedExistingIndexes,
+        getActivitySourceActivityKey,
+    );
+    assignUniqueMatchesBySignature(
+        existingActivities,
+        parsedActivities,
+        assignments,
+        usedExistingIndexes,
+        getStrictIdentitySignature,
+    );
+    assignUniqueMatchesBySignature(
+        existingActivities,
+        parsedActivities,
+        assignments,
+        usedExistingIndexes,
+        getTimeTypeIdentitySignature,
+    );
+    assignUniqueMatchesBySignature(
+        existingActivities,
+        parsedActivities,
+        assignments,
+        usedExistingIndexes,
+        getStartIdentitySignature,
+    );
+
+    const unmatchedParsedIndexes = parsedActivities
+        .map((_activity, index) => index)
+        .filter(index => !assignments.has(index));
+    const unmatchedExistingIndexes = existingActivities
+        .map((_activity, index) => index)
+        .filter(index => !usedExistingIndexes.has(index));
+
+    if (unmatchedParsedIndexes.length === 1 && unmatchedExistingIndexes.length === 1) {
+        assignments.set(unmatchedParsedIndexes[0], unmatchedExistingIndexes[0]);
+        return {
+            assignments,
+            unmatchedParsedIndexes: [],
+            unmatchedExistingIndexes: [],
+        };
+    }
+
+    return {
+        assignments,
+        unmatchedParsedIndexes,
+        unmatchedExistingIndexes,
+    };
+}
+
+function toComparableExistingActivity(existingDoc: Pick<admin.firestore.QueryDocumentSnapshot, 'id' | 'data'>): ActivityIdentityLike {
+    const raw = existingDoc.data() as Record<string, unknown> || {};
+    const stats = raw.stats && typeof raw.stats === 'object'
+        ? raw.stats as Record<string, unknown>
+        : {};
+    return {
+        startDate: raw.startDate,
+        endDate: raw.endDate,
+        type: raw.type,
+        creator: raw.creator as { name?: string } | undefined,
+        sourceActivityKey: normalizeText(raw.sourceActivityKey) || undefined,
+        getStat: (statType: string) => {
+            const value = getStatValueFromJson(stats, statType);
+            if (value === null) {
+                return null;
+            }
+            return {
+                getValue: () => value,
+            };
+        },
+    };
+}
+
+function describeActivityIdentity(activity: ActivityIdentityLike, index: number): {
+    index: number;
+    sourceActivityKey: string | null;
+    startMs: number | null;
+    type: string;
+} {
+    return {
+        index,
+        sourceActivityKey: getActivitySourceActivityKey(activity),
+        startMs: toTimestampMs(activity.startDate),
+        type: normalizeIdentityType(activity.type),
+    };
+}
+
+export function resolveActivityEditCarryover(
+    parsedEvent: EventInterface,
+    existingActivityDocs: Array<Pick<admin.firestore.QueryDocumentSnapshot, 'id' | 'data'>>,
+): ActivityEditCarryoverResult {
+    const activities = parsedEvent.getActivities();
+    const existingComparableActivities = existingActivityDocs.map(toComparableExistingActivity);
+    const assignmentResult = resolveActivityEditAssignments(existingComparableActivities, activities as ActivityIdentityLike[]);
+
+    assignmentResult.assignments.forEach((existingIndex, parsedIndex) => {
+        const activity = activities[parsedIndex] as ActivityIdentityLike | undefined;
+        const existingActivity = existingComparableActivities[existingIndex];
+        if (!activity || !existingActivity) {
+            return;
+        }
+
+        const existingSourceActivityKey = getActivitySourceActivityKey(existingActivity);
+        if (!getActivitySourceActivityKey(activity) && existingSourceActivityKey) {
+            setActivitySourceActivityKey(activity, existingSourceActivityKey);
+        }
+
+        const existingCreatorName = `${existingActivity.creator?.name ?? ''}`.trim();
         if (!existingCreatorName) {
             return;
         }
 
-        if ((activity as any).creator) {
-            (activity as any).creator.name = existingCreatorName;
+        if (activity.creator) {
+            activity.creator.name = existingCreatorName;
         }
     });
+
+    return assignmentResult;
+}
+
+export async function assignReimportActivityIds(parsedEvent: EventInterface, eventID: string): Promise<void> {
+    const activities = parsedEvent.getActivities();
+    for (let index = 0; index < activities.length; index++) {
+        const activity = activities[index] as ActivityIdentityLike;
+        const sourceActivityKey = getActivitySourceActivityKey(activity);
+        if (!sourceActivityKey || !isShaDerivedSourceActivityKey(sourceActivityKey)) {
+            throw new Error(
+                `[sports-lib-reparse] Missing or invalid SHA-derived sourceActivityKey for parsed activity at index ${index}`,
+            );
+        }
+        setActivitySourceActivityKey(activity, sourceActivityKey);
+        if (typeof activity.setID === 'function') {
+            activity.setID(await generateActivityIDFromSourceKey(eventID, sourceActivityKey));
+        }
+    }
 }
 
 function getWriterLogAdapter(): LogAdapter {
@@ -731,9 +1114,9 @@ export async function getEventAndActivitiesForReparse(uid: string, eventId: stri
         .collection(`users/${uid}/activities`)
         .where('eventID', '==', eventId)
         .get();
-    // Keep deterministic identity mapping without relying on a composite index.
+    // Keep deterministic ordering for diagnostics/tie-breaking without relying on a composite index.
     // We intentionally include docs missing startDate (legacy/malformed records),
-    // then place them after dated docs for stable index-based ID preservation.
+    // then place them after dated docs.
     const sortedActivityDocs = [...activitiesSnapshot.docs].sort((a, b) => {
         const aStart = toDateOrUndefined(a.data()?.startDate)?.getTime();
         const bStart = toDateOrUndefined(b.data()?.startDate)?.getTime();
@@ -806,7 +1189,25 @@ export async function reparseEventFromOriginalFiles(
     const reparsedEvent = parseResult.finalEvent;
     reparsedEvent.setID(eventId);
     applyPreservedFields(reparsedEvent, autoHealResult.eventData);
-    mapActivityIdentity(reparsedEvent, eventAndActivities.activityDocs);
+    const activityEditCarryoverResult = resolveActivityEditCarryover(reparsedEvent, eventAndActivities.activityDocs);
+    if (
+        activityEditCarryoverResult.unmatchedParsedIndexes.length > 0
+        || activityEditCarryoverResult.unmatchedExistingIndexes.length > 0
+    ) {
+        const parsedActivities = reparsedEvent.getActivities();
+        const existingComparableActivities = eventAndActivities.activityDocs.map(toComparableExistingActivity);
+        logger.warn('[sports-lib-reparse] Activity edit carryover skipped for unmatched identities', {
+            eventID: eventId,
+            parsedCount: parsedActivities.length,
+            existingCount: eventAndActivities.activityDocs.length,
+            assignedCount: activityEditCarryoverResult.assignments.size,
+            unmatchedParsed: activityEditCarryoverResult.unmatchedParsedIndexes
+                .map((index) => describeActivityIdentity(parsedActivities[index] as ActivityIdentityLike, index)),
+            unmatchedExisting: activityEditCarryoverResult.unmatchedExistingIndexes
+                .map((index) => describeActivityIdentity(existingComparableActivities[index], index)),
+        });
+    }
+    await assignReimportActivityIds(reparsedEvent, eventId);
     if (mode === 'regenerate') {
         reparsedEvent.getActivities().forEach((activity) => {
             const activityAny = activity as any;

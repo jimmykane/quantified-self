@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { generateEventID, generateActivityID, generateIDFromParts, EVENT_DUPLICATE_THRESHOLD_MS } from './id-generator';
+import {
+    generateEventID,
+    generateActivityID,
+    generateActivityIDFromSourceKey,
+    generateIDFromParts,
+    EVENT_DUPLICATE_THRESHOLD_MS,
+} from './id-generator';
 
 describe('ID Generator', () => {
     const userID = 'user123';
@@ -72,6 +78,21 @@ describe('ID Generator', () => {
     it('should generate different IDs for different activity indices', async () => {
         const id1 = await generateActivityID(eventID, 0);
         const id2 = await generateActivityID(eventID, 1);
+
+        expect(id1).not.toBe(id2);
+    });
+
+    it('should generate a consistent activity ID from source activity key', async () => {
+        const key = 'sha256:key:0';
+        const id1 = await generateActivityIDFromSourceKey(eventID, key);
+        const id2 = await generateActivityIDFromSourceKey(eventID, key);
+
+        expect(id1).toBe(id2);
+    });
+
+    it('should generate different activity IDs for different source activity keys', async () => {
+        const id1 = await generateActivityIDFromSourceKey(eventID, 'sha256:key:0');
+        const id2 = await generateActivityIDFromSourceKey(eventID, 'sha256:key:1');
 
         expect(id1).not.toBe(id2);
     });
