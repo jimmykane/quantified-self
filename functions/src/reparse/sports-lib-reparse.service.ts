@@ -117,6 +117,13 @@ export interface ReparseExecutionResult {
 type MergeType = 'benchmark' | 'multi';
 export type ReparseMode = 'reimport' | 'regenerate';
 
+function toErrorMessage(error: unknown): string {
+    if (error instanceof Error) {
+        return error.message;
+    }
+    return `${error}`;
+}
+
 function toDateOrUndefined(value: unknown): Date | undefined {
     if (!value) {
         return undefined;
@@ -1364,100 +1371,163 @@ export async function reparseEventFromOriginalFiles(
         activityDocs?: admin.firestore.QueryDocumentSnapshot[];
     },
 ): Promise<ReparseExecutionResult> {
+    const startedAtMs = Date.now();
+    let stage = 'load_event_and_activities';
     const mode = options?.mode || 'reimport';
     const targetSportsLibVersion = options?.targetSportsLibVersion || resolveTargetSportsLibVersion();
-    const eventAndActivities = options?.eventData && options?.activityDocs
-        ? {
-            eventData: options.eventData,
-            activityDocs: options.activityDocs,
+    try {
+        const loadEventAndActivitiesStartedAtMs = Date.now();
+        const eventAndActivities = options?.eventData && options?.activityDocs
+            ? {
+                eventData: options.eventData,
+                activityDocs: options.activityDocs,
+            }
+            : await getEventAndActivitiesForReparse(uid, eventId);
+        const loadEventAndActivitiesDurationMs = Date.now() - loadEventAndActivitiesStartedAtMs;
+
+        stage = 'extract_source_files';
+        const sourceFiles = extractSourceFiles(eventAndActivities.eventData);
+        if (sourceFiles.length === 0) {
+            const totalDurationMs = Date.now() - startedAtMs;
+            logger.info('[sports-lib-reparse] Reparse timing', {
+                uid,
+                eventId,
+                mode,
+                status: 'skipped',
+                reason: SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
+                targetSportsLibVersion,
+                sourceFilesCount: 0,
+                parsedActivitiesCount: 0,
+                staleActivitiesDeleted: 0,
+                loadEventAndActivitiesDurationMs,
+                parseFromSourcesDurationMs: 0,
+                transformDurationMs: 0,
+                persistDurationMs: 0,
+                totalDurationMs,
+            });
+            return {
+                status: 'skipped',
+                reason: SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
+                sourceFilesCount: 0,
+                parsedActivitiesCount: 0,
+                staleActivitiesDeleted: 0,
+            };
         }
-        : await getEventAndActivitiesForReparse(uid, eventId);
 
-    const sourceFiles = extractSourceFiles(eventAndActivities.eventData);
-    if (sourceFiles.length === 0) {
-        return {
-            status: 'skipped',
-            reason: SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
-            sourceFilesCount: 0,
-            parsedActivitiesCount: 0,
-            staleActivitiesDeleted: 0,
-        };
-    }
+        stage = 'parse_source_files';
+        const parseFromSourcesStartedAtMs = Date.now();
+        const parseResult = await parseFromOriginalFilesStrict(sourceFiles);
+        const parseFromSourcesDurationMs = Date.now() - parseFromSourcesStartedAtMs;
 
-    const parseResult = await parseFromOriginalFilesStrict(sourceFiles);
-    const autoHealResult = applyAutoHealedSourceBucketMetadata(
-        eventAndActivities.eventData,
-        parseResult.resolvedSourceBuckets,
-    );
-    if (autoHealResult.healedEntries > 0) {
-        logger.warn('[sports-lib-reparse] Auto-healed original-file bucket metadata', {
+        const autoHealResult = applyAutoHealedSourceBucketMetadata(
+            eventAndActivities.eventData,
+            parseResult.resolvedSourceBuckets,
+        );
+        if (autoHealResult.healedEntries > 0) {
+            logger.warn('[sports-lib-reparse] Auto-healed original-file bucket metadata', {
+                uid,
+                eventId,
+                healedEntries: autoHealResult.healedEntries,
+            });
+        }
+
+        stage = 'transform_event';
+        const transformStartedAtMs = Date.now();
+        const reparsedEvent = parseResult.finalEvent;
+        reparsedEvent.setID(eventId);
+        applyPreservedFields(reparsedEvent, autoHealResult.eventData);
+        const existingComparableActivities = eventAndActivities.activityDocs.map(toComparableExistingActivity);
+        const activityEditCarryoverResult = resolveActivityEditCarryover(reparsedEvent, eventAndActivities.activityDocs);
+        if (
+            activityEditCarryoverResult.unmatchedParsedIndexes.length > 0
+            || activityEditCarryoverResult.unmatchedExistingIndexes.length > 0
+        ) {
+            const parsedActivities = reparsedEvent.getActivities();
+            logger.warn('[sports-lib-reparse] Activity edit carryover skipped for unmatched identities', {
+                eventID: eventId,
+                parsedCount: parsedActivities.length,
+                existingCount: eventAndActivities.activityDocs.length,
+                assignedCount: activityEditCarryoverResult.assignments.size,
+                unmatchedParsed: activityEditCarryoverResult.unmatchedParsedIndexes
+                    .map((index) => describeActivityIdentity(parsedActivities[index] as ActivityIdentityLike, index)),
+                unmatchedExisting: activityEditCarryoverResult.unmatchedExistingIndexes
+                    .map((index) => describeActivityIdentity(existingComparableActivities[index], index)),
+            });
+        }
+        await assignReimportActivityIds(reparsedEvent, eventId, {
+            combinedSourceContentHash: parseResult.combinedSourceContentHash,
+            existingActivities: existingComparableActivities,
+        });
+        if (mode === 'regenerate') {
+            reparsedEvent.getActivities().forEach((activity) => {
+                const activityAny = activity as any;
+                if (
+                    typeof activityAny.getStats !== 'function'
+                    || typeof activityAny.clearStats !== 'function'
+                    || typeof activityAny.addStat !== 'function'
+                    || typeof activityAny.getStat !== 'function'
+                ) {
+                    return;
+                }
+
+                const previousStats = new Map(activityAny.getStats());
+                activityAny.clearStats();
+                ActivityUtilities.generateMissingStreamsAndStatsForActivity(activity as any);
+                previousStats.forEach((stat, type) => {
+                    if (!activityAny.getStat(type)) {
+                        activityAny.addStat(stat);
+                    }
+                });
+            });
+        }
+        EventUtilities.reGenerateStatsForEvent(reparsedEvent);
+        const transformDurationMs = Date.now() - transformStartedAtMs;
+
+        stage = 'persist_reparsed_event';
+        const persistStartedAtMs = Date.now();
+        const persistResult = await persistReparsedEvent(
             uid,
             eventId,
-            healedEntries: autoHealResult.healedEntries,
-        });
-    }
-    const reparsedEvent = parseResult.finalEvent;
-    reparsedEvent.setID(eventId);
-    applyPreservedFields(reparsedEvent, autoHealResult.eventData);
-    const existingComparableActivities = eventAndActivities.activityDocs.map(toComparableExistingActivity);
-    const activityEditCarryoverResult = resolveActivityEditCarryover(reparsedEvent, eventAndActivities.activityDocs);
-    if (
-        activityEditCarryoverResult.unmatchedParsedIndexes.length > 0
-        || activityEditCarryoverResult.unmatchedExistingIndexes.length > 0
-    ) {
-        const parsedActivities = reparsedEvent.getActivities();
-        logger.warn('[sports-lib-reparse] Activity edit carryover skipped for unmatched identities', {
-            eventID: eventId,
-            parsedCount: parsedActivities.length,
-            existingCount: eventAndActivities.activityDocs.length,
-            assignedCount: activityEditCarryoverResult.assignments.size,
-            unmatchedParsed: activityEditCarryoverResult.unmatchedParsedIndexes
-                .map((index) => describeActivityIdentity(parsedActivities[index] as ActivityIdentityLike, index)),
-            unmatchedExisting: activityEditCarryoverResult.unmatchedExistingIndexes
-                .map((index) => describeActivityIdentity(existingComparableActivities[index], index)),
-        });
-    }
-    await assignReimportActivityIds(reparsedEvent, eventId, {
-        combinedSourceContentHash: parseResult.combinedSourceContentHash,
-        existingActivities: existingComparableActivities,
-    });
-    if (mode === 'regenerate') {
-        reparsedEvent.getActivities().forEach((activity) => {
-            const activityAny = activity as any;
-            if (
-                typeof activityAny.getStats !== 'function'
-                || typeof activityAny.clearStats !== 'function'
-                || typeof activityAny.addStat !== 'function'
-                || typeof activityAny.getStat !== 'function'
-            ) {
-                return;
-            }
+            reparsedEvent,
+            autoHealResult.eventData,
+            eventAndActivities.activityDocs,
+            targetSportsLibVersion,
+        );
+        const persistDurationMs = Date.now() - persistStartedAtMs;
+        const totalDurationMs = Date.now() - startedAtMs;
 
-            const previousStats = new Map(activityAny.getStats());
-            activityAny.clearStats();
-            ActivityUtilities.generateMissingStreamsAndStatsForActivity(activity as any);
-            previousStats.forEach((stat, type) => {
-                if (!activityAny.getStat(type)) {
-                    activityAny.addStat(stat);
-                }
-            });
+        logger.info('[sports-lib-reparse] Reparse timing', {
+            uid,
+            eventId,
+            mode,
+            status: 'completed',
+            targetSportsLibVersion,
+            sourceFilesCount: parseResult.sourceFilesCount,
+            parsedActivitiesCount: reparsedEvent.getActivities().length,
+            staleActivitiesDeleted: persistResult.staleActivitiesDeleted,
+            loadEventAndActivitiesDurationMs,
+            parseFromSourcesDurationMs,
+            transformDurationMs,
+            persistDurationMs,
+            totalDurationMs,
         });
+
+        return {
+            status: 'completed',
+            sourceFilesCount: parseResult.sourceFilesCount,
+            parsedActivitiesCount: reparsedEvent.getActivities().length,
+            staleActivitiesDeleted: persistResult.staleActivitiesDeleted,
+        };
+    } catch (error) {
+        logger.error('[sports-lib-reparse] Reparse failed', {
+            uid,
+            eventId,
+            mode,
+            targetSportsLibVersion,
+            stage,
+            durationMs: Date.now() - startedAtMs,
+            error: toErrorMessage(error),
+        });
+        throw error;
     }
-    EventUtilities.reGenerateStatsForEvent(reparsedEvent);
-
-    const persistResult = await persistReparsedEvent(
-        uid,
-        eventId,
-        reparsedEvent,
-        autoHealResult.eventData,
-        eventAndActivities.activityDocs,
-        targetSportsLibVersion,
-    );
-
-    return {
-        status: 'completed',
-        sourceFilesCount: parseResult.sourceFilesCount,
-        parsedActivitiesCount: reparsedEvent.getActivities().length,
-        staleActivitiesDeleted: persistResult.staleActivitiesDeleted,
-    };
 }

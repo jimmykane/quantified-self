@@ -33,6 +33,7 @@ export const processSportsLibReparseTask = onTaskDispatched({
     timeoutSeconds: 540,
     region: FUNCTIONS_MANIFEST.processSportsLibReparseTask.region,
 }, async (request) => {
+    const startedAtMs = Date.now();
     const payload = request.data as SportsLibReparseTaskPayload;
     const jobId = payload?.jobId;
 
@@ -90,6 +91,18 @@ export const processSportsLibReparseTask = onTaskDispatched({
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             lastError: admin.firestore.FieldValue.delete(),
         }, { merge: true });
+
+        logger.info('[sports-lib-reparse-worker] Job completed.', {
+            jobId,
+            uid: job.uid,
+            eventId: job.eventId,
+            durationMs: Date.now() - startedAtMs,
+            resultStatus: reparseResult.status,
+            resultReason: reparseResult.reason || null,
+            sourceFilesCount: reparseResult.sourceFilesCount,
+            parsedActivitiesCount: reparseResult.parsedActivitiesCount,
+            staleActivitiesDeleted: reparseResult.staleActivitiesDeleted,
+        });
     } catch (error) {
         const errorMessage = getErrorMessage(error);
         await writeReparseStatus(job.uid, job.eventId, {
@@ -106,6 +119,14 @@ export const processSportsLibReparseTask = onTaskDispatched({
             processedAt: admin.firestore.FieldValue.serverTimestamp(),
             lastError: errorMessage,
         }, { merge: true });
+
+        logger.error('[sports-lib-reparse-worker] Job failed.', {
+            jobId,
+            uid: job.uid,
+            eventId: job.eventId,
+            durationMs: Date.now() - startedAtMs,
+            error: errorMessage,
+        });
 
         throw error;
     }
