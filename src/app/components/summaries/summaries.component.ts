@@ -10,7 +10,7 @@ import {
   OnInit,
   SimpleChanges,
 } from '@angular/core';
-import { Subscription } from 'rxjs';
+import { firstValueFrom, Subscription, take } from 'rxjs';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
 import { CdkDragDrop, CdkDragSortEvent, moveItemInArray } from '@angular/cdk/drag-drop';
@@ -35,6 +35,25 @@ import {
   isDashboardChartTileViewModel,
 } from '../../helpers/dashboard-tile-view-model.helper';
 import { AppUserService } from '../../services/app.user.service';
+import { DashboardDerivedMetricsService } from '../../services/dashboard-derived-metrics.service';
+import type { DashboardFormPoint } from '../../helpers/dashboard-form.helper';
+import type { DashboardRecoveryNowContext } from '../../helpers/dashboard-recovery-now.helper';
+import type { DerivedMetricSnapshotStatus } from '@shared/derived-metrics';
+import {
+  isDashboardFormChartType,
+  isDashboardRecoveryNowChartType,
+} from '../../helpers/dashboard-special-chart-types';
+import { MatDialog } from '@angular/material/dialog';
+import { DashboardChartManagerDialogComponent } from './chart-manager-dialog/chart-manager-dialog.component';
+
+type DashboardDerivedMetricStatus = DerivedMetricSnapshotStatus | 'missing';
+
+interface DashboardDerivedMetricsBanner {
+  type: 'pending' | 'warning';
+  title: string;
+  description: string;
+  showRetry: boolean;
+}
 
 @Component({
   selector: 'app-summaries',
@@ -64,16 +83,26 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   public tileTypes = TileTypes;
   public desktopTileDragEnabled = false;
+  public isChartManagerOpen = false;
 
 
-  private appThemeSubscription: Subscription;
+  private appThemeSubscription: Subscription | null = null;
+  private derivedMetricsSubscription: Subscription | null = null;
+  private derivedMetricsUserUID: string | null = null;
   public darkTheme = false;
   private logger: LoggerService;
   private dashboardTileSettingsSnapshot: TileSettingsInterface[] = [];
+  private derivedFormPoints: DashboardFormPoint[] | null = null;
+  private derivedRecoveryNowContext: DashboardRecoveryNowContext | null = null;
+  private derivedFormStatus: DashboardDerivedMetricStatus = 'missing';
+  private derivedRecoveryNowStatus: DashboardDerivedMetricStatus = 'missing';
+  public derivedMetricsBanner: DashboardDerivedMetricsBanner | null = null;
 
   constructor(
     private themeService: AppThemeService,
     private userService: AppUserService,
+    private dashboardDerivedMetricsService: DashboardDerivedMetricsService,
+    private dialog: MatDialog,
     changeDetector: ChangeDetectorRef,
     logger: LoggerService,
   ) {
@@ -192,13 +221,42 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.changeDetector.detectChanges();
   }
 
+  public async openChartManagerDialog(): Promise<void> {
+    if (!this.showActions || !this.user || this.isChartManagerOpen) {
+      return;
+    }
+
+    this.isChartManagerOpen = true;
+    this.changeDetector.markForCheck();
+
+    try {
+      const dialogRef = this.dialog.open(DashboardChartManagerDialogComponent, {
+        data: { user: this.user },
+        width: '680px',
+        maxWidth: '95vw',
+      });
+      const result = await firstValueFrom(dialogRef.afterClosed().pipe(take(1)));
+      if (result?.saved === true) {
+        await this.rebuildTilesFromCurrentState();
+      }
+    } finally {
+      this.isChartManagerOpen = false;
+      this.changeDetector.markForCheck();
+    }
+  }
+
   private async unsubscribeAndCreateCharts() {
-    const buildStart = performance.now();
-    this.unsubscribeFromAll();
+    this.unsubscribeThemeSubscription();
     this.appThemeSubscription = this.themeService.getAppTheme().subscribe((theme) => {
       this.darkTheme = theme === AppThemes.Dark;
     });
+    this.syncDerivedMetricsSubscription();
+    await this.rebuildTilesFromCurrentState();
+  }
 
+  private async rebuildTilesFromCurrentState(): Promise<void> {
+    const buildStart = performance.now();
+    this.refreshDerivedMetricsBannerState();
     const newTiles = buildDashboardTileViewModels({
       tiles: this.user?.settings?.dashboardSettings?.tiles ?? [],
       events: this.events,
@@ -209,6 +267,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       },
       preferences: this.getAggregationPreferences(),
       logger: this.logger,
+      derivedMetrics: {
+        formPoints: this.derivedFormPoints,
+        recoveryNow: this.derivedRecoveryNowContext,
+      },
     });
     this.dashboardTileSettingsSnapshot = this.getDashboardTileSettingsSnapshot();
     this.logger.log('[perf] summaries_build_tiles', {
@@ -216,7 +278,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       inputEvents: this.events?.length || 0,
       generatedTiles: newTiles.length,
     });
-    // if there are no current charts get and assign and get done
+
     if (!this.tiles.length && newTiles.length) {
       this.tiles = newTiles;
       this.updateDesktopTileDragCapability();
@@ -228,25 +290,16 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       return;
     }
 
-    // Here we need to update:
-    // 1. Go over the new ones
-    // 2. If there is a current one and differs update it
-    // 3. If not leave it alone so no change detection is triggered to the children
     newTiles.forEach(newChart => {
-      // Find one with the same order
       const sameOrderChart = this.tiles.find(chart => chart.order === newChart.order);
-      // If none of the same order then its new so only push
       if (!sameOrderChart) {
         this.tiles.push(newChart);
         return;
       }
-      // If we found one with the same order then compare for changes
-      // if its equal then noop / no equal replace the current index
       if (!equal(sameOrderChart, newChart)) {
         this.tiles[this.tiles.findIndex(chart => chart === sameOrderChart)] = newChart;
       }
     });
-    // Here we need to remove non existing ones
     this.tiles = this.tiles.filter(chart => newTiles.find(newChart => newChart.order === chart.order));
     this.updateDesktopTileDragCapability();
     this.loaded();
@@ -254,6 +307,73 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       durationMs: Number((performance.now() - buildStart).toFixed(2)),
       finalTiles: this.tiles.length,
     });
+  }
+
+  private syncDerivedMetricsSubscription(): void {
+    const uid = `${this.user?.uid || ''}`.trim();
+    if (!uid) {
+      this.derivedMetricsUserUID = null;
+      this.derivedFormPoints = null;
+      this.derivedRecoveryNowContext = null;
+      this.derivedFormStatus = 'missing';
+      this.derivedRecoveryNowStatus = 'missing';
+      this.refreshDerivedMetricsBannerState();
+      if (this.derivedMetricsSubscription) {
+        this.derivedMetricsSubscription.unsubscribe();
+        this.derivedMetricsSubscription = null;
+      }
+      return;
+    }
+
+    if (this.derivedMetricsUserUID === uid && this.derivedMetricsSubscription) {
+      return;
+    }
+
+    if (this.derivedMetricsSubscription) {
+      this.derivedMetricsSubscription.unsubscribe();
+      this.derivedMetricsSubscription = null;
+    }
+
+    this.derivedMetricsUserUID = uid;
+    this.derivedFormPoints = null;
+    this.derivedRecoveryNowContext = null;
+    this.derivedFormStatus = 'missing';
+    this.derivedRecoveryNowStatus = 'missing';
+    this.refreshDerivedMetricsBannerState();
+
+    this.derivedMetricsSubscription = this.dashboardDerivedMetricsService.watch(this.user).subscribe((state) => {
+      this.dashboardDerivedMetricsService.ensureForDashboard(this.user, state);
+
+      const hasFormPointsChanged = !equal(this.derivedFormPoints, state.formPoints);
+      const hasRecoveryContextChanged = !equal(this.derivedRecoveryNowContext, state.recoveryNow);
+      const hasFormStatusChanged = this.derivedFormStatus !== state.formStatus;
+      const hasRecoveryStatusChanged = this.derivedRecoveryNowStatus !== state.recoveryNowStatus;
+      const hasBannerStateChanged = hasFormStatusChanged || hasRecoveryStatusChanged;
+      const hasTileDataChanged = hasFormPointsChanged || hasRecoveryContextChanged;
+      if (!hasTileDataChanged && !hasBannerStateChanged) {
+        return;
+      }
+
+      this.derivedFormPoints = state.formPoints;
+      this.derivedRecoveryNowContext = state.recoveryNow;
+      this.derivedFormStatus = state.formStatus;
+      this.derivedRecoveryNowStatus = state.recoveryNowStatus;
+      this.refreshDerivedMetricsBannerState();
+
+      if (hasTileDataChanged) {
+        void this.rebuildTilesFromCurrentState();
+        return;
+      }
+
+      this.changeDetector.markForCheck();
+    });
+  }
+
+  private unsubscribeThemeSubscription(): void {
+    if (this.appThemeSubscription) {
+      this.appThemeSubscription.unsubscribe();
+      this.appThemeSubscription = null;
+    }
   }
 
   private getDashboardTileSettingsSnapshot(): TileSettingsInterface[] {
@@ -317,9 +437,72 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   private unsubscribeFromAll() {
-    if (this.appThemeSubscription) {
-    this.appThemeSubscription.unsubscribe();
+    this.unsubscribeThemeSubscription();
+    if (this.derivedMetricsSubscription) {
+      this.derivedMetricsSubscription.unsubscribe();
+      this.derivedMetricsSubscription = null;
+      this.derivedMetricsUserUID = null;
     }
+  }
+
+  public retryDerivedMetricsRebuild(): void {
+    if (!this.user) {
+      return;
+    }
+
+    this.dashboardDerivedMetricsService.ensureForDashboard(this.user, {
+      formPoints: this.derivedFormPoints,
+      recoveryNow: this.derivedRecoveryNowContext,
+      formStatus: this.derivedFormStatus,
+      recoveryNowStatus: this.derivedRecoveryNowStatus,
+    }, { force: true });
+  }
+
+  private refreshDerivedMetricsBannerState(): void {
+    const dashboardTiles = this.user?.settings?.dashboardSettings?.tiles ?? [];
+    const hasFormTile = dashboardTiles.some(tile =>
+      tile.type === TileTypes.Chart
+      && isDashboardFormChartType((tile as TileChartSettingsInterface).chartType),
+    );
+    const hasRecoveryTile = dashboardTiles.some(tile =>
+      tile.type === TileTypes.Chart
+      && isDashboardRecoveryNowChartType((tile as TileChartSettingsInterface).chartType),
+    );
+
+    if (!hasFormTile && !hasRecoveryTile) {
+      this.derivedMetricsBanner = null;
+      return;
+    }
+
+    const relevantStatuses: DashboardDerivedMetricStatus[] = [
+      ...(hasFormTile ? [this.derivedFormStatus] : []),
+      ...(hasRecoveryTile ? [this.derivedRecoveryNowStatus] : []),
+    ];
+
+    if (relevantStatuses.some(status => status === 'failed')) {
+      this.derivedMetricsBanner = {
+        type: 'warning',
+        title: 'Training metrics update failed',
+        description: 'Form and Recovery metrics could not refresh. Retry to rebuild derived metrics.',
+        showRetry: true,
+      };
+      return;
+    }
+
+    if (relevantStatuses.some(status => status === 'missing' || status === 'building' || status === 'stale')) {
+      const isUsingStaleData = relevantStatuses.some(status => status === 'stale');
+      this.derivedMetricsBanner = {
+        type: 'pending',
+        title: isUsingStaleData ? 'Refreshing training metrics' : 'Building training metrics',
+        description: isUsingStaleData
+          ? 'Using stale derived metrics while a refresh is in progress.'
+          : 'Form and Recovery metrics are being prepared in the background.',
+        showRetry: false,
+      };
+      return;
+    }
+
+    this.derivedMetricsBanner = null;
   }
 
   private getAggregationPreferences(): EventStatAggregationPreferences {

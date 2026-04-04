@@ -19,7 +19,7 @@ import {
 } from '../../../helpers/echarts-host-controller';
 import { buildOfficialEChartsThemeTokens, ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
 
-export type AdminQueueStatsView = 'all' | 'workout' | 'reparse';
+export type AdminQueueStatsView = 'all' | 'workout' | 'reparse' | 'derived';
 
 @Component({
     selector: 'app-admin-queue-stats',
@@ -42,6 +42,7 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
     @Input() queueView: AdminQueueStatsView = 'all';
     hasRetryData = false;
     readonly reparseFailureColumns = ['uid', 'eventId', 'attemptCount', 'updatedAt', 'lastError'];
+    readonly derivedFailureColumns = ['uid', 'generation', 'dirtyMetricKinds', 'updatedAtMs', 'lastError'];
 
     @ViewChild('retryChart')
     set retryChartRef(ref: ElementRef<HTMLDivElement> | undefined) {
@@ -245,17 +246,37 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
         return this.stats?.reparse?.recentFailures || [];
     }
 
+    getDerivedMetricsFailureRows(): {
+        uid: string;
+        generation: number;
+        dirtyMetricKinds: string[];
+        lastError: string;
+        updatedAtMs: number;
+    }[] {
+        return this.stats?.derivedMetrics?.recentFailures || [];
+    }
+
     get showWorkoutSection(): boolean {
-        return this.queueView !== 'reparse';
+        return this.queueView === 'all' || this.queueView === 'workout';
     }
 
     get showReparseSection(): boolean {
-        return this.queueView !== 'workout';
+        return this.queueView === 'all' || this.queueView === 'reparse';
+    }
+
+    get showDerivedSection(): boolean {
+        return this.queueView === 'all' || this.queueView === 'derived';
     }
 
     formatTimestamp(value: unknown): string {
         if (!value) {
             return 'N/A';
+        }
+        if (typeof value === 'number' && Number.isFinite(value)) {
+            const parsedFromEpoch = new Date(value);
+            if (!Number.isNaN(parsedFromEpoch.getTime())) {
+                return parsedFromEpoch.toLocaleString();
+            }
         }
         if (typeof (value as { toDate?: unknown }).toDate === 'function') {
             const tsDate = (value as { toDate: () => Date }).toDate();

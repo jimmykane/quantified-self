@@ -21,9 +21,8 @@ import {
   buildAggregatedChartRows,
   type AggregatedChartRow,
 } from './aggregated-chart-row.helper';
-import {
-  buildDashboardFormPoints,
-  type DashboardFormPoint,
+import type {
+  DashboardFormPoint,
 } from './dashboard-form.helper';
 import {
   resolveAggregatedRecoveryNowContext,
@@ -60,6 +59,10 @@ interface BuildDashboardTileViewModelsInput {
   } | null;
   preferences?: EventStatAggregationPreferences;
   logger?: EventStatAggregationLogger;
+  derivedMetrics?: {
+    formPoints?: DashboardFormPoint[] | null;
+    recoveryNow?: DashboardRecoveryNowContext | null;
+  } | null;
 }
 
 function resolveEventStartDateTimeMs(event: EventInterface): number | null {
@@ -129,15 +132,17 @@ function normalizeDashboardTileEvents(
 export function buildDashboardTileViewModels(
   input: BuildDashboardTileViewModelsInput,
 ): DashboardTileViewModel[] {
-  const normalizedEvents = normalizeDashboardTileEvents(input.events, input.dashboardDateRange);
-  const aggregatedRecoveryNowContext = resolveAggregatedRecoveryNowContext(normalizedEvents);
+  const filteredEvents = normalizeDashboardTileEvents(input.events, input.dashboardDateRange);
+  const fallbackFilteredRecoveryNowContext = resolveAggregatedRecoveryNowContext(filteredEvents);
+  const derivedFormPoints = Array.isArray(input.derivedMetrics?.formPoints) ? input.derivedMetrics?.formPoints : null;
+  const derivedRecoveryNowContext = input.derivedMetrics?.recoveryNow || null;
 
   return (input.tiles || []).reduce<DashboardTileViewModel[]>((viewModels, tile) => {
     if (tile.type === TileTypes.Map) {
       const mapTile = tile as DashboardMapTileSettings;
       viewModels.push({
         ...mapTile,
-        events: normalizedEvents,
+        events: filteredEvents,
       });
       return viewModels;
     }
@@ -152,7 +157,7 @@ export function buildDashboardTileViewModels(
       viewModels.push({
         ...chartTile,
         timeInterval: TimeIntervals.Daily,
-        data: buildDashboardFormPoints(normalizedEvents),
+        data: derivedFormPoints || [],
       });
       return viewModels;
     }
@@ -161,12 +166,12 @@ export function buildDashboardTileViewModels(
       viewModels.push({
         ...chartTile,
         timeInterval: TimeIntervals.Auto,
-        data: normalizedEvents,
+        data: filteredEvents,
       });
       return viewModels;
     }
 
-    const aggregation = buildEventStatAggregation(normalizedEvents, {
+    const aggregation = buildEventStatAggregation(filteredEvents, {
       dataType: chartTile.dataType,
       valueType: chartTile.dataValueType,
       categoryType: chartTile.dataCategoryType,
@@ -174,13 +179,21 @@ export function buildDashboardTileViewModels(
       preferences: input.preferences,
     }, input.logger);
 
+    const isCuratedRecoveryTile = isDashboardRecoveryNowChartType(chartTile.chartType);
+    const recoveryNowContextForTile = isCuratedRecoveryTile
+      ? derivedRecoveryNowContext
+      : fallbackFilteredRecoveryNowContext;
+    const chartRowsForTile = isCuratedRecoveryTile && !recoveryNowContextForTile
+      ? []
+      : buildAggregatedChartRows(aggregation);
+
     viewModels.push({
       ...chartTile,
       timeInterval: aggregation.resolvedTimeInterval,
-      data: buildAggregatedChartRows(aggregation),
+      data: chartRowsForTile,
       ...((chartTile.dataType === DataRecoveryTime.type || isDashboardRecoveryNowChartType(chartTile.chartType))
-        && aggregatedRecoveryNowContext
-        ? { recoveryNow: aggregatedRecoveryNowContext }
+        && recoveryNowContextForTile
+        ? { recoveryNow: recoveryNowContextForTile }
         : {}),
     });
     return viewModels;

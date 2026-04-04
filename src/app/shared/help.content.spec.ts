@@ -55,12 +55,24 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Total recovery');
   });
 
+  it('should document chart manager curated and custom categories', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+
+    expect(gettingStartedSection?.content).toContain('Chart manager');
+    expect(gettingStartedSection?.content).toContain('Curated');
+    expect(gettingStartedSection?.content).toContain('Custom');
+  });
+
   it('should document the dashboard form tile CTL/ATL/TSB behavior', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
     expect(gettingStartedSection?.content).toContain('Form tile (CTL / ATL / TSB)');
     expect(gettingStartedSection?.content).toContain('Training Stress Score');
+    expect(gettingStartedSection?.content).toContain('Power Training Stress Score');
     expect(gettingStartedSection?.content).toContain('Form (TSB)');
     expect(gettingStartedSection?.content).toContain('prior-day readiness');
+    expect(gettingStartedSection?.content).toContain('full history');
+    expect(gettingStartedSection?.content).toContain('asynchronously');
+    expect(gettingStartedSection?.content).toContain('status notice');
   });
 });

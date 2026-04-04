@@ -2,6 +2,7 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
 import { of } from 'rxjs';
+import { MatDialog } from '@angular/material/dialog';
 import {
   ActivityTypes,
   ChartDataCategoryTypes,
@@ -14,6 +15,7 @@ import {
 import { AppThemeService } from '../../services/app.theme.service';
 import { LoggerService } from '../../services/logger.service';
 import { AppUserService } from '../../services/app.user.service';
+import { DashboardDerivedMetricsService } from '../../services/dashboard-derived-metrics.service';
 import * as dashboardTileViewModelHelper from '../../helpers/dashboard-tile-view-model.helper';
 import { SummariesComponent } from './summaries.component';
 
@@ -22,7 +24,12 @@ describe('SummariesComponent', () => {
   let fixture: ComponentFixture<SummariesComponent>;
   let mockThemeService: { getAppTheme: ReturnType<typeof vi.fn> };
   let mockUserService: { updateUserProperties: ReturnType<typeof vi.fn> };
+  let mockDashboardDerivedMetricsService: {
+    watch: ReturnType<typeof vi.fn>;
+    ensureForDashboard: ReturnType<typeof vi.fn>;
+  };
   let mockLogger: { error: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn>; log: ReturnType<typeof vi.fn> };
+  let mockDialog: { open: ReturnType<typeof vi.fn> };
   let buildDashboardTileViewModelsSpy: ReturnType<typeof vi.spyOn>;
   let originalMatchMedia: typeof window.matchMedia | undefined;
 
@@ -34,7 +41,21 @@ describe('SummariesComponent', () => {
     mockUserService = {
       updateUserProperties: vi.fn().mockResolvedValue(true),
     };
+    mockDashboardDerivedMetricsService = {
+      watch: vi.fn().mockReturnValue(of({
+        formPoints: null,
+        recoveryNow: null,
+        formStatus: 'missing',
+        recoveryNowStatus: 'missing',
+      })),
+      ensureForDashboard: vi.fn(),
+    };
     mockLogger = { error: vi.fn(), warn: vi.fn(), log: vi.fn() };
+    mockDialog = {
+      open: vi.fn().mockReturnValue({
+        afterClosed: () => of({ saved: false }),
+      }),
+    };
     buildDashboardTileViewModelsSpy = vi.spyOn(dashboardTileViewModelHelper, 'buildDashboardTileViewModels');
     originalMatchMedia = window.matchMedia;
     Object.defineProperty(window, 'matchMedia', {
@@ -58,7 +79,9 @@ describe('SummariesComponent', () => {
       providers: [
         { provide: AppThemeService, useValue: mockThemeService },
         { provide: AppUserService, useValue: mockUserService },
+        { provide: DashboardDerivedMetricsService, useValue: mockDashboardDerivedMetricsService },
         { provide: LoggerService, useValue: mockLogger },
+        { provide: MatDialog, useValue: mockDialog },
       ],
     }).compileComponents();
 
@@ -140,6 +163,10 @@ describe('SummariesComponent', () => {
         removeDescentForEventTypes: [ActivityTypes.Cycling],
       },
       logger: mockLogger,
+      derivedMetrics: {
+        formPoints: null,
+        recoveryNow: null,
+      },
     });
     expect(component.tiles).toBe(builtTiles);
   });
@@ -316,6 +343,66 @@ describe('SummariesComponent', () => {
     expect(buildDashboardTileViewModelsSpy).toHaveBeenCalledTimes(1);
   });
 
+  it('should show a warning banner and force retry when derived metrics fail for a form tile', () => {
+    component.user = {
+      settings: {
+        dashboardSettings: {
+          tiles: [{
+            type: TileTypes.Chart,
+            order: 0,
+            chartType: 'Form',
+            dataType: 'Training Stress Score',
+            dataValueType: ChartDataValueTypes.Total,
+            dataCategoryType: ChartDataCategoryTypes.DateType,
+            size: { columns: 1, rows: 1 },
+          }],
+        },
+      },
+    } as any;
+    (component as any).derivedFormStatus = 'failed';
+    (component as any).derivedRecoveryNowStatus = 'ready';
+    (component as any).refreshDerivedMetricsBannerState();
+
+    expect(component.derivedMetricsBanner?.type).toBe('warning');
+    expect(component.derivedMetricsBanner?.showRetry).toBe(true);
+
+    component.retryDerivedMetricsRebuild();
+
+    expect(mockDashboardDerivedMetricsService.ensureForDashboard).toHaveBeenLastCalledWith(
+      component.user,
+      expect.objectContaining({
+        formStatus: 'failed',
+        recoveryNowStatus: 'ready',
+      }),
+      { force: true },
+    );
+  });
+
+  it('should show a pending banner while derived metrics are stale', () => {
+    component.user = {
+      settings: {
+        dashboardSettings: {
+          tiles: [{
+            type: TileTypes.Chart,
+            order: 0,
+            chartType: 'Form',
+            dataType: 'Training Stress Score',
+            dataValueType: ChartDataValueTypes.Total,
+            dataCategoryType: ChartDataCategoryTypes.DateType,
+            size: { columns: 1, rows: 1 },
+          }],
+        },
+      },
+    } as any;
+    (component as any).derivedFormStatus = 'stale';
+    (component as any).derivedRecoveryNowStatus = 'ready';
+    (component as any).refreshDerivedMetricsBannerState();
+
+    expect(component.derivedMetricsBanner?.type).toBe('pending');
+    expect(component.derivedMetricsBanner?.title).toContain('Refreshing');
+    expect(component.derivedMetricsBanner?.showRetry).toBe(false);
+  });
+
   it('should remove tiles that are no longer returned by the tile builder', async () => {
     const initialTiles = [{
       type: TileTypes.Chart,
@@ -444,6 +531,45 @@ describe('SummariesComponent', () => {
     mediaMatches['(hover: hover)'] = false;
     (component as any).updateDesktopTileDragCapability();
     expect(component.desktopTileDragEnabled).toBe(false);
+  });
+
+  it('should open chart manager dialog and rebuild tiles when dialog saves changes', async () => {
+    component.user = {
+      settings: {
+        dashboardSettings: {
+          tiles: [{
+            type: TileTypes.Chart,
+            order: 0,
+            chartType: ChartTypes.ColumnsVertical,
+            dataType: DataAscent.type,
+            dataValueType: ChartDataValueTypes.Total,
+            dataCategoryType: ChartDataCategoryTypes.ActivityType,
+            size: { columns: 1, rows: 1 },
+          }],
+        },
+      },
+    } as any;
+    component.events = [];
+    component.showActions = true;
+    mockDialog.open.mockReturnValue({
+      afterClosed: () => of({ saved: true }),
+    });
+    const rebuildSpy = vi.spyOn(component as any, 'rebuildTilesFromCurrentState').mockResolvedValue(undefined);
+
+    await component.openChartManagerDialog();
+
+    expect(mockDialog.open).toHaveBeenCalledTimes(1);
+    expect(rebuildSpy).toHaveBeenCalledTimes(1);
+    expect(component.isChartManagerOpen).toBe(false);
+  });
+
+  it('should ignore chart manager open requests when actions are hidden', async () => {
+    component.user = { settings: { dashboardSettings: { tiles: [] } } } as any;
+    component.showActions = false;
+
+    await component.openChartManagerDialog();
+
+    expect(mockDialog.open).not.toHaveBeenCalled();
   });
 
   it('should reorder and persist dashboard tiles on valid drop', async () => {

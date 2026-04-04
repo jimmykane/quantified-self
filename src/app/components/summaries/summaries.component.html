@@ -1,5 +1,25 @@
 @if (tiles.length) {
 <section class="pie">
+  @if (showActions) {
+  <div class="dashboard-summary-actions">
+    <button mat-flat-button class="qs-mat-primary" (click)="openChartManagerDialog()" [disabled]="isChartManagerOpen">
+      <mat-icon>add_chart</mat-icon>
+      <span>Chart manager</span>
+    </button>
+  </div>
+  }
+  @if (derivedMetricsBanner) {
+  <div class="derived-metrics-banner" [class.pending]="derivedMetricsBanner.type === 'pending'"
+    [class.warning]="derivedMetricsBanner.type === 'warning'">
+    <div class="derived-metrics-banner-content">
+      <div class="derived-metrics-banner-title">{{derivedMetricsBanner.title}}</div>
+      <div class="derived-metrics-banner-description">{{derivedMetricsBanner.description}}</div>
+    </div>
+    @if (derivedMetricsBanner.showRetry) {
+    <button type="button" class="derived-metrics-banner-action" (click)="retryDerivedMetricsRebuild()">Retry</button>
+    }
+  </div>
+  }
   <div
     class="dashboard-grid"
     cdkDropList

@@ -3,8 +3,10 @@ import { TimeIntervals, type EventInterface } from '@sports-alliance/sports-lib'
 const CTL_TIME_CONSTANT_DAYS = 42;
 const ATL_TIME_CONSTANT_DAYS = 7;
 const THIRTY_ONE_DAYS_MS = 31 * 24 * 60 * 60 * 1000;
+const UTC_DAY_MS = 24 * 60 * 60 * 1000;
 
 export const DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE = 'Training Stress Score';
+export const DASHBOARD_FORM_LEGACY_TRAINING_STRESS_SCORE_TYPE = 'Power Training Stress Score';
 
 export type DashboardFormMode = 'same-day' | 'prior-day';
 
@@ -40,11 +42,67 @@ function resolveDayStartLocalTime(date: Date): number {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 }
 
+function buildDashboardFormPointsFromDailyLoadMap(
+  dailyTrainingStressScores: Map<number, number>,
+  daySequenceBuilder: (startDay: number, endDay: number) => number[],
+): DashboardFormPoint[] {
+  if (!dailyTrainingStressScores.size) {
+    return [];
+  }
+
+  const sortedDays = [...dailyTrainingStressScores.keys()].sort((left, right) => left - right);
+  const startDay = sortedDays[0];
+  const endDay = sortedDays[sortedDays.length - 1];
+  if (!Number.isFinite(startDay) || !Number.isFinite(endDay)) {
+    return [];
+  }
+
+  const daySequence = daySequenceBuilder(startDay, endDay);
+  if (!daySequence.length) {
+    return [];
+  }
+
+  const points: DashboardFormPoint[] = [];
+  let previousCtl = 0;
+  let previousAtl = 0;
+
+  daySequence.forEach((dayTime) => {
+    const trainingStressScore = dailyTrainingStressScores.get(dayTime) || 0;
+    const ctl = previousCtl + ((trainingStressScore - previousCtl) / CTL_TIME_CONSTANT_DAYS);
+    const atl = previousAtl + ((trainingStressScore - previousAtl) / ATL_TIME_CONSTANT_DAYS);
+
+    points.push({
+      time: dayTime,
+      trainingStressScore,
+      ctl,
+      atl,
+      formSameDay: ctl - atl,
+      formPriorDay: points.length ? previousCtl - previousAtl : null,
+    });
+
+    previousCtl = ctl;
+    previousAtl = atl;
+  });
+
+  return points;
+}
+
 export function resolveDashboardFormTrainingStressScore(event: EventInterface): number | null {
-  const stat = event?.getStat?.(DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE) as
-    { getValue?: () => unknown } | null | undefined;
-  const value = toFiniteNumber(stat?.getValue?.());
-  return value !== null && value >= 0 ? value : null;
+  const statTypes = [
+    DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+    DASHBOARD_FORM_LEGACY_TRAINING_STRESS_SCORE_TYPE,
+  ];
+
+  for (const statType of statTypes) {
+    const stat = event?.getStat?.(statType) as
+      { getValue?: () => unknown } | null | undefined;
+    const value = toFiniteNumber(stat?.getValue?.());
+    if (value !== null && value >= 0) {
+      return value;
+    }
+  }
+
+  return null;
 }
 
 export function buildDashboardFormPoints(events: readonly EventInterface[] | null | undefined): DashboardFormPoint[] {
@@ -54,8 +112,6 @@ export function buildDashboardFormPoints(events: readonly EventInterface[] | nul
   }
 
   const dailyTrainingStressScores = new Map<number, number>();
-  let startDay = Number.POSITIVE_INFINITY;
-  let endDay = Number.NEGATIVE_INFINITY;
   normalizedEvents.forEach((event) => {
     const startDate = event?.startDate;
     if (!(startDate instanceof Date) || !Number.isFinite(startDate.getTime())) {
@@ -72,46 +128,52 @@ export function buildDashboardFormPoints(events: readonly EventInterface[] | nul
       dayStart,
       (dailyTrainingStressScores.get(dayStart) || 0) + stressScore,
     );
-    if (dayStart < startDay) {
-      startDay = dayStart;
-    }
-    if (dayStart > endDay) {
-      endDay = dayStart;
-    }
   });
 
-  if (!Number.isFinite(startDay) || !Number.isFinite(endDay)) {
+  return buildDashboardFormPointsFromDailyLoadMap(
+    dailyTrainingStressScores,
+    (startDay, endDay) => {
+      const daySequence: number[] = [];
+      for (
+        let currentDay = new Date(startDay);
+        currentDay.getTime() <= endDay;
+        currentDay = new Date(currentDay.getFullYear(), currentDay.getMonth(), currentDay.getDate() + 1)
+      ) {
+        daySequence.push(currentDay.getTime());
+      }
+      return daySequence;
+    },
+  );
+}
+
+export function buildDashboardFormPointsFromDailyLoads(
+  dailyLoads: readonly (readonly [number, number])[] | null | undefined,
+): DashboardFormPoint[] {
+  const normalizedDailyLoads = Array.isArray(dailyLoads) ? dailyLoads : [];
+  if (!normalizedDailyLoads.length) {
     return [];
   }
 
-  const points: DashboardFormPoint[] = [];
-  let previousCtl = 0;
-  let previousAtl = 0;
+  const dailyTrainingStressScores = normalizedDailyLoads.reduce((scores, pair) => {
+    const dayTime = toFiniteNumber(pair?.[0]);
+    const trainingStressScore = toFiniteNumber(pair?.[1]);
+    if (dayTime === null || trainingStressScore === null || trainingStressScore < 0) {
+      return scores;
+    }
+    scores.set(dayTime, (scores.get(dayTime) || 0) + trainingStressScore);
+    return scores;
+  }, new Map<number, number>());
 
-  for (
-    let currentDay = new Date(startDay);
-    currentDay.getTime() <= endDay;
-    currentDay = new Date(currentDay.getFullYear(), currentDay.getMonth(), currentDay.getDate() + 1)
-  ) {
-    const dayTime = currentDay.getTime();
-    const trainingStressScore = dailyTrainingStressScores.get(dayTime) || 0;
-    const ctl = previousCtl + ((trainingStressScore - previousCtl) / CTL_TIME_CONSTANT_DAYS);
-    const atl = previousAtl + ((trainingStressScore - previousAtl) / ATL_TIME_CONSTANT_DAYS);
-
-    points.push({
-      time: dayTime,
-      trainingStressScore,
-      ctl,
-      atl,
-      formSameDay: ctl - atl,
-      formPriorDay: points.length ? previousCtl - previousAtl : null,
-    });
-
-    previousCtl = ctl;
-    previousAtl = atl;
-  }
-
-  return points;
+  return buildDashboardFormPointsFromDailyLoadMap(
+    dailyTrainingStressScores,
+    (startDay, endDay) => {
+      const daySequence: number[] = [];
+      for (let dayMs = startDay; dayMs <= endDay; dayMs += UTC_DAY_MS) {
+        daySequence.push(dayMs);
+      }
+      return daySequence;
+    },
+  );
 }
 
 export function resolveDashboardFormValue(

@@ -66,7 +66,7 @@ vi.mock('firebase-functions/v2/https', () => ({
 }));
 
 
-import { listUsers } from './admin';
+import { listUsers } from '../admin';
 
 describe('listUsers Cloud Function - Service Filtering', () => {
     beforeEach(() => {

@@ -96,6 +96,14 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 ## Core dashboard features
 
+### Chart manager
+
+- Use the **Chart manager** button above dashboard tiles to add or edit chart tiles.
+- You can choose between **Curated** and **Custom** chart categories.
+- **Curated** charts (Recovery, Form/TSS) are fixed insights and do not react to dashboard date-range changes.
+- **Custom** charts keep the existing configurable behavior and react to dashboard filters/date range.
+- Curated chart types are unique: only one Recovery and one Form tile can exist at a time.
+
 ### Reorder dashboard tiles
 
 - On desktop, drag dashboard tiles from the tile action area to reorder them.
@@ -106,18 +114,21 @@ export const HELP_SECTIONS: HelpSection[] = [
 ### Recovery tile summary
 
 - The curated **Recovery** pie tile is optional and not added automatically.
-- New **Recovery** tiles are temporarily disabled from chart type options.
 - The tile shows live recovery split between **Left now** and **Elapsed**.
-- When recovery data is available for your current dashboard filters, the summary shows **Recovery Left Now** and **Total recovery** summed across all recovery-enabled events in the filtered range.
+- The summary shows **Recovery Left Now** and **Total recovery** summed across all recovery-enabled events.
 - Remaining recovery updates every minute while the tile is visible.
 - You can still move or remove this tile from the tile menu.
 
 ### Form tile (CTL / ATL / TSB)
 
-- New dashboard **Form** tiles are temporarily disabled from chart type options.
 - The tile derives daily load from **Training Stress Score**.
+- Legacy **Power Training Stress Score** is used automatically when current TSS is missing.
 - It shows three headline stats: **Fitness (CTL)**, **Fatigue (ATL)**, and **Form (TSB)**.
 - **Form (TSB)** is shown as **prior-day readiness** using the prior day CTL - ATL.
+- Form and RecoveryNow tiles use precomputed derived snapshots from your full history (UTC day buckets), not only the currently selected dashboard date range.
+- When snapshots are missing or stale, they rebuild asynchronously; refresh usually follows within a few minutes.
+- If rebuilding requests fail repeatedly, the dashboard shows a retry notification and continues with last known snapshot values.
+- While rebuilding, the dashboard shows a small training-metrics status notice above tiles.
 - The status title updates dynamically from current Form bands:
   - **High fatigue** at very negative Form values,
   - **Building fitness** while carrying meaningful load,
