@@ -5,5 +5,5 @@ export const SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS = {
     // Higher defaults improve migration throughput while still allowing bounded scans.
     scanLimit: 1200,
     enqueueLimit: 800,
-    uidAllowlist: null,
+    uidAllowlist: [],
 } as const;
