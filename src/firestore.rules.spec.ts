@@ -842,6 +842,25 @@ describe('Firestore Security Rules', () => {
             }));
         });
 
+        it('should deny user from updating sourceActivityKey of their activity', async () => {
+            const db = testEnv.authenticatedContext(userId).firestore();
+
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().collection(`users/${userId}/events`).doc('original_event').set({
+                    type: 'Running'
+                });
+                await context.firestore().collection(`users/${userId}/activities`).doc(activityId).set({
+                    type: 'Running',
+                    eventID: 'original_event',
+                    sourceActivityKey: 'sha256:signature:0',
+                });
+            });
+
+            await assertFails(db.collection(`users/${userId}/activities`).doc(activityId).update({
+                sourceActivityKey: 'sha256:signature:1'
+            }));
+        });
+
         it('should deny user from reading another users activity', async () => {
             const db = testEnv.authenticatedContext(userId).firestore();
             await assertFails(db.collection(`users/${otherId}/activities`).doc('some_activity').get());

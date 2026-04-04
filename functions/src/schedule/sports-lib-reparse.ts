@@ -23,7 +23,8 @@ import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 
 const SPORTS_LIB_REPARSE_SCAN_CONCURRENCY = 25;
-const SPORTS_LIB_REPARSE_ENQUEUE_SPREAD_SECONDS = 10 * 60;
+// Keep a spread window to avoid burst spikes, but shorten it to improve end-to-end drain rate.
+const SPORTS_LIB_REPARSE_ENQUEUE_SPREAD_SECONDS = 5 * 60;
 
 type ProcessingTaskResult = {
     trackedPromise: Promise<ProcessingTaskResult>;

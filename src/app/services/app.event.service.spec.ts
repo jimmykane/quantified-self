@@ -1091,6 +1091,7 @@ describe('AppEventService', () => {
             eventID: 'event-hijack',
             userID: 'other-user',
             eventStartDate: new Date('2026-01-01T00:00:00.000Z'),
+            sourceActivityKey: 'sha256:signature:0',
             details: {
                 streams: [{ type: 'Power', values: [100, 200] }],
             },
@@ -1107,6 +1108,7 @@ describe('AppEventService', () => {
         expect(writtenPayload.eventID).toBeUndefined();
         expect(writtenPayload.userID).toBeUndefined();
         expect(writtenPayload.eventStartDate).toBeUndefined();
+        expect(writtenPayload.sourceActivityKey).toBeUndefined();
         expect(hasStreamsKey(writtenPayload)).toBe(false);
     });
 
@@ -1117,6 +1119,7 @@ describe('AppEventService', () => {
             eventID: 'hijack',
             userID: 'other-user',
             eventStartDate: new Date('2026-01-01T00:00:00.000Z'),
+            sourceActivityKey: 'sha256:signature:0',
             nested: {
                 streams: [{ type: 'Pace', values: [1, 2, 3] }],
             },
@@ -1147,6 +1150,7 @@ describe('AppEventService', () => {
         expect(writtenActivityPatch.eventID).toBeUndefined();
         expect(writtenActivityPatch.userID).toBeUndefined();
         expect(writtenActivityPatch.eventStartDate).toBeUndefined();
+        expect(writtenActivityPatch.sourceActivityKey).toBeUndefined();
         expect(hasStreamsKey(writtenActivityPatch)).toBe(false);
 
         const writtenEventPatch = mocks.batchUpdate.mock.calls[1][1];

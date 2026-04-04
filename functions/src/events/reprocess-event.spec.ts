@@ -118,6 +118,23 @@ describe('reprocessEvent', () => {
         });
     });
 
+    it('should return staleActivitiesDeleted count from reparse response', async () => {
+        hoisted.mockReparseEventFromOriginalFiles.mockResolvedValueOnce({
+            status: 'completed',
+            sourceFilesCount: 1,
+            parsedActivitiesCount: 2,
+            staleActivitiesDeleted: 3,
+        });
+
+        const result = await reprocessEvent({
+            auth: { uid: 'u1' },
+            app: { appId: 'app-id' },
+            data: { eventId: 'event-1', mode: 'reimport' },
+        } as any);
+
+        expect(result.staleActivitiesDeleted).toBe(3);
+    });
+
     it('should process regenerate mode with regenerate-specific reparse mode', async () => {
         const result = await reprocessEvent({
             auth: { uid: 'u1' },
