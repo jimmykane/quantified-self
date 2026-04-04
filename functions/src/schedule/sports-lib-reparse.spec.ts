@@ -393,7 +393,7 @@ describe('scheduleSportsLibReparseScan', () => {
         expect(secondCallArgs[1]).toBeLessThanOrEqual(10);
     });
 
-    it('should use bounded dynamic enqueue delay in global mode', async () => {
+    it('should use the same bounded dynamic enqueue delay in global mode', async () => {
         hoisted.runtimeDefaults.uidAllowlist = null;
         hoisted.runtimeDefaults.enqueueLimit = 2;
         hoisted.buildSportsLibReparseJobId.mockImplementation((_uid: string, eventId: string) => `job-${eventId}`);
@@ -417,8 +417,8 @@ describe('scheduleSportsLibReparseScan', () => {
         const secondCallArgs = hoisted.enqueueSportsLibReparseTask.mock.calls[1];
         expect(firstCallArgs).toEqual(['job-e1']);
         expect(secondCallArgs[0]).toBe('job-e2');
-        expect(secondCallArgs[1]).toBeGreaterThanOrEqual(30);
-        expect(secondCallArgs[1]).toBeLessThanOrEqual(60);
+        expect(secondCallArgs[1]).toBeGreaterThanOrEqual(2);
+        expect(secondCallArgs[1]).toBeLessThanOrEqual(10);
     });
 
     it('should apply tuple cursor startAfter in global mode', async () => {

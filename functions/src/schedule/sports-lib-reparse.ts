@@ -23,12 +23,9 @@ import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 
 const SPORTS_LIB_REPARSE_SCAN_CONCURRENCY = 25;
-const SPORTS_LIB_REPARSE_GLOBAL_TARGET_ENQUEUE_RPS = 6;
-const SPORTS_LIB_REPARSE_OVERRIDE_TARGET_ENQUEUE_RPS = 10;
-const SPORTS_LIB_REPARSE_GLOBAL_ENQUEUE_SPREAD_MIN_SECONDS = 30;
-const SPORTS_LIB_REPARSE_GLOBAL_ENQUEUE_SPREAD_MAX_SECONDS = 5 * 60;
-const SPORTS_LIB_REPARSE_OVERRIDE_ENQUEUE_SPREAD_MIN_SECONDS = 5;
-const SPORTS_LIB_REPARSE_OVERRIDE_ENQUEUE_SPREAD_MAX_SECONDS = 2 * 60;
+const SPORTS_LIB_REPARSE_TARGET_ENQUEUE_RPS = 12;
+const SPORTS_LIB_REPARSE_ENQUEUE_SPREAD_MIN_SECONDS = 5;
+const SPORTS_LIB_REPARSE_ENQUEUE_SPREAD_MAX_SECONDS = 5 * 60;
 
 type EnqueuePacingMode = 'global' | 'override';
 
@@ -104,23 +101,17 @@ function clampNumber(value: number, minValue: number, maxValue: number): number 
 
 function resolveEnqueueSpreadSeconds(
     enqueueLimit: number,
-    mode: EnqueuePacingMode,
 ): number {
     if (enqueueLimit <= 1) {
         return 1;
     }
-    const targetEnqueueRps = mode === 'override'
-        ? SPORTS_LIB_REPARSE_OVERRIDE_TARGET_ENQUEUE_RPS
-        : SPORTS_LIB_REPARSE_GLOBAL_TARGET_ENQUEUE_RPS;
-    const minSpreadSeconds = mode === 'override'
-        ? SPORTS_LIB_REPARSE_OVERRIDE_ENQUEUE_SPREAD_MIN_SECONDS
-        : SPORTS_LIB_REPARSE_GLOBAL_ENQUEUE_SPREAD_MIN_SECONDS;
-    const maxSpreadSeconds = mode === 'override'
-        ? SPORTS_LIB_REPARSE_OVERRIDE_ENQUEUE_SPREAD_MAX_SECONDS
-        : SPORTS_LIB_REPARSE_GLOBAL_ENQUEUE_SPREAD_MAX_SECONDS;
-    const idealSpreadSeconds = Math.ceil(enqueueLimit / targetEnqueueRps);
+    const idealSpreadSeconds = Math.ceil(enqueueLimit / SPORTS_LIB_REPARSE_TARGET_ENQUEUE_RPS);
 
-    return clampNumber(idealSpreadSeconds, minSpreadSeconds, maxSpreadSeconds);
+    return clampNumber(
+        idealSpreadSeconds,
+        SPORTS_LIB_REPARSE_ENQUEUE_SPREAD_MIN_SECONDS,
+        SPORTS_LIB_REPARSE_ENQUEUE_SPREAD_MAX_SECONDS,
+    );
 }
 
 function calculateEnqueueDelaySeconds(
@@ -174,7 +165,7 @@ export const scheduleSportsLibReparseScan = onSchedule({
     const enqueuePacingMode: EnqueuePacingMode = settings.uidAllowlist && settings.uidAllowlist.size > 0
         ? 'override'
         : 'global';
-    const enqueueSpreadSeconds = resolveEnqueueSpreadSeconds(settings.enqueueLimit, enqueuePacingMode);
+    const enqueueSpreadSeconds = resolveEnqueueSpreadSeconds(settings.enqueueLimit);
     const hasReachedEnqueueLimit = (): boolean => enqueuedCount >= settings.enqueueLimit;
     const hasAvailableEnqueueSlot = (): boolean => (enqueuedCount + enqueueReservationCount) < settings.enqueueLimit;
     const tryAcquireEnqueueSlotLease = (): EnqueueSlotLease | null => {
