@@ -1,5 +1,8 @@
 import { Injectable, inject } from '@angular/core';
 import {
+  ActivityInterface,
+  DataDistance,
+  DataDuration,
   EventImporterFIT,
   EventImporterGPX,
   EventImporterSuuntoJSON,
@@ -16,7 +19,6 @@ import { AppCacheService } from './app.cache.service';
 import { EventJSONSanitizer } from '../utils/event-json-sanitizer';
 import { AppEventInterface, OriginalFileMetaData } from '@shared/app-event.interface';
 import { createParsingOptions } from '@shared/parsing-options';
-import { ActivityInterface } from '@sports-alliance/sports-lib';
 
 export interface ParseOptions {
   skipEnrichment?: boolean;
@@ -229,10 +231,18 @@ export class AppOriginalFileHydrationService {
   }
 
   private applyExistingActivityIdentity(existingEvent: AppEventInterface, parsedEvent: EventInterface): void {
-    const existingActivities = existingEvent.getActivities();
-    parsedEvent.getActivities().forEach((parsedActivity, index) => {
-      const existingActivity = existingActivities[index];
-      if (!existingActivity) {
+    const existingActivities = existingEvent.getActivities() || [];
+    const parsedActivities = parsedEvent.getActivities() || [];
+    if (!existingActivities.length || !parsedActivities.length) {
+      return;
+    }
+
+    const assignedParsedToExistingIndex = this.resolveActivityIdentityAssignments(existingActivities, parsedActivities);
+
+    assignedParsedToExistingIndex.forEach((existingIndex, parsedIndex) => {
+      const existingActivity = existingActivities[existingIndex];
+      const parsedActivity = parsedActivities[parsedIndex];
+      if (!existingActivity || !parsedActivity) {
         return;
       }
 
@@ -240,8 +250,258 @@ export class AppOriginalFileHydrationService {
       if (existingId) {
         parsedActivity.setID(existingId);
       }
+      const existingSourceActivityKey = this.getActivitySourceActivityKey(existingActivity);
+      if (existingSourceActivityKey && !this.getActivitySourceActivityKey(parsedActivity)) {
+        (parsedActivity as any).sourceActivityKey = existingSourceActivityKey;
+      }
       this.applyUserActivityOverrides(existingActivity, parsedActivity);
     });
+
+    if (assignedParsedToExistingIndex.size !== parsedActivities.length) {
+      const assignedParsedIndexes = new Set(assignedParsedToExistingIndex.keys());
+      const assignedExistingIndexes = new Set(assignedParsedToExistingIndex.values());
+      const unmatchedParsed = parsedActivities
+        .map((activity, index) => ({ activity, index }))
+        .filter(({ index }) => !assignedParsedIndexes.has(index))
+        .map(({ activity, index }) => ({
+          index,
+          id: activity.getID?.() || null,
+          sourceActivityKey: this.getActivitySourceActivityKey(activity),
+          startMs: this.toTimestampMs((activity as any)?.startDate),
+          type: `${(activity as any)?.type || ''}`.trim() || null,
+        }));
+      const unmatchedExisting = existingActivities
+        .map((activity, index) => ({ activity, index }))
+        .filter(({ index }) => !assignedExistingIndexes.has(index))
+        .map(({ activity, index }) => ({
+          index,
+          id: activity.getID?.() || null,
+          sourceActivityKey: this.getActivitySourceActivityKey(activity),
+          startMs: this.toTimestampMs((activity as any)?.startDate),
+          type: `${(activity as any)?.type || ''}`.trim() || null,
+        }));
+
+      this.logger.warn('[AppOriginalFileHydrationService] Could not deterministically map all parsed activities to existing identities', {
+        eventID: existingEvent.getID?.() || null,
+        parsedCount: parsedActivities.length,
+        existingCount: existingActivities.length,
+        assignedCount: assignedParsedToExistingIndex.size,
+        unmatchedParsed,
+        unmatchedExisting,
+      });
+    }
+  }
+
+  private resolveActivityIdentityAssignments(
+    existingActivities: ActivityInterface[],
+    parsedActivities: ActivityInterface[],
+  ): Map<number, number> {
+    const assignments = new Map<number, number>();
+    const usedExistingIndexes = new Set<number>();
+
+    const assign = (parsedIndex: number, existingIndex: number): void => {
+      if (assignments.has(parsedIndex) || usedExistingIndexes.has(existingIndex)) {
+        return;
+      }
+      assignments.set(parsedIndex, existingIndex);
+      usedExistingIndexes.add(existingIndex);
+    };
+
+    const findUnassignedExistingById = (id: string): number[] =>
+      existingActivities.reduce<number[]>((matches, activity, index) => {
+        if (usedExistingIndexes.has(index)) {
+          return matches;
+        }
+        if ((activity.getID?.() || '') === id) {
+          matches.push(index);
+        }
+        return matches;
+      }, []);
+
+    this.assignUniqueMatchesBySignature(
+      existingActivities,
+      parsedActivities,
+      assignments,
+      usedExistingIndexes,
+      (activity) => this.getActivitySourceActivityKey(activity),
+    );
+
+    parsedActivities.forEach((parsedActivity, parsedIndex) => {
+      const parsedId = parsedActivity.getID?.();
+      if (!parsedId) {
+        return;
+      }
+      const byIdMatches = findUnassignedExistingById(parsedId);
+      if (byIdMatches.length === 1) {
+        assign(parsedIndex, byIdMatches[0]);
+      }
+    });
+
+    this.assignUniqueMatchesBySignature(
+      existingActivities,
+      parsedActivities,
+      assignments,
+      usedExistingIndexes,
+      (activity) => this.getStrictIdentitySignature(activity),
+    );
+    this.assignUniqueMatchesBySignature(
+      existingActivities,
+      parsedActivities,
+      assignments,
+      usedExistingIndexes,
+      (activity) => this.getTimeTypeIdentitySignature(activity),
+    );
+    this.assignUniqueMatchesBySignature(
+      existingActivities,
+      parsedActivities,
+      assignments,
+      usedExistingIndexes,
+      (activity) => this.getStartIdentitySignature(activity),
+    );
+
+    const remainingParsedIndexes = parsedActivities
+      .map((_activity, index) => index)
+      .filter((index) => !assignments.has(index));
+    const remainingExistingIndexes = existingActivities
+      .map((_activity, index) => index)
+      .filter((index) => !usedExistingIndexes.has(index));
+    if (remainingParsedIndexes.length === 1 && remainingExistingIndexes.length === 1) {
+      assign(remainingParsedIndexes[0], remainingExistingIndexes[0]);
+    }
+
+    return assignments;
+  }
+
+  private getActivitySourceActivityKey(activity: ActivityInterface): string | null {
+    const sourceActivityKey = `${(activity as any)?.sourceActivityKey || ''}`.trim();
+    return sourceActivityKey.length > 0 ? sourceActivityKey : null;
+  }
+
+  private assignUniqueMatchesBySignature(
+    existingActivities: ActivityInterface[],
+    parsedActivities: ActivityInterface[],
+    assignments: Map<number, number>,
+    usedExistingIndexes: Set<number>,
+    signatureResolver: (activity: ActivityInterface) => string | null,
+  ): void {
+    const existingBySignature = new Map<string, number[]>();
+    existingActivities.forEach((activity, index) => {
+      if (usedExistingIndexes.has(index)) {
+        return;
+      }
+      const signature = signatureResolver(activity);
+      if (!signature) {
+        return;
+      }
+      const list = existingBySignature.get(signature) || [];
+      list.push(index);
+      existingBySignature.set(signature, list);
+    });
+
+    const parsedBySignature = new Map<string, number[]>();
+    parsedActivities.forEach((activity, index) => {
+      if (assignments.has(index)) {
+        return;
+      }
+      const signature = signatureResolver(activity);
+      if (!signature) {
+        return;
+      }
+      const list = parsedBySignature.get(signature) || [];
+      list.push(index);
+      parsedBySignature.set(signature, list);
+    });
+
+    parsedBySignature.forEach((parsedIndexes, signature) => {
+      const existingIndexes = existingBySignature.get(signature) || [];
+      if (parsedIndexes.length !== 1 || existingIndexes.length !== 1) {
+        return;
+      }
+      const parsedIndex = parsedIndexes[0];
+      const existingIndex = existingIndexes[0];
+      if (assignments.has(parsedIndex) || usedExistingIndexes.has(existingIndex)) {
+        return;
+      }
+      assignments.set(parsedIndex, existingIndex);
+      usedExistingIndexes.add(existingIndex);
+    });
+  }
+
+  private getStrictIdentitySignature(activity: ActivityInterface): string | null {
+    const startMs = this.toTimestampMs((activity as any)?.startDate);
+    if (startMs === null) {
+      return null;
+    }
+    const endMs = this.toTimestampMs((activity as any)?.endDate);
+    const type = this.normalizeIdentityType((activity as any)?.type);
+    const duration = this.getActivityStatValue(activity, DataDuration.type);
+    const distance = this.getActivityStatValue(activity, DataDistance.type);
+    const roundedDuration = duration === null ? 'na' : `${Math.round(duration)}`;
+    const roundedDistance = distance === null ? 'na' : `${Math.round(distance)}`;
+    return [startMs, endMs ?? 'na', type, roundedDuration, roundedDistance].join('|');
+  }
+
+  private getTimeTypeIdentitySignature(activity: ActivityInterface): string | null {
+    const startMs = this.toTimestampMs((activity as any)?.startDate);
+    if (startMs === null) {
+      return null;
+    }
+    const endMs = this.toTimestampMs((activity as any)?.endDate);
+    const type = this.normalizeIdentityType((activity as any)?.type);
+    return [startMs, endMs ?? 'na', type].join('|');
+  }
+
+  private getStartIdentitySignature(activity: ActivityInterface): string | null {
+    const startMs = this.toTimestampMs((activity as any)?.startDate);
+    if (startMs === null) {
+      return null;
+    }
+    const type = this.normalizeIdentityType((activity as any)?.type);
+    return [startMs, type].join('|');
+  }
+
+  private getActivityStatValue(activity: ActivityInterface, statType: string): number | null {
+    const getter = (activity as any)?.getStat;
+    if (typeof getter !== 'function') {
+      return null;
+    }
+    const stat = getter.call(activity, statType);
+    const getValue = stat?.getValue;
+    if (typeof getValue !== 'function') {
+      return null;
+    }
+    const value = Number(getValue.call(stat));
+    return Number.isFinite(value) ? value : null;
+  }
+
+  private normalizeIdentityType(type: unknown): string {
+    return `${type || ''}`.trim().toLowerCase() || 'unknown';
+  }
+
+  private toTimestampMs(value: unknown): number | null {
+    if (value instanceof Date) {
+      const timestamp = value.getTime();
+      return Number.isFinite(timestamp) ? timestamp : null;
+    }
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === 'string' && value.trim().length > 0) {
+      const parsed = Date.parse(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+    const maybeTimestamp = value as { toDate?: () => Date; seconds?: number; nanoseconds?: number } | null;
+    if (maybeTimestamp && typeof maybeTimestamp.toDate === 'function') {
+      const date = maybeTimestamp.toDate();
+      const timestamp = date?.getTime?.();
+      return Number.isFinite(timestamp) ? timestamp : null;
+    }
+    if (maybeTimestamp && Number.isFinite(maybeTimestamp.seconds)) {
+      const nanoseconds = Number.isFinite(maybeTimestamp.nanoseconds) ? maybeTimestamp.nanoseconds || 0 : 0;
+      const timestamp = (maybeTimestamp.seconds as number) * 1000 + nanoseconds / 1000000;
+      return Number.isFinite(timestamp) ? timestamp : null;
+    }
+    return null;
   }
 
   private applyUserActivityOverrides(existingActivity: ActivityInterface, parsedActivity: ActivityInterface): void {

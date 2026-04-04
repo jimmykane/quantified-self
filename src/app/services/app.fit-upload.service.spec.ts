@@ -1,10 +1,11 @@
 import { TestBed } from '@angular/core/testing';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AppFitUploadService } from './app.fit-upload.service';
 import { FirebaseApp } from 'app/firebase/app';
 import { Auth } from 'app/firebase/auth';
 import { AppCheckReadinessService } from './app-check-readiness.service';
+import { environment } from '../../environments/environment';
 
 describe('AppFitUploadService', () => {
   let service: AppFitUploadService;
@@ -12,6 +13,13 @@ describe('AppFitUploadService', () => {
   let appMock: any;
   let appCheckReadinessMock: Pick<AppCheckReadinessService, 'getToken'>;
   let fetchMock: any;
+  let originalLocalhost: boolean;
+  let originalUseFunctionsEmulator: boolean;
+
+  beforeEach(() => {
+    originalLocalhost = environment.localhost;
+    originalUseFunctionsEmulator = environment.useFunctionsEmulator;
+  });
 
   beforeEach(() => {
     fetchMock = vi.fn();
@@ -43,6 +51,11 @@ describe('AppFitUploadService', () => {
     service = TestBed.inject(AppFitUploadService);
   });
 
+  afterEach(() => {
+    environment.localhost = originalLocalhost;
+    environment.useFunctionsEmulator = originalUseFunctionsEmulator;
+  });
+
   it('should upload activity bytes with auth, app check, and extension headers', async () => {
     fetchMock.mockResolvedValue({
       ok: true,
@@ -61,7 +74,7 @@ describe('AppFitUploadService', () => {
     expect(authMock.currentUser.getIdToken).toHaveBeenCalledWith(true);
     expect(appCheckReadinessMock.getToken).toHaveBeenCalledWith();
     expect(fetchMock).toHaveBeenCalledWith(
-      'https://europe-west2-quantified-self-io.cloudfunctions.net/uploadActivity',
+      'http://localhost:5001/quantified-self-io/europe-west2/uploadActivity',
       expect.objectContaining({
         method: 'POST',
         body: payload,
@@ -219,5 +232,27 @@ describe('AppFitUploadService', () => {
 
   it('should throw when extension is empty for uploadActivityFile', async () => {
     await expect(service.uploadActivityFile(new Uint8Array([1]).buffer, '')).rejects.toThrow('extension');
+  });
+
+  it('should use production upload URL when functions emulator is disabled', async () => {
+    environment.useFunctionsEmulator = false;
+
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: vi.fn().mockResolvedValue({
+        eventId: 'event-1',
+        activitiesCount: 1,
+        uploadLimit: 10,
+        uploadCountAfterWrite: 1,
+      }),
+    });
+
+    await service.uploadActivityFile(new Uint8Array([1, 2, 3]).buffer, 'fit');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://europe-west2-quantified-self-io.cloudfunctions.net/uploadActivity',
+      expect.any(Object),
+    );
   });
 });

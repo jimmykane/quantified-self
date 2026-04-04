@@ -38,6 +38,10 @@ const hoisted = vi.hoisted(() => {
     const mergeEvents = vi.fn((events: any[]) => events[0]);
     const reGenerateStatsForEvent = vi.fn();
     const generateMissingStreamsAndStatsForActivity = vi.fn();
+    const mockGenerateActivityIDFromSourceKey = vi.fn();
+    const mockLoggerInfo = vi.fn();
+    const mockLoggerWarn = vi.fn();
+    const mockLoggerError = vi.fn();
 
     const serverTimestamp = vi.fn(() => 'SERVER_TIMESTAMP');
     const deleteField = vi.fn(() => 'DELETE_FIELD');
@@ -62,10 +66,20 @@ const hoisted = vi.hoisted(() => {
         mergeEvents,
         reGenerateStatsForEvent,
         generateMissingStreamsAndStatsForActivity,
+        mockGenerateActivityIDFromSourceKey,
+        mockLoggerInfo,
+        mockLoggerWarn,
+        mockLoggerError,
         serverTimestamp,
         deleteField,
     };
 });
+
+vi.mock('firebase-functions/logger', () => ({
+    info: (...args: unknown[]) => hoisted.mockLoggerInfo(...args),
+    warn: (...args: unknown[]) => hoisted.mockLoggerWarn(...args),
+    error: (...args: unknown[]) => hoisted.mockLoggerError(...args),
+}));
 
 vi.mock('firebase-admin', () => {
     const firestoreFn = vi.fn(() => ({
@@ -98,6 +112,8 @@ vi.mock('@sports-alliance/sports-lib', () => ({
     ActivityParsingOptions: class ActivityParsingOptions {
         constructor(public opts: unknown) { }
     },
+    DataDistance: { type: 'distance' },
+    DataDuration: { type: 'duration' },
     EventImporterFIT: hoisted.fitImporter,
     EventImporterGPX: hoisted.gpxImporter,
     EventImporterTCX: hoisted.tcxImporter,
@@ -121,11 +137,16 @@ vi.mock('../shared/event-writer', () => ({
     }),
 }));
 
+vi.mock('../shared/id-generator', () => ({
+    generateActivityIDFromSourceKey: (...args: unknown[]) => hoisted.mockGenerateActivityIDFromSourceKey(...args),
+}));
+
 import {
     hasPaidOrGraceAccess,
     parseFromOriginalFilesStrict,
     applyPreservedFields,
-    mapActivityIdentity,
+    resolveActivityEditCarryover,
+    assignReimportActivityIds,
     extractSourceFiles,
     persistReparsedEvent,
     parseUIDAllowlist,
@@ -204,6 +225,9 @@ describe('sports-lib-reparse.service', () => {
         hoisted.suuntoJSONImporter.getFromJSONString.mockResolvedValue(makeEvent());
         hoisted.suuntoSMLImporter.getFromXML.mockResolvedValue(makeEvent());
         hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(() => { });
+        hoisted.mockGenerateActivityIDFromSourceKey.mockImplementation(
+            async (eventID: string, sourceActivityKey: string) => `new-${eventID}-${sourceActivityKey}`,
+        );
     });
 
     it('hasPaidOrGraceAccess should return true for basic claim', async () => {
@@ -481,6 +505,112 @@ describe('sports-lib-reparse.service', () => {
         expect(hoisted.mergeEvents).toHaveBeenCalledTimes(1);
     });
 
+    it('parseFromOriginalFilesStrict should stamp source keys deterministically when parsed order changes', async () => {
+        const buildActivity = (input: {
+            creator: string;
+            start: string;
+            end: string;
+            type: string;
+            duration: number;
+            distance: number;
+        }) => ({
+            setID: vi.fn(),
+            getID: vi.fn(() => null),
+            creator: { name: input.creator },
+            startDate: new Date(input.start),
+            endDate: new Date(input.end),
+            type: input.type,
+            getStat: vi.fn((statType: string) => {
+                if (statType === 'duration') {
+                    return { getValue: () => input.duration };
+                }
+                if (statType === 'distance') {
+                    return { getValue: () => input.distance };
+                }
+                return null;
+            }),
+        });
+
+        const makeParsedEvent = (order: 'ab' | 'ba') => {
+            const activityA = buildActivity({
+                creator: 'alice',
+                start: '2026-01-01T10:00:00.000Z',
+                end: '2026-01-01T10:30:00.000Z',
+                type: 'Run',
+                duration: 1800,
+                distance: 5000,
+            });
+            const activityB = buildActivity({
+                creator: 'bob',
+                start: '2026-01-01T12:00:00.000Z',
+                end: '2026-01-01T13:00:00.000Z',
+                type: 'Ride',
+                duration: 3600,
+                distance: 30000,
+            });
+            return {
+                setID: vi.fn(),
+                getActivities: vi.fn(() => (order === 'ab' ? [activityA, activityB] : [activityB, activityA])),
+            };
+        };
+
+        hoisted.fitImporter.getFromArrayBuffer
+            .mockResolvedValueOnce(makeParsedEvent('ab') as any)
+            .mockResolvedValueOnce(makeParsedEvent('ba') as any);
+
+        const firstParse = await parseFromOriginalFilesStrict([{ path: 'users/u1/events/e1/original.fit' }]);
+        const secondParse = await parseFromOriginalFilesStrict([{ path: 'users/u1/events/e1/original.fit' }]);
+
+        const keyBySignature = (activities: any[]) =>
+            new Map(
+                activities.map((activity) => [
+                    `${activity.type}|${activity.startDate?.toISOString?.()}`,
+                    activity.sourceActivityKey,
+                ]),
+            );
+
+        const firstKeys = keyBySignature(firstParse.finalEvent.getActivities() as any[]);
+        const secondKeys = keyBySignature(secondParse.finalEvent.getActivities() as any[]);
+
+        expect(firstKeys.get('Run|2026-01-01T10:00:00.000Z')).toBe(secondKeys.get('Run|2026-01-01T10:00:00.000Z'));
+        expect(firstKeys.get('Ride|2026-01-01T12:00:00.000Z')).toBe(secondKeys.get('Ride|2026-01-01T12:00:00.000Z'));
+        expect(firstKeys.get('Run|2026-01-01T10:00:00.000Z')).toMatch(/^[a-f0-9]{64}:/);
+        expect(firstKeys.get('Ride|2026-01-01T12:00:00.000Z')).toMatch(/^[a-f0-9]{64}:/);
+    });
+
+    it('parseFromOriginalFilesStrict should leave keys unset for unresolved indistinguishable duplicates', async () => {
+        const buildDuplicateActivity = () => ({
+            setID: vi.fn(),
+            getID: vi.fn(() => null),
+            creator: { name: 'same-device' },
+            startDate: new Date('2026-01-01T10:00:00.000Z'),
+            endDate: new Date('2026-01-01T10:30:00.000Z'),
+            type: 'Run',
+            getStat: vi.fn((statType: string) => {
+                if (statType === 'duration') {
+                    return { getValue: () => 1800 };
+                }
+                if (statType === 'distance') {
+                    return { getValue: () => 5000 };
+                }
+                return null;
+            }),
+        });
+
+        const parsedEvent = {
+            setID: vi.fn(),
+            getActivities: vi.fn(() => [buildDuplicateActivity(), buildDuplicateActivity()]),
+        };
+        hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent as any);
+
+        const result = await parseFromOriginalFilesStrict([{ path: 'users/u1/events/e1/original.fit' }]);
+        const activities = result.finalEvent.getActivities() as any[];
+
+        expect(activities).toHaveLength(2);
+        expect(activities[0].sourceActivityKey).toBeUndefined();
+        expect(activities[1].sourceActivityKey).toBeUndefined();
+    });
+
     it('parseFromOriginalFilesStrict should fail for unsupported extensions', async () => {
         await expect(parseFromOriginalFilesStrict([
             { path: 'unsupported.zip' }
@@ -592,52 +722,312 @@ describe('sports-lib-reparse.service', () => {
         expect(event.mergeType).toBe('benchmark');
     });
 
-    it('mapActivityIdentity should preserve IDs and creator names by index', () => {
-        const activityOne = { setID: vi.fn(), creator: { name: 'new1' } };
-        const activityTwo = { setID: vi.fn(), creator: { name: 'new2' } };
+    it('resolveActivityEditCarryover should preserve creator names using deterministic matching when order changes', () => {
+        const activityOne = {
+            creator: { name: 'new1' },
+            startDate: new Date('2026-01-01T10:00:00.000Z'),
+            endDate: new Date('2026-01-01T10:30:00.000Z'),
+            type: 'Run',
+            getStat: vi.fn(() => null),
+        };
+        const activityTwo = {
+            creator: { name: 'new2' },
+            startDate: new Date('2026-01-01T12:00:00.000Z'),
+            endDate: new Date('2026-01-01T12:30:00.000Z'),
+            type: 'Ride',
+            getStat: vi.fn(() => null),
+        };
         const parsedEvent = {
-            getActivities: () => [activityOne, activityTwo]
+            getActivities: () => [activityTwo, activityOne],
         } as any;
 
-        mapActivityIdentity(parsedEvent, [
-            { id: 'a1', data: () => ({ creator: { name: 'old1' } }) } as any,
-            { id: 'a2', data: () => ({ creator: { name: 'old2' } }) } as any,
+        const result = resolveActivityEditCarryover(parsedEvent, [
+            {
+                id: 'a1',
+                data: () => ({
+                    creator: { name: 'old1' },
+                    startDate: new Date('2026-01-01T10:00:00.000Z'),
+                    endDate: new Date('2026-01-01T10:30:00.000Z'),
+                    type: 'Run',
+                }),
+            } as any,
+            {
+                id: 'a2',
+                data: () => ({
+                    creator: { name: 'old2' },
+                    startDate: new Date('2026-01-01T12:00:00.000Z'),
+                    endDate: new Date('2026-01-01T12:30:00.000Z'),
+                    type: 'Ride',
+                }),
+            } as any,
         ]);
 
-        expect(activityOne.setID).toHaveBeenCalledWith('a1');
-        expect(activityTwo.setID).toHaveBeenCalledWith('a2');
+        expect(result.assignments.size).toBe(2);
         expect(activityOne.creator.name).toBe('old1');
         expect(activityTwo.creator.name).toBe('old2');
     });
 
-    it('mapActivityIdentity should ignore missing existing docs and blank creator names', () => {
-        const activityOne = { setID: vi.fn(), creator: { name: 'keep-me' } };
-        const activityTwo = { setID: vi.fn() };
+    it('resolveActivityEditCarryover should leave creator unchanged on ambiguous matches', () => {
+        const sharedStart = new Date('2026-01-01T10:00:00.000Z');
+        const activityOne = { creator: { name: 'keep-me' }, startDate: sharedStart, type: 'Run', getStat: vi.fn(() => null) };
+        const activityTwo = { creator: { name: 'keep-me-2' }, startDate: sharedStart, type: 'Run', getStat: vi.fn(() => null) };
         const parsedEvent = {
-            getActivities: () => [activityOne, activityTwo]
+            getActivities: () => [activityOne, activityTwo],
         } as any;
 
-        mapActivityIdentity(parsedEvent, [
-            { id: 'a1', data: () => ({ creator: { name: '   ' } }) } as any,
+        const result = resolveActivityEditCarryover(parsedEvent, [
+            { id: 'a1', data: () => ({ creator: { name: 'old-1' }, startDate: sharedStart, type: 'Run' }) } as any,
+            { id: 'a2', data: () => ({ creator: { name: 'old-2' }, startDate: sharedStart, type: 'Run' }) } as any,
         ]);
 
-        expect(activityOne.setID).toHaveBeenCalledWith('a1');
         expect(activityOne.creator.name).toBe('keep-me');
-        expect(activityTwo.setID).not.toHaveBeenCalled();
+        expect(activityTwo.creator.name).toBe('keep-me-2');
+        expect(result.assignments.size).toBe(0);
+        expect(result.unmatchedParsedIndexes).toEqual([0, 1]);
+        expect(result.unmatchedExistingIndexes).toEqual([0, 1]);
     });
 
-    it('mapActivityIdentity should handle missing creator data without changing parsed creator', () => {
-        const activity = { setID: vi.fn(), creator: { name: 'keep-existing' } };
+    it('resolveActivityEditCarryover should decode legacy _value stats for strict matching', () => {
+        const sharedStart = new Date('2026-01-01T10:00:00.000Z');
+        const sharedEnd = new Date('2026-01-01T10:30:00.000Z');
+
+        const parsedFirst = {
+            creator: { name: 'new-first' },
+            startDate: sharedStart,
+            endDate: sharedEnd,
+            type: 'Run',
+            getStat: vi.fn((type: string) => {
+                if (type === 'duration') {
+                    return { getValue: () => 100 };
+                }
+                if (type === 'distance') {
+                    return { getValue: () => 1000 };
+                }
+                return null;
+            }),
+        };
+        const parsedSecond = {
+            creator: { name: 'new-second' },
+            startDate: sharedStart,
+            endDate: sharedEnd,
+            type: 'Run',
+            getStat: vi.fn((type: string) => {
+                if (type === 'duration') {
+                    return { getValue: () => 200 };
+                }
+                if (type === 'distance') {
+                    return { getValue: () => 2000 };
+                }
+                return null;
+            }),
+        };
+
         const parsedEvent = {
-            getActivities: () => [activity],
+            getActivities: () => [parsedSecond, parsedFirst],
         } as any;
 
-        mapActivityIdentity(parsedEvent, [
-            { id: 'a1', data: () => ({}) } as any,
+        const result = resolveActivityEditCarryover(parsedEvent, [
+            {
+                id: 'a-1',
+                data: () => ({
+                    creator: { name: 'old-first' },
+                    startDate: sharedStart,
+                    endDate: sharedEnd,
+                    type: 'Run',
+                    stats: {
+                        duration: { _value: 100 },
+                        distance: { _value: 1000 },
+                    },
+                }),
+            } as any,
+            {
+                id: 'a-2',
+                data: () => ({
+                    creator: { name: 'old-second' },
+                    startDate: sharedStart,
+                    endDate: sharedEnd,
+                    type: 'Run',
+                    stats: {
+                        duration: { _value: 200 },
+                        distance: { _value: 2000 },
+                    },
+                }),
+            } as any,
         ]);
 
-        expect(activity.setID).toHaveBeenCalledWith('a1');
-        expect(activity.creator.name).toBe('keep-existing');
+        expect(result.assignments.size).toBe(2);
+        expect(parsedFirst.creator.name).toBe('old-first');
+        expect(parsedSecond.creator.name).toBe('old-second');
+    });
+
+    it('assignReimportActivityIds should always assign deterministic ids by sourceActivityKey', async () => {
+        const combinedHash = 'a'.repeat(64);
+        const sourceKeyOne = `${combinedHash}:${'1'.repeat(64)}:0`;
+        const sourceKeyTwo = `${combinedHash}:${'2'.repeat(64)}:0`;
+        const activityOne = {
+            setID: vi.fn(),
+            getID: vi.fn(() => 'old-id-1'),
+            sourceActivityKey: sourceKeyOne,
+        };
+        const activityTwo = {
+            setID: vi.fn(),
+            getID: vi.fn(() => 'old-id-2'),
+            sourceActivityKey: sourceKeyTwo,
+        };
+        const parsedEvent = {
+            getActivities: () => [activityOne, activityTwo],
+        } as any;
+
+        await assignReimportActivityIds(parsedEvent, 'event-1', {
+            combinedSourceContentHash: combinedHash,
+        });
+
+        expect(hoisted.mockGenerateActivityIDFromSourceKey).toHaveBeenNthCalledWith(1, 'event-1', sourceKeyOne);
+        expect(hoisted.mockGenerateActivityIDFromSourceKey).toHaveBeenNthCalledWith(2, 'event-1', sourceKeyTwo);
+        expect(activityOne.setID).toHaveBeenCalledWith(`new-event-1-${sourceKeyOne}`);
+        expect(activityTwo.setID).toHaveBeenCalledWith(`new-event-1-${sourceKeyTwo}`);
+    });
+
+    it('assignReimportActivityIds should keep key-based ids stable even when parsed order changes', async () => {
+        const combinedHash = 'c'.repeat(64);
+        const sourceKeyA = `${combinedHash}:${'a'.repeat(64)}:0`;
+        const sourceKeyB = `${combinedHash}:${'b'.repeat(64)}:0`;
+        const firstOrder = [
+            { setID: vi.fn(), sourceActivityKey: sourceKeyA },
+            { setID: vi.fn(), sourceActivityKey: sourceKeyB },
+        ];
+        const secondOrder = [
+            { setID: vi.fn(), sourceActivityKey: sourceKeyB },
+            { setID: vi.fn(), sourceActivityKey: sourceKeyA },
+        ];
+
+        await assignReimportActivityIds({ getActivities: () => firstOrder } as any, 'event-2', {
+            combinedSourceContentHash: combinedHash,
+        });
+        await assignReimportActivityIds({ getActivities: () => secondOrder } as any, 'event-2', {
+            combinedSourceContentHash: combinedHash,
+        });
+
+        const idsByKeyFirst = new Map(firstOrder.map((activity: any) => [activity.sourceActivityKey, activity.setID.mock.calls[0][0]]));
+        const idsByKeySecond = new Map(secondOrder.map((activity: any) => [activity.sourceActivityKey, activity.setID.mock.calls[0][0]]));
+
+        expect(idsByKeyFirst.get(sourceKeyA)).toBe(idsByKeySecond.get(sourceKeyA));
+        expect(idsByKeyFirst.get(sourceKeyB)).toBe(idsByKeySecond.get(sourceKeyB));
+    });
+
+    it('assignReimportActivityIds should restamp missing or non-SHA keys before assigning ids', async () => {
+        const combinedHash = 'd'.repeat(64);
+        const parsedActivities = [
+            {
+                setID: vi.fn(),
+                startDate: new Date('2026-01-01T10:00:00.000Z'),
+                endDate: new Date('2026-01-01T10:30:00.000Z'),
+                type: 'Run',
+                creator: { name: 'first' },
+                getStat: vi.fn(() => null),
+            },
+            {
+                setID: vi.fn(),
+                sourceActivityKey: 'legacy-key',
+                startDate: new Date('2026-01-01T12:00:00.000Z'),
+                endDate: new Date('2026-01-01T12:30:00.000Z'),
+                type: 'Ride',
+                creator: { name: 'second' },
+                getStat: vi.fn(() => null),
+            },
+        ];
+
+        await assignReimportActivityIds({
+            getActivities: () => parsedActivities,
+        } as any, 'event-3', {
+            combinedSourceContentHash: combinedHash,
+        });
+
+        expect(hoisted.mockGenerateActivityIDFromSourceKey).toHaveBeenCalledTimes(2);
+        const firstKey = hoisted.mockGenerateActivityIDFromSourceKey.mock.calls[0]?.[1] as string;
+        const secondKey = hoisted.mockGenerateActivityIDFromSourceKey.mock.calls[1]?.[1] as string;
+        expect(firstKey).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}:[0-9]+$/);
+        expect(secondKey).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}:[0-9]+$/);
+        expect(firstKey.startsWith(`${combinedHash}:`)).toBe(true);
+        expect(secondKey.startsWith(`${combinedHash}:`)).toBe(true);
+    });
+
+    it('assignReimportActivityIds should restamp malformed sha-prefix keys before assigning ids', async () => {
+        const combinedHash = 'e'.repeat(64);
+        const malformedKey = `${'a'.repeat(64)}:legacy-signature:0`;
+        const parsedActivities = [
+            {
+                setID: vi.fn(),
+                sourceActivityKey: malformedKey,
+                startDate: new Date('2026-01-01T09:00:00.000Z'),
+                endDate: new Date('2026-01-01T09:30:00.000Z'),
+                type: 'Run',
+                creator: { name: 'legacy' },
+                getStat: vi.fn(() => null),
+            },
+        ];
+
+        await assignReimportActivityIds({
+            getActivities: () => parsedActivities,
+        } as any, 'event-legacy', {
+            combinedSourceContentHash: combinedHash,
+        });
+
+        expect(hoisted.mockGenerateActivityIDFromSourceKey).toHaveBeenCalledTimes(1);
+        const assignedKey = hoisted.mockGenerateActivityIDFromSourceKey.mock.calls[0]?.[1] as string;
+        expect(assignedKey).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}:[0-9]+$/);
+        expect(assignedKey).not.toBe(malformedKey);
+        expect(assignedKey.startsWith(`${combinedHash}:`)).toBe(true);
+    });
+
+    it('assignReimportActivityIds should fail when combinedSourceContentHash is missing or invalid', async () => {
+        const missingHashEvent = {
+            getActivities: () => [{ setID: vi.fn(), sourceActivityKey: `${'e'.repeat(64)}:${'1'.repeat(64)}:0` }],
+        } as any;
+        await expect(assignReimportActivityIds(missingHashEvent, 'event-3', {
+            combinedSourceContentHash: '',
+        }))
+            .rejects
+            .toThrow('Missing or invalid combinedSourceContentHash');
+
+        const invalidHashEvent = {
+            getActivities: () => [{ setID: vi.fn(), sourceActivityKey: `${'f'.repeat(64)}:${'2'.repeat(64)}:0` }],
+        } as any;
+        await expect(assignReimportActivityIds(invalidHashEvent, 'event-3', {
+            combinedSourceContentHash: 'not-a-sha',
+        }))
+            .rejects
+            .toThrow('Missing or invalid combinedSourceContentHash');
+    });
+
+    it('assignReimportActivityIds should fail on strict ambiguity after restamp', async () => {
+        const combinedHash = 'f'.repeat(64);
+        const ambiguousActivities = [
+            {
+                setID: vi.fn(),
+                startDate: new Date('2026-01-01T10:00:00.000Z'),
+                endDate: new Date('2026-01-01T10:30:00.000Z'),
+                type: 'Run',
+                creator: { name: 'same' },
+                getStat: vi.fn(() => null),
+            },
+            {
+                setID: vi.fn(),
+                startDate: new Date('2026-01-01T10:00:00.000Z'),
+                endDate: new Date('2026-01-01T10:30:00.000Z'),
+                type: 'Run',
+                creator: { name: 'same' },
+                getStat: vi.fn(() => null),
+            },
+        ];
+
+        await expect(assignReimportActivityIds({
+            getActivities: () => ambiguousActivities,
+        } as any, 'event-3', {
+            combinedSourceContentHash: combinedHash,
+        }))
+            .rejects
+            .toThrow('Ambiguous sourceActivityKey stamping');
     });
 
     it('persistReparsedEvent should delete stale activities and write processing metadata', async () => {
@@ -1009,12 +1399,138 @@ describe('sports-lib-reparse.service', () => {
         expect(result.parsedActivitiesCount).toBe(2);
         expect(hoisted.reGenerateStatsForEvent).toHaveBeenCalledWith(parsedEvent);
         expect(hoisted.mockWriteAllEventData).toHaveBeenCalled();
+        const parsedActivities = parsedEvent.getActivities();
+        expect(parsedActivities[0].setID).toHaveBeenCalledTimes(1);
+        expect(parsedActivities[1].setID).toHaveBeenCalledTimes(1);
+        expect(hoisted.mockGenerateActivityIDFromSourceKey).toHaveBeenCalledTimes(2);
+        const firstSourceKey = hoisted.mockGenerateActivityIDFromSourceKey.mock.calls[0]?.[1] as string;
+        const secondSourceKey = hoisted.mockGenerateActivityIDFromSourceKey.mock.calls[1]?.[1] as string;
+        expect(firstSourceKey).toMatch(/^[a-f0-9]{64}:/);
+        expect(secondSourceKey).toMatch(/^[a-f0-9]{64}:/);
+        expect(firstSourceKey).not.toBe(secondSourceKey);
         const persistedEvent = hoisted.mockWriteAllEventData.mock.calls[0]?.[1] as Record<string, unknown>;
         expect(persistedEvent.description).toBe('keep-desc');
         expect(persistedEvent.privacy).toBe('private');
         expect(persistedEvent.notes).toBe('keep-notes');
         expect(persistedEvent.rpe).toBe(9);
         expect(persistedEvent.feeling).toBe(2);
+    });
+
+    it('reparseEventFromOriginalFiles should skip creator carryover and warn when matches are ambiguous', async () => {
+        const sharedStart = new Date('2026-01-01T10:00:00.000Z');
+        const parsedActivityOne = {
+            getID: vi.fn(() => 'parsed-1'),
+            setID: vi.fn(),
+            creator: { name: 'new-creator-1' },
+            startDate: sharedStart,
+            type: 'Run',
+            getStat: vi.fn(() => null),
+        };
+        const parsedActivityTwo = {
+            getID: vi.fn(() => 'parsed-2'),
+            setID: vi.fn(),
+            creator: { name: 'new-creator-2' },
+            startDate: sharedStart,
+            type: 'Run',
+            getStat: vi.fn(() => null),
+        };
+        const parsedEvent = makeEvent({
+            getActivities: vi.fn(() => [parsedActivityOne, parsedActivityTwo]),
+        });
+        hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent);
+
+        const result = await reparseEventFromOriginalFiles('u1', 'e1', {
+            eventData: {
+                originalFile: { path: 'users/u1/events/e1/original.fit' },
+            },
+            activityDocs: [
+                { id: 'a-old-1', data: () => ({ creator: { name: 'old-1' }, startDate: sharedStart, type: 'Run' }) } as any,
+                { id: 'a-old-2', data: () => ({ creator: { name: 'old-2' }, startDate: sharedStart, type: 'Run' }) } as any,
+            ],
+            targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,
+        });
+
+        expect(result.status).toBe('completed');
+        expect(parsedActivityOne.creator.name).toBe('new-creator-1');
+        expect(parsedActivityTwo.creator.name).toBe('new-creator-2');
+        expect(parsedActivityOne.setID).toHaveBeenCalledTimes(1);
+        expect(parsedActivityTwo.setID).toHaveBeenCalledTimes(1);
+        expect(hoisted.mockGenerateActivityIDFromSourceKey).toHaveBeenCalledTimes(2);
+        expect(hoisted.mockLoggerWarn).toHaveBeenCalledWith(
+            '[sports-lib-reparse] Activity edit carryover skipped for unmatched identities',
+            expect.objectContaining({
+                eventID: 'e1',
+                assignedCount: 0,
+                unmatchedParsed: expect.any(Array),
+                unmatchedExisting: expect.any(Array),
+            }),
+        );
+    });
+
+    it('reparseEventFromOriginalFiles should fail fast when duplicate fingerprints remain ambiguous', async () => {
+        const sharedStart = new Date('2026-01-01T10:00:00.000Z');
+        const sharedEnd = new Date('2026-01-01T10:30:00.000Z');
+        const buildDuplicateActivity = () => ({
+            getID: vi.fn(() => null),
+            setID: vi.fn(),
+            creator: { name: 'same-device' },
+            startDate: sharedStart,
+            endDate: sharedEnd,
+            type: 'Run',
+            getStat: vi.fn((statType: string) => {
+                if (statType === 'duration') {
+                    return { getValue: () => 1800 };
+                }
+                if (statType === 'distance') {
+                    return { getValue: () => 5000 };
+                }
+                return null;
+            }),
+        });
+
+        const parsedEvent = makeEvent({
+            getActivities: vi.fn(() => [buildDuplicateActivity(), buildDuplicateActivity()]),
+        });
+        hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent);
+
+        await expect(
+            reparseEventFromOriginalFiles('u1', 'e1', {
+                eventData: {
+                    originalFile: { path: 'users/u1/events/e1/original.fit' },
+                },
+                activityDocs: [
+                    {
+                        id: 'old-a',
+                        data: () => ({
+                            sourceActivityKey: `${'a'.repeat(64)}:legacy-signature:0`,
+                            creator: { name: 'same-device' },
+                            startDate: sharedStart,
+                            endDate: sharedEnd,
+                            type: 'Run',
+                            stats: {
+                                duration: { _value: 1800 },
+                                distance: { _value: 5000 },
+                            },
+                        }),
+                    } as any,
+                    {
+                        id: 'old-b',
+                        data: () => ({
+                            sourceActivityKey: `${'b'.repeat(64)}:legacy-signature:1`,
+                            creator: { name: 'same-device' },
+                            startDate: sharedStart,
+                            endDate: sharedEnd,
+                            type: 'Run',
+                            stats: {
+                                duration: { _value: 1800 },
+                                distance: { _value: 5000 },
+                            },
+                        }),
+                    } as any,
+                ],
+                targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,
+            }),
+        ).rejects.toThrow('Ambiguous sourceActivityKey stamping');
     });
 
     it('reparseEventFromOriginalFiles should run activity-level sports-lib regeneration in regenerate mode', async () => {
