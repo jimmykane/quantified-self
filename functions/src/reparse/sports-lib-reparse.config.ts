@@ -1,4 +1,4 @@
-export const SPORTS_LIB_REPARSE_TARGET_VERSION = '11.0.1';
+export const SPORTS_LIB_REPARSE_TARGET_VERSION = '11.0.2';
 
 export const SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS = {
     enabled: true,
