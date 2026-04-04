@@ -23,8 +23,11 @@ import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 
 const SPORTS_LIB_REPARSE_SCAN_CONCURRENCY = 25;
-// Keep a spread window to avoid burst spikes, but shorten it to improve end-to-end drain rate.
-const SPORTS_LIB_REPARSE_ENQUEUE_SPREAD_SECONDS = 5 * 60;
+const SPORTS_LIB_REPARSE_TARGET_ENQUEUE_RPS = 12;
+const SPORTS_LIB_REPARSE_ENQUEUE_SPREAD_MIN_SECONDS = 5;
+const SPORTS_LIB_REPARSE_ENQUEUE_SPREAD_MAX_SECONDS = 5 * 60;
+
+type EnqueuePacingMode = 'global' | 'override';
 
 type ProcessingTaskResult = {
     trackedPromise: Promise<ProcessingTaskResult>;
@@ -92,21 +95,42 @@ function isProcessingMetadataDocPath(path: string): boolean {
     return path.endsWith('/metaData/processing');
 }
 
+function clampNumber(value: number, minValue: number, maxValue: number): number {
+    return Math.max(minValue, Math.min(maxValue, value));
+}
+
+function resolveEnqueueSpreadSeconds(
+    enqueueLimit: number,
+): number {
+    if (enqueueLimit <= 1) {
+        return 1;
+    }
+    const idealSpreadSeconds = Math.ceil(enqueueLimit / SPORTS_LIB_REPARSE_TARGET_ENQUEUE_RPS);
+
+    return clampNumber(
+        idealSpreadSeconds,
+        SPORTS_LIB_REPARSE_ENQUEUE_SPREAD_MIN_SECONDS,
+        SPORTS_LIB_REPARSE_ENQUEUE_SPREAD_MAX_SECONDS,
+    );
+}
+
 function calculateEnqueueDelaySeconds(
     enqueueSequence: number,
     enqueueLimit: number,
+    enqueueSpreadSeconds: number,
 ): number {
     if (enqueueSequence <= 0 || enqueueLimit <= 1) {
         return 1;
     }
     const denominator = Math.max(enqueueLimit - 1, 1);
-    const scaled = Math.floor((enqueueSequence * SPORTS_LIB_REPARSE_ENQUEUE_SPREAD_SECONDS) / denominator);
-    return Math.max(1, Math.min(SPORTS_LIB_REPARSE_ENQUEUE_SPREAD_SECONDS, scaled));
+    const scaled = Math.floor((enqueueSequence * enqueueSpreadSeconds) / denominator);
+    return clampNumber(scaled, 1, enqueueSpreadSeconds);
 }
 
 export const scheduleSportsLibReparseScan = onSchedule({
     region: FUNCTIONS_MANIFEST.scheduleSportsLibReparseScan.region,
     schedule: 'every 10 minutes',
+    memory: '512MiB',
     timeoutSeconds: 300,
 }, async () => {
     const settings = getCurrentSettings();
@@ -138,6 +162,10 @@ export const scheduleSportsLibReparseScan = onSchedule({
     let enqueueReservationCount = 0;
     let lastProcessingDocPath: string | null = null;
     let lastProcessingVersionCode: number | null = null;
+    const enqueuePacingMode: EnqueuePacingMode = settings.uidAllowlist && settings.uidAllowlist.size > 0
+        ? 'override'
+        : 'global';
+    const enqueueSpreadSeconds = resolveEnqueueSpreadSeconds(settings.enqueueLimit);
     const hasReachedEnqueueLimit = (): boolean => enqueuedCount >= settings.enqueueLimit;
     const hasAvailableEnqueueSlot = (): boolean => (enqueuedCount + enqueueReservationCount) < settings.enqueueLimit;
     const tryAcquireEnqueueSlotLease = (): EnqueueSlotLease | null => {
@@ -241,6 +269,7 @@ export const scheduleSportsLibReparseScan = onSchedule({
                 const enqueueDelaySeconds = calculateEnqueueDelaySeconds(
                     enqueueAttemptSequence,
                     settings.enqueueLimit,
+                    enqueueSpreadSeconds,
                 );
                 enqueueAttemptSequence++;
                 const taskCreated = enqueueDelaySeconds > 1
@@ -330,6 +359,8 @@ export const scheduleSportsLibReparseScan = onSchedule({
             scannedCount,
             enqueuedCount,
             overrideUIDsCount: overrideUIDs.length,
+            enqueuePacingMode,
+            enqueueSpreadSeconds,
             nextCursorByUID,
         });
         return;
@@ -515,6 +546,8 @@ export const scheduleSportsLibReparseScan = onSchedule({
     logger.info('[sports-lib-reparse] Scan complete', {
         scannedCount,
         enqueuedCount,
+        enqueuePacingMode,
+        enqueueSpreadSeconds,
         nextCursorProcessingDocPath: passCompleted ? null : lastProcessingDocPath,
         nextCursorProcessingVersionCode: passCompleted ? null : lastProcessingVersionCode,
     });
