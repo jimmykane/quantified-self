@@ -13,7 +13,7 @@ import {
     mockGetAll,
     mockGetTables,
     mockBigQueryQuery,
-} from './test-utils/admin-test-harness.spec';
+} from './test-utils/admin-test-harness';
 
 describe('listUsers Cloud Function', () => {
 

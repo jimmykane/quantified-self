@@ -39,7 +39,7 @@ describe('DashboardDerivedMetricsService', () => {
     hoisted.docMock.mockReset();
     hoisted.docDataMock.mockReset();
     mockFunctionsService = {
-      call: vi.fn().mockResolvedValue({ accepted: true }),
+      call: vi.fn().mockResolvedValue({ data: { accepted: true } }),
     };
     mockSnackBar = {
       open: vi.fn().mockReturnValue({
@@ -244,7 +244,7 @@ describe('DashboardDerivedMetricsService', () => {
   it('resets failure streak after a successful ensure call', async () => {
     mockFunctionsService.call
       .mockRejectedValueOnce(new Error('first failure'))
-      .mockResolvedValueOnce({ accepted: true })
+      .mockResolvedValueOnce({ data: { accepted: true } })
       .mockRejectedValueOnce(new Error('third call failure'));
 
     const state: DashboardDerivedMetricsState = {

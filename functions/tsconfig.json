@@ -24,6 +24,7 @@
   "exclude": [
     "node_modules",
     "**/*.spec.ts",
-    "src/test-setup.ts"
+    "src/test-setup.ts",
+    "src/admin/test-utils/admin-test-harness.ts"
   ]
 }

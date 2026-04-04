@@ -114,7 +114,7 @@ export class DashboardDerivedMetricsService {
     from(this.functionsService.call<EnsureDerivedMetricsRequest, EnsureDerivedMetricsResponse>('ensureDerivedMetrics', request))
       .pipe(
         tap((response) => {
-          if (response?.accepted === false) {
+          if (response?.data?.accepted === false) {
             throw new Error('ensureDerivedMetrics request was not accepted');
           }
           this.resetEnsureFailureState(uid);

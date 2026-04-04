@@ -4,7 +4,7 @@ import {
     getSubscriptionHistoryTrend,
     getUserGrowthTrend,
     mockCollection,
-} from './test-utils/admin-test-harness.spec';
+} from './test-utils/admin-test-harness';
 
 describe('getSubscriptionHistoryTrend Cloud Function', () => {
     const toSeconds = (value: string): number => Math.floor(new Date(value).getTime() / 1000);

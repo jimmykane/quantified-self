@@ -5,7 +5,7 @@ import {
     mockCollection,
     mockDoc,
     mockGetCloudTaskQueueDepthForQueue,
-} from './test-utils/admin-test-harness.spec';
+} from './test-utils/admin-test-harness';
 
 describe('getQueueStats Cloud Function', () => {
     let request: any;

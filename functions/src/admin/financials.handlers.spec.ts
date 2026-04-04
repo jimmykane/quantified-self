@@ -9,7 +9,7 @@ import {
     mockListBudgets,
     mockGetTables,
     mockBigQueryQuery,
-} from './test-utils/admin-test-harness.spec';
+} from './test-utils/admin-test-harness';
 
 describe('getFinancialStats Cloud Function', () => {
     let request: any;

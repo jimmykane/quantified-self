@@ -11,7 +11,7 @@ import {
     mockCreateCustomToken,
     mockGetProjectBillingInfo,
     mockCollection,
-} from './test-utils/admin-test-harness.spec';
+} from './test-utils/admin-test-harness';
 
 describe('Generic Error Handling', () => {
     beforeEach(() => {

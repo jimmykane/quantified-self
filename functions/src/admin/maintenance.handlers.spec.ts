@@ -5,7 +5,7 @@ import {
     getMaintenanceStatus,
     setMaintenanceMode,
     mockRemoteConfig,
-} from './test-utils/admin-test-harness.spec';
+} from './test-utils/admin-test-harness';
 
 describe('getMaintenanceStatus Cloud Function', () => {
     let request: any;

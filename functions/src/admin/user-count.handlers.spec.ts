@@ -4,7 +4,7 @@ import {
     getUserCount,
     mockListUsers,
     mockCollection,
-} from './test-utils/admin-test-harness.spec';
+} from './test-utils/admin-test-harness';
 
 describe('getUserCount Cloud Function', () => {
     beforeEach(() => {
