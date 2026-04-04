@@ -127,6 +127,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Form (TSB)** is shown as **prior-day readiness** using the prior day CTL - ATL.
 - Form and RecoveryNow tiles use precomputed derived snapshots from your full history (UTC day buckets), not only the currently selected dashboard date range.
 - When snapshots are missing or stale, they rebuild asynchronously; refresh usually follows within a few minutes.
+- If rebuilding requests fail repeatedly, the dashboard shows a retry notification and continues with last known snapshot values.
 - While rebuilding, the dashboard shows a small training-metrics status notice above tiles.
 - The status title updates dynamically from current Form bands:
   - **High fatigue** at very negative Form values,

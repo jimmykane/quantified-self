@@ -1,16 +1,18 @@
 import { Injectable, inject } from '@angular/core';
 import { Firestore, doc, docData } from 'app/firebase/firestore';
 import { combineLatest, from, Observable, of } from 'rxjs';
-import { catchError, map } from 'rxjs/operators';
+import { catchError, finalize, map, tap } from 'rxjs/operators';
 import type { DashboardFormPoint } from '../helpers/dashboard-form.helper';
 import { buildDashboardFormPointsFromDailyLoads } from '../helpers/dashboard-form.helper';
 import type { DashboardRecoveryNowContext } from '../helpers/dashboard-recovery-now.helper';
 import { AppFunctionsService } from './app.functions.service';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import {
   DERIVED_METRIC_KINDS,
   getDerivedMetricDocId,
   type DerivedMetricSnapshotStatus,
   type EnsureDerivedMetricsRequest,
+  type EnsureDerivedMetricsResponse,
 } from '@shared/derived-metrics';
 
 export interface DashboardDerivedMetricsState {
@@ -27,11 +29,16 @@ type UserUIDCarrier = { uid?: string | null } | null | undefined;
 })
 export class DashboardDerivedMetricsService {
   private static readonly ENSURE_COOLDOWN_MS = 30 * 1000;
+  private static readonly ENSURE_FAILURE_NOTIFICATION_THRESHOLD = 2;
+  private static readonly ENSURE_FAILURE_NOTIFICATION_COOLDOWN_MS = 5 * 60 * 1000;
 
   private firestore = inject(Firestore);
   private functionsService = inject(AppFunctionsService);
+  private snackBar = inject(MatSnackBar);
   private ensureInFlightByUID = new Set<string>();
   private ensureLastRequestedAtByUID = new Map<string, number>();
+  private ensureFailureCountByUID = new Map<string, number>();
+  private ensureLastFailureNotifiedAtByUID = new Map<string, number>();
 
   watch(user: UserUIDCarrier): Observable<DashboardDerivedMetricsState> {
     const uid = `${user?.uid || ''}`.trim();
@@ -77,6 +84,7 @@ export class DashboardDerivedMetricsService {
     const shouldEnsureForm = state.formStatus === 'missing' || state.formStatus === 'failed' || state.formStatus === 'stale';
     const shouldEnsureRecovery = state.recoveryNowStatus === 'missing' || state.recoveryNowStatus === 'failed' || state.recoveryNowStatus === 'stale';
     if (!shouldEnsureForm && !shouldEnsureRecovery) {
+      this.resetEnsureFailureState(uid);
       return;
     }
 
@@ -103,18 +111,23 @@ export class DashboardDerivedMetricsService {
       ],
     };
 
-    from(this.functionsService.call<EnsureDerivedMetricsRequest, unknown>('ensureDerivedMetrics', request))
+    from(this.functionsService.call<EnsureDerivedMetricsRequest, EnsureDerivedMetricsResponse>('ensureDerivedMetrics', request))
       .pipe(
-        catchError(() => of(null)),
+        tap((response) => {
+          if (response?.accepted === false) {
+            throw new Error('ensureDerivedMetrics request was not accepted');
+          }
+          this.resetEnsureFailureState(uid);
+        }),
+        catchError((error) => {
+          this.handleEnsureFailure(uid, user, state, error);
+          return of(null);
+        }),
+        finalize(() => {
+          this.ensureInFlightByUID.delete(uid);
+        }),
       )
-      .subscribe({
-        complete: () => {
-          this.ensureInFlightByUID.delete(uid);
-        },
-        error: () => {
-          this.ensureInFlightByUID.delete(uid);
-        },
-      });
+      .subscribe();
   }
 
   private resolveSnapshotStatus(snapshot: Record<string, unknown> | undefined): DerivedMetricSnapshotStatus | 'missing' {
@@ -189,5 +202,40 @@ export class DashboardDerivedMetricsService {
       return null;
     }
     return numericValue;
+  }
+
+  private resetEnsureFailureState(uid: string): void {
+    this.ensureFailureCountByUID.delete(uid);
+    this.ensureLastFailureNotifiedAtByUID.delete(uid);
+  }
+
+  private handleEnsureFailure(
+    uid: string,
+    user: UserUIDCarrier,
+    state: DashboardDerivedMetricsState,
+    _error: unknown,
+  ): void {
+    const nextFailureCount = (this.ensureFailureCountByUID.get(uid) || 0) + 1;
+    this.ensureFailureCountByUID.set(uid, nextFailureCount);
+
+    if (nextFailureCount < DashboardDerivedMetricsService.ENSURE_FAILURE_NOTIFICATION_THRESHOLD) {
+      return;
+    }
+
+    const nowMs = Date.now();
+    const lastNotifiedAtMs = this.ensureLastFailureNotifiedAtByUID.get(uid) || 0;
+    if ((nowMs - lastNotifiedAtMs) < DashboardDerivedMetricsService.ENSURE_FAILURE_NOTIFICATION_COOLDOWN_MS) {
+      return;
+    }
+
+    this.ensureLastFailureNotifiedAtByUID.set(uid, nowMs);
+    const snackBarRef = this.snackBar.open(
+      'Could not refresh dashboard derived metrics. Showing last known values.',
+      'Retry',
+      { duration: 7000 },
+    );
+    snackBarRef.onAction().subscribe(() => {
+      this.ensureForDashboard(user, state, { force: true });
+    });
   }
 }

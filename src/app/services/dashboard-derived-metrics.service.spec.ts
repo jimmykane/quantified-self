@@ -1,7 +1,8 @@
 import { TestBed } from '@angular/core/testing';
-import { firstValueFrom, of } from 'rxjs';
+import { firstValueFrom, of, Subject } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Firestore, doc, docData } from 'app/firebase/firestore';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import {
   DERIVED_METRIC_KINDS,
   getDerivedMetricDocId,
@@ -32,6 +33,7 @@ vi.mock('app/firebase/firestore', async (importOriginal) => {
 describe('DashboardDerivedMetricsService', () => {
   let service: DashboardDerivedMetricsService;
   let mockFunctionsService: { call: ReturnType<typeof vi.fn> };
+  let mockSnackBar: { open: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     hoisted.docMock.mockReset();
@@ -39,12 +41,18 @@ describe('DashboardDerivedMetricsService', () => {
     mockFunctionsService = {
       call: vi.fn().mockResolvedValue({ accepted: true }),
     };
+    mockSnackBar = {
+      open: vi.fn().mockReturnValue({
+        onAction: () => of(void 0),
+      }),
+    };
 
     TestBed.configureTestingModule({
       providers: [
         DashboardDerivedMetricsService,
         { provide: Firestore, useValue: {} },
         { provide: AppFunctionsService, useValue: mockFunctionsService },
+        { provide: MatSnackBar, useValue: mockSnackBar },
       ],
     });
 
@@ -184,5 +192,75 @@ describe('DashboardDerivedMetricsService', () => {
     service.ensureForDashboard({ uid: 'user-1' }, state, { force: true });
 
     expect(mockFunctionsService.call).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not show a snackbar on the first transient ensure failure', async () => {
+    mockFunctionsService.call.mockRejectedValue(new Error('ensure failed'));
+
+    const state: DashboardDerivedMetricsState = {
+      formPoints: null,
+      recoveryNow: null,
+      formStatus: 'missing',
+      recoveryNowStatus: 'ready',
+    };
+
+    service.ensureForDashboard({ uid: 'user-1' }, state);
+    await Promise.resolve();
+
+    expect(mockSnackBar.open).not.toHaveBeenCalled();
+  });
+
+  it('shows a snackbar after repeated ensure failures and retries on action', async () => {
+    const retryAction$ = new Subject<void>();
+    mockSnackBar.open.mockReturnValue({
+      onAction: () => retryAction$.asObservable(),
+    });
+    mockFunctionsService.call.mockRejectedValue(new Error('ensure failed'));
+
+    const state: DashboardDerivedMetricsState = {
+      formPoints: null,
+      recoveryNow: null,
+      formStatus: 'missing',
+      recoveryNowStatus: 'ready',
+    };
+
+    service.ensureForDashboard({ uid: 'user-1' }, state);
+    await Promise.resolve();
+    service.ensureForDashboard({ uid: 'user-1' }, state, { force: true });
+    await Promise.resolve();
+
+    expect(mockSnackBar.open).toHaveBeenCalledWith(
+      'Could not refresh dashboard derived metrics. Showing last known values.',
+      'Retry',
+      { duration: 7000 },
+    );
+    expect(mockFunctionsService.call).toHaveBeenCalledTimes(2);
+
+    retryAction$.next();
+    await Promise.resolve();
+    expect(mockFunctionsService.call).toHaveBeenCalledTimes(3);
+  });
+
+  it('resets failure streak after a successful ensure call', async () => {
+    mockFunctionsService.call
+      .mockRejectedValueOnce(new Error('first failure'))
+      .mockResolvedValueOnce({ accepted: true })
+      .mockRejectedValueOnce(new Error('third call failure'));
+
+    const state: DashboardDerivedMetricsState = {
+      formPoints: null,
+      recoveryNow: null,
+      formStatus: 'missing',
+      recoveryNowStatus: 'ready',
+    };
+
+    service.ensureForDashboard({ uid: 'user-1' }, state);
+    await Promise.resolve();
+    service.ensureForDashboard({ uid: 'user-1' }, state, { force: true });
+    await Promise.resolve();
+    service.ensureForDashboard({ uid: 'user-1' }, state, { force: true });
+    await Promise.resolve();
+
+    expect(mockSnackBar.open).not.toHaveBeenCalled();
   });
 });
