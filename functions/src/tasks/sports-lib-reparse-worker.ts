@@ -29,6 +29,7 @@ function getErrorMessage(error: unknown): string {
 
 export const processSportsLibReparseTask = onTaskDispatched({
     retryConfig: CLOUD_TASK_RETRY_CONFIG,
+    cpu: 2,
     memory: '1GiB',
     timeoutSeconds: 540,
     region: FUNCTIONS_MANIFEST.processSportsLibReparseTask.region,
