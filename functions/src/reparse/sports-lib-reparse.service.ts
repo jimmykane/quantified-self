@@ -21,6 +21,7 @@ import { createParsingOptions } from '../../../shared/parsing-options';
 import { FirestoreAdapter, LogAdapter, EventWriter } from '../shared/event-writer';
 import { generateActivityIDFromSourceKey } from '../shared/id-generator';
 import { ProcessingMetaData } from '../shared/processing-metadata.interface';
+import { SPORTS_LIB_VERSION } from '../shared/sports-lib-version.node';
 import { SPORTS_LIB_REPARSE_TARGET_VERSION } from './sports-lib-reparse.config';
 
 export const SPORTS_LIB_REPARSE_CHECKPOINT_PATH = 'systemJobs/sportsLibReparse';
@@ -286,6 +287,28 @@ export function parseUidAndEventIdFromEventPath(path: string): { uid: string; ev
 
 export function resolveTargetSportsLibVersion(): string {
     return SPORTS_LIB_REPARSE_TARGET_VERSION;
+}
+
+export function assertSportsLibRuntimeVersionMatchesTarget(
+    targetSportsLibVersion: string,
+    runtimeSportsLibVersion: string = SPORTS_LIB_VERSION,
+): void {
+    const normalizedTargetVersion = semver.valid(targetSportsLibVersion);
+    if (!normalizedTargetVersion) {
+        throw new Error(`[sports-lib-reparse] Invalid target sports-lib version "${targetSportsLibVersion}"`);
+    }
+
+    const normalizedRuntimeVersion = semver.valid(runtimeSportsLibVersion);
+    if (!normalizedRuntimeVersion) {
+        throw new Error(`[sports-lib-reparse] Invalid runtime sports-lib version "${runtimeSportsLibVersion}"`);
+    }
+
+    if (normalizedTargetVersion !== normalizedRuntimeVersion) {
+        throw new Error(
+            `[sports-lib-reparse] Reparse target sports-lib version "${normalizedTargetVersion}" `
+            + `does not match runtime sports-lib version "${normalizedRuntimeVersion}"`,
+        );
+    }
 }
 
 const SPORTS_LIB_VERSION_CODE_FACTOR_MINOR = 1_000;
@@ -1372,10 +1395,13 @@ export async function reparseEventFromOriginalFiles(
     },
 ): Promise<ReparseExecutionResult> {
     const startedAtMs = Date.now();
-    let stage = 'load_event_and_activities';
+    let stage = 'validate_target_version';
     const mode = options?.mode || 'reimport';
     const targetSportsLibVersion = options?.targetSportsLibVersion || resolveTargetSportsLibVersion();
     try {
+        assertSportsLibRuntimeVersionMatchesTarget(targetSportsLibVersion);
+
+        stage = 'load_event_and_activities';
         const loadEventAndActivitiesStartedAtMs = Date.now();
         const eventAndActivities = options?.eventData && options?.activityDocs
             ? {

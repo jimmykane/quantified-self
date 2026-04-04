@@ -153,6 +153,7 @@ import {
     parseUidAndEventIdFromEventPath,
     resolveTargetSportsLibVersion,
     resolveTargetSportsLibVersionCode,
+    assertSportsLibRuntimeVersionMatchesTarget,
     sportsLibVersionToCode,
     shouldEventBeReparsed,
     writeReparseStatus,
@@ -241,6 +242,16 @@ describe('sports-lib-reparse.service', () => {
 
     it('resolveTargetSportsLibVersionCode should return encoded hardcoded target version', () => {
         expect(resolveTargetSportsLibVersionCode()).toBe(sportsLibVersionToCode(TARGET_SPORTS_LIB_VERSION));
+    });
+
+    it('assertSportsLibRuntimeVersionMatchesTarget should validate and compare versions', () => {
+        expect(() => assertSportsLibRuntimeVersionMatchesTarget('11.0.2', '11.0.2')).not.toThrow();
+        expect(() => assertSportsLibRuntimeVersionMatchesTarget('11.0.2', '11.1.0'))
+            .toThrow('does not match runtime sports-lib version');
+        expect(() => assertSportsLibRuntimeVersionMatchesTarget('not-semver', '11.0.2'))
+            .toThrow('Invalid target sports-lib version');
+        expect(() => assertSportsLibRuntimeVersionMatchesTarget('11.0.2', 'not-semver'))
+            .toThrow('Invalid runtime sports-lib version');
     });
 
     it('sportsLibVersionToCode should encode valid semver and reject invalid versions', () => {
@@ -1372,6 +1383,14 @@ describe('sports-lib-reparse.service', () => {
 
         expect(result.status).toBe('skipped');
         expect(result.reason).toBe(SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES);
+    });
+
+    it('reparseEventFromOriginalFiles should throw when target sports-lib version mismatches runtime', async () => {
+        await expect(reparseEventFromOriginalFiles('u1', 'e1', {
+            eventData: {},
+            activityDocs: [],
+            targetSportsLibVersion: HIGHER_SPORTS_LIB_VERSION,
+        })).rejects.toThrow('does not match runtime sports-lib version');
     });
 
     it('reparseEventFromOriginalFiles should parse, preserve fields, and persist', async () => {
