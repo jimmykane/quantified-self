@@ -449,6 +449,40 @@ describe('mergeEvents', () => {
     expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
   });
 
+  it('should reject merge when selected events reference duplicate source file paths', async () => {
+    hoisted.state.eventDocs.set('users/u1/events/e2', {
+      startDate: new Date('2026-01-11T10:00:00.000Z'),
+      description: 'Evening run',
+      originalFiles: [
+        {
+          path: 'users/u1/events/e1/original.fit',
+          bucket: 'quantified-self-io',
+          startDate: new Date('2026-01-11T10:00:00.000Z'),
+        },
+      ],
+    });
+
+    await expect(mergeEvents({
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
+    } as any)).rejects.toMatchObject({ code: 'already-exists' });
+
+    expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+  });
+
+  it('should reject merge when selected source files have identical content', async () => {
+    hoisted.state.fileBytesByPath.set('users/u1/events/e2/original.gpx.gz', Buffer.from([0x01, 0x02]));
+
+    await expect(mergeEvents({
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
+    } as any)).rejects.toMatchObject({ code: 'already-exists' });
+
+    expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+  });
+
   it('should merge events and return normalized payload', async () => {
     const result = await mergeEvents({
       auth: { uid: 'u1' },

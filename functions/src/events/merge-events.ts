@@ -1,6 +1,7 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
+import { createHash } from 'node:crypto';
 import {
   ActivityJSONInterface,
   EventImporterJSON,
@@ -42,6 +43,7 @@ const MAX_SOURCE_EVENTS = 10;
 const GENERATED_MERGE_DESCRIPTION_PREFIX = 'a merge of 2 or more activit';
 const PRIMARY_BUCKET = 'quantified-self-io';
 const LEGACY_BUCKET = 'quantified-self-io.appspot.com';
+const DUPLICATE_SOURCE_FILES_MESSAGE = 'Selected events include identical source files. Deselect duplicates and try again.';
 
 function toDateOrUndefined(value: unknown): Date | undefined {
   if (!value) {
@@ -201,6 +203,18 @@ function resolveStoredExtensionFromPath(path: string): string {
   return lower.endsWith('.gz') ? `${extension}.gz` : extension;
 }
 
+function normalizeSourceFilePath(path: string): string {
+  return path.trim();
+}
+
+function toSourceFileReferenceKey(path: string): string {
+  return normalizeSourceFilePath(path);
+}
+
+function buildDuplicateSourceFilesMessage(firstPath: string, secondPath: string): string {
+  return `${DUPLICATE_SOURCE_FILES_MESSAGE} Conflicting files: ${firstPath} and ${secondPath}.`;
+}
+
 function extractSourceFiles(eventDoc: FirestoreEventJSON | Record<string, unknown>): SourceFileMeta[] {
   const eventAny = eventDoc as Record<string, unknown>;
   const eventStartDate = toDateOrUndefined(eventAny.startDate);
@@ -219,6 +233,24 @@ function extractSourceFiles(eventDoc: FirestoreEventJSON | Record<string, unknow
       startDate: toDateOrUndefined(file.startDate) || eventStartDate,
       originalFilename: file.originalFilename,
     }));
+}
+
+function assertNoDuplicateSourceFileReferences(sourceFiles: SourceFileMeta[]): void {
+  const seenPathByReferenceKey = new Map<string, string>();
+
+  for (const sourceFile of sourceFiles) {
+    const normalizedPath = normalizeSourceFilePath(sourceFile.path);
+    const referenceKey = toSourceFileReferenceKey(normalizedPath);
+    const existingPath = seenPathByReferenceKey.get(referenceKey);
+    if (existingPath) {
+      throw new HttpsError(
+        'already-exists',
+        buildDuplicateSourceFilesMessage(existingPath, sourceFile.path),
+      );
+    }
+
+    seenPathByReferenceKey.set(referenceKey, sourceFile.path);
+  }
 }
 
 function sortActivityDocs(
@@ -410,10 +442,21 @@ async function loadSourceEvent(userID: string, eventID: string): Promise<SourceE
 
 async function downloadOriginalFilesForMerge(sourceFiles: SourceFileMeta[]): Promise<OriginalFile[]> {
   const originalFiles: OriginalFile[] = [];
+  const seenHashesByPath = new Map<string, string>();
 
   for (const sourceFile of sourceFiles) {
     try {
       const bytes = await downloadSourceBytesWithBucketFallback(sourceFile);
+      const fileHash = createHash('sha256').update(bytes).digest('hex');
+      const duplicatePath = seenHashesByPath.get(fileHash);
+      if (duplicatePath) {
+        throw new HttpsError(
+          'already-exists',
+          buildDuplicateSourceFilesMessage(duplicatePath, sourceFile.path),
+        );
+      }
+      seenHashesByPath.set(fileHash, sourceFile.path);
+
       originalFiles.push({
         data: bytes,
         extension: resolveStoredExtensionFromPath(sourceFile.path),
@@ -421,6 +464,9 @@ async function downloadOriginalFilesForMerge(sourceFiles: SourceFileMeta[]): Pro
         originalFilename: sourceFile.originalFilename,
       });
     } catch (error) {
+      if (error instanceof HttpsError) {
+        throw error;
+      }
       logger.warn('[mergeEvents] Failed to load source file for merge', {
         path: sourceFile.path,
         bucket: sourceFile.bucket,
@@ -467,6 +513,7 @@ export const mergeEvents = onCall({
 
     const sourceEvents = sourceLoadResults.map(result => result.event);
     const sourceFiles = sourceLoadResults.flatMap(result => result.sourceFiles);
+    assertNoDuplicateSourceFileReferences(sourceFiles);
     const originalFiles = await downloadOriginalFilesForMerge(sourceFiles);
 
     const mergedEvent = EventUtilities.mergeEvents(sourceEvents);
