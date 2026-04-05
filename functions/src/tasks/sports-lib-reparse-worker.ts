@@ -16,6 +16,11 @@ interface SportsLibReparseTaskPayload {
     jobId: string;
 }
 
+const TERMINAL_REPARSE_ERROR_PATTERNS = [
+    /^\[sports-lib-reparse\] Reparse target sports-lib version ".*" does not match runtime sports-lib version ".*"$/,
+    /^Event .* was not found for user .*$/,
+] as const;
+
 function getJobRef(jobId: string): admin.firestore.DocumentReference {
     return admin.firestore().collection(SPORTS_LIB_REPARSE_JOBS_COLLECTION).doc(jobId);
 }
@@ -25,6 +30,10 @@ function getErrorMessage(error: unknown): string {
         return error.message;
     }
     return `${error}`;
+}
+
+function isTerminalReparseFailure(errorMessage: string): boolean {
+    return TERMINAL_REPARSE_ERROR_PATTERNS.some((pattern) => pattern.test(errorMessage));
 }
 
 export const processSportsLibReparseTask = onTaskDispatched({
@@ -129,6 +138,16 @@ export const processSportsLibReparseTask = onTaskDispatched({
             durationMs: Date.now() - startedAtMs,
             error: errorMessage,
         });
+
+        if (isTerminalReparseFailure(errorMessage)) {
+            logger.warn('[sports-lib-reparse-worker] Suppressing retry for terminal job failure.', {
+                jobId,
+                uid: job.uid,
+                eventId: job.eventId,
+                error: errorMessage,
+            });
+            return;
+        }
 
         throw error;
     }

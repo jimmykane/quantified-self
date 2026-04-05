@@ -215,6 +215,60 @@ describe('processSportsLibReparseTask', () => {
         }), { merge: true });
     });
 
+    it('should mark failed and suppress retry on target/runtime version mismatch', async () => {
+        hoisted.jobGet.mockResolvedValue({
+            exists: true,
+            data: () => ({
+                uid: 'u1',
+                eventId: 'e1',
+                status: 'pending',
+                attemptCount: 0,
+                targetSportsLibVersion: '11.0.2',
+            }),
+        });
+        hoisted.reparseEventFromOriginalFiles.mockRejectedValue(new Error(
+            '[sports-lib-reparse] Reparse target sports-lib version "11.0.2" does not match runtime sports-lib version "11.0.3"',
+        ));
+
+        await expect((processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } })).resolves.toBeUndefined();
+
+        expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
+            status: 'failed',
+            lastError: '[sports-lib-reparse] Reparse target sports-lib version "11.0.2" does not match runtime sports-lib version "11.0.3"',
+        }));
+        expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({
+            status: 'failed',
+            lastError: '[sports-lib-reparse] Reparse target sports-lib version "11.0.2" does not match runtime sports-lib version "11.0.3"',
+        }), { merge: true });
+    });
+
+    it('should mark failed and suppress retry when event is missing', async () => {
+        hoisted.jobGet.mockResolvedValue({
+            exists: true,
+            data: () => ({
+                uid: 'u1',
+                eventId: 'e1',
+                status: 'pending',
+                attemptCount: 0,
+                targetSportsLibVersion: '11.0.3',
+            }),
+        });
+        hoisted.reparseEventFromOriginalFiles.mockRejectedValue(new Error(
+            'Event e1 was not found for user u1',
+        ));
+
+        await expect((processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } })).resolves.toBeUndefined();
+
+        expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
+            status: 'failed',
+            lastError: 'Event e1 was not found for user u1',
+        }));
+        expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({
+            status: 'failed',
+            lastError: 'Event e1 was not found for user u1',
+        }), { merge: true });
+    });
+
     it('should process users without entitlement gating', async () => {
         hoisted.jobGet.mockResolvedValue({
             exists: true,
