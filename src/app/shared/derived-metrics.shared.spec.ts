@@ -46,6 +46,6 @@ describe('derived-metrics shared helpers', () => {
   it('resolves metric kind guards and document ids', () => {
     expect(isDerivedMetricKind(DERIVED_METRIC_KINDS.Form)).toBe(true);
     expect(isDerivedMetricKind('random_metric')).toBe(false);
-    expect(getDerivedMetricDocId(DERIVED_METRIC_KINDS.RecoveryNow)).toBe('derivedMetrics_recovery_now');
+    expect(getDerivedMetricDocId(DERIVED_METRIC_KINDS.RecoveryNow)).toBe('recovery_now');
   });
 });

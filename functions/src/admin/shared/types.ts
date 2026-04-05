@@ -120,6 +120,7 @@ export interface SportsLibReparseJobDocData {
 }
 
 export interface DerivedMetricsCoordinatorDocData {
+    entryType?: unknown;
     status?: unknown;
     generation?: unknown;
     dirtyMetricKinds?: unknown;

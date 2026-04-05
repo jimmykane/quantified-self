@@ -9,7 +9,11 @@ import { COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME } from '../../coros/constants';
 import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
 import { config } from '../../config';
 import { SPORTS_LIB_REPARSE_TARGET_VERSION } from '../../reparse/sports-lib-reparse.config';
-import { DERIVED_METRICS_COORDINATOR_DOC_ID, normalizeDerivedMetricKindsStrict } from '../../../../shared/derived-metrics';
+import {
+    DERIVED_METRICS_COLLECTION_ID,
+    DERIVED_METRICS_ENTRY_TYPES,
+    normalizeDerivedMetricKindsStrict,
+} from '../../../../shared/derived-metrics';
 import { normalizeError } from '../shared/error.utils';
 import { toEpochMillis, toSafeNumber } from '../shared/date.utils';
 import {
@@ -97,9 +101,8 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             }),
         ]);
 
-        // Querying the `meta` collection group by coordinator doc ID gives one coordinator snapshot per user.
-        const derivedMetricsCoordinatorSnapshot = await db.collectionGroup('meta')
-            .where(admin.firestore.FieldPath.documentId(), '==', DERIVED_METRICS_COORDINATOR_DOC_ID)
+        const derivedMetricsCoordinatorSnapshot = await db.collectionGroup(DERIVED_METRICS_COLLECTION_ID)
+            .where('entryType', '==', DERIVED_METRICS_ENTRY_TYPES.Coordinator)
             .get()
             .catch(e => {
                 // Keep queue observability available even if coordinator aggregation fails (e.g. missing index/transient read issue).

@@ -19,10 +19,12 @@ describe('getQueueStats Cloud Function', () => {
                 })
             });
 
-            if (collectionName === 'meta') {
+            if (collectionName === 'derivedMetrics') {
                 const docs = [
                     {
+                        id: 'coordinator',
                         data: () => ({
+                            entryType: 'coordinator',
                             status: 'failed',
                             generation: 3,
                             dirtyMetricKinds: ['form'],
@@ -143,10 +145,12 @@ describe('getQueueStats Cloud Function', () => {
                 return failedJobsMock;
             }
 
-            if (collectionName === 'meta') {
+            if (collectionName === 'derivedMetrics') {
                 const docs = [
                     {
+                        id: 'coordinator',
                         data: () => ({
+                            entryType: 'coordinator',
                             status: 'queued',
                             generation: 7,
                             dirtyMetricKinds: ['form', 'recovery_now'],
@@ -156,7 +160,9 @@ describe('getQueueStats Cloud Function', () => {
                         ref: { parent: { parent: { id: 'uid-queued' } } }
                     },
                     {
+                        id: 'coordinator',
                         data: () => ({
+                            entryType: 'coordinator',
                             status: 'processing',
                             generation: 6,
                             dirtyMetricKinds: ['form'],
@@ -166,7 +172,9 @@ describe('getQueueStats Cloud Function', () => {
                         ref: { parent: { parent: { id: 'uid-processing' } } }
                     },
                     {
+                        id: 'coordinator',
                         data: () => ({
+                            entryType: 'coordinator',
                             status: 'idle',
                             generation: 5,
                             dirtyMetricKinds: [],
@@ -176,7 +184,9 @@ describe('getQueueStats Cloud Function', () => {
                         ref: { parent: { parent: { id: 'uid-idle' } } }
                     },
                     {
+                        id: 'coordinator',
                         data: () => ({
+                            entryType: 'coordinator',
                             status: 'failed',
                             generation: 4,
                             dirtyMetricKinds: ['form'],
@@ -310,7 +320,7 @@ describe('getQueueStats Cloud Function', () => {
                 })
             });
 
-            if (collectionName === 'meta') {
+            if (collectionName === 'derivedMetrics') {
                 return {
                     where: vi.fn().mockReturnValue({
                         get: vi.fn().mockRejectedValue(new Error('Missing index'))
@@ -390,4 +400,3 @@ describe('getQueueStats Cloud Function', () => {
         await expect((getQueueStats as any)(request)).rejects.toThrow('Only admins can call this function.');
     });
 });
-

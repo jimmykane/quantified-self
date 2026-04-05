@@ -133,6 +133,11 @@ service cloud.firestore {
         match /meta/{document=**} {
           allow read: if request.auth.uid == userID;
         }
+
+        match /derivedMetrics/{document=**} {
+          allow read: if request.auth.uid == userID;
+          allow write: if false;
+        }
     }
 
     // AI Insights repaired prompt backlog (global / server-owned only)

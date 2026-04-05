@@ -3,7 +3,9 @@ import * as logger from 'firebase-functions/logger';
 import { DataDuration, DataRecoveryTime } from '@sports-alliance/sports-lib';
 import {
     DERIVED_METRIC_KINDS,
+    DERIVED_METRICS_COLLECTION_ID,
     DERIVED_METRICS_COORDINATOR_DOC_ID,
+    DERIVED_METRICS_ENTRY_TYPES,
     DEFAULT_DERIVED_METRIC_KINDS,
     type DerivedFormMetricPayload,
     type DerivedMetricKind,
@@ -15,7 +17,7 @@ import {
     type EnsureDerivedMetricsResponse,
 } from '../../../shared/derived-metrics';
 import { enqueueDerivedMetricsTask } from '../shared/cloud-tasks';
-import { getDerivedMetricsUidAllowlistEnvKey, isDerivedMetricsUidAllowed } from './derived-metrics-uid-gate';
+import { getDerivedMetricsUidAllowlist, isDerivedMetricsUidAllowed } from './derived-metrics-uid-gate';
 
 const FORM_STAT_TYPE = 'Training Stress Score';
 const LEGACY_FORM_STAT_TYPE = 'Power Training Stress Score';
@@ -113,6 +115,7 @@ function parseCoordinator(data: unknown): DerivedMetricsCoordinator {
     const dirtyMetricKinds = normalizeDerivedMetricKindsStrict(normalizedData.dirtyMetricKinds as unknown[]);
 
     return {
+        entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
         status: status === 'queued' || status === 'processing' || status === 'failed' ? status : 'idle',
         generation: generationRaw === null ? 0 : Math.max(0, Math.floor(generationRaw)),
         dirtyMetricKinds,
@@ -318,11 +321,11 @@ function buildRecoveryNowMetricPayload(
 }
 
 function getCoordinatorDocRef(uid: string): FirebaseFirestore.DocumentReference {
-    return admin.firestore().doc(`users/${uid}/meta/${DERIVED_METRICS_COORDINATOR_DOC_ID}`);
+    return admin.firestore().doc(`users/${uid}/${DERIVED_METRICS_COLLECTION_ID}/${DERIVED_METRICS_COORDINATOR_DOC_ID}`);
 }
 
 function getMetricDocRef(uid: string, metricKind: DerivedMetricKind): FirebaseFirestore.DocumentReference {
-    return admin.firestore().doc(`users/${uid}/meta/${getDerivedMetricDocId(metricKind)}`);
+    return admin.firestore().doc(`users/${uid}/${DERIVED_METRICS_COLLECTION_ID}/${getDerivedMetricDocId(metricKind)}`);
 }
 
 async function queueDerivedMetricsTask(uid: string, generation: number): Promise<boolean> {
@@ -348,7 +351,7 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
     if (!isDerivedMetricsUidAllowed(uid)) {
         logger.info('[derived-metrics] Skipping dirty-mark enqueue due to UID allowlist gate.', {
             uid,
-            envKey: getDerivedMetricsUidAllowlistEnvKey(),
+            allowlistSize: getDerivedMetricsUidAllowlist().size,
         });
         return {
             accepted: false,
@@ -386,6 +389,7 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
         generationToQueue = nextGeneration;
 
         transaction.set(coordinatorRef, {
+            entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
             status: isAlreadyQueuedOrProcessing ? coordinator.status : 'queued',
             generation: nextGeneration,
             dirtyMetricKinds: nextDirtyMetricKinds,
@@ -409,6 +413,7 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
                 error,
             });
             await coordinatorRef.set({
+                entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
                 status: 'failed',
                 lastError: toSafeString((error as { message?: unknown } | null)?.message) || 'enqueue_failed',
                 updatedAtMs: Date.now(),
@@ -462,6 +467,7 @@ export async function startDerivedMetricsProcessing(
         const dirtyMetricKinds = normalizeDerivedMetricKindsStrict(coordinator.dirtyMetricKinds);
         if (!dirtyMetricKinds.length) {
             transaction.set(coordinatorRef, {
+                entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
                 status: 'idle',
                 updatedAtMs: nowMs,
                 completedAtMs: nowMs,
@@ -472,6 +478,7 @@ export async function startDerivedMetricsProcessing(
         }
 
         transaction.set(coordinatorRef, {
+            entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
             status: 'processing',
             dirtyMetricKinds: [],
             startedAtMs: nowMs,
@@ -515,6 +522,7 @@ export async function completeDerivedMetricsProcessing(
         if (pendingDirtyMetricKinds.length) {
             const nextGeneration = coordinator.generation + 1;
             transaction.set(coordinatorRef, {
+                entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
                 status: 'queued',
                 generation: nextGeneration,
                 dirtyMetricKinds: pendingDirtyMetricKinds,
@@ -531,6 +539,7 @@ export async function completeDerivedMetricsProcessing(
         }
 
         transaction.set(coordinatorRef, {
+            entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
             status: 'idle',
             dirtyMetricKinds: [],
             updatedAtMs: nowMs,
@@ -555,6 +564,7 @@ export async function completeDerivedMetricsProcessing(
                 error,
             });
             await coordinatorRef.set({
+                entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
                 status: 'failed',
                 lastError: toSafeString((error as { message?: unknown } | null)?.message) || 'enqueue_follow_up_failed',
                 updatedAtMs: Date.now(),
@@ -591,6 +601,7 @@ export async function failDerivedMetricsProcessing(
             normalizeDerivedMetricKindsStrict(processedMetricKinds),
         );
         transaction.set(coordinatorRef, {
+            entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
             status: 'failed',
             dirtyMetricKinds: retainedDirtyMetricKinds,
             lastError: errorMessage,
@@ -607,6 +618,7 @@ export async function markDerivedMetricSnapshotsBuilding(
     const batch = admin.firestore().batch();
     metricKinds.forEach((metricKind) => {
         batch.set(getMetricDocRef(uid, metricKind), {
+            entryType: DERIVED_METRICS_ENTRY_TYPES.Snapshot,
             metricKind,
             schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
             status: 'building',
@@ -627,6 +639,7 @@ export async function markDerivedMetricSnapshotsFailed(
     const batch = admin.firestore().batch();
     metricKinds.forEach((metricKind) => {
         batch.set(getMetricDocRef(uid, metricKind), {
+            entryType: DERIVED_METRICS_ENTRY_TYPES.Snapshot,
             metricKind,
             schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
             status: 'failed',
@@ -649,6 +662,7 @@ export async function writeDerivedMetricSnapshotsReady(
         if (metricKind === DERIVED_METRIC_KINDS.Form) {
             const buildResult = buildFormMetricPayload(docs);
             batch.set(getMetricDocRef(uid, metricKind), {
+                entryType: DERIVED_METRICS_ENTRY_TYPES.Snapshot,
                 metricKind,
                 schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
                 status: 'ready',
@@ -663,6 +677,7 @@ export async function writeDerivedMetricSnapshotsReady(
         if (metricKind === DERIVED_METRIC_KINDS.RecoveryNow) {
             const buildResult = buildRecoveryNowMetricPayload(docs);
             batch.set(getMetricDocRef(uid, metricKind), {
+                entryType: DERIVED_METRICS_ENTRY_TYPES.Snapshot,
                 metricKind,
                 schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
                 status: 'ready',

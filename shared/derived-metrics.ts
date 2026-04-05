@@ -10,7 +10,15 @@ export const DEFAULT_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
   DERIVED_METRIC_KINDS.RecoveryNow,
 ];
 
-export const DERIVED_METRICS_COORDINATOR_DOC_ID = 'derivedMetricsCoordinator';
+export const DERIVED_METRICS_COLLECTION_ID = 'derivedMetrics';
+export const DERIVED_METRICS_COORDINATOR_DOC_ID = 'coordinator';
+
+export const DERIVED_METRICS_ENTRY_TYPES = {
+  Coordinator: 'coordinator',
+  Snapshot: 'snapshot',
+} as const;
+
+export type DerivedMetricsEntryType = typeof DERIVED_METRICS_ENTRY_TYPES[keyof typeof DERIVED_METRICS_ENTRY_TYPES];
 
 export type DerivedMetricsCoordinatorStatus =
   | 'idle'
@@ -19,6 +27,7 @@ export type DerivedMetricsCoordinatorStatus =
   | 'failed';
 
 export interface DerivedMetricsCoordinator {
+  entryType: typeof DERIVED_METRICS_ENTRY_TYPES.Coordinator;
   status: DerivedMetricsCoordinatorStatus;
   generation: number;
   dirtyMetricKinds: DerivedMetricKind[];
@@ -36,6 +45,7 @@ export type DerivedMetricSnapshotStatus =
   | 'stale';
 
 export interface DerivedMetricSnapshotBase<TPayload> {
+  entryType: typeof DERIVED_METRICS_ENTRY_TYPES.Snapshot;
   metricKind: DerivedMetricKind;
   schemaVersion: number;
   status: DerivedMetricSnapshotStatus;
@@ -101,5 +111,5 @@ export function normalizeDerivedMetricKinds(metricKinds: readonly unknown[] | nu
 }
 
 export function getDerivedMetricDocId(metricKind: DerivedMetricKind): string {
-  return `derivedMetrics_${metricKind}`;
+  return metricKind;
 }

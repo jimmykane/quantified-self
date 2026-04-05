@@ -9,6 +9,7 @@ import { AppFunctionsService } from './app.functions.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import {
   DERIVED_METRIC_KINDS,
+  DERIVED_METRICS_COLLECTION_ID,
   getDerivedMetricDocId,
   type DerivedMetricSnapshotStatus,
   type EnsureDerivedMetricsRequest,
@@ -51,8 +52,8 @@ export class DashboardDerivedMetricsService {
       });
     }
 
-    const formDocRef = doc(this.firestore, 'users', uid, 'meta', getDerivedMetricDocId(DERIVED_METRIC_KINDS.Form));
-    const recoveryDocRef = doc(this.firestore, 'users', uid, 'meta', getDerivedMetricDocId(DERIVED_METRIC_KINDS.RecoveryNow));
+    const formDocRef = doc(this.firestore, 'users', uid, DERIVED_METRICS_COLLECTION_ID, getDerivedMetricDocId(DERIVED_METRIC_KINDS.Form));
+    const recoveryDocRef = doc(this.firestore, 'users', uid, DERIVED_METRICS_COLLECTION_ID, getDerivedMetricDocId(DERIVED_METRIC_KINDS.RecoveryNow));
 
     return combineLatest([
       (docData(formDocRef) as Observable<Record<string, unknown> | undefined>).pipe(

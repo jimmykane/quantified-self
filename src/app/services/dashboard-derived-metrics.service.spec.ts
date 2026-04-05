@@ -5,6 +5,7 @@ import { Firestore, doc, docData } from 'app/firebase/firestore';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import {
   DERIVED_METRIC_KINDS,
+  DERIVED_METRICS_COLLECTION_ID,
   getDerivedMetricDocId,
   type EnsureDerivedMetricsRequest,
 } from '@shared/derived-metrics';
@@ -74,8 +75,8 @@ describe('DashboardDerivedMetricsService', () => {
 
   it('maps derived snapshots to form points and recovery-now context', async () => {
     const uid = 'user-1';
-    const formDocRef = { path: `users/${uid}/meta/${getDerivedMetricDocId(DERIVED_METRIC_KINDS.Form)}` };
-    const recoveryDocRef = { path: `users/${uid}/meta/${getDerivedMetricDocId(DERIVED_METRIC_KINDS.RecoveryNow)}` };
+    const formDocRef = { path: `users/${uid}/${DERIVED_METRICS_COLLECTION_ID}/${getDerivedMetricDocId(DERIVED_METRIC_KINDS.Form)}` };
+    const recoveryDocRef = { path: `users/${uid}/${DERIVED_METRICS_COLLECTION_ID}/${getDerivedMetricDocId(DERIVED_METRIC_KINDS.RecoveryNow)}` };
 
     hoisted.docMock
       .mockReturnValueOnce(formDocRef)
@@ -104,8 +105,8 @@ describe('DashboardDerivedMetricsService', () => {
 
     const state = await firstValueFrom(service.watch({ uid }));
 
-    expect(doc).toHaveBeenNthCalledWith(1, {}, 'users', uid, 'meta', getDerivedMetricDocId(DERIVED_METRIC_KINDS.Form));
-    expect(doc).toHaveBeenNthCalledWith(2, {}, 'users', uid, 'meta', getDerivedMetricDocId(DERIVED_METRIC_KINDS.RecoveryNow));
+    expect(doc).toHaveBeenNthCalledWith(1, {}, 'users', uid, DERIVED_METRICS_COLLECTION_ID, getDerivedMetricDocId(DERIVED_METRIC_KINDS.Form));
+    expect(doc).toHaveBeenNthCalledWith(2, {}, 'users', uid, DERIVED_METRICS_COLLECTION_ID, getDerivedMetricDocId(DERIVED_METRIC_KINDS.RecoveryNow));
     expect(state.formStatus).toBe('ready');
     expect(state.recoveryNowStatus).toBe('ready');
     expect(state.formPoints?.map(point => point.time)).toEqual([
