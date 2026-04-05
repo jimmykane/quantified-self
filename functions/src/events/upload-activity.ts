@@ -1,6 +1,7 @@
 import { onRequest } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import {
   EventImporterFIT,
   EventImporterGPX,
@@ -299,7 +300,7 @@ async function persistProcessingMetadata(userID: string, eventID: string): Promi
   const processingPayload: ProcessingMetaData = {
     sportsLibVersion: SPORTS_LIB_VERSION,
     sportsLibVersionCode: sportsLibVersionToCode(SPORTS_LIB_VERSION),
-    processedAt: admin.firestore.FieldValue.serverTimestamp(),
+    processedAt: FieldValue.serverTimestamp(),
   };
 
   await admin.firestore()

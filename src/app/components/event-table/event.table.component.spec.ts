@@ -458,6 +458,25 @@ describe('EventTableComponent', () => {
         expect(mockEventMergeService.mergeEvents).not.toHaveBeenCalled();
     });
 
+    it('should stop merge when selected events include duplicate source files', async () => {
+        const e1 = new MockEvent('event1');
+        const e2 = new MockEvent('event2');
+        e1.originalFiles = [{ path: 'users/u1/events/shared/original.fit' }];
+        e2.originalFiles = [{ path: 'users/u1/events/shared/original.fit' }];
+        component.selection.select({ Event: e1 } as any);
+        component.selection.select({ Event: e2 } as any);
+
+        await component.mergeSelection(new Event('click'));
+
+        expect(mockSnackBar.open).toHaveBeenCalledWith(
+            'Selected events include identical source files. Deselect duplicates and try again.',
+            undefined,
+            { duration: 4000 }
+        );
+        expect(mockDialog.open).not.toHaveBeenCalled();
+        expect(mockEventMergeService.mergeEvents).not.toHaveBeenCalled();
+    });
+
     it('should abort merge when dialog closes without selection', async () => {
         const e1 = new MockEvent('event1');
         const e2 = new MockEvent('event2');

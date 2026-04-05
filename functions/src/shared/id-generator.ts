@@ -39,6 +39,14 @@ export async function generateActivityID(eventID: string, index: number): Promis
 }
 
 /**
+ * Generates a deterministic ID for an activity based on the event ID and source activity key.
+ */
+export async function generateActivityIDFromSourceKey(eventID: string, sourceActivityKey: string): Promise<string> {
+    const parts = [eventID, sourceActivityKey];
+    return generateIDFromParts(parts);
+}
+
+/**
  * Generates a SHA-256 hash from an array of strings.
  */
 export async function generateIDFromParts(parts: string[]): Promise<string> {

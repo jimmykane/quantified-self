@@ -182,6 +182,107 @@ describe('AppOriginalFileHydrationService', () => {
     expect(parsedFirst.creator.name).toBe('Renamed Device A');
   });
 
+  it('should prefer sourceActivityKey matching before parsed activity ID matching', async () => {
+    const firstStart = new Date('2026-01-01T10:00:00.000Z');
+    const secondStart = new Date('2026-01-01T12:30:00.000Z');
+    const keyA = `${'a'.repeat(64)}:fingerprint-a:0`;
+    const keyB = `${'b'.repeat(64)}:fingerprint-b:0`;
+
+    const existingFirst = {
+      getID: () => 'existing-a',
+      sourceActivityKey: keyA,
+      startDate: firstStart,
+      type: 'Run',
+      creator: { name: 'Renamed Device A' },
+      getStat: vi.fn().mockReturnValue(null),
+    };
+    const existingSecond = {
+      getID: () => 'existing-b',
+      sourceActivityKey: keyB,
+      startDate: secondStart,
+      type: 'Ride',
+      creator: { name: 'Renamed Device B' },
+      getStat: vi.fn().mockReturnValue(null),
+    };
+
+    // IDs intentionally conflict with keys:
+    // if ID matching runs first this would swap identities.
+    const parsedFirst = {
+      getID: () => 'existing-a',
+      setID: vi.fn(),
+      sourceActivityKey: keyB,
+      startDate: secondStart,
+      type: 'Ride',
+      creator: { name: 'Parser Device B' },
+      getStat: vi.fn().mockReturnValue(null),
+    };
+    const parsedSecond = {
+      getID: () => 'existing-b',
+      setID: vi.fn(),
+      sourceActivityKey: keyA,
+      startDate: firstStart,
+      type: 'Run',
+      creator: { name: 'Parser Device A' },
+      getStat: vi.fn().mockReturnValue(null),
+    };
+
+    const event = {
+      getID: () => 'event-key-first',
+      originalFile: { path: 'users/u/events/e/original.fit' },
+      getActivities: () => [existingFirst, existingSecond],
+    } as any;
+    const parsedEvent = {
+      getActivities: () => [parsedFirst, parsedSecond],
+    } as any;
+    vi.spyOn(service as any, 'fetchAndParseOneFile').mockResolvedValue({ event: parsedEvent });
+
+    await service.parseEventFromOriginalFiles(event);
+
+    expect(parsedFirst.setID).toHaveBeenCalledWith('existing-b');
+    expect(parsedSecond.setID).toHaveBeenCalledWith('existing-a');
+    expect(parsedFirst.creator.name).toBe('Renamed Device B');
+    expect(parsedSecond.creator.name).toBe('Renamed Device A');
+  });
+
+  it('should copy sourceActivityKey from existing activity when signature matching resolves identity', async () => {
+    const firstStart = new Date('2026-01-01T10:00:00.000Z');
+    const firstEnd = new Date('2026-01-01T10:30:00.000Z');
+    const existingKey = `${'c'.repeat(64)}:fingerprint-c:0`;
+    const existingActivity = {
+      getID: () => 'existing-c',
+      sourceActivityKey: existingKey,
+      startDate: firstStart,
+      endDate: firstEnd,
+      type: 'Run',
+      creator: { name: 'Renamed Device C' },
+      getStat: vi.fn().mockReturnValue(null),
+    };
+    const parsedActivity = {
+      getID: () => '',
+      setID: vi.fn(),
+      startDate: firstStart,
+      endDate: firstEnd,
+      type: 'Run',
+      creator: { name: 'Parser Device C' },
+      getStat: vi.fn().mockReturnValue(null),
+    } as any;
+
+    const event = {
+      getID: () => 'event-copy-key',
+      originalFile: { path: 'users/u/events/e/original.fit' },
+      getActivities: () => [existingActivity],
+    } as any;
+    const parsedEvent = {
+      getActivities: () => [parsedActivity],
+    } as any;
+    vi.spyOn(service as any, 'fetchAndParseOneFile').mockResolvedValue({ event: parsedEvent });
+
+    await service.parseEventFromOriginalFiles(event);
+
+    expect(parsedActivity.setID).toHaveBeenCalledWith('existing-c');
+    expect(parsedActivity.sourceActivityKey).toBe(existingKey);
+  });
+
   it('should avoid identity reassignment when multiple candidates are ambiguous', async () => {
     const sharedStart = new Date('2026-01-01T10:00:00.000Z');
 

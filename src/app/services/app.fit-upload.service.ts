@@ -3,6 +3,7 @@ import { FirebaseApp } from 'app/firebase/app';
 import { Auth } from 'app/firebase/auth';
 import { FUNCTIONS_MANIFEST } from '@shared/functions-manifest';
 import { AppCheckReadinessService } from './app-check-readiness.service';
+import { environment } from '../../environments/environment';
 
 export interface UploadActivityFromFitResponse {
     eventId: string;
@@ -43,6 +44,8 @@ function mapFallbackUploadErrorMessage(statusCode: number): string {
     providedIn: 'root'
 })
 export class AppFitUploadService {
+    private static readonly LOCAL_FUNCTIONS_EMULATOR_HOST = 'localhost';
+    private static readonly LOCAL_FUNCTIONS_EMULATOR_PORT = 5001;
     private app = inject(FirebaseApp);
     private auth = inject(Auth);
     private appCheckReadiness = inject(AppCheckReadinessService);
@@ -70,7 +73,7 @@ export class AppFitUploadService {
         }
 
         const config = FUNCTIONS_MANIFEST.uploadActivity;
-        const functionURL = `https://${config.region}-${projectID}.cloudfunctions.net/${config.name}`;
+        const functionURL = this.resolveUploadFunctionUrl(config.region, config.name, projectID);
 
         const headers = new Headers({
             'Authorization': `Bearer ${idToken}`,
@@ -110,5 +113,17 @@ export class AppFitUploadService {
 
     async uploadFitFile(fileBytes: ArrayBuffer, originalFilename?: string): Promise<UploadActivityFromFitResponse> {
         return this.uploadActivityFile(fileBytes, 'fit', originalFilename);
+    }
+
+    private resolveUploadFunctionUrl(region: string, functionName: string, projectID: string): string {
+        if (this.shouldUseFunctionsEmulator()) {
+            return `http://${AppFitUploadService.LOCAL_FUNCTIONS_EMULATOR_HOST}:${AppFitUploadService.LOCAL_FUNCTIONS_EMULATOR_PORT}/${projectID}/${region}/${functionName}`;
+        }
+
+        return `https://${region}-${projectID}.cloudfunctions.net/${functionName}`;
+    }
+
+    private shouldUseFunctionsEmulator(): boolean {
+        return environment.localhost === true && environment.useFunctionsEmulator === true;
     }
 }

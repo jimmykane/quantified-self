@@ -87,6 +87,17 @@ describe('AppEventMergeService', () => {
     });
   });
 
+  it('should map already-exists to DUPLICATE_SOURCE_FILE error', async () => {
+    functionsServiceMock.call.mockRejectedValueOnce({
+      code: 'functions/already-exists',
+      message: 'duplicate source file',
+    });
+
+    await expect(service.mergeEvents(['e1', 'e2'], 'benchmark')).rejects.toMatchObject({
+      code: 'DUPLICATE_SOURCE_FILE',
+    });
+  });
+
   it('should map unknown function errors to INTERNAL error', async () => {
     functionsServiceMock.call.mockRejectedValueOnce({
       code: 'functions/internal',
@@ -104,6 +115,7 @@ describe('AppEventMergeService', () => {
     expect(service.getMergeErrorMessage(new EventMergeError('LIMIT_REACHED', 'x'))).toContain('Upload limit reached');
     expect(service.getMergeErrorMessage(new EventMergeError('EVENT_NOT_FOUND', 'x'))).toContain('not found');
     expect(service.getMergeErrorMessage(new EventMergeError('MISSING_SOURCE_FILE', 'x'))).toContain('missing original files');
+    expect(service.getMergeErrorMessage(new EventMergeError('DUPLICATE_SOURCE_FILE', 'x'))).toContain('identical source files');
     expect(service.getMergeErrorMessage(new EventMergeError('INTERNAL', 'x'))).toBe('Could not merge events.');
     expect(service.getMergeErrorMessage(new Error('boom'))).toBe('boom');
     expect(service.getMergeErrorMessage(null)).toBe('Could not merge events.');

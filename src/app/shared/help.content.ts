@@ -457,6 +457,7 @@ This action cannot be undone.
 - Merge requires at least two selected events.
 - Merge requests are limited to 10 events at a time.
 - If merge fails because source files are missing, select events that still have their original uploaded files.
+- If merge fails due to identical source files, remove duplicate events/files from the selection and retry.
 - If merge fails at plan limits, free space or upgrade your plan before retrying.
 - Benchmark comparison requires exactly two activities for the selected pair.
 

@@ -250,6 +250,10 @@ export class AppOriginalFileHydrationService {
       if (existingId) {
         parsedActivity.setID(existingId);
       }
+      const existingSourceActivityKey = this.getActivitySourceActivityKey(existingActivity);
+      if (existingSourceActivityKey && !this.getActivitySourceActivityKey(parsedActivity)) {
+        (parsedActivity as any).sourceActivityKey = existingSourceActivityKey;
+      }
       this.applyUserActivityOverrides(existingActivity, parsedActivity);
     });
 
@@ -262,6 +266,7 @@ export class AppOriginalFileHydrationService {
         .map(({ activity, index }) => ({
           index,
           id: activity.getID?.() || null,
+          sourceActivityKey: this.getActivitySourceActivityKey(activity),
           startMs: this.toTimestampMs((activity as any)?.startDate),
           type: `${(activity as any)?.type || ''}`.trim() || null,
         }));
@@ -271,6 +276,7 @@ export class AppOriginalFileHydrationService {
         .map(({ activity, index }) => ({
           index,
           id: activity.getID?.() || null,
+          sourceActivityKey: this.getActivitySourceActivityKey(activity),
           startMs: this.toTimestampMs((activity as any)?.startDate),
           type: `${(activity as any)?.type || ''}`.trim() || null,
         }));
@@ -311,6 +317,14 @@ export class AppOriginalFileHydrationService {
         }
         return matches;
       }, []);
+
+    this.assignUniqueMatchesBySignature(
+      existingActivities,
+      parsedActivities,
+      assignments,
+      usedExistingIndexes,
+      (activity) => this.getActivitySourceActivityKey(activity),
+    );
 
     parsedActivities.forEach((parsedActivity, parsedIndex) => {
       const parsedId = parsedActivity.getID?.();
@@ -356,6 +370,11 @@ export class AppOriginalFileHydrationService {
     }
 
     return assignments;
+  }
+
+  private getActivitySourceActivityKey(activity: ActivityInterface): string | null {
+    const sourceActivityKey = `${(activity as any)?.sourceActivityKey || ''}`.trim();
+    return sourceActivityKey.length > 0 ? sourceActivityKey : null;
   }
 
   private assignUniqueMatchesBySignature(

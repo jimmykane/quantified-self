@@ -126,7 +126,7 @@ service cloud.firestore {
             allow create: if false;
             allow delete: if false;
             allow update: if request.auth.uid == userID
-              && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['eventID', 'userID', 'eventStartDate'])
+              && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['eventID', 'userID', 'eventStartDate', 'sourceActivityKey'])
               && isOwnEventRef(request.resource.data);
           }
 
