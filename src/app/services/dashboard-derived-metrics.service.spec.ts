@@ -86,8 +86,8 @@ describe('DashboardDerivedMetricsService', () => {
         status: 'ready',
         payload: {
           dailyLoads: [
-            [Date.UTC(2026, 0, 1), 30],
-            [Date.UTC(2026, 0, 3), 10],
+            { dayMs: Date.UTC(2026, 0, 1), load: 30 },
+            { dayMs: Date.UTC(2026, 0, 3), load: 10 },
           ],
         },
       }))
@@ -96,6 +96,9 @@ describe('DashboardDerivedMetricsService', () => {
         payload: {
           totalSeconds: 5400,
           endTimeMs: Date.UTC(2026, 0, 3, 12, 0, 0),
+          latestWorkoutSeconds: 3600,
+          latestWorkoutEndTimeMs: Date.UTC(2026, 0, 3, 12, 0, 0),
+          maxSupportedRecoverySeconds: 14 * 24 * 60 * 60,
           segments: [
             { totalSeconds: 1800, endTimeMs: Date.UTC(2026, 0, 2, 12, 0, 0) },
             { totalSeconds: 3600, endTimeMs: Date.UTC(2026, 0, 3, 12, 0, 0) },
@@ -118,11 +121,40 @@ describe('DashboardDerivedMetricsService', () => {
     expect(state.recoveryNow).toEqual({
       totalSeconds: 5400,
       endTimeMs: Date.UTC(2026, 0, 3, 12, 0, 0),
+      latestWorkoutSeconds: 3600,
+      latestWorkoutEndTimeMs: Date.UTC(2026, 0, 3, 12, 0, 0),
+      maxSupportedRecoverySeconds: 14 * 24 * 60 * 60,
       segments: [
         { totalSeconds: 1800, endTimeMs: Date.UTC(2026, 0, 2, 12, 0, 0) },
         { totalSeconds: 3600, endTimeMs: Date.UTC(2026, 0, 3, 12, 0, 0) },
       ],
     });
+  });
+
+  it('supports legacy tuple daily-load payloads for backward compatibility', async () => {
+    const uid = 'user-1';
+    const formDocRef = { path: `users/${uid}/${DERIVED_METRICS_COLLECTION_ID}/${getDerivedMetricDocId(DERIVED_METRIC_KINDS.Form)}` };
+    const recoveryDocRef = { path: `users/${uid}/${DERIVED_METRICS_COLLECTION_ID}/${getDerivedMetricDocId(DERIVED_METRIC_KINDS.RecoveryNow)}` };
+
+    hoisted.docMock
+      .mockReturnValueOnce(formDocRef)
+      .mockReturnValueOnce(recoveryDocRef);
+    hoisted.docDataMock
+      .mockReturnValueOnce(of({
+        status: 'ready',
+        payload: {
+          dailyLoads: [
+            [Date.UTC(2026, 0, 1), 20],
+            [Date.UTC(2026, 0, 3), 5],
+          ],
+        },
+      }))
+      .mockReturnValueOnce(of(undefined));
+
+    const state = await firstValueFrom(service.watch({ uid }));
+
+    expect(state.formPoints?.map(point => point.trainingStressScore)).toEqual([20, 0, 5]);
+    expect(state.recoveryNow).toBeNull();
   });
 
   it('requests missing derived metrics once while a request is in flight', async () => {

@@ -48,11 +48,12 @@ describe('help.content', () => {
     });
   });
 
-  it('should document the dashboard recovery tile now/total summary behavior', () => {
+  it('should document the dashboard recovery tile now/active/latest summary behavior', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
     expect(gettingStartedSection?.content).toContain('Recovery Left Now');
-    expect(gettingStartedSection?.content).toContain('Total recovery');
+    expect(gettingStartedSection?.content).toContain('Active total');
+    expect(gettingStartedSection?.content).toContain('Latest workout');
   });
 
   it('should document chart manager curated and custom categories', () => {
@@ -72,6 +73,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Form (TSB)');
     expect(gettingStartedSection?.content).toContain('prior-day readiness');
     expect(gettingStartedSection?.content).toContain('full history');
+    expect(gettingStartedSection?.content).toContain('does not react to dashboard date-range changes');
+    expect(gettingStartedSection?.content).toContain('weekly');
     expect(gettingStartedSection?.content).toContain('asynchronously');
     expect(gettingStartedSection?.content).toContain('status notice');
   });

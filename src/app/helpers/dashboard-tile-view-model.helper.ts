@@ -3,6 +3,7 @@ import {
   ChartTypes,
   DataRecoveryTime,
   DateRanges,
+  DaysOfTheWeek,
   TileChartSettingsInterface,
   TileMapSettingsInterface,
   TileSettingsInterface,
@@ -21,9 +22,11 @@ import {
   buildAggregatedChartRows,
   type AggregatedChartRow,
 } from './aggregated-chart-row.helper';
-import type {
-  DashboardFormPoint,
+import {
+  type DashboardFormPoint,
+  resolveDashboardFormLatestPoint,
 } from './dashboard-form.helper';
+import { getDatesForDateRange } from './date-range-helper';
 import {
   resolveAggregatedRecoveryNowContext,
   type DashboardRecoveryNowContext,
@@ -37,6 +40,7 @@ export interface DashboardChartTileViewModel extends TileChartSettingsInterface 
   timeInterval: TimeIntervals;
   data: AggregatedChartRow[] | EventInterface[] | DashboardFormPoint[];
   recoveryNow?: DashboardRecoveryNowContext;
+  absoluteLatestFormPoint?: DashboardFormPoint | null;
 }
 
 export type DashboardMapTileSettings = Omit<TileMapSettingsInterface, 'mapType'> & {
@@ -56,6 +60,7 @@ interface BuildDashboardTileViewModelsInput {
     dateRange?: DateRanges | null;
     startDate?: number | Date | null;
     endDate?: number | Date | null;
+    startOfTheWeek?: DaysOfTheWeek | null;
   } | null;
   preferences?: EventStatAggregationPreferences;
   logger?: EventStatAggregationLogger;
@@ -92,25 +97,54 @@ function resolveDateRangeTimeMs(value: unknown): number | null {
   return null;
 }
 
+function resolveDashboardDateRangeBounds(
+  dashboardDateRange?: BuildDashboardTileViewModelsInput['dashboardDateRange'],
+): { startTimeMs: number; endTimeMs: number } | null {
+  if (!dashboardDateRange || dashboardDateRange.dateRange === DateRanges.all) {
+    return null;
+  }
+
+  const explicitStartTimeMs = resolveDateRangeTimeMs(dashboardDateRange.startDate);
+  const explicitEndTimeMs = resolveDateRangeTimeMs(dashboardDateRange.endDate);
+  if (explicitStartTimeMs !== null && explicitEndTimeMs !== null) {
+    return {
+      startTimeMs: explicitStartTimeMs,
+      endTimeMs: explicitEndTimeMs,
+    };
+  }
+
+  if (dashboardDateRange.dateRange === DateRanges.custom) {
+    return null;
+  }
+
+  const startOfTheWeek = dashboardDateRange.startOfTheWeek ?? DaysOfTheWeek.Monday;
+  const resolvedRange = getDatesForDateRange(dashboardDateRange.dateRange, startOfTheWeek);
+  const presetStartTimeMs = resolveDateRangeTimeMs(resolvedRange.startDate);
+  const presetEndTimeMs = resolveDateRangeTimeMs(resolvedRange.endDate);
+  if (presetStartTimeMs === null || presetEndTimeMs === null) {
+    return null;
+  }
+
+  return {
+    startTimeMs: presetStartTimeMs,
+    endTimeMs: presetEndTimeMs,
+  };
+}
+
 function applyDashboardDateRangeFilter(
   events: EventInterface[],
   dashboardDateRange?: BuildDashboardTileViewModelsInput['dashboardDateRange'],
 ): EventInterface[] {
-  if (!dashboardDateRange || dashboardDateRange.dateRange === DateRanges.all) {
-    return events;
-  }
-
-  const startTimeMs = resolveDateRangeTimeMs(dashboardDateRange.startDate);
-  const endTimeMs = resolveDateRangeTimeMs(dashboardDateRange.endDate);
-  if (startTimeMs === null || endTimeMs === null) {
+  const bounds = resolveDashboardDateRangeBounds(dashboardDateRange);
+  if (!bounds) {
     return events;
   }
 
   return events.filter((event) => {
     const eventStartTimeMs = resolveEventStartDateTimeMs(event);
     return eventStartTimeMs !== null
-      && eventStartTimeMs >= startTimeMs
-      && eventStartTimeMs <= endTimeMs;
+      && eventStartTimeMs >= bounds.startTimeMs
+      && eventStartTimeMs <= bounds.endTimeMs;
   });
 }
 
@@ -154,10 +188,12 @@ export function buildDashboardTileViewModels(
     const chartTile = tile as TileChartSettingsInterface;
     const requestedTimeInterval = chartTile.dataTimeInterval || TimeIntervals.Auto;
     if (isDashboardFormChartType(chartTile.chartType)) {
+      const fullFormPoints = derivedFormPoints || [];
       viewModels.push({
         ...chartTile,
-        timeInterval: TimeIntervals.Daily,
-        data: derivedFormPoints || [],
+        timeInterval: TimeIntervals.Weekly,
+        data: fullFormPoints,
+        absoluteLatestFormPoint: resolveDashboardFormLatestPoint(fullFormPoints),
       });
       return viewModels;
     }

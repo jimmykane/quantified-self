@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   DERIVED_METRIC_KINDS,
+  DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS,
+  DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS,
+  DERIVED_RECOVERY_QUERY_DURATION_BUFFER_SECONDS,
   DEFAULT_DERIVED_METRIC_KINDS,
+  buildDerivedFormDailyLoads,
   getDerivedMetricDocId,
   isDerivedMetricKind,
+  normalizeDerivedFormDailyLoads,
   normalizeDerivedMetricKinds,
   normalizeDerivedMetricKindsStrict,
 } from '@shared/derived-metrics';
@@ -47,5 +52,36 @@ describe('derived-metrics shared helpers', () => {
     expect(isDerivedMetricKind(DERIVED_METRIC_KINDS.Form)).toBe(true);
     expect(isDerivedMetricKind('random_metric')).toBe(false);
     expect(getDerivedMetricDocId(DERIVED_METRIC_KINDS.RecoveryNow)).toBe('recovery_now');
+  });
+
+  it('normalizes derived form daily loads for object and legacy tuple entries', () => {
+    expect(normalizeDerivedFormDailyLoads([
+      { dayMs: Date.UTC(2026, 0, 2), load: 5 },
+      [Date.UTC(2026, 0, 1), 10],
+      [Date.UTC(2026, 0, 2), 7],
+      { dayMs: 'invalid', load: 1 },
+      [Date.UTC(2026, 0, 3), -1],
+    ])).toEqual([
+      { dayMs: Date.UTC(2026, 0, 1), load: 10 },
+      { dayMs: Date.UTC(2026, 0, 2), load: 12 },
+    ]);
+  });
+
+  it('builds sorted Firestore-safe form daily loads from day maps', () => {
+    expect(buildDerivedFormDailyLoads(new Map([
+      [Date.UTC(2026, 0, 3), 4],
+      [Date.UTC(2026, 0, 1), 9],
+    ]))).toEqual([
+      { dayMs: Date.UTC(2026, 0, 1), load: 9 },
+      { dayMs: Date.UTC(2026, 0, 3), load: 4 },
+    ]);
+  });
+
+  it('exposes recovery lookback constants for bounded derived recovery scans', () => {
+    expect(DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS).toBe(14 * 24 * 60 * 60);
+    expect(DERIVED_RECOVERY_QUERY_DURATION_BUFFER_SECONDS).toBe(2 * 24 * 60 * 60);
+    expect(DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS).toBe(
+      DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS + DERIVED_RECOVERY_QUERY_DURATION_BUFFER_SECONDS,
+    );
   });
 });

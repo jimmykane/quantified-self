@@ -156,18 +156,37 @@ describe('ChartsFormComponent', () => {
     expect(topGrid.height).toBe(bottomGrid.height);
     expect(topGrid.outerBoundsMode).toBe('none');
     expect(bottomGrid.outerBoundsMode).toBe('none');
-    expect(formSeries.data).toEqual(points.map(point => point.formPriorDay));
+    expect(formSeries.data).toEqual([points[points.length - 1].formPriorDay]);
   });
 
-  it('should expose dynamic status title and rounded headline stats', async () => {
+  it('should expose dynamic status title and rounded headline stats from latest real point', async () => {
     fixture.detectChanges();
     await waitForChartStabilization();
 
     expect(component.status().title).toBe('Maintaining fitness');
     expect(component.headlineStats()).toEqual({
-      fitness: '11',
-      fatigue: '12',
-      form: '-3',
+      fitness: {
+        value: '11',
+      },
+      fatigue: {
+        value: '12',
+      },
+      form: {
+        value: '-3',
+      },
+    });
+  });
+
+  it('should show safe fallback headline values when latest points are unavailable', async () => {
+    component.data = [];
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    expect(component.headlineStats()).toEqual({
+      fitness: { value: '--' },
+      fatigue: { value: '--' },
+      form: { value: '--' },
     });
   });
 
@@ -183,7 +202,7 @@ describe('ChartsFormComponent', () => {
     expect(option.yAxis).toEqual([]);
   });
 
-  it('should apply coarser dashboard-aligned render granularity for long date ranges', async () => {
+  it('should apply fixed weekly render granularity for the form chart', async () => {
     const longRangePoints: DashboardFormPoint[] = Array.from({ length: 120 }, (_, index) => {
       const ctl = 10 + index * 0.15;
       const atl = 11 + index * 0.1;
@@ -203,8 +222,40 @@ describe('ChartsFormComponent', () => {
 
     const option = getLastOption();
     const formSeries = option.series.find((entry: { name?: string }) => entry.name === 'Form (TSB)');
+    const fitnessSeries = option.series.find((entry: { name?: string }) => entry.name === 'Fitness (CTL)');
+    const fatigueSeries = option.series.find((entry: { name?: string }) => entry.name === 'Fatigue (ATL)');
 
     expect(formSeries.data.length).toBeLessThan(longRangePoints.length);
     expect(option.xAxis[1].axisLabel.rotate).toBe(0);
+    expect(option.xAxis[1].axisLabel.interval).toBeGreaterThan(0);
+    expect(option.xAxis[1].data.length).toBe(formSeries.data.length);
+    expect(option.xAxis[1].data[0]).toMatch(/^([0-9]{2}\s[A-Za-z]{3}|[A-Za-z]{3}\s[0-9]{2})$/);
+    expect(fitnessSeries.lineStyle.width).toBe(1.5);
+    expect(fatigueSeries.lineStyle.width).toBe(1.5);
+    expect(formSeries.lineStyle.width).toBe(1.3);
+  });
+
+  it('should render a rich tooltip card with status/date and metric grid', async () => {
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const option = getLastOption();
+    const tooltipHtml = option.tooltip.formatter([{ dataIndex: 0 }]);
+
+    expect(tooltipHtml).toContain('qs-form-tooltip-card');
+    expect(tooltipHtml).toContain('Fitness');
+    expect(tooltipHtml).toContain('Fatigue');
+    expect(tooltipHtml).toContain('Form');
+    expect(tooltipHtml).toContain('TSS');
+    expect(tooltipHtml).toContain('Fitness change');
+
+    const position = option.tooltip.position(
+      [0, 0],
+      [],
+      null,
+      null,
+      { contentSize: [320, 150], viewSize: [360, 400] },
+    );
+    expect(position).toEqual([20, 8]);
   });
 });

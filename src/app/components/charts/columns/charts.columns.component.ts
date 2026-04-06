@@ -56,6 +56,8 @@ import {
 } from '../../../helpers/dashboard-date-activity-segmentation.helper';
 import { normalizeUnitDerivedTypeLabel } from '../../../helpers/stat-label.helper';
 import {
+  resolveActiveRecoveryTotalSeconds,
+  resolveLatestWorkoutRecoverySeconds,
   resolveRemainingRecoverySeconds,
   type DashboardRecoveryNowContext,
 } from '../../../helpers/dashboard-recovery-now.helper';
@@ -827,16 +829,18 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     }
 
     const context = this.recoveryNow;
-    const totalSeconds = Number(context?.totalSeconds);
-    const remainingSeconds = resolveRemainingRecoverySeconds(context, Date.now());
-    if (!Number.isFinite(totalSeconds) || totalSeconds <= 0 || remainingSeconds === null) {
+    const nowMs = Date.now();
+    const activeTotalSeconds = resolveActiveRecoveryTotalSeconds(context, nowMs);
+    const remainingSeconds = resolveRemainingRecoverySeconds(context, nowMs);
+    const latestWorkoutSeconds = resolveLatestWorkoutRecoverySeconds(context);
+    if (activeTotalSeconds === null || activeTotalSeconds <= 0 || remainingSeconds === null) {
       return null;
     }
 
     const normalizedUnitSettings = this.getNormalizedUnitSettings();
-    const totalText = formatDashboardNumericValue(
+    const activeTotalText = formatDashboardNumericValue(
       DataDuration.type,
-      totalSeconds,
+      activeTotalSeconds,
       this.logger,
       normalizedUnitSettings,
     );
@@ -846,11 +850,19 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
       this.logger,
       normalizedUnitSettings,
     );
+    const latestWorkoutText = latestWorkoutSeconds !== null
+      ? formatDashboardNumericValue(
+        DataDuration.type,
+        latestWorkoutSeconds,
+        this.logger,
+        normalizedUnitSettings,
+      )
+      : '-';
 
     return {
       label: 'Recovery Left Now',
       value: remainingText,
-      meta: `Total recovery: ${totalText}`,
+      meta: `Active total: ${activeTotalText} | Latest workout: ${latestWorkoutText}`,
     };
   }
 

@@ -12,6 +12,10 @@ export const DEFAULT_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
 
 export const DERIVED_METRICS_COLLECTION_ID = 'derivedMetrics';
 export const DERIVED_METRICS_COORDINATOR_DOC_ID = 'coordinator';
+export const DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS = 14 * 24 * 60 * 60;
+export const DERIVED_RECOVERY_QUERY_DURATION_BUFFER_SECONDS = 2 * 24 * 60 * 60;
+export const DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS =
+  DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS + DERIVED_RECOVERY_QUERY_DURATION_BUFFER_SECONDS;
 
 export const DERIVED_METRICS_ENTRY_TYPES = {
   Coordinator: 'coordinator',
@@ -44,6 +48,13 @@ export type DerivedMetricSnapshotStatus =
   | 'failed'
   | 'stale';
 
+export interface DerivedFormDailyLoadEntry {
+  dayMs: number;
+  load: number;
+}
+
+export type LegacyDerivedFormDailyLoadEntry = readonly [number, number];
+
 export interface DerivedMetricSnapshotBase<TPayload> {
   entryType: typeof DERIVED_METRICS_ENTRY_TYPES.Snapshot;
   metricKind: DerivedMetricKind;
@@ -59,7 +70,7 @@ export interface DerivedFormMetricPayload {
   dayBoundary: 'UTC';
   rangeStartDayMs: number | null;
   rangeEndDayMs: number | null;
-  dailyLoads: Array<[number, number]>;
+  dailyLoads: DerivedFormDailyLoadEntry[];
   excludesMergedEvents: boolean;
 }
 
@@ -73,6 +84,10 @@ export interface DerivedRecoveryNowMetricPayload {
   endTimeMs: number;
   segments: DerivedRecoveryNowSegment[];
   excludesMergedEvents: boolean;
+  latestWorkoutSeconds?: number | null;
+  latestWorkoutEndTimeMs?: number | null;
+  maxSupportedRecoverySeconds?: number;
+  lookbackWindowSeconds?: number;
 }
 
 export type DerivedFormMetricSnapshot = DerivedMetricSnapshotBase<DerivedFormMetricPayload>;
@@ -112,4 +127,77 @@ export function normalizeDerivedMetricKinds(metricKinds: readonly unknown[] | nu
 
 export function getDerivedMetricDocId(metricKind: DerivedMetricKind): string {
   return metricKind;
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  const numericValue = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(numericValue) ? numericValue : null;
+}
+
+function normalizeDerivedFormDailyLoadEntry(
+  candidate: unknown,
+): DerivedFormDailyLoadEntry | null {
+  if (Array.isArray(candidate)) {
+    const dayMs = toFiniteNumber(candidate[0]);
+    const load = toFiniteNumber(candidate[1]);
+    if (dayMs === null || dayMs < 0 || load === null || load < 0) {
+      return null;
+    }
+    return {
+      dayMs: Math.floor(dayMs),
+      load,
+    };
+  }
+
+  if (!candidate || typeof candidate !== 'object') {
+    return null;
+  }
+
+  const entry = candidate as Record<string, unknown>;
+  const dayMs = toFiniteNumber(entry.dayMs);
+  const load = toFiniteNumber(entry.load);
+  if (dayMs === null || dayMs < 0 || load === null || load < 0) {
+    return null;
+  }
+
+  return {
+    dayMs: Math.floor(dayMs),
+    load,
+  };
+}
+
+export function normalizeDerivedFormDailyLoads(
+  dailyLoads: unknown,
+): DerivedFormDailyLoadEntry[] {
+  const entries = Array.isArray(dailyLoads) ? dailyLoads : [];
+  const loadByDayMs = new Map<number, number>();
+
+  entries.forEach((entry) => {
+    const normalizedEntry = normalizeDerivedFormDailyLoadEntry(entry);
+    if (!normalizedEntry) {
+      return;
+    }
+    loadByDayMs.set(
+      normalizedEntry.dayMs,
+      (loadByDayMs.get(normalizedEntry.dayMs) || 0) + normalizedEntry.load,
+    );
+  });
+
+  return [...loadByDayMs.entries()]
+    .sort((left, right) => left[0] - right[0])
+    .map(([dayMs, load]) => ({
+      dayMs,
+      load,
+    }));
+}
+
+export function buildDerivedFormDailyLoads(
+  loadByDayMs: ReadonlyMap<number, number>,
+): DerivedFormDailyLoadEntry[] {
+  return normalizeDerivedFormDailyLoads(
+    [...loadByDayMs.entries()].map(([dayMs, load]) => ({ dayMs, load })),
+  );
 }

@@ -100,7 +100,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 - Use the **Chart manager** button above dashboard tiles to add or edit chart tiles.
 - You can choose between **Curated** and **Custom** chart categories.
-- **Curated** charts (Recovery, Form/TSS) are fixed insights and do not react to dashboard date-range changes.
+- **Curated Recovery** remains a fixed insight and does not react to dashboard date-range changes.
+- **Curated Form/TSS** computes from full history and does not react to dashboard date-range changes.
 - **Custom** charts keep the existing configurable behavior and react to dashboard filters/date range.
 - Curated chart types are unique: only one Recovery and one Form tile can exist at a time.
 
@@ -115,7 +116,9 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 - The curated **Recovery** pie tile is optional and not added automatically.
 - The tile shows live recovery split between **Left now** and **Elapsed**.
-- The summary shows **Recovery Left Now** and **Total recovery** summed across all recovery-enabled events.
+- The summary shows **Recovery Left Now**, plus **Active total** and **Latest workout** recovery context.
+- Active totals only include currently active recovery windows, not all historical recovery values.
+- Extremely large recovery values above 14 days are treated as outliers and ignored.
 - Remaining recovery updates every minute while the tile is visible.
 - You can still move or remove this tile from the tile menu.
 
@@ -125,7 +128,9 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Legacy **Power Training Stress Score** is used automatically when current TSS is missing.
 - It shows three headline stats: **Fitness (CTL)**, **Fatigue (ATL)**, and **Form (TSB)**.
 - **Form (TSB)** is shown as **prior-day readiness** using the prior day CTL - ATL.
-- Form and RecoveryNow tiles use precomputed derived snapshots from your full history (UTC day buckets), not only the currently selected dashboard date range.
+- Form and RecoveryNow tiles use precomputed derived snapshots from your full history (UTC day buckets).
+- Form/TSS does not react to dashboard date-range changes; it always shows full-history context.
+- Form/TSS rendering uses fixed **weekly** granularity.
 - When snapshots are missing or stale, they rebuild asynchronously; refresh usually follows within a few minutes.
 - If rebuilding requests fail repeatedly, the dashboard shows a retry notification and continues with last known snapshot values.
 - While rebuilding, the dashboard shows a small training-metrics status notice above tiles.

@@ -1,11 +1,14 @@
 import { onTaskDispatched } from 'firebase-functions/v2/tasks';
 import * as logger from 'firebase-functions/logger';
+import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
 import { CLOUD_TASK_RETRY_CONFIG } from '../shared/queue-config';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import {
     completeDerivedMetricsProcessing,
     failDerivedMetricsProcessing,
     fetchDerivedMetricsEventDocs,
+    fetchRecoveryLookbackEventDocs,
+    getDerivedRecoveryLookbackWindowSeconds,
     markDerivedMetricSnapshotsBuilding,
     markDerivedMetricSnapshotsFailed,
     startDerivedMetricsProcessing,
@@ -56,15 +59,28 @@ export const processDerivedMetricsTask = onTaskDispatched({
 
     try {
         await markDerivedMetricSnapshotsBuilding(uid, dirtyMetricKinds);
-        const docs = await fetchDerivedMetricsEventDocs(uid);
-        await writeDerivedMetricSnapshotsReady(uid, dirtyMetricKinds, docs);
+        const needsFormDocs = dirtyMetricKinds.includes(DERIVED_METRIC_KINDS.Form);
+        const needsRecoveryNowDocs = dirtyMetricKinds.includes(DERIVED_METRIC_KINDS.RecoveryNow);
+        const formDocs = needsFormDocs
+            ? await fetchDerivedMetricsEventDocs(uid)
+            : [];
+        const recoveryNowDocs = needsRecoveryNowDocs
+            ? (needsFormDocs ? formDocs : await fetchRecoveryLookbackEventDocs(uid))
+            : [];
+
+        await writeDerivedMetricSnapshotsReady(uid, dirtyMetricKinds, {
+            formDocs,
+            recoveryNowDocs,
+        });
         const completion = await completeDerivedMetricsProcessing(uid, Math.floor(generation));
 
         logger.info('[derived-metrics] Processed derived metrics task.', {
             uid,
             generation,
             dirtyMetricKinds,
-            eventDocsScanned: docs.length,
+            formEventDocsScanned: formDocs.length,
+            recoveryEventDocsScanned: recoveryNowDocs.length,
+            recoveryLookbackWindowSeconds: getDerivedRecoveryLookbackWindowSeconds(),
             requeued: completion.requeued,
             nextGeneration: completion.nextGeneration,
             durationMs: Date.now() - processingStart,

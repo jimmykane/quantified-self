@@ -210,7 +210,7 @@ describe('ChartsXYComponent', () => {
     expect(option.graphic[0].children[2].style.text).toBe('Total per month');
   });
 
-  it('should override summary with recovery left now and total recovery meta when context is available', async () => {
+  it('should override summary with recovery left now, active total, and latest workout recovery metadata', async () => {
     const nowMs = Date.UTC(2024, 0, 3, 12, 0, 0);
     const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(nowMs);
     component.chartDataType = DataRecoveryTime.type;
@@ -233,7 +233,9 @@ describe('ChartsXYComponent', () => {
 
     expect(option.graphic[0].children[0].style.text).toBe('Recovery Left Now');
     expect(option.graphic[0].children[1].style.text).toBe(expectedRemaining);
-    expect(option.graphic[0].children[2].style.text).toBe(`Total recovery: ${expectedTotal}`);
+    expect(option.graphic[0].children[2].style.text).toBe(
+      `Active total: ${expectedTotal} | Latest workout: ${expectedTotal}`,
+    );
     dateNowSpy.mockRestore();
   });
 

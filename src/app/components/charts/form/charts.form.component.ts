@@ -24,7 +24,6 @@ import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-ech
 import { buildDashboardValueAxisConfig } from '../../../helpers/dashboard-echarts-yaxis.helper';
 import {
   isEChartsMobileTooltipViewport,
-  resolveEChartsTooltipSurfaceConfig,
   resolveEChartsTooltipTriggerOn,
 } from '../../../helpers/echarts-tooltip-interaction.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
@@ -33,12 +32,15 @@ import {
   buildDashboardFormRenderPoints,
   DashboardFormPoint,
   resolveDashboardFormLatestPoint,
-  resolveDashboardFormRenderTimeInterval,
   resolveDashboardFormStatus,
   resolveDashboardFormValue,
 } from '../../../helpers/dashboard-form.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
+type EChartsTooltipPositionSize = {
+  contentSize?: [number, number];
+  viewSize?: [number, number];
+};
 
 @Component({
   selector: 'app-form-chart',
@@ -49,6 +51,7 @@ type ChartOption = Parameters<EChartsType['setOption']>[0];
 })
 export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy {
   private static readonly FORM_MODE = 'prior-day' as const;
+  private static readonly FORM_RENDER_INTERVAL = TimeIntervals.Weekly;
 
   @Input() darkTheme = false;
   @Input() isLoading = false;
@@ -71,9 +74,15 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
   readonly headlineStats = computed(() => {
     const latest = this.latestPoint();
     return {
-      fitness: this.formatRoundedValue(latest?.ctl),
-      fatigue: this.formatRoundedValue(latest?.atl),
-      form: this.formatRoundedValue(this.selectedFormValue()),
+      fitness: {
+        value: this.formatRoundedValue(latest?.ctl),
+      },
+      fatigue: {
+        value: this.formatRoundedValue(latest?.atl),
+      },
+      form: {
+        value: this.formatRoundedValue(this.selectedFormValue()),
+      },
     };
   });
 
@@ -134,9 +143,10 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
 
     const chartWidth = this.chartDiv?.nativeElement?.clientWidth || 0;
     const chartStyle = buildDashboardEChartsStyleTokens(this.darkTheme, chartWidth);
-    const renderTimeInterval = resolveDashboardFormRenderTimeInterval(sourcePoints);
+    const renderTimeInterval = ChartsFormComponent.FORM_RENDER_INTERVAL;
     const points = buildDashboardFormRenderPoints(sourcePoints, renderTimeInterval);
-    const labels = points.map(point => formatDashboardDateByInterval(point.time, renderTimeInterval));
+    const axisLabels = points.map(point => this.formatAxisDateLabel(point.time, renderTimeInterval));
+    const xAxisLabelInterval = this.resolveXAxisLabelInterval(points.length);
     const ctlValues = points.map(point => point.ctl);
     const atlValues = points.map(point => point.atl);
     const formValues = points.map(point => resolveDashboardFormValue(point, ChartsFormComponent.FORM_MODE));
@@ -149,7 +159,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
 
     const topXAxis = {
       type: 'category',
-      data: labels,
+      data: axisLabels,
       axisLabel: { show: false },
       axisTick: { show: false },
       axisLine: { lineStyle: { color: chartStyle.axisColor } },
@@ -159,14 +169,14 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
 
     const bottomXAxis = {
       type: 'category',
-      data: labels,
+      data: axisLabels,
       axisLabel: {
         show: true,
         color: chartStyle.textColor,
         fontSize: chartStyle.axisFontSize,
-        hideOverlap: true,
-        interval: 0,
-        rotate: renderTimeInterval === TimeIntervals.Daily ? (chartStyle.isCompactLayout ? 52 : 40) : 0,
+        hideOverlap: false,
+        interval: xAxisLabelInterval,
+        rotate: 0,
       },
       axisTick: { show: false },
       axisLine: { lineStyle: { color: chartStyle.axisColor } },
@@ -247,16 +257,21 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
         triggerOn: resolveEChartsTooltipTriggerOn(true, isMobileTooltipViewport),
         axisPointer: { type: 'line' },
         renderMode: 'html',
-        ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),
+        show: true,
+        confine: true,
+        position: (_point: number[], _params: unknown, _dom: unknown, _rect: unknown, size: EChartsTooltipPositionSize) => (
+          this.resolveTooltipPosition(size)
+        ),
         backgroundColor: chartStyle.tooltipBackgroundColor,
         borderColor: chartStyle.tooltipBorderColor,
         borderWidth: 1,
+        padding: 0,
         textStyle: {
           color: chartStyle.tooltipTextColor,
           fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
           fontSize: chartStyle.isCompactLayout ? 12 : 13,
         },
-        formatter: (params: { dataIndex: number }[]) => this.formatTooltip(points, params, renderTimeInterval),
+        formatter: (params: { dataIndex: number }[]) => this.formatTooltip(points, params, renderTimeInterval, chartStyle),
       },
       xAxis: [
         {
@@ -287,10 +302,9 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
           data: ctlValues,
           smooth: false,
           connectNulls: true,
-          symbol: 'circle',
-          symbolSize: chartStyle.isCompactLayout ? 5 : 6,
+          symbol: 'none',
           lineStyle: {
-            width: 2.1,
+            width: 1.5,
             color: chartStyle.trendLineColor,
           },
           itemStyle: {
@@ -305,10 +319,9 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
           data: atlValues,
           smooth: false,
           connectNulls: true,
-          symbol: 'circle',
-          symbolSize: chartStyle.isCompactLayout ? 5 : 6,
+          symbol: 'none',
           lineStyle: {
-            width: 2.1,
+            width: 1.5,
             color: AppColors.Pink,
           },
           itemStyle: {
@@ -323,10 +336,9 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
           data: formValues,
           smooth: false,
           connectNulls: false,
-          symbol: 'circle',
-          symbolSize: chartStyle.isCompactLayout ? 4 : 5,
+          symbol: 'none',
           lineStyle: {
-            width: 2,
+            width: 1.3,
             color: chartStyle.secondaryTextColor,
           },
           itemStyle: {
@@ -341,6 +353,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
     points: DashboardFormPoint[],
     params: { dataIndex: number }[] | undefined,
     renderTimeInterval: TimeIntervals,
+    chartStyle: ReturnType<typeof buildDashboardEChartsStyleTokens>,
   ): string {
     if (!Array.isArray(params) || !params.length) {
       return '';
@@ -357,25 +370,112 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
     }
 
     const formValue = resolveDashboardFormValue(point, ChartsFormComponent.FORM_MODE);
-    const formLabel = 'Form (TSB prior-day)';
+    const statusTitle = resolveDashboardFormStatus(formValue).title;
+    const previousPoint = index > 0 ? points[index - 1] : null;
+    const fitnessChange = previousPoint
+      ? point.ctl - previousPoint.ctl
+      : null;
 
-    return [
-      formatDashboardDateByInterval(point.time, renderTimeInterval),
-      `TSS: <b>${this.formatDetailedValue(point.trainingStressScore)}</b>`,
-      `Fitness (CTL): <b>${this.formatDetailedValue(point.ctl)}</b>`,
-      `Fatigue (ATL): <b>${this.formatDetailedValue(point.atl)}</b>`,
-      `${formLabel}: <b>${this.formatDetailedValue(formValue)}</b>`,
-    ].join('<br/>');
+    const dateLabel = formatDashboardDateByInterval(point.time, renderTimeInterval);
+    const statusColor = AppColors.Pink;
+    const valueColor = chartStyle.tooltipTextColor;
+    const labelColor = chartStyle.secondaryTextColor;
+    const dividerColor = chartStyle.tooltipBorderColor;
+
+    const renderMetric = (label: string, value: string): string => (
+      `<div style="display:flex;flex-direction:column;gap:2px;min-width:0;">`
+      + `<div style="font-family:${ECHARTS_GLOBAL_FONT_FAMILY};font-size:${chartStyle.isCompactLayout ? 15 : 16}px;line-height:1.15;font-weight:700;color:${valueColor};">${this.escapeHtml(value)}</div>`
+      + `<div style="font-size:${chartStyle.isCompactLayout ? 11 : 12}px;line-height:1.2;color:${labelColor};white-space:nowrap;">${this.escapeHtml(label)}</div>`
+      + `</div>`
+    );
+
+    return (
+      `<div class="qs-form-tooltip-card" style="min-width:312px;max-width:340px;`
+      + `padding:12px 14px 10px;font-family:${ECHARTS_GLOBAL_FONT_FAMILY};">`
+      + `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">`
+      + `<div style="font-size:13px;line-height:1.2;font-weight:700;color:${statusColor};">${this.escapeHtml(statusTitle)}</div>`
+      + `<div style="font-size:12px;line-height:1.2;color:${labelColor};white-space:nowrap;">${this.escapeHtml(dateLabel)}</div>`
+      + `</div>`
+      + `<div style="height:1px;background:${dividerColor};margin:9px 0 10px;"></div>`
+      + `<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 12px;">`
+      + renderMetric('Fitness', this.formatRoundedValue(point.ctl))
+      + renderMetric('Fatigue', this.formatRoundedValue(point.atl))
+      + renderMetric('Form', this.formatRoundedValue(formValue))
+      + renderMetric('TSS', this.formatRoundedValue(point.trainingStressScore))
+      + renderMetric('Fitness change', this.formatSignedRoundedValue(fitnessChange))
+      + `<div aria-hidden="true"></div>`
+      + `</div>`
+      + `</div>`
+    );
   }
 
   private formatRoundedValue(value: number | null | undefined): string {
     return Number.isFinite(value as number) ? `${Math.round(value as number)}` : '--';
   }
 
-  private formatDetailedValue(value: number | null | undefined): string {
+  private formatSignedRoundedValue(value: number | null | undefined): string {
     if (!Number.isFinite(value as number)) {
       return '--';
     }
-    return Number(value).toFixed(1);
+    const rounded = Math.round(value as number);
+    if (rounded > 0) {
+      return `+${rounded}`;
+    }
+    return `${rounded}`;
+  }
+
+  private escapeHtml(value: string): string {
+    return value
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll('\'', '&#39;');
+  }
+
+  private resolveTooltipPosition(size: EChartsTooltipPositionSize): [number, number] {
+    const contentWidth = size?.contentSize?.[0] || 320;
+    const viewWidth = size?.viewSize?.[0] || contentWidth;
+    const horizontalPadding = 8;
+    const centeredLeft = (viewWidth - contentWidth) / 2;
+    const left = Math.max(horizontalPadding, Math.min(
+      centeredLeft,
+      viewWidth - contentWidth - horizontalPadding,
+    ));
+    return [left, 8];
+  }
+
+  private formatAxisDateLabel(time: number, interval: TimeIntervals): string {
+    const date = new Date(time);
+    if (!Number.isFinite(date.getTime())) {
+      return '';
+    }
+
+    if (interval === TimeIntervals.Daily) {
+      return date.toLocaleDateString(undefined, { day: '2-digit', month: 'short' });
+    }
+
+    if (interval === TimeIntervals.Monthly) {
+      return date.toLocaleDateString(undefined, { month: 'short', year: '2-digit' });
+    }
+
+    if (interval === TimeIntervals.Yearly) {
+      return date.toLocaleDateString(undefined, { year: 'numeric' });
+    }
+
+    if (interval === TimeIntervals.Weekly) {
+      return date.toLocaleDateString(undefined, { day: '2-digit', month: 'short' });
+    }
+
+    return formatDashboardDateByInterval(time, interval);
+  }
+
+  private resolveXAxisLabelInterval(pointCount: number): number {
+    if (!Number.isFinite(pointCount) || pointCount <= 8) {
+      return 0;
+    }
+
+    const targetVisibleLabels = 6;
+    return Math.max(0, Math.ceil(pointCount / targetVisibleLabels) - 1);
   }
 }

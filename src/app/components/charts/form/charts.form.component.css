@@ -69,6 +69,13 @@
   color: var(--mat-sys-on-surface);
 }
 
+.form-stat-sublabel {
+  margin-top: 2px;
+  font-size: 0.66rem;
+  line-height: 1.2;
+  color: var(--mat-sys-on-surface-variant);
+}
+
 .form-stat-label {
   margin-top: 2px;
   font-size: 0.74rem;

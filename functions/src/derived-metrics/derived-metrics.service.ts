@@ -2,10 +2,13 @@ import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import { DataDuration, DataRecoveryTime } from '@sports-alliance/sports-lib';
 import {
+    buildDerivedFormDailyLoads,
     DERIVED_METRIC_KINDS,
     DERIVED_METRICS_COLLECTION_ID,
     DERIVED_METRICS_COORDINATOR_DOC_ID,
     DERIVED_METRICS_ENTRY_TYPES,
+    DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS,
+    DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS,
     DEFAULT_DERIVED_METRIC_KINDS,
     type DerivedFormMetricPayload,
     type DerivedMetricKind,
@@ -22,6 +25,7 @@ import { getDerivedMetricsUidAllowlist, isDerivedMetricsUidAllowed } from './der
 const FORM_STAT_TYPE = 'Training Stress Score';
 const LEGACY_FORM_STAT_TYPE = 'Power Training Stress Score';
 const DERIVED_METRIC_SCHEMA_VERSION = 1;
+const DERIVED_METRICS_EVENT_FIELDS = ['startDate', 'endDate', 'stats', 'isMerge', 'mergeType', 'originalFiles'] as const;
 
 type FirestoreQueryDocumentSnapshot = FirebaseFirestore.QueryDocumentSnapshot<FirebaseFirestore.DocumentData>;
 
@@ -235,6 +239,25 @@ function resolveRecoveryEventEndTimeMs(eventData: Record<string, unknown>): numb
     return startTimeMs + (durationSeconds * 1000);
 }
 
+function resolveSupportedRecoverySeconds(
+    eventData: Record<string, unknown>,
+): number | null {
+    // Guard against provider/parser outliers (for example malformed multi-day recovery values).
+    const recoverySeconds = toFinitePositiveNumber(resolveRawStatNumericValue(eventData, DataRecoveryTime.type));
+    if (recoverySeconds === null || recoverySeconds > DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS) {
+        return null;
+    }
+    return recoverySeconds;
+}
+
+function resolveRecoveryEventLookbackStartMs(nowMs = Date.now()): number {
+    return nowMs - (DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS * 1000);
+}
+
+export function getDerivedRecoveryLookbackWindowSeconds(): number {
+    return DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS;
+}
+
 function buildFormMetricPayload(
     docs: readonly FirestoreQueryDocumentSnapshot[],
 ): DerivedMetricBuildResult<DerivedFormMetricPayload> {
@@ -262,16 +285,15 @@ function buildFormMetricPayload(
         sourceEventCount += 1;
     });
 
-    const sortedDailyLoads = [...dailyLoadsByUtcDay.entries()]
-        .sort((left, right) => left[0] - right[0])
-        .map(([dayMs, load]) => [dayMs, load] as [number, number]);
+    // Firestore rejects nested arrays, so we persist day/load objects instead of tuple arrays.
+    const sortedDailyLoads = buildDerivedFormDailyLoads(dailyLoadsByUtcDay);
 
     return {
         sourceEventCount,
         payload: {
             dayBoundary: 'UTC',
-            rangeStartDayMs: sortedDailyLoads.length ? sortedDailyLoads[0][0] : null,
-            rangeEndDayMs: sortedDailyLoads.length ? sortedDailyLoads[sortedDailyLoads.length - 1][0] : null,
+            rangeStartDayMs: sortedDailyLoads.length ? sortedDailyLoads[0].dayMs : null,
+            rangeEndDayMs: sortedDailyLoads.length ? sortedDailyLoads[sortedDailyLoads.length - 1].dayMs : null,
             dailyLoads: sortedDailyLoads,
             excludesMergedEvents: true,
         },
@@ -282,8 +304,10 @@ function buildRecoveryNowMetricPayload(
     docs: readonly FirestoreQueryDocumentSnapshot[],
 ): DerivedMetricBuildResult<DerivedRecoveryNowMetricPayload> {
     const segments: Array<{ totalSeconds: number; endTimeMs: number }> = [];
-    let totalSeconds = 0;
     let latestEndTimeMs = Number.NEGATIVE_INFINITY;
+    let latestWorkoutSeconds = Number.NaN;
+    let ignoredOutlierCount = 0;
+    let maxIgnoredRecoverySeconds = 0;
 
     docs.forEach((doc) => {
         const eventData = (doc.data() || {}) as Record<string, unknown>;
@@ -291,7 +315,14 @@ function buildRecoveryNowMetricPayload(
             return;
         }
 
-        const recoverySeconds = toFinitePositiveNumber(resolveRawStatNumericValue(eventData, DataRecoveryTime.type));
+        const rawRecoverySeconds = toFinitePositiveNumber(resolveRawStatNumericValue(eventData, DataRecoveryTime.type));
+        if (rawRecoverySeconds !== null && rawRecoverySeconds > DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS) {
+            ignoredOutlierCount += 1;
+            maxIgnoredRecoverySeconds = Math.max(maxIgnoredRecoverySeconds, rawRecoverySeconds);
+            return;
+        }
+
+        const recoverySeconds = resolveSupportedRecoverySeconds(eventData);
         if (recoverySeconds === null) {
             return;
         }
@@ -301,13 +332,25 @@ function buildRecoveryNowMetricPayload(
             return;
         }
 
-        totalSeconds += recoverySeconds;
-        latestEndTimeMs = Math.max(latestEndTimeMs, endTimeMs);
+        if (endTimeMs >= latestEndTimeMs) {
+            latestEndTimeMs = endTimeMs;
+            latestWorkoutSeconds = recoverySeconds;
+        }
         segments.push({
             totalSeconds: recoverySeconds,
             endTimeMs,
         });
     });
+
+    if (ignoredOutlierCount > 0) {
+        logger.warn('[derived-metrics] Ignored recovery outliers above supported maximum.', {
+            ignoredOutlierCount,
+            maxIgnoredRecoverySeconds,
+            maxSupportedRecoverySeconds: DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS,
+        });
+    }
+
+    const totalSeconds = segments.reduce((sum, segment) => sum + segment.totalSeconds, 0);
 
     return {
         sourceEventCount: segments.length,
@@ -316,6 +359,10 @@ function buildRecoveryNowMetricPayload(
             endTimeMs: Number.isFinite(latestEndTimeMs) ? latestEndTimeMs : 0,
             segments,
             excludesMergedEvents: true,
+            latestWorkoutSeconds: Number.isFinite(latestWorkoutSeconds) ? latestWorkoutSeconds : null,
+            latestWorkoutEndTimeMs: Number.isFinite(latestEndTimeMs) ? latestEndTimeMs : null,
+            maxSupportedRecoverySeconds: DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS,
+            lookbackWindowSeconds: DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS,
         },
     };
 }
@@ -338,7 +385,24 @@ export async function fetchDerivedMetricsEventDocs(uid: string): Promise<Firesto
         .collection('users')
         .doc(uid)
         .collection('events')
-        .select('startDate', 'endDate', 'stats', 'isMerge', 'mergeType', 'originalFiles')
+        .select(...DERIVED_METRICS_EVENT_FIELDS)
+        .get();
+    return snapshot.docs;
+}
+
+export async function fetchRecoveryLookbackEventDocs(
+    uid: string,
+    nowMs = Date.now(),
+): Promise<FirestoreQueryDocumentSnapshot[]> {
+    const lookbackStartMs = resolveRecoveryEventLookbackStartMs(nowMs);
+    // Recovery-now does not need full history; a bounded lookback tied to max supported
+    // recovery horizon keeps queue processing predictable on large accounts.
+    const snapshot = await admin.firestore()
+        .collection('users')
+        .doc(uid)
+        .collection('events')
+        .where('startDate', '>=', admin.firestore.Timestamp.fromMillis(lookbackStartMs))
+        .select(...DERIVED_METRICS_EVENT_FIELDS)
         .get();
     return snapshot.docs;
 }
@@ -653,14 +717,19 @@ export async function markDerivedMetricSnapshotsFailed(
 export async function writeDerivedMetricSnapshotsReady(
     uid: string,
     metricKinds: readonly DerivedMetricKind[],
-    docs: readonly FirestoreQueryDocumentSnapshot[],
+    sourceDocs: {
+        formDocs?: readonly FirestoreQueryDocumentSnapshot[];
+        recoveryNowDocs?: readonly FirestoreQueryDocumentSnapshot[];
+    },
 ): Promise<void> {
     const nowMs = Date.now();
     const batch = admin.firestore().batch();
+    const formDocs = sourceDocs.formDocs || [];
+    const recoveryNowDocs = sourceDocs.recoveryNowDocs || [];
 
     metricKinds.forEach((metricKind) => {
         if (metricKind === DERIVED_METRIC_KINDS.Form) {
-            const buildResult = buildFormMetricPayload(docs);
+            const buildResult = buildFormMetricPayload(formDocs);
             batch.set(getMetricDocRef(uid, metricKind), {
                 entryType: DERIVED_METRICS_ENTRY_TYPES.Snapshot,
                 metricKind,
@@ -675,7 +744,7 @@ export async function writeDerivedMetricSnapshotsReady(
         }
 
         if (metricKind === DERIVED_METRIC_KINDS.RecoveryNow) {
-            const buildResult = buildRecoveryNowMetricPayload(docs);
+            const buildResult = buildRecoveryNowMetricPayload(recoveryNowDocs);
             batch.set(getMetricDocRef(uid, metricKind), {
                 entryType: DERIVED_METRICS_ENTRY_TYPES.Snapshot,
                 metricKind,

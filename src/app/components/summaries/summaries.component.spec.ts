@@ -226,11 +226,11 @@ describe('SummariesComponent', () => {
     });
 
     expect(buildDashboardTileViewModelsSpy).toHaveBeenCalledWith(expect.objectContaining({
-      dashboardDateRange: {
+      dashboardDateRange: expect.objectContaining({
         dateRange: component.dashboardDateRange,
         startDate: component.dashboardStartDate,
         endDate: component.dashboardEndDate,
-      },
+      }),
     }));
   });
 

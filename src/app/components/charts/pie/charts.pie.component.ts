@@ -52,6 +52,8 @@ import {
   getDashboardSummaryMetaLabel
 } from '../../../helpers/dashboard-chart-data.helper';
 import {
+  resolveActiveRecoveryTotalSeconds,
+  resolveLatestWorkoutRecoverySeconds,
   resolveRemainingRecoverySeconds,
   type DashboardRecoveryNowContext,
 } from '../../../helpers/dashboard-recovery-now.helper';
@@ -361,16 +363,18 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
     }
 
     const context = this.recoveryNow;
-    const totalSeconds = Number(context?.totalSeconds);
-    const remainingSeconds = resolveRemainingRecoverySeconds(context, Date.now());
-    if (!Number.isFinite(totalSeconds) || totalSeconds <= 0 || remainingSeconds === null) {
+    const nowMs = Date.now();
+    const activeTotalSeconds = resolveActiveRecoveryTotalSeconds(context, nowMs);
+    const remainingSeconds = resolveRemainingRecoverySeconds(context, nowMs);
+    const latestWorkoutSeconds = resolveLatestWorkoutRecoverySeconds(context);
+    if (activeTotalSeconds === null || activeTotalSeconds <= 0 || remainingSeconds === null) {
       return null;
     }
 
     const normalizedUnitSettings = this.getNormalizedUnitSettings();
-    const totalText = formatDashboardNumericValue(
+    const activeTotalText = formatDashboardNumericValue(
       DataDuration.type,
-      totalSeconds,
+      activeTotalSeconds,
       this.logger,
       normalizedUnitSettings,
     );
@@ -380,11 +384,19 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
       this.logger,
       normalizedUnitSettings,
     );
+    const latestWorkoutText = latestWorkoutSeconds !== null
+      ? formatDashboardNumericValue(
+        DataDuration.type,
+        latestWorkoutSeconds,
+        this.logger,
+        normalizedUnitSettings,
+      )
+      : '-';
 
     return {
       label: 'Recovery Left Now',
       value: remainingText,
-      meta: `Total recovery: ${totalText}`,
+      meta: `Active total: ${activeTotalText} | Latest workout: ${latestWorkoutText}`,
     };
   }
 
@@ -450,15 +462,16 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
     }
 
     const context = this.recoveryNow;
-    const totalSeconds = Number(context?.totalSeconds);
-    const remainingSeconds = resolveRemainingRecoverySeconds(context, Date.now());
-    if (!Number.isFinite(totalSeconds) || totalSeconds <= 0 || remainingSeconds === null) {
+    const nowMs = Date.now();
+    const activeTotalSeconds = resolveActiveRecoveryTotalSeconds(context, nowMs);
+    const remainingSeconds = resolveRemainingRecoverySeconds(context, nowMs);
+    if (activeTotalSeconds === null || activeTotalSeconds <= 0 || remainingSeconds === null) {
       return null;
     }
 
-    const elapsedSeconds = Math.max(0, totalSeconds - remainingSeconds);
-    const leftPercent = totalSeconds > 0 ? (remainingSeconds / totalSeconds) * 100 : 0;
-    const elapsedPercent = totalSeconds > 0 ? (elapsedSeconds / totalSeconds) * 100 : 0;
+    const elapsedSeconds = Math.max(0, activeTotalSeconds - remainingSeconds);
+    const leftPercent = activeTotalSeconds > 0 ? (remainingSeconds / activeTotalSeconds) * 100 : 0;
+    const elapsedPercent = activeTotalSeconds > 0 ? (elapsedSeconds / activeTotalSeconds) * 100 : 0;
 
     return [
       {

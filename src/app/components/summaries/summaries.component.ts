@@ -264,6 +264,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         dateRange: this.dashboardDateRange,
         startDate: this.dashboardStartDate,
         endDate: this.dashboardEndDate,
+        startOfTheWeek: this.user?.settings?.unitSettings?.startOfTheWeek,
       },
       preferences: this.getAggregationPreferences(),
       logger: this.logger,

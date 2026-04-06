@@ -8,11 +8,13 @@ import {
   DataDistance,
   DataRecoveryTime,
   DateRanges,
+  DaysOfTheWeek,
   TileTypes,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
 import { buildDashboardCartesianPoints } from './dashboard-echarts-cartesian.helper';
 import { buildAggregatedChartRows } from './aggregated-chart-row.helper';
+import { getDatesForDateRange } from './date-range-helper';
 import {
   buildDashboardTileViewModels,
 } from './dashboard-tile-view-model.helper';
@@ -215,7 +217,7 @@ describe('dashboard-tile-view-model.helper', () => {
     });
 
     const formChart = viewModels[0] as any;
-    expect(formChart.timeInterval).toBe(TimeIntervals.Daily);
+    expect(formChart.timeInterval).toBe(TimeIntervals.Weekly);
     expect(formChart.data).toEqual([]);
   });
 
@@ -250,7 +252,7 @@ describe('dashboard-tile-view-model.helper', () => {
     });
 
     const formChart = viewModels[0] as any;
-    expect(formChart.timeInterval).toBe(TimeIntervals.Daily);
+    expect(formChart.timeInterval).toBe(TimeIntervals.Weekly);
     expect(formChart.data).toEqual([]);
   });
 
@@ -292,7 +294,7 @@ describe('dashboard-tile-view-model.helper', () => {
     expect((viewModels[0] as any).data).toEqual(precomputedPoints);
   });
 
-  it('should use derived form points for curated form charts regardless of dashboard date range', () => {
+  it('should keep derived form points independent from dashboard date range', () => {
     const derivedPoints = [
       {
         time: Date.UTC(2024, 0, 2),
@@ -347,6 +349,57 @@ describe('dashboard-tile-view-model.helper', () => {
     });
 
     expect((viewModels[0] as any).data).toEqual(derivedPoints);
+    expect((viewModels[0] as any).absoluteLatestFormPoint).toEqual(derivedPoints[1]);
+  });
+
+  it('should keep derived form points for preset ranges without clipping', () => {
+    const currentWeekRange = getDatesForDateRange(DateRanges.thisWeek, DaysOfTheWeek.Monday);
+    const insideWeekTimeMs = currentWeekRange.startDate.getTime() + (2 * 24 * 60 * 60 * 1000);
+    const beforeWeekTimeMs = currentWeekRange.startDate.getTime() - (24 * 60 * 60 * 1000);
+    const derivedPoints = [
+      {
+        time: beforeWeekTimeMs,
+        trainingStressScore: 20,
+        ctl: 1.5,
+        atl: 2.5,
+        formSameDay: -1,
+        formPriorDay: null,
+      },
+      {
+        time: insideWeekTimeMs,
+        trainingStressScore: 30,
+        ctl: 2.1,
+        atl: 3.5,
+        formSameDay: -1.4,
+        formPriorDay: -1,
+      },
+    ];
+
+    const viewModels = buildDashboardTileViewModels({
+      tiles: [{
+        type: TileTypes.Chart,
+        order: 0,
+        chartType: DASHBOARD_FORM_CHART_TYPE as any,
+        dataType: 'Training Stress Score',
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        dataTimeInterval: TimeIntervals.Daily,
+        size: { columns: 1, rows: 1 },
+      } as any],
+      events: [],
+      dashboardDateRange: {
+        dateRange: DateRanges.thisWeek,
+        startDate: null,
+        endDate: null,
+        startOfTheWeek: DaysOfTheWeek.Monday,
+      },
+      derivedMetrics: {
+        formPoints: derivedPoints as any,
+      },
+    });
+
+    expect((viewModels[0] as any).data).toEqual(derivedPoints);
+    expect((viewModels[0] as any).absoluteLatestFormPoint).toEqual(derivedPoints[1]);
   });
 
   it('should build map tiles from filtered sorted events and preserve mixed tile ordering and sizes', () => {

@@ -141,7 +141,7 @@ export class DashboardDerivedMetricsService {
   private resolveFormPoints(snapshot: Record<string, unknown> | undefined): DashboardFormPoint[] | null {
     const payload = snapshot?.payload as { dailyLoads?: unknown } | undefined;
     const dailyLoads = Array.isArray(payload?.dailyLoads)
-      ? payload?.dailyLoads as Array<[number, number]>
+      ? payload?.dailyLoads
       : null;
     if (!dailyLoads) {
       return null;
@@ -154,12 +154,15 @@ export class DashboardDerivedMetricsService {
       totalSeconds?: unknown;
       endTimeMs?: unknown;
       segments?: unknown;
+      latestWorkoutSeconds?: unknown;
+      latestWorkoutEndTimeMs?: unknown;
+      maxSupportedRecoverySeconds?: unknown;
     } | undefined;
     if (!payload) {
       return null;
     }
 
-    const totalSeconds = this.toFinitePositiveNumber(payload.totalSeconds);
+    const totalSeconds = this.toFiniteNonNegativeNumber(payload.totalSeconds);
     const endTimeMs = this.toFiniteNumber(payload.endTimeMs);
     if (totalSeconds === null || endTimeMs === null) {
       return null;
@@ -181,11 +184,17 @@ export class DashboardDerivedMetricsService {
         })
         .filter((segment): segment is { totalSeconds: number; endTimeMs: number } => !!segment)
       : [];
+    const latestWorkoutSeconds = this.toFinitePositiveNumber(payload.latestWorkoutSeconds);
+    const latestWorkoutEndTimeMs = this.toFiniteNumber(payload.latestWorkoutEndTimeMs);
+    const maxSupportedRecoverySeconds = this.toFinitePositiveNumber(payload.maxSupportedRecoverySeconds);
 
     return {
       totalSeconds,
       endTimeMs,
       ...(segments.length ? { segments } : {}),
+      ...(latestWorkoutSeconds !== null ? { latestWorkoutSeconds } : {}),
+      ...(latestWorkoutEndTimeMs !== null ? { latestWorkoutEndTimeMs } : {}),
+      ...(maxSupportedRecoverySeconds !== null ? { maxSupportedRecoverySeconds } : {}),
     };
   }
 
@@ -200,6 +209,14 @@ export class DashboardDerivedMetricsService {
   private toFinitePositiveNumber(value: unknown): number | null {
     const numericValue = this.toFiniteNumber(value);
     if (numericValue === null || numericValue <= 0) {
+      return null;
+    }
+    return numericValue;
+  }
+
+  private toFiniteNonNegativeNumber(value: unknown): number | null {
+    const numericValue = this.toFiniteNumber(value);
+    if (numericValue === null || numericValue < 0) {
       return null;
     }
     return numericValue;

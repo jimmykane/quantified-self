@@ -76,6 +76,21 @@ describe('dashboard-form.helper', () => {
     expect(points.map(point => point.trainingStressScore)).toEqual([30, 0, 10]);
   });
 
+  it('should parse object-based daily loads used by Firestore snapshots', () => {
+    const points = buildDashboardFormPointsFromDailyLoads([
+      { dayMs: Date.UTC(2024, 0, 1), load: 30 },
+      { dayMs: Date.UTC(2024, 0, 3), load: 10 },
+    ]);
+
+    expect(points).toHaveLength(3);
+    expect(points.map(point => point.time)).toEqual([
+      Date.UTC(2024, 0, 1),
+      Date.UTC(2024, 0, 2),
+      Date.UTC(2024, 0, 3),
+    ]);
+    expect(points.map(point => point.trainingStressScore)).toEqual([30, 0, 10]);
+  });
+
   it('should bucket training stress by runtime local calendar day boundaries', () => {
     const firstStartTimeMs = Date.parse('2024-01-01T23:30:00.000Z');
     const secondStartTimeMs = Date.parse('2024-01-02T00:30:00.000Z');
@@ -142,7 +157,7 @@ describe('dashboard-form.helper', () => {
     expect(points[1].formPriorDay).toBeCloseTo(-1.190476, 5);
   });
 
-  it('should resolve form render interval using dashboard auto-granularity rules', () => {
+  it('should resolve form render interval to fixed weekly granularity', () => {
     const shortRangePoints = buildDashboardFormPoints([
       buildEvent(Date.UTC(2024, 0, 1), {
         [DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE]: 10,
@@ -168,9 +183,9 @@ describe('dashboard-form.helper', () => {
       }),
     ]);
 
-    expect(resolveDashboardFormRenderTimeInterval(shortRangePoints)).toBe(TimeIntervals.Daily);
-    expect(resolveDashboardFormRenderTimeInterval(longSameYearPoints)).toBe(TimeIntervals.Monthly);
-    expect(resolveDashboardFormRenderTimeInterval(crossYearPoints)).toBe(TimeIntervals.Yearly);
+    expect(resolveDashboardFormRenderTimeInterval(shortRangePoints)).toBe(TimeIntervals.Weekly);
+    expect(resolveDashboardFormRenderTimeInterval(longSameYearPoints)).toBe(TimeIntervals.Weekly);
+    expect(resolveDashboardFormRenderTimeInterval(crossYearPoints)).toBe(TimeIntervals.Weekly);
   });
 
   it('should aggregate render points by monthly and yearly buckets while preserving latest CTL/ATL/form in bucket', () => {
@@ -218,6 +233,25 @@ describe('dashboard-form.helper', () => {
 
     expect(yearly[0].ctl).toBeCloseTo(year2024End?.ctl || 0, 8);
     expect(yearly[1].ctl).toBeCloseTo(year2025End?.ctl || 0, 8);
+  });
+
+  it('should aggregate render points by weekly buckets while preserving latest CTL/ATL/form in bucket', () => {
+    const points = buildDashboardFormPoints([
+      buildEvent(Date.UTC(2024, 0, 1), {
+        [DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE]: 10,
+      }),
+      buildEvent(Date.UTC(2024, 0, 2), {
+        [DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE]: 20,
+      }),
+      buildEvent(Date.UTC(2024, 0, 8), {
+        [DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE]: 30,
+      }),
+    ]);
+
+    const weekly = buildDashboardFormRenderPoints(points, TimeIntervals.Weekly);
+    expect(weekly.length).toBeLessThan(points.length);
+    expect(weekly[0].trainingStressScore).toBe(30);
+    expect(weekly[1].trainingStressScore).toBe(30);
   });
 
   it('should resolve same-day and prior-day form values safely', () => {

@@ -1,8 +1,12 @@
 import { TimeIntervals, type EventInterface } from '@sports-alliance/sports-lib';
+import {
+  normalizeDerivedFormDailyLoads,
+  type DerivedFormDailyLoadEntry,
+  type LegacyDerivedFormDailyLoadEntry,
+} from '@shared/derived-metrics';
 
 const CTL_TIME_CONSTANT_DAYS = 42;
 const ATL_TIME_CONSTANT_DAYS = 7;
-const THIRTY_ONE_DAYS_MS = 31 * 24 * 60 * 60 * 1000;
 const UTC_DAY_MS = 24 * 60 * 60 * 1000;
 
 export const DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE = 'Training Stress Score';
@@ -147,20 +151,15 @@ export function buildDashboardFormPoints(events: readonly EventInterface[] | nul
 }
 
 export function buildDashboardFormPointsFromDailyLoads(
-  dailyLoads: readonly (readonly [number, number])[] | null | undefined,
+  dailyLoads: readonly (DerivedFormDailyLoadEntry | LegacyDerivedFormDailyLoadEntry)[] | null | undefined,
 ): DashboardFormPoint[] {
-  const normalizedDailyLoads = Array.isArray(dailyLoads) ? dailyLoads : [];
+  const normalizedDailyLoads = normalizeDerivedFormDailyLoads(dailyLoads);
   if (!normalizedDailyLoads.length) {
     return [];
   }
 
-  const dailyTrainingStressScores = normalizedDailyLoads.reduce((scores, pair) => {
-    const dayTime = toFiniteNumber(pair?.[0]);
-    const trainingStressScore = toFiniteNumber(pair?.[1]);
-    if (dayTime === null || trainingStressScore === null || trainingStressScore < 0) {
-      return scores;
-    }
-    scores.set(dayTime, (scores.get(dayTime) || 0) + trainingStressScore);
+  const dailyTrainingStressScores = normalizedDailyLoads.reduce((scores, load) => {
+    scores.set(load.dayMs, (scores.get(load.dayMs) || 0) + load.load);
     return scores;
   }, new Map<number, number>());
 
@@ -208,6 +207,14 @@ function resolveFormBucketTime(time: number, timeInterval: TimeIntervals): numbe
       return new Date(date.getFullYear(), 0, 1).getTime();
     case TimeIntervals.Monthly:
       return new Date(date.getFullYear(), date.getMonth(), 1).getTime();
+    case TimeIntervals.Weekly: {
+      const dayIndexMondayFirst = (date.getDay() + 6) % 7;
+      return new Date(
+        date.getFullYear(),
+        date.getMonth(),
+        date.getDate() - dayIndexMondayFirst,
+      ).getTime();
+    }
     default:
       return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
   }
@@ -216,34 +223,10 @@ function resolveFormBucketTime(time: number, timeInterval: TimeIntervals): numbe
 export function resolveDashboardFormRenderTimeInterval(
   points: readonly DashboardFormPoint[] | null | undefined,
 ): TimeIntervals {
-  if (!Array.isArray(points) || points.length < 2) {
-    return TimeIntervals.Daily;
+  if (!Array.isArray(points) || !points.length) {
+    return TimeIntervals.Weekly;
   }
-
-  const startTime = points[0]?.time;
-  const endTime = points[points.length - 1]?.time;
-  if (!Number.isFinite(startTime) || !Number.isFinite(endTime)) {
-    return TimeIntervals.Daily;
-  }
-
-  const startDate = new Date(startTime);
-  const endDate = new Date(endTime);
-  if (!Number.isFinite(startDate.getTime()) || !Number.isFinite(endDate.getTime())) {
-    return TimeIntervals.Daily;
-  }
-
-  if (endDate.getFullYear() !== startDate.getFullYear()) {
-    return TimeIntervals.Yearly;
-  }
-
-  if (endDate.getMonth() !== startDate.getMonth()) {
-    if (endDate.getTime() <= startDate.getTime() + THIRTY_ONE_DAYS_MS) {
-      return TimeIntervals.Daily;
-    }
-    return TimeIntervals.Monthly;
-  }
-
-  return TimeIntervals.Daily;
+  return TimeIntervals.Weekly;
 }
 
 export function buildDashboardFormRenderPoints(
@@ -255,7 +238,11 @@ export function buildDashboardFormRenderPoints(
     return [];
   }
 
-  if (timeInterval !== TimeIntervals.Monthly && timeInterval !== TimeIntervals.Yearly) {
+  if (
+    timeInterval !== TimeIntervals.Weekly
+    && timeInterval !== TimeIntervals.Monthly
+    && timeInterval !== TimeIntervals.Yearly
+  ) {
     return normalizedPoints;
   }
 
