@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { gzipSync } from 'node:zlib';
 import { USAGE_LIMITS } from '../../../shared/limits';
 
 const hoisted = vi.hoisted(() => {
@@ -473,6 +474,31 @@ describe('mergeEvents', () => {
 
   it('should reject merge when selected source files have identical content', async () => {
     hoisted.state.fileBytesByPath.set('users/u1/events/e2/original.gpx.gz', Buffer.from([0x01, 0x02]));
+
+    await expect(mergeEvents({
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
+    } as any)).rejects.toMatchObject({ code: 'already-exists' });
+
+    expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+  });
+
+  it('should reject merge when gzip-wrapped source content matches an uncompressed source file', async () => {
+    const sharedPayload = Buffer.from([0x10, 0x20, 0x30, 0x40]);
+    hoisted.state.eventDocs.set('users/u1/events/e2', {
+      startDate: new Date('2026-01-11T10:00:00.000Z'),
+      description: 'Evening run',
+      originalFiles: [
+        {
+          path: 'users/u1/events/e2/original.fit.gz',
+          bucket: 'quantified-self-io',
+          startDate: new Date('2026-01-11T10:00:00.000Z'),
+        },
+      ],
+    });
+    hoisted.state.fileBytesByPath.set('users/u1/events/e1/original.fit', sharedPayload);
+    hoisted.state.fileBytesByPath.set('users/u1/events/e2/original.fit.gz', gzipSync(sharedPayload));
 
     await expect(mergeEvents({
       auth: { uid: 'u1' },
