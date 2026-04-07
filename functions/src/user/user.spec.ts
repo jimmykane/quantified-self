@@ -7,7 +7,10 @@ const {
     getUserMock,
     mailSetMock,
     mailDocMock,
-    mailCollectionMock,
+    deletionMarkerSetMock,
+    deletionMarkerDeleteMock,
+    deletionMarkerDocMock,
+    firestoreCollectionMock,
     loggerInfoMock,
     loggerWarnMock,
     loggerErrorMock
@@ -16,16 +19,39 @@ const {
     const mailDocMock = vi.fn((_id?: string) => ({
         set: mailSetMock
     }));
-    const mailCollectionMock = vi.fn((_name?: string) => ({
-        doc: mailDocMock
+    const deletionMarkerSetMock = vi.fn().mockResolvedValue(undefined);
+    const deletionMarkerDeleteMock = vi.fn().mockResolvedValue(undefined);
+    const deletionMarkerDocMock = vi.fn((_id?: string) => ({
+        set: deletionMarkerSetMock,
+        delete: deletionMarkerDeleteMock
     }));
+    const firestoreCollectionMock = vi.fn((name?: string) => {
+        if (name === 'mail') {
+            return {
+                doc: mailDocMock
+            };
+        }
+
+        if (name === 'userDeletionTombstones') {
+            return {
+                doc: deletionMarkerDocMock
+            };
+        }
+
+        return {
+            doc: vi.fn()
+        };
+    });
 
     return {
         deleteUserMock: vi.fn().mockResolvedValue(undefined),
         getUserMock: vi.fn().mockResolvedValue({ email: 'test@example.com' }),
         mailSetMock,
         mailDocMock,
-        mailCollectionMock,
+        deletionMarkerSetMock,
+        deletionMarkerDeleteMock,
+        deletionMarkerDocMock,
+        firestoreCollectionMock,
         loggerInfoMock: vi.fn(),
         loggerWarnMock: vi.fn(),
         loggerErrorMock: vi.fn()
@@ -37,10 +63,13 @@ const testEnv = firebaseFunctionsTest();
 // Mock admin
 vi.mock('firebase-admin', () => {
     const firestoreMock = Object.assign(vi.fn(() => ({
-        collection: mailCollectionMock
+        collection: firestoreCollectionMock
     })), {
         Timestamp: {
             fromDate: vi.fn((date: Date) => ({ seconds: Math.floor(date.getTime() / 1000), nanoseconds: 0 }))
+        },
+        FieldValue: {
+            serverTimestamp: vi.fn(() => 'SERVER_TIMESTAMP')
         }
     });
 
@@ -96,6 +125,8 @@ describe('deleteSelf Cloud Function', () => {
         deleteUserMock.mockResolvedValue(undefined);
         getUserMock.mockResolvedValue({ email: 'test@example.com' });
         mailSetMock.mockResolvedValue(undefined);
+        deletionMarkerSetMock.mockResolvedValue(undefined);
+        deletionMarkerDeleteMock.mockResolvedValue(undefined);
     });
 
     afterEach(() => {
@@ -139,6 +170,13 @@ describe('deleteSelf Cloud Function', () => {
 
         expect(deleteUserMock).toHaveBeenCalledWith(uid);
         expect(getUserMock).toHaveBeenCalledWith(uid);
+        expect(admin.firestore().collection).toHaveBeenCalledWith('userDeletionTombstones');
+        expect(deletionMarkerDocMock).toHaveBeenCalledWith(uid);
+        expect(deletionMarkerSetMock).toHaveBeenCalledWith({
+            createdAt: 'SERVER_TIMESTAMP',
+            source: 'deleteSelf',
+            expireAt: expect.any(Object)
+        }, { merge: true });
         expect(admin.firestore().collection).toHaveBeenCalledWith('mail');
         expect(mailDocMock).toHaveBeenCalledWith(`account_deleted_confirmation_${uid}`);
         expect(mailSetMock).toHaveBeenCalledWith(expect.objectContaining({
@@ -174,6 +212,30 @@ describe('deleteSelf Cloud Function', () => {
             typeof message === 'string' &&
             message.includes('Skipping account deletion confirmation email')
         )).toBe(true);
+        expect(result).toEqual({ success: true });
+    });
+
+    it('should continue deleting the user if writing the deletion marker fails', async () => {
+        const uid = 'test-uid';
+        const context = {
+            rawRequest: {},
+            auth: {
+                uid,
+                token: {}
+            },
+            app: { appId: 'mock-app-id' }
+        };
+
+        const markerError = new Error('Marker write failed');
+        deletionMarkerSetMock.mockRejectedValueOnce(markerError);
+
+        const result = await (deleteSelf as any)({}, context);
+
+        expect(deleteUserMock).toHaveBeenCalledWith(uid);
+        expect(loggerErrorMock).toHaveBeenCalledWith(
+            `Failed to write user deletion marker for ${uid}. Continuing with deletion.`,
+            markerError
+        );
         expect(result).toEqual({ success: true });
     });
 
@@ -247,5 +309,7 @@ describe('deleteSelf Cloud Function', () => {
             expect(e.code).to.equal('internal');
             expect(e.message).to.equal('Unable to delete user');
         }
+
+        expect(deletionMarkerDeleteMock).toHaveBeenCalledTimes(1);
     });
 });

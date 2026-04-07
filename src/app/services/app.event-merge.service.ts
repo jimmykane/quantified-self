@@ -19,6 +19,7 @@ export type EventMergeErrorCode =
   | 'LIMIT_REACHED'
   | 'EVENT_NOT_FOUND'
   | 'MISSING_SOURCE_FILE'
+  | 'DUPLICATE_SOURCE_FILE'
   | 'INTERNAL';
 
 export class EventMergeError extends Error {
@@ -61,6 +62,8 @@ export class AppEventMergeService {
           return 'One or more selected events were not found.';
         case 'MISSING_SOURCE_FILE':
           return 'One or more selected events have missing original files.';
+        case 'DUPLICATE_SOURCE_FILE':
+          return 'Selected events include identical source files. Deselect duplicates and try again.';
         default:
           return 'Could not merge events.';
       }
@@ -88,6 +91,13 @@ export class AppEventMergeService {
     }
     if (code.includes('failed-precondition')) {
       return new EventMergeError('MISSING_SOURCE_FILE', message || 'Missing source files.', error);
+    }
+    if (code.includes('already-exists')) {
+      return new EventMergeError(
+        'DUPLICATE_SOURCE_FILE',
+        message || 'Selected events include identical source files.',
+        error,
+      );
     }
 
     return new EventMergeError('INTERNAL', message || 'Could not merge events.', error);

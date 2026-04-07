@@ -374,7 +374,7 @@ describe('scheduleSportsLibReparseScan', () => {
 
     it('should spread enqueue schedule delays across multiple sequential override enqueues', async () => {
         hoisted.runtimeDefaults.uidAllowlist = ['u1'];
-        hoisted.runtimeDefaults.enqueueLimit = 100;
+        hoisted.runtimeDefaults.enqueueLimit = 2;
         hoisted.buildSportsLibReparseJobId
             .mockReturnValueOnce('job-e1')
             .mockReturnValueOnce('job-e2');
@@ -389,8 +389,36 @@ describe('scheduleSportsLibReparseScan', () => {
         const secondCallArgs = hoisted.enqueueSportsLibReparseTask.mock.calls[1];
         expect(firstCallArgs).toEqual(['job-e1']);
         expect(secondCallArgs[0]).toBe('job-e2');
-        expect(typeof secondCallArgs[1]).toBe('number');
-        expect(secondCallArgs[1]).toBeGreaterThan(1);
+        expect(secondCallArgs[1]).toBeGreaterThanOrEqual(2);
+        expect(secondCallArgs[1]).toBeLessThanOrEqual(10);
+    });
+
+    it('should use the same bounded dynamic enqueue delay in global mode', async () => {
+        hoisted.runtimeDefaults.uidAllowlist = null;
+        hoisted.runtimeDefaults.enqueueLimit = 2;
+        hoisted.buildSportsLibReparseJobId.mockImplementation((_uid: string, eventId: string) => `job-${eventId}`);
+
+        const eventRefOne = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        const eventRefTwo = createEventRef('u1', 'e2', { originalFile: { path: 'y.fit' } });
+        hoisted.processingDocs.push(
+            createProcessingDoc(eventRefOne, {
+                sportsLibVersion: '9.0.0',
+                sportsLibVersionCode: 9_000_000,
+            }),
+            createProcessingDoc(eventRefTwo, {
+                sportsLibVersion: '9.0.0',
+                sportsLibVersionCode: 9_000_000,
+            }),
+        );
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        const firstCallArgs = hoisted.enqueueSportsLibReparseTask.mock.calls[0];
+        const secondCallArgs = hoisted.enqueueSportsLibReparseTask.mock.calls[1];
+        expect(firstCallArgs).toEqual(['job-e1']);
+        expect(secondCallArgs[0]).toBe('job-e2');
+        expect(secondCallArgs[1]).toBeGreaterThanOrEqual(2);
+        expect(secondCallArgs[1]).toBeLessThanOrEqual(10);
     });
 
     it('should apply tuple cursor startAfter in global mode', async () => {

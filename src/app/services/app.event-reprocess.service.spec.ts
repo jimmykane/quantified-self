@@ -24,8 +24,8 @@ describe('AppEventReprocessService', () => {
     } as any;
   };
 
-  const makeSourceEvent = (activityId: string = 'activity-1') => ({
-    getActivities: vi.fn(() => [{ getID: () => activityId }]),
+  const makeSourceEvent = () => ({
+    getActivities: vi.fn(() => [{ getID: () => 'activity-1' }]),
     originalFiles: [{ path: 'users/u1/events/e1/original.fit' }],
     originalFile: { path: 'users/u1/events/e1/original.fit' },
     isMerge: false,
@@ -74,27 +74,6 @@ describe('AppEventReprocessService', () => {
     expect(event.addActivities).toHaveBeenCalledWith([{ getID: expect.any(Function) }]);
     expect(result.sourceFilesCount).toBe(1);
     expect(result.wasMultiFileSource).toBe(false);
-  });
-
-  it('should regenerate activity statistics through backend callable without sending activityId', async () => {
-    const event = makeTargetEvent();
-
-    const result = await service.regenerateActivityStatistics({ uid: 'u1' } as any, event, 'activity-1');
-
-    expect(functionsServiceMock.call).toHaveBeenCalledWith('reprocessEvent', {
-      eventId: 'event-1',
-      mode: 'regenerate',
-    });
-    expect(result.updatedActivityId).toBe('activity-1');
-  });
-
-  it('should throw ACTIVITY_NOT_FOUND_AFTER_REHYDRATE when requested activity does not exist after refresh', async () => {
-    const event = makeTargetEvent();
-    eventServiceMock.getEventAndActivities.mockReturnValueOnce(of(makeSourceEvent('different-activity')));
-
-    await expect(service.regenerateActivityStatistics({ uid: 'u1' } as any, event, 'activity-1')).rejects.toMatchObject({
-      code: 'ACTIVITY_NOT_FOUND_AFTER_REHYDRATE',
-    });
   });
 
   it('should call backend with reimport mode', async () => {

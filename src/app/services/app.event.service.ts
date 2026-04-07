@@ -233,6 +233,7 @@ export class AppEventService implements OnDestroy {
     delete sanitizedPayload.eventID;
     delete sanitizedPayload.userID;
     delete sanitizedPayload.eventStartDate;
+    delete sanitizedPayload.sourceActivityKey;
     return sanitizedPayload;
   }
 

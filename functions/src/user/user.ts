@@ -13,6 +13,9 @@ type FirebaseAuthErrorLike = {
     };
 };
 
+const USER_DELETION_TOMBSTONES_COLLECTION = 'userDeletionTombstones';
+const USER_DELETION_TOMBSTONE_RETENTION_IN_DAYS = 7;
+
 const isAuthUserNotFoundError = (error: unknown): boolean => {
     return (error as FirebaseAuthErrorLike)?.errorInfo?.code === 'auth/user-not-found';
 };
@@ -44,15 +47,29 @@ export const deleteSelf = functions
         }
 
         const uid = context.auth.uid;
+        const firestore = admin.firestore();
+        const deletionMarkerRef = firestore.collection(USER_DELETION_TOMBSTONES_COLLECTION).doc(uid);
         logger.info(`Requesting deletion for user: ${uid} `);
 
         try {
             let userEmail: string | undefined;
+            let deletionMarkerWritten = false;
             try {
                 const userRecord = await admin.auth().getUser(uid);
                 userEmail = userRecord.email ?? undefined;
             } catch (lookupError) {
                 logger.warn(`Could not fetch user email before deletion for ${uid}. Continuing with deletion.`, lookupError);
+            }
+
+            try {
+                await deletionMarkerRef.set({
+                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                    source: 'deleteSelf',
+                    expireAt: getExpireAtTimestamp(USER_DELETION_TOMBSTONE_RETENTION_IN_DAYS),
+                }, { merge: true });
+                deletionMarkerWritten = true;
+            } catch (markerError) {
+                logger.error(`Failed to write user deletion marker for ${uid}. Continuing with deletion.`, markerError);
             }
 
             // Delete Auth User (idempotent if already deleted)
@@ -63,6 +80,13 @@ export const deleteSelf = functions
                 if (isAuthUserNotFoundError(deleteError)) {
                     logger.warn(`User ${uid} was already deleted in auth. Treating deletion as successful.`, deleteError);
                 } else {
+                    if (deletionMarkerWritten) {
+                        try {
+                            await deletionMarkerRef.delete();
+                        } catch (markerCleanupError) {
+                            logger.error(`Failed to remove user deletion marker after auth deletion failed for ${uid}.`, markerCleanupError);
+                        }
+                    }
                     throw deleteError;
                 }
             }

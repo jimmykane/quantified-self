@@ -93,6 +93,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   private isHandset = false;
   private readonly defaultSelectedColumns = AppUserUtilities.getDefaultSelectedTableColumns();
   private readonly nonSearchableRowKeys = new Set(['Color', 'Gradient', 'Event']);
+  private readonly duplicateSourceFilesMessage = 'Selected events include identical source files. Deselect duplicates and try again.';
   private rowCache = new Map<string, EventTableRowCacheEntry>();
 
 
@@ -325,11 +326,53 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     selectableRows.forEach(row => this.selection.select(row));
   }
 
+  private collectSourceFilePaths(event: EventInterface): string[] {
+    const appEvent = event as {
+      originalFiles?: Array<{ path?: unknown }>;
+      originalFile?: { path?: unknown };
+    };
+
+    if (Array.isArray(appEvent.originalFiles) && appEvent.originalFiles.length > 0) {
+      return appEvent.originalFiles
+        .map((file) => `${file?.path || ''}`.trim())
+        .filter((path) => path.length > 0);
+    }
+
+    const legacyPath = `${appEvent.originalFile?.path || ''}`.trim();
+    return legacyPath.length > 0 ? [legacyPath] : [];
+  }
+
+  private hasDuplicateSourceFilePaths(events: EventInterface[]): boolean {
+    const seenPaths = new Set<string>();
+
+    for (const appEvent of events) {
+      const sourcePaths = this.collectSourceFilePaths(appEvent);
+      for (const path of sourcePaths) {
+        if (seenPaths.has(path)) {
+          return true;
+        }
+        seenPaths.add(path);
+      }
+    }
+
+    return false;
+  }
+
   async mergeSelection(event) {
     if (this.selection.selected.length < 2) {
       this.snackBar.open('Select at least two events to merge', undefined, { duration: 2000 });
       return;
     }
+
+    const selectedEvents = this.selection.selected
+      .map((selected) => selected?.Event as EventInterface | undefined)
+      .filter((selectedEvent): selectedEvent is EventInterface => !!selectedEvent);
+
+    if (this.hasDuplicateSourceFilePaths(selectedEvents)) {
+      this.snackBar.open(this.duplicateSourceFilesMessage, undefined, { duration: 4000 });
+      return;
+    }
+
     const dialogRef = this.dialog.open(MergeOptionsDialogComponent);
     const mergeSelection = await firstValueFrom(
       race(

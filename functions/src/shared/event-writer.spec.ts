@@ -269,6 +269,26 @@ describe('EventWriter', () => {
         }));
     });
 
+    it('should persist sourceActivityKey when available on activity instance', async () => {
+        activityMock.sourceActivityKey = 'sha256:signature:0';
+        activityMock.toJSON.mockReturnValue({
+            id: 'activity-1',
+            streams: [{ type: 'Power', values: [100, 200] }],
+        });
+
+        await writer.writeAllEventData('user-1', eventMock);
+        const setDocFn = adapter.setDoc as any;
+
+        const activityCall = setDocFn.mock.calls.find((call: any) =>
+            call[0][0] === 'users' && call[0][1] === 'user-1' && call[0][2] === 'activities'
+        );
+
+        expect(activityCall).toBeTruthy();
+        expect(activityCall[1]).toEqual(expect.objectContaining({
+            sourceActivityKey: 'sha256:signature:0',
+        }));
+    });
+
     it('should strip activities from event document', async () => {
         // Ensure the mock returns activities initially so we can verify they are removed
         eventMock.toJSON.mockReturnValue({
