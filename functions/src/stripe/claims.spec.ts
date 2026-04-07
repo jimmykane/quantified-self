@@ -4,13 +4,56 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 // Mock dependencies
 const mockSetCustomUserClaims = vi.fn();
 const mockSet = vi.fn();
+const mockDelete = vi.fn();
 const mockUpdate = vi.fn();
 const mockGetDoc = vi.fn();
-const mockDoc = vi.fn().mockReturnValue({
+let userExists = true;
+let systemStatusData: Record<string, unknown> = {};
+let deletionMarkerState: 'missing' | 'active' | 'expired' = 'missing';
+
+const getDocSnapshot = (path?: string) => {
+    if (path?.startsWith('userDeletionTombstones/')) {
+        if (deletionMarkerState === 'missing') {
+            return {
+                exists: false,
+                data: () => ({})
+            };
+        }
+
+        return {
+            exists: true,
+            data: () => deletionMarkerState === 'expired'
+                ? { expireAt: { toMillis: () => Date.now() - 1000 } }
+                : { expireAt: { toMillis: () => Date.now() + 60_000 } }
+        };
+    }
+
+    if (path?.includes('/system/status')) {
+        return {
+            exists: true,
+            data: () => systemStatusData
+        };
+    }
+
+    if (path?.startsWith('users/')) {
+        return {
+            exists: userExists,
+            data: () => ({})
+        };
+    }
+
+    return {
+        exists: true,
+        data: () => ({})
+    };
+};
+
+const mockDoc = vi.fn((path?: string) => ({
     set: mockSet,
-    get: mockGetDoc,
-    update: mockUpdate
-});
+    get: () => mockGetDoc(path),
+    update: mockUpdate,
+    delete: mockDelete
+}));
 const mockAuth = {
     setCustomUserClaims: mockSetCustomUserClaims,
     getUser: vi.fn().mockResolvedValue({ customClaims: {}, email: 'test@example.com' })
@@ -20,13 +63,23 @@ const mockGet = vi.fn();
 const mockLimit = vi.fn().mockReturnValue({ get: mockGet });
 const mockOrderBy = vi.fn().mockReturnValue({ limit: mockLimit });
 const mockWhere = vi.fn().mockReturnValue({ orderBy: mockOrderBy });
-const mockCollection = vi.fn().mockReturnValue({
-    where: mockWhere,
-    doc: mockDoc
+const mockRunTransaction = vi.fn();
+const mockCollection = vi.fn((path?: string) => {
+    if (path?.includes('subscriptions')) {
+        return {
+            where: mockWhere
+        };
+    }
+
+    return {
+        where: mockWhere,
+        doc: (id: string) => mockDoc(`${path}/${id}`)
+    };
 });
 const mockFirestore = {
     collection: mockCollection,
-    doc: mockDoc
+    doc: mockDoc,
+    runTransaction: mockRunTransaction
 };
 
 vi.mock('firebase-admin', () => {
@@ -85,15 +138,44 @@ import { reconcileClaims, linkExistingStripeCustomer, restoreUserClaims } from '
 describe('reconcileClaims', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        mockGetDoc.mockReset();
+        mockRunTransaction.mockReset();
+        userExists = true;
+        systemStatusData = {};
+        deletionMarkerState = 'missing';
         // Reset chain
         mockWhere.mockReturnValue({ orderBy: mockOrderBy });
         mockOrderBy.mockReturnValue({ limit: mockLimit });
         mockLimit.mockReturnValue({ get: mockGet });
-        mockGetDoc.mockResolvedValue({ exists: true, data: () => ({}) });
+        mockGetDoc.mockImplementation((path?: string) => Promise.resolve(getDocSnapshot(path)));
+        mockRunTransaction.mockImplementation(async (updateFunction: (transaction: {
+            get: (docRef: { get: () => Promise<unknown> }) => Promise<unknown>;
+            set: (_docRef: unknown, data: unknown, options: unknown) => void;
+            delete: (_docRef: unknown) => void;
+        }) => Promise<unknown>) => updateFunction({
+            get: (docRef) => docRef.get(),
+            set: (_docRef, data, options) => {
+                mockSet(data, options);
+            },
+            delete: (_docRef) => {
+                mockDelete();
+            }
+        }));
 
         // Explicitly reset collection mock to clear any mockImplementationOnce
         mockCollection.mockReset();
-        mockCollection.mockReturnValue({ where: mockWhere, doc: mockDoc });
+        mockCollection.mockImplementation((path?: string) => {
+            if (path?.includes('subscriptions')) {
+                return {
+                    where: mockWhere
+                };
+            }
+
+            return {
+                where: mockWhere,
+                doc: (id: string) => mockDoc(`${path}/${id}`)
+            };
+        });
 
         // Default auth user
         mockAuth.getUser.mockResolvedValue({ customClaims: {}, email: 'test@example.com' });
@@ -102,12 +184,31 @@ describe('reconcileClaims', () => {
     it('should return "free" if no active subscription exists locally or in Stripe', async () => {
         mockGet.mockResolvedValue({ empty: true });
         mockStripeCustomersSearch.mockResolvedValue({ data: [] });
-        mockGetDoc.mockResolvedValue({ data: () => ({}) });
+        systemStatusData = {};
 
         const result = await reconcileClaims('user1');
         expect(result.role).toBe('free');
         expect(mockStripeCustomersSearch).toHaveBeenCalled();
         expect(mockSetCustomUserClaims).toHaveBeenCalledWith('user1', expect.objectContaining({ stripeRole: 'free' }));
+    });
+
+    it('should skip claim reconciliation when the user is marked for deletion', async () => {
+        deletionMarkerState = 'active';
+        mockGet.mockResolvedValue({
+            empty: false,
+            docs: [{
+                data: () => ({
+                    status: 'active',
+                    role: 'pro'
+                })
+            }]
+        });
+
+        const result = await reconcileClaims('user1');
+
+        expect(result.role).toBe('free');
+        expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
+        expect(mockSet).not.toHaveBeenCalled();
     });
 
     it('should set claims based on role field (Local)', async () => {
@@ -191,7 +292,7 @@ describe('reconcileClaims', () => {
 
         expect(result.role).toBe('pro');
         // Should update firestore link
-        expect(mockDoc).toHaveBeenCalledWith('user1');
+        expect(mockCollection).toHaveBeenCalledWith('customers');
         expect(mockSet).toHaveBeenCalledWith(expect.objectContaining({
             stripeId: 'cus_123',
             stripeLink: 'https://dashboard.stripe.com/customers/cus_123',
@@ -213,13 +314,42 @@ describe('reconcileClaims', () => {
             }]
         });
 
-        mockGetDoc.mockResolvedValueOnce({ exists: false, data: () => undefined });
+        userExists = false;
 
         const result = await reconcileClaims('missingUser');
 
         expect(result.role).toBe('basic');
         expect(mockSetCustomUserClaims).toHaveBeenCalledWith('missingUser', { stripeRole: 'basic' });
-        expect(mockDoc.mock.calls.map((call) => call[0])).not.toContain('users/missingUser/system/status');
+        expect(mockGetDoc.mock.calls.map((call) => call[0])).not.toContain('users/missingUser/system/status');
+        expect(mockSet).not.toHaveBeenCalled();
+    });
+
+    it('should skip claimsUpdatedAt write when deletion starts before the final status write', async () => {
+        mockGet.mockResolvedValue({
+            empty: false,
+            docs: [{
+                data: () => ({
+                    status: 'active',
+                    role: 'basic'
+                })
+            }]
+        });
+
+        mockGetDoc
+            .mockResolvedValueOnce({ exists: false, data: () => ({}) }) // initial deletion marker check
+            .mockResolvedValueOnce({ exists: true, data: () => ({}) }) // users/{uid}
+            .mockResolvedValueOnce({ exists: false, data: () => ({}) }) // pre-claims deletion marker check
+            .mockResolvedValueOnce({ exists: true, data: () => ({}) }) // users/{uid}/system/status
+            .mockResolvedValueOnce({ // transaction deletion marker check
+                exists: true,
+                data: () => ({ expireAt: { toMillis: () => Date.now() + 60_000 } })
+            })
+            .mockResolvedValueOnce({ exists: true, data: () => ({}) }); // transaction users/{uid}
+
+        const result = await reconcileClaims('user1');
+
+        expect(result.role).toBe('basic');
+        expect(mockSetCustomUserClaims).toHaveBeenCalledWith('user1', { stripeRole: 'basic' });
         expect(mockSet).not.toHaveBeenCalled();
     });
 
@@ -234,7 +364,7 @@ describe('reconcileClaims', () => {
                 })
             }]
         });
-        mockGetDoc.mockResolvedValue({ data: () => ({}) });
+        systemStatusData = {};
 
         const result = await reconcileClaims('user1');
         expect(result.role).toBe('free');
@@ -383,7 +513,7 @@ describe('restoreUserClaims', () => {
         // Mock reconcileClaims to return 'free' (indirectly by mocking the database states it depends on)
         mockGet.mockResolvedValue({ empty: true });
         mockStripeCustomersSearch.mockResolvedValue({ data: [] });
-        mockGetDoc.mockResolvedValue({ data: () => ({}) });
+        systemStatusData = {};
 
         const req = { auth: { uid: 'user1' }, app: { appId: 'test' } } as any;
         const result = await (restoreUserClaims as any)(req);
@@ -408,7 +538,7 @@ describe('reconcileClaims (Complex Scenarios)', () => {
             data: [{ id: 'cus_no_sub', email: 'test@example.com' }]
         });
         mockStripeSubscriptionsList.mockResolvedValue({ data: [] }); // No subs
-        mockGetDoc.mockResolvedValue({ data: () => ({}) });
+        systemStatusData = {};
 
         const result = await reconcileClaims('user1');
         expect(result.role).toBe('free');
@@ -481,4 +611,3 @@ describe('reconcileClaims (Complex Scenarios)', () => {
         expect(mockSetCustomUserClaims).toHaveBeenCalledWith('user1', { stripeRole: 'basic' });
     });
 });
-

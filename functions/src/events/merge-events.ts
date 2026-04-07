@@ -2,6 +2,7 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import { createHash } from 'node:crypto';
+import { gunzipSync } from 'node:zlib';
 import {
   ActivityJSONInterface,
   EventImporterJSON,
@@ -44,6 +45,7 @@ const GENERATED_MERGE_DESCRIPTION_PREFIX = 'a merge of 2 or more activit';
 const PRIMARY_BUCKET = 'quantified-self-io';
 const LEGACY_BUCKET = 'quantified-self-io.appspot.com';
 const DUPLICATE_SOURCE_FILES_MESSAGE = 'Selected events include identical source files. Deselect duplicates and try again.';
+const MAX_DECOMPRESSED_HASH_BYTES = 150 * 1024 * 1024;
 
 function toDateOrUndefined(value: unknown): Date | undefined {
   if (!value) {
@@ -213,6 +215,26 @@ function toSourceFileReferenceKey(path: string): string {
 
 function buildDuplicateSourceFilesMessage(firstPath: string, secondPath: string): string {
   return `${DUPLICATE_SOURCE_FILES_MESSAGE} Conflicting files: ${firstPath} and ${secondPath}.`;
+}
+
+function shouldNormalizeGzipForHashing(path: string): boolean {
+  return path.toLowerCase().endsWith('.gz');
+}
+
+function getNormalizedBytesForDuplicateHashing(path: string, bytes: Buffer): Buffer {
+  if (!shouldNormalizeGzipForHashing(path)) {
+    return bytes;
+  }
+
+  try {
+    return gunzipSync(bytes, { maxOutputLength: MAX_DECOMPRESSED_HASH_BYTES });
+  } catch (error) {
+    logger.warn('[mergeEvents] Failed to normalize gzip payload for duplicate hash; falling back to raw bytes', {
+      path,
+      error,
+    });
+    return bytes;
+  }
 }
 
 function extractSourceFiles(eventDoc: FirestoreEventJSON | Record<string, unknown>): SourceFileMeta[] {
@@ -447,7 +469,8 @@ async function downloadOriginalFilesForMerge(sourceFiles: SourceFileMeta[]): Pro
   for (const sourceFile of sourceFiles) {
     try {
       const bytes = await downloadSourceBytesWithBucketFallback(sourceFile);
-      const fileHash = createHash('sha256').update(bytes).digest('hex');
+      const normalizedBytes = getNormalizedBytesForDuplicateHashing(sourceFile.path, bytes);
+      const fileHash = createHash('sha256').update(normalizedBytes).digest('hex');
       const duplicatePath = seenHashesByPath.get(fileHash);
       if (duplicatePath) {
         throw new HttpsError(

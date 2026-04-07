@@ -43,6 +43,40 @@ import { reconcileClaims } from './claims';
 import { checkAndSendSubscriptionEmails } from './email-triggers';
 import { GRACE_PERIOD_DAYS } from '../../../shared/limits';
 
+const USER_DELETION_TOMBSTONES_COLLECTION = 'userDeletionTombstones';
+
+const getTimestampMillis = (value: unknown): number | null => {
+    if (value && typeof value === 'object' && typeof (value as { toMillis?: unknown }).toMillis === 'function') {
+        return (value as { toMillis: () => number }).toMillis();
+    }
+
+    return null;
+};
+
+const hasActiveDeletionMarker = async (
+    deletionMarkerRef: admin.firestore.DocumentReference,
+    uid: string,
+    logContext: string
+): Promise<boolean> => {
+    const markerDoc = await deletionMarkerRef.get();
+    if (!markerDoc.exists) {
+        return false;
+    }
+
+    const expireAtMs = getTimestampMillis(markerDoc.data()?.expireAt);
+    if (expireAtMs !== null && expireAtMs <= Date.now()) {
+        try {
+            await deletionMarkerRef.delete();
+            logger.info(`[${logContext}] Removed expired user deletion marker for ${uid}.`);
+        } catch (error) {
+            logger.warn(`[${logContext}] Failed to remove expired user deletion marker for ${uid}. Continuing.`, error);
+        }
+        return false;
+    }
+
+    return true;
+};
+
 /**
  * Firestore Trigger: onSubscriptionUpdated
  *
@@ -101,12 +135,21 @@ export const onSubscriptionUpdated = onDocumentWritten({
     region: 'europe-west3'
 }, async (event) => {
     const uid = event.params.uid;
+    const firestore = admin.firestore();
+    const userDocRef = firestore.collection('users').doc(uid);
+    const deletionMarkerRef = firestore.collection(USER_DELETION_TOMBSTONES_COLLECTION).doc(uid);
+    const systemStatusRef = firestore.doc(`users/${uid}/system/status`);
 
     logger.info(`[onSubscriptionUpdated] Change detected for user ${uid}. Reconciling claims...`);
 
     // Check if the user document exists before proceeding
     // This prevents creating orphaned subcollections when a user has been deleted
-    const userDoc = await admin.firestore().collection('users').doc(uid).get();
+    if (await hasActiveDeletionMarker(deletionMarkerRef, uid, 'onSubscriptionUpdated')) {
+        logger.warn(`[onSubscriptionUpdated] User ${uid} is marked for deletion. Skipping subscription processing.`);
+        return;
+    }
+
+    const userDoc = await userDocRef.get();
     if (!userDoc.exists) {
         logger.warn(`[onSubscriptionUpdated] User ${uid} no longer exists in Firestore. Skipping to prevent orphaned subcollections.`);
         return;
@@ -122,7 +165,7 @@ export const onSubscriptionUpdated = onDocumentWritten({
         }
     }
 
-    const subscriptionsRef = admin.firestore().collection(`customers/${uid}/subscriptions`);
+    const subscriptionsRef = firestore.collection(`customers/${uid}/subscriptions`);
     const activeSnapshot = await subscriptionsRef
         .where('status', 'in', ['active', 'trialing'])
         .limit(1)
@@ -131,28 +174,66 @@ export const onSubscriptionUpdated = onDocumentWritten({
     if (activeSnapshot.empty) {
         logger.info(`[onSubscriptionUpdated] No active subscriptions for ${uid}. Checking for previous paid state...`);
 
-        // Check if user already has a grace period set to avoid overwriting or extending it unfairly
-        const systemDoc = await admin.firestore().doc(`users/${uid}/system/status`).get();
-        const systemData = systemDoc.data();
+        const gracePeriodUntil = admin.firestore.Timestamp.fromDate(
+            new Date(Date.now() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000)
+        );
+        const gracePeriodResult = await firestore.runTransaction(async (transaction) => {
+            const [latestDeletionMarkerDoc, latestUserDoc, systemDoc] = await Promise.all([
+                transaction.get(deletionMarkerRef),
+                transaction.get(userDocRef),
+                transaction.get(systemStatusRef)
+            ]);
 
-        // If they don't have a grace period yet, set it to 30 days from now
-        if (!systemData?.gracePeriodUntil) {
-            const gracePeriodUntil = admin.firestore.Timestamp.fromDate(
-                new Date(Date.now() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000)
-            );
-            logger.info(`[onSubscriptionUpdated] Setting gracePeriodUntil: ${gracePeriodUntil.toDate().toISOString()} for user ${uid}`);
-            await admin.firestore().doc(`users/${uid}/system/status`).set({
+            if (latestDeletionMarkerDoc.exists) {
+                const expireAtMs = getTimestampMillis(latestDeletionMarkerDoc.data()?.expireAt);
+                if (expireAtMs !== null && expireAtMs <= Date.now()) {
+                    transaction.delete(deletionMarkerRef);
+                } else {
+                    return 'skip-deleted-user' as const;
+                }
+            }
+
+            if (!latestUserDoc.exists) {
+                return 'skip-missing-user' as const;
+            }
+
+            if (systemDoc.data()?.gracePeriodUntil) {
+                return 'already-set' as const;
+            }
+
+            transaction.set(systemStatusRef, {
                 gracePeriodUntil,
                 lastDowngradedAt: admin.firestore.FieldValue.serverTimestamp()
             }, { merge: true });
+
+            return 'set' as const;
+        });
+
+        if (gracePeriodResult === 'skip-deleted-user') {
+            logger.warn(`[onSubscriptionUpdated] User ${uid} was marked for deletion before setting grace period. Skipping follow-up processing.`);
+            return;
+        }
+
+        if (gracePeriodResult === 'skip-missing-user') {
+            logger.warn(`[onSubscriptionUpdated] User ${uid} no longer exists before setting grace period. Skipping to prevent orphaned subcollections.`);
+            return;
+        }
+
+        if (gracePeriodResult === 'set') {
+            logger.info(`[onSubscriptionUpdated] Setting gracePeriodUntil: ${gracePeriodUntil.toDate().toISOString()} for user ${uid}`);
 
             // Re-reconcile to ensure the new grace period is in the Auth claims
             await reconcileClaims(uid);
         }
     } else {
         // User has an active sub. Clear grace period if it exists.
+        if (await hasActiveDeletionMarker(deletionMarkerRef, uid, 'onSubscriptionUpdated')) {
+            logger.warn(`[onSubscriptionUpdated] User ${uid} was marked for deletion before clearing grace period. Skipping follow-up processing.`);
+            return;
+        }
+
         logger.info(`[onSubscriptionUpdated] Active subscription found. Clearing grace period for ${uid}.`);
-        await admin.firestore().doc(`users/${uid}/system/status`).update({
+        await systemStatusRef.update({
             gracePeriodUntil: admin.firestore.FieldValue.delete(),
             lastDowngradedAt: admin.firestore.FieldValue.delete()
         }).catch(() => { }); // Ignore error if field doesn't exist
@@ -164,6 +245,11 @@ export const onSubscriptionUpdated = onDocumentWritten({
     // Check for email triggers (Welcome, Upgrade, Downgrade, Cancellation)
     // using the specific change that triggered this event.
     if (event.data) {
+        if (await hasActiveDeletionMarker(deletionMarkerRef, uid, 'onSubscriptionUpdated')) {
+            logger.warn(`[onSubscriptionUpdated] User ${uid} was marked for deletion before email processing. Skipping email triggers.`);
+            return;
+        }
+
         await checkAndSendSubscriptionEmails(
             uid,
             event.params.subscriptionId,
