@@ -31,12 +31,19 @@ vi.mock('firebase-functions/v2/firestore', () => ({
 import { onSubscriptionUpdated } from './subscriptions';
 
 describe('onSubscriptionUpdated', () => {
+    type DeletionMarkerState = boolean | 'expired';
+
     let collectionSpy: ReturnType<typeof vi.fn>;
     let docSpy: ReturnType<typeof vi.fn>;
     let setSpy: ReturnType<typeof vi.fn>;
+    let deleteSpy: ReturnType<typeof vi.fn>;
     let updateSpy: ReturnType<typeof vi.fn>;
-    let getSpy: ReturnType<typeof vi.fn>;
+    let runTransactionSpy: ReturnType<typeof vi.fn>;
     let authSpy: ReturnType<typeof vi.spyOn>;
+    let userExists: boolean;
+    let systemStatusData: Record<string, unknown>;
+    let hasActiveSubscription: boolean;
+    let deletionMarkerSequence: DeletionMarkerState[];
 
     const createMockEvent = (uid: string, subscriptionId: string, beforeData?: unknown, afterData?: unknown) => ({
         id: `evt_${Date.now()}`,
@@ -48,58 +55,117 @@ describe('onSubscriptionUpdated', () => {
     });
 
     const setupUserExists = (exists: boolean, userData?: Record<string, unknown>) => {
-        // First call is for user doc check, subsequent calls may be for system/status
-        getSpy.mockImplementation(() => Promise.resolve({
-            exists,
-            data: () => userData || {}
-        }));
+        userExists = exists;
+        systemStatusData = userData || {};
     };
 
-    const setupSubscriptionsQuery = (hasActiveSubscription: boolean) => {
-        collectionSpy.mockImplementation((path: string) => {
-            if (path.includes('subscriptions')) {
+    const setupSubscriptionsQuery = (activeSubscriptionExists: boolean) => {
+        hasActiveSubscription = activeSubscriptionExists;
+    };
+
+    const setupDeletionMarkerSequence = (...states: DeletionMarkerState[]) => {
+        deletionMarkerSequence = [...states];
+    };
+
+    const getDeletionMarkerState = (): DeletionMarkerState => {
+        if (deletionMarkerSequence.length === 0) {
+            return false;
+        }
+
+        return deletionMarkerSequence.shift() ?? false;
+    };
+
+    const getDocSnapshot = (path: string) => {
+        if (path.startsWith('userDeletionTombstones/')) {
+            const markerState = getDeletionMarkerState();
+            if (markerState === false) {
                 return {
-                    where: vi.fn().mockReturnThis(),
-                    limit: vi.fn().mockReturnThis(),
-                    get: vi.fn().mockResolvedValue({
-                        empty: !hasActiveSubscription,
-                        docs: hasActiveSubscription ? [{ id: 'sub_123' }] : []
-                    })
+                    exists: false,
+                    data: () => ({})
                 };
             }
+
             return {
-                doc: docSpy
+                exists: true,
+                data: () => markerState === 'expired'
+                    ? { expireAt: { toMillis: () => Date.now() - 1000 } }
+                    : { expireAt: { toMillis: () => Date.now() + 60_000 } }
             };
-        });
+        }
+
+        if (path.includes('/system/status')) {
+            return {
+                exists: true,
+                data: () => systemStatusData
+            };
+        }
+
+        if (path.startsWith('users/')) {
+            return {
+                exists: userExists,
+                data: () => ({})
+            };
+        }
+
+        return {
+            exists: false,
+            data: () => ({})
+        };
     };
 
     beforeEach(() => {
         vi.clearAllMocks();
 
         setSpy = vi.fn().mockResolvedValue({});
+        deleteSpy = vi.fn().mockResolvedValue({});
         updateSpy = vi.fn().mockResolvedValue({});
-        getSpy = vi.fn();
+        runTransactionSpy = vi.fn(async (updateFunction: (transaction: {
+            get: (docRef: { get: () => Promise<unknown> }) => Promise<unknown>;
+            set: (_docRef: unknown, data: unknown, options: unknown) => void;
+            delete: (_docRef: unknown) => void;
+        }) => Promise<unknown>) => updateFunction({
+            get: (docRef) => docRef.get(),
+            set: (_docRef, data, options) => {
+                setSpy(data, options);
+            },
+            delete: (_docRef) => {
+                deleteSpy();
+            }
+        }));
 
-        docSpy = vi.fn().mockReturnValue({
-            get: getSpy,
-            set: setSpy,
-            update: updateSpy
-        });
+        userExists = true;
+        systemStatusData = {};
+        hasActiveSubscription = false;
+        deletionMarkerSequence = [];
+
+        docSpy = vi.fn((path: string) => ({
+            get: vi.fn(() => Promise.resolve(getDocSnapshot(path))),
+            set: (data: unknown, options: unknown) => setSpy(data, options),
+            delete: () => deleteSpy(),
+            update: (data: unknown) => updateSpy(data)
+        }));
 
         collectionSpy = vi.fn().mockImplementation((path: string) => {
             if (path.includes('subscriptions')) {
-                return {
-                    where: vi.fn().mockReturnThis(),
-                    limit: vi.fn().mockReturnThis(),
-                    get: vi.fn().mockResolvedValue({ empty: true, docs: [] })
+                const query = {
+                    where: vi.fn(() => query),
+                    limit: vi.fn(() => query),
+                    get: vi.fn().mockResolvedValue({
+                        empty: !hasActiveSubscription,
+                        docs: hasActiveSubscription ? [{ id: 'sub_123' }] : []
+                    })
                 };
+                return query;
             }
-            return { doc: docSpy };
+            return {
+                doc: (id: string) => docSpy(`${path}/${id}`)
+            };
         });
 
         vi.spyOn(admin, 'firestore').mockReturnValue({
             collection: collectionSpy,
             doc: docSpy,
+            runTransaction: runTransactionSpy,
         } as unknown as admin.firestore.Firestore);
 
         (admin.firestore as unknown as Record<string, unknown>).Timestamp = {
@@ -121,6 +187,40 @@ describe('onSubscriptionUpdated', () => {
     // User Existence Check Tests (NEW - Prevents Orphaned Subcollections)
     // --------------------------------------------------------------------------------
     describe('User Existence Check', () => {
+        it('should delete expired markers and continue processing', async () => {
+            const uid = 'expired_marker_user';
+            const event = createMockEvent(uid, 'sub_expired_marker');
+
+            setupUserExists(true);
+            setupSubscriptionsQuery(true);
+            setupDeletionMarkerSequence('expired', false);
+            mockReconcileClaims.mockResolvedValue({ role: 'pro' });
+
+            await onSubscriptionUpdated(event as any);
+
+            expect(deleteSpy).toHaveBeenCalledTimes(1);
+            expect(mockReconcileClaims).toHaveBeenCalledTimes(2);
+            expect(updateSpy).toHaveBeenCalled();
+        });
+
+        it('should skip processing if the user is marked for deletion', async () => {
+            const uid = 'deleted_marker_user';
+            const event = createMockEvent(uid, 'sub_marker');
+
+            setupUserExists(true);
+            setupDeletionMarkerSequence(true);
+
+            await onSubscriptionUpdated(event);
+
+            expect(mockLogger.warn).toHaveBeenCalledWith(
+                `[onSubscriptionUpdated] User ${uid} is marked for deletion. Skipping subscription processing.`
+            );
+            expect(mockReconcileClaims).not.toHaveBeenCalled();
+            expect(setSpy).not.toHaveBeenCalled();
+            expect(updateSpy).not.toHaveBeenCalled();
+            expect(mockCheckAndSendEmails).not.toHaveBeenCalled();
+        });
+
         it('should skip processing if user document does not exist', async () => {
             const uid = 'deleted_user_123';
             const event = createMockEvent(uid, 'sub456');
@@ -207,6 +307,25 @@ describe('onSubscriptionUpdated', () => {
             }), { merge: true });
         });
 
+        it('should skip the grace period write if the user is marked for deletion mid-flight', async () => {
+            const uid = 'user_deleting_during_grace_period';
+            const event = createMockEvent(uid, 'sub456');
+
+            setupUserExists(true, {});
+            setupSubscriptionsQuery(false);
+            setupDeletionMarkerSequence(false, true);
+            mockReconcileClaims.mockResolvedValue({ role: 'free' });
+
+            await onSubscriptionUpdated(event);
+
+            expect(setSpy).not.toHaveBeenCalled();
+            expect(mockReconcileClaims).toHaveBeenCalledTimes(1);
+            expect(mockCheckAndSendEmails).not.toHaveBeenCalled();
+            expect(mockLogger.warn).toHaveBeenCalledWith(
+                `[onSubscriptionUpdated] User ${uid} was marked for deletion before setting grace period. Skipping follow-up processing.`
+            );
+        });
+
         it('should NOT set gracePeriodUntil if already set', async () => {
             const uid = 'user123';
             const event = createMockEvent(uid, 'sub456');
@@ -290,7 +409,9 @@ describe('onSubscriptionUpdated', () => {
                         })
                     };
                 }
-                return { doc: docSpy };
+                return {
+                    doc: (id: string) => docSpy(`${path}/${id}`)
+                };
             });
             mockReconcileClaims.mockResolvedValue({ role: 'basic' });
 
@@ -470,6 +591,28 @@ describe('onSubscriptionUpdated', () => {
                 beforeData,
                 afterData,
                 expect.any(String)
+            );
+        });
+
+        it('should skip email triggers if the user is marked for deletion before emails are checked', async () => {
+            const uid = 'user_deleted_before_emails';
+            const subId = 'sub_upgrade';
+            const beforeData = { role: 'basic', status: 'active' };
+            const afterData = { role: 'pro', status: 'active' };
+
+            const event = createMockEvent(uid, subId, beforeData, afterData);
+
+            setupUserExists(true);
+            setupSubscriptionsQuery(true);
+            setupDeletionMarkerSequence(false, false, true);
+            mockReconcileClaims.mockResolvedValue({ role: 'pro' });
+
+            await onSubscriptionUpdated(event as any);
+
+            expect(updateSpy).toHaveBeenCalled();
+            expect(mockCheckAndSendEmails).not.toHaveBeenCalled();
+            expect(mockLogger.warn).toHaveBeenCalledWith(
+                `[onSubscriptionUpdated] User ${uid} was marked for deletion before email processing. Skipping email triggers.`
             );
         });
     });

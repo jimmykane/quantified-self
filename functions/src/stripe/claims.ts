@@ -36,6 +36,41 @@ import { getStripe } from './client';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { enforceAppCheck } from '../utils';
 
+const USER_DELETION_TOMBSTONES_COLLECTION = 'userDeletionTombstones';
+
+const getTimestampMillis = (value: unknown): number | null => {
+    if (value && typeof value === 'object' && typeof (value as { toMillis?: unknown }).toMillis === 'function') {
+        return (value as { toMillis: () => number }).toMillis();
+    }
+
+    return null;
+};
+
+const hasActiveDeletionMarker = async (
+    deletionMarkerRef: admin.firestore.DocumentReference,
+    uid: string,
+    logContext: string
+): Promise<boolean> => {
+    const markerDoc = await deletionMarkerRef.get();
+    if (!markerDoc.exists) {
+        return false;
+    }
+
+    const expireAtMs = getTimestampMillis(markerDoc.data()?.expireAt);
+    if (expireAtMs !== null && expireAtMs <= Date.now()) {
+        try {
+            await deletionMarkerRef.delete();
+            logger.info(`[${logContext}] Removed expired user deletion marker for ${uid}.`);
+        } catch (error) {
+            logger.warn(`[${logContext}] Failed to remove expired user deletion marker for ${uid}. Continuing.`, error);
+        }
+        return false;
+    }
+
+    logger.warn(`[${logContext}] User ${uid} is marked for deletion. Skipping claim reconciliation.`);
+    return true;
+};
+
 /**
  * Result of attempting to find and link a Stripe customer by email.
  *
@@ -269,10 +304,17 @@ export const restoreUserClaims = onCall({
 export async function reconcileClaims(uid: string): Promise<{ role: string }> {
     const db = admin.firestore();
     const userDocRef = db.doc(`users/${uid}`);
+    const deletionMarkerRef = db.collection(USER_DELETION_TOMBSTONES_COLLECTION).doc(uid);
     const subscriptionsRef = db.collection(`customers/${uid}/subscriptions`);
+    const systemStatusRef = db.doc(`users/${uid}/system/status`);
 
     let role = 'free';
     let hasUserDocument = false;
+
+    if (await hasActiveDeletionMarker(deletionMarkerRef, uid, 'reconcileClaims')) {
+        return { role };
+    }
+
     try {
         const userDoc = await userDocRef.get();
         hasUserDocument = userDoc.exists;
@@ -303,6 +345,10 @@ export async function reconcileClaims(uid: string): Promise<{ role: string }> {
         // Fallback: Check if the user exists in Stripe by email
         logger.info(`[reconcileClaims] No local subscription found for ${uid}. Checking Stripe by email...`);
 
+        if (await hasActiveDeletionMarker(deletionMarkerRef, uid, 'reconcileClaims')) {
+            return { role };
+        }
+
         const user = await admin.auth().getUser(uid);
         if (user.email) {
             const result = await findAndLinkStripeCustomerByEmail(uid, user.email, user);
@@ -314,6 +360,11 @@ export async function reconcileClaims(uid: string): Promise<{ role: string }> {
 
     // Set custom user claims
     logger.info(`[reconcileClaims] Updating claims for user ${uid}. Final role: ${role}`);
+
+    if (await hasActiveDeletionMarker(deletionMarkerRef, uid, 'reconcileClaims')) {
+        return { role };
+    }
+
     const user = await admin.auth().getUser(uid);
     const existingClaims = user.customClaims || {};
 
@@ -321,7 +372,7 @@ export async function reconcileClaims(uid: string): Promise<{ role: string }> {
     if (hasUserDocument) {
         try {
             // Check for grace period in system status
-            const systemDoc = await db.doc(`users/${uid}/system/status`).get();
+            const systemDoc = await systemStatusRef.get();
             const systemData = systemDoc.data();
             gracePeriodUntil = systemData?.gracePeriodUntil ? Math.floor(systemData.gracePeriodUntil.toMillis()) : undefined;
         } catch (error) {
@@ -345,10 +396,36 @@ export async function reconcileClaims(uid: string): Promise<{ role: string }> {
 
     if (hasUserDocument) {
         try {
-            // Semantic update: Signal that claims have been updated so the client can refresh
-            await db.doc(`users/${uid}/system/status`).set({
-                claimsUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
+            // Semantic update: signal that claims have been updated so the client can refresh,
+            // but avoid recreating users/{uid}/system/status once account deletion has started.
+            const didWriteClaimsUpdateSignal = await db.runTransaction(async (transaction) => {
+                const [latestDeletionMarkerDoc, latestUserDoc] = await Promise.all([
+                    transaction.get(deletionMarkerRef),
+                    transaction.get(userDocRef)
+                ]);
+
+                if (!latestUserDoc.exists) {
+                    return false;
+                }
+
+                if (latestDeletionMarkerDoc.exists) {
+                    const expireAtMs = getTimestampMillis(latestDeletionMarkerDoc.data()?.expireAt);
+                    if (expireAtMs !== null && expireAtMs <= Date.now()) {
+                        transaction.delete(deletionMarkerRef);
+                    } else {
+                        return false;
+                    }
+                }
+
+                transaction.set(systemStatusRef, {
+                    claimsUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
+                }, { merge: true });
+                return true;
+            });
+
+            if (!didWriteClaimsUpdateSignal) {
+                logger.info(`[reconcileClaims] Skipping users/${uid}/system/status.claimsUpdatedAt because deletion is in progress or the user root is missing.`);
+            }
         } catch (error) {
             logger.error(`[reconcileClaims] Failed to write users/${uid}/system/status.claimsUpdatedAt.`, error);
             throw error;
