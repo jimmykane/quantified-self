@@ -4,6 +4,7 @@ import { DataDuration, DataRecoveryTime } from '@sports-alliance/sports-lib';
 import {
     buildDerivedFormDailyLoads,
     DERIVED_METRIC_KINDS,
+    DERIVED_METRIC_SCHEMA_VERSION,
     DERIVED_METRICS_COLLECTION_ID,
     DERIVED_METRICS_COORDINATOR_DOC_ID,
     DERIVED_METRICS_ENTRY_TYPES,
@@ -24,7 +25,6 @@ import { getDerivedMetricsUidAllowlist, isDerivedMetricsUidAllowed } from './der
 
 const FORM_STAT_TYPE = 'Training Stress Score';
 const LEGACY_FORM_STAT_TYPE = 'Power Training Stress Score';
-const DERIVED_METRIC_SCHEMA_VERSION = 1;
 const DERIVED_METRICS_EVENT_FIELDS = ['startDate', 'endDate', 'stats', 'isMerge', 'mergeType', 'originalFiles'] as const;
 
 type FirestoreQueryDocumentSnapshot = FirebaseFirestore.QueryDocumentSnapshot<FirebaseFirestore.DocumentData>;
@@ -397,13 +397,22 @@ export async function fetchRecoveryLookbackEventDocs(
     const lookbackStartMs = resolveRecoveryEventLookbackStartMs(nowMs);
     // Recovery-now does not need full history; a bounded lookback tied to max supported
     // recovery horizon keeps queue processing predictable on large accounts.
+    // EventWriter persists sports-lib event JSON with numeric startDate/endDate epoch
+    // milliseconds, so this query must use numeric comparisons.
     const snapshot = await admin.firestore()
         .collection('users')
         .doc(uid)
         .collection('events')
-        .where('startDate', '>=', admin.firestore.Timestamp.fromMillis(lookbackStartMs))
+        .where('startDate', '>=', lookbackStartMs)
         .select(...DERIVED_METRICS_EVENT_FIELDS)
         .get();
+    if (!snapshot.docs.length) {
+        logger.warn('[derived-metrics] Recovery lookback query returned no event docs.', {
+            uid,
+            lookbackStartMs,
+            lookbackWindowSeconds: DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS,
+        });
+    }
     return snapshot.docs;
 }
 

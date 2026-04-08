@@ -256,6 +256,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   private async rebuildTilesFromCurrentState(): Promise<void> {
     const buildStart = performance.now();
+    this.logRecoveryPipelineState('before_tile_build');
     this.refreshDerivedMetricsBannerState();
     const newTiles = buildDashboardTileViewModels({
       tiles: this.user?.settings?.dashboardSettings?.tiles ?? [],
@@ -308,6 +309,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       durationMs: Number((performance.now() - buildStart).toFixed(2)),
       finalTiles: this.tiles.length,
     });
+    this.logRecoveryPipelineState('after_tile_build');
   }
 
   private syncDerivedMetricsSubscription(): void {
@@ -359,6 +361,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.derivedRecoveryNowContext = state.recoveryNow;
       this.derivedFormStatus = state.formStatus;
       this.derivedRecoveryNowStatus = state.recoveryNowStatus;
+      this.logRecoveryPipelineState('derived_metrics_update');
       this.refreshDerivedMetricsBannerState();
 
       if (hasTileDataChanged) {
@@ -536,5 +539,32 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   getMapTile(tile: DashboardTileViewModel | TileSettingsInterface): DashboardMapTileViewModel {
     return tile as DashboardMapTileViewModel;
+  }
+
+  private logRecoveryPipelineState(stage: string): void {
+    const dashboardTiles = this.user?.settings?.dashboardSettings?.tiles ?? [];
+    const hasRecoveryTile = dashboardTiles.some((tile) => {
+      if (tile.type !== TileTypes.Chart) {
+        return false;
+      }
+      const chartTile = tile as TileChartSettingsInterface;
+      return isDashboardRecoveryNowChartType(chartTile.chartType);
+    });
+    if (!hasRecoveryTile) {
+      return;
+    }
+
+    const derivedSegments = Array.isArray(this.derivedRecoveryNowContext?.segments)
+      ? this.derivedRecoveryNowContext?.segments
+      : [];
+    this.logger.log('[debug][recovery-now] summaries_pipeline_state', {
+      stage,
+      hasRecoveryTile,
+      dashboardEvents: this.events?.length || 0,
+      derivedStatus: this.derivedRecoveryNowStatus,
+      derivedAvailable: !!this.derivedRecoveryNowContext,
+      derivedTotalSeconds: this.derivedRecoveryNowContext?.totalSeconds ?? null,
+      derivedSegments: derivedSegments.length,
+    });
   }
 }

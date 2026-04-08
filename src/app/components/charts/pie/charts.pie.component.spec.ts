@@ -224,9 +224,10 @@ describe('ChartsPieComponent', () => {
     expect(option.graphic[0].children[2].style.text).toBe('Total per month');
   });
 
-  it('should override center summary with recovery-left, active total, and latest workout recovery meta', async () => {
+  it('should override center summary with recovery-left and total recovery meta', async () => {
     const nowMs = Date.UTC(2024, 0, 3, 12, 0, 0);
     const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(nowMs);
+    component.enableRecoveryNowMode = true;
     component.chartDataType = DataRecoveryTime.type;
     component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
     component.chartDataTimeInterval = TimeIntervals.Daily;
@@ -258,12 +259,82 @@ describe('ChartsPieComponent', () => {
     const recoverySliceNames = option.series[0].data.map((entry: { name: string }) => entry.name);
     expect(option.graphic[0].children[0].style.text).toBe('Recovery Left Now');
     expect(option.graphic[0].children[1].style.text).toBe(expectedRemaining);
-    expect(option.graphic[0].children[2].style.text).toBe(
-      `Active total: ${expectedTotal} | Latest workout: ${expectedTotal}`,
-    );
+    expect(option.graphic[0].children[2].style.text).toBe(`Total recovery: ${expectedTotal}`);
     expect(recoverySliceNames).toEqual(['Left now', 'Elapsed']);
 
     dateNowSpy.mockRestore();
+  });
+
+  it('should compute recovery total from currently active segments only', async () => {
+    const nowMs = Date.UTC(2024, 0, 10, 12, 0, 0);
+    const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(nowMs);
+    component.enableRecoveryNowMode = true;
+    component.chartDataType = DataRecoveryTime.type;
+    component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.chartDataTimeInterval = TimeIntervals.Daily;
+    component.data = [
+      { type: Date.UTC(2024, 0, 10), time: Date.UTC(2024, 0, 10), [ChartDataValueTypes.Total]: 1, count: 1 },
+    ];
+    component.recoveryNow = {
+      totalSeconds: 999999, // legacy aggregate value should not drive curated summary
+      endTimeMs: nowMs,
+      segments: [
+        {
+          totalSeconds: 6 * 3600,
+          endTimeMs: nowMs - (10 * 3600 * 1000), // expired
+        },
+        {
+          totalSeconds: 5 * 3600,
+          endTimeMs: nowMs - (2 * 3600 * 1000), // 3h left
+        },
+      ],
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    const option = mockLoader.setOption.mock.calls.at(-1)?.[1] as Record<string, any>;
+    const expectedRemaining = formatDashboardNumericValue(
+      DataDuration.type,
+      3 * 3600,
+      undefined as any,
+      component.userUnitSettings,
+    );
+    const expectedActiveTotal = formatDashboardNumericValue(
+      DataDuration.type,
+      5 * 3600,
+      undefined as any,
+      component.userUnitSettings,
+    );
+    expect(option.graphic[0].children[1].style.text).toBe(expectedRemaining);
+    expect(option.graphic[0].children[2].style.text).toBe(`Total recovery: ${expectedActiveTotal}`);
+    expect(option.series[0].data[0].value).toBe(3 * 3600);
+    expect(option.series[0].data[1].value).toBe(2 * 3600);
+
+    dateNowSpy.mockRestore();
+  });
+
+  it('should keep generic summary when recovery mode is disabled for pie charts', async () => {
+    component.enableRecoveryNowMode = false;
+    component.chartDataType = DataRecoveryTime.type;
+    component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.chartDataTimeInterval = TimeIntervals.Daily;
+    component.data = [
+      { type: Date.UTC(2024, 0, 3), time: Date.UTC(2024, 0, 3), [ChartDataValueTypes.Total]: 5400, count: 1 },
+    ];
+    component.recoveryNow = {
+      totalSeconds: 5400,
+      endTimeMs: Date.UTC(2024, 0, 3, 11, 50, 0),
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    const option = mockLoader.setOption.mock.calls.at(-1)?.[1] as Record<string, any>;
+    expect(option.graphic[0].children[0].style.text).not.toBe('Recovery Left Now');
+    expect(option.series[0].data.map((entry: { name: string }) => entry.name)).not.toEqual(['Left now', 'Elapsed']);
   });
 
   it('should format pie center and tooltip values using passed unit settings', async () => {
@@ -342,6 +413,7 @@ describe('ChartsPieComponent', () => {
     const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(nowMs);
     const setIntervalSpy = vi.spyOn(globalThis, 'setInterval').mockImplementation(() => 789 as any);
     const clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval').mockImplementation(() => undefined);
+    component.enableRecoveryNowMode = true;
     component.chartDataType = DataRecoveryTime.type;
     component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
     component.chartDataTimeInterval = TimeIntervals.Daily;
@@ -378,10 +450,32 @@ describe('ChartsPieComponent', () => {
 
     expect(option.series).toEqual([]);
     expect(option.tooltip.show).toBe(false);
+    expect(component.showNoDataError).toBe(true);
     expect(settings).toEqual({
       notMerge: true,
       lazyUpdate: false
     });
+  });
+
+  it('should suppress no-data overlay in curated recovery mode when recovery context is renderable', async () => {
+    const nowMs = Date.UTC(2024, 0, 3, 12, 0, 0);
+    const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(nowMs);
+    component.enableRecoveryNowMode = true;
+    component.chartDataType = DataRecoveryTime.type;
+    component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.chartDataTimeInterval = TimeIntervals.Daily;
+    component.data = [];
+    component.recoveryNow = {
+      totalSeconds: 5400,
+      endTimeMs: nowMs - (10 * 60 * 1000),
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(component.showNoDataError).toBe(false);
+    dateNowSpy.mockRestore();
   });
 
   it('should dispose chart on destroy', async () => {

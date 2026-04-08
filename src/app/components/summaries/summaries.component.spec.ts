@@ -290,6 +290,7 @@ describe('SummariesComponent', () => {
 
     component.user.settings.dashboardSettings.tiles[0].chartType = ChartTypes.ColumnsVertical;
     component.ngDoCheck();
+    await Promise.resolve();
 
     expect(buildDashboardTileViewModelsSpy).toHaveBeenCalledTimes(2);
     expect((component.tiles[0] as any).chartType).toBe(ChartTypes.ColumnsVertical);
@@ -470,6 +471,7 @@ describe('SummariesComponent', () => {
 
     component.user.settings.dashboardSettings.tiles.pop();
     component.ngDoCheck();
+    await Promise.resolve();
 
     expect(component.tiles).toHaveLength(1);
     expect((component.tiles[0] as any).order).toBe(0);

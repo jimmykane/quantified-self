@@ -175,6 +175,51 @@ export function buildDashboardFormPointsFromDailyLoads(
   );
 }
 
+export function extendDashboardFormPointsWithZeroLoadUntil(
+  points: readonly DashboardFormPoint[] | null | undefined,
+  endTimeMs: number,
+): DashboardFormPoint[] {
+  const normalizedPoints = Array.isArray(points) ? [...points] : [];
+  if (!normalizedPoints.length || !Number.isFinite(endTimeMs)) {
+    return normalizedPoints;
+  }
+
+  const lastPoint = normalizedPoints[normalizedPoints.length - 1];
+  if (!lastPoint || !Number.isFinite(lastPoint.time)) {
+    return normalizedPoints;
+  }
+
+  const endDate = new Date(endTimeMs);
+  const endDayTimeMs = Date.UTC(endDate.getUTCFullYear(), endDate.getUTCMonth(), endDate.getUTCDate());
+  if (!Number.isFinite(endDayTimeMs) || endDayTimeMs <= lastPoint.time) {
+    return normalizedPoints;
+  }
+
+  const extendedPoints = [...normalizedPoints];
+  let previousCtl = Number(lastPoint.ctl) || 0;
+  let previousAtl = Number(lastPoint.atl) || 0;
+
+  for (let dayMs = lastPoint.time + UTC_DAY_MS; dayMs <= endDayTimeMs; dayMs += UTC_DAY_MS) {
+    const trainingStressScore = 0;
+    const ctl = previousCtl + ((trainingStressScore - previousCtl) / CTL_TIME_CONSTANT_DAYS);
+    const atl = previousAtl + ((trainingStressScore - previousAtl) / ATL_TIME_CONSTANT_DAYS);
+
+    extendedPoints.push({
+      time: dayMs,
+      trainingStressScore,
+      ctl,
+      atl,
+      formSameDay: ctl - atl,
+      formPriorDay: previousCtl - previousAtl,
+    });
+
+    previousCtl = ctl;
+    previousAtl = atl;
+  }
+
+  return extendedPoints;
+}
+
 export function resolveDashboardFormValue(
   point: DashboardFormPoint | null | undefined,
   mode: DashboardFormMode,

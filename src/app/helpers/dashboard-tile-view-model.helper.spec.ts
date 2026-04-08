@@ -294,7 +294,7 @@ describe('dashboard-tile-view-model.helper', () => {
     expect((viewModels[0] as any).data).toEqual(precomputedPoints);
   });
 
-  it('should keep derived form points independent from dashboard date range', () => {
+  it('should clip derived form points by dashboard date range while preserving absolute latest form point metadata', () => {
     const derivedPoints = [
       {
         time: Date.UTC(2024, 0, 2),
@@ -348,11 +348,11 @@ describe('dashboard-tile-view-model.helper', () => {
       },
     });
 
-    expect((viewModels[0] as any).data).toEqual(derivedPoints);
+    expect((viewModels[0] as any).data).toEqual([derivedPoints[0]]);
     expect((viewModels[0] as any).absoluteLatestFormPoint).toEqual(derivedPoints[1]);
   });
 
-  it('should keep derived form points for preset ranges without clipping', () => {
+  it('should resolve this-week preset dashboard date range for form clipping when explicit start/end are missing', () => {
     const currentWeekRange = getDatesForDateRange(DateRanges.thisWeek, DaysOfTheWeek.Monday);
     const insideWeekTimeMs = currentWeekRange.startDate.getTime() + (2 * 24 * 60 * 60 * 1000);
     const beforeWeekTimeMs = currentWeekRange.startDate.getTime() - (24 * 60 * 60 * 1000);
@@ -398,7 +398,60 @@ describe('dashboard-tile-view-model.helper', () => {
       },
     });
 
-    expect((viewModels[0] as any).data).toEqual(derivedPoints);
+    const formData = (viewModels[0] as any).data as Array<{ time: number; trainingStressScore: number }>;
+    expect(formData[0]).toEqual(derivedPoints[1]);
+    expect(formData.length).toBeGreaterThan(1);
+    expect(formData.slice(1).every(point => point.trainingStressScore === 0)).toBe(true);
+    expect((viewModels[0] as any).absoluteLatestFormPoint).toEqual(derivedPoints[1]);
+  });
+
+  it('should synthesize zero-load form decay points when dashboard range ends after the latest derived day', () => {
+    const derivedPoints = [
+      {
+        time: Date.UTC(2024, 0, 2),
+        trainingStressScore: 20,
+        ctl: 1.5,
+        atl: 2.5,
+        formSameDay: -1,
+        formPriorDay: null,
+      },
+      {
+        time: Date.UTC(2024, 0, 3),
+        trainingStressScore: 30,
+        ctl: 2.1,
+        atl: 3.5,
+        formSameDay: -1.4,
+        formPriorDay: -1,
+      },
+    ];
+
+    const viewModels = buildDashboardTileViewModels({
+      tiles: [{
+        type: TileTypes.Chart,
+        order: 0,
+        chartType: DASHBOARD_FORM_CHART_TYPE as any,
+        dataType: 'Training Stress Score',
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        dataTimeInterval: TimeIntervals.Daily,
+        size: { columns: 1, rows: 1 },
+      } as any],
+      events: [],
+      dashboardDateRange: {
+        dateRange: DateRanges.custom,
+        startDate: new Date('2024-01-04T00:00:00.000Z'),
+        endDate: new Date('2024-01-06T23:59:59.999Z'),
+      },
+      derivedMetrics: {
+        formPoints: derivedPoints as any,
+      },
+    });
+
+    const formData = (viewModels[0] as any).data as Array<{ time: number; trainingStressScore: number }>;
+    expect(formData.length).toBe(3);
+    expect(formData.every(point => point.trainingStressScore === 0)).toBe(true);
+    expect(formData[0].time).toBe(Date.UTC(2024, 0, 4));
+    expect(formData[2].time).toBe(Date.UTC(2024, 0, 6));
     expect((viewModels[0] as any).absoluteLatestFormPoint).toEqual(derivedPoints[1]);
   });
 
@@ -516,7 +569,7 @@ describe('dashboard-tile-view-model.helper', () => {
     expect(events[1]).toBe(second);
   });
 
-  it('should attach aggregated recovery context to recovery chart tiles from all recovery-enabled events', () => {
+  it('should keep custom recovery data-type tiles free from curated recovery context', () => {
     const viewModels = buildDashboardTileViewModels({
       tiles: [{
         type: TileTypes.Chart,
@@ -546,21 +599,65 @@ describe('dashboard-tile-view-model.helper', () => {
       ],
     });
 
-    const recoveryTile = viewModels[0] as any;
-    expect(recoveryTile.recoveryNow).toEqual({
-      totalSeconds: 5400,
-      endTimeMs: Date.UTC(2024, 0, 2, 9, 0, 0),
+    const recoveryTile = viewModels[0] as DashboardChartTileViewModel;
+    expect(recoveryTile.recoveryNow).toBeUndefined();
+  });
+
+  it('should treat legacy pie recovery tiles as curated recovery tiles and use derived recovery context', () => {
+    const derivedRecoveryContext = {
+      totalSeconds: 9000,
+      endTimeMs: Date.UTC(2024, 2, 5, 9, 0, 0),
       segments: [
         {
           totalSeconds: 1800,
           endTimeMs: Date.UTC(2024, 0, 1, 9, 0, 0),
         },
         {
-          totalSeconds: 3600,
-          endTimeMs: Date.UTC(2024, 0, 2, 9, 0, 0),
+          totalSeconds: 7200,
+          endTimeMs: Date.UTC(2024, 2, 5, 9, 0, 0),
         },
       ],
+    };
+    const viewModels = buildDashboardTileViewModels({
+      tiles: [{
+        type: TileTypes.Chart,
+        order: 0,
+        chartType: ChartTypes.Pie,
+        dataType: DataRecoveryTime.type,
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        dataTimeInterval: TimeIntervals.Monthly,
+        size: { columns: 1, rows: 1 },
+      } as any],
+      events: [
+        makeEvent({
+          id: 'legacy-recovery-1',
+          startDate: '2024-01-01T08:00:00.000Z',
+          endDate: '2024-01-01T09:00:00.000Z',
+          activityTypes: [ActivityTypes.Running],
+          stats: { [DataRecoveryTime.type]: 1800 },
+        }),
+        makeEvent({
+          id: 'legacy-recovery-2',
+          startDate: '2024-03-05T08:00:00.000Z',
+          endDate: '2024-03-05T09:00:00.000Z',
+          activityTypes: [ActivityTypes.Running],
+          stats: { [DataRecoveryTime.type]: 7200 },
+        }),
+      ],
+      dashboardDateRange: {
+        dateRange: DateRanges.custom,
+        startDate: new Date('2024-01-01T00:00:00.000Z'),
+        endDate: new Date('2024-01-31T23:59:59.999Z'),
+      },
+      derivedMetrics: {
+        recoveryNow: derivedRecoveryContext as any,
+      },
     });
+
+    const recoveryTile = viewModels[0] as DashboardChartTileViewModel;
+    expect(recoveryTile.chartType).toBe(DASHBOARD_RECOVERY_NOW_CHART_TYPE);
+    expect(recoveryTile.recoveryNow).toEqual(derivedRecoveryContext);
   });
 
   it('should keep recovery context undefined for non-recovery chart tiles', () => {
@@ -592,12 +689,12 @@ describe('dashboard-tile-view-model.helper', () => {
     expect((viewModels[0] as any).recoveryNow).toBeUndefined();
   });
 
-  it('should not infer curated recovery context from dashboard events when derived context is missing', () => {
+  it('should keep curated recovery context undefined when derived context is missing', () => {
     const tiles = [
       {
         type: TileTypes.Chart,
         chartType: DASHBOARD_RECOVERY_NOW_CHART_TYPE as any,
-        dataType: 'Distance',
+        dataType: DataRecoveryTime.type,
         dataValueType: ChartDataValueTypes.Total,
         dataCategoryType: ChartDataCategoryTypes.DateType,
         dataTimeInterval: TimeIntervals.Auto,
@@ -606,17 +703,30 @@ describe('dashboard-tile-view-model.helper', () => {
         name: 'Recovery',
       } as TileChartSettingsInterface,
     ];
-    const events = [
-      makeEvent({
-        id: 'e-recovery-curated',
-        startDate: new Date(Date.UTC(2024, 0, 1, 12, 0, 0)).toISOString(),
-        endDate: new Date(Date.UTC(2024, 0, 1, 13, 0, 0)).toISOString(),
-        activityTypes: [ActivityTypes.Running],
-        stats: { [DataRecoveryTime.type]: 7200 },
-      }),
-    ];
+    const olderEvent = makeEvent({
+      id: 'e-recovery-curated-older',
+      startDate: new Date(Date.UTC(2024, 0, 1, 12, 0, 0)).toISOString(),
+      endDate: new Date(Date.UTC(2024, 0, 1, 13, 0, 0)).toISOString(),
+      activityTypes: [ActivityTypes.Running],
+      stats: { [DataRecoveryTime.type]: 1800 },
+    });
+    const latestEvent = makeEvent({
+      id: 'e-recovery-curated-latest',
+      startDate: new Date(Date.UTC(2024, 2, 5, 8, 0, 0)).toISOString(),
+      endDate: new Date(Date.UTC(2024, 2, 5, 9, 0, 0)).toISOString(),
+      activityTypes: [ActivityTypes.Running],
+      stats: { [DataRecoveryTime.type]: 7200 },
+    });
 
-    const viewModels = buildDashboardTileViewModels({ tiles, events });
+    const viewModels = buildDashboardTileViewModels({
+      tiles,
+      events: [olderEvent, latestEvent],
+      dashboardDateRange: {
+        dateRange: DateRanges.custom,
+        startDate: new Date('2024-01-01T00:00:00.000Z'),
+        endDate: new Date('2024-01-31T23:59:59.999Z'),
+      },
+    });
     const recoveryTile = viewModels[0] as DashboardChartTileViewModel;
 
     expect(recoveryTile.recoveryNow).toBeUndefined();
@@ -684,7 +794,7 @@ describe('dashboard-tile-view-model.helper', () => {
     expect(recoveryTile.recoveryNow).toEqual(derivedRecoveryContext);
   });
 
-  it('should resolve custom recovery context from events inside the provided dashboard date range', () => {
+  it('should not attach derived-style recovery context to custom charts inside dashboard date ranges', () => {
     const tiles = [
       {
         type: TileTypes.Chart,
@@ -722,16 +832,7 @@ describe('dashboard-tile-view-model.helper', () => {
       },
     });
 
-    expect((viewModels[0] as any).recoveryNow).toEqual({
-      totalSeconds: 1800,
-      endTimeMs: Date.UTC(2024, 0, 2, 9, 0, 0),
-      segments: [
-        {
-          totalSeconds: 1800,
-          endTimeMs: Date.UTC(2024, 0, 2, 9, 0, 0),
-        },
-      ],
-    });
+    expect((viewModels[0] as any).recoveryNow).toBeUndefined();
   });
 
   it('should prefer derived recovery context for curated recovery chart types only', () => {
@@ -784,15 +885,6 @@ describe('dashboard-tile-view-model.helper', () => {
     });
 
     expect((viewModels[0] as any).recoveryNow).toEqual(derivedRecoveryContext);
-    expect((viewModels[1] as any).recoveryNow).toEqual({
-      totalSeconds: 1800,
-      endTimeMs: Date.UTC(2024, 0, 2, 9, 0, 0),
-      segments: [
-        {
-          totalSeconds: 1800,
-          endTimeMs: Date.UTC(2024, 0, 2, 9, 0, 0),
-        },
-      ],
-    });
+    expect((viewModels[1] as any).recoveryNow).toBeUndefined();
   });
 });

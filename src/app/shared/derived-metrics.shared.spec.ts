@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DERIVED_METRIC_KINDS,
+  DERIVED_METRIC_SCHEMA_VERSION,
   DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS,
   DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS,
   DERIVED_RECOVERY_QUERY_DURATION_BUFFER_SECONDS,
@@ -78,6 +79,7 @@ describe('derived-metrics shared helpers', () => {
   });
 
   it('exposes recovery lookback constants for bounded derived recovery scans', () => {
+    expect(DERIVED_METRIC_SCHEMA_VERSION).toBe(3);
     expect(DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS).toBe(14 * 24 * 60 * 60);
     expect(DERIVED_RECOVERY_QUERY_DURATION_BUFFER_SECONDS).toBe(2 * 24 * 60 * 60);
     expect(DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS).toBe(

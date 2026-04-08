@@ -24,14 +24,15 @@ import {
 } from './aggregated-chart-row.helper';
 import {
   type DashboardFormPoint,
+  extendDashboardFormPointsWithZeroLoadUntil,
   resolveDashboardFormLatestPoint,
 } from './dashboard-form.helper';
 import { getDatesForDateRange } from './date-range-helper';
 import {
-  resolveAggregatedRecoveryNowContext,
   type DashboardRecoveryNowContext,
 } from './dashboard-recovery-now.helper';
 import {
+  DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   isDashboardFormChartType,
   isDashboardRecoveryNowChartType,
 } from './dashboard-special-chart-types';
@@ -68,6 +69,16 @@ interface BuildDashboardTileViewModelsInput {
     formPoints?: DashboardFormPoint[] | null;
     recoveryNow?: DashboardRecoveryNowContext | null;
   } | null;
+}
+
+function logRecoveryNowDebug(
+  logger: EventStatAggregationLogger | undefined,
+  payload: Record<string, unknown>,
+): void {
+  const loggerWithOptionalLog = logger as (EventStatAggregationLogger & {
+    log?: (...args: unknown[]) => void;
+  }) | undefined;
+  loggerWithOptionalLog?.log?.('[debug][recovery-now] dashboard_tile_recovery_context', payload);
 }
 
 function resolveEventStartDateTimeMs(event: EventInterface): number | null {
@@ -150,7 +161,6 @@ function applyDashboardDateRangeFilter(
 
 function normalizeDashboardTileEvents(
   events?: EventInterface[] | null,
-  dashboardDateRange?: BuildDashboardTileViewModelsInput['dashboardDateRange'],
 ): EventInterface[] {
   const normalizedEvents = [...(events || [])]
     .filter(event => (event as { isMerge?: boolean } | null)?.isMerge !== true)
@@ -159,15 +169,31 @@ function normalizeDashboardTileEvents(
       const rightTime = resolveEventStartDateTimeMs(right) ?? Number.NEGATIVE_INFINITY;
       return leftTime - rightTime;
     });
+  return normalizedEvents;
+}
 
-  return applyDashboardDateRangeFilter(normalizedEvents, dashboardDateRange);
+function applyDashboardDateRangeFilterToFormPoints(
+  points: DashboardFormPoint[],
+  dashboardDateRange?: BuildDashboardTileViewModelsInput['dashboardDateRange'],
+): DashboardFormPoint[] {
+  const bounds = resolveDashboardDateRangeBounds(dashboardDateRange);
+  if (!bounds) {
+    return points;
+  }
+
+  const pointsWithRangeDecay = extendDashboardFormPointsWithZeroLoadUntil(points, bounds.endTimeMs);
+  return pointsWithRangeDecay.filter((point) => (
+    Number.isFinite(point?.time)
+    && point.time >= bounds.startTimeMs
+    && point.time <= bounds.endTimeMs
+  ));
 }
 
 export function buildDashboardTileViewModels(
   input: BuildDashboardTileViewModelsInput,
 ): DashboardTileViewModel[] {
-  const filteredEvents = normalizeDashboardTileEvents(input.events, input.dashboardDateRange);
-  const fallbackFilteredRecoveryNowContext = resolveAggregatedRecoveryNowContext(filteredEvents);
+  const normalizedEvents = normalizeDashboardTileEvents(input.events);
+  const filteredEvents = applyDashboardDateRangeFilter(normalizedEvents, input.dashboardDateRange);
   const derivedFormPoints = Array.isArray(input.derivedMetrics?.formPoints) ? input.derivedMetrics?.formPoints : null;
   const derivedRecoveryNowContext = input.derivedMetrics?.recoveryNow || null;
 
@@ -189,10 +215,11 @@ export function buildDashboardTileViewModels(
     const requestedTimeInterval = chartTile.dataTimeInterval || TimeIntervals.Auto;
     if (isDashboardFormChartType(chartTile.chartType)) {
       const fullFormPoints = derivedFormPoints || [];
+      const visibleFormPoints = applyDashboardDateRangeFilterToFormPoints(fullFormPoints, input.dashboardDateRange);
       viewModels.push({
         ...chartTile,
         timeInterval: TimeIntervals.Weekly,
-        data: fullFormPoints,
+        data: visibleFormPoints,
         absoluteLatestFormPoint: resolveDashboardFormLatestPoint(fullFormPoints),
       });
       return viewModels;
@@ -207,6 +234,36 @@ export function buildDashboardTileViewModels(
       return viewModels;
     }
 
+    const isLegacyRecoveryPieTile = chartTile.chartType === ChartTypes.Pie
+      && chartTile.dataType === DataRecoveryTime.type;
+    const isCuratedRecoveryTile = isDashboardRecoveryNowChartType(chartTile.chartType)
+      || isLegacyRecoveryPieTile;
+    const effectiveChartType = isLegacyRecoveryPieTile
+      ? (DASHBOARD_RECOVERY_NOW_CHART_TYPE as unknown as ChartTypes)
+      : chartTile.chartType;
+    if (isCuratedRecoveryTile) {
+      const recoveryNowContextForTile = derivedRecoveryNowContext;
+      const segments = Array.isArray(recoveryNowContextForTile?.segments) ? recoveryNowContextForTile.segments : [];
+      logRecoveryNowDebug(input.logger, {
+        tileName: chartTile.name || null,
+        chartType: `${effectiveChartType}`,
+        source: derivedRecoveryNowContext ? 'derived' : 'none',
+        derivedAvailable: !!derivedRecoveryNowContext,
+        filteredEvents: filteredEvents.length,
+        contextTotalSeconds: recoveryNowContextForTile?.totalSeconds ?? null,
+        contextEndTimeMs: recoveryNowContextForTile?.endTimeMs ?? null,
+        contextSegments: segments.length,
+      });
+      viewModels.push({
+        ...chartTile,
+        chartType: effectiveChartType,
+        timeInterval: chartTile.dataTimeInterval || TimeIntervals.Auto,
+        data: [],
+        ...(recoveryNowContextForTile ? { recoveryNow: recoveryNowContextForTile } : {}),
+      });
+      return viewModels;
+    }
+
     const aggregation = buildEventStatAggregation(filteredEvents, {
       dataType: chartTile.dataType,
       valueType: chartTile.dataValueType,
@@ -214,23 +271,13 @@ export function buildDashboardTileViewModels(
       requestedTimeInterval,
       preferences: input.preferences,
     }, input.logger);
-
-    const isCuratedRecoveryTile = isDashboardRecoveryNowChartType(chartTile.chartType);
-    const recoveryNowContextForTile = isCuratedRecoveryTile
-      ? derivedRecoveryNowContext
-      : fallbackFilteredRecoveryNowContext;
-    const chartRowsForTile = isCuratedRecoveryTile && !recoveryNowContextForTile
-      ? []
-      : buildAggregatedChartRows(aggregation);
+    const chartRowsForTile = buildAggregatedChartRows(aggregation);
 
     viewModels.push({
       ...chartTile,
+      chartType: effectiveChartType,
       timeInterval: aggregation.resolvedTimeInterval,
       data: chartRowsForTile,
-      ...((chartTile.dataType === DataRecoveryTime.type || isDashboardRecoveryNowChartType(chartTile.chartType))
-        && recoveryNowContextForTile
-        ? { recoveryNow: recoveryNowContextForTile }
-        : {}),
     });
     return viewModels;
   }, []);

@@ -20,7 +20,7 @@
 .form-status-row {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: space-between;
   gap: 12px;
   margin-bottom: 8px;
 }
@@ -47,6 +47,12 @@
 
 .form-status-title[data-status='fresh'] {
   color: var(--mat-sys-tertiary);
+}
+
+.form-status-meta {
+  font-size: 0.72rem;
+  color: var(--mat-sys-on-surface-variant);
+  white-space: nowrap;
 }
 
 .form-stats-row {

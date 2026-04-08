@@ -4,6 +4,7 @@ import {
   buildDashboardFormRenderPoints,
   buildDashboardFormPoints,
   buildDashboardFormPointsFromDailyLoads,
+  extendDashboardFormPointsWithZeroLoadUntil,
   resolveDashboardFormLatestPoint,
   resolveDashboardFormRenderTimeInterval,
   resolveDashboardFormStatus,
@@ -282,6 +283,19 @@ describe('dashboard-form.helper', () => {
 
     expect(resolveDashboardFormLatestPoint(points)).toEqual(points[1]);
     expect(resolveDashboardFormLatestPoint([])).toBeNull();
+  });
+
+  it('should extend form points with zero-load decay until a target day', () => {
+    const points = buildDashboardFormPointsFromDailyLoads([
+      { dayMs: Date.UTC(2024, 0, 1), load: 30 },
+      { dayMs: Date.UTC(2024, 0, 2), load: 10 },
+    ]);
+
+    const extended = extendDashboardFormPointsWithZeroLoadUntil(points, Date.UTC(2024, 0, 5, 16, 0, 0));
+    expect(extended[extended.length - 1].time).toBe(Date.UTC(2024, 0, 5));
+    expect(extended.slice(points.length).every(point => point.trainingStressScore === 0)).toBe(true);
+    expect(extended[extended.length - 1].ctl).toBeLessThan(points[points.length - 1].ctl);
+    expect(extended[extended.length - 1].atl).toBeLessThan(points[points.length - 1].atl);
   });
 
   it('should map form value bands to the expected dynamic status title', () => {

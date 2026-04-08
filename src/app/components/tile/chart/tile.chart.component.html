@@ -16,17 +16,19 @@
   @if (chartType === recoveryNowChartType) {
   <app-pie-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme" [chartDataType]="dataType"
     [chartDataValueType]="dataValueType" [chartDataCategoryType]="dataCategoryType"
-    [chartDataTimeInterval]="dataTimeInterval" [userUnitSettings]="user?.settings?.unitSettings" [recoveryNow]="recoveryNow">
+    [chartDataTimeInterval]="dataTimeInterval" [userUnitSettings]="user?.settings?.unitSettings"
+    [recoveryNow]="recoveryNow" [enableRecoveryNowMode]="true">
   </app-pie-chart>
   }
   @if (chartType === chartTypes.Pie) {
   <app-pie-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme" [chartDataType]="dataType"
     [chartDataValueType]="dataValueType" [chartDataCategoryType]="dataCategoryType"
-    [chartDataTimeInterval]="dataTimeInterval" [userUnitSettings]="user?.settings?.unitSettings" [recoveryNow]="recoveryNow">
+    [chartDataTimeInterval]="dataTimeInterval" [userUnitSettings]="user?.settings?.unitSettings">
   </app-pie-chart>
   }
   @if (chartType === formChartType) {
-  <app-form-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme">
+  <app-form-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme"
+    [absoluteLatestPoint]="absoluteLatestFormPoint">
   </app-form-chart>
   }
   @if (chartType === chartTypes.LinesHorizontal
@@ -34,7 +36,7 @@
   <app-xy-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme" [chartDataType]="dataType"
     [chartDataValueType]="dataValueType" [chartDataCategoryType]="dataCategoryType"
     [chartDataTimeInterval]="dataTimeInterval" [vertical]="chartType !== chartTypes.LinesHorizontal"
-    [userUnitSettings]="user?.settings?.unitSettings" [recoveryNow]="recoveryNow">
+    [userUnitSettings]="user?.settings?.unitSettings">
   </app-xy-chart>
   }
   @if (chartType === chartTypes.ColumnsHorizontal
@@ -44,7 +46,7 @@
       ? 'columns'
       : 'pyramids'" [vertical]="chartType !== chartTypes.ColumnsHorizontal" [chartDataType]="dataType" [chartDataValueType]="dataValueType"
     [chartDataCategoryType]="dataCategoryType" [chartDataTimeInterval]="dataTimeInterval"
-    [userUnitSettings]="user?.settings?.unitSettings" [recoveryNow]="recoveryNow">
+    [userUnitSettings]="user?.settings?.unitSettings">
   </app-columns-chart>
   }
 

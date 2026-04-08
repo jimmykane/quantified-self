@@ -65,7 +65,9 @@ export const processDerivedMetricsTask = onTaskDispatched({
             ? await fetchDerivedMetricsEventDocs(uid)
             : [];
         const recoveryNowDocs = needsRecoveryNowDocs
-            ? (needsFormDocs ? formDocs : await fetchRecoveryLookbackEventDocs(uid))
+            // Recovery-now must always use bounded lookback docs, even when Form is processed in the same task.
+            // Reusing full-history form docs inflates segment counts and breaks "recovery left now" semantics.
+            ? await fetchRecoveryLookbackEventDocs(uid)
             : [];
 
         await writeDerivedMetricSnapshotsReady(uid, dirtyMetricKinds, {

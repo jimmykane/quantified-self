@@ -53,7 +53,6 @@ import {
 } from '../../../helpers/dashboard-chart-data.helper';
 import {
   resolveActiveRecoveryTotalSeconds,
-  resolveLatestWorkoutRecoverySeconds,
   resolveRemainingRecoverySeconds,
   type DashboardRecoveryNowContext,
 } from '../../../helpers/dashboard-recovery-now.helper';
@@ -81,6 +80,8 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() isLoading = false;
   @Input() userUnitSettings?: UserUnitSettingsInterface | null;
   @Input() recoveryNow?: DashboardRecoveryNowContext | null;
+  // Curated recovery is a dedicated dashboard chart type. Keep generic pie behavior isolated.
+  @Input() enableRecoveryNowMode = false;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
@@ -102,6 +103,8 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
     lazyUpdate: false
   };
   private recoveryRefreshIntervalHandle: ReturnType<typeof setInterval> | null = null;
+  private recoveryDebugSignature: string | null = null;
+  public showNoDataError = false;
 
   constructor(
     private eChartsLoader: EChartsLoaderService,
@@ -116,10 +119,12 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
   }
 
   async ngAfterViewInit(): Promise<void> {
+    this.updateNoDataErrorState();
     await this.refreshChart();
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    this.updateNoDataErrorState();
     if (!this.chartDiv?.nativeElement) {
       return;
     }
@@ -146,6 +151,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
   }
 
   private async refreshChart(): Promise<void> {
+    this.updateNoDataErrorState();
     const chart = await this.chartHost.init(
       this.chartDiv?.nativeElement,
       resolveEChartsThemeName(this.darkTheme)
@@ -358,7 +364,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
   }
 
   private getRecoverySummaryOverride(): { label: string; value: string; meta: string } | null {
-    if (this.chartDataType !== DataRecoveryTime.type) {
+    if (!this.enableRecoveryNowMode || this.chartDataType !== DataRecoveryTime.type) {
       return null;
     }
 
@@ -366,13 +372,12 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
     const nowMs = Date.now();
     const activeTotalSeconds = resolveActiveRecoveryTotalSeconds(context, nowMs);
     const remainingSeconds = resolveRemainingRecoverySeconds(context, nowMs);
-    const latestWorkoutSeconds = resolveLatestWorkoutRecoverySeconds(context);
     if (activeTotalSeconds === null || activeTotalSeconds <= 0 || remainingSeconds === null) {
       return null;
     }
 
     const normalizedUnitSettings = this.getNormalizedUnitSettings();
-    const activeTotalText = formatDashboardNumericValue(
+    const totalText = formatDashboardNumericValue(
       DataDuration.type,
       activeTotalSeconds,
       this.logger,
@@ -384,24 +389,15 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
       this.logger,
       normalizedUnitSettings,
     );
-    const latestWorkoutText = latestWorkoutSeconds !== null
-      ? formatDashboardNumericValue(
-        DataDuration.type,
-        latestWorkoutSeconds,
-        this.logger,
-        normalizedUnitSettings,
-      )
-      : '-';
-
     return {
       label: 'Recovery Left Now',
       value: remainingText,
-      meta: `Active total: ${activeTotalText} | Latest workout: ${latestWorkoutText}`,
+      meta: `Total recovery: ${totalText}`,
     };
   }
 
   private shouldEnableRecoveryRefreshTimer(): boolean {
-    if (this.chartDataType !== DataRecoveryTime.type) {
+    if (!this.enableRecoveryNowMode || this.chartDataType !== DataRecoveryTime.type) {
       return false;
     }
     const remainingSeconds = resolveRemainingRecoverySeconds(this.recoveryNow, Date.now());
@@ -457,15 +453,26 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
     percent: number;
     itemStyle: { color: string; borderColor: string; borderWidth: number };
   }> | null {
-    if (this.chartDataType !== DataRecoveryTime.type) {
+    if (!this.enableRecoveryNowMode || this.chartDataType !== DataRecoveryTime.type) {
+      this.logRecoveryDebugState('mode_disabled');
       return null;
     }
 
     const context = this.recoveryNow;
+    if (!context) {
+      this.logRecoveryDebugState('missing_context');
+      return null;
+    }
     const nowMs = Date.now();
     const activeTotalSeconds = resolveActiveRecoveryTotalSeconds(context, nowMs);
     const remainingSeconds = resolveRemainingRecoverySeconds(context, nowMs);
     if (activeTotalSeconds === null || activeTotalSeconds <= 0 || remainingSeconds === null) {
+      this.logRecoveryDebugState('no_active_recovery', {
+        activeTotalSeconds,
+        remainingSeconds,
+        totalSeconds: context.totalSeconds,
+        segments: Array.isArray(context.segments) ? context.segments.length : 0,
+      });
       return null;
     }
 
@@ -497,6 +504,47 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
         }
       }
     ];
+  }
+
+  private logRecoveryDebugState(
+    state: string,
+    data?: Record<string, unknown>,
+  ): void {
+    const signature = `${state}:${JSON.stringify(data || {})}`;
+    if (this.recoveryDebugSignature === signature) {
+      return;
+    }
+    this.recoveryDebugSignature = signature;
+    this.logger?.log?.('[debug][recovery-now] pie_series_state', {
+      state,
+      ...(data || {}),
+    });
+  }
+
+  private updateNoDataErrorState(): void {
+    const hasArrayData = Array.isArray(this.data);
+    if (!hasArrayData) {
+      this.showNoDataError = false;
+      return;
+    }
+
+    if (this.data.length > 0) {
+      this.showNoDataError = false;
+      return;
+    }
+
+    if (!this.enableRecoveryNowMode || this.chartDataType !== DataRecoveryTime.type) {
+      this.showNoDataError = true;
+      return;
+    }
+
+    const nowMs = Date.now();
+    const activeTotalSeconds = resolveActiveRecoveryTotalSeconds(this.recoveryNow, nowMs);
+    const remainingSeconds = resolveRemainingRecoverySeconds(this.recoveryNow, nowMs);
+    const hasRenderableRecovery = activeTotalSeconds !== null
+      && activeTotalSeconds > 0
+      && remainingSeconds !== null;
+    this.showNoDataError = !hasRenderableRecovery;
   }
 }
 

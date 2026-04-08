@@ -73,7 +73,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Form (TSB)');
     expect(gettingStartedSection?.content).toContain('prior-day readiness');
     expect(gettingStartedSection?.content).toContain('full history');
-    expect(gettingStartedSection?.content).toContain('does not react to dashboard date-range changes');
+    expect(gettingStartedSection?.content).toContain('clipped by the selected dashboard date range');
+    expect(gettingStartedSection?.content).toContain('Latest TSS');
     expect(gettingStartedSection?.content).toContain('weekly');
     expect(gettingStartedSection?.content).toContain('asynchronously');
     expect(gettingStartedSection?.content).toContain('status notice');

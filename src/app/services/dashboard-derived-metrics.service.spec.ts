@@ -5,6 +5,7 @@ import { Firestore, doc, docData } from 'app/firebase/firestore';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import {
   DERIVED_METRIC_KINDS,
+  DERIVED_METRIC_SCHEMA_VERSION,
   DERIVED_METRICS_COLLECTION_ID,
   getDerivedMetricDocId,
   type EnsureDerivedMetricsRequest,
@@ -84,6 +85,7 @@ describe('DashboardDerivedMetricsService', () => {
     hoisted.docDataMock
       .mockReturnValueOnce(of({
         status: 'ready',
+        schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
         payload: {
           dailyLoads: [
             { dayMs: Date.UTC(2026, 0, 1), load: 30 },
@@ -93,6 +95,7 @@ describe('DashboardDerivedMetricsService', () => {
       }))
       .mockReturnValueOnce(of({
         status: 'ready',
+        schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
         payload: {
           totalSeconds: 5400,
           endTimeMs: Date.UTC(2026, 0, 3, 12, 0, 0),
@@ -142,6 +145,7 @@ describe('DashboardDerivedMetricsService', () => {
     hoisted.docDataMock
       .mockReturnValueOnce(of({
         status: 'ready',
+        schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
         payload: {
           dailyLoads: [
             [Date.UTC(2026, 0, 1), 20],
@@ -155,6 +159,44 @@ describe('DashboardDerivedMetricsService', () => {
 
     expect(state.formPoints?.map(point => point.trainingStressScore)).toEqual([20, 0, 5]);
     expect(state.recoveryNow).toBeNull();
+  });
+
+  it('marks ready snapshots with older schema versions as stale for self-heal', async () => {
+    const uid = 'user-1';
+    const formDocRef = { path: `users/${uid}/${DERIVED_METRICS_COLLECTION_ID}/${getDerivedMetricDocId(DERIVED_METRIC_KINDS.Form)}` };
+    const recoveryDocRef = { path: `users/${uid}/${DERIVED_METRICS_COLLECTION_ID}/${getDerivedMetricDocId(DERIVED_METRIC_KINDS.RecoveryNow)}` };
+
+    hoisted.docMock
+      .mockReturnValueOnce(formDocRef)
+      .mockReturnValueOnce(recoveryDocRef);
+    hoisted.docDataMock
+      .mockReturnValueOnce(of({
+        status: 'ready',
+        schemaVersion: DERIVED_METRIC_SCHEMA_VERSION - 1,
+        payload: {
+          dailyLoads: [
+            { dayMs: Date.UTC(2026, 0, 1), load: 30 },
+          ],
+        },
+      }))
+      .mockReturnValueOnce(of({
+        status: 'ready',
+        schemaVersion: DERIVED_METRIC_SCHEMA_VERSION - 1,
+        payload: {
+          totalSeconds: 5400,
+          endTimeMs: Date.UTC(2026, 0, 3, 12, 0, 0),
+        },
+      }));
+
+    const state = await firstValueFrom(service.watch({ uid }));
+
+    expect(state.formStatus).toBe('stale');
+    expect(state.recoveryNowStatus).toBe('stale');
+
+    service.ensureForDashboard({ uid }, state);
+    expect(mockFunctionsService.call).toHaveBeenCalledWith<EnsureDerivedMetricsRequest, unknown>('ensureDerivedMetrics', {
+      metricKinds: [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.RecoveryNow],
+    });
   });
 
   it('requests missing derived metrics once while a request is in flight', async () => {

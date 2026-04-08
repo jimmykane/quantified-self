@@ -157,22 +157,35 @@ describe('ChartsFormComponent', () => {
     expect(topGrid.outerBoundsMode).toBe('none');
     expect(bottomGrid.outerBoundsMode).toBe('none');
     expect(formSeries.data).toEqual([points[points.length - 1].formPriorDay]);
+    expect(formSeries.symbol).toBe('circle');
   });
 
   it('should expose dynamic status title and rounded headline stats from latest real point', async () => {
+    component.absoluteLatestPoint = {
+      time: Date.UTC(2024, 1, 5),
+      trainingStressScore: 18,
+      ctl: 42.2,
+      atl: 44.1,
+      formSameDay: -1.9,
+      formPriorDay: -1.9,
+    };
+
     fixture.detectChanges();
     await waitForChartStabilization();
 
     expect(component.status().title).toBe('Maintaining fitness');
     expect(component.headlineStats()).toEqual({
       fitness: {
-        value: '11',
+        value: '42',
       },
       fatigue: {
-        value: '12',
+        value: '44',
       },
       form: {
-        value: '-3',
+        value: '-2',
+      },
+      tss: {
+        value: '18',
       },
     });
   });
@@ -187,6 +200,7 @@ describe('ChartsFormComponent', () => {
       fitness: { value: '--' },
       fatigue: { value: '--' },
       form: { value: '--' },
+      tss: { value: '--' },
     });
   });
 
@@ -230,6 +244,7 @@ describe('ChartsFormComponent', () => {
     expect(option.xAxis[1].axisLabel.interval).toBeGreaterThan(0);
     expect(option.xAxis[1].data.length).toBe(formSeries.data.length);
     expect(option.xAxis[1].data[0]).toMatch(/^([0-9]{2}\s[A-Za-z]{3}|[A-Za-z]{3}\s[0-9]{2})$/);
+    expect(formSeries.symbol).toBe('none');
     expect(fitnessSeries.lineStyle.width).toBe(1.5);
     expect(fatigueSeries.lineStyle.width).toBe(1.5);
     expect(formSeries.lineStyle.width).toBe(1.3);

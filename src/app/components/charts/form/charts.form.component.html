@@ -5,6 +5,7 @@
     <header class="form-chart-header">
       <div class="form-status-row">
         <h3 class="form-status-title" [attr.data-status]="status().key">{{ status().title }}</h3>
+        <div class="form-status-meta">Latest TSS: {{ headlineStats().tss.value }}</div>
       </div>
 
       <div class="form-stats-row">

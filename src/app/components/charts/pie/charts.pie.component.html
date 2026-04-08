@@ -1,4 +1,4 @@
-<app-loading-overlay [isLoading]="isLoading" [hasError]="data && data.length === 0" [allowErrorPassthrough]="true" [errorMessage]="'No data yet'"
+<app-loading-overlay [isLoading]="isLoading" [hasError]="showNoDataError" [allowErrorPassthrough]="true" [errorMessage]="'No data yet'"
   [errorHint]="'Try a different date range or metric'" [errorIcon]="'pie_chart'" [showSkeleton]="false" height="100%"
   [style.height.%]="100">
   <div #chartDiv [style.min-width.%]="100" [style.min-height.%]="100"></div>

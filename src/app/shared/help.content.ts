@@ -129,8 +129,9 @@ export const HELP_SECTIONS: HelpSection[] = [
 - It shows three headline stats: **Fitness (CTL)**, **Fatigue (ATL)**, and **Form (TSB)**.
 - **Form (TSB)** is shown as **prior-day readiness** using the prior day CTL - ATL.
 - Form and RecoveryNow tiles use precomputed derived snapshots from your full history (UTC day buckets).
-- Form/TSS does not react to dashboard date-range changes; it always shows full-history context.
-- Form/TSS rendering uses fixed **weekly** granularity.
+- Form/TSS trend lines are clipped by the selected dashboard date range (zoom/crop behavior).
+- Headline values show the latest real full-history values, including **Latest TSS**.
+- Form/TSS rendering uses fixed **weekly** granularity for trends.
 - When snapshots are missing or stale, they rebuild asynchronously; refresh usually follows within a few minutes.
 - If rebuilding requests fail repeatedly, the dashboard shows a retry notification and continues with last known snapshot values.
 - While rebuilding, the dashboard shows a small training-metrics status notice above tiles.

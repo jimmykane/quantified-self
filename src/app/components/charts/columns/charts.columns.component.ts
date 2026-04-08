@@ -15,8 +15,6 @@ import {
   ActivityTypesHelper,
   ChartDataCategoryTypes,
   ChartDataValueTypes,
-  DataDuration,
-  DataRecoveryTime,
   TimeIntervals,
   type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
@@ -55,12 +53,6 @@ import {
   DashboardDateActivitySeriesEntry
 } from '../../../helpers/dashboard-date-activity-segmentation.helper';
 import { normalizeUnitDerivedTypeLabel } from '../../../helpers/stat-label.helper';
-import {
-  resolveActiveRecoveryTotalSeconds,
-  resolveLatestWorkoutRecoverySeconds,
-  resolveRemainingRecoverySeconds,
-  type DashboardRecoveryNowContext,
-} from '../../../helpers/dashboard-recovery-now.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 
@@ -72,8 +64,6 @@ type ChartOption = Parameters<EChartsType['setOption']>[0];
   standalone: false
 })
 export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestroy {
-  private static readonly RECOVERY_REFRESH_INTERVAL_MS = 60 * 1000;
-
   @Input() data: any;
   @Input() chartDataType?: string;
   @Input() chartDataValueType?: ChartDataValueTypes;
@@ -84,7 +74,6 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
   @Input() isLoading = false;
   @Input() userUnitSettings?: UserUnitSettingsInterface | null;
   @Input() preferDateActivitySegmentation = false;
-  @Input() recoveryNow?: DashboardRecoveryNowContext | null;
 
   @Input() vertical = true;
   @Input() type: 'columns' | 'pyramids' = 'columns';
@@ -137,22 +126,18 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
       changes.vertical ||
       changes.type ||
       changes.userUnitSettings ||
-      changes.preferDateActivitySegmentation ||
-      changes.recoveryNow
+      changes.preferDateActivitySegmentation
     ) {
-      this.updateRecoveryRefreshTimer();
       void this.refreshChart();
     }
   }
 
   ngOnDestroy(): void {
-    this.clearRecoveryRefreshTimer();
     this.chartHost.dispose();
   }
 
   private readonly stackedActivitySeriesKey = 'date-activity-stack';
   private readonly stackedTotalLabelSeriesName = '__date_activity_totals__';
-  private recoveryRefreshIntervalHandle: ReturnType<typeof setInterval> | null = null;
 
   private async refreshChart(): Promise<void> {
     const chart = await this.chartHost.init(
@@ -179,7 +164,6 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     this.chartHost.hideTooltip();
     this.chartHost.setOption(option, ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
     this.chartHost.scheduleResize();
-    this.updateRecoveryRefreshTimer();
   }
 
   private buildChartOption(
@@ -286,12 +270,11 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
       ? this.buildTrendSeries(points, chartStyle.trendLineColor)
       : null;
 
-    const recoverySummary = this.getRecoverySummaryOverride();
-    const summaryLabel = recoverySummary?.label ?? (aggregate
+    const summaryLabel = (aggregate
       ? normalizeUnitDerivedTypeLabel(aggregate.getType(), aggregate.getDisplayType())
       : (this.chartDataValueType || 'Value'));
-    const summaryValue = recoverySummary?.value ?? formatDashboardDataDisplay(aggregate, this.getNormalizedUnitSettings());
-    const summaryMeta = recoverySummary?.meta ?? getDashboardSummaryMetaLabel(
+    const summaryValue = formatDashboardDataDisplay(aggregate, this.getNormalizedUnitSettings());
+    const summaryMeta = getDashboardSummaryMetaLabel(
       this.chartDataCategoryType,
       this.chartDataValueType,
       this.chartDataTimeInterval
@@ -821,80 +804,6 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
       return this.eventColorService.getColorForActivityTypeByActivityTypeGroup(resolvedActivityType);
     }
     return this.dateTypePalette[index % this.dateTypePalette.length];
-  }
-
-  private getRecoverySummaryOverride(): { label: string; value: string; meta: string } | null {
-    if (this.chartDataType !== DataRecoveryTime.type) {
-      return null;
-    }
-
-    const context = this.recoveryNow;
-    const nowMs = Date.now();
-    const activeTotalSeconds = resolveActiveRecoveryTotalSeconds(context, nowMs);
-    const remainingSeconds = resolveRemainingRecoverySeconds(context, nowMs);
-    const latestWorkoutSeconds = resolveLatestWorkoutRecoverySeconds(context);
-    if (activeTotalSeconds === null || activeTotalSeconds <= 0 || remainingSeconds === null) {
-      return null;
-    }
-
-    const normalizedUnitSettings = this.getNormalizedUnitSettings();
-    const activeTotalText = formatDashboardNumericValue(
-      DataDuration.type,
-      activeTotalSeconds,
-      this.logger,
-      normalizedUnitSettings,
-    );
-    const remainingText = formatDashboardNumericValue(
-      DataDuration.type,
-      remainingSeconds,
-      this.logger,
-      normalizedUnitSettings,
-    );
-    const latestWorkoutText = latestWorkoutSeconds !== null
-      ? formatDashboardNumericValue(
-        DataDuration.type,
-        latestWorkoutSeconds,
-        this.logger,
-        normalizedUnitSettings,
-      )
-      : '-';
-
-    return {
-      label: 'Recovery Left Now',
-      value: remainingText,
-      meta: `Active total: ${activeTotalText} | Latest workout: ${latestWorkoutText}`,
-    };
-  }
-
-  private shouldEnableRecoveryRefreshTimer(): boolean {
-    if (this.chartDataType !== DataRecoveryTime.type) {
-      return false;
-    }
-    const remainingSeconds = resolveRemainingRecoverySeconds(this.recoveryNow, Date.now());
-    return remainingSeconds !== null && remainingSeconds > 0;
-  }
-
-  private updateRecoveryRefreshTimer(): void {
-    if (!this.shouldEnableRecoveryRefreshTimer()) {
-      this.clearRecoveryRefreshTimer();
-      return;
-    }
-
-    if (this.recoveryRefreshIntervalHandle !== null) {
-      return;
-    }
-
-    this.recoveryRefreshIntervalHandle = setInterval(() => {
-      void this.refreshChart();
-    }, ChartsColumnsComponent.RECOVERY_REFRESH_INTERVAL_MS);
-  }
-
-  private clearRecoveryRefreshTimer(): void {
-    if (this.recoveryRefreshIntervalHandle === null) {
-      return;
-    }
-    clearInterval(this.recoveryRefreshIntervalHandle);
-    this.recoveryRefreshIntervalHandle = null;
   }
 
   private getNormalizedUnitSettings(): UserUnitSettingsInterface {

@@ -5,6 +5,7 @@ import {
   ChartTypes, TimeIntervals
 } from '@sports-alliance/sports-lib';
 import { TileAbstractDirective } from '../tile-abstract.directive';
+import type { DashboardFormPoint } from '../../../helpers/dashboard-form.helper';
 import type { DashboardRecoveryNowContext } from '../../../helpers/dashboard-recovery-now.helper';
 import {
   DASHBOARD_FORM_CHART_TYPE,
@@ -31,6 +32,7 @@ export class TileChartComponent extends TileAbstractDirective {
   @Input() dataTimeInterval: TimeIntervals;
   @Input() data: any;
   @Input() recoveryNow?: DashboardRecoveryNowContext | null;
+  @Input() absoluteLatestFormPoint?: DashboardFormPoint | null;
 
   public chartTypes = ChartTypes;
   public recoveryNowChartType = DASHBOARD_RECOVERY_NOW_CHART_TYPE;

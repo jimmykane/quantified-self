@@ -9,6 +9,7 @@ import { AppFunctionsService } from './app.functions.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import {
   DERIVED_METRIC_KINDS,
+  DERIVED_METRIC_SCHEMA_VERSION,
   DERIVED_METRICS_COLLECTION_ID,
   getDerivedMetricDocId,
   type DerivedMetricSnapshotStatus,
@@ -133,9 +134,23 @@ export class DashboardDerivedMetricsService {
 
   private resolveSnapshotStatus(snapshot: Record<string, unknown> | undefined): DerivedMetricSnapshotStatus | 'missing' {
     const status = `${snapshot?.status || ''}` as DerivedMetricSnapshotStatus;
-    return status === 'ready' || status === 'building' || status === 'failed' || status === 'stale'
-      ? status
-      : 'missing';
+    if (status !== 'ready' && status !== 'building' && status !== 'failed' && status !== 'stale') {
+      return 'missing';
+    }
+
+    const schemaVersion = this.toFiniteNumber(snapshot?.schemaVersion);
+    // Self-heal old snapshot documents by requeueing ensureDerivedMetrics when schema is behind.
+    if (
+      status === 'ready'
+      && (
+        schemaVersion === null
+        || schemaVersion < DERIVED_METRIC_SCHEMA_VERSION
+      )
+    ) {
+      return 'stale';
+    }
+
+    return status;
   }
 
   private resolveFormPoints(snapshot: Record<string, unknown> | undefined): DashboardFormPoint[] | null {

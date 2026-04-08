@@ -61,18 +61,23 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
       void this.refreshChart();
     }
   }
+  @Input() set absoluteLatestPoint(value: DashboardFormPoint | null | undefined) {
+    this.absoluteLatestPointSignal.set(value || null);
+  }
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
   private readonly chartHost: EChartsHostController;
   private readonly pointsSignal = signal<DashboardFormPoint[]>([]);
+  private readonly absoluteLatestPointSignal = signal<DashboardFormPoint | null>(null);
 
   readonly hasData = computed(() => this.pointsSignal().length > 0);
   readonly latestPoint = computed(() => resolveDashboardFormLatestPoint(this.pointsSignal()));
-  readonly selectedFormValue = computed(() => resolveDashboardFormValue(this.latestPoint(), ChartsFormComponent.FORM_MODE));
+  readonly displayPoint = computed(() => this.absoluteLatestPointSignal() || this.latestPoint());
+  readonly selectedFormValue = computed(() => resolveDashboardFormValue(this.displayPoint(), ChartsFormComponent.FORM_MODE));
   readonly status = computed(() => resolveDashboardFormStatus(this.selectedFormValue()));
   readonly headlineStats = computed(() => {
-    const latest = this.latestPoint();
+    const latest = this.displayPoint();
     return {
       fitness: {
         value: this.formatRoundedValue(latest?.ctl),
@@ -82,6 +87,9 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
       },
       form: {
         value: this.formatRoundedValue(this.selectedFormValue()),
+      },
+      tss: {
+        value: this.formatRoundedValue(latest?.trainingStressScore),
       },
     };
   });
@@ -147,6 +155,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
     const points = buildDashboardFormRenderPoints(sourcePoints, renderTimeInterval);
     const axisLabels = points.map(point => this.formatAxisDateLabel(point.time, renderTimeInterval));
     const xAxisLabelInterval = this.resolveXAxisLabelInterval(points.length);
+    const hasSingleVisiblePoint = points.length <= 1;
     const ctlValues = points.map(point => point.ctl);
     const atlValues = points.map(point => point.atl);
     const formValues = points.map(point => resolveDashboardFormValue(point, ChartsFormComponent.FORM_MODE));
@@ -302,7 +311,8 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
           data: ctlValues,
           smooth: false,
           connectNulls: true,
-          symbol: 'none',
+          symbol: hasSingleVisiblePoint ? 'circle' : 'none',
+          symbolSize: hasSingleVisiblePoint ? 4 : 0,
           lineStyle: {
             width: 1.5,
             color: chartStyle.trendLineColor,
@@ -319,7 +329,8 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
           data: atlValues,
           smooth: false,
           connectNulls: true,
-          symbol: 'none',
+          symbol: hasSingleVisiblePoint ? 'circle' : 'none',
+          symbolSize: hasSingleVisiblePoint ? 4 : 0,
           lineStyle: {
             width: 1.5,
             color: AppColors.Pink,
@@ -336,7 +347,8 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
           data: formValues,
           smooth: false,
           connectNulls: false,
-          symbol: 'none',
+          symbol: hasSingleVisiblePoint ? 'circle' : 'none',
+          symbolSize: hasSingleVisiblePoint ? 3.5 : 0,
           lineStyle: {
             width: 1.3,
             color: chartStyle.secondaryTextColor,
