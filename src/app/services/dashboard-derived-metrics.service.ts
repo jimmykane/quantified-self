@@ -5,6 +5,7 @@ import { catchError, finalize, map, tap } from 'rxjs/operators';
 import type { DashboardFormPoint } from '../helpers/dashboard-form.helper';
 import { buildDashboardFormPointsFromDailyLoads } from '../helpers/dashboard-form.helper';
 import type { DashboardRecoveryNowContext } from '../helpers/dashboard-recovery-now.helper';
+import type { DashboardDerivedMetricStatus } from '../helpers/derived-metric-status.helper';
 import { AppFunctionsService } from './app.functions.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import {
@@ -20,8 +21,8 @@ import {
 export interface DashboardDerivedMetricsState {
   formPoints: DashboardFormPoint[] | null;
   recoveryNow: DashboardRecoveryNowContext | null;
-  formStatus: DerivedMetricSnapshotStatus | 'missing';
-  recoveryNowStatus: DerivedMetricSnapshotStatus | 'missing';
+  formStatus: DashboardDerivedMetricStatus;
+  recoveryNowStatus: DashboardDerivedMetricStatus;
 }
 
 type UserUIDCarrier = { uid?: string | null } | null | undefined;
@@ -132,9 +133,16 @@ export class DashboardDerivedMetricsService {
       .subscribe();
   }
 
-  private resolveSnapshotStatus(snapshot: Record<string, unknown> | undefined): DerivedMetricSnapshotStatus | 'missing' {
-    const status = `${snapshot?.status || ''}` as DerivedMetricSnapshotStatus;
-    if (status !== 'ready' && status !== 'building' && status !== 'failed' && status !== 'stale') {
+  private resolveSnapshotStatus(snapshot: Record<string, unknown> | undefined): DashboardDerivedMetricStatus {
+    const status = `${snapshot?.status || ''}` as DashboardDerivedMetricStatus;
+    if (
+      status !== 'ready'
+      && status !== 'building'
+      && status !== 'failed'
+      && status !== 'stale'
+      && status !== 'queued'
+      && status !== 'processing'
+    ) {
       return 'missing';
     }
 

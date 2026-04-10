@@ -120,6 +120,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Active totals only include currently active recovery windows, not all historical recovery values.
 - Extremely large recovery values above 14 days are treated as outliers and ignored.
 - Remaining recovery updates every minute while the tile is visible.
+- While derived metrics are refreshing, the tile shows a recovery-specific **updating** message instead of generic no-data text.
 - You can still move or remove this tile from the tile menu.
 
 ### Form tile (CTL / ATL / TSB)
@@ -129,9 +130,11 @@ export const HELP_SECTIONS: HelpSection[] = [
 - It shows three headline stats: **Fitness (CTL)**, **Fatigue (ATL)**, and **Form (TSB)**.
 - **Form (TSB)** is shown as **prior-day readiness** using the prior day CTL - ATL.
 - Form and RecoveryNow tiles use precomputed derived snapshots from your full history (UTC day buckets).
-- Form/TSS trend lines are clipped by the selected dashboard date range (zoom/crop behavior).
+- Form/TSS trend lines keep full history and are explored with compact **W / M / Y** timeline buttons.
+- The chart does not use slider or reload/reset toolbar controls.
 - Headline values show the latest real full-history values, including **Latest TSS**.
-- Form/TSS rendering uses fixed **weekly** granularity for trends.
+- Form/TSS rendering uses **weekly** trend data, while **M** and **Y** widen the visible history window.
+- While derived metrics are refreshing, the tile shows a training-metrics **updating** message instead of generic no-data text.
 - When snapshots are missing or stale, they rebuild asynchronously; refresh usually follows within a few minutes.
 - If rebuilding requests fail repeatedly, the dashboard shows a retry notification and continues with last known snapshot values.
 - While rebuilding, the dashboard shows a small training-metrics status notice above tiles.

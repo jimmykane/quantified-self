@@ -38,15 +38,16 @@ import { AppUserService } from '../../services/app.user.service';
 import { DashboardDerivedMetricsService } from '../../services/dashboard-derived-metrics.service';
 import type { DashboardFormPoint } from '../../helpers/dashboard-form.helper';
 import type { DashboardRecoveryNowContext } from '../../helpers/dashboard-recovery-now.helper';
-import type { DerivedMetricSnapshotStatus } from '@shared/derived-metrics';
+import {
+  type DashboardDerivedMetricStatus,
+  isDerivedMetricPendingStatus,
+} from '../../helpers/derived-metric-status.helper';
 import {
   isDashboardFormChartType,
   isDashboardRecoveryNowChartType,
 } from '../../helpers/dashboard-special-chart-types';
 import { MatDialog } from '@angular/material/dialog';
 import { DashboardChartManagerDialogComponent } from './chart-manager-dialog/chart-manager-dialog.component';
-
-type DashboardDerivedMetricStatus = DerivedMetricSnapshotStatus | 'missing';
 
 interface DashboardDerivedMetricsBanner {
   type: 'pending' | 'warning';
@@ -493,7 +494,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       return;
     }
 
-    if (relevantStatuses.some(status => status === 'missing' || status === 'building' || status === 'stale')) {
+    if (relevantStatuses.some(status => status === 'missing' || isDerivedMetricPendingStatus(status))) {
       const isUsingStaleData = relevantStatuses.some(status => status === 'stale');
       this.derivedMetricsBanner = {
         type: 'pending',
@@ -539,6 +540,26 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   getMapTile(tile: DashboardTileViewModel | TileSettingsInterface): DashboardMapTileViewModel {
     return tile as DashboardMapTileViewModel;
+  }
+
+  getRecoveryNowStatusForTile(tile: DashboardTileViewModel | TileSettingsInterface): DashboardDerivedMetricStatus | null {
+    if (!isDashboardChartTileViewModel(tile)) {
+      return null;
+    }
+    if (!isDashboardRecoveryNowChartType(tile.chartType)) {
+      return null;
+    }
+    return this.derivedRecoveryNowStatus;
+  }
+
+  getFormStatusForTile(tile: DashboardTileViewModel | TileSettingsInterface): DashboardDerivedMetricStatus | null {
+    if (!isDashboardChartTileViewModel(tile)) {
+      return null;
+    }
+    if (!isDashboardFormChartType(tile.chartType)) {
+      return null;
+    }
+    return this.derivedFormStatus;
   }
 
   private logRecoveryPipelineState(stage: string): void {

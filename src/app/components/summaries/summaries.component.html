@@ -46,7 +46,9 @@
         [isLoading]="isLoading" [data]="getChartTile(tile).data" [showActions]="showActions" [darkTheme]="darkTheme"
         [dataType]="getChartTile(tile).dataType" [dataValueType]="getChartTile(tile).dataValueType"
         [dataCategoryType]="getChartTile(tile).dataCategoryType" [dataTimeInterval]="getChartTile(tile).timeInterval"
-        [recoveryNow]="getChartTile(tile).recoveryNow" [absoluteLatestFormPoint]="getChartTile(tile).absoluteLatestFormPoint"
+        [recoveryNow]="getChartTile(tile).recoveryNow" [recoveryNowStatus]="getRecoveryNowStatusForTile(tile)"
+        [formStatus]="getFormStatusForTile(tile)"
+        [absoluteLatestFormPoint]="getChartTile(tile).absoluteLatestFormPoint"
         [size]="tile.size" [order]="tile.order" [enableDesktopDrag]="desktopTileDragEnabled"></app-tile-chart>
       }
       @if (tile.type === tileTypes.Map) {

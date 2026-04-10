@@ -22,7 +22,15 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  padding-right: 72px;
   margin-bottom: 8px;
+}
+
+.form-status-controls {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
 }
 
 .form-status-title {
@@ -50,9 +58,27 @@
 }
 
 .form-status-meta {
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   color: var(--mat-sys-on-surface-variant);
   white-space: nowrap;
+}
+
+.form-granularity-toggle {
+  --mat-standard-button-toggle-height: 18px;
+  --mat-standard-button-toggle-shape: 999px;
+  flex: 0 0 auto;
+  margin-right: 2px;
+}
+
+:host ::ng-deep .form-granularity-toggle .mat-button-toggle-button {
+  min-width: 16px !important;
+}
+
+:host ::ng-deep .form-granularity-toggle .mat-button-toggle-label-content {
+  line-height: 18px !important;
+  font-size: 0.56rem !important;
+  font-weight: 600 !important;
+  padding: 0 4px !important;
 }
 
 .form-stats-row {
@@ -103,6 +129,17 @@
 
   .form-status-title {
     font-size: 0.86rem;
+  }
+
+  .form-status-row {
+    align-items: flex-start;
+    padding-right: 44px;
+  }
+
+  .form-status-controls {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
   }
 
   .form-stat-value {

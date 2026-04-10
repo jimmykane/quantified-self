@@ -1,11 +1,19 @@
-<app-loading-overlay [isLoading]="isLoading" [hasError]="!isLoading && !hasData()" [allowErrorPassthrough]="true" [errorMessage]="'No data yet'"
-  [errorHint]="'Needs events with a Training Stress Score'" [errorIcon]="'monitoring'" [showSkeleton]="false"
+<app-loading-overlay [isLoading]="isLoading" [hasError]="!isLoading && !hasData()" [allowErrorPassthrough]="true" [errorMessage]="noDataErrorMessage"
+  [errorHint]="noDataErrorHint" [errorIcon]="noDataErrorIcon" [showSkeleton]="false"
   height="100%" [style.height.%]="100">
   <section class="form-chart-layout">
     <header class="form-chart-header">
       <div class="form-status-row">
         <h3 class="form-status-title" [attr.data-status]="status().key">{{ status().title }}</h3>
-        <div class="form-status-meta">Latest TSS: {{ headlineStats().tss.value }}</div>
+        <div class="form-status-controls">
+          <div class="form-status-meta">Latest TSS: {{ headlineStats().tss.value }}</div>
+          <mat-button-toggle-group class="form-granularity-toggle" [value]="selectedGranularity()"
+            (change)="onGranularityChange($event)" hideSingleSelectionIndicator>
+            @for (option of granularityOptions; track option.key) {
+            <mat-button-toggle [value]="option.key">{{ option.label }}</mat-button-toggle>
+            }
+          </mat-button-toggle-group>
+        </div>
       </div>
 
       <div class="form-stats-row">

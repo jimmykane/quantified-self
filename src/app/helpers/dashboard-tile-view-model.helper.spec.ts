@@ -294,7 +294,7 @@ describe('dashboard-tile-view-model.helper', () => {
     expect((viewModels[0] as any).data).toEqual(precomputedPoints);
   });
 
-  it('should clip derived form points by dashboard date range while preserving absolute latest form point metadata', () => {
+  it('should keep full derived form points regardless of dashboard date range while preserving absolute latest form point metadata', () => {
     const derivedPoints = [
       {
         time: Date.UTC(2024, 0, 2),
@@ -348,11 +348,11 @@ describe('dashboard-tile-view-model.helper', () => {
       },
     });
 
-    expect((viewModels[0] as any).data).toEqual([derivedPoints[0]]);
+    expect((viewModels[0] as any).data).toEqual(derivedPoints);
     expect((viewModels[0] as any).absoluteLatestFormPoint).toEqual(derivedPoints[1]);
   });
 
-  it('should resolve this-week preset dashboard date range for form clipping when explicit start/end are missing', () => {
+  it('should ignore preset dashboard date range clipping for form points when explicit start/end are missing', () => {
     const currentWeekRange = getDatesForDateRange(DateRanges.thisWeek, DaysOfTheWeek.Monday);
     const insideWeekTimeMs = currentWeekRange.startDate.getTime() + (2 * 24 * 60 * 60 * 1000);
     const beforeWeekTimeMs = currentWeekRange.startDate.getTime() - (24 * 60 * 60 * 1000);
@@ -399,13 +399,11 @@ describe('dashboard-tile-view-model.helper', () => {
     });
 
     const formData = (viewModels[0] as any).data as Array<{ time: number; trainingStressScore: number }>;
-    expect(formData[0]).toEqual(derivedPoints[1]);
-    expect(formData.length).toBeGreaterThan(1);
-    expect(formData.slice(1).every(point => point.trainingStressScore === 0)).toBe(true);
+    expect(formData).toEqual(derivedPoints);
     expect((viewModels[0] as any).absoluteLatestFormPoint).toEqual(derivedPoints[1]);
   });
 
-  it('should synthesize zero-load form decay points when dashboard range ends after the latest derived day', () => {
+  it('should not synthesize zero-load form decay points from dashboard date range clipping', () => {
     const derivedPoints = [
       {
         time: Date.UTC(2024, 0, 2),
@@ -448,10 +446,7 @@ describe('dashboard-tile-view-model.helper', () => {
     });
 
     const formData = (viewModels[0] as any).data as Array<{ time: number; trainingStressScore: number }>;
-    expect(formData.length).toBe(3);
-    expect(formData.every(point => point.trainingStressScore === 0)).toBe(true);
-    expect(formData[0].time).toBe(Date.UTC(2024, 0, 4));
-    expect(formData[2].time).toBe(Date.UTC(2024, 0, 6));
+    expect(formData).toEqual(derivedPoints);
     expect((viewModels[0] as any).absoluteLatestFormPoint).toEqual(derivedPoints[1]);
   });
 

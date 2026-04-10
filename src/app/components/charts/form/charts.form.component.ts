@@ -11,6 +11,7 @@ import {
   computed,
   signal,
 } from '@angular/core';
+import type { MatButtonToggleChange } from '@angular/material/button-toggle';
 import type { EChartsType } from 'echarts/core';
 import { TimeIntervals } from '@sports-alliance/sports-lib';
 import { AppColors } from '../../../services/color/app.colors';
@@ -35,12 +36,25 @@ import {
   resolveDashboardFormStatus,
   resolveDashboardFormValue,
 } from '../../../helpers/dashboard-form.helper';
+import {
+  formatDashboardFormXAxisLabel,
+  resolveDashboardFormXAxisLabelConfig,
+} from '../../../helpers/dashboard-form-x-axis.helper';
+import {
+  type DashboardDerivedMetricStatus,
+  isDerivedMetricPendingStatus,
+} from '../../../helpers/derived-metric-status.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type EChartsTooltipPositionSize = {
   contentSize?: [number, number];
   viewSize?: [number, number];
 };
+type DashboardFormTimelineWindow = 'w' | 'm' | 'y';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const WEEK_VIEW_SPAN_MS = 84 * DAY_MS;
+const MONTH_VIEW_SPAN_MS = 365 * DAY_MS;
 
 @Component({
   selector: 'app-form-chart',
@@ -53,8 +67,15 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
   private static readonly FORM_MODE = 'prior-day' as const;
   private static readonly FORM_RENDER_INTERVAL = TimeIntervals.Weekly;
 
+  readonly granularityOptions: ReadonlyArray<{ key: DashboardFormTimelineWindow; label: string }> = [
+    { key: 'w', label: 'W' },
+    { key: 'm', label: 'M' },
+    { key: 'y', label: 'Y' },
+  ];
+
   @Input() darkTheme = false;
   @Input() isLoading = false;
+  @Input() formStatus?: DashboardDerivedMetricStatus | null;
   @Input() set data(value: DashboardFormPoint[] | null | undefined) {
     this.pointsSignal.set(Array.isArray(value) ? value : []);
     if (this.chartDiv?.nativeElement) {
@@ -70,12 +91,17 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
   private readonly chartHost: EChartsHostController;
   private readonly pointsSignal = signal<DashboardFormPoint[]>([]);
   private readonly absoluteLatestPointSignal = signal<DashboardFormPoint | null>(null);
+  private readonly selectedTimelineWindowSignal = signal<DashboardFormTimelineWindow>('w');
+  public noDataErrorMessage = 'No data yet';
+  public noDataErrorHint = 'Needs events with a Training Stress Score';
+  public noDataErrorIcon = 'monitoring';
 
   readonly hasData = computed(() => this.pointsSignal().length > 0);
   readonly latestPoint = computed(() => resolveDashboardFormLatestPoint(this.pointsSignal()));
   readonly displayPoint = computed(() => this.absoluteLatestPointSignal() || this.latestPoint());
   readonly selectedFormValue = computed(() => resolveDashboardFormValue(this.displayPoint(), ChartsFormComponent.FORM_MODE));
   readonly status = computed(() => resolveDashboardFormStatus(this.selectedFormValue()));
+  readonly selectedGranularity = computed(() => this.selectedTimelineWindowSignal());
   readonly headlineStats = computed(() => {
     const latest = this.displayPoint();
     return {
@@ -110,11 +136,12 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    this.updateNoDataOverlayState();
     if (!this.chartDiv?.nativeElement) {
       return;
     }
 
-    if (changes.darkTheme || changes.isLoading) {
+    if (changes.darkTheme || changes.isLoading || changes.formStatus) {
       void this.refreshChart();
     }
   }
@@ -123,7 +150,22 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
     this.chartHost.dispose();
   }
 
+  onGranularityChange(event: MatButtonToggleChange | DashboardFormTimelineWindow | null | undefined): void {
+    const value = typeof event === 'string' ? event : `${event?.value || ''}`;
+    if (value !== 'w' && value !== 'm' && value !== 'y') {
+      return;
+    }
+    if (this.selectedTimelineWindowSignal() === value) {
+      return;
+    }
+    this.selectedTimelineWindowSignal.set(value);
+    if (this.chartDiv?.nativeElement) {
+      void this.refreshChart();
+    }
+  }
+
   private async refreshChart(): Promise<void> {
+    this.updateNoDataOverlayState();
     const chart = await this.chartHost.init(
       this.chartDiv?.nativeElement,
       resolveEChartsThemeName(this.darkTheme),
@@ -133,19 +175,39 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
     }
 
     this.chartHost.hideTooltip();
-    this.chartHost.setOption(this.buildChartOption(), ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
+    const refreshContext = this.buildChartOption();
+    this.chartHost.setOption(refreshContext.option, ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
     this.chartHost.scheduleResize();
   }
 
-  private buildChartOption(): ChartOption {
+  private updateNoDataOverlayState(): void {
+    this.noDataErrorMessage = 'No data yet';
+    this.noDataErrorHint = 'Needs events with a Training Stress Score';
+    this.noDataErrorIcon = 'monitoring';
+    if (this.pointsSignal().length > 0) {
+      return;
+    }
+    if (!isDerivedMetricPendingStatus(this.formStatus)) {
+      return;
+    }
+    this.noDataErrorMessage = 'Training metrics are updating';
+    this.noDataErrorHint = 'We are recalculating your fitness, fatigue, and form.';
+    this.noDataErrorIcon = 'autorenew';
+  }
+
+  private buildChartOption(): {
+    option: ChartOption;
+  } {
     const sourcePoints = this.pointsSignal();
     if (!sourcePoints.length) {
       return {
-        animation: false,
-        tooltip: { show: false },
-        xAxis: [],
-        yAxis: [],
-        series: [],
+        option: {
+          animation: false,
+          tooltip: { show: false },
+          xAxis: [],
+          yAxis: [],
+          series: [],
+        },
       };
     }
 
@@ -153,22 +215,33 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
     const chartStyle = buildDashboardEChartsStyleTokens(this.darkTheme, chartWidth);
     const renderTimeInterval = ChartsFormComponent.FORM_RENDER_INTERVAL;
     const points = buildDashboardFormRenderPoints(sourcePoints, renderTimeInterval);
-    const axisLabels = points.map(point => this.formatAxisDateLabel(point.time, renderTimeInterval));
-    const xAxisLabelInterval = this.resolveXAxisLabelInterval(points.length);
-    const hasSingleVisiblePoint = points.length <= 1;
-    const ctlValues = points.map(point => point.ctl);
-    const atlValues = points.map(point => point.atl);
-    const formValues = points.map(point => resolveDashboardFormValue(point, ChartsFormComponent.FORM_MODE));
+    const viewBounds = this.resolveVisibleBounds(points, this.selectedTimelineWindowSignal());
+    const labelConfig = resolveDashboardFormXAxisLabelConfig(
+      viewBounds.minTime,
+      viewBounds.maxTime,
+      viewBounds.visiblePointCount,
+    );
+    const hasSingleVisiblePoint = viewBounds.visiblePointCount <= 1;
+
+    const ctlSeriesValues = points.map(point => [point.time, point.ctl] as const);
+    const atlSeriesValues = points.map(point => [point.time, point.atl] as const);
+    const formSeriesValues = points.map(point => [point.time, resolveDashboardFormValue(point, ChartsFormComponent.FORM_MODE)] as const);
+    const ctlAxisValues = points.map(point => point.ctl);
+    const atlAxisValues = points.map(point => point.atl);
+    const formAxisValues = points.map(point => resolveDashboardFormValue(point, ChartsFormComponent.FORM_MODE));
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
 
-    const topAxisConfig = buildDashboardValueAxisConfig([...ctlValues, ...atlValues]);
+    const topAxisConfig = buildDashboardValueAxisConfig([...ctlAxisValues, ...atlAxisValues]);
     const bottomAxisConfig = buildDashboardValueAxisConfig(
-      [...formValues, 0].filter((value): value is number => Number.isFinite(value)),
+      [...formAxisValues, 0].filter((value): value is number => Number.isFinite(value)),
     );
 
     const topXAxis = {
-      type: 'category',
-      data: axisLabels,
+      type: 'time',
+      min: viewBounds.minTime,
+      max: viewBounds.maxTime,
+      minInterval: labelConfig.minIntervalMs,
+      splitNumber: labelConfig.splitNumber,
       axisLabel: { show: false },
       axisTick: { show: false },
       axisLine: { lineStyle: { color: chartStyle.axisColor } },
@@ -177,14 +250,17 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
     };
 
     const bottomXAxis = {
-      type: 'category',
-      data: axisLabels,
+      type: 'time',
+      min: viewBounds.minTime,
+      max: viewBounds.maxTime,
+      minInterval: labelConfig.minIntervalMs,
+      splitNumber: labelConfig.splitNumber,
       axisLabel: {
         show: true,
         color: chartStyle.textColor,
         fontSize: chartStyle.axisFontSize,
-        hideOverlap: false,
-        interval: xAxisLabelInterval,
+        hideOverlap: true,
+        formatter: (value: number) => formatDashboardFormXAxisLabel(Number(value), labelConfig.mode),
         rotate: 0,
       },
       axisTick: { show: false },
@@ -231,133 +307,163 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
 
     const gridLeft = chartStyle.isCompactLayout ? 34 : 38;
     const gridRight = chartStyle.isCompactLayout ? 14 : 16;
-    const panelHeight = chartStyle.isCompactLayout ? '38%' : '40%';
-    const topPanelTop = chartStyle.isCompactLayout ? '5%' : '4%';
-    const bottomPanelTop = chartStyle.isCompactLayout ? '54%' : '52%';
+    const panelHeight = chartStyle.isCompactLayout ? '39%' : '40%';
+    const topPanelTop = '4%';
+    const bottomPanelTop = chartStyle.isCompactLayout ? '52%' : '51%';
 
     return {
-      animation: false,
-      backgroundColor: 'transparent',
-      textStyle: {
-        color: chartStyle.textColor,
-        fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
-      },
-      grid: [
-        {
-          left: gridLeft,
-          right: gridRight,
-          top: topPanelTop,
-          height: panelHeight,
-          outerBoundsMode: 'none',
-        },
-        {
-          left: gridLeft,
-          right: gridRight,
-          top: bottomPanelTop,
-          height: panelHeight,
-          outerBoundsMode: 'none',
-        },
-      ],
-      axisPointer: {
-        link: [{ xAxisIndex: [0, 1] }],
-      },
-      tooltip: {
-        trigger: 'axis',
-        triggerOn: resolveEChartsTooltipTriggerOn(true, isMobileTooltipViewport),
-        axisPointer: { type: 'line' },
-        renderMode: 'html',
-        show: true,
-        confine: true,
-        position: (_point: number[], _params: unknown, _dom: unknown, _rect: unknown, size: EChartsTooltipPositionSize) => (
-          this.resolveTooltipPosition(size)
-        ),
-        backgroundColor: chartStyle.tooltipBackgroundColor,
-        borderColor: chartStyle.tooltipBorderColor,
-        borderWidth: 1,
-        padding: 0,
+      option: {
+        animation: false,
+        backgroundColor: 'transparent',
         textStyle: {
-          color: chartStyle.tooltipTextColor,
+          color: chartStyle.textColor,
           fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
-          fontSize: chartStyle.isCompactLayout ? 12 : 13,
         },
-        formatter: (params: { dataIndex: number }[]) => this.formatTooltip(points, params, renderTimeInterval, chartStyle),
+        grid: [
+          {
+            left: gridLeft,
+            right: gridRight,
+            top: topPanelTop,
+            height: panelHeight,
+            outerBoundsMode: 'none',
+          },
+          {
+            left: gridLeft,
+            right: gridRight,
+            top: bottomPanelTop,
+            height: panelHeight,
+            outerBoundsMode: 'none',
+          },
+        ],
+        axisPointer: {
+          link: [{ xAxisIndex: [0, 1] }],
+        },
+        // Deliberately no ECharts dataZoom/toolbox controls here.
+        // Timeline navigation is handled via explicit compact W/M/Y window buttons.
+        tooltip: {
+          trigger: 'axis',
+          triggerOn: resolveEChartsTooltipTriggerOn(true, isMobileTooltipViewport),
+          axisPointer: { type: 'line' },
+          renderMode: 'html',
+          show: true,
+          confine: true,
+          position: (_point: number[], _params: unknown, _dom: unknown, _rect: unknown, size: EChartsTooltipPositionSize) => (
+            this.resolveTooltipPosition(size)
+          ),
+          backgroundColor: chartStyle.tooltipBackgroundColor,
+          borderColor: chartStyle.tooltipBorderColor,
+          borderWidth: 1,
+          padding: 0,
+          textStyle: {
+            color: chartStyle.tooltipTextColor,
+            fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+            fontSize: chartStyle.isCompactLayout ? 12 : 13,
+          },
+          formatter: (params: { dataIndex: number }[]) => this.formatTooltip(points, params, renderTimeInterval, chartStyle),
+        },
+        xAxis: [
+          {
+            ...topXAxis,
+            gridIndex: 0,
+          },
+          {
+            ...bottomXAxis,
+            gridIndex: 1,
+          },
+        ],
+        yAxis: [
+          {
+            ...topYAxis,
+            gridIndex: 0,
+          },
+          {
+            ...bottomYAxis,
+            gridIndex: 1,
+          },
+        ],
+        series: [
+          {
+            name: 'Fitness (CTL)',
+            type: 'line',
+            xAxisIndex: 0,
+            yAxisIndex: 0,
+            data: ctlSeriesValues,
+            smooth: false,
+            connectNulls: true,
+            symbol: hasSingleVisiblePoint ? 'circle' : 'none',
+            symbolSize: hasSingleVisiblePoint ? 4 : 0,
+            lineStyle: {
+              width: 1.2,
+              color: chartStyle.trendLineColor,
+            },
+            itemStyle: {
+              color: chartStyle.trendLineColor,
+            },
+          },
+          {
+            name: 'Fatigue (ATL)',
+            type: 'line',
+            xAxisIndex: 0,
+            yAxisIndex: 0,
+            data: atlSeriesValues,
+            smooth: false,
+            connectNulls: true,
+            symbol: hasSingleVisiblePoint ? 'circle' : 'none',
+            symbolSize: hasSingleVisiblePoint ? 4 : 0,
+            lineStyle: {
+              width: 1.2,
+              color: AppColors.Pink,
+            },
+            itemStyle: {
+              color: AppColors.Pink,
+            },
+          },
+          {
+            name: 'Form (TSB)',
+            type: 'line',
+            xAxisIndex: 1,
+            yAxisIndex: 1,
+            data: formSeriesValues,
+            smooth: false,
+            connectNulls: false,
+            symbol: hasSingleVisiblePoint ? 'circle' : 'none',
+            symbolSize: hasSingleVisiblePoint ? 3.5 : 0,
+            lineStyle: {
+              width: 1.1,
+              color: chartStyle.secondaryTextColor,
+            },
+            itemStyle: {
+              color: chartStyle.secondaryTextColor,
+            },
+          },
+        ],
       },
-      xAxis: [
-        {
-          ...topXAxis,
-          gridIndex: 0,
-        },
-        {
-          ...bottomXAxis,
-          gridIndex: 1,
-        },
-      ],
-      yAxis: [
-        {
-          ...topYAxis,
-          gridIndex: 0,
-        },
-        {
-          ...bottomYAxis,
-          gridIndex: 1,
-        },
-      ],
-      series: [
-        {
-          name: 'Fitness (CTL)',
-          type: 'line',
-          xAxisIndex: 0,
-          yAxisIndex: 0,
-          data: ctlValues,
-          smooth: false,
-          connectNulls: true,
-          symbol: hasSingleVisiblePoint ? 'circle' : 'none',
-          symbolSize: hasSingleVisiblePoint ? 4 : 0,
-          lineStyle: {
-            width: 1.5,
-            color: chartStyle.trendLineColor,
-          },
-          itemStyle: {
-            color: chartStyle.trendLineColor,
-          },
-        },
-        {
-          name: 'Fatigue (ATL)',
-          type: 'line',
-          xAxisIndex: 0,
-          yAxisIndex: 0,
-          data: atlValues,
-          smooth: false,
-          connectNulls: true,
-          symbol: hasSingleVisiblePoint ? 'circle' : 'none',
-          symbolSize: hasSingleVisiblePoint ? 4 : 0,
-          lineStyle: {
-            width: 1.5,
-            color: AppColors.Pink,
-          },
-          itemStyle: {
-            color: AppColors.Pink,
-          },
-        },
-        {
-          name: 'Form (TSB)',
-          type: 'line',
-          xAxisIndex: 1,
-          yAxisIndex: 1,
-          data: formValues,
-          smooth: false,
-          connectNulls: false,
-          symbol: hasSingleVisiblePoint ? 'circle' : 'none',
-          symbolSize: hasSingleVisiblePoint ? 3.5 : 0,
-          lineStyle: {
-            width: 1.3,
-            color: chartStyle.secondaryTextColor,
-          },
-          itemStyle: {
-            color: chartStyle.secondaryTextColor,
-          },
-        },
-      ],
+    };
+  }
+
+  private resolveVisibleBounds(
+    points: DashboardFormPoint[],
+    window: DashboardFormTimelineWindow,
+  ): { minTime: number; maxTime: number; visiblePointCount: number } {
+    const firstTime = Number(points[0]?.time);
+    const lastTime = Number(points[points.length - 1]?.time);
+    if (!Number.isFinite(firstTime) || !Number.isFinite(lastTime) || firstTime > lastTime) {
+      return {
+        minTime: 0,
+        maxTime: 0,
+        visiblePointCount: 0,
+      };
+    }
+
+    const minTime = window === 'y'
+      ? firstTime
+      : Math.max(firstTime, lastTime - (window === 'm' ? MONTH_VIEW_SPAN_MS : WEEK_VIEW_SPAN_MS));
+    const visiblePointCount = points.filter(point => point.time >= minTime && point.time <= lastTime).length;
+
+    return {
+      minTime,
+      maxTime: lastTime,
+      visiblePointCount,
     };
   }
 
@@ -455,39 +561,5 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
       viewWidth - contentWidth - horizontalPadding,
     ));
     return [left, 8];
-  }
-
-  private formatAxisDateLabel(time: number, interval: TimeIntervals): string {
-    const date = new Date(time);
-    if (!Number.isFinite(date.getTime())) {
-      return '';
-    }
-
-    if (interval === TimeIntervals.Daily) {
-      return date.toLocaleDateString(undefined, { day: '2-digit', month: 'short' });
-    }
-
-    if (interval === TimeIntervals.Monthly) {
-      return date.toLocaleDateString(undefined, { month: 'short', year: '2-digit' });
-    }
-
-    if (interval === TimeIntervals.Yearly) {
-      return date.toLocaleDateString(undefined, { year: 'numeric' });
-    }
-
-    if (interval === TimeIntervals.Weekly) {
-      return date.toLocaleDateString(undefined, { day: '2-digit', month: 'short' });
-    }
-
-    return formatDashboardDateByInterval(time, interval);
-  }
-
-  private resolveXAxisLabelInterval(pointCount: number): number {
-    if (!Number.isFinite(pointCount) || pointCount <= 8) {
-      return 0;
-    }
-
-    const targetVisibleLabels = 6;
-    return Math.max(0, Math.ceil(pointCount / targetVisibleLabels) - 1);
   }
 }

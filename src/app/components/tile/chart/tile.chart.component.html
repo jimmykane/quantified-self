@@ -17,7 +17,7 @@
   <app-pie-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme" [chartDataType]="dataType"
     [chartDataValueType]="dataValueType" [chartDataCategoryType]="dataCategoryType"
     [chartDataTimeInterval]="dataTimeInterval" [userUnitSettings]="user?.settings?.unitSettings"
-    [recoveryNow]="recoveryNow" [enableRecoveryNowMode]="true">
+    [recoveryNow]="recoveryNow" [recoveryNowStatus]="recoveryNowStatus" [enableRecoveryNowMode]="true">
   </app-pie-chart>
   }
   @if (chartType === chartTypes.Pie) {
@@ -28,7 +28,7 @@
   }
   @if (chartType === formChartType) {
   <app-form-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme"
-    [absoluteLatestPoint]="absoluteLatestFormPoint">
+    [absoluteLatestPoint]="absoluteLatestFormPoint" [formStatus]="formStatus">
   </app-form-chart>
   }
   @if (chartType === chartTypes.LinesHorizontal

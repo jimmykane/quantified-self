@@ -12,6 +12,10 @@ import {
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   type DashboardChartType,
 } from '../../../helpers/dashboard-special-chart-types';
+import type { DerivedMetricSnapshotStatus } from '@shared/derived-metrics';
+import type { DashboardDerivedMetricStatus } from '../../../helpers/derived-metric-status.helper';
+
+type DashboardRecoveryNowSnapshotStatus = DerivedMetricSnapshotStatus | 'missing' | 'queued' | 'processing';
 
 @Component({
   selector: 'app-tile-chart',
@@ -32,6 +36,8 @@ export class TileChartComponent extends TileAbstractDirective {
   @Input() dataTimeInterval: TimeIntervals;
   @Input() data: any;
   @Input() recoveryNow?: DashboardRecoveryNowContext | null;
+  @Input() recoveryNowStatus?: DashboardRecoveryNowSnapshotStatus | null;
+  @Input() formStatus?: DashboardDerivedMetricStatus | null;
   @Input() absoluteLatestFormPoint?: DashboardFormPoint | null;
 
   public chartTypes = ChartTypes;

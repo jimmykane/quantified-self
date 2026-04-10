@@ -11,6 +11,8 @@ type ResizeObserverRecord = {
   disconnect: ReturnType<typeof vi.fn>;
 };
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 describe('ChartsFormComponent', () => {
   let fixture: ComponentFixture<ChartsFormComponent>;
   let component: ChartsFormComponent;
@@ -19,9 +21,11 @@ describe('ChartsFormComponent', () => {
   let originalRequestAnimationFrame: typeof requestAnimationFrame | undefined;
   let originalCancelAnimationFrame: typeof cancelAnimationFrame | undefined;
 
-  const mockChart = {
-    isDisposed: vi.fn().mockReturnValue(false),
-    dispatchAction: vi.fn(),
+  let mockChart: {
+    isDisposed: ReturnType<typeof vi.fn>;
+    dispatchAction: ReturnType<typeof vi.fn>;
+    on: ReturnType<typeof vi.fn>;
+    off: ReturnType<typeof vi.fn>;
   };
 
   let mockLoader: {
@@ -65,6 +69,21 @@ describe('ChartsFormComponent', () => {
     },
   ];
 
+  const buildLongRangePoints = (count: number): DashboardFormPoint[] => (
+    Array.from({ length: count }, (_, index) => {
+      const ctl = 10 + index * 0.15;
+      const atl = 11 + index * 0.1;
+      return {
+        time: Date.UTC(2024, 0, index + 1),
+        trainingStressScore: index % 5 === 0 ? 40 : 0,
+        ctl,
+        atl,
+        formSameDay: ctl - atl,
+        formPriorDay: index === 0 ? null : (10 + (index - 1) * 0.15) - (11 + (index - 1) * 0.1),
+      };
+    })
+  );
+
   beforeEach(async () => {
     resizeObserverRecords = [];
     originalResizeObserver = globalThis.ResizeObserver;
@@ -89,6 +108,13 @@ describe('ChartsFormComponent', () => {
       return 1;
     }) as unknown as typeof requestAnimationFrame;
     globalThis.cancelAnimationFrame = vi.fn();
+
+    mockChart = {
+      isDisposed: vi.fn().mockReturnValue(false),
+      dispatchAction: vi.fn(),
+      on: vi.fn(),
+      off: vi.fn(),
+    };
 
     mockLoader = {
       init: vi.fn().mockResolvedValue(mockChart),
@@ -134,15 +160,18 @@ describe('ChartsFormComponent', () => {
     document.body.classList.remove('dark-theme');
   });
 
-  const getLastOption = (): Record<string, any> => {
-    return mockLoader.setOption.mock.calls.at(-1)?.[1] as Record<string, any>;
+  const getLastFullChartOption = (): Record<string, any> => {
+    const call = [...mockLoader.setOption.mock.calls]
+      .reverse()
+      .find(([, option]) => Array.isArray((option as Record<string, unknown>)?.series));
+    return (call?.[1] || {}) as Record<string, any>;
   };
 
   it('should initialize echarts with two panes and default prior-day form series', async () => {
     fixture.detectChanges();
     await waitForChartStabilization();
 
-    const option = getLastOption();
+    const option = getLastFullChartOption();
     const formSeries = option.series.find((entry: { name?: string }) => entry.name === 'Form (TSB)');
     const topGrid = option.grid?.[0];
     const bottomGrid = option.grid?.[1];
@@ -156,8 +185,20 @@ describe('ChartsFormComponent', () => {
     expect(topGrid.height).toBe(bottomGrid.height);
     expect(topGrid.outerBoundsMode).toBe('none');
     expect(bottomGrid.outerBoundsMode).toBe('none');
-    expect(formSeries.data).toEqual([points[points.length - 1].formPriorDay]);
+    expect(option.xAxis[0].type).toBe('time');
+    expect(option.xAxis[1].type).toBe('time');
+    expect(Array.isArray(formSeries.data)).toBe(true);
+    expect(formSeries.data).toHaveLength(1);
+    expect(formSeries.data[0][1]).toBe(points[points.length - 1].formPriorDay);
     expect(formSeries.symbol).toBe('circle');
+    expect(option.dataZoom).toBeUndefined();
+    expect(option.toolbox).toBeUndefined();
+    expect(option.xAxis[1].minInterval).toBe(7 * DAY_MS);
+    expect(option.xAxis[1].splitNumber).toBeGreaterThanOrEqual(2);
+    expect(option.xAxis[1].splitNumber).toBeLessThanOrEqual(7);
+    expect(typeof option.xAxis[1].axisLabel.formatter).toBe('function');
+    expect(mockChart.on).not.toHaveBeenCalledWith('datazoom', expect.any(Function));
+    expect(mockChart.on).not.toHaveBeenCalledWith('restore', expect.any(Function));
   });
 
   it('should expose dynamic status title and rounded headline stats from latest real point', async () => {
@@ -204,57 +245,122 @@ describe('ChartsFormComponent', () => {
     });
   });
 
+  it('should show updating no-data messaging while form derived metrics are pending', async () => {
+    component.formStatus = 'stale' as any;
+    component.data = [];
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    expect(component.noDataErrorMessage).toBe('Training metrics are updating');
+    expect(component.noDataErrorHint).toBe('We are recalculating your fitness, fatigue, and form.');
+    expect(component.noDataErrorIcon).toBe('autorenew');
+  });
+
   it('should emit empty chart option when there are no form points', async () => {
     component.data = [];
 
     fixture.detectChanges();
     await waitForChartStabilization();
 
-    const option = getLastOption();
+    const option = getLastFullChartOption();
     expect(option.series).toEqual([]);
     expect(option.xAxis).toEqual([]);
     expect(option.yAxis).toEqual([]);
   });
 
-  it('should apply fixed weekly render granularity for the form chart', async () => {
-    const longRangePoints: DashboardFormPoint[] = Array.from({ length: 120 }, (_, index) => {
-      const ctl = 10 + index * 0.15;
-      const atl = 11 + index * 0.1;
-      return {
-        time: Date.UTC(2024, 0, index + 1),
-        trainingStressScore: index % 5 === 0 ? 40 : 0,
-        ctl,
-        atl,
-        formSameDay: ctl - atl,
-        formPriorDay: index === 0 ? null : (10 + (index - 1) * 0.15) - (11 + (index - 1) * 0.1),
-      };
-    });
-
+  it('should apply weekly granularity by default with thinner line styling', async () => {
+    const longRangePoints = buildLongRangePoints(260);
     component.data = longRangePoints;
     fixture.detectChanges();
     await waitForChartStabilization();
 
-    const option = getLastOption();
+    const option = getLastFullChartOption();
     const formSeries = option.series.find((entry: { name?: string }) => entry.name === 'Form (TSB)');
     const fitnessSeries = option.series.find((entry: { name?: string }) => entry.name === 'Fitness (CTL)');
     const fatigueSeries = option.series.find((entry: { name?: string }) => entry.name === 'Fatigue (ATL)');
 
+    expect(component.selectedGranularity()).toBe('w');
     expect(formSeries.data.length).toBeLessThan(longRangePoints.length);
     expect(option.xAxis[1].axisLabel.rotate).toBe(0);
-    expect(option.xAxis[1].axisLabel.interval).toBeGreaterThan(0);
-    expect(option.xAxis[1].data.length).toBe(formSeries.data.length);
-    expect(option.xAxis[1].data[0]).toMatch(/^([0-9]{2}\s[A-Za-z]{3}|[A-Za-z]{3}\s[0-9]{2})$/);
+    expect(option.xAxis[1].minInterval).toBe(7 * DAY_MS);
+    expect(option.xAxis[1].splitNumber).toBeGreaterThanOrEqual(2);
+    expect(option.xAxis[1].splitNumber).toBeLessThanOrEqual(7);
+    expect(option.xAxis[1].min).toBeGreaterThan(longRangePoints[0].time);
+    expect(option.xAxis[1].max).toBe(formSeries.data[formSeries.data.length - 1][0]);
+    expect(typeof option.xAxis[1].axisLabel.formatter).toBe('function');
     expect(formSeries.symbol).toBe('none');
-    expect(fitnessSeries.lineStyle.width).toBe(1.5);
-    expect(fatigueSeries.lineStyle.width).toBe(1.5);
-    expect(formSeries.lineStyle.width).toBe(1.3);
+    expect(fitnessSeries.lineStyle.width).toBe(1.2);
+    expect(fatigueSeries.lineStyle.width).toBe(1.2);
+    expect(formSeries.lineStyle.width).toBe(1.1);
+    expect(option.dataZoom).toBeUndefined();
+    expect(option.toolbox).toBeUndefined();
+  });
+
+  it('should switch chart timeline window via compact buttons without any zoom/restore toolbar', async () => {
+    const longRangePoints = buildLongRangePoints(1200);
+    component.data = longRangePoints;
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const weeklyOption = getLastFullChartOption();
+    const weeklyFormSeries = weeklyOption.series.find((entry: { name?: string }) => entry.name === 'Form (TSB)');
+    const weeklyLength = weeklyFormSeries.data.length;
+    const weeklyMin = weeklyOption.xAxis[1].min;
+    const weeklyMax = weeklyOption.xAxis[1].max;
+
+    const granularityToggle = fixture.nativeElement.querySelector('mat-button-toggle-group.form-granularity-toggle');
+    expect(granularityToggle).toBeTruthy();
+    expect((fixture.nativeElement.textContent || '')).toContain('W');
+    expect((fixture.nativeElement.textContent || '')).toContain('M');
+    expect((fixture.nativeElement.textContent || '')).toContain('Y');
+
+    component.onGranularityChange('m');
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const monthlyOption = getLastFullChartOption();
+    const monthlyFormSeries = monthlyOption.series.find((entry: { name?: string }) => entry.name === 'Form (TSB)');
+    const monthlyLength = monthlyFormSeries.data.length;
+    const monthlyMin = monthlyOption.xAxis[1].min;
+    const monthlyMax = monthlyOption.xAxis[1].max;
+
+    expect(component.selectedGranularity()).toBe('m');
+    expect(monthlyOption.xAxis[1].minInterval).toBe(28 * DAY_MS);
+    expect(monthlyOption.xAxis[1].splitNumber).toBeGreaterThanOrEqual(2);
+    expect(monthlyOption.xAxis[1].splitNumber).toBeLessThanOrEqual(7);
+    expect(monthlyLength).toBe(weeklyLength);
+    expect(monthlyMin).toBeLessThan(weeklyMin);
+    expect(monthlyMax).toBe(weeklyMax);
+    expect(monthlyOption.dataZoom).toBeUndefined();
+    expect(monthlyOption.toolbox).toBeUndefined();
+
+    component.onGranularityChange('y');
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const yearlyOption = getLastFullChartOption();
+    const yearlyFormSeries = yearlyOption.series.find((entry: { name?: string }) => entry.name === 'Form (TSB)');
+    const yearlyMin = yearlyOption.xAxis[1].min;
+    const yearlyMax = yearlyOption.xAxis[1].max;
+
+    expect(component.selectedGranularity()).toBe('y');
+    expect(yearlyOption.xAxis[1].minInterval).toBe(365 * DAY_MS);
+    expect(yearlyOption.xAxis[1].splitNumber).toBeGreaterThanOrEqual(2);
+    expect(yearlyOption.xAxis[1].splitNumber).toBeLessThanOrEqual(7);
+    expect(yearlyFormSeries.data.length).toBe(weeklyLength);
+    expect(yearlyMin).toBe(yearlyFormSeries.data[0][0]);
+    expect(yearlyMax).toBe(weeklyMax);
+    expect(yearlyMin).toBeLessThan(monthlyMin);
+    expect(yearlyOption.dataZoom).toBeUndefined();
+    expect(yearlyOption.toolbox).toBeUndefined();
   });
 
   it('should render a rich tooltip card with status/date and metric grid', async () => {
     fixture.detectChanges();
     await waitForChartStabilization();
 
-    const option = getLastOption();
+    const option = getLastFullChartOption();
     const tooltipHtml = option.tooltip.formatter([{ dataIndex: 0 }]);
 
     expect(tooltipHtml).toContain('qs-form-tooltip-card');

@@ -56,10 +56,13 @@ import {
   resolveRemainingRecoverySeconds,
   type DashboardRecoveryNowContext,
 } from '../../../helpers/dashboard-recovery-now.helper';
+import {
+  type DashboardDerivedMetricStatus,
+  isDerivedMetricPendingStatus,
+} from '../../../helpers/derived-metric-status.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type ChartSetOptionSettings = Parameters<EChartsType['setOption']>[1];
-
 @Component({
   selector: 'app-pie-chart',
   templateUrl: './charts.pie.component.html',
@@ -80,6 +83,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() isLoading = false;
   @Input() userUnitSettings?: UserUnitSettingsInterface | null;
   @Input() recoveryNow?: DashboardRecoveryNowContext | null;
+  @Input() recoveryNowStatus?: DashboardDerivedMetricStatus | null;
   // Curated recovery is a dedicated dashboard chart type. Keep generic pie behavior isolated.
   @Input() enableRecoveryNowMode = false;
 
@@ -105,6 +109,9 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
   private recoveryRefreshIntervalHandle: ReturnType<typeof setInterval> | null = null;
   private recoveryDebugSignature: string | null = null;
   public showNoDataError = false;
+  public noDataErrorMessage = 'No data yet';
+  public noDataErrorHint = 'Try a different date range or metric';
+  public noDataErrorIcon = 'pie_chart';
 
   constructor(
     private eChartsLoader: EChartsLoaderService,
@@ -522,6 +529,8 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
   }
 
   private updateNoDataErrorState(): void {
+    this.applyNoDataOverlayState('default');
+
     const hasArrayData = Array.isArray(this.data);
     if (!hasArrayData) {
       this.showNoDataError = false;
@@ -544,7 +553,47 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
     const hasRenderableRecovery = activeTotalSeconds !== null
       && activeTotalSeconds > 0
       && remainingSeconds !== null;
-    this.showNoDataError = !hasRenderableRecovery;
+    if (hasRenderableRecovery) {
+      this.showNoDataError = false;
+      return;
+    }
+
+    const status = this.recoveryNowStatus;
+    if (isDerivedMetricPendingStatus(status)) {
+      this.applyNoDataOverlayState('updating');
+      this.showNoDataError = true;
+      return;
+    }
+
+    if (status === 'ready') {
+      this.applyNoDataOverlayState('fully-recovered');
+      this.showNoDataError = true;
+      return;
+    }
+
+    this.showNoDataError = true;
+  }
+
+  private applyNoDataOverlayState(
+    state: 'default' | 'updating' | 'fully-recovered',
+  ): void {
+    if (state === 'updating') {
+      this.noDataErrorMessage = 'Recovery is updating';
+      this.noDataErrorHint = 'We are recalculating your current recovery window.';
+      this.noDataErrorIcon = 'autorenew';
+      return;
+    }
+
+    if (state === 'fully-recovered') {
+      this.noDataErrorMessage = 'No active recovery now';
+      this.noDataErrorHint = 'You are fully recovered based on your latest activities.';
+      this.noDataErrorIcon = 'verified';
+      return;
+    }
+
+    this.noDataErrorMessage = 'No data yet';
+    this.noDataErrorHint = 'Try a different date range or metric';
+    this.noDataErrorIcon = 'pie_chart';
   }
 }
 

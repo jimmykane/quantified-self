@@ -84,6 +84,7 @@ class MockPieChartComponent {
   @Input() chartDataCategoryType?: ChartDataCategoryTypes;
   @Input() chartDataTimeInterval?: TimeIntervals;
   @Input() recoveryNow?: DashboardRecoveryNowContext | null;
+  @Input() recoveryNowStatus?: string | null;
   @Input() enableRecoveryNowMode = false;
 }
 
@@ -97,6 +98,7 @@ class MockFormChartComponent {
   @Input() data: any;
   @Input() darkTheme = false;
   @Input() absoluteLatestPoint: any;
+  @Input() formStatus?: string | null;
 }
 
 describe('TileChartComponent', () => {
@@ -246,6 +248,7 @@ describe('TileChartComponent', () => {
     const recoveryNow = { totalSeconds: 3600, endTimeMs: Date.UTC(2024, 0, 1, 12, 0, 0) };
     component.chartType = DASHBOARD_RECOVERY_NOW_CHART_TYPE as any;
     component.recoveryNow = recoveryNow as any;
+    component.recoveryNowStatus = 'stale' as any;
 
     fixture.detectChanges();
 
@@ -253,10 +256,12 @@ describe('TileChartComponent', () => {
     expect(pie).toBeTruthy();
     expect(pie.enableRecoveryNowMode).toBe(true);
     expect(pie.recoveryNow).toEqual(recoveryNow);
+    expect(pie.recoveryNowStatus).toBe('stale');
   });
 
   it('should render form chart type using form renderer', () => {
     component.chartType = DASHBOARD_FORM_CHART_TYPE as any;
+    component.formStatus = 'stale' as any;
     component.absoluteLatestFormPoint = {
       time: Date.UTC(2024, 0, 5),
       trainingStressScore: 12,
@@ -271,6 +276,7 @@ describe('TileChartComponent', () => {
     const form = getFormComponent();
     expect(form).toBeTruthy();
     expect(form.data).toBe(component.data);
+    expect(form.formStatus).toBe('stale');
     expect(form.absoluteLatestPoint).toEqual(component.absoluteLatestFormPoint);
   });
 

@@ -478,6 +478,69 @@ describe('ChartsPieComponent', () => {
     dateNowSpy.mockRestore();
   });
 
+  it('should show an updating message while curated recovery metrics are stale/building', async () => {
+    component.enableRecoveryNowMode = true;
+    component.chartDataType = DataRecoveryTime.type;
+    component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.chartDataTimeInterval = TimeIntervals.Daily;
+    component.data = [];
+    component.recoveryNow = null;
+    component.recoveryNowStatus = 'stale' as any;
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(component.showNoDataError).toBe(true);
+    expect(component.noDataErrorMessage).toBe('Recovery is updating');
+    expect(component.noDataErrorHint).toBe('We are recalculating your current recovery window.');
+    expect(component.noDataErrorIcon).toBe('autorenew');
+  });
+
+  it('should show fully-recovered message when curated recovery is ready with no active recovery', async () => {
+    const nowMs = Date.UTC(2024, 0, 3, 12, 0, 0);
+    const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(nowMs);
+    component.enableRecoveryNowMode = true;
+    component.chartDataType = DataRecoveryTime.type;
+    component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.chartDataTimeInterval = TimeIntervals.Daily;
+    component.data = [];
+    component.recoveryNow = {
+      totalSeconds: 3600,
+      endTimeMs: nowMs - (2 * 3600 * 1000), // expired
+    };
+    component.recoveryNowStatus = 'ready' as any;
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(component.showNoDataError).toBe(true);
+    expect(component.noDataErrorMessage).toBe('No active recovery now');
+    expect(component.noDataErrorHint).toBe('You are fully recovered based on your latest activities.');
+    expect(component.noDataErrorIcon).toBe('verified');
+    dateNowSpy.mockRestore();
+  });
+
+  it('should keep default no-data message for failed curated recovery states', async () => {
+    component.enableRecoveryNowMode = true;
+    component.chartDataType = DataRecoveryTime.type;
+    component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.chartDataTimeInterval = TimeIntervals.Daily;
+    component.data = [];
+    component.recoveryNow = null;
+    component.recoveryNowStatus = 'failed' as any;
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(component.showNoDataError).toBe(true);
+    expect(component.noDataErrorMessage).toBe('No data yet');
+    expect(component.noDataErrorHint).toBe('Try a different date range or metric');
+    expect(component.noDataErrorIcon).toBe('pie_chart');
+  });
+
   it('should dispose chart on destroy', async () => {
     component.data = [
       { type: 'Running', [ChartDataValueTypes.Total]: 10, count: 1 },

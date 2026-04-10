@@ -24,7 +24,6 @@ import {
 } from './aggregated-chart-row.helper';
 import {
   type DashboardFormPoint,
-  extendDashboardFormPointsWithZeroLoadUntil,
   resolveDashboardFormLatestPoint,
 } from './dashboard-form.helper';
 import { getDatesForDateRange } from './date-range-helper';
@@ -172,23 +171,6 @@ function normalizeDashboardTileEvents(
   return normalizedEvents;
 }
 
-function applyDashboardDateRangeFilterToFormPoints(
-  points: DashboardFormPoint[],
-  dashboardDateRange?: BuildDashboardTileViewModelsInput['dashboardDateRange'],
-): DashboardFormPoint[] {
-  const bounds = resolveDashboardDateRangeBounds(dashboardDateRange);
-  if (!bounds) {
-    return points;
-  }
-
-  const pointsWithRangeDecay = extendDashboardFormPointsWithZeroLoadUntil(points, bounds.endTimeMs);
-  return pointsWithRangeDecay.filter((point) => (
-    Number.isFinite(point?.time)
-    && point.time >= bounds.startTimeMs
-    && point.time <= bounds.endTimeMs
-  ));
-}
-
 export function buildDashboardTileViewModels(
   input: BuildDashboardTileViewModelsInput,
 ): DashboardTileViewModel[] {
@@ -215,11 +197,12 @@ export function buildDashboardTileViewModels(
     const requestedTimeInterval = chartTile.dataTimeInterval || TimeIntervals.Auto;
     if (isDashboardFormChartType(chartTile.chartType)) {
       const fullFormPoints = derivedFormPoints || [];
-      const visibleFormPoints = applyDashboardDateRangeFilterToFormPoints(fullFormPoints, input.dashboardDateRange);
       viewModels.push({
         ...chartTile,
         timeInterval: TimeIntervals.Weekly,
-        data: visibleFormPoints,
+        // Curated Form/TSS always renders from full derived history.
+        // The chart itself handles viewport navigation (scroll/zoom) without date-range clipping.
+        data: fullFormPoints,
         absoluteLatestFormPoint: resolveDashboardFormLatestPoint(fullFormPoints),
       });
       return viewModels;

@@ -54,6 +54,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Recovery Left Now');
     expect(gettingStartedSection?.content).toContain('Active total');
     expect(gettingStartedSection?.content).toContain('Latest workout');
+    expect(gettingStartedSection?.content).toContain('updating');
   });
 
   it('should document chart manager curated and custom categories', () => {
@@ -73,7 +74,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Form (TSB)');
     expect(gettingStartedSection?.content).toContain('prior-day readiness');
     expect(gettingStartedSection?.content).toContain('full history');
-    expect(gettingStartedSection?.content).toContain('clipped by the selected dashboard date range');
+    expect(gettingStartedSection?.content).toContain('W / M / Y');
+    expect(gettingStartedSection?.content).toContain('does not use slider or reload/reset toolbar controls');
     expect(gettingStartedSection?.content).toContain('Latest TSS');
     expect(gettingStartedSection?.content).toContain('weekly');
     expect(gettingStartedSection?.content).toContain('asynchronously');
