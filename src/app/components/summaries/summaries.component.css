@@ -12,6 +12,10 @@
   margin: 0 0 0.75rem;
 }
 
+.dashboard-summary-actions > button {
+  max-width: 100%;
+}
+
 .derived-metrics-banner {
   align-items: center;
   border-left: 4px solid var(--mat-sys-secondary);
@@ -102,4 +106,14 @@ section {
 .desktop-draggable-tile.cdk-drag-preview {
   border-radius: 20px;
   opacity: 0.95;
+}
+
+@media (max-width: 767px) {
+  .dashboard-summary-actions {
+    justify-content: stretch;
+  }
+
+  .dashboard-summary-actions > button {
+    width: 100%;
+  }
 }
