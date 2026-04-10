@@ -188,9 +188,9 @@ describe('ChartsFormComponent', () => {
     expect(option.xAxis[0].type).toBe('time');
     expect(option.xAxis[1].type).toBe('time');
     expect(Array.isArray(formSeries.data)).toBe(true);
-    expect(formSeries.data).toHaveLength(1);
-    expect(formSeries.data[0][1]).toBe(points[points.length - 1].formPriorDay);
-    expect(formSeries.symbol).toBe('circle');
+    expect(formSeries.data).toHaveLength(points.length);
+    expect(formSeries.data[formSeries.data.length - 1][1]).toBe(points[points.length - 1].formPriorDay);
+    expect(formSeries.symbol).toBe('none');
     expect(option.dataZoom).toBeUndefined();
     expect(option.toolbox).toBeUndefined();
     expect(option.xAxis[1].minInterval).toBe(7 * DAY_MS);
@@ -269,7 +269,7 @@ describe('ChartsFormComponent', () => {
     expect(option.yAxis).toEqual([]);
   });
 
-  it('should apply weekly granularity by default with thinner line styling', async () => {
+  it('should apply daily render points for W view by default with thinner line styling', async () => {
     const longRangePoints = buildLongRangePoints(260);
     component.data = longRangePoints;
     fixture.detectChanges();
@@ -281,7 +281,7 @@ describe('ChartsFormComponent', () => {
     const fatigueSeries = option.series.find((entry: { name?: string }) => entry.name === 'Fatigue (ATL)');
 
     expect(component.selectedGranularity()).toBe('w');
-    expect(formSeries.data.length).toBeLessThan(longRangePoints.length);
+    expect(formSeries.data.length).toBe(longRangePoints.length);
     expect(option.xAxis[1].axisLabel.rotate).toBe(0);
     expect(option.xAxis[1].minInterval).toBe(7 * DAY_MS);
     expect(option.xAxis[1].splitNumber).toBeGreaterThanOrEqual(2);
@@ -297,7 +297,7 @@ describe('ChartsFormComponent', () => {
     expect(option.toolbox).toBeUndefined();
   });
 
-  it('should switch chart timeline window via compact buttons without any zoom/restore toolbar', async () => {
+  it('should switch render granularity and timeline window via compact buttons without zoom/restore toolbar', async () => {
     const longRangePoints = buildLongRangePoints(1200);
     component.data = longRangePoints;
     fixture.detectChanges();
@@ -329,9 +329,9 @@ describe('ChartsFormComponent', () => {
     expect(monthlyOption.xAxis[1].minInterval).toBe(28 * DAY_MS);
     expect(monthlyOption.xAxis[1].splitNumber).toBeGreaterThanOrEqual(2);
     expect(monthlyOption.xAxis[1].splitNumber).toBeLessThanOrEqual(7);
-    expect(monthlyLength).toBe(weeklyLength);
+    expect(monthlyLength).toBeLessThan(weeklyLength);
     expect(monthlyMin).toBeLessThan(weeklyMin);
-    expect(monthlyMax).toBe(weeklyMax);
+    expect(monthlyMax).toBeLessThanOrEqual(weeklyMax);
     expect(monthlyOption.dataZoom).toBeUndefined();
     expect(monthlyOption.toolbox).toBeUndefined();
 
@@ -348,9 +348,9 @@ describe('ChartsFormComponent', () => {
     expect(yearlyOption.xAxis[1].minInterval).toBe(365 * DAY_MS);
     expect(yearlyOption.xAxis[1].splitNumber).toBeGreaterThanOrEqual(2);
     expect(yearlyOption.xAxis[1].splitNumber).toBeLessThanOrEqual(7);
-    expect(yearlyFormSeries.data.length).toBe(weeklyLength);
+    expect(yearlyFormSeries.data.length).toBeLessThan(monthlyLength);
     expect(yearlyMin).toBe(yearlyFormSeries.data[0][0]);
-    expect(yearlyMax).toBe(weeklyMax);
+    expect(yearlyMax).toBeLessThanOrEqual(weeklyMax);
     expect(yearlyMin).toBeLessThan(monthlyMin);
     expect(yearlyOption.dataZoom).toBeUndefined();
     expect(yearlyOption.toolbox).toBeUndefined();

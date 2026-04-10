@@ -65,7 +65,6 @@ const MONTH_VIEW_SPAN_MS = 365 * DAY_MS;
 })
 export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy {
   private static readonly FORM_MODE = 'prior-day' as const;
-  private static readonly FORM_RENDER_INTERVAL = TimeIntervals.Weekly;
 
   readonly granularityOptions: ReadonlyArray<{ key: DashboardFormTimelineWindow; label: string }> = [
     { key: 'w', label: 'W' },
@@ -213,7 +212,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
 
     const chartWidth = this.chartDiv?.nativeElement?.clientWidth || 0;
     const chartStyle = buildDashboardEChartsStyleTokens(this.darkTheme, chartWidth);
-    const renderTimeInterval = ChartsFormComponent.FORM_RENDER_INTERVAL;
+    const renderTimeInterval = this.resolveRenderTimeInterval(this.selectedTimelineWindowSignal());
     const points = buildDashboardFormRenderPoints(sourcePoints, renderTimeInterval);
     const viewBounds = this.resolveVisibleBounds(points, this.selectedTimelineWindowSignal());
     const labelConfig = resolveDashboardFormXAxisLabelConfig(
@@ -465,6 +464,16 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
       maxTime: lastTime,
       visiblePointCount,
     };
+  }
+
+  private resolveRenderTimeInterval(window: DashboardFormTimelineWindow): TimeIntervals {
+    if (window === 'm') {
+      return TimeIntervals.Weekly;
+    }
+    if (window === 'y') {
+      return TimeIntervals.Monthly;
+    }
+    return TimeIntervals.Daily;
   }
 
   private formatTooltip(

@@ -138,7 +138,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Form/TSS trend lines keep full history and are explored with compact **W / M / Y** timeline buttons.
 - The chart does not use slider or reload/reset toolbar controls.
 - Headline values show the latest real full-history values, including **Latest TSS**.
-- Form/TSS rendering uses **weekly** trend data, while **M** and **Y** widen the visible history window.
+- Form/TSS uses adaptive render granularity by view: **W = daily points**, **M = weekly points**, **Y = monthly points**.
 - While derived metrics are refreshing, the tile shows a training-metrics **updating** message instead of generic no-data text.
 - When snapshots are missing or stale, they rebuild asynchronously; refresh usually follows within a few minutes.
 - If rebuilding requests fail repeatedly, the dashboard shows a retry notification and continues with last known snapshot values.
