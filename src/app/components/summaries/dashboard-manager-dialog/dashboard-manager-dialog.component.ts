@@ -46,7 +46,6 @@ import { AppUserInterface } from '../../../models/app-user.interface';
 import {
   DASHBOARD_FORM_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
-  type DashboardChartCategory,
   type DashboardCuratedChartType,
   getDashboardCuratedChartDefinitions,
   isDashboardCuratedChartType,
@@ -56,6 +55,15 @@ import {
 import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from '../../../helpers/dashboard-form.helper';
 import { AppUserUtilities } from '../../../utils/app.user.utilities';
 import type { MapStyleName } from '../../../services/map/map-style.types';
+import {
+  buildDashboardManagerPresetTile,
+  DASHBOARD_MANAGER_PRESET_IDS,
+  getDashboardManagerPresetDefinition,
+  getDashboardManagerPresetDefinitions,
+  type DashboardManagerPresetCategory,
+  type DashboardManagerPresetDefinition,
+  type DashboardManagerPresetId,
+} from '../../../helpers/dashboard-manager-presets.helper';
 
 export interface DashboardManagerDialogData {
   user: AppUserInterface;
@@ -67,8 +75,9 @@ export interface DashboardManagerDialogResult {
   saved: boolean;
 }
 
-type DashboardManagerCategory = DashboardChartCategory | 'map';
+type DashboardManagerCategory = DashboardManagerPresetCategory;
 type DashboardMapTileSettings = TileMapSettingsInterface & { mapStyle?: MapStyleName };
+type DashboardManagerWorkflowTab = 'manual' | 'presets';
 
 interface DataGroupInterface {
   name: string;
@@ -104,6 +113,20 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
     !DashboardManagerDialogComponent.excludedChartTypePatterns.some(pattern => pattern.test(`${chartType}`))
   );
   public readonly curatedChartDefinitions = getDashboardCuratedChartDefinitions();
+  public readonly workflowTabOptions: IconOption<DashboardManagerWorkflowTab>[] = [
+    {
+      value: 'manual',
+      label: 'Manual',
+      icon: 'tune',
+      description: 'Configure tile settings field by field',
+    },
+    {
+      value: 'presets',
+      label: 'Presets',
+      icon: 'auto_awesome',
+      description: 'Quick-start from predefined dashboard tile templates',
+    },
+  ];
   public readonly modeOptions: IconOption<'add' | 'edit'>[] = [
     {
       value: 'add',
@@ -138,6 +161,27 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
       description: 'Dashboard map tile that reacts to dashboard filters',
     },
   ];
+  public readonly presetCategoryOptions: IconOption<DashboardManagerPresetCategory>[] = [
+    {
+      value: 'curated',
+      label: 'Curated',
+      icon: 'auto_awesome',
+      description: 'Recovery and Form fixed tiles',
+    },
+    {
+      value: 'custom',
+      label: 'Custom',
+      icon: 'tune',
+      description: 'Configurable chart templates',
+    },
+    {
+      value: 'map',
+      label: 'Map',
+      icon: 'map',
+      description: 'Map tile templates',
+    },
+  ];
+  public readonly presetDefinitions = getDashboardManagerPresetDefinitions();
   public readonly curatedChartIconByType: Record<DashboardCuratedChartType, string> = {
     [DASHBOARD_RECOVERY_NOW_CHART_TYPE]: 'health_and_safety',
     [DASHBOARD_FORM_CHART_TYPE]: 'insights',
@@ -161,6 +205,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
   public dataGroups: DataGroupInterface[] = [];
 
   public mode: 'add' | 'edit' = 'add';
+  public activeWorkflowTab: DashboardManagerWorkflowTab = 'manual';
   public category: DashboardManagerCategory = 'custom';
   public editTileOrder: number | null = null;
   public curatedChartType: DashboardCuratedChartType = DASHBOARD_RECOVERY_NOW_CHART_TYPE;
@@ -173,6 +218,8 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
 
   public mapStyle: MapStyleName = this.normalizeMapStyle(AppUserUtilities.getDefaultDashboardMapStyle());
   public mapClusterMarkers = true;
+  public presetCategory: DashboardManagerPresetCategory = 'curated';
+  public selectedPresetId: DashboardManagerPresetId | null = DASHBOARD_MANAGER_PRESET_IDS.CURATED_RECOVERY;
 
   public isSaving = false;
   public saveError = '';
@@ -210,6 +257,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
     }
 
     this.dataGroups = this.buildDataGroups();
+    this.ensurePresetSelection();
 
     if (this.dashboardTiles.length > 0) {
       this.editTileOrder = this.dashboardTiles[0].order;
@@ -245,6 +293,32 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
       .map(tile => tile as TileChartSettingsInterface);
   }
 
+  get workflowTabIndex(): number {
+    return this.activeWorkflowTab === 'presets' ? 1 : 0;
+  }
+
+  get filteredPresetDefinitions(): DashboardManagerPresetDefinition[] {
+    return this.presetDefinitions.filter(definition => definition.category === this.presetCategory);
+  }
+
+  get selectedPresetDefinition(): DashboardManagerPresetDefinition | null {
+    if (!this.selectedPresetId) {
+      return null;
+    }
+    return getDashboardManagerPresetDefinition(this.selectedPresetId);
+  }
+
+  get selectedPresetDisabledReason(): string | null {
+    if (this.activeWorkflowTab !== 'presets') {
+      return null;
+    }
+    const selectedPreset = this.selectedPresetDefinition;
+    if (!selectedPreset) {
+      return 'Select a preset.';
+    }
+    return this.getPresetDisabledReason(selectedPreset);
+  }
+
   get isTileLimitReached(): boolean {
     return (this.data?.user?.settings?.dashboardSettings?.tiles || []).length >= DashboardManagerDialogComponent.maxDashboardTiles;
   }
@@ -258,6 +332,9 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
     }
     if (this.mode === 'edit' && this.editTileOrder === null) {
       return true;
+    }
+    if (this.activeWorkflowTab === 'presets') {
+      return this.selectedPresetDisabledReason !== null;
     }
     if (this.category === 'curated' && this.isCuratedOptionDisabled(this.curatedChartType)) {
       return true;
@@ -277,19 +354,29 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
       if (editTarget) {
         this.syncFormStateFromTile(editTarget);
       }
+      this.ensurePresetSelection();
       return;
     }
 
     this.category = 'custom';
+    this.ensurePresetSelection();
+  }
+
+  onWorkflowTabChange(nextIndex: number): void {
+    this.activeWorkflowTab = nextIndex === 1 ? 'presets' : 'manual';
+    this.saveError = '';
+    this.ensurePresetSelection();
   }
 
   onEditTileSelectionChange(nextOrder: number): void {
     this.editTileOrder = Number(nextOrder);
     const editTarget = this.resolveEditTile();
     if (!editTarget) {
+      this.ensurePresetSelection();
       return;
     }
     this.syncFormStateFromTile(editTarget);
+    this.ensurePresetSelection();
   }
 
   onCategoryChange(nextCategory: DashboardManagerCategory): void {
@@ -310,6 +397,37 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
         this.syncFormStateFromTile(editTile);
       }
     }
+  }
+
+  onPresetCategoryChange(nextCategory: DashboardManagerPresetCategory): void {
+    this.presetCategory = nextCategory;
+    this.saveError = '';
+    this.ensurePresetSelection(true);
+  }
+
+  onPresetSelectionChange(nextPresetId: DashboardManagerPresetId): void {
+    this.selectedPresetId = nextPresetId;
+    this.saveError = '';
+  }
+
+  isPresetDisabled(definition: DashboardManagerPresetDefinition): boolean {
+    return this.getPresetDisabledReason(definition) !== null;
+  }
+
+  getPresetDisabledReason(definition: DashboardManagerPresetDefinition): string | null {
+    if (this.mode === 'add' && this.isTileLimitReached) {
+      return 'Tile limit reached.';
+    }
+
+    if (definition.category === 'curated' && this.isCuratedOptionDisabled(definition.curatedChartType)) {
+      return 'Already on dashboard.';
+    }
+
+    if (definition.category === 'map' && this.isMapOptionDisabled()) {
+      return 'Map tile already exists.';
+    }
+
+    return null;
   }
 
   onCustomChartTypeChange(nextChartType: ChartTypes): void {
@@ -370,7 +488,9 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
       }));
 
       if (this.mode === 'add') {
-        const newTile = this.buildTileForMode(clonedTiles.length, { columns: 1, rows: 1 }, null);
+        const newTile = this.activeWorkflowTab === 'presets'
+          ? this.buildPresetTileForMode(clonedTiles.length, { columns: 1, rows: 1 })
+          : this.buildTileForMode(clonedTiles.length, { columns: 1, rows: 1 }, null);
         if (!newTile) {
           this.isSaving = false;
           return;
@@ -391,7 +511,9 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
           return;
         }
 
-        const replacement = this.buildTileForMode(editTile.order, editTile.size || { columns: 1, rows: 1 }, editTile);
+        const replacement = this.activeWorkflowTab === 'presets'
+          ? this.buildPresetTileForMode(editTile.order, editTile.size || { columns: 1, rows: 1 })
+          : this.buildTileForMode(editTile.order, editTile.size || { columns: 1, rows: 1 }, editTile);
         if (!replacement) {
           this.isSaving = false;
           return;
@@ -485,6 +607,29 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
     }
 
     return this.buildCustomTile(order, size, existingTile);
+  }
+
+  private buildPresetTileForMode(
+    order: number,
+    size: { columns: number; rows: number },
+  ): TileSettingsInterface | null {
+    const selectedPreset = this.selectedPresetDefinition;
+    if (!selectedPreset) {
+      this.saveError = 'Select a preset.';
+      return null;
+    }
+
+    const disabledReason = this.getPresetDisabledReason(selectedPreset);
+    if (disabledReason) {
+      this.saveError = disabledReason;
+      return null;
+    }
+
+    return buildDashboardManagerPresetTile({
+      presetId: selectedPreset.id,
+      order,
+      size,
+    });
   }
 
   private buildCuratedTile(
@@ -595,6 +740,25 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
       }
     }
     return false;
+  }
+
+  private ensurePresetSelection(forceCategoryFallback = false): void {
+    const presetsForCategory = this.filteredPresetDefinitions;
+    if (!presetsForCategory.length) {
+      this.selectedPresetId = null;
+      return;
+    }
+
+    const hasSelectedPresetInCategory = this.selectedPresetId
+      ? presetsForCategory.some(definition => definition.id === this.selectedPresetId)
+      : false;
+
+    if (!forceCategoryFallback && hasSelectedPresetInCategory) {
+      return;
+    }
+
+    const preferredEnabledPreset = presetsForCategory.find(definition => !this.isPresetDisabled(definition));
+    this.selectedPresetId = (preferredEnabledPreset || presetsForCategory[0]).id;
   }
 
   private buildDataGroups(): DataGroupInterface[] {

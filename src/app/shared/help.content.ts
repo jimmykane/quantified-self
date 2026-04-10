@@ -99,7 +99,9 @@ export const HELP_SECTIONS: HelpSection[] = [
 ### Dashboard manager
 
 - Use the **Dashboard manager** button above dashboard tiles to add or edit dashboard tiles.
+- Dashboard manager supports two workflows: **Manual** and **Presets**.
 - You can choose between **Curated**, **Custom**, and **Map** categories.
+- **Presets** provide quick-start tile templates and can be applied in both **Add** and **Edit** modes.
 - **Curated Recovery** remains a fixed insight and does not react to dashboard date-range changes.
 - **Curated Form/TSS** computes from full history and does not react to dashboard date-range changes.
 - **Custom** charts keep the existing configurable behavior and react to dashboard filters/date range.

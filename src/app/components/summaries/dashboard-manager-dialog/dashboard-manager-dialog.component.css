@@ -17,6 +17,16 @@
   min-width: 0;
 }
 
+.dashboard-manager-tab-group {
+  width: 100%;
+}
+
+.dashboard-manager-tab-content {
+  display: grid;
+  gap: 0.85rem;
+  padding-top: 0.6rem;
+}
+
 .dashboard-manager-section-title {
   color: var(--mat-sys-on-surface-variant);
   font-size: 0.76rem;
@@ -35,15 +45,28 @@
 
 .dashboard-manager-icon-label {
   align-items: center;
-  display: inline-flex;
+  display: flex;
   gap: 0.4rem;
+  line-height: 1.2;
+  min-height: 1.5rem;
 }
 
 .dashboard-manager-icon-label mat-icon {
+  align-items: center;
   color: var(--mat-sys-on-surface-variant);
+  display: inline-flex;
   font-size: 1.05rem;
   height: 1.05rem;
+  justify-content: center;
+  line-height: 1;
+  vertical-align: middle;
   width: 1.05rem;
+}
+
+.dashboard-manager-icon-label > span {
+  align-items: center;
+  display: flex;
+  line-height: 1.2;
 }
 
 .dashboard-manager-inline-radio-group {
@@ -56,7 +79,32 @@
   margin: 0;
 }
 
+.dashboard-manager-chip-listbox {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
 :host ::ng-deep .dashboard-manager-inline-radio-option .mdc-form-field {
+  align-items: center;
+}
+
+:host ::ng-deep .dashboard-manager-radio-option .mdc-form-field {
+  align-items: center;
+}
+
+:host ::ng-deep .dashboard-manager-chip-listbox .mdc-evolution-chip__text-label {
+  align-items: center;
+  display: flex;
+  line-height: 1.2;
+}
+
+:host ::ng-deep .dashboard-manager-chip-listbox .mdc-evolution-chip__graphic {
+  display: none;
+}
+
+:host ::ng-deep .dashboard-manager-chip-listbox .mat-mdc-chip-action-label {
+  display: flex;
   align-items: center;
 }
 

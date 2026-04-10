@@ -46,6 +46,10 @@ function resolveDayStartLocalTime(date: Date): number {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 }
 
+function resolveDayStartUtcTime(date: Date): number {
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+}
+
 function buildDashboardFormPointsFromDailyLoadMap(
   dailyTrainingStressScores: Map<number, number>,
   daySequenceBuilder: (startDay: number, endDay: number) => number[],
@@ -249,19 +253,19 @@ function resolveFormBucketTime(time: number, timeInterval: TimeIntervals): numbe
 
   switch (timeInterval) {
     case TimeIntervals.Yearly:
-      return new Date(date.getFullYear(), 0, 1).getTime();
+      return Date.UTC(date.getUTCFullYear(), 0, 1);
     case TimeIntervals.Monthly:
-      return new Date(date.getFullYear(), date.getMonth(), 1).getTime();
+      return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1);
     case TimeIntervals.Weekly: {
-      const dayIndexMondayFirst = (date.getDay() + 6) % 7;
-      return new Date(
-        date.getFullYear(),
-        date.getMonth(),
-        date.getDate() - dayIndexMondayFirst,
-      ).getTime();
+      const dayIndexMondayFirst = (date.getUTCDay() + 6) % 7;
+      return Date.UTC(
+        date.getUTCFullYear(),
+        date.getUTCMonth(),
+        date.getUTCDate() - dayIndexMondayFirst,
+      );
     }
     default:
-      return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+      return resolveDayStartUtcTime(date);
   }
 }
 

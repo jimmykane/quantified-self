@@ -2,11 +2,14 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   ChartTypes,
   DataDistance,
+  DataDuration,
   TileTypes,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
@@ -15,6 +18,7 @@ import {
   DASHBOARD_FORM_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
 } from '../../../helpers/dashboard-special-chart-types';
+import { DASHBOARD_MANAGER_PRESET_IDS } from '../../../helpers/dashboard-manager-presets.helper';
 import { AppUserService } from '../../../services/app.user.service';
 import { DashboardManagerDialogComponent } from './dashboard-manager-dialog.component';
 
@@ -123,6 +127,57 @@ describe('DashboardManagerDialogComponent', () => {
     expect(userServiceMock.updateUserProperties).toHaveBeenCalledTimes(1);
   });
 
+  it('should render presets tab content and category controls in template', () => {
+    const templatePath = resolve(process.cwd(), 'src/app/components/summaries/dashboard-manager-dialog/dashboard-manager-dialog.component.html');
+    const template = readFileSync(templatePath, 'utf8');
+
+    expect(template).toContain('Preset category');
+    expect(template).toContain('Presets');
+    expect(template).toContain('Apply preset');
+    expect(template).toContain('mat-chip-listbox');
+  });
+
+  it('applies a preset in add mode and appends a new tile', async () => {
+    component.mode = 'add';
+    component.onWorkflowTabChange(1);
+    component.onPresetCategoryChange('custom');
+    component.onPresetSelectionChange(DASHBOARD_MANAGER_PRESET_IDS.CUSTOM_WEEKLY_DISTANCE_TREND);
+
+    await component.save();
+
+    const tiles = dialogData.user.settings.dashboardSettings.tiles;
+    expect(tiles).toHaveLength(2);
+    expect(tiles[1]).toMatchObject({
+      type: TileTypes.Chart,
+      chartType: ChartTypes.LinesVertical,
+      dataTimeInterval: TimeIntervals.Weekly,
+      dataType: DataDistance.type,
+      order: 1,
+      size: { columns: 1, rows: 1 },
+    });
+  });
+
+  it('applies a preset in edit mode and preserves tile order and size', async () => {
+    dialogData.user.settings.dashboardSettings.tiles[0].size = { columns: 2, rows: 3 };
+    component.mode = 'edit';
+    component.editTileOrder = 0;
+    component.onWorkflowTabChange(1);
+    component.onPresetCategoryChange('custom');
+    component.onPresetSelectionChange(DASHBOARD_MANAGER_PRESET_IDS.CUSTOM_DURATION_PIE);
+
+    await component.save();
+
+    const tile = dialogData.user.settings.dashboardSettings.tiles[0];
+    expect(tile).toMatchObject({
+      type: TileTypes.Chart,
+      order: 0,
+      size: { columns: 2, rows: 3 },
+      chartType: ChartTypes.Pie,
+      dataType: DataDuration.type,
+      dataValueType: ChartDataValueTypes.Total,
+    });
+  });
+
   it('prevents adding a duplicate curated chart type', async () => {
     dialogData.user.settings.dashboardSettings.tiles.push({
       type: TileTypes.Chart,
@@ -149,6 +204,28 @@ describe('DashboardManagerDialogComponent', () => {
     expect(dialogRefMock.close).not.toHaveBeenCalledWith({ saved: true });
   });
 
+  it('disables curated preset option when that curated tile already exists', () => {
+    dialogData.user.settings.dashboardSettings.tiles.push({
+      type: TileTypes.Chart,
+      order: 1,
+      name: 'Recovery',
+      chartType: DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+      dataType: 'Recovery Time',
+      dataValueType: ChartDataValueTypes.Total,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataTimeInterval: TimeIntervals.Auto,
+      size: { columns: 1, rows: 1 },
+    });
+
+    component.mode = 'add';
+    component.onWorkflowTabChange(1);
+    component.onPresetCategoryChange('curated');
+    component.onPresetSelectionChange(DASHBOARD_MANAGER_PRESET_IDS.CURATED_RECOVERY);
+
+    expect(component.selectedPresetDisabledReason).toBe('Already on dashboard.');
+    expect(component.isSaveDisabled).toBe(true);
+  });
+
   it('prevents adding a duplicate map tile', async () => {
     dialogData.user.settings.dashboardSettings.tiles.push({
       type: TileTypes.Map,
@@ -171,6 +248,27 @@ describe('DashboardManagerDialogComponent', () => {
 
     expect(component.saveError).toBe('');
     expect(userServiceMock.updateUserProperties).not.toHaveBeenCalled();
+  });
+
+  it('disables map preset option when a map tile already exists', () => {
+    dialogData.user.settings.dashboardSettings.tiles.push({
+      type: TileTypes.Map,
+      order: 1,
+      name: 'Map',
+      mapStyle: 'default',
+      mapTheme: 'normal',
+      showHeatMap: true,
+      clusterMarkers: true,
+      size: { columns: 1, rows: 1 },
+    });
+
+    component.mode = 'add';
+    component.onWorkflowTabChange(1);
+    component.onPresetCategoryChange('map');
+    component.onPresetSelectionChange(DASHBOARD_MANAGER_PRESET_IDS.MAP_DEFAULT_CLUSTERED);
+
+    expect(component.selectedPresetDisabledReason).toBe('Map tile already exists.');
+    expect(component.isSaveDisabled).toBe(true);
   });
 
   it('edits an existing chart and switches it to curated form', async () => {
@@ -297,6 +395,28 @@ describe('DashboardManagerDialogComponent', () => {
     component.ngOnInit();
 
     expect(component.isTileLimitReached).toBe(true);
+    expect(component.isSaveDisabled).toBe(true);
+  });
+
+  it('disables preset add flow when dashboard tile limit is reached', () => {
+    dialogData.user.settings.dashboardSettings.tiles = Array.from({ length: 12 }, (_value, index) => ({
+      type: TileTypes.Chart,
+      order: index,
+      name: `Tile-${index}`,
+      chartType: ChartTypes.ColumnsVertical,
+      dataType: DataDistance.type,
+      dataValueType: ChartDataValueTypes.Total,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataTimeInterval: TimeIntervals.Auto,
+      size: { columns: 1, rows: 1 },
+    }));
+
+    component.ngOnInit();
+    component.onWorkflowTabChange(1);
+    component.onPresetCategoryChange('custom');
+    component.onPresetSelectionChange(DASHBOARD_MANAGER_PRESET_IDS.CUSTOM_DURATION_PIE);
+
+    expect(component.selectedPresetDisabledReason).toBe('Tile limit reached.');
     expect(component.isSaveDisabled).toBe(true);
   });
 

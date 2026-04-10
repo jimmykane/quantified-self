@@ -61,6 +61,8 @@ describe('help.content', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
     expect(gettingStartedSection?.content).toContain('Dashboard manager');
+    expect(gettingStartedSection?.content).toContain('Manual');
+    expect(gettingStartedSection?.content).toContain('Presets');
     expect(gettingStartedSection?.content).toContain('Curated');
     expect(gettingStartedSection?.content).toContain('Custom');
     expect(gettingStartedSection?.content).toContain('Map');

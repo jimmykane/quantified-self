@@ -154,6 +154,30 @@ function hasSameDerivedMetricKinds(
     return rightMetricKinds.every((metricKind) => leftSet.has(metricKind));
 }
 
+function resolveInFlightMetricKinds(
+    rawCoordinatorData: unknown,
+    dirtyMetricKinds: readonly DerivedMetricKind[],
+): DerivedMetricKind[] {
+    const normalizedData = (rawCoordinatorData && typeof rawCoordinatorData === 'object')
+        ? rawCoordinatorData as Record<string, unknown>
+        : {};
+    const persistedInFlightMetricKinds = normalizeDerivedMetricKindsStrict(
+        normalizedData.processingMetricKinds as unknown[],
+    );
+    if (persistedInFlightMetricKinds.length) {
+        return persistedInFlightMetricKinds;
+    }
+
+    const fallbackDirtyMetricKinds = normalizeDerivedMetricKindsStrict(dirtyMetricKinds);
+    if (fallbackDirtyMetricKinds.length) {
+        return fallbackDirtyMetricKinds;
+    }
+
+    // Legacy coordinator docs written before processingMetricKinds existed can be
+    // left in "processing" with an empty dirty set after task crashes/timeouts.
+    return [...DEFAULT_DERIVED_METRIC_KINDS];
+}
+
 function isMergedEvent(eventData: Record<string, unknown>): boolean {
     if (eventData.isMerge === true) {
         return true;
@@ -524,14 +548,31 @@ export async function startDerivedMetricsProcessing(
             return;
         }
 
-        const coordinator = parseCoordinator(coordinatorSnapshot.data());
+        const rawCoordinatorData = coordinatorSnapshot.data();
+        const coordinator = parseCoordinator(rawCoordinatorData);
         if (coordinator.generation !== generation) {
             startedResult = null;
             return;
         }
 
-        // A generation can only be claimed from the queued state.
-        // Duplicate deliveries while already processing should be a no-op.
+        if (coordinator.status === 'processing') {
+            const inFlightMetricKinds = resolveInFlightMetricKinds(rawCoordinatorData, coordinator.dirtyMetricKinds);
+            transaction.set(coordinatorRef, {
+                entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
+                status: 'processing',
+                processingMetricKinds: inFlightMetricKinds,
+                startedAtMs: nowMs,
+                updatedAtMs: nowMs,
+                lastError: null,
+            }, { merge: true });
+            startedResult = {
+                dirtyMetricKinds: inFlightMetricKinds,
+                startedAtMs: nowMs,
+            };
+            return;
+        }
+
+        // A generation can only be freshly claimed from queued state.
         if (coordinator.status !== 'queued') {
             startedResult = null;
             return;
@@ -542,6 +583,7 @@ export async function startDerivedMetricsProcessing(
             transaction.set(coordinatorRef, {
                 entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
                 status: 'idle',
+                processingMetricKinds: [],
                 updatedAtMs: nowMs,
                 completedAtMs: nowMs,
                 lastError: null,
@@ -554,6 +596,7 @@ export async function startDerivedMetricsProcessing(
             entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
             status: 'processing',
             dirtyMetricKinds: [],
+            processingMetricKinds: dirtyMetricKinds,
             startedAtMs: nowMs,
             updatedAtMs: nowMs,
             lastError: null,
@@ -599,6 +642,7 @@ export async function completeDerivedMetricsProcessing(
                 status: 'queued',
                 generation: nextGeneration,
                 dirtyMetricKinds: pendingDirtyMetricKinds,
+                processingMetricKinds: [],
                 requestedAtMs: nowMs,
                 updatedAtMs: nowMs,
                 completedAtMs: null,
@@ -615,6 +659,7 @@ export async function completeDerivedMetricsProcessing(
             entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
             status: 'idle',
             dirtyMetricKinds: [],
+            processingMetricKinds: [],
             updatedAtMs: nowMs,
             completedAtMs: nowMs,
             lastError: null,
@@ -677,6 +722,7 @@ export async function failDerivedMetricsProcessing(
             entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
             status: 'failed',
             dirtyMetricKinds: retainedDirtyMetricKinds,
+            processingMetricKinds: [],
             lastError: errorMessage,
             updatedAtMs: nowMs,
         }, { merge: true });
