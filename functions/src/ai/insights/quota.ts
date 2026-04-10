@@ -22,6 +22,11 @@ interface SubscriptionPeriod {
   endDate: string;
 }
 
+interface CalendarMonthPeriod {
+  startDate: string;
+  endDate: string;
+}
+
 interface AiInsightsQuotaUsageDoc {
   version: number;
   role: 'free' | 'basic' | 'pro';
@@ -238,6 +243,13 @@ function buildUsageDocId(periodStart: string, periodEnd: string): string {
   return `period_${Date.parse(periodStart)}_${Date.parse(periodEnd)}`;
 }
 
+function buildCalendarMonthPeriod(now: Date): CalendarMonthPeriod {
+  return {
+    startDate: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString(),
+    endDate: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString(),
+  };
+}
+
 function getUsageDocRef(
   userID: string,
   periodDocId: string,
@@ -297,7 +309,7 @@ function normalizeUsageDoc(
       : 0,
     periodStart: typeof data?.periodStart === 'string' ? data.periodStart : '',
     periodEnd: typeof data?.periodEnd === 'string' ? data.periodEnd : '',
-    periodKind: data?.periodKind === 'subscription' || data?.periodKind === 'grace_hold' || data?.periodKind === 'no_billing_period'
+    periodKind: data?.periodKind === 'subscription' || data?.periodKind === 'grace_hold' || data?.periodKind === 'calendar_month' || data?.periodKind === 'no_billing_period'
       ? data.periodKind
       : 'subscription',
     successfulRequestCount,
@@ -404,17 +416,18 @@ async function resolveAiInsightsQuotaWindow(
   }
 
   if (!currentPaidRole) {
+    const freePeriod = buildCalendarMonthPeriod(dependencies.now());
     return {
       status: {
         role: 'free',
         limit: getAiInsightsRequestLimitForRole('free'),
-        periodStart: null,
-        periodEnd: null,
-        periodKind: 'no_billing_period',
-        resetMode: 'next_successful_payment',
-        isEligible: false,
+        periodStart: freePeriod.startDate,
+        periodEnd: freePeriod.endDate,
+        periodKind: 'calendar_month',
+        resetMode: 'date',
+        isEligible: true,
       },
-      periodDocId: null,
+      periodDocId: buildUsageDocId(freePeriod.startDate, freePeriod.endDate),
     };
   }
 
@@ -489,7 +502,7 @@ export async function reserveAiInsightsQuotaForRequest(
 ): Promise<AiInsightsQuotaReservation> {
   const resolvedWindow = await resolveAiInsightsQuotaWindow(userID, dependencies, userRoleContext);
   if (!resolvedWindow.status.isEligible) {
-    throw new HttpsError('permission-denied', 'AI Insights is available to Basic and Pro members.');
+    throw new HttpsError('permission-denied', 'AI Insights is unavailable for this account.');
   }
 
   if (!resolvedWindow.periodDocId || !resolvedWindow.status.periodStart || !resolvedWindow.status.periodEnd) {

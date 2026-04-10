@@ -184,17 +184,17 @@ export const HELP_SECTIONS: HelpSection[] = [
     summary: 'How prompt execution, result types, quotas, and restore behavior work in the AI Insights page.',
     content: `## Access and quota
 
-- AI Insights is available for **Basic** and **Pro** accounts.
-- Free accounts are redirected to the subscription flow for AI Insights access.
+- AI Insights is available for **Free**, **Basic**, and **Pro** accounts.
 - Prompts are currently **English only**.
 - For AI Insights, we do **not** share your raw activities, routes, or uploaded files with AI providers.
 - We only send the minimum derived stats needed to generate answers.
 - **Why do I get the same answer for the same prompt?**
   - AI Insights is mostly deterministic for the same prompt and same data scope.
   - Answers change when the underlying stats change, like new activities, a different date range, or a changed prompt.
-- Request limits per billing period:
-  - Basic: up to **${AI_INSIGHTS_REQUEST_LIMITS.basic}** requests
-  - Pro: up to **${AI_INSIGHTS_REQUEST_LIMITS.pro}** requests
+- Request limits:
+  - Free: up to **${AI_INSIGHTS_REQUEST_LIMITS.free}** requests per calendar month
+  - Basic: up to **${AI_INSIGHTS_REQUEST_LIMITS.basic}** requests per billing period
+  - Pro: up to **${AI_INSIGHTS_REQUEST_LIMITS.pro}** requests per billing period
 - The prompt card always shows your live remaining requests and reset timing.
 
 ## Prompt flow and execution
