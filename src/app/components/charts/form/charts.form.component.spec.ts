@@ -20,6 +20,7 @@ describe('ChartsFormComponent', () => {
   let originalResizeObserver: typeof ResizeObserver | undefined;
   let originalRequestAnimationFrame: typeof requestAnimationFrame | undefined;
   let originalCancelAnimationFrame: typeof cancelAnimationFrame | undefined;
+  let dateNowSpy: ReturnType<typeof vi.spyOn> | null;
 
   let mockChart: {
     isDisposed: ReturnType<typeof vi.fn>;
@@ -86,6 +87,7 @@ describe('ChartsFormComponent', () => {
 
   beforeEach(async () => {
     resizeObserverRecords = [];
+    dateNowSpy = null;
     originalResizeObserver = globalThis.ResizeObserver;
     originalRequestAnimationFrame = globalThis.requestAnimationFrame;
     originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
@@ -139,9 +141,13 @@ describe('ChartsFormComponent', () => {
     component.darkTheme = false;
     component.isLoading = false;
     component.data = points;
+    // Keep tests deterministic; individual tests can override this.
+    dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(points[points.length - 1].time);
   });
 
   afterEach(() => {
+    dateNowSpy?.mockRestore();
+    dateNowSpy = null;
     if (originalResizeObserver) {
       globalThis.ResizeObserver = originalResizeObserver;
     } else {
@@ -255,6 +261,22 @@ describe('ChartsFormComponent', () => {
     expect(component.noDataErrorMessage).toBe('Training metrics are updating');
     expect(component.noDataErrorHint).toBe('We are recalculating your fitness, fatigue, and form.');
     expect(component.noDataErrorIcon).toBe('autorenew');
+  });
+
+  it('should extend form trend to today with zero-load decay days', async () => {
+    dateNowSpy?.mockRestore();
+    dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2024, 0, 10, 13, 0, 0));
+    component.data = points;
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const option = getLastFullChartOption();
+    const formSeries = option.series.find((entry: { name?: string }) => entry.name === 'Form (TSB)');
+
+    expect(formSeries.data.length).toBe(10);
+    expect(option.xAxis[1].max).toBe(Date.UTC(2024, 0, 10));
+    expect(option.xAxis[1].max).toBeGreaterThan(points[points.length - 1].time);
   });
 
   it('should emit empty chart option when there are no form points', async () => {

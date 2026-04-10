@@ -137,6 +137,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Form and RecoveryNow tiles use precomputed derived snapshots from your full history (UTC day buckets).
 - Form/TSS trend lines keep full history and are explored with compact **W / M / Y** timeline buttons.
 - The chart does not use slider or reload/reset toolbar controls.
+- Form trend lines continue to **today** with zero-load decay after your latest workout.
 - Headline values show the latest real full-history values, including **Latest TSS**.
 - Form/TSS uses adaptive render granularity by view: **W = daily points**, **M = weekly points**, **Y = monthly points**.
 - While derived metrics are refreshing, the tile shows a training-metrics **updating** message instead of generic no-data text.

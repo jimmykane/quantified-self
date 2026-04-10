@@ -32,6 +32,7 @@ import { formatDashboardDateByInterval } from '../../../helpers/dashboard-chart-
 import {
   buildDashboardFormRenderPoints,
   DashboardFormPoint,
+  extendDashboardFormPointsWithZeroLoadUntil,
   resolveDashboardFormLatestPoint,
   resolveDashboardFormStatus,
   resolveDashboardFormValue,
@@ -213,7 +214,10 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
     const chartWidth = this.chartDiv?.nativeElement?.clientWidth || 0;
     const chartStyle = buildDashboardEChartsStyleTokens(this.darkTheme, chartWidth);
     const renderTimeInterval = this.resolveRenderTimeInterval(this.selectedTimelineWindowSignal());
-    const points = buildDashboardFormRenderPoints(sourcePoints, renderTimeInterval);
+    // Keep the trend continuous through today by extending with zero-load decay days.
+    // Headline stats still use the absolute latest real workout point.
+    const pointsUntilToday = extendDashboardFormPointsWithZeroLoadUntil(sourcePoints, Date.now());
+    const points = buildDashboardFormRenderPoints(pointsUntilToday, renderTimeInterval);
     const viewBounds = this.resolveVisibleBounds(points, this.selectedTimelineWindowSignal());
     const labelConfig = resolveDashboardFormXAxisLabelConfig(
       viewBounds.minTime,

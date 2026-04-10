@@ -79,6 +79,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('prior-day readiness');
     expect(gettingStartedSection?.content).toContain('full history');
     expect(gettingStartedSection?.content).toContain('W / M / Y');
+    expect(gettingStartedSection?.content).toContain('continue to **today** with zero-load decay');
     expect(gettingStartedSection?.content).toContain('does not use slider or reload/reset toolbar controls');
     expect(gettingStartedSection?.content).toContain('Latest TSS');
     expect(gettingStartedSection?.content).toContain('weekly');

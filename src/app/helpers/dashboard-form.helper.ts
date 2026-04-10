@@ -319,7 +319,9 @@ export function buildDashboardFormRenderPoints(
     .sort((left, right) => left[0] - right[0])
     .map(([time, bucket]) => ({
       ...bucket.lastPoint,
-      time,
+      // Plot aggregated buckets at their latest included day so ongoing
+      // week/month buckets render up to "today" instead of bucket start.
+      time: bucket.lastPoint.time,
       trainingStressScore: bucket.trainingStressScore,
     }));
 }

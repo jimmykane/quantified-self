@@ -202,9 +202,9 @@ describe('dashboard-form.helper', () => {
 
     expect(monthly).toHaveLength(13);
 
-    const january2024 = monthly.find(point => point.time === Date.UTC(2024, 0, 1));
-    const february2024 = monthly.find(point => point.time === Date.UTC(2024, 1, 1));
-    const january2025 = monthly.find(point => point.time === Date.UTC(2025, 0, 1));
+    const january2024 = monthly.find(point => point.time === Date.UTC(2024, 0, 31));
+    const february2024 = monthly.find(point => point.time === Date.UTC(2024, 1, 29));
+    const january2025 = monthly.find(point => point.time === Date.UTC(2025, 0, 10));
 
     expect(january2024?.trainingStressScore).toBe(30);
     expect(february2024?.trainingStressScore).toBe(30);
@@ -241,7 +241,7 @@ describe('dashboard-form.helper', () => {
     expect(weekly[1].trainingStressScore).toBe(30);
   });
 
-  it('should bucket weekly render points by UTC Monday boundaries for derived daily loads', () => {
+  it('should bucket weekly render points by UTC Monday boundaries and plot each bucket at the latest day', () => {
     const points = buildDashboardFormPointsFromDailyLoads([
       { dayMs: Date.UTC(2024, 0, 7), load: 10 }, // Sunday
       { dayMs: Date.UTC(2024, 0, 8), load: 20 }, // Monday
@@ -251,7 +251,7 @@ describe('dashboard-form.helper', () => {
 
     expect(weekly).toHaveLength(2);
     expect(weekly.map(point => point.time)).toEqual([
-      Date.UTC(2024, 0, 1),
+      Date.UTC(2024, 0, 7),
       Date.UTC(2024, 0, 8),
     ]);
     expect(weekly.map(point => point.trainingStressScore)).toEqual([10, 20]);
