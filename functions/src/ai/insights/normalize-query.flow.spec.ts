@@ -24,6 +24,7 @@ import {
   DataPowerAvg,
   DataPowerNormalized,
   DataPowerTrainingStressScore,
+  DataPowerWattsPerKg,
   DataPowerZoneTwoDuration,
   DataRecoveryTime,
   DataSwimPaceAvg,
@@ -2925,6 +2926,39 @@ describe('normalizeInsightQuery', () => {
 
     expect(result.metricKey).toBe('ftp');
     expect(result.query.dataType).toBe(DataFTP.type);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Average);
+    expect(result.query.categoryType).toBe(ChartDataCategoryTypes.DateType);
+  });
+
+  it('normalizes average power-to-weight ratio over time for cycling this year', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'average power to weight ratio',
+        aggregation: 'average',
+        category: 'date',
+        requestedTimeInterval: 'auto',
+        activityTypes: ['Cycling'],
+        dateRange: {
+          kind: 'current_period',
+          unit: 'year',
+        },
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show my average power-to-weight ratio over time for cycling this year',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('power_watts_per_kg');
+    expect(result.query.dataType).toBe(DataPowerWattsPerKg.type);
     expect(result.query.valueType).toBe(ChartDataValueTypes.Average);
     expect(result.query.categoryType).toBe(ChartDataCategoryTypes.DateType);
   });

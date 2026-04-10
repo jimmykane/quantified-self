@@ -38,6 +38,7 @@ describe('metric-catalog', () => {
     expect(resolveInsightMetric('ftp')?.key).toBe('ftp');
     expect(resolveInsightMetric('critical power')?.key).toBe('critical_power');
     expect(resolveInsightMetric('watts per kg')?.key).toBe('power_watts_per_kg');
+    expect(resolveInsightMetric('average power to weight ratio')?.key).toBe('power_watts_per_kg');
     expect(resolveInsightMetric('vo2 max')?.key).toBe('vo2_max');
     expect(resolveInsightMetric('epoc')?.key).toBe('epoc');
     expect(resolveInsightMetric('avg vam')?.key).toBe('avg_vam');
