@@ -1,0 +1,52 @@
+:host {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.intensity-layout {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 8px 10px 8px;
+}
+
+.intensity-header {
+  display: grid;
+  gap: 4px;
+}
+
+.intensity-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.intensity-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.intensity-stat-value {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1.14rem;
+  line-height: 1;
+  font-weight: 700;
+  color: var(--mat-sys-on-surface);
+}
+
+.intensity-stat-label {
+  margin-top: 2px;
+  font-size: 0.66rem;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.intensity-chart {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 90px;
+  min-width: 0;
+}

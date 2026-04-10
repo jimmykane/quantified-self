@@ -17,16 +17,29 @@ import {
 } from '@sports-alliance/sports-lib';
 import type { MapStyleName } from '../services/map/map-style.types';
 import {
+  DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
+  DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
+  DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
+  DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
+  DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   type DashboardChartCategory,
   type DashboardCuratedChartType,
+  type DashboardKpiChartType,
 } from './dashboard-special-chart-types';
 import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from './dashboard-form.helper';
 
 export const DASHBOARD_MANAGER_PRESET_IDS = {
   CURATED_RECOVERY: 'curated-recovery',
   CURATED_FORM: 'curated-form',
+  CURATED_FRESHNESS_FORECAST: 'curated-freshness-forecast',
+  CURATED_INTENSITY_DISTRIBUTION: 'curated-intensity-distribution',
+  CURATED_EFFICIENCY_TREND: 'curated-efficiency-trend',
+  KPI_ACWR: 'kpi-acwr',
+  KPI_RAMP_RATE: 'kpi-ramp-rate',
+  KPI_MONOTONY_STRAIN: 'kpi-monotony-strain',
   MAP_DEFAULT_CLUSTERED: 'map-default-clustered',
   CUSTOM_DURATION_PIE: 'custom-duration-pie',
   CUSTOM_DISTANCE_COLUMNS: 'custom-distance-columns',
@@ -61,6 +74,11 @@ export interface DashboardManagerCuratedPresetDefinition extends DashboardManage
   curatedChartType: DashboardCuratedChartType;
 }
 
+export interface DashboardManagerKpiPresetDefinition extends DashboardManagerPresetBaseDefinition {
+  category: 'kpi';
+  kpiChartType: DashboardKpiChartType;
+}
+
 export interface DashboardManagerCustomPresetDefinition extends DashboardManagerPresetBaseDefinition {
   category: 'custom';
   chartType: ChartTypes;
@@ -78,6 +96,7 @@ export interface DashboardManagerMapPresetDefinition extends DashboardManagerPre
 
 export type DashboardManagerPresetDefinition =
   | DashboardManagerCuratedPresetDefinition
+  | DashboardManagerKpiPresetDefinition
   | DashboardManagerCustomPresetDefinition
   | DashboardManagerMapPresetDefinition;
 
@@ -107,6 +126,60 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     icon: 'insights',
     category: 'curated',
     curatedChartType: DASHBOARD_FORM_CHART_TYPE,
+  },
+  {
+    id: DASHBOARD_MANAGER_PRESET_IDS.CURATED_FRESHNESS_FORECAST,
+    label: 'Freshness Forecast',
+    tileName: 'Freshness Forecast',
+    description: '7-day zero-load form forecast from derived history.',
+    icon: 'trending_up',
+    category: 'curated',
+    curatedChartType: DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
+  },
+  {
+    id: DASHBOARD_MANAGER_PRESET_IDS.CURATED_INTENSITY_DISTRIBUTION,
+    label: 'Intensity Distribution',
+    tileName: 'Intensity Distribution',
+    description: 'Weekly easy/moderate/hard training mix.',
+    icon: 'bar_chart',
+    category: 'curated',
+    curatedChartType: DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
+  },
+  {
+    id: DASHBOARD_MANAGER_PRESET_IDS.CURATED_EFFICIENCY_TREND,
+    label: 'Efficiency Trend',
+    tileName: 'Efficiency Trend',
+    description: 'Weekly duration-weighted power/heart-rate trend.',
+    icon: 'show_chart',
+    category: 'curated',
+    curatedChartType: DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
+  },
+  {
+    id: DASHBOARD_MANAGER_PRESET_IDS.KPI_ACWR,
+    label: 'KPI: ACWR',
+    tileName: 'ACWR',
+    description: 'Acute vs chronic load ratio with mini trend.',
+    icon: 'monitoring',
+    category: 'kpi',
+    kpiChartType: DASHBOARD_ACWR_KPI_CHART_TYPE,
+  },
+  {
+    id: DASHBOARD_MANAGER_PRESET_IDS.KPI_RAMP_RATE,
+    label: 'KPI: Ramp Rate',
+    tileName: 'Ramp Rate',
+    description: 'CTL change over 7 days with mini trend.',
+    icon: 'speed',
+    category: 'kpi',
+    kpiChartType: DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
+  },
+  {
+    id: DASHBOARD_MANAGER_PRESET_IDS.KPI_MONOTONY_STRAIN,
+    label: 'KPI: Monotony / Strain',
+    tileName: 'Monotony / Strain',
+    description: 'Weekly strain and monotony KPI with mini trend.',
+    icon: 'stacked_line_chart',
+    category: 'kpi',
+    kpiChartType: DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.MAP_DEFAULT_CLUSTERED,
@@ -259,18 +332,37 @@ export function buildDashboardManagerPresetTile(
       return formTile;
     }
 
-    const recoveryTile: TileChartSettingsInterface = {
+    const curatedTile: TileChartSettingsInterface = {
       name: definition.tileName,
       type: TileTypes.Chart,
       order: input.order,
       size: input.size,
-      chartType: DASHBOARD_RECOVERY_NOW_CHART_TYPE as unknown as ChartTypes,
-      dataType: DataRecoveryTime.type,
+      chartType: definition.curatedChartType as unknown as ChartTypes,
+      dataType: definition.curatedChartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE
+        ? DataRecoveryTime.type
+        : DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
       dataValueType: ChartDataValueTypes.Total,
       dataCategoryType: ChartDataCategoryTypes.DateType,
-      dataTimeInterval: TimeIntervals.Auto,
+      dataTimeInterval: definition.curatedChartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE
+        ? TimeIntervals.Auto
+        : TimeIntervals.Weekly,
     };
-    return recoveryTile;
+    return curatedTile;
+  }
+
+  if (definition.category === 'kpi') {
+    const kpiTile: TileChartSettingsInterface = {
+      name: definition.tileName,
+      type: TileTypes.Chart,
+      order: input.order,
+      size: input.size,
+      chartType: definition.kpiChartType as unknown as ChartTypes,
+      dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+      dataValueType: ChartDataValueTypes.Total,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataTimeInterval: TimeIntervals.Weekly,
+    };
+    return kpiTile;
   }
 
   const customTile: TileChartSettingsInterface = {

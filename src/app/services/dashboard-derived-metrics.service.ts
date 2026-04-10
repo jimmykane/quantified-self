@@ -4,6 +4,22 @@ import { combineLatest, from, Observable, of } from 'rxjs';
 import { catchError, finalize, map, tap } from 'rxjs/operators';
 import type { DashboardFormPoint } from '../helpers/dashboard-form.helper';
 import { buildDashboardFormPointsFromDailyLoads } from '../helpers/dashboard-form.helper';
+import type {
+  DashboardAcwrContext,
+  DashboardEfficiencyTrendContext,
+  DashboardFreshnessForecastContext,
+  DashboardIntensityDistributionContext,
+  DashboardMonotonyStrainContext,
+  DashboardRampRateContext,
+} from '../helpers/dashboard-derived-metrics.helper';
+import {
+  resolveDashboardAcwrContext,
+  resolveDashboardEfficiencyTrendContext,
+  resolveDashboardFreshnessForecastContext,
+  resolveDashboardIntensityDistributionContext,
+  resolveDashboardMonotonyStrainContext,
+  resolveDashboardRampRateContext,
+} from '../helpers/dashboard-derived-metrics.helper';
 import type { DashboardRecoveryNowContext } from '../helpers/dashboard-recovery-now.helper';
 import type { DashboardDerivedMetricStatus } from '../helpers/derived-metric-status.helper';
 import { AppFunctionsService } from './app.functions.service';
@@ -21,11 +37,25 @@ import {
 export interface DashboardDerivedMetricsState {
   formPoints: DashboardFormPoint[] | null;
   recoveryNow: DashboardRecoveryNowContext | null;
+  acwr: DashboardAcwrContext | null;
+  rampRate: DashboardRampRateContext | null;
+  monotonyStrain: DashboardMonotonyStrainContext | null;
+  freshnessForecast: DashboardFreshnessForecastContext | null;
+  intensityDistribution: DashboardIntensityDistributionContext | null;
+  efficiencyTrend: DashboardEfficiencyTrendContext | null;
   formStatus: DashboardDerivedMetricStatus;
   recoveryNowStatus: DashboardDerivedMetricStatus;
+  acwrStatus: DashboardDerivedMetricStatus;
+  rampRateStatus: DashboardDerivedMetricStatus;
+  monotonyStrainStatus: DashboardDerivedMetricStatus;
+  freshnessForecastStatus: DashboardDerivedMetricStatus;
+  intensityDistributionStatus: DashboardDerivedMetricStatus;
+  efficiencyTrendStatus: DashboardDerivedMetricStatus;
 }
 
 type UserUIDCarrier = { uid?: string | null } | null | undefined;
+type SnapshotRecord = Record<string, unknown> | undefined;
+type DerivedEnsureCandidate = { kind: typeof DERIVED_METRIC_KINDS[keyof typeof DERIVED_METRIC_KINDS]; status: DashboardDerivedMetricStatus };
 
 @Injectable({
   providedIn: 'root',
@@ -49,13 +79,31 @@ export class DashboardDerivedMetricsService {
       return of({
         formPoints: null,
         recoveryNow: null,
+        acwr: null,
+        rampRate: null,
+        monotonyStrain: null,
+        freshnessForecast: null,
+        intensityDistribution: null,
+        efficiencyTrend: null,
         formStatus: 'missing',
         recoveryNowStatus: 'missing',
+        acwrStatus: 'missing',
+        rampRateStatus: 'missing',
+        monotonyStrainStatus: 'missing',
+        freshnessForecastStatus: 'missing',
+        intensityDistributionStatus: 'missing',
+        efficiencyTrendStatus: 'missing',
       });
     }
 
     const formDocRef = doc(this.firestore, 'users', uid, DERIVED_METRICS_COLLECTION_ID, getDerivedMetricDocId(DERIVED_METRIC_KINDS.Form));
     const recoveryDocRef = doc(this.firestore, 'users', uid, DERIVED_METRICS_COLLECTION_ID, getDerivedMetricDocId(DERIVED_METRIC_KINDS.RecoveryNow));
+    const acwrDocRef = doc(this.firestore, 'users', uid, DERIVED_METRICS_COLLECTION_ID, getDerivedMetricDocId(DERIVED_METRIC_KINDS.Acwr));
+    const rampRateDocRef = doc(this.firestore, 'users', uid, DERIVED_METRICS_COLLECTION_ID, getDerivedMetricDocId(DERIVED_METRIC_KINDS.RampRate));
+    const monotonyStrainDocRef = doc(this.firestore, 'users', uid, DERIVED_METRICS_COLLECTION_ID, getDerivedMetricDocId(DERIVED_METRIC_KINDS.MonotonyStrain));
+    const freshnessForecastDocRef = doc(this.firestore, 'users', uid, DERIVED_METRICS_COLLECTION_ID, getDerivedMetricDocId(DERIVED_METRIC_KINDS.FreshnessForecast));
+    const intensityDistributionDocRef = doc(this.firestore, 'users', uid, DERIVED_METRICS_COLLECTION_ID, getDerivedMetricDocId(DERIVED_METRIC_KINDS.IntensityDistribution));
+    const efficiencyTrendDocRef = doc(this.firestore, 'users', uid, DERIVED_METRICS_COLLECTION_ID, getDerivedMetricDocId(DERIVED_METRIC_KINDS.EfficiencyTrend));
 
     return combineLatest([
       (docData(formDocRef) as Observable<Record<string, unknown> | undefined>).pipe(
@@ -64,12 +112,51 @@ export class DashboardDerivedMetricsService {
       (docData(recoveryDocRef) as Observable<Record<string, unknown> | undefined>).pipe(
         catchError(() => of(undefined)),
       ),
+      (docData(acwrDocRef) as Observable<Record<string, unknown> | undefined>).pipe(
+        catchError(() => of(undefined)),
+      ),
+      (docData(rampRateDocRef) as Observable<Record<string, unknown> | undefined>).pipe(
+        catchError(() => of(undefined)),
+      ),
+      (docData(monotonyStrainDocRef) as Observable<Record<string, unknown> | undefined>).pipe(
+        catchError(() => of(undefined)),
+      ),
+      (docData(freshnessForecastDocRef) as Observable<Record<string, unknown> | undefined>).pipe(
+        catchError(() => of(undefined)),
+      ),
+      (docData(intensityDistributionDocRef) as Observable<Record<string, unknown> | undefined>).pipe(
+        catchError(() => of(undefined)),
+      ),
+      (docData(efficiencyTrendDocRef) as Observable<Record<string, unknown> | undefined>).pipe(
+        catchError(() => of(undefined)),
+      ),
     ]).pipe(
-      map(([formSnapshot, recoverySnapshot]) => ({
+      map(([
+        formSnapshot,
+        recoverySnapshot,
+        acwrSnapshot,
+        rampRateSnapshot,
+        monotonyStrainSnapshot,
+        freshnessForecastSnapshot,
+        intensityDistributionSnapshot,
+        efficiencyTrendSnapshot,
+      ]) => ({
         formStatus: this.resolveSnapshotStatus(formSnapshot),
         recoveryNowStatus: this.resolveSnapshotStatus(recoverySnapshot),
+        acwrStatus: this.resolveSnapshotStatus(acwrSnapshot),
+        rampRateStatus: this.resolveSnapshotStatus(rampRateSnapshot),
+        monotonyStrainStatus: this.resolveSnapshotStatus(monotonyStrainSnapshot),
+        freshnessForecastStatus: this.resolveSnapshotStatus(freshnessForecastSnapshot),
+        intensityDistributionStatus: this.resolveSnapshotStatus(intensityDistributionSnapshot),
+        efficiencyTrendStatus: this.resolveSnapshotStatus(efficiencyTrendSnapshot),
         formPoints: this.resolveFormPoints(formSnapshot),
         recoveryNow: this.resolveRecoveryNowContext(recoverySnapshot),
+        acwr: resolveDashboardAcwrContext(this.resolveSnapshotPayload(acwrSnapshot)),
+        rampRate: resolveDashboardRampRateContext(this.resolveSnapshotPayload(rampRateSnapshot)),
+        monotonyStrain: resolveDashboardMonotonyStrainContext(this.resolveSnapshotPayload(monotonyStrainSnapshot)),
+        freshnessForecast: resolveDashboardFreshnessForecastContext(this.resolveSnapshotPayload(freshnessForecastSnapshot)),
+        intensityDistribution: resolveDashboardIntensityDistributionContext(this.resolveSnapshotPayload(intensityDistributionSnapshot)),
+        efficiencyTrend: resolveDashboardEfficiencyTrendContext(this.resolveSnapshotPayload(efficiencyTrendSnapshot)),
       })),
     );
   }
@@ -84,9 +171,20 @@ export class DashboardDerivedMetricsService {
       return;
     }
 
-    const shouldEnsureForm = state.formStatus === 'missing' || state.formStatus === 'failed' || state.formStatus === 'stale';
-    const shouldEnsureRecovery = state.recoveryNowStatus === 'missing' || state.recoveryNowStatus === 'failed' || state.recoveryNowStatus === 'stale';
-    if (!shouldEnsureForm && !shouldEnsureRecovery) {
+    const ensureCandidates: DerivedEnsureCandidate[] = [
+      { kind: DERIVED_METRIC_KINDS.Form, status: state.formStatus },
+      { kind: DERIVED_METRIC_KINDS.RecoveryNow, status: state.recoveryNowStatus },
+      { kind: DERIVED_METRIC_KINDS.Acwr, status: state.acwrStatus },
+      { kind: DERIVED_METRIC_KINDS.RampRate, status: state.rampRateStatus },
+      { kind: DERIVED_METRIC_KINDS.MonotonyStrain, status: state.monotonyStrainStatus },
+      { kind: DERIVED_METRIC_KINDS.FreshnessForecast, status: state.freshnessForecastStatus },
+      { kind: DERIVED_METRIC_KINDS.IntensityDistribution, status: state.intensityDistributionStatus },
+      { kind: DERIVED_METRIC_KINDS.EfficiencyTrend, status: state.efficiencyTrendStatus },
+    ];
+    const requestedMetricKinds = ensureCandidates
+      .filter(candidate => candidate.status === 'missing' || candidate.status === 'failed' || candidate.status === 'stale')
+      .map(candidate => candidate.kind);
+    if (!requestedMetricKinds.length) {
       this.resetEnsureFailureState(uid);
       return;
     }
@@ -108,10 +206,7 @@ export class DashboardDerivedMetricsService {
     this.ensureLastRequestedAtByUID.set(uid, nowMs);
 
     const request: EnsureDerivedMetricsRequest = {
-      metricKinds: [
-        ...(shouldEnsureForm ? [DERIVED_METRIC_KINDS.Form] : []),
-        ...(shouldEnsureRecovery ? [DERIVED_METRIC_KINDS.RecoveryNow] : []),
-      ],
+      metricKinds: requestedMetricKinds,
     };
 
     from(this.functionsService.call<EnsureDerivedMetricsRequest, EnsureDerivedMetricsResponse>('ensureDerivedMetrics', request))
@@ -159,6 +254,14 @@ export class DashboardDerivedMetricsService {
     }
 
     return status;
+  }
+
+  private resolveSnapshotPayload(snapshot: SnapshotRecord): unknown {
+    const payload = snapshot?.payload;
+    if (!payload || typeof payload !== 'object') {
+      return null;
+    }
+    return payload;
   }
 
   private resolveFormPoints(snapshot: Record<string, unknown> | undefined): DashboardFormPoint[] | null {

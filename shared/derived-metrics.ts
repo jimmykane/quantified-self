@@ -1,6 +1,12 @@
 export const DERIVED_METRIC_KINDS = {
   Form: 'form',
   RecoveryNow: 'recovery_now',
+  Acwr: 'acwr',
+  RampRate: 'ramp_rate',
+  MonotonyStrain: 'monotony_strain',
+  FreshnessForecast: 'freshness_forecast',
+  IntensityDistribution: 'intensity_distribution',
+  EfficiencyTrend: 'efficiency_trend',
 } as const;
 
 export type DerivedMetricKind = typeof DERIVED_METRIC_KINDS[keyof typeof DERIVED_METRIC_KINDS];
@@ -8,11 +14,17 @@ export type DerivedMetricKind = typeof DERIVED_METRIC_KINDS[keyof typeof DERIVED
 export const DEFAULT_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
   DERIVED_METRIC_KINDS.Form,
   DERIVED_METRIC_KINDS.RecoveryNow,
+  DERIVED_METRIC_KINDS.Acwr,
+  DERIVED_METRIC_KINDS.RampRate,
+  DERIVED_METRIC_KINDS.MonotonyStrain,
+  DERIVED_METRIC_KINDS.FreshnessForecast,
+  DERIVED_METRIC_KINDS.IntensityDistribution,
+  DERIVED_METRIC_KINDS.EfficiencyTrend,
 ];
 
 export const DERIVED_METRICS_COLLECTION_ID = 'derivedMetrics';
 export const DERIVED_METRICS_COORDINATOR_DOC_ID = 'coordinator';
-export const DERIVED_METRIC_SCHEMA_VERSION = 3;
+export const DERIVED_METRIC_SCHEMA_VERSION = 4;
 export const DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS = 14 * 24 * 60 * 60;
 export const DERIVED_RECOVERY_QUERY_DURATION_BUFFER_SECONDS = 2 * 24 * 60 * 60;
 export const DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS =
@@ -91,11 +103,114 @@ export interface DerivedRecoveryNowMetricPayload {
   lookbackWindowSeconds?: number;
 }
 
+export interface DerivedAcwrTrendPoint {
+  weekStartMs: number;
+  ratio: number | null;
+}
+
+export interface DerivedAcwrMetricPayload {
+  dayBoundary: 'UTC';
+  latestDayMs: number | null;
+  acuteLoad7: number;
+  chronicLoad28: number;
+  ratio: number | null;
+  trend8Weeks: DerivedAcwrTrendPoint[];
+}
+
+export interface DerivedRampRateTrendPoint {
+  weekStartMs: number;
+  rampRate: number | null;
+}
+
+export interface DerivedRampRateMetricPayload {
+  dayBoundary: 'UTC';
+  latestDayMs: number | null;
+  ctlToday: number | null;
+  ctl7DaysAgo: number | null;
+  rampRate: number | null;
+  trend8Weeks: DerivedRampRateTrendPoint[];
+}
+
+export interface DerivedMonotonyStrainTrendPoint {
+  weekStartMs: number;
+  strain: number | null;
+}
+
+export interface DerivedMonotonyStrainMetricPayload {
+  dayBoundary: 'UTC';
+  latestDayMs: number | null;
+  weeklyLoad7: number;
+  monotony: number | null;
+  strain: number | null;
+  trend8Weeks: DerivedMonotonyStrainTrendPoint[];
+}
+
+export interface DerivedFreshnessForecastPoint {
+  dayMs: number;
+  trainingStressScore: number;
+  ctl: number;
+  atl: number;
+  formSameDay: number;
+  formPriorDay: number | null;
+  isForecast: boolean;
+}
+
+export interface DerivedFreshnessForecastMetricPayload {
+  dayBoundary: 'UTC';
+  generatedAtMs: number;
+  points: DerivedFreshnessForecastPoint[];
+}
+
+export type DerivedIntensityDistributionSource = 'power' | 'heart-rate';
+
+export interface DerivedIntensityDistributionWeek {
+  weekStartMs: number;
+  easySeconds: number;
+  moderateSeconds: number;
+  hardSeconds: number;
+  source: DerivedIntensityDistributionSource;
+}
+
+export interface DerivedIntensityDistributionMetricPayload {
+  dayBoundary: 'UTC';
+  weeks: DerivedIntensityDistributionWeek[];
+  latestWeekStartMs: number | null;
+  latestEasyPercent: number | null;
+  latestModeratePercent: number | null;
+  latestHardPercent: number | null;
+}
+
+export interface DerivedEfficiencyTrendPoint {
+  weekStartMs: number;
+  value: number;
+  sampleCount: number;
+  totalDurationSeconds: number;
+}
+
+export interface DerivedEfficiencyTrendMetricPayload {
+  dayBoundary: 'UTC';
+  points: DerivedEfficiencyTrendPoint[];
+  latestWeekStartMs: number | null;
+  latestValue: number | null;
+}
+
 export type DerivedFormMetricSnapshot = DerivedMetricSnapshotBase<DerivedFormMetricPayload>;
 export type DerivedRecoveryNowMetricSnapshot = DerivedMetricSnapshotBase<DerivedRecoveryNowMetricPayload>;
+export type DerivedAcwrMetricSnapshot = DerivedMetricSnapshotBase<DerivedAcwrMetricPayload>;
+export type DerivedRampRateMetricSnapshot = DerivedMetricSnapshotBase<DerivedRampRateMetricPayload>;
+export type DerivedMonotonyStrainMetricSnapshot = DerivedMetricSnapshotBase<DerivedMonotonyStrainMetricPayload>;
+export type DerivedFreshnessForecastMetricSnapshot = DerivedMetricSnapshotBase<DerivedFreshnessForecastMetricPayload>;
+export type DerivedIntensityDistributionMetricSnapshot = DerivedMetricSnapshotBase<DerivedIntensityDistributionMetricPayload>;
+export type DerivedEfficiencyTrendMetricSnapshot = DerivedMetricSnapshotBase<DerivedEfficiencyTrendMetricPayload>;
 export type DerivedMetricSnapshot =
   | DerivedFormMetricSnapshot
-  | DerivedRecoveryNowMetricSnapshot;
+  | DerivedRecoveryNowMetricSnapshot
+  | DerivedAcwrMetricSnapshot
+  | DerivedRampRateMetricSnapshot
+  | DerivedMonotonyStrainMetricSnapshot
+  | DerivedFreshnessForecastMetricSnapshot
+  | DerivedIntensityDistributionMetricSnapshot
+  | DerivedEfficiencyTrendMetricSnapshot;
 
 export interface EnsureDerivedMetricsRequest {
   metricKinds?: DerivedMetricKind[];

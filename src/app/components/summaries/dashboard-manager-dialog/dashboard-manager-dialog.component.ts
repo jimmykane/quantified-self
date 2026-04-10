@@ -44,12 +44,22 @@ import * as SpeedMax from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppUserInterface } from '../../../models/app-user.interface';
 import {
+  DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
+  DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
+  DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
+  DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
+  DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   type DashboardCuratedChartType,
   getDashboardCuratedChartDefinitions,
+  type DashboardKpiChartType,
+  getDashboardKpiChartDefinitions,
+  isDashboardKpiChartType,
   isDashboardCuratedChartType,
   isDashboardRecoveryNowChartType,
+  isDashboardSpecialChartType,
   resolveDashboardChartCategory,
 } from '../../../helpers/dashboard-special-chart-types';
 import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from '../../../helpers/dashboard-form.helper';
@@ -113,6 +123,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
     !DashboardManagerDialogComponent.excludedChartTypePatterns.some(pattern => pattern.test(`${chartType}`))
   );
   public readonly curatedChartDefinitions = getDashboardCuratedChartDefinitions();
+  public readonly kpiChartDefinitions = getDashboardKpiChartDefinitions();
   public readonly workflowTabOptions: IconOption<DashboardManagerWorkflowTab>[] = [
     {
       value: 'manual',
@@ -149,6 +160,12 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
       description: 'Fixed behavior, independent from dashboard date range',
     },
     {
+      value: 'kpi',
+      label: 'KPI',
+      icon: 'monitoring',
+      description: 'Compact derived KPI cards',
+    },
+    {
       value: 'custom',
       label: 'Custom',
       icon: 'tune',
@@ -169,6 +186,12 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
       description: 'Recovery and Form fixed tiles',
     },
     {
+      value: 'kpi',
+      label: 'KPI',
+      icon: 'monitoring',
+      description: 'Derived KPI card templates',
+    },
+    {
       value: 'custom',
       label: 'Custom',
       icon: 'tune',
@@ -185,10 +208,26 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
   public readonly curatedChartIconByType: Record<DashboardCuratedChartType, string> = {
     [DASHBOARD_RECOVERY_NOW_CHART_TYPE]: 'health_and_safety',
     [DASHBOARD_FORM_CHART_TYPE]: 'insights',
+    [DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE]: 'trending_up',
+    [DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE]: 'bar_chart',
+    [DASHBOARD_EFFICIENCY_TREND_CHART_TYPE]: 'show_chart',
   };
   public readonly curatedChartDescriptionByType: Record<DashboardCuratedChartType, string> = {
     [DASHBOARD_RECOVERY_NOW_CHART_TYPE]: 'Recovery left now vs elapsed recovery.',
     [DASHBOARD_FORM_CHART_TYPE]: 'Fitness/fatigue/form trend from derived training stress.',
+    [DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE]: '7-day projected freshness from current CTL/ATL decay.',
+    [DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE]: 'Weekly easy/moderate/hard intensity split (Power or HR fallback).',
+    [DASHBOARD_EFFICIENCY_TREND_CHART_TYPE]: 'Weekly duration-weighted power/heart-rate efficiency trend.',
+  };
+  public readonly kpiChartIconByType: Record<DashboardKpiChartType, string> = {
+    [DASHBOARD_ACWR_KPI_CHART_TYPE]: 'monitoring',
+    [DASHBOARD_RAMP_RATE_KPI_CHART_TYPE]: 'speed',
+    [DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE]: 'stacked_line_chart',
+  };
+  public readonly kpiChartDescriptionByType: Record<DashboardKpiChartType, string> = {
+    [DASHBOARD_ACWR_KPI_CHART_TYPE]: 'Acute/chronic workload ratio with 8-week sparkline.',
+    [DASHBOARD_RAMP_RATE_KPI_CHART_TYPE]: 'CTL delta over 7 days with 8-week sparkline.',
+    [DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE]: 'Weekly strain KPI with monotony context and sparkline.',
   };
   public readonly mapStyleOptions: Array<{ value: MapStyleName; label: string }> = [
     { value: 'default', label: 'Default' },
@@ -209,6 +248,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
   public category: DashboardManagerCategory = 'custom';
   public editTileOrder: number | null = null;
   public curatedChartType: DashboardCuratedChartType = DASHBOARD_RECOVERY_NOW_CHART_TYPE;
+  public kpiChartType: DashboardKpiChartType = DASHBOARD_ACWR_KPI_CHART_TYPE;
 
   public customChartType: ChartTypes = AppUserUtilities.getDefaultUserDashboardChartTile().chartType;
   public customDataType = AppUserUtilities.getDefaultUserDashboardChartTile().dataType;
@@ -228,6 +268,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
 
   @ViewChild('customSection') private customSectionRef?: ElementRef<HTMLElement>;
   @ViewChild('curatedSection') private curatedSectionRef?: ElementRef<HTMLElement>;
+  @ViewChild('kpiSection') private kpiSectionRef?: ElementRef<HTMLElement>;
   @ViewChild('mapSection') private mapSectionRef?: ElementRef<HTMLElement>;
   @ViewChild('customChartTypeSelect') private customChartTypeSelect?: MatSelect;
   @ViewChild('mapStyleSelect') private mapStyleSelect?: MatSelect;
@@ -339,6 +380,9 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
     if (this.category === 'curated' && this.isCuratedOptionDisabled(this.curatedChartType)) {
       return true;
     }
+    if (this.category === 'kpi' && this.isKpiOptionDisabled(this.kpiChartType)) {
+      return true;
+    }
     if (this.category === 'map' && this.isMapOptionDisabled()) {
       return true;
     }
@@ -391,6 +435,14 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
       return;
     }
 
+    if (nextCategory === 'kpi') {
+      const availableKpi = this.kpiChartDefinitions.find(def => !this.isKpiOptionDisabled(def.chartType));
+      if (availableKpi) {
+        this.kpiChartType = availableKpi.chartType;
+      }
+      return;
+    }
+
     if (nextCategory === 'map') {
       const editTile = this.resolveEditTile();
       if (editTile?.type === TileTypes.Map) {
@@ -423,6 +475,10 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
       return 'Already on dashboard.';
     }
 
+    if (definition.category === 'kpi' && this.isKpiOptionDisabled(definition.kpiChartType)) {
+      return 'Already on dashboard.';
+    }
+
     if (definition.category === 'map' && this.isMapOptionDisabled()) {
       return 'Map tile already exists.';
     }
@@ -438,6 +494,14 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
   }
 
   isCuratedOptionDisabled(chartType: DashboardCuratedChartType): boolean {
+    const editedOrder = this.mode === 'edit' ? this.editTileOrder : null;
+    return this.chartTiles.some((tile) => (
+      `${tile.chartType}` === `${chartType}`
+      && (editedOrder === null || tile.order !== editedOrder)
+    ));
+  }
+
+  isKpiOptionDisabled(chartType: DashboardKpiChartType): boolean {
     const editedOrder = this.mode === 'edit' ? this.editTileOrder : null;
     return this.chartTiles.some((tile) => (
       `${tile.chartType}` === `${chartType}`
@@ -488,9 +552,10 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
       }));
 
       if (this.mode === 'add') {
+        const defaultSizeForAdd = this.resolveDefaultAddTileSize();
         const newTile = this.activeWorkflowTab === 'presets'
-          ? this.buildPresetTileForMode(clonedTiles.length, { columns: 1, rows: 1 })
-          : this.buildTileForMode(clonedTiles.length, { columns: 1, rows: 1 }, null);
+          ? this.buildPresetTileForMode(clonedTiles.length, defaultSizeForAdd)
+          : this.buildTileForMode(clonedTiles.length, defaultSizeForAdd, null);
         if (!newTile) {
           this.isSaving = false;
           return;
@@ -522,8 +587,8 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
         clonedTiles[editIndex] = replacement;
       }
 
-      if (this.hasDuplicateCuratedTiles(clonedTiles)) {
-        this.saveError = 'Curated charts can only be added once each.';
+      if (this.hasDuplicateSpecialTiles(clonedTiles)) {
+        this.saveError = 'Derived curated and KPI chart types can only be added once each.';
         this.isSaving = false;
         return;
       }
@@ -578,6 +643,11 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
       return;
     }
 
+    if (isDashboardKpiChartType(chartTile.chartType)) {
+      this.kpiChartType = chartTile.chartType;
+      return;
+    }
+
     this.customChartType = chartTile.chartType;
     this.customDataType = chartTile.dataType;
     this.customDataValueType = chartTile.dataValueType;
@@ -604,6 +674,14 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
         return null;
       }
       return this.buildCuratedTile(this.curatedChartType, order, size);
+    }
+
+    if (this.category === 'kpi') {
+      if (this.isKpiOptionDisabled(this.kpiChartType)) {
+        this.saveError = 'This KPI chart already exists.';
+        return null;
+      }
+      return this.buildKpiTile(this.kpiChartType, order, size);
     }
 
     return this.buildCustomTile(order, size, existingTile);
@@ -651,6 +729,48 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
       };
     }
 
+    if (chartType === DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE) {
+      return {
+        name: 'Freshness Forecast',
+        type: TileTypes.Chart,
+        order,
+        size,
+        chartType: DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE as unknown as ChartTypes,
+        dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        dataTimeInterval: TimeIntervals.Weekly,
+      };
+    }
+
+    if (chartType === DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE) {
+      return {
+        name: 'Intensity Distribution',
+        type: TileTypes.Chart,
+        order,
+        size,
+        chartType: DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE as unknown as ChartTypes,
+        dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        dataTimeInterval: TimeIntervals.Weekly,
+      };
+    }
+
+    if (chartType === DASHBOARD_EFFICIENCY_TREND_CHART_TYPE) {
+      return {
+        name: 'Efficiency Trend',
+        type: TileTypes.Chart,
+        order,
+        size,
+        chartType: DASHBOARD_EFFICIENCY_TREND_CHART_TYPE as unknown as ChartTypes,
+        dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        dataTimeInterval: TimeIntervals.Weekly,
+      };
+    }
+
     return {
       name: 'Recovery',
       type: TileTypes.Chart,
@@ -661,6 +781,29 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
       dataValueType: ChartDataValueTypes.Total,
       dataCategoryType: ChartDataCategoryTypes.DateType,
       dataTimeInterval: TimeIntervals.Auto,
+    };
+  }
+
+  private buildKpiTile(
+    chartType: DashboardKpiChartType,
+    order: number,
+    size: { columns: number; rows: number },
+  ): TileChartSettingsInterface {
+    const chartName = chartType === DASHBOARD_ACWR_KPI_CHART_TYPE
+      ? 'ACWR'
+      : chartType === DASHBOARD_RAMP_RATE_KPI_CHART_TYPE
+        ? 'Ramp Rate'
+        : 'Monotony / Strain';
+    return {
+      name: chartName,
+      type: TileTypes.Chart,
+      order,
+      size,
+      chartType: chartType as unknown as ChartTypes,
+      dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+      dataValueType: ChartDataValueTypes.Total,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataTimeInterval: TimeIntervals.Weekly,
     };
   }
 
@@ -710,14 +853,14 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
     };
   }
 
-  private hasDuplicateCuratedTiles(tiles: TileSettingsInterface[]): boolean {
+  private hasDuplicateSpecialTiles(tiles: TileSettingsInterface[]): boolean {
     const seen = new Set<string>();
     for (const tile of tiles) {
       if (tile.type !== TileTypes.Chart) {
         continue;
       }
       const chartTile = tile as TileChartSettingsInterface;
-      if (!isDashboardCuratedChartType(chartTile.chartType)) {
+      if (!isDashboardSpecialChartType(chartTile.chartType)) {
         continue;
       }
       if (seen.has(`${chartTile.chartType}`)) {
@@ -726,6 +869,22 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
       seen.add(`${chartTile.chartType}`);
     }
     return false;
+  }
+
+  private resolveDefaultAddTileSize(): { columns: number; rows: number } {
+    if (this.activeWorkflowTab === 'presets') {
+      const selectedPreset = this.selectedPresetDefinition;
+      if (selectedPreset?.category === 'curated') {
+        return { columns: 2, rows: 1 };
+      }
+      return { columns: 1, rows: 1 };
+    }
+
+    if (this.category === 'curated') {
+      return { columns: 2, rows: 1 };
+    }
+
+    return { columns: 1, rows: 1 };
   }
 
   private hasDuplicateMapTiles(tiles: TileSettingsInterface[]): boolean {
@@ -861,6 +1020,17 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
       const firstEnabledCuratedOption = curatedSection?.querySelector('input[type="radio"]:not(:disabled)') as HTMLElement | null;
       firstEnabledCuratedOption?.focus?.();
       if (!firstEnabledCuratedOption) {
+        this.focusSelect(this.editTileSelect);
+      }
+      return;
+    }
+
+    if (this.category === 'kpi') {
+      const kpiSection = this.kpiSectionRef?.nativeElement;
+      kpiSection?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+      const firstEnabledKpiOption = kpiSection?.querySelector('input[type="radio"]:not(:disabled)') as HTMLElement | null;
+      firstEnabledKpiOption?.focus?.();
+      if (!firstEnabledKpiOption) {
         this.focusSelect(this.editTileSelect);
       }
       return;

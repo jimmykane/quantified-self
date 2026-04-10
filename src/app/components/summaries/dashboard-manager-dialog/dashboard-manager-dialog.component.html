@@ -79,6 +79,31 @@
         </section>
         }
 
+        @if (category === 'kpi') {
+        <section class="dashboard-manager-section" #kpiSection>
+          <div class="dashboard-manager-section-title">KPI chart</div>
+          <mat-radio-group class="dashboard-manager-radio-group" [value]="kpiChartType" (change)="kpiChartType = $event.value">
+            @for (definition of kpiChartDefinitions; track definition.chartType) {
+            <mat-radio-button class="dashboard-manager-radio-option" [value]="definition.chartType" [disabled]="isKpiOptionDisabled(definition.chartType)">
+              <div class="dashboard-manager-radio-content">
+                <div class="dashboard-manager-icon-label">
+                  <mat-icon>{{ kpiChartIconByType[definition.chartType] }}</mat-icon>
+                  <span>{{ definition.label }}</span>
+                </div>
+                <div class="dashboard-manager-option-description">{{ kpiChartDescriptionByType[definition.chartType] }}</div>
+                @if (isKpiOptionDisabled(definition.chartType)) {
+                <div class="dashboard-manager-option-warning">Already on dashboard</div>
+                }
+              </div>
+            </mat-radio-button>
+            }
+          </mat-radio-group>
+          <p class="dashboard-manager-hint">
+            KPI cards are derived-only compact tiles with fixed logic.
+          </p>
+        </section>
+        }
+
         @if (category === 'custom') {
         <section class="dashboard-manager-section" #customSection>
           <div class="dashboard-manager-fields-grid">

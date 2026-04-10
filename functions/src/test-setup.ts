@@ -138,6 +138,24 @@ vi.mock('./request-helper', () => ({
 
 // Mock sports-lib to avoid resolution errors
 vi.mock('@sports-alliance/sports-lib', () => ({
+    DataDuration: { type: 'Duration' },
+    DataHeartRateAvg: { type: 'Heart Rate Avg' },
+    DataHeartRateZoneOneDuration: { type: 'Heart Rate Zone 1 Duration' },
+    DataHeartRateZoneTwoDuration: { type: 'Heart Rate Zone 2 Duration' },
+    DataHeartRateZoneThreeDuration: { type: 'Heart Rate Zone 3 Duration' },
+    DataHeartRateZoneFourDuration: { type: 'Heart Rate Zone 4 Duration' },
+    DataHeartRateZoneFiveDuration: { type: 'Heart Rate Zone 5 Duration' },
+    DataHeartRateZoneSixDuration: { type: 'Heart Rate Zone 6 Duration' },
+    DataHeartRateZoneSevenDuration: { type: 'Heart Rate Zone 7 Duration' },
+    DataPowerAvg: { type: 'Power Avg' },
+    DataPowerZoneOneDuration: { type: 'Power Zone 1 Duration' },
+    DataPowerZoneTwoDuration: { type: 'Power Zone 2 Duration' },
+    DataPowerZoneThreeDuration: { type: 'Power Zone 3 Duration' },
+    DataPowerZoneFourDuration: { type: 'Power Zone 4 Duration' },
+    DataPowerZoneFiveDuration: { type: 'Power Zone 5 Duration' },
+    DataPowerZoneSixDuration: { type: 'Power Zone 6 Duration' },
+    DataPowerZoneSevenDuration: { type: 'Power Zone 7 Duration' },
+    DataRecoveryTime: { type: 'Recovery Time' },
     ServiceNames: {
         GarminAPI: 'garminAPI',
         SuuntoApp: 'suuntoApp',

@@ -100,15 +100,18 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 - Use the **Dashboard manager** button above dashboard tiles to add or edit dashboard tiles.
 - Dashboard manager supports two workflows: **Manual** and **Presets**.
-- You can choose between **Curated**, **Custom**, and **Map** categories.
+- You can choose between **Curated**, **KPI**, **Custom**, and **Map** categories.
 - **Presets** provide quick-start tile templates and can be applied in both **Add** and **Edit** modes.
 - **Curated Recovery** remains a fixed insight and does not react to dashboard date-range changes.
 - **Curated Form/TSS** computes from full history and does not react to dashboard date-range changes.
+- New curated derived charts: **Freshness Forecast**, **Intensity Distribution**, and **Efficiency Trend**.
+- KPI cards are derived-only compact tiles: **ACWR**, **Ramp Rate**, and **Monotony / Strain**.
 - **Custom** charts keep the existing configurable behavior and react to dashboard filters/date range.
 - **Map** keeps the existing map behavior and reacts to dashboard filters/date range.
-- Curated chart types are unique: only one Recovery and one Form tile can exist at a time.
+- Derived curated and KPI chart types are unique: only one tile per special derived chart type can exist at a time.
 - Map tiles are also unique: only one map tile can exist at a time.
 - Map style and cluster-marker settings are edited inside Dashboard manager.
+- Default manager sizes: KPI tiles start at **1x1** and curated derived charts start at **2x1**.
 
 ### Reorder dashboard tiles
 
@@ -149,6 +152,16 @@ export const HELP_SECTIONS: HelpSection[] = [
   - **Building fitness** while carrying meaningful load,
   - **Maintaining fitness** around neutral Form,
   - **Fresh** when Form is clearly positive.
+
+### Derived KPI and curated charts
+
+- **ACWR** uses acute 7-day load versus chronic 28-day load/4 and shows an 8-week sparkline.
+- **Ramp Rate** uses CTL(today) - CTL(today-7d) with an 8-week sparkline.
+- **Monotony / Strain** uses 7-day load mean/stddev for monotony, and load * monotony for strain.
+- **Freshness Forecast** projects 7 future days with zero load from the latest derived day.
+- **Intensity Distribution** uses power zones when available, otherwise heart-rate zones, grouped to Easy/Moderate/Hard by week.
+- **Efficiency Trend** uses weekly duration-weighted average of avgPower/avgHeartRate.
+- These tiles are derived-only and do not fall back to currently loaded dashboard events.
 
 ### Merge events
 

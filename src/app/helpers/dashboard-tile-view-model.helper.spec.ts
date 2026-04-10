@@ -19,7 +19,13 @@ import {
   buildDashboardTileViewModels,
 } from './dashboard-tile-view-model.helper';
 import {
+  DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
+  DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
+  DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
+  DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
+  DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
 } from './dashboard-special-chart-types';
 import type { EventStatAggregationResult } from '@shared/event-stat-aggregation.types';
@@ -881,5 +887,105 @@ describe('dashboard-tile-view-model.helper', () => {
 
     expect((viewModels[0] as any).recoveryNow).toEqual(derivedRecoveryContext);
     expect((viewModels[1] as any).recoveryNow).toBeUndefined();
+  });
+
+  it('should map derived ACWR context for KPI chart tiles', () => {
+    const viewModels = buildDashboardTileViewModels({
+      tiles: [{
+        type: TileTypes.Chart,
+        order: 0,
+        chartType: DASHBOARD_ACWR_KPI_CHART_TYPE as any,
+        dataType: 'Training Stress Score',
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        dataTimeInterval: TimeIntervals.Weekly,
+        size: { columns: 1, rows: 1 },
+      } as any],
+      events: [],
+      derivedMetrics: {
+        acwr: {
+          latestDayMs: Date.UTC(2026, 0, 1),
+          acuteLoad7: 200,
+          chronicLoad28: 180,
+          ratio: 1.11,
+          trend8Weeks: [{ time: Date.UTC(2025, 11, 1), value: 1.0 }],
+        } as any,
+      },
+    });
+
+    expect((viewModels[0] as any).acwr?.ratio).toBe(1.11);
+    expect((viewModels[0] as any).timeInterval).toBe(TimeIntervals.Weekly);
+    expect((viewModels[0] as any).data).toEqual([]);
+  });
+
+  it('should map derived KPI and curated contexts to dedicated special chart tiles', () => {
+    const viewModels = buildDashboardTileViewModels({
+      tiles: [
+        {
+          type: TileTypes.Chart,
+          order: 0,
+          chartType: DASHBOARD_RAMP_RATE_KPI_CHART_TYPE as any,
+          dataType: 'Training Stress Score',
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+          dataTimeInterval: TimeIntervals.Weekly,
+          size: { columns: 1, rows: 1 },
+        },
+        {
+          type: TileTypes.Chart,
+          order: 1,
+          chartType: DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE as any,
+          dataType: 'Training Stress Score',
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+          dataTimeInterval: TimeIntervals.Weekly,
+          size: { columns: 1, rows: 1 },
+        },
+        {
+          type: TileTypes.Chart,
+          order: 2,
+          chartType: DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE as any,
+          dataType: 'Training Stress Score',
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+          dataTimeInterval: TimeIntervals.Weekly,
+          size: { columns: 2, rows: 1 },
+        },
+        {
+          type: TileTypes.Chart,
+          order: 3,
+          chartType: DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE as any,
+          dataType: 'Training Stress Score',
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+          dataTimeInterval: TimeIntervals.Weekly,
+          size: { columns: 2, rows: 1 },
+        },
+        {
+          type: TileTypes.Chart,
+          order: 4,
+          chartType: DASHBOARD_EFFICIENCY_TREND_CHART_TYPE as any,
+          dataType: 'Training Stress Score',
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+          dataTimeInterval: TimeIntervals.Weekly,
+          size: { columns: 2, rows: 1 },
+        },
+      ] as any,
+      events: [],
+      derivedMetrics: {
+        rampRate: { rampRate: 2.8, trend8Weeks: [] } as any,
+        monotonyStrain: { strain: 630, trend8Weeks: [] } as any,
+        freshnessForecast: { generatedAtMs: Date.now(), points: [] } as any,
+        intensityDistribution: { weeks: [], latestWeekStartMs: null } as any,
+        efficiencyTrend: { points: [], latestWeekStartMs: null } as any,
+      },
+    });
+
+    expect((viewModels[0] as any).rampRate?.rampRate).toBe(2.8);
+    expect((viewModels[1] as any).monotonyStrain?.strain).toBe(630);
+    expect((viewModels[2] as any).freshnessForecast).toBeTruthy();
+    expect((viewModels[3] as any).intensityDistribution).toBeTruthy();
+    expect((viewModels[4] as any).efficiencyTrend).toBeTruthy();
   });
 });

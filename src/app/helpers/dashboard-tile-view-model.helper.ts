@@ -30,9 +30,29 @@ import { getDatesForDateRange } from './date-range-helper';
 import {
   type DashboardRecoveryNowContext,
 } from './dashboard-recovery-now.helper';
+import type {
+  DashboardAcwrContext,
+  DashboardEfficiencyTrendContext,
+  DashboardFreshnessForecastContext,
+  DashboardIntensityDistributionContext,
+  DashboardMonotonyStrainContext,
+  DashboardRampRateContext,
+} from './dashboard-derived-metrics.helper';
 import {
+  DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
+  DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
+  DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
+  DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+  DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
+  isDashboardAcwrKpiChartType,
+  isDashboardEfficiencyTrendChartType,
+  isDashboardFreshnessForecastChartType,
   isDashboardFormChartType,
+  isDashboardIntensityDistributionChartType,
+  isDashboardMonotonyStrainKpiChartType,
+  isDashboardRampRateKpiChartType,
   isDashboardRecoveryNowChartType,
 } from './dashboard-special-chart-types';
 
@@ -41,6 +61,12 @@ export interface DashboardChartTileViewModel extends TileChartSettingsInterface 
   data: AggregatedChartRow[] | EventInterface[] | DashboardFormPoint[];
   recoveryNow?: DashboardRecoveryNowContext;
   absoluteLatestFormPoint?: DashboardFormPoint | null;
+  acwr?: DashboardAcwrContext | null;
+  rampRate?: DashboardRampRateContext | null;
+  monotonyStrain?: DashboardMonotonyStrainContext | null;
+  freshnessForecast?: DashboardFreshnessForecastContext | null;
+  intensityDistribution?: DashboardIntensityDistributionContext | null;
+  efficiencyTrend?: DashboardEfficiencyTrendContext | null;
 }
 
 export type DashboardMapTileSettings = Omit<TileMapSettingsInterface, 'mapType'> & {
@@ -67,6 +93,12 @@ interface BuildDashboardTileViewModelsInput {
   derivedMetrics?: {
     formPoints?: DashboardFormPoint[] | null;
     recoveryNow?: DashboardRecoveryNowContext | null;
+    acwr?: DashboardAcwrContext | null;
+    rampRate?: DashboardRampRateContext | null;
+    monotonyStrain?: DashboardMonotonyStrainContext | null;
+    freshnessForecast?: DashboardFreshnessForecastContext | null;
+    intensityDistribution?: DashboardIntensityDistributionContext | null;
+    efficiencyTrend?: DashboardEfficiencyTrendContext | null;
   } | null;
 }
 
@@ -178,6 +210,12 @@ export function buildDashboardTileViewModels(
   const filteredEvents = applyDashboardDateRangeFilter(normalizedEvents, input.dashboardDateRange);
   const derivedFormPoints = Array.isArray(input.derivedMetrics?.formPoints) ? input.derivedMetrics?.formPoints : null;
   const derivedRecoveryNowContext = input.derivedMetrics?.recoveryNow || null;
+  const derivedAcwrContext = input.derivedMetrics?.acwr || null;
+  const derivedRampRateContext = input.derivedMetrics?.rampRate || null;
+  const derivedMonotonyStrainContext = input.derivedMetrics?.monotonyStrain || null;
+  const derivedFreshnessForecastContext = input.derivedMetrics?.freshnessForecast || null;
+  const derivedIntensityDistributionContext = input.derivedMetrics?.intensityDistribution || null;
+  const derivedEfficiencyTrendContext = input.derivedMetrics?.efficiencyTrend || null;
 
   return (input.tiles || []).reduce<DashboardTileViewModel[]>((viewModels, tile) => {
     if (tile.type === TileTypes.Map) {
@@ -204,6 +242,72 @@ export function buildDashboardTileViewModels(
         // The chart itself handles viewport navigation (scroll/zoom) without date-range clipping.
         data: fullFormPoints,
         absoluteLatestFormPoint: resolveDashboardFormLatestPoint(fullFormPoints),
+      });
+      return viewModels;
+    }
+
+    if (isDashboardAcwrKpiChartType(chartTile.chartType)) {
+      viewModels.push({
+        ...chartTile,
+        chartType: DASHBOARD_ACWR_KPI_CHART_TYPE as unknown as ChartTypes,
+        timeInterval: TimeIntervals.Weekly,
+        data: [],
+        acwr: derivedAcwrContext,
+      });
+      return viewModels;
+    }
+
+    if (isDashboardRampRateKpiChartType(chartTile.chartType)) {
+      viewModels.push({
+        ...chartTile,
+        chartType: DASHBOARD_RAMP_RATE_KPI_CHART_TYPE as unknown as ChartTypes,
+        timeInterval: TimeIntervals.Weekly,
+        data: [],
+        rampRate: derivedRampRateContext,
+      });
+      return viewModels;
+    }
+
+    if (isDashboardMonotonyStrainKpiChartType(chartTile.chartType)) {
+      viewModels.push({
+        ...chartTile,
+        chartType: DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE as unknown as ChartTypes,
+        timeInterval: TimeIntervals.Weekly,
+        data: [],
+        monotonyStrain: derivedMonotonyStrainContext,
+      });
+      return viewModels;
+    }
+
+    if (isDashboardFreshnessForecastChartType(chartTile.chartType)) {
+      viewModels.push({
+        ...chartTile,
+        chartType: DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE as unknown as ChartTypes,
+        timeInterval: TimeIntervals.Daily,
+        data: [],
+        freshnessForecast: derivedFreshnessForecastContext,
+      });
+      return viewModels;
+    }
+
+    if (isDashboardIntensityDistributionChartType(chartTile.chartType)) {
+      viewModels.push({
+        ...chartTile,
+        chartType: DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE as unknown as ChartTypes,
+        timeInterval: TimeIntervals.Weekly,
+        data: [],
+        intensityDistribution: derivedIntensityDistributionContext,
+      });
+      return viewModels;
+    }
+
+    if (isDashboardEfficiencyTrendChartType(chartTile.chartType)) {
+      viewModels.push({
+        ...chartTile,
+        chartType: DASHBOARD_EFFICIENCY_TREND_CHART_TYPE as unknown as ChartTypes,
+        timeInterval: TimeIntervals.Weekly,
+        data: [],
+        efficiencyTrend: derivedEfficiencyTrendContext,
       });
       return viewModels;
     }

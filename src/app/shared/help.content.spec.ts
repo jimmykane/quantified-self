@@ -64,6 +64,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Manual');
     expect(gettingStartedSection?.content).toContain('Presets');
     expect(gettingStartedSection?.content).toContain('Curated');
+    expect(gettingStartedSection?.content).toContain('KPI');
     expect(gettingStartedSection?.content).toContain('Custom');
     expect(gettingStartedSection?.content).toContain('Map');
     expect(gettingStartedSection?.content).toContain('one map tile');
@@ -85,5 +86,17 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('weekly');
     expect(gettingStartedSection?.content).toContain('asynchronously');
     expect(gettingStartedSection?.content).toContain('status notice');
+  });
+
+  it('should document new derived KPI cards and curated charts', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+
+    expect(gettingStartedSection?.content).toContain('Freshness Forecast');
+    expect(gettingStartedSection?.content).toContain('Intensity Distribution');
+    expect(gettingStartedSection?.content).toContain('Efficiency Trend');
+    expect(gettingStartedSection?.content).toContain('ACWR');
+    expect(gettingStartedSection?.content).toContain('Ramp Rate');
+    expect(gettingStartedSection?.content).toContain('Monotony / Strain');
+    expect(gettingStartedSection?.content).toContain('derived-only');
   });
 });

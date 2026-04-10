@@ -37,9 +37,29 @@ describe('DashboardDerivedMetricsService', () => {
   let mockFunctionsService: { call: ReturnType<typeof vi.fn> };
   let mockSnackBar: { open: ReturnType<typeof vi.fn> };
 
+  const createMissingState = (): DashboardDerivedMetricsState => ({
+    formPoints: null,
+    recoveryNow: null,
+    acwr: null,
+    rampRate: null,
+    monotonyStrain: null,
+    freshnessForecast: null,
+    intensityDistribution: null,
+    efficiencyTrend: null,
+    formStatus: 'missing',
+    recoveryNowStatus: 'missing',
+    acwrStatus: 'missing',
+    rampRateStatus: 'missing',
+    monotonyStrainStatus: 'missing',
+    freshnessForecastStatus: 'missing',
+    intensityDistributionStatus: 'missing',
+    efficiencyTrendStatus: 'missing',
+  });
+
   beforeEach(() => {
     hoisted.docMock.mockReset();
     hoisted.docDataMock.mockReset();
+    hoisted.docDataMock.mockReturnValue(of(undefined));
     mockFunctionsService = {
       call: vi.fn().mockResolvedValue({ data: { accepted: true } }),
     };
@@ -64,12 +84,7 @@ describe('DashboardDerivedMetricsService', () => {
   it('returns missing snapshot state when uid is not available', async () => {
     const state = await firstValueFrom(service.watch(null));
 
-    expect(state).toEqual<DashboardDerivedMetricsState>({
-      formPoints: null,
-      recoveryNow: null,
-      formStatus: 'missing',
-      recoveryNowStatus: 'missing',
-    });
+    expect(state).toEqual<DashboardDerivedMetricsState>(createMissingState());
     expect(doc).not.toHaveBeenCalled();
     expect(docData).not.toHaveBeenCalled();
   });
@@ -113,8 +128,15 @@ describe('DashboardDerivedMetricsService', () => {
 
     expect(doc).toHaveBeenNthCalledWith(1, {}, 'users', uid, DERIVED_METRICS_COLLECTION_ID, getDerivedMetricDocId(DERIVED_METRIC_KINDS.Form));
     expect(doc).toHaveBeenNthCalledWith(2, {}, 'users', uid, DERIVED_METRICS_COLLECTION_ID, getDerivedMetricDocId(DERIVED_METRIC_KINDS.RecoveryNow));
+    expect(doc).toHaveBeenCalledTimes(8);
     expect(state.formStatus).toBe('ready');
     expect(state.recoveryNowStatus).toBe('ready');
+    expect(state.acwrStatus).toBe('missing');
+    expect(state.rampRateStatus).toBe('missing');
+    expect(state.monotonyStrainStatus).toBe('missing');
+    expect(state.freshnessForecastStatus).toBe('missing');
+    expect(state.intensityDistributionStatus).toBe('missing');
+    expect(state.efficiencyTrendStatus).toBe('missing');
     expect(state.formPoints?.map(point => point.time)).toEqual([
       Date.UTC(2026, 0, 1),
       Date.UTC(2026, 0, 2),
@@ -195,7 +217,16 @@ describe('DashboardDerivedMetricsService', () => {
 
     service.ensureForDashboard({ uid }, state);
     expect(mockFunctionsService.call).toHaveBeenCalledWith<EnsureDerivedMetricsRequest, unknown>('ensureDerivedMetrics', {
-      metricKinds: [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.RecoveryNow],
+      metricKinds: [
+        DERIVED_METRIC_KINDS.Form,
+        DERIVED_METRIC_KINDS.RecoveryNow,
+        DERIVED_METRIC_KINDS.Acwr,
+        DERIVED_METRIC_KINDS.RampRate,
+        DERIVED_METRIC_KINDS.MonotonyStrain,
+        DERIVED_METRIC_KINDS.FreshnessForecast,
+        DERIVED_METRIC_KINDS.IntensityDistribution,
+        DERIVED_METRIC_KINDS.EfficiencyTrend,
+      ],
     });
   });
 
@@ -206,9 +237,7 @@ describe('DashboardDerivedMetricsService', () => {
     }));
 
     const state: DashboardDerivedMetricsState = {
-      formPoints: null,
-      recoveryNow: null,
-      formStatus: 'missing',
+      ...createMissingState(),
       recoveryNowStatus: 'failed',
     };
 
@@ -217,7 +246,16 @@ describe('DashboardDerivedMetricsService', () => {
 
     expect(mockFunctionsService.call).toHaveBeenCalledTimes(1);
     expect(mockFunctionsService.call).toHaveBeenCalledWith<EnsureDerivedMetricsRequest, unknown>('ensureDerivedMetrics', {
-      metricKinds: [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.RecoveryNow],
+      metricKinds: [
+        DERIVED_METRIC_KINDS.Form,
+        DERIVED_METRIC_KINDS.RecoveryNow,
+        DERIVED_METRIC_KINDS.Acwr,
+        DERIVED_METRIC_KINDS.RampRate,
+        DERIVED_METRIC_KINDS.MonotonyStrain,
+        DERIVED_METRIC_KINDS.FreshnessForecast,
+        DERIVED_METRIC_KINDS.IntensityDistribution,
+        DERIVED_METRIC_KINDS.EfficiencyTrend,
+      ],
     });
 
     resolveCall?.(null);
@@ -226,10 +264,17 @@ describe('DashboardDerivedMetricsService', () => {
 
   it('does not request ensure when both metric snapshots are ready', () => {
     const state: DashboardDerivedMetricsState = {
+      ...createMissingState(),
       formPoints: [],
       recoveryNow: { totalSeconds: 1, endTimeMs: 1 },
       formStatus: 'ready',
       recoveryNowStatus: 'ready',
+      acwrStatus: 'ready',
+      rampRateStatus: 'ready',
+      monotonyStrainStatus: 'ready',
+      freshnessForecastStatus: 'ready',
+      intensityDistributionStatus: 'ready',
+      efficiencyTrendStatus: 'ready',
     };
 
     service.ensureForDashboard({ uid: 'user-1' }, state);
@@ -239,10 +284,15 @@ describe('DashboardDerivedMetricsService', () => {
 
   it('treats stale snapshots as ensure-required', () => {
     const state: DashboardDerivedMetricsState = {
-      formPoints: null,
-      recoveryNow: null,
+      ...createMissingState(),
       formStatus: 'stale',
       recoveryNowStatus: 'ready',
+      acwrStatus: 'ready',
+      rampRateStatus: 'ready',
+      monotonyStrainStatus: 'ready',
+      freshnessForecastStatus: 'ready',
+      intensityDistributionStatus: 'ready',
+      efficiencyTrendStatus: 'ready',
     };
 
     service.ensureForDashboard({ uid: 'user-1' }, state);
@@ -255,10 +305,14 @@ describe('DashboardDerivedMetricsService', () => {
 
   it('bypasses cooldown when force is requested', async () => {
     const state: DashboardDerivedMetricsState = {
-      formPoints: null,
-      recoveryNow: null,
-      formStatus: 'missing',
+      ...createMissingState(),
       recoveryNowStatus: 'ready',
+      acwrStatus: 'ready',
+      rampRateStatus: 'ready',
+      monotonyStrainStatus: 'ready',
+      freshnessForecastStatus: 'ready',
+      intensityDistributionStatus: 'ready',
+      efficiencyTrendStatus: 'ready',
     };
 
     service.ensureForDashboard({ uid: 'user-1' }, state);
@@ -273,10 +327,14 @@ describe('DashboardDerivedMetricsService', () => {
     mockFunctionsService.call.mockRejectedValue(new Error('ensure failed'));
 
     const state: DashboardDerivedMetricsState = {
-      formPoints: null,
-      recoveryNow: null,
-      formStatus: 'missing',
+      ...createMissingState(),
       recoveryNowStatus: 'ready',
+      acwrStatus: 'ready',
+      rampRateStatus: 'ready',
+      monotonyStrainStatus: 'ready',
+      freshnessForecastStatus: 'ready',
+      intensityDistributionStatus: 'ready',
+      efficiencyTrendStatus: 'ready',
     };
 
     service.ensureForDashboard({ uid: 'user-1' }, state);
@@ -293,10 +351,14 @@ describe('DashboardDerivedMetricsService', () => {
     mockFunctionsService.call.mockRejectedValue(new Error('ensure failed'));
 
     const state: DashboardDerivedMetricsState = {
-      formPoints: null,
-      recoveryNow: null,
-      formStatus: 'missing',
+      ...createMissingState(),
       recoveryNowStatus: 'ready',
+      acwrStatus: 'ready',
+      rampRateStatus: 'ready',
+      monotonyStrainStatus: 'ready',
+      freshnessForecastStatus: 'ready',
+      intensityDistributionStatus: 'ready',
+      efficiencyTrendStatus: 'ready',
     };
 
     service.ensureForDashboard({ uid: 'user-1' }, state);

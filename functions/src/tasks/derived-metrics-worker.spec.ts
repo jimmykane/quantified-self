@@ -84,5 +84,29 @@ describe('processDerivedMetricsTask', () => {
             recoveryNowDocs: [{ id: 'recovery-doc' }],
         });
     });
-});
 
+    it('queries full event docs for non-form tss-derived kinds', async () => {
+        hoisted.startDerivedMetricsProcessing.mockResolvedValueOnce({
+            dirtyMetricKinds: [DERIVED_METRIC_KINDS.Acwr],
+            startedAtMs: Date.now(),
+        });
+        hoisted.fetchDerivedMetricsEventDocs.mockResolvedValueOnce([{ id: 'tss-doc' }] as any);
+        hoisted.fetchRecoveryLookbackEventDocs.mockResolvedValueOnce([] as any);
+
+        await (processDerivedMetricsTask as any)({
+            data: {
+                uid: 'user-2',
+                generation: 13,
+            },
+        });
+
+        expect(hoisted.fetchDerivedMetricsEventDocs).toHaveBeenCalledWith('user-2');
+        expect(hoisted.fetchRecoveryLookbackEventDocs).not.toHaveBeenCalled();
+        expect(hoisted.writeDerivedMetricSnapshotsReady).toHaveBeenCalledWith('user-2', [
+            DERIVED_METRIC_KINDS.Acwr,
+        ], {
+            formDocs: [{ id: 'tss-doc' }],
+            recoveryNowDocs: [],
+        });
+    });
+});

@@ -157,6 +157,7 @@ describe('SummariesComponent', () => {
         dateRange: null,
         startDate: null,
         endDate: null,
+        startOfTheWeek: undefined,
       },
       preferences: {
         removeAscentForEventTypes: [ActivityTypes.Running],
@@ -166,6 +167,12 @@ describe('SummariesComponent', () => {
       derivedMetrics: {
         formPoints: null,
         recoveryNow: null,
+        acwr: null,
+        rampRate: null,
+        monotonyStrain: null,
+        freshnessForecast: null,
+        intensityDistribution: null,
+        efficiencyTrend: null,
       },
     });
     expect(component.tiles).toBe(builtTiles);

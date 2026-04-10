@@ -59,7 +59,15 @@ export const processDerivedMetricsTask = onTaskDispatched({
 
     try {
         await markDerivedMetricSnapshotsBuilding(uid, dirtyMetricKinds);
-        const needsFormDocs = dirtyMetricKinds.includes(DERIVED_METRIC_KINDS.Form);
+        const needsFormDocs = dirtyMetricKinds.some((metricKind) => (
+            metricKind === DERIVED_METRIC_KINDS.Form
+            || metricKind === DERIVED_METRIC_KINDS.Acwr
+            || metricKind === DERIVED_METRIC_KINDS.RampRate
+            || metricKind === DERIVED_METRIC_KINDS.MonotonyStrain
+            || metricKind === DERIVED_METRIC_KINDS.FreshnessForecast
+            || metricKind === DERIVED_METRIC_KINDS.IntensityDistribution
+            || metricKind === DERIVED_METRIC_KINDS.EfficiencyTrend
+        ));
         const needsRecoveryNowDocs = dirtyMetricKinds.includes(DERIVED_METRIC_KINDS.RecoveryNow);
         const formDocs = needsFormDocs
             ? await fetchDerivedMetricsEventDocs(uid)

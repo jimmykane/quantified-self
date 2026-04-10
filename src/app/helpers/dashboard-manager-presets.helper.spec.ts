@@ -15,17 +15,19 @@ import {
   getDashboardManagerPresetDefinitions,
 } from './dashboard-manager-presets.helper';
 import {
+  DASHBOARD_ACWR_KPI_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
 } from './dashboard-special-chart-types';
 
 describe('dashboard-manager-presets.helper', () => {
-  it('exposes the expanded preset catalog with 10 unique definitions', () => {
+  it('exposes the expanded preset catalog with 16 unique definitions', () => {
     const definitions = getDashboardManagerPresetDefinitions();
 
-    expect(definitions).toHaveLength(10);
-    expect(new Set(definitions.map(definition => definition.id)).size).toBe(10);
-    expect(definitions.filter(definition => definition.category === 'curated')).toHaveLength(2);
+    expect(definitions).toHaveLength(16);
+    expect(new Set(definitions.map(definition => definition.id)).size).toBe(16);
+    expect(definitions.filter(definition => definition.category === 'curated')).toHaveLength(5);
+    expect(definitions.filter(definition => definition.category === 'kpi')).toHaveLength(3);
     expect(definitions.filter(definition => definition.category === 'custom')).toHaveLength(7);
     expect(definitions.filter(definition => definition.category === 'map')).toHaveLength(1);
   });
@@ -103,6 +105,23 @@ describe('dashboard-manager-presets.helper', () => {
       clusterMarkers: true,
       order: 4,
       size: { columns: 2, rows: 2 },
+    });
+  });
+
+  it('builds deterministic KPI preset tiles', () => {
+    const kpiTile = buildDashboardManagerPresetTile({
+      presetId: DASHBOARD_MANAGER_PRESET_IDS.KPI_ACWR,
+      order: 2,
+      size: { columns: 1, rows: 1 },
+    });
+
+    expect(kpiTile).toMatchObject({
+      type: TileTypes.Chart,
+      chartType: DASHBOARD_ACWR_KPI_CHART_TYPE,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataValueType: ChartDataValueTypes.Total,
+      dataTimeInterval: TimeIntervals.Weekly,
+      size: { columns: 1, rows: 1 },
     });
   });
 

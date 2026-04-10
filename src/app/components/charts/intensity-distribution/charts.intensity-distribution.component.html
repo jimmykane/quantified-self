@@ -1,0 +1,23 @@
+<app-loading-overlay [isLoading]="isLoading" [hasError]="showNoDataError" [allowErrorPassthrough]="true" [errorMessage]="noDataErrorMessage"
+  [errorHint]="noDataErrorHint" [errorIcon]="noDataErrorIcon" [showSkeleton]="false" height="100%" [style.height.%]="100">
+  <section class="intensity-layout">
+    <header class="intensity-header">
+      <div class="intensity-title">Intensity Distribution</div>
+      <div class="intensity-stats">
+        <div class="intensity-stat">
+          <div class="intensity-stat-value">{{ easyText }}</div>
+          <div class="intensity-stat-label">Easy</div>
+        </div>
+        <div class="intensity-stat">
+          <div class="intensity-stat-value">{{ moderateText }}</div>
+          <div class="intensity-stat-label">Moderate</div>
+        </div>
+        <div class="intensity-stat">
+          <div class="intensity-stat-value">{{ hardText }}</div>
+          <div class="intensity-stat-label">Hard</div>
+        </div>
+      </div>
+    </header>
+    <div #chartDiv class="intensity-chart"></div>
+  </section>
+</app-loading-overlay>

@@ -15,7 +15,13 @@ import {
 } from '@sports-alliance/sports-lib';
 import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from '../../../helpers/dashboard-form.helper';
 import {
+  DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
+  DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
+  DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
+  DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
+  DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
 } from '../../../helpers/dashboard-special-chart-types';
 import { DASHBOARD_MANAGER_PRESET_IDS } from '../../../helpers/dashboard-manager-presets.helper';
@@ -86,6 +92,14 @@ describe('DashboardManagerDialogComponent', () => {
     expect(component.curatedChartDefinitions.map(definition => definition.chartType)).toEqual([
       DASHBOARD_RECOVERY_NOW_CHART_TYPE,
       DASHBOARD_FORM_CHART_TYPE,
+      DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
+      DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
+      DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
+    ]);
+    expect(component.kpiChartDefinitions.map(definition => definition.chartType)).toEqual([
+      DASHBOARD_ACWR_KPI_CHART_TYPE,
+      DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
+      DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
     ]);
   });
 
@@ -125,6 +139,25 @@ describe('DashboardManagerDialogComponent', () => {
     expect(tiles[1].mapStyle).toBe('satellite');
     expect(tiles[1].clusterMarkers).toBe(false);
     expect(userServiceMock.updateUserProperties).toHaveBeenCalledTimes(1);
+  });
+
+  it('adds a KPI tile with fixed derived settings', async () => {
+    component.mode = 'add';
+    component.category = 'kpi' as any;
+    component.kpiChartType = DASHBOARD_RAMP_RATE_KPI_CHART_TYPE as any;
+
+    await component.save();
+
+    const tiles = dialogData.user.settings.dashboardSettings.tiles;
+    expect(tiles).toHaveLength(2);
+    expect(tiles[1]).toMatchObject({
+      type: TileTypes.Chart,
+      chartType: DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataValueType: ChartDataValueTypes.Total,
+      dataTimeInterval: TimeIntervals.Weekly,
+      size: { columns: 1, rows: 1 },
+    });
   });
 
   it('should render presets tab content and category controls in template', () => {
@@ -221,6 +254,28 @@ describe('DashboardManagerDialogComponent', () => {
     component.onWorkflowTabChange(1);
     component.onPresetCategoryChange('curated');
     component.onPresetSelectionChange(DASHBOARD_MANAGER_PRESET_IDS.CURATED_RECOVERY);
+
+    expect(component.selectedPresetDisabledReason).toBe('Already on dashboard.');
+    expect(component.isSaveDisabled).toBe(true);
+  });
+
+  it('disables KPI preset option when that KPI tile already exists', () => {
+    dialogData.user.settings.dashboardSettings.tiles.push({
+      type: TileTypes.Chart,
+      order: 1,
+      name: 'ACWR',
+      chartType: DASHBOARD_ACWR_KPI_CHART_TYPE,
+      dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+      dataValueType: ChartDataValueTypes.Total,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataTimeInterval: TimeIntervals.Weekly,
+      size: { columns: 1, rows: 1 },
+    });
+
+    component.mode = 'add';
+    component.onWorkflowTabChange(1);
+    component.onPresetCategoryChange('kpi');
+    component.onPresetSelectionChange(DASHBOARD_MANAGER_PRESET_IDS.KPI_ACWR);
 
     expect(component.selectedPresetDisabledReason).toBe('Already on dashboard.');
     expect(component.isSaveDisabled).toBe(true);

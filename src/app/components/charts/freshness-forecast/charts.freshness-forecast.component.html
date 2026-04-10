@@ -1,0 +1,19 @@
+<app-loading-overlay [isLoading]="isLoading" [hasError]="showNoDataError" [allowErrorPassthrough]="true" [errorMessage]="noDataErrorMessage"
+  [errorHint]="noDataErrorHint" [errorIcon]="noDataErrorIcon" [showSkeleton]="false" height="100%" [style.height.%]="100">
+  <section class="forecast-layout">
+    <header class="forecast-header">
+      <div class="forecast-title">Freshness Forecast</div>
+      <div class="forecast-stats">
+        <div class="forecast-stat">
+          <div class="forecast-stat-value">{{ currentFormText }}</div>
+          <div class="forecast-stat-label">Now (TSB)</div>
+        </div>
+        <div class="forecast-stat">
+          <div class="forecast-stat-value">{{ forecastFormText }}</div>
+          <div class="forecast-stat-label">+7d (TSB)</div>
+        </div>
+      </div>
+    </header>
+    <div #chartDiv class="forecast-chart"></div>
+  </section>
+</app-loading-overlay>

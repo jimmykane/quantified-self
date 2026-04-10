@@ -1,6 +1,25 @@
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
-import { DataDuration, DataRecoveryTime } from '@sports-alliance/sports-lib';
+import {
+    DataDuration,
+    DataHeartRateAvg,
+    DataHeartRateZoneFiveDuration,
+    DataHeartRateZoneFourDuration,
+    DataHeartRateZoneOneDuration,
+    DataHeartRateZoneSevenDuration,
+    DataHeartRateZoneSixDuration,
+    DataHeartRateZoneThreeDuration,
+    DataHeartRateZoneTwoDuration,
+    DataPowerAvg,
+    DataPowerZoneFiveDuration,
+    DataPowerZoneFourDuration,
+    DataPowerZoneOneDuration,
+    DataPowerZoneSevenDuration,
+    DataPowerZoneSixDuration,
+    DataPowerZoneThreeDuration,
+    DataPowerZoneTwoDuration,
+    DataRecoveryTime,
+} from '@sports-alliance/sports-lib';
 import {
     buildDerivedFormDailyLoads,
     DERIVED_METRIC_KINDS,
@@ -11,9 +30,15 @@ import {
     DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS,
     DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS,
     DEFAULT_DERIVED_METRIC_KINDS,
+    type DerivedAcwrMetricPayload,
+    type DerivedEfficiencyTrendMetricPayload,
+    type DerivedFreshnessForecastMetricPayload,
+    type DerivedIntensityDistributionMetricPayload,
     type DerivedFormMetricPayload,
     type DerivedMetricKind,
     type DerivedMetricsCoordinator,
+    type DerivedMonotonyStrainMetricPayload,
+    type DerivedRampRateMetricPayload,
     type DerivedRecoveryNowMetricPayload,
     getDerivedMetricDocId,
     normalizeDerivedMetricKinds,
@@ -26,12 +51,44 @@ import { getDerivedMetricsUidAllowlist, isDerivedMetricsUidAllowed } from './der
 const FORM_STAT_TYPE = 'Training Stress Score';
 const LEGACY_FORM_STAT_TYPE = 'Power Training Stress Score';
 const DERIVED_METRICS_EVENT_FIELDS = ['startDate', 'endDate', 'stats', 'isMerge', 'mergeType', 'originalFiles'] as const;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const CTL_TIME_CONSTANT_DAYS = 42;
+const ATL_TIME_CONSTANT_DAYS = 7;
+const HISTORY_TREND_WEEKS = 8;
+const FORECAST_DAYS = 7;
+const POWER_ZONE_STAT_TYPES = [
+    DataPowerZoneOneDuration.type,
+    DataPowerZoneTwoDuration.type,
+    DataPowerZoneThreeDuration.type,
+    DataPowerZoneFourDuration.type,
+    DataPowerZoneFiveDuration.type,
+    DataPowerZoneSixDuration.type,
+    DataPowerZoneSevenDuration.type,
+] as const;
+const HEART_RATE_ZONE_STAT_TYPES = [
+    DataHeartRateZoneOneDuration.type,
+    DataHeartRateZoneTwoDuration.type,
+    DataHeartRateZoneThreeDuration.type,
+    DataHeartRateZoneFourDuration.type,
+    DataHeartRateZoneFiveDuration.type,
+    DataHeartRateZoneSixDuration.type,
+    DataHeartRateZoneSevenDuration.type,
+] as const;
 
 type FirestoreQueryDocumentSnapshot = FirebaseFirestore.QueryDocumentSnapshot<FirebaseFirestore.DocumentData>;
 
 interface DerivedMetricBuildResult<TPayload> {
     sourceEventCount: number;
     payload: TPayload;
+}
+
+interface DerivedLoadPoint {
+    dayMs: number;
+    load: number;
+    ctl: number;
+    atl: number;
+    formSameDay: number;
+    formPriorDay: number | null;
 }
 
 export interface StartDerivedMetricsProcessingResult {
@@ -106,6 +163,24 @@ function toMillis(value: unknown): number | null {
 function resolveUtcDayStartMs(timeMs: number): number {
     const date = new Date(timeMs);
     return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+}
+
+function resolveUtcWeekStartMs(timeMs: number): number {
+    const date = new Date(timeMs);
+    const dayIndexMondayFirst = (date.getUTCDay() + 6) % 7;
+    return Date.UTC(
+        date.getUTCFullYear(),
+        date.getUTCMonth(),
+        date.getUTCDate() - dayIndexMondayFirst,
+    );
+}
+
+function toRoundedNumber(value: number, precision = 4): number {
+    if (!Number.isFinite(value)) {
+        return 0;
+    }
+    const factor = Math.pow(10, precision);
+    return Math.round(value * factor) / factor;
 }
 
 function parseCoordinator(data: unknown): DerivedMetricsCoordinator {
@@ -282,9 +357,12 @@ export function getDerivedRecoveryLookbackWindowSeconds(): number {
     return DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS;
 }
 
-function buildFormMetricPayload(
+function buildDailyLoadContext(
     docs: readonly FirestoreQueryDocumentSnapshot[],
-): DerivedMetricBuildResult<DerivedFormMetricPayload> {
+): {
+    dailyLoadsByUtcDay: Map<number, number>;
+    sourceEventCount: number;
+} {
     const dailyLoadsByUtcDay = new Map<number, number>();
     let sourceEventCount = 0;
 
@@ -309,17 +387,459 @@ function buildFormMetricPayload(
         sourceEventCount += 1;
     });
 
+    return {
+        dailyLoadsByUtcDay,
+        sourceEventCount,
+    };
+}
+
+function buildDerivedLoadPoints(
+    dailyLoadsByUtcDay: ReadonlyMap<number, number>,
+    options?: {
+        endDayMs?: number | null;
+    },
+): DerivedLoadPoint[] {
+    if (!dailyLoadsByUtcDay.size) {
+        return [];
+    }
+
+    const sortedDays = [...dailyLoadsByUtcDay.keys()].sort((left, right) => left - right);
+    const startDay = sortedDays[0];
+    const latestDayWithSourceLoad = sortedDays[sortedDays.length - 1];
+    const requestedEndDay = toFiniteNumber(options?.endDayMs);
+    const normalizedRequestedEndDay = requestedEndDay === null
+        ? null
+        : resolveUtcDayStartMs(requestedEndDay);
+    const endDay = normalizedRequestedEndDay === null
+        ? latestDayWithSourceLoad
+        : Math.max(latestDayWithSourceLoad, normalizedRequestedEndDay);
+    if (!Number.isFinite(startDay) || !Number.isFinite(endDay)) {
+        return [];
+    }
+
+    const points: DerivedLoadPoint[] = [];
+    let previousCtl = 0;
+    let previousAtl = 0;
+
+    for (let dayMs = startDay; dayMs <= endDay; dayMs += DAY_MS) {
+        const load = dailyLoadsByUtcDay.get(dayMs) || 0;
+        const ctl = previousCtl + ((load - previousCtl) / CTL_TIME_CONSTANT_DAYS);
+        const atl = previousAtl + ((load - previousAtl) / ATL_TIME_CONSTANT_DAYS);
+        points.push({
+            dayMs,
+            load,
+            ctl,
+            atl,
+            formSameDay: ctl - atl,
+            formPriorDay: points.length ? previousCtl - previousAtl : null,
+        });
+        previousCtl = ctl;
+        previousAtl = atl;
+    }
+
+    return points;
+}
+
+function resolveRollingLoad(points: readonly DerivedLoadPoint[], index: number, days: number): number {
+    let sum = 0;
+    const startIndex = Math.max(0, index - (days - 1));
+    for (let currentIndex = startIndex; currentIndex <= index; currentIndex += 1) {
+        sum += points[currentIndex]?.load || 0;
+    }
+    return sum;
+}
+
+function takeLatestTrendWeeks<T extends { weekStartMs: number }>(points: readonly T[]): T[] {
+    if (!points.length) {
+        return [];
+    }
+    return points.slice(Math.max(0, points.length - HISTORY_TREND_WEEKS));
+}
+
+function buildFormMetricPayload(
+    dailyLoadContext: ReturnType<typeof buildDailyLoadContext>,
+): DerivedMetricBuildResult<DerivedFormMetricPayload> {
     // Firestore rejects nested arrays, so we persist day/load objects instead of tuple arrays.
-    const sortedDailyLoads = buildDerivedFormDailyLoads(dailyLoadsByUtcDay);
+    const sortedDailyLoads = buildDerivedFormDailyLoads(dailyLoadContext.dailyLoadsByUtcDay);
 
     return {
-        sourceEventCount,
+        sourceEventCount: dailyLoadContext.sourceEventCount,
         payload: {
             dayBoundary: 'UTC',
             rangeStartDayMs: sortedDailyLoads.length ? sortedDailyLoads[0].dayMs : null,
             rangeEndDayMs: sortedDailyLoads.length ? sortedDailyLoads[sortedDailyLoads.length - 1].dayMs : null,
             dailyLoads: sortedDailyLoads,
             excludesMergedEvents: true,
+        },
+    };
+}
+
+function buildAcwrMetricPayload(
+    points: readonly DerivedLoadPoint[],
+    sourceEventCount: number,
+): DerivedMetricBuildResult<DerivedAcwrMetricPayload> {
+    if (!points.length) {
+        return {
+            sourceEventCount,
+            payload: {
+                dayBoundary: 'UTC',
+                latestDayMs: null,
+                acuteLoad7: 0,
+                chronicLoad28: 0,
+                ratio: null,
+                trend8Weeks: [],
+            },
+        };
+    }
+
+    const trendByWeek = new Map<number, { weekStartMs: number; ratio: number | null }>();
+    const acwrByDay = points.map((point, index) => {
+        const acuteLoad7 = resolveRollingLoad(points, index, 7);
+        const chronicLoad28 = resolveRollingLoad(points, index, 28) / 4;
+        const ratio = chronicLoad28 > 0 ? acuteLoad7 / chronicLoad28 : null;
+        trendByWeek.set(resolveUtcWeekStartMs(point.dayMs), {
+            weekStartMs: resolveUtcWeekStartMs(point.dayMs),
+            ratio: ratio === null ? null : toRoundedNumber(ratio, 4),
+        });
+        return {
+            acuteLoad7,
+            chronicLoad28,
+            ratio,
+        };
+    });
+    const latest = acwrByDay[acwrByDay.length - 1];
+    const trend8Weeks = takeLatestTrendWeeks(
+        [...trendByWeek.values()].sort((left, right) => left.weekStartMs - right.weekStartMs),
+    );
+
+    return {
+        sourceEventCount,
+        payload: {
+            dayBoundary: 'UTC',
+            latestDayMs: points[points.length - 1]?.dayMs ?? null,
+            acuteLoad7: toRoundedNumber(latest?.acuteLoad7 || 0, 2),
+            chronicLoad28: toRoundedNumber(latest?.chronicLoad28 || 0, 2),
+            ratio: latest?.ratio === null ? null : toRoundedNumber(latest?.ratio || 0, 4),
+            trend8Weeks,
+        },
+    };
+}
+
+function buildRampRateMetricPayload(
+    points: readonly DerivedLoadPoint[],
+    sourceEventCount: number,
+): DerivedMetricBuildResult<DerivedRampRateMetricPayload> {
+    if (!points.length) {
+        return {
+            sourceEventCount,
+            payload: {
+                dayBoundary: 'UTC',
+                latestDayMs: null,
+                ctlToday: null,
+                ctl7DaysAgo: null,
+                rampRate: null,
+                trend8Weeks: [],
+            },
+        };
+    }
+
+    const pointByDay = new Map<number, DerivedLoadPoint>(points.map(point => [point.dayMs, point]));
+    const trendByWeek = new Map<number, { weekStartMs: number; rampRate: number | null }>();
+    points.forEach((point) => {
+        const previous = pointByDay.get(point.dayMs - (7 * DAY_MS));
+        const rampRate = previous ? point.ctl - previous.ctl : null;
+        trendByWeek.set(resolveUtcWeekStartMs(point.dayMs), {
+            weekStartMs: resolveUtcWeekStartMs(point.dayMs),
+            rampRate: rampRate === null ? null : toRoundedNumber(rampRate, 4),
+        });
+    });
+
+    const latestPoint = points[points.length - 1];
+    const point7DaysAgo = pointByDay.get(latestPoint.dayMs - (7 * DAY_MS)) || null;
+    const rampRate = point7DaysAgo ? (latestPoint.ctl - point7DaysAgo.ctl) : null;
+
+    return {
+        sourceEventCount,
+        payload: {
+            dayBoundary: 'UTC',
+            latestDayMs: latestPoint.dayMs,
+            ctlToday: toRoundedNumber(latestPoint.ctl, 4),
+            ctl7DaysAgo: point7DaysAgo ? toRoundedNumber(point7DaysAgo.ctl, 4) : null,
+            rampRate: rampRate === null ? null : toRoundedNumber(rampRate, 4),
+            trend8Weeks: takeLatestTrendWeeks(
+                [...trendByWeek.values()].sort((left, right) => left.weekStartMs - right.weekStartMs),
+            ),
+        },
+    };
+}
+
+function resolveMonotonyStrain(
+    points: readonly DerivedLoadPoint[],
+    index: number,
+): { weeklyLoad7: number; monotony: number | null; strain: number | null } {
+    const startIndex = Math.max(0, index - 6);
+    const windowLoads = points.slice(startIndex, index + 1).map(point => point.load);
+    const weeklyLoad7 = windowLoads.reduce((sum, value) => sum + value, 0);
+    const mean = windowLoads.length ? (weeklyLoad7 / windowLoads.length) : 0;
+    const variance = windowLoads.length
+        ? windowLoads.reduce((sum, value) => sum + Math.pow(value - mean, 2), 0) / windowLoads.length
+        : 0;
+    const stddev = Math.sqrt(variance);
+    const monotony = stddev > 0 ? (mean / stddev) : null;
+    const strain = monotony === null ? null : weeklyLoad7 * monotony;
+    return {
+        weeklyLoad7,
+        monotony,
+        strain,
+    };
+}
+
+function buildMonotonyStrainMetricPayload(
+    points: readonly DerivedLoadPoint[],
+    sourceEventCount: number,
+): DerivedMetricBuildResult<DerivedMonotonyStrainMetricPayload> {
+    if (!points.length) {
+        return {
+            sourceEventCount,
+            payload: {
+                dayBoundary: 'UTC',
+                latestDayMs: null,
+                weeklyLoad7: 0,
+                monotony: null,
+                strain: null,
+                trend8Weeks: [],
+            },
+        };
+    }
+
+    const trendByWeek = new Map<number, { weekStartMs: number; strain: number | null }>();
+    const latestDerived = resolveMonotonyStrain(points, points.length - 1);
+    points.forEach((point, index) => {
+        const weeklyValue = resolveMonotonyStrain(points, index);
+        trendByWeek.set(resolveUtcWeekStartMs(point.dayMs), {
+            weekStartMs: resolveUtcWeekStartMs(point.dayMs),
+            strain: weeklyValue.strain === null ? null : toRoundedNumber(weeklyValue.strain, 2),
+        });
+    });
+
+    return {
+        sourceEventCount,
+        payload: {
+            dayBoundary: 'UTC',
+            latestDayMs: points[points.length - 1].dayMs,
+            weeklyLoad7: toRoundedNumber(latestDerived.weeklyLoad7, 2),
+            monotony: latestDerived.monotony === null ? null : toRoundedNumber(latestDerived.monotony, 4),
+            strain: latestDerived.strain === null ? null : toRoundedNumber(latestDerived.strain, 2),
+            trend8Weeks: takeLatestTrendWeeks(
+                [...trendByWeek.values()].sort((left, right) => left.weekStartMs - right.weekStartMs),
+            ),
+        },
+    };
+}
+
+function buildFreshnessForecastMetricPayload(
+    points: readonly DerivedLoadPoint[],
+    sourceEventCount: number,
+): DerivedMetricBuildResult<DerivedFreshnessForecastMetricPayload> {
+    if (!points.length) {
+        return {
+            sourceEventCount,
+            payload: {
+                dayBoundary: 'UTC',
+                generatedAtMs: Date.now(),
+                points: [],
+            },
+        };
+    }
+
+    const latestPoint = points[points.length - 1];
+    const forecastPoints: DerivedFreshnessForecastMetricPayload['points'] = [
+        {
+            dayMs: latestPoint.dayMs,
+            trainingStressScore: latestPoint.load,
+            ctl: toRoundedNumber(latestPoint.ctl, 4),
+            atl: toRoundedNumber(latestPoint.atl, 4),
+            formSameDay: toRoundedNumber(latestPoint.formSameDay, 4),
+            formPriorDay: latestPoint.formPriorDay === null ? null : toRoundedNumber(latestPoint.formPriorDay, 4),
+            isForecast: false,
+        },
+    ];
+    let previousCtl = latestPoint.ctl;
+    let previousAtl = latestPoint.atl;
+
+    for (let dayOffset = 1; dayOffset <= FORECAST_DAYS; dayOffset += 1) {
+        const trainingStressScore = 0;
+        const ctl = previousCtl + ((trainingStressScore - previousCtl) / CTL_TIME_CONSTANT_DAYS);
+        const atl = previousAtl + ((trainingStressScore - previousAtl) / ATL_TIME_CONSTANT_DAYS);
+        forecastPoints.push({
+            dayMs: latestPoint.dayMs + (dayOffset * DAY_MS),
+            trainingStressScore,
+            ctl: toRoundedNumber(ctl, 4),
+            atl: toRoundedNumber(atl, 4),
+            formSameDay: toRoundedNumber(ctl - atl, 4),
+            formPriorDay: toRoundedNumber(previousCtl - previousAtl, 4),
+            isForecast: true,
+        });
+        previousCtl = ctl;
+        previousAtl = atl;
+    }
+
+    return {
+        sourceEventCount,
+        payload: {
+            dayBoundary: 'UTC',
+            generatedAtMs: Date.now(),
+            points: forecastPoints,
+        },
+    };
+}
+
+function resolveZoneDurations(
+    eventData: Record<string, unknown>,
+    zoneTypes: readonly string[],
+): number[] {
+    return zoneTypes.map((zoneType) => {
+        const value = toFinitePositiveNumber(resolveRawStatNumericValue(eventData, zoneType));
+        return value === null ? 0 : value;
+    });
+}
+
+function buildIntensityDistributionMetricPayload(
+    docs: readonly FirestoreQueryDocumentSnapshot[],
+): DerivedMetricBuildResult<DerivedIntensityDistributionMetricPayload> {
+    const weeklyBuckets = new Map<number, {
+        easySeconds: number;
+        moderateSeconds: number;
+        hardSeconds: number;
+        powerEvents: number;
+        heartRateEvents: number;
+    }>();
+    let sourceEventCount = 0;
+
+    docs.forEach((doc) => {
+        const eventData = (doc.data() || {}) as Record<string, unknown>;
+        if (isMergedEvent(eventData)) {
+            return;
+        }
+        const startTimeMs = toMillis(eventData.startDate);
+        if (startTimeMs === null) {
+            return;
+        }
+
+        const powerZones = resolveZoneDurations(eventData, POWER_ZONE_STAT_TYPES);
+        const powerTotal = powerZones.reduce((sum, value) => sum + value, 0);
+        const heartRateZones = resolveZoneDurations(eventData, HEART_RATE_ZONE_STAT_TYPES);
+        const heartRateTotal = heartRateZones.reduce((sum, value) => sum + value, 0);
+        const sourceZones = powerTotal > 0 ? powerZones : (heartRateTotal > 0 ? heartRateZones : null);
+        if (!sourceZones) {
+            return;
+        }
+
+        const weekStartMs = resolveUtcWeekStartMs(startTimeMs);
+        const week = weeklyBuckets.get(weekStartMs) || {
+            easySeconds: 0,
+            moderateSeconds: 0,
+            hardSeconds: 0,
+            powerEvents: 0,
+            heartRateEvents: 0,
+        };
+        week.easySeconds += (sourceZones[0] || 0) + (sourceZones[1] || 0);
+        week.moderateSeconds += (sourceZones[2] || 0) + (sourceZones[3] || 0);
+        week.hardSeconds += (sourceZones[4] || 0) + (sourceZones[5] || 0) + (sourceZones[6] || 0);
+        if (powerTotal > 0) {
+            week.powerEvents += 1;
+        } else {
+            week.heartRateEvents += 1;
+        }
+        weeklyBuckets.set(weekStartMs, week);
+        sourceEventCount += 1;
+    });
+
+    const weeks: DerivedIntensityDistributionMetricPayload['weeks'] = [...weeklyBuckets.entries()]
+        .sort((left, right) => left[0] - right[0])
+        .map(([weekStartMs, bucket]) => ({
+            weekStartMs,
+            easySeconds: toRoundedNumber(bucket.easySeconds, 2),
+            moderateSeconds: toRoundedNumber(bucket.moderateSeconds, 2),
+            hardSeconds: toRoundedNumber(bucket.hardSeconds, 2),
+            source: bucket.powerEvents >= bucket.heartRateEvents ? 'power' : 'heart-rate',
+        }));
+    const latestWeek = weeks[weeks.length - 1];
+    const latestTotal = latestWeek
+        ? latestWeek.easySeconds + latestWeek.moderateSeconds + latestWeek.hardSeconds
+        : 0;
+
+    return {
+        sourceEventCount,
+        payload: {
+            dayBoundary: 'UTC',
+            weeks,
+            latestWeekStartMs: latestWeek?.weekStartMs ?? null,
+            latestEasyPercent: latestTotal > 0 ? toRoundedNumber((latestWeek!.easySeconds / latestTotal) * 100, 2) : null,
+            latestModeratePercent: latestTotal > 0 ? toRoundedNumber((latestWeek!.moderateSeconds / latestTotal) * 100, 2) : null,
+            latestHardPercent: latestTotal > 0 ? toRoundedNumber((latestWeek!.hardSeconds / latestTotal) * 100, 2) : null,
+        },
+    };
+}
+
+function buildEfficiencyTrendMetricPayload(
+    docs: readonly FirestoreQueryDocumentSnapshot[],
+): DerivedMetricBuildResult<DerivedEfficiencyTrendMetricPayload> {
+    const weekly = new Map<number, {
+        weightedValueSum: number;
+        totalDurationSeconds: number;
+        sampleCount: number;
+    }>();
+    let sourceEventCount = 0;
+
+    docs.forEach((doc) => {
+        const eventData = (doc.data() || {}) as Record<string, unknown>;
+        if (isMergedEvent(eventData)) {
+            return;
+        }
+        const startTimeMs = toMillis(eventData.startDate);
+        if (startTimeMs === null) {
+            return;
+        }
+
+        const avgPower = toFinitePositiveNumber(resolveRawStatNumericValue(eventData, DataPowerAvg.type));
+        const avgHeartRate = toFinitePositiveNumber(resolveRawStatNumericValue(eventData, DataHeartRateAvg.type));
+        const durationSeconds = toFinitePositiveNumber(resolveRawStatNumericValue(eventData, DataDuration.type));
+        if (avgPower === null || avgHeartRate === null || durationSeconds === null) {
+            return;
+        }
+
+        const ratio = avgPower / avgHeartRate;
+        const weekStartMs = resolveUtcWeekStartMs(startTimeMs);
+        const bucket = weekly.get(weekStartMs) || {
+            weightedValueSum: 0,
+            totalDurationSeconds: 0,
+            sampleCount: 0,
+        };
+        bucket.weightedValueSum += ratio * durationSeconds;
+        bucket.totalDurationSeconds += durationSeconds;
+        bucket.sampleCount += 1;
+        weekly.set(weekStartMs, bucket);
+        sourceEventCount += 1;
+    });
+
+    const points = [...weekly.entries()]
+        .sort((left, right) => left[0] - right[0])
+        .map(([weekStartMs, bucket]) => ({
+            weekStartMs,
+            value: bucket.totalDurationSeconds > 0 ? toRoundedNumber(bucket.weightedValueSum / bucket.totalDurationSeconds, 4) : 0,
+            sampleCount: bucket.sampleCount,
+            totalDurationSeconds: toRoundedNumber(bucket.totalDurationSeconds, 2),
+        }));
+    const latestPoint = points[points.length - 1];
+
+    return {
+        sourceEventCount,
+        payload: {
+            dayBoundary: 'UTC',
+            points,
+            latestWeekStartMs: latestPoint?.weekStartMs ?? null,
+            latestValue: latestPoint ? latestPoint.value : null,
         },
     };
 }
@@ -781,35 +1301,87 @@ export async function writeDerivedMetricSnapshotsReady(
     const batch = admin.firestore().batch();
     const formDocs = sourceDocs.formDocs || [];
     const recoveryNowDocs = sourceDocs.recoveryNowDocs || [];
+    const requiresDailyLoadContext = metricKinds.some((metricKind) => (
+        metricKind === DERIVED_METRIC_KINDS.Form
+        || metricKind === DERIVED_METRIC_KINDS.Acwr
+        || metricKind === DERIVED_METRIC_KINDS.RampRate
+        || metricKind === DERIVED_METRIC_KINDS.MonotonyStrain
+        || metricKind === DERIVED_METRIC_KINDS.FreshnessForecast
+    ));
+    const dailyLoadContext = requiresDailyLoadContext
+        ? buildDailyLoadContext(formDocs)
+        : null;
+    const derivedLoadPoints = dailyLoadContext
+        ? buildDerivedLoadPoints(dailyLoadContext.dailyLoadsByUtcDay)
+        : [];
+    // KPI metrics should reflect the current training state, so we extend daily load
+    // with zero-load days up to "today" while keeping source event counts untouched.
+    const kpiDerivedLoadPoints = dailyLoadContext
+        ? buildDerivedLoadPoints(dailyLoadContext.dailyLoadsByUtcDay, { endDayMs: resolveUtcDayStartMs(nowMs) })
+        : [];
+
+    const persistBuildResult = <TPayload>(
+        metricKind: DerivedMetricKind,
+        buildResult: DerivedMetricBuildResult<TPayload>,
+    ): void => {
+        batch.set(getMetricDocRef(uid, metricKind), {
+            entryType: DERIVED_METRICS_ENTRY_TYPES.Snapshot,
+            metricKind,
+            schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+            status: 'ready',
+            updatedAtMs: nowMs,
+            sourceEventCount: buildResult.sourceEventCount,
+            payload: buildResult.payload,
+            lastError: null,
+        }, { merge: true });
+    };
 
     metricKinds.forEach((metricKind) => {
         if (metricKind === DERIVED_METRIC_KINDS.Form) {
-            const buildResult = buildFormMetricPayload(formDocs);
-            batch.set(getMetricDocRef(uid, metricKind), {
-                entryType: DERIVED_METRICS_ENTRY_TYPES.Snapshot,
-                metricKind,
-                schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
-                status: 'ready',
-                updatedAtMs: nowMs,
-                sourceEventCount: buildResult.sourceEventCount,
-                payload: buildResult.payload,
-                lastError: null,
-            }, { merge: true });
+            const buildResult = buildFormMetricPayload(dailyLoadContext || buildDailyLoadContext(formDocs));
+            persistBuildResult(metricKind, buildResult);
+            return;
+        }
+
+        if (metricKind === DERIVED_METRIC_KINDS.Acwr) {
+            const buildResult = buildAcwrMetricPayload(kpiDerivedLoadPoints, dailyLoadContext?.sourceEventCount || 0);
+            persistBuildResult(metricKind, buildResult);
+            return;
+        }
+
+        if (metricKind === DERIVED_METRIC_KINDS.RampRate) {
+            const buildResult = buildRampRateMetricPayload(kpiDerivedLoadPoints, dailyLoadContext?.sourceEventCount || 0);
+            persistBuildResult(metricKind, buildResult);
+            return;
+        }
+
+        if (metricKind === DERIVED_METRIC_KINDS.MonotonyStrain) {
+            const buildResult = buildMonotonyStrainMetricPayload(kpiDerivedLoadPoints, dailyLoadContext?.sourceEventCount || 0);
+            persistBuildResult(metricKind, buildResult);
+            return;
+        }
+
+        if (metricKind === DERIVED_METRIC_KINDS.FreshnessForecast) {
+            const buildResult = buildFreshnessForecastMetricPayload(derivedLoadPoints, dailyLoadContext?.sourceEventCount || 0);
+            persistBuildResult(metricKind, buildResult);
+            return;
+        }
+
+        if (metricKind === DERIVED_METRIC_KINDS.IntensityDistribution) {
+            const buildResult = buildIntensityDistributionMetricPayload(formDocs);
+            persistBuildResult(metricKind, buildResult);
+            return;
+        }
+
+        if (metricKind === DERIVED_METRIC_KINDS.EfficiencyTrend) {
+            const buildResult = buildEfficiencyTrendMetricPayload(formDocs);
+            persistBuildResult(metricKind, buildResult);
             return;
         }
 
         if (metricKind === DERIVED_METRIC_KINDS.RecoveryNow) {
             const buildResult = buildRecoveryNowMetricPayload(recoveryNowDocs);
-            batch.set(getMetricDocRef(uid, metricKind), {
-                entryType: DERIVED_METRICS_ENTRY_TYPES.Snapshot,
-                metricKind,
-                schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
-                status: 'ready',
-                updatedAtMs: nowMs,
-                sourceEventCount: buildResult.sourceEventCount,
-                payload: buildResult.payload,
-                lastError: null,
-            }, { merge: true });
+            persistBuildResult(metricKind, buildResult);
         }
     });
 

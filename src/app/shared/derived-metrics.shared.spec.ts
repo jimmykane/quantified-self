@@ -52,6 +52,7 @@ describe('derived-metrics shared helpers', () => {
   it('resolves metric kind guards and document ids', () => {
     expect(isDerivedMetricKind(DERIVED_METRIC_KINDS.Form)).toBe(true);
     expect(isDerivedMetricKind('random_metric')).toBe(false);
+    expect(getDerivedMetricDocId(DERIVED_METRIC_KINDS.Acwr)).toBe('acwr');
     expect(getDerivedMetricDocId(DERIVED_METRIC_KINDS.RecoveryNow)).toBe('recovery_now');
   });
 
@@ -79,7 +80,7 @@ describe('derived-metrics shared helpers', () => {
   });
 
   it('exposes recovery lookback constants for bounded derived recovery scans', () => {
-    expect(DERIVED_METRIC_SCHEMA_VERSION).toBe(3);
+    expect(DERIVED_METRIC_SCHEMA_VERSION).toBe(4);
     expect(DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS).toBe(14 * 24 * 60 * 60);
     expect(DERIVED_RECOVERY_QUERY_DURATION_BUFFER_SECONDS).toBe(2 * 24 * 60 * 60);
     expect(DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS).toBe(

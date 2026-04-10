@@ -32,6 +32,31 @@
     [absoluteLatestPoint]="absoluteLatestFormPoint" [formStatus]="formStatus">
   </app-form-chart>
   }
+  @if (
+  chartType === acwrKpiChartType
+  || chartType === rampRateKpiChartType
+  || chartType === monotonyStrainKpiChartType
+  ) {
+  <app-kpi-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme" [chartType]="chartType"
+    [acwr]="acwr" [rampRate]="rampRate" [monotonyStrain]="monotonyStrain"
+    [acwrStatus]="acwrStatus" [rampRateStatus]="rampRateStatus" [monotonyStrainStatus]="monotonyStrainStatus">
+  </app-kpi-chart>
+  }
+  @if (chartType === freshnessForecastChartType) {
+  <app-freshness-forecast-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
+    [forecast]="freshnessForecast" [status]="freshnessForecastStatus">
+  </app-freshness-forecast-chart>
+  }
+  @if (chartType === intensityDistributionChartType) {
+  <app-intensity-distribution-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
+    [distribution]="intensityDistribution" [status]="intensityDistributionStatus">
+  </app-intensity-distribution-chart>
+  }
+  @if (chartType === efficiencyTrendChartType) {
+  <app-efficiency-trend-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
+    [trend]="efficiencyTrend" [status]="efficiencyTrendStatus">
+  </app-efficiency-trend-chart>
+  }
   @if (chartType === chartTypes.LinesHorizontal
   || chartType === chartTypes.LinesVertical) {
   <app-xy-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme" [chartDataType]="dataType"

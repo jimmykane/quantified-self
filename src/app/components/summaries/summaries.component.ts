@@ -38,12 +38,26 @@ import { AppUserService } from '../../services/app.user.service';
 import { DashboardDerivedMetricsService } from '../../services/dashboard-derived-metrics.service';
 import type { DashboardFormPoint } from '../../helpers/dashboard-form.helper';
 import type { DashboardRecoveryNowContext } from '../../helpers/dashboard-recovery-now.helper';
+import type {
+  DashboardAcwrContext,
+  DashboardEfficiencyTrendContext,
+  DashboardFreshnessForecastContext,
+  DashboardIntensityDistributionContext,
+  DashboardMonotonyStrainContext,
+  DashboardRampRateContext,
+} from '../../helpers/dashboard-derived-metrics.helper';
 import {
   type DashboardDerivedMetricStatus,
   isDerivedMetricPendingStatus,
 } from '../../helpers/derived-metric-status.helper';
 import {
+  isDashboardAcwrKpiChartType,
+  isDashboardEfficiencyTrendChartType,
+  isDashboardFreshnessForecastChartType,
   isDashboardFormChartType,
+  isDashboardIntensityDistributionChartType,
+  isDashboardMonotonyStrainKpiChartType,
+  isDashboardRampRateKpiChartType,
   isDashboardRecoveryNowChartType,
 } from '../../helpers/dashboard-special-chart-types';
 import { MatDialog } from '@angular/material/dialog';
@@ -95,8 +109,20 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private dashboardTileSettingsSnapshot: TileSettingsInterface[] = [];
   private derivedFormPoints: DashboardFormPoint[] | null = null;
   private derivedRecoveryNowContext: DashboardRecoveryNowContext | null = null;
+  private derivedAcwrContext: DashboardAcwrContext | null = null;
+  private derivedRampRateContext: DashboardRampRateContext | null = null;
+  private derivedMonotonyStrainContext: DashboardMonotonyStrainContext | null = null;
+  private derivedFreshnessForecastContext: DashboardFreshnessForecastContext | null = null;
+  private derivedIntensityDistributionContext: DashboardIntensityDistributionContext | null = null;
+  private derivedEfficiencyTrendContext: DashboardEfficiencyTrendContext | null = null;
   private derivedFormStatus: DashboardDerivedMetricStatus = 'missing';
   private derivedRecoveryNowStatus: DashboardDerivedMetricStatus = 'missing';
+  private derivedAcwrStatus: DashboardDerivedMetricStatus = 'missing';
+  private derivedRampRateStatus: DashboardDerivedMetricStatus = 'missing';
+  private derivedMonotonyStrainStatus: DashboardDerivedMetricStatus = 'missing';
+  private derivedFreshnessForecastStatus: DashboardDerivedMetricStatus = 'missing';
+  private derivedIntensityDistributionStatus: DashboardDerivedMetricStatus = 'missing';
+  private derivedEfficiencyTrendStatus: DashboardDerivedMetricStatus = 'missing';
   public derivedMetricsBanner: DashboardDerivedMetricsBanner | null = null;
 
   constructor(
@@ -290,6 +316,12 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       derivedMetrics: {
         formPoints: this.derivedFormPoints,
         recoveryNow: this.derivedRecoveryNowContext,
+        acwr: this.derivedAcwrContext,
+        rampRate: this.derivedRampRateContext,
+        monotonyStrain: this.derivedMonotonyStrainContext,
+        freshnessForecast: this.derivedFreshnessForecastContext,
+        intensityDistribution: this.derivedIntensityDistributionContext,
+        efficiencyTrend: this.derivedEfficiencyTrendContext,
       },
     });
     this.dashboardTileSettingsSnapshot = this.getDashboardTileSettingsSnapshot();
@@ -336,8 +368,20 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.derivedMetricsUserUID = null;
       this.derivedFormPoints = null;
       this.derivedRecoveryNowContext = null;
+      this.derivedAcwrContext = null;
+      this.derivedRampRateContext = null;
+      this.derivedMonotonyStrainContext = null;
+      this.derivedFreshnessForecastContext = null;
+      this.derivedIntensityDistributionContext = null;
+      this.derivedEfficiencyTrendContext = null;
       this.derivedFormStatus = 'missing';
       this.derivedRecoveryNowStatus = 'missing';
+      this.derivedAcwrStatus = 'missing';
+      this.derivedRampRateStatus = 'missing';
+      this.derivedMonotonyStrainStatus = 'missing';
+      this.derivedFreshnessForecastStatus = 'missing';
+      this.derivedIntensityDistributionStatus = 'missing';
+      this.derivedEfficiencyTrendStatus = 'missing';
       this.refreshDerivedMetricsBannerState();
       if (this.derivedMetricsSubscription) {
         this.derivedMetricsSubscription.unsubscribe();
@@ -358,8 +402,20 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.derivedMetricsUserUID = uid;
     this.derivedFormPoints = null;
     this.derivedRecoveryNowContext = null;
+    this.derivedAcwrContext = null;
+    this.derivedRampRateContext = null;
+    this.derivedMonotonyStrainContext = null;
+    this.derivedFreshnessForecastContext = null;
+    this.derivedIntensityDistributionContext = null;
+    this.derivedEfficiencyTrendContext = null;
     this.derivedFormStatus = 'missing';
     this.derivedRecoveryNowStatus = 'missing';
+    this.derivedAcwrStatus = 'missing';
+    this.derivedRampRateStatus = 'missing';
+    this.derivedMonotonyStrainStatus = 'missing';
+    this.derivedFreshnessForecastStatus = 'missing';
+    this.derivedIntensityDistributionStatus = 'missing';
+    this.derivedEfficiencyTrendStatus = 'missing';
     this.refreshDerivedMetricsBannerState();
 
     this.derivedMetricsSubscription = this.dashboardDerivedMetricsService.watch(this.user).subscribe((state) => {
@@ -367,18 +423,56 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
       const hasFormPointsChanged = !equal(this.derivedFormPoints, state.formPoints);
       const hasRecoveryContextChanged = !equal(this.derivedRecoveryNowContext, state.recoveryNow);
+      const hasAcwrChanged = !equal(this.derivedAcwrContext, state.acwr);
+      const hasRampRateChanged = !equal(this.derivedRampRateContext, state.rampRate);
+      const hasMonotonyStrainChanged = !equal(this.derivedMonotonyStrainContext, state.monotonyStrain);
+      const hasFreshnessForecastChanged = !equal(this.derivedFreshnessForecastContext, state.freshnessForecast);
+      const hasIntensityDistributionChanged = !equal(this.derivedIntensityDistributionContext, state.intensityDistribution);
+      const hasEfficiencyTrendChanged = !equal(this.derivedEfficiencyTrendContext, state.efficiencyTrend);
       const hasFormStatusChanged = this.derivedFormStatus !== state.formStatus;
       const hasRecoveryStatusChanged = this.derivedRecoveryNowStatus !== state.recoveryNowStatus;
-      const hasBannerStateChanged = hasFormStatusChanged || hasRecoveryStatusChanged;
-      const hasTileDataChanged = hasFormPointsChanged || hasRecoveryContextChanged;
+      const hasAcwrStatusChanged = this.derivedAcwrStatus !== state.acwrStatus;
+      const hasRampRateStatusChanged = this.derivedRampRateStatus !== state.rampRateStatus;
+      const hasMonotonyStrainStatusChanged = this.derivedMonotonyStrainStatus !== state.monotonyStrainStatus;
+      const hasFreshnessForecastStatusChanged = this.derivedFreshnessForecastStatus !== state.freshnessForecastStatus;
+      const hasIntensityDistributionStatusChanged = this.derivedIntensityDistributionStatus !== state.intensityDistributionStatus;
+      const hasEfficiencyTrendStatusChanged = this.derivedEfficiencyTrendStatus !== state.efficiencyTrendStatus;
+      const hasBannerStateChanged = hasFormStatusChanged
+        || hasRecoveryStatusChanged
+        || hasAcwrStatusChanged
+        || hasRampRateStatusChanged
+        || hasMonotonyStrainStatusChanged
+        || hasFreshnessForecastStatusChanged
+        || hasIntensityDistributionStatusChanged
+        || hasEfficiencyTrendStatusChanged;
+      const hasTileDataChanged = hasFormPointsChanged
+        || hasRecoveryContextChanged
+        || hasAcwrChanged
+        || hasRampRateChanged
+        || hasMonotonyStrainChanged
+        || hasFreshnessForecastChanged
+        || hasIntensityDistributionChanged
+        || hasEfficiencyTrendChanged;
       if (!hasTileDataChanged && !hasBannerStateChanged) {
         return;
       }
 
       this.derivedFormPoints = state.formPoints;
       this.derivedRecoveryNowContext = state.recoveryNow;
+      this.derivedAcwrContext = state.acwr;
+      this.derivedRampRateContext = state.rampRate;
+      this.derivedMonotonyStrainContext = state.monotonyStrain;
+      this.derivedFreshnessForecastContext = state.freshnessForecast;
+      this.derivedIntensityDistributionContext = state.intensityDistribution;
+      this.derivedEfficiencyTrendContext = state.efficiencyTrend;
       this.derivedFormStatus = state.formStatus;
       this.derivedRecoveryNowStatus = state.recoveryNowStatus;
+      this.derivedAcwrStatus = state.acwrStatus;
+      this.derivedRampRateStatus = state.rampRateStatus;
+      this.derivedMonotonyStrainStatus = state.monotonyStrainStatus;
+      this.derivedFreshnessForecastStatus = state.freshnessForecastStatus;
+      this.derivedIntensityDistributionStatus = state.intensityDistributionStatus;
+      this.derivedEfficiencyTrendStatus = state.efficiencyTrendStatus;
       this.logRecoveryPipelineState('derived_metrics_update');
       this.refreshDerivedMetricsBannerState();
 
@@ -475,37 +569,44 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.dashboardDerivedMetricsService.ensureForDashboard(this.user, {
       formPoints: this.derivedFormPoints,
       recoveryNow: this.derivedRecoveryNowContext,
+      acwr: this.derivedAcwrContext,
+      rampRate: this.derivedRampRateContext,
+      monotonyStrain: this.derivedMonotonyStrainContext,
+      freshnessForecast: this.derivedFreshnessForecastContext,
+      intensityDistribution: this.derivedIntensityDistributionContext,
+      efficiencyTrend: this.derivedEfficiencyTrendContext,
       formStatus: this.derivedFormStatus,
       recoveryNowStatus: this.derivedRecoveryNowStatus,
+      acwrStatus: this.derivedAcwrStatus,
+      rampRateStatus: this.derivedRampRateStatus,
+      monotonyStrainStatus: this.derivedMonotonyStrainStatus,
+      freshnessForecastStatus: this.derivedFreshnessForecastStatus,
+      intensityDistributionStatus: this.derivedIntensityDistributionStatus,
+      efficiencyTrendStatus: this.derivedEfficiencyTrendStatus,
     }, { force: true });
   }
 
   private refreshDerivedMetricsBannerState(): void {
     const dashboardTiles = this.user?.settings?.dashboardSettings?.tiles ?? [];
-    const hasFormTile = dashboardTiles.some(tile =>
-      tile.type === TileTypes.Chart
-      && isDashboardFormChartType((tile as TileChartSettingsInterface).chartType),
-    );
-    const hasRecoveryTile = dashboardTiles.some(tile =>
-      tile.type === TileTypes.Chart
-      && isDashboardRecoveryNowChartType((tile as TileChartSettingsInterface).chartType),
-    );
+    const relevantStatuses = dashboardTiles
+      .map((tile) => {
+        if (tile.type !== TileTypes.Chart) {
+          return null;
+        }
+        return this.resolveDerivedStatusForChartType((tile as TileChartSettingsInterface).chartType);
+      })
+      .filter((status): status is DashboardDerivedMetricStatus => !!status);
 
-    if (!hasFormTile && !hasRecoveryTile) {
+    if (!relevantStatuses.length) {
       this.derivedMetricsBanner = null;
       return;
     }
-
-    const relevantStatuses: DashboardDerivedMetricStatus[] = [
-      ...(hasFormTile ? [this.derivedFormStatus] : []),
-      ...(hasRecoveryTile ? [this.derivedRecoveryNowStatus] : []),
-    ];
 
     if (relevantStatuses.some(status => status === 'failed')) {
       this.derivedMetricsBanner = {
         type: 'warning',
         title: 'Training metrics update failed',
-        description: 'Form and Recovery metrics could not refresh. Retry to rebuild derived metrics.',
+        description: 'Some derived dashboard metrics could not refresh. Retry to rebuild derived metrics.',
         showRetry: true,
       };
       return;
@@ -518,7 +619,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         title: isUsingStaleData ? 'Refreshing training metrics' : 'Building training metrics',
         description: isUsingStaleData
           ? 'Using stale derived metrics while a refresh is in progress.'
-          : 'Form and Recovery metrics are being prepared in the background.',
+          : 'Derived dashboard metrics are being prepared in the background.',
         showRetry: false,
       };
       return;
@@ -577,6 +678,94 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       return null;
     }
     return this.derivedFormStatus;
+  }
+
+  getAcwrStatusForTile(tile: DashboardTileViewModel | TileSettingsInterface): DashboardDerivedMetricStatus | null {
+    if (!isDashboardChartTileViewModel(tile)) {
+      return null;
+    }
+    if (!isDashboardAcwrKpiChartType(tile.chartType)) {
+      return null;
+    }
+    return this.derivedAcwrStatus;
+  }
+
+  getRampRateStatusForTile(tile: DashboardTileViewModel | TileSettingsInterface): DashboardDerivedMetricStatus | null {
+    if (!isDashboardChartTileViewModel(tile)) {
+      return null;
+    }
+    if (!isDashboardRampRateKpiChartType(tile.chartType)) {
+      return null;
+    }
+    return this.derivedRampRateStatus;
+  }
+
+  getMonotonyStrainStatusForTile(tile: DashboardTileViewModel | TileSettingsInterface): DashboardDerivedMetricStatus | null {
+    if (!isDashboardChartTileViewModel(tile)) {
+      return null;
+    }
+    if (!isDashboardMonotonyStrainKpiChartType(tile.chartType)) {
+      return null;
+    }
+    return this.derivedMonotonyStrainStatus;
+  }
+
+  getFreshnessForecastStatusForTile(tile: DashboardTileViewModel | TileSettingsInterface): DashboardDerivedMetricStatus | null {
+    if (!isDashboardChartTileViewModel(tile)) {
+      return null;
+    }
+    if (!isDashboardFreshnessForecastChartType(tile.chartType)) {
+      return null;
+    }
+    return this.derivedFreshnessForecastStatus;
+  }
+
+  getIntensityDistributionStatusForTile(tile: DashboardTileViewModel | TileSettingsInterface): DashboardDerivedMetricStatus | null {
+    if (!isDashboardChartTileViewModel(tile)) {
+      return null;
+    }
+    if (!isDashboardIntensityDistributionChartType(tile.chartType)) {
+      return null;
+    }
+    return this.derivedIntensityDistributionStatus;
+  }
+
+  getEfficiencyTrendStatusForTile(tile: DashboardTileViewModel | TileSettingsInterface): DashboardDerivedMetricStatus | null {
+    if (!isDashboardChartTileViewModel(tile)) {
+      return null;
+    }
+    if (!isDashboardEfficiencyTrendChartType(tile.chartType)) {
+      return null;
+    }
+    return this.derivedEfficiencyTrendStatus;
+  }
+
+  private resolveDerivedStatusForChartType(chartType: unknown): DashboardDerivedMetricStatus | null {
+    if (isDashboardFormChartType(chartType)) {
+      return this.derivedFormStatus;
+    }
+    if (isDashboardRecoveryNowChartType(chartType)) {
+      return this.derivedRecoveryNowStatus;
+    }
+    if (isDashboardAcwrKpiChartType(chartType)) {
+      return this.derivedAcwrStatus;
+    }
+    if (isDashboardRampRateKpiChartType(chartType)) {
+      return this.derivedRampRateStatus;
+    }
+    if (isDashboardMonotonyStrainKpiChartType(chartType)) {
+      return this.derivedMonotonyStrainStatus;
+    }
+    if (isDashboardFreshnessForecastChartType(chartType)) {
+      return this.derivedFreshnessForecastStatus;
+    }
+    if (isDashboardIntensityDistributionChartType(chartType)) {
+      return this.derivedIntensityDistributionStatus;
+    }
+    if (isDashboardEfficiencyTrendChartType(chartType)) {
+      return this.derivedEfficiencyTrendStatus;
+    }
+    return null;
   }
 
   private logRecoveryPipelineState(stage: string): void {

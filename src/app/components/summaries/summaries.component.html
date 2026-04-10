@@ -48,6 +48,12 @@
         [dataCategoryType]="getChartTile(tile).dataCategoryType" [dataTimeInterval]="getChartTile(tile).timeInterval"
         [recoveryNow]="getChartTile(tile).recoveryNow" [recoveryNowStatus]="getRecoveryNowStatusForTile(tile)"
         [formStatus]="getFormStatusForTile(tile)"
+        [acwr]="getChartTile(tile).acwr" [acwrStatus]="getAcwrStatusForTile(tile)"
+        [rampRate]="getChartTile(tile).rampRate" [rampRateStatus]="getRampRateStatusForTile(tile)"
+        [monotonyStrain]="getChartTile(tile).monotonyStrain" [monotonyStrainStatus]="getMonotonyStrainStatusForTile(tile)"
+        [freshnessForecast]="getChartTile(tile).freshnessForecast" [freshnessForecastStatus]="getFreshnessForecastStatusForTile(tile)"
+        [intensityDistribution]="getChartTile(tile).intensityDistribution" [intensityDistributionStatus]="getIntensityDistributionStatusForTile(tile)"
+        [efficiencyTrend]="getChartTile(tile).efficiencyTrend" [efficiencyTrendStatus]="getEfficiencyTrendStatusForTile(tile)"
         [absoluteLatestFormPoint]="getChartTile(tile).absoluteLatestFormPoint"
         [size]="tile.size" [order]="tile.order" [enableDesktopDrag]="desktopTileDragEnabled"
         (editInDashboardManager)="openDashboardManagerForTileOrder($event)"></app-tile-chart>
