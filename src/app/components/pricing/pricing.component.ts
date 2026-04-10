@@ -208,6 +208,9 @@ export class PricingComponent implements OnInit, OnDestroy {
             if (limit <= 0) {
                 return 'AI Insights not included';
             }
+            if (resolvedRole === 'free') {
+                return `AI Insights up to ${limit} requests per calendar month`;
+            }
             return `AI Insights up to ${limit} requests per billing period`;
         } catch (error) {
             this.logger.error(`Unsupported pricing role '${resolvedRole}' in AI insights pricing UI`, error);

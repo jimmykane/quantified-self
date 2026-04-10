@@ -1,5 +1,25 @@
 @if (tiles.length) {
 <section class="pie">
+  @if (showActions) {
+  <div class="dashboard-summary-actions">
+    <button mat-flat-button class="qs-mat-primary" (click)="openDashboardManagerDialog()" [disabled]="isDashboardManagerOpen">
+      <mat-icon>add_chart</mat-icon>
+      <span>Dashboard manager</span>
+    </button>
+  </div>
+  }
+  @if (derivedMetricsBanner) {
+  <div class="derived-metrics-banner" [class.pending]="derivedMetricsBanner.type === 'pending'"
+    [class.warning]="derivedMetricsBanner.type === 'warning'">
+    <div class="derived-metrics-banner-content">
+      <div class="derived-metrics-banner-title">{{derivedMetricsBanner.title}}</div>
+      <div class="derived-metrics-banner-description">{{derivedMetricsBanner.description}}</div>
+    </div>
+    @if (derivedMetricsBanner.showRetry) {
+    <button type="button" class="derived-metrics-banner-action" (click)="retryDerivedMetricsRebuild()">Retry</button>
+    }
+  </div>
+  }
   <div
     class="dashboard-grid"
     cdkDropList
@@ -26,14 +46,18 @@
         [isLoading]="isLoading" [data]="getChartTile(tile).data" [showActions]="showActions" [darkTheme]="darkTheme"
         [dataType]="getChartTile(tile).dataType" [dataValueType]="getChartTile(tile).dataValueType"
         [dataCategoryType]="getChartTile(tile).dataCategoryType" [dataTimeInterval]="getChartTile(tile).timeInterval"
-        [recoveryNow]="getChartTile(tile).recoveryNow"
-        [size]="tile.size" [order]="tile.order" [enableDesktopDrag]="desktopTileDragEnabled"></app-tile-chart>
+        [recoveryNow]="getChartTile(tile).recoveryNow" [recoveryNowStatus]="getRecoveryNowStatusForTile(tile)"
+        [formStatus]="getFormStatusForTile(tile)"
+        [absoluteLatestFormPoint]="getChartTile(tile).absoluteLatestFormPoint"
+        [size]="tile.size" [order]="tile.order" [enableDesktopDrag]="desktopTileDragEnabled"
+        (editInDashboardManager)="openDashboardManagerForTileOrder($event)"></app-tile-chart>
       }
       @if (tile.type === tileTypes.Map) {
       <app-tile-map class="qs-glass-card-panel" [user]="user" [type]="tile.type" [isLoading]="isLoading"
         [showActions]="showActions" [events]="getMapTile(tile).events" [mapStyle]="getMapTile(tile).mapStyle || 'default'"
         [clusterMarkers]="getMapTile(tile).clusterMarkers" [size]="tile.size" [order]="tile.order"
-        [enableDesktopDrag]="desktopTileDragEnabled"></app-tile-map>
+        [enableDesktopDrag]="desktopTileDragEnabled"
+        (editInDashboardManager)="openDashboardManagerForTileOrder($event)"></app-tile-map>
       }
     </div>
     }

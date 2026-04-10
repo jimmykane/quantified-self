@@ -1,16 +1,21 @@
-import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output } from '@angular/core';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   ChartTypes, TimeIntervals
 } from '@sports-alliance/sports-lib';
 import { TileAbstractDirective } from '../tile-abstract.directive';
+import type { DashboardFormPoint } from '../../../helpers/dashboard-form.helper';
 import type { DashboardRecoveryNowContext } from '../../../helpers/dashboard-recovery-now.helper';
 import {
   DASHBOARD_FORM_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   type DashboardChartType,
 } from '../../../helpers/dashboard-special-chart-types';
+import type { DerivedMetricSnapshotStatus } from '@shared/derived-metrics';
+import type { DashboardDerivedMetricStatus } from '../../../helpers/derived-metric-status.helper';
+
+type DashboardRecoveryNowSnapshotStatus = DerivedMetricSnapshotStatus | 'missing' | 'queued' | 'processing';
 
 @Component({
   selector: 'app-tile-chart',
@@ -31,6 +36,10 @@ export class TileChartComponent extends TileAbstractDirective {
   @Input() dataTimeInterval: TimeIntervals;
   @Input() data: any;
   @Input() recoveryNow?: DashboardRecoveryNowContext | null;
+  @Input() recoveryNowStatus?: DashboardRecoveryNowSnapshotStatus | null;
+  @Input() formStatus?: DashboardDerivedMetricStatus | null;
+  @Input() absoluteLatestFormPoint?: DashboardFormPoint | null;
+  @Output() editInDashboardManager = new EventEmitter<number>();
 
   public chartTypes = ChartTypes;
   public recoveryNowChartType = DASHBOARD_RECOVERY_NOW_CHART_TYPE;
@@ -39,6 +48,10 @@ export class TileChartComponent extends TileAbstractDirective {
 
   onTileActionSaving(isSaving: boolean): void {
     this.isTileActionSaving = isSaving === true;
+  }
+
+  onEditInDashboardManager(order: number): void {
+    this.editInDashboardManager.emit(order);
   }
 
 }

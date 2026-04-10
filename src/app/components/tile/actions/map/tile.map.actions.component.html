@@ -3,117 +3,48 @@
   <mat-icon>more_vert</mat-icon>
 </button>
 <mat-menu #menu="matMenu" class="qs-menu-panel qs-menu-panel-form qs-config-menu">
-  @if (user.settings.dashboardSettings.tiles.length <= 11) { <app-tile-actions-header (add)="addNewTile($event)">
-    </app-tile-actions-header>
-    }
-    <section mat-menu-item>
-      <mat-form-field>
-        <mat-label>Type {{type}}</mat-label>
-        <mat-select placeholder="Type of tile" [value]="type" panelClass="qs-config-submenu"
-          (selectionChange)="changeTileType($event)">
-          <mat-select-trigger>
-            @if (type === tileTypes.Map) {
-            <span>
-              <mat-icon>map</mat-icon>&nbsp;{{tileTypes.Map}}
-            </span>
-            }
-            @if (type === tileTypes.Chart) {
-            <span>
-              <mat-icon>show_chart</mat-icon>&nbsp;{{tileTypes.Chart}}
-            </span>
-            }
-          </mat-select-trigger>
-          @for (tileType of tileTypes | keyvalue; track tileType) {
-          <mat-option [value]="tileType.value">
-            @if (tileType.key === tileTypes.Map) {
-            <mat-icon>map</mat-icon>
-            }
-            @if (tileType.key === tileTypes.Chart) {
-            <mat-icon>show_chart</mat-icon>
-            }
-            {{tileType.value}}
-          </mat-option>
-          }
-        </mat-select>
-      </mat-form-field>
-    </section>
-    <section mat-menu-item>
-      <mat-form-field>
-        <mat-label>Map Style</mat-label>
-        <mat-select placeholder="Map style" [value]="mapStyle" panelClass="qs-config-submenu"
-          (selectionChange)="changeMapStyle($event)">
-          @for (style of mapStyleOptions; track style.value) {
-          <mat-option [value]="style.value">
-            {{ style.label }}
-          </mat-option>
-          }
-        </mat-select>
-      </mat-form-field>
-    </section>
+  <section mat-menu-item>
+    <mat-form-field>
+      <mat-label>Column Size</mat-label>
+      <mat-select placeholder="Size" [value]="size.columns" panelClass="qs-config-submenu qs-config-submenu-compact"
+        (selectionChange)="changeTileColumnSize($event)">
+        <mat-option [value]="1">1</mat-option>
+        <mat-option [value]="2">2</mat-option>
+        <mat-option [value]="3">3</mat-option>
+        <mat-option [value]="4">4</mat-option>
+      </mat-select>
+    </mat-form-field>
+  </section>
+  <section mat-menu-item>
+    <mat-form-field>
+      <mat-label>Row Size</mat-label>
+      <mat-select placeholder="Size" [value]="size.rows" panelClass="qs-config-submenu qs-config-submenu-compact"
+        (selectionChange)="changeTileRowSize($event)">
+        <mat-option [value]="1">1</mat-option>
+        <mat-option [value]="2">2</mat-option>
+        <mat-option [value]="3">3</mat-option>
+        <mat-option [value]="4">4</mat-option>
+      </mat-select>
+    </mat-form-field>
+  </section>
 
+  <section mat-menu-item class="tile-move-actions">
+    <button mat-button (click)="moveTileBackward()" [disabled]="!canMoveTileBackward()">
+      <mat-icon>arrow_back</mat-icon>
+      <span>Move earlier</span>
+    </button>
+    <button mat-button (click)="moveTileForward()" [disabled]="!canMoveTileForward()">
+      <span>Move later</span>
+      <mat-icon iconPositionEnd>arrow_forward</mat-icon>
+    </button>
+  </section>
 
-    <section mat-menu-item>
-      <mat-form-field>
-        <mat-label>Column Size</mat-label>
-        <mat-select placeholder="Size" [value]="size.columns" panelClass="qs-config-submenu qs-config-submenu-compact"
-          (selectionChange)="changeTileColumnSize($event)">
-          <mat-option [value]="1">
-            1
-          </mat-option>
-          <mat-option [value]="2">
-            2
-          </mat-option>
-          <mat-option [value]="3">
-            3
-          </mat-option>
-          <mat-option [value]="4">
-            4
-          </mat-option>
-        </mat-select>
-      </mat-form-field>
-    </section>
-    <section mat-menu-item>
-      <mat-form-field>
-        <mat-label>Row Size</mat-label>
-        <mat-select placeholder="Size" [value]="size.rows" panelClass="qs-config-submenu qs-config-submenu-compact"
-          (selectionChange)="changeTileRowSize($event)">
-          <mat-option [value]="1">
-            1
-          </mat-option>
-          <mat-option [value]="2">
-            2
-          </mat-option>
-          <mat-option [value]="3">
-            3
-          </mat-option>
-          <mat-option [value]="4">
-            4
-          </mat-option>
-        </mat-select>
-      </mat-form-field>
-    </section>
+  <button mat-menu-item type="button" (click)="openEditInDashboardManager($event)">
+    <mat-icon>edit</mat-icon>
+    <span>Edit in Dashboard manager</span>
+  </button>
 
-
-    <section mat-menu-item>
-      <mat-slide-toggle (change)="switchClusterMarkers($event)" [(ngModel)]="clusterMarkers">
-        <span matTooltip="If you want clusters of markers">
-          Clusters
-        </span>
-      </mat-slide-toggle>
-    </section>
-    <section mat-menu-item class="tile-move-actions">
-      <button mat-button (click)="moveTileBackward()" [disabled]="!canMoveTileBackward()">
-        <mat-icon>arrow_back</mat-icon>
-        <span>Move earlier</span>
-      </button>
-      <button mat-button (click)="moveTileForward()" [disabled]="!canMoveTileForward()">
-        <span>Move later</span>
-        <mat-icon iconPositionEnd>arrow_forward</mat-icon>
-      </button>
-    </section>
-
-
-    @if (user.settings.dashboardSettings.tiles.length > 1) {
-    <app-tile-actions-footer (delete)="deleteTile($event)"></app-tile-actions-footer>
-    }
+  @if (user.settings.dashboardSettings.tiles.length > 1) {
+  <app-tile-actions-footer (delete)="deleteTile($event)"></app-tile-actions-footer>
+  }
 </mat-menu>

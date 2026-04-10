@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output } from '@angular/core';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { TileAbstractDirective } from '../tile-abstract.directive';
 import { MapStyleName } from '../../../services/map/map-style.types';
@@ -17,4 +17,9 @@ export class TileMapComponent extends TileAbstractDirective {
   @Input() enableDesktopDrag = false;
   @Input() clusterMarkers!: boolean;
   @Input() events: EventInterface[] = [];
+  @Output() editInDashboardManager = new EventEmitter<number>();
+
+  onEditInDashboardManager(order: number): void {
+    this.editInDashboardManager.emit(order);
+  }
 }

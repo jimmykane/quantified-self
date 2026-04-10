@@ -1,4 +1,5 @@
 import { DataDuration, DataRecoveryTime, type EventInterface } from '@sports-alliance/sports-lib';
+import { DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS } from '@shared/derived-metrics';
 
 export interface DashboardRecoveryNowSegment {
   totalSeconds: number;
@@ -9,6 +10,9 @@ export interface DashboardRecoveryNowContext {
   totalSeconds: number;
   endTimeMs: number;
   segments?: DashboardRecoveryNowSegment[];
+  latestWorkoutSeconds?: number | null;
+  latestWorkoutEndTimeMs?: number | null;
+  maxSupportedRecoverySeconds?: number;
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -28,13 +32,21 @@ function toFinitePositiveNumber(value: unknown): number | null {
   return numericValue;
 }
 
+function toSupportedRecoverySeconds(value: unknown): number | null {
+  const numericValue = toFinitePositiveNumber(value);
+  if (numericValue === null || numericValue > DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS) {
+    return null;
+  }
+  return numericValue;
+}
+
 function resolveEventStatNumber(event: EventInterface, dataType: string): number | null {
   const stat = event?.getStat?.(dataType) as { getValue?: () => unknown } | null | undefined;
   return toFiniteNumber(stat?.getValue?.());
 }
 
 function resolveRecoveryTotalSeconds(event: EventInterface): number | null {
-  return toFinitePositiveNumber(resolveEventStatNumber(event, DataRecoveryTime.type));
+  return toSupportedRecoverySeconds(resolveEventStatNumber(event, DataRecoveryTime.type));
 }
 
 function resolveEventStartTimeMs(event: EventInterface): number | null {
@@ -105,7 +117,7 @@ export function resolveAggregatedRecoveryNowContext(
   }
 
   return {
-    totalSeconds: totalRecoverySeconds,
+    totalSeconds: Math.floor(totalRecoverySeconds),
     endTimeMs: latestEndTimeMs,
     segments,
   };
@@ -134,7 +146,7 @@ export function resolveRemainingRecoverySeconds(
     let hasValidSegment = false;
 
     for (const segment of segments) {
-      const segmentTotalSeconds = toFinitePositiveNumber(segment?.totalSeconds);
+      const segmentTotalSeconds = toSupportedRecoverySeconds(segment?.totalSeconds);
       const segmentEndTimeMs = toFiniteNumber(segment?.endTimeMs);
       if (segmentTotalSeconds === null || segmentEndTimeMs === null) {
         continue;
@@ -157,7 +169,7 @@ export function resolveRemainingRecoverySeconds(
     return Math.max(0, Math.floor(totalRemainingSeconds));
   }
 
-  const totalSeconds = toFinitePositiveNumber(context.totalSeconds);
+  const totalSeconds = toSupportedRecoverySeconds(context.totalSeconds);
   const endTimeMs = toFiniteNumber(context.endTimeMs);
   if (totalSeconds === null || endTimeMs === null) {
     return null;
@@ -171,4 +183,93 @@ export function resolveRemainingRecoverySeconds(
   }
 
   return Math.max(0, Math.floor(remainingSeconds));
+}
+
+export function resolveActiveRecoveryTotalSeconds(
+  context: DashboardRecoveryNowContext | null | undefined,
+  nowMs = Date.now(),
+): number | null {
+  if (!context) {
+    return null;
+  }
+
+  const segments = Array.isArray(context.segments) ? context.segments : [];
+  if (segments.length > 0) {
+    let activeTotalSeconds = 0;
+    let hasValidSegment = false;
+
+    for (const segment of segments) {
+      const segmentTotalSeconds = toSupportedRecoverySeconds(segment?.totalSeconds);
+      const segmentEndTimeMs = toFiniteNumber(segment?.endTimeMs);
+      if (segmentTotalSeconds === null || segmentEndTimeMs === null) {
+        continue;
+      }
+
+      hasValidSegment = true;
+      const elapsedSeconds = Math.max(0, (nowMs - segmentEndTimeMs) / 1000);
+      if ((segmentTotalSeconds - elapsedSeconds) > 0) {
+        activeTotalSeconds += segmentTotalSeconds;
+      }
+    }
+
+    if (!hasValidSegment || !Number.isFinite(activeTotalSeconds)) {
+      return null;
+    }
+
+    return Math.max(0, Math.floor(activeTotalSeconds));
+  }
+
+  const totalSeconds = toSupportedRecoverySeconds(context.totalSeconds);
+  const endTimeMs = toFiniteNumber(context.endTimeMs);
+  if (totalSeconds === null || endTimeMs === null) {
+    return null;
+  }
+
+  const elapsedSeconds = Math.max(0, (nowMs - endTimeMs) / 1000);
+  if ((totalSeconds - elapsedSeconds) <= 0) {
+    return 0;
+  }
+  return Math.floor(totalSeconds);
+}
+
+export function resolveLatestWorkoutRecoverySeconds(
+  context: DashboardRecoveryNowContext | null | undefined,
+): number | null {
+  if (!context) {
+    return null;
+  }
+
+  const latestFromPayload = toSupportedRecoverySeconds(context.latestWorkoutSeconds);
+  if (latestFromPayload !== null) {
+    return Math.floor(latestFromPayload);
+  }
+
+  const segments = Array.isArray(context.segments) ? context.segments : [];
+  if (segments.length > 0) {
+    let latestSegmentEndTimeMs = Number.NEGATIVE_INFINITY;
+    let latestSegmentTotalSeconds = Number.NaN;
+
+    for (const segment of segments) {
+      const segmentTotalSeconds = toSupportedRecoverySeconds(segment?.totalSeconds);
+      const segmentEndTimeMs = toFiniteNumber(segment?.endTimeMs);
+      if (segmentTotalSeconds === null || segmentEndTimeMs === null) {
+        continue;
+      }
+
+      if (segmentEndTimeMs >= latestSegmentEndTimeMs) {
+        latestSegmentEndTimeMs = segmentEndTimeMs;
+        latestSegmentTotalSeconds = segmentTotalSeconds;
+      }
+    }
+
+    if (Number.isFinite(latestSegmentTotalSeconds)) {
+      return Math.floor(latestSegmentTotalSeconds);
+    }
+  }
+
+  const totalSeconds = toSupportedRecoverySeconds(context.totalSeconds);
+  if (totalSeconds === null) {
+    return null;
+  }
+  return Math.floor(totalSeconds);
 }

@@ -69,6 +69,12 @@ describe('AdminQueueStatsComponent', () => {
     });
 
     describe('formatTimestamp', () => {
+        it('should format epoch milliseconds numbers', () => {
+            const result = component.formatTimestamp(1700000000000);
+            expect(result).not.toBe('1700000000000');
+            expect(result).not.toBe('N/A');
+        });
+
         it('should format firestore-like objects with _seconds', () => {
             const result = component.formatTimestamp({ _seconds: 1700000000, _nanoseconds: 0 });
             expect(result).not.toBe('[object Object]');
@@ -178,7 +184,7 @@ describe('AdminQueueStatsComponent', () => {
     });
 
     describe('Cloud Tasks Queue Breakdown', () => {
-        it('should render workout and reparse queue pending values', () => {
+        it('should render workout, reparse, and derived queue pending values', () => {
             component.loading = false;
             component.stats = {
                 pending: 1,
@@ -186,21 +192,28 @@ describe('AdminQueueStatsComponent', () => {
                 stuck: 0,
                 providers: [],
                 cloudTasks: {
-                    pending: 50,
+                    pending: 56,
                     queues: {
                         workout: { queueId: 'processWorkoutTask', pending: 42 },
-                        sportsLibReparse: { queueId: 'processSportsLibReparseTask', pending: 8 }
+                        sportsLibReparse: { queueId: 'processSportsLibReparseTask', pending: 8 },
+                        derivedMetrics: { queueId: 'processDerivedMetricsTask', pending: 6 }
                     }
-                }
+                },
+                derivedMetrics: {
+                    coordinators: { idle: 2, queued: 1, processing: 1, failed: 1, total: 5 },
+                    recentFailures: []
+                },
             };
 
             fixture.detectChanges();
             const host: HTMLElement = fixture.nativeElement;
             expect(host.textContent).toContain('Cloud Tasks (Workout)');
             expect(host.textContent).toContain('Cloud Tasks (Reparse)');
+            expect(host.textContent).toContain('Cloud Tasks (Derived Metrics)');
             expect(host.textContent).not.toContain('Cloud Tasks (All Queues)');
             expect(host.textContent).toContain('42');
             expect(host.textContent).toContain('8');
+            expect(host.textContent).toContain('6');
         });
 
         it('should render zero for missing queue breakdown data', () => {
@@ -229,6 +242,7 @@ describe('AdminQueueStatsComponent', () => {
 
             expect(readCardValue('Cloud Tasks (Workout)')).toBe('0');
             expect(readCardValue('Cloud Tasks (Reparse)')).toBe('0');
+            expect(readCardValue('Cloud Tasks (Derived Metrics)')).toBe('0');
         });
     });
 
@@ -263,6 +277,7 @@ describe('AdminQueueStatsComponent', () => {
             const host: HTMLElement = fixture.nativeElement;
             expect(host.textContent).not.toContain('Workout Ingestion');
             expect(host.textContent).toContain('Sports-lib Reparse');
+            expect(host.textContent).not.toContain('Derived Metrics');
         });
 
         it('should hide reparse section in workout-only view', () => {
@@ -285,6 +300,34 @@ describe('AdminQueueStatsComponent', () => {
             fixture.detectChanges();
             const host: HTMLElement = fixture.nativeElement;
             expect(host.textContent).toContain('Workout Ingestion');
+            expect(host.textContent).not.toContain('Sports-lib Reparse');
+            expect(host.textContent).not.toContain('Derived Metrics');
+        });
+
+        it('should show only derived section in derived-only view', () => {
+            component.loading = false;
+            component.queueView = 'derived';
+            component.stats = {
+                pending: 1,
+                succeeded: 1,
+                stuck: 0,
+                providers: [],
+                cloudTasks: {
+                    pending: 6,
+                    queues: {
+                        derivedMetrics: { queueId: 'processDerivedMetricsTask', pending: 6 }
+                    }
+                },
+                derivedMetrics: {
+                    coordinators: { idle: 1, queued: 2, processing: 0, failed: 1, total: 4 },
+                    recentFailures: []
+                }
+            };
+
+            fixture.detectChanges();
+            const host: HTMLElement = fixture.nativeElement;
+            expect(host.textContent).toContain('Derived Metrics');
+            expect(host.textContent).not.toContain('Workout Ingestion');
             expect(host.textContent).not.toContain('Sports-lib Reparse');
         });
     });
@@ -392,6 +435,48 @@ describe('AdminQueueStatsComponent', () => {
             expect(host.textContent).toContain('uid-1');
             expect(host.textContent).toContain('event-1');
             expect(host.textContent).toContain('Parse failed');
+        });
+    });
+
+    describe('Derived Section', () => {
+        it('should render coordinator cards and derived failures table', () => {
+            component.loading = false;
+            component.stats = {
+                pending: 1,
+                succeeded: 1,
+                stuck: 0,
+                providers: [],
+                cloudTasks: {
+                    pending: 7,
+                    queues: {
+                        derivedMetrics: { queueId: 'processDerivedMetricsTask', pending: 7 }
+                    }
+                },
+                derivedMetrics: {
+                    coordinators: { idle: 2, queued: 3, processing: 1, failed: 1, total: 7 },
+                    recentFailures: [
+                        {
+                            uid: 'uid-derived',
+                            generation: 8,
+                            dirtyMetricKinds: ['form', 'recovery_now'],
+                            lastError: 'Worker timeout',
+                            updatedAtMs: 1700000000000
+                        }
+                    ]
+                }
+            };
+
+            fixture.detectChanges();
+            const host: HTMLElement = fixture.nativeElement;
+            expect(host.textContent).toContain('Cloud Tasks (Derived Metrics)');
+            expect(host.textContent).toContain('Coordinators (Queued)');
+            expect(host.textContent).toContain('Coordinators (Processing)');
+            expect(host.textContent).toContain('Coordinators (Failed)');
+            expect(host.textContent).toContain('Coordinators (Idle)');
+            expect(host.textContent).toContain('Coordinators (Total)');
+            expect(host.textContent).toContain('Recent Derived Metrics Failures');
+            expect(host.textContent).toContain('uid-derived');
+            expect(host.textContent).toContain('Worker timeout');
         });
     });
 });

@@ -50,7 +50,7 @@ interface AiInsightsCallableContext {
   app?: unknown;
 }
 
-const AI_INSIGHTS_PAID_REQUIRED_MESSAGE = 'AI Insights is available to Basic and Pro members.';
+const AI_INSIGHTS_UNAVAILABLE_MESSAGE = 'AI Insights is unavailable for this account.';
 const DEFAULT_EMPTY_STATE = 'No matching events were found for this insight in the requested range.';
 const AI_INSIGHTS_LOG_PROMPT_PREVIEW_MAX_CHARS = 60;
 
@@ -159,7 +159,7 @@ export async function runAiInsights(
     ? await aiInsightsRuntime.getAiInsightsQuotaStatus(userID, quotaRoleContext)
     : await aiInsightsRuntime.getAiInsightsQuotaStatus(userID);
   if (!initialQuotaStatus.isEligible) {
-    throw new HttpsError('permission-denied', AI_INSIGHTS_PAID_REQUIRED_MESSAGE);
+    throw new HttpsError('permission-denied', AI_INSIGHTS_UNAVAILABLE_MESSAGE);
   }
 
   if (initialQuotaStatus.remainingCount <= 0) {

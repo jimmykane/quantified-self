@@ -552,7 +552,7 @@ export function formatQuotaStatusText(
   const limit = numberFormatter.format(quotaStatus.limit);
 
   if (!quotaStatus.isEligible) {
-    return `${remainingCount} of ${limit} left • Basic or Pro required`;
+    return `${remainingCount} of ${limit} left • unavailable`;
   }
 
   if (quotaStatus.resetMode === 'date' && quotaStatus.periodEnd) {
@@ -567,7 +567,7 @@ export function formatQuotaStatusText(
 
 export function resolveQuotaBlockedMessage(quotaStatus: AiInsightsQuotaStatus): string {
   if (!quotaStatus.isEligible) {
-    return 'AI Insights is available to Basic and Pro members.';
+    return 'AI Insights is unavailable for this account.';
   }
 
   return 'AI Insights limit reached for this billing period.';

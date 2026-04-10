@@ -362,4 +362,118 @@
             </ng-template>
         </mat-card>
     </div>
+
+    <div class="pipeline-section" *ngIf="showDerivedSection">
+        <h3 class="pipeline-title">
+            <mat-icon>monitor_heart</mat-icon>
+            Derived Metrics
+        </h3>
+
+        <div class="stats-grid">
+            <mat-card class="app-stat-card status-info"
+                matTooltip="Tasks currently in flight or scheduled in the derived metrics Cloud Tasks queue.">
+                <div class="app-stat-header">
+                    <mat-icon>monitor_heart</mat-icon>
+                    <span>Cloud Tasks (Derived Metrics)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.cloudTasks?.queues?.derivedMetrics?.pending ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+                <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">queue: derived metrics</span>
+            </mat-card>
+            <mat-card class="app-stat-card status-pending">
+                <div class="app-stat-header">
+                    <mat-icon>schedule</mat-icon>
+                    <span>Coordinators (Queued)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.derivedMetrics?.coordinators?.queued ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+            <mat-card class="app-stat-card status-info">
+                <div class="app-stat-header">
+                    <mat-icon>sync</mat-icon>
+                    <span>Coordinators (Processing)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.derivedMetrics?.coordinators?.processing ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+            <mat-card class="app-stat-card status-error">
+                <div class="app-stat-header">
+                    <mat-icon>error</mat-icon>
+                    <span>Coordinators (Failed)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.derivedMetrics?.coordinators?.failed ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+            <mat-card class="app-stat-card status-success">
+                <div class="app-stat-header">
+                    <mat-icon>check_circle</mat-icon>
+                    <span>Coordinators (Idle)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.derivedMetrics?.coordinators?.idle ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+            <mat-card class="app-stat-card status-info">
+                <div class="app-stat-header">
+                    <mat-icon>groups</mat-icon>
+                    <span>Coordinators (Total)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.derivedMetrics?.coordinators?.total ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+        </div>
+
+        <mat-card class="table-container" style="margin-bottom: 0;">
+            <h3 class="card-title">Recent Derived Metrics Failures</h3>
+            <div class="table-wrapper" *ngIf="getDerivedMetricsFailureRows().length > 0; else noDerivedFailuresTemplate">
+                <table mat-table [dataSource]="getDerivedMetricsFailureRows()">
+                    <ng-container matColumnDef="uid">
+                        <th mat-header-cell *matHeaderCellDef> UID </th>
+                        <td mat-cell *matCellDef="let row"><span class="mono-cell">{{ row.uid }}</span></td>
+                    </ng-container>
+
+                    <ng-container matColumnDef="generation">
+                        <th mat-header-cell *matHeaderCellDef> Generation </th>
+                        <td mat-cell *matCellDef="let row"> {{ row.generation }} </td>
+                    </ng-container>
+
+                    <ng-container matColumnDef="dirtyMetricKinds">
+                        <th mat-header-cell *matHeaderCellDef> Dirty Kinds </th>
+                        <td mat-cell *matCellDef="let row">
+                            <span>{{ row.dirtyMetricKinds.length ? row.dirtyMetricKinds.join(', ') : 'N/A' }}</span>
+                        </td>
+                    </ng-container>
+
+                    <ng-container matColumnDef="updatedAtMs">
+                        <th mat-header-cell *matHeaderCellDef> Updated </th>
+                        <td mat-cell *matCellDef="let row"> {{ formatTimestamp(row.updatedAtMs) }} </td>
+                    </ng-container>
+
+                    <ng-container matColumnDef="lastError">
+                        <th mat-header-cell *matHeaderCellDef> Last Error </th>
+                        <td mat-cell *matCellDef="let row">
+                            <span class="analysis-error-text" [matTooltip]="row.lastError">{{ row.lastError || 'N/A' }}</span>
+                        </td>
+                    </ng-container>
+
+                    <tr mat-header-row *matHeaderRowDef="derivedFailureColumns"></tr>
+                    <tr mat-row *matRowDef="let row; columns: derivedFailureColumns;"></tr>
+                </table>
+            </div>
+            <ng-template #noDerivedFailuresTemplate>
+                <div class="empty-table-state">No recent derived metrics failures.</div>
+            </ng-template>
+        </mat-card>
+    </div>
 </div>

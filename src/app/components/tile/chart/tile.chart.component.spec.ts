@@ -51,6 +51,7 @@ class MockTileChartActionsComponent {
   @Input() chartTimeInterval?: TimeIntervals;
   @Input() chartDataValueType?: ChartDataValueTypes;
   @Output() savingChange = new EventEmitter<boolean>();
+  @Output() editInDashboardManager = new EventEmitter<number>();
 }
 
 @Component({
@@ -84,6 +85,8 @@ class MockPieChartComponent {
   @Input() chartDataCategoryType?: ChartDataCategoryTypes;
   @Input() chartDataTimeInterval?: TimeIntervals;
   @Input() recoveryNow?: DashboardRecoveryNowContext | null;
+  @Input() recoveryNowStatus?: string | null;
+  @Input() enableRecoveryNowMode = false;
 }
 
 @Component({
@@ -95,6 +98,8 @@ class MockFormChartComponent {
   @Input() isLoading = false;
   @Input() data: any;
   @Input() darkTheme = false;
+  @Input() absoluteLatestPoint: any;
+  @Input() formStatus?: string | null;
 }
 
 describe('TileChartComponent', () => {
@@ -228,29 +233,21 @@ describe('TileChartComponent', () => {
     expect(columns.isLoading).toBe(true);
   });
 
-  it('should pass recovery context through to line charts', () => {
-    const recoveryNow = { totalSeconds: 3600, endTimeMs: Date.UTC(2024, 0, 1, 12, 0, 0) };
-    component.chartType = ChartTypes.LinesVertical;
-    component.recoveryNow = recoveryNow as any;
-
-    fixture.detectChanges();
-
-    const xy = getXYComponent();
-    expect(xy.recoveryNow).toEqual(recoveryNow);
-  });
-
-  it('should pass recovery context through to columns charts', () => {
-    const recoveryNow = { totalSeconds: 5400, endTimeMs: Date.UTC(2024, 0, 2, 14, 0, 0) };
+  it('should re-emit dashboard manager edit requests from tile actions', () => {
     component.chartType = ChartTypes.ColumnsVertical;
-    component.recoveryNow = recoveryNow as any;
+    component.showActions = true;
+    const emittedOrders: number[] = [];
+    component.editInDashboardManager.subscribe((order) => emittedOrders.push(order));
 
     fixture.detectChanges();
 
-    const columns = getColumnsComponent();
-    expect(columns.recoveryNow).toEqual(recoveryNow);
+    const actions = getActionsComponent();
+    actions.editInDashboardManager.emit(4);
+
+    expect(emittedOrders).toEqual([4]);
   });
 
-  it('should pass recovery context through to pie charts', () => {
+  it('should keep generic pie renderer in non-curated mode', () => {
     const recoveryNow = { totalSeconds: 4800, endTimeMs: Date.UTC(2024, 0, 3, 10, 0, 0) };
     component.chartType = ChartTypes.Pie;
     component.recoveryNow = recoveryNow as any;
@@ -258,26 +255,44 @@ describe('TileChartComponent', () => {
     fixture.detectChanges();
 
     const pie = getPieComponent();
-    expect(pie.recoveryNow).toEqual(recoveryNow);
+    expect(pie.enableRecoveryNowMode).toBe(false);
+    expect(pie.recoveryNow).toBeUndefined();
   });
 
   it('should render curated recovery chart type using pie renderer', () => {
+    const recoveryNow = { totalSeconds: 3600, endTimeMs: Date.UTC(2024, 0, 1, 12, 0, 0) };
     component.chartType = DASHBOARD_RECOVERY_NOW_CHART_TYPE as any;
+    component.recoveryNow = recoveryNow as any;
+    component.recoveryNowStatus = 'stale' as any;
 
     fixture.detectChanges();
 
     const pie = getPieComponent();
     expect(pie).toBeTruthy();
+    expect(pie.enableRecoveryNowMode).toBe(true);
+    expect(pie.recoveryNow).toEqual(recoveryNow);
+    expect(pie.recoveryNowStatus).toBe('stale');
   });
 
   it('should render form chart type using form renderer', () => {
     component.chartType = DASHBOARD_FORM_CHART_TYPE as any;
+    component.formStatus = 'stale' as any;
+    component.absoluteLatestFormPoint = {
+      time: Date.UTC(2024, 0, 5),
+      trainingStressScore: 12,
+      ctl: 10,
+      atl: 12,
+      formSameDay: -2,
+      formPriorDay: -3,
+    } as any;
 
     fixture.detectChanges();
 
     const form = getFormComponent();
     expect(form).toBeTruthy();
     expect(form.data).toBe(component.data);
+    expect(form.formStatus).toBe('stale');
+    expect(form.absoluteLatestPoint).toEqual(component.absoluteLatestFormPoint);
   });
 
   it('should render a visible drag handle button for desktop drag mode', () => {

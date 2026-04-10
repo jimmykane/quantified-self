@@ -448,11 +448,11 @@ describe('aiInsights callable', () => {
     } as any)).rejects.toMatchObject({ code: 'failed-precondition' });
   });
 
-  it('rejects unpaid users before normalization', async () => {
+  it('rejects ineligible users before normalization', async () => {
     hoisted.getAiInsightsQuotaStatus.mockResolvedValue({
       ...quotaStatus,
-      role: 'free',
-      limit: 0,
+      role: 'basic',
+      limit: AI_INSIGHTS_REQUEST_LIMITS.basic,
       successfulRequestCount: 0,
       remainingCount: 0,
       isEligible: false,
@@ -464,7 +464,7 @@ describe('aiInsights callable', () => {
       clientTimezone: 'UTC',
     } as any)).rejects.toMatchObject({
       code: 'permission-denied',
-      message: 'AI Insights is available to Basic and Pro members.',
+      message: 'AI Insights is unavailable for this account.',
     });
 
     expect(hoisted.normalizeInsightQuery).not.toHaveBeenCalled();

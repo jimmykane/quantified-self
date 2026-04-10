@@ -48,11 +48,25 @@ describe('help.content', () => {
     });
   });
 
-  it('should document the dashboard recovery tile now/total summary behavior', () => {
+  it('should document the dashboard recovery tile now/active/latest summary behavior', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
     expect(gettingStartedSection?.content).toContain('Recovery Left Now');
-    expect(gettingStartedSection?.content).toContain('Total recovery');
+    expect(gettingStartedSection?.content).toContain('Active total');
+    expect(gettingStartedSection?.content).toContain('Latest workout');
+    expect(gettingStartedSection?.content).toContain('updating');
+  });
+
+  it('should document dashboard manager curated/custom/map categories', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+
+    expect(gettingStartedSection?.content).toContain('Dashboard manager');
+    expect(gettingStartedSection?.content).toContain('Manual');
+    expect(gettingStartedSection?.content).toContain('Presets');
+    expect(gettingStartedSection?.content).toContain('Curated');
+    expect(gettingStartedSection?.content).toContain('Custom');
+    expect(gettingStartedSection?.content).toContain('Map');
+    expect(gettingStartedSection?.content).toContain('one map tile');
   });
 
   it('should document the dashboard form tile CTL/ATL/TSB behavior', () => {
@@ -60,7 +74,16 @@ describe('help.content', () => {
 
     expect(gettingStartedSection?.content).toContain('Form tile (CTL / ATL / TSB)');
     expect(gettingStartedSection?.content).toContain('Training Stress Score');
+    expect(gettingStartedSection?.content).toContain('Power Training Stress Score');
     expect(gettingStartedSection?.content).toContain('Form (TSB)');
     expect(gettingStartedSection?.content).toContain('prior-day readiness');
+    expect(gettingStartedSection?.content).toContain('full history');
+    expect(gettingStartedSection?.content).toContain('W / M / Y');
+    expect(gettingStartedSection?.content).toContain('continue to **today** with zero-load decay');
+    expect(gettingStartedSection?.content).toContain('does not use slider or reload/reset toolbar controls');
+    expect(gettingStartedSection?.content).toContain('Latest TSS');
+    expect(gettingStartedSection?.content).toContain('weekly');
+    expect(gettingStartedSection?.content).toContain('asynchronously');
+    expect(gettingStartedSection?.content).toContain('status notice');
   });
 });
