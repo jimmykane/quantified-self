@@ -1,4 +1,4 @@
-import { Component, Input, OnInit } from '@angular/core';
+import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -25,6 +25,7 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
   @Input() chartDataCategoryType: ChartDataCategoryTypes;
   @Input() chartTimeInterval: TimeIntervals;
   @Input() chartOrder: number;
+  @Output() editInDashboardManager = new EventEmitter<number>();
 
   constructor(
     userService: AppUserService) {
@@ -42,5 +43,11 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
     if (!this.user) {
       throw new Error('Component needs user');
     }
+  }
+
+  openEditInDashboardManager(event: MouseEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.editInDashboardManager.emit(this.order);
   }
 }

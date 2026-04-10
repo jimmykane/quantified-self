@@ -420,7 +420,10 @@ export class AppUserUtilities {
         settings.dashboardSettings.dismissedCuratedRecoveryNowTile = settings.dashboardSettings.dismissedCuratedRecoveryNowTile === true;
         settings.dashboardSettings.tiles = settings.dashboardSettings.tiles || AppUserUtilities.getDefaultUserDashboardTiles();
         let hasNormalizedRecoveryDashboardTile = false;
-        settings.dashboardSettings.tiles = settings.dashboardSettings.tiles
+        let hasNormalizedMapDashboardTile = false;
+        const orderedDashboardTiles = [...settings.dashboardSettings.tiles]
+            .sort((left: TileSettingsInterface, right: TileSettingsInterface) => Number(left?.order || 0) - Number(right?.order || 0));
+        settings.dashboardSettings.tiles = orderedDashboardTiles
             .map((tile: TileSettingsInterface) => {
             if (tile.type === TileTypes.Chart) {
                 const chartTile = tile as TileChartSettingsInterface;
@@ -441,6 +444,11 @@ export class AppUserUtilities {
             if (tile.type !== TileTypes.Map) {
                 return tile;
             }
+
+            if (hasNormalizedMapDashboardTile) {
+                return null;
+            }
+            hasNormalizedMapDashboardTile = true;
 
             const mapTile = tile as any;
             mapTile.mapStyle = mapTile.mapStyle || AppUserUtilities.getDefaultDashboardMapStyle();

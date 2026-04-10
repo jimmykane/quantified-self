@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output } from '@angular/core';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -39,6 +39,7 @@ export class TileChartComponent extends TileAbstractDirective {
   @Input() recoveryNowStatus?: DashboardRecoveryNowSnapshotStatus | null;
   @Input() formStatus?: DashboardDerivedMetricStatus | null;
   @Input() absoluteLatestFormPoint?: DashboardFormPoint | null;
+  @Output() editInDashboardManager = new EventEmitter<number>();
 
   public chartTypes = ChartTypes;
   public recoveryNowChartType = DASHBOARD_RECOVERY_NOW_CHART_TYPE;
@@ -47,6 +48,10 @@ export class TileChartComponent extends TileAbstractDirective {
 
   onTileActionSaving(isSaving: boolean): void {
     this.isTileActionSaving = isSaving === true;
+  }
+
+  onEditInDashboardManager(order: number): void {
+    this.editInDashboardManager.emit(order);
   }
 
 }

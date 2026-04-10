@@ -2,9 +2,9 @@
 <section class="pie">
   @if (showActions) {
   <div class="dashboard-summary-actions">
-    <button mat-flat-button class="qs-mat-primary" (click)="openChartManagerDialog()" [disabled]="isChartManagerOpen">
+    <button mat-flat-button class="qs-mat-primary" (click)="openDashboardManagerDialog()" [disabled]="isDashboardManagerOpen">
       <mat-icon>add_chart</mat-icon>
-      <span>Chart manager</span>
+      <span>Dashboard manager</span>
     </button>
   </div>
   }
@@ -49,13 +49,15 @@
         [recoveryNow]="getChartTile(tile).recoveryNow" [recoveryNowStatus]="getRecoveryNowStatusForTile(tile)"
         [formStatus]="getFormStatusForTile(tile)"
         [absoluteLatestFormPoint]="getChartTile(tile).absoluteLatestFormPoint"
-        [size]="tile.size" [order]="tile.order" [enableDesktopDrag]="desktopTileDragEnabled"></app-tile-chart>
+        [size]="tile.size" [order]="tile.order" [enableDesktopDrag]="desktopTileDragEnabled"
+        (editInDashboardManager)="openDashboardManagerForTileOrder($event)"></app-tile-chart>
       }
       @if (tile.type === tileTypes.Map) {
       <app-tile-map class="qs-glass-card-panel" [user]="user" [type]="tile.type" [isLoading]="isLoading"
         [showActions]="showActions" [events]="getMapTile(tile).events" [mapStyle]="getMapTile(tile).mapStyle || 'default'"
         [clusterMarkers]="getMapTile(tile).clusterMarkers" [size]="tile.size" [order]="tile.order"
-        [enableDesktopDrag]="desktopTileDragEnabled"></app-tile-map>
+        [enableDesktopDrag]="desktopTileDragEnabled"
+        (editInDashboardManager)="openDashboardManagerForTileOrder($event)"></app-tile-map>
       }
     </div>
     }

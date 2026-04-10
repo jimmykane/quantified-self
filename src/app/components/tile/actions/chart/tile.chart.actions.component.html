@@ -5,20 +5,6 @@
 <mat-menu #chartOptions="matMenu" class="qs-menu-panel qs-menu-panel-form qs-config-menu">
   <section mat-menu-item>
     <mat-form-field>
-      <mat-label>Type</mat-label>
-      <mat-select placeholder="Type of tile" [value]="type" panelClass="qs-config-submenu"
-        (selectionChange)="changeTileType($event)">
-        @for (tileType of tileTypes | keyvalue; track tileType) {
-        <mat-option [value]="tileType.value">
-          {{tileType.value}}
-        </mat-option>
-        }
-      </mat-select>
-    </mat-form-field>
-  </section>
-
-  <section mat-menu-item>
-    <mat-form-field>
       <mat-label>Column Size</mat-label>
       <mat-select placeholder="Size" [value]="size.columns" panelClass="qs-config-submenu qs-config-submenu-compact"
         (selectionChange)="changeTileColumnSize($event)">
@@ -53,6 +39,11 @@
       <mat-icon iconPositionEnd>arrow_forward</mat-icon>
     </button>
   </section>
+
+  <button mat-menu-item type="button" (click)="openEditInDashboardManager($event)">
+    <mat-icon>edit</mat-icon>
+    <span>Edit in Dashboard manager</span>
+  </button>
 
   @if (user.settings.dashboardSettings.tiles.length > 1) {
   <app-tile-actions-footer (delete)="deleteTile($event)"></app-tile-actions-footer>

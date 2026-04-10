@@ -51,6 +51,7 @@ class MockTileChartActionsComponent {
   @Input() chartTimeInterval?: TimeIntervals;
   @Input() chartDataValueType?: ChartDataValueTypes;
   @Output() savingChange = new EventEmitter<boolean>();
+  @Output() editInDashboardManager = new EventEmitter<number>();
 }
 
 @Component({
@@ -230,6 +231,20 @@ describe('TileChartComponent', () => {
 
     const columns = getColumnsComponent();
     expect(columns.isLoading).toBe(true);
+  });
+
+  it('should re-emit dashboard manager edit requests from tile actions', () => {
+    component.chartType = ChartTypes.ColumnsVertical;
+    component.showActions = true;
+    const emittedOrders: number[] = [];
+    component.editInDashboardManager.subscribe((order) => emittedOrders.push(order));
+
+    fixture.detectChanges();
+
+    const actions = getActionsComponent();
+    actions.editInDashboardManager.emit(4);
+
+    expect(emittedOrders).toEqual([4]);
   });
 
   it('should keep generic pie renderer in non-curated mode', () => {

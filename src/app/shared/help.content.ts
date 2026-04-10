@@ -96,14 +96,17 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 ## Core dashboard features
 
-### Chart manager
+### Dashboard manager
 
-- Use the **Chart manager** button above dashboard tiles to add or edit chart tiles.
-- You can choose between **Curated** and **Custom** chart categories.
+- Use the **Dashboard manager** button above dashboard tiles to add or edit dashboard tiles.
+- You can choose between **Curated**, **Custom**, and **Map** categories.
 - **Curated Recovery** remains a fixed insight and does not react to dashboard date-range changes.
 - **Curated Form/TSS** computes from full history and does not react to dashboard date-range changes.
 - **Custom** charts keep the existing configurable behavior and react to dashboard filters/date range.
+- **Map** keeps the existing map behavior and reacts to dashboard filters/date range.
 - Curated chart types are unique: only one Recovery and one Form tile can exist at a time.
+- Map tiles are also unique: only one map tile can exist at a time.
+- Map style and cluster-marker settings are edited inside Dashboard manager.
 
 ### Reorder dashboard tiles
 

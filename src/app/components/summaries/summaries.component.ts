@@ -47,7 +47,7 @@ import {
   isDashboardRecoveryNowChartType,
 } from '../../helpers/dashboard-special-chart-types';
 import { MatDialog } from '@angular/material/dialog';
-import { DashboardChartManagerDialogComponent } from './chart-manager-dialog/chart-manager-dialog.component';
+import { DashboardManagerDialogComponent } from './dashboard-manager-dialog/dashboard-manager-dialog.component';
 
 interface DashboardDerivedMetricsBanner {
   type: 'pending' | 'warning';
@@ -84,7 +84,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   public tileTypes = TileTypes;
   public desktopTileDragEnabled = false;
-  public isChartManagerOpen = false;
+  public isDashboardManagerOpen = false;
 
 
   private appThemeSubscription: Subscription | null = null;
@@ -222,17 +222,34 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.changeDetector.detectChanges();
   }
 
-  public async openChartManagerDialog(): Promise<void> {
-    if (!this.showActions || !this.user || this.isChartManagerOpen) {
+  public async openDashboardManagerDialog(): Promise<void> {
+    return this.openDashboardManagerDialogWithState();
+  }
+
+  public async openDashboardManagerForTileOrder(order: number): Promise<void> {
+    await this.openDashboardManagerDialogWithState({
+      initialMode: 'edit',
+      initialEditTileOrder: Number(order),
+    });
+  }
+
+  private async openDashboardManagerDialogWithState(
+    initialState?: { initialMode?: 'add' | 'edit'; initialEditTileOrder?: number | null },
+  ): Promise<void> {
+    if (!this.showActions || !this.user || this.isDashboardManagerOpen) {
       return;
     }
 
-    this.isChartManagerOpen = true;
+    this.isDashboardManagerOpen = true;
     this.changeDetector.markForCheck();
 
     try {
-      const dialogRef = this.dialog.open(DashboardChartManagerDialogComponent, {
-        data: { user: this.user },
+      const dialogRef = this.dialog.open(DashboardManagerDialogComponent, {
+        data: {
+          user: this.user,
+          initialMode: initialState?.initialMode,
+          initialEditTileOrder: initialState?.initialEditTileOrder ?? null,
+        },
         width: '680px',
         maxWidth: '95vw',
       });
@@ -241,7 +258,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         await this.rebuildTilesFromCurrentState();
       }
     } finally {
-      this.isChartManagerOpen = false;
+      this.isDashboardManagerOpen = false;
       this.changeDetector.markForCheck();
     }
   }

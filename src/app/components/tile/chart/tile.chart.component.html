@@ -9,7 +9,8 @@
     <app-tile-chart-actions [user]="user" [chartType]="chartType" [order]="order" [size]="size"
       [type]="type" [chartDataType]="dataType" [chartDataCategoryType]="dataCategoryType"
       [chartTimeInterval]="dataTimeInterval" [chartDataValueType]="dataValueType"
-      (savingChange)="onTileActionSaving($event)">
+      (savingChange)="onTileActionSaving($event)"
+      (editInDashboardManager)="onEditInDashboardManager($event)">
     </app-tile-chart-actions>
   </div>
   }

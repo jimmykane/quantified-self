@@ -57,12 +57,14 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('updating');
   });
 
-  it('should document chart manager curated and custom categories', () => {
+  it('should document dashboard manager curated/custom/map categories', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
-    expect(gettingStartedSection?.content).toContain('Chart manager');
+    expect(gettingStartedSection?.content).toContain('Dashboard manager');
     expect(gettingStartedSection?.content).toContain('Curated');
     expect(gettingStartedSection?.content).toContain('Custom');
+    expect(gettingStartedSection?.content).toContain('Map');
+    expect(gettingStartedSection?.content).toContain('one map tile');
   });
 
   it('should document the dashboard form tile CTL/ATL/TSB behavior', () => {

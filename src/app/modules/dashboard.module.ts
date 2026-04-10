@@ -20,7 +20,7 @@ import { EventTableActionsComponent } from '../components/event-table/actions/ev
 import { BenchmarkModule } from './benchmark.module';
 import { AppChartsModule } from './app-charts.module';
 import { DragDropModule } from '@angular/cdk/drag-drop';
-import { DashboardChartManagerDialogComponent } from '../components/summaries/chart-manager-dialog/chart-manager-dialog.component';
+import { DashboardManagerDialogComponent } from '../components/summaries/dashboard-manager-dialog/dashboard-manager-dialog.component';
 
 @NgModule({
     imports: [
@@ -47,7 +47,7 @@ import { DashboardChartManagerDialogComponent } from '../components/summaries/ch
         EventTableActionsComponent,
         TileChartComponent,
         TileMapComponent,
-        DashboardChartManagerDialogComponent,
+        DashboardManagerDialogComponent,
 
     ],
     providers: [

@@ -1,5 +1,6 @@
-import { Component, Inject, OnInit } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, Inject, OnInit, ViewChild } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { MatSelect } from '@angular/material/select';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -32,6 +33,7 @@ import {
   DataVO2Max,
   SpeedUnitsToGradeAdjustedSpeedUnits,
   TileChartSettingsInterface,
+  TileMapSettingsInterface,
   TileSettingsInterface,
   TileTypes,
   TimeIntervals,
@@ -53,14 +55,20 @@ import {
 } from '../../../helpers/dashboard-special-chart-types';
 import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from '../../../helpers/dashboard-form.helper';
 import { AppUserUtilities } from '../../../utils/app.user.utilities';
+import type { MapStyleName } from '../../../services/map/map-style.types';
 
-export interface DashboardChartManagerDialogData {
+export interface DashboardManagerDialogData {
   user: AppUserInterface;
+  initialMode?: 'add' | 'edit';
+  initialEditTileOrder?: number | null;
 }
 
-export interface DashboardChartManagerDialogResult {
+export interface DashboardManagerDialogResult {
   saved: boolean;
 }
+
+type DashboardManagerCategory = DashboardChartCategory | 'map';
+type DashboardMapTileSettings = TileMapSettingsInterface & { mapStyle?: MapStyleName };
 
 interface DataGroupInterface {
   name: string;
@@ -76,12 +84,12 @@ interface IconOption<TValue> {
 }
 
 @Component({
-  selector: 'app-dashboard-chart-manager-dialog',
-  templateUrl: './chart-manager-dialog.component.html',
-  styleUrls: ['./chart-manager-dialog.component.css'],
+  selector: 'app-dashboard-manager-dialog',
+  templateUrl: './dashboard-manager-dialog.component.html',
+  styleUrls: ['./dashboard-manager-dialog.component.css'],
   standalone: false,
 })
-export class DashboardChartManagerDialogComponent implements OnInit {
+export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
   private static readonly excludedChartTypePatterns = [
     /^bri.*dev/i,
     /^spiral$/i,
@@ -93,24 +101,24 @@ export class DashboardChartManagerDialogComponent implements OnInit {
   public readonly chartCategoryTypes = ChartDataCategoryTypes;
   public readonly chartValueTypes = ChartDataValueTypes;
   public readonly customChartTypeOptions = Object.values(ChartTypes).filter(chartType =>
-    !DashboardChartManagerDialogComponent.excludedChartTypePatterns.some(pattern => pattern.test(`${chartType}`))
+    !DashboardManagerDialogComponent.excludedChartTypePatterns.some(pattern => pattern.test(`${chartType}`))
   );
   public readonly curatedChartDefinitions = getDashboardCuratedChartDefinitions();
   public readonly modeOptions: IconOption<'add' | 'edit'>[] = [
     {
       value: 'add',
-      label: 'Add chart',
+      label: 'Add tile',
       icon: 'add_circle',
-      description: 'Create a new chart tile',
+      description: 'Create a new dashboard tile',
     },
     {
       value: 'edit',
-      label: 'Edit chart',
+      label: 'Edit tile',
       icon: 'edit',
-      description: 'Update an existing chart tile',
+      description: 'Update an existing dashboard tile',
     },
   ];
-  public readonly categoryOptions: IconOption<DashboardChartCategory>[] = [
+  public readonly categoryOptions: IconOption<DashboardManagerCategory>[] = [
     {
       value: 'curated',
       label: 'Curated',
@@ -123,6 +131,12 @@ export class DashboardChartManagerDialogComponent implements OnInit {
       icon: 'tune',
       description: 'Configurable chart that reacts to dashboard filters',
     },
+    {
+      value: 'map',
+      label: 'Map',
+      icon: 'map',
+      description: 'Dashboard map tile that reacts to dashboard filters',
+    },
   ];
   public readonly curatedChartIconByType: Record<DashboardCuratedChartType, string> = {
     [DASHBOARD_RECOVERY_NOW_CHART_TYPE]: 'health_and_safety',
@@ -132,6 +146,11 @@ export class DashboardChartManagerDialogComponent implements OnInit {
     [DASHBOARD_RECOVERY_NOW_CHART_TYPE]: 'Recovery left now vs elapsed recovery.',
     [DASHBOARD_FORM_CHART_TYPE]: 'Fitness/fatigue/form trend from derived training stress.',
   };
+  public readonly mapStyleOptions: Array<{ value: MapStyleName; label: string }> = [
+    { value: 'default', label: 'Default' },
+    { value: 'satellite', label: 'Satellite' },
+    { value: 'outdoors', label: 'Outdoors' },
+  ];
   public readonly timeIntervalOptions: Array<{ label: string; value: TimeIntervals }> = [
     { label: 'Auto', value: TimeIntervals.Auto },
     { label: 'Daily', value: TimeIntervals.Daily },
@@ -142,8 +161,8 @@ export class DashboardChartManagerDialogComponent implements OnInit {
   public dataGroups: DataGroupInterface[] = [];
 
   public mode: 'add' | 'edit' = 'add';
-  public category: DashboardChartCategory = 'custom';
-  public editChartOrder: number | null = null;
+  public category: DashboardManagerCategory = 'custom';
+  public editTileOrder: number | null = null;
   public curatedChartType: DashboardCuratedChartType = DASHBOARD_RECOVERY_NOW_CHART_TYPE;
 
   public customChartType: ChartTypes = AppUserUtilities.getDefaultUserDashboardChartTile().chartType;
@@ -152,18 +171,30 @@ export class DashboardChartManagerDialogComponent implements OnInit {
   public customDataCategoryType = AppUserUtilities.getDefaultUserDashboardChartTile().dataCategoryType;
   public customTimeInterval = AppUserUtilities.getDefaultUserDashboardChartTile().dataTimeInterval;
 
+  public mapStyle: MapStyleName = this.normalizeMapStyle(AppUserUtilities.getDefaultDashboardMapStyle());
+  public mapClusterMarkers = true;
+
   public isSaving = false;
   public saveError = '';
 
+  private shouldAutoFocusEditSection = false;
+
+  @ViewChild('customSection') private customSectionRef?: ElementRef<HTMLElement>;
+  @ViewChild('curatedSection') private curatedSectionRef?: ElementRef<HTMLElement>;
+  @ViewChild('mapSection') private mapSectionRef?: ElementRef<HTMLElement>;
+  @ViewChild('customChartTypeSelect') private customChartTypeSelect?: MatSelect;
+  @ViewChild('mapStyleSelect') private mapStyleSelect?: MatSelect;
+  @ViewChild('editTileSelect') private editTileSelect?: MatSelect;
+
   constructor(
-    @Inject(MAT_DIALOG_DATA) public data: DashboardChartManagerDialogData,
-    private dialogRef: MatDialogRef<DashboardChartManagerDialogComponent, DashboardChartManagerDialogResult>,
+    @Inject(MAT_DIALOG_DATA) public data: DashboardManagerDialogData,
+    private dialogRef: MatDialogRef<DashboardManagerDialogComponent, DashboardManagerDialogResult>,
     private userService: AppUserService,
   ) { }
 
   ngOnInit(): void {
     if (!this.data?.user) {
-      throw new Error('Chart manager dialog requires a user.');
+      throw new Error('Dashboard manager dialog requires a user.');
     }
 
     if (!this.data.user.settings) {
@@ -180,20 +211,42 @@ export class DashboardChartManagerDialogComponent implements OnInit {
 
     this.dataGroups = this.buildDataGroups();
 
-    if (this.chartTiles.length > 0) {
-      this.editChartOrder = this.chartTiles[0].order;
+    if (this.dashboardTiles.length > 0) {
+      this.editTileOrder = this.dashboardTiles[0].order;
+    }
+
+    const requestedInitialMode = this.data?.initialMode;
+    if (requestedInitialMode === 'edit' && this.dashboardTiles.length > 0) {
+      const requestedEditOrder = Number(this.data?.initialEditTileOrder);
+      const hasRequestedOrder = Number.isFinite(requestedEditOrder)
+        && this.dashboardTiles.some(tile => tile.order === requestedEditOrder);
+      this.mode = 'edit';
+      this.editTileOrder = hasRequestedOrder ? requestedEditOrder : this.dashboardTiles[0].order;
+      const editTarget = this.resolveEditTile();
+      if (editTarget) {
+        this.syncFormStateFromTile(editTarget);
+        this.shouldAutoFocusEditSection = true;
+      }
     }
   }
 
-  get chartTiles(): TileChartSettingsInterface[] {
+  ngAfterViewInit(): void {
+    this.scrollAndFocusInitialEditSection();
+  }
+
+  get dashboardTiles(): TileSettingsInterface[] {
     return [...(this.data?.user?.settings?.dashboardSettings?.tiles || [])]
-      .filter(tile => tile.type === TileTypes.Chart)
-      .map(tile => tile as TileChartSettingsInterface)
       .sort((left, right) => left.order - right.order);
   }
 
+  get chartTiles(): TileChartSettingsInterface[] {
+    return this.dashboardTiles
+      .filter(tile => tile.type === TileTypes.Chart)
+      .map(tile => tile as TileChartSettingsInterface);
+  }
+
   get isTileLimitReached(): boolean {
-    return (this.data?.user?.settings?.dashboardSettings?.tiles || []).length >= DashboardChartManagerDialogComponent.maxDashboardTiles;
+    return (this.data?.user?.settings?.dashboardSettings?.tiles || []).length >= DashboardManagerDialogComponent.maxDashboardTiles;
   }
 
   get isSaveDisabled(): boolean {
@@ -203,10 +256,13 @@ export class DashboardChartManagerDialogComponent implements OnInit {
     if (this.mode === 'add' && this.isTileLimitReached) {
       return true;
     }
-    if (this.mode === 'edit' && this.editChartOrder === null) {
+    if (this.mode === 'edit' && this.editTileOrder === null) {
       return true;
     }
     if (this.category === 'curated' && this.isCuratedOptionDisabled(this.curatedChartType)) {
+      return true;
+    }
+    if (this.category === 'map' && this.isMapOptionDisabled()) {
       return true;
     }
     return false;
@@ -227,8 +283,8 @@ export class DashboardChartManagerDialogComponent implements OnInit {
     this.category = 'custom';
   }
 
-  onEditChartSelectionChange(nextOrder: number): void {
-    this.editChartOrder = Number(nextOrder);
+  onEditTileSelectionChange(nextOrder: number): void {
+    this.editTileOrder = Number(nextOrder);
     const editTarget = this.resolveEditTile();
     if (!editTarget) {
       return;
@@ -236,7 +292,7 @@ export class DashboardChartManagerDialogComponent implements OnInit {
     this.syncFormStateFromTile(editTarget);
   }
 
-  onCategoryChange(nextCategory: DashboardChartCategory): void {
+  onCategoryChange(nextCategory: DashboardManagerCategory): void {
     this.category = nextCategory;
     this.saveError = '';
 
@@ -244,6 +300,14 @@ export class DashboardChartManagerDialogComponent implements OnInit {
       const availableCurated = this.curatedChartDefinitions.find(def => !this.isCuratedOptionDisabled(def.chartType));
       if (availableCurated) {
         this.curatedChartType = availableCurated.chartType;
+      }
+      return;
+    }
+
+    if (nextCategory === 'map') {
+      const editTile = this.resolveEditTile();
+      if (editTile?.type === TileTypes.Map) {
+        this.syncFormStateFromTile(editTile);
       }
     }
   }
@@ -256,17 +320,29 @@ export class DashboardChartManagerDialogComponent implements OnInit {
   }
 
   isCuratedOptionDisabled(chartType: DashboardCuratedChartType): boolean {
-    const editedOrder = this.mode === 'edit' ? this.editChartOrder : null;
+    const editedOrder = this.mode === 'edit' ? this.editTileOrder : null;
     return this.chartTiles.some((tile) => (
       `${tile.chartType}` === `${chartType}`
       && (editedOrder === null || tile.order !== editedOrder)
     ));
   }
 
-  getEditTileLabel(tile: TileChartSettingsInterface): string {
+  isMapOptionDisabled(): boolean {
+    const editedOrder = this.mode === 'edit' ? this.editTileOrder : null;
+    return this.dashboardTiles.some((tile) => (
+      tile.type === TileTypes.Map
+      && (editedOrder === null || tile.order !== editedOrder)
+    ));
+  }
+
+  getEditTileLabel(tile: TileSettingsInterface): string {
     const tileName = `${tile.name || ''}`.trim();
-    const chartName = tileName || `${tile.chartType}`;
-    return `${chartName} (#${tile.order + 1})`;
+    const tileKindLabel = tile.type === TileTypes.Map ? 'Map' : 'Chart';
+    const fallbackName = tile.type === TileTypes.Map
+      ? 'Map'
+      : `${(tile as TileChartSettingsInterface).chartType || 'Chart'}`;
+    const displayName = tileName || fallbackName;
+    return `${displayName} (${tileKindLabel} #${tile.order + 1})`;
   }
 
   close(): void {
@@ -303,14 +379,14 @@ export class DashboardChartManagerDialogComponent implements OnInit {
       } else {
         const editTile = this.resolveEditTile();
         if (!editTile) {
-          this.saveError = 'Select a chart to edit.';
+          this.saveError = 'Select a tile to edit.';
           this.isSaving = false;
           return;
         }
 
-        const editIndex = clonedTiles.findIndex(tile => tile.order === editTile.order && tile.type === TileTypes.Chart);
+        const editIndex = clonedTiles.findIndex(tile => tile.order === editTile.order);
         if (editIndex < 0) {
-          this.saveError = 'Could not find the selected chart tile.';
+          this.saveError = 'Could not find the selected tile.';
           this.isSaving = false;
           return;
         }
@@ -330,6 +406,12 @@ export class DashboardChartManagerDialogComponent implements OnInit {
         return;
       }
 
+      if (this.hasDuplicateMapTiles(clonedTiles)) {
+        this.saveError = 'Map tile can only be added once.';
+        this.isSaving = false;
+        return;
+      }
+
       dashboardSettings.tiles = clonedTiles;
       if (dashboardSettings.tiles.some(tile => tile.type === TileTypes.Chart && isDashboardRecoveryNowChartType((tile as TileChartSettingsInterface).chartType))) {
         dashboardSettings.dismissedCuratedRecoveryNowTile = false;
@@ -343,40 +425,57 @@ export class DashboardChartManagerDialogComponent implements OnInit {
         size: tile.size ? { ...tile.size } : tile.size,
       }));
       dashboardSettings.dismissedCuratedRecoveryNowTile = previousDismissedRecoveryTile;
-      this.saveError = 'Could not save chart settings.';
-      console.error('[DashboardChartManagerDialogComponent] Failed to save chart settings', error);
+      this.saveError = 'Could not save dashboard tile settings.';
+      console.error('[DashboardManagerDialogComponent] Failed to save dashboard tile settings', error);
     } finally {
       this.isSaving = false;
     }
   }
 
-  private resolveEditTile(): TileChartSettingsInterface | null {
-    if (this.editChartOrder === null) {
+  private resolveEditTile(): TileSettingsInterface | null {
+    if (this.editTileOrder === null) {
       return null;
     }
-    return this.chartTiles.find(tile => tile.order === this.editChartOrder) || null;
+    return this.dashboardTiles.find(tile => tile.order === this.editTileOrder) || null;
   }
 
-  private syncFormStateFromTile(tile: TileChartSettingsInterface): void {
-    this.category = resolveDashboardChartCategory(tile.chartType) as DashboardChartCategory;
-
-    if (isDashboardCuratedChartType(tile.chartType)) {
-      this.curatedChartType = tile.chartType;
+  private syncFormStateFromTile(tile: TileSettingsInterface): void {
+    if (tile.type === TileTypes.Map) {
+      const mapTile = tile as DashboardMapTileSettings;
+      this.category = 'map';
+      this.mapStyle = this.normalizeMapStyle(mapTile.mapStyle);
+      this.mapClusterMarkers = mapTile.clusterMarkers !== false;
       return;
     }
 
-    this.customChartType = tile.chartType;
-    this.customDataType = tile.dataType;
-    this.customDataValueType = tile.dataValueType;
-    this.customDataCategoryType = tile.dataCategoryType;
-    this.customTimeInterval = tile.dataTimeInterval || TimeIntervals.Auto;
+    const chartTile = tile as TileChartSettingsInterface;
+    this.category = resolveDashboardChartCategory(chartTile.chartType);
+
+    if (isDashboardCuratedChartType(chartTile.chartType)) {
+      this.curatedChartType = chartTile.chartType;
+      return;
+    }
+
+    this.customChartType = chartTile.chartType;
+    this.customDataType = chartTile.dataType;
+    this.customDataValueType = chartTile.dataValueType;
+    this.customDataCategoryType = chartTile.dataCategoryType;
+    this.customTimeInterval = chartTile.dataTimeInterval || TimeIntervals.Auto;
   }
 
   private buildTileForMode(
     order: number,
     size: { columns: number; rows: number },
-    existingTile: TileChartSettingsInterface | null,
-  ): TileChartSettingsInterface | null {
+    existingTile: TileSettingsInterface | null,
+  ): TileSettingsInterface | null {
+    if (this.category === 'map') {
+      if (this.isMapOptionDisabled()) {
+        this.saveError = 'Map tile can only be added once.';
+        return null;
+      }
+      return this.buildMapTile(order, size, existingTile);
+    }
+
     if (this.category === 'curated') {
       if (this.isCuratedOptionDisabled(this.curatedChartType)) {
         this.saveError = 'This curated chart already exists.';
@@ -420,17 +519,41 @@ export class DashboardChartManagerDialogComponent implements OnInit {
     };
   }
 
+  private buildMapTile(
+    order: number,
+    size: { columns: number; rows: number },
+    existingTile: TileSettingsInterface | null,
+  ): DashboardMapTileSettings {
+    const defaultMapTile = AppUserUtilities.getDefaultUserDashboardMapTile() as DashboardMapTileSettings;
+    const existingMapTile = existingTile?.type === TileTypes.Map ? existingTile as DashboardMapTileSettings : null;
+    const existingName = `${existingMapTile?.name || ''}`.trim();
+
+    return {
+      ...defaultMapTile,
+      ...existingMapTile,
+      name: existingName || `${defaultMapTile.name || 'Map'}`,
+      type: TileTypes.Map,
+      order,
+      size,
+      mapStyle: this.mapStyle,
+      clusterMarkers: this.mapClusterMarkers,
+      mapTheme: existingMapTile?.mapTheme ?? defaultMapTile.mapTheme,
+      showHeatMap: existingMapTile?.showHeatMap ?? defaultMapTile.showHeatMap,
+    };
+  }
+
   private buildCustomTile(
     order: number,
     size: { columns: number; rows: number },
-    existingTile: TileChartSettingsInterface | null,
+    existingTile: TileSettingsInterface | null,
   ): TileChartSettingsInterface {
+    const existingChartTile = existingTile?.type === TileTypes.Chart ? existingTile as TileChartSettingsInterface : null;
     const isIntensityZones = this.customChartType === ChartTypes.IntensityZones;
     const isPie = this.customChartType === ChartTypes.Pie;
     const fallbackName = isIntensityZones ? 'Intensity Zones' : `${this.customDataType || 'Custom chart'}`;
 
     return {
-      name: `${existingTile?.name || ''}`.trim() || fallbackName,
+      name: `${existingChartTile?.name || ''}`.trim() || fallbackName,
       type: TileTypes.Chart,
       order,
       size,
@@ -456,6 +579,20 @@ export class DashboardChartManagerDialogComponent implements OnInit {
         return true;
       }
       seen.add(`${chartTile.chartType}`);
+    }
+    return false;
+  }
+
+  private hasDuplicateMapTiles(tiles: TileSettingsInterface[]): boolean {
+    let mapTileCount = 0;
+    for (const tile of tiles) {
+      if (tile.type !== TileTypes.Map) {
+        continue;
+      }
+      mapTileCount += 1;
+      if (mapTileCount > 1) {
+        return true;
+      }
     }
     return false;
   }
@@ -546,5 +683,60 @@ export class DashboardChartManagerDialogComponent implements OnInit {
     }
 
     return groups;
+  }
+
+  private scrollAndFocusInitialEditSection(): void {
+    if (!this.shouldAutoFocusEditSection || this.mode !== 'edit') {
+      return;
+    }
+
+    this.shouldAutoFocusEditSection = false;
+    if (this.category === 'curated') {
+      const curatedSection = this.curatedSectionRef?.nativeElement;
+      curatedSection?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+      const firstEnabledCuratedOption = curatedSection?.querySelector('input[type="radio"]:not(:disabled)') as HTMLElement | null;
+      firstEnabledCuratedOption?.focus?.();
+      if (!firstEnabledCuratedOption) {
+        this.focusSelect(this.editTileSelect);
+      }
+      return;
+    }
+
+    if (this.category === 'map') {
+      const mapSection = this.mapSectionRef?.nativeElement;
+      mapSection?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+      if (this.focusSelect(this.mapStyleSelect)) {
+        return;
+      }
+      this.focusSelect(this.editTileSelect);
+      return;
+    }
+
+    const customSection = this.customSectionRef?.nativeElement;
+    customSection?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+    if (this.focusSelect(this.customChartTypeSelect)) {
+      return;
+    }
+    this.focusSelect(this.editTileSelect);
+  }
+
+  private focusSelect(select: MatSelect | undefined): boolean {
+    if (!select) {
+      return false;
+    }
+    const maybeFocusableSelect = select as unknown as { focus?: () => void };
+    if (typeof maybeFocusableSelect.focus !== 'function') {
+      return false;
+    }
+    maybeFocusableSelect.focus();
+    return true;
+  }
+
+  private normalizeMapStyle(mapStyle: unknown): MapStyleName {
+    const mapStyleCandidate = `${mapStyle || ''}`.trim().toLowerCase() as MapStyleName;
+    if (this.mapStyleOptions.some(option => option.value === mapStyleCandidate)) {
+      return mapStyleCandidate;
+    }
+    return AppUserUtilities.getDefaultDashboardMapStyle() as MapStyleName;
   }
 }

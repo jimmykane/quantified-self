@@ -98,10 +98,26 @@ describe('TileChartActionsComponent', () => {
     const template = readFileSync(templatePath, 'utf8');
 
     expect(template).not.toContain('app-tile-actions-header');
+    expect(template).not.toContain('<mat-label>Type</mat-label>');
     expect(template).not.toContain('Chart type');
     expect(template).not.toContain('What data to look at');
     expect(template).not.toContain('How to look at the data');
     expect(template).not.toContain('Time interval');
+    expect(template).toContain('Edit in Dashboard manager');
+  });
+
+  it('should emit editInDashboardManager with current tile order', () => {
+    const emittedOrders: number[] = [];
+    component.editInDashboardManager.subscribe((order) => emittedOrders.push(order));
+    const preventDefault = vi.fn();
+    const stopPropagation = vi.fn();
+
+    component.order = 1;
+    component.openEditInDashboardManager({ preventDefault, stopPropagation } as any);
+
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+    expect(stopPropagation).toHaveBeenCalledTimes(1);
+    expect(emittedOrders).toEqual([1]);
   });
 
   it('should emit savingChange while persisting structural settings', async () => {

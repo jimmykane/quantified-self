@@ -535,7 +535,7 @@ describe('SummariesComponent', () => {
     expect(component.desktopTileDragEnabled).toBe(false);
   });
 
-  it('should open chart manager dialog and rebuild tiles when dialog saves changes', async () => {
+  it('should open dashboard manager dialog and rebuild tiles when dialog saves changes', async () => {
     component.user = {
       settings: {
         dashboardSettings: {
@@ -558,18 +558,89 @@ describe('SummariesComponent', () => {
     });
     const rebuildSpy = vi.spyOn(component as any, 'rebuildTilesFromCurrentState').mockResolvedValue(undefined);
 
-    await component.openChartManagerDialog();
+    await component.openDashboardManagerDialog();
 
     expect(mockDialog.open).toHaveBeenCalledTimes(1);
+    expect(mockDialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      data: expect.objectContaining({
+        user: component.user,
+        initialMode: undefined,
+        initialEditTileOrder: null,
+      }),
+    }));
     expect(rebuildSpy).toHaveBeenCalledTimes(1);
-    expect(component.isChartManagerOpen).toBe(false);
+    expect(component.isDashboardManagerOpen).toBe(false);
   });
 
-  it('should ignore chart manager open requests when actions are hidden', async () => {
+  it('should open dashboard manager dialog in edit mode for a specific chart tile order', async () => {
+    component.user = {
+      settings: {
+        dashboardSettings: {
+          tiles: [{
+            type: TileTypes.Chart,
+            order: 3,
+            chartType: ChartTypes.ColumnsVertical,
+            dataType: DataAscent.type,
+            dataValueType: ChartDataValueTypes.Total,
+            dataCategoryType: ChartDataCategoryTypes.ActivityType,
+            size: { columns: 1, rows: 1 },
+          }],
+        },
+      },
+    } as any;
+    component.events = [];
+    component.showActions = true;
+    mockDialog.open.mockReturnValue({
+      afterClosed: () => of({ saved: false }),
+    });
+
+    await component.openDashboardManagerForTileOrder(3);
+
+    expect(mockDialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      data: expect.objectContaining({
+        user: component.user,
+        initialMode: 'edit',
+        initialEditTileOrder: 3,
+      }),
+    }));
+  });
+
+  it('should open dashboard manager dialog in edit mode for a map tile order', async () => {
+    component.user = {
+      settings: {
+        dashboardSettings: {
+          tiles: [{
+            type: TileTypes.Map,
+            order: 4,
+            mapStyle: 'default',
+            clusterMarkers: true,
+            size: { columns: 1, rows: 1 },
+          }],
+        },
+      },
+    } as any;
+    component.events = [];
+    component.showActions = true;
+    mockDialog.open.mockReturnValue({
+      afterClosed: () => of({ saved: false }),
+    });
+
+    await component.openDashboardManagerForTileOrder(4);
+
+    expect(mockDialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      data: expect.objectContaining({
+        user: component.user,
+        initialMode: 'edit',
+        initialEditTileOrder: 4,
+      }),
+    }));
+  });
+
+  it('should ignore dashboard manager open requests when actions are hidden', async () => {
     component.user = { settings: { dashboardSettings: { tiles: [] } } } as any;
     component.showActions = false;
 
-    await component.openChartManagerDialog();
+    await component.openDashboardManagerDialog();
 
     expect(mockDialog.open).not.toHaveBeenCalled();
   });
