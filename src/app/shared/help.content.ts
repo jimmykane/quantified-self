@@ -233,6 +233,12 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Empty**: the request shape is valid but no matching data was found in scope.
 - **Unsupported**: the request could not be mapped confidently; suggested prompts are returned.
 
+## Supported metric highlights
+
+- Power profiling includes **FTP**, **Critical Power**, and **Power-to-Weight (W/kg)** prompts.
+- Running dynamics includes **Ground Contact Time**, **Vertical Oscillation**, **Vertical Ratio**, and **Leg Stiffness** prompts.
+- Zone prompts support deterministic aggregate trends such as **time in Heart Rate Zone 2**, **Power Zone 2**, and **Speed Zone 2** over time.
+
 ## Confidence and anomaly guardrails
 
 - Confidence tiers are deterministic and based on coverage, sample size, and signal strength.

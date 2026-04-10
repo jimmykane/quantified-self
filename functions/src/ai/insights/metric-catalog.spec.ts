@@ -1,8 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   ChartDataValueTypes,
+  DataGroundContactTimeMax,
   DataJumpDistanceMax,
   DataJumpHangTimeMax,
+  DataLegStiffnessMin,
+  DataVerticalOscillationMin,
+  DataVerticalRatioMax,
   DataWeight,
 } from '@sports-alliance/sports-lib';
 import { getAiInsightsPromptEntriesBySurface } from '../../../../shared/ai-insights-prompts';
@@ -31,6 +35,9 @@ describe('metric-catalog', () => {
     expect(resolveInsightMetric('normalized power')?.key).toBe('normalized_power');
     expect(resolveInsightMetric('intensity factor')?.key).toBe('intensity_factor');
     expect(resolveInsightMetric('power work')?.key).toBe('power_work');
+    expect(resolveInsightMetric('ftp')?.key).toBe('ftp');
+    expect(resolveInsightMetric('critical power')?.key).toBe('critical_power');
+    expect(resolveInsightMetric('watts per kg')?.key).toBe('power_watts_per_kg');
     expect(resolveInsightMetric('vo2 max')?.key).toBe('vo2_max');
     expect(resolveInsightMetric('epoc')?.key).toBe('epoc');
     expect(resolveInsightMetric('avg vam')?.key).toBe('avg_vam');
@@ -42,6 +49,13 @@ describe('metric-catalog', () => {
     expect(resolveInsightMetric('highest jump')).toBeNull();
     expect(resolveInsightMetric('biggest jump')?.key).toBe('jump_distance');
     expect(resolveInsightMetric('air time')?.key).toBe('jump_hang_time');
+    expect(resolveInsightMetric('ground contact time')?.key).toBe('ground_contact_time');
+    expect(resolveInsightMetric('vertical oscillation')?.key).toBe('vertical_oscillation');
+    expect(resolveInsightMetric('vertical ratio')?.key).toBe('vertical_ratio');
+    expect(resolveInsightMetric('leg stiffness')?.key).toBe('leg_stiffness');
+    expect(resolveInsightMetric('time in heart rate zone 2')?.key).toBe('heart_rate_zone_two_duration');
+    expect(resolveInsightMetric('time in power zone 2')?.key).toBe('power_zone_two_duration');
+    expect(resolveInsightMetric('time in speed zone 2')?.key).toBe('speed_zone_two_duration');
   });
 
   it('resolves family metrics to the correct concrete max data type', () => {
@@ -55,6 +69,18 @@ describe('metric-catalog', () => {
     expect(resolveInsightMetric('longest jump', ChartDataValueTypes.Maximum)?.dataType).toBe(DataJumpDistanceMax.type);
     expect(resolveInsightMetric('biggest jump', ChartDataValueTypes.Maximum)?.dataType).toBe(DataJumpDistanceMax.type);
     expect(resolveInsightMetric('biggest hang time', ChartDataValueTypes.Maximum)?.dataType).toBe(DataJumpHangTimeMax.type);
+    expect(resolveInsightMetric('max ground contact time', ChartDataValueTypes.Average)?.dataType).toBe(
+      DataGroundContactTimeMax.type,
+    );
+    expect(resolveInsightMetric('minimum vertical oscillation', ChartDataValueTypes.Average)?.dataType).toBe(
+      DataVerticalOscillationMin.type,
+    );
+    expect(resolveInsightMetric('max vertical ratio', ChartDataValueTypes.Average)?.dataType).toBe(
+      DataVerticalRatioMax.type,
+    );
+    expect(resolveInsightMetric('minimum leg stiffness', ChartDataValueTypes.Average)?.dataType).toBe(
+      DataLegStiffnessMin.type,
+    );
   });
 
   it('prefers the explicit prompt alias that matches the requested family variant', () => {
@@ -75,7 +101,7 @@ describe('metric-catalog', () => {
   });
 
   it('returns null for unsupported metrics', () => {
-    expect(resolveInsightMetric('ground contact time')).toBeNull();
+    expect(resolveInsightMetric('left pedal smoothness')).toBeNull();
   });
 
   it('finds the most specific alias inside the original prompt text', () => {
@@ -103,6 +129,12 @@ describe('metric-catalog', () => {
         metric: expect.objectContaining({ key: 'anaerobic_training_effect' }),
       }),
     );
+    expect(findInsightMetricAliasMatch('Show my time in heart rate zone 2 this month')).toEqual(
+      expect.objectContaining({
+        alias: 'time in heart rate zone 2',
+        metric: expect.objectContaining({ key: 'heart_rate_zone_two_duration' }),
+      }),
+    );
     expect(findInsightMetricAliasMatch('Show my total training duration over time for weight training this year')).toEqual(
       expect.objectContaining({
         metric: expect.objectContaining({ key: 'duration' }),
@@ -117,6 +149,8 @@ describe('metric-catalog', () => {
     expect(isAggregationAllowedForMetric('normalized_power', ChartDataValueTypes.Total)).toBe(false);
     expect(isAggregationAllowedForMetric('body_weight', ChartDataValueTypes.Total)).toBe(false);
     expect(isAggregationAllowedForMetric('recovery_time', ChartDataValueTypes.Maximum)).toBe(true);
+    expect(isAggregationAllowedForMetric('power_zone_two_duration', ChartDataValueTypes.Total)).toBe(true);
+    expect(isAggregationAllowedForMetric('ftp', ChartDataValueTypes.Total)).toBe(false);
   });
 
   it('can retrieve canonical metric definitions by key', () => {
@@ -124,6 +158,12 @@ describe('metric-catalog', () => {
     expect(getInsightMetricDefinition('body_weight')?.suggestedPrompt).toBe('Show my weight over time this year.');
     expect(getInsightMetricDefinition('jump_distance')?.suggestedPrompt).toBe('Show my jump distance over time this season.');
     expect(getInsightMetricDefinition('jump_hang_time')?.suggestedPrompt).toBe('Show my jump hang time over time this year.');
+    expect(getInsightMetricDefinition('ground_contact_time')?.suggestedPrompt).toBe(
+      'Show my average ground contact time over time for running this year.',
+    );
+    expect(getInsightMetricDefinition('power_zone_two_duration')?.suggestedPrompt).toBe(
+      'Show my total time in power zone 2 over time for cycling this year.',
+    );
   });
 
   it('prioritizes context-matching suggested prompts instead of always returning the first metrics', () => {
@@ -135,6 +175,9 @@ describe('metric-catalog', () => {
     );
     expect(getSuggestedInsightPrompts(3, 'show swim pace per lap')[0]).toBe(
       'Show my average swim pace over time for swimming this year.',
+    );
+    expect(getSuggestedInsightPrompts(3, 'show vo2 max trend')[0]).toBe(
+      'Show my average VO2 max over time for running this year.',
     );
   });
 

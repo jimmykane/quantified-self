@@ -12,7 +12,9 @@ import {
   DataDistance,
   DataDuration,
   DataEffortPaceAvg,
+  DataFTP,
   DataGradeAdjustedPaceAvg,
+  DataGroundContactTimeAvg,
   DataHeartRateAvg,
   DataHeartRateMax,
   DataJumpDistanceMax,
@@ -22,6 +24,7 @@ import {
   DataPowerAvg,
   DataPowerNormalized,
   DataPowerTrainingStressScore,
+  DataPowerZoneTwoDuration,
   DataRecoveryTime,
   DataSwimPaceAvg,
   DataWeight,
@@ -2891,6 +2894,105 @@ describe('normalizeInsightQuery', () => {
     expect(result.query.valueType).toBe(ChartDataValueTypes.Average);
     expect(result.query.requestedTimeInterval).toBe(TimeIntervals.Daily);
     expect(result.query.activityTypes).toEqual([ActivityTypes.Cycling]);
+  });
+
+  it('normalizes average ftp over time for cycling this year', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'ftp',
+        aggregation: 'average',
+        category: 'date',
+        requestedTimeInterval: 'auto',
+        activityTypes: ['Cycling'],
+        dateRange: {
+          kind: 'current_period',
+          unit: 'year',
+        },
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show my average ftp over time for cycling this year',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('ftp');
+    expect(result.query.dataType).toBe(DataFTP.type);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Average);
+    expect(result.query.categoryType).toBe(ChartDataCategoryTypes.DateType);
+  });
+
+  it('normalizes average ground contact time over time for running this year', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'ground contact time',
+        aggregation: 'average',
+        category: 'date',
+        requestedTimeInterval: 'auto',
+        activityTypes: ['Running'],
+        dateRange: {
+          kind: 'current_period',
+          unit: 'year',
+        },
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show my average ground contact time over time for running this year',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('ground_contact_time');
+    expect(result.query.dataType).toBe(DataGroundContactTimeAvg.type);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Average);
+    expect(result.query.categoryType).toBe(ChartDataCategoryTypes.DateType);
+  });
+
+  it('normalizes total time in power zone 2 over time for cycling this year', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'time in power zone 2',
+        aggregation: 'total',
+        category: 'date',
+        requestedTimeInterval: 'auto',
+        activityTypes: ['Cycling'],
+        dateRange: {
+          kind: 'current_period',
+          unit: 'year',
+        },
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Show my total time in power zone 2 over time for cycling this year',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('power_zone_two_duration');
+    expect(result.query.dataType).toBe(DataPowerZoneTwoDuration.type);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Total);
+    expect(result.query.categoryType).toBe(ChartDataCategoryTypes.DateType);
   });
 
   it('keeps aerobic and anaerobic training effect metrics distinct', async () => {
