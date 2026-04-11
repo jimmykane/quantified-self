@@ -2,6 +2,9 @@ const PROMPT_CANONICAL_REPLACEMENTS: ReadonlyArray<readonly [RegExp, string]> = 
   [/\bheartrate\b/g, 'heart rate'],
   [/\bheart[-_\s]*rate\b/g, 'heart rate'],
   [/\bactivity[-_\s]*types?\b/g, 'activity type'],
+  [/\bmountainbiking\b/g, 'mountain biking'],
+  [/\bmountainbike\b/g, 'mountain biking'],
+  [/\bmtb\b/g, 'mountain biking'],
 ];
 
 export function canonicalizeInsightPrompt(

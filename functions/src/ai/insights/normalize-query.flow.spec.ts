@@ -3160,6 +3160,35 @@ describe('normalizeInsightQuery', () => {
     expect(result.query.activityTypes).toEqual([ActivityTypes.Running]);
   });
 
+  it('normalizes mountainbiking aliases into an exact mountain biking activity filter', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'When was my max speed mountainbiking in last 4 years?',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('speed');
+    expect(result.query.resultKind).toBe('event_lookup');
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Maximum);
+    expect(result.query.activityTypeGroups).toEqual([]);
+    expect(result.query.activityTypes).toEqual([ActivityTypes['Mountain Biking']]);
+    expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
+      startDate: '2022-03-18T00:00:00.000Z',
+      endDate: '2026-03-18T23:59:59.999Z',
+      timezone: 'UTC',
+      source: 'prompt',
+    });
+  });
+
   it('uses a group when an ambiguous label is made explicit with group wording', async () => {
     setNormalizeQueryDependenciesForTesting({
       now: () => new Date('2026-03-18T12:00:00.000Z'),
