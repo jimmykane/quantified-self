@@ -22,11 +22,21 @@ import {
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
 import type {
   DashboardAcwrContext,
+  DashboardEasyPercentContext,
+  DashboardEfficiencyDelta4wContext,
   DashboardMonotonyStrainContext,
+  DashboardFormNowContext,
+  DashboardFormPlus7dContext,
+  DashboardHardPercentContext,
   DashboardRampRateContext,
 } from '../../../helpers/dashboard-derived-metrics.helper';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
+  DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
+  DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
+  DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
+  DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   type DashboardKpiChartType,
@@ -41,6 +51,9 @@ interface KpiPresentation {
   primaryValue: number | null;
   primaryLabel: string;
   secondaryLabel: string;
+  primarySuffix?: string;
+  primarySigned?: boolean;
+  secondaryValueText?: string;
   trend: Array<{ time: number; value: number | null }>;
 }
 
@@ -58,9 +71,19 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() acwr?: DashboardAcwrContext | null;
   @Input() rampRate?: DashboardRampRateContext | null;
   @Input() monotonyStrain?: DashboardMonotonyStrainContext | null;
+  @Input() formNow?: DashboardFormNowContext | null;
+  @Input() formPlus7d?: DashboardFormPlus7dContext | null;
+  @Input() easyPercent?: DashboardEasyPercentContext | null;
+  @Input() hardPercent?: DashboardHardPercentContext | null;
+  @Input() efficiencyDelta4w?: DashboardEfficiencyDelta4wContext | null;
   @Input() acwrStatus?: DashboardDerivedMetricStatus | null;
   @Input() rampRateStatus?: DashboardDerivedMetricStatus | null;
   @Input() monotonyStrainStatus?: DashboardDerivedMetricStatus | null;
+  @Input() formNowStatus?: DashboardDerivedMetricStatus | null;
+  @Input() formPlus7dStatus?: DashboardDerivedMetricStatus | null;
+  @Input() easyPercentStatus?: DashboardDerivedMetricStatus | null;
+  @Input() hardPercentStatus?: DashboardDerivedMetricStatus | null;
+  @Input() efficiencyDelta4wStatus?: DashboardDerivedMetricStatus | null;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
@@ -70,6 +93,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   public primaryValueText = '--';
   public primaryLabel = 'Ratio';
   public secondaryLabel = 'Acute / chronic load';
+  public secondaryValueText = '';
   public showNoDataError = false;
   public noDataErrorMessage = 'No data yet';
   public noDataErrorHint = 'This KPI needs derived training metrics.';
@@ -102,9 +126,19 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       || changes.acwr
       || changes.rampRate
       || changes.monotonyStrain
+      || changes.formNow
+      || changes.formPlus7d
+      || changes.easyPercent
+      || changes.hardPercent
+      || changes.efficiencyDelta4w
       || changes.acwrStatus
       || changes.rampRateStatus
       || changes.monotonyStrainStatus
+      || changes.formNowStatus
+      || changes.formPlus7dStatus
+      || changes.easyPercentStatus
+      || changes.hardPercentStatus
+      || changes.efficiencyDelta4wStatus
     ) {
       void this.refreshChart();
     }
@@ -135,7 +169,11 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     this.title = presentation.title;
     this.primaryLabel = presentation.primaryLabel;
     this.secondaryLabel = presentation.secondaryLabel;
-    this.primaryValueText = this.formatPrimaryValue(presentation.primaryValue);
+    this.primaryValueText = this.formatPrimaryValue(presentation.primaryValue, {
+      suffix: presentation.primarySuffix || '',
+      signed: presentation.primarySigned === true,
+    });
+    this.secondaryValueText = presentation.secondaryValueText || '';
 
     const hasRenderableValue = presentation.primaryValue !== null;
     this.showNoDataError = !hasRenderableValue;
@@ -154,6 +192,70 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   }
 
   private resolvePresentation(): KpiPresentation {
+    if (this.chartType === DASHBOARD_FORM_NOW_KPI_CHART_TYPE) {
+      const context = this.formNow || null;
+      return {
+        title: 'Form Now',
+        primaryValue: context?.value ?? null,
+        primaryLabel: 'Prior-day TSB',
+        secondaryLabel: 'Current readiness state',
+        primarySigned: true,
+        trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
+      };
+    }
+
+    if (this.chartType === DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE) {
+      const context = this.formPlus7d || null;
+      return {
+        title: 'Form +7d',
+        primaryValue: context?.value ?? null,
+        primaryLabel: 'Projected prior-day TSB',
+        secondaryLabel: 'Zero-load forecast',
+        primarySigned: true,
+        trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
+      };
+    }
+
+    if (this.chartType === DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE) {
+      const context = this.easyPercent || null;
+      return {
+        title: 'Easy %',
+        primaryValue: context?.value ?? null,
+        primaryLabel: 'Latest weekly bucket',
+        secondaryLabel: 'Weekly intensity split',
+        primarySuffix: '%',
+        trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
+      };
+    }
+
+    if (this.chartType === DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE) {
+      const context = this.hardPercent || null;
+      return {
+        title: 'Hard %',
+        primaryValue: context?.value ?? null,
+        primaryLabel: 'Latest weekly bucket',
+        secondaryLabel: 'Weekly intensity split',
+        primarySuffix: '%',
+        trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
+      };
+    }
+
+    if (this.chartType === DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE) {
+      const context = this.efficiencyDelta4w || null;
+      const percentDeltaText = context?.deltaPct === null || context?.deltaPct === undefined
+        ? '--'
+        : `${context.deltaPct >= 0 ? '+' : ''}${this.formatPrimaryValue(context.deltaPct)}%`;
+      return {
+        title: 'Efficiency Δ (4w)',
+        primaryValue: context?.deltaAbs ?? null,
+        primaryLabel: 'Absolute delta',
+        secondaryLabel: 'Percent delta',
+        secondaryValueText: percentDeltaText,
+        primarySigned: true,
+        trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
+      };
+    }
+
     if (this.chartType === DASHBOARD_RAMP_RATE_KPI_CHART_TYPE) {
       const context = this.rampRate || null;
       return {
@@ -194,6 +296,21 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   }
 
   private resolveActiveStatus(): DashboardDerivedMetricStatus | null {
+    if (this.chartType === DASHBOARD_FORM_NOW_KPI_CHART_TYPE) {
+      return this.formNowStatus || null;
+    }
+    if (this.chartType === DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE) {
+      return this.formPlus7dStatus || null;
+    }
+    if (this.chartType === DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE) {
+      return this.easyPercentStatus || null;
+    }
+    if (this.chartType === DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE) {
+      return this.hardPercentStatus || null;
+    }
+    if (this.chartType === DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE) {
+      return this.efficiencyDelta4wStatus || null;
+    }
     if (this.chartType === DASHBOARD_RAMP_RATE_KPI_CHART_TYPE) {
       return this.rampRateStatus || null;
     }
@@ -293,17 +410,22 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     };
   }
 
-  private formatPrimaryValue(value: unknown): string {
+  private formatPrimaryValue(
+    value: unknown,
+    options?: { suffix?: string; signed?: boolean },
+  ): string {
     if (value === null || value === undefined || value === '' || !Number.isFinite(Number(value))) {
       return '--';
     }
     const numericValue = Number(value);
+    const suffix = `${options?.suffix || ''}`;
+    const prefix = options?.signed === true && numericValue > 0 ? '+' : '';
     if (Math.abs(numericValue) >= 100) {
-      return `${Math.round(numericValue)}`;
+      return `${prefix}${Math.round(numericValue)}${suffix}`;
     }
     if (Math.abs(numericValue) >= 10) {
-      return `${Math.round(numericValue * 10) / 10}`;
+      return `${prefix}${Math.round(numericValue * 10) / 10}${suffix}`;
     }
-    return `${Math.round(numericValue * 100) / 100}`;
+    return `${prefix}${Math.round(numericValue * 100) / 100}${suffix}`;
   }
 }

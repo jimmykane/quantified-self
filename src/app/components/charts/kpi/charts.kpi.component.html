@@ -6,6 +6,9 @@
       <div class="kpi-value">{{ primaryValueText }}</div>
       <div class="kpi-primary-label">{{ primaryLabel }}</div>
       <div class="kpi-secondary-label">{{ secondaryLabel }}</div>
+      @if (secondaryValueText) {
+      <div class="kpi-secondary-value">{{ secondaryValueText }}</div>
+      }
     </header>
     <div #chartDiv class="kpi-sparkline"></div>
   </section>

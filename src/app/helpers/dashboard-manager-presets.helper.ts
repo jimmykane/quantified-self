@@ -18,15 +18,21 @@ import {
 import type { MapStyleName } from '../services/map/map-style.types';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
+  DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
   DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
+  DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
+  DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
+  DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   type DashboardChartCategory,
   type DashboardCuratedChartType,
+  type DashboardKpiGroup,
   type DashboardKpiChartType,
 } from './dashboard-special-chart-types';
 import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from './dashboard-form.helper';
@@ -40,6 +46,11 @@ export const DASHBOARD_MANAGER_PRESET_IDS = {
   KPI_ACWR: 'kpi-acwr',
   KPI_RAMP_RATE: 'kpi-ramp-rate',
   KPI_MONOTONY_STRAIN: 'kpi-monotony-strain',
+  KPI_FORM_NOW: 'kpi-form-now',
+  KPI_FORM_PLUS_7D: 'kpi-form-plus-7d',
+  KPI_EASY_PERCENT: 'kpi-easy-percent',
+  KPI_HARD_PERCENT: 'kpi-hard-percent',
+  KPI_EFFICIENCY_DELTA_4W: 'kpi-efficiency-delta-4w',
   MAP_DEFAULT_CLUSTERED: 'map-default-clustered',
   CUSTOM_DURATION_PIE: 'custom-duration-pie',
   CUSTOM_DISTANCE_COLUMNS: 'custom-distance-columns',
@@ -77,6 +88,7 @@ export interface DashboardManagerCuratedPresetDefinition extends DashboardManage
 export interface DashboardManagerKpiPresetDefinition extends DashboardManagerPresetBaseDefinition {
   category: 'kpi';
   kpiChartType: DashboardKpiChartType;
+  kpiGroup: DashboardKpiGroup;
 }
 
 export interface DashboardManagerCustomPresetDefinition extends DashboardManagerPresetBaseDefinition {
@@ -162,6 +174,7 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     icon: 'monitoring',
     category: 'kpi',
     kpiChartType: DASHBOARD_ACWR_KPI_CHART_TYPE,
+    kpiGroup: 'load',
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.KPI_RAMP_RATE,
@@ -171,6 +184,7 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     icon: 'speed',
     category: 'kpi',
     kpiChartType: DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
+    kpiGroup: 'load',
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.KPI_MONOTONY_STRAIN,
@@ -180,6 +194,57 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     icon: 'stacked_line_chart',
     category: 'kpi',
     kpiChartType: DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
+    kpiGroup: 'load',
+  },
+  {
+    id: DASHBOARD_MANAGER_PRESET_IDS.KPI_FORM_NOW,
+    label: 'KPI: Form Now',
+    tileName: 'Form Now',
+    description: 'Prior-day TSB readiness KPI with mini trend.',
+    icon: 'self_improvement',
+    category: 'kpi',
+    kpiChartType: DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
+    kpiGroup: 'readiness',
+  },
+  {
+    id: DASHBOARD_MANAGER_PRESET_IDS.KPI_FORM_PLUS_7D,
+    label: 'KPI: Form +7d',
+    tileName: 'Form +7d',
+    description: 'Zero-load readiness projection at +7d.',
+    icon: 'trending_up',
+    category: 'kpi',
+    kpiChartType: DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
+    kpiGroup: 'readiness',
+  },
+  {
+    id: DASHBOARD_MANAGER_PRESET_IDS.KPI_EASY_PERCENT,
+    label: 'KPI: Easy %',
+    tileName: 'Easy %',
+    description: 'Latest weekly Easy intensity percentage.',
+    icon: 'wb_sunny',
+    category: 'kpi',
+    kpiChartType: DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
+    kpiGroup: 'execution',
+  },
+  {
+    id: DASHBOARD_MANAGER_PRESET_IDS.KPI_HARD_PERCENT,
+    label: 'KPI: Hard %',
+    tileName: 'Hard %',
+    description: 'Latest weekly Hard intensity percentage.',
+    icon: 'flash_on',
+    category: 'kpi',
+    kpiChartType: DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
+    kpiGroup: 'execution',
+  },
+  {
+    id: DASHBOARD_MANAGER_PRESET_IDS.KPI_EFFICIENCY_DELTA_4W,
+    label: 'KPI: Efficiency Δ (4w)',
+    tileName: 'Efficiency Δ (4w)',
+    description: 'Current efficiency versus prior 4-week baseline.',
+    icon: 'query_stats',
+    category: 'kpi',
+    kpiChartType: DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
+    kpiGroup: 'execution',
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.MAP_DEFAULT_CLUSTERED,

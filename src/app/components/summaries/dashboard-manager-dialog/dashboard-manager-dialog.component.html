@@ -82,8 +82,18 @@
         @if (category === 'kpi') {
         <section class="dashboard-manager-section" #kpiSection>
           <div class="dashboard-manager-section-title">KPI chart</div>
+          <mat-chip-listbox class="dashboard-manager-chip-listbox" [multiple]="false" [hideSingleSelectionIndicator]="true" [value]="kpiGroup" (change)="onKpiGroupChange($event.value)">
+            @for (groupOption of kpiGroupOptions; track groupOption.value) {
+            <mat-chip-option [value]="groupOption.value">
+              <span class="dashboard-manager-icon-label">
+                <mat-icon>{{ groupOption.icon }}</mat-icon>
+                <span>{{ groupOption.label }}</span>
+              </span>
+            </mat-chip-option>
+            }
+          </mat-chip-listbox>
           <mat-radio-group class="dashboard-manager-radio-group" [value]="kpiChartType" (change)="kpiChartType = $event.value">
-            @for (definition of kpiChartDefinitions; track definition.chartType) {
+            @for (definition of filteredKpiChartDefinitions; track definition.chartType) {
             <mat-radio-button class="dashboard-manager-radio-option" [value]="definition.chartType" [disabled]="isKpiOptionDisabled(definition.chartType)">
               <div class="dashboard-manager-radio-content">
                 <div class="dashboard-manager-icon-label">
@@ -225,6 +235,18 @@
 
         <section class="dashboard-manager-section">
           <div class="dashboard-manager-section-title">Preset</div>
+          @if (presetCategory === 'kpi') {
+          <mat-chip-listbox class="dashboard-manager-chip-listbox" [multiple]="false" [hideSingleSelectionIndicator]="true" [value]="presetKpiGroup" (change)="onPresetKpiGroupChange($event.value)">
+            @for (groupOption of kpiGroupOptions; track groupOption.value) {
+            <mat-chip-option [value]="groupOption.value">
+              <span class="dashboard-manager-icon-label">
+                <mat-icon>{{ groupOption.icon }}</mat-icon>
+                <span>{{ groupOption.label }}</span>
+              </span>
+            </mat-chip-option>
+            }
+          </mat-chip-listbox>
+          }
           <mat-radio-group class="dashboard-manager-radio-group" [value]="selectedPresetId" (change)="onPresetSelectionChange($event.value)">
             @for (presetDefinition of filteredPresetDefinitions; track presetDefinition.id) {
             <mat-radio-button class="dashboard-manager-radio-option" [value]="presetDefinition.id" [disabled]="isPresetDisabled(presetDefinition)">

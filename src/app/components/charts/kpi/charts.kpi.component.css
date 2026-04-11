@@ -43,6 +43,14 @@
   color: color-mix(in srgb, var(--mat-sys-on-surface-variant), transparent 15%);
 }
 
+.kpi-secondary-value {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.9rem;
+  line-height: 1.1;
+  font-weight: 600;
+  color: var(--mat-sys-on-surface);
+}
+
 .kpi-sparkline {
   width: 100%;
   flex: 1 1 auto;

@@ -6,6 +6,11 @@ import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
+  DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
+  DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
+  DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
+  DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
 } from '../../../helpers/dashboard-special-chart-types';
@@ -130,5 +135,78 @@ describe('ChartsKpiComponent', () => {
 
     expect(component.showNoDataError).toBe(true);
     expect(component.noDataErrorMessage).toBe('KPI is updating');
+  });
+
+  it('renders Form Now readiness KPI presentation', async () => {
+    component.chartType = DASHBOARD_FORM_NOW_KPI_CHART_TYPE;
+    component.formNow = {
+      latestDayMs: Date.UTC(2026, 0, 1),
+      value: -2.4,
+      trend8Weeks: [{ time: Date.UTC(2025, 11, 1), value: -1.1 }],
+    };
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(component.title).toBe('Form Now');
+    expect(component.primaryValueText).toBe('-2.4');
+  });
+
+  it('renders Form +7d readiness KPI presentation', async () => {
+    component.chartType = DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE;
+    component.formPlus7d = {
+      latestDayMs: Date.UTC(2026, 0, 1),
+      projectedDayMs: Date.UTC(2026, 0, 8),
+      value: 3.2,
+      trend8Weeks: [{ time: Date.UTC(2025, 11, 1), value: 1.6 }],
+    };
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(component.title).toBe('Form +7d');
+    expect(component.primaryValueText).toBe('+3.2');
+  });
+
+  it('renders Easy % execution KPI presentation', async () => {
+    component.chartType = DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE;
+    component.easyPercent = {
+      latestWeekStartMs: Date.UTC(2026, 0, 1),
+      value: 62.5,
+      trend8Weeks: [{ time: Date.UTC(2025, 11, 1), value: 58.1 }],
+    };
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(component.title).toBe('Easy %');
+    expect(component.primaryValueText).toBe('62.5%');
+  });
+
+  it('renders Hard % execution KPI presentation', async () => {
+    component.chartType = DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE;
+    component.hardPercent = {
+      latestWeekStartMs: Date.UTC(2026, 0, 1),
+      value: 14.3,
+      trend8Weeks: [{ time: Date.UTC(2025, 11, 1), value: 12.2 }],
+    };
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(component.title).toBe('Hard %');
+    expect(component.primaryValueText).toBe('14.3%');
+  });
+
+  it('renders efficiency delta with absolute and percent labels', async () => {
+    component.chartType = DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE;
+    component.efficiencyDelta4w = {
+      latestWeekStartMs: Date.UTC(2026, 0, 1),
+      latestValue: 1.92,
+      baselineValue: 1.8,
+      baselineWeekCount: 4,
+      deltaAbs: 0.12,
+      deltaPct: 6.67,
+      trend8Weeks: [{ time: Date.UTC(2025, 11, 1), value: 1.7 }],
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.title).toBe('Efficiency Δ (4w)');
+    expect(component.primaryValueText).toBe('+0.12');
+    expect(component.secondaryValueText).toBe('+6.67%');
   });
 });

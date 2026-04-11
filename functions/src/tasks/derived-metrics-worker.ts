@@ -1,6 +1,5 @@
 import { onTaskDispatched } from 'firebase-functions/v2/tasks';
 import * as logger from 'firebase-functions/logger';
-import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
 import { CLOUD_TASK_RETRY_CONFIG } from '../shared/queue-config';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import {
@@ -11,6 +10,7 @@ import {
     getDerivedRecoveryLookbackWindowSeconds,
     markDerivedMetricSnapshotsBuilding,
     markDerivedMetricSnapshotsFailed,
+    resolveDerivedMetricSourceRequirements,
     startDerivedMetricsProcessing,
     writeDerivedMetricSnapshotsReady,
 } from '../derived-metrics/derived-metrics.service';
@@ -59,20 +59,11 @@ export const processDerivedMetricsTask = onTaskDispatched({
 
     try {
         await markDerivedMetricSnapshotsBuilding(uid, dirtyMetricKinds);
-        const needsFormDocs = dirtyMetricKinds.some((metricKind) => (
-            metricKind === DERIVED_METRIC_KINDS.Form
-            || metricKind === DERIVED_METRIC_KINDS.Acwr
-            || metricKind === DERIVED_METRIC_KINDS.RampRate
-            || metricKind === DERIVED_METRIC_KINDS.MonotonyStrain
-            || metricKind === DERIVED_METRIC_KINDS.FreshnessForecast
-            || metricKind === DERIVED_METRIC_KINDS.IntensityDistribution
-            || metricKind === DERIVED_METRIC_KINDS.EfficiencyTrend
-        ));
-        const needsRecoveryNowDocs = dirtyMetricKinds.includes(DERIVED_METRIC_KINDS.RecoveryNow);
-        const formDocs = needsFormDocs
+        const sourceRequirements = resolveDerivedMetricSourceRequirements(dirtyMetricKinds);
+        const formDocs = sourceRequirements.needsFormDocs
             ? await fetchDerivedMetricsEventDocs(uid)
             : [];
-        const recoveryNowDocs = needsRecoveryNowDocs
+        const recoveryNowDocs = sourceRequirements.needsRecoveryNowDocs
             // Recovery-now must always use bounded lookback docs, even when Form is processed in the same task.
             // Reusing full-history form docs inflates segment counts and breaks "recovery left now" semantics.
             ? await fetchRecoveryLookbackEventDocs(uid)

@@ -14,9 +14,14 @@ import { TileChartComponent } from './tile.chart.component';
 import type { DashboardRecoveryNowContext } from '../../../helpers/dashboard-recovery-now.helper';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
+  DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
   DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
+  DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
+  DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
+  DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
@@ -120,9 +125,19 @@ class MockKpiChartComponent {
   @Input() acwr: any;
   @Input() rampRate: any;
   @Input() monotonyStrain: any;
+  @Input() formNow: any;
+  @Input() formPlus7d: any;
+  @Input() easyPercent: any;
+  @Input() hardPercent: any;
+  @Input() efficiencyDelta4w: any;
   @Input() acwrStatus?: string | null;
   @Input() rampRateStatus?: string | null;
   @Input() monotonyStrainStatus?: string | null;
+  @Input() formNowStatus?: string | null;
+  @Input() formPlus7dStatus?: string | null;
+  @Input() easyPercentStatus?: string | null;
+  @Input() hardPercentStatus?: string | null;
+  @Input() efficiencyDelta4wStatus?: string | null;
 }
 
 @Component({
@@ -405,6 +420,51 @@ describe('TileChartComponent', () => {
     fixture.detectChanges();
 
     expect(getKpiComponent().chartType).toBe(DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE);
+  });
+
+  it('should route Form Now KPI chart type to the KPI renderer', () => {
+    component.chartType = DASHBOARD_FORM_NOW_KPI_CHART_TYPE as any;
+    component.formNow = { value: -3.2 } as any;
+    component.formNowStatus = 'processing' as any;
+    fixture.detectChanges();
+
+    const kpi = getKpiComponent();
+    expect(kpi.chartType).toBe(DASHBOARD_FORM_NOW_KPI_CHART_TYPE);
+    expect(kpi.formNow).toEqual(component.formNow);
+    expect(kpi.formNowStatus).toBe('processing');
+  });
+
+  it('should route Efficiency Δ (4w) KPI chart type to the KPI renderer', () => {
+    component.chartType = DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE as any;
+    component.efficiencyDelta4w = { deltaAbs: 0.12, deltaPct: 6 } as any;
+    component.efficiencyDelta4wStatus = 'queued' as any;
+    fixture.detectChanges();
+
+    expect(getKpiComponent().chartType).toBe(DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE);
+  });
+
+  it('should route Easy % KPI chart type to the KPI renderer', () => {
+    component.chartType = DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE as any;
+    component.easyPercent = { value: 67 } as any;
+    component.easyPercentStatus = 'ready' as any;
+    fixture.detectChanges();
+    expect(getKpiComponent().chartType).toBe(DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE);
+  });
+
+  it('should route Hard % KPI chart type to the KPI renderer', () => {
+    component.chartType = DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE as any;
+    component.hardPercent = { value: 12 } as any;
+    component.hardPercentStatus = 'ready' as any;
+    fixture.detectChanges();
+    expect(getKpiComponent().chartType).toBe(DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE);
+  });
+
+  it('should route Form +7d KPI chart type to the KPI renderer', () => {
+    component.chartType = DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE as any;
+    component.formPlus7d = { value: 4.1 } as any;
+    component.formPlus7dStatus = 'ready' as any;
+    fixture.detectChanges();
+    expect(getKpiComponent().chartType).toBe(DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE);
   });
 
   it('should route freshness forecast chart type to dedicated renderer', () => {

@@ -20,9 +20,14 @@ import {
 } from './dashboard-tile-view-model.helper';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
+  DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
   DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
+  DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
+  DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
+  DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
@@ -944,6 +949,56 @@ describe('dashboard-tile-view-model.helper', () => {
         {
           type: TileTypes.Chart,
           order: 2,
+          chartType: DASHBOARD_FORM_NOW_KPI_CHART_TYPE as any,
+          dataType: 'Training Stress Score',
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+          dataTimeInterval: TimeIntervals.Weekly,
+          size: { columns: 1, rows: 1 },
+        },
+        {
+          type: TileTypes.Chart,
+          order: 3,
+          chartType: DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE as any,
+          dataType: 'Training Stress Score',
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+          dataTimeInterval: TimeIntervals.Weekly,
+          size: { columns: 1, rows: 1 },
+        },
+        {
+          type: TileTypes.Chart,
+          order: 4,
+          chartType: DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE as any,
+          dataType: 'Training Stress Score',
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+          dataTimeInterval: TimeIntervals.Weekly,
+          size: { columns: 1, rows: 1 },
+        },
+        {
+          type: TileTypes.Chart,
+          order: 5,
+          chartType: DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE as any,
+          dataType: 'Training Stress Score',
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+          dataTimeInterval: TimeIntervals.Weekly,
+          size: { columns: 1, rows: 1 },
+        },
+        {
+          type: TileTypes.Chart,
+          order: 6,
+          chartType: DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE as any,
+          dataType: 'Training Stress Score',
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+          dataTimeInterval: TimeIntervals.Weekly,
+          size: { columns: 1, rows: 1 },
+        },
+        {
+          type: TileTypes.Chart,
+          order: 7,
           chartType: DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE as any,
           dataType: 'Training Stress Score',
           dataValueType: ChartDataValueTypes.Total,
@@ -953,7 +1008,7 @@ describe('dashboard-tile-view-model.helper', () => {
         },
         {
           type: TileTypes.Chart,
-          order: 3,
+          order: 8,
           chartType: DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE as any,
           dataType: 'Training Stress Score',
           dataValueType: ChartDataValueTypes.Total,
@@ -963,7 +1018,7 @@ describe('dashboard-tile-view-model.helper', () => {
         },
         {
           type: TileTypes.Chart,
-          order: 4,
+          order: 9,
           chartType: DASHBOARD_EFFICIENCY_TREND_CHART_TYPE as any,
           dataType: 'Training Stress Score',
           dataValueType: ChartDataValueTypes.Total,
@@ -976,6 +1031,11 @@ describe('dashboard-tile-view-model.helper', () => {
       derivedMetrics: {
         rampRate: { rampRate: 2.8, trend8Weeks: [] } as any,
         monotonyStrain: { strain: 630, trend8Weeks: [] } as any,
+        formNow: { value: -2, trend8Weeks: [] } as any,
+        formPlus7d: { value: 3, trend8Weeks: [] } as any,
+        easyPercent: { value: 64, trend8Weeks: [] } as any,
+        hardPercent: { value: 14, trend8Weeks: [] } as any,
+        efficiencyDelta4w: { deltaAbs: 0.12, deltaPct: 6, trend8Weeks: [] } as any,
         freshnessForecast: { generatedAtMs: Date.now(), points: [] } as any,
         intensityDistribution: { weeks: [], latestWeekStartMs: null } as any,
         efficiencyTrend: { points: [], latestWeekStartMs: null } as any,
@@ -984,8 +1044,13 @@ describe('dashboard-tile-view-model.helper', () => {
 
     expect((viewModels[0] as any).rampRate?.rampRate).toBe(2.8);
     expect((viewModels[1] as any).monotonyStrain?.strain).toBe(630);
-    expect((viewModels[2] as any).freshnessForecast).toBeTruthy();
-    expect((viewModels[3] as any).intensityDistribution).toBeTruthy();
-    expect((viewModels[4] as any).efficiencyTrend).toBeTruthy();
+    expect((viewModels[2] as any).formNow?.value).toBe(-2);
+    expect((viewModels[3] as any).formPlus7d?.value).toBe(3);
+    expect((viewModels[4] as any).easyPercent?.value).toBe(64);
+    expect((viewModels[5] as any).hardPercent?.value).toBe(14);
+    expect((viewModels[6] as any).efficiencyDelta4w?.deltaPct).toBe(6);
+    expect((viewModels[7] as any).freshnessForecast).toBeTruthy();
+    expect((viewModels[8] as any).intensityDistribution).toBeTruthy();
+    expect((viewModels[9] as any).efficiencyTrend).toBeTruthy();
   });
 });

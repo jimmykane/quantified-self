@@ -1,7 +1,12 @@
 import type {
   DerivedAcwrMetricPayload,
+  DerivedEasyPercentMetricPayload,
+  DerivedEfficiencyDelta4wMetricPayload,
   DerivedEfficiencyTrendMetricPayload,
   DerivedFreshnessForecastMetricPayload,
+  DerivedFormNowMetricPayload,
+  DerivedFormPlus7dMetricPayload,
+  DerivedHardPercentMetricPayload,
   DerivedIntensityDistributionMetricPayload,
   DerivedMonotonyStrainMetricPayload,
   DerivedRampRateMetricPayload,
@@ -33,6 +38,31 @@ export interface DashboardMonotonyStrainContext {
   weeklyLoad7: number;
   monotony: number | null;
   strain: number | null;
+  trend8Weeks: DashboardDerivedTrendPoint[];
+}
+
+export interface DashboardFormNowContext {
+  latestDayMs: number | null;
+  value: number | null;
+  trend8Weeks: DashboardDerivedTrendPoint[];
+}
+
+export interface DashboardFormPlus7dContext {
+  latestDayMs: number | null;
+  projectedDayMs: number | null;
+  value: number | null;
+  trend8Weeks: DashboardDerivedTrendPoint[];
+}
+
+export interface DashboardEasyPercentContext {
+  latestWeekStartMs: number | null;
+  value: number | null;
+  trend8Weeks: DashboardDerivedTrendPoint[];
+}
+
+export interface DashboardHardPercentContext {
+  latestWeekStartMs: number | null;
+  value: number | null;
   trend8Weeks: DashboardDerivedTrendPoint[];
 }
 
@@ -78,6 +108,16 @@ export interface DashboardEfficiencyTrendContext {
   points: DashboardEfficiencyTrendPoint[];
   latestWeekStartMs: number | null;
   latestValue: number | null;
+}
+
+export interface DashboardEfficiencyDelta4wContext {
+  latestWeekStartMs: number | null;
+  latestValue: number | null;
+  baselineValue: number | null;
+  baselineWeekCount: number;
+  deltaAbs: number | null;
+  deltaPct: number | null;
+  trend8Weeks: DashboardDerivedTrendPoint[];
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -152,6 +192,43 @@ export function resolveDashboardMonotonyStrainContext(payload: unknown): Dashboa
     monotony: toFiniteNumber(normalized.monotony),
     strain: toFiniteNumber(normalized.strain),
     trend8Weeks: normalizeTrendPoints(normalized.trend8Weeks, 'weekStartMs', 'strain'),
+  };
+}
+
+export function resolveDashboardFormNowContext(payload: unknown): DashboardFormNowContext | null {
+  const normalized = (payload || {}) as Partial<DerivedFormNowMetricPayload>;
+  return {
+    latestDayMs: toFiniteNumber(normalized.latestDayMs),
+    value: toFiniteNumber(normalized.value),
+    trend8Weeks: normalizeTrendPoints(normalized.trend8Weeks, 'weekStartMs', 'value'),
+  };
+}
+
+export function resolveDashboardFormPlus7dContext(payload: unknown): DashboardFormPlus7dContext | null {
+  const normalized = (payload || {}) as Partial<DerivedFormPlus7dMetricPayload>;
+  return {
+    latestDayMs: toFiniteNumber(normalized.latestDayMs),
+    projectedDayMs: toFiniteNumber(normalized.projectedDayMs),
+    value: toFiniteNumber(normalized.value),
+    trend8Weeks: normalizeTrendPoints(normalized.trend8Weeks, 'weekStartMs', 'value'),
+  };
+}
+
+export function resolveDashboardEasyPercentContext(payload: unknown): DashboardEasyPercentContext | null {
+  const normalized = (payload || {}) as Partial<DerivedEasyPercentMetricPayload>;
+  return {
+    latestWeekStartMs: toFiniteNumber(normalized.latestWeekStartMs),
+    value: toFiniteNumber(normalized.value),
+    trend8Weeks: normalizeTrendPoints(normalized.trend8Weeks, 'weekStartMs', 'value'),
+  };
+}
+
+export function resolveDashboardHardPercentContext(payload: unknown): DashboardHardPercentContext | null {
+  const normalized = (payload || {}) as Partial<DerivedHardPercentMetricPayload>;
+  return {
+    latestWeekStartMs: toFiniteNumber(normalized.latestWeekStartMs),
+    value: toFiniteNumber(normalized.value),
+    trend8Weeks: normalizeTrendPoints(normalized.trend8Weeks, 'weekStartMs', 'value'),
   };
 }
 
@@ -259,5 +336,18 @@ export function resolveDashboardEfficiencyTrendContext(payload: unknown): Dashbo
     points,
     latestWeekStartMs: toFiniteNumber(normalized.latestWeekStartMs),
     latestValue: toFiniteNumber(normalized.latestValue),
+  };
+}
+
+export function resolveDashboardEfficiencyDelta4wContext(payload: unknown): DashboardEfficiencyDelta4wContext | null {
+  const normalized = (payload || {}) as Partial<DerivedEfficiencyDelta4wMetricPayload>;
+  return {
+    latestWeekStartMs: toFiniteNumber(normalized.latestWeekStartMs),
+    latestValue: toFiniteNumber(normalized.latestValue),
+    baselineValue: toFiniteNumber(normalized.baselineValue),
+    baselineWeekCount: toFiniteNumber(normalized.baselineWeekCount) || 0,
+    deltaAbs: toFiniteNumber(normalized.deltaAbs),
+    deltaPct: toFiniteNumber(normalized.deltaPct),
+    trend8Weeks: normalizeTrendPoints(normalized.trend8Weeks, 'weekStartMs', 'value'),
   };
 }

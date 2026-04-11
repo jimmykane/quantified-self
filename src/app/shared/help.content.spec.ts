@@ -97,6 +97,14 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('ACWR');
     expect(gettingStartedSection?.content).toContain('Ramp Rate');
     expect(gettingStartedSection?.content).toContain('Monotony / Strain');
+    expect(gettingStartedSection?.content).toContain('Form Now');
+    expect(gettingStartedSection?.content).toContain('Form +7d');
+    expect(gettingStartedSection?.content).toContain('Easy %');
+    expect(gettingStartedSection?.content).toContain('Hard %');
+    expect(gettingStartedSection?.content).toContain('Efficiency Δ (4w)');
+    expect(gettingStartedSection?.content).toContain('Load');
+    expect(gettingStartedSection?.content).toContain('Readiness');
+    expect(gettingStartedSection?.content).toContain('Execution');
     expect(gettingStartedSection?.content).toContain('derived-only');
   });
 });

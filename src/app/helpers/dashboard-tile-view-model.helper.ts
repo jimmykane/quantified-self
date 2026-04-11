@@ -32,24 +32,39 @@ import {
 } from './dashboard-recovery-now.helper';
 import type {
   DashboardAcwrContext,
+  DashboardEasyPercentContext,
+  DashboardEfficiencyDelta4wContext,
   DashboardEfficiencyTrendContext,
   DashboardFreshnessForecastContext,
+  DashboardFormNowContext,
+  DashboardFormPlus7dContext,
+  DashboardHardPercentContext,
   DashboardIntensityDistributionContext,
   DashboardMonotonyStrainContext,
   DashboardRampRateContext,
 } from './dashboard-derived-metrics.helper';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
+  DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
   DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
+  DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
+  DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
+  DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
   isDashboardAcwrKpiChartType,
+  isDashboardEasyPercentKpiChartType,
+  isDashboardEfficiencyDelta4wKpiChartType,
   isDashboardEfficiencyTrendChartType,
   isDashboardFreshnessForecastChartType,
   isDashboardFormChartType,
+  isDashboardFormNowKpiChartType,
+  isDashboardFormPlus7dKpiChartType,
+  isDashboardHardPercentKpiChartType,
   isDashboardIntensityDistributionChartType,
   isDashboardMonotonyStrainKpiChartType,
   isDashboardRampRateKpiChartType,
@@ -64,6 +79,11 @@ export interface DashboardChartTileViewModel extends TileChartSettingsInterface 
   acwr?: DashboardAcwrContext | null;
   rampRate?: DashboardRampRateContext | null;
   monotonyStrain?: DashboardMonotonyStrainContext | null;
+  formNow?: DashboardFormNowContext | null;
+  formPlus7d?: DashboardFormPlus7dContext | null;
+  easyPercent?: DashboardEasyPercentContext | null;
+  hardPercent?: DashboardHardPercentContext | null;
+  efficiencyDelta4w?: DashboardEfficiencyDelta4wContext | null;
   freshnessForecast?: DashboardFreshnessForecastContext | null;
   intensityDistribution?: DashboardIntensityDistributionContext | null;
   efficiencyTrend?: DashboardEfficiencyTrendContext | null;
@@ -96,6 +116,11 @@ interface BuildDashboardTileViewModelsInput {
     acwr?: DashboardAcwrContext | null;
     rampRate?: DashboardRampRateContext | null;
     monotonyStrain?: DashboardMonotonyStrainContext | null;
+    formNow?: DashboardFormNowContext | null;
+    formPlus7d?: DashboardFormPlus7dContext | null;
+    easyPercent?: DashboardEasyPercentContext | null;
+    hardPercent?: DashboardHardPercentContext | null;
+    efficiencyDelta4w?: DashboardEfficiencyDelta4wContext | null;
     freshnessForecast?: DashboardFreshnessForecastContext | null;
     intensityDistribution?: DashboardIntensityDistributionContext | null;
     efficiencyTrend?: DashboardEfficiencyTrendContext | null;
@@ -213,6 +238,11 @@ export function buildDashboardTileViewModels(
   const derivedAcwrContext = input.derivedMetrics?.acwr || null;
   const derivedRampRateContext = input.derivedMetrics?.rampRate || null;
   const derivedMonotonyStrainContext = input.derivedMetrics?.monotonyStrain || null;
+  const derivedFormNowContext = input.derivedMetrics?.formNow || null;
+  const derivedFormPlus7dContext = input.derivedMetrics?.formPlus7d || null;
+  const derivedEasyPercentContext = input.derivedMetrics?.easyPercent || null;
+  const derivedHardPercentContext = input.derivedMetrics?.hardPercent || null;
+  const derivedEfficiencyDelta4wContext = input.derivedMetrics?.efficiencyDelta4w || null;
   const derivedFreshnessForecastContext = input.derivedMetrics?.freshnessForecast || null;
   const derivedIntensityDistributionContext = input.derivedMetrics?.intensityDistribution || null;
   const derivedEfficiencyTrendContext = input.derivedMetrics?.efficiencyTrend || null;
@@ -275,6 +305,61 @@ export function buildDashboardTileViewModels(
         timeInterval: TimeIntervals.Weekly,
         data: [],
         monotonyStrain: derivedMonotonyStrainContext,
+      });
+      return viewModels;
+    }
+
+    if (isDashboardFormNowKpiChartType(chartTile.chartType)) {
+      viewModels.push({
+        ...chartTile,
+        chartType: DASHBOARD_FORM_NOW_KPI_CHART_TYPE as unknown as ChartTypes,
+        timeInterval: TimeIntervals.Weekly,
+        data: [],
+        formNow: derivedFormNowContext,
+      });
+      return viewModels;
+    }
+
+    if (isDashboardFormPlus7dKpiChartType(chartTile.chartType)) {
+      viewModels.push({
+        ...chartTile,
+        chartType: DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE as unknown as ChartTypes,
+        timeInterval: TimeIntervals.Weekly,
+        data: [],
+        formPlus7d: derivedFormPlus7dContext,
+      });
+      return viewModels;
+    }
+
+    if (isDashboardEasyPercentKpiChartType(chartTile.chartType)) {
+      viewModels.push({
+        ...chartTile,
+        chartType: DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE as unknown as ChartTypes,
+        timeInterval: TimeIntervals.Weekly,
+        data: [],
+        easyPercent: derivedEasyPercentContext,
+      });
+      return viewModels;
+    }
+
+    if (isDashboardHardPercentKpiChartType(chartTile.chartType)) {
+      viewModels.push({
+        ...chartTile,
+        chartType: DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE as unknown as ChartTypes,
+        timeInterval: TimeIntervals.Weekly,
+        data: [],
+        hardPercent: derivedHardPercentContext,
+      });
+      return viewModels;
+    }
+
+    if (isDashboardEfficiencyDelta4wKpiChartType(chartTile.chartType)) {
+      viewModels.push({
+        ...chartTile,
+        chartType: DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE as unknown as ChartTypes,
+        timeInterval: TimeIntervals.Weekly,
+        data: [],
+        efficiencyDelta4w: derivedEfficiencyDelta4wContext,
       });
       return viewModels;
     }

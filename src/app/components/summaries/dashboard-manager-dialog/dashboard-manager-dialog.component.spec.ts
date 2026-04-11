@@ -16,9 +16,14 @@ import {
 import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from '../../../helpers/dashboard-form.helper';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
+  DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
   DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
+  DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
+  DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
+  DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
@@ -100,6 +105,11 @@ describe('DashboardManagerDialogComponent', () => {
       DASHBOARD_ACWR_KPI_CHART_TYPE,
       DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
       DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
+      DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
+      DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
+      DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
+      DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
+      DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
     ]);
   });
 
@@ -158,6 +168,34 @@ describe('DashboardManagerDialogComponent', () => {
       dataTimeInterval: TimeIntervals.Weekly,
       size: { columns: 1, rows: 1 },
     });
+  });
+
+  it('filters manual KPI options by selected KPI group', () => {
+    component.category = 'kpi' as any;
+    component.onKpiGroupChange('readiness');
+
+    expect(component.filteredKpiChartDefinitions.map(definition => definition.chartType)).toEqual([
+      DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
+      DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
+    ]);
+
+    component.onKpiGroupChange('execution');
+    expect(component.filteredKpiChartDefinitions.map(definition => definition.chartType)).toEqual([
+      DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
+      DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
+      DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
+    ]);
+  });
+
+  it('filters KPI presets by selected KPI group', () => {
+    component.onWorkflowTabChange(1);
+    component.onPresetCategoryChange('kpi');
+    component.onPresetKpiGroupChange('readiness');
+
+    expect(component.filteredPresetDefinitions.map(definition => definition.id)).toEqual([
+      DASHBOARD_MANAGER_PRESET_IDS.KPI_FORM_NOW,
+      DASHBOARD_MANAGER_PRESET_IDS.KPI_FORM_PLUS_7D,
+    ]);
   });
 
   it('should render presets tab content and category controls in template', () => {

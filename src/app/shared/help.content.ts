@@ -105,7 +105,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Curated Recovery** remains a fixed insight and does not react to dashboard date-range changes.
 - **Curated Form/TSS** computes from full history and does not react to dashboard date-range changes.
 - New curated derived charts: **Freshness Forecast**, **Intensity Distribution**, and **Efficiency Trend**.
-- KPI cards are derived-only compact tiles: **ACWR**, **Ramp Rate**, and **Monotony / Strain**.
+- KPI cards are derived-only compact tiles: **ACWR**, **Ramp Rate**, **Monotony / Strain**, **Form Now**, **Form +7d**, **Easy %**, **Hard %**, and **Efficiency Δ (4w)**.
+- KPI choices in Dashboard manager are grouped as **Load**, **Readiness**, and **Execution** for both manual and preset flows.
 - **Custom** charts keep the existing configurable behavior and react to dashboard filters/date range.
 - **Map** keeps the existing map behavior and reacts to dashboard filters/date range.
 - Derived curated and KPI chart types are unique: only one tile per special derived chart type can exist at a time.
@@ -158,6 +159,10 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **ACWR** uses acute 7-day load versus chronic 28-day load/4 and shows an 8-week sparkline.
 - **Ramp Rate** uses CTL(today) - CTL(today-7d) with an 8-week sparkline.
 - **Monotony / Strain** uses 7-day load mean/stddev for monotony, and load * monotony for strain.
+- **Form Now** uses prior-day TSB readiness from the latest derived load state.
+- **Form +7d** projects prior-day TSB at day +7 assuming zero load.
+- **Easy %** and **Hard %** use the latest weekly intensity distribution bucket.
+- **Efficiency Δ (4w)** shows current efficiency versus the prior 4-week baseline as absolute + percent delta.
 - **Freshness Forecast** projects 7 future days with zero load from the latest derived day.
 - **Intensity Distribution** uses power zones when available, otherwise heart-rate zones, grouped to Easy/Moderate/Hard by week.
 - **Efficiency Trend** uses weekly duration-weighted average of avgPower/avgHeartRate.

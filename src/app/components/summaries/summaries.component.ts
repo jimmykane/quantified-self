@@ -40,8 +40,13 @@ import type { DashboardFormPoint } from '../../helpers/dashboard-form.helper';
 import type { DashboardRecoveryNowContext } from '../../helpers/dashboard-recovery-now.helper';
 import type {
   DashboardAcwrContext,
+  DashboardEasyPercentContext,
+  DashboardEfficiencyDelta4wContext,
   DashboardEfficiencyTrendContext,
   DashboardFreshnessForecastContext,
+  DashboardFormNowContext,
+  DashboardFormPlus7dContext,
+  DashboardHardPercentContext,
   DashboardIntensityDistributionContext,
   DashboardMonotonyStrainContext,
   DashboardRampRateContext,
@@ -52,9 +57,14 @@ import {
 } from '../../helpers/derived-metric-status.helper';
 import {
   isDashboardAcwrKpiChartType,
+  isDashboardEasyPercentKpiChartType,
+  isDashboardEfficiencyDelta4wKpiChartType,
   isDashboardEfficiencyTrendChartType,
   isDashboardFreshnessForecastChartType,
   isDashboardFormChartType,
+  isDashboardFormNowKpiChartType,
+  isDashboardFormPlus7dKpiChartType,
+  isDashboardHardPercentKpiChartType,
   isDashboardIntensityDistributionChartType,
   isDashboardMonotonyStrainKpiChartType,
   isDashboardRampRateKpiChartType,
@@ -112,6 +122,11 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private derivedAcwrContext: DashboardAcwrContext | null = null;
   private derivedRampRateContext: DashboardRampRateContext | null = null;
   private derivedMonotonyStrainContext: DashboardMonotonyStrainContext | null = null;
+  private derivedFormNowContext: DashboardFormNowContext | null = null;
+  private derivedFormPlus7dContext: DashboardFormPlus7dContext | null = null;
+  private derivedEasyPercentContext: DashboardEasyPercentContext | null = null;
+  private derivedHardPercentContext: DashboardHardPercentContext | null = null;
+  private derivedEfficiencyDelta4wContext: DashboardEfficiencyDelta4wContext | null = null;
   private derivedFreshnessForecastContext: DashboardFreshnessForecastContext | null = null;
   private derivedIntensityDistributionContext: DashboardIntensityDistributionContext | null = null;
   private derivedEfficiencyTrendContext: DashboardEfficiencyTrendContext | null = null;
@@ -120,6 +135,11 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private derivedAcwrStatus: DashboardDerivedMetricStatus = 'missing';
   private derivedRampRateStatus: DashboardDerivedMetricStatus = 'missing';
   private derivedMonotonyStrainStatus: DashboardDerivedMetricStatus = 'missing';
+  private derivedFormNowStatus: DashboardDerivedMetricStatus = 'missing';
+  private derivedFormPlus7dStatus: DashboardDerivedMetricStatus = 'missing';
+  private derivedEasyPercentStatus: DashboardDerivedMetricStatus = 'missing';
+  private derivedHardPercentStatus: DashboardDerivedMetricStatus = 'missing';
+  private derivedEfficiencyDelta4wStatus: DashboardDerivedMetricStatus = 'missing';
   private derivedFreshnessForecastStatus: DashboardDerivedMetricStatus = 'missing';
   private derivedIntensityDistributionStatus: DashboardDerivedMetricStatus = 'missing';
   private derivedEfficiencyTrendStatus: DashboardDerivedMetricStatus = 'missing';
@@ -319,6 +339,11 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         acwr: this.derivedAcwrContext,
         rampRate: this.derivedRampRateContext,
         monotonyStrain: this.derivedMonotonyStrainContext,
+        formNow: this.derivedFormNowContext,
+        formPlus7d: this.derivedFormPlus7dContext,
+        easyPercent: this.derivedEasyPercentContext,
+        hardPercent: this.derivedHardPercentContext,
+        efficiencyDelta4w: this.derivedEfficiencyDelta4wContext,
         freshnessForecast: this.derivedFreshnessForecastContext,
         intensityDistribution: this.derivedIntensityDistributionContext,
         efficiencyTrend: this.derivedEfficiencyTrendContext,
@@ -366,23 +391,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     const uid = `${this.user?.uid || ''}`.trim();
     if (!uid) {
       this.derivedMetricsUserUID = null;
-      this.derivedFormPoints = null;
-      this.derivedRecoveryNowContext = null;
-      this.derivedAcwrContext = null;
-      this.derivedRampRateContext = null;
-      this.derivedMonotonyStrainContext = null;
-      this.derivedFreshnessForecastContext = null;
-      this.derivedIntensityDistributionContext = null;
-      this.derivedEfficiencyTrendContext = null;
-      this.derivedFormStatus = 'missing';
-      this.derivedRecoveryNowStatus = 'missing';
-      this.derivedAcwrStatus = 'missing';
-      this.derivedRampRateStatus = 'missing';
-      this.derivedMonotonyStrainStatus = 'missing';
-      this.derivedFreshnessForecastStatus = 'missing';
-      this.derivedIntensityDistributionStatus = 'missing';
-      this.derivedEfficiencyTrendStatus = 'missing';
-      this.refreshDerivedMetricsBannerState();
+      this.resetDerivedMetricsState();
       if (this.derivedMetricsSubscription) {
         this.derivedMetricsSubscription.unsubscribe();
         this.derivedMetricsSubscription = null;
@@ -400,23 +409,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
 
     this.derivedMetricsUserUID = uid;
-    this.derivedFormPoints = null;
-    this.derivedRecoveryNowContext = null;
-    this.derivedAcwrContext = null;
-    this.derivedRampRateContext = null;
-    this.derivedMonotonyStrainContext = null;
-    this.derivedFreshnessForecastContext = null;
-    this.derivedIntensityDistributionContext = null;
-    this.derivedEfficiencyTrendContext = null;
-    this.derivedFormStatus = 'missing';
-    this.derivedRecoveryNowStatus = 'missing';
-    this.derivedAcwrStatus = 'missing';
-    this.derivedRampRateStatus = 'missing';
-    this.derivedMonotonyStrainStatus = 'missing';
-    this.derivedFreshnessForecastStatus = 'missing';
-    this.derivedIntensityDistributionStatus = 'missing';
-    this.derivedEfficiencyTrendStatus = 'missing';
-    this.refreshDerivedMetricsBannerState();
+    this.resetDerivedMetricsState();
 
     this.derivedMetricsSubscription = this.dashboardDerivedMetricsService.watch(this.user).subscribe((state) => {
       this.dashboardDerivedMetricsService.ensureForDashboard(this.user, state);
@@ -426,6 +419,11 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       const hasAcwrChanged = !equal(this.derivedAcwrContext, state.acwr);
       const hasRampRateChanged = !equal(this.derivedRampRateContext, state.rampRate);
       const hasMonotonyStrainChanged = !equal(this.derivedMonotonyStrainContext, state.monotonyStrain);
+      const hasFormNowChanged = !equal(this.derivedFormNowContext, state.formNow);
+      const hasFormPlus7dChanged = !equal(this.derivedFormPlus7dContext, state.formPlus7d);
+      const hasEasyPercentChanged = !equal(this.derivedEasyPercentContext, state.easyPercent);
+      const hasHardPercentChanged = !equal(this.derivedHardPercentContext, state.hardPercent);
+      const hasEfficiencyDelta4wChanged = !equal(this.derivedEfficiencyDelta4wContext, state.efficiencyDelta4w);
       const hasFreshnessForecastChanged = !equal(this.derivedFreshnessForecastContext, state.freshnessForecast);
       const hasIntensityDistributionChanged = !equal(this.derivedIntensityDistributionContext, state.intensityDistribution);
       const hasEfficiencyTrendChanged = !equal(this.derivedEfficiencyTrendContext, state.efficiencyTrend);
@@ -434,6 +432,11 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       const hasAcwrStatusChanged = this.derivedAcwrStatus !== state.acwrStatus;
       const hasRampRateStatusChanged = this.derivedRampRateStatus !== state.rampRateStatus;
       const hasMonotonyStrainStatusChanged = this.derivedMonotonyStrainStatus !== state.monotonyStrainStatus;
+      const hasFormNowStatusChanged = this.derivedFormNowStatus !== state.formNowStatus;
+      const hasFormPlus7dStatusChanged = this.derivedFormPlus7dStatus !== state.formPlus7dStatus;
+      const hasEasyPercentStatusChanged = this.derivedEasyPercentStatus !== state.easyPercentStatus;
+      const hasHardPercentStatusChanged = this.derivedHardPercentStatus !== state.hardPercentStatus;
+      const hasEfficiencyDelta4wStatusChanged = this.derivedEfficiencyDelta4wStatus !== state.efficiencyDelta4wStatus;
       const hasFreshnessForecastStatusChanged = this.derivedFreshnessForecastStatus !== state.freshnessForecastStatus;
       const hasIntensityDistributionStatusChanged = this.derivedIntensityDistributionStatus !== state.intensityDistributionStatus;
       const hasEfficiencyTrendStatusChanged = this.derivedEfficiencyTrendStatus !== state.efficiencyTrendStatus;
@@ -442,6 +445,11 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         || hasAcwrStatusChanged
         || hasRampRateStatusChanged
         || hasMonotonyStrainStatusChanged
+        || hasFormNowStatusChanged
+        || hasFormPlus7dStatusChanged
+        || hasEasyPercentStatusChanged
+        || hasHardPercentStatusChanged
+        || hasEfficiencyDelta4wStatusChanged
         || hasFreshnessForecastStatusChanged
         || hasIntensityDistributionStatusChanged
         || hasEfficiencyTrendStatusChanged;
@@ -450,6 +458,11 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         || hasAcwrChanged
         || hasRampRateChanged
         || hasMonotonyStrainChanged
+        || hasFormNowChanged
+        || hasFormPlus7dChanged
+        || hasEasyPercentChanged
+        || hasHardPercentChanged
+        || hasEfficiencyDelta4wChanged
         || hasFreshnessForecastChanged
         || hasIntensityDistributionChanged
         || hasEfficiencyTrendChanged;
@@ -462,6 +475,11 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.derivedAcwrContext = state.acwr;
       this.derivedRampRateContext = state.rampRate;
       this.derivedMonotonyStrainContext = state.monotonyStrain;
+      this.derivedFormNowContext = state.formNow;
+      this.derivedFormPlus7dContext = state.formPlus7d;
+      this.derivedEasyPercentContext = state.easyPercent;
+      this.derivedHardPercentContext = state.hardPercent;
+      this.derivedEfficiencyDelta4wContext = state.efficiencyDelta4w;
       this.derivedFreshnessForecastContext = state.freshnessForecast;
       this.derivedIntensityDistributionContext = state.intensityDistribution;
       this.derivedEfficiencyTrendContext = state.efficiencyTrend;
@@ -470,6 +488,11 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.derivedAcwrStatus = state.acwrStatus;
       this.derivedRampRateStatus = state.rampRateStatus;
       this.derivedMonotonyStrainStatus = state.monotonyStrainStatus;
+      this.derivedFormNowStatus = state.formNowStatus;
+      this.derivedFormPlus7dStatus = state.formPlus7dStatus;
+      this.derivedEasyPercentStatus = state.easyPercentStatus;
+      this.derivedHardPercentStatus = state.hardPercentStatus;
+      this.derivedEfficiencyDelta4wStatus = state.efficiencyDelta4wStatus;
       this.derivedFreshnessForecastStatus = state.freshnessForecastStatus;
       this.derivedIntensityDistributionStatus = state.intensityDistributionStatus;
       this.derivedEfficiencyTrendStatus = state.efficiencyTrendStatus;
@@ -490,6 +513,36 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.appThemeSubscription.unsubscribe();
       this.appThemeSubscription = null;
     }
+  }
+
+  private resetDerivedMetricsState(): void {
+    this.derivedFormPoints = null;
+    this.derivedRecoveryNowContext = null;
+    this.derivedAcwrContext = null;
+    this.derivedRampRateContext = null;
+    this.derivedMonotonyStrainContext = null;
+    this.derivedFormNowContext = null;
+    this.derivedFormPlus7dContext = null;
+    this.derivedEasyPercentContext = null;
+    this.derivedHardPercentContext = null;
+    this.derivedEfficiencyDelta4wContext = null;
+    this.derivedFreshnessForecastContext = null;
+    this.derivedIntensityDistributionContext = null;
+    this.derivedEfficiencyTrendContext = null;
+    this.derivedFormStatus = 'missing';
+    this.derivedRecoveryNowStatus = 'missing';
+    this.derivedAcwrStatus = 'missing';
+    this.derivedRampRateStatus = 'missing';
+    this.derivedMonotonyStrainStatus = 'missing';
+    this.derivedFormNowStatus = 'missing';
+    this.derivedFormPlus7dStatus = 'missing';
+    this.derivedEasyPercentStatus = 'missing';
+    this.derivedHardPercentStatus = 'missing';
+    this.derivedEfficiencyDelta4wStatus = 'missing';
+    this.derivedFreshnessForecastStatus = 'missing';
+    this.derivedIntensityDistributionStatus = 'missing';
+    this.derivedEfficiencyTrendStatus = 'missing';
+    this.refreshDerivedMetricsBannerState();
   }
 
   private getDashboardTileSettingsSnapshot(): TileSettingsInterface[] {
@@ -572,6 +625,11 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       acwr: this.derivedAcwrContext,
       rampRate: this.derivedRampRateContext,
       monotonyStrain: this.derivedMonotonyStrainContext,
+      formNow: this.derivedFormNowContext,
+      formPlus7d: this.derivedFormPlus7dContext,
+      easyPercent: this.derivedEasyPercentContext,
+      hardPercent: this.derivedHardPercentContext,
+      efficiencyDelta4w: this.derivedEfficiencyDelta4wContext,
       freshnessForecast: this.derivedFreshnessForecastContext,
       intensityDistribution: this.derivedIntensityDistributionContext,
       efficiencyTrend: this.derivedEfficiencyTrendContext,
@@ -580,6 +638,11 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       acwrStatus: this.derivedAcwrStatus,
       rampRateStatus: this.derivedRampRateStatus,
       monotonyStrainStatus: this.derivedMonotonyStrainStatus,
+      formNowStatus: this.derivedFormNowStatus,
+      formPlus7dStatus: this.derivedFormPlus7dStatus,
+      easyPercentStatus: this.derivedEasyPercentStatus,
+      hardPercentStatus: this.derivedHardPercentStatus,
+      efficiencyDelta4wStatus: this.derivedEfficiencyDelta4wStatus,
       freshnessForecastStatus: this.derivedFreshnessForecastStatus,
       intensityDistributionStatus: this.derivedIntensityDistributionStatus,
       efficiencyTrendStatus: this.derivedEfficiencyTrendStatus,
@@ -710,6 +773,56 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     return this.derivedMonotonyStrainStatus;
   }
 
+  getFormNowStatusForTile(tile: DashboardTileViewModel | TileSettingsInterface): DashboardDerivedMetricStatus | null {
+    if (!isDashboardChartTileViewModel(tile)) {
+      return null;
+    }
+    if (!isDashboardFormNowKpiChartType(tile.chartType)) {
+      return null;
+    }
+    return this.derivedFormNowStatus;
+  }
+
+  getFormPlus7dStatusForTile(tile: DashboardTileViewModel | TileSettingsInterface): DashboardDerivedMetricStatus | null {
+    if (!isDashboardChartTileViewModel(tile)) {
+      return null;
+    }
+    if (!isDashboardFormPlus7dKpiChartType(tile.chartType)) {
+      return null;
+    }
+    return this.derivedFormPlus7dStatus;
+  }
+
+  getEasyPercentStatusForTile(tile: DashboardTileViewModel | TileSettingsInterface): DashboardDerivedMetricStatus | null {
+    if (!isDashboardChartTileViewModel(tile)) {
+      return null;
+    }
+    if (!isDashboardEasyPercentKpiChartType(tile.chartType)) {
+      return null;
+    }
+    return this.derivedEasyPercentStatus;
+  }
+
+  getHardPercentStatusForTile(tile: DashboardTileViewModel | TileSettingsInterface): DashboardDerivedMetricStatus | null {
+    if (!isDashboardChartTileViewModel(tile)) {
+      return null;
+    }
+    if (!isDashboardHardPercentKpiChartType(tile.chartType)) {
+      return null;
+    }
+    return this.derivedHardPercentStatus;
+  }
+
+  getEfficiencyDelta4wStatusForTile(tile: DashboardTileViewModel | TileSettingsInterface): DashboardDerivedMetricStatus | null {
+    if (!isDashboardChartTileViewModel(tile)) {
+      return null;
+    }
+    if (!isDashboardEfficiencyDelta4wKpiChartType(tile.chartType)) {
+      return null;
+    }
+    return this.derivedEfficiencyDelta4wStatus;
+  }
+
   getFreshnessForecastStatusForTile(tile: DashboardTileViewModel | TileSettingsInterface): DashboardDerivedMetricStatus | null {
     if (!isDashboardChartTileViewModel(tile)) {
       return null;
@@ -755,6 +868,21 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
     if (isDashboardMonotonyStrainKpiChartType(chartType)) {
       return this.derivedMonotonyStrainStatus;
+    }
+    if (isDashboardFormNowKpiChartType(chartType)) {
+      return this.derivedFormNowStatus;
+    }
+    if (isDashboardFormPlus7dKpiChartType(chartType)) {
+      return this.derivedFormPlus7dStatus;
+    }
+    if (isDashboardEasyPercentKpiChartType(chartType)) {
+      return this.derivedEasyPercentStatus;
+    }
+    if (isDashboardHardPercentKpiChartType(chartType)) {
+      return this.derivedHardPercentStatus;
+    }
+    if (isDashboardEfficiencyDelta4wKpiChartType(chartType)) {
+      return this.derivedEfficiencyDelta4wStatus;
     }
     if (isDashboardFreshnessForecastChartType(chartType)) {
       return this.derivedFreshnessForecastStatus;

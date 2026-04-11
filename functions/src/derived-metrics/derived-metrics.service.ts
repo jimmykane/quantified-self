@@ -31,10 +31,16 @@ import {
     DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS,
     DEFAULT_DERIVED_METRIC_KINDS,
     type DerivedAcwrMetricPayload,
+    type DerivedEasyPercentMetricPayload,
+    type DerivedEfficiencyDelta4wMetricPayload,
     type DerivedEfficiencyTrendMetricPayload,
     type DerivedFreshnessForecastMetricPayload,
     type DerivedIntensityDistributionMetricPayload,
     type DerivedFormMetricPayload,
+    type DerivedFormNowMetricPayload,
+    type DerivedFormPlus7dMetricPayload,
+    type DerivedHardPercentMetricPayload,
+    type DerivedKpiTrendPoint,
     type DerivedMetricKind,
     type DerivedMetricsCoordinator,
     type DerivedMonotonyStrainMetricPayload,
@@ -82,6 +88,8 @@ interface DerivedMetricBuildResult<TPayload> {
     payload: TPayload;
 }
 
+type DerivedMetricBuildSourceDependency = 'formDocs' | 'recoveryNowDocs';
+
 interface DerivedLoadPoint {
     dayMs: number;
     load: number;
@@ -100,6 +108,22 @@ export interface CompleteDerivedMetricsProcessingResult {
     requeued: boolean;
     nextGeneration: number | null;
     dirtyMetricKinds: DerivedMetricKind[];
+}
+
+interface DerivedMetricBuildExecutionContext {
+    nowMs: number;
+    formDocs: readonly FirestoreQueryDocumentSnapshot[];
+    recoveryNowDocs: readonly FirestoreQueryDocumentSnapshot[];
+    getDailyLoadContext: () => ReturnType<typeof buildDailyLoadContext>;
+    getDerivedLoadPoints: () => DerivedLoadPoint[];
+    getKpiDerivedLoadPoints: () => DerivedLoadPoint[];
+    getIntensityDistributionBuildResult: () => DerivedMetricBuildResult<DerivedIntensityDistributionMetricPayload>;
+    getEfficiencyTrendBuildResult: () => DerivedMetricBuildResult<DerivedEfficiencyTrendMetricPayload>;
+}
+
+interface DerivedMetricBuildDefinition {
+    sourceDependencies: readonly DerivedMetricBuildSourceDependency[];
+    build: (context: DerivedMetricBuildExecutionContext) => DerivedMetricBuildResult<unknown>;
 }
 
 function toSafeString(value: unknown): string {
@@ -456,6 +480,51 @@ function takeLatestTrendWeeks<T extends { weekStartMs: number }>(points: readonl
     return points.slice(Math.max(0, points.length - HISTORY_TREND_WEEKS));
 }
 
+function buildWeeklyKpiTrendFromDailyPoints(
+    points: readonly DerivedLoadPoint[],
+    valueSelector: (point: DerivedLoadPoint) => number | null,
+): DerivedKpiTrendPoint[] {
+    if (!points.length) {
+        return [];
+    }
+
+    const trendByWeek = new Map<number, DerivedKpiTrendPoint>();
+    points.forEach((point) => {
+        const rawValue = valueSelector(point);
+        trendByWeek.set(resolveUtcWeekStartMs(point.dayMs), {
+            weekStartMs: resolveUtcWeekStartMs(point.dayMs),
+            value: rawValue === null ? null : toRoundedNumber(rawValue, 4),
+        });
+    });
+
+    return takeLatestTrendWeeks(
+        [...trendByWeek.values()].sort((left, right) => left.weekStartMs - right.weekStartMs),
+    );
+}
+
+function projectPriorDayFormWithZeroLoad(
+    ctl: number,
+    atl: number,
+    projectionDays: number,
+): number {
+    if (!Number.isFinite(ctl) || !Number.isFinite(atl) || projectionDays <= 0) {
+        return ctl - atl;
+    }
+
+    let previousCtl = ctl;
+    let previousAtl = atl;
+    let projectedPriorDayForm = previousCtl - previousAtl;
+    for (let dayOffset = 1; dayOffset <= projectionDays; dayOffset += 1) {
+        const nextCtl = previousCtl + ((0 - previousCtl) / CTL_TIME_CONSTANT_DAYS);
+        const nextAtl = previousAtl + ((0 - previousAtl) / ATL_TIME_CONSTANT_DAYS);
+        projectedPriorDayForm = previousCtl - previousAtl;
+        previousCtl = nextCtl;
+        previousAtl = nextAtl;
+    }
+
+    return projectedPriorDayForm;
+}
+
 function buildFormMetricPayload(
     dailyLoadContext: ReturnType<typeof buildDailyLoadContext>,
 ): DerivedMetricBuildResult<DerivedFormMetricPayload> {
@@ -637,6 +706,69 @@ function buildMonotonyStrainMetricPayload(
     };
 }
 
+function buildFormNowMetricPayload(
+    points: readonly DerivedLoadPoint[],
+    sourceEventCount: number,
+): DerivedMetricBuildResult<DerivedFormNowMetricPayload> {
+    if (!points.length) {
+        return {
+            sourceEventCount,
+            payload: {
+                dayBoundary: 'UTC',
+                latestDayMs: null,
+                value: null,
+                trend8Weeks: [],
+            },
+        };
+    }
+
+    const latestPoint = points[points.length - 1];
+    return {
+        sourceEventCount,
+        payload: {
+            dayBoundary: 'UTC',
+            latestDayMs: latestPoint.dayMs,
+            value: latestPoint.formPriorDay === null ? null : toRoundedNumber(latestPoint.formPriorDay, 4),
+            trend8Weeks: buildWeeklyKpiTrendFromDailyPoints(points, (point) => point.formPriorDay),
+        },
+    };
+}
+
+function buildFormPlus7dMetricPayload(
+    points: readonly DerivedLoadPoint[],
+    sourceEventCount: number,
+): DerivedMetricBuildResult<DerivedFormPlus7dMetricPayload> {
+    if (!points.length) {
+        return {
+            sourceEventCount,
+            payload: {
+                dayBoundary: 'UTC',
+                latestDayMs: null,
+                projectedDayMs: null,
+                value: null,
+                trend8Weeks: [],
+            },
+        };
+    }
+
+    const latestPoint = points[points.length - 1];
+    // Form +7d uses the same prior-day TSB semantics as Form Now, projected 7 days
+    // ahead by decaying CTL/ATL with zero load.
+    const latestProjection = projectPriorDayFormWithZeroLoad(latestPoint.ctl, latestPoint.atl, 7);
+    return {
+        sourceEventCount,
+        payload: {
+            dayBoundary: 'UTC',
+            latestDayMs: latestPoint.dayMs,
+            projectedDayMs: latestPoint.dayMs + (7 * DAY_MS),
+            value: toRoundedNumber(latestProjection, 4),
+            trend8Weeks: buildWeeklyKpiTrendFromDailyPoints(points, (point) => (
+                projectPriorDayFormWithZeroLoad(point.ctl, point.atl, 7)
+            )),
+        },
+    };
+}
+
 function buildFreshnessForecastMetricPayload(
     points: readonly DerivedLoadPoint[],
     sourceEventCount: number,
@@ -782,6 +914,64 @@ function buildIntensityDistributionMetricPayload(
     };
 }
 
+function buildEasyPercentMetricPayload(
+    intensityPayload: DerivedIntensityDistributionMetricPayload,
+    sourceEventCount: number,
+): DerivedMetricBuildResult<DerivedEasyPercentMetricPayload> {
+    const trend8Weeks = takeLatestTrendWeeks(
+        intensityPayload.weeks
+            .map((week) => {
+                const totalSeconds = week.easySeconds + week.moderateSeconds + week.hardSeconds;
+                return {
+                    weekStartMs: week.weekStartMs,
+                    value: totalSeconds > 0 ? toRoundedNumber((week.easySeconds / totalSeconds) * 100, 2) : null,
+                };
+            })
+            .sort((left, right) => left.weekStartMs - right.weekStartMs),
+    );
+
+    return {
+        sourceEventCount,
+        payload: {
+            dayBoundary: 'UTC',
+            latestWeekStartMs: intensityPayload.latestWeekStartMs,
+            value: intensityPayload.latestEasyPercent === null
+                ? null
+                : toRoundedNumber(intensityPayload.latestEasyPercent, 2),
+            trend8Weeks,
+        },
+    };
+}
+
+function buildHardPercentMetricPayload(
+    intensityPayload: DerivedIntensityDistributionMetricPayload,
+    sourceEventCount: number,
+): DerivedMetricBuildResult<DerivedHardPercentMetricPayload> {
+    const trend8Weeks = takeLatestTrendWeeks(
+        intensityPayload.weeks
+            .map((week) => {
+                const totalSeconds = week.easySeconds + week.moderateSeconds + week.hardSeconds;
+                return {
+                    weekStartMs: week.weekStartMs,
+                    value: totalSeconds > 0 ? toRoundedNumber((week.hardSeconds / totalSeconds) * 100, 2) : null,
+                };
+            })
+            .sort((left, right) => left.weekStartMs - right.weekStartMs),
+    );
+
+    return {
+        sourceEventCount,
+        payload: {
+            dayBoundary: 'UTC',
+            latestWeekStartMs: intensityPayload.latestWeekStartMs,
+            value: intensityPayload.latestHardPercent === null
+                ? null
+                : toRoundedNumber(intensityPayload.latestHardPercent, 2),
+            trend8Weeks,
+        },
+    };
+}
+
 function buildEfficiencyTrendMetricPayload(
     docs: readonly FirestoreQueryDocumentSnapshot[],
 ): DerivedMetricBuildResult<DerivedEfficiencyTrendMetricPayload> {
@@ -840,6 +1030,53 @@ function buildEfficiencyTrendMetricPayload(
             points,
             latestWeekStartMs: latestPoint?.weekStartMs ?? null,
             latestValue: latestPoint ? latestPoint.value : null,
+        },
+    };
+}
+
+function buildEfficiencyDelta4wMetricPayload(
+    efficiencyPayload: DerivedEfficiencyTrendMetricPayload,
+    sourceEventCount: number,
+): DerivedMetricBuildResult<DerivedEfficiencyDelta4wMetricPayload> {
+    const sortedPoints = [...(efficiencyPayload.points || [])]
+        .sort((left, right) => left.weekStartMs - right.weekStartMs);
+    const latestPoint = sortedPoints.length ? sortedPoints[sortedPoints.length - 1] : null;
+    // Compare the latest weekly efficiency value against up to 4 previous weeks.
+    const baselineWindow = latestPoint
+        ? sortedPoints.slice(Math.max(0, sortedPoints.length - 5), sortedPoints.length - 1)
+        : [];
+    const baselineValues = baselineWindow
+        .map((point) => toFinitePositiveNumber(point.value))
+        .filter((value): value is number => value !== null);
+    const baselineValue = baselineValues.length
+        ? (baselineValues.reduce((sum, value) => sum + value, 0) / baselineValues.length)
+        : null;
+    const latestValue = latestPoint?.value ?? null;
+    const deltaAbs = baselineValue !== null && latestValue !== null
+        ? latestValue - baselineValue
+        : null;
+    const deltaPct = baselineValue !== null
+        && baselineValue > 0
+        && deltaAbs !== null
+        ? (deltaAbs / baselineValue) * 100
+        : null;
+
+    return {
+        sourceEventCount,
+        payload: {
+            dayBoundary: 'UTC',
+            latestWeekStartMs: latestPoint?.weekStartMs ?? null,
+            latestValue: latestValue === null ? null : toRoundedNumber(latestValue, 4),
+            baselineValue: baselineValue === null ? null : toRoundedNumber(baselineValue, 4),
+            baselineWeekCount: baselineValues.length,
+            deltaAbs: deltaAbs === null ? null : toRoundedNumber(deltaAbs, 4),
+            deltaPct: deltaPct === null ? null : toRoundedNumber(deltaPct, 2),
+            trend8Weeks: takeLatestTrendWeeks(
+                sortedPoints.map((point) => ({
+                    weekStartMs: point.weekStartMs,
+                    value: toRoundedNumber(point.value, 4),
+                })),
+            ),
         },
     };
 }
@@ -908,6 +1145,195 @@ function buildRecoveryNowMetricPayload(
             maxSupportedRecoverySeconds: DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS,
             lookbackWindowSeconds: DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS,
         },
+    };
+}
+
+// Metric registry is the single extension point for derived builds:
+// add a new kind here with source dependencies and a builder callback.
+const DERIVED_METRIC_BUILD_REGISTRY: Record<DerivedMetricKind, DerivedMetricBuildDefinition> = {
+    [DERIVED_METRIC_KINDS.Form]: {
+        sourceDependencies: ['formDocs'],
+        build: (context) => buildFormMetricPayload(context.getDailyLoadContext()),
+    },
+    [DERIVED_METRIC_KINDS.RecoveryNow]: {
+        sourceDependencies: ['recoveryNowDocs'],
+        build: (context) => buildRecoveryNowMetricPayload(context.recoveryNowDocs),
+    },
+    [DERIVED_METRIC_KINDS.Acwr]: {
+        sourceDependencies: ['formDocs'],
+        build: (context) => {
+            const dailyLoadContext = context.getDailyLoadContext();
+            return buildAcwrMetricPayload(context.getKpiDerivedLoadPoints(), dailyLoadContext.sourceEventCount);
+        },
+    },
+    [DERIVED_METRIC_KINDS.RampRate]: {
+        sourceDependencies: ['formDocs'],
+        build: (context) => {
+            const dailyLoadContext = context.getDailyLoadContext();
+            return buildRampRateMetricPayload(context.getKpiDerivedLoadPoints(), dailyLoadContext.sourceEventCount);
+        },
+    },
+    [DERIVED_METRIC_KINDS.MonotonyStrain]: {
+        sourceDependencies: ['formDocs'],
+        build: (context) => {
+            const dailyLoadContext = context.getDailyLoadContext();
+            return buildMonotonyStrainMetricPayload(context.getKpiDerivedLoadPoints(), dailyLoadContext.sourceEventCount);
+        },
+    },
+    [DERIVED_METRIC_KINDS.FormNow]: {
+        sourceDependencies: ['formDocs'],
+        build: (context) => {
+            const dailyLoadContext = context.getDailyLoadContext();
+            return buildFormNowMetricPayload(context.getKpiDerivedLoadPoints(), dailyLoadContext.sourceEventCount);
+        },
+    },
+    [DERIVED_METRIC_KINDS.FormPlus7d]: {
+        sourceDependencies: ['formDocs'],
+        build: (context) => {
+            const dailyLoadContext = context.getDailyLoadContext();
+            return buildFormPlus7dMetricPayload(context.getKpiDerivedLoadPoints(), dailyLoadContext.sourceEventCount);
+        },
+    },
+    [DERIVED_METRIC_KINDS.EasyPercent]: {
+        sourceDependencies: ['formDocs'],
+        build: (context) => {
+            const distributionBuildResult = context.getIntensityDistributionBuildResult();
+            return buildEasyPercentMetricPayload(distributionBuildResult.payload, distributionBuildResult.sourceEventCount);
+        },
+    },
+    [DERIVED_METRIC_KINDS.HardPercent]: {
+        sourceDependencies: ['formDocs'],
+        build: (context) => {
+            const distributionBuildResult = context.getIntensityDistributionBuildResult();
+            return buildHardPercentMetricPayload(distributionBuildResult.payload, distributionBuildResult.sourceEventCount);
+        },
+    },
+    [DERIVED_METRIC_KINDS.EfficiencyDelta4w]: {
+        sourceDependencies: ['formDocs'],
+        build: (context) => {
+            const efficiencyTrendBuildResult = context.getEfficiencyTrendBuildResult();
+            return buildEfficiencyDelta4wMetricPayload(
+                efficiencyTrendBuildResult.payload,
+                efficiencyTrendBuildResult.sourceEventCount,
+            );
+        },
+    },
+    [DERIVED_METRIC_KINDS.FreshnessForecast]: {
+        sourceDependencies: ['formDocs'],
+        build: (context) => {
+            const dailyLoadContext = context.getDailyLoadContext();
+            return buildFreshnessForecastMetricPayload(context.getDerivedLoadPoints(), dailyLoadContext.sourceEventCount);
+        },
+    },
+    [DERIVED_METRIC_KINDS.IntensityDistribution]: {
+        sourceDependencies: ['formDocs'],
+        build: (context) => context.getIntensityDistributionBuildResult(),
+    },
+    [DERIVED_METRIC_KINDS.EfficiencyTrend]: {
+        sourceDependencies: ['formDocs'],
+        build: (context) => context.getEfficiencyTrendBuildResult(),
+    },
+};
+
+function createDerivedMetricBuildExecutionContext(
+    sourceDocs: {
+        formDocs?: readonly FirestoreQueryDocumentSnapshot[];
+        recoveryNowDocs?: readonly FirestoreQueryDocumentSnapshot[];
+    },
+    nowMs: number,
+): DerivedMetricBuildExecutionContext {
+    const formDocs = sourceDocs.formDocs || [];
+    const recoveryNowDocs = sourceDocs.recoveryNowDocs || [];
+
+    let dailyLoadContextCache: ReturnType<typeof buildDailyLoadContext> | null = null;
+    let derivedLoadPointsCache: DerivedLoadPoint[] | null = null;
+    let kpiDerivedLoadPointsCache: DerivedLoadPoint[] | null = null;
+    let intensityDistributionBuildResultCache: DerivedMetricBuildResult<DerivedIntensityDistributionMetricPayload> | null = null;
+    let efficiencyTrendBuildResultCache: DerivedMetricBuildResult<DerivedEfficiencyTrendMetricPayload> | null = null;
+
+    const getDailyLoadContext = (): ReturnType<typeof buildDailyLoadContext> => {
+        if (dailyLoadContextCache) {
+            return dailyLoadContextCache;
+        }
+        dailyLoadContextCache = buildDailyLoadContext(formDocs);
+        return dailyLoadContextCache;
+    };
+
+    const getDerivedLoadPoints = (): DerivedLoadPoint[] => {
+        if (derivedLoadPointsCache) {
+            return derivedLoadPointsCache;
+        }
+        const dailyLoadContext = getDailyLoadContext();
+        derivedLoadPointsCache = buildDerivedLoadPoints(dailyLoadContext.dailyLoadsByUtcDay);
+        return derivedLoadPointsCache;
+    };
+
+    const getKpiDerivedLoadPoints = (): DerivedLoadPoint[] => {
+        if (kpiDerivedLoadPointsCache) {
+            return kpiDerivedLoadPointsCache;
+        }
+        const dailyLoadContext = getDailyLoadContext();
+        // KPI metrics should reflect the current training state, so we extend daily load
+        // with zero-load days up to "today" while keeping source event counts untouched.
+        kpiDerivedLoadPointsCache = buildDerivedLoadPoints(dailyLoadContext.dailyLoadsByUtcDay, {
+            endDayMs: resolveUtcDayStartMs(nowMs),
+        });
+        return kpiDerivedLoadPointsCache;
+    };
+
+    const getIntensityDistributionBuildResult = (): DerivedMetricBuildResult<DerivedIntensityDistributionMetricPayload> => {
+        if (intensityDistributionBuildResultCache) {
+            return intensityDistributionBuildResultCache;
+        }
+        intensityDistributionBuildResultCache = buildIntensityDistributionMetricPayload(formDocs);
+        return intensityDistributionBuildResultCache;
+    };
+
+    const getEfficiencyTrendBuildResult = (): DerivedMetricBuildResult<DerivedEfficiencyTrendMetricPayload> => {
+        if (efficiencyTrendBuildResultCache) {
+            return efficiencyTrendBuildResultCache;
+        }
+        efficiencyTrendBuildResultCache = buildEfficiencyTrendMetricPayload(formDocs);
+        return efficiencyTrendBuildResultCache;
+    };
+
+    return {
+        nowMs,
+        formDocs,
+        recoveryNowDocs,
+        getDailyLoadContext,
+        getDerivedLoadPoints,
+        getKpiDerivedLoadPoints,
+        getIntensityDistributionBuildResult,
+        getEfficiencyTrendBuildResult,
+    };
+}
+
+export function resolveDerivedMetricSourceRequirements(
+    metricKinds: readonly DerivedMetricKind[],
+): {
+    needsFormDocs: boolean;
+    needsRecoveryNowDocs: boolean;
+} {
+    let needsFormDocs = false;
+    let needsRecoveryNowDocs = false;
+
+    metricKinds.forEach((metricKind) => {
+        const definition = DERIVED_METRIC_BUILD_REGISTRY[metricKind];
+        if (!definition) {
+            return;
+        }
+        if (definition.sourceDependencies.includes('formDocs')) {
+            needsFormDocs = true;
+        }
+        if (definition.sourceDependencies.includes('recoveryNowDocs')) {
+            needsRecoveryNowDocs = true;
+        }
+    });
+
+    return {
+        needsFormDocs,
+        needsRecoveryNowDocs,
     };
 }
 
@@ -1299,26 +1725,7 @@ export async function writeDerivedMetricSnapshotsReady(
 ): Promise<void> {
     const nowMs = Date.now();
     const batch = admin.firestore().batch();
-    const formDocs = sourceDocs.formDocs || [];
-    const recoveryNowDocs = sourceDocs.recoveryNowDocs || [];
-    const requiresDailyLoadContext = metricKinds.some((metricKind) => (
-        metricKind === DERIVED_METRIC_KINDS.Form
-        || metricKind === DERIVED_METRIC_KINDS.Acwr
-        || metricKind === DERIVED_METRIC_KINDS.RampRate
-        || metricKind === DERIVED_METRIC_KINDS.MonotonyStrain
-        || metricKind === DERIVED_METRIC_KINDS.FreshnessForecast
-    ));
-    const dailyLoadContext = requiresDailyLoadContext
-        ? buildDailyLoadContext(formDocs)
-        : null;
-    const derivedLoadPoints = dailyLoadContext
-        ? buildDerivedLoadPoints(dailyLoadContext.dailyLoadsByUtcDay)
-        : [];
-    // KPI metrics should reflect the current training state, so we extend daily load
-    // with zero-load days up to "today" while keeping source event counts untouched.
-    const kpiDerivedLoadPoints = dailyLoadContext
-        ? buildDerivedLoadPoints(dailyLoadContext.dailyLoadsByUtcDay, { endDayMs: resolveUtcDayStartMs(nowMs) })
-        : [];
+    const buildContext = createDerivedMetricBuildExecutionContext(sourceDocs, nowMs);
 
     const persistBuildResult = <TPayload>(
         metricKind: DerivedMetricKind,
@@ -1337,52 +1744,12 @@ export async function writeDerivedMetricSnapshotsReady(
     };
 
     metricKinds.forEach((metricKind) => {
-        if (metricKind === DERIVED_METRIC_KINDS.Form) {
-            const buildResult = buildFormMetricPayload(dailyLoadContext || buildDailyLoadContext(formDocs));
-            persistBuildResult(metricKind, buildResult);
+        const definition = DERIVED_METRIC_BUILD_REGISTRY[metricKind];
+        if (!definition) {
             return;
         }
-
-        if (metricKind === DERIVED_METRIC_KINDS.Acwr) {
-            const buildResult = buildAcwrMetricPayload(kpiDerivedLoadPoints, dailyLoadContext?.sourceEventCount || 0);
-            persistBuildResult(metricKind, buildResult);
-            return;
-        }
-
-        if (metricKind === DERIVED_METRIC_KINDS.RampRate) {
-            const buildResult = buildRampRateMetricPayload(kpiDerivedLoadPoints, dailyLoadContext?.sourceEventCount || 0);
-            persistBuildResult(metricKind, buildResult);
-            return;
-        }
-
-        if (metricKind === DERIVED_METRIC_KINDS.MonotonyStrain) {
-            const buildResult = buildMonotonyStrainMetricPayload(kpiDerivedLoadPoints, dailyLoadContext?.sourceEventCount || 0);
-            persistBuildResult(metricKind, buildResult);
-            return;
-        }
-
-        if (metricKind === DERIVED_METRIC_KINDS.FreshnessForecast) {
-            const buildResult = buildFreshnessForecastMetricPayload(derivedLoadPoints, dailyLoadContext?.sourceEventCount || 0);
-            persistBuildResult(metricKind, buildResult);
-            return;
-        }
-
-        if (metricKind === DERIVED_METRIC_KINDS.IntensityDistribution) {
-            const buildResult = buildIntensityDistributionMetricPayload(formDocs);
-            persistBuildResult(metricKind, buildResult);
-            return;
-        }
-
-        if (metricKind === DERIVED_METRIC_KINDS.EfficiencyTrend) {
-            const buildResult = buildEfficiencyTrendMetricPayload(formDocs);
-            persistBuildResult(metricKind, buildResult);
-            return;
-        }
-
-        if (metricKind === DERIVED_METRIC_KINDS.RecoveryNow) {
-            const buildResult = buildRecoveryNowMetricPayload(recoveryNowDocs);
-            persistBuildResult(metricKind, buildResult);
-        }
+        const buildResult = definition.build(buildContext);
+        persistBuildResult(metricKind, buildResult);
     });
 
     await batch.commit();

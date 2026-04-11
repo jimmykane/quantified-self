@@ -35,17 +35,23 @@ const hoisted = vi.hoisted(() => ({
     writeDerivedMetricSnapshotsReady: vi.fn(),
 }));
 
-vi.mock('../derived-metrics/derived-metrics.service', () => ({
-    completeDerivedMetricsProcessing: hoisted.completeDerivedMetricsProcessing,
-    failDerivedMetricsProcessing: hoisted.failDerivedMetricsProcessing,
-    fetchDerivedMetricsEventDocs: hoisted.fetchDerivedMetricsEventDocs,
-    fetchRecoveryLookbackEventDocs: hoisted.fetchRecoveryLookbackEventDocs,
-    getDerivedRecoveryLookbackWindowSeconds: hoisted.getDerivedRecoveryLookbackWindowSeconds,
-    markDerivedMetricSnapshotsBuilding: hoisted.markDerivedMetricSnapshotsBuilding,
-    markDerivedMetricSnapshotsFailed: hoisted.markDerivedMetricSnapshotsFailed,
-    startDerivedMetricsProcessing: hoisted.startDerivedMetricsProcessing,
-    writeDerivedMetricSnapshotsReady: hoisted.writeDerivedMetricSnapshotsReady,
-}));
+vi.mock('../derived-metrics/derived-metrics.service', async () => {
+    const actual = await vi.importActual<typeof import('../derived-metrics/derived-metrics.service')>(
+        '../derived-metrics/derived-metrics.service',
+    );
+    return {
+        ...actual,
+        completeDerivedMetricsProcessing: hoisted.completeDerivedMetricsProcessing,
+        failDerivedMetricsProcessing: hoisted.failDerivedMetricsProcessing,
+        fetchDerivedMetricsEventDocs: hoisted.fetchDerivedMetricsEventDocs,
+        fetchRecoveryLookbackEventDocs: hoisted.fetchRecoveryLookbackEventDocs,
+        getDerivedRecoveryLookbackWindowSeconds: hoisted.getDerivedRecoveryLookbackWindowSeconds,
+        markDerivedMetricSnapshotsBuilding: hoisted.markDerivedMetricSnapshotsBuilding,
+        markDerivedMetricSnapshotsFailed: hoisted.markDerivedMetricSnapshotsFailed,
+        startDerivedMetricsProcessing: hoisted.startDerivedMetricsProcessing,
+        writeDerivedMetricSnapshotsReady: hoisted.writeDerivedMetricSnapshotsReady,
+    };
+});
 
 import { processDerivedMetricsTask } from './derived-metrics-worker';
 
@@ -106,6 +112,30 @@ describe('processDerivedMetricsTask', () => {
             DERIVED_METRIC_KINDS.Acwr,
         ], {
             formDocs: [{ id: 'tss-doc' }],
+            recoveryNowDocs: [],
+        });
+    });
+
+    it('queries full event docs for new KPI derived kinds', async () => {
+        hoisted.startDerivedMetricsProcessing.mockResolvedValueOnce({
+            dirtyMetricKinds: [DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.EasyPercent],
+            startedAtMs: Date.now(),
+        });
+        hoisted.fetchDerivedMetricsEventDocs.mockResolvedValueOnce([{ id: 'kpi-doc' }] as any);
+
+        await (processDerivedMetricsTask as any)({
+            data: {
+                uid: 'user-3',
+                generation: 14,
+            },
+        });
+
+        expect(hoisted.fetchDerivedMetricsEventDocs).toHaveBeenCalledWith('user-3');
+        expect(hoisted.writeDerivedMetricSnapshotsReady).toHaveBeenCalledWith('user-3', [
+            DERIVED_METRIC_KINDS.FormNow,
+            DERIVED_METRIC_KINDS.EasyPercent,
+        ], {
+            formDocs: [{ id: 'kpi-doc' }],
             recoveryNowDocs: [],
         });
     });

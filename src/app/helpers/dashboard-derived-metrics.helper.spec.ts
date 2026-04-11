@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  resolveDashboardEasyPercentContext,
+  resolveDashboardEfficiencyDelta4wContext,
   resolveDashboardAcwrContext,
   resolveDashboardEfficiencyTrendContext,
   resolveDashboardFreshnessForecastContext,
+  resolveDashboardFormNowContext,
+  resolveDashboardFormPlus7dContext,
+  resolveDashboardHardPercentContext,
   resolveDashboardIntensityDistributionContext,
   resolveDashboardMonotonyStrainContext,
   resolveDashboardRampRateContext,
@@ -89,5 +94,52 @@ describe('dashboard-derived-metrics.helper', () => {
     expect(freshness?.points).toHaveLength(1);
     expect(intensity?.weeks[0].source).toBe('power');
     expect(efficiency?.latestValue).toBe(1.92);
+  });
+
+  it('normalizes readiness and execution KPI payload contexts', () => {
+    const formNow = resolveDashboardFormNowContext({
+      latestDayMs: Date.UTC(2026, 0, 10),
+      value: -3.2,
+      trend8Weeks: [{ weekStartMs: Date.UTC(2025, 11, 1), value: -1.3 }],
+    });
+    const formPlus7d = resolveDashboardFormPlus7dContext({
+      latestDayMs: Date.UTC(2026, 0, 10),
+      projectedDayMs: Date.UTC(2026, 0, 17),
+      value: 2.9,
+      trend8Weeks: [{ weekStartMs: Date.UTC(2025, 11, 1), value: 1.1 }],
+    });
+    const easyPercent = resolveDashboardEasyPercentContext({
+      latestWeekStartMs: Date.UTC(2026, 0, 5),
+      value: 66,
+      trend8Weeks: [{ weekStartMs: Date.UTC(2025, 11, 1), value: 62 }],
+    });
+    const hardPercent = resolveDashboardHardPercentContext({
+      latestWeekStartMs: Date.UTC(2026, 0, 5),
+      value: 14,
+      trend8Weeks: [{ weekStartMs: Date.UTC(2025, 11, 1), value: 12 }],
+    });
+
+    expect(formNow?.value).toBe(-3.2);
+    expect(formNow?.trend8Weeks[0]).toEqual({ time: Date.UTC(2025, 11, 1), value: -1.3 });
+    expect(formPlus7d?.projectedDayMs).toBe(Date.UTC(2026, 0, 17));
+    expect(easyPercent?.value).toBe(66);
+    expect(hardPercent?.value).toBe(14);
+  });
+
+  it('normalizes efficiency delta payload context', () => {
+    const context = resolveDashboardEfficiencyDelta4wContext({
+      latestWeekStartMs: Date.UTC(2026, 0, 5),
+      latestValue: 1.92,
+      baselineValue: 1.84,
+      baselineWeekCount: 4,
+      deltaAbs: 0.08,
+      deltaPct: 4.35,
+      trend8Weeks: [{ weekStartMs: Date.UTC(2025, 11, 1), value: 1.7 }],
+    });
+
+    expect(context?.deltaAbs).toBe(0.08);
+    expect(context?.deltaPct).toBe(4.35);
+    expect(context?.baselineWeekCount).toBe(4);
+    expect(context?.trend8Weeks[0]).toEqual({ time: Date.UTC(2025, 11, 1), value: 1.7 });
   });
 });

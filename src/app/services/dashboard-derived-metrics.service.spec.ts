@@ -43,6 +43,11 @@ describe('DashboardDerivedMetricsService', () => {
     acwr: null,
     rampRate: null,
     monotonyStrain: null,
+    formNow: null,
+    formPlus7d: null,
+    easyPercent: null,
+    hardPercent: null,
+    efficiencyDelta4w: null,
     freshnessForecast: null,
     intensityDistribution: null,
     efficiencyTrend: null,
@@ -51,6 +56,11 @@ describe('DashboardDerivedMetricsService', () => {
     acwrStatus: 'missing',
     rampRateStatus: 'missing',
     monotonyStrainStatus: 'missing',
+    formNowStatus: 'missing',
+    formPlus7dStatus: 'missing',
+    easyPercentStatus: 'missing',
+    hardPercentStatus: 'missing',
+    efficiencyDelta4wStatus: 'missing',
     freshnessForecastStatus: 'missing',
     intensityDistributionStatus: 'missing',
     efficiencyTrendStatus: 'missing',
@@ -128,12 +138,17 @@ describe('DashboardDerivedMetricsService', () => {
 
     expect(doc).toHaveBeenNthCalledWith(1, {}, 'users', uid, DERIVED_METRICS_COLLECTION_ID, getDerivedMetricDocId(DERIVED_METRIC_KINDS.Form));
     expect(doc).toHaveBeenNthCalledWith(2, {}, 'users', uid, DERIVED_METRICS_COLLECTION_ID, getDerivedMetricDocId(DERIVED_METRIC_KINDS.RecoveryNow));
-    expect(doc).toHaveBeenCalledTimes(8);
+    expect(doc).toHaveBeenCalledTimes(13);
     expect(state.formStatus).toBe('ready');
     expect(state.recoveryNowStatus).toBe('ready');
     expect(state.acwrStatus).toBe('missing');
     expect(state.rampRateStatus).toBe('missing');
     expect(state.monotonyStrainStatus).toBe('missing');
+    expect(state.formNowStatus).toBe('missing');
+    expect(state.formPlus7dStatus).toBe('missing');
+    expect(state.easyPercentStatus).toBe('missing');
+    expect(state.hardPercentStatus).toBe('missing');
+    expect(state.efficiencyDelta4wStatus).toBe('missing');
     expect(state.freshnessForecastStatus).toBe('missing');
     expect(state.intensityDistributionStatus).toBe('missing');
     expect(state.efficiencyTrendStatus).toBe('missing');
@@ -223,6 +238,11 @@ describe('DashboardDerivedMetricsService', () => {
         DERIVED_METRIC_KINDS.Acwr,
         DERIVED_METRIC_KINDS.RampRate,
         DERIVED_METRIC_KINDS.MonotonyStrain,
+        DERIVED_METRIC_KINDS.FormNow,
+        DERIVED_METRIC_KINDS.FormPlus7d,
+        DERIVED_METRIC_KINDS.EasyPercent,
+        DERIVED_METRIC_KINDS.HardPercent,
+        DERIVED_METRIC_KINDS.EfficiencyDelta4w,
         DERIVED_METRIC_KINDS.FreshnessForecast,
         DERIVED_METRIC_KINDS.IntensityDistribution,
         DERIVED_METRIC_KINDS.EfficiencyTrend,
@@ -252,6 +272,11 @@ describe('DashboardDerivedMetricsService', () => {
         DERIVED_METRIC_KINDS.Acwr,
         DERIVED_METRIC_KINDS.RampRate,
         DERIVED_METRIC_KINDS.MonotonyStrain,
+        DERIVED_METRIC_KINDS.FormNow,
+        DERIVED_METRIC_KINDS.FormPlus7d,
+        DERIVED_METRIC_KINDS.EasyPercent,
+        DERIVED_METRIC_KINDS.HardPercent,
+        DERIVED_METRIC_KINDS.EfficiencyDelta4w,
         DERIVED_METRIC_KINDS.FreshnessForecast,
         DERIVED_METRIC_KINDS.IntensityDistribution,
         DERIVED_METRIC_KINDS.EfficiencyTrend,
@@ -272,6 +297,11 @@ describe('DashboardDerivedMetricsService', () => {
       acwrStatus: 'ready',
       rampRateStatus: 'ready',
       monotonyStrainStatus: 'ready',
+      formNowStatus: 'ready',
+      formPlus7dStatus: 'ready',
+      easyPercentStatus: 'ready',
+      hardPercentStatus: 'ready',
+      efficiencyDelta4wStatus: 'ready',
       freshnessForecastStatus: 'ready',
       intensityDistributionStatus: 'ready',
       efficiencyTrendStatus: 'ready',
@@ -290,6 +320,11 @@ describe('DashboardDerivedMetricsService', () => {
       acwrStatus: 'ready',
       rampRateStatus: 'ready',
       monotonyStrainStatus: 'ready',
+      formNowStatus: 'ready',
+      formPlus7dStatus: 'ready',
+      easyPercentStatus: 'ready',
+      hardPercentStatus: 'ready',
+      efficiencyDelta4wStatus: 'ready',
       freshnessForecastStatus: 'ready',
       intensityDistributionStatus: 'ready',
       efficiencyTrendStatus: 'ready',
@@ -310,6 +345,11 @@ describe('DashboardDerivedMetricsService', () => {
       acwrStatus: 'ready',
       rampRateStatus: 'ready',
       monotonyStrainStatus: 'ready',
+      formNowStatus: 'ready',
+      formPlus7dStatus: 'ready',
+      easyPercentStatus: 'ready',
+      hardPercentStatus: 'ready',
+      efficiencyDelta4wStatus: 'ready',
       freshnessForecastStatus: 'ready',
       intensityDistributionStatus: 'ready',
       efficiencyTrendStatus: 'ready',
@@ -332,6 +372,11 @@ describe('DashboardDerivedMetricsService', () => {
       acwrStatus: 'ready',
       rampRateStatus: 'ready',
       monotonyStrainStatus: 'ready',
+      formNowStatus: 'ready',
+      formPlus7dStatus: 'ready',
+      easyPercentStatus: 'ready',
+      hardPercentStatus: 'ready',
+      efficiencyDelta4wStatus: 'ready',
       freshnessForecastStatus: 'ready',
       intensityDistributionStatus: 'ready',
       efficiencyTrendStatus: 'ready',
@@ -356,6 +401,11 @@ describe('DashboardDerivedMetricsService', () => {
       acwrStatus: 'ready',
       rampRateStatus: 'ready',
       monotonyStrainStatus: 'ready',
+      formNowStatus: 'ready',
+      formPlus7dStatus: 'ready',
+      easyPercentStatus: 'ready',
+      hardPercentStatus: 'ready',
+      efficiencyDelta4wStatus: 'ready',
       freshnessForecastStatus: 'ready',
       intensityDistributionStatus: 'ready',
       efficiencyTrendStatus: 'ready',
@@ -385,8 +435,7 @@ describe('DashboardDerivedMetricsService', () => {
       .mockRejectedValueOnce(new Error('third call failure'));
 
     const state: DashboardDerivedMetricsState = {
-      formPoints: null,
-      recoveryNow: null,
+      ...createMissingState(),
       formStatus: 'missing',
       recoveryNowStatus: 'ready',
     };

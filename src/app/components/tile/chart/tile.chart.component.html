@@ -36,10 +36,20 @@
   chartType === acwrKpiChartType
   || chartType === rampRateKpiChartType
   || chartType === monotonyStrainKpiChartType
+  || chartType === formNowKpiChartType
+  || chartType === formPlus7dKpiChartType
+  || chartType === easyPercentKpiChartType
+  || chartType === hardPercentKpiChartType
+  || chartType === efficiencyDelta4wKpiChartType
   ) {
   <app-kpi-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme" [chartType]="chartType"
     [acwr]="acwr" [rampRate]="rampRate" [monotonyStrain]="monotonyStrain"
-    [acwrStatus]="acwrStatus" [rampRateStatus]="rampRateStatus" [monotonyStrainStatus]="monotonyStrainStatus">
+    [formNow]="formNow" [formPlus7d]="formPlus7d" [easyPercent]="easyPercent" [hardPercent]="hardPercent"
+    [efficiencyDelta4w]="efficiencyDelta4w"
+    [acwrStatus]="acwrStatus" [rampRateStatus]="rampRateStatus" [monotonyStrainStatus]="monotonyStrainStatus"
+    [formNowStatus]="formNowStatus" [formPlus7dStatus]="formPlus7dStatus"
+    [easyPercentStatus]="easyPercentStatus" [hardPercentStatus]="hardPercentStatus"
+    [efficiencyDelta4wStatus]="efficiencyDelta4wStatus">
   </app-kpi-chart>
   }
   @if (chartType === freshnessForecastChartType) {

@@ -45,14 +45,20 @@ import { AppUserService } from '../../../services/app.user.service';
 import { AppUserInterface } from '../../../models/app-user.interface';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
+  DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
   DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
+  DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
+  DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
+  DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   type DashboardCuratedChartType,
+  type DashboardKpiGroup,
   getDashboardCuratedChartDefinitions,
   type DashboardKpiChartType,
   getDashboardKpiChartDefinitions,
@@ -124,6 +130,26 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
   );
   public readonly curatedChartDefinitions = getDashboardCuratedChartDefinitions();
   public readonly kpiChartDefinitions = getDashboardKpiChartDefinitions();
+  public readonly kpiGroupOptions: IconOption<DashboardKpiGroup>[] = [
+    {
+      value: 'load',
+      label: 'Load',
+      icon: 'monitoring',
+      description: 'Workload progression KPIs',
+    },
+    {
+      value: 'readiness',
+      label: 'Readiness',
+      icon: 'self_improvement',
+      description: 'Current and projected form KPIs',
+    },
+    {
+      value: 'execution',
+      label: 'Execution',
+      icon: 'show_chart',
+      description: 'How hard and how efficiently you execute',
+    },
+  ];
   public readonly workflowTabOptions: IconOption<DashboardManagerWorkflowTab>[] = [
     {
       value: 'manual',
@@ -223,11 +249,21 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
     [DASHBOARD_ACWR_KPI_CHART_TYPE]: 'monitoring',
     [DASHBOARD_RAMP_RATE_KPI_CHART_TYPE]: 'speed',
     [DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE]: 'stacked_line_chart',
+    [DASHBOARD_FORM_NOW_KPI_CHART_TYPE]: 'self_improvement',
+    [DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE]: 'trending_up',
+    [DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE]: 'wb_sunny',
+    [DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE]: 'flash_on',
+    [DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE]: 'query_stats',
   };
   public readonly kpiChartDescriptionByType: Record<DashboardKpiChartType, string> = {
     [DASHBOARD_ACWR_KPI_CHART_TYPE]: 'Acute/chronic workload ratio with 8-week sparkline.',
     [DASHBOARD_RAMP_RATE_KPI_CHART_TYPE]: 'CTL delta over 7 days with 8-week sparkline.',
     [DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE]: 'Weekly strain KPI with monotony context and sparkline.',
+    [DASHBOARD_FORM_NOW_KPI_CHART_TYPE]: 'Prior-day TSB readiness from derived load state.',
+    [DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE]: 'Prior-day TSB projection at +7d with zero load.',
+    [DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE]: 'Latest weekly Easy (Z1-2) intensity share.',
+    [DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE]: 'Latest weekly Hard (Z5-7) intensity share.',
+    [DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE]: 'Current efficiency vs prior 4-week baseline.',
   };
   public readonly mapStyleOptions: Array<{ value: MapStyleName; label: string }> = [
     { value: 'default', label: 'Default' },
@@ -249,6 +285,8 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
   public editTileOrder: number | null = null;
   public curatedChartType: DashboardCuratedChartType = DASHBOARD_RECOVERY_NOW_CHART_TYPE;
   public kpiChartType: DashboardKpiChartType = DASHBOARD_ACWR_KPI_CHART_TYPE;
+  public kpiGroup: DashboardKpiGroup = 'load';
+  public presetKpiGroup: DashboardKpiGroup = 'load';
 
   public customChartType: ChartTypes = AppUserUtilities.getDefaultUserDashboardChartTile().chartType;
   public customDataType = AppUserUtilities.getDefaultUserDashboardChartTile().dataType;
@@ -339,7 +377,19 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
   }
 
   get filteredPresetDefinitions(): DashboardManagerPresetDefinition[] {
-    return this.presetDefinitions.filter(definition => definition.category === this.presetCategory);
+    return this.presetDefinitions.filter((definition) => {
+      if (definition.category !== this.presetCategory) {
+        return false;
+      }
+      if (definition.category !== 'kpi') {
+        return true;
+      }
+      return definition.kpiGroup === this.presetKpiGroup;
+    });
+  }
+
+  get filteredKpiChartDefinitions() {
+    return this.kpiChartDefinitions.filter(definition => definition.group === this.kpiGroup);
   }
 
   get selectedPresetDefinition(): DashboardManagerPresetDefinition | null {
@@ -436,7 +486,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
     }
 
     if (nextCategory === 'kpi') {
-      const availableKpi = this.kpiChartDefinitions.find(def => !this.isKpiOptionDisabled(def.chartType));
+      const availableKpi = this.filteredKpiChartDefinitions.find(def => !this.isKpiOptionDisabled(def.chartType));
       if (availableKpi) {
         this.kpiChartType = availableKpi.chartType;
       }
@@ -453,6 +503,21 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
 
   onPresetCategoryChange(nextCategory: DashboardManagerPresetCategory): void {
     this.presetCategory = nextCategory;
+    this.saveError = '';
+    this.ensurePresetSelection(true);
+  }
+
+  onKpiGroupChange(nextGroup: DashboardKpiGroup): void {
+    this.kpiGroup = nextGroup;
+    this.saveError = '';
+    const nextAvailable = this.filteredKpiChartDefinitions.find(def => !this.isKpiOptionDisabled(def.chartType));
+    if (nextAvailable) {
+      this.kpiChartType = nextAvailable.chartType;
+    }
+  }
+
+  onPresetKpiGroupChange(nextGroup: DashboardKpiGroup): void {
+    this.presetKpiGroup = nextGroup;
     this.saveError = '';
     this.ensurePresetSelection(true);
   }
@@ -645,6 +710,8 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
 
     if (isDashboardKpiChartType(chartTile.chartType)) {
       this.kpiChartType = chartTile.chartType;
+      this.kpiGroup = this.resolveKpiGroupForChartType(chartTile.chartType);
+      this.presetKpiGroup = this.kpiGroup;
       return;
     }
 
@@ -789,11 +856,17 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
     order: number,
     size: { columns: number; rows: number },
   ): TileChartSettingsInterface {
-    const chartName = chartType === DASHBOARD_ACWR_KPI_CHART_TYPE
-      ? 'ACWR'
-      : chartType === DASHBOARD_RAMP_RATE_KPI_CHART_TYPE
-        ? 'Ramp Rate'
-        : 'Monotony / Strain';
+    const chartNameByType: Record<DashboardKpiChartType, string> = {
+      [DASHBOARD_ACWR_KPI_CHART_TYPE]: 'ACWR',
+      [DASHBOARD_RAMP_RATE_KPI_CHART_TYPE]: 'Ramp Rate',
+      [DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE]: 'Monotony / Strain',
+      [DASHBOARD_FORM_NOW_KPI_CHART_TYPE]: 'Form Now',
+      [DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE]: 'Form +7d',
+      [DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE]: 'Easy %',
+      [DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE]: 'Hard %',
+      [DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE]: 'Efficiency Δ (4w)',
+    };
+    const chartName = chartNameByType[chartType];
     return {
       name: chartName,
       type: TileTypes.Chart,
@@ -885,6 +958,10 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
     }
 
     return { columns: 1, rows: 1 };
+  }
+
+  private resolveKpiGroupForChartType(chartType: DashboardKpiChartType): DashboardKpiGroup {
+    return this.kpiChartDefinitions.find(definition => definition.chartType === chartType)?.group || 'load';
   }
 
   private hasDuplicateMapTiles(tiles: TileSettingsInterface[]): boolean {

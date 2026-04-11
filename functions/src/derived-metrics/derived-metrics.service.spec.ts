@@ -125,6 +125,36 @@ describe('fetchRecoveryLookbackEventDocs', () => {
     });
 });
 
+describe('resolveDerivedMetricSourceRequirements', () => {
+    it('marks form docs required for load-backed and KPI metric kinds', async () => {
+        const { resolveDerivedMetricSourceRequirements } = await import('./derived-metrics.service');
+
+        expect(
+            resolveDerivedMetricSourceRequirements([
+                DERIVED_METRIC_KINDS.FormNow,
+                DERIVED_METRIC_KINDS.EasyPercent,
+            ]),
+        ).toEqual({
+            needsFormDocs: true,
+            needsRecoveryNowDocs: false,
+        });
+    });
+
+    it('marks recovery lookback docs required only when recovery-now is requested', async () => {
+        const { resolveDerivedMetricSourceRequirements } = await import('./derived-metrics.service');
+
+        expect(
+            resolveDerivedMetricSourceRequirements([
+                DERIVED_METRIC_KINDS.RecoveryNow,
+                DERIVED_METRIC_KINDS.Form,
+            ]),
+        ).toEqual({
+            needsFormDocs: true,
+            needsRecoveryNowDocs: true,
+        });
+    });
+});
+
 describe('startDerivedMetricsProcessing', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -298,6 +328,11 @@ describe('writeDerivedMetricSnapshotsReady', () => {
                 DERIVED_METRIC_KINDS.Acwr,
                 DERIVED_METRIC_KINDS.RampRate,
                 DERIVED_METRIC_KINDS.MonotonyStrain,
+                DERIVED_METRIC_KINDS.FormNow,
+                DERIVED_METRIC_KINDS.FormPlus7d,
+                DERIVED_METRIC_KINDS.EasyPercent,
+                DERIVED_METRIC_KINDS.HardPercent,
+                DERIVED_METRIC_KINDS.EfficiencyDelta4w,
                 DERIVED_METRIC_KINDS.FreshnessForecast,
                 DERIVED_METRIC_KINDS.IntensityDistribution,
                 DERIVED_METRIC_KINDS.EfficiencyTrend,
@@ -330,6 +365,14 @@ describe('writeDerivedMetricSnapshotsReady', () => {
         expect(monotonyPayload.monotony).toBeTypeOf('number');
         expect(monotonyPayload.strain).toBeTypeOf('number');
 
+        const formNowPayload = findPersistedPayload(DERIVED_METRIC_KINDS.FormNow).payload as Record<string, unknown>;
+        expect(formNowPayload.value).toBeTypeOf('number');
+        expect(Array.isArray(formNowPayload.trend8Weeks)).toBe(true);
+
+        const formPlus7dPayload = findPersistedPayload(DERIVED_METRIC_KINDS.FormPlus7d).payload as Record<string, unknown>;
+        expect(formPlus7dPayload.value).toBeTypeOf('number');
+        expect(formPlus7dPayload.projectedDayMs).toBe(Date.UTC(2026, 0, 10));
+
         const forecastPayload = findPersistedPayload(DERIVED_METRIC_KINDS.FreshnessForecast).payload as Record<string, unknown>;
         const forecastPoints = forecastPayload.points as Array<Record<string, unknown>>;
         expect(forecastPoints).toHaveLength(8);
@@ -341,11 +384,27 @@ describe('writeDerivedMetricSnapshotsReady', () => {
         expect(intensityPayload.latestEasyPercent).toBeTypeOf('number');
         expect(intensityPayload.latestHardPercent).toBeTypeOf('number');
 
+        const easyPercentPayload = findPersistedPayload(DERIVED_METRIC_KINDS.EasyPercent).payload as Record<string, unknown>;
+        expect(easyPercentPayload.value).toBeTypeOf('number');
+        expect(Array.isArray(easyPercentPayload.trend8Weeks)).toBe(true);
+
+        const hardPercentPayload = findPersistedPayload(DERIVED_METRIC_KINDS.HardPercent).payload as Record<string, unknown>;
+        expect(hardPercentPayload.value).toBeTypeOf('number');
+        expect(Array.isArray(hardPercentPayload.trend8Weeks)).toBe(true);
+
         const efficiencyPayload = findPersistedPayload(DERIVED_METRIC_KINDS.EfficiencyTrend).payload as Record<string, unknown>;
         const efficiencyPoints = efficiencyPayload.points as Array<Record<string, unknown>>;
         expect(efficiencyPoints.length).toBeGreaterThan(0);
         expect(efficiencyPayload.latestValue).toBeTypeOf('number');
         expect(efficiencyPoints[0].value).toBeGreaterThan(0);
+
+        const efficiencyDeltaPayload = findPersistedPayload(DERIVED_METRIC_KINDS.EfficiencyDelta4w).payload as Record<string, unknown>;
+        expect(efficiencyDeltaPayload).toMatchObject({
+            latestValue: expect.any(Number),
+        });
+        expect(efficiencyDeltaPayload).toHaveProperty('deltaAbs');
+        expect(efficiencyDeltaPayload).toHaveProperty('deltaPct');
+        expect(Array.isArray(efficiencyDeltaPayload.trend8Weeks)).toBe(true);
     });
 
     it('extends KPI daily-load state to today with zero-fill so latest KPI week is current', async () => {
@@ -382,6 +441,8 @@ describe('writeDerivedMetricSnapshotsReady', () => {
                 DERIVED_METRIC_KINDS.Acwr,
                 DERIVED_METRIC_KINDS.RampRate,
                 DERIVED_METRIC_KINDS.MonotonyStrain,
+                DERIVED_METRIC_KINDS.FormNow,
+                DERIVED_METRIC_KINDS.FormPlus7d,
             ],
             {
                 formDocs: formDocs as any,
@@ -405,5 +466,69 @@ describe('writeDerivedMetricSnapshotsReady', () => {
         expect(monotonyPayload.weeklyLoad7).toBe(0);
         expect(monotonyPayload.monotony).toBeNull();
         expect(monotonyPayload.strain).toBeNull();
+
+        const formNowPayload = findPersistedPayload(DERIVED_METRIC_KINDS.FormNow).payload as Record<string, unknown>;
+        expect(formNowPayload.latestDayMs).toBe(Date.UTC(2026, 0, 10));
+        expect(formNowPayload.value).toBeTypeOf('number');
+
+        const formPlus7dPayload = findPersistedPayload(DERIVED_METRIC_KINDS.FormPlus7d).payload as Record<string, unknown>;
+        expect(formPlus7dPayload.latestDayMs).toBe(Date.UTC(2026, 0, 10));
+        expect(formPlus7dPayload.projectedDayMs).toBe(Date.UTC(2026, 0, 17));
+    });
+
+    it('handles efficiency delta edge cases with insufficient baseline history', async () => {
+        const { writeDerivedMetricSnapshotsReady } = await import('./derived-metrics.service');
+        vi.useFakeTimers();
+        vi.setSystemTime(Date.UTC(2026, 0, 3, 12, 0, 0));
+        const formDocs = [
+            buildEventDoc({
+                startDate: Date.UTC(2026, 0, 3, 8, 0, 0),
+                endDate: Date.UTC(2026, 0, 3, 9, 0, 0),
+                stats: {
+                    [DataPowerAvg.type]: 200,
+                    [DataHeartRateAvg.type]: 100,
+                    [DataDuration.type]: 1800,
+                },
+            }),
+        ];
+
+        await writeDerivedMetricSnapshotsReady(
+            'user-1',
+            [DERIVED_METRIC_KINDS.EfficiencyDelta4w],
+            {
+                formDocs: formDocs as any,
+                recoveryNowDocs: [] as any,
+            },
+        );
+
+        const efficiencyDeltaPayload = findPersistedPayload(DERIVED_METRIC_KINDS.EfficiencyDelta4w).payload as Record<string, unknown>;
+        expect(efficiencyDeltaPayload.latestValue).toBeTypeOf('number');
+        expect(efficiencyDeltaPayload.baselineValue).toBeNull();
+        expect(efficiencyDeltaPayload.deltaAbs).toBeNull();
+        expect(efficiencyDeltaPayload.deltaPct).toBeNull();
+    });
+
+    it('builds nullable payloads for new KPI kinds when no source docs exist', async () => {
+        const { writeDerivedMetricSnapshotsReady } = await import('./derived-metrics.service');
+        await writeDerivedMetricSnapshotsReady(
+            'user-1',
+            [
+                DERIVED_METRIC_KINDS.FormNow,
+                DERIVED_METRIC_KINDS.FormPlus7d,
+                DERIVED_METRIC_KINDS.EasyPercent,
+                DERIVED_METRIC_KINDS.HardPercent,
+                DERIVED_METRIC_KINDS.EfficiencyDelta4w,
+            ],
+            {
+                formDocs: [] as any,
+                recoveryNowDocs: [] as any,
+            },
+        );
+
+        expect((findPersistedPayload(DERIVED_METRIC_KINDS.FormNow).payload as Record<string, unknown>).value).toBeNull();
+        expect((findPersistedPayload(DERIVED_METRIC_KINDS.FormPlus7d).payload as Record<string, unknown>).value).toBeNull();
+        expect((findPersistedPayload(DERIVED_METRIC_KINDS.EasyPercent).payload as Record<string, unknown>).value).toBeNull();
+        expect((findPersistedPayload(DERIVED_METRIC_KINDS.HardPercent).payload as Record<string, unknown>).value).toBeNull();
+        expect((findPersistedPayload(DERIVED_METRIC_KINDS.EfficiencyDelta4w).payload as Record<string, unknown>).deltaAbs).toBeNull();
     });
 });
