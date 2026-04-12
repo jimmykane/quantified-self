@@ -19,6 +19,11 @@ import {
   type DashboardDerivedMetricStatus,
   isDerivedMetricPendingStatus,
 } from '../../../helpers/derived-metric-status.helper';
+import {
+  isEChartsMobileTooltipViewport,
+  resolveEChartsTooltipSurfaceConfig,
+  resolveEChartsTooltipTriggerOn,
+} from '../../../helpers/echarts-tooltip-interaction.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
 import type {
   DashboardAcwrContext,
@@ -323,6 +328,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   private buildOption(presentation: KpiPresentation): ChartOption {
     const chartWidth = this.chartDiv?.nativeElement?.clientWidth || 0;
     const style = buildDashboardEChartsStyleTokens(this.darkTheme, chartWidth);
+    const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
     const trendData = presentation.trend
       .filter(point => Number.isFinite(point.time))
       .map(point => [point.time, point.value] as const);
@@ -366,8 +372,12 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
         splitLine: { show: false },
       },
       tooltip: {
+        show: true,
         trigger: 'axis',
+        triggerOn: resolveEChartsTooltipTriggerOn(true, isMobileTooltipViewport),
         axisPointer: { type: 'line' },
+        renderMode: 'html',
+        ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),
         borderWidth: 1,
         borderColor: style.tooltipBorderColor,
         backgroundColor: style.tooltipBackgroundColor,

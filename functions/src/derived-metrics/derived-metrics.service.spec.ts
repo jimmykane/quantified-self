@@ -53,6 +53,7 @@ const hoisted = vi.hoisted(() => {
         runTransaction,
     };
     const loggerWarn = vi.fn();
+    const enqueueDerivedMetricsTask = vi.fn();
 
     return {
         get,
@@ -70,6 +71,7 @@ const hoisted = vi.hoisted(() => {
         usersCollection,
         firestoreInstance,
         loggerWarn,
+        enqueueDerivedMetricsTask,
     };
 });
 
@@ -84,7 +86,7 @@ vi.mock('firebase-functions/logger', () => ({
 }));
 
 vi.mock('../shared/cloud-tasks', () => ({
-    enqueueDerivedMetricsTask: vi.fn(),
+    enqueueDerivedMetricsTask: hoisted.enqueueDerivedMetricsTask,
 }));
 
 describe('fetchRecoveryLookbackEventDocs', () => {
@@ -249,6 +251,151 @@ describe('startDerivedMetricsProcessing', () => {
                 processingMetricKinds: DEFAULT_DERIVED_METRIC_KINDS,
             }),
             { merge: true },
+        );
+    });
+});
+
+describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        hoisted.runTransaction.mockImplementation(async (updateFunction: (transaction: unknown) => Promise<void>) => {
+            await updateFunction({
+                get: hoisted.transactionGet,
+                set: hoisted.transactionSet,
+            });
+        });
+        hoisted.enqueueDerivedMetricsTask.mockResolvedValue(true);
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('coalesces when coordinator is queued recently and dirty set is unchanged', async () => {
+        const { markDerivedMetricsDirtyAndMaybeQueue } = await import('./derived-metrics.service');
+        vi.useFakeTimers();
+        vi.setSystemTime(Date.UTC(2026, 3, 11, 9, 0, 0));
+        const nowMs = Date.now();
+        hoisted.transactionGet.mockResolvedValueOnce({
+            exists: true,
+            data: () => ({
+                status: 'queued',
+                generation: 12,
+                dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form],
+                requestedAtMs: nowMs - 2 * 60 * 1000,
+                updatedAtMs: nowMs - 2 * 60 * 1000,
+            }),
+        });
+
+        const response = await markDerivedMetricsDirtyAndMaybeQueue(
+            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            [DERIVED_METRIC_KINDS.Form],
+        );
+
+        expect(response).toEqual({
+            accepted: true,
+            queued: false,
+            generation: 12,
+            metricKinds: [DERIVED_METRIC_KINDS.Form],
+        });
+        expect(hoisted.transactionSet).not.toHaveBeenCalled();
+        expect(hoisted.enqueueDerivedMetricsTask).not.toHaveBeenCalled();
+    });
+
+    it('forces requeue when coordinator is queued for too long', async () => {
+        const { markDerivedMetricsDirtyAndMaybeQueue } = await import('./derived-metrics.service');
+        vi.useFakeTimers();
+        vi.setSystemTime(Date.UTC(2026, 3, 11, 9, 0, 0));
+        const nowMs = Date.now();
+        hoisted.transactionGet.mockResolvedValueOnce({
+            exists: true,
+            data: () => ({
+                status: 'queued',
+                generation: 21,
+                dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form],
+                requestedAtMs: nowMs - 20 * 60 * 1000,
+                updatedAtMs: nowMs - 20 * 60 * 1000,
+            }),
+        });
+
+        const response = await markDerivedMetricsDirtyAndMaybeQueue(
+            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            [DERIVED_METRIC_KINDS.Form],
+        );
+
+        expect(response).toEqual({
+            accepted: true,
+            queued: true,
+            generation: 22,
+            metricKinds: [DERIVED_METRIC_KINDS.Form],
+        });
+        expect(hoisted.transactionSet).toHaveBeenCalledWith(
+            hoisted.coordinatorRef,
+            expect.objectContaining({
+                status: 'queued',
+                generation: 22,
+                dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form],
+                processingMetricKinds: [],
+            }),
+            { merge: true },
+        );
+        expect(hoisted.enqueueDerivedMetricsTask).toHaveBeenCalledWith('xcsAolLDDTWTgtRN9eYF3lW2YKL2', 22);
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[derived-metrics] Coordinator appears stuck; forcing requeue.',
+            expect.objectContaining({
+                uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                status: 'queued',
+                generation: 21,
+            }),
+        );
+    });
+
+    it('forces requeue when coordinator is processing for too long', async () => {
+        const { markDerivedMetricsDirtyAndMaybeQueue } = await import('./derived-metrics.service');
+        vi.useFakeTimers();
+        vi.setSystemTime(Date.UTC(2026, 3, 11, 9, 0, 0));
+        const nowMs = Date.now();
+        hoisted.transactionGet.mockResolvedValueOnce({
+            exists: true,
+            data: () => ({
+                status: 'processing',
+                generation: 30,
+                dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form],
+                startedAtMs: nowMs - 20 * 60 * 1000,
+                updatedAtMs: nowMs - 20 * 60 * 1000,
+                processingMetricKinds: [DERIVED_METRIC_KINDS.Form],
+            }),
+        });
+
+        const response = await markDerivedMetricsDirtyAndMaybeQueue(
+            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            [DERIVED_METRIC_KINDS.Form],
+        );
+
+        expect(response).toEqual({
+            accepted: true,
+            queued: true,
+            generation: 31,
+            metricKinds: [DERIVED_METRIC_KINDS.Form],
+        });
+        expect(hoisted.transactionSet).toHaveBeenCalledWith(
+            hoisted.coordinatorRef,
+            expect.objectContaining({
+                status: 'queued',
+                generation: 31,
+                dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form],
+                processingMetricKinds: [],
+            }),
+            { merge: true },
+        );
+        expect(hoisted.enqueueDerivedMetricsTask).toHaveBeenCalledWith('xcsAolLDDTWTgtRN9eYF3lW2YKL2', 31);
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[derived-metrics] Coordinator appears stuck; forcing requeue.',
+            expect.objectContaining({
+                uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                status: 'processing',
+                generation: 30,
+            }),
         );
     });
 });

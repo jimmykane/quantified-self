@@ -209,4 +209,48 @@ describe('ChartsKpiComponent', () => {
     expect(component.primaryValueText).toBe('+0.12');
     expect(component.secondaryValueText).toBe('+6.67%');
   });
+
+  it('re-enables tooltip when KPI transitions from no-data to data', async () => {
+    component.chartType = DASHBOARD_ACWR_KPI_CHART_TYPE;
+    component.acwr = {
+      latestDayMs: Date.UTC(2026, 0, 1),
+      acuteLoad7: 0,
+      chronicLoad28: 0,
+      ratio: null,
+      trend8Weeks: [],
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const noDataCallCount = mockLoader.setOption.mock.calls.length;
+
+    component.acwr = {
+      latestDayMs: Date.UTC(2026, 0, 1),
+      acuteLoad7: 210,
+      chronicLoad28: 190,
+      ratio: 1.11,
+      trend8Weeks: [
+        { time: Date.UTC(2025, 11, 1), value: 0.9 },
+        { time: Date.UTC(2025, 11, 8), value: 1.0 },
+      ],
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await (component as any).refreshChart();
+
+    expect(mockLoader.setOption.mock.calls.length).toBeGreaterThan(noDataCallCount);
+    const latestSetOptionArgs = mockLoader.setOption.mock.calls.at(-1) || [];
+    const tooltipEnabledOption = latestSetOptionArgs.find((arg) => (
+      !!arg
+      && typeof arg === 'object'
+      && 'tooltip' in (arg as Record<string, unknown>)
+    )) as Record<string, any> | undefined;
+
+    expect(tooltipEnabledOption).toBeTruthy();
+    expect(tooltipEnabledOption?.tooltip?.show).toBe(true);
+    expect(tooltipEnabledOption?.tooltip?.triggerOn).toBe('mousemove|click');
+    expect(tooltipEnabledOption?.tooltip?.renderMode).toBe('html');
+  });
 });

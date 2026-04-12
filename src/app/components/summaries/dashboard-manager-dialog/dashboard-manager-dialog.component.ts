@@ -120,8 +120,6 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
     /^spiral$/i,
   ];
 
-  private static readonly maxDashboardTiles = 12;
-
   public readonly chartTypes = ChartTypes;
   public readonly chartCategoryTypes = ChartDataCategoryTypes;
   public readonly chartValueTypes = ChartDataValueTypes;
@@ -410,15 +408,8 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
     return this.getPresetDisabledReason(selectedPreset);
   }
 
-  get isTileLimitReached(): boolean {
-    return (this.data?.user?.settings?.dashboardSettings?.tiles || []).length >= DashboardManagerDialogComponent.maxDashboardTiles;
-  }
-
   get isSaveDisabled(): boolean {
     if (this.isSaving) {
-      return true;
-    }
-    if (this.mode === 'add' && this.isTileLimitReached) {
       return true;
     }
     if (this.mode === 'edit' && this.editTileOrder === null) {
@@ -532,10 +523,6 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
   }
 
   getPresetDisabledReason(definition: DashboardManagerPresetDefinition): string | null {
-    if (this.mode === 'add' && this.isTileLimitReached) {
-      return 'Tile limit reached.';
-    }
-
     if (definition.category === 'curated' && this.isCuratedOptionDisabled(definition.curatedChartType)) {
       return 'Already on dashboard.';
     }

@@ -269,10 +269,6 @@
     </mat-tab>
   </mat-tab-group>
 
-  @if (mode === 'add' && isTileLimitReached) {
-  <p class="dashboard-manager-warning">Maximum dashboard tile limit reached. Remove a tile before adding a new one.</p>
-  }
-
   @if (activeWorkflowTab === 'presets' && selectedPresetDisabledReason) {
   <p class="dashboard-manager-warning">{{ selectedPresetDisabledReason }}</p>
   }

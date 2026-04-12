@@ -62,6 +62,8 @@ const CTL_TIME_CONSTANT_DAYS = 42;
 const ATL_TIME_CONSTANT_DAYS = 7;
 const HISTORY_TREND_WEEKS = 8;
 const FORECAST_DAYS = 7;
+const DERIVED_METRICS_STUCK_QUEUED_THRESHOLD_MS = 10 * 60 * 1000;
+const DERIVED_METRICS_STUCK_PROCESSING_THRESHOLD_MS = 15 * 60 * 1000;
 const POWER_ZONE_STAT_TYPES = [
     DataPowerZoneOneDuration.type,
     DataPowerZoneTwoDuration.type,
@@ -275,6 +277,25 @@ function resolveInFlightMetricKinds(
     // Legacy coordinator docs written before processingMetricKinds existed can be
     // left in "processing" with an empty dirty set after task crashes/timeouts.
     return [...DEFAULT_DERIVED_METRIC_KINDS];
+}
+
+function isDerivedMetricsCoordinatorStuck(
+    coordinator: DerivedMetricsCoordinator,
+    nowMs: number,
+): boolean {
+    if (coordinator.status === 'queued') {
+        const queuedSinceMs = coordinator.requestedAtMs ?? coordinator.updatedAtMs;
+        return Number.isFinite(queuedSinceMs)
+            && (nowMs - (queuedSinceMs as number)) >= DERIVED_METRICS_STUCK_QUEUED_THRESHOLD_MS;
+    }
+
+    if (coordinator.status === 'processing') {
+        const processingSinceMs = coordinator.startedAtMs ?? coordinator.updatedAtMs;
+        return Number.isFinite(processingSinceMs)
+            && (nowMs - (processingSinceMs as number)) >= DERIVED_METRICS_STUCK_PROCESSING_THRESHOLD_MS;
+    }
+
+    return false;
 }
 
 function isMergedEvent(eventData: Record<string, unknown>): boolean {
@@ -1416,33 +1437,53 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
         const nextDirtyMetricKinds = mergeDerivedMetricKinds(coordinator.dirtyMetricKinds, metricKinds);
         const isAlreadyQueuedOrProcessing = coordinator.status === 'queued' || coordinator.status === 'processing';
         const dirtyMetricKindsChanged = !hasSameDerivedMetricKinds(coordinator.dirtyMetricKinds, nextDirtyMetricKinds);
+        const coordinatorLikelyStuck = isAlreadyQueuedOrProcessing
+            && isDerivedMetricsCoordinatorStuck(coordinator, nowMs);
 
         // Coalesce repeated writes during bulk updates:
         // if a user is already queued/processing and the dirty set did not change,
         // avoid writing the coordinator doc again.
-        if (isAlreadyQueuedOrProcessing && !dirtyMetricKindsChanged) {
+        if (isAlreadyQueuedOrProcessing && !dirtyMetricKindsChanged && !coordinatorLikelyStuck) {
             shouldEnqueue = false;
             generationToQueue = coordinator.generation;
             return;
         }
 
-        const nextGeneration = isAlreadyQueuedOrProcessing ? coordinator.generation : coordinator.generation + 1;
+        if (coordinatorLikelyStuck) {
+            logger.warn('[derived-metrics] Coordinator appears stuck; forcing requeue.', {
+                uid,
+                status: coordinator.status,
+                generation: coordinator.generation,
+                requestedAtMs: coordinator.requestedAtMs,
+                startedAtMs: coordinator.startedAtMs,
+                updatedAtMs: coordinator.updatedAtMs,
+            });
+        }
 
-        shouldEnqueue = !isAlreadyQueuedOrProcessing;
+        const nextGeneration = (isAlreadyQueuedOrProcessing && !coordinatorLikelyStuck)
+            ? coordinator.generation
+            : coordinator.generation + 1;
+        const nextStatus = (isAlreadyQueuedOrProcessing && !coordinatorLikelyStuck)
+            ? coordinator.status
+            : 'queued';
+        const shouldResetLifecycleFields = !isAlreadyQueuedOrProcessing || coordinatorLikelyStuck;
+
+        shouldEnqueue = !isAlreadyQueuedOrProcessing || coordinatorLikelyStuck;
         generationToQueue = nextGeneration;
 
         transaction.set(coordinatorRef, {
             entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
-            status: isAlreadyQueuedOrProcessing ? coordinator.status : 'queued',
+            status: nextStatus,
             generation: nextGeneration,
             dirtyMetricKinds: nextDirtyMetricKinds,
             requestedAtMs: nowMs,
             updatedAtMs: nowMs,
-            ...(isAlreadyQueuedOrProcessing ? {} : {
+            ...(shouldResetLifecycleFields ? {
                 startedAtMs: null,
                 completedAtMs: null,
                 lastError: null,
-            }),
+                processingMetricKinds: [],
+            } : {}),
         }, { merge: true });
     });
 

@@ -472,7 +472,7 @@ describe('DashboardManagerDialogComponent', () => {
     expect(dialogRefMock.close).not.toHaveBeenCalledWith({ saved: true });
   });
 
-  it('disables add save flow when dashboard tile limit is reached', () => {
+  it('allows add save flow when dashboard already has many tiles', async () => {
     dialogData.user.settings.dashboardSettings.tiles = Array.from({ length: 12 }, (_value, index) => ({
       type: TileTypes.Chart,
       order: index,
@@ -487,11 +487,23 @@ describe('DashboardManagerDialogComponent', () => {
 
     component.ngOnInit();
 
-    expect(component.isTileLimitReached).toBe(true);
-    expect(component.isSaveDisabled).toBe(true);
+    expect(component.isSaveDisabled).toBe(false);
+
+    component.mode = 'add';
+    component.category = 'custom';
+    component.customChartType = ChartTypes.Pie;
+    component.customDataType = DataDistance.type;
+    component.customDataCategoryType = ChartDataCategoryTypes.ActivityType;
+    component.customDataValueType = ChartDataValueTypes.Maximum;
+    component.customTimeInterval = TimeIntervals.Monthly;
+
+    await component.save();
+
+    expect(dialogData.user.settings.dashboardSettings.tiles).toHaveLength(13);
+    expect(userServiceMock.updateUserProperties).toHaveBeenCalledTimes(1);
   });
 
-  it('disables preset add flow when dashboard tile limit is reached', () => {
+  it('allows preset add flow when dashboard already has many tiles', async () => {
     dialogData.user.settings.dashboardSettings.tiles = Array.from({ length: 12 }, (_value, index) => ({
       type: TileTypes.Chart,
       order: index,
@@ -509,8 +521,13 @@ describe('DashboardManagerDialogComponent', () => {
     component.onPresetCategoryChange('custom');
     component.onPresetSelectionChange(DASHBOARD_MANAGER_PRESET_IDS.CUSTOM_DURATION_PIE);
 
-    expect(component.selectedPresetDisabledReason).toBe('Tile limit reached.');
-    expect(component.isSaveDisabled).toBe(true);
+    expect(component.selectedPresetDisabledReason).toBe(null);
+    expect(component.isSaveDisabled).toBe(false);
+
+    await component.save();
+
+    expect(dialogData.user.settings.dashboardSettings.tiles).toHaveLength(13);
+    expect(userServiceMock.updateUserProperties).toHaveBeenCalledTimes(1);
   });
 
   it('loads current chart values when edit mode selects a tile', () => {
