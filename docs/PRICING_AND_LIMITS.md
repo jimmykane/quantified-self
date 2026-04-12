@@ -9,16 +9,19 @@ The application defines three primary user roles based on subscription status:
 ### 1. Free
 *   **Cost:** $0 / month
 *   **Activity Limit:** 100 Activities (Events)
+*   **AI Insights Limit:** 20 requests per calendar month
 *   **Device Sync:** Not Available
 *   **Role Key:** `free`
 
 ### 2. Basic
 *   **Activity Limit:** 1,000 Activities (Events)
+*   **AI Insights Limit:** 50 requests per billing period
 *   **Device Sync:** Not Available
 *   **Role Key:** `basic`
 
 ### 3. Pro
 *   **Activity Limit:** Unlimited
+*   **AI Insights Limit:** 100 requests per billing period
 *   **Device Sync:** Full Access (Garmin, Suunto, COROS)
 *   **Role Key:** `pro`
 

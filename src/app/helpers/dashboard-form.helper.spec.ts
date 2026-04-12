@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   buildDashboardFormRenderPoints,
   buildDashboardFormPoints,
+  buildDashboardFormPointsFromDailyLoads,
+  extendDashboardFormPointsWithZeroLoadUntil,
   resolveDashboardFormLatestPoint,
   resolveDashboardFormRenderTimeInterval,
   resolveDashboardFormStatus,
@@ -23,7 +25,7 @@ function buildEvent(startTimeMs: number, stats: Record<string, unknown>): any {
 }
 
 describe('dashboard-form.helper', () => {
-  it('should resolve training stress score from the current stat type only', () => {
+  it('should resolve training stress score from current and legacy stat types', () => {
     const preferredEvent = buildEvent(Date.UTC(2024, 0, 1), {
       [DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE]: 44.5,
       ['Power Training Stress Score']: 12,
@@ -33,7 +35,7 @@ describe('dashboard-form.helper', () => {
     });
 
     expect(resolveDashboardFormTrainingStressScore(preferredEvent)).toBe(44.5);
-    expect(resolveDashboardFormTrainingStressScore(legacyOnlyEvent)).toBeNull();
+    expect(resolveDashboardFormTrainingStressScore(legacyOnlyEvent)).toBe(13.7);
   });
 
   it('should return null training stress score when no finite stat value exists', () => {
@@ -46,7 +48,7 @@ describe('dashboard-form.helper', () => {
     expect(resolveDashboardFormTrainingStressScore(emptyEvent)).toBeNull();
   });
 
-  it('should ignore legacy-only stress stats when building daily points', () => {
+  it('should include legacy-only stress stats when building daily points', () => {
     const points = buildDashboardFormPoints([
       buildEvent(Date.UTC(2024, 0, 1, 10, 0, 0), {
         [DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE]: 10,
@@ -56,8 +58,38 @@ describe('dashboard-form.helper', () => {
       }),
     ]);
 
-    expect(points).toHaveLength(1);
-    expect(points.map(point => point.trainingStressScore)).toEqual([10]);
+    expect(points).toHaveLength(3);
+    expect(points.map(point => point.trainingStressScore)).toEqual([10, 0, 20]);
+  });
+
+  it('should build form points from UTC daily-load series with contiguous zero-filled days', () => {
+    const points = buildDashboardFormPointsFromDailyLoads([
+      [Date.UTC(2024, 0, 1), 30],
+      [Date.UTC(2024, 0, 3), 10],
+    ]);
+
+    expect(points).toHaveLength(3);
+    expect(points.map(point => point.time)).toEqual([
+      Date.UTC(2024, 0, 1),
+      Date.UTC(2024, 0, 2),
+      Date.UTC(2024, 0, 3),
+    ]);
+    expect(points.map(point => point.trainingStressScore)).toEqual([30, 0, 10]);
+  });
+
+  it('should parse object-based daily loads used by Firestore snapshots', () => {
+    const points = buildDashboardFormPointsFromDailyLoads([
+      { dayMs: Date.UTC(2024, 0, 1), load: 30 },
+      { dayMs: Date.UTC(2024, 0, 3), load: 10 },
+    ]);
+
+    expect(points).toHaveLength(3);
+    expect(points.map(point => point.time)).toEqual([
+      Date.UTC(2024, 0, 1),
+      Date.UTC(2024, 0, 2),
+      Date.UTC(2024, 0, 3),
+    ]);
+    expect(points.map(point => point.trainingStressScore)).toEqual([30, 0, 10]);
   });
 
   it('should bucket training stress by runtime local calendar day boundaries', () => {
@@ -126,7 +158,7 @@ describe('dashboard-form.helper', () => {
     expect(points[1].formPriorDay).toBeCloseTo(-1.190476, 5);
   });
 
-  it('should resolve form render interval using dashboard auto-granularity rules', () => {
+  it('should resolve form render interval to fixed weekly granularity', () => {
     const shortRangePoints = buildDashboardFormPoints([
       buildEvent(Date.UTC(2024, 0, 1), {
         [DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE]: 10,
@@ -152,25 +184,17 @@ describe('dashboard-form.helper', () => {
       }),
     ]);
 
-    expect(resolveDashboardFormRenderTimeInterval(shortRangePoints)).toBe(TimeIntervals.Daily);
-    expect(resolveDashboardFormRenderTimeInterval(longSameYearPoints)).toBe(TimeIntervals.Monthly);
-    expect(resolveDashboardFormRenderTimeInterval(crossYearPoints)).toBe(TimeIntervals.Yearly);
+    expect(resolveDashboardFormRenderTimeInterval(shortRangePoints)).toBe(TimeIntervals.Weekly);
+    expect(resolveDashboardFormRenderTimeInterval(longSameYearPoints)).toBe(TimeIntervals.Weekly);
+    expect(resolveDashboardFormRenderTimeInterval(crossYearPoints)).toBe(TimeIntervals.Weekly);
   });
 
   it('should aggregate render points by monthly and yearly buckets while preserving latest CTL/ATL/form in bucket', () => {
-    const points = buildDashboardFormPoints([
-      buildEvent(Date.UTC(2024, 0, 1), {
-        [DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE]: 10,
-      }),
-      buildEvent(Date.UTC(2024, 0, 20), {
-        [DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE]: 20,
-      }),
-      buildEvent(Date.UTC(2024, 1, 10), {
-        [DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE]: 30,
-      }),
-      buildEvent(Date.UTC(2025, 0, 10), {
-        [DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE]: 40,
-      }),
+    const points = buildDashboardFormPointsFromDailyLoads([
+      { dayMs: Date.UTC(2024, 0, 1), load: 10 },
+      { dayMs: Date.UTC(2024, 0, 20), load: 20 },
+      { dayMs: Date.UTC(2024, 1, 10), load: 30 },
+      { dayMs: Date.UTC(2025, 0, 10), load: 40 },
     ]);
 
     const monthly = buildDashboardFormRenderPoints(points, TimeIntervals.Monthly);
@@ -178,17 +202,17 @@ describe('dashboard-form.helper', () => {
 
     expect(monthly).toHaveLength(13);
 
-    const january2024 = monthly.find(point => point.time === new Date(2024, 0, 1).getTime());
-    const february2024 = monthly.find(point => point.time === new Date(2024, 1, 1).getTime());
-    const january2025 = monthly.find(point => point.time === new Date(2025, 0, 1).getTime());
+    const january2024 = monthly.find(point => point.time === Date.UTC(2024, 0, 31));
+    const february2024 = monthly.find(point => point.time === Date.UTC(2024, 1, 29));
+    const january2025 = monthly.find(point => point.time === Date.UTC(2025, 0, 10));
 
     expect(january2024?.trainingStressScore).toBe(30);
     expect(february2024?.trainingStressScore).toBe(30);
     expect(january2025?.trainingStressScore).toBe(40);
 
-    const january2024End = points.find(point => point.time === new Date(2024, 0, 31).getTime());
-    const february2024End = points.find(point => point.time === new Date(2024, 1, 29).getTime());
-    const january2025End = points.find(point => point.time === new Date(2025, 0, 10).getTime());
+    const january2024End = points.find(point => point.time === Date.UTC(2024, 0, 31));
+    const february2024End = points.find(point => point.time === Date.UTC(2024, 1, 29));
+    const january2025End = points.find(point => point.time === Date.UTC(2025, 0, 10));
 
     expect(january2024?.ctl).toBeCloseTo(january2024End?.ctl || 0, 8);
     expect(february2024?.ctl).toBeCloseTo(february2024End?.ctl || 0, 8);
@@ -197,11 +221,40 @@ describe('dashboard-form.helper', () => {
     expect(yearly).toHaveLength(2);
     expect(yearly.map(point => point.trainingStressScore)).toEqual([60, 40]);
 
-    const year2024End = points.find(point => point.time === new Date(2024, 11, 31).getTime());
-    const year2025End = points.find(point => point.time === new Date(2025, 0, 10).getTime());
+    const year2024End = points.find(point => point.time === Date.UTC(2024, 11, 31));
+    const year2025End = points.find(point => point.time === Date.UTC(2025, 0, 10));
 
     expect(yearly[0].ctl).toBeCloseTo(year2024End?.ctl || 0, 8);
     expect(yearly[1].ctl).toBeCloseTo(year2025End?.ctl || 0, 8);
+  });
+
+  it('should aggregate render points by weekly buckets while preserving latest CTL/ATL/form in bucket', () => {
+    const points = buildDashboardFormPointsFromDailyLoads([
+      { dayMs: Date.UTC(2024, 0, 1), load: 10 },
+      { dayMs: Date.UTC(2024, 0, 2), load: 20 },
+      { dayMs: Date.UTC(2024, 0, 8), load: 30 },
+    ]);
+
+    const weekly = buildDashboardFormRenderPoints(points, TimeIntervals.Weekly);
+    expect(weekly.length).toBeLessThan(points.length);
+    expect(weekly[0].trainingStressScore).toBe(30);
+    expect(weekly[1].trainingStressScore).toBe(30);
+  });
+
+  it('should bucket weekly render points by UTC Monday boundaries and plot each bucket at the latest day', () => {
+    const points = buildDashboardFormPointsFromDailyLoads([
+      { dayMs: Date.UTC(2024, 0, 7), load: 10 }, // Sunday
+      { dayMs: Date.UTC(2024, 0, 8), load: 20 }, // Monday
+    ]);
+
+    const weekly = buildDashboardFormRenderPoints(points, TimeIntervals.Weekly);
+
+    expect(weekly).toHaveLength(2);
+    expect(weekly.map(point => point.time)).toEqual([
+      Date.UTC(2024, 0, 7),
+      Date.UTC(2024, 0, 8),
+    ]);
+    expect(weekly.map(point => point.trainingStressScore)).toEqual([10, 20]);
   });
 
   it('should resolve same-day and prior-day form values safely', () => {
@@ -232,6 +285,19 @@ describe('dashboard-form.helper', () => {
 
     expect(resolveDashboardFormLatestPoint(points)).toEqual(points[1]);
     expect(resolveDashboardFormLatestPoint([])).toBeNull();
+  });
+
+  it('should extend form points with zero-load decay until a target day', () => {
+    const points = buildDashboardFormPointsFromDailyLoads([
+      { dayMs: Date.UTC(2024, 0, 1), load: 30 },
+      { dayMs: Date.UTC(2024, 0, 2), load: 10 },
+    ]);
+
+    const extended = extendDashboardFormPointsWithZeroLoadUntil(points, Date.UTC(2024, 0, 5, 16, 0, 0));
+    expect(extended[extended.length - 1].time).toBe(Date.UTC(2024, 0, 5));
+    expect(extended.slice(points.length).every(point => point.trainingStressScore === 0)).toBe(true);
+    expect(extended[extended.length - 1].ctl).toBeLessThan(points[points.length - 1].ctl);
+    expect(extended[extended.length - 1].atl).toBeLessThan(points[points.length - 1].atl);
   });
 
   it('should map form value bands to the expected dynamic status title', () => {

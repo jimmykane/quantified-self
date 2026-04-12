@@ -152,11 +152,35 @@ describe('ai-insights prompts', () => {
     ]);
   });
 
-  it('resolves unsupported default prompts for jump metrics in the shared catalog', () => {
+  it('resolves default prompts for extended metrics in the shared catalog', () => {
     expect(getAiInsightsDefaultMetricPrompt('jump_hang_time')).toBe('Show my jump hang time over time this year.');
     expect(getAiInsightsDefaultMetricPrompt('jump_distance')).toBe('Show my jump distance over time this season.');
     expect(getAiInsightsDefaultMetricPrompt('jump_speed')).toBe('Show my jump speed over time this year.');
     expect(getAiInsightsDefaultMetricPrompt('jump_score')).toBe('Show my jump score over time this year.');
     expect(getAiInsightsDefaultMetricPrompt('body_weight')).toBe('Show my weight over time this year.');
+    expect(getAiInsightsDefaultMetricPrompt('ftp')).toBe('Show my average FTP over time for cycling this year.');
+    expect(getAiInsightsDefaultMetricPrompt('critical_power')).toBe('Show my average critical power over time for cycling this year.');
+    expect(getAiInsightsDefaultMetricPrompt('power_watts_per_kg')).toBe('Show my average power-to-weight ratio over time for cycling this year.');
+    expect(getAiInsightsDefaultMetricPrompt('ground_contact_time')).toBe(
+      'Show my average ground contact time over time for running this year.',
+    );
+    expect(getAiInsightsDefaultMetricPrompt('vertical_oscillation')).toBe(
+      'Show my average vertical oscillation over time for running this year.',
+    );
+    expect(getAiInsightsDefaultMetricPrompt('vertical_ratio')).toBe(
+      'Show my average vertical ratio over time for running this year.',
+    );
+    expect(getAiInsightsDefaultMetricPrompt('leg_stiffness')).toBe(
+      'Show my average leg stiffness over time for running this year.',
+    );
+    expect(getAiInsightsDefaultMetricPrompt('heart_rate_zone_two_duration')).toBe(
+      'Show my total time in heart rate zone 2 over time for running this year.',
+    );
+    expect(getAiInsightsDefaultMetricPrompt('power_zone_two_duration')).toBe(
+      'Show my total time in power zone 2 over time for cycling this year.',
+    );
+    expect(getAiInsightsDefaultMetricPrompt('speed_zone_two_duration')).toBe(
+      'Show my total time in speed zone 2 over time for running this year.',
+    );
   });
 });

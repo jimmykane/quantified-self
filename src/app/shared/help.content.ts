@@ -96,6 +96,24 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 ## Core dashboard features
 
+### Dashboard manager
+
+- Use the **Dashboard manager** button above dashboard tiles to add or edit dashboard tiles.
+- Dashboard manager supports two workflows: **Manual** and **Presets**.
+- You can choose between **Curated**, **KPI**, **Custom**, and **Map** categories.
+- **Presets** provide quick-start tile templates and can be applied in both **Add** and **Edit** modes.
+- **Curated Recovery** remains a fixed insight and does not react to dashboard date-range changes.
+- **Curated Form/TSS** computes from full history and does not react to dashboard date-range changes.
+- New curated derived charts: **Freshness Forecast**, **Intensity Distribution**, and **Efficiency Trend**.
+- KPI cards are derived-only compact tiles: **ACWR**, **Ramp Rate**, **Monotony / Strain**, **Form Now**, **Form +7d**, **Easy %**, **Hard %**, and **Efficiency Δ (4w)**.
+- KPI choices in Dashboard manager are grouped as **Load**, **Readiness**, and **Execution** for both manual and preset flows.
+- **Custom** charts keep the existing configurable behavior and react to dashboard filters/date range.
+- **Map** keeps the existing map behavior and reacts to dashboard filters/date range.
+- Derived curated and KPI chart types are unique: only one tile per special derived chart type can exist at a time.
+- Map tiles are also unique: only one map tile can exist at a time.
+- Map style and cluster-marker settings are edited inside Dashboard manager.
+- Default manager sizes: KPI tiles start at **1x1** and curated derived charts start at **2x1**.
+
 ### Reorder dashboard tiles
 
 - On desktop, drag dashboard tiles from the tile action area to reorder them.
@@ -106,23 +124,49 @@ export const HELP_SECTIONS: HelpSection[] = [
 ### Recovery tile summary
 
 - The curated **Recovery** pie tile is optional and not added automatically.
-- New **Recovery** tiles are temporarily disabled from chart type options.
 - The tile shows live recovery split between **Left now** and **Elapsed**.
-- When recovery data is available for your current dashboard filters, the summary shows **Recovery Left Now** and **Total recovery** summed across all recovery-enabled events in the filtered range.
+- The summary shows **Recovery Left Now**, plus **Active total** and **Latest workout** recovery context.
+- Active totals only include currently active recovery windows, not all historical recovery values.
+- Extremely large recovery values above 14 days are treated as outliers and ignored.
 - Remaining recovery updates every minute while the tile is visible.
+- While derived metrics are refreshing, the tile shows a recovery-specific **updating** message instead of generic no-data text.
 - You can still move or remove this tile from the tile menu.
 
 ### Form tile (CTL / ATL / TSB)
 
-- New dashboard **Form** tiles are temporarily disabled from chart type options.
 - The tile derives daily load from **Training Stress Score**.
+- Legacy **Power Training Stress Score** is used automatically when current TSS is missing.
 - It shows three headline stats: **Fitness (CTL)**, **Fatigue (ATL)**, and **Form (TSB)**.
 - **Form (TSB)** is shown as **prior-day readiness** using the prior day CTL - ATL.
+- Form and RecoveryNow tiles use precomputed derived snapshots from your full history (UTC day buckets).
+- Form/TSS trend lines keep full history and are explored with compact **W / M / Y** timeline buttons.
+- The chart does not use slider or reload/reset toolbar controls.
+- Form trend lines continue to **today** with zero-load decay after your latest workout.
+- Headline values show the latest real full-history values, including **Latest TSS**.
+- Form/TSS uses adaptive render granularity by view: **W = daily points**, **M = weekly points**, **Y = monthly points**.
+- While derived metrics are refreshing, the tile shows a training-metrics **updating** message instead of generic no-data text.
+- When snapshots are missing or stale, they rebuild asynchronously; refresh usually follows within a few minutes.
+- If rebuilding requests fail repeatedly, the dashboard shows a retry notification and continues with last known snapshot values.
+- While rebuilding, the dashboard shows a small training-metrics status notice above tiles.
 - The status title updates dynamically from current Form bands:
   - **High fatigue** at very negative Form values,
   - **Building fitness** while carrying meaningful load,
   - **Maintaining fitness** around neutral Form,
   - **Fresh** when Form is clearly positive.
+
+### Derived KPI and curated charts
+
+- **ACWR** uses acute 7-day load versus chronic 28-day load/4 and shows an 8-week sparkline.
+- **Ramp Rate** uses CTL(today) - CTL(today-7d) with an 8-week sparkline.
+- **Monotony / Strain** uses 7-day load mean/stddev for monotony, and load * monotony for strain.
+- **Form Now** uses prior-day TSB readiness from the latest derived load state.
+- **Form +7d** projects prior-day TSB at day +7 assuming zero load.
+- **Easy %** and **Hard %** use the latest weekly intensity distribution bucket.
+- **Efficiency Δ (4w)** shows current efficiency versus the prior 4-week baseline as absolute + percent delta.
+- **Freshness Forecast** projects 7 future days with zero load from the latest derived day.
+- **Intensity Distribution** uses power zones when available, otherwise heart-rate zones, grouped to Easy/Moderate/Hard by week.
+- **Efficiency Trend** uses weekly duration-weighted average of avgPower/avgHeartRate.
+- These tiles are derived-only and do not fall back to currently loaded dashboard events.
 
 ### Merge events
 
@@ -164,17 +208,17 @@ export const HELP_SECTIONS: HelpSection[] = [
     summary: 'How prompt execution, result types, quotas, and restore behavior work in the AI Insights page.',
     content: `## Access and quota
 
-- AI Insights is available for **Basic** and **Pro** accounts.
-- Free accounts are redirected to the subscription flow for AI Insights access.
+- AI Insights is available for **Free**, **Basic**, and **Pro** accounts.
 - Prompts are currently **English only**.
 - For AI Insights, we do **not** share your raw activities, routes, or uploaded files with AI providers.
 - We only send the minimum derived stats needed to generate answers.
 - **Why do I get the same answer for the same prompt?**
   - AI Insights is mostly deterministic for the same prompt and same data scope.
   - Answers change when the underlying stats change, like new activities, a different date range, or a changed prompt.
-- Request limits per billing period:
-  - Basic: up to **${AI_INSIGHTS_REQUEST_LIMITS.basic}** requests
-  - Pro: up to **${AI_INSIGHTS_REQUEST_LIMITS.pro}** requests
+- Request limits:
+  - Free: up to **${AI_INSIGHTS_REQUEST_LIMITS.free}** requests per calendar month
+  - Basic: up to **${AI_INSIGHTS_REQUEST_LIMITS.basic}** requests per billing period
+  - Pro: up to **${AI_INSIGHTS_REQUEST_LIMITS.pro}** requests per billing period
 - The prompt card always shows your live remaining requests and reset timing.
 
 ## Prompt flow and execution
@@ -206,6 +250,12 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Confidence & evidence chips**: compact chips under supported AI result narratives and callouts that show confidence tier and linked deterministic evidence.
 - **Empty**: the request shape is valid but no matching data was found in scope.
 - **Unsupported**: the request could not be mapped confidently; suggested prompts are returned.
+
+## Supported metric highlights
+
+- Power profiling includes **FTP**, **Critical Power**, and **Power-to-Weight (W/kg)** prompts.
+- Running dynamics includes **Ground Contact Time**, **Vertical Oscillation**, **Vertical Ratio**, and **Leg Stiffness** prompts.
+- Zone prompts support deterministic aggregate trends such as **time in Heart Rate Zone 2**, **Power Zone 2**, and **Speed Zone 2** over time.
 
 ## Confidence and anomaly guardrails
 

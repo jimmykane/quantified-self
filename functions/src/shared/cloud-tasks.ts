@@ -151,6 +151,40 @@ export async function enqueueSportsLibReparseTask(jobId: string, scheduleDelaySe
     });
 }
 
+/**
+ * Enqueue a single derived-metrics rebuild task for one user generation.
+ * Task name is deterministic to guarantee one pending task per user generation.
+ */
+export async function enqueueDerivedMetricsTask(
+    uid: string,
+    generation: number,
+    scheduleDelaySeconds?: number,
+): Promise<boolean> {
+    const client = getCloudTasksClient();
+    const { projectId, location, derivedMetricsQueue, serviceAccountEmail } = config.cloudtasks;
+    if (!projectId) {
+        throw new Error('Project ID is not defined in config');
+    }
+
+    const parent = client.queuePath(projectId, location, derivedMetricsQueue);
+    const url = `https://${location}-${projectId}.cloudfunctions.net/processDerivedMetricsTask`;
+    const safeUid = `${uid}`.replace(/[^a-zA-Z0-9-_]/g, '-');
+    const safeGeneration = Number.isFinite(generation) ? Math.max(0, Math.floor(generation)) : 0;
+    const taskName = `${parent}/tasks/derived-metrics-${safeUid}-${safeGeneration}`;
+    const payload = { data: { uid, generation: safeGeneration } };
+
+    return enqueueTaskWithRetry({
+        parent,
+        taskName,
+        payload,
+        serviceAccountEmail,
+        url,
+        scheduleDelaySeconds,
+        alreadyExistsLogMessage: `[DerivedMetricsDispatcher] Task already exists for ${uid} generation ${safeGeneration}, skipping`,
+        failedLogPrefix: `[DerivedMetricsDispatcher] Failed to enqueue derived metrics task for ${uid} generation ${safeGeneration}:`,
+    });
+}
+
 interface EnqueueTaskParams {
     parent: string;
     taskName: string;

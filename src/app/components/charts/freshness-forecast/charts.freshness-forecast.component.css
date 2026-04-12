@@ -1,0 +1,52 @@
+:host {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.forecast-layout {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 8px 10px 8px;
+}
+
+.forecast-header {
+  display: grid;
+  gap: 4px;
+}
+
+.forecast-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.forecast-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.forecast-stat-value {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1.24rem;
+  line-height: 1;
+  font-weight: 700;
+  color: var(--mat-sys-on-surface);
+}
+
+.forecast-stat-label {
+  margin-top: 2px;
+  font-size: 0.68rem;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.forecast-chart {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 86px;
+  min-width: 0;
+}

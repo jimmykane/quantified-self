@@ -9,32 +9,70 @@
     <app-tile-chart-actions [user]="user" [chartType]="chartType" [order]="order" [size]="size"
       [type]="type" [chartDataType]="dataType" [chartDataCategoryType]="dataCategoryType"
       [chartTimeInterval]="dataTimeInterval" [chartDataValueType]="dataValueType"
-      (savingChange)="onTileActionSaving($event)">
+      (savingChange)="onTileActionSaving($event)"
+      (editInDashboardManager)="onEditInDashboardManager($event)">
     </app-tile-chart-actions>
   </div>
   }
   @if (chartType === recoveryNowChartType) {
   <app-pie-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme" [chartDataType]="dataType"
     [chartDataValueType]="dataValueType" [chartDataCategoryType]="dataCategoryType"
-    [chartDataTimeInterval]="dataTimeInterval" [userUnitSettings]="user?.settings?.unitSettings" [recoveryNow]="recoveryNow">
+    [chartDataTimeInterval]="dataTimeInterval" [userUnitSettings]="user?.settings?.unitSettings"
+    [recoveryNow]="recoveryNow" [recoveryNowStatus]="recoveryNowStatus" [enableRecoveryNowMode]="true">
   </app-pie-chart>
   }
   @if (chartType === chartTypes.Pie) {
   <app-pie-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme" [chartDataType]="dataType"
     [chartDataValueType]="dataValueType" [chartDataCategoryType]="dataCategoryType"
-    [chartDataTimeInterval]="dataTimeInterval" [userUnitSettings]="user?.settings?.unitSettings" [recoveryNow]="recoveryNow">
+    [chartDataTimeInterval]="dataTimeInterval" [userUnitSettings]="user?.settings?.unitSettings">
   </app-pie-chart>
   }
   @if (chartType === formChartType) {
-  <app-form-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme">
+  <app-form-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme"
+    [absoluteLatestPoint]="absoluteLatestFormPoint" [formStatus]="formStatus">
   </app-form-chart>
+  }
+  @if (
+  chartType === acwrKpiChartType
+  || chartType === rampRateKpiChartType
+  || chartType === monotonyStrainKpiChartType
+  || chartType === formNowKpiChartType
+  || chartType === formPlus7dKpiChartType
+  || chartType === easyPercentKpiChartType
+  || chartType === hardPercentKpiChartType
+  || chartType === efficiencyDelta4wKpiChartType
+  ) {
+  <app-kpi-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme" [chartType]="chartType"
+    [acwr]="acwr" [rampRate]="rampRate" [monotonyStrain]="monotonyStrain"
+    [formNow]="formNow" [formPlus7d]="formPlus7d" [easyPercent]="easyPercent" [hardPercent]="hardPercent"
+    [efficiencyDelta4w]="efficiencyDelta4w"
+    [acwrStatus]="acwrStatus" [rampRateStatus]="rampRateStatus" [monotonyStrainStatus]="monotonyStrainStatus"
+    [formNowStatus]="formNowStatus" [formPlus7dStatus]="formPlus7dStatus"
+    [easyPercentStatus]="easyPercentStatus" [hardPercentStatus]="hardPercentStatus"
+    [efficiencyDelta4wStatus]="efficiencyDelta4wStatus">
+  </app-kpi-chart>
+  }
+  @if (chartType === freshnessForecastChartType) {
+  <app-freshness-forecast-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
+    [forecast]="freshnessForecast" [status]="freshnessForecastStatus">
+  </app-freshness-forecast-chart>
+  }
+  @if (chartType === intensityDistributionChartType) {
+  <app-intensity-distribution-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
+    [distribution]="intensityDistribution" [status]="intensityDistributionStatus">
+  </app-intensity-distribution-chart>
+  }
+  @if (chartType === efficiencyTrendChartType) {
+  <app-efficiency-trend-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
+    [trend]="efficiencyTrend" [status]="efficiencyTrendStatus">
+  </app-efficiency-trend-chart>
   }
   @if (chartType === chartTypes.LinesHorizontal
   || chartType === chartTypes.LinesVertical) {
   <app-xy-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme" [chartDataType]="dataType"
     [chartDataValueType]="dataValueType" [chartDataCategoryType]="dataCategoryType"
     [chartDataTimeInterval]="dataTimeInterval" [vertical]="chartType !== chartTypes.LinesHorizontal"
-    [userUnitSettings]="user?.settings?.unitSettings" [recoveryNow]="recoveryNow">
+    [userUnitSettings]="user?.settings?.unitSettings">
   </app-xy-chart>
   }
   @if (chartType === chartTypes.ColumnsHorizontal
@@ -44,7 +82,7 @@
       ? 'columns'
       : 'pyramids'" [vertical]="chartType !== chartTypes.ColumnsHorizontal" [chartDataType]="dataType" [chartDataValueType]="dataValueType"
     [chartDataCategoryType]="dataCategoryType" [chartDataTimeInterval]="dataTimeInterval"
-    [userUnitSettings]="user?.settings?.unitSettings" [recoveryNow]="recoveryNow">
+    [userUnitSettings]="user?.settings?.unitSettings">
   </app-columns-chart>
   }
 

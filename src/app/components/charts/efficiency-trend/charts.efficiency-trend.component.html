@@ -1,0 +1,11 @@
+<app-loading-overlay [isLoading]="isLoading" [hasError]="showNoDataError" [allowErrorPassthrough]="true" [errorMessage]="noDataErrorMessage"
+  [errorHint]="noDataErrorHint" [errorIcon]="noDataErrorIcon" [showSkeleton]="false" height="100%" [style.height.%]="100">
+  <section class="efficiency-layout">
+    <header class="efficiency-header">
+      <div class="efficiency-title">Efficiency Trend</div>
+      <div class="efficiency-value">{{ latestValueText }}</div>
+      <div class="efficiency-subtitle">Latest power / heart-rate ratio</div>
+    </header>
+    <div #chartDiv class="efficiency-chart"></div>
+  </section>
+</app-loading-overlay>

@@ -1,7 +1,9 @@
 import { DataDuration, DataRecoveryTime } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import {
+  resolveActiveRecoveryTotalSeconds,
   resolveAggregatedRecoveryNowContext,
+  resolveLatestWorkoutRecoverySeconds,
   resolveLatestRecoveryNowContext,
   resolveRecoveryEventEndTimeMs,
   resolveRemainingRecoverySeconds,
@@ -130,6 +132,39 @@ describe('dashboard-recovery-now.helper', () => {
     expect(resolveRemainingRecoverySeconds(context, 8_000_000)).toBe(0);
   });
 
+  it('resolves active total recovery from currently active segments only', () => {
+    const context = {
+      totalSeconds: 7200,
+      endTimeMs: 2_000_000,
+      segments: [
+        { totalSeconds: 3600, endTimeMs: 1_000_000 },
+        { totalSeconds: 7200, endTimeMs: 2_000_000 },
+      ],
+    };
+
+    expect(resolveActiveRecoveryTotalSeconds(context, 1_500_000)).toBe(10800);
+    expect(resolveActiveRecoveryTotalSeconds(context, 5_000_000)).toBe(7200);
+    expect(resolveActiveRecoveryTotalSeconds(context, 12_000_000)).toBe(0);
+  });
+
+  it('resolves latest workout recovery from metadata and segment fallback', () => {
+    expect(resolveLatestWorkoutRecoverySeconds({
+      totalSeconds: 3600,
+      endTimeMs: 1_000,
+      latestWorkoutSeconds: 5400,
+      latestWorkoutEndTimeMs: 2_000,
+    })).toBe(5400);
+
+    expect(resolveLatestWorkoutRecoverySeconds({
+      totalSeconds: 3600,
+      endTimeMs: 2_000,
+      segments: [
+        { totalSeconds: 1200, endTimeMs: 1_000 },
+        { totalSeconds: 4800, endTimeMs: 2_000 },
+      ],
+    })).toBe(4800);
+  });
+
   it('returns null for invalid or missing recovery contexts', () => {
     expect(resolveAggregatedRecoveryNowContext(null)).toBeNull();
     expect(resolveAggregatedRecoveryNowContext([] as any)).toBeNull();
@@ -137,7 +172,7 @@ describe('dashboard-recovery-now.helper', () => {
       buildEvent({
         startDate: Date.UTC(2024, 0, 1, 9, 0, 0),
         endDate: Date.UTC(2024, 0, 1, 10, 0, 0),
-        recoverySeconds: 0,
+        recoverySeconds: 15 * 24 * 60 * 60,
       }),
     ] as any)).toBeNull();
 
@@ -146,6 +181,7 @@ describe('dashboard-recovery-now.helper', () => {
       totalSeconds: NaN,
       endTimeMs: Date.UTC(2024, 0, 1, 10, 0, 0),
     })).toBeNull();
+    expect(resolveLatestWorkoutRecoverySeconds(null)).toBeNull();
   });
 
   it('keeps legacy latest helper as a compatibility alias to aggregated behavior', () => {

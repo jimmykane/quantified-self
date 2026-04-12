@@ -1,11 +1,6 @@
-import { Component, Input, OnInit, inject } from '@angular/core';
+import { Component, EventEmitter, OnInit, Output } from '@angular/core';
 import { AppUserService } from '../../../../services/app.user.service';
 import { TileActionsAbstractDirective } from '../tile-actions-abstract.directive';
-import { TileMapSettingsInterface } from '@sports-alliance/sports-lib';
-import { MapStyleService } from '../../../../services/map-style.service';
-import { MapStyleName } from '../../../../services/map/map-style.types';
-
-type DashboardMapTileSettings = TileMapSettingsInterface & { mapStyle?: MapStyleName };
 
 @Component({
   selector: 'app-tile-map-actions',
@@ -15,14 +10,7 @@ type DashboardMapTileSettings = TileMapSettingsInterface & { mapStyle?: MapStyle
   standalone: false
 })
 export class TileMapActionsComponent extends TileActionsAbstractDirective implements OnInit {
-  @Input() mapStyle: MapStyleName = 'default';
-  @Input() clusterMarkers!: boolean;
-  public iconColor: string = '';
-  private mapStyleService = inject(MapStyleService);
-
-  public get mapStyleOptions() {
-    return this.mapStyleService.getSupportedStyleOptions();
-  }
+  @Output() editInDashboardManager = new EventEmitter<number>();
 
   constructor(
     userService: AppUserService) {
@@ -36,26 +24,9 @@ export class TileMapActionsComponent extends TileActionsAbstractDirective implem
     }
   }
 
-  async changeMapStyle(event: any) {
-    this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeMapStyle' });
-    const tile = <DashboardMapTileSettings>this.user?.settings.dashboardSettings.tiles.find(tile => tile.order === this.order);
-    if (tile) {
-      tile.mapStyle = this.mapStyleService.normalizeStyle(event.value);
-      delete (tile as any).mapType;
-    }
-    return this.persistUserSettings();
+  openEditInDashboardManager(event: MouseEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.editInDashboardManager.emit(this.order);
   }
-
-
-
-  async switchClusterMarkers(event: any) {
-    this.analyticsService.logEvent('dashboard_tile_action', { method: 'switchClusterMarkers' });
-    const tile = <TileMapSettingsInterface>this.user?.settings.dashboardSettings.tiles.find(tile => tile.order === this.order);
-    if (tile) {
-      tile.clusterMarkers = this.clusterMarkers;
-    }
-    return this.persistUserSettings();
-  }
-
 }
-

@@ -11,6 +11,8 @@ type ResizeObserverRecord = {
   disconnect: ReturnType<typeof vi.fn>;
 };
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 describe('ChartsFormComponent', () => {
   let fixture: ComponentFixture<ChartsFormComponent>;
   let component: ChartsFormComponent;
@@ -18,10 +20,13 @@ describe('ChartsFormComponent', () => {
   let originalResizeObserver: typeof ResizeObserver | undefined;
   let originalRequestAnimationFrame: typeof requestAnimationFrame | undefined;
   let originalCancelAnimationFrame: typeof cancelAnimationFrame | undefined;
+  let dateNowSpy: ReturnType<typeof vi.spyOn> | null;
 
-  const mockChart = {
-    isDisposed: vi.fn().mockReturnValue(false),
-    dispatchAction: vi.fn(),
+  let mockChart: {
+    isDisposed: ReturnType<typeof vi.fn>;
+    dispatchAction: ReturnType<typeof vi.fn>;
+    on: ReturnType<typeof vi.fn>;
+    off: ReturnType<typeof vi.fn>;
   };
 
   let mockLoader: {
@@ -65,8 +70,24 @@ describe('ChartsFormComponent', () => {
     },
   ];
 
+  const buildLongRangePoints = (count: number): DashboardFormPoint[] => (
+    Array.from({ length: count }, (_, index) => {
+      const ctl = 10 + index * 0.15;
+      const atl = 11 + index * 0.1;
+      return {
+        time: Date.UTC(2024, 0, index + 1),
+        trainingStressScore: index % 5 === 0 ? 40 : 0,
+        ctl,
+        atl,
+        formSameDay: ctl - atl,
+        formPriorDay: index === 0 ? null : (10 + (index - 1) * 0.15) - (11 + (index - 1) * 0.1),
+      };
+    })
+  );
+
   beforeEach(async () => {
     resizeObserverRecords = [];
+    dateNowSpy = null;
     originalResizeObserver = globalThis.ResizeObserver;
     originalRequestAnimationFrame = globalThis.requestAnimationFrame;
     originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
@@ -89,6 +110,13 @@ describe('ChartsFormComponent', () => {
       return 1;
     }) as unknown as typeof requestAnimationFrame;
     globalThis.cancelAnimationFrame = vi.fn();
+
+    mockChart = {
+      isDisposed: vi.fn().mockReturnValue(false),
+      dispatchAction: vi.fn(),
+      on: vi.fn(),
+      off: vi.fn(),
+    };
 
     mockLoader = {
       init: vi.fn().mockResolvedValue(mockChart),
@@ -113,9 +141,13 @@ describe('ChartsFormComponent', () => {
     component.darkTheme = false;
     component.isLoading = false;
     component.data = points;
+    // Keep tests deterministic; individual tests can override this.
+    dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(points[points.length - 1].time);
   });
 
   afterEach(() => {
+    dateNowSpy?.mockRestore();
+    dateNowSpy = null;
     if (originalResizeObserver) {
       globalThis.ResizeObserver = originalResizeObserver;
     } else {
@@ -134,15 +166,18 @@ describe('ChartsFormComponent', () => {
     document.body.classList.remove('dark-theme');
   });
 
-  const getLastOption = (): Record<string, any> => {
-    return mockLoader.setOption.mock.calls.at(-1)?.[1] as Record<string, any>;
+  const getLastFullChartOption = (): Record<string, any> => {
+    const call = [...mockLoader.setOption.mock.calls]
+      .reverse()
+      .find(([, option]) => Array.isArray((option as Record<string, unknown>)?.series));
+    return (call?.[1] || {}) as Record<string, any>;
   };
 
   it('should initialize echarts with two panes and default prior-day form series', async () => {
     fixture.detectChanges();
     await waitForChartStabilization();
 
-    const option = getLastOption();
+    const option = getLastFullChartOption();
     const formSeries = option.series.find((entry: { name?: string }) => entry.name === 'Form (TSB)');
     const topGrid = option.grid?.[0];
     const bottomGrid = option.grid?.[1];
@@ -156,19 +191,92 @@ describe('ChartsFormComponent', () => {
     expect(topGrid.height).toBe(bottomGrid.height);
     expect(topGrid.outerBoundsMode).toBe('none');
     expect(bottomGrid.outerBoundsMode).toBe('none');
-    expect(formSeries.data).toEqual(points.map(point => point.formPriorDay));
+    expect(option.xAxis[0].type).toBe('time');
+    expect(option.xAxis[1].type).toBe('time');
+    expect(Array.isArray(formSeries.data)).toBe(true);
+    expect(formSeries.data).toHaveLength(points.length);
+    expect(formSeries.data[formSeries.data.length - 1][1]).toBe(points[points.length - 1].formPriorDay);
+    expect(formSeries.symbol).toBe('none');
+    expect(option.dataZoom).toBeUndefined();
+    expect(option.toolbox).toBeUndefined();
+    expect(option.xAxis[1].minInterval).toBe(7 * DAY_MS);
+    expect(option.xAxis[1].splitNumber).toBeGreaterThanOrEqual(2);
+    expect(option.xAxis[1].splitNumber).toBeLessThanOrEqual(7);
+    expect(typeof option.xAxis[1].axisLabel.formatter).toBe('function');
+    expect(mockChart.on).not.toHaveBeenCalledWith('datazoom', expect.any(Function));
+    expect(mockChart.on).not.toHaveBeenCalledWith('restore', expect.any(Function));
   });
 
-  it('should expose dynamic status title and rounded headline stats', async () => {
+  it('should expose dynamic status title and rounded headline stats from latest real point', async () => {
+    component.absoluteLatestPoint = {
+      time: Date.UTC(2024, 1, 5),
+      trainingStressScore: 18,
+      ctl: 42.2,
+      atl: 44.1,
+      formSameDay: -1.9,
+      formPriorDay: -1.9,
+    };
+
     fixture.detectChanges();
     await waitForChartStabilization();
 
     expect(component.status().title).toBe('Maintaining fitness');
     expect(component.headlineStats()).toEqual({
-      fitness: '11',
-      fatigue: '12',
-      form: '-3',
+      fitness: {
+        value: '42',
+      },
+      fatigue: {
+        value: '44',
+      },
+      form: {
+        value: '-2',
+      },
+      tss: {
+        value: '18',
+      },
     });
+  });
+
+  it('should show safe fallback headline values when latest points are unavailable', async () => {
+    component.data = [];
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    expect(component.headlineStats()).toEqual({
+      fitness: { value: '--' },
+      fatigue: { value: '--' },
+      form: { value: '--' },
+      tss: { value: '--' },
+    });
+  });
+
+  it('should show updating no-data messaging while form derived metrics are pending', async () => {
+    component.formStatus = 'stale' as any;
+    component.data = [];
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    expect(component.noDataErrorMessage).toBe('Training metrics are updating');
+    expect(component.noDataErrorHint).toBe('We are recalculating your fitness, fatigue, and form.');
+    expect(component.noDataErrorIcon).toBe('autorenew');
+  });
+
+  it('should extend form trend to today with zero-load decay days', async () => {
+    dateNowSpy?.mockRestore();
+    dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2024, 0, 10, 13, 0, 0));
+    component.data = points;
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const option = getLastFullChartOption();
+    const formSeries = option.series.find((entry: { name?: string }) => entry.name === 'Form (TSB)');
+
+    expect(formSeries.data.length).toBe(10);
+    expect(option.xAxis[1].max).toBe(Date.UTC(2024, 0, 10));
+    expect(option.xAxis[1].max).toBeGreaterThan(points[points.length - 1].time);
   });
 
   it('should emit empty chart option when there are no form points', async () => {
@@ -177,34 +285,120 @@ describe('ChartsFormComponent', () => {
     fixture.detectChanges();
     await waitForChartStabilization();
 
-    const option = getLastOption();
+    const option = getLastFullChartOption();
     expect(option.series).toEqual([]);
     expect(option.xAxis).toEqual([]);
     expect(option.yAxis).toEqual([]);
   });
 
-  it('should apply coarser dashboard-aligned render granularity for long date ranges', async () => {
-    const longRangePoints: DashboardFormPoint[] = Array.from({ length: 120 }, (_, index) => {
-      const ctl = 10 + index * 0.15;
-      const atl = 11 + index * 0.1;
-      return {
-        time: Date.UTC(2024, 0, index + 1),
-        trainingStressScore: index % 5 === 0 ? 40 : 0,
-        ctl,
-        atl,
-        formSameDay: ctl - atl,
-        formPriorDay: index === 0 ? null : (10 + (index - 1) * 0.15) - (11 + (index - 1) * 0.1),
-      };
-    });
-
+  it('should apply daily render points for W view by default with thinner line styling', async () => {
+    const longRangePoints = buildLongRangePoints(260);
     component.data = longRangePoints;
     fixture.detectChanges();
     await waitForChartStabilization();
 
-    const option = getLastOption();
+    const option = getLastFullChartOption();
     const formSeries = option.series.find((entry: { name?: string }) => entry.name === 'Form (TSB)');
+    const fitnessSeries = option.series.find((entry: { name?: string }) => entry.name === 'Fitness (CTL)');
+    const fatigueSeries = option.series.find((entry: { name?: string }) => entry.name === 'Fatigue (ATL)');
 
-    expect(formSeries.data.length).toBeLessThan(longRangePoints.length);
+    expect(component.selectedGranularity()).toBe('w');
+    expect(formSeries.data.length).toBe(longRangePoints.length);
     expect(option.xAxis[1].axisLabel.rotate).toBe(0);
+    expect(option.xAxis[1].minInterval).toBe(7 * DAY_MS);
+    expect(option.xAxis[1].splitNumber).toBeGreaterThanOrEqual(2);
+    expect(option.xAxis[1].splitNumber).toBeLessThanOrEqual(7);
+    expect(option.xAxis[1].min).toBeGreaterThan(longRangePoints[0].time);
+    expect(option.xAxis[1].max).toBe(formSeries.data[formSeries.data.length - 1][0]);
+    expect(typeof option.xAxis[1].axisLabel.formatter).toBe('function');
+    expect(formSeries.symbol).toBe('none');
+    expect(fitnessSeries.lineStyle.width).toBe(1.2);
+    expect(fatigueSeries.lineStyle.width).toBe(1.2);
+    expect(formSeries.lineStyle.width).toBe(1.1);
+    expect(option.dataZoom).toBeUndefined();
+    expect(option.toolbox).toBeUndefined();
+  });
+
+  it('should switch render granularity and timeline window via compact buttons without zoom/restore toolbar', async () => {
+    const longRangePoints = buildLongRangePoints(1200);
+    component.data = longRangePoints;
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const weeklyOption = getLastFullChartOption();
+    const weeklyFormSeries = weeklyOption.series.find((entry: { name?: string }) => entry.name === 'Form (TSB)');
+    const weeklyLength = weeklyFormSeries.data.length;
+    const weeklyMin = weeklyOption.xAxis[1].min;
+    const weeklyMax = weeklyOption.xAxis[1].max;
+
+    const granularityToggle = fixture.nativeElement.querySelector('mat-button-toggle-group.form-granularity-toggle');
+    expect(granularityToggle).toBeTruthy();
+    expect((fixture.nativeElement.textContent || '')).toContain('W');
+    expect((fixture.nativeElement.textContent || '')).toContain('M');
+    expect((fixture.nativeElement.textContent || '')).toContain('Y');
+
+    component.onGranularityChange('m');
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const monthlyOption = getLastFullChartOption();
+    const monthlyFormSeries = monthlyOption.series.find((entry: { name?: string }) => entry.name === 'Form (TSB)');
+    const monthlyLength = monthlyFormSeries.data.length;
+    const monthlyMin = monthlyOption.xAxis[1].min;
+    const monthlyMax = monthlyOption.xAxis[1].max;
+
+    expect(component.selectedGranularity()).toBe('m');
+    expect(monthlyOption.xAxis[1].minInterval).toBe(28 * DAY_MS);
+    expect(monthlyOption.xAxis[1].splitNumber).toBeGreaterThanOrEqual(2);
+    expect(monthlyOption.xAxis[1].splitNumber).toBeLessThanOrEqual(7);
+    expect(monthlyLength).toBeLessThan(weeklyLength);
+    expect(monthlyMin).toBeLessThan(weeklyMin);
+    expect(monthlyMax).toBeLessThanOrEqual(weeklyMax);
+    expect(monthlyOption.dataZoom).toBeUndefined();
+    expect(monthlyOption.toolbox).toBeUndefined();
+
+    component.onGranularityChange('y');
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const yearlyOption = getLastFullChartOption();
+    const yearlyFormSeries = yearlyOption.series.find((entry: { name?: string }) => entry.name === 'Form (TSB)');
+    const yearlyMin = yearlyOption.xAxis[1].min;
+    const yearlyMax = yearlyOption.xAxis[1].max;
+
+    expect(component.selectedGranularity()).toBe('y');
+    expect(yearlyOption.xAxis[1].minInterval).toBe(365 * DAY_MS);
+    expect(yearlyOption.xAxis[1].splitNumber).toBeGreaterThanOrEqual(2);
+    expect(yearlyOption.xAxis[1].splitNumber).toBeLessThanOrEqual(7);
+    expect(yearlyFormSeries.data.length).toBeLessThan(monthlyLength);
+    expect(yearlyMin).toBe(yearlyFormSeries.data[0][0]);
+    expect(yearlyMax).toBeLessThanOrEqual(weeklyMax);
+    expect(yearlyMin).toBeLessThan(monthlyMin);
+    expect(yearlyOption.dataZoom).toBeUndefined();
+    expect(yearlyOption.toolbox).toBeUndefined();
+  });
+
+  it('should render a rich tooltip card with status/date and metric grid', async () => {
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const option = getLastFullChartOption();
+    const tooltipHtml = option.tooltip.formatter([{ dataIndex: 0 }]);
+
+    expect(tooltipHtml).toContain('qs-form-tooltip-card');
+    expect(tooltipHtml).toContain('Fitness');
+    expect(tooltipHtml).toContain('Fatigue');
+    expect(tooltipHtml).toContain('Form');
+    expect(tooltipHtml).toContain('TSS');
+    expect(tooltipHtml).toContain('Fitness change');
+
+    const position = option.tooltip.position(
+      [0, 0],
+      [],
+      null,
+      null,
+      { contentSize: [320, 150], viewSize: [360, 400] },
+    );
+    expect(position).toEqual([20, 8]);
   });
 });

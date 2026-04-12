@@ -294,6 +294,38 @@ const powerCurveQuery = {
   defaultedToCycling: true,
 };
 
+const athensRadiusLocationFilter = {
+  requestedText: 'Athens',
+  effectiveText: 'Athens',
+  resolvedLabel: 'Athens, Greece',
+  source: 'prompt' as const,
+  mode: 'radius' as const,
+  radiusKm: 20,
+  center: {
+    latitudeDegrees: 37.9838,
+    longitudeDegrees: 23.7275,
+  },
+};
+
+const greeceBboxLocationFilter = {
+  requestedText: 'Greece',
+  effectiveText: 'Greece',
+  resolvedLabel: 'Greece',
+  source: 'prompt' as const,
+  mode: 'bbox' as const,
+  radiusKm: 50,
+  center: {
+    latitudeDegrees: 39.0742,
+    longitudeDegrees: 21.8243,
+  },
+  bbox: {
+    west: 19.0,
+    south: 34.0,
+    east: 29.0,
+    north: 42.0,
+  },
+};
+
 const summary = {
   matchedEventCount: 2,
   overallAggregateValue: 123,
@@ -448,11 +480,11 @@ describe('aiInsights callable', () => {
     } as any)).rejects.toMatchObject({ code: 'failed-precondition' });
   });
 
-  it('rejects unpaid users before normalization', async () => {
+  it('rejects ineligible users before normalization', async () => {
     hoisted.getAiInsightsQuotaStatus.mockResolvedValue({
       ...quotaStatus,
-      role: 'free',
-      limit: 0,
+      role: 'basic',
+      limit: AI_INSIGHTS_REQUEST_LIMITS.basic,
       successfulRequestCount: 0,
       remainingCount: 0,
       isEligible: false,
@@ -464,7 +496,7 @@ describe('aiInsights callable', () => {
       clientTimezone: 'UTC',
     } as any)).rejects.toMatchObject({
       code: 'permission-denied',
-      message: 'AI Insights is available to Basic and Pro members.',
+      message: 'AI Insights is unavailable for this account.',
     });
 
     expect(hoisted.normalizeInsightQuery).not.toHaveBeenCalled();
@@ -1320,7 +1352,7 @@ describe('aiInsights callable', () => {
     expect(result).toEqual({
       status: 'ok',
       resultKind: 'latest_event',
-      narrative: 'Your latest cycling event was on Mar 18, 2026. I matched 4 events.',
+      narrative: 'Your latest event for cycling was on Mar 18, 2026. I matched 4 events.',
       quota: quotaStatus,
       statementChips: expect.any(Array),
       query: latestEventQuery,
@@ -1359,10 +1391,85 @@ describe('aiInsights callable', () => {
     expect(result).toEqual(expect.objectContaining({
       status: 'empty',
       query: latestEventQuery,
-      narrative: 'I found no matching cycling events in this range.',
+      narrative: 'I found no matching events for cycling in this range.',
       presentation: expect.objectContaining({
         emptyState: expect.any(String),
       }),
+    }));
+  });
+
+  it('returns a latest_event response with canonical all-activities location scope', async () => {
+    const latestEventLocationQuery = {
+      ...latestEventQuery,
+      activityTypes: [],
+      locationFilter: athensRadiusLocationFilter,
+    };
+
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'ok',
+      query: latestEventLocationQuery,
+    });
+    hoisted.executeAiInsightsQuery.mockResolvedValue({
+      resultKind: 'latest_event',
+      matchedEventsCount: 2,
+      matchedActivityTypeCounts: [
+        {
+          activityType: ActivityTypes.Cycling,
+          eventCount: 1,
+        },
+        {
+          activityType: ActivityTypes.Running,
+          eventCount: 1,
+        },
+      ],
+      latestEvent: {
+        eventId: 'event-athens',
+        startDate: '2026-03-12T08:00:00.000Z',
+      },
+    });
+
+    const result = await aiInsights({
+      prompt: 'When was my last activity near Athens?',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(result).toEqual(expect.objectContaining({
+      status: 'ok',
+      query: latestEventLocationQuery,
+      narrative: 'Your latest event across all activities within 20 km of athens, greece was on Mar 12, 2026. I matched 2 events.',
+    }));
+  });
+
+  it('returns empty latest_event responses with canonical location scope', async () => {
+    const latestEventLocationQuery = {
+      ...latestEventQuery,
+      activityTypes: [],
+      locationFilter: athensRadiusLocationFilter,
+    };
+
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'ok',
+      query: latestEventLocationQuery,
+    });
+    hoisted.executeAiInsightsQuery.mockResolvedValue({
+      resultKind: 'latest_event',
+      matchedEventsCount: 0,
+      matchedActivityTypeCounts: [],
+      latestEvent: {
+        eventId: null,
+        startDate: null,
+      },
+    });
+
+    const result = await aiInsights({
+      prompt: 'When was my last activity near Athens?',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(result).toEqual(expect.objectContaining({
+      status: 'empty',
+      query: latestEventLocationQuery,
+      narrative: 'I found no matching events across all activities within 20 km of athens, greece in this range.',
     }));
   });
 
@@ -1492,6 +1599,170 @@ describe('aiInsights callable', () => {
       presentation: expect.objectContaining({
         emptyState: expect.any(String),
       }),
+    }));
+  });
+
+  it('returns a power_curve response with canonical activity and location scope', async () => {
+    const powerCurveLocationQuery = {
+      ...powerCurveQuery,
+      locationFilter: greeceBboxLocationFilter,
+    };
+
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'ok',
+      query: powerCurveLocationQuery,
+    });
+    hoisted.executeAiInsightsQuery.mockResolvedValue({
+      resultKind: 'power_curve',
+      matchedEventsCount: 3,
+      matchedActivityTypeCounts: [
+        {
+          activityType: ActivityTypes.Cycling,
+          eventCount: 3,
+        },
+      ],
+      powerCurve: {
+        mode: 'best',
+        resolvedTimeInterval: TimeIntervals.Auto,
+        matchedEventCount: 3,
+        requestedSeriesCount: 1,
+        returnedSeriesCount: 1,
+        safetyGuardApplied: false,
+        safetyGuardMaxSeries: null,
+        trimmedSeriesCount: 0,
+        series: [
+          {
+            seriesKey: 'best',
+            label: 'Best power curve',
+            matchedEventCount: 3,
+            bucketStartDate: null,
+            bucketEndDate: null,
+            points: [
+              { duration: 5, power: 640, wattsPerKg: 8.9 },
+            ],
+          },
+        ],
+      },
+    });
+
+    const result = await aiInsights({
+      prompt: 'What is my best power curve in Greece?',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(result).toEqual(expect.objectContaining({
+      status: 'ok',
+      query: powerCurveLocationQuery,
+      narrative: 'I built your best power curve for cycling in greece as the max-power envelope across 3 matching events.',
+    }));
+  });
+
+  it('returns a power_curve response with canonical all-activities location scope', async () => {
+    const powerCurveAllActivitiesLocationQuery = {
+      ...powerCurveQuery,
+      activityTypes: [],
+      defaultedToCycling: false,
+      locationFilter: greeceBboxLocationFilter,
+    };
+
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'ok',
+      query: {
+        ...powerCurveAllActivitiesLocationQuery,
+        mode: 'compare_over_time',
+      },
+    });
+    hoisted.executeAiInsightsQuery.mockResolvedValue({
+      resultKind: 'power_curve',
+      matchedEventsCount: 4,
+      matchedActivityTypeCounts: [
+        {
+          activityType: ActivityTypes.Cycling,
+          eventCount: 2,
+        },
+        {
+          activityType: ActivityTypes.Running,
+          eventCount: 2,
+        },
+      ],
+      powerCurve: {
+        mode: 'compare_over_time',
+        resolvedTimeInterval: TimeIntervals.Monthly,
+        matchedEventCount: 4,
+        requestedSeriesCount: 2,
+        returnedSeriesCount: 2,
+        safetyGuardApplied: false,
+        safetyGuardMaxSeries: null,
+        trimmedSeriesCount: 0,
+        series: [
+          {
+            seriesKey: '2026-01',
+            label: 'Jan 2026',
+            matchedEventCount: 2,
+            bucketStartDate: '2026-01-01T00:00:00.000Z',
+            bucketEndDate: '2026-01-31T23:59:59.999Z',
+            points: [
+              { duration: 60, power: 350, wattsPerKg: 4.9 },
+            ],
+          },
+        ],
+      },
+    });
+
+    const result = await aiInsights({
+      prompt: 'Compare my power curve over time in Greece',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(result).toEqual(expect.objectContaining({
+      status: 'ok',
+      query: {
+        ...powerCurveAllActivitiesLocationQuery,
+        mode: 'compare_over_time',
+      },
+      narrative: 'I compared your power curve across all activities in greece over time by building one envelope per month.',
+    }));
+  });
+
+  it('returns empty power_curve responses with canonical location scope', async () => {
+    const powerCurveAllActivitiesLocationQuery = {
+      ...powerCurveQuery,
+      activityTypes: [],
+      defaultedToCycling: false,
+      mode: 'compare_over_time' as const,
+      locationFilter: greeceBboxLocationFilter,
+    };
+
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'ok',
+      query: powerCurveAllActivitiesLocationQuery,
+    });
+    hoisted.executeAiInsightsQuery.mockResolvedValue({
+      resultKind: 'power_curve',
+      matchedEventsCount: 0,
+      matchedActivityTypeCounts: [],
+      powerCurve: {
+        mode: 'compare_over_time',
+        resolvedTimeInterval: TimeIntervals.Monthly,
+        matchedEventCount: 0,
+        requestedSeriesCount: 0,
+        returnedSeriesCount: 0,
+        safetyGuardApplied: false,
+        safetyGuardMaxSeries: null,
+        trimmedSeriesCount: 0,
+        series: [],
+      },
+    });
+
+    const result = await aiInsights({
+      prompt: 'Compare my power curve over time in Greece',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(result).toEqual(expect.objectContaining({
+      status: 'empty',
+      query: powerCurveAllActivitiesLocationQuery,
+      narrative: 'I found no power-curve data across all activities in greece in this range.',
     }));
   });
 

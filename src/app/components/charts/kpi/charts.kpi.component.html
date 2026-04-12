@@ -1,0 +1,15 @@
+<app-loading-overlay [isLoading]="isLoading" [hasError]="showNoDataError" [allowErrorPassthrough]="true" [errorMessage]="noDataErrorMessage"
+  [errorHint]="noDataErrorHint" [errorIcon]="noDataErrorIcon" [showSkeleton]="false" height="100%" [style.height.%]="100">
+  <section class="kpi-layout">
+    <header class="kpi-header">
+      <div class="kpi-title">{{ title }}</div>
+      <div class="kpi-value">{{ primaryValueText }}</div>
+      <div class="kpi-primary-label">{{ primaryLabel }}</div>
+      <div class="kpi-secondary-label">{{ secondaryLabel }}</div>
+      @if (secondaryValueText) {
+      <div class="kpi-secondary-value">{{ secondaryValueText }}</div>
+      }
+    </header>
+    <div #chartDiv class="kpi-sparkline"></div>
+  </section>
+</app-loading-overlay>
