@@ -29,7 +29,7 @@
   }
   @if (chartType === formChartType) {
   <app-form-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme"
-    [absoluteLatestPoint]="absoluteLatestFormPoint" [formStatus]="formStatus">
+    [absoluteLatestPoint]="absoluteLatestFormPoint" [formStatus]="formStatus" [infoTooltip]="chartInfoTooltip">
   </app-form-chart>
   }
   @if (
@@ -43,6 +43,7 @@
   || chartType === efficiencyDelta4wKpiChartType
   ) {
   <app-kpi-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme" [chartType]="chartType"
+    [infoTooltip]="chartInfoTooltip"
     [acwr]="acwr" [rampRate]="rampRate" [monotonyStrain]="monotonyStrain"
     [formNow]="formNow" [formPlus7d]="formPlus7d" [easyPercent]="easyPercent" [hardPercent]="hardPercent"
     [efficiencyDelta4w]="efficiencyDelta4w"
@@ -54,17 +55,17 @@
   }
   @if (chartType === freshnessForecastChartType) {
   <app-freshness-forecast-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
-    [forecast]="freshnessForecast" [status]="freshnessForecastStatus">
+    [forecast]="freshnessForecast" [status]="freshnessForecastStatus" [infoTooltip]="chartInfoTooltip">
   </app-freshness-forecast-chart>
   }
   @if (chartType === intensityDistributionChartType) {
   <app-intensity-distribution-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
-    [distribution]="intensityDistribution" [status]="intensityDistributionStatus">
+    [distribution]="intensityDistribution" [status]="intensityDistributionStatus" [infoTooltip]="chartInfoTooltip">
   </app-intensity-distribution-chart>
   }
   @if (chartType === efficiencyTrendChartType) {
   <app-efficiency-trend-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
-    [trend]="efficiencyTrend" [status]="efficiencyTrendStatus">
+    [trend]="efficiencyTrend" [status]="efficiencyTrendStatus" [infoTooltip]="chartInfoTooltip">
   </app-efficiency-trend-chart>
   }
   @if (chartType === chartTypes.LinesHorizontal

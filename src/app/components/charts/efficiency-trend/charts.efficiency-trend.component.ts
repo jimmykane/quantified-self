@@ -17,6 +17,11 @@ import {
 import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
 import { buildDashboardValueAxisConfig } from '../../../helpers/dashboard-echarts-yaxis.helper';
 import {
+  isEChartsMobileTooltipViewport,
+  resolveEChartsTooltipSurfaceConfig,
+  resolveEChartsTooltipTriggerOn,
+} from '../../../helpers/echarts-tooltip-interaction.helper';
+import {
   type DashboardDerivedMetricStatus,
   isDerivedMetricPendingStatus,
 } from '../../../helpers/derived-metric-status.helper';
@@ -42,6 +47,7 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
   @Input() isLoading = false;
   @Input() trend?: DashboardEfficiencyTrendContext | null;
   @Input() status?: DashboardDerivedMetricStatus | null;
+  @Input() infoTooltip?: string | null;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
@@ -132,6 +138,7 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
 
     const chartWidth = this.chartDiv?.nativeElement?.clientWidth || 0;
     const style = buildDashboardEChartsStyleTokens(this.darkTheme, chartWidth);
+    const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
 
     const values = points.map(point => point.value);
     const valueAxis = buildDashboardValueAxisConfig(values);
@@ -152,8 +159,12 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
         outerBoundsContain: 'axisLabel',
       },
       tooltip: {
+        show: true,
         trigger: 'axis',
+        triggerOn: resolveEChartsTooltipTriggerOn(true, false),
         axisPointer: { type: 'line' },
+        renderMode: 'html',
+        ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),
         borderWidth: 1,
         borderColor: style.tooltipBorderColor,
         backgroundColor: style.tooltipBackgroundColor,

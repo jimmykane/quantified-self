@@ -36,6 +36,7 @@ import {
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   type DashboardChartType,
 } from '../../../helpers/dashboard-special-chart-types';
+import { resolveDashboardChartInfoTooltip } from '../../../helpers/dashboard-chart-info.helper';
 import type { DerivedMetricSnapshotStatus } from '@shared/derived-metrics';
 import type { DashboardDerivedMetricStatus } from '../../../helpers/derived-metric-status.helper';
 
@@ -102,6 +103,10 @@ export class TileChartComponent extends TileAbstractDirective {
   public intensityDistributionChartType = DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE;
   public efficiencyTrendChartType = DASHBOARD_EFFICIENCY_TREND_CHART_TYPE;
   public isTileActionSaving = false;
+
+  get chartInfoTooltip(): string | null {
+    return resolveDashboardChartInfoTooltip(this.chartType);
+  }
 
   onTileActionSaving(isSaving: boolean): void {
     this.isTileActionSaving = isSaving === true;

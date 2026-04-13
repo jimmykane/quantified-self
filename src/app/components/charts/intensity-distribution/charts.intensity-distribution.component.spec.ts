@@ -98,4 +98,43 @@ describe('ChartsIntensityDistributionComponent', () => {
     expect(component.showNoDataError).toBe(true);
     expect(component.noDataErrorMessage).toBe('Intensity distribution is updating');
   });
+
+  it('formats tooltip values as whole percentages with units', async () => {
+    const weeks = [
+      {
+        weekStartMs: Date.UTC(2025, 11, 29),
+        easySeconds: 7200,
+        moderateSeconds: 3600,
+        hardSeconds: 1800,
+        source: 'power' as const,
+      },
+    ];
+    component.distribution = {
+      latestWeekStartMs: Date.UTC(2026, 0, 5),
+      latestEasyPercent: 50,
+      latestModeratePercent: 30,
+      latestHardPercent: 20,
+      weeks,
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const option = (component as any).buildOption(weeks) as Record<string, any>;
+    const formatter = option?.tooltip?.formatter as ((params: Array<{ axisValueLabel?: string; seriesName?: string; value?: number }>) => string);
+
+    expect(typeof formatter).toBe('function');
+
+    const tooltipHtml = formatter([
+      { axisValueLabel: 'Dec 29', seriesName: 'Easy', value: 57.142857 },
+      { axisValueLabel: 'Dec 29', seriesName: 'Moderate', value: 28.571428 },
+      { axisValueLabel: 'Dec 29', seriesName: 'Hard', value: 14.285714 },
+    ]);
+
+    expect(tooltipHtml).toContain('Dec 29');
+    expect(tooltipHtml).toContain('Easy: 57%');
+    expect(tooltipHtml).toContain('Moderate: 29%');
+    expect(tooltipHtml).toContain('Hard: 14%');
+    expect(tooltipHtml).not.toContain('57.1');
+  });
 });

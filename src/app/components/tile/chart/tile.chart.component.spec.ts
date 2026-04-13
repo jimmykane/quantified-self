@@ -111,6 +111,7 @@ class MockFormChartComponent {
   @Input() darkTheme = false;
   @Input() absoluteLatestPoint: any;
   @Input() formStatus?: string | null;
+  @Input() infoTooltip?: string | null;
 }
 
 @Component({
@@ -122,6 +123,7 @@ class MockKpiChartComponent {
   @Input() isLoading = false;
   @Input() darkTheme = false;
   @Input() chartType: any;
+  @Input() infoTooltip?: string | null;
   @Input() acwr: any;
   @Input() rampRate: any;
   @Input() monotonyStrain: any;
@@ -150,6 +152,7 @@ class MockFreshnessForecastChartComponent {
   @Input() darkTheme = false;
   @Input() forecast: any;
   @Input() status?: string | null;
+  @Input() infoTooltip?: string | null;
 }
 
 @Component({
@@ -162,6 +165,7 @@ class MockIntensityDistributionChartComponent {
   @Input() darkTheme = false;
   @Input() distribution: any;
   @Input() status?: string | null;
+  @Input() infoTooltip?: string | null;
 }
 
 @Component({
@@ -174,6 +178,7 @@ class MockEfficiencyTrendChartComponent {
   @Input() darkTheme = false;
   @Input() trend: any;
   @Input() status?: string | null;
+  @Input() infoTooltip?: string | null;
 }
 
 describe('TileChartComponent', () => {
@@ -489,6 +494,32 @@ describe('TileChartComponent', () => {
     component.efficiencyTrendStatus = 'failed' as any;
     fixture.detectChanges();
     expect(getEfficiencyTrendComponent().trend).toEqual(component.efficiencyTrend);
+  });
+
+  it('should pass info tooltip text to derived curated chart renderers', () => {
+    component.chartType = DASHBOARD_FORM_CHART_TYPE as any;
+    component.showActions = false;
+    fixture.detectChanges();
+
+    expect(component.chartInfoTooltip).toContain('CTL');
+    expect(getFormComponent().infoTooltip).toContain('CTL');
+  });
+
+  it('should pass info tooltip text to KPI chart renderer', () => {
+    component.chartType = DASHBOARD_ACWR_KPI_CHART_TYPE as any;
+    component.showActions = true;
+    fixture.detectChanges();
+
+    expect(component.chartInfoTooltip).toContain('7 days');
+    expect(getKpiComponent().infoTooltip).toContain('7 days');
+  });
+
+  it('should keep tooltip text null for custom chart types', () => {
+    component.chartType = ChartTypes.ColumnsVertical;
+    component.showActions = false;
+    fixture.detectChanges();
+
+    expect(component.chartInfoTooltip).toBeNull();
   });
 
   it('should render a visible drag handle button for desktop drag mode', () => {

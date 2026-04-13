@@ -17,6 +17,11 @@ import {
 import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
 import { buildDashboardValueAxisConfig } from '../../../helpers/dashboard-echarts-yaxis.helper';
 import {
+  isEChartsMobileTooltipViewport,
+  resolveEChartsTooltipSurfaceConfig,
+  resolveEChartsTooltipTriggerOn,
+} from '../../../helpers/echarts-tooltip-interaction.helper';
+import {
   type DashboardDerivedMetricStatus,
   isDerivedMetricPendingStatus,
 } from '../../../helpers/derived-metric-status.helper';
@@ -42,6 +47,7 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
   @Input() isLoading = false;
   @Input() forecast?: DashboardFreshnessForecastContext | null;
   @Input() status?: DashboardDerivedMetricStatus | null;
+  @Input() infoTooltip?: string | null;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
@@ -137,6 +143,7 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
 
     const chartWidth = this.chartDiv?.nativeElement?.clientWidth || 0;
     const style = buildDashboardEChartsStyleTokens(this.darkTheme, chartWidth);
+    const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
 
     const ctlSeries = points.map(point => [point.dayMs, point.ctl] as const);
     const atlSeries = points.map(point => [point.dayMs, point.atl] as const);
@@ -169,8 +176,12 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
         outerBoundsContain: 'axisLabel',
       },
       tooltip: {
+        show: true,
         trigger: 'axis',
+        triggerOn: resolveEChartsTooltipTriggerOn(true, false),
         axisPointer: { type: 'line' },
+        renderMode: 'html',
+        ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),
         borderWidth: 1,
         borderColor: style.tooltipBorderColor,
         backgroundColor: style.tooltipBackgroundColor,

@@ -16,6 +16,11 @@ import {
 } from '../../../helpers/echarts-host-controller';
 import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
 import {
+  isEChartsMobileTooltipViewport,
+  resolveEChartsTooltipSurfaceConfig,
+  resolveEChartsTooltipTriggerOn,
+} from '../../../helpers/echarts-tooltip-interaction.helper';
+import {
   type DashboardDerivedMetricStatus,
   isDerivedMetricPendingStatus,
 } from '../../../helpers/derived-metric-status.helper';
@@ -41,6 +46,7 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
   @Input() isLoading = false;
   @Input() distribution?: DashboardIntensityDistributionContext | null;
   @Input() status?: DashboardDerivedMetricStatus | null;
+  @Input() infoTooltip?: string | null;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
@@ -143,6 +149,7 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
 
     const chartWidth = this.chartDiv?.nativeElement?.clientWidth || 0;
     const style = buildDashboardEChartsStyleTokens(this.darkTheme, chartWidth);
+    const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
 
     const categories = weeks.map((week) => new Date(week.weekStartMs).toLocaleDateString(undefined, {
       month: 'short',
@@ -176,8 +183,12 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
         outerBoundsContain: 'axisLabel',
       },
       tooltip: {
+        show: true,
         trigger: 'axis',
+        triggerOn: resolveEChartsTooltipTriggerOn(true, false),
         axisPointer: { type: 'shadow' },
+        renderMode: 'html',
+        ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),
         borderWidth: 1,
         borderColor: style.tooltipBorderColor,
         backgroundColor: style.tooltipBackgroundColor,
@@ -185,6 +196,23 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
           color: style.tooltipTextColor,
           fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
           fontSize: style.axisFontSize,
+        },
+        formatter: (params: Array<{ axisValueLabel?: string; seriesName?: string; value?: number }>) => {
+          if (!Array.isArray(params) || params.length === 0) {
+            return '';
+          }
+          const axisValueLabel = `${params[0]?.axisValueLabel || ''}`.trim();
+          const lines = params
+            .map((entry) => {
+              const seriesName = `${entry?.seriesName || ''}`.trim();
+              const valueText = this.formatPercent(entry?.value ?? null);
+              return seriesName ? `${seriesName}: ${valueText}` : valueText;
+            })
+            .filter((line) => line.trim().length > 0);
+          if (!lines.length) {
+            return axisValueLabel;
+          }
+          return axisValueLabel ? `${axisValueLabel}<br/>${lines.join('<br/>')}` : lines.join('<br/>');
         },
       },
       xAxis: {
@@ -241,5 +269,12 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
         },
       ],
     };
+  }
+
+  private formatPercent(value: unknown): string {
+    if (value === null || value === undefined || !Number.isFinite(Number(value))) {
+      return '--';
+    }
+    return `${Math.round(Number(value))}%`;
   }
 }

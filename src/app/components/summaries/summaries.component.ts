@@ -66,6 +66,7 @@ import {
   isDashboardFormPlus7dKpiChartType,
   isDashboardHardPercentKpiChartType,
   isDashboardIntensityDistributionChartType,
+  isDashboardKpiChartType,
   isDashboardMonotonyStrainKpiChartType,
   isDashboardRampRateKpiChartType,
   isDashboardRecoveryNowChartType,
@@ -105,6 +106,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
 
   public tiles: DashboardTileViewModel[] = [];
+  public kpiLaneTiles: DashboardChartTileViewModel[] = [];
+  public mainGridTiles: DashboardTileViewModel[] = [];
 
   public tileTypes = TileTypes;
   public desktopTileDragEnabled = false;
@@ -210,61 +213,32 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   public async onTilesDrop(_event: CdkDragDrop<DashboardTileViewModel[]>): Promise<void> {
-    if (!this.desktopTileDragEnabled) {
-      return;
-    }
+    this.ensureTileLanesInitializedFromTiles();
+    await this.persistLaneOrder();
+  }
 
-    const dashboardSettings = this.user?.settings?.dashboardSettings;
-    if (!dashboardSettings?.tiles?.length || !this.showActions || this.tiles.length < 2) {
-      return;
-    }
-
-    const orderedSettingsTiles = this.getOrderedDashboardSettingsTiles();
-    if (!orderedSettingsTiles.length) {
-      return;
-    }
-    const currentViewOrder = this.tiles.map(tile => tile.order);
-    const currentSettingsOrder = orderedSettingsTiles.map(tile => tile.order);
-    if (this.getOrderSignature(currentViewOrder) === this.getOrderSignature(currentSettingsOrder)) {
-      return;
-    }
-
-    const settingsByOrder = new Map<number, TileSettingsInterface>(
-      orderedSettingsTiles.map(tile => [tile.order, tile])
-    );
-    const nextSettingsTiles = currentViewOrder
-      .map(order => settingsByOrder.get(order))
-      .filter((tile): tile is TileSettingsInterface => !!tile);
-    if (nextSettingsTiles.length !== orderedSettingsTiles.length) {
-      this.logger.warn('[SummariesComponent] Skipping dashboard tile drag persist because order mapping was incomplete.');
-      return;
-    }
-
-    const previousSettingsTiles = this.cloneTileSettings(dashboardSettings.tiles);
-    const previousRenderedTiles = this.cloneDashboardViewModels(this.tiles);
-    const previousRenderedTilesByPersistedOrder = [...previousRenderedTiles]
-      .sort((left, right) => left.order - right.order);
-    dashboardSettings.tiles = this.withSequentialOrder(nextSettingsTiles);
-    this.tiles = this.withSequentialOrder([...this.tiles]);
-    this.dashboardTileSettingsSnapshot = this.getDashboardTileSettingsSnapshot();
-
-    try {
-      await this.userService.updateUserProperties(this.user as any, { settings: this.user?.settings });
-      this.updateDesktopTileDragCapability();
-    } catch (error) {
-      dashboardSettings.tiles = this.cloneTileSettings(previousSettingsTiles);
-      this.tiles = this.withSequentialOrder(this.cloneDashboardViewModels(previousRenderedTilesByPersistedOrder));
-      this.dashboardTileSettingsSnapshot = this.getDashboardTileSettingsSnapshot();
-      this.updateDesktopTileDragCapability();
-      this.logger.error('[SummariesComponent] Failed to persist dashboard tile drag order update', error);
-    }
+  public async onKpiTilesDrop(_event: CdkDragDrop<DashboardChartTileViewModel[]>): Promise<void> {
+    this.ensureTileLanesInitializedFromTiles();
+    await this.persistLaneOrder();
   }
 
   public onTilesSort(event: CdkDragSortEvent<DashboardTileViewModel[]>): void {
-    if (!this.desktopTileDragEnabled || !this.showActions || this.tiles.length < 2 || event.previousIndex === event.currentIndex) {
+    this.ensureTileLanesInitializedFromTiles();
+    if (!this.desktopTileDragEnabled || !this.showActions || this.mainGridTiles.length < 2 || event.previousIndex === event.currentIndex) {
       return;
     }
-    moveItemInArray(this.tiles, event.previousIndex, event.currentIndex);
+    moveItemInArray(this.mainGridTiles, event.previousIndex, event.currentIndex);
+    this.syncTilesFromLanesForPreview();
+    this.changeDetector.detectChanges();
+  }
+
+  public onKpiTilesSort(event: CdkDragSortEvent<DashboardChartTileViewModel[]>): void {
+    this.ensureTileLanesInitializedFromTiles();
+    if (!this.desktopTileDragEnabled || !this.showActions || this.kpiLaneTiles.length < 2 || event.previousIndex === event.currentIndex) {
+      return;
+    }
+    moveItemInArray(this.kpiLaneTiles, event.previousIndex, event.currentIndex);
+    this.syncTilesFromLanesForPreview();
     this.changeDetector.detectChanges();
   }
 
@@ -358,6 +332,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
     if (!this.tiles.length && newTiles.length) {
       this.tiles = newTiles;
+      this.refreshTileLanes();
       this.updateDesktopTileDragCapability();
       this.loaded();
       this.logger.log('[perf] summaries_commit_tiles', {
@@ -378,6 +353,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       }
     });
     this.tiles = this.tiles.filter(chart => newTiles.find(newChart => newChart.order === chart.order));
+    this.refreshTileLanes();
     this.updateDesktopTileDragCapability();
     this.loaded();
     this.logger.log('[perf] summaries_commit_tiles', {
@@ -569,8 +545,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   private updateDesktopTileDragCapability(): void {
+    this.ensureTileLanesInitializedFromTiles();
+    const hasDraggableLane = this.mainGridTiles.length > 1 || this.kpiLaneTiles.length > 1;
     this.desktopTileDragEnabled = this.showActions === true
-      && this.tiles.length > 1
+      && hasDraggableLane
       && this.matchesMediaQuery(SummariesComponent.desktopMinWidthMediaQuery)
       && this.matchesMediaQuery(SummariesComponent.finePointerMediaQuery)
       && this.matchesMediaQuery(SummariesComponent.hoverMediaQuery);
@@ -599,6 +577,97 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   private withSequentialOrder<T extends { order: number }>(tiles: T[]): T[] {
     return tiles.map((tile, index) => ({ ...tile, order: index })) as T[];
+  }
+
+  private isKpiLaneTile(tile: DashboardTileViewModel): tile is DashboardChartTileViewModel {
+    if (!isDashboardChartTileViewModel(tile)) {
+      return false;
+    }
+    return isDashboardKpiChartType(tile.chartType);
+  }
+
+  private isKpiSettingsTile(tile: TileSettingsInterface): tile is TileChartSettingsInterface {
+    if (tile.type !== TileTypes.Chart) {
+      return false;
+    }
+    return isDashboardKpiChartType((tile as TileChartSettingsInterface).chartType);
+  }
+
+  private refreshTileLanes(): void {
+    const orderedTiles = [...this.tiles].sort((left, right) => left.order - right.order);
+    this.kpiLaneTiles = orderedTiles.filter((tile): tile is DashboardChartTileViewModel => this.isKpiLaneTile(tile));
+    this.mainGridTiles = orderedTiles.filter(tile => !this.isKpiLaneTile(tile));
+  }
+
+  private ensureTileLanesInitializedFromTiles(): void {
+    if ((this.kpiLaneTiles.length + this.mainGridTiles.length) !== this.tiles.length) {
+      this.refreshTileLanes();
+    }
+  }
+
+  private syncTilesFromLanesForPreview(): void {
+    this.tiles = [...this.kpiLaneTiles, ...this.mainGridTiles];
+  }
+
+  private async persistLaneOrder(): Promise<void> {
+    if (!this.desktopTileDragEnabled) {
+      return;
+    }
+
+    const dashboardSettings = this.user?.settings?.dashboardSettings;
+    if (!dashboardSettings?.tiles?.length || !this.showActions || this.tiles.length < 2) {
+      return;
+    }
+
+    const orderedSettingsTiles = this.getOrderedDashboardSettingsTiles();
+    if (!orderedSettingsTiles.length) {
+      return;
+    }
+    const currentViewOrder = [...this.kpiLaneTiles, ...this.mainGridTiles].map(tile => tile.order);
+    const currentSettingsOrder = [
+      ...orderedSettingsTiles.filter(tile => this.isKpiSettingsTile(tile)).map(tile => tile.order),
+      ...orderedSettingsTiles.filter(tile => !this.isKpiSettingsTile(tile)).map(tile => tile.order),
+    ];
+    if (this.getOrderSignature(currentViewOrder) === this.getOrderSignature(currentSettingsOrder)) {
+      return;
+    }
+
+    const settingsByOrder = new Map<number, TileSettingsInterface>(
+      orderedSettingsTiles.map(tile => [tile.order, tile])
+    );
+    const nextKpiSettingsTiles = this.kpiLaneTiles
+      .map(tile => settingsByOrder.get(tile.order))
+      .filter((tile): tile is TileSettingsInterface => !!tile);
+    const nextMainGridSettingsTiles = this.mainGridTiles
+      .map(tile => settingsByOrder.get(tile.order))
+      .filter((tile): tile is TileSettingsInterface => !!tile);
+    const nextSettingsTiles = [...nextKpiSettingsTiles, ...nextMainGridSettingsTiles];
+
+    if (nextSettingsTiles.length !== orderedSettingsTiles.length) {
+      this.logger.warn('[SummariesComponent] Skipping dashboard tile drag persist because order mapping was incomplete.');
+      return;
+    }
+
+    const previousSettingsTiles = this.cloneTileSettings(dashboardSettings.tiles);
+    const previousRenderedTiles = this.cloneDashboardViewModels(this.tiles);
+    const previousRenderedTilesByPersistedOrder = [...previousRenderedTiles]
+      .sort((left, right) => left.order - right.order);
+    dashboardSettings.tiles = this.withSequentialOrder(nextSettingsTiles);
+    this.tiles = this.withSequentialOrder(this.cloneDashboardViewModels([...this.kpiLaneTiles, ...this.mainGridTiles]));
+    this.refreshTileLanes();
+    this.dashboardTileSettingsSnapshot = this.getDashboardTileSettingsSnapshot();
+
+    try {
+      await this.userService.updateUserProperties(this.user as any, { settings: this.user?.settings });
+      this.updateDesktopTileDragCapability();
+    } catch (error) {
+      dashboardSettings.tiles = this.cloneTileSettings(previousSettingsTiles);
+      this.tiles = this.withSequentialOrder(this.cloneDashboardViewModels(previousRenderedTilesByPersistedOrder));
+      this.refreshTileLanes();
+      this.dashboardTileSettingsSnapshot = this.getDashboardTileSettingsSnapshot();
+      this.updateDesktopTileDragCapability();
+      this.logger.error('[SummariesComponent] Failed to persist dashboard tile drag order update', error);
+    }
   }
 
   private getOrderSignature(orders: number[]): string {

@@ -73,6 +73,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() darkTheme = false;
   @Input() isLoading = false;
   @Input() chartType: DashboardKpiChartType = DASHBOARD_ACWR_KPI_CHART_TYPE;
+  @Input() infoTooltip?: string | null;
   @Input() acwr?: DashboardAcwrContext | null;
   @Input() rampRate?: DashboardRampRateContext | null;
   @Input() monotonyStrain?: DashboardMonotonyStrainContext | null;
@@ -329,9 +330,15 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     const chartWidth = this.chartDiv?.nativeElement?.clientWidth || 0;
     const style = buildDashboardEChartsStyleTokens(this.darkTheme, chartWidth);
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
-    const trendData = presentation.trend
+    const rawTrendData = presentation.trend
       .filter(point => Number.isFinite(point.time))
-      .map(point => [point.time, point.value] as const);
+      .map(point => {
+        const numericValue = point.value === null || point.value === undefined
+          ? null
+          : Number(point.value);
+        return [point.time, Number.isFinite(numericValue) ? numericValue : null] as const;
+      });
+    const trendData = this.trimNullEdgeTrendPoints(rawTrendData);
 
     if (!trendData.length) {
       return {
@@ -351,14 +358,17 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
         fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
       },
       grid: {
-        left: 2,
-        right: 2,
+        left: 0,
+        right: 0,
         top: 4,
         bottom: 2,
         containLabel: false,
       },
       xAxis: {
         type: 'time',
+        min: 'dataMin',
+        max: 'dataMax',
+        boundaryGap: false,
         axisLabel: { show: false },
         axisTick: { show: false },
         axisLine: { show: false },
@@ -374,7 +384,8 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       tooltip: {
         show: true,
         trigger: 'axis',
-        triggerOn: resolveEChartsTooltipTriggerOn(true, isMobileTooltipViewport),
+        // Keep tooltip available on compact KPI cards across desktop/mobile.
+        triggerOn: resolveEChartsTooltipTriggerOn(true, false),
         axisPointer: { type: 'line' },
         renderMode: 'html',
         ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),
@@ -407,6 +418,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
           smooth: true,
           showSymbol: false,
           symbol: 'none',
+          connectNulls: true,
           lineStyle: {
             width: 1.4,
             color: style.trendLineColor,
@@ -418,6 +430,29 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
         },
       ],
     };
+  }
+
+  private trimNullEdgeTrendPoints(
+    trendData: ReadonlyArray<readonly [number, number | null]>,
+  ): Array<readonly [number, number | null]> {
+    if (!trendData.length) {
+      return [];
+    }
+
+    let firstIndex = 0;
+    let lastIndex = trendData.length - 1;
+
+    while (firstIndex <= lastIndex && trendData[firstIndex][1] === null) {
+      firstIndex += 1;
+    }
+    while (lastIndex >= firstIndex && trendData[lastIndex][1] === null) {
+      lastIndex -= 1;
+    }
+
+    if (firstIndex > lastIndex) {
+      return [];
+    }
+    return trendData.slice(firstIndex, lastIndex + 1);
   }
 
   private formatPrimaryValue(

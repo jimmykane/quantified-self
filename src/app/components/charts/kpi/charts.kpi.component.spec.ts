@@ -253,4 +253,41 @@ describe('ChartsKpiComponent', () => {
     expect(tooltipEnabledOption?.tooltip?.triggerOn).toBe('mousemove|click');
     expect(tooltipEnabledOption?.tooltip?.renderMode).toBe('html');
   });
+
+  it('trims null trend edges and clamps sparkline x-axis to data bounds', async () => {
+    component.chartType = DASHBOARD_ACWR_KPI_CHART_TYPE;
+    component.acwr = {
+      latestDayMs: Date.UTC(2026, 0, 1),
+      acuteLoad7: 210,
+      chronicLoad28: 190,
+      ratio: 1.11,
+      trend8Weeks: [
+        { time: Date.UTC(2025, 10, 24), value: null },
+        { time: Date.UTC(2025, 11, 1), value: 0.9 },
+        { time: Date.UTC(2025, 11, 8), value: 1.0 },
+      ],
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await (component as any).refreshChart();
+
+    expect(mockLoader.setOption.mock.calls.length).toBeGreaterThan(0);
+    const latestSetOptionArgs = mockLoader.setOption.mock.calls.at(-1) || [];
+    const option = latestSetOptionArgs.find((arg) => (
+      !!arg
+      && typeof arg === 'object'
+      && 'series' in (arg as Record<string, unknown>)
+      && 'xAxis' in (arg as Record<string, unknown>)
+    )) as Record<string, any> | undefined;
+
+    expect(option).toBeTruthy();
+    expect(option?.xAxis?.min).toBe('dataMin');
+    expect(option?.xAxis?.max).toBe('dataMax');
+    expect(option?.xAxis?.boundaryGap).toBe(false);
+    expect(option?.series?.[0]?.data).toEqual([
+      [Date.UTC(2025, 11, 1), 0.9],
+      [Date.UTC(2025, 11, 8), 1.0],
+    ]);
+  });
 });

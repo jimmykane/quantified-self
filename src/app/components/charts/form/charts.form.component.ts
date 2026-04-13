@@ -76,6 +76,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
   @Input() darkTheme = false;
   @Input() isLoading = false;
   @Input() formStatus?: DashboardDerivedMetricStatus | null;
+  @Input() infoTooltip?: string | null;
   @Input() set data(value: DashboardFormPoint[] | null | undefined) {
     this.pointsSignal.set(Array.isArray(value) ? value : []);
     if (this.chartDiv?.nativeElement) {
