@@ -52,13 +52,23 @@ import {
   getDashboardSummaryMetaLabel
 } from '../../../helpers/dashboard-chart-data.helper';
 import {
+  resolveActiveRecoveryTotalSeconds,
   resolveRemainingRecoverySeconds,
   type DashboardRecoveryNowContext,
 } from '../../../helpers/dashboard-recovery-now.helper';
+import {
+  type DashboardDerivedMetricStatus,
+  isDerivedMetricPendingStatus,
+} from '../../../helpers/derived-metric-status.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type ChartSetOptionSettings = Parameters<EChartsType['setOption']>[1];
-
+type RecoverySummaryOverride = {
+  label: string;
+  value: string;
+  meta: string;
+  layoutMode: 'default' | 'fully-recovered';
+};
 @Component({
   selector: 'app-pie-chart',
   templateUrl: './charts.pie.component.html',
@@ -79,6 +89,9 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() isLoading = false;
   @Input() userUnitSettings?: UserUnitSettingsInterface | null;
   @Input() recoveryNow?: DashboardRecoveryNowContext | null;
+  @Input() recoveryNowStatus?: DashboardDerivedMetricStatus | null;
+  // Curated recovery is a dedicated dashboard chart type. Keep generic pie behavior isolated.
+  @Input() enableRecoveryNowMode = false;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
@@ -100,6 +113,11 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
     lazyUpdate: false
   };
   private recoveryRefreshIntervalHandle: ReturnType<typeof setInterval> | null = null;
+  private recoveryDebugSignature: string | null = null;
+  public showNoDataError = false;
+  public noDataErrorMessage = 'No data yet';
+  public noDataErrorHint = 'Try a different date range or metric';
+  public noDataErrorIcon = 'pie_chart';
 
   constructor(
     private eChartsLoader: EChartsLoaderService,
@@ -114,10 +132,12 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
   }
 
   async ngAfterViewInit(): Promise<void> {
+    this.updateNoDataErrorState();
     await this.refreshChart();
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    this.updateNoDataErrorState();
     if (!this.chartDiv?.nativeElement) {
       return;
     }
@@ -144,6 +164,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
   }
 
   private async refreshChart(): Promise<void> {
+    this.updateNoDataErrorState();
     const chart = await this.chartHost.init(
       this.chartDiv?.nativeElement,
       resolveEChartsThemeName(this.darkTheme)
@@ -232,6 +253,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
       this.chartDataValueType,
       this.chartDataTimeInterval
     );
+    const isFullyRecoveredLayout = recoverySummary?.layoutMode === 'fully-recovered';
 
     return {
       animation: this.useAnimations === true,
@@ -307,89 +329,137 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
           left: '50%',
           top: pieCenterY,
           bounding: 'raw',
-          children: [
-            {
-              type: 'text',
-              style: {
-                text: centerLabel,
-                fontSize: isCompactLayout ? 12 : 13,
-                fontWeight: 500,
-                fill: textColor,
-                opacity: 0.86,
-                textAlign: 'center',
-                fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+          children: isFullyRecoveredLayout
+            ? [
+              {
+                type: 'text',
+                style: {
+                  text: centerLabel,
+                  width: isCompactLayout ? 120 : 146,
+                  overflow: 'break',
+                  lineHeight: isCompactLayout ? 14 : 16,
+                  fontSize: isCompactLayout ? 11 : 12,
+                  fontWeight: 600,
+                  fill: textColor,
+                  opacity: 0.9,
+                  textAlign: 'center',
+                  fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+                },
+                left: 'center',
+                top: isCompactLayout ? -24 : -28
               },
-              left: 'center',
-              top: isCompactLayout ? -22 : -24
-            },
-            {
-              type: 'text',
-              style: {
-                text: centerValue,
-                fontSize: isCompactLayout ? 22 : 26,
-                fontWeight: 700,
-                fill: textColor,
-                textAlign: 'center',
-                fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+              {
+                type: 'text',
+                style: {
+                  text: centerSubLabel,
+                  width: isCompactLayout ? 120 : 146,
+                  overflow: 'break',
+                  lineHeight: isCompactLayout ? 13 : 15,
+                  fontSize: isCompactLayout ? 10 : 11,
+                  fontWeight: 500,
+                  fill: textColor,
+                  opacity: 0.72,
+                  textAlign: 'center',
+                  fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+                },
+                left: 'center',
+                top: isCompactLayout ? 8 : 10
+              }
+            ]
+            : [
+              {
+                type: 'text',
+                style: {
+                  text: centerLabel,
+                  fontSize: isCompactLayout ? 12 : 13,
+                  fontWeight: 500,
+                  fill: textColor,
+                  opacity: 0.86,
+                  textAlign: 'center',
+                  fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+                },
+                left: 'center',
+                top: isCompactLayout ? -22 : -24
               },
-              left: 'center',
-              top: isCompactLayout ? -2 : -4
-            },
-            {
-              type: 'text',
-              style: {
-                text: centerSubLabel,
-                fontSize: isCompactLayout ? 11 : 12,
-                fontWeight: 500,
-                fill: textColor,
-                opacity: 0.7,
-                textAlign: 'center',
-                fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+              {
+                type: 'text',
+                style: {
+                  text: centerValue,
+                  fontSize: isCompactLayout ? 22 : 26,
+                  fontWeight: 700,
+                  fill: textColor,
+                  textAlign: 'center',
+                  fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+                },
+                left: 'center',
+                top: isCompactLayout ? -2 : -4
               },
-              left: 'center',
-              top: isCompactLayout ? 20 : 24
-            }
-          ]
+              {
+                type: 'text',
+                style: {
+                  text: centerSubLabel,
+                  fontSize: isCompactLayout ? 11 : 12,
+                  fontWeight: 500,
+                  fill: textColor,
+                  opacity: 0.7,
+                  textAlign: 'center',
+                  fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+                },
+                left: 'center',
+                top: isCompactLayout ? 20 : 24
+              }
+            ]
         }
       ]
     };
   }
 
-  private getRecoverySummaryOverride(): { label: string; value: string; meta: string } | null {
-    if (this.chartDataType !== DataRecoveryTime.type) {
+  private getRecoverySummaryOverride(): RecoverySummaryOverride | null {
+    if (!this.enableRecoveryNowMode || this.chartDataType !== DataRecoveryTime.type) {
       return null;
     }
 
-    const context = this.recoveryNow;
-    const totalSeconds = Number(context?.totalSeconds);
-    const remainingSeconds = resolveRemainingRecoverySeconds(context, Date.now());
-    if (!Number.isFinite(totalSeconds) || totalSeconds <= 0 || remainingSeconds === null) {
+    const nowMs = Date.now();
+    const activeTotalSeconds = resolveActiveRecoveryTotalSeconds(this.recoveryNow, nowMs);
+    const remainingSeconds = resolveRemainingRecoverySeconds(this.recoveryNow, nowMs);
+    const hasRenderableRecovery = activeTotalSeconds !== null
+      && activeTotalSeconds > 0
+      && remainingSeconds !== null;
+    if (!hasRenderableRecovery) {
+      if (this.recoveryNowStatus === 'ready') {
+        return {
+          label: 'No active recovery now',
+          value: '',
+          meta: 'You are fully recovered based on your latest activities.',
+          layoutMode: 'fully-recovered',
+        };
+      }
       return null;
     }
 
     const normalizedUnitSettings = this.getNormalizedUnitSettings();
     const totalText = formatDashboardNumericValue(
       DataDuration.type,
-      totalSeconds,
+      activeTotalSeconds!,
       this.logger,
       normalizedUnitSettings,
     );
     const remainingText = formatDashboardNumericValue(
       DataDuration.type,
-      remainingSeconds,
+      remainingSeconds!,
       this.logger,
       normalizedUnitSettings,
     );
-
     return {
       label: 'Recovery Left Now',
       value: remainingText,
       meta: `Total recovery: ${totalText}`,
+      layoutMode: 'default',
     };
   }
 
   private shouldEnableRecoveryRefreshTimer(): boolean {
-    if (this.chartDataType !== DataRecoveryTime.type) {
+    if (!this.enableRecoveryNowMode || this.chartDataType !== DataRecoveryTime.type) {
       return false;
     }
     const remainingSeconds = resolveRemainingRecoverySeconds(this.recoveryNow, Date.now());
@@ -445,25 +515,52 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
     percent: number;
     itemStyle: { color: string; borderColor: string; borderWidth: number };
   }> | null {
-    if (this.chartDataType !== DataRecoveryTime.type) {
+    if (!this.enableRecoveryNowMode || this.chartDataType !== DataRecoveryTime.type) {
+      this.logRecoveryDebugState('mode_disabled');
       return null;
     }
 
-    const context = this.recoveryNow;
-    const totalSeconds = Number(context?.totalSeconds);
-    const remainingSeconds = resolveRemainingRecoverySeconds(context, Date.now());
-    if (!Number.isFinite(totalSeconds) || totalSeconds <= 0 || remainingSeconds === null) {
+    const nowMs = Date.now();
+    const activeTotalSeconds = resolveActiveRecoveryTotalSeconds(this.recoveryNow, nowMs);
+    const remainingSeconds = resolveRemainingRecoverySeconds(this.recoveryNow, nowMs);
+    const hasRenderableRecovery = activeTotalSeconds !== null
+      && activeTotalSeconds > 0
+      && remainingSeconds !== null;
+    if (!hasRenderableRecovery) {
+      if (this.recoveryNowStatus === 'ready') {
+        this.logRecoveryDebugState('fully_recovered');
+        return [
+          {
+            name: 'Recovered',
+            value: 1,
+            count: 0,
+            percent: 100,
+            itemStyle: {
+              color: AppColors.DarkGray,
+              borderColor: subtleBorderColor,
+              borderWidth: 1.2
+            }
+          }
+        ];
+      }
+      this.logRecoveryDebugState('no_active_recovery', {
+        activeTotalSeconds,
+        remainingSeconds,
+        totalSeconds: this.recoveryNow?.totalSeconds ?? null,
+        segments: Array.isArray(this.recoveryNow?.segments) ? this.recoveryNow?.segments.length : 0,
+        status: this.recoveryNowStatus ?? null,
+      });
       return null;
     }
 
-    const elapsedSeconds = Math.max(0, totalSeconds - remainingSeconds);
-    const leftPercent = totalSeconds > 0 ? (remainingSeconds / totalSeconds) * 100 : 0;
-    const elapsedPercent = totalSeconds > 0 ? (elapsedSeconds / totalSeconds) * 100 : 0;
+    const elapsedSeconds = Math.max(0, activeTotalSeconds! - remainingSeconds!);
+    const leftPercent = activeTotalSeconds! > 0 ? (remainingSeconds! / activeTotalSeconds!) * 100 : 0;
+    const elapsedPercent = activeTotalSeconds! > 0 ? (elapsedSeconds / activeTotalSeconds!) * 100 : 0;
 
     return [
       {
         name: 'Left now',
-        value: remainingSeconds,
+        value: remainingSeconds!,
         count: 0,
         percent: leftPercent,
         itemStyle: {
@@ -484,6 +581,80 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
         }
       }
     ];
+  }
+
+  private logRecoveryDebugState(
+    state: string,
+    data?: Record<string, unknown>,
+  ): void {
+    const signature = `${state}:${JSON.stringify(data || {})}`;
+    if (this.recoveryDebugSignature === signature) {
+      return;
+    }
+    this.recoveryDebugSignature = signature;
+    this.logger?.log?.('[debug][recovery-now] pie_series_state', {
+      state,
+      ...(data || {}),
+    });
+  }
+
+  private updateNoDataErrorState(): void {
+    this.applyNoDataOverlayState('default');
+
+    const hasArrayData = Array.isArray(this.data);
+    if (!hasArrayData) {
+      this.showNoDataError = false;
+      return;
+    }
+
+    if (this.data.length > 0) {
+      this.showNoDataError = false;
+      return;
+    }
+
+    if (!this.enableRecoveryNowMode || this.chartDataType !== DataRecoveryTime.type) {
+      this.showNoDataError = true;
+      return;
+    }
+
+    const nowMs = Date.now();
+    const activeTotalSeconds = resolveActiveRecoveryTotalSeconds(this.recoveryNow, nowMs);
+    const remainingSeconds = resolveRemainingRecoverySeconds(this.recoveryNow, nowMs);
+    const hasRenderableRecovery = activeTotalSeconds !== null
+      && activeTotalSeconds > 0
+      && remainingSeconds !== null;
+    if (hasRenderableRecovery) {
+      this.showNoDataError = false;
+      return;
+    }
+
+    const status = this.recoveryNowStatus;
+    if (status === 'ready') {
+      this.showNoDataError = false;
+      return;
+    }
+    if (isDerivedMetricPendingStatus(status)) {
+      this.applyNoDataOverlayState('updating');
+      this.showNoDataError = true;
+      return;
+    }
+
+    this.showNoDataError = true;
+  }
+
+  private applyNoDataOverlayState(
+    state: 'default' | 'updating',
+  ): void {
+    if (state === 'updating') {
+      this.noDataErrorMessage = 'Recovery is updating';
+      this.noDataErrorHint = 'We are recalculating your current recovery window.';
+      this.noDataErrorIcon = 'autorenew';
+      return;
+    }
+
+    this.noDataErrorMessage = 'No data yet';
+    this.noDataErrorHint = 'Try a different date range or metric';
+    this.noDataErrorIcon = 'pie_chart';
   }
 }
 

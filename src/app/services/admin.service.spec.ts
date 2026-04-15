@@ -54,11 +54,24 @@ describe('AdminService', () => {
             stuck: 2,
             providers: [],
             cloudTasks: {
-                pending: 12,
+                pending: 18,
                 queues: {
                     workout: { queueId: 'processWorkoutTask', pending: 10 },
                     sportsLibReparse: { queueId: 'processSportsLibReparseTask', pending: 2 },
+                    derivedMetrics: { queueId: 'processDerivedMetricsTask', pending: 6 },
                 },
+            },
+            derivedMetrics: {
+                coordinators: { idle: 1, queued: 2, processing: 3, failed: 4, total: 10 },
+                recentFailures: [
+                    {
+                        uid: 'user-1',
+                        generation: 7,
+                        dirtyMetricKinds: ['form'],
+                        lastError: 'Coordinator failed',
+                        updatedAtMs: 1700000000000,
+                    },
+                ],
             },
         };
         functionsServiceMock.call.mockResolvedValue({ data: mockStats });

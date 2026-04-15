@@ -158,7 +158,7 @@ describe('AiInsightsService', () => {
   it('should map function errors into AiInsightsError instances', async () => {
     functionsServiceMock.call.mockRejectedValue({
       code: 'functions/permission-denied',
-      message: 'AI Insights is available to Basic and Pro members.',
+      message: 'AI Insights is unavailable for this account.',
     });
 
     await expect(service.runInsight({
@@ -173,8 +173,8 @@ describe('AiInsightsService', () => {
   it('should provide a friendly error message for mapped errors', () => {
     expect(service.getErrorMessage(new AiInsightsError('APP_CHECK_REQUIRED', 'App Check verification failed.')))
       .toBe('App verification failed. Refresh the page and try again.');
-    expect(service.getErrorMessage(new AiInsightsError('PERMISSION_DENIED', 'AI Insights is available to Basic and Pro members.')))
-      .toBe('AI Insights is available to Basic and Pro members.');
+    expect(service.getErrorMessage(new AiInsightsError('PERMISSION_DENIED', 'AI Insights is unavailable for this account.')))
+      .toBe('AI Insights is unavailable for this account.');
     expect(service.getErrorMessage(new AiInsightsError(
       'INVALID_ARGUMENT',
       'Could not resolve the location "Grece". Try a city, region, country, or coordinates.',

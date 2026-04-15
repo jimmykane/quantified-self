@@ -20,16 +20,31 @@
 .form-status-row {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: space-between;
   gap: 12px;
+  padding-right: 72px;
   margin-bottom: 8px;
+}
+
+.form-status-controls {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.form-status-title-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
 }
 
 .form-status-title {
   margin: 0;
   font-size: 0.9rem;
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.1;
   color: var(--mat-sys-on-surface);
 }
 
@@ -47,6 +62,52 @@
 
 .form-status-title[data-status='fresh'] {
   color: var(--mat-sys-tertiary);
+}
+
+.title-info-button {
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  min-height: 20px;
+  line-height: 20px;
+  flex: 0 0 auto;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  --mdc-icon-button-state-layer-size: 20px;
+}
+
+.title-info-button mat-icon {
+  width: 16px;
+  height: 16px;
+  line-height: 16px;
+  font-size: 16px;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.form-status-meta {
+  font-size: 0.68rem;
+  color: var(--mat-sys-on-surface-variant);
+  white-space: nowrap;
+}
+
+.form-granularity-toggle {
+  --mat-standard-button-toggle-height: 18px;
+  --mat-standard-button-toggle-shape: 999px;
+  flex: 0 0 auto;
+  margin-right: 2px;
+}
+
+:host ::ng-deep .form-granularity-toggle .mat-button-toggle-button {
+  min-width: 16px !important;
+}
+
+:host ::ng-deep .form-granularity-toggle .mat-button-toggle-label-content {
+  line-height: 18px !important;
+  font-size: 0.56rem !important;
+  font-weight: 600 !important;
+  padding: 0 4px !important;
 }
 
 .form-stats-row {
@@ -67,6 +128,13 @@
   line-height: 1;
   font-weight: 700;
   color: var(--mat-sys-on-surface);
+}
+
+.form-stat-sublabel {
+  margin-top: 2px;
+  font-size: 0.66rem;
+  line-height: 1.2;
+  color: var(--mat-sys-on-surface-variant);
 }
 
 .form-stat-label {
@@ -90,6 +158,17 @@
 
   .form-status-title {
     font-size: 0.86rem;
+  }
+
+  .form-status-row {
+    align-items: flex-start;
+    padding-right: 44px;
+  }
+
+  .form-status-controls {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
   }
 
   .form-stat-value {

@@ -145,6 +145,7 @@ export type NormalizedInsightQuery =
 export type AiInsightsQuotaPeriodKind =
   | 'subscription'
   | 'grace_hold'
+  | 'calendar_month'
   | 'no_billing_period';
 
 export type AiInsightsQuotaResetMode =

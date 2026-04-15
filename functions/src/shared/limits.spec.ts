@@ -27,6 +27,11 @@ describe('USAGE_LIMITS', () => {
     });
 
     it('should resolve AI insights limits explicitly for supported roles', () => {
+        expect(AI_INSIGHTS_REQUEST_LIMITS).toEqual({
+            free: 20,
+            basic: 50,
+            pro: 100,
+        });
         expect(getAiInsightsRequestLimitForRole('free')).toBe(AI_INSIGHTS_REQUEST_LIMITS.free);
         expect(getAiInsightsRequestLimitForRole('basic')).toBe(AI_INSIGHTS_REQUEST_LIMITS.basic);
         expect(getAiInsightsRequestLimitForRole('pro')).toBe(AI_INSIGHTS_REQUEST_LIMITS.pro);

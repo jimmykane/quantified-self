@@ -79,7 +79,7 @@ describe('aiInsightsGuard', () => {
     expect(result).toBe(true);
   });
 
-  it('should redirect a lapsed onboarded user to subscriptions', async () => {
+  it('should allow a lapsed onboarded free user', async () => {
     authServiceStub.user$ = of({
       uid: '123',
       stripeRole: 'free',
@@ -93,12 +93,10 @@ describe('aiInsightsGuard', () => {
 
     const result = await TestBed.runInInjectionContext(() => aiInsightsGuard({} as any, [] as any));
 
-    expect(result).not.toBe(true);
-    expect(result).not.toBe(false);
-    expect((result as any).toString()).toContain('/subscriptions');
+    expect(result).toBe(true);
   });
 
-  it('should redirect explicitly completed free onboarding users to subscriptions', async () => {
+  it('should allow explicitly completed free onboarding users', async () => {
     authServiceStub.user$ = of({
       uid: '123',
       stripeRole: 'free',
@@ -113,9 +111,7 @@ describe('aiInsightsGuard', () => {
 
     const result = await TestBed.runInInjectionContext(() => aiInsightsGuard({} as any, [] as any));
 
-    expect(result).not.toBe(true);
-    expect(result).not.toBe(false);
-    expect((result as any).toString()).toContain('/subscriptions');
+    expect(result).toBe(true);
   });
 
   it('should defer to onboarding when onboarding is incomplete', async () => {

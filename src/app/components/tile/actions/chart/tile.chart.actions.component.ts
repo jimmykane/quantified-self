@@ -1,50 +1,15 @@
-import { Component, Input, OnChanges, OnInit, SimpleChanges } from '@angular/core';
-import { DataDistance } from '@sports-alliance/sports-lib';
-import { DataAerobicTrainingEffect } from '@sports-alliance/sports-lib';
-import { DataDuration } from '@sports-alliance/sports-lib';
-import { DataEnergy } from '@sports-alliance/sports-lib';
-import { DataAscent } from '@sports-alliance/sports-lib';
-import { DataDescent } from '@sports-alliance/sports-lib';
-import { DataHeartRateAvg } from '@sports-alliance/sports-lib';
+import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
-  TileChartSettingsInterface,
   TimeIntervals,
-  ChartTypes
 } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../../../services/app.user.service';
-import { DataAltitudeMax } from '@sports-alliance/sports-lib';
-import { DataAltitudeMin } from '@sports-alliance/sports-lib';
-import { DataAltitudeAvg } from '@sports-alliance/sports-lib';
-import { DataHeartRateMax } from '@sports-alliance/sports-lib';
-import { DataHeartRateMin } from '@sports-alliance/sports-lib';
-import { DataPowerMax } from '@sports-alliance/sports-lib';
-import { DataPowerMin } from '@sports-alliance/sports-lib';
-import { DataPowerAvg } from '@sports-alliance/sports-lib';
-import { DataTemperatureMax } from '@sports-alliance/sports-lib';
-import { DataTemperatureAvg } from '@sports-alliance/sports-lib';
-import { DataTemperatureMin } from '@sports-alliance/sports-lib';
-import { DataCadenceMax } from '@sports-alliance/sports-lib';
-import { DataCadenceAvg } from '@sports-alliance/sports-lib';
-import { DataCadenceMin } from '@sports-alliance/sports-lib';
-import * as SpeedMax from '@sports-alliance/sports-lib';
-import * as SpeedAvg from '@sports-alliance/sports-lib';
-import * as SpeedMin from '@sports-alliance/sports-lib';
-import { DataVO2Max } from '@sports-alliance/sports-lib';
-import { DataPeakEPOC } from '@sports-alliance/sports-lib';
-import { DataFeeling } from '@sports-alliance/sports-lib';
-import { DataRPE } from '@sports-alliance/sports-lib';
 import { TileActionsAbstractDirective } from '../tile-actions-abstract.directive';
-import { DataRecoveryTime } from '@sports-alliance/sports-lib';
-import { SpeedUnitsToGradeAdjustedSpeedUnits } from '@sports-alliance/sports-lib';
 import {
   type DashboardChartType,
-  isDashboardFormChartType,
   isDashboardRecoveryNowChartType,
 } from '../../../../helpers/dashboard-special-chart-types';
-import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from '../../../../helpers/dashboard-form.helper';
-
 
 @Component({
   selector: 'app-tile-chart-actions',
@@ -53,193 +18,36 @@ import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from '../../../../helpers/d
   providers: [],
   standalone: false
 })
-export class TileChartActionsComponent extends TileActionsAbstractDirective implements OnInit, OnChanges {
-  private static readonly excludedChartTypePatterns = [
-    /^bri.*dev/i,
-    /^spiral$/i
-  ];
-
+export class TileChartActionsComponent extends TileActionsAbstractDirective implements OnInit {
   @Input() chartType: DashboardChartType;
   @Input() chartDataType: string;
   @Input() chartDataValueType: ChartDataValueTypes;
   @Input() chartDataCategoryType: ChartDataCategoryTypes;
   @Input() chartTimeInterval: TimeIntervals;
   @Input() chartOrder: number;
-
-  public chartTypes = ChartTypes;
-  public isCuratedRecoveryNowChart = false;
-  public isFormChart = false;
-  public chartTypeOptions = [
-    ...Object.values(ChartTypes).filter(chartType =>
-      !TileChartActionsComponent.excludedChartTypePatterns.some(pattern => pattern.test(`${chartType}`))
-    ),
-  ];
-  public chartValueTypes = ChartDataValueTypes;
-  public chartCategoryTypes = ChartDataCategoryTypes;
-
-  public dataGroups: DataGroupInterface[] = [
-    {
-      name: 'Common',
-      data: [
-        DataDuration.type,
-        DataDistance.type,
-        DataEnergy.type,
-        DataAscent.type,
-        DataDescent.type
-      ]
-    },
-    {
-      name: 'Altitude',
-      data: [
-        DataAltitudeMax.type,
-        DataAltitudeMin.type,
-        DataAltitudeAvg.type,
-        DataAscent.type,
-        DataDescent.type
-      ]
-    },
-    {
-      name: 'Heart Rate',
-      data: [
-        DataHeartRateMax.type,
-        DataHeartRateMin.type,
-        DataHeartRateAvg.type
-      ]
-    },
-    {
-      name: 'Cadence',
-      data: [
-        DataCadenceMax.type,
-        DataCadenceMin.type,
-        DataCadenceAvg.type
-      ]
-    },
-    {
-      name: 'Power',
-      data: [
-        DataPowerMax.type,
-        DataPowerMin.type,
-        DataPowerAvg.type
-      ]
-    },
-    {
-      name: 'Temperature',
-      data: [
-        DataTemperatureMax.type,
-        DataTemperatureMin.type,
-        DataTemperatureAvg.type
-      ]
-    },
-    {
-      name: 'Body',
-      data: [
-        DataFeeling.type,
-        DataRPE.type,
-        DataVO2Max.type,
-        DataAerobicTrainingEffect.type,
-        DataPeakEPOC.type
-      ]
-    }
-  ];
+  @Output() editInDashboardManager = new EventEmitter<number>();
 
   constructor(
     userService: AppUserService) {
     super(userService);
   }
 
-  async changeChartType(event) {
-    this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeChartType' });
-    const chart = (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order));
-    chart.chartType = event.value;
-    if (isDashboardRecoveryNowChartType(event.value)) {
-      chart.name = 'Recovery';
-      chart.dataType = DataRecoveryTime.type;
-      chart.dataCategoryType = ChartDataCategoryTypes.DateType;
-      chart.dataValueType = ChartDataValueTypes.Total;
-      chart.dataTimeInterval = TimeIntervals.Auto;
-      (this.user.settings.dashboardSettings as { dismissedCuratedRecoveryNowTile?: boolean }).dismissedCuratedRecoveryNowTile = false;
-    }
-    if (isDashboardFormChartType(event.value)) {
-      chart.name = 'Form';
-      chart.dataType = DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE;
-      chart.dataCategoryType = ChartDataCategoryTypes.DateType;
-      chart.dataValueType = ChartDataValueTypes.Total;
-      chart.dataTimeInterval = TimeIntervals.Daily;
-    }
-    // If its pie show only totals
-    if (event.value === ChartTypes.Pie) {
-      chart.dataValueType = ChartDataValueTypes.Total;
-    }
-    return this.persistUserSettings();
-  }
-
-  async changeChartDataType(event) {
-    this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeChartDataType' });
-    (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).dataType = event.value;
-    return this.persistUserSettings();
-  }
-
-  async changeChartDataValueType(event) {
-    this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeChartDataValueType' });
-    (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).dataValueType = event.value;
-    return this.persistUserSettings();
-  }
-
-  async changeChartDataCategoryType(event) {
-    this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeChartDataCategoryType' });
-    (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).dataCategoryType = event.value;
-    return this.persistUserSettings();
-  }
-
-  async changeChartTimeInterval(event) {
-    this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeChartTimeInterval' });
-    (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).dataTimeInterval = event.value;
-    return this.persistUserSettings();
-  }
-
-  override async deleteTile(event) {
+  override async deleteTile(event: unknown) {
     if (isDashboardRecoveryNowChartType(this.chartType)) {
       (this.user.settings.dashboardSettings as { dismissedCuratedRecoveryNowTile?: boolean }).dismissedCuratedRecoveryNowTile = true;
     }
     return super.deleteTile(event);
   }
 
-  ngOnChanges(_: SimpleChanges): void {
-    this.syncChartModeFlags();
-  }
-
   ngOnInit(): void {
     if (!this.user) {
       throw new Error('Component needs user');
     }
-
-    // See https://sentry.io/organizations/dimitrios-kanellopoulos/issues/2051985404/?project=1194244&referrer=slack
-    try {
-      const speedUnits = [];
-      this.user.settings.unitSettings.speedUnits.forEach(key => {
-        const unit = SpeedUnitsToGradeAdjustedSpeedUnits[key];
-        speedUnits.push(SpeedAvg['DataSpeedAvg' + unit].type);
-        speedUnits.push(SpeedMin['DataSpeedMin' + unit].type);
-        speedUnits.push(SpeedMax['DataSpeedMax' + unit].type);
-      });
-      this.dataGroups.push({
-        name: 'Speed',
-        data: speedUnits
-      });
-    } catch (e) {
-      // Noop
-    }
-    this.syncChartModeFlags();
   }
 
-  private syncChartModeFlags(): void {
-    this.isCuratedRecoveryNowChart = isDashboardRecoveryNowChartType(this.chartType);
-    this.isFormChart = isDashboardFormChartType(this.chartType);
+  openEditInDashboardManager(event: MouseEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.editInDashboardManager.emit(this.order);
   }
-}
-
-export interface DataGroupInterface {
-  name: string;
-  data: string[];
-  disabled?: boolean;
 }

@@ -680,6 +680,23 @@ describe('Firestore Security Rules', () => {
                 }));
             });
         });
+
+        describe('Derived Metrics (users/{uid}/derivedMetrics/{doc})', () => {
+            it('should allow user to read their own derived metrics docs', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertSucceeds(db.collection('users').doc(userId).collection('derivedMetrics').doc('form').get());
+            });
+
+            it('should deny user reading other user derived metrics docs', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertFails(db.collection('users').doc(otherId).collection('derivedMetrics').doc('form').get());
+            });
+
+            it('should deny unauthenticated reads for derived metrics docs', async () => {
+                const db = testEnv.unauthenticatedContext().firestore();
+                await assertFails(db.collection('users').doc(userId).collection('derivedMetrics').doc('form').get());
+            });
+        });
     });
     // End of main describe block removed here to include appended tests
 

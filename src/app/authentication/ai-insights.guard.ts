@@ -5,6 +5,7 @@ import { take } from 'rxjs/operators';
 import { AppAuthService } from './app.auth.service';
 import { LoggerService } from '../services/logger.service';
 import { AppUserUtilities } from '../utils/app.user.utilities';
+import { getAiInsightsRequestLimitForRole } from '@shared/limits';
 
 @Injectable({
   providedIn: 'root'
@@ -31,20 +32,33 @@ class AiInsightsPermissionsService {
       const explicitlyCompleted = (user as any).onboardingCompleted === true;
       const onboardingCompleted = termsAccepted && (hasSubscribedOnce || explicitlyCompleted);
       const isAdmin = (user as any).admin === true;
-      const hasAiInsightsAccess = AppUserUtilities.hasPaidAccessUser(user, isAdmin);
+      const hasPaidAiInsightsAccess = AppUserUtilities.hasPaidAccessUser(user, isAdmin);
+      const stripeRole = `${(user as any).stripeRole || 'free'}`;
+      let hasConfiguredAiInsightsAccess = false;
+      try {
+        hasConfiguredAiInsightsAccess = getAiInsightsRequestLimitForRole(stripeRole) > 0;
+      } catch (error) {
+        this.logger.error('[AiInsightsGuard] Unsupported role while checking AI Insights access', error);
+      }
 
       this.logger.log('[AiInsightsGuard] Status:', {
         stripeRole: (user as any).stripeRole,
         isAdmin,
-        hasAiInsightsAccess,
+        hasPaidAiInsightsAccess,
+        hasConfiguredAiInsightsAccess,
         termsAccepted,
         hasSubscribedOnce,
         explicitlyCompleted,
         onboardingCompleted,
       });
 
-      if (hasAiInsightsAccess) {
+      if (hasPaidAiInsightsAccess) {
         this.logger.log('[AiInsightsGuard] Access GRANTED (Paid/Admin/Grace)');
+        return true;
+      }
+
+      if (hasConfiguredAiInsightsAccess && onboardingCompleted) {
+        this.logger.log('[AiInsightsGuard] Access GRANTED (Configured quota)');
         return true;
       }
 

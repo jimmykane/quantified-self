@@ -350,6 +350,58 @@ describe('AppUserUtilities', () => {
             expect(settings.dashboardSettings?.dismissedCuratedRecoveryNowTile).toBe(true);
         });
 
+        it('should keep only one map tile and preserve the first map by order', () => {
+            const user = {
+                settings: {
+                    dashboardSettings: {
+                        tiles: [
+                            {
+                                type: TileTypes.Map,
+                                order: 2,
+                                name: 'Map-later',
+                                mapStyle: 'satellite',
+                                mapTheme: 'normal',
+                                showHeatMap: true,
+                                clusterMarkers: false,
+                                size: { columns: 1, rows: 1 }
+                            },
+                            {
+                                type: TileTypes.Chart,
+                                order: 1,
+                                chartType: ChartTypes.ColumnsHorizontal,
+                                dataType: 'distance',
+                                dataValueType: ChartDataValueTypes.Total,
+                                dataCategoryType: ChartDataCategoryTypes.ActivityType,
+                                dataTimeInterval: TimeIntervals.Auto,
+                                name: 'Distance',
+                                size: { columns: 1, rows: 1 }
+                            },
+                            {
+                                type: TileTypes.Map,
+                                order: 0,
+                                name: 'Map-first',
+                                mapStyle: 'outdoors',
+                                mapTheme: 'normal',
+                                showHeatMap: true,
+                                clusterMarkers: true,
+                                size: { columns: 1, rows: 1 }
+                            }
+                        ]
+                    }
+                }
+            } as unknown as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+            const mapTiles = settings.dashboardSettings?.tiles?.filter((tile: any) => tile?.type === TileTypes.Map) || [];
+            const chartTiles = settings.dashboardSettings?.tiles?.filter((tile: any) => tile?.type === TileTypes.Chart) || [];
+
+            expect(mapTiles).toHaveLength(1);
+            expect(mapTiles[0].name).toBe('Map-first');
+            expect(mapTiles[0].mapStyle).toBe('outdoors');
+            expect(chartTiles).toHaveLength(1);
+            expect(chartTiles[0].name).toBe('Distance');
+        });
+
         it('should normalize malformed legacy chart, unit, and table settings', () => {
             const user = {
                 settings: {

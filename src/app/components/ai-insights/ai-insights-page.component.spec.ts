@@ -3203,10 +3203,10 @@ describe('AiInsightsPageComponent', () => {
     expect(quotaSupportLink?.getAttribute('href')).toBe('mailto:support@quantified-self.io?subject=Renew%20tokens');
   });
 
-  it('should show the paid-tier access message when AI Insights is unavailable for the current account', async () => {
+  it('should show the unavailable message when AI Insights is unavailable for the current account', async () => {
     aiInsightsQuotaServiceMock.loadQuotaStatus.mockResolvedValueOnce(buildQuotaStatus({
-      role: 'free',
-      limit: 0,
+      role: 'basic',
+      limit: AI_INSIGHTS_REQUEST_LIMITS.basic,
       successfulRequestCount: 0,
       remainingCount: 0,
       isEligible: false,
@@ -3222,8 +3222,8 @@ describe('AiInsightsPageComponent', () => {
     const quotaLine = fixture.debugElement.query(By.css('.prompt-quota-line'))?.nativeElement as HTMLElement | undefined;
     const quotaNote = fixture.debugElement.query(By.css('.prompt-quota-note'))?.nativeElement as HTMLElement | undefined;
 
-    expect(quotaLine?.textContent).toContain('0 of 0 left');
-    expect(quotaLine?.textContent).toContain('Basic or Pro required');
-    expect(quotaNote?.textContent).toContain('Basic and Pro members');
+    expect(quotaLine?.textContent).toContain(`0 of ${AI_INSIGHTS_REQUEST_LIMITS.basic} left`);
+    expect(quotaLine?.textContent).toContain('unavailable');
+    expect(quotaNote?.textContent).toContain('unavailable for this account');
   });
 });

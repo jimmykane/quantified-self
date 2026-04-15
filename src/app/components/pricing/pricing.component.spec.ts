@@ -135,7 +135,7 @@ describe('PricingComponent', () => {
     });
 
     it('should derive AI insights limit labels by plan role', () => {
-        expect(component.getAiInsightsLimitLabel('free')).toBe('AI Insights not included');
+        expect(component.getAiInsightsLimitLabel('free')).toBe(`AI Insights up to ${AI_INSIGHTS_REQUEST_LIMITS.free} requests per calendar month`);
         expect(component.getAiInsightsLimitLabel('basic')).toBe(`AI Insights up to ${AI_INSIGHTS_REQUEST_LIMITS.basic} requests per billing period`);
         expect(component.getAiInsightsLimitLabel('pro')).toBe(`AI Insights up to ${AI_INSIGHTS_REQUEST_LIMITS.pro} requests per billing period`);
     });

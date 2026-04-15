@@ -15,6 +15,7 @@ interface ReprocessEventRequest {
 
 export const reprocessEvent = onCall({
   region: FUNCTIONS_MANIFEST.reprocessEvent.region,
+  memory: '1GiB',
   cors: ALLOWED_CORS_ORIGINS,
   timeoutSeconds: 540,
   maxInstances: 20,

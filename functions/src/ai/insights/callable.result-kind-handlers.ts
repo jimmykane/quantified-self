@@ -19,8 +19,8 @@ import type {
   NormalizedInsightMultiMetricAggregateQuery,
   NormalizedInsightPowerCurveQuery,
 } from '../../../../shared/ai-insights.types';
-import { resolveAiInsightsActivityFilterLabel } from '../../../../shared/ai-insights-activity-filter';
 import type { AiInsightsExecutionResult } from './execute-query';
+import { resolveNarrativeScope } from './narrative-scope';
 import type {
   SummarizeInsightApi,
   SummarizeInsightNarrativeResult,
@@ -121,14 +121,11 @@ function buildLatestEventNarrative(params: {
   matchedEventCount: number;
   locale?: string;
 }): string {
-  const activityLabel = resolveAiInsightsActivityFilterLabel(params.query).toLowerCase();
-  const activityText = activityLabel === 'all activities'
-    ? 'activities'
-    : activityLabel;
+  const narrativeScope = resolveNarrativeScope(params.query);
   const matchedNoun = params.matchedEventCount === 1 ? 'event' : 'events';
 
   if (!params.latestEventStartDate) {
-    return `I found no matching ${activityText} events in this range.`;
+    return `I found no matching events ${narrativeScope.scopeLabel} in this range.`;
   }
 
   const eventDate = new Date(params.latestEventStartDate);
@@ -141,7 +138,7 @@ function buildLatestEventNarrative(params: {
     }).format(eventDate)
     : params.latestEventStartDate;
 
-  return `Your latest ${activityText} event was on ${eventDateLabel}. I matched ${params.matchedEventCount} ${matchedNoun}.`;
+  return `Your latest event ${narrativeScope.scopeLabel} was on ${eventDateLabel}. I matched ${params.matchedEventCount} ${matchedNoun}.`;
 }
 
 function resolveTimeIntervalLabel(timeInterval: TimeIntervals): string {
@@ -169,21 +166,18 @@ function resolveTimeIntervalLabel(timeInterval: TimeIntervals): string {
 
 function buildPowerCurveNarrative(context: PowerCurveCallableResultKindContext): string {
   const powerCurve = context.executionResult.powerCurve;
-  const activityLabel = resolveAiInsightsActivityFilterLabel(context.query);
-  const activitySuffix = activityLabel === 'All activities'
-    ? ''
-    : ` for ${activityLabel.toLowerCase()}`;
+  const narrativeScope = resolveNarrativeScope(context.query);
   if (!powerCurve.series.length) {
-    return `I found no power-curve data${activitySuffix} in this range.`;
+    return `I found no power-curve data ${narrativeScope.scopeLabel} in this range.`;
   }
 
   if (powerCurve.mode === 'best') {
     const eventNoun = powerCurve.matchedEventCount === 1 ? 'event' : 'events';
-    return `I built your best power curve${activitySuffix} as the max-power envelope across ${powerCurve.matchedEventCount} matching ${eventNoun}.`;
+    return `I built your best power curve ${narrativeScope.scopeLabel} as the max-power envelope across ${powerCurve.matchedEventCount} matching ${eventNoun}.`;
   }
 
   const intervalLabel = resolveTimeIntervalLabel(powerCurve.resolvedTimeInterval);
-  return `I compared your power curve${activitySuffix} over time by building one envelope per ${intervalLabel}.`;
+  return `I compared your power curve ${narrativeScope.scopeLabel} over time by building one envelope per ${intervalLabel}.`;
 }
 
 const CALLABLE_RESULT_KIND_REGISTRY = {

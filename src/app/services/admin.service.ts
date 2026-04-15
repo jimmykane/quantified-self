@@ -151,6 +151,27 @@ export interface ReparseStats {
     recentFailures: ReparseFailurePreview[];
 }
 
+export interface DerivedMetricsCoordinatorStats {
+    idle: number;
+    queued: number;
+    processing: number;
+    failed: number;
+    total: number;
+}
+
+export interface DerivedMetricsFailurePreview {
+    uid: string;
+    generation: number;
+    dirtyMetricKinds: string[];
+    lastError: string;
+    updatedAtMs: number;
+}
+
+export interface DerivedMetricsStats {
+    coordinators: DerivedMetricsCoordinatorStats;
+    recentFailures: DerivedMetricsFailurePreview[];
+}
+
 export interface QueueStats {
     pending: number;
     succeeded: number;
@@ -166,6 +187,10 @@ export interface QueueStats {
                 queueId: string;
                 pending: number;
             };
+            derivedMetrics?: {
+                queueId: string;
+                pending: number;
+            };
         };
     };
     providers: {
@@ -177,6 +202,7 @@ export interface QueueStats {
     }[];
     dlq?: DLQStats;
     reparse?: ReparseStats;
+    derivedMetrics?: DerivedMetricsStats;
     advanced?: {
         throughput: number;
         maxLagMs: number;

@@ -4,16 +4,24 @@ const hoisted = vi.hoisted(() => {
     const mockGet = vi.fn();
     const mockDoc = vi.fn(() => ({ get: mockGet }));
     const mockReparseEventFromOriginalFiles = vi.fn();
+    let onCallOptions: unknown = null;
 
     return {
         mockGet,
         mockDoc,
         mockReparseEventFromOriginalFiles,
+        getOnCallOptions: () => onCallOptions,
+        setOnCallOptions: (options: unknown) => {
+            onCallOptions = options;
+        },
     };
 });
 
 vi.mock('firebase-functions/v2/https', () => ({
-    onCall: (_options: unknown, handler: unknown) => handler,
+    onCall: (options: unknown, handler: unknown) => {
+        hoisted.setOnCallOptions(options);
+        return handler;
+    },
     HttpsError: class HttpsError extends Error {
         code: string;
         constructor(code: string, message: string) {
@@ -53,6 +61,12 @@ describe('reprocessEvent', () => {
             sourceFilesCount: 1,
             parsedActivitiesCount: 1,
             staleActivitiesDeleted: 0,
+        });
+    });
+
+    it('should register with 1GiB memory', () => {
+        expect(hoisted.getOnCallOptions()).toMatchObject({
+            memory: '1GiB',
         });
     });
 

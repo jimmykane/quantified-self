@@ -223,7 +223,7 @@ export const AiInsightsQuotaStatusSchema = z.object({
   remainingCount: z.number().int().nonnegative(),
   periodStart: z.string().datetime().nullable(),
   periodEnd: z.string().datetime().nullable(),
-  periodKind: z.enum(['subscription', 'grace_hold', 'no_billing_period']),
+  periodKind: z.enum(['subscription', 'grace_hold', 'calendar_month', 'no_billing_period']),
   resetMode: z.enum(['date', 'next_successful_payment']),
   isEligible: z.boolean(),
   blockedReason: z.enum(['requires_pro', 'limit_reached']).nullable(),

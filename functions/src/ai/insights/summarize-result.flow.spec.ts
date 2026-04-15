@@ -511,7 +511,7 @@ describe('summarizeAiInsightResult', () => {
 
     expect(result.source).toBe('genkit');
     expect(result.narrative).toBe(
-      'Used the default date range (Jan 01, 2026 to Mar 20, 2026) because no time range was found in your prompt. No matching trail running events with pace data were found in Jan 01, 2026 to Mar 20, 2026.',
+      'Used the default date range (Jan 01, 2026 to Mar 20, 2026) because no time range was found in your prompt. No matching events for trail running with pace data were found in Jan 01, 2026 to Mar 20, 2026.',
     );
     expect(result.narrative).not.toContain('2024');
   });
@@ -615,14 +615,14 @@ describe('summarizeAiInsightResult', () => {
     setSummarizeInsightDependenciesForTesting({
       generateNarrative: async () => ({
         source: 'genkit',
-        narrative: 'No matching data was found for 2024.',
+        narrative: 'No matching data was found for 2024 for trail running.',
       }),
     });
 
     const result = await summarizeAiInsightResult(paceInput);
 
     expect(result.source).toBe('genkit');
-    expect(result.narrative).toBe('No matching data was found for 2024.');
+    expect(result.narrative).toBe('No matching data was found for 2024 for trail running.');
   });
 
   it('builds a fallback narrative for multi-metric aggregate results', async () => {
@@ -1100,6 +1100,42 @@ describe('summarizeAiInsightResult', () => {
     expect(facts.digest?.periods.every(period => period.hasData === false)).toBe(true);
   });
 
+  it('builds canonical scope facts without leaking the raw prompt text', () => {
+    const facts = buildNarrativeFacts({
+      ...eventLookupInput,
+      query: {
+        ...eventLookupInput.query,
+        activityTypes: [],
+        locationFilter: {
+          requestedText: 'Athens',
+          effectiveText: 'Athens',
+          resolvedLabel: 'Athens, Greece',
+          source: 'prompt',
+          mode: 'radius',
+          radiusKm: 20,
+          center: {
+            latitudeDegrees: 37.9838,
+            longitudeDegrees: 23.7275,
+          },
+        },
+      },
+    }) as {
+      prompt?: string;
+      activityFilterLabel: string;
+      locationFilterLabel: string;
+      scopeLabel: string;
+      narrativeLead: string;
+    };
+
+    expect(facts).not.toHaveProperty('prompt');
+    expect(facts.activityFilterLabel).toBe('all activities');
+    expect(facts.locationFilterLabel).toBe('within 20 km of athens, greece');
+    expect(facts.scopeLabel).toBe('across all activities within 20 km of athens, greece');
+    expect(facts.narrativeLead).toBe(
+      'Across all activities within 20 km of athens, greece, this answer covers Jan 01, 2026 to Mar 19, 2026.',
+    );
+  });
+
   it('builds localized dateRangeLabel facts for model generation', () => {
     const facts = buildNarrativeFacts({
       ...paceInput,
@@ -1183,18 +1219,174 @@ describe('summarizeAiInsightResult', () => {
     expect(result.narrative).not.toContain('time buckets');
   });
 
+  it('replaces event-lookup narratives that contradict the resolved all-activities scope', async () => {
+    setSummarizeInsightDependenciesForTesting({
+      generateNarrative: async () => ({
+        source: 'genkit',
+        narrative: 'Between Jan 01, 2026 to Mar 18, 2026, your highest speed mountain biking was 65.20 km/h, recorded on Mar 10, 2026.',
+      }),
+    });
+
+    const result = await summarizeAiInsightResult({
+      ...eventLookupInput,
+      prompt: 'When was my max speed mountainbiking in last 4 years?',
+      metricLabel: 'speed',
+      query: {
+        ...eventLookupInput.query,
+        dataType: 'Maximum Speed',
+        activityTypes: [],
+      },
+      eventLookup: {
+        matchedEventCount: 3,
+        primaryEvent: {
+          eventId: 'event-3',
+          startDate: '2026-03-10T08:00:00.000Z',
+          aggregateValue: 65.2,
+        },
+        rankedEvents: [
+          {
+            eventId: 'event-3',
+            startDate: '2026-03-10T08:00:00.000Z',
+            aggregateValue: 65.2,
+          },
+        ],
+      },
+      presentation: {
+        title: 'Top speed events',
+        chartType: ChartTypes.LinesVertical,
+      },
+    });
+
+    expect(result.source).toBe('genkit');
+    expect(result.narrative).toContain('across all activities');
+    expect(result.narrative).not.toContain('mountain biking');
+  });
+
+  it('replaces generated narratives that use a prompt-only location instead of the resolved location scope', async () => {
+    setSummarizeInsightDependenciesForTesting({
+      generateNarrative: async () => ({
+        source: 'genkit',
+        narrative: 'From Sep 18, 2025 to Mar 18, 2026 for trail running in Italy, your pace was 07:02 min/km.',
+      }),
+    });
+
+    const result = await summarizeAiInsightResult({
+      ...paceInput,
+      query: {
+        ...paceInput.query,
+        locationFilter: {
+          requestedText: 'Grece',
+          effectiveText: 'Greece',
+          resolvedLabel: 'Greece',
+          source: 'ai_fallback',
+          mode: 'bbox',
+          radiusKm: 50,
+          center: {
+            latitudeDegrees: 39.0742,
+            longitudeDegrees: 21.8243,
+          },
+          bbox: {
+            west: 19.0,
+            south: 34.0,
+            east: 29.0,
+            north: 42.0,
+          },
+        },
+      },
+    });
+
+    expect(result.source).toBe('genkit');
+    expect(result.narrative).toContain('for trail running in greece');
+    expect(result.narrative).not.toContain('Italy');
+  });
+
+  it('replaces generated narratives that append extra unsupported location text after the resolved scope', async () => {
+    setSummarizeInsightDependenciesForTesting({
+      generateNarrative: async () => ({
+        source: 'genkit',
+        narrative: 'From Sep 18, 2025 to Mar 18, 2026 for trail running, your pace was 07:02 min/km. This peak came in Italy.',
+      }),
+    });
+
+    const result = await summarizeAiInsightResult(paceInput);
+
+    expect(result.source).toBe('genkit');
+    expect(result.narrative).toContain('for trail running');
+    expect(result.narrative).not.toContain('Italy');
+  });
+
+  it('replaces generated narratives that append unsupported location scope with date-time followups', async () => {
+    setSummarizeInsightDependenciesForTesting({
+      generateNarrative: async () => ({
+        source: 'genkit',
+        narrative: 'From Sep 18, 2025 to Mar 18, 2026 for trail running, your pace was 07:02 min/km, with a best split in Italy on Mar 10.',
+      }),
+    });
+
+    const result = await summarizeAiInsightResult(paceInput);
+
+    expect(result.source).toBe('genkit');
+    expect(result.narrative).toContain('for trail running');
+    expect(result.narrative).not.toContain('Italy');
+  });
+
+  it('replaces generated narratives that append unsupported free-form activity modifiers', async () => {
+    setSummarizeInsightDependenciesForTesting({
+      generateNarrative: async () => ({
+        source: 'genkit',
+        narrative: 'From Sep 18, 2025 to Mar 18, 2026 for trail running and bike rides, your pace was 07:02 min/km.',
+      }),
+    });
+
+    const result = await summarizeAiInsightResult(paceInput);
+
+    expect(result.source).toBe('genkit');
+    expect(result.narrative).toContain('for trail running');
+    expect(result.narrative).not.toContain('bike rides');
+  });
+
+  it('rejects generated narratives where canonical scope is only a substring of a larger token', async () => {
+    setSummarizeInsightDependenciesForTesting({
+      generateNarrative: async () => ({
+        source: 'genkit',
+        narrative: 'From Sep 18, 2025 to Mar 18, 2026 for trail runnington, your pace was 07:02 min/km.',
+      }),
+    });
+
+    const result = await summarizeAiInsightResult(paceInput);
+
+    expect(result.source).toBe('genkit');
+    expect(result.narrative).toContain('for trail running');
+    expect(result.narrative).not.toContain('runnington');
+  });
+
+  it('replaces generated narratives that omit the canonical scope entirely', async () => {
+    setSummarizeInsightDependenciesForTesting({
+      generateNarrative: async () => ({
+        source: 'genkit',
+        narrative: 'From Sep 18, 2025 to Mar 18, 2026, your pace was 07:02 min/km.',
+      }),
+    });
+
+    const result = await summarizeAiInsightResult(paceInput);
+
+    expect(result.source).toBe('genkit');
+    expect(result.narrative).toContain('for trail running');
+    expect(result.narrative).toContain('07:02 min/km');
+  });
+
   it('builds compact deterministic compare summary with net change, extremes, and period deltas', async () => {
     setSummarizeInsightDependenciesForTesting({
       generateNarrative: async () => ({
         source: 'genkit',
-        narrative: 'Base narrative.',
+        narrative: 'Base narrative for trail running.',
       }),
     });
 
     const result = await summarizeAiInsightResult(compareDeltaInput);
 
     expect(result.source).toBe('genkit');
-    expect(result.narrative).toBe('Base narrative.');
+    expect(result.narrative).toBe('Base narrative for trail running.');
     expect(result.deterministicCompareSummary).toContain('From 2025 to 2028, power increased by');
     expect(result.deterministicCompareSummary).toContain('Largest increase: 2025 to 2026');
     expect(result.deterministicCompareSummary).toContain('Largest decrease: 2026 to 2027');

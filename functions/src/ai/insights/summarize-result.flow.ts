@@ -22,13 +22,19 @@ import {
   AI_INSIGHTS_TOP_RESULTS_DEFAULT,
   clampAiInsightsTopResultsLimit,
 } from '../../../../shared/ai-insights-ranking.constants';
-import { resolveAiInsightsActivityFilterLabel } from '../../../../shared/ai-insights-activity-filter';
 import { formatAiInsightsSelectedDateRanges } from '../../../../shared/ai-insights-date-selection';
 import type { EventStatAggregationResult } from '../../../../shared/event-stat-aggregation.types';
 import { resolveMetricSemantics, resolveMetricSummarySemantics } from '../../../../shared/metric-semantics';
 import { formatUnitAwareDataValue } from '../../../../shared/unit-aware-display';
 import { aiInsightsGenkit } from './genkit';
 import { buildExecutionPromptLogContext } from './execute-query.logging';
+import {
+  buildDeterministicNarrativeLead,
+  containsUnexpectedScopeSuffix,
+  containsUnexpectedNarrativeScopeReference,
+  normalizeNarrativeScopeToken,
+  resolveNarrativeScope,
+} from './narrative-scope';
 
 interface SummarizeInsightEventLookupFact {
   eventId: string;
@@ -93,7 +99,7 @@ export interface SummarizeInsightApi {
 const SummarizeInsightResultInputSchema = z.any();
 
 const SummarizeInsightResultOutputSchema = z.object({
-  narrative: z.string().min(1),
+  continuation: z.string().trim().min(1).optional(),
 });
 
 const SummarizeInsightNarrativeResultSchema = z.object({
@@ -127,8 +133,88 @@ function formatLocalizedDateRange(
   return formatAiInsightsSelectedDateRanges(query, locale);
 }
 
-function formatActivityFilter(query: NormalizedInsightQuery): string {
-  return resolveAiInsightsActivityFilterLabel(query).toLowerCase();
+interface ScopeReferenceMatch {
+  normalizedNarrative: string;
+  start: number;
+  end: number;
+  suffix: string;
+}
+
+function isScopeBoundaryCharacter(value: string | undefined): boolean {
+  if (!value) {
+    return true;
+  }
+
+  return !/[a-z0-9]/i.test(value);
+}
+
+function findFirstResolvedScopeReference(
+  input: SummarizeInsightResultInput,
+  narrative: string,
+): ScopeReferenceMatch | null {
+  const normalizedNarrative = normalizeNarrativeScopeToken(narrative);
+  const narrativeScope = resolveNarrativeScope(input.query);
+
+  for (const scopeToken of narrativeScope.validationTokens.scope) {
+    if (!scopeToken) {
+      continue;
+    }
+
+    let searchIndex = 0;
+    while (searchIndex <= normalizedNarrative.length) {
+      const scopeIndex = normalizedNarrative.indexOf(scopeToken, searchIndex);
+      if (scopeIndex < 0) {
+        break;
+      }
+
+      const scopeEnd = scopeIndex + scopeToken.length;
+      const charBefore = normalizedNarrative[scopeIndex - 1];
+      const charAfter = normalizedNarrative[scopeEnd];
+
+      if (isScopeBoundaryCharacter(charBefore) && isScopeBoundaryCharacter(charAfter)) {
+        return {
+          normalizedNarrative,
+          start: scopeIndex,
+          end: scopeEnd,
+          suffix: normalizedNarrative.slice(scopeEnd).replace(/^\s+/, ''),
+        };
+      }
+
+      searchIndex = scopeIndex + 1;
+    }
+  }
+
+  return null;
+}
+
+function hasResolvedScopeReference(
+  input: SummarizeInsightResultInput,
+  narrative: string,
+): boolean {
+  return findFirstResolvedScopeReference(input, narrative) !== null;
+}
+
+function hasUnexpectedScopeReference(
+  input: SummarizeInsightResultInput,
+  narrative: string,
+): boolean {
+  const scopeMatch = findFirstResolvedScopeReference(input, narrative);
+  if (!scopeMatch) {
+    return false;
+  }
+
+  if (containsUnexpectedScopeSuffix(scopeMatch.suffix)) {
+    return true;
+  }
+
+  const narrativeWithoutResolvedScope = `${scopeMatch.normalizedNarrative.slice(0, scopeMatch.start)} ${scopeMatch.normalizedNarrative.slice(scopeMatch.end)}`
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return containsUnexpectedNarrativeScopeReference(
+    narrativeWithoutResolvedScope,
+    resolveNarrativeScope(input.query),
+  );
 }
 
 function joinMetricLabels(metricLabels: string[]): string {
@@ -630,9 +716,17 @@ function hasEffectiveRangeReference(
 function resolveNarrativeOverrideReason(
   input: SummarizeInsightResultInput,
   narrative: string,
-): 'empty_result' | 'contains_no_data_phrasing' | 'missing_effective_range' | null {
+): 'empty_result' | 'contains_no_data_phrasing' | 'missing_effective_range' | 'missing_scope_reference' | 'unexpected_scope_reference' | null {
   if (input.status === 'empty') {
     return 'empty_result';
+  }
+
+  if (!hasResolvedScopeReference(input, narrative)) {
+    return 'missing_scope_reference';
+  }
+
+  if (hasUnexpectedScopeReference(input, narrative)) {
+    return 'unexpected_scope_reference';
   }
 
   if (input.query.dateRange.kind !== 'bounded' || input.query.dateRange.source !== 'default') {
@@ -658,9 +752,9 @@ function buildDigestNarrativeFallback(
   }
 
   const dateRangeText = formatLocalizedDateRange(input.query, input.clientLocale);
-  const activityText = formatActivityFilter(input.query);
+  const scopeText = resolveNarrativeScope(input.query).scopeLabel;
   if (input.digest.periodCount <= 0) {
-    return `Digest summary for ${activityText} in ${dateRangeText}: no matching data was found for this range.`;
+    return `Digest summary ${scopeText} in ${dateRangeText}: no matching data was found for this range.`;
   }
 
   const periodNoun = resolveDigestPeriodNoun(input.digest.granularity);
@@ -669,7 +763,7 @@ function buildDigestNarrativeFallback(
   const noDataPeriodCount = Math.max(0, input.digest.periodCount - input.digest.nonEmptyPeriodCount);
 
   if (input.status === 'empty' || nonEmptyPeriods.length === 0) {
-    return `Digest summary for ${activityText} in ${dateRangeText}: no matching data in all ${input.digest.periodCount} ${periodNounPlural}.`;
+    return `Digest summary ${scopeText} in ${dateRangeText}: no matching data in all ${input.digest.periodCount} ${periodNounPlural}.`;
   }
 
   const latestPeriodWithData = nonEmptyPeriods[nonEmptyPeriods.length - 1];
@@ -694,12 +788,12 @@ function buildDigestNarrativeFallback(
     ? ` No data in ${noDataPeriodCount} ${noDataPeriodCount === 1 ? periodNoun : `${periodNoun}s`}.`
     : '';
 
-  return `Digest summary for ${activityText} in ${dateRangeText}: data in ${input.digest.nonEmptyPeriodCount} of ${input.digest.periodCount} ${periodNounPlural}.${latestPeriodLabel && latestMetricSummary ? ` Latest ${periodNoun} with data: ${latestPeriodLabel} (${latestMetricSummary}).` : ''}${noDataSuffix}`;
+  return `Digest summary ${scopeText} in ${dateRangeText}: data in ${input.digest.nonEmptyPeriodCount} of ${input.digest.periodCount} ${periodNounPlural}.${latestPeriodLabel && latestMetricSummary ? ` Latest ${periodNoun} with data: ${latestPeriodLabel} (${latestMetricSummary}).` : ''}${noDataSuffix}`;
 }
 
 function buildNarrativeFallback(input: SummarizeInsightResultInput): string {
   const dateRangeText = formatLocalizedDateRange(input.query, input.clientLocale);
-  const activityText = formatActivityFilter(input.query);
+  const scopeText = resolveNarrativeScope(input.query).scopeLabel;
   const isAllTime = input.query.dateRange.kind === 'all_time';
   const metricLabelText = 'metricResults' in input
     ? joinMetricLabels(input.metricLabels)
@@ -715,16 +809,16 @@ function buildNarrativeFallback(input: SummarizeInsightResultInput): string {
       : '';
 
     return isAllTime
-      ? `${defaultRangePrefix}No matching ${activityText} events with ${metricLabelText} data were found across all recorded history.`
-      : `${defaultRangePrefix}No matching ${activityText} events with ${metricLabelText} data were found in ${dateRangeText}.`;
+      ? `${defaultRangePrefix}No matching events ${scopeText} with ${metricLabelText} data were found across all recorded history.`
+      : `${defaultRangePrefix}No matching events ${scopeText} with ${metricLabelText} data were found in ${dateRangeText}.`;
   }
 
   if ('metricResults' in input) {
     const metricSummaryFacts = buildMultiMetricSummaryFacts(input);
     if (metricSummaryFacts.every((metric) => !metric.overallAggregateDisplayValue)) {
       return isAllTime
-        ? `I could not find matching ${activityText} events with ${metricLabelText} data across all recorded history.`
-        : `I could not find matching ${activityText} events with ${metricLabelText} data from ${dateRangeText}.`;
+        ? `I could not find matching events ${scopeText} with ${metricLabelText} data across all recorded history.`
+        : `I could not find matching events ${scopeText} with ${metricLabelText} data from ${dateRangeText}.`;
     }
 
     const metricSummaries = metricSummaryFacts
@@ -738,14 +832,14 @@ function buildNarrativeFallback(input: SummarizeInsightResultInput): string {
 
     const summarySentence = metricSummaries.join('; ');
     return isAllTime
-      ? `Across all recorded history for ${activityText}, ${summarySentence}.`
-      : `From ${dateRangeText} for ${activityText}, ${summarySentence}.`;
+      ? `Across all recorded history ${scopeText}, ${summarySentence}.`
+      : `From ${dateRangeText} ${scopeText}, ${summarySentence}.`;
   }
 
   if ('eventLookup' in input) {
     const primaryEvent = input.eventLookup.primaryEvent;
     if (!primaryEvent) {
-      return `I found matching ${activityText} events for ${input.metricLabel}, but could not determine the winning event.`;
+      return `I found matching events ${scopeText} for ${input.metricLabel}, but could not determine the winning event.`;
     }
 
     const descriptor = resolveEventLookupDescriptor(input.query, input.metricLabel);
@@ -754,8 +848,8 @@ function buildNarrativeFallback(input: SummarizeInsightResultInput): string {
     const matchedNoun = input.eventLookup.matchedEventCount === 1 ? 'event' : 'events';
 
     return isAllTime
-      ? `Your ${descriptor} event for ${activityText} was ${displayValue} on ${eventDate}. I ranked ${input.eventLookup.matchedEventCount} matching ${matchedNoun}.`
-      : `Between ${dateRangeText}, your ${descriptor} event for ${activityText} was ${displayValue} on ${eventDate}. I ranked ${input.eventLookup.matchedEventCount} matching ${matchedNoun}.`;
+      ? `Your ${descriptor} event ${scopeText} was ${displayValue} on ${eventDate}. I ranked ${input.eventLookup.matchedEventCount} matching ${matchedNoun}.`
+      : `Between ${dateRangeText}, your ${descriptor} event ${scopeText} was ${displayValue} on ${eventDate}. I ranked ${input.eventLookup.matchedEventCount} matching ${matchedNoun}.`;
   }
 
   const summary = buildInsightSummaryFacts(input);
@@ -767,14 +861,14 @@ function buildNarrativeFallback(input: SummarizeInsightResultInput): string {
   ) {
     const activityNoun = summary.matchedEventCount === 1 ? 'activity' : 'activities';
     return isAllTime
-      ? `Your ${input.metricLabel} for ${activityText} across all recorded history was ${summary.overallAggregateDisplayValue}. This was calculated from ${summary.matchedEventCount} ${activityNoun}.`
-      : `Your ${input.metricLabel} for ${activityText} from ${dateRangeText} was ${summary.overallAggregateDisplayValue}. This was calculated from ${summary.matchedEventCount} ${activityNoun}.`;
+      ? `Your ${input.metricLabel} ${scopeText} across all recorded history was ${summary.overallAggregateDisplayValue}. This was calculated from ${summary.matchedEventCount} ${activityNoun}.`
+      : `Your ${input.metricLabel} ${scopeText} from ${dateRangeText} was ${summary.overallAggregateDisplayValue}. This was calculated from ${summary.matchedEventCount} ${activityNoun}.`;
   }
 
   if (!summary.highestValueBucket || !summary.latestBucket) {
     return isAllTime
-      ? `I found matching ${activityText} events for ${input.metricLabel}, but there was not enough aggregated data to summarize the result across all recorded history.`
-      : `I found matching ${activityText} events for ${input.metricLabel} from ${dateRangeText}, but there was not enough aggregated data to summarize the result.`;
+      ? `I found matching events ${scopeText} for ${input.metricLabel}, but there was not enough aggregated data to summarize the result across all recorded history.`
+      : `I found matching events ${scopeText} for ${input.metricLabel} from ${dateRangeText}, but there was not enough aggregated data to summarize the result.`;
   }
 
   const grouping = input.query.categoryType === ChartDataCategoryTypes.ActivityType
@@ -787,6 +881,10 @@ function buildNarrativeFallback(input: SummarizeInsightResultInput): string {
 }
 
 export function buildNarrativeFacts(input: SummarizeInsightResultInput): Record<string, unknown> {
+  const dateRangeLabel = formatLocalizedDateRange(input.query, input.clientLocale);
+  const narrativeScope = resolveNarrativeScope(input.query);
+  const narrativeLead = buildDeterministicNarrativeLead(input.query, dateRangeLabel);
+
   if ('metricResults' in input) {
     const metricSummaryFacts = buildMultiMetricSummaryFacts(input);
     const digest = input.digest;
@@ -819,15 +917,17 @@ export function buildNarrativeFacts(input: SummarizeInsightResultInput): Record<
 
     return {
       status: input.status,
-      prompt: input.prompt,
       resultKind: 'multi_metric_aggregate',
       ...(digest ? { narrativeMode: 'digest' as const } : {}),
       groupingMode: input.query.groupingMode,
       title: input.presentation.title,
       chartType: input.presentation.chartType,
       metricLabels: input.metricLabels,
-      dateRangeLabel: formatLocalizedDateRange(input.query, input.clientLocale),
-      activityFilterLabel: formatActivityFilter(input.query),
+      dateRangeLabel,
+      narrativeLead,
+      activityFilterLabel: narrativeScope.activityFilterLabel,
+      ...(narrativeScope.locationScopeLabel ? { locationFilterLabel: narrativeScope.locationScopeLabel } : {}),
+      scopeLabel: narrativeScope.scopeLabel,
       ...(digestFacts ? { digest: digestFacts } : {}),
       metrics: input.metricResults.map((metricResult, index) => ({
         metricKey: metricResult.metricKey,
@@ -851,13 +951,15 @@ export function buildNarrativeFacts(input: SummarizeInsightResultInput): Record<
     );
     return {
       status: input.status,
-      prompt: input.prompt,
       metricLabel: input.metricLabel,
       title: input.presentation.title,
       resultKind: 'event_lookup',
       chartType: input.presentation.chartType,
-      dateRangeLabel: formatLocalizedDateRange(input.query, input.clientLocale),
-      activityFilterLabel: formatActivityFilter(input.query),
+      dateRangeLabel,
+      narrativeLead,
+      activityFilterLabel: narrativeScope.activityFilterLabel,
+      ...(narrativeScope.locationScopeLabel ? { locationFilterLabel: narrativeScope.locationScopeLabel } : {}),
+      scopeLabel: narrativeScope.scopeLabel,
       descriptor: resolveEventLookupDescriptor(input.query, input.metricLabel),
       matchedEventCount: input.eventLookup.matchedEventCount,
       primaryEvent: input.eventLookup.primaryEvent
@@ -887,15 +989,19 @@ export function buildNarrativeFacts(input: SummarizeInsightResultInput): Record<
 
   return {
     status: input.status,
-      prompt: input.prompt,
-      metricLabel: input.metricLabel,
-      title: input.presentation.title,
+    resultKind: 'aggregate',
+    metricLabel: input.metricLabel,
+    title: input.presentation.title,
     chartType: input.presentation.chartType,
     categoryType: input.query.categoryType,
     valueType: input.query.valueType,
+    activityFilterLabel: narrativeScope.activityFilterLabel,
+    ...(narrativeScope.locationScopeLabel ? { locationFilterLabel: narrativeScope.locationScopeLabel } : {}),
+    scopeLabel: narrativeScope.scopeLabel,
     activityTypes: input.query.activityTypes,
     dateRange: input.query.dateRange,
-    dateRangeLabel: formatLocalizedDateRange(input.query, input.clientLocale),
+    dateRangeLabel,
+    narrativeLead,
     bucketCount: input.aggregation.buckets.length,
     summary,
     buckets: input.aggregation.buckets.slice(0, 24).map(bucket => ({
@@ -910,14 +1016,18 @@ export function buildNarrativeFacts(input: SummarizeInsightResultInput): Record<
 const defaultSummarizeInsightDependencies: SummarizeInsightDependencies = {
   generateNarrative: async (input) => {
     const fallback = buildNarrativeFallback(input);
+    const dateRangeLabel = formatLocalizedDateRange(input.query, input.clientLocale);
+    const narrativeLead = buildDeterministicNarrativeLead(input.query, dateRangeLabel);
     const { output } = await aiInsightsGenkit.generate({
       system: [
         'You write concise fitness insight summaries.',
         'Use only the supplied facts.',
+        'The supplied narrativeLead is fixed and must not be repeated, rephrased, or contradicted.',
+        'Return only one or two continuation sentences that follow the supplied narrativeLead.',
+        'Do not mention activity filters, locations, scope labels, or the requested date range in the continuation.',
         'Use the provided formatted display values and labels exactly as supplied.',
         'Do not invent units, dates, metrics, or calculations.',
         'Do not restate raw storage values or infer new numeric calculations.',
-        'Always anchor the summary to the supplied effective dateRangeLabel when it is provided.',
         'If status is ok, do not claim that no matching data was found and do not mention any date range other than the supplied effective range.',
         'If the status is empty, clearly say that no matching data was found.',
       ].join(' '),
@@ -925,10 +1035,12 @@ const defaultSummarizeInsightDependencies: SummarizeInsightDependencies = {
       output: { schema: SummarizeInsightResultOutputSchema },
     });
 
-    const narrative = output?.narrative?.trim();
-    if (narrative) {
+    const continuation = output?.continuation
+      ?.replace(/^[\s,;:.!-]+/, '')
+      .trim();
+    if (continuation) {
       return {
-        narrative,
+        narrative: `${narrativeLead} ${continuation}`.trim(),
         source: 'genkit',
       };
     }

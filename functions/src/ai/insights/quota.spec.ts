@@ -442,7 +442,7 @@ describe('ai insights quota', () => {
     expect(quotaStatus.periodKind).toBe('subscription');
   });
 
-  it('returns an ineligible zero limit status for unpaid users without a billing period', async () => {
+  it('returns an eligible calendar-month quota for free users without a billing period', async () => {
     setAiInsightsQuotaDependenciesForTesting({
       now: () => new Date(FIXED_NOW_ISO),
       createReservationId: () => 'reservation-1',
@@ -457,17 +457,43 @@ describe('ai insights quota', () => {
 
     expect(quotaStatus).toEqual({
       role: 'free',
-      limit: 0,
+      limit: AI_INSIGHTS_REQUEST_LIMITS.free,
       successfulRequestCount: 0,
       activeRequestCount: 0,
-      remainingCount: 0,
-      periodStart: null,
-      periodEnd: null,
-      periodKind: 'no_billing_period',
-      resetMode: 'next_successful_payment',
-      isEligible: false,
-      blockedReason: 'requires_pro',
+      remainingCount: AI_INSIGHTS_REQUEST_LIMITS.free,
+      periodStart: PERIOD_START,
+      periodEnd: PERIOD_END,
+      periodKind: 'calendar_month',
+      resetMode: 'date',
+      isEligible: true,
+      blockedReason: null,
     });
+  });
+
+  it('reserves and finalizes free user quota in the calendar-month window', async () => {
+    setAiInsightsQuotaDependenciesForTesting({
+      now: () => new Date(FIXED_NOW_ISO),
+      createReservationId: () => 'reservation-1',
+      db: () => fakeDb as unknown as FirebaseFirestore.Firestore,
+      getUserRoleAndGracePeriod: async () => ({ role: 'free' }),
+      isGracePeriodActive: () => false,
+      getActiveSubscriptionPeriod: async () => null,
+      getLatestPaidSubscriptionPeriod: async () => null,
+    });
+
+    const reservation = await reserveAiInsightsQuotaForRequest('user-1');
+    const finalizedStatus = await finalizeAiInsightsQuotaReservation(reservation);
+
+    expect(reservation).toMatchObject({
+      role: 'free',
+      limit: AI_INSIGHTS_REQUEST_LIMITS.free,
+      periodDocId: PERIOD_DOC_ID,
+      periodKind: 'calendar_month',
+      resetMode: 'date',
+      isEligible: true,
+    });
+    expect(finalizedStatus.successfulRequestCount).toBe(1);
+    expect(finalizedStatus.remainingCount).toBe(AI_INSIGHTS_REQUEST_LIMITS.free - 1);
   });
 
   it('returns an ineligible status for paid users when no billing window can be resolved', async () => {
@@ -511,7 +537,7 @@ describe('ai insights quota', () => {
 
     await expect(reserveAiInsightsQuotaForRequest('user-1')).rejects.toMatchObject<HttpsError>({
       code: 'permission-denied',
-      message: 'AI Insights is available to Basic and Pro members.',
+      message: 'AI Insights is unavailable for this account.',
     });
   });
 });

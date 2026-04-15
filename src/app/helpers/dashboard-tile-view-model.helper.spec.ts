@@ -8,16 +8,29 @@ import {
   DataDistance,
   DataRecoveryTime,
   DateRanges,
+  DaysOfTheWeek,
   TileTypes,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
 import { buildDashboardCartesianPoints } from './dashboard-echarts-cartesian.helper';
 import { buildAggregatedChartRows } from './aggregated-chart-row.helper';
+import { getDatesForDateRange } from './date-range-helper';
 import {
   buildDashboardTileViewModels,
 } from './dashboard-tile-view-model.helper';
 import {
+  DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
+  DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
+  DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
+  DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
+  DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
+  DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
+  DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
+  DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
+  DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
+  DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
 } from './dashboard-special-chart-types';
 import type { EventStatAggregationResult } from '@shared/event-stat-aggregation.types';
@@ -184,7 +197,7 @@ describe('dashboard-tile-view-model.helper', () => {
     expect(data[1].getID()).toBe('later');
   });
 
-  it('should build form chart tiles as contiguous daily CTL/ATL/TSB points from dashboard events', () => {
+  it('should return empty form chart data when derived form points are missing', () => {
     const formTile = {
       type: TileTypes.Chart,
       order: 0,
@@ -215,14 +228,8 @@ describe('dashboard-tile-view-model.helper', () => {
     });
 
     const formChart = viewModels[0] as any;
-    expect(formChart.timeInterval).toBe(TimeIntervals.Daily);
-    expect(Array.isArray(formChart.data)).toBe(true);
-    expect(formChart.data).toHaveLength(3);
-    expect(formChart.data.map((point: any) => point.trainingStressScore)).toEqual([40, 0, 20]);
-    expect(formChart.data.every((point: any) => typeof point.ctl === 'number')).toBe(true);
-    expect(formChart.data.every((point: any) => typeof point.atl === 'number')).toBe(true);
-    expect(formChart.data.every((point: any) => typeof point.formSameDay === 'number')).toBe(true);
-    expect(formChart.data[0].formPriorDay).toBeNull();
+    expect(formChart.timeInterval).toBe(TimeIntervals.Weekly);
+    expect(formChart.data).toEqual([]);
   });
 
   it('should return empty form data when dashboard events have no training stress score stats', () => {
@@ -256,8 +263,202 @@ describe('dashboard-tile-view-model.helper', () => {
     });
 
     const formChart = viewModels[0] as any;
-    expect(formChart.timeInterval).toBe(TimeIntervals.Daily);
+    expect(formChart.timeInterval).toBe(TimeIntervals.Weekly);
     expect(formChart.data).toEqual([]);
+  });
+
+  it('should prefer precomputed derived form points when provided', () => {
+    const precomputedPoints = [
+      {
+        time: Date.UTC(2024, 0, 1),
+        trainingStressScore: 50,
+        ctl: 1,
+        atl: 5,
+        formSameDay: -4,
+        formPriorDay: null,
+      },
+    ];
+    const viewModels = buildDashboardTileViewModels({
+      tiles: [{
+        type: TileTypes.Chart,
+        order: 0,
+        chartType: DASHBOARD_FORM_CHART_TYPE as any,
+        dataType: 'Training Stress Score',
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        dataTimeInterval: TimeIntervals.Daily,
+        size: { columns: 1, rows: 1 },
+      } as any],
+      events: [
+        makeEvent({
+          id: 'stress-event',
+          startDate: '2024-01-01T10:00:00.000Z',
+          activityTypes: [ActivityTypes.Running],
+          stats: { 'Training Stress Score': 20 },
+        }),
+      ],
+      derivedMetrics: {
+        formPoints: precomputedPoints as any,
+      },
+    });
+
+    expect((viewModels[0] as any).data).toEqual(precomputedPoints);
+  });
+
+  it('should keep full derived form points regardless of dashboard date range while preserving absolute latest form point metadata', () => {
+    const derivedPoints = [
+      {
+        time: Date.UTC(2024, 0, 2),
+        trainingStressScore: 20,
+        ctl: 1.5,
+        atl: 2.5,
+        formSameDay: -1,
+        formPriorDay: null,
+      },
+      {
+        time: Date.UTC(2024, 2, 5),
+        trainingStressScore: 30,
+        ctl: 2.1,
+        atl: 3.5,
+        formSameDay: -1.4,
+        formPriorDay: -1,
+      },
+    ];
+    const viewModels = buildDashboardTileViewModels({
+      tiles: [{
+        type: TileTypes.Chart,
+        order: 0,
+        chartType: DASHBOARD_FORM_CHART_TYPE as any,
+        dataType: 'Training Stress Score',
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        dataTimeInterval: TimeIntervals.Daily,
+        size: { columns: 1, rows: 1 },
+      } as any],
+      events: [
+        makeEvent({
+          id: 'january',
+          startDate: '2024-01-02T12:00:00.000Z',
+          activityTypes: [ActivityTypes.Running],
+          stats: { 'Training Stress Score': 20 },
+        }),
+        makeEvent({
+          id: 'march',
+          startDate: '2024-03-05T12:00:00.000Z',
+          activityTypes: [ActivityTypes.Running],
+          stats: { 'Training Stress Score': 30 },
+        }),
+      ],
+      dashboardDateRange: {
+        dateRange: DateRanges.custom,
+        startDate: new Date('2024-01-01T00:00:00.000Z'),
+        endDate: new Date('2024-01-31T23:59:59.999Z'),
+      },
+      derivedMetrics: {
+        formPoints: derivedPoints as any,
+      },
+    });
+
+    expect((viewModels[0] as any).data).toEqual(derivedPoints);
+    expect((viewModels[0] as any).absoluteLatestFormPoint).toEqual(derivedPoints[1]);
+  });
+
+  it('should ignore preset dashboard date range clipping for form points when explicit start/end are missing', () => {
+    const currentWeekRange = getDatesForDateRange(DateRanges.thisWeek, DaysOfTheWeek.Monday);
+    const insideWeekTimeMs = currentWeekRange.startDate.getTime() + (2 * 24 * 60 * 60 * 1000);
+    const beforeWeekTimeMs = currentWeekRange.startDate.getTime() - (24 * 60 * 60 * 1000);
+    const derivedPoints = [
+      {
+        time: beforeWeekTimeMs,
+        trainingStressScore: 20,
+        ctl: 1.5,
+        atl: 2.5,
+        formSameDay: -1,
+        formPriorDay: null,
+      },
+      {
+        time: insideWeekTimeMs,
+        trainingStressScore: 30,
+        ctl: 2.1,
+        atl: 3.5,
+        formSameDay: -1.4,
+        formPriorDay: -1,
+      },
+    ];
+
+    const viewModels = buildDashboardTileViewModels({
+      tiles: [{
+        type: TileTypes.Chart,
+        order: 0,
+        chartType: DASHBOARD_FORM_CHART_TYPE as any,
+        dataType: 'Training Stress Score',
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        dataTimeInterval: TimeIntervals.Daily,
+        size: { columns: 1, rows: 1 },
+      } as any],
+      events: [],
+      dashboardDateRange: {
+        dateRange: DateRanges.thisWeek,
+        startDate: null,
+        endDate: null,
+        startOfTheWeek: DaysOfTheWeek.Monday,
+      },
+      derivedMetrics: {
+        formPoints: derivedPoints as any,
+      },
+    });
+
+    const formData = (viewModels[0] as any).data as Array<{ time: number; trainingStressScore: number }>;
+    expect(formData).toEqual(derivedPoints);
+    expect((viewModels[0] as any).absoluteLatestFormPoint).toEqual(derivedPoints[1]);
+  });
+
+  it('should not synthesize zero-load form decay points from dashboard date range clipping', () => {
+    const derivedPoints = [
+      {
+        time: Date.UTC(2024, 0, 2),
+        trainingStressScore: 20,
+        ctl: 1.5,
+        atl: 2.5,
+        formSameDay: -1,
+        formPriorDay: null,
+      },
+      {
+        time: Date.UTC(2024, 0, 3),
+        trainingStressScore: 30,
+        ctl: 2.1,
+        atl: 3.5,
+        formSameDay: -1.4,
+        formPriorDay: -1,
+      },
+    ];
+
+    const viewModels = buildDashboardTileViewModels({
+      tiles: [{
+        type: TileTypes.Chart,
+        order: 0,
+        chartType: DASHBOARD_FORM_CHART_TYPE as any,
+        dataType: 'Training Stress Score',
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        dataTimeInterval: TimeIntervals.Daily,
+        size: { columns: 1, rows: 1 },
+      } as any],
+      events: [],
+      dashboardDateRange: {
+        dateRange: DateRanges.custom,
+        startDate: new Date('2024-01-04T00:00:00.000Z'),
+        endDate: new Date('2024-01-06T23:59:59.999Z'),
+      },
+      derivedMetrics: {
+        formPoints: derivedPoints as any,
+      },
+    });
+
+    const formData = (viewModels[0] as any).data as Array<{ time: number; trainingStressScore: number }>;
+    expect(formData).toEqual(derivedPoints);
+    expect((viewModels[0] as any).absoluteLatestFormPoint).toEqual(derivedPoints[1]);
   });
 
   it('should build map tiles from filtered sorted events and preserve mixed tile ordering and sizes', () => {
@@ -374,7 +575,7 @@ describe('dashboard-tile-view-model.helper', () => {
     expect(events[1]).toBe(second);
   });
 
-  it('should attach aggregated recovery context to recovery chart tiles from all recovery-enabled events', () => {
+  it('should keep custom recovery data-type tiles free from curated recovery context', () => {
     const viewModels = buildDashboardTileViewModels({
       tiles: [{
         type: TileTypes.Chart,
@@ -404,21 +605,65 @@ describe('dashboard-tile-view-model.helper', () => {
       ],
     });
 
-    const recoveryTile = viewModels[0] as any;
-    expect(recoveryTile.recoveryNow).toEqual({
-      totalSeconds: 5400,
-      endTimeMs: Date.UTC(2024, 0, 2, 9, 0, 0),
+    const recoveryTile = viewModels[0] as DashboardChartTileViewModel;
+    expect(recoveryTile.recoveryNow).toBeUndefined();
+  });
+
+  it('should treat legacy pie recovery tiles as curated recovery tiles and use derived recovery context', () => {
+    const derivedRecoveryContext = {
+      totalSeconds: 9000,
+      endTimeMs: Date.UTC(2024, 2, 5, 9, 0, 0),
       segments: [
         {
           totalSeconds: 1800,
           endTimeMs: Date.UTC(2024, 0, 1, 9, 0, 0),
         },
         {
-          totalSeconds: 3600,
-          endTimeMs: Date.UTC(2024, 0, 2, 9, 0, 0),
+          totalSeconds: 7200,
+          endTimeMs: Date.UTC(2024, 2, 5, 9, 0, 0),
         },
       ],
+    };
+    const viewModels = buildDashboardTileViewModels({
+      tiles: [{
+        type: TileTypes.Chart,
+        order: 0,
+        chartType: ChartTypes.Pie,
+        dataType: DataRecoveryTime.type,
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        dataTimeInterval: TimeIntervals.Monthly,
+        size: { columns: 1, rows: 1 },
+      } as any],
+      events: [
+        makeEvent({
+          id: 'legacy-recovery-1',
+          startDate: '2024-01-01T08:00:00.000Z',
+          endDate: '2024-01-01T09:00:00.000Z',
+          activityTypes: [ActivityTypes.Running],
+          stats: { [DataRecoveryTime.type]: 1800 },
+        }),
+        makeEvent({
+          id: 'legacy-recovery-2',
+          startDate: '2024-03-05T08:00:00.000Z',
+          endDate: '2024-03-05T09:00:00.000Z',
+          activityTypes: [ActivityTypes.Running],
+          stats: { [DataRecoveryTime.type]: 7200 },
+        }),
+      ],
+      dashboardDateRange: {
+        dateRange: DateRanges.custom,
+        startDate: new Date('2024-01-01T00:00:00.000Z'),
+        endDate: new Date('2024-01-31T23:59:59.999Z'),
+      },
+      derivedMetrics: {
+        recoveryNow: derivedRecoveryContext as any,
+      },
     });
+
+    const recoveryTile = viewModels[0] as DashboardChartTileViewModel;
+    expect(recoveryTile.chartType).toBe(DASHBOARD_RECOVERY_NOW_CHART_TYPE);
+    expect(recoveryTile.recoveryNow).toEqual(derivedRecoveryContext);
   });
 
   it('should keep recovery context undefined for non-recovery chart tiles', () => {
@@ -450,12 +695,12 @@ describe('dashboard-tile-view-model.helper', () => {
     expect((viewModels[0] as any).recoveryNow).toBeUndefined();
   });
 
-  it('should attach recovery context for curated recovery chart types even when dataType differs', () => {
+  it('should keep curated recovery context undefined when derived context is missing', () => {
     const tiles = [
       {
         type: TileTypes.Chart,
         chartType: DASHBOARD_RECOVERY_NOW_CHART_TYPE as any,
-        dataType: 'Distance',
+        dataType: DataRecoveryTime.type,
         dataValueType: ChartDataValueTypes.Total,
         dataCategoryType: ChartDataCategoryTypes.DateType,
         dataTimeInterval: TimeIntervals.Auto,
@@ -464,32 +709,37 @@ describe('dashboard-tile-view-model.helper', () => {
         name: 'Recovery',
       } as TileChartSettingsInterface,
     ];
-    const events = [
-      makeEvent({
-        id: 'e-recovery-curated',
-        startDate: new Date(Date.UTC(2024, 0, 1, 12, 0, 0)).toISOString(),
-        endDate: new Date(Date.UTC(2024, 0, 1, 13, 0, 0)).toISOString(),
-        activityTypes: [ActivityTypes.Running],
-        stats: { [DataRecoveryTime.type]: 7200 },
-      }),
-    ];
+    const olderEvent = makeEvent({
+      id: 'e-recovery-curated-older',
+      startDate: new Date(Date.UTC(2024, 0, 1, 12, 0, 0)).toISOString(),
+      endDate: new Date(Date.UTC(2024, 0, 1, 13, 0, 0)).toISOString(),
+      activityTypes: [ActivityTypes.Running],
+      stats: { [DataRecoveryTime.type]: 1800 },
+    });
+    const latestEvent = makeEvent({
+      id: 'e-recovery-curated-latest',
+      startDate: new Date(Date.UTC(2024, 2, 5, 8, 0, 0)).toISOString(),
+      endDate: new Date(Date.UTC(2024, 2, 5, 9, 0, 0)).toISOString(),
+      activityTypes: [ActivityTypes.Running],
+      stats: { [DataRecoveryTime.type]: 7200 },
+    });
 
-    const viewModels = buildDashboardTileViewModels({ tiles, events });
+    const viewModels = buildDashboardTileViewModels({
+      tiles,
+      events: [olderEvent, latestEvent],
+      dashboardDateRange: {
+        dateRange: DateRanges.custom,
+        startDate: new Date('2024-01-01T00:00:00.000Z'),
+        endDate: new Date('2024-01-31T23:59:59.999Z'),
+      },
+    });
     const recoveryTile = viewModels[0] as DashboardChartTileViewModel;
 
-    expect(recoveryTile.recoveryNow).toEqual({
-      totalSeconds: 7200,
-      endTimeMs: Date.UTC(2024, 0, 1, 13, 0, 0),
-      segments: [
-        {
-          totalSeconds: 7200,
-          endTimeMs: Date.UTC(2024, 0, 1, 13, 0, 0),
-        },
-      ],
-    });
+    expect(recoveryTile.recoveryNow).toBeUndefined();
+    expect(recoveryTile.data).toEqual([]);
   });
 
-  it('should resolve recovery context from events inside the provided dashboard date range', () => {
+  it('should use derived recovery context for curated recovery charts regardless of dashboard date range', () => {
     const tiles = [
       {
         type: TileTypes.Chart,
@@ -518,6 +768,66 @@ describe('dashboard-tile-view-model.helper', () => {
       stats: { [DataRecoveryTime.type]: 7200 },
     });
 
+    const derivedRecoveryContext = {
+      totalSeconds: 9000,
+      endTimeMs: Date.UTC(2024, 2, 5, 9, 0, 0),
+      segments: [
+        {
+          totalSeconds: 1800,
+          endTimeMs: Date.UTC(2024, 0, 2, 9, 0, 0),
+        },
+        {
+          totalSeconds: 7200,
+          endTimeMs: Date.UTC(2024, 2, 5, 9, 0, 0),
+        },
+      ],
+    };
+
+    const viewModels = buildDashboardTileViewModels({
+      tiles,
+      events: [oldEvent, recentEvent],
+      dashboardDateRange: {
+        dateRange: DateRanges.custom,
+        startDate: new Date('2024-01-01T00:00:00.000Z'),
+        endDate: new Date('2024-01-31T23:59:59.999Z'),
+      },
+      derivedMetrics: {
+        recoveryNow: derivedRecoveryContext as any,
+      },
+    });
+    const recoveryTile = viewModels[0] as DashboardChartTileViewModel;
+
+    expect(recoveryTile.recoveryNow).toEqual(derivedRecoveryContext);
+  });
+
+  it('should not attach derived-style recovery context to custom charts inside dashboard date ranges', () => {
+    const tiles = [
+      {
+        type: TileTypes.Chart,
+        chartType: ChartTypes.LinesVertical,
+        dataType: DataRecoveryTime.type,
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        dataTimeInterval: TimeIntervals.Auto,
+        order: 0,
+        size: { columns: 1, rows: 1 },
+      } as any,
+    ];
+    const oldEvent = makeEvent({
+      id: 'old-event',
+      startDate: '2024-01-02T08:00:00.000Z',
+      endDate: '2024-01-02T09:00:00.000Z',
+      activityTypes: [ActivityTypes.Running],
+      stats: { [DataRecoveryTime.type]: 1800 },
+    });
+    const recentEvent = makeEvent({
+      id: 'recent-event',
+      startDate: '2024-03-05T08:00:00.000Z',
+      endDate: '2024-03-05T09:00:00.000Z',
+      activityTypes: [ActivityTypes.Running],
+      stats: { [DataRecoveryTime.type]: 7200 },
+    });
+
     const viewModels = buildDashboardTileViewModels({
       tiles,
       events: [oldEvent, recentEvent],
@@ -527,17 +837,220 @@ describe('dashboard-tile-view-model.helper', () => {
         endDate: new Date('2024-01-31T23:59:59.999Z'),
       },
     });
-    const recoveryTile = viewModels[0] as DashboardChartTileViewModel;
 
-    expect(recoveryTile.recoveryNow).toEqual({
-      totalSeconds: 1800,
-      endTimeMs: Date.UTC(2024, 0, 2, 9, 0, 0),
+    expect((viewModels[0] as any).recoveryNow).toBeUndefined();
+  });
+
+  it('should prefer derived recovery context for curated recovery chart types only', () => {
+    const derivedRecoveryContext = {
+      totalSeconds: 999,
+      endTimeMs: Date.UTC(2024, 0, 10, 9, 0, 0),
       segments: [
         {
-          totalSeconds: 1800,
-          endTimeMs: Date.UTC(2024, 0, 2, 9, 0, 0),
+          totalSeconds: 999,
+          endTimeMs: Date.UTC(2024, 0, 10, 9, 0, 0),
         },
       ],
+    };
+    const events = [
+      makeEvent({
+        id: 'event',
+        startDate: '2024-01-02T08:00:00.000Z',
+        endDate: '2024-01-02T09:00:00.000Z',
+        activityTypes: [ActivityTypes.Running],
+        stats: { [DataRecoveryTime.type]: 1800 },
+      }),
+    ];
+    const viewModels = buildDashboardTileViewModels({
+      tiles: [
+        {
+          type: TileTypes.Chart,
+          chartType: DASHBOARD_RECOVERY_NOW_CHART_TYPE as any,
+          dataType: DataRecoveryTime.type,
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+          dataTimeInterval: TimeIntervals.Auto,
+          order: 0,
+          size: { columns: 1, rows: 1 },
+        } as any,
+        {
+          type: TileTypes.Chart,
+          chartType: ChartTypes.LinesVertical,
+          dataType: DataRecoveryTime.type,
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+          dataTimeInterval: TimeIntervals.Auto,
+          order: 1,
+          size: { columns: 1, rows: 1 },
+        } as any,
+      ],
+      events,
+      derivedMetrics: {
+        recoveryNow: derivedRecoveryContext as any,
+      },
     });
+
+    expect((viewModels[0] as any).recoveryNow).toEqual(derivedRecoveryContext);
+    expect((viewModels[1] as any).recoveryNow).toBeUndefined();
+  });
+
+  it('should map derived ACWR context for KPI chart tiles', () => {
+    const viewModels = buildDashboardTileViewModels({
+      tiles: [{
+        type: TileTypes.Chart,
+        order: 0,
+        chartType: DASHBOARD_ACWR_KPI_CHART_TYPE as any,
+        dataType: 'Training Stress Score',
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        dataTimeInterval: TimeIntervals.Weekly,
+        size: { columns: 1, rows: 1 },
+      } as any],
+      events: [],
+      derivedMetrics: {
+        acwr: {
+          latestDayMs: Date.UTC(2026, 0, 1),
+          acuteLoad7: 200,
+          chronicLoad28: 180,
+          ratio: 1.11,
+          trend8Weeks: [{ time: Date.UTC(2025, 11, 1), value: 1.0 }],
+        } as any,
+      },
+    });
+
+    expect((viewModels[0] as any).acwr?.ratio).toBe(1.11);
+    expect((viewModels[0] as any).timeInterval).toBe(TimeIntervals.Weekly);
+    expect((viewModels[0] as any).data).toEqual([]);
+  });
+
+  it('should map derived KPI and curated contexts to dedicated special chart tiles', () => {
+    const viewModels = buildDashboardTileViewModels({
+      tiles: [
+        {
+          type: TileTypes.Chart,
+          order: 0,
+          chartType: DASHBOARD_RAMP_RATE_KPI_CHART_TYPE as any,
+          dataType: 'Training Stress Score',
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+          dataTimeInterval: TimeIntervals.Weekly,
+          size: { columns: 1, rows: 1 },
+        },
+        {
+          type: TileTypes.Chart,
+          order: 1,
+          chartType: DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE as any,
+          dataType: 'Training Stress Score',
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+          dataTimeInterval: TimeIntervals.Weekly,
+          size: { columns: 1, rows: 1 },
+        },
+        {
+          type: TileTypes.Chart,
+          order: 2,
+          chartType: DASHBOARD_FORM_NOW_KPI_CHART_TYPE as any,
+          dataType: 'Training Stress Score',
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+          dataTimeInterval: TimeIntervals.Weekly,
+          size: { columns: 1, rows: 1 },
+        },
+        {
+          type: TileTypes.Chart,
+          order: 3,
+          chartType: DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE as any,
+          dataType: 'Training Stress Score',
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+          dataTimeInterval: TimeIntervals.Weekly,
+          size: { columns: 1, rows: 1 },
+        },
+        {
+          type: TileTypes.Chart,
+          order: 4,
+          chartType: DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE as any,
+          dataType: 'Training Stress Score',
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+          dataTimeInterval: TimeIntervals.Weekly,
+          size: { columns: 1, rows: 1 },
+        },
+        {
+          type: TileTypes.Chart,
+          order: 5,
+          chartType: DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE as any,
+          dataType: 'Training Stress Score',
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+          dataTimeInterval: TimeIntervals.Weekly,
+          size: { columns: 1, rows: 1 },
+        },
+        {
+          type: TileTypes.Chart,
+          order: 6,
+          chartType: DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE as any,
+          dataType: 'Training Stress Score',
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+          dataTimeInterval: TimeIntervals.Weekly,
+          size: { columns: 1, rows: 1 },
+        },
+        {
+          type: TileTypes.Chart,
+          order: 7,
+          chartType: DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE as any,
+          dataType: 'Training Stress Score',
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+          dataTimeInterval: TimeIntervals.Weekly,
+          size: { columns: 2, rows: 1 },
+        },
+        {
+          type: TileTypes.Chart,
+          order: 8,
+          chartType: DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE as any,
+          dataType: 'Training Stress Score',
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+          dataTimeInterval: TimeIntervals.Weekly,
+          size: { columns: 2, rows: 1 },
+        },
+        {
+          type: TileTypes.Chart,
+          order: 9,
+          chartType: DASHBOARD_EFFICIENCY_TREND_CHART_TYPE as any,
+          dataType: 'Training Stress Score',
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+          dataTimeInterval: TimeIntervals.Weekly,
+          size: { columns: 2, rows: 1 },
+        },
+      ] as any,
+      events: [],
+      derivedMetrics: {
+        rampRate: { rampRate: 2.8, trend8Weeks: [] } as any,
+        monotonyStrain: { strain: 630, trend8Weeks: [] } as any,
+        formNow: { value: -2, trend8Weeks: [] } as any,
+        formPlus7d: { value: 3, trend8Weeks: [] } as any,
+        easyPercent: { value: 64, trend8Weeks: [] } as any,
+        hardPercent: { value: 14, trend8Weeks: [] } as any,
+        efficiencyDelta4w: { deltaAbs: 0.12, deltaPct: 6, trend8Weeks: [] } as any,
+        freshnessForecast: { generatedAtMs: Date.now(), points: [] } as any,
+        intensityDistribution: { weeks: [], latestWeekStartMs: null } as any,
+        efficiencyTrend: { points: [], latestWeekStartMs: null } as any,
+      },
+    });
+
+    expect((viewModels[0] as any).rampRate?.rampRate).toBe(2.8);
+    expect((viewModels[1] as any).monotonyStrain?.strain).toBe(630);
+    expect((viewModels[2] as any).formNow?.value).toBe(-2);
+    expect((viewModels[3] as any).formPlus7d?.value).toBe(3);
+    expect((viewModels[4] as any).easyPercent?.value).toBe(64);
+    expect((viewModels[5] as any).hardPercent?.value).toBe(14);
+    expect((viewModels[6] as any).efficiencyDelta4w?.deltaPct).toBe(6);
+    expect((viewModels[7] as any).freshnessForecast).toBeTruthy();
+    expect((viewModels[8] as any).intensityDistribution).toBeTruthy();
+    expect((viewModels[9] as any).efficiencyTrend).toBeTruthy();
   });
 });

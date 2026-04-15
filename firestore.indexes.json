@@ -1064,6 +1064,29 @@
       ]
     },
     {
+      "collectionGroup": "derivedMetrics",
+      "fieldPath": "entryType",
+      "ttl": false,
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "arrayConfig": "CONTAINS",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    },
+    {
       "collectionGroup": "failed_jobs",
       "fieldPath": "expireAt",
       "ttl": true,
@@ -1335,6 +1358,25 @@
         {
           "order": "ASCENDING",
           "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "userDeletionTombstones",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "arrayConfig": "CONTAINS",
+          "queryScope": "COLLECTION"
         }
       ]
     }

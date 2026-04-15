@@ -39,6 +39,16 @@ export type AiInsightsPromptMetricKey =
   | 'normalized_power'
   | 'intensity_factor'
   | 'power_work'
+  | 'ftp'
+  | 'critical_power'
+  | 'power_watts_per_kg'
+  | 'ground_contact_time'
+  | 'vertical_oscillation'
+  | 'vertical_ratio'
+  | 'leg_stiffness'
+  | 'heart_rate_zone_two_duration'
+  | 'power_zone_two_duration'
+  | 'speed_zone_two_duration'
   | 'vo2_max'
   | 'epoc'
   | 'avg_vam'
@@ -182,6 +192,54 @@ export const AI_INSIGHTS_PROMPT_CATALOG = [
     metricKey: 'speed',
   },
   {
+    id: 'ground-contact-time-running-this-year',
+    prompt: 'Show my average ground contact time over time for running this year.',
+    category: 'Cardio & Speed',
+    featured: false,
+    surfaces: ['picker', 'unsupported'],
+    metricKey: 'ground_contact_time',
+  },
+  {
+    id: 'vertical-oscillation-running-this-year',
+    prompt: 'Show my average vertical oscillation over time for running this year.',
+    category: 'Cardio & Speed',
+    featured: false,
+    surfaces: ['picker', 'unsupported'],
+    metricKey: 'vertical_oscillation',
+  },
+  {
+    id: 'vertical-ratio-running-this-year',
+    prompt: 'Show my average vertical ratio over time for running this year.',
+    category: 'Cardio & Speed',
+    featured: false,
+    surfaces: ['picker', 'unsupported'],
+    metricKey: 'vertical_ratio',
+  },
+  {
+    id: 'leg-stiffness-running-this-year',
+    prompt: 'Show my average leg stiffness over time for running this year.',
+    category: 'Cardio & Speed',
+    featured: false,
+    surfaces: ['picker', 'unsupported'],
+    metricKey: 'leg_stiffness',
+  },
+  {
+    id: 'heart-rate-zone-two-running-this-year',
+    prompt: 'Show my total time in heart rate zone 2 over time for running this year.',
+    category: 'Cardio & Speed',
+    featured: false,
+    surfaces: ['picker', 'unsupported'],
+    metricKey: 'heart_rate_zone_two_duration',
+  },
+  {
+    id: 'speed-zone-two-running-this-year',
+    prompt: 'Show my total time in speed zone 2 over time for running this year.',
+    category: 'Cardio & Speed',
+    featured: false,
+    surfaces: ['picker', 'unsupported'],
+    metricKey: 'speed_zone_two_duration',
+  },
+  {
     id: 'pace-running-3-months',
     prompt: 'Show my average pace over time for running in the last 3 months.',
     category: 'Cardio & Speed',
@@ -252,6 +310,38 @@ export const AI_INSIGHTS_PROMPT_CATALOG = [
     featured: false,
     surfaces: ['picker', 'unsupported'],
     metricKey: 'power_work',
+  },
+  {
+    id: 'ftp-cycling-this-year',
+    prompt: 'Show my average FTP over time for cycling this year.',
+    category: 'Power & Load',
+    featured: false,
+    surfaces: ['picker', 'unsupported'],
+    metricKey: 'ftp',
+  },
+  {
+    id: 'critical-power-cycling-this-year',
+    prompt: 'Show my average critical power over time for cycling this year.',
+    category: 'Power & Load',
+    featured: false,
+    surfaces: ['picker', 'unsupported'],
+    metricKey: 'critical_power',
+  },
+  {
+    id: 'power-watts-per-kg-cycling-this-year',
+    prompt: 'Show my average power-to-weight ratio over time for cycling this year.',
+    category: 'Power & Load',
+    featured: false,
+    surfaces: ['picker', 'unsupported'],
+    metricKey: 'power_watts_per_kg',
+  },
+  {
+    id: 'power-zone-two-cycling-this-year',
+    prompt: 'Show my total time in power zone 2 over time for cycling this year.',
+    category: 'Power & Load',
+    featured: false,
+    surfaces: ['picker', 'unsupported'],
+    metricKey: 'power_zone_two_duration',
   },
   {
     id: 'best-power-curve',

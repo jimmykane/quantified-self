@@ -5,6 +5,7 @@ import {
   DataAscent,
   DataAvgVAM,
   DataCadenceAvg,
+  DataCriticalPower,
   DataDescent,
   DataDistance,
   DataDuration,
@@ -13,10 +14,15 @@ import {
   DataEffortPaceAvg,
   DataEffortPaceMax,
   DataEffortPaceMin,
+  DataFTP,
   DataGradeAdjustedPaceAvg,
   DataGradeAdjustedPaceMax,
   DataGradeAdjustedPaceMin,
+  DataGroundContactTimeAvg,
+  DataGroundContactTimeMax,
+  DataGroundContactTimeMin,
   DataHeartRateAvg,
+  DataHeartRateZoneTwoDuration,
   DataJumpDistanceAvg,
   DataJumpDistanceMax,
   DataJumpDistanceMin,
@@ -29,19 +35,31 @@ import {
   DataJumpSpeedAvg,
   DataJumpSpeedMax,
   DataJumpSpeedMin,
+  DataLegStiffnessAvg,
+  DataLegStiffnessMax,
+  DataLegStiffnessMin,
   DataPaceAvg,
   DataPaceMax,
   DataPaceMin,
   DataPowerAvg,
   DataPowerIntensityFactor,
   DataPowerNormalized,
+  DataPowerWattsPerKg,
   DataPowerTrainingStressScore,
   DataPowerWork,
+  DataPowerZoneTwoDuration,
   DataRecoveryTime,
   DataSpeedAvg,
+  DataSpeedZoneTwoDuration,
   DataSwimPaceAvg,
   DataSwimPaceMax,
   DataSwimPaceMin,
+  DataVerticalOscillationAvg,
+  DataVerticalOscillationMax,
+  DataVerticalOscillationMin,
+  DataVerticalRatioAvg,
+  DataVerticalRatioMax,
+  DataVerticalRatioMin,
   DataVO2Max,
   DataWeight,
   DynamicDataLoader,
@@ -89,6 +107,46 @@ function tokenizeMetricText(value: string): string[] {
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+const SUGGESTED_PROMPT_LOW_SIGNAL_TOKENS = new Set<string>([
+  'a',
+  'an',
+  'and',
+  'avg',
+  'average',
+  'for',
+  'in',
+  'max',
+  'maximum',
+  'min',
+  'minimum',
+  'my',
+  'of',
+  'on',
+  'over',
+  'per',
+  'show',
+  'the',
+  'time',
+  'to',
+  'total',
+  'trend',
+  'with',
+  'year',
+  'zone',
+  'duration',
+]);
+
+function getSuggestionSignalTokens(value: string): string[] {
+  return tokenizeMetricText(value).filter((token) => (
+    token.length > 2
+    && !SUGGESTED_PROMPT_LOW_SIGNAL_TOKENS.has(token)
+  ));
+}
+
+function sourceContainsSearchTerm(sourceText: string, searchTerm: string): boolean {
+  return new RegExp(`(^|\\s)${escapeRegExp(searchTerm)}(?=$|\\s)`).test(sourceText);
 }
 
 export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
@@ -352,6 +410,35 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
     familyType: 'Heart Rate',
   },
   {
+    key: 'heart_rate_zone_two_duration',
+    dataType: DataHeartRateZoneTwoDuration.type,
+    label: 'heart rate zone 2 duration',
+    aliases: [
+      'heart rate zone 2 duration',
+      'heart rate zone two duration',
+      'hr zone 2 duration',
+      'hr zone two duration',
+      'time in heart rate zone 2',
+      'time in heart rate zone two',
+      'time in hr zone 2',
+      'time in hr zone two',
+      'zone 2 heart rate duration',
+      'zone two heart rate duration',
+      'zone 2 heart rate time',
+      'zone two heart rate time',
+      'z2 heart rate duration',
+      'z2 heart rate time',
+    ],
+    defaultValueType: ChartDataValueTypes.Total,
+    allowedValueTypes: [
+      ChartDataValueTypes.Total,
+      ChartDataValueTypes.Average,
+      ChartDataValueTypes.Minimum,
+      ChartDataValueTypes.Maximum,
+    ],
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('heart_rate_zone_two_duration'),
+  },
+  {
     key: 'speed',
     dataType: DataSpeedAvg.type,
     label: 'speed',
@@ -374,6 +461,151 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
     ],
     suggestedPrompt: getAiInsightsDefaultMetricPrompt('speed'),
     familyType: 'Speed',
+  },
+  {
+    key: 'speed_zone_two_duration',
+    dataType: DataSpeedZoneTwoDuration.type,
+    label: 'speed zone 2 duration',
+    aliases: [
+      'speed zone 2 duration',
+      'speed zone two duration',
+      'time in speed zone 2',
+      'time in speed zone two',
+      'zone 2 speed duration',
+      'zone two speed duration',
+      'zone 2 speed time',
+      'zone two speed time',
+      'z2 speed duration',
+      'z2 speed time',
+    ],
+    defaultValueType: ChartDataValueTypes.Total,
+    allowedValueTypes: [
+      ChartDataValueTypes.Total,
+      ChartDataValueTypes.Average,
+      ChartDataValueTypes.Minimum,
+      ChartDataValueTypes.Maximum,
+    ],
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('speed_zone_two_duration'),
+  },
+  {
+    key: 'ground_contact_time',
+    dataType: DataGroundContactTimeAvg.type,
+    label: 'ground contact time',
+    aliases: [
+      'ground contact time',
+      'average ground contact time',
+      'avg ground contact time',
+      'minimum ground contact time',
+      'min ground contact time',
+      'maximum ground contact time',
+      'max ground contact time',
+      'gct',
+      'average gct',
+      'avg gct',
+      'minimum gct',
+      'min gct',
+      'maximum gct',
+      'max gct',
+    ],
+    defaultValueType: ChartDataValueTypes.Average,
+    allowedValueTypes: [
+      ChartDataValueTypes.Average,
+      ChartDataValueTypes.Minimum,
+      ChartDataValueTypes.Maximum,
+    ],
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('ground_contact_time'),
+    variantDataTypes: {
+      [ChartDataValueTypes.Average]: DataGroundContactTimeAvg.type,
+      [ChartDataValueTypes.Minimum]: DataGroundContactTimeMin.type,
+      [ChartDataValueTypes.Maximum]: DataGroundContactTimeMax.type,
+    },
+  },
+  {
+    key: 'vertical_oscillation',
+    dataType: DataVerticalOscillationAvg.type,
+    label: 'vertical oscillation',
+    aliases: [
+      'vertical oscillation',
+      'average vertical oscillation',
+      'avg vertical oscillation',
+      'minimum vertical oscillation',
+      'min vertical oscillation',
+      'maximum vertical oscillation',
+      'max vertical oscillation',
+      'running vertical oscillation',
+      'average running vertical oscillation',
+      'avg running vertical oscillation',
+    ],
+    defaultValueType: ChartDataValueTypes.Average,
+    allowedValueTypes: [
+      ChartDataValueTypes.Average,
+      ChartDataValueTypes.Minimum,
+      ChartDataValueTypes.Maximum,
+    ],
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('vertical_oscillation'),
+    variantDataTypes: {
+      [ChartDataValueTypes.Average]: DataVerticalOscillationAvg.type,
+      [ChartDataValueTypes.Minimum]: DataVerticalOscillationMin.type,
+      [ChartDataValueTypes.Maximum]: DataVerticalOscillationMax.type,
+    },
+  },
+  {
+    key: 'vertical_ratio',
+    dataType: DataVerticalRatioAvg.type,
+    label: 'vertical ratio',
+    aliases: [
+      'vertical ratio',
+      'average vertical ratio',
+      'avg vertical ratio',
+      'minimum vertical ratio',
+      'min vertical ratio',
+      'maximum vertical ratio',
+      'max vertical ratio',
+      'running vertical ratio',
+      'average running vertical ratio',
+      'avg running vertical ratio',
+    ],
+    defaultValueType: ChartDataValueTypes.Average,
+    allowedValueTypes: [
+      ChartDataValueTypes.Average,
+      ChartDataValueTypes.Minimum,
+      ChartDataValueTypes.Maximum,
+    ],
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('vertical_ratio'),
+    variantDataTypes: {
+      [ChartDataValueTypes.Average]: DataVerticalRatioAvg.type,
+      [ChartDataValueTypes.Minimum]: DataVerticalRatioMin.type,
+      [ChartDataValueTypes.Maximum]: DataVerticalRatioMax.type,
+    },
+  },
+  {
+    key: 'leg_stiffness',
+    dataType: DataLegStiffnessAvg.type,
+    label: 'leg stiffness',
+    aliases: [
+      'leg stiffness',
+      'average leg stiffness',
+      'avg leg stiffness',
+      'minimum leg stiffness',
+      'min leg stiffness',
+      'maximum leg stiffness',
+      'max leg stiffness',
+      'running leg stiffness',
+      'average running leg stiffness',
+      'avg running leg stiffness',
+    ],
+    defaultValueType: ChartDataValueTypes.Average,
+    allowedValueTypes: [
+      ChartDataValueTypes.Average,
+      ChartDataValueTypes.Minimum,
+      ChartDataValueTypes.Maximum,
+    ],
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('leg_stiffness'),
+    variantDataTypes: {
+      [ChartDataValueTypes.Average]: DataLegStiffnessAvg.type,
+      [ChartDataValueTypes.Minimum]: DataLegStiffnessMin.type,
+      [ChartDataValueTypes.Maximum]: DataLegStiffnessMax.type,
+    },
   },
   {
     key: 'pace',
@@ -607,6 +839,119 @@ export const SUPPORTED_INSIGHT_METRICS: readonly InsightMetricDefinition[] = [
       ChartDataValueTypes.Maximum,
     ],
     suggestedPrompt: getAiInsightsDefaultMetricPrompt('power_work'),
+  },
+  {
+    key: 'ftp',
+    dataType: DataFTP.type,
+    label: 'ftp',
+    aliases: [
+      'ftp',
+      'functional threshold power',
+      'threshold power',
+      'average ftp',
+      'avg ftp',
+      'minimum ftp',
+      'min ftp',
+      'maximum ftp',
+      'max ftp',
+      'average functional threshold power',
+      'avg functional threshold power',
+      'minimum functional threshold power',
+      'min functional threshold power',
+      'maximum functional threshold power',
+      'max functional threshold power',
+    ],
+    defaultValueType: ChartDataValueTypes.Average,
+    allowedValueTypes: [
+      ChartDataValueTypes.Average,
+      ChartDataValueTypes.Minimum,
+      ChartDataValueTypes.Maximum,
+    ],
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('ftp'),
+  },
+  {
+    key: 'critical_power',
+    dataType: DataCriticalPower.type,
+    label: 'critical power',
+    aliases: [
+      'critical power',
+      'cp',
+      'average critical power',
+      'avg critical power',
+      'minimum critical power',
+      'min critical power',
+      'maximum critical power',
+      'max critical power',
+      'critical watts',
+      'critical cycling power',
+    ],
+    defaultValueType: ChartDataValueTypes.Average,
+    allowedValueTypes: [
+      ChartDataValueTypes.Average,
+      ChartDataValueTypes.Minimum,
+      ChartDataValueTypes.Maximum,
+    ],
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('critical_power'),
+  },
+  {
+    key: 'power_watts_per_kg',
+    dataType: DataPowerWattsPerKg.type,
+    label: 'power watts per kg',
+    aliases: [
+      'power watts per kg',
+      'watts per kg',
+      'watts per kilogram',
+      'w/kg',
+      'w kg',
+      'watts/kg',
+      'power per kg',
+      'power to weight',
+      'power to weight ratio',
+      'average power to weight ratio',
+      'avg power to weight ratio',
+      'minimum power to weight ratio',
+      'min power to weight ratio',
+      'maximum power to weight ratio',
+      'max power to weight ratio',
+      'average watts per kg',
+      'avg watts per kg',
+      'minimum watts per kg',
+      'min watts per kg',
+      'maximum watts per kg',
+      'max watts per kg',
+    ],
+    defaultValueType: ChartDataValueTypes.Average,
+    allowedValueTypes: [
+      ChartDataValueTypes.Average,
+      ChartDataValueTypes.Minimum,
+      ChartDataValueTypes.Maximum,
+    ],
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('power_watts_per_kg'),
+  },
+  {
+    key: 'power_zone_two_duration',
+    dataType: DataPowerZoneTwoDuration.type,
+    label: 'power zone 2 duration',
+    aliases: [
+      'power zone 2 duration',
+      'power zone two duration',
+      'time in power zone 2',
+      'time in power zone two',
+      'zone 2 power duration',
+      'zone two power duration',
+      'zone 2 power time',
+      'zone two power time',
+      'z2 power duration',
+      'z2 power time',
+    ],
+    defaultValueType: ChartDataValueTypes.Total,
+    allowedValueTypes: [
+      ChartDataValueTypes.Total,
+      ChartDataValueTypes.Average,
+      ChartDataValueTypes.Minimum,
+      ChartDataValueTypes.Maximum,
+    ],
+    suggestedPrompt: getAiInsightsDefaultMetricPrompt('power_zone_two_duration'),
   },
   {
     key: 'vo2_max',
@@ -1012,11 +1357,11 @@ function buildSuggestedPromptScore(
       continue;
     }
 
-    if (sourceText.includes(searchTerm)) {
+    if (sourceContainsSearchTerm(sourceText, searchTerm)) {
       score = Math.max(score, 500 + searchTerm.length);
     }
 
-    const overlapCount = tokenizeMetricText(searchTerm)
+    const overlapCount = getSuggestionSignalTokens(searchTerm)
       .filter(token => sourceTokens.has(token))
       .length;
     score = Math.max(score, overlapCount * 10);
@@ -1027,7 +1372,7 @@ function buildSuggestedPromptScore(
 
 export function getSuggestedInsightPrompts(limit = 3, sourceText?: string): string[] {
   const normalizedSource = normalizeMetricText(sourceText || '');
-  const sourceTokens = new Set(tokenizeMetricText(sourceText || ''));
+  const sourceTokens = new Set(getSuggestionSignalTokens(sourceText || ''));
   const explicitMetricMatch = normalizedSource
     ? (findInsightMetricAliasMatch(sourceText || '')?.metric ?? null)
     : null;

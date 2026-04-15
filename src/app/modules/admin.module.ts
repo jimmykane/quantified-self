@@ -48,6 +48,14 @@ const routes: Routes = [
         data: {
             queueView: 'reparse'
         }
+    },
+    {
+        path: 'queues/derived-metrics',
+        component: AdminQueueMonitorComponent,
+        canActivate: [adminGuard],
+        data: {
+            queueView: 'derived'
+        }
     }
 ];
 

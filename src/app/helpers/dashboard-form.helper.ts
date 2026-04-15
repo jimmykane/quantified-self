@@ -1,10 +1,16 @@
 import { TimeIntervals, type EventInterface } from '@sports-alliance/sports-lib';
+import {
+  normalizeDerivedFormDailyLoads,
+  type DerivedFormDailyLoadEntry,
+  type LegacyDerivedFormDailyLoadEntry,
+} from '@shared/derived-metrics';
 
 const CTL_TIME_CONSTANT_DAYS = 42;
 const ATL_TIME_CONSTANT_DAYS = 7;
-const THIRTY_ONE_DAYS_MS = 31 * 24 * 60 * 60 * 1000;
+const UTC_DAY_MS = 24 * 60 * 60 * 1000;
 
 export const DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE = 'Training Stress Score';
+export const DASHBOARD_FORM_LEGACY_TRAINING_STRESS_SCORE_TYPE = 'Power Training Stress Score';
 
 export type DashboardFormMode = 'same-day' | 'prior-day';
 
@@ -40,11 +46,71 @@ function resolveDayStartLocalTime(date: Date): number {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 }
 
+function resolveDayStartUtcTime(date: Date): number {
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+}
+
+function buildDashboardFormPointsFromDailyLoadMap(
+  dailyTrainingStressScores: Map<number, number>,
+  daySequenceBuilder: (startDay: number, endDay: number) => number[],
+): DashboardFormPoint[] {
+  if (!dailyTrainingStressScores.size) {
+    return [];
+  }
+
+  const sortedDays = [...dailyTrainingStressScores.keys()].sort((left, right) => left - right);
+  const startDay = sortedDays[0];
+  const endDay = sortedDays[sortedDays.length - 1];
+  if (!Number.isFinite(startDay) || !Number.isFinite(endDay)) {
+    return [];
+  }
+
+  const daySequence = daySequenceBuilder(startDay, endDay);
+  if (!daySequence.length) {
+    return [];
+  }
+
+  const points: DashboardFormPoint[] = [];
+  let previousCtl = 0;
+  let previousAtl = 0;
+
+  daySequence.forEach((dayTime) => {
+    const trainingStressScore = dailyTrainingStressScores.get(dayTime) || 0;
+    const ctl = previousCtl + ((trainingStressScore - previousCtl) / CTL_TIME_CONSTANT_DAYS);
+    const atl = previousAtl + ((trainingStressScore - previousAtl) / ATL_TIME_CONSTANT_DAYS);
+
+    points.push({
+      time: dayTime,
+      trainingStressScore,
+      ctl,
+      atl,
+      formSameDay: ctl - atl,
+      formPriorDay: points.length ? previousCtl - previousAtl : null,
+    });
+
+    previousCtl = ctl;
+    previousAtl = atl;
+  });
+
+  return points;
+}
+
 export function resolveDashboardFormTrainingStressScore(event: EventInterface): number | null {
-  const stat = event?.getStat?.(DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE) as
-    { getValue?: () => unknown } | null | undefined;
-  const value = toFiniteNumber(stat?.getValue?.());
-  return value !== null && value >= 0 ? value : null;
+  const statTypes = [
+    DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+    DASHBOARD_FORM_LEGACY_TRAINING_STRESS_SCORE_TYPE,
+  ];
+
+  for (const statType of statTypes) {
+    const stat = event?.getStat?.(statType) as
+      { getValue?: () => unknown } | null | undefined;
+    const value = toFiniteNumber(stat?.getValue?.());
+    if (value !== null && value >= 0) {
+      return value;
+    }
+  }
+
+  return null;
 }
 
 export function buildDashboardFormPoints(events: readonly EventInterface[] | null | undefined): DashboardFormPoint[] {
@@ -54,8 +120,6 @@ export function buildDashboardFormPoints(events: readonly EventInterface[] | nul
   }
 
   const dailyTrainingStressScores = new Map<number, number>();
-  let startDay = Number.POSITIVE_INFINITY;
-  let endDay = Number.NEGATIVE_INFINITY;
   normalizedEvents.forEach((event) => {
     const startDate = event?.startDate;
     if (!(startDate instanceof Date) || !Number.isFinite(startDate.getTime())) {
@@ -72,46 +136,92 @@ export function buildDashboardFormPoints(events: readonly EventInterface[] | nul
       dayStart,
       (dailyTrainingStressScores.get(dayStart) || 0) + stressScore,
     );
-    if (dayStart < startDay) {
-      startDay = dayStart;
-    }
-    if (dayStart > endDay) {
-      endDay = dayStart;
-    }
   });
 
-  if (!Number.isFinite(startDay) || !Number.isFinite(endDay)) {
+  return buildDashboardFormPointsFromDailyLoadMap(
+    dailyTrainingStressScores,
+    (startDay, endDay) => {
+      const daySequence: number[] = [];
+      for (
+        let currentDay = new Date(startDay);
+        currentDay.getTime() <= endDay;
+        currentDay = new Date(currentDay.getFullYear(), currentDay.getMonth(), currentDay.getDate() + 1)
+      ) {
+        daySequence.push(currentDay.getTime());
+      }
+      return daySequence;
+    },
+  );
+}
+
+export function buildDashboardFormPointsFromDailyLoads(
+  dailyLoads: readonly (DerivedFormDailyLoadEntry | LegacyDerivedFormDailyLoadEntry)[] | null | undefined,
+): DashboardFormPoint[] {
+  const normalizedDailyLoads = normalizeDerivedFormDailyLoads(dailyLoads);
+  if (!normalizedDailyLoads.length) {
     return [];
   }
 
-  const points: DashboardFormPoint[] = [];
-  let previousCtl = 0;
-  let previousAtl = 0;
+  const dailyTrainingStressScores = normalizedDailyLoads.reduce((scores, load) => {
+    scores.set(load.dayMs, (scores.get(load.dayMs) || 0) + load.load);
+    return scores;
+  }, new Map<number, number>());
 
-  for (
-    let currentDay = new Date(startDay);
-    currentDay.getTime() <= endDay;
-    currentDay = new Date(currentDay.getFullYear(), currentDay.getMonth(), currentDay.getDate() + 1)
-  ) {
-    const dayTime = currentDay.getTime();
-    const trainingStressScore = dailyTrainingStressScores.get(dayTime) || 0;
+  return buildDashboardFormPointsFromDailyLoadMap(
+    dailyTrainingStressScores,
+    (startDay, endDay) => {
+      const daySequence: number[] = [];
+      for (let dayMs = startDay; dayMs <= endDay; dayMs += UTC_DAY_MS) {
+        daySequence.push(dayMs);
+      }
+      return daySequence;
+    },
+  );
+}
+
+export function extendDashboardFormPointsWithZeroLoadUntil(
+  points: readonly DashboardFormPoint[] | null | undefined,
+  endTimeMs: number,
+): DashboardFormPoint[] {
+  const normalizedPoints = Array.isArray(points) ? [...points] : [];
+  if (!normalizedPoints.length || !Number.isFinite(endTimeMs)) {
+    return normalizedPoints;
+  }
+
+  const lastPoint = normalizedPoints[normalizedPoints.length - 1];
+  if (!lastPoint || !Number.isFinite(lastPoint.time)) {
+    return normalizedPoints;
+  }
+
+  const endDate = new Date(endTimeMs);
+  const endDayTimeMs = Date.UTC(endDate.getUTCFullYear(), endDate.getUTCMonth(), endDate.getUTCDate());
+  if (!Number.isFinite(endDayTimeMs) || endDayTimeMs <= lastPoint.time) {
+    return normalizedPoints;
+  }
+
+  const extendedPoints = [...normalizedPoints];
+  let previousCtl = Number(lastPoint.ctl) || 0;
+  let previousAtl = Number(lastPoint.atl) || 0;
+
+  for (let dayMs = lastPoint.time + UTC_DAY_MS; dayMs <= endDayTimeMs; dayMs += UTC_DAY_MS) {
+    const trainingStressScore = 0;
     const ctl = previousCtl + ((trainingStressScore - previousCtl) / CTL_TIME_CONSTANT_DAYS);
     const atl = previousAtl + ((trainingStressScore - previousAtl) / ATL_TIME_CONSTANT_DAYS);
 
-    points.push({
-      time: dayTime,
+    extendedPoints.push({
+      time: dayMs,
       trainingStressScore,
       ctl,
       atl,
       formSameDay: ctl - atl,
-      formPriorDay: points.length ? previousCtl - previousAtl : null,
+      formPriorDay: previousCtl - previousAtl,
     });
 
     previousCtl = ctl;
     previousAtl = atl;
   }
 
-  return points;
+  return extendedPoints;
 }
 
 export function resolveDashboardFormValue(
@@ -143,45 +253,29 @@ function resolveFormBucketTime(time: number, timeInterval: TimeIntervals): numbe
 
   switch (timeInterval) {
     case TimeIntervals.Yearly:
-      return new Date(date.getFullYear(), 0, 1).getTime();
+      return Date.UTC(date.getUTCFullYear(), 0, 1);
     case TimeIntervals.Monthly:
-      return new Date(date.getFullYear(), date.getMonth(), 1).getTime();
+      return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1);
+    case TimeIntervals.Weekly: {
+      const dayIndexMondayFirst = (date.getUTCDay() + 6) % 7;
+      return Date.UTC(
+        date.getUTCFullYear(),
+        date.getUTCMonth(),
+        date.getUTCDate() - dayIndexMondayFirst,
+      );
+    }
     default:
-      return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+      return resolveDayStartUtcTime(date);
   }
 }
 
 export function resolveDashboardFormRenderTimeInterval(
   points: readonly DashboardFormPoint[] | null | undefined,
 ): TimeIntervals {
-  if (!Array.isArray(points) || points.length < 2) {
-    return TimeIntervals.Daily;
+  if (!Array.isArray(points) || !points.length) {
+    return TimeIntervals.Weekly;
   }
-
-  const startTime = points[0]?.time;
-  const endTime = points[points.length - 1]?.time;
-  if (!Number.isFinite(startTime) || !Number.isFinite(endTime)) {
-    return TimeIntervals.Daily;
-  }
-
-  const startDate = new Date(startTime);
-  const endDate = new Date(endTime);
-  if (!Number.isFinite(startDate.getTime()) || !Number.isFinite(endDate.getTime())) {
-    return TimeIntervals.Daily;
-  }
-
-  if (endDate.getFullYear() !== startDate.getFullYear()) {
-    return TimeIntervals.Yearly;
-  }
-
-  if (endDate.getMonth() !== startDate.getMonth()) {
-    if (endDate.getTime() <= startDate.getTime() + THIRTY_ONE_DAYS_MS) {
-      return TimeIntervals.Daily;
-    }
-    return TimeIntervals.Monthly;
-  }
-
-  return TimeIntervals.Daily;
+  return TimeIntervals.Weekly;
 }
 
 export function buildDashboardFormRenderPoints(
@@ -193,7 +287,11 @@ export function buildDashboardFormRenderPoints(
     return [];
   }
 
-  if (timeInterval !== TimeIntervals.Monthly && timeInterval !== TimeIntervals.Yearly) {
+  if (
+    timeInterval !== TimeIntervals.Weekly
+    && timeInterval !== TimeIntervals.Monthly
+    && timeInterval !== TimeIntervals.Yearly
+  ) {
     return normalizedPoints;
   }
 
@@ -221,7 +319,9 @@ export function buildDashboardFormRenderPoints(
     .sort((left, right) => left[0] - right[0])
     .map(([time, bucket]) => ({
       ...bucket.lastPoint,
-      time,
+      // Plot aggregated buckets at their latest included day so ongoing
+      // week/month buckets render up to "today" instead of bucket start.
+      time: bucket.lastPoint.time,
       trainingStressScore: bucket.trainingStressScore,
     }));
 }
