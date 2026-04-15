@@ -26,7 +26,7 @@ interface DerivedMetricsFreshnessInput {
     coordinatorCompletedAtMs: number | null;
     coordinatorUpdatedAtMs: number | null;
     formSnapshotStatus: string | null;
-    formSnapshotSourceEventCount: number | null;
+    formSnapshotSourceDocCount: number | null;
     formRangeEndDayMs: number | null;
     latestEventStartDayMs: number | null;
     latestEventUpdatedAtMs: number | null;
@@ -43,6 +43,7 @@ interface DerivedMetricsFreshnessDecision {
     | 'no_form_freshness_signal'
     | 'missing_event_count'
     | 'missing_form_snapshot'
+    | 'missing_source_doc_count'
     | 'missing_completed_at'
     | 'event_count_mismatch'
     | 'latest_event_beyond_form_range'
@@ -152,7 +153,10 @@ export function decideDerivedMetricsFreshness(input: DerivedMetricsFreshnessInpu
         if (input.formSnapshotStatus !== 'ready') {
             return { shouldQueue: true, reason: 'missing_form_snapshot' };
         }
-        if ((input.formSnapshotSourceEventCount ?? -1) !== 0) {
+        if (!Number.isFinite(input.formSnapshotSourceDocCount)) {
+            return { shouldQueue: true, reason: 'missing_source_doc_count' };
+        }
+        if ((input.formSnapshotSourceDocCount ?? -1) !== 0) {
             return { shouldQueue: true, reason: 'event_count_mismatch' };
         }
         if (!Number.isFinite(input.coordinatorCompletedAtMs)) {
@@ -167,7 +171,10 @@ export function decideDerivedMetricsFreshness(input: DerivedMetricsFreshnessInpu
     if (!Number.isFinite(input.coordinatorCompletedAtMs)) {
         return { shouldQueue: true, reason: 'missing_completed_at' };
     }
-    if ((input.formSnapshotSourceEventCount ?? -1) !== latestEventCount) {
+    if (!Number.isFinite(input.formSnapshotSourceDocCount)) {
+        return { shouldQueue: true, reason: 'missing_source_doc_count' };
+    }
+    if ((input.formSnapshotSourceDocCount ?? -1) !== latestEventCount) {
         return { shouldQueue: true, reason: 'event_count_mismatch' };
     }
     if (Number.isFinite(input.latestEventStartDayMs) && Number.isFinite(input.formRangeEndDayMs)
@@ -230,7 +237,7 @@ export const ensureDerivedMetrics = onCall({
 
     const formSnapshotData = formSnapshot.data() || {};
     const formSnapshotStatus = toSafeString(formSnapshotData.status) || null;
-    const formSnapshotSourceEventCount = toFiniteNumber(formSnapshotData.sourceEventCount);
+    const formSnapshotSourceDocCount = toFiniteNumber(formSnapshotData.sourceDocCount);
     const formRangeEndDayMs = toFiniteNumber(
         ((formSnapshotData.payload as Record<string, unknown> | undefined)?.rangeEndDayMs) || null,
     );
@@ -250,7 +257,7 @@ export const ensureDerivedMetrics = onCall({
         coordinatorCompletedAtMs,
         coordinatorUpdatedAtMs,
         formSnapshotStatus,
-        formSnapshotSourceEventCount,
+        formSnapshotSourceDocCount,
         formRangeEndDayMs,
         latestEventStartDayMs,
         latestEventUpdatedAtMs,

@@ -490,7 +490,9 @@ describe('writeDerivedMetricSnapshotsReady', () => {
             },
         );
 
-        const formPayload = findPersistedPayload(DERIVED_METRIC_KINDS.Form).payload as Record<string, unknown>;
+        const formPersistedSnapshot = findPersistedPayload(DERIVED_METRIC_KINDS.Form);
+        expect(formPersistedSnapshot.sourceDocCount).toBe(formDocs.length);
+        const formPayload = formPersistedSnapshot.payload as Record<string, unknown>;
         expect(formPayload.dailyLoads).toEqual([
             { dayMs: Date.UTC(2026, 0, 1), load: 10 },
             { dayMs: Date.UTC(2026, 0, 2), load: 20 },
