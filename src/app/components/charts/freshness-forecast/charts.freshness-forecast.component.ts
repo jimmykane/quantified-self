@@ -168,12 +168,11 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
         fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
       },
       grid: {
-        left: 36,
-        right: 8,
+        left: 6,
+        right: 6,
         top: 8,
-        bottom: 24,
-        outerBoundsMode: 'same',
-        outerBoundsContain: 'axisLabel',
+        bottom: 22,
+        containLabel: false,
       },
       tooltip: {
         show: true,
@@ -229,16 +228,14 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
         min: valueAxis.min,
         max: valueAxis.max,
         interval: valueAxis.interval,
-        axisLine: { lineStyle: { color: style.axisColor } },
+        axisLine: { show: false },
         axisTick: { show: false },
         splitLine: {
           show: true,
           lineStyle: { color: style.gridColor },
         },
         axisLabel: {
-          color: style.textColor,
-          fontSize: style.axisFontSize,
-          formatter: (value: number) => `${Math.round(value)}`,
+          show: false,
         },
       },
       series: [

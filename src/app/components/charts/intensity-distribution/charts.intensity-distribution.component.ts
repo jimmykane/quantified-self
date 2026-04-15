@@ -175,12 +175,11 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
         fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
       },
       grid: {
-        left: 30,
-        right: 8,
+        left: 6,
+        right: 6,
         top: 6,
-        bottom: 22,
-        outerBoundsMode: 'same',
-        outerBoundsContain: 'axisLabel',
+        bottom: 20,
+        containLabel: false,
       },
       tooltip: {
         show: true,
@@ -225,7 +224,6 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
           color: style.textColor,
           fontSize: style.axisFontSize,
           hideOverlap: true,
-          interval: 0,
         },
       },
       yAxis: {
@@ -234,12 +232,10 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
         max: 100,
         interval: 25,
         axisTick: { show: false },
-        axisLine: { lineStyle: { color: style.axisColor } },
+        axisLine: { show: false },
         splitLine: { lineStyle: { color: style.gridColor } },
         axisLabel: {
-          color: style.textColor,
-          fontSize: style.axisFontSize,
-          formatter: (value: number) => `${Math.round(value)}%`,
+          show: false,
         },
       },
       series: [
