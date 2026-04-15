@@ -123,6 +123,8 @@ export class DashboardDerivedMetricsService {
   private static readonly ENSURE_COOLDOWN_MS = 30 * 1000;
   private static readonly ENSURE_FAILURE_NOTIFICATION_THRESHOLD = 2;
   private static readonly ENSURE_FAILURE_NOTIFICATION_COOLDOWN_MS = 5 * 60 * 1000;
+  private static readonly STUCK_STALE_THRESHOLD_MS = 10 * 60 * 1000;
+  private static readonly STUCK_BUILDING_THRESHOLD_MS = 15 * 60 * 1000;
 
   private firestore = inject(Firestore);
   private functionsService = inject(AppFunctionsService);
@@ -274,16 +276,18 @@ export class DashboardDerivedMetricsService {
       return;
     }
 
-    const requestedMetricKinds = this.metricDescriptors
+    const staleOrMissingMetricKinds = this.metricDescriptors
       .filter((descriptor) => {
         const status = state[descriptor.statusKey];
         return status === 'missing' || status === 'failed' || status === 'stale';
       })
       .map(descriptor => descriptor.kind);
-    if (!requestedMetricKinds.length) {
-      this.resetEnsureFailureState(uid);
-      return;
-    }
+    // Even when tiles currently look "ready", always send a lightweight freshness probe.
+    // Backend compares latest event shape/timestamps to derived snapshots and only requeues
+    // when stale/failure conditions are detected.
+    const requestedMetricKinds = staleOrMissingMetricKinds.length
+      ? staleOrMissingMetricKinds
+      : [...DASHBOARD_DERIVED_METRIC_KINDS];
 
     const nowMs = Date.now();
     const lastRequestedAtMs = this.ensureLastRequestedAtByUID.get(uid) || 0;
@@ -351,6 +355,7 @@ export class DashboardDerivedMetricsService {
     }
 
     const schemaVersion = this.toFiniteNumber(snapshot?.schemaVersion);
+    const updatedAtMs = this.toFiniteNumber(snapshot?.updatedAtMs);
     // Self-heal old snapshot documents by requeueing ensureDerivedMetrics when schema is behind.
     if (
       status === 'ready'
@@ -362,7 +367,28 @@ export class DashboardDerivedMetricsService {
       return 'stale';
     }
 
+    if (this.isStuckPendingStatus(status, updatedAtMs)) {
+      return 'failed';
+    }
+
     return status;
+  }
+
+  private isStuckPendingStatus(
+    status: DashboardDerivedMetricStatus,
+    updatedAtMs: number | null,
+  ): boolean {
+    if (!Number.isFinite(updatedAtMs)) {
+      return false;
+    }
+    const ageMs = Date.now() - (updatedAtMs as number);
+    if (status === 'stale') {
+      return ageMs >= DashboardDerivedMetricsService.STUCK_STALE_THRESHOLD_MS;
+    }
+    if (status === 'building' || status === 'queued' || status === 'processing') {
+      return ageMs >= DashboardDerivedMetricsService.STUCK_BUILDING_THRESHOLD_MS;
+    }
+    return false;
   }
 
   private resolveSnapshotPayload(snapshot: SnapshotRecord): unknown {

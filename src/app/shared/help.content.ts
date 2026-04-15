@@ -149,7 +149,9 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Form/TSS uses adaptive render granularity by view: **W = daily points**, **M = weekly points**, **Y = monthly points**.
 - While derived metrics are refreshing, the tile shows a training-metrics **updating** message instead of generic no-data text.
 - When snapshots are missing or stale, they rebuild asynchronously; refresh usually follows within a few minutes.
+- Opening the dashboard also runs a freshness check against your latest events and requeues a rebuild automatically if snapshots are behind.
 - If rebuilding requests fail repeatedly, the dashboard shows a retry notification and continues with last known snapshot values.
+- If a stale/building state is stuck for too long, the dashboard switches to a retryable failed state so you can trigger a rebuild immediately.
 - While rebuilding, the dashboard shows a small training-metrics status notice above tiles.
 - The status title updates dynamically from current Form bands:
   - **High fatigue** at very negative Form values,

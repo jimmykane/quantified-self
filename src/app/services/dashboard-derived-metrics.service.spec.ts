@@ -287,7 +287,7 @@ describe('DashboardDerivedMetricsService', () => {
     await Promise.resolve();
   });
 
-  it('does not request ensure when both metric snapshots are ready', () => {
+  it('still requests ensure when snapshots are ready so backend can run freshness checks', () => {
     const state: DashboardDerivedMetricsState = {
       ...createMissingState(),
       formPoints: [],
@@ -309,7 +309,24 @@ describe('DashboardDerivedMetricsService', () => {
 
     service.ensureForDashboard({ uid: 'user-1' }, state);
 
-    expect(mockFunctionsService.call).not.toHaveBeenCalled();
+    expect(mockFunctionsService.call).toHaveBeenCalledTimes(1);
+    expect(mockFunctionsService.call).toHaveBeenCalledWith<EnsureDerivedMetricsRequest, unknown>('ensureDerivedMetrics', {
+      metricKinds: [
+        DERIVED_METRIC_KINDS.Form,
+        DERIVED_METRIC_KINDS.RecoveryNow,
+        DERIVED_METRIC_KINDS.Acwr,
+        DERIVED_METRIC_KINDS.RampRate,
+        DERIVED_METRIC_KINDS.MonotonyStrain,
+        DERIVED_METRIC_KINDS.FormNow,
+        DERIVED_METRIC_KINDS.FormPlus7d,
+        DERIVED_METRIC_KINDS.EasyPercent,
+        DERIVED_METRIC_KINDS.HardPercent,
+        DERIVED_METRIC_KINDS.EfficiencyDelta4w,
+        DERIVED_METRIC_KINDS.FreshnessForecast,
+        DERIVED_METRIC_KINDS.IntensityDistribution,
+        DERIVED_METRIC_KINDS.EfficiencyTrend,
+      ],
+    });
   });
 
   it('treats stale snapshots as ensure-required', () => {
@@ -336,6 +353,39 @@ describe('DashboardDerivedMetricsService', () => {
     expect(mockFunctionsService.call).toHaveBeenCalledWith<EnsureDerivedMetricsRequest, unknown>('ensureDerivedMetrics', {
       metricKinds: [DERIVED_METRIC_KINDS.Form],
     });
+  });
+
+  it('treats long-stale snapshots as failed so UI shows retry', async () => {
+    const uid = 'user-1';
+    const staleUpdatedAtMs = Date.now() - (11 * 60 * 1000);
+    const formDocRef = { path: `users/${uid}/${DERIVED_METRICS_COLLECTION_ID}/${getDerivedMetricDocId(DERIVED_METRIC_KINDS.Form)}` };
+    const recoveryDocRef = { path: `users/${uid}/${DERIVED_METRICS_COLLECTION_ID}/${getDerivedMetricDocId(DERIVED_METRIC_KINDS.RecoveryNow)}` };
+
+    hoisted.docMock
+      .mockReturnValueOnce(formDocRef)
+      .mockReturnValueOnce(recoveryDocRef);
+    hoisted.docDataMock
+      .mockReturnValueOnce(of({
+        status: 'stale',
+        schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+        updatedAtMs: staleUpdatedAtMs,
+        payload: {
+          dailyLoads: [
+            { dayMs: Date.UTC(2026, 0, 1), load: 30 },
+          ],
+        },
+      }))
+      .mockReturnValueOnce(of({
+        status: 'ready',
+        schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+        payload: {
+          totalSeconds: 5400,
+          endTimeMs: Date.UTC(2026, 0, 3, 12, 0, 0),
+        },
+      }));
+
+    const state = await firstValueFrom(service.watch({ uid }));
+    expect(state.formStatus).toBe('failed');
   });
 
   it('bypasses cooldown when force is requested', async () => {
