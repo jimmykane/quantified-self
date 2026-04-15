@@ -63,6 +63,12 @@ import {
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type ChartSetOptionSettings = Parameters<EChartsType['setOption']>[1];
+type RecoverySummaryOverride = {
+  label: string;
+  value: string;
+  meta: string;
+  layoutMode: 'default' | 'fully-recovered';
+};
 @Component({
   selector: 'app-pie-chart',
   templateUrl: './charts.pie.component.html',
@@ -247,6 +253,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
       this.chartDataValueType,
       this.chartDataTimeInterval
     );
+    const isFullyRecoveredLayout = recoverySummary?.layoutMode === 'fully-recovered';
 
     return {
       animation: this.useAnimations === true,
@@ -322,77 +329,124 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
           left: '50%',
           top: pieCenterY,
           bounding: 'raw',
-          children: [
-            {
-              type: 'text',
-              style: {
-                text: centerLabel,
-                fontSize: isCompactLayout ? 12 : 13,
-                fontWeight: 500,
-                fill: textColor,
-                opacity: 0.86,
-                textAlign: 'center',
-                fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+          children: isFullyRecoveredLayout
+            ? [
+              {
+                type: 'text',
+                style: {
+                  text: centerLabel,
+                  width: isCompactLayout ? 120 : 146,
+                  overflow: 'break',
+                  lineHeight: isCompactLayout ? 14 : 16,
+                  fontSize: isCompactLayout ? 11 : 12,
+                  fontWeight: 600,
+                  fill: textColor,
+                  opacity: 0.9,
+                  textAlign: 'center',
+                  fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+                },
+                left: 'center',
+                top: isCompactLayout ? -24 : -28
               },
-              left: 'center',
-              top: isCompactLayout ? -22 : -24
-            },
-            {
-              type: 'text',
-              style: {
-                text: centerValue,
-                fontSize: isCompactLayout ? 22 : 26,
-                fontWeight: 700,
-                fill: textColor,
-                textAlign: 'center',
-                fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+              {
+                type: 'text',
+                style: {
+                  text: centerSubLabel,
+                  width: isCompactLayout ? 120 : 146,
+                  overflow: 'break',
+                  lineHeight: isCompactLayout ? 13 : 15,
+                  fontSize: isCompactLayout ? 10 : 11,
+                  fontWeight: 500,
+                  fill: textColor,
+                  opacity: 0.72,
+                  textAlign: 'center',
+                  fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+                },
+                left: 'center',
+                top: isCompactLayout ? 8 : 10
+              }
+            ]
+            : [
+              {
+                type: 'text',
+                style: {
+                  text: centerLabel,
+                  fontSize: isCompactLayout ? 12 : 13,
+                  fontWeight: 500,
+                  fill: textColor,
+                  opacity: 0.86,
+                  textAlign: 'center',
+                  fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+                },
+                left: 'center',
+                top: isCompactLayout ? -22 : -24
               },
-              left: 'center',
-              top: isCompactLayout ? -2 : -4
-            },
-            {
-              type: 'text',
-              style: {
-                text: centerSubLabel,
-                fontSize: isCompactLayout ? 11 : 12,
-                fontWeight: 500,
-                fill: textColor,
-                opacity: 0.7,
-                textAlign: 'center',
-                fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+              {
+                type: 'text',
+                style: {
+                  text: centerValue,
+                  fontSize: isCompactLayout ? 22 : 26,
+                  fontWeight: 700,
+                  fill: textColor,
+                  textAlign: 'center',
+                  fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+                },
+                left: 'center',
+                top: isCompactLayout ? -2 : -4
               },
-              left: 'center',
-              top: isCompactLayout ? 20 : 24
-            }
-          ]
+              {
+                type: 'text',
+                style: {
+                  text: centerSubLabel,
+                  fontSize: isCompactLayout ? 11 : 12,
+                  fontWeight: 500,
+                  fill: textColor,
+                  opacity: 0.7,
+                  textAlign: 'center',
+                  fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+                },
+                left: 'center',
+                top: isCompactLayout ? 20 : 24
+              }
+            ]
         }
       ]
     };
   }
 
-  private getRecoverySummaryOverride(): { label: string; value: string; meta: string } | null {
+  private getRecoverySummaryOverride(): RecoverySummaryOverride | null {
     if (!this.enableRecoveryNowMode || this.chartDataType !== DataRecoveryTime.type) {
       return null;
     }
 
-    const context = this.recoveryNow;
     const nowMs = Date.now();
-    const activeTotalSeconds = resolveActiveRecoveryTotalSeconds(context, nowMs);
-    const remainingSeconds = resolveRemainingRecoverySeconds(context, nowMs);
-    if (activeTotalSeconds === null || activeTotalSeconds <= 0 || remainingSeconds === null) {
+    const activeTotalSeconds = resolveActiveRecoveryTotalSeconds(this.recoveryNow, nowMs);
+    const remainingSeconds = resolveRemainingRecoverySeconds(this.recoveryNow, nowMs);
+    const hasRenderableRecovery = activeTotalSeconds !== null
+      && activeTotalSeconds > 0
+      && remainingSeconds !== null;
+    if (!hasRenderableRecovery) {
+      if (this.recoveryNowStatus === 'ready') {
+        return {
+          label: 'No active recovery now',
+          value: '',
+          meta: 'You are fully recovered based on your latest activities.',
+          layoutMode: 'fully-recovered',
+        };
+      }
       return null;
     }
 
     const normalizedUnitSettings = this.getNormalizedUnitSettings();
     const totalText = formatDashboardNumericValue(
       DataDuration.type,
-      activeTotalSeconds,
+      activeTotalSeconds!,
       this.logger,
       normalizedUnitSettings,
     );
     const remainingText = formatDashboardNumericValue(
       DataDuration.type,
-      remainingSeconds,
+      remainingSeconds!,
       this.logger,
       normalizedUnitSettings,
     );
@@ -400,6 +454,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
       label: 'Recovery Left Now',
       value: remainingText,
       meta: `Total recovery: ${totalText}`,
+      layoutMode: 'default',
     };
   }
 
@@ -465,32 +520,47 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
       return null;
     }
 
-    const context = this.recoveryNow;
-    if (!context) {
-      this.logRecoveryDebugState('missing_context');
-      return null;
-    }
     const nowMs = Date.now();
-    const activeTotalSeconds = resolveActiveRecoveryTotalSeconds(context, nowMs);
-    const remainingSeconds = resolveRemainingRecoverySeconds(context, nowMs);
-    if (activeTotalSeconds === null || activeTotalSeconds <= 0 || remainingSeconds === null) {
+    const activeTotalSeconds = resolveActiveRecoveryTotalSeconds(this.recoveryNow, nowMs);
+    const remainingSeconds = resolveRemainingRecoverySeconds(this.recoveryNow, nowMs);
+    const hasRenderableRecovery = activeTotalSeconds !== null
+      && activeTotalSeconds > 0
+      && remainingSeconds !== null;
+    if (!hasRenderableRecovery) {
+      if (this.recoveryNowStatus === 'ready') {
+        this.logRecoveryDebugState('fully_recovered');
+        return [
+          {
+            name: 'Recovered',
+            value: 1,
+            count: 0,
+            percent: 100,
+            itemStyle: {
+              color: AppColors.DarkGray,
+              borderColor: subtleBorderColor,
+              borderWidth: 1.2
+            }
+          }
+        ];
+      }
       this.logRecoveryDebugState('no_active_recovery', {
         activeTotalSeconds,
         remainingSeconds,
-        totalSeconds: context.totalSeconds,
-        segments: Array.isArray(context.segments) ? context.segments.length : 0,
+        totalSeconds: this.recoveryNow?.totalSeconds ?? null,
+        segments: Array.isArray(this.recoveryNow?.segments) ? this.recoveryNow?.segments.length : 0,
+        status: this.recoveryNowStatus ?? null,
       });
       return null;
     }
 
-    const elapsedSeconds = Math.max(0, activeTotalSeconds - remainingSeconds);
-    const leftPercent = activeTotalSeconds > 0 ? (remainingSeconds / activeTotalSeconds) * 100 : 0;
-    const elapsedPercent = activeTotalSeconds > 0 ? (elapsedSeconds / activeTotalSeconds) * 100 : 0;
+    const elapsedSeconds = Math.max(0, activeTotalSeconds! - remainingSeconds!);
+    const leftPercent = activeTotalSeconds! > 0 ? (remainingSeconds! / activeTotalSeconds!) * 100 : 0;
+    const elapsedPercent = activeTotalSeconds! > 0 ? (elapsedSeconds / activeTotalSeconds!) * 100 : 0;
 
     return [
       {
         name: 'Left now',
-        value: remainingSeconds,
+        value: remainingSeconds!,
         count: 0,
         percent: leftPercent,
         itemStyle: {
@@ -559,14 +629,12 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
     }
 
     const status = this.recoveryNowStatus;
-    if (isDerivedMetricPendingStatus(status)) {
-      this.applyNoDataOverlayState('updating');
-      this.showNoDataError = true;
+    if (status === 'ready') {
+      this.showNoDataError = false;
       return;
     }
-
-    if (status === 'ready') {
-      this.applyNoDataOverlayState('fully-recovered');
+    if (isDerivedMetricPendingStatus(status)) {
+      this.applyNoDataOverlayState('updating');
       this.showNoDataError = true;
       return;
     }
@@ -575,19 +643,12 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
   }
 
   private applyNoDataOverlayState(
-    state: 'default' | 'updating' | 'fully-recovered',
+    state: 'default' | 'updating',
   ): void {
     if (state === 'updating') {
       this.noDataErrorMessage = 'Recovery is updating';
       this.noDataErrorHint = 'We are recalculating your current recovery window.';
       this.noDataErrorIcon = 'autorenew';
-      return;
-    }
-
-    if (state === 'fully-recovered') {
-      this.noDataErrorMessage = 'No active recovery now';
-      this.noDataErrorHint = 'You are fully recovered based on your latest activities.';
-      this.noDataErrorIcon = 'verified';
       return;
     }
 

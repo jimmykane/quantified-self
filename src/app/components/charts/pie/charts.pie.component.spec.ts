@@ -497,7 +497,7 @@ describe('ChartsPieComponent', () => {
     expect(component.noDataErrorIcon).toBe('autorenew');
   });
 
-  it('should show fully-recovered message when curated recovery is ready with no active recovery', async () => {
+  it('should render a fully-recovered pie state (no overlay) when curated recovery is ready with no active recovery', async () => {
     const nowMs = Date.UTC(2024, 0, 3, 12, 0, 0);
     const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(nowMs);
     component.enableRecoveryNowMode = true;
@@ -515,10 +515,12 @@ describe('ChartsPieComponent', () => {
     await fixture.whenStable();
     await new Promise(resolve => setTimeout(resolve, 0));
 
-    expect(component.showNoDataError).toBe(true);
-    expect(component.noDataErrorMessage).toBe('No active recovery now');
-    expect(component.noDataErrorHint).toBe('You are fully recovered based on your latest activities.');
-    expect(component.noDataErrorIcon).toBe('verified');
+    const option = mockLoader.setOption.mock.calls.at(-1)?.[1] as Record<string, any>;
+    expect(component.showNoDataError).toBe(false);
+    expect(option.series[0].data.map((entry: { name: string }) => entry.name)).toEqual(['Recovered']);
+    expect(option.graphic[0].children).toHaveLength(2);
+    expect(option.graphic[0].children[0].style.text).toBe('No active recovery now');
+    expect(option.graphic[0].children[1].style.text).toBe('You are fully recovered based on your latest activities.');
     dateNowSpy.mockRestore();
   });
 

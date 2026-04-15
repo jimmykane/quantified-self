@@ -203,6 +203,13 @@ describe('ChartsFormComponent', () => {
     expect(option.xAxis[1].splitNumber).toBeGreaterThanOrEqual(2);
     expect(option.xAxis[1].splitNumber).toBeLessThanOrEqual(7);
     expect(typeof option.xAxis[1].axisLabel.formatter).toBe('function');
+    expect(option.xAxis[0].axisPointer?.snap).toBe(true);
+    expect(option.xAxis[1].axisPointer?.snap).toBe(true);
+    expect(option.axisPointer?.snap).toBe(true);
+    expect(option.tooltip?.axisPointer?.snap).toBe(true);
+    expect(option.tooltip?.axisPointer?.axis).toBe('x');
+    expect(option.yAxis?.[0]?.axisPointer?.show).toBe(false);
+    expect(option.yAxis?.[1]?.axisPointer?.show).toBe(false);
     expect(mockChart.on).not.toHaveBeenCalledWith('datazoom', expect.any(Function));
     expect(mockChart.on).not.toHaveBeenCalledWith('restore', expect.any(Function));
   });

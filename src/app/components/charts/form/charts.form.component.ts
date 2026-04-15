@@ -246,6 +246,12 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
       max: viewBounds.maxTime,
       minInterval: labelConfig.minIntervalMs,
       splitNumber: labelConfig.splitNumber,
+      axisPointer: {
+        show: true,
+        snap: true,
+        triggerTooltip: true,
+        label: { show: false },
+      },
       axisLabel: { show: false },
       axisTick: { show: false },
       axisLine: { lineStyle: { color: chartStyle.axisColor } },
@@ -259,6 +265,12 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
       max: viewBounds.maxTime,
       minInterval: labelConfig.minIntervalMs,
       splitNumber: labelConfig.splitNumber,
+      axisPointer: {
+        show: true,
+        snap: true,
+        triggerTooltip: true,
+        label: { show: false },
+      },
       axisLabel: {
         show: true,
         color: chartStyle.textColor,
@@ -289,6 +301,10 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
         show: true,
         lineStyle: { color: chartStyle.gridColor },
       },
+      axisPointer: {
+        show: false,
+        label: { show: false },
+      },
     };
 
     const bottomYAxis = {
@@ -306,6 +322,10 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
       splitLine: {
         show: true,
         lineStyle: { color: chartStyle.gridColor },
+      },
+      axisPointer: {
+        show: false,
+        label: { show: false },
       },
     };
 
@@ -341,13 +361,20 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
         ],
         axisPointer: {
           link: [{ xAxisIndex: [0, 1] }],
+          show: true,
+          snap: true,
+          triggerTooltip: true,
         },
         // Deliberately no ECharts dataZoom/toolbox controls here.
         // Timeline navigation is handled via explicit compact W/M/Y window buttons.
         tooltip: {
           trigger: 'axis',
           triggerOn: resolveEChartsTooltipTriggerOn(true, isMobileTooltipViewport),
-          axisPointer: { type: 'line' },
+          axisPointer: {
+            type: 'line',
+            axis: 'x',
+            snap: true,
+          },
           renderMode: 'html',
           show: true,
           confine: true,

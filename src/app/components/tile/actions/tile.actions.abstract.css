@@ -60,18 +60,18 @@ button[mat-icon-button] {
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  width: 32px;
-  min-width: 32px;
-  height: 32px;
-  min-height: 32px;
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  min-height: 24px;
   padding: 0;
   line-height: 1;
   align-self: center;
   border-radius: 50%;
   overflow: hidden;
-  --mdc-icon-button-state-layer-size: 32px;
-  --mat-icon-button-state-layer-size: 32px;
-  --mat-icon-button-touch-target-size: 32px;
+  --mdc-icon-button-state-layer-size: 24px;
+  --mat-icon-button-state-layer-size: 24px;
+  --mat-icon-button-touch-target-size: 24px;
   --mat-icon-button-touch-target-display: none;
 }
 
