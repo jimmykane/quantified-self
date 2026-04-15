@@ -22,6 +22,34 @@ section{
 
 .drag-handle-indicator {
   cursor: grab;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  line-height: 1;
+  border-radius: 50%;
+  overflow: hidden;
+  --mdc-icon-button-state-layer-size: 32px;
+  --mat-icon-button-state-layer-size: 32px;
+  --mat-icon-button-touch-target-size: 32px;
+  --mat-icon-button-touch-target-display: none;
+}
+
+.drag-handle-indicator mat-icon {
+  display: block;
+  width: 18px;
+  height: 18px;
+  line-height: 18px;
+  font-size: 18px;
+}
+
+.drag-handle-indicator .mat-mdc-button-touch-target {
+  display: none;
 }
 
 .drag-handle-indicator:active {
