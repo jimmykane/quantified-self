@@ -285,6 +285,7 @@ describe('ChartsKpiComponent', () => {
     expect(option?.xAxis?.min).toBe('dataMin');
     expect(option?.xAxis?.max).toBe('dataMax');
     expect(option?.xAxis?.boundaryGap).toBe(false);
+    expect(option?.grid?.bottom).toBe(2);
     expect(option?.series?.[0]?.data).toEqual([
       [Date.UTC(2025, 11, 1), 0.9],
       [Date.UTC(2025, 11, 8), 1.0],
