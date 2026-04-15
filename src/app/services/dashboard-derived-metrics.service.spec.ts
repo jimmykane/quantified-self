@@ -329,6 +329,33 @@ describe('DashboardDerivedMetricsService', () => {
     });
   });
 
+  it('applies longer cooldown for healthy freshness probes', async () => {
+    const state: DashboardDerivedMetricsState = {
+      ...createMissingState(),
+      formPoints: [],
+      recoveryNow: { totalSeconds: 1, endTimeMs: 1 },
+      formStatus: 'ready',
+      recoveryNowStatus: 'ready',
+      acwrStatus: 'ready',
+      rampRateStatus: 'ready',
+      monotonyStrainStatus: 'ready',
+      formNowStatus: 'ready',
+      formPlus7dStatus: 'ready',
+      easyPercentStatus: 'ready',
+      hardPercentStatus: 'ready',
+      efficiencyDelta4wStatus: 'ready',
+      freshnessForecastStatus: 'ready',
+      intensityDistributionStatus: 'ready',
+      efficiencyTrendStatus: 'ready',
+    };
+
+    service.ensureForDashboard({ uid: 'user-1' }, state);
+    await Promise.resolve();
+    service.ensureForDashboard({ uid: 'user-1' }, state);
+
+    expect(mockFunctionsService.call).toHaveBeenCalledTimes(1);
+  });
+
   it('treats stale snapshots as ensure-required', () => {
     const state: DashboardDerivedMetricsState = {
       ...createMissingState(),

@@ -12,7 +12,7 @@ describe('decideDerivedMetricsFreshness', () => {
         formSnapshotStatus: 'ready',
         formSnapshotSourceEventCount: 10,
         formRangeEndDayMs: Date.UTC(2026, 3, 15),
-        latestEventStartDateMs: Date.UTC(2026, 3, 15),
+        latestEventStartDayMs: Date.UTC(2026, 3, 15),
         latestEventUpdatedAtMs: Date.UTC(2026, 3, 15, 9, 30, 0),
         latestEventCount: 10,
     };
@@ -50,7 +50,7 @@ describe('decideDerivedMetricsFreshness', () => {
     it('requests queue when latest event date is beyond form snapshot range', () => {
         const decision = decideDerivedMetricsFreshness({
             ...baseInput,
-            latestEventStartDateMs: Date.UTC(2026, 3, 16),
+            latestEventStartDayMs: Date.UTC(2026, 3, 16),
         });
         expect(decision).toEqual({
             shouldQueue: true,
@@ -103,17 +103,38 @@ describe('decideDerivedMetricsFreshness', () => {
         });
     });
 
-    it('skips freshness gating for requests that do not include form metric', () => {
+    it('queues when request contains non-form metrics and coordinator is idle', () => {
         const decision = decideDerivedMetricsFreshness({
             ...baseInput,
             metricKinds: [DERIVED_METRIC_KINDS.RecoveryNow],
-            formSnapshotStatus: null,
-            latestEventCount: null,
+        });
+        expect(decision).toEqual({
+            shouldQueue: true,
+            reason: 'requested_metric_without_form',
+        });
+    });
+
+    it('does not requeue non-form requests when coordinator is already queued and healthy', () => {
+        const decision = decideDerivedMetricsFreshness({
+            ...baseInput,
+            metricKinds: [DERIVED_METRIC_KINDS.RecoveryNow],
+            coordinatorStatus: 'queued',
+            coordinatorUpdatedAtMs: baseInput.nowMs - (9 * 60 * 1000),
         });
         expect(decision).toEqual({
             shouldQueue: false,
-            reason: 'no_form_freshness_signal',
+            reason: 'fresh',
+        });
+    });
+
+    it('does not requeue when latest event is on same UTC day as form range end', () => {
+        const decision = decideDerivedMetricsFreshness({
+            ...baseInput,
+            latestEventStartDayMs: baseInput.formRangeEndDayMs,
+        });
+        expect(decision).toEqual({
+            shouldQueue: false,
+            reason: 'fresh',
         });
     });
 });
-

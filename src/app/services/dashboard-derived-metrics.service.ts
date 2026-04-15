@@ -121,6 +121,7 @@ const DASHBOARD_DERIVED_METRIC_KINDS = Object.values(DERIVED_METRIC_KINDS) as De
 })
 export class DashboardDerivedMetricsService {
   private static readonly ENSURE_COOLDOWN_MS = 30 * 1000;
+  private static readonly HEALTHY_PROBE_COOLDOWN_MS = 5 * 60 * 1000;
   private static readonly ENSURE_FAILURE_NOTIFICATION_THRESHOLD = 2;
   private static readonly ENSURE_FAILURE_NOTIFICATION_COOLDOWN_MS = 5 * 60 * 1000;
   private static readonly STUCK_STALE_THRESHOLD_MS = 10 * 60 * 1000;
@@ -288,6 +289,9 @@ export class DashboardDerivedMetricsService {
     const requestedMetricKinds = staleOrMissingMetricKinds.length
       ? staleOrMissingMetricKinds
       : [...DASHBOARD_DERIVED_METRIC_KINDS];
+    const requestCooldownMs = staleOrMissingMetricKinds.length
+      ? DashboardDerivedMetricsService.ENSURE_COOLDOWN_MS
+      : DashboardDerivedMetricsService.HEALTHY_PROBE_COOLDOWN_MS;
 
     const nowMs = Date.now();
     const lastRequestedAtMs = this.ensureLastRequestedAtByUID.get(uid) || 0;
@@ -296,7 +300,7 @@ export class DashboardDerivedMetricsService {
       this.ensureInFlightByUID.has(uid)
       || (
         shouldRespectCooldown
-        && (nowMs - lastRequestedAtMs) < DashboardDerivedMetricsService.ENSURE_COOLDOWN_MS
+        && (nowMs - lastRequestedAtMs) < requestCooldownMs
       )
     ) {
       return;

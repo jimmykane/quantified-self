@@ -28,7 +28,7 @@ interface DerivedMetricsFreshnessInput {
     formSnapshotStatus: string | null;
     formSnapshotSourceEventCount: number | null;
     formRangeEndDayMs: number | null;
-    latestEventStartDateMs: number | null;
+    latestEventStartDayMs: number | null;
     latestEventUpdatedAtMs: number | null;
     latestEventCount: number | null;
 }
@@ -39,6 +39,7 @@ interface DerivedMetricsFreshnessDecision {
     | 'failed_status'
     | 'queued_stuck'
     | 'processing_stuck'
+    | 'requested_metric_without_form'
     | 'no_form_freshness_signal'
     | 'missing_event_count'
     | 'missing_form_snapshot'
@@ -97,6 +98,15 @@ function toMillis(value: unknown): number | null {
     return null;
 }
 
+function toUtcDayStartMs(value: number): number {
+    const date = new Date(value);
+    return Date.UTC(
+        date.getUTCFullYear(),
+        date.getUTCMonth(),
+        date.getUTCDate(),
+    );
+}
+
 function parseCoordinatorStatus(value: unknown): DerivedMetricsCoordinatorStatus {
     const normalized = `${value || ''}`.trim();
     if (normalized === 'queued' || normalized === 'processing' || normalized === 'failed') {
@@ -128,7 +138,9 @@ export function decideDerivedMetricsFreshness(input: DerivedMetricsFreshnessInpu
 
     const includesForm = input.metricKinds.includes(DERIVED_METRIC_KINDS.Form);
     if (!includesForm) {
-        return { shouldQueue: false, reason: 'no_form_freshness_signal' };
+        // Non-form request paths are used to recover stale/missing non-form metrics.
+        // Queue directly unless an active queued/processing coordinator is already handling work.
+        return { shouldQueue: true, reason: 'requested_metric_without_form' };
     }
 
     if (!Number.isFinite(input.latestEventCount)) {
@@ -158,8 +170,8 @@ export function decideDerivedMetricsFreshness(input: DerivedMetricsFreshnessInpu
     if ((input.formSnapshotSourceEventCount ?? -1) !== latestEventCount) {
         return { shouldQueue: true, reason: 'event_count_mismatch' };
     }
-    if (Number.isFinite(input.latestEventStartDateMs) && Number.isFinite(input.formRangeEndDayMs)
-        && (input.latestEventStartDateMs as number) > (input.formRangeEndDayMs as number)) {
+    if (Number.isFinite(input.latestEventStartDayMs) && Number.isFinite(input.formRangeEndDayMs)
+        && (input.latestEventStartDayMs as number) > (input.formRangeEndDayMs as number)) {
         return { shouldQueue: true, reason: 'latest_event_beyond_form_range' };
     }
     if (Number.isFinite(input.latestEventUpdatedAtMs)
@@ -226,6 +238,9 @@ export const ensureDerivedMetrics = onCall({
     const latestEventDoc = latestEventSnapshot.docs[0];
     const latestEventData = latestEventDoc?.data() || {};
     const latestEventStartDateMs = toMillis(latestEventData.startDate);
+    const latestEventStartDayMs = Number.isFinite(latestEventStartDateMs)
+        ? toUtcDayStartMs(latestEventStartDateMs as number)
+        : null;
     const latestEventUpdatedAtMs = toMillis(latestEventDoc?.updateTime);
     const latestEventCount = toFiniteNumber(eventCountSnapshot.data().count);
     const freshnessDecision = decideDerivedMetricsFreshness({
@@ -237,7 +252,7 @@ export const ensureDerivedMetrics = onCall({
         formSnapshotStatus,
         formSnapshotSourceEventCount,
         formRangeEndDayMs,
-        latestEventStartDateMs,
+        latestEventStartDayMs,
         latestEventUpdatedAtMs,
         latestEventCount,
     });
