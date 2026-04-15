@@ -34,6 +34,10 @@ import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
+type EfficiencyXAxisLabelMode = 'year' | 'month-year' | 'day-month';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const YEAR_MS = 365 * DAY_MS;
 
 @Component({
   selector: 'app-efficiency-trend-chart',
@@ -142,6 +146,7 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
 
     const values = points.map(point => point.value);
     const valueAxis = buildDashboardValueAxisConfig(values);
+    const labelMode = this.resolveXAxisLabelMode(points);
 
     return {
       animation: false,
@@ -182,10 +187,7 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
           color: style.textColor,
           fontSize: style.axisFontSize,
           hideOverlap: true,
-          formatter: (value: number) => new Date(value).toLocaleDateString(undefined, {
-            month: 'short',
-            day: 'numeric',
-          }),
+          formatter: (value: number) => this.formatXAxisLabel(Number(value), labelMode),
         },
       },
       yAxis: {
@@ -218,6 +220,36 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
         },
       ],
     };
+  }
+
+  private resolveXAxisLabelMode(points: readonly DashboardEfficiencyTrendPoint[]): EfficiencyXAxisLabelMode {
+    if (points.length < 2) {
+      return 'day-month';
+    }
+    const minTime = points[0]?.weekStartMs ?? 0;
+    const maxTime = points[points.length - 1]?.weekStartMs ?? minTime;
+    const spanMs = Math.max(0, maxTime - minTime);
+    if (spanMs >= (2 * YEAR_MS)) {
+      return 'year';
+    }
+    if (spanMs >= (120 * DAY_MS)) {
+      return 'month-year';
+    }
+    return 'day-month';
+  }
+
+  private formatXAxisLabel(value: number, mode: EfficiencyXAxisLabelMode): string {
+    if (!Number.isFinite(value)) {
+      return '';
+    }
+    const date = new Date(value);
+    if (mode === 'year') {
+      return date.toLocaleDateString(undefined, { year: 'numeric' });
+    }
+    if (mode === 'month-year') {
+      return date.toLocaleDateString(undefined, { month: 'short', year: '2-digit' });
+    }
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   }
 
   private formatValue(value: unknown): string {

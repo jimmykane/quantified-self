@@ -99,4 +99,39 @@ describe('ChartsEfficiencyTrendComponent', () => {
     expect(component.showNoDataError).toBe(true);
     expect(component.noDataErrorMessage).toBe('Efficiency trend is updating');
   });
+
+  it('includes year in x-axis labels for wide history spans', async () => {
+    const points = [
+      {
+        weekStartMs: Date.UTC(2023, 0, 2),
+        value: 1.7,
+        sampleCount: 3,
+        totalDurationSeconds: 8400,
+      },
+      {
+        weekStartMs: Date.UTC(2026, 0, 5),
+        value: 1.95,
+        sampleCount: 4,
+        totalDurationSeconds: 9200,
+      },
+    ];
+    component.trend = {
+      latestWeekStartMs: Date.UTC(2026, 0, 5),
+      latestValue: 1.95,
+      points,
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const option = (component as any).buildOption(points) as Record<string, any>;
+    const formatter = option?.xAxis?.axisLabel?.formatter as ((value: number) => string);
+    expect(typeof formatter).toBe('function');
+
+    const firstLabel = formatter(Date.UTC(2023, 0, 1));
+    const secondLabel = formatter(Date.UTC(2026, 0, 1));
+    expect(firstLabel).not.toBe(secondLabel);
+    expect(firstLabel).toMatch(/\d{4}/);
+    expect(secondLabel).toMatch(/\d{4}/);
+  });
 });
