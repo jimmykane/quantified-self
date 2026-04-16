@@ -224,7 +224,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 logger.error('[admin/getQueueStats] Failed to count activity sync pending jobs:', e);
                 return null;
             }),
-            activitySyncCollection.where('processed', '==', true).count().get().catch(e => {
+            activitySyncCollection.where('resultStatus', '==', 'success').count().get().catch(e => {
                 logger.error('[admin/getQueueStats] Failed to count activity sync succeeded jobs:', e);
                 return null;
             }),
@@ -244,7 +244,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 logger.error('[admin/getQueueStats] Failed to count activity sync retry bucket 8-9:', e);
                 return null;
             }),
-            activitySyncCollection.where('processed', '==', true).where('processedAt', '>', ONE_HOUR_AGO).count().get().catch(e => {
+            activitySyncCollection.where('successProcessedAt', '>', ONE_HOUR_AGO).count().get().catch(e => {
                 logger.error('[admin/getQueueStats] Failed to count activity sync throughput:', e);
                 return null;
             }),

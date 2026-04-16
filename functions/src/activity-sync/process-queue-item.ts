@@ -151,7 +151,10 @@ export async function processActivitySyncQueueItem(
             skippedReason: 'allowlist_misconfigured',
             detail: allowlistConfigError,
         });
-        return updateToProcessed(queueItem, bulkWriter, { skippedReason: 'allowlist_misconfigured' });
+        return updateToProcessed(queueItem, bulkWriter, {
+            skippedReason: 'allowlist_misconfigured',
+            resultStatus: 'skipped',
+        });
     }
 
     if (!isActivitySyncRouteUserAllowlisted(queueItem.routeId, queueItem.userID)) {
@@ -160,7 +163,10 @@ export async function processActivitySyncQueueItem(
             skippedReason: 'user_not_allowlisted',
             detail: 'User is not allowlisted for this activity sync route.',
         });
-        return updateToProcessed(queueItem, bulkWriter, { skippedReason: 'user_not_allowlisted' });
+        return updateToProcessed(queueItem, bulkWriter, {
+            skippedReason: 'user_not_allowlisted',
+            resultStatus: 'skipped',
+        });
     }
 
     await setActivitySyncProcessingMetadata(routeMeta);
@@ -171,7 +177,10 @@ export async function processActivitySyncQueueItem(
             skippedReason: 'no_pro_access',
             detail: 'Activity sync is a Pro feature.',
         });
-        return updateToProcessed(queueItem, bulkWriter, { skippedReason: 'no_pro_access' });
+        return updateToProcessed(queueItem, bulkWriter, {
+            skippedReason: 'no_pro_access',
+            resultStatus: 'skipped',
+        });
     }
 
     const enabled = await isActivitySyncRouteEnabledForUser(queueItem.userID, queueItem.routeId);
@@ -181,7 +190,10 @@ export async function processActivitySyncQueueItem(
             skippedReason: 'route_disabled',
             detail: 'Route is disabled in user settings.',
         });
-        return updateToProcessed(queueItem, bulkWriter, { skippedReason: 'route_disabled' });
+        return updateToProcessed(queueItem, bulkWriter, {
+            skippedReason: 'route_disabled',
+            resultStatus: 'skipped',
+        });
     }
 
     const destinationConnected = await isDestinationConnected(queueItem.userID, queueItem.destinationServiceName);
@@ -191,7 +203,10 @@ export async function processActivitySyncQueueItem(
             skippedReason: 'destination_not_connected',
             detail: 'Destination account is not connected.',
         });
-        return updateToProcessed(queueItem, bulkWriter, { skippedReason: 'destination_not_connected' });
+        return updateToProcessed(queueItem, bulkWriter, {
+            skippedReason: 'destination_not_connected',
+            resultStatus: 'skipped',
+        });
     }
 
     const extension = toExtension(queueItem.originalFile?.path, queueItem.originalFile?.extension);
@@ -201,7 +216,10 @@ export async function processActivitySyncQueueItem(
             skippedReason: 'unsupported_original_file',
             detail: `Unsupported original file extension: ${extension || 'unknown'}.`,
         });
-        return updateToProcessed(queueItem, bulkWriter, { skippedReason: 'unsupported_original_file' });
+        return updateToProcessed(queueItem, bulkWriter, {
+            skippedReason: 'unsupported_original_file',
+            resultStatus: 'skipped',
+        });
     }
 
     try {
@@ -219,6 +237,8 @@ export async function processActivitySyncQueueItem(
             destinationUploadID: uploadResult.uploadId || null,
             destinationWorkoutKey: uploadResult.workoutKey || null,
             destinationInfoCode: uploadResult.code || null,
+            resultStatus: 'success',
+            successProcessedAt: Date.now(),
         });
     } catch (error) {
         if (isSkippableAuthenticationError(error)) {
@@ -228,7 +248,10 @@ export async function processActivitySyncQueueItem(
                 skippedReason: 'destination_auth_failed',
                 detail: `${errorLike.message || 'Authentication failed.'}`,
             });
-            return updateToProcessed(queueItem, bulkWriter, { skippedReason: 'destination_auth_failed' });
+            return updateToProcessed(queueItem, bulkWriter, {
+                skippedReason: 'destination_auth_failed',
+                resultStatus: 'skipped',
+            });
         }
 
         const metadataError = toActivitySyncMetadataError(error);

@@ -7,6 +7,10 @@ const {
   mockGetCloudTaskQueueDepthForQueue,
   mockEnqueueActivitySyncTask,
   mockQueueGet,
+  mockQueueWhere,
+  mockQueueOrderBy,
+  mockQueueStartAfter,
+  mockQueueLimit,
   mockQueueCollection,
   mockFirestore,
 } = vi.hoisted(() => {
@@ -15,9 +19,11 @@ const {
   const mockGetCloudTaskQueueDepthForQueue = vi.fn();
   const mockEnqueueActivitySyncTask = vi.fn();
   const mockQueueGet = vi.fn();
-  const mockQueueLimit = vi.fn(() => ({ get: mockQueueGet }));
-  const mockQueueWhere = vi.fn(() => ({ limit: mockQueueLimit }));
-  const mockQueueCollection = vi.fn(() => ({ where: mockQueueWhere }));
+  const mockQueueWhere = vi.fn();
+  const mockQueueOrderBy = vi.fn();
+  const mockQueueStartAfter = vi.fn();
+  const mockQueueLimit = vi.fn();
+  const mockQueueCollection = vi.fn();
   const mockFirestore = vi.fn(() => ({ collection: mockQueueCollection }));
 
   return {
@@ -26,6 +32,10 @@ const {
     mockGetCloudTaskQueueDepthForQueue,
     mockEnqueueActivitySyncTask,
     mockQueueGet,
+    mockQueueWhere,
+    mockQueueOrderBy,
+    mockQueueStartAfter,
+    mockQueueLimit,
     mockQueueCollection,
     mockFirestore,
   };
@@ -72,6 +82,18 @@ describe('activity-sync/dispatcher', () => {
     vi.clearAllMocks();
     mockGetCloudTaskQueueDepthForQueue.mockResolvedValue(0);
     mockEnqueueActivitySyncTask.mockResolvedValue(true);
+    const queryChain: any = {
+      where: mockQueueWhere,
+      orderBy: mockQueueOrderBy,
+      startAfter: mockQueueStartAfter,
+      limit: mockQueueLimit,
+      get: mockQueueGet,
+    };
+    mockQueueCollection.mockReturnValue(queryChain);
+    mockQueueWhere.mockReturnValue(queryChain);
+    mockQueueOrderBy.mockReturnValue(queryChain);
+    mockQueueStartAfter.mockReturnValue(queryChain);
+    mockQueueLimit.mockReturnValue(queryChain);
     mockQueueGet.mockResolvedValue({
       empty: true,
       docs: [],
@@ -166,5 +188,44 @@ describe('activity-sync/dispatcher', () => {
     expect(updateFirst).not.toHaveBeenCalled();
     expect(updateSecond).toHaveBeenCalledWith({ dispatchedToCloudTask: nowMs });
     expect(mockLoggerError).toHaveBeenCalled();
+  });
+
+  it('paginates a stable queue window so older undispatched items outside the first page still dispatch', async () => {
+    const nowMs = 1_700_000_000_000;
+    const recentDispatchedAt = nowMs - (10 * 60 * 1000);
+    const firstPageRecentDocs = Array.from({ length: 100 }, (_, index) => ({
+      id: `recent-item-${index}`,
+      data: () => ({ dispatchedToCloudTask: recentDispatchedAt, dateCreated: index }),
+      ref: { update: vi.fn().mockResolvedValue(undefined) },
+    }));
+    const updateOlderUndispatched = vi.fn().mockResolvedValue(undefined);
+    const olderUndispatchedDoc = {
+      id: 'older-undispatched-item',
+      data: () => ({ dispatchedToCloudTask: null, dateCreated: 999 }),
+      ref: { update: updateOlderUndispatched },
+    };
+
+    mockQueueGet
+      .mockResolvedValueOnce({
+        empty: false,
+        docs: firstPageRecentDocs,
+      })
+      .mockResolvedValueOnce({
+        empty: false,
+        docs: [olderUndispatchedDoc],
+      });
+
+    const result = await reconcileActivitySyncQueueDispatches(nowMs);
+
+    expect(result).toEqual({
+      inspected: 101,
+      dispatched: 1,
+      skippedRecent: 100,
+    });
+    expect(mockQueueOrderBy).toHaveBeenCalledWith('dateCreated', 'asc');
+    expect(mockQueueStartAfter).toHaveBeenCalled();
+    expect(mockQueueGet).toHaveBeenCalledTimes(2);
+    expect(mockEnqueueActivitySyncTask).toHaveBeenCalledWith('older-undispatched-item', 999);
+    expect(updateOlderUndispatched).toHaveBeenCalledWith({ dispatchedToCloudTask: nowMs });
   });
 });

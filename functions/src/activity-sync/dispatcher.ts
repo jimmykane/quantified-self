@@ -9,6 +9,7 @@ import { enqueueActivitySyncTask, getCloudTaskQueueDepthForQueue } from '../util
 
 const ACTIVITY_SYNC_REDISPATCH_STALE_MS = 2 * 60 * 60 * 1000;
 const MAX_ACTIVITY_SYNC_QUEUE_SCAN = 500;
+const ACTIVITY_SYNC_RECONCILIATION_PAGE_SIZE = 100;
 
 function toDispatchTimestamp(value: unknown): number | null {
     const timestamp = Number(value);
@@ -45,13 +46,39 @@ export async function reconcileActivitySyncQueueDispatches(nowMs = Date.now()): 
         };
     }
 
-    const querySnapshot = await admin.firestore()
-        .collection(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME)
-        .where('processed', '==', false)
-        .limit(Math.min(MAX_ACTIVITY_SYNC_QUEUE_SCAN, MAX_PENDING_TASKS))
-        .get();
+    const scanLimit = MAX_ACTIVITY_SYNC_QUEUE_SCAN;
+    const pageSize = Math.min(ACTIVITY_SYNC_RECONCILIATION_PAGE_SIZE, MAX_ACTIVITY_SYNC_QUEUE_SCAN, MAX_PENDING_TASKS);
+    const scannedDocs: admin.firestore.QueryDocumentSnapshot[] = [];
+    let pageCursor: admin.firestore.QueryDocumentSnapshot | undefined;
 
-    if (querySnapshot.empty) {
+    while (scannedDocs.length < scanLimit) {
+        const remainingScanCapacity = scanLimit - scannedDocs.length;
+        const currentPageSize = Math.min(pageSize, remainingScanCapacity);
+
+        let query = admin.firestore()
+            .collection(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME)
+            .where('processed', '==', false)
+            .orderBy('dateCreated', 'asc')
+            .limit(currentPageSize);
+
+        if (pageCursor) {
+            query = query.startAfter(pageCursor);
+        }
+
+        const pageSnapshot = await query.get();
+        if (pageSnapshot.empty) {
+            break;
+        }
+
+        scannedDocs.push(...pageSnapshot.docs);
+        if (pageSnapshot.docs.length < currentPageSize) {
+            break;
+        }
+
+        pageCursor = pageSnapshot.docs[pageSnapshot.docs.length - 1];
+    }
+
+    if (!scannedDocs.length) {
         return {
             inspected: 0,
             dispatched: 0,
@@ -59,7 +86,7 @@ export async function reconcileActivitySyncQueueDispatches(nowMs = Date.now()): 
         };
     }
 
-    const candidates = querySnapshot.docs
+    const candidates = scannedDocs
         .map((doc) => {
             const data = doc.data() as Partial<ActivitySyncQueueItemInterface>;
             const dispatchedToCloudTask = toDispatchTimestamp(data.dispatchedToCloudTask);
@@ -121,4 +148,3 @@ export const dispatchActivitySyncQueue = functions.region('europe-west2').runWit
     const result = await reconcileActivitySyncQueueDispatches();
     logger.info('[ActivitySyncDispatcher] Reconciliation completed', result);
 });
-

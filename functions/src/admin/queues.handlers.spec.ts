@@ -410,6 +410,131 @@ describe('getQueueStats Cloud Function', () => {
         });
     });
 
+    it('counts only successful activity-sync completions and throughput', async () => {
+        const resolveActivitySyncCount = (filters: Array<{ field: string; op: string; value: unknown }>): number => {
+            const has = (field: string, op: string, value?: unknown): boolean =>
+                filters.some((filter) => filter.field === field && filter.op === op && (value === undefined || filter.value === value));
+
+            if (has('successProcessedAt', '>')) {
+                return 1;
+            }
+            if (has('resultStatus', '==', 'success')) {
+                return 2;
+            }
+            if (has('processed', '==', false) && has('retryCount', '>=', 10)) {
+                return 1;
+            }
+            if (has('processed', '==', false) && has('retryCount', '<', 4)) {
+                return 3;
+            }
+            if (has('processed', '==', false) && has('retryCount', '>=', 4) && has('retryCount', '<', 8)) {
+                return 1;
+            }
+            if (has('processed', '==', false) && has('retryCount', '>=', 8) && has('retryCount', '<', 10)) {
+                return 0;
+            }
+            if (has('processed', '==', false) && has('retryCount', '<', 10)) {
+                return 4;
+            }
+
+            return 0;
+        };
+
+        mockCollection.mockImplementation((collectionName: string) => {
+            if (collectionName === 'activitySyncQueue') {
+                const buildQuery = (filters: Array<{ field: string; op: string; value: unknown }>) => ({
+                    where: vi.fn((field: string, op: string, value: unknown) => buildQuery([...filters, { field, op, value }])),
+                    orderBy: vi.fn(() => buildQuery(filters)),
+                    limit: vi.fn(() => buildQuery(filters)),
+                    count: vi.fn(() => ({
+                        get: vi.fn().mockResolvedValue({
+                            data: () => ({ count: resolveActivitySyncCount(filters) }),
+                        }),
+                    })),
+                    get: vi.fn().mockResolvedValue({
+                        empty: false,
+                        docs: [{ data: () => ({ dateCreated: Date.now() - 20000 }) }],
+                    }),
+                });
+
+                return buildQuery([]);
+            }
+
+            if (collectionName === 'derivedMetrics') {
+                return {
+                    where: vi.fn().mockReturnValue({
+                        get: vi.fn().mockResolvedValue({ docs: [] })
+                    })
+                };
+            }
+
+            if (collectionName === 'failed_jobs') {
+                const filters: Array<{ field: string; op: string; value: unknown }> = [];
+                const failedJobsMock: any = {
+                    where: vi.fn((field: string, op: string, value: unknown) => {
+                        filters.push({ field, op, value });
+                        return failedJobsMock;
+                    }),
+                    count: vi.fn(() => ({
+                        get: vi.fn().mockResolvedValue({
+                            data: () => ({
+                                count: filters.some((f) => f.field === 'originalCollection' && f.value === 'activitySyncQueue') ? 2 : 5,
+                            }),
+                        }),
+                    })),
+                    orderBy: vi.fn().mockReturnValue({
+                        limit: vi.fn().mockReturnValue({
+                            get: vi.fn().mockResolvedValue({
+                                size: 0,
+                                docs: [],
+                            }),
+                        }),
+                    }),
+                    get: vi.fn().mockResolvedValue({
+                        size: 0,
+                        docs: [],
+                    }),
+                };
+                return failedJobsMock;
+            }
+
+            const mockCount = vi.fn().mockReturnValue({
+                get: vi.fn().mockResolvedValue({
+                    data: () => ({ count: 5 })
+                })
+            });
+            return {
+                where: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockReturnThis(),
+                count: mockCount,
+                get: vi.fn().mockResolvedValue({
+                    empty: false,
+                    docs: [{ data: () => ({ dateCreated: Date.now() - 10000 }) }],
+                    data: () => ({ count: 5 })
+                })
+            };
+        });
+
+        request.data = { includeAnalysis: false };
+        const result = await (getQueueStats as any)(request);
+
+        expect(result.activitySync).toEqual(expect.objectContaining({
+            pending: 4,
+            succeeded: 2,
+            stuck: 1,
+            dead: 2,
+            advanced: expect.objectContaining({
+                throughput: 1,
+                retryHistogram: {
+                    '0-3': 3,
+                    '4-7': 1,
+                    '8-9': 0,
+                },
+            }),
+        }));
+    });
+
     it('should return only basic statistics when includeAnalysis is false', async () => {
         request.data = { includeAnalysis: false };
         const result = await (getQueueStats as any)(request);

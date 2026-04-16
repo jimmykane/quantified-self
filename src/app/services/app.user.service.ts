@@ -532,11 +532,16 @@ export class AppUserService implements OnDestroy {
     startDate: Date,
     endDate: Date,
   ): Promise<ActivitySyncBackfillSummary> {
+    const normalizedStartDate = new Date(startDate.getTime());
+    normalizedStartDate.setHours(0, 0, 0, 0);
+    const normalizedEndDate = new Date(endDate.getTime());
+    normalizedEndDate.setHours(23, 59, 59, 999);
+
     const result = await this.functionsService.call('backfillActivitySyncRoute', {
       sourceServiceName,
       destinationServiceName,
-      startDate: startDate.toISOString(),
-      endDate: endDate.toISOString(),
+      startDate: normalizedStartDate.toISOString(),
+      endDate: normalizedEndDate.toISOString(),
     });
     return result.data as ActivitySyncBackfillSummary;
   }

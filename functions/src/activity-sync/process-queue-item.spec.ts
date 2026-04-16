@@ -169,6 +169,8 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockUpdateToProcessed).toHaveBeenCalledWith(expect.any(Object), undefined, expect.objectContaining({
       destinationUploadID: 'upload-1',
       destinationWorkoutKey: 'workout-1',
+      resultStatus: 'success',
+      successProcessedAt: expect.any(Number),
     }));
   });
 
@@ -184,6 +186,7 @@ describe('activity-sync/process-queue-item', () => {
     }));
     expect(mockUpdateToProcessed).toHaveBeenCalledWith(expect.any(Object), undefined, expect.objectContaining({
       skippedReason: 'user_not_allowlisted',
+      resultStatus: 'skipped',
     }));
     expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
   });

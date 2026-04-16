@@ -55,6 +55,8 @@ export interface ActivitySyncQueueItemInterface extends QueueItemInterface {
   sourceActivityID?: string;
   originalFile: ActivitySyncOriginalFileMetadata;
   manual: boolean;
+  resultStatus?: 'success' | 'skipped';
+  successProcessedAt?: number;
 }
 
 export interface QueueItemError {
