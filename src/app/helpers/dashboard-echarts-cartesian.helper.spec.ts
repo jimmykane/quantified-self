@@ -81,6 +81,7 @@ describe('dashboard-echarts-cartesian.helper', () => {
   it('should fill missing biweekly date buckets using biweekly intervals instead of daily gaps', () => {
     const firstBucket = Date.UTC(2024, 0, 1);
     const thirdBucket = Date.UTC(2024, 0, 29);
+    const secondBucket = new Date(2024, 0, 15).getTime();
 
     const points = buildDashboardCartesianPoints({
       data: [
@@ -95,7 +96,7 @@ describe('dashboard-echarts-cartesian.helper', () => {
     expect(points).toHaveLength(3);
     expect(points.map(point => point.time)).toEqual([
       firstBucket,
-      Date.UTC(2024, 0, 15),
+      secondBucket,
       thirdBucket,
     ]);
     expect(points.map(point => point.value)).toEqual([10, 0, 30]);
@@ -104,6 +105,7 @@ describe('dashboard-echarts-cartesian.helper', () => {
   it('should fill missing quarterly date buckets using quarter intervals', () => {
     const q1 = Date.UTC(2024, 0, 1);
     const q3 = Date.UTC(2024, 6, 1);
+    const q2 = new Date(2024, 3, 1).getTime();
 
     const points = buildDashboardCartesianPoints({
       data: [
@@ -118,7 +120,7 @@ describe('dashboard-echarts-cartesian.helper', () => {
     expect(points).toHaveLength(3);
     expect(points.map(point => point.time)).toEqual([
       q1,
-      Date.UTC(2024, 3, 1),
+      q2,
       q3,
     ]);
     expect(points.map(point => point.value)).toEqual([10, 0, 30]);
@@ -146,6 +148,16 @@ describe('dashboard-echarts-cartesian.helper', () => {
   it('should not truncate long hourly ranges beyond ten thousand buckets', () => {
     const startHour = Date.UTC(2024, 0, 1, 0, 0, 0, 0);
     const endHour = startHour + (10000 * 60 * 60 * 1000);
+    const expectedPointCount = (() => {
+      let count = 0;
+      const cursor = new Date(startHour);
+      const end = new Date(endHour);
+      while (cursor.getTime() <= end.getTime()) {
+        count += 1;
+        cursor.setHours(cursor.getHours() + 1);
+      }
+      return count;
+    })();
 
     const points = buildDashboardCartesianPoints({
       data: [
@@ -157,12 +169,12 @@ describe('dashboard-echarts-cartesian.helper', () => {
       chartDataTimeInterval: TimeIntervals.Hourly,
     });
 
-    expect(points).toHaveLength(10001);
+    expect(points).toHaveLength(expectedPointCount);
     expect(points[0].time).toBe(startHour);
     expect(points[0].value).toBe(10);
-    expect(points[9999].value).toBe(0);
-    expect(points[10000].time).toBe(endHour);
-    expect(points[10000].value).toBe(20);
+    expect(points[points.length - 2].value).toBe(0);
+    expect(points[points.length - 1].time).toBe(endHour);
+    expect(points[points.length - 1].value).toBe(20);
   }, 15000);
 
   it('should advance daily buckets in UTC across DST boundaries', () => {
@@ -194,6 +206,28 @@ describe('dashboard-echarts-cartesian.helper', () => {
         process.env.TZ = previousTimeZone;
       }
     }
+  });
+
+  it('should keep existing daily values when bucket timestamps shift by one hour', () => {
+    const dayOne = Date.UTC(2026, 2, 27, 22, 0, 0, 0);
+    const shiftedDayThree = Date.UTC(2026, 2, 29, 21, 0, 0, 0);
+
+    const points = buildDashboardCartesianPoints({
+      data: [
+        { time: dayOne, [ChartDataValueTypes.Total]: 10, count: 1 },
+        { time: shiftedDayThree, [ChartDataValueTypes.Total]: 30, count: 1 },
+      ],
+      chartDataValueType: ChartDataValueTypes.Total,
+      chartDataCategoryType: ChartDataCategoryTypes.DateType,
+      chartDataTimeInterval: TimeIntervals.Daily,
+    });
+
+    expect(points).toHaveLength(3);
+    expect(points[0].time).toBe(dayOne);
+    expect(points[0].value).toBe(10);
+    expect(points[1].value).toBe(0);
+    expect(points[2].time).toBe(shiftedDayThree);
+    expect(points[2].value).toBe(30);
   });
 
   it('should pad a single daily date point with adjacent zero buckets', () => {

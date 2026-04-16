@@ -36,81 +36,188 @@ function getMissingBucketValue(chartDataValueType: ChartDataValueTypes | undefin
   return chartDataValueType === ChartDataValueTypes.Total ? 0 : null;
 }
 
-function getNextIntervalTime(time: number, interval: TimeIntervals): number {
-  const next = new Date(time);
+function resolveDayBucketStart(date: Date): Date {
+  const normalizedDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  normalizedDate.setHours(0, 0, 0, 0);
+  return normalizedDate;
+}
+
+function resolveWeeklyBucketStartDate(date: Date): Date {
+  const weekStart = resolveDayBucketStart(date);
+  const day = weekStart.getDay() || 7;
+  weekStart.setDate(weekStart.getDate() - day + 1);
+  return weekStart;
+}
+
+function resolveIsoWeekOneStart(year: number): Date {
+  return resolveWeeklyBucketStartDate(new Date(year, 0, 4));
+}
+
+function resolveUtcCalendarTime(date: Date): number {
+  return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function resolveBiWeeklyBucketStartDate(date: Date): Date {
+  const weekStart = resolveWeeklyBucketStartDate(date);
+  const weekReference = new Date(weekStart.getTime());
+  weekReference.setDate(weekReference.getDate() + 3);
+  const isoWeekYear = weekReference.getFullYear();
+  const isoWeekOneStart = resolveIsoWeekOneStart(isoWeekYear);
+  const weeksFromIsoWeekOne = Math.floor(
+    (resolveUtcCalendarTime(weekStart) - resolveUtcCalendarTime(isoWeekOneStart)) / (7 * 24 * 60 * 60 * 1000),
+  );
+  if (weeksFromIsoWeekOne % 2 === 0) {
+    return weekStart;
+  }
+  const biWeeklyStart = new Date(weekStart.getTime());
+  biWeeklyStart.setDate(biWeeklyStart.getDate() - 7);
+  return biWeeklyStart;
+}
+
+function resolveQuarterlyBucketStartDate(date: Date): Date {
+  return new Date(date.getFullYear(), Math.floor(date.getMonth() / 3) * 3, 1);
+}
+
+function resolveSemesterlyBucketStartDate(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth() < 6 ? 0 : 6, 1);
+}
+
+function resolveHourlyBucketStartDate(date: Date): Date {
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+    date.getHours(),
+    0,
+    0,
+    0,
+  );
+}
+
+function resolveIntervalBucketStartDate(date: Date, interval: TimeIntervals): Date {
   switch (interval) {
     case TimeIntervals.Yearly:
-      next.setUTCFullYear(next.getUTCFullYear() + 1);
+      return new Date(date.getFullYear(), 0, 1);
+    case TimeIntervals.Monthly:
+      return new Date(date.getFullYear(), date.getMonth(), 1);
+    case TimeIntervals.Weekly:
+      return resolveWeeklyBucketStartDate(date);
+    case TimeIntervals.BiWeekly:
+      return resolveBiWeeklyBucketStartDate(date);
+    case TimeIntervals.Quarterly:
+      return resolveQuarterlyBucketStartDate(date);
+    case TimeIntervals.Semesterly:
+      return resolveSemesterlyBucketStartDate(date);
+    case TimeIntervals.Hourly:
+      return resolveHourlyBucketStartDate(date);
+    case TimeIntervals.Daily:
+    default:
+      return resolveDayBucketStart(date);
+  }
+}
+
+function formatBucketKeyPart(value: number): string {
+  return `${value}`.padStart(2, '0');
+}
+
+function resolveIntervalBucketKey(date: Date, interval: TimeIntervals): string {
+  switch (interval) {
+    case TimeIntervals.Yearly:
+      return `Y-${date.getFullYear()}`;
+    case TimeIntervals.Monthly:
+      return `M-${date.getFullYear()}-${formatBucketKeyPart(date.getMonth() + 1)}`;
+    case TimeIntervals.Weekly:
+      return `W-${date.getFullYear()}-${formatBucketKeyPart(date.getMonth() + 1)}-${formatBucketKeyPart(date.getDate())}`;
+    case TimeIntervals.BiWeekly:
+      return `BW-${date.getFullYear()}-${formatBucketKeyPart(date.getMonth() + 1)}-${formatBucketKeyPart(date.getDate())}`;
+    case TimeIntervals.Quarterly:
+      return `Q-${date.getFullYear()}-${Math.floor(date.getMonth() / 3) + 1}`;
+    case TimeIntervals.Semesterly:
+      return `S-${date.getFullYear()}-${date.getMonth() < 6 ? 1 : 2}`;
+    case TimeIntervals.Hourly:
+      return `H-${date.getFullYear()}-${formatBucketKeyPart(date.getMonth() + 1)}-${formatBucketKeyPart(date.getDate())}-${formatBucketKeyPart(date.getHours())}`;
+    case TimeIntervals.Daily:
+    default:
+      return `D-${date.getFullYear()}-${formatBucketKeyPart(date.getMonth() + 1)}-${formatBucketKeyPart(date.getDate())}`;
+  }
+}
+
+function getNextIntervalDate(date: Date, interval: TimeIntervals): Date {
+  const next = new Date(date.getTime());
+  switch (interval) {
+    case TimeIntervals.Yearly:
+      next.setFullYear(next.getFullYear() + 1);
       break;
     case TimeIntervals.Monthly:
-      next.setUTCMonth(next.getUTCMonth() + 1);
+      next.setMonth(next.getMonth() + 1);
       break;
     case TimeIntervals.Weekly:
-      next.setUTCDate(next.getUTCDate() + 7);
+      next.setDate(next.getDate() + 7);
       break;
     case TimeIntervals.BiWeekly:
-      next.setUTCDate(next.getUTCDate() + 14);
+      next.setDate(next.getDate() + 14);
       break;
     case TimeIntervals.Quarterly:
-      next.setUTCMonth(next.getUTCMonth() + 3);
+      next.setMonth(next.getMonth() + 3);
       break;
     case TimeIntervals.Semesterly:
-      next.setUTCMonth(next.getUTCMonth() + 6);
+      next.setMonth(next.getMonth() + 6);
       break;
     case TimeIntervals.Hourly:
-      next.setUTCHours(next.getUTCHours() + 1);
+      next.setHours(next.getHours() + 1);
       break;
     case TimeIntervals.Daily:
     default:
-      next.setUTCDate(next.getUTCDate() + 1);
+      next.setDate(next.getDate() + 1);
       break;
   }
-  return next.getTime();
+  return resolveIntervalBucketStartDate(next, interval);
 }
 
-function getPreviousIntervalTime(time: number, interval: TimeIntervals): number {
-  const previous = new Date(time);
+function getPreviousIntervalDate(date: Date, interval: TimeIntervals): Date {
+  const previous = new Date(date.getTime());
   switch (interval) {
     case TimeIntervals.Yearly:
-      previous.setUTCFullYear(previous.getUTCFullYear() - 1);
+      previous.setFullYear(previous.getFullYear() - 1);
       break;
     case TimeIntervals.Monthly:
-      previous.setUTCMonth(previous.getUTCMonth() - 1);
+      previous.setMonth(previous.getMonth() - 1);
       break;
     case TimeIntervals.Weekly:
-      previous.setUTCDate(previous.getUTCDate() - 7);
+      previous.setDate(previous.getDate() - 7);
       break;
     case TimeIntervals.BiWeekly:
-      previous.setUTCDate(previous.getUTCDate() - 14);
+      previous.setDate(previous.getDate() - 14);
       break;
     case TimeIntervals.Quarterly:
-      previous.setUTCMonth(previous.getUTCMonth() - 3);
+      previous.setMonth(previous.getMonth() - 3);
       break;
     case TimeIntervals.Semesterly:
-      previous.setUTCMonth(previous.getUTCMonth() - 6);
+      previous.setMonth(previous.getMonth() - 6);
       break;
     case TimeIntervals.Hourly:
-      previous.setUTCHours(previous.getUTCHours() - 1);
+      previous.setHours(previous.getHours() - 1);
       break;
     case TimeIntervals.Daily:
     default:
-      previous.setUTCDate(previous.getUTCDate() - 1);
+      previous.setDate(previous.getDate() - 1);
       break;
   }
-  return previous.getTime();
+  return resolveIntervalBucketStartDate(previous, interval);
 }
 
-function countInclusiveIntervals(startTime: number, endTime: number, interval: TimeIntervals): number | null {
-  if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || startTime > endTime) {
+function countInclusiveIntervals(startDate: Date, endDate: Date, interval: TimeIntervals): number | null {
+  if (!Number.isFinite(startDate.getTime()) || !Number.isFinite(endDate.getTime()) || startDate.getTime() > endDate.getTime()) {
     return null;
   }
 
   let count = 0;
-  let cursor = startTime;
-  while (cursor <= endTime) {
+  let cursor = resolveIntervalBucketStartDate(startDate, interval);
+  const endCursor = resolveIntervalBucketStartDate(endDate, interval);
+  while (cursor.getTime() <= endCursor.getTime()) {
     count += 1;
-    const nextCursor = getNextIntervalTime(cursor, interval);
-    if (nextCursor <= cursor) {
+    const nextCursor = getNextIntervalDate(cursor, interval);
+    if (nextCursor.getTime() <= cursor.getTime()) {
       return null;
     }
     cursor = nextCursor;
@@ -246,10 +353,12 @@ export function buildDashboardCartesianPoints(
     return points;
   }
 
-  const pointsByTime = new Map<number, DashboardCartesianPoint>();
+  const pointsByBucketKey = new Map<string, DashboardCartesianPoint>();
   points.forEach((point) => {
     if (point.time !== null) {
-      pointsByTime.set(point.time, point);
+      const pointDate = resolveIntervalBucketStartDate(new Date(point.time), chartDataTimeInterval);
+      const bucketKey = resolveIntervalBucketKey(pointDate, chartDataTimeInterval);
+      pointsByBucketKey.set(bucketKey, point);
     }
   });
 
@@ -258,17 +367,20 @@ export function buildDashboardCartesianPoints(
   if (startTime === null || endTime === null) {
     return points;
   }
+  const startDate = resolveIntervalBucketStartDate(new Date(startTime), chartDataTimeInterval);
+  const endDate = resolveIntervalBucketStartDate(new Date(endTime), chartDataTimeInterval);
 
-  const expectedPointCount = countInclusiveIntervals(startTime, endTime, chartDataTimeInterval);
+  const expectedPointCount = countInclusiveIntervals(startDate, endDate, chartDataTimeInterval);
   if (!expectedPointCount) {
     return points;
   }
 
   const contiguousPoints = new Array<DashboardCartesianPoint>(expectedPointCount);
   const missingBucketValue = getMissingBucketValue(input.chartDataValueType);
-  let cursor = startTime;
+  let cursor = startDate;
   for (let index = 0; index < expectedPointCount; index += 1) {
-    const existingPoint = pointsByTime.get(cursor);
+    const bucketKey = resolveIntervalBucketKey(cursor, chartDataTimeInterval);
+    const existingPoint = pointsByBucketKey.get(bucketKey);
     if (existingPoint) {
       contiguousPoints[index] = {
         ...existingPoint,
@@ -277,18 +389,18 @@ export function buildDashboardCartesianPoints(
     } else {
       contiguousPoints[index] = {
         index,
-        label: formatDashboardDateByInterval(cursor, chartDataTimeInterval),
+        label: formatDashboardDateByInterval(cursor.getTime(), chartDataTimeInterval),
         value: missingBucketValue,
         count: 0,
-        time: cursor,
+        time: cursor.getTime(),
         activityType: null,
         rawItem: null
       };
     }
 
     if (index < expectedPointCount - 1) {
-      const nextCursor = getNextIntervalTime(cursor, chartDataTimeInterval);
-      if (nextCursor <= cursor) {
+      const nextCursor = getNextIntervalDate(cursor, chartDataTimeInterval);
+      if (nextCursor.getTime() <= cursor.getTime()) {
         return points;
       }
       cursor = nextCursor;
@@ -297,8 +409,9 @@ export function buildDashboardCartesianPoints(
 
   if (contiguousPoints.length === 1 && contiguousPoints[0].time !== null) {
     const anchorTime = contiguousPoints[0].time as number;
-    const previousTime = getPreviousIntervalTime(anchorTime, chartDataTimeInterval);
-    const nextTime = getNextIntervalTime(anchorTime, chartDataTimeInterval);
+    const anchorDate = resolveIntervalBucketStartDate(new Date(anchorTime), chartDataTimeInterval);
+    const previousTime = getPreviousIntervalDate(anchorDate, chartDataTimeInterval).getTime();
+    const nextTime = getNextIntervalDate(anchorDate, chartDataTimeInterval).getTime();
     const paddingBucketValue = getMissingBucketValue(input.chartDataValueType);
 
     return [
