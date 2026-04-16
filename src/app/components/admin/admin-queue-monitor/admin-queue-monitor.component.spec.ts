@@ -25,6 +25,7 @@ describe('AdminQueueMonitorComponent', () => {
             pending: 11,
             queues: {
                 workout: { queueId: 'processWorkoutTask', pending: 3 },
+                activitySync: { queueId: 'processActivitySyncTask', pending: 0 },
                 sportsLibReparse: { queueId: 'processSportsLibReparseTask', pending: 2 },
                 derivedMetrics: { queueId: 'processDerivedMetricsTask', pending: 6 }
             }

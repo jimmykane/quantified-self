@@ -1,0 +1,270 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ServiceNames } from '@sports-alliance/sports-lib';
+import { ACTIVITY_SYNC_ROUTE_IDS } from '../../../shared/activity-sync-routes';
+import { ActivitySyncQueueItemInterface } from '../queue/queue-item.interface';
+
+const {
+  mockTokenGet,
+  mockDownload,
+  mockUpdateToProcessed,
+  mockIncreaseRetryCountForQueueItem,
+  mockMoveToDeadLetterQueue,
+  mockGetActivitySyncRouteAllowlistConfigError,
+  mockIsActivitySyncRouteUserAllowlisted,
+  mockIsActivitySyncRouteEnabledForUser,
+  mockSetActivitySyncProcessingMetadata,
+  mockSetActivitySyncSuccessMetadata,
+  mockSetActivitySyncSkippedMetadata,
+  mockSetActivitySyncRetryingMetadata,
+  mockSetActivitySyncFailedMetadata,
+  mockToActivitySyncMetadataError,
+  mockUploadActivityFileToSuunto,
+  mockHasProAccess,
+} = vi.hoisted(() => {
+  const mockTokenGet = vi.fn();
+  const mockDownload = vi.fn();
+
+  return {
+    mockTokenGet,
+    mockDownload,
+    mockUpdateToProcessed: vi.fn(),
+    mockIncreaseRetryCountForQueueItem: vi.fn(),
+    mockMoveToDeadLetterQueue: vi.fn(),
+    mockGetActivitySyncRouteAllowlistConfigError: vi.fn(),
+    mockIsActivitySyncRouteUserAllowlisted: vi.fn(),
+    mockIsActivitySyncRouteEnabledForUser: vi.fn(),
+    mockSetActivitySyncProcessingMetadata: vi.fn().mockResolvedValue(undefined),
+    mockSetActivitySyncSuccessMetadata: vi.fn().mockResolvedValue(undefined),
+    mockSetActivitySyncSkippedMetadata: vi.fn().mockResolvedValue(undefined),
+    mockSetActivitySyncRetryingMetadata: vi.fn().mockResolvedValue(undefined),
+    mockSetActivitySyncFailedMetadata: vi.fn().mockResolvedValue(undefined),
+    mockToActivitySyncMetadataError: vi.fn((error: unknown) => ({
+      code: `${(error as { code?: unknown } | undefined)?.code || 'unknown'}`,
+      message: `${(error as { message?: unknown } | undefined)?.message || error}`,
+      normalizedMessage: `${(error as { message?: unknown } | undefined)?.message || error}`,
+    })),
+    mockUploadActivityFileToSuunto: vi.fn(),
+    mockHasProAccess: vi.fn(),
+  };
+});
+
+vi.mock('firebase-admin', () => ({
+  firestore: () => ({
+    collection: vi.fn(() => ({
+      doc: vi.fn(() => ({
+        collection: vi.fn(() => ({
+          limit: vi.fn(() => ({
+            get: mockTokenGet,
+          })),
+        })),
+      })),
+    })),
+  }),
+  storage: () => ({
+    bucket: vi.fn(() => ({
+      file: vi.fn(() => ({
+        download: mockDownload,
+      })),
+    })),
+  }),
+}));
+
+vi.mock('../queue-utils', () => ({
+  QueueResult: {
+    Processed: 'PROCESSED',
+    RetryIncremented: 'RETRY_INCREMENTED',
+    MovedToDLQ: 'MOVED_TO_DLQ',
+    Failed: 'FAILED',
+  },
+  updateToProcessed: mockUpdateToProcessed,
+  increaseRetryCountForQueueItem: mockIncreaseRetryCountForQueueItem,
+  moveToDeadLetterQueue: mockMoveToDeadLetterQueue,
+}));
+
+vi.mock('./settings', () => ({
+  isActivitySyncRouteEnabledForUser: mockIsActivitySyncRouteEnabledForUser,
+}));
+
+vi.mock('./allowlist', () => ({
+  getActivitySyncRouteAllowlistConfigError: mockGetActivitySyncRouteAllowlistConfigError,
+  isActivitySyncRouteUserAllowlisted: mockIsActivitySyncRouteUserAllowlisted,
+}));
+
+vi.mock('./metadata', () => ({
+  setActivitySyncProcessingMetadata: mockSetActivitySyncProcessingMetadata,
+  setActivitySyncSuccessMetadata: mockSetActivitySyncSuccessMetadata,
+  setActivitySyncSkippedMetadata: mockSetActivitySyncSkippedMetadata,
+  setActivitySyncRetryingMetadata: mockSetActivitySyncRetryingMetadata,
+  setActivitySyncFailedMetadata: mockSetActivitySyncFailedMetadata,
+  toActivitySyncMetadataError: mockToActivitySyncMetadataError,
+}));
+
+vi.mock('../suunto/activities', () => ({
+  uploadActivityFileToSuunto: mockUploadActivityFileToSuunto,
+}));
+
+vi.mock('../utils', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils')>();
+  return {
+    ...actual,
+    hasProAccess: mockHasProAccess,
+  };
+});
+
+import { processActivitySyncQueueItem } from './process-queue-item';
+import { QueueResult } from '../queue-utils';
+
+const baseQueueItem: ActivitySyncQueueItemInterface = {
+  id: 'sync-item-1',
+  dateCreated: Date.now(),
+  processed: false as const,
+  retryCount: 0,
+  totalRetryCount: 0,
+  errors: [],
+  dispatchedToCloudTask: null,
+  routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+  sourceServiceName: ServiceNames.GarminAPI,
+  destinationServiceName: ServiceNames.SuuntoApp,
+  userID: 'user-1',
+  eventID: 'event-1',
+  sourceActivityID: 'activity-1',
+  manual: false,
+  originalFile: {
+    path: 'users/user-1/events/event-1/original.fit',
+    extension: 'fit',
+  },
+};
+
+describe('activity-sync/process-queue-item', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetActivitySyncRouteAllowlistConfigError.mockReturnValue(null);
+    mockIsActivitySyncRouteUserAllowlisted.mockReturnValue(true);
+    mockHasProAccess.mockResolvedValue(true);
+    mockIsActivitySyncRouteEnabledForUser.mockResolvedValue(true);
+    mockTokenGet.mockResolvedValue({ size: 1 });
+    mockDownload.mockResolvedValue([Buffer.from('FITDATA')]);
+    mockUploadActivityFileToSuunto.mockResolvedValue({
+      status: 'success',
+      message: 'ok',
+      uploadId: 'upload-1',
+      workoutKey: 'workout-1',
+    });
+    mockUpdateToProcessed.mockResolvedValue(QueueResult.Processed);
+    mockIncreaseRetryCountForQueueItem.mockResolvedValue(QueueResult.RetryIncremented);
+    mockMoveToDeadLetterQueue.mockResolvedValue(QueueResult.MovedToDLQ);
+  });
+
+  it('marks queue item processed and writes success metadata when upload succeeds', async () => {
+    const result = await processActivitySyncQueueItem(baseQueueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockSetActivitySyncProcessingMetadata).toHaveBeenCalled();
+    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledWith('user-1', Buffer.from('FITDATA'));
+    expect(mockSetActivitySyncSuccessMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+      destinationUploadID: 'upload-1',
+      workoutKey: 'workout-1',
+    }));
+    expect(mockUpdateToProcessed).toHaveBeenCalledWith(expect.any(Object), undefined, expect.objectContaining({
+      destinationUploadID: 'upload-1',
+      destinationWorkoutKey: 'workout-1',
+    }));
+  });
+
+  it('skips and marks processed when user is not allowlisted for route', async () => {
+    mockIsActivitySyncRouteUserAllowlisted.mockReturnValue(false);
+
+    const result = await processActivitySyncQueueItem(baseQueueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockSetActivitySyncProcessingMetadata).not.toHaveBeenCalled();
+    expect(mockSetActivitySyncSkippedMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      skippedReason: 'user_not_allowlisted',
+    }));
+    expect(mockUpdateToProcessed).toHaveBeenCalledWith(expect.any(Object), undefined, expect.objectContaining({
+      skippedReason: 'user_not_allowlisted',
+    }));
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+  });
+
+  it('skips and marks processed when allowlist is misconfigured', async () => {
+    mockGetActivitySyncRouteAllowlistConfigError.mockReturnValue('allowlist misconfigured');
+
+    const result = await processActivitySyncQueueItem(baseQueueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockSetActivitySyncProcessingMetadata).not.toHaveBeenCalled();
+    expect(mockSetActivitySyncSkippedMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      skippedReason: 'allowlist_misconfigured',
+      detail: 'allowlist misconfigured',
+    }));
+    expect(mockUpdateToProcessed).toHaveBeenCalledWith(expect.any(Object), undefined, expect.objectContaining({
+      skippedReason: 'allowlist_misconfigured',
+    }));
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+  });
+
+  it('treats ALREADY_EXISTS destination response as success', async () => {
+    mockUploadActivityFileToSuunto.mockResolvedValue({
+      status: 'info',
+      code: 'ALREADY_EXISTS',
+      message: 'exists',
+      uploadId: 'upload-existing',
+    });
+
+    const result = await processActivitySyncQueueItem(baseQueueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockSetActivitySyncSuccessMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      infoCode: 'ALREADY_EXISTS',
+      destinationUploadID: 'upload-existing',
+    }));
+  });
+
+  it('skips and marks processed when original file extension is unsupported', async () => {
+    const unsupportedOriginalFileQueueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      originalFile: { path: 'users/user-1/events/event-1/original.tcx', extension: 'tcx' },
+    };
+    const result = await processActivitySyncQueueItem(unsupportedOriginalFileQueueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockSetActivitySyncSkippedMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      skippedReason: 'unsupported_original_file',
+    }));
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+  });
+
+  it('skips and marks processed when route is disabled at worker time', async () => {
+    mockIsActivitySyncRouteEnabledForUser.mockResolvedValue(false);
+
+    const result = await processActivitySyncQueueItem(baseQueueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockSetActivitySyncSkippedMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      skippedReason: 'route_disabled',
+    }));
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+  });
+
+  it('increments retry for transient upload failures', async () => {
+    mockUploadActivityFileToSuunto.mockRejectedValue({ statusCode: 503, message: 'temporarily unavailable' });
+
+    const result = await processActivitySyncQueueItem(baseQueueItem);
+
+    expect(result).toBe(QueueResult.RetryIncremented);
+    expect(mockSetActivitySyncRetryingMetadata).toHaveBeenCalled();
+    expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalled();
+  });
+
+  it('moves to DLQ for permanent failures', async () => {
+    mockUploadActivityFileToSuunto.mockRejectedValue(new Error('permanent failure'));
+
+    const result = await processActivitySyncQueueItem(baseQueueItem);
+
+    expect(result).toBe(QueueResult.MovedToDLQ);
+    expect(mockSetActivitySyncFailedMetadata).toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).toHaveBeenCalled();
+  });
+});

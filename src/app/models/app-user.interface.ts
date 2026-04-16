@@ -13,6 +13,7 @@ import { Timestamp } from 'app/firebase/firestore';
 import { StripeRole } from './stripe-role.model';
 import { AppThemePreference } from './app-theme-preference.type';
 import { AppDateValue } from './app-date-value.type';
+import { ActivitySyncRouteId } from '@shared/activity-sync-routes';
 
 export type AppMapStyleName = 'default' | 'satellite' | 'outdoors';
 
@@ -44,11 +45,20 @@ export interface AppAppSettingsInterface extends UserAppSettingsInterface {
     themePreference?: AppThemePreference;
 }
 
+export interface ActivitySyncRouteSettingsInterface {
+    enabled?: boolean;
+}
+
+export interface ServiceSyncSettingsInterface {
+    activitySyncRoutes?: Partial<Record<ActivitySyncRouteId, ActivitySyncRouteSettingsInterface>>;
+}
+
 export interface AppUserSettingsInterface extends UserSettingsInterface {
     myTracksSettings?: AppMyTracksSettings;
     mapSettings?: AppMapSettingsInterface;
     dashboardSettings?: AppDashboardSettingsInterface;
     appSettings?: AppAppSettingsInterface;
+    serviceSyncSettings?: ServiceSyncSettingsInterface;
 }
 
 export interface AppUserInterface extends User {

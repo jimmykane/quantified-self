@@ -18,7 +18,10 @@ vi.mock('firebase-functions/logger', () => ({
 }));
 
 // Mock EventWriter to avoid heavy behavior
-const writeAllEventDataMock = vi.fn().mockResolvedValue(undefined);
+const mockSavedOriginalFiles = [
+    { path: 'users/user-1/events/event-1/original.fit' },
+];
+const writeAllEventDataMock = vi.fn().mockResolvedValue(mockSavedOriginalFiles);
 vi.mock('./shared/event-writer', () => ({
     EventWriter: vi.fn().mockImplementation(() => ({
         writeAllEventData: writeAllEventDataMock,
@@ -189,9 +192,12 @@ describe('utils higher-level helpers', () => {
         it('writes activities, meta data, and uses bulkWriter when provided', async () => {
             hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'pro' } });
             const bulkWriter = { set: vi.fn() };
+            let assignedEventID: string | null = null;
             const event = {
-                getID: () => null,
-                setID: vi.fn(),
+                getID: () => assignedEventID,
+                setID: vi.fn((id: string) => {
+                    assignedEventID = id;
+                }),
                 getActivities: () => [{
                     getID: () => null,
                     setID: vi.fn(),
@@ -209,7 +215,7 @@ describe('utils higher-level helpers', () => {
                 startDate: new Date(),
             };
 
-            await setEvent('user-1', 'event-1', event as any, metaData, originalFile as any, bulkWriter as any);
+            const result = await setEvent('user-1', 'event-1', event as any, metaData, originalFile as any, bulkWriter as any);
 
             expect(writeAllEventDataMock).toHaveBeenCalled();
             expect(bulkWriter.set).toHaveBeenCalled(); // called at least for metaData/processing
@@ -221,6 +227,10 @@ describe('utils higher-level helpers', () => {
                 sportsLibVersionCode: expect.any(Number),
                 processedAt: 'SERVER_TIMESTAMP',
             }));
+            expect(result).toEqual({
+                eventID: 'event-1',
+                savedOriginalFiles: mockSavedOriginalFiles,
+            });
         });
     });
 

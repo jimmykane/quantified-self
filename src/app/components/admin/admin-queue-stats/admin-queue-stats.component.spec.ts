@@ -192,9 +192,10 @@ describe('AdminQueueStatsComponent', () => {
                 stuck: 0,
                 providers: [],
                 cloudTasks: {
-                    pending: 56,
+                    pending: 60,
                     queues: {
                         workout: { queueId: 'processWorkoutTask', pending: 42 },
+                        activitySync: { queueId: 'processActivitySyncTask', pending: 4 },
                         sportsLibReparse: { queueId: 'processSportsLibReparseTask', pending: 8 },
                         derivedMetrics: { queueId: 'processDerivedMetricsTask', pending: 6 }
                     }
@@ -208,10 +209,12 @@ describe('AdminQueueStatsComponent', () => {
             fixture.detectChanges();
             const host: HTMLElement = fixture.nativeElement;
             expect(host.textContent).toContain('Cloud Tasks (Workout)');
+            expect(host.textContent).toContain('Cloud Tasks (Activity Sync)');
             expect(host.textContent).toContain('Cloud Tasks (Reparse)');
             expect(host.textContent).toContain('Cloud Tasks (Derived Metrics)');
             expect(host.textContent).not.toContain('Cloud Tasks (All Queues)');
             expect(host.textContent).toContain('42');
+            expect(host.textContent).toContain('4');
             expect(host.textContent).toContain('8');
             expect(host.textContent).toContain('6');
         });
@@ -241,6 +244,7 @@ describe('AdminQueueStatsComponent', () => {
             };
 
             expect(readCardValue('Cloud Tasks (Workout)')).toBe('0');
+            expect(readCardValue('Cloud Tasks (Activity Sync)')).toBe('0');
             expect(readCardValue('Cloud Tasks (Reparse)')).toBe('0');
             expect(readCardValue('Cloud Tasks (Derived Metrics)')).toBe('0');
         });

@@ -241,6 +241,10 @@ describe('getQueueStats Cloud Function', () => {
                     queueId: 'processWorkoutTask',
                     pending: 42,
                 },
+                activitySync: {
+                    queueId: 'processActivitySyncTask',
+                    pending: 0,
+                },
                 sportsLibReparse: {
                     queueId: 'processSportsLibReparseTask',
                     pending: 8,
@@ -291,18 +295,23 @@ describe('getQueueStats Cloud Function', () => {
         mockGetCloudTaskQueueDepthForQueue
             .mockResolvedValueOnce(42)
             .mockRejectedValueOnce(new Error('Queue depth error'))
+            .mockResolvedValueOnce(8)
             .mockResolvedValueOnce(6);
         const result = await (getQueueStats as any)(request);
         expect(result.cloudTasks).toEqual({
-            pending: 48,
+            pending: 56,
             queues: {
                 workout: {
                     queueId: 'processWorkoutTask',
                     pending: 42,
                 },
+                activitySync: {
+                    queueId: 'processActivitySyncTask',
+                    pending: 0,
+                },
                 sportsLibReparse: {
                     queueId: 'processSportsLibReparseTask',
-                    pending: 0,
+                    pending: 8,
                 },
                 derivedMetrics: {
                     queueId: 'processDerivedMetricsTask',

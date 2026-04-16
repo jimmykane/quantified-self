@@ -183,6 +183,10 @@ export interface QueueStats {
                 queueId: string;
                 pending: number;
             };
+            activitySync?: {
+                queueId: string;
+                pending: number;
+            };
             sportsLibReparse?: {
                 queueId: string;
                 pending: number;

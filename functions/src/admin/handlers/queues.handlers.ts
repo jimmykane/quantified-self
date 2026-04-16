@@ -54,10 +54,14 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
 
     try {
         const db = admin.firestore();
-        const { workoutQueue, sportsLibReparseQueue, derivedMetricsQueue } = config.cloudtasks;
-        const [workoutCloudTaskDepth, sportsLibReparseCloudTaskDepth, derivedMetricsCloudTaskDepth] = await Promise.all([
+        const { workoutQueue, activitySyncQueue, sportsLibReparseQueue, derivedMetricsQueue } = config.cloudtasks;
+        const [workoutCloudTaskDepth, activitySyncCloudTaskDepth, sportsLibReparseCloudTaskDepth, derivedMetricsCloudTaskDepth] = await Promise.all([
             getCloudTaskQueueDepthForQueue(workoutQueue).catch(e => {
                 logger.error(`Error getting Cloud Task depth for queue ${workoutQueue}:`, e);
+                return 0;
+            }),
+            getCloudTaskQueueDepthForQueue(activitySyncQueue).catch(e => {
+                logger.error(`Error getting Cloud Task depth for queue ${activitySyncQueue}:`, e);
                 return 0;
             }),
             getCloudTaskQueueDepthForQueue(sportsLibReparseQueue).catch(e => {
@@ -69,7 +73,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 return 0;
             }),
         ]);
-        const totalCloudTaskDepth = workoutCloudTaskDepth + sportsLibReparseCloudTaskDepth + derivedMetricsCloudTaskDepth;
+        const totalCloudTaskDepth = workoutCloudTaskDepth + activitySyncCloudTaskDepth + sportsLibReparseCloudTaskDepth + derivedMetricsCloudTaskDepth;
         const reparseJobsCollection = db.collection(SPORTS_LIB_REPARSE_JOBS_COLLECTION);
 
         const [
@@ -325,6 +329,10 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                     workout: {
                         queueId: workoutQueue,
                         pending: workoutCloudTaskDepth,
+                    },
+                    activitySync: {
+                        queueId: activitySyncQueue,
+                        pending: activitySyncCloudTaskDepth,
                     },
                     sportsLibReparse: {
                         queueId: sportsLibReparseQueue,

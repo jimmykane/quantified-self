@@ -865,6 +865,19 @@ describe('AppUserService', () => {
             });
         });
 
+        describe('backfillActivitySyncRouteForCurrentUser', () => {
+            it('should call cloud function for activity sync route backfill', async () => {
+                await service.backfillActivitySyncRouteForCurrentUser('Garmin API' as any, 'Suunto app' as any, startDate, endDate);
+
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('backfillActivitySyncRoute', {
+                    sourceServiceName: 'Garmin API',
+                    destinationServiceName: 'Suunto app',
+                    startDate: startDate.toISOString(),
+                    endDate: endDate.toISOString(),
+                });
+            });
+        });
+
         describe('deauthorizeService', () => {
             it('should call cloud function for COROS', async () => {
                 const serviceName = 'COROS API' as any;

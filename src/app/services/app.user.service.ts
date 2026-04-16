@@ -86,6 +86,20 @@ import { Firestore, doc, docData, collection, collectionData, setDoc, updateDoc 
 import { AppFunctionsService } from './app.functions.service';
 import { FunctionName } from '@shared/functions-manifest';
 
+export interface ActivitySyncBackfillFailedEvent {
+  eventID: string;
+  reason: string;
+  message: string;
+}
+
+export interface ActivitySyncBackfillSummary {
+  scanned: number;
+  queued: number;
+  skippedByReason: Record<string, number>;
+  failedCount: number;
+  failedEvents: ActivitySyncBackfillFailedEvent[];
+}
+
 
 /**
  * Service for managing user data, subscription roles, and settings.
@@ -510,6 +524,21 @@ export class AppUserService implements OnDestroy {
 
     const result = await this.functionsService.call(functionName, payload);
     return result.data;
+  }
+
+  async backfillActivitySyncRouteForCurrentUser(
+    sourceServiceName: ServiceNames,
+    destinationServiceName: ServiceNames,
+    startDate: Date,
+    endDate: Date,
+  ): Promise<ActivitySyncBackfillSummary> {
+    const result = await this.functionsService.call('backfillActivitySyncRoute', {
+      sourceServiceName,
+      destinationServiceName,
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
+    });
+    return result.data as ActivitySyncBackfillSummary;
   }
 
   async deauthorizeService(serviceName: ServiceNames): Promise<any> {

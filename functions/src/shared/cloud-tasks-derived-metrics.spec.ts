@@ -26,6 +26,7 @@ vi.mock('../config', () => ({
       projectId: 'test-project',
       location: 'test-location',
       workoutQueue: 'processWorkoutTask',
+      activitySyncQueue: 'processActivitySyncTask',
       sportsLibReparseQueue: 'processSportsLibReparseTask',
       derivedMetricsQueue: 'processDerivedMetricsTask',
       serviceAccountEmail: 'sa@test.com',

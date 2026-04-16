@@ -430,6 +430,16 @@ Garmin can deliver imported activities gradually over hours or days.
 
 If Garmin permissions are missing, reconnect the app and grant the required export and history permissions in Garmin Connect.
 
+Garmin -> Suunto activity sync is route-based:
+
+- you must connect both Garmin and Suunto,
+- enable the route toggle in Garmin Services,
+- and keep Garmin ACTIVITY_EXPORT permission enabled.
+
+Automatic sync runs only for newly imported Garmin activities and uses the stored original activity file from your event.
+
+Manual catch-up is available in Garmin Services: choose a date range to queue missing route sync jobs for already-imported events.
+
 ## COROS
 
 COROS history import is limited to the last **3 months** because of API restrictions.
