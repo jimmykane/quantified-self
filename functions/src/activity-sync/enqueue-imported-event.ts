@@ -1,5 +1,4 @@
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { OriginalFileMetaData } from '../../../shared/app-event.interface';
 import { ACTIVITY_SYNC_ROUTES, ActivitySyncRoute, ActivitySyncRouteId } from '../../../shared/activity-sync-routes';
 import { isActivitySyncRouteEnabledForUser } from './settings';
 import { enqueueActivitySyncQueueItem } from './queue';
@@ -12,7 +11,7 @@ export interface EnqueueActivitySyncJobsForImportedEventParams {
     eventID: string;
     sourceServiceName: ServiceNames;
     sourceActivityID?: string;
-    originalFiles: OriginalFileMetaData[];
+    originalFiles: EnqueueActivitySyncOriginalFileMetadata[];
     manual?: boolean;
     routeIdFilter?: ActivitySyncRouteId;
     respectRouteEnabled?: boolean;
@@ -21,6 +20,13 @@ export interface EnqueueActivitySyncJobsForImportedEventParams {
 export interface EnqueueActivitySyncJobsForImportedEventResult {
     queued: number;
     skippedByReason: Record<string, number>;
+}
+
+export interface EnqueueActivitySyncOriginalFileMetadata {
+    path: string;
+    bucket?: string;
+    startDate?: unknown;
+    originalFilename?: string;
 }
 
 function toFileExtension(path?: string): string {
@@ -36,7 +42,7 @@ function toFileExtension(path?: string): string {
     return path.slice(lastDotIndex + 1).toLowerCase();
 }
 
-function toOriginalFileForQueue(sourceFile: OriginalFileMetaData, extension: string): ActivitySyncOriginalFileMetadata {
+function toOriginalFileForQueue(sourceFile: EnqueueActivitySyncOriginalFileMetadata, extension: string): ActivitySyncOriginalFileMetadata {
     const startDateValue = sourceFile.startDate as unknown;
     const startDateEpochMs = startDateValue instanceof Date
         ? startDateValue.getTime()

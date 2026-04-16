@@ -4,8 +4,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck, hasProAccess, PRO_REQUIRED_MESSAGE } from '../utils';
 import { ActivitySyncRouteId, getActivitySyncRouteId } from '../../../shared/activity-sync-routes';
-import { enqueueActivitySyncJobsForImportedEvent } from './enqueue-imported-event';
-import { OriginalFileMetaData } from '../../../shared/app-event.interface';
+import { EnqueueActivitySyncOriginalFileMetadata, enqueueActivitySyncJobsForImportedEvent } from './enqueue-imported-event';
 import { getActivitySyncMetadataDocId, setActivitySyncSkippedMetadata } from './metadata';
 import * as logger from 'firebase-functions/logger';
 import { getActivitySyncRouteAllowlistConfigError, isActivitySyncRouteUserAllowlisted } from './allowlist';
@@ -64,21 +63,45 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     return value && typeof value === 'object' ? value as Record<string, unknown> : null;
 }
 
-function extractOriginalFiles(eventData: Record<string, unknown>): OriginalFileMetaData[] {
-    const files: OriginalFileMetaData[] = [];
+function toEnqueueOriginalFile(candidate: Record<string, unknown>): EnqueueActivitySyncOriginalFileMetadata | null {
+    const path = `${candidate.path || ''}`.trim();
+    if (!path) {
+        return null;
+    }
+
+    return {
+        path,
+        bucket: typeof candidate.bucket === 'string' && candidate.bucket.trim().length > 0 ? candidate.bucket.trim() : undefined,
+        startDate: candidate.startDate,
+        originalFilename: typeof candidate.originalFilename === 'string' && candidate.originalFilename.trim().length > 0
+            ? candidate.originalFilename.trim()
+            : undefined,
+    };
+}
+
+function extractOriginalFiles(eventData: Record<string, unknown>): EnqueueActivitySyncOriginalFileMetadata[] {
+    const files: EnqueueActivitySyncOriginalFileMetadata[] = [];
 
     if (Array.isArray(eventData.originalFiles)) {
         for (const file of eventData.originalFiles) {
             const candidate = asRecord(file);
-            if (candidate && typeof candidate.path === 'string' && candidate.path.trim().length > 0) {
-                files.push(candidate as OriginalFileMetaData);
+            if (!candidate) {
+                continue;
+            }
+
+            const normalized = toEnqueueOriginalFile(candidate);
+            if (normalized) {
+                files.push(normalized);
             }
         }
     }
 
     const originalFile = asRecord(eventData.originalFile);
-    if (files.length === 0 && originalFile && typeof originalFile.path === 'string' && originalFile.path.trim().length > 0) {
-        files.push(originalFile as OriginalFileMetaData);
+    if (files.length === 0 && originalFile) {
+        const normalized = toEnqueueOriginalFile(originalFile);
+        if (normalized) {
+            files.push(normalized);
+        }
     }
 
     return files;
