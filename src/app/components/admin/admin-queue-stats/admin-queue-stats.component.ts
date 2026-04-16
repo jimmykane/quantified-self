@@ -19,7 +19,7 @@ import {
 } from '../../../helpers/echarts-host-controller';
 import { buildOfficialEChartsThemeTokens, ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
 
-export type AdminQueueStatsView = 'all' | 'workout' | 'reparse' | 'derived';
+export type AdminQueueStatsView = 'all' | 'workout' | 'activity-sync' | 'reparse' | 'derived';
 
 @Component({
     selector: 'app-admin-queue-stats',
@@ -129,7 +129,7 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
             return;
         }
 
-        const histogram = this.stats?.advanced?.retryHistogram;
+        const histogram = this.getActiveRetryHistogram();
         const values = histogram
             ? [
                 histogram['0-3'] ?? 0,
@@ -214,6 +214,14 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
         this.chartHost.scheduleResize();
     }
 
+    private getActiveRetryHistogram(): { '0-3': number; '4-7': number; '8-9': number } | null {
+        if (this.queueView === 'activity-sync') {
+            return this.stats?.activitySync?.advanced?.retryHistogram || null;
+        }
+
+        return this.stats?.advanced?.retryHistogram || null;
+    }
+
     private async updateChartTheme(): Promise<void> {
         if (!this._retryChartRef?.nativeElement) {
             return;
@@ -258,6 +266,10 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
 
     get showWorkoutSection(): boolean {
         return this.queueView === 'all' || this.queueView === 'workout';
+    }
+
+    get showActivitySyncSection(): boolean {
+        return this.queueView === 'all' || this.queueView === 'activity-sync';
     }
 
     get showReparseSection(): boolean {

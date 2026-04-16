@@ -6,6 +6,7 @@ COLLECTIONS=(
     "COROSAPIWorkoutQueue"
     "suuntoAppWorkoutQueue"
     "garminAPIActivityQueue"
+    "activitySyncQueue"
     "sportsLibReparseJobs"
     "failed_jobs"
     "mail"

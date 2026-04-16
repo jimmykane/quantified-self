@@ -24,6 +24,7 @@ import {
     QueueStatsResponse,
     SportsLibReparseJobDocData,
 } from '../shared/types';
+import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from '../../activity-sync/constants';
 
 const SPORTS_LIB_REPARSE_JOBS_COLLECTION = 'sportsLibReparseJobs';
 const SPORTS_LIB_REPARSE_CHECKPOINT_DOC_PATH = 'systemJobs/sportsLibReparse';
@@ -206,6 +207,74 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
         const retryHistogram = { '0-3': 0, '4-7': 0, '8-9': 0 };
 
         const ONE_HOUR_AGO = Date.now() - (60 * 60 * 1000);
+        const activitySyncCollection = db.collection(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME);
+
+        const [
+            activitySyncPendingSnap,
+            activitySyncSucceededSnap,
+            activitySyncStuckSnap,
+            activitySyncRetry0to3Snap,
+            activitySyncRetry4to7Snap,
+            activitySyncRetry8to9Snap,
+            activitySyncThroughputSnap,
+            activitySyncOldestPendingSnap,
+            activitySyncDeadSnap,
+        ] = await Promise.all([
+            activitySyncCollection.where('processed', '==', false).where('retryCount', '<', 10).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count activity sync pending jobs:', e);
+                return null;
+            }),
+            activitySyncCollection.where('processed', '==', true).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count activity sync succeeded jobs:', e);
+                return null;
+            }),
+            activitySyncCollection.where('processed', '==', false).where('retryCount', '>=', 10).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count activity sync stuck jobs:', e);
+                return null;
+            }),
+            activitySyncCollection.where('processed', '==', false).where('retryCount', '<', 4).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count activity sync retry bucket 0-3:', e);
+                return null;
+            }),
+            activitySyncCollection.where('processed', '==', false).where('retryCount', '>=', 4).where('retryCount', '<', 8).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count activity sync retry bucket 4-7:', e);
+                return null;
+            }),
+            activitySyncCollection.where('processed', '==', false).where('retryCount', '>=', 8).where('retryCount', '<', 10).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count activity sync retry bucket 8-9:', e);
+                return null;
+            }),
+            activitySyncCollection.where('processed', '==', true).where('processedAt', '>', ONE_HOUR_AGO).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count activity sync throughput:', e);
+                return null;
+            }),
+            activitySyncCollection.where('processed', '==', false).orderBy('dateCreated', 'asc').limit(1).get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to query oldest activity sync pending job:', e);
+                return null;
+            }),
+            db.collection('failed_jobs').where('originalCollection', '==', ACTIVITY_SYNC_QUEUE_COLLECTION_NAME).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count activity sync dead-letter jobs:', e);
+                return null;
+            }),
+        ]);
+
+        const activitySyncPending = activitySyncPendingSnap?.data().count || 0;
+        const activitySyncSucceeded = activitySyncSucceededSnap?.data().count || 0;
+        const activitySyncStuck = activitySyncStuckSnap?.data().count || 0;
+        const activitySyncDead = activitySyncDeadSnap?.data().count || 0;
+        const activitySyncRetryHistogram = {
+            '0-3': activitySyncRetry0to3Snap?.data().count || 0,
+            '4-7': activitySyncRetry4to7Snap?.data().count || 0,
+            '8-9': activitySyncRetry8to9Snap?.data().count || 0,
+        };
+        const activitySyncThroughput = activitySyncThroughputSnap?.data().count || 0;
+        let activitySyncMaxLagMs = 0;
+        const activitySyncOldestPendingDate = activitySyncOldestPendingSnap?.empty === false
+            ? activitySyncOldestPendingSnap.docs[0]?.data()?.dateCreated
+            : null;
+        if (activitySyncOldestPendingDate) {
+            activitySyncMaxLagMs = Math.max(0, Date.now() - activitySyncOldestPendingDate);
+        }
 
         const providers: { name: string; pending: number; succeeded: number; stuck: number; dead: number }[] = [];
 
@@ -282,6 +351,8 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
         // Dead Letter Queue stats & Error Clustering (Expensive)
         let dlq: QueueStatsResponse['dlq'] = undefined;
         let topErrors: { error: string; count: number }[] = [];
+        let activitySyncTopErrors: { error: string; count: number }[] = [];
+        let activitySyncByContext: { context: string; count: number }[] = [];
 
         if (includeAnalysis) {
             const dlqCol = db.collection('failed_jobs');
@@ -314,6 +385,30 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             };
 
             topErrors = Object.entries(errorCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5)
+                .map(([error, count]) => ({ error, count }));
+
+            const activitySyncRecentDlqSnap = await dlqCol
+                .where('originalCollection', '==', ACTIVITY_SYNC_QUEUE_COLLECTION_NAME)
+                .get()
+                .catch(e => {
+                    logger.error('[admin/getQueueStats] Failed to load activity sync DLQ preview:', e);
+                    return null;
+                });
+            const activitySyncContextCounts: Record<string, number> = {};
+            const activitySyncErrorCounts: Record<string, number> = {};
+            for (const doc of (activitySyncRecentDlqSnap?.docs || []).slice(0, 50)) {
+                const data = doc.data();
+                const context = `${data.context || 'UNKNOWN'}`;
+                const errorMsg = normalizeError(data.error || 'Unknown Error');
+                activitySyncContextCounts[context] = (activitySyncContextCounts[context] || 0) + 1;
+                activitySyncErrorCounts[errorMsg] = (activitySyncErrorCounts[errorMsg] || 0) + 1;
+            }
+            activitySyncByContext = Object.entries(activitySyncContextCounts)
+                .map(([context, count]) => ({ context, count }))
+                .sort((a, b) => b.count - a.count);
+            activitySyncTopErrors = Object.entries(activitySyncErrorCounts)
                 .sort((a, b) => b[1] - a[1])
                 .slice(0, 5)
                 .map(([error, count]) => ({ error, count }));
@@ -376,7 +471,20 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 maxLagMs,
                 retryHistogram,
                 topErrors
-            }
+            },
+            activitySync: {
+                pending: activitySyncPending,
+                succeeded: activitySyncSucceeded,
+                stuck: activitySyncStuck,
+                dead: activitySyncDead,
+                dlqByContext: activitySyncByContext,
+                advanced: {
+                    throughput: activitySyncThroughput,
+                    maxLagMs: activitySyncMaxLagMs,
+                    retryHistogram: activitySyncRetryHistogram,
+                    topErrors: activitySyncTopErrors,
+                },
+            },
         };
     } catch (error: unknown) {
         logger.error('Error getting queue stats:', error);

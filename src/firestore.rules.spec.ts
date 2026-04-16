@@ -995,6 +995,40 @@ describe('Firestore Security Rules', () => {
         });
     });
 
+    describe('Server-Owned Queue Collections', () => {
+        it('should deny non-admin reads from activitySyncQueue', async () => {
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().doc('activitySyncQueue/queue-item-1').set({
+                    processed: false,
+                    routeId: 'GarminAPI_to_SuuntoApp'
+                });
+            });
+
+            const db = testEnv.authenticatedContext('regular-user').firestore();
+            await assertFails(db.doc('activitySyncQueue/queue-item-1').get());
+        });
+
+        it('should allow admin reads from activitySyncQueue', async () => {
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().doc('activitySyncQueue/queue-item-2').set({
+                    processed: false,
+                    routeId: 'GarminAPI_to_SuuntoApp'
+                });
+            });
+
+            const db = testEnv.authenticatedContext('admin-user', { admin: true }).firestore();
+            await assertSucceeds(db.doc('activitySyncQueue/queue-item-2').get());
+        });
+
+        it('should deny writes to activitySyncQueue even for admins', async () => {
+            const db = testEnv.authenticatedContext('admin-user', { admin: true }).firestore();
+            await assertFails(db.doc('activitySyncQueue/queue-item-3').set({
+                processed: false,
+                routeId: 'GarminAPI_to_SuuntoApp'
+            }));
+        });
+    });
+
     describe('Changelogs Collection', () => {
         const userId = 'user_123';
         const adminId = 'admin_456';

@@ -16,7 +16,6 @@ import { LoggerService } from '../../services/logger.service';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { combineLatest, of, Subscription } from 'rxjs';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
-import { User } from '@sports-alliance/sports-lib';
 import { ActivatedRoute, ParamMap, Router } from '@angular/router';
 import { switchMap, take, tap } from 'rxjs/operators';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
@@ -29,13 +28,14 @@ import { AppUserService } from '../../services/app.user.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppEventService } from '../../services/app.event.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { AppUserInterface } from '../../models/app-user.interface';
 
 
 @Directive()
 export abstract class ServicesAbstractComponentDirective implements OnInit, OnDestroy, OnChanges {
   public abstract serviceName: ServiceNames;
 
-  @Input() user!: User;
+  @Input() user!: AppUserInterface;
 
   @Input() hasProAccess!: boolean;
   @Input() isAdmin: boolean = false;

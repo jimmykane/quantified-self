@@ -213,6 +213,19 @@ export interface QueueStats {
         retryHistogram: { '0-3': number; '4-7': number; '8-9': number };
         topErrors: { error: string; count: number }[];
     };
+    activitySync?: {
+        pending: number;
+        succeeded: number;
+        stuck: number;
+        dead: number;
+        dlqByContext: { context: string; count: number }[];
+        advanced: {
+            throughput: number;
+            maxLagMs: number;
+            retryHistogram: { '0-3': number; '4-7': number; '8-9': number };
+            topErrors: { error: string; count: number }[];
+        };
+    };
 }
 
 export interface FinancialStats {

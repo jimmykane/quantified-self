@@ -42,6 +42,14 @@ const routes: Routes = [
         }
     },
     {
+        path: 'queues/activity-sync',
+        component: AdminQueueMonitorComponent,
+        canActivate: [adminGuard],
+        data: {
+            queueView: 'activity-sync'
+        }
+    },
+    {
         path: 'queues/reparse',
         component: AdminQueueMonitorComponent,
         canActivate: [adminGuard],

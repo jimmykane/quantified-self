@@ -58,6 +58,7 @@ describe('AdminDashboardComponent', () => {
         const buttons = Array.from(host.querySelectorAll('button')).map((button) => button.textContent || '');
 
         expect(buttons.join(' ')).toContain('Workout Queue');
+        expect(buttons.join(' ')).toContain('Activity Sync Queue');
         expect(buttons.join(' ')).toContain('Reparse Queue');
         expect(buttons.join(' ')).toContain('Derived Metrics Queue');
     });

@@ -289,6 +289,29 @@ describe('getQueueStats Cloud Function', () => {
                 }
             ],
         });
+        expect(result.activitySync).toEqual({
+            pending: 5,
+            succeeded: 5,
+            stuck: 5,
+            dead: 5,
+            dlqByContext: expect.arrayContaining([
+                { context: 'NO_TOKEN_FOUND', count: 1 },
+                { context: 'MAX_RETRY_REACHED', count: 1 },
+            ]),
+            advanced: {
+                throughput: 5,
+                maxLagMs: expect.any(Number),
+                retryHistogram: {
+                    '0-3': 5,
+                    '4-7': 5,
+                    '8-9': 5,
+                },
+                topErrors: expect.arrayContaining([
+                    { error: 'Token expired', count: 1 },
+                    { error: 'Timeout', count: 1 },
+                ]),
+            },
+        });
     });
 
     it('should handle single-queue Cloud Task depth error and return 0 for that queue', async () => {
@@ -394,6 +417,8 @@ describe('getQueueStats Cloud Function', () => {
         expect(result.pending).toBeDefined();
         expect(result.dlq).toBeUndefined(); // Should be skipped
         expect(result.advanced.topErrors).toHaveLength(0); // Should be empty
+        expect(result.activitySync.advanced.topErrors).toHaveLength(0); // Should be empty
+        expect(result.activitySync.dlqByContext).toHaveLength(0); // Should be empty
     });
 
     it('should require authentication', async () => {

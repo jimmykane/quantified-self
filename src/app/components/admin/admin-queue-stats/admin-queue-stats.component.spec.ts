@@ -181,6 +181,45 @@ describe('AdminQueueStatsComponent', () => {
             expect(optionArg.backgroundColor).toBe('transparent');
             expect(optionArg.series[0].data).toEqual([5, 3, 2]);
         });
+
+        it('should use activity sync retry histogram in activity-sync view', async () => {
+            component.queueView = 'activity-sync';
+            component.loading = false;
+            component.stats = {
+                pending: 0,
+                succeeded: 0,
+                stuck: 0,
+                providers: [],
+                cloudTasks: {
+                    pending: 4,
+                    queues: {
+                        activitySync: { queueId: 'processActivitySyncTask', pending: 4 }
+                    }
+                },
+                activitySync: {
+                    pending: 3,
+                    succeeded: 11,
+                    stuck: 1,
+                    dead: 0,
+                    dlqByContext: [],
+                    advanced: {
+                        throughput: 7,
+                        maxLagMs: 12000,
+                        retryHistogram: { '0-3': 2, '4-7': 1, '8-9': 0 },
+                        topErrors: []
+                    }
+                }
+            };
+
+            component.ngOnChanges({ stats: new SimpleChange(null, component.stats, true) });
+            fixture.detectChanges();
+            await fixture.whenStable();
+            await new Promise(resolve => setTimeout(resolve, 0));
+
+            expect(mockEchartsService.setOption).toHaveBeenCalled();
+            const optionArg = mockEchartsService.setOption.mock.calls.at(-1)?.[1];
+            expect(optionArg.series[0].data).toEqual([2, 1, 0]);
+        });
     });
 
     describe('Cloud Tasks Queue Breakdown', () => {
@@ -333,6 +372,50 @@ describe('AdminQueueStatsComponent', () => {
             expect(host.textContent).toContain('Derived Metrics');
             expect(host.textContent).not.toContain('Workout Ingestion');
             expect(host.textContent).not.toContain('Sports-lib Reparse');
+        });
+
+        it('should show only activity sync section in activity-sync-only view', () => {
+            component.loading = false;
+            component.queueView = 'activity-sync';
+            component.stats = {
+                pending: 1,
+                succeeded: 1,
+                stuck: 0,
+                providers: [],
+                cloudTasks: {
+                    pending: 4,
+                    queues: {
+                        activitySync: { queueId: 'processActivitySyncTask', pending: 4 }
+                    }
+                },
+                activitySync: {
+                    pending: 3,
+                    succeeded: 11,
+                    stuck: 1,
+                    dead: 2,
+                    dlqByContext: [{ context: 'NO_TOKEN_FOUND', count: 2 }],
+                    advanced: {
+                        throughput: 7,
+                        maxLagMs: 12000,
+                        retryHistogram: { '0-3': 2, '4-7': 1, '8-9': 0 },
+                        topErrors: [{ error: 'Token missing', count: 2 }]
+                    }
+                }
+            };
+
+            fixture.detectChanges();
+            const host: HTMLElement = fixture.nativeElement;
+            expect(host.textContent).toContain('Activity Sync');
+            expect(host.textContent).toContain('Cloud Tasks (Activity Sync)');
+            expect(host.textContent).toContain('Pending (DB)');
+            expect(host.textContent).toContain('Succeeded (Sync)');
+            expect(host.textContent).toContain('Stuck (Sync)');
+            expect(host.textContent).toContain('Dead Letter Queue (Sync)');
+            expect(host.textContent).toContain('Throughput (1h)');
+            expect(host.textContent).toContain('Retry Distribution (Pending Items)');
+            expect(host.textContent).not.toContain('Workout Ingestion');
+            expect(host.textContent).not.toContain('Sports-lib Reparse');
+            expect(host.textContent).not.toContain('Derived Metrics');
         });
     });
 
