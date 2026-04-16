@@ -121,11 +121,25 @@ async function uploadToDestination(
     }
 }
 
+async function safelyWriteMetadata(writeOperation: () => Promise<void>): Promise<void> {
+    try {
+        await writeOperation();
+    } catch {
+        // Queue state transitions (retry/DLQ/processed) are the source of truth.
+        // Metadata write failures should not prevent those transitions.
+    }
+}
+
+function getDeadLetterContext(error: unknown): string {
+    const errorLike = asErrorLike(error) as ErrorLike & { dlqContext?: unknown };
+    const context = `${errorLike.dlqContext || ''}`.trim();
+    return context.length > 0 ? context : 'ACTIVITY_SYNC_PERMANENT_FAILURE';
+}
+
 export async function processActivitySyncQueueItem(
     queueItem: ActivitySyncQueueItemInterface,
     bulkWriter?: admin.firestore.BulkWriter,
 ): Promise<QueueResult> {
-    const route = ACTIVITY_SYNC_ROUTES[queueItem.routeId];
     const routeMeta = {
         routeId: queueItem.routeId,
         userID: queueItem.userID,
@@ -135,96 +149,99 @@ export async function processActivitySyncQueueItem(
         manual: queueItem.manual === true,
     };
 
-    if (!route) {
-        const error = new Error(`Unknown activity sync route ${queueItem.routeId}`);
-        await setActivitySyncFailedMetadata({
-            ...routeMeta,
-            error: toActivitySyncMetadataError(error),
-        });
-        return moveToDeadLetterQueue(queueItem, error, bulkWriter, 'UNKNOWN_ACTIVITY_SYNC_ROUTE');
-    }
-
-    const allowlistConfigError = getActivitySyncRouteAllowlistConfigError(queueItem.routeId);
-    if (allowlistConfigError) {
-        await setActivitySyncSkippedMetadata({
-            ...routeMeta,
-            skippedReason: 'allowlist_misconfigured',
-            detail: allowlistConfigError,
-        });
-        return updateToProcessed(queueItem, bulkWriter, {
-            skippedReason: 'allowlist_misconfigured',
-            resultStatus: 'skipped',
-        });
-    }
-
-    if (!isActivitySyncRouteUserAllowlisted(queueItem.routeId, queueItem.userID)) {
-        await setActivitySyncSkippedMetadata({
-            ...routeMeta,
-            skippedReason: 'user_not_allowlisted',
-            detail: 'User is not allowlisted for this activity sync route.',
-        });
-        return updateToProcessed(queueItem, bulkWriter, {
-            skippedReason: 'user_not_allowlisted',
-            resultStatus: 'skipped',
-        });
-    }
-
-    await setActivitySyncProcessingMetadata(routeMeta);
-
-    if (!(await hasProAccess(queueItem.userID))) {
-        await setActivitySyncSkippedMetadata({
-            ...routeMeta,
-            skippedReason: 'no_pro_access',
-            detail: 'Activity sync is a Pro feature.',
-        });
-        return updateToProcessed(queueItem, bulkWriter, {
-            skippedReason: 'no_pro_access',
-            resultStatus: 'skipped',
-        });
-    }
-
-    const enabled = await isActivitySyncRouteEnabledForUser(queueItem.userID, queueItem.routeId);
-    if (!enabled) {
-        await setActivitySyncSkippedMetadata({
-            ...routeMeta,
-            skippedReason: 'route_disabled',
-            detail: 'Route is disabled in user settings.',
-        });
-        return updateToProcessed(queueItem, bulkWriter, {
-            skippedReason: 'route_disabled',
-            resultStatus: 'skipped',
-        });
-    }
-
-    const destinationConnected = await isDestinationConnected(queueItem.userID, queueItem.destinationServiceName);
-    if (!destinationConnected) {
-        await setActivitySyncSkippedMetadata({
-            ...routeMeta,
-            skippedReason: 'destination_not_connected',
-            detail: 'Destination account is not connected.',
-        });
-        return updateToProcessed(queueItem, bulkWriter, {
-            skippedReason: 'destination_not_connected',
-            resultStatus: 'skipped',
-        });
-    }
-
-    const extension = toExtension(queueItem.originalFile?.path, queueItem.originalFile?.extension);
-    if (!route.supportedFileExtensions.includes(extension)) {
-        await setActivitySyncSkippedMetadata({
-            ...routeMeta,
-            skippedReason: 'unsupported_original_file',
-            detail: `Unsupported original file extension: ${extension || 'unknown'}.`,
-        });
-        return updateToProcessed(queueItem, bulkWriter, {
-            skippedReason: 'unsupported_original_file',
-            resultStatus: 'skipped',
-        });
-    }
+    let duringDestinationUpload = false;
 
     try {
+        const route = ACTIVITY_SYNC_ROUTES[queueItem.routeId];
+        if (!route) {
+            const error = new Error(`Unknown activity sync route ${queueItem.routeId}`) as Error & { dlqContext?: string };
+            error.dlqContext = 'UNKNOWN_ACTIVITY_SYNC_ROUTE';
+            throw error;
+        }
+
+        const allowlistConfigError = getActivitySyncRouteAllowlistConfigError(queueItem.routeId);
+        if (allowlistConfigError) {
+            await setActivitySyncSkippedMetadata({
+                ...routeMeta,
+                skippedReason: 'allowlist_misconfigured',
+                detail: allowlistConfigError,
+            });
+            return updateToProcessed(queueItem, bulkWriter, {
+                skippedReason: 'allowlist_misconfigured',
+                resultStatus: 'skipped',
+            });
+        }
+
+        if (!isActivitySyncRouteUserAllowlisted(queueItem.routeId, queueItem.userID)) {
+            await setActivitySyncSkippedMetadata({
+                ...routeMeta,
+                skippedReason: 'user_not_allowlisted',
+                detail: 'User is not allowlisted for this activity sync route.',
+            });
+            return updateToProcessed(queueItem, bulkWriter, {
+                skippedReason: 'user_not_allowlisted',
+                resultStatus: 'skipped',
+            });
+        }
+
+        await setActivitySyncProcessingMetadata(routeMeta);
+
+        if (!(await hasProAccess(queueItem.userID))) {
+            await setActivitySyncSkippedMetadata({
+                ...routeMeta,
+                skippedReason: 'no_pro_access',
+                detail: 'Activity sync is a Pro feature.',
+            });
+            return updateToProcessed(queueItem, bulkWriter, {
+                skippedReason: 'no_pro_access',
+                resultStatus: 'skipped',
+            });
+        }
+
+        const enabled = await isActivitySyncRouteEnabledForUser(queueItem.userID, queueItem.routeId);
+        const isManualRun = queueItem.manual === true;
+        if (!enabled && !isManualRun) {
+            await setActivitySyncSkippedMetadata({
+                ...routeMeta,
+                skippedReason: 'route_disabled',
+                detail: 'Route is disabled in user settings.',
+            });
+            return updateToProcessed(queueItem, bulkWriter, {
+                skippedReason: 'route_disabled',
+                resultStatus: 'skipped',
+            });
+        }
+
+        const destinationConnected = await isDestinationConnected(queueItem.userID, queueItem.destinationServiceName);
+        if (!destinationConnected) {
+            await setActivitySyncSkippedMetadata({
+                ...routeMeta,
+                skippedReason: 'destination_not_connected',
+                detail: 'Destination account is not connected.',
+            });
+            return updateToProcessed(queueItem, bulkWriter, {
+                skippedReason: 'destination_not_connected',
+                resultStatus: 'skipped',
+            });
+        }
+
+        const extension = toExtension(queueItem.originalFile?.path, queueItem.originalFile?.extension);
+        if (!route.supportedFileExtensions.includes(extension)) {
+            await setActivitySyncSkippedMetadata({
+                ...routeMeta,
+                skippedReason: 'unsupported_original_file',
+                detail: `Unsupported original file extension: ${extension || 'unknown'}.`,
+            });
+            return updateToProcessed(queueItem, bulkWriter, {
+                skippedReason: 'unsupported_original_file',
+                resultStatus: 'skipped',
+            });
+        }
+
         const fileBuffer = await downloadOriginalFile(queueItem);
+        duringDestinationUpload = true;
         const uploadResult = await uploadToDestination(queueItem, fileBuffer);
+        duringDestinationUpload = false;
 
         await setActivitySyncSuccessMetadata({
             ...routeMeta,
@@ -241,32 +258,34 @@ export async function processActivitySyncQueueItem(
             successProcessedAt: Date.now(),
         });
     } catch (error) {
-        if (isSkippableAuthenticationError(error)) {
+        if (duringDestinationUpload && isSkippableAuthenticationError(error)) {
             const errorLike = asErrorLike(error);
-            await setActivitySyncSkippedMetadata({
+            await safelyWriteMetadata(() => setActivitySyncSkippedMetadata({
                 ...routeMeta,
                 skippedReason: 'destination_auth_failed',
                 detail: `${errorLike.message || 'Authentication failed.'}`,
-            });
+            }));
             return updateToProcessed(queueItem, bulkWriter, {
                 skippedReason: 'destination_auth_failed',
                 resultStatus: 'skipped',
             });
         }
 
-        const metadataError = toActivitySyncMetadataError(error);
+        const normalizedError = toError(error);
+        const metadataError = toActivitySyncMetadataError(normalizedError);
+
         if (isTransientActivitySyncError(error)) {
-            await setActivitySyncRetryingMetadata({
+            await safelyWriteMetadata(() => setActivitySyncRetryingMetadata({
                 ...routeMeta,
                 error: metadataError,
-            });
-            return increaseRetryCountForQueueItem(queueItem, toError(error), 1, bulkWriter);
+            }));
+            return increaseRetryCountForQueueItem(queueItem, normalizedError, 1, bulkWriter);
         }
 
-        await setActivitySyncFailedMetadata({
+        await safelyWriteMetadata(() => setActivitySyncFailedMetadata({
             ...routeMeta,
             error: metadataError,
-        });
-        return moveToDeadLetterQueue(queueItem, toError(error), bulkWriter, 'ACTIVITY_SYNC_PERMANENT_FAILURE');
+        }));
+        return moveToDeadLetterQueue(queueItem, normalizedError, bulkWriter, getDeadLetterContext(normalizedError));
     }
 }

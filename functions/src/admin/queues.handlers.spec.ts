@@ -535,6 +535,195 @@ describe('getQueueStats Cloud Function', () => {
         }));
     });
 
+    it('keeps ingestion DLQ/top-errors isolated from activity-sync failures', async () => {
+        type FailedJobDoc = {
+            context: string;
+            originalCollection: string;
+            error: string;
+            failedAt: number;
+        };
+
+        const failedJobsDocs: FailedJobDoc[] = [
+            {
+                context: 'NO_TOKEN_FOUND',
+                originalCollection: 'suuntoAppWorkoutQueue',
+                error: 'Token expired',
+                failedAt: 20,
+            },
+            {
+                context: 'ACTIVITY_SYNC_PERMANENT_FAILURE',
+                originalCollection: 'activitySyncQueue',
+                error: 'Sync auth failed',
+                failedAt: 30,
+            },
+        ];
+
+        const matchesFilters = (doc: FailedJobDoc, filters: Array<{ field: string; op: string; value: unknown }>) => (
+            filters.every((filter) => {
+                if (filter.op === '==') {
+                    return (doc as Record<string, unknown>)[filter.field] === filter.value;
+                }
+                if (filter.op === 'in' && Array.isArray(filter.value)) {
+                    return (filter.value as unknown[]).includes((doc as Record<string, unknown>)[filter.field]);
+                }
+                return true;
+            })
+        );
+
+        mockCollection.mockImplementation((collectionName: string) => {
+            const defaultCount = vi.fn().mockReturnValue({
+                get: vi.fn().mockResolvedValue({
+                    data: () => ({ count: 5 })
+                })
+            });
+
+            if (collectionName === 'failed_jobs') {
+                const buildFailedJobsQuery = (
+                    filters: Array<{ field: string; op: string; value: unknown }>,
+                    limitCount?: number
+                ) => ({
+                    where: vi.fn((field: string, op: string, value: unknown) =>
+                        buildFailedJobsQuery([...filters, { field, op, value }], limitCount)),
+                    orderBy: vi.fn(() => buildFailedJobsQuery(filters, limitCount)),
+                    limit: vi.fn((nextLimit: number) => buildFailedJobsQuery(filters, nextLimit)),
+                    count: vi.fn(() => ({
+                        get: vi.fn().mockResolvedValue({
+                            data: () => ({
+                                count: failedJobsDocs.filter((doc) => matchesFilters(doc, filters)).length,
+                            }),
+                        }),
+                    })),
+                    get: vi.fn().mockResolvedValue({
+                        size: failedJobsDocs.filter((doc) => matchesFilters(doc, filters)).length,
+                        docs: failedJobsDocs
+                            .filter((doc) => matchesFilters(doc, filters))
+                            .sort((a, b) => b.failedAt - a.failedAt)
+                            .slice(0, limitCount ?? failedJobsDocs.length)
+                            .map((doc) => ({ data: () => doc })),
+                    }),
+                });
+
+                return buildFailedJobsQuery([]);
+            }
+
+            if (collectionName === 'derivedMetrics') {
+                return {
+                    where: vi.fn().mockReturnValue({
+                        get: vi.fn().mockResolvedValue({ docs: [] })
+                    })
+                };
+            }
+
+            return {
+                where: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockReturnThis(),
+                count: defaultCount,
+                get: vi.fn().mockResolvedValue({
+                    empty: false,
+                    docs: [{ data: () => ({ dateCreated: Date.now() - 10000 }) }],
+                    data: () => ({ count: 5 })
+                })
+            };
+        });
+
+        request.data = { includeAnalysis: true };
+        const result = await (getQueueStats as any)(request);
+
+        expect(result.dlq?.total).toBe(1);
+        expect(result.dlq?.byProvider).toEqual(expect.arrayContaining([
+            { provider: 'suuntoAppWorkoutQueue', count: 1 },
+        ]));
+        expect(result.dlq?.byProvider).not.toEqual(expect.arrayContaining([
+            { provider: 'activitySyncQueue', count: 1 },
+        ]));
+        expect(result.advanced.topErrors).toEqual(expect.arrayContaining([
+            { error: 'Token expired', count: 1 },
+        ]));
+        expect(result.advanced.topErrors).not.toEqual(expect.arrayContaining([
+            { error: 'Sync auth failed', count: 1 },
+        ]));
+
+        expect(result.activitySync.advanced.topErrors).toEqual(expect.arrayContaining([
+            { error: 'Sync auth failed', count: 1 },
+        ]));
+    });
+
+    it('uses bounded ordered query for activity-sync DLQ preview', async () => {
+        const whereOrderedGet = vi.fn().mockResolvedValue({
+            size: 1,
+            docs: [
+                { data: () => ({ context: 'ACTIVITY_SYNC_PERMANENT_FAILURE', originalCollection: 'activitySyncQueue', error: 'timeout' }) }
+            ]
+        });
+        const whereLimit = vi.fn().mockReturnValue({
+            get: whereOrderedGet,
+        });
+        const whereOrderBy = vi.fn().mockReturnValue({
+            limit: whereLimit,
+        });
+        const whereDirectGet = vi.fn().mockResolvedValue({
+            size: 999,
+            docs: [],
+        });
+
+        mockCollection.mockImplementation((collectionName: string) => {
+            const mockCount = vi.fn().mockReturnValue({
+                get: vi.fn().mockResolvedValue({
+                    data: () => ({ count: 5 })
+                })
+            });
+
+            if (collectionName === 'failed_jobs') {
+                const failedJobsMock: any = {
+                    count: mockCount,
+                    orderBy: vi.fn().mockReturnValue({
+                        limit: vi.fn().mockReturnValue({
+                            get: vi.fn().mockResolvedValue({
+                                size: 0,
+                                docs: []
+                            })
+                        })
+                    }),
+                    where: vi.fn().mockReturnValue({
+                        orderBy: whereOrderBy,
+                        count: mockCount,
+                        get: whereDirectGet,
+                    }),
+                };
+                return failedJobsMock;
+            }
+
+            if (collectionName === 'derivedMetrics') {
+                return {
+                    where: vi.fn().mockReturnValue({
+                        get: vi.fn().mockResolvedValue({ docs: [] })
+                    })
+                };
+            }
+
+            return {
+                where: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockReturnThis(),
+                count: mockCount,
+                get: vi.fn().mockResolvedValue({
+                    empty: false,
+                    docs: [{ data: () => ({ dateCreated: Date.now() - 10000 }) }],
+                    data: () => ({ count: 5 })
+                })
+            };
+        });
+
+        request.data = { includeAnalysis: true };
+        await (getQueueStats as any)(request);
+
+        expect(whereOrderBy).toHaveBeenCalledWith('failedAt', 'desc');
+        expect(whereLimit).toHaveBeenCalledWith(50);
+        expect(whereDirectGet).not.toHaveBeenCalled();
+        expect(whereOrderedGet).toHaveBeenCalled();
+    });
+
     it('should return only basic statistics when includeAnalysis is false', async () => {
         request.data = { includeAnalysis: false };
         const result = await (getQueueStats as any)(request);

@@ -212,6 +212,10 @@
         <mat-divider style="margin: 16px 0;"></mat-divider>
 
         <div style="font-weight: 600; margin-bottom: 8px;">Manual Catch-up</div>
+        <app-status-info type="info" title="Manual Catch-up Scope" style="margin-bottom: 12px;">
+          Use this anytime to queue Garmin -> Suunto sync jobs for activities already imported into Quantified Self in
+          the selected date range. It uses stored original files and can run even when automatic sync is turned off.
+        </app-status-info>
         <div class="date-fields">
           <mat-form-field appearance="outline">
             <mat-label>Start Date</mat-label>
@@ -230,7 +234,7 @@
         </div>
 
         <button mat-flat-button class="qs-mat-primary" style="width: 100%; margin-top: 8px;"
-          [disabled]="isBackfillingSync || isBackfillDateRangeInvalid || !isGarminToSuuntoRouteEnabled"
+          [disabled]="isBackfillingSync || isBackfillDateRangeInvalid"
           (click)="runGarminToSuuntoBackfill($event)">
           @if (isBackfillingSync) {
           <ng-container>
@@ -240,7 +244,7 @@
           </ng-container>
           } @else {
           <ng-container>
-            Queue Missing Sync Jobs
+            Queue now
           </ng-container>
           }
         </button>

@@ -117,5 +117,8 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('Garmin -> Suunto activity sync is route-based');
     expect(serviceConnectionsSection?.content).toContain('ACTIVITY_EXPORT');
     expect(serviceConnectionsSection?.content).toContain('Manual catch-up is available in Garmin Services');
+    expect(serviceConnectionsSection?.content).toContain('convenience tool for queuing a period on demand');
+    expect(serviceConnectionsSection?.content).toContain('stored original files already attached to existing Quantified Self events');
+    expect(serviceConnectionsSection?.content).toContain('can run even when the Garmin -> Suunto auto-sync toggle is off');
   });
 });

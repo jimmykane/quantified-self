@@ -367,6 +367,25 @@ describe('ServicesGarminComponent', () => {
             });
         });
 
+        it('should allow manual catch-up when auto-sync toggle is disabled', () => {
+            component.hasProAccess = true;
+            component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
+            component.serviceTokens = [{ accessToken: 'garmin-token', permissions: [] }] as any;
+            (component as any).suuntoTokens = [{ accessToken: 'suunto-token' }];
+            component.isBackfillingSync = false;
+            component.backfillStartDate = new Date('2026-01-01T00:00:00.000Z');
+            component.backfillEndDate = new Date('2026-01-31T00:00:00.000Z');
+
+            fixture.detectChanges();
+
+            const queueButton = Array.from(fixture.nativeElement.querySelectorAll('button'))
+                .find((button: HTMLButtonElement) => (button.textContent || '').includes('Queue now')) as HTMLButtonElement | undefined;
+
+            expect(component.isGarminToSuuntoRouteEnabled).toBe(false);
+            expect(queueButton).toBeTruthy();
+            expect(queueButton?.disabled).toBe(false);
+        });
+
         it('should hide activity sync card for non-allowlisted users', () => {
             component.hasProAccess = true;
             component.user = { uid: 'non-allowlisted-user', settings: {} } as any;
@@ -400,6 +419,23 @@ describe('ServicesGarminComponent', () => {
             expect(content).toContain('Failed: 1');
             expect(content).toContain('event-123');
             expect(content).toContain('queue enqueue failed');
+        });
+
+        it('should explain that manual catch-up only uses already imported Quantified Self events', () => {
+            component.hasProAccess = true;
+            component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
+            component.serviceTokens = [{ accessToken: 'garmin-token', permissions: [] }] as any;
+            (component as any).suuntoTokens = [{ accessToken: 'suunto-token' }];
+
+            fixture.detectChanges();
+
+            const infoBlock = fixture.nativeElement.querySelector('app-status-info[title="Manual Catch-up Scope"]');
+            const content = fixture.nativeElement.textContent;
+            expect(infoBlock).toBeTruthy();
+            expect(content).toContain('Use this anytime to queue Garmin -> Suunto sync jobs');
+            expect(content).toContain('activities already imported into Quantified Self');
+            expect(content).toContain('uses stored original files');
+            expect(content).toContain('can run even when automatic sync is turned off');
         });
     });
 });

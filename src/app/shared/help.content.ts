@@ -438,7 +438,11 @@ Garmin -> Suunto activity sync is route-based:
 
 Automatic sync runs only for newly imported Garmin activities and uses the stored original activity file from your event.
 
-Manual catch-up is available in Garmin Services: choose a date range to queue missing route sync jobs for already-imported events.
+Manual catch-up is available in Garmin Services: choose a date range to queue Garmin -> Suunto sync jobs for events already imported into Quantified Self.
+
+Manual catch-up is a convenience tool for queuing a period on demand. It uses stored original files already attached to existing Quantified Self events.
+
+Manual catch-up can run even when the Garmin -> Suunto auto-sync toggle is off, and it does not enable auto-sync for future imports.
 
 ## COROS
 

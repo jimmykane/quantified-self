@@ -106,6 +106,29 @@
       </div>
     </div>
 
+    <mat-card class="garmin-suunto-launch glass-panel animate-on-scroll" appearance="outlined">
+      <mat-card-content>
+        <p class="launch-badge">
+          <mat-icon>sync_alt</mat-icon>
+          New Integration
+        </p>
+        <h3 class="launch-title">Garmin -> Suunto sync is now live</h3>
+        <p class="launch-body">
+          Connect Garmin and Suunto once. New Garmin imports can flow to Suunto automatically, and you can run catch-up sync
+          for older events already in Quantified Self.
+        </p>
+        <p class="launch-qualifier">Requires Pro and active Garmin + Suunto connections.</p>
+        <div class="launch-actions">
+          <button mat-flat-button class="qs-mat-primary" (click)="navigateToServiceSetupOrLogin()">
+            Set up sync
+          </button>
+          <button mat-stroked-button (click)="navigateToServiceConnectionsHelp()">
+            How it works
+          </button>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
     <div class="integration-followup-grid">
       <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
         <mat-card-header>

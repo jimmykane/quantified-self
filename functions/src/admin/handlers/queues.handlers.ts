@@ -30,6 +30,8 @@ const SPORTS_LIB_REPARSE_JOBS_COLLECTION = 'sportsLibReparseJobs';
 const SPORTS_LIB_REPARSE_CHECKPOINT_DOC_PATH = 'systemJobs/sportsLibReparse';
 const SPORTS_LIB_REPARSE_FAILURE_PREVIEW_LIMIT = 10;
 const DERIVED_METRICS_FAILURE_PREVIEW_LIMIT = 10;
+const INGESTION_DLQ_PREVIEW_LIMIT = 50;
+const ACTIVITY_SYNC_DLQ_PREVIEW_LIMIT = 50;
 
 const DERIVED_METRICS_COORDINATOR_STATUSES = ['idle', 'queued', 'processing', 'failed'] as const;
 type DerivedMetricsCoordinatorStatus = typeof DERIVED_METRICS_COORDINATOR_STATUSES[number];
@@ -356,18 +358,33 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
 
         if (includeAnalysis) {
             const dlqCol = db.collection('failed_jobs');
+            const ingestionDlqCollections = Array.from(new Set(Object.values(PROVIDER_QUEUES).flat()));
+            const ingestionDlqQuery = dlqCol.where('originalCollection', 'in', ingestionDlqCollections);
 
-            // Use limited query for clustering to save reads
+            // Use filtered + limited queries for ingestion clustering to save reads and avoid mixing activity-sync entries.
             const [dlqCountSnap, dlqRecentSnap] = await Promise.all([
-                dlqCol.count().get(),
-                dlqCol.orderBy('failedAt', 'desc').limit(50).get()
+                ingestionDlqQuery.count().get(),
+                ingestionDlqQuery
+                    .orderBy('failedAt', 'desc')
+                    .limit(INGESTION_DLQ_PREVIEW_LIMIT)
+                    .get()
+                    .catch(async (e) => {
+                        logger.error('[admin/getQueueStats] Failed to load ordered ingestion DLQ preview:', e);
+                        return ingestionDlqQuery
+                            .limit(INGESTION_DLQ_PREVIEW_LIMIT)
+                            .get()
+                            .catch(fallbackError => {
+                                logger.error('[admin/getQueueStats] Failed to load fallback ingestion DLQ preview:', fallbackError);
+                                return null;
+                            });
+                    })
             ]);
 
             const dlqByContext: Record<string, number> = {};
             const dlqByProvider: Record<string, number> = {};
             const errorCounts: Record<string, number> = {};
 
-            dlqRecentSnap.docs.forEach(doc => {
+            (dlqRecentSnap?.docs || []).forEach(doc => {
                 const data = doc.data();
                 const context = data.context || 'UNKNOWN';
                 const originalCollection = data.originalCollection || 'unknown';
@@ -389,16 +406,24 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 .slice(0, 5)
                 .map(([error, count]) => ({ error, count }));
 
-            const activitySyncRecentDlqSnap = await dlqCol
-                .where('originalCollection', '==', ACTIVITY_SYNC_QUEUE_COLLECTION_NAME)
+            const activitySyncDlqQuery = dlqCol.where('originalCollection', '==', ACTIVITY_SYNC_QUEUE_COLLECTION_NAME);
+            const activitySyncRecentDlqSnap = await activitySyncDlqQuery
+                .orderBy('failedAt', 'desc')
+                .limit(ACTIVITY_SYNC_DLQ_PREVIEW_LIMIT)
                 .get()
-                .catch(e => {
-                    logger.error('[admin/getQueueStats] Failed to load activity sync DLQ preview:', e);
-                    return null;
+                .catch(async (e) => {
+                    logger.error('[admin/getQueueStats] Failed to load ordered activity sync DLQ preview:', e);
+                    return activitySyncDlqQuery
+                        .limit(ACTIVITY_SYNC_DLQ_PREVIEW_LIMIT)
+                        .get()
+                        .catch(fallbackError => {
+                            logger.error('[admin/getQueueStats] Failed to load fallback activity sync DLQ preview:', fallbackError);
+                            return null;
+                        });
                 });
             const activitySyncContextCounts: Record<string, number> = {};
             const activitySyncErrorCounts: Record<string, number> = {};
-            for (const doc of (activitySyncRecentDlqSnap?.docs || []).slice(0, 50)) {
+            for (const doc of (activitySyncRecentDlqSnap?.docs || [])) {
                 const data = doc.data();
                 const context = `${data.context || 'UNKNOWN'}`;
                 const errorMsg = normalizeError(data.error || 'Unknown Error');

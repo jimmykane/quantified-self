@@ -312,6 +312,7 @@ describe('activity-sync/backfill callable', () => {
       sourceServiceName: route.sourceServiceName,
       sourceActivityID: 'garmin-1',
       manual: true,
+      respectRouteEnabled: false,
     }));
 
     expect(mockSetActivitySyncSkippedMetadata).toHaveBeenCalledTimes(1);

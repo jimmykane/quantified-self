@@ -251,6 +251,23 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
   });
 
+  it('processes manual queue items when route is disabled at worker time', async () => {
+    mockIsActivitySyncRouteEnabledForUser.mockResolvedValue(false);
+    const manualQueueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      manual: true,
+    };
+
+    const result = await processActivitySyncQueueItem(manualQueueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockSetActivitySyncSkippedMetadata).not.toHaveBeenCalledWith(expect.objectContaining({
+      skippedReason: 'route_disabled',
+    }));
+    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledWith('user-1', Buffer.from('FITDATA'));
+    expect(mockSetActivitySyncSuccessMetadata).toHaveBeenCalled();
+  });
+
   it('increments retry for transient upload failures', async () => {
     mockUploadActivityFileToSuunto.mockRejectedValue({ statusCode: 503, message: 'temporarily unavailable' });
 
@@ -259,6 +276,32 @@ describe('activity-sync/process-queue-item', () => {
     expect(result).toBe(QueueResult.RetryIncremented);
     expect(mockSetActivitySyncRetryingMetadata).toHaveBeenCalled();
     expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalled();
+  });
+
+  it('increments retry for transient pre-check failures before upload', async () => {
+    mockHasProAccess.mockRejectedValue({ statusCode: 503, message: 'auth store unavailable' });
+
+    const result = await processActivitySyncQueueItem(baseQueueItem);
+
+    expect(result).toBe(QueueResult.RetryIncremented);
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+    expect(mockSetActivitySyncRetryingMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+    }));
+    expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalled();
+  });
+
+  it('moves to DLQ for permanent pre-check failures before upload', async () => {
+    mockHasProAccess.mockRejectedValue(new Error('permission graph exploded'));
+
+    const result = await processActivitySyncQueueItem(baseQueueItem);
+
+    expect(result).toBe(QueueResult.MovedToDLQ);
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+    expect(mockSetActivitySyncFailedMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+    }));
+    expect(mockMoveToDeadLetterQueue).toHaveBeenCalled();
   });
 
   it('moves to DLQ for permanent failures', async () => {

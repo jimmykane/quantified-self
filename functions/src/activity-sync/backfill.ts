@@ -196,7 +196,7 @@ async function processBackfillEvent(params: {
             originalFiles,
             routeIdFilter: routeId,
             manual: true,
-            respectRouteEnabled: true,
+            respectRouteEnabled: false,
         });
 
         return {
