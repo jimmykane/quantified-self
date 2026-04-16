@@ -106,29 +106,6 @@
       </div>
     </div>
 
-    <mat-card class="garmin-suunto-launch glass-panel animate-on-scroll" appearance="outlined">
-      <mat-card-content>
-        <p class="launch-badge">
-          <mat-icon>sync_alt</mat-icon>
-          New Integration
-        </p>
-        <h3 class="launch-title">Garmin -> Suunto sync is now live</h3>
-        <p class="launch-body">
-          Connect Garmin and Suunto once. New Garmin imports can flow to Suunto automatically, and you can run catch-up sync
-          for older events already in Quantified Self.
-        </p>
-        <p class="launch-qualifier">Requires Pro and active Garmin + Suunto connections.</p>
-        <div class="launch-actions">
-          <button mat-flat-button class="qs-mat-primary" (click)="navigateToServiceSetupOrLogin()">
-            Set up sync
-          </button>
-          <button mat-stroked-button (click)="navigateToServiceConnectionsHelp()">
-            How it works
-          </button>
-        </div>
-      </mat-card-content>
-    </mat-card>
-
     <div class="integration-followup-grid">
       <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
         <mat-card-header>
@@ -148,10 +125,11 @@
           <div mat-card-avatar class="feature-icon-container sync">
             <mat-icon>sync</mat-icon>
           </div>
-          <mat-card-title>Seamless Sync</mat-card-title>
+          <mat-card-title>Cross-Platform Sync</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <p>New activities appear instantly. Watch your new activities and routes sync automatically to Suunto.</p>
+          <p>Garmin -> Suunto sync is built in: newly imported Garmin activities can sync automatically, and catch-up sync
+            covers events already stored in Quantified Self.</p>
         </mat-card-content>
       </mat-card>
     </div>
@@ -213,8 +191,7 @@
           <mat-card-title>Ecosystem Connectivity</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <p>The ultimate Suunto companion. Sync routes and activities directly to your watch. Perform full history
-            imports from major platforms with ease.</p>
+          <p>Connect Garmin, Suunto, and COROS in one place with route/activity sync and full-history import workflows.</p>
         </mat-card-content>
       </mat-card>
 

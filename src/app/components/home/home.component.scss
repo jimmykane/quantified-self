@@ -359,82 +359,6 @@
         }
     }
 
-    .garmin-suunto-launch {
-        width: min(1200px, 100%);
-        margin-top: 2.5rem;
-        border-radius: 24px;
-        border-color: color-mix(in srgb, var(--mat-sys-primary) 35%, var(--mat-sys-outline-variant));
-        background:
-            linear-gradient(135deg,
-                color-mix(in srgb, var(--mat-sys-primary-container) 45%, var(--mat-sys-surface) 55%) 0%,
-                var(--mat-sys-surface-container-low) 100%);
-
-        mat-card-content {
-            padding: 1.75rem;
-            display: flex;
-            flex-direction: column;
-            gap: 0.85rem;
-        }
-
-        .launch-badge {
-            margin: 0;
-            width: fit-content;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.45rem;
-            padding: 0.28rem 0.7rem;
-            border-radius: 999px;
-            font-size: 0.78rem;
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
-            font-weight: 700;
-            background: color-mix(in srgb, var(--mat-sys-primary) 12%, transparent);
-            color: var(--mat-sys-primary);
-
-            mat-icon {
-                width: 16px;
-                height: 16px;
-                font-size: 16px;
-            }
-        }
-
-        .launch-title {
-            margin: 0;
-            font-size: clamp(1.45rem, 3vw, 2rem);
-            line-height: 1.2;
-            letter-spacing: -0.01em;
-            color: var(--mat-sys-on-surface);
-        }
-
-        .launch-body {
-            margin: 0;
-            font-size: 1rem;
-            line-height: 1.55;
-            color: var(--mat-sys-on-surface-variant);
-            max-width: 70ch;
-        }
-
-        .launch-qualifier {
-            margin: 0;
-            font-size: 0.9rem;
-            color: var(--mat-sys-on-surface-variant);
-        }
-
-        .launch-actions {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            flex-wrap: wrap;
-            margin-top: 0.2rem;
-
-            button {
-                border-radius: 999px;
-                min-height: 44px;
-                padding-inline: 1.1rem;
-            }
-        }
-    }
-
     .integration-followup-grid {
         width: min(1200px, 100%);
         margin-top: 3rem;
@@ -1067,23 +991,6 @@
     }
 
     .integrations-section {
-        .garmin-suunto-launch {
-            margin-top: 2rem;
-
-            mat-card-content {
-                padding: 1.25rem;
-            }
-
-            .launch-actions {
-                flex-direction: column;
-                align-items: stretch;
-
-                button {
-                    width: 100%;
-                }
-            }
-        }
-
         .integration-followup-grid {
             margin-top: 2rem;
             grid-template-columns: 1fr;
