@@ -529,12 +529,14 @@ export class AppUserService implements OnDestroy {
   async backfillActivitySyncRouteForCurrentUser(
     sourceServiceName: ServiceNames,
     destinationServiceName: ServiceNames,
-    startDate: Date,
-    endDate: Date,
+    startDate: Date | string | number,
+    endDate: Date | string | number,
   ): Promise<ActivitySyncBackfillSummary> {
-    const normalizedStartDate = new Date(startDate.getTime());
+    const coercedStartDate = this.coerceValidDate(startDate, 'startDate');
+    const coercedEndDate = this.coerceValidDate(endDate, 'endDate');
+    const normalizedStartDate = new Date(coercedStartDate.getTime());
     normalizedStartDate.setHours(0, 0, 0, 0);
-    const normalizedEndDate = new Date(endDate.getTime());
+    const normalizedEndDate = new Date(coercedEndDate.getTime());
     normalizedEndDate.setHours(23, 59, 59, 999);
 
     const result = await this.functionsService.call('backfillActivitySyncRoute', {
@@ -544,6 +546,14 @@ export class AppUserService implements OnDestroy {
       endDate: normalizedEndDate.toISOString(),
     });
     return result.data as ActivitySyncBackfillSummary;
+  }
+
+  private coerceValidDate(value: Date | string | number, fieldName: 'startDate' | 'endDate'): Date {
+    const date = value instanceof Date ? value : new Date(value);
+    if (!Number.isFinite(date.getTime())) {
+      throw new Error(`Invalid ${fieldName}`);
+    }
+    return date;
   }
 
   async deauthorizeService(serviceName: ServiceNames): Promise<any> {

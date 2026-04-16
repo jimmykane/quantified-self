@@ -903,6 +903,29 @@ describe('AppUserService', () => {
                     endDate: expectedEndDate.toISOString(),
                 });
             });
+
+            it('should accept ISO date string inputs and normalize to local day boundaries', async () => {
+                const startDateIso = '2026-04-01T14:21:00.000Z';
+                const endDateIso = '2026-04-16T00:00:00.000Z';
+                const expectedStartDate = new Date(startDateIso);
+                expectedStartDate.setHours(0, 0, 0, 0);
+                const expectedEndDate = new Date(endDateIso);
+                expectedEndDate.setHours(23, 59, 59, 999);
+
+                await service.backfillActivitySyncRouteForCurrentUser(
+                    'Garmin API' as any,
+                    'Suunto app' as any,
+                    startDateIso as any,
+                    endDateIso as any,
+                );
+
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('backfillActivitySyncRoute', {
+                    sourceServiceName: 'Garmin API',
+                    destinationServiceName: 'Suunto app',
+                    startDate: expectedStartDate.toISOString(),
+                    endDate: expectedEndDate.toISOString(),
+                });
+            });
         });
 
         describe('deauthorizeService', () => {
