@@ -148,16 +148,7 @@ describe('dashboard-echarts-cartesian.helper', () => {
   it('should not truncate long hourly ranges beyond ten thousand buckets', () => {
     const startHour = Date.UTC(2024, 0, 1, 0, 0, 0, 0);
     const endHour = startHour + (10000 * 60 * 60 * 1000);
-    const expectedPointCount = (() => {
-      let count = 0;
-      const cursor = new Date(startHour);
-      const end = new Date(endHour);
-      while (cursor.getTime() <= end.getTime()) {
-        count += 1;
-        cursor.setHours(cursor.getHours() + 1);
-      }
-      return count;
-    })();
+    const expectedPointCount = Math.floor((endHour - startHour) / (60 * 60 * 1000)) + 1;
 
     const points = buildDashboardCartesianPoints({
       data: [
@@ -228,6 +219,26 @@ describe('dashboard-echarts-cartesian.helper', () => {
     expect(points[1].value).toBe(0);
     expect(points[2].time).toBe(shiftedDayThree);
     expect(points[2].value).toBe(30);
+  });
+
+  it('should preserve both repeated DST fallback hourly buckets', () => {
+    const firstRepeatedHour = Date.UTC(2026, 9, 25, 0, 30, 0, 0);
+    const secondRepeatedHour = Date.UTC(2026, 9, 25, 1, 30, 0, 0);
+
+    const points = buildDashboardCartesianPoints({
+      data: [
+        { time: firstRepeatedHour, [ChartDataValueTypes.Total]: 10, count: 1 },
+        { time: secondRepeatedHour, [ChartDataValueTypes.Total]: 20, count: 1 },
+      ],
+      chartDataValueType: ChartDataValueTypes.Total,
+      chartDataCategoryType: ChartDataCategoryTypes.DateType,
+      chartDataTimeInterval: TimeIntervals.Hourly,
+    });
+
+    expect(points).toHaveLength(2);
+    expect(points[0].value).toBe(10);
+    expect(points[1].value).toBe(20);
+    expect(points[0].time).not.toBe(points[1].time);
   });
 
   it('should pad a single daily date point with adjacent zero buckets', () => {

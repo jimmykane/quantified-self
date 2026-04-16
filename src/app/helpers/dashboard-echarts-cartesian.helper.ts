@@ -32,6 +32,8 @@ export interface DashboardRegressionPoint {
   y: number;
 }
 
+const HOUR_MS = 60 * 60 * 1000;
+
 function getMissingBucketValue(chartDataValueType: ChartDataValueTypes | undefined): number | null {
   return chartDataValueType === ChartDataValueTypes.Total ? 0 : null;
 }
@@ -83,15 +85,8 @@ function resolveSemesterlyBucketStartDate(date: Date): Date {
 }
 
 function resolveHourlyBucketStartDate(date: Date): Date {
-  return new Date(
-    date.getFullYear(),
-    date.getMonth(),
-    date.getDate(),
-    date.getHours(),
-    0,
-    0,
-    0,
-  );
+  const hourStartTime = Math.floor(date.getTime() / HOUR_MS) * HOUR_MS;
+  return new Date(hourStartTime);
 }
 
 function resolveIntervalBucketStartDate(date: Date, interval: TimeIntervals): Date {
@@ -135,7 +130,7 @@ function resolveIntervalBucketKey(date: Date, interval: TimeIntervals): string {
     case TimeIntervals.Semesterly:
       return `S-${date.getFullYear()}-${date.getMonth() < 6 ? 1 : 2}`;
     case TimeIntervals.Hourly:
-      return `H-${date.getFullYear()}-${formatBucketKeyPart(date.getMonth() + 1)}-${formatBucketKeyPart(date.getDate())}-${formatBucketKeyPart(date.getHours())}`;
+      return `H-${date.getTime()}`;
     case TimeIntervals.Daily:
     default:
       return `D-${date.getFullYear()}-${formatBucketKeyPart(date.getMonth() + 1)}-${formatBucketKeyPart(date.getDate())}`;
@@ -164,7 +159,7 @@ function getNextIntervalDate(date: Date, interval: TimeIntervals): Date {
       next.setMonth(next.getMonth() + 6);
       break;
     case TimeIntervals.Hourly:
-      next.setHours(next.getHours() + 1);
+      next.setTime(next.getTime() + HOUR_MS);
       break;
     case TimeIntervals.Daily:
     default:
@@ -196,7 +191,7 @@ function getPreviousIntervalDate(date: Date, interval: TimeIntervals): Date {
       previous.setMonth(previous.getMonth() - 6);
       break;
     case TimeIntervals.Hourly:
-      previous.setHours(previous.getHours() - 1);
+      previous.setTime(previous.getTime() - HOUR_MS);
       break;
     case TimeIntervals.Daily:
     default:
