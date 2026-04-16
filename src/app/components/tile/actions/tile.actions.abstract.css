@@ -9,6 +9,35 @@ section.tile-move-actions {
   width: 100%;
 }
 
+section.tile-size-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 6px;
+}
+
+.tile-size-label {
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.tile-size-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.tile-size-field {
+  width: 100%;
+  min-width: 0;
+}
+
 /* "Add New" Header Section */
 .first {
   padding: 12px 16px;

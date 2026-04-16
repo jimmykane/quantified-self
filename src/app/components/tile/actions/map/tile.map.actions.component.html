@@ -2,30 +2,31 @@
   (click)="$event.preventDefault(); $event.stopPropagation(); fixDisappearIOSBug();">
   <mat-icon>more_vert</mat-icon>
 </button>
-<mat-menu #menu="matMenu" class="qs-menu-panel qs-menu-panel-form qs-config-menu">
-  <section mat-menu-item>
-    <mat-form-field>
-      <mat-label>Column Size</mat-label>
-      <mat-select placeholder="Size" [value]="size.columns" panelClass="qs-config-submenu qs-config-submenu-compact"
-        (selectionChange)="changeTileColumnSize($event)">
-        <mat-option [value]="1">1</mat-option>
-        <mat-option [value]="2">2</mat-option>
-        <mat-option [value]="3">3</mat-option>
-        <mat-option [value]="4">4</mat-option>
-      </mat-select>
-    </mat-form-field>
-  </section>
-  <section mat-menu-item>
-    <mat-form-field>
-      <mat-label>Row Size</mat-label>
-      <mat-select placeholder="Size" [value]="size.rows" panelClass="qs-config-submenu qs-config-submenu-compact"
-        (selectionChange)="changeTileRowSize($event)">
-        <mat-option [value]="1">1</mat-option>
-        <mat-option [value]="2">2</mat-option>
-        <mat-option [value]="3">3</mat-option>
-        <mat-option [value]="4">4</mat-option>
-      </mat-select>
-    </mat-form-field>
+<mat-menu #menu="matMenu" class="qs-menu-panel qs-menu-panel-form qs-config-menu qs-tile-actions-menu">
+  <section mat-menu-item class="tile-size-actions">
+    <span class="tile-size-label">Tile size</span>
+    <div class="tile-size-fields">
+      <mat-form-field class="tile-size-field" subscriptSizing="dynamic">
+        <mat-label>Cols</mat-label>
+        <mat-select [value]="size.columns" panelClass="qs-config-submenu qs-config-submenu-compact"
+          (selectionChange)="changeTileColumnSize($event)">
+          <mat-option [value]="1">1</mat-option>
+          <mat-option [value]="2">2</mat-option>
+          <mat-option [value]="3">3</mat-option>
+          <mat-option [value]="4">4</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field class="tile-size-field" subscriptSizing="dynamic">
+        <mat-label>Rows</mat-label>
+        <mat-select [value]="size.rows" panelClass="qs-config-submenu qs-config-submenu-compact"
+          (selectionChange)="changeTileRowSize($event)">
+          <mat-option [value]="1">1</mat-option>
+          <mat-option [value]="2">2</mat-option>
+          <mat-option [value]="3">3</mat-option>
+          <mat-option [value]="4">4</mat-option>
+        </mat-select>
+      </mat-form-field>
+    </div>
   </section>
 
   <section mat-menu-item class="tile-move-actions">
