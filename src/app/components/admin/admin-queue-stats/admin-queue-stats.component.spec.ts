@@ -104,6 +104,7 @@ describe('AdminQueueStatsComponent', () => {
         it('should initialize chart when retry container appears after async stats load', async () => {
             component.loading = true;
             component.stats = null;
+            mockEchartsService.init.mockClear();
             fixture.detectChanges();
             await fixture.whenStable();
 
@@ -219,6 +220,32 @@ describe('AdminQueueStatsComponent', () => {
             expect(mockEchartsService.setOption).toHaveBeenCalled();
             const optionArg = mockEchartsService.setOption.mock.calls.at(-1)?.[1];
             expect(optionArg.series[0].data).toEqual([2, 1, 0]);
+        });
+
+        it('should render zeroed retry chart when histogram data is missing', async () => {
+            component.queueView = 'workout';
+            component.loading = false;
+            component.stats = {
+                pending: 2,
+                succeeded: 10,
+                stuck: 0,
+                providers: [],
+                cloudTasks: {
+                    pending: 1,
+                    queues: {
+                        workout: { queueId: 'processWorkoutTask', pending: 1 }
+                    }
+                }
+            };
+
+            component.ngOnChanges({ stats: new SimpleChange(null, component.stats, true) });
+            fixture.detectChanges();
+            await fixture.whenStable();
+            await new Promise(resolve => setTimeout(resolve, 0));
+
+            expect(mockEchartsService.setOption).toHaveBeenCalled();
+            const optionArg = mockEchartsService.setOption.mock.calls.at(-1)?.[1];
+            expect(optionArg.series[0].data).toEqual([0, 0, 0]);
         });
     });
 

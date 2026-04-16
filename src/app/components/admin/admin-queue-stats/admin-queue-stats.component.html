@@ -97,7 +97,7 @@
                     <mat-spinner diameter="40"></mat-spinner>
                 </div>
 
-                <div class="chart-wrapper" *ngIf="!loading && stats?.advanced?.retryHistogram">
+                <div class="chart-wrapper" *ngIf="!loading">
                     <div #retryChart class="echart-surface"></div>
                     <div class="chart-empty-overlay" *ngIf="!hasRetryData">
                         <mat-icon>check_circle</mat-icon>
@@ -298,7 +298,7 @@
                     <mat-spinner diameter="40"></mat-spinner>
                 </div>
 
-                <div class="chart-wrapper" *ngIf="!loading && stats?.activitySync?.advanced?.retryHistogram">
+                <div class="chart-wrapper" *ngIf="!loading">
                     <div #retryChart class="echart-surface"></div>
                     <div class="chart-empty-overlay" *ngIf="!hasRetryData">
                         <mat-icon>check_circle</mat-icon>
