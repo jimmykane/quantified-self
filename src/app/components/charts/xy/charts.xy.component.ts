@@ -49,6 +49,7 @@ import { normalizeUnitDerivedTypeLabel } from '../../../helpers/stat-label.helpe
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type ChartSetOptionSettings = Parameters<EChartsType['setOption']>[1];
+type ChartDataTimeBounds = { first: number | null; last: number | null };
 
 @Component({
   selector: 'app-xy-chart',
@@ -150,6 +151,7 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
       this.chartDataType,
       this.logger
     );
+    this.logCustomChartRenderDebug(points, aggregate);
     const option = this.buildChartOption(points, aggregate);
     this.chartHost.hideTooltip();
     this.chartHost.setOption(
@@ -450,5 +452,93 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
 
   private getNormalizedUnitSettings(): UserUnitSettingsInterface {
     return normalizeUserUnitSettings(this.userUnitSettings);
+  }
+
+  private logCustomChartRenderDebug(
+    points: DashboardCartesianPoint[],
+    aggregate: ReturnType<typeof getDashboardAggregateData>,
+  ): void {
+    const rows = Array.isArray(this.data) ? this.data : [];
+    const rawDateBounds = this.resolveRawDateBounds(rows);
+    const rawValueStats = this.resolveRawValueStats(rows);
+    const firstPoint = points[0];
+    const lastPoint = points[points.length - 1];
+    this.logger.log?.('[debug][custom-chart] xy_render_state', {
+      chartDataType: this.chartDataType || null,
+      chartDataValueType: this.chartDataValueType || null,
+      chartDataCategoryType: this.chartDataCategoryType || null,
+      chartDataTimeInterval: this.chartDataTimeInterval || null,
+      vertical: this.vertical,
+      rawRows: rows.length,
+      rawFirstTime: rawDateBounds.first,
+      rawLastTime: rawDateBounds.last,
+      rawRowsWithFiniteValue: rawValueStats.withValueCount,
+      rawRowsWithoutFiniteValue: rawValueStats.withoutValueCount,
+      points: points.length,
+      firstPointTime: firstPoint?.time ?? null,
+      firstPointLabel: firstPoint?.label ?? null,
+      firstPointValue: firstPoint?.value ?? null,
+      lastPointTime: lastPoint?.time ?? null,
+      lastPointLabel: lastPoint?.label ?? null,
+      lastPointValue: lastPoint?.value ?? null,
+      aggregateValue: aggregate?.getValue?.() ?? null,
+    });
+  }
+
+  private resolveRawDateBounds(rows: any[]): ChartDataTimeBounds {
+    let first: number | null = null;
+    let last: number | null = null;
+    rows.forEach((row) => {
+      const time = this.toFiniteTime(row?.time ?? row?.type);
+      if (time === null) {
+        return;
+      }
+      if (first === null || time < first) {
+        first = time;
+      }
+      if (last === null || time > last) {
+        last = time;
+      }
+    });
+    return { first, last };
+  }
+
+  private resolveRawValueStats(rows: any[]): { withValueCount: number; withoutValueCount: number } {
+    if (!this.chartDataValueType) {
+      return {
+        withValueCount: 0,
+        withoutValueCount: rows.length,
+      };
+    }
+    let withValueCount = 0;
+    let withoutValueCount = 0;
+    rows.forEach((row) => {
+      const value = row?.[this.chartDataValueType as string];
+      const numericValue = typeof value === 'number' ? value : Number(value);
+      if (Number.isFinite(numericValue)) {
+        withValueCount += 1;
+      } else {
+        withoutValueCount += 1;
+      }
+    });
+    return {
+      withValueCount,
+      withoutValueCount,
+    };
+  }
+
+  private toFiniteTime(value: unknown): number | null {
+    if (value === null || value === undefined || value === '') {
+      return null;
+    }
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+    if (value instanceof Date) {
+      const time = value.getTime();
+      return Number.isFinite(time) ? time : null;
+    }
+    const date = new Date(value as string);
+    return Number.isFinite(date.getTime()) ? date.getTime() : null;
   }
 }

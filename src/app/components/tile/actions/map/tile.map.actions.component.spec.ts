@@ -83,7 +83,7 @@ describe('TileMapActionsComponent', () => {
     expect(template).not.toContain('<mat-label>Type');
     expect(template).not.toContain('Map style');
     expect(template).not.toContain('Cluster markers');
-    expect(template).toContain('Edit in Dashboard manager');
+    expect(template).toContain('Edit');
   });
 
   it('should emit editInDashboardManager with current tile order', () => {

@@ -14,7 +14,7 @@ section.tile-size-actions {
   flex-direction: column;
   align-items: stretch;
   justify-content: flex-start;
-  gap: 6px;
+  gap: 10px;
 }
 
 .tile-size-label {
@@ -69,6 +69,13 @@ section.delete-section {
   padding-top: 12px;
 }
 
+section.delete-section button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
 section.delete-section button:hover {
   background: rgba(244, 67, 54, 0.2);
 }
@@ -77,10 +84,26 @@ section.delete-section mat-icon {
   color: #f44336;
 }
 
-button {
-  flex: 1 1 auto;
-  padding: 0;
+section.tile-move-actions > button {
+  flex: 1 1 0;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 8px;
   text-align: center;
+}
+
+button[mat-menu-item] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+button[mat-menu-item] .mat-icon {
+  margin: 0;
 }
 
 button[mat-icon-button] {
@@ -130,8 +153,4 @@ mat-icon.delete {
 
 .mat-slide-toggle {
   height: 100%;
-}
-
-.mat-menu-item .mat-icon {
-  margin: 0
 }

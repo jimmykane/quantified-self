@@ -26,6 +26,7 @@ import {
   isDerivedMetricPendingStatus,
 } from '../../../helpers/derived-metric-status.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
+import { resolveDashboardFormStatus } from '../../../helpers/dashboard-form.helper';
 import type {
   DashboardFreshnessForecastContext,
   DashboardFreshnessForecastPoint,
@@ -34,6 +35,9 @@ import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
+type AxisTooltipParam = {
+  data?: [number, number | null];
+};
 
 @Component({
   selector: 'app-freshness-forecast-chart',
@@ -189,24 +193,7 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
           fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
           fontSize: style.axisFontSize,
         },
-        formatter: (params: Array<{ data?: [number, number | null] }>) => {
-          const time = params?.[0]?.data?.[0];
-          if (!time) {
-            return '';
-          }
-          const dateLabel = new Date(time).toLocaleDateString(undefined, {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric',
-          });
-          const metricLines = params
-            .filter(param => param?.data && param.data[1] !== null)
-            .map((param) => {
-              const valueText = this.formatValue(param.data?.[1] ?? null);
-              return `${valueText}`;
-            });
-          return `${dateLabel}<br/>${metricLines.join('<br/>')}`;
-        },
+        formatter: (params: AxisTooltipParam[]) => this.formatTooltip(params, points),
       },
       xAxis: {
         type: 'time',
@@ -288,6 +275,61 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
     };
   }
 
+  private formatTooltip(params: AxisTooltipParam[], points: DashboardFreshnessForecastPoint[]): string {
+    const point = this.resolveTooltipPoint(params, points);
+    if (!point) {
+      return '';
+    }
+    const pointIndex = points.findIndex(entry => entry.dayMs === point.dayMs);
+    const previousPoint = pointIndex > 0 ? points[pointIndex - 1] : null;
+    const formValue = point.formPriorDay ?? point.formSameDay;
+    const previousFormValue = previousPoint ? (previousPoint.formPriorDay ?? previousPoint.formSameDay) : null;
+    const deltaForm = (
+      Number.isFinite(formValue)
+      && Number.isFinite(previousFormValue)
+    ) ? Number(formValue) - Number(previousFormValue) : null;
+    const status = resolveDashboardFormStatus(formValue);
+    const dateLabel = new Date(point.dayMs).toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+    const firstForecastIndex = points.findIndex(entry => entry.isForecast);
+    const forecastOffset = point.isForecast && firstForecastIndex >= 0
+      ? (pointIndex - firstForecastIndex + 1)
+      : null;
+    const phaseLabel = point.isForecast
+      ? `Forecast${forecastOffset ? ` · Day +${forecastOffset}` : ''}`
+      : 'Observed';
+
+    const lines = [
+      dateLabel,
+      phaseLabel,
+      `Fitness (CTL): ${this.formatValue(point.ctl)}`,
+      `Fatigue (ATL): ${this.formatValue(point.atl)}`,
+      `Form (TSB): ${this.formatSignedValue(formValue)} · ${status.title}`,
+      `TSS: ${this.formatValue(point.trainingStressScore)}`,
+    ];
+    if (deltaForm !== null) {
+      lines.push(`Δ Form vs prev: ${this.formatSignedValue(deltaForm)}`);
+    }
+    if (point.isForecast) {
+      lines.push('Assumes zero load.');
+    }
+    return lines.join('<br/>');
+  }
+
+  private resolveTooltipPoint(
+    params: AxisTooltipParam[],
+    points: DashboardFreshnessForecastPoint[],
+  ): DashboardFreshnessForecastPoint | null {
+    const dayMs = params?.[0]?.data?.[0];
+    if (!Number.isFinite(dayMs)) {
+      return null;
+    }
+    return points.find(point => point.dayMs === dayMs) || null;
+  }
+
   private formatValue(value: unknown): string {
     if (value === null || value === undefined || !Number.isFinite(Number(value))) {
       return '--';
@@ -297,5 +339,17 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
       return `${Math.round(numericValue)}`;
     }
     return `${Math.round(numericValue * 10) / 10}`;
+  }
+
+  private formatSignedValue(value: unknown): string {
+    if (value === null || value === undefined || !Number.isFinite(Number(value))) {
+      return '--';
+    }
+    const numericValue = Number(value);
+    const valueText = this.formatValue(numericValue);
+    if (numericValue > 0) {
+      return `+${valueText}`;
+    }
+    return valueText;
   }
 }
