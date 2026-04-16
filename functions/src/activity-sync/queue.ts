@@ -97,23 +97,29 @@ export async function enqueueActivitySyncQueueItem(
     });
 
     if (decision.enqueued) {
-        await enqueueActivitySyncTask(queueItemId, decision.dateCreated || Date.now());
-        await queueDocRef.update({ dispatchedToCloudTask: Date.now() });
+        const wasTaskEnqueued = await enqueueActivitySyncTask(queueItemId, decision.dateCreated || Date.now());
+        if (wasTaskEnqueued) {
+            await queueDocRef.update({ dispatchedToCloudTask: Date.now() });
+        }
         return {
             enqueued: true,
             queueItemId,
         };
     }
 
+    let redispatched = false;
     if (decision.shouldDispatchExisting) {
-        await enqueueActivitySyncTask(queueItemId, decision.dateCreated || Date.now());
-        await queueDocRef.update({ dispatchedToCloudTask: Date.now() });
+        const wasTaskEnqueued = await enqueueActivitySyncTask(queueItemId, decision.dateCreated || Date.now());
+        if (wasTaskEnqueued) {
+            await queueDocRef.update({ dispatchedToCloudTask: Date.now() });
+            redispatched = true;
+        }
     }
 
     return {
         enqueued: false,
         queueItemId,
         reason: decision.reason,
-        redispatched: decision.shouldDispatchExisting === true ? true : undefined,
+        redispatched: redispatched ? true : undefined,
     };
 }

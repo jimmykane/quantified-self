@@ -125,7 +125,11 @@ export async function reconcileActivitySyncQueueDispatches(nowMs = Date.now()): 
         }
 
         try {
-            await enqueueActivitySyncTask(candidate.doc.id, candidate.dateCreated);
+            const wasTaskEnqueued = await enqueueActivitySyncTask(candidate.doc.id, candidate.dateCreated);
+            if (!wasTaskEnqueued) {
+                logger.info(`[ActivitySyncDispatcher] Task not enqueued for ${candidate.doc.id}; leaving dispatch marker unchanged.`);
+                continue;
+            }
             await candidate.doc.ref.update({ dispatchedToCloudTask: nowMs });
             dispatched += 1;
         } catch (error) {

@@ -190,6 +190,32 @@ describe('activity-sync/dispatcher', () => {
     expect(mockLoggerError).toHaveBeenCalled();
   });
 
+  it('does not mark queue item as dispatched when Cloud Task enqueue returns false', async () => {
+    const nowMs = 1_700_000_000_000;
+    const updateUndispatched = vi.fn().mockResolvedValue(undefined);
+    mockEnqueueActivitySyncTask.mockResolvedValueOnce(false);
+    mockQueueGet.mockResolvedValue({
+      empty: false,
+      docs: [
+        {
+          id: 'undispatched-item',
+          data: () => ({ dispatchedToCloudTask: null, dateCreated: 301 }),
+          ref: { update: updateUndispatched },
+        },
+      ],
+    });
+
+    const result = await reconcileActivitySyncQueueDispatches(nowMs);
+
+    expect(result).toEqual({
+      inspected: 1,
+      dispatched: 0,
+      skippedRecent: 0,
+    });
+    expect(mockEnqueueActivitySyncTask).toHaveBeenCalledWith('undispatched-item', 301);
+    expect(updateUndispatched).not.toHaveBeenCalled();
+  });
+
   it('paginates a stable queue window so older undispatched items outside the first page still dispatch', async () => {
     const nowMs = 1_700_000_000_000;
     const recentDispatchedAt = nowMs - (10 * 60 * 1000);
