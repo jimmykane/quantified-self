@@ -170,6 +170,39 @@ describe('DashboardManagerDialogComponent', () => {
     });
   });
 
+  it('adds freshness forecast curated tile with one-column default size', async () => {
+    component.mode = 'add';
+    component.category = 'curated';
+    component.curatedChartType = DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE as any;
+
+    await component.save();
+
+    const tiles = dialogData.user.settings.dashboardSettings.tiles;
+    expect(tiles).toHaveLength(2);
+    expect(tiles[1]).toMatchObject({
+      type: TileTypes.Chart,
+      chartType: DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
+      size: { columns: 1, rows: 1 },
+    });
+  });
+
+  it('applies freshness forecast curated preset with one-column default size', async () => {
+    component.mode = 'add';
+    component.onWorkflowTabChange(1);
+    component.onPresetCategoryChange('curated');
+    component.onPresetSelectionChange(DASHBOARD_MANAGER_PRESET_IDS.CURATED_FRESHNESS_FORECAST);
+
+    await component.save();
+
+    const tiles = dialogData.user.settings.dashboardSettings.tiles;
+    expect(tiles).toHaveLength(2);
+    expect(tiles[1]).toMatchObject({
+      type: TileTypes.Chart,
+      chartType: DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
+      size: { columns: 1, rows: 1 },
+    });
+  });
+
   it('filters manual KPI options by selected KPI group', () => {
     component.category = 'kpi' as any;
     component.onKpiGroupChange('readiness');

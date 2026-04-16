@@ -854,6 +854,12 @@ tr.mat-row:focus,
   max-width: min(380px, calc(100vw - 24px)) !important;
 }
 
+/* Tile menu uses compact row/column selectors and does not need the wider config width. */
+.mat-mdc-menu-panel.qs-tile-actions-menu {
+  min-width: 228px !important;
+  max-width: min(320px, calc(100vw - 24px)) !important;
+}
+
 .mat-mdc-menu-panel.qs-menu-panel .mat-mdc-menu-content {
   @extend .qs-scrollbar;
   overflow: auto;
