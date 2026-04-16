@@ -935,12 +935,18 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
     if (this.activeWorkflowTab === 'presets') {
       const selectedPreset = this.selectedPresetDefinition;
       if (selectedPreset?.category === 'curated') {
+        if (selectedPreset.curatedChartType === DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE) {
+          return { columns: 1, rows: 1 };
+        }
         return { columns: 2, rows: 1 };
       }
       return { columns: 1, rows: 1 };
     }
 
     if (this.category === 'curated') {
+      if (this.curatedChartType === DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE) {
+        return { columns: 1, rows: 1 };
+      }
       return { columns: 2, rows: 1 };
     }
 

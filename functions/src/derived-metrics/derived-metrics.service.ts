@@ -1766,11 +1766,27 @@ export async function writeDerivedMetricSnapshotsReady(
 ): Promise<void> {
     const nowMs = Date.now();
     const batch = admin.firestore().batch();
+    const formSourceDocCount = sourceDocs.formDocs?.length || 0;
+    const recoveryNowSourceDocCount = sourceDocs.recoveryNowDocs?.length || 0;
     const buildContext = createDerivedMetricBuildExecutionContext(sourceDocs, nowMs);
+
+    const resolveSourceDocCountForDependencies = (
+        sourceDependencies: readonly DerivedMetricBuildSourceDependency[],
+    ): number => {
+        let sourceDocCount = 0;
+        if (sourceDependencies.includes('formDocs')) {
+            sourceDocCount += formSourceDocCount;
+        }
+        if (sourceDependencies.includes('recoveryNowDocs')) {
+            sourceDocCount += recoveryNowSourceDocCount;
+        }
+        return sourceDocCount;
+    };
 
     const persistBuildResult = <TPayload>(
         metricKind: DerivedMetricKind,
         buildResult: DerivedMetricBuildResult<TPayload>,
+        sourceDocCount: number,
     ): void => {
         batch.set(getMetricDocRef(uid, metricKind), {
             entryType: DERIVED_METRICS_ENTRY_TYPES.Snapshot,
@@ -1779,6 +1795,7 @@ export async function writeDerivedMetricSnapshotsReady(
             status: 'ready',
             updatedAtMs: nowMs,
             sourceEventCount: buildResult.sourceEventCount,
+            sourceDocCount,
             payload: buildResult.payload,
             lastError: null,
         }, { merge: true });
@@ -1790,7 +1807,8 @@ export async function writeDerivedMetricSnapshotsReady(
             return;
         }
         const buildResult = definition.build(buildContext);
-        persistBuildResult(metricKind, buildResult);
+        const sourceDocCount = resolveSourceDocCountForDependencies(definition.sourceDependencies);
+        persistBuildResult(metricKind, buildResult, sourceDocCount);
     });
 
     await batch.commit();

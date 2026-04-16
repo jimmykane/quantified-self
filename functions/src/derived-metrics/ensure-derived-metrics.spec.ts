@@ -10,7 +10,7 @@ describe('decideDerivedMetricsFreshness', () => {
         coordinatorCompletedAtMs: Date.UTC(2026, 3, 15, 10, 0, 0),
         coordinatorUpdatedAtMs: Date.UTC(2026, 3, 15, 10, 0, 0),
         formSnapshotStatus: 'ready',
-        formSnapshotSourceEventCount: 10,
+        formSnapshotSourceDocCount: 10,
         formRangeEndDayMs: Date.UTC(2026, 3, 15),
         latestEventStartDayMs: Date.UTC(2026, 3, 15),
         latestEventUpdatedAtMs: Date.UTC(2026, 3, 15, 9, 30, 0),
@@ -36,7 +36,7 @@ describe('decideDerivedMetricsFreshness', () => {
         });
     });
 
-    it('requests queue when event count differs from form snapshot source count', () => {
+    it('requests queue when raw event count differs from form snapshot source doc count', () => {
         const decision = decideDerivedMetricsFreshness({
             ...baseInput,
             latestEventCount: 11,
@@ -44,6 +44,29 @@ describe('decideDerivedMetricsFreshness', () => {
         expect(decision).toEqual({
             shouldQueue: true,
             reason: 'event_count_mismatch',
+        });
+    });
+
+    it('uses source doc count as freshness comparator for raw event parity', () => {
+        const decision = decideDerivedMetricsFreshness({
+            ...baseInput,
+            formSnapshotSourceDocCount: 12,
+            latestEventCount: 12,
+        });
+        expect(decision).toEqual({
+            shouldQueue: false,
+            reason: 'fresh',
+        });
+    });
+
+    it('requeues once when legacy snapshots are missing source doc count', () => {
+        const decision = decideDerivedMetricsFreshness({
+            ...baseInput,
+            formSnapshotSourceDocCount: null,
+        });
+        expect(decision).toEqual({
+            shouldQueue: true,
+            reason: 'missing_source_doc_count',
         });
     });
 

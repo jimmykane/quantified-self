@@ -105,4 +105,68 @@ describe('ChartsFreshnessForecastComponent', () => {
     expect(component.showNoDataError).toBe(true);
     expect(component.noDataErrorMessage).toBe('Forecast is updating');
   });
+
+  it('formats tooltip with labeled metrics and forecast context', async () => {
+    const dayOne = Date.UTC(2026, 0, 8);
+    const dayTwo = Date.UTC(2026, 0, 9);
+    const dayThree = Date.UTC(2026, 0, 10);
+
+    component.forecast = {
+      generatedAtMs: Date.now(),
+      points: [
+        {
+          dayMs: dayOne,
+          trainingStressScore: 20,
+          ctl: 50,
+          atl: 55,
+          formSameDay: -5,
+          formPriorDay: -4,
+          isForecast: false,
+        },
+        {
+          dayMs: dayTwo,
+          trainingStressScore: 24,
+          ctl: 49,
+          atl: 54,
+          formSameDay: -5,
+          formPriorDay: -5,
+          isForecast: false,
+        },
+        {
+          dayMs: dayThree,
+          trainingStressScore: 0,
+          ctl: 47,
+          atl: 40,
+          formSameDay: 7,
+          formPriorDay: 6,
+          isForecast: true,
+        },
+      ],
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => {
+      expect(mockLoader.setOption).toHaveBeenCalled();
+    });
+
+    const setOptionCall = mockLoader.setOption.mock.calls.at(-1) || [];
+    const optionCandidate = setOptionCall[1] || setOptionCall[0];
+    const option = optionCandidate as {
+      tooltip?: {
+        formatter?: (params: Array<{ data?: [number, number | null] }>) => string;
+      };
+    };
+    const formatter = option.tooltip?.formatter;
+    expect(typeof formatter).toBe('function');
+
+    const tooltipHtml = formatter?.([{ data: [dayThree, 47] }]) || '';
+    expect(tooltipHtml).toContain('Forecast · Day +1');
+    expect(tooltipHtml).toContain('Fitness (CTL): 47');
+    expect(tooltipHtml).toContain('Fatigue (ATL): 40');
+    expect(tooltipHtml).toContain('Form (TSB): +6');
+    expect(tooltipHtml).toContain('TSS: 0');
+    expect(tooltipHtml).toContain('Δ Form vs prev: +11');
+    expect(tooltipHtml).toContain('Assumes zero load.');
+  });
 });

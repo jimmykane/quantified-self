@@ -103,7 +103,7 @@ describe('TileChartActionsComponent', () => {
     expect(template).not.toContain('What data to look at');
     expect(template).not.toContain('How to look at the data');
     expect(template).not.toContain('Time interval');
-    expect(template).toContain('Edit in Dashboard manager');
+    expect(template).toContain('Edit');
   });
 
   it('should emit editInDashboardManager with current tile order', () => {

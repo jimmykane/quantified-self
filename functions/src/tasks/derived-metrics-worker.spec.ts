@@ -139,4 +139,28 @@ describe('processDerivedMetricsTask', () => {
             recoveryNowDocs: [],
         });
     });
+
+    it('rethrows processing errors so Cloud Tasks retry policy can apply', async () => {
+        const transientError = new Error('transient_processing_failure');
+        hoisted.writeDerivedMetricSnapshotsReady.mockRejectedValueOnce(transientError);
+
+        await expect((processDerivedMetricsTask as any)({
+            data: {
+                uid: 'user-4',
+                generation: 15,
+            },
+        })).rejects.toThrow('transient_processing_failure');
+
+        expect(hoisted.markDerivedMetricSnapshotsFailed).toHaveBeenCalledWith(
+            'user-4',
+            [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.RecoveryNow],
+            transientError,
+        );
+        expect(hoisted.failDerivedMetricsProcessing).toHaveBeenCalledWith(
+            'user-4',
+            15,
+            transientError,
+            [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.RecoveryNow],
+        );
+    });
 });

@@ -87,14 +87,18 @@ export const processDerivedMetricsTask = onTaskDispatched({
             durationMs: Date.now() - processingStart,
         });
     } catch (error) {
+        const processingError = error instanceof Error
+            ? error
+            : new Error(`${error ?? 'unknown_derived_metrics_processing_error'}`);
         logger.error('[derived-metrics] Failed to process derived metrics task.', {
             uid,
             generation,
             dirtyMetricKinds,
-            error,
+            error: processingError,
             durationMs: Date.now() - processingStart,
         });
-        await markDerivedMetricSnapshotsFailed(uid, dirtyMetricKinds, error);
-        await failDerivedMetricsProcessing(uid, Math.floor(generation), error, dirtyMetricKinds);
+        await markDerivedMetricSnapshotsFailed(uid, dirtyMetricKinds, processingError);
+        await failDerivedMetricsProcessing(uid, Math.floor(generation), processingError, dirtyMetricKinds);
+        throw processingError;
     }
 });

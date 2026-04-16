@@ -9,6 +9,35 @@ section.tile-move-actions {
   width: 100%;
 }
 
+section.tile-size-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 10px;
+}
+
+.tile-size-label {
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.tile-size-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.tile-size-field {
+  width: 100%;
+  min-width: 0;
+}
+
 /* "Add New" Header Section */
 .first {
   padding: 12px 16px;
@@ -40,6 +69,13 @@ section.delete-section {
   padding-top: 12px;
 }
 
+section.delete-section button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
 section.delete-section button:hover {
   background: rgba(244, 67, 54, 0.2);
 }
@@ -48,10 +84,26 @@ section.delete-section mat-icon {
   color: #f44336;
 }
 
-button {
-  flex: 1 1 auto;
-  padding: 0;
+section.tile-move-actions > button {
+  flex: 1 1 0;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 8px;
   text-align: center;
+}
+
+button[mat-menu-item] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+button[mat-menu-item] .mat-icon {
+  margin: 0;
 }
 
 button[mat-icon-button] {
@@ -101,8 +153,4 @@ mat-icon.delete {
 
 .mat-slide-toggle {
   height: 100%;
-}
-
-.mat-menu-item .mat-icon {
-  margin: 0
 }
