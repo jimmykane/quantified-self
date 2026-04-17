@@ -120,5 +120,6 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('convenience tool for queuing a period on demand');
     expect(serviceConnectionsSection?.content).toContain('stored original files already attached to existing Quantified Self events');
     expect(serviceConnectionsSection?.content).toContain('can run even when the Garmin -> Suunto auto-sync toggle is off');
+    expect(serviceConnectionsSection?.content).toContain('Disconnecting Garmin or Suunto automatically disables related route auto-sync settings');
   });
 });

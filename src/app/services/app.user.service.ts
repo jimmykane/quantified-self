@@ -549,6 +549,9 @@ export class AppUserService implements OnDestroy {
   }
 
   private coerceValidDate(value: Date | string | number, fieldName: 'startDate' | 'endDate'): Date {
+    if (value === null || value === undefined) {
+      throw new Error(`Invalid ${fieldName}`);
+    }
     const date = value instanceof Date ? value : new Date(value);
     if (!Number.isFinite(date.getTime())) {
       throw new Error(`Invalid ${fieldName}`);

@@ -367,6 +367,54 @@ describe('ServicesGarminComponent', () => {
             });
         });
 
+        it('should require both connections when enabling Garmin->Suunto route', async () => {
+            const snackBar = TestBed.inject(MatSnackBar);
+            const snackBarSpy = vi.spyOn(snackBar, 'open');
+            component.hasProAccess = true;
+            component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
+            component.serviceTokens = [] as any;
+            (component as any).suuntoTokens = [{ accessToken: 'suunto-token' }];
+
+            await component.onGarminToSuuntoRouteToggle(true);
+
+            expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+            expect(snackBarSpy).toHaveBeenCalledWith(
+                'Connect both Garmin and Suunto accounts before enabling sync.',
+                undefined,
+                { duration: 4000 }
+            );
+        });
+
+        it('should allow disabling Garmin->Suunto route when a service is disconnected', async () => {
+            component.hasProAccess = true;
+            component.user = {
+                uid: ACTIVITY_SYNC_ALLOWLISTED_UID,
+                settings: {
+                    serviceSyncSettings: {
+                        activitySyncRoutes: {
+                            [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true }
+                        }
+                    }
+                }
+            } as any;
+            component.serviceTokens = [] as any;
+            (component as any).suuntoTokens = [] as any;
+
+            await component.onGarminToSuuntoRouteToggle(false);
+
+            expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(component.user, {
+                settings: {
+                    serviceSyncSettings: {
+                        activitySyncRoutes: {
+                            [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: {
+                                enabled: false
+                            }
+                        }
+                    }
+                }
+            });
+        });
+
         it('should allow manual catch-up when auto-sync toggle is disabled', () => {
             component.hasProAccess = true;
             component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
