@@ -55,6 +55,15 @@ function getSuuntoErrorMessage(error: unknown): string | undefined {
   return undefined;
 }
 
+function toSuuntoAuthorizationHeader(accessToken: string): string {
+  const trimmed = `${accessToken || ''}`.trim();
+  if (trimmed.length === 0) {
+    return '';
+  }
+
+  return /^Bearer\s+/i.test(trimmed) ? trimmed : `Bearer ${trimmed}`;
+}
+
 function isLikelyPermanentSuunto500(error: unknown): boolean {
   const statusCode = getStatusCode(error);
   if (statusCode !== 500) {
@@ -143,7 +152,7 @@ export async function uploadActivityFileToSuunto(userID: string, fileBuffer: Buf
               `Init activity upload for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`,
               async () => requestPromise.post({
                 headers: {
-                  'Authorization': accessToken,
+                  'Authorization': toSuuntoAuthorizationHeader(accessToken),
                   'Content-Type': 'application/json',
                   'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
                 },
@@ -151,7 +160,7 @@ export async function uploadActivityFileToSuunto(userID: string, fileBuffer: Buf
                 body: {
                   notifyUser: true,
                 },
-                url: 'https://cloudapi.suunto.com/v2/upload/',
+                url: 'https://cloudapi.suunto.com/v2/upload',
               }),
               SUUNTO_MAX_TRANSIENT_RETRIES,
               true
@@ -208,7 +217,7 @@ export async function uploadActivityFileToSuunto(userID: string, fileBuffer: Buf
                   statusRequestAttempts++;
                   return requestPromise.get({
                     headers: {
-                      'Authorization': accessToken,
+                      'Authorization': toSuuntoAuthorizationHeader(accessToken),
                       'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
                     },
                     json: true,
