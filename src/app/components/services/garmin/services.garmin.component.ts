@@ -198,6 +198,7 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
       settings.serviceSyncSettings.activitySyncRoutes[this.garminToSuuntoRouteID] = { enabled };
       this.user.settings = settings;
 
+      this.analyticsService.logActivitySyncRouteToggle(this.garminToSuuntoRouteID, enabled);
       this.snackBar.open(enabled ? 'Garmin to Suunto auto-sync enabled.' : 'Garmin to Suunto auto-sync disabled.', undefined, { duration: 3000 });
     } catch (error: any) {
       this.logger.error(error);
@@ -234,6 +235,11 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
       );
 
       this.backfillSummary = summary;
+      this.analyticsService.logActivitySyncRouteBackfill(this.garminToSuuntoRouteID, {
+        scanned: summary.scanned,
+        queued: summary.queued,
+        failedCount: summary.failedCount,
+      });
       const failureSuffix = summary.failedCount > 0 ? ` Failed: ${summary.failedCount}.` : '';
       this.snackBar.open(`Backfill complete. Queued ${summary.queued} sync job(s).${failureSuffix}`, undefined, { duration: 4000 });
     } catch (error: any) {

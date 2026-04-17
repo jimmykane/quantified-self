@@ -9,6 +9,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { RouterTestingModule } from '@angular/router/testing';
+import { MatDialog } from '@angular/material/dialog';
 import { Analytics } from 'app/firebase/analytics';
 import { AppEventService } from '../../../services/app.event.service';
 import { AppAuthService } from '../../../authentication/app.auth.service';
@@ -16,6 +17,8 @@ import { AppUserService } from '../../../services/app.user.service';
 import { AppWindowService } from '../../../services/app.window.service';
 import { LoggerService } from '../../../services/logger.service';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
+import { of } from 'rxjs';
+import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
 
 describe('ServicesSuuntoComponent', () => {
     let component: ServicesSuuntoComponent;
@@ -23,17 +26,24 @@ describe('ServicesSuuntoComponent', () => {
     let mockUserService: any;
     let mockEventService: any;
     let mockSnackBar: any;
+    let mockDialog: any;
 
     beforeEach(async () => {
         mockUserService = {
             isAdmin: vi.fn(),
             requestAndSetCurrentUserSuuntoAppAccessToken: vi.fn(),
             getCurrentUserServiceTokenAndRedirectURI: vi.fn(),
+            deauthorizeService: vi.fn().mockResolvedValue(undefined),
         };
         mockEventService = {
         };
         mockSnackBar = {
             open: vi.fn(),
+        };
+        mockDialog = {
+            open: vi.fn(() => ({
+                afterClosed: () => of(true),
+            })),
         };
 
         await TestBed.configureTestingModule({
@@ -53,6 +63,7 @@ describe('ServicesSuuntoComponent', () => {
                 { provide: AppWindowService, useValue: { currentDomain: 'http://localhost', windowRef: { location: { href: '' } } } },
                 { provide: LoggerService, useValue: { error: vi.fn(), log: vi.fn() } },
                 { provide: MatSnackBar, useValue: mockSnackBar },
+                { provide: MatDialog, useValue: mockDialog },
             ],
             schemas: [CUSTOM_ELEMENTS_SCHEMA]
         }).compileComponents();
@@ -137,5 +148,48 @@ describe('ServicesSuuntoComponent', () => {
             expect(fitUploadCard.querySelector('app-upload-activity-to-service')).toBeTruthy();
             expect(gpxUploadCard.querySelector('app-upload-route-to-service')).toBeTruthy();
         });
+    });
+
+    it('should show inline warning pill when connected service is used by active route', () => {
+        component.hasProAccess = true;
+        component.user = {
+            uid: 'u-1',
+            settings: {
+                serviceSyncSettings: {
+                    activitySyncRoutes: {
+                        [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true }
+                    }
+                }
+            }
+        } as any;
+        component.serviceTokens = [{ accessToken: 'token' } as any];
+        fixture.detectChanges();
+
+        const warningPill = fixture.nativeElement.querySelector('.active-sync-warning-pill');
+        expect(warningPill).toBeTruthy();
+        expect((warningPill.textContent || '').trim()).toContain('Used by active auto-sync route');
+    });
+
+    it('should ask for confirmation before disconnect when active route depends on Suunto', async () => {
+        component.hasProAccess = true;
+        component.user = {
+            uid: 'u-1',
+            settings: {
+                serviceSyncSettings: {
+                    activitySyncRoutes: {
+                        [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true }
+                    }
+                }
+            }
+        } as any;
+        component.serviceTokens = [{ accessToken: 'token' } as any];
+        mockDialog.open.mockReturnValueOnce({
+            afterClosed: () => of(false),
+        });
+
+        await component.deauthorizeService(new MouseEvent('click'));
+
+        expect(mockDialog.open).toHaveBeenCalled();
+        expect(mockUserService.deauthorizeService).not.toHaveBeenCalled();
     });
 });

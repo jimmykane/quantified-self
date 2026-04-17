@@ -18,6 +18,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatListModule } from '@angular/material/list';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatDialog } from '@angular/material/dialog';
 import { AppFileService } from '../../../services/app.file.service';
 import { Analytics } from 'app/firebase/analytics';
 import { AppEventService } from '../../../services/app.event.service';
@@ -40,6 +41,7 @@ describe('ServicesGarminComponent', () => {
     let mockUserService: any;
     let mockAnalyticsService: any;
     let mockRouter: any;
+    let mockDialog: any;
     let queryParams: Record<string, string | null>;
     let mockActivatedRoute: any;
 
@@ -55,8 +57,15 @@ describe('ServicesGarminComponent', () => {
         mockRouter = {
             navigate: vi.fn().mockResolvedValue(true)
         };
+        mockDialog = {
+            open: vi.fn(() => ({
+                afterClosed: () => of(true),
+            })),
+        };
         mockAnalyticsService = {
-            logEvent: vi.fn()
+            logEvent: vi.fn(),
+            logActivitySyncRouteToggle: vi.fn(),
+            logActivitySyncRouteBackfill: vi.fn(),
         };
         mockUserService = {
             isAdmin: vi.fn(),
@@ -66,6 +75,7 @@ describe('ServicesGarminComponent', () => {
             getUserMetaForService: vi.fn().mockReturnValue(of(undefined)),
             updateUserProperties: vi.fn().mockResolvedValue(undefined),
             backfillActivitySyncRouteForCurrentUser: vi.fn().mockResolvedValue({ scanned: 0, queued: 0, skippedByReason: {}, failedCount: 0, failedEvents: [] }),
+            deauthorizeService: vi.fn().mockResolvedValue(undefined),
         };
 
         await TestBed.configureTestingModule({
@@ -99,7 +109,8 @@ describe('ServicesGarminComponent', () => {
                 { provide: LoggerService, useValue: { error: vi.fn(), log: vi.fn() } },
                 { provide: AppAnalyticsService, useValue: mockAnalyticsService },
                 { provide: ActivatedRoute, useValue: mockActivatedRoute },
-                { provide: Router, useValue: mockRouter }
+                { provide: Router, useValue: mockRouter },
+                { provide: MatDialog, useValue: mockDialog }
             ],
             schemas: [CUSTOM_ELEMENTS_SCHEMA]
         }).compileComponents();
@@ -365,6 +376,10 @@ describe('ServicesGarminComponent', () => {
                     }
                 }
             });
+            expect(mockAnalyticsService.logActivitySyncRouteToggle).toHaveBeenCalledWith(
+                ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+                true
+            );
         });
 
         it('should require both connections when enabling Garmin->Suunto route', async () => {
@@ -413,6 +428,10 @@ describe('ServicesGarminComponent', () => {
                     }
                 }
             });
+            expect(mockAnalyticsService.logActivitySyncRouteToggle).toHaveBeenCalledWith(
+                ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+                false
+            );
         });
 
         it('should allow manual catch-up when auto-sync toggle is disabled', () => {
@@ -484,6 +503,107 @@ describe('ServicesGarminComponent', () => {
             expect(content).toContain('activities already imported into Quantified Self');
             expect(content).toContain('uses stored original files');
             expect(content).toContain('can run even when automatic sync is turned off');
+        });
+
+        it('should log route backfill analytics when catch-up succeeds', async () => {
+            component.hasProAccess = true;
+            component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
+            component.serviceTokens = [{ accessToken: 'garmin-token', permissions: [] }] as any;
+            (component as any).suuntoTokens = [{ accessToken: 'suunto-token' }];
+            mockUserService.backfillActivitySyncRouteForCurrentUser.mockResolvedValueOnce({
+                scanned: 20,
+                queued: 17,
+                skippedByReason: {},
+                failedCount: 1,
+                failedEvents: [{ eventID: 'evt-1', reason: 'x', message: 'failed' }]
+            });
+
+            await component.runGarminToSuuntoBackfill(new Event('submit'));
+
+            expect(mockAnalyticsService.logActivitySyncRouteBackfill).toHaveBeenCalledWith(
+                ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+                {
+                    scanned: 20,
+                    queued: 17,
+                    failedCount: 1,
+                }
+            );
+        });
+
+        it('should show inline warning pill when connected service is used by active route', () => {
+            component.hasProAccess = true;
+            component.user = {
+                uid: ACTIVITY_SYNC_ALLOWLISTED_UID,
+                settings: {
+                    serviceSyncSettings: {
+                        activitySyncRoutes: {
+                            [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true }
+                        }
+                    }
+                }
+            } as any;
+            component.serviceTokens = [{ accessToken: 'garmin-token', permissions: [] }] as any;
+            (component as any).suuntoTokens = [{ accessToken: 'suunto-token' }];
+
+            fixture.detectChanges();
+
+            const warningPill = fixture.nativeElement.querySelector('.active-sync-warning-pill');
+            expect(warningPill).toBeTruthy();
+            expect((warningPill.textContent || '').trim()).toContain('Used by active auto-sync route');
+        });
+
+        it('should require confirmation before disconnect when active sync route would be disabled', async () => {
+            component.hasProAccess = true;
+            component.user = {
+                uid: ACTIVITY_SYNC_ALLOWLISTED_UID,
+                settings: {
+                    serviceSyncSettings: {
+                        activitySyncRoutes: {
+                            [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true }
+                        }
+                    }
+                }
+            } as any;
+            component.serviceTokens = [{ accessToken: 'garmin-token', permissions: [] }] as any;
+            (component as any).suuntoTokens = [{ accessToken: 'suunto-token' }];
+            mockDialog.open.mockReturnValueOnce({
+                afterClosed: () => of(false),
+            });
+
+            await component.deauthorizeService(new MouseEvent('click'));
+
+            expect(mockDialog.open).toHaveBeenCalled();
+            expect(mockDialog.open).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.objectContaining({
+                    data: expect.objectContaining({
+                        confirmLabel: 'Disconnect and disable sync',
+                        cancelLabel: 'Keep connected',
+                    }),
+                })
+            );
+            expect(mockUserService.deauthorizeService).not.toHaveBeenCalled();
+        });
+
+        it('should disconnect without confirmation when no active route depends on Garmin', async () => {
+            component.hasProAccess = true;
+            component.user = {
+                uid: ACTIVITY_SYNC_ALLOWLISTED_UID,
+                settings: {
+                    serviceSyncSettings: {
+                        activitySyncRoutes: {
+                            [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: false }
+                        }
+                    }
+                }
+            } as any;
+            component.serviceTokens = [{ accessToken: 'garmin-token', permissions: [] }] as any;
+            (component as any).suuntoTokens = [{ accessToken: 'suunto-token' }];
+
+            await component.deauthorizeService(new MouseEvent('click'));
+
+            expect(mockDialog.open).not.toHaveBeenCalled();
+            expect(mockUserService.deauthorizeService).toHaveBeenCalledWith(component.serviceName);
         });
     });
 });

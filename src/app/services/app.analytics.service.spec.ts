@@ -120,4 +120,37 @@ describe('AppAnalyticsService', () => {
         expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'test_event', { param: 1 });
         expect(setAnalyticsCollectionEnabled).toHaveBeenCalledWith(expect.anything(), true);
     });
+
+    it('should log route metadata when toggling an activity sync route', () => {
+        userSubject.next({ acceptedTrackingPolicy: true } as User);
+
+        service.logActivitySyncRouteToggle('GarminAPI_to_SuuntoApp', true);
+
+        expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'activity_sync_route_toggle', {
+            route_id: 'GarminAPI_to_SuuntoApp',
+            source_service: 'Garmin API',
+            destination_service: 'Suunto app',
+            enabled: true,
+            action: 'enable',
+        });
+    });
+
+    it('should log summary metadata when running an activity sync route backfill', () => {
+        userSubject.next({ acceptedTrackingPolicy: true } as User);
+
+        service.logActivitySyncRouteBackfill('GarminAPI_to_SuuntoApp', {
+            scanned: 12,
+            queued: 9,
+            failedCount: 1,
+        });
+
+        expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'activity_sync_route_backfill', {
+            route_id: 'GarminAPI_to_SuuntoApp',
+            source_service: 'Garmin API',
+            destination_service: 'Suunto app',
+            scanned_count: 12,
+            queued_count: 9,
+            failed_count: 1,
+        });
+    });
 });
