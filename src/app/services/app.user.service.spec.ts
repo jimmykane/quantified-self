@@ -926,6 +926,32 @@ describe('AppUserService', () => {
                     endDate: expectedEndDate.toISOString(),
                 });
             });
+
+            it('should reject null startDate values and avoid triggering backfill', async () => {
+                await expect(
+                    service.backfillActivitySyncRouteForCurrentUser(
+                        'Garmin API' as any,
+                        'Suunto app' as any,
+                        null as any,
+                        endDate,
+                    )
+                ).rejects.toThrow('Invalid startDate');
+
+                expect(mockFunctionsService.call).not.toHaveBeenCalledWith('backfillActivitySyncRoute', expect.anything());
+            });
+
+            it('should reject undefined endDate values and avoid triggering backfill', async () => {
+                await expect(
+                    service.backfillActivitySyncRouteForCurrentUser(
+                        'Garmin API' as any,
+                        'Suunto app' as any,
+                        startDate,
+                        undefined as any,
+                    )
+                ).rejects.toThrow('Invalid endDate');
+
+                expect(mockFunctionsService.call).not.toHaveBeenCalledWith('backfillActivitySyncRoute', expect.anything());
+            });
         });
 
         describe('deauthorizeService', () => {

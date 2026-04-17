@@ -436,6 +436,8 @@ Garmin -> Suunto activity sync is route-based:
 - enable the route toggle in Garmin Services,
 - and keep Garmin ACTIVITY_EXPORT permission enabled.
 
+Disconnecting Garmin or Suunto automatically disables related route auto-sync settings. After reconnecting, re-enable the route toggle if you want automatic sync to resume.
+
 Automatic sync runs only for newly imported Garmin activities and uses the stored original activity file from your event.
 
 Manual catch-up is available in Garmin Services: choose a date range to queue Garmin -> Suunto sync jobs for events already imported into Quantified Self.

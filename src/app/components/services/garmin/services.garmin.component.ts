@@ -173,7 +173,7 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
       return;
     }
 
-    if (!this.isConnectedToService() || !this.isSuuntoConnected) {
+    if (enabled && (!this.isConnectedToService() || !this.isSuuntoConnected)) {
       this.snackBar.open('Connect both Garmin and Suunto accounts before enabling sync.', undefined, { duration: 4000 });
       return;
     }

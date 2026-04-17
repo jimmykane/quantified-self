@@ -530,6 +530,7 @@ describe('OAuth2', () => {
             await deleteLocalServiceToken(userID, serviceName, tokenID);
             expect(tokenDeleteSpy).toHaveBeenCalled();
             expect(mockRecursiveDelete).toHaveBeenCalled();
+            expect(mockCollection).not.toHaveBeenCalledWith('users');
         });
 
         it('should NOT delete parent document if tokens remain', async () => {
@@ -537,6 +538,7 @@ describe('OAuth2', () => {
             await deleteLocalServiceToken(userID, serviceName, tokenID);
             expect(tokenDeleteSpy).toHaveBeenCalled();
             expect(mockRecursiveDelete).not.toHaveBeenCalled();
+            expect(mockCollection).not.toHaveBeenCalledWith('users');
         });
     });
 

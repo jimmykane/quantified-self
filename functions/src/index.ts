@@ -129,6 +129,11 @@ export {
 
 export { backfillActivitySyncRoute } from './activity-sync/backfill';
 export { dispatchActivitySyncQueue } from './activity-sync/dispatcher';
+export {
+  disableActivitySyncRoutesOnGarminTokenRootDelete,
+  disableActivitySyncRoutesOnSuuntoTokenRootDelete,
+  disableActivitySyncRoutesOnCOROSTokenRootDelete,
+} from './activity-sync/disconnect-routes';
 
 // Tokens
 export { refreshCOROSAPIRefreshTokens } from './coros/tokens';
