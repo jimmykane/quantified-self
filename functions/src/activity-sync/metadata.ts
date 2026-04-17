@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ActivitySyncRouteId } from '../../../shared/activity-sync-routes';
 import { ACTIVITY_SYNC_METADATA_DOC_PREFIX } from './constants';
@@ -95,8 +96,8 @@ export async function setActivitySyncQueuedMetadata(params: BaseMetadataParams):
         manual: params.manual === true,
         status: 'queued' satisfies ActivitySyncStatus,
         attempts: 0,
-        queuedAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        queuedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
 }
 
@@ -108,11 +109,11 @@ export async function setActivitySyncRequeuedMetadata(params: BaseMetadataParams
         destinationServiceName: params.destinationServiceName,
         manual: params.manual === true,
         status: 'queued' satisfies ActivitySyncStatus,
-        queuedAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        lastError: admin.firestore.FieldValue.delete(),
-        skippedReason: admin.firestore.FieldValue.delete(),
-        detail: admin.firestore.FieldValue.delete(),
+        queuedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+        lastError: FieldValue.delete(),
+        skippedReason: FieldValue.delete(),
+        detail: FieldValue.delete(),
     }, { merge: true });
 }
 
@@ -124,9 +125,9 @@ export async function setActivitySyncProcessingMetadata(params: BaseMetadataPara
         destinationServiceName: params.destinationServiceName,
         manual: params.manual === true,
         status: 'processing' satisfies ActivitySyncStatus,
-        attempts: admin.firestore.FieldValue.increment(1),
-        lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        attempts: FieldValue.increment(1),
+        lastAttemptAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
 }
 
@@ -147,11 +148,11 @@ export async function setActivitySyncSuccessMetadata(params: SuccessMetadataPara
         destinationUploadID: params.destinationUploadID || null,
         workoutKey: params.workoutKey || null,
         infoCode: params.infoCode || null,
-        completedAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        lastError: admin.firestore.FieldValue.delete(),
-        skippedReason: admin.firestore.FieldValue.delete(),
-        detail: admin.firestore.FieldValue.delete(),
+        completedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+        lastError: FieldValue.delete(),
+        skippedReason: FieldValue.delete(),
+        detail: FieldValue.delete(),
     }, { merge: true });
 }
 
@@ -170,9 +171,9 @@ export async function setActivitySyncSkippedMetadata(params: SkippedMetadataPara
         status: 'skipped' satisfies ActivitySyncStatus,
         skippedReason: params.skippedReason,
         detail: params.detail || null,
-        completedAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        lastError: admin.firestore.FieldValue.delete(),
+        completedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+        lastError: FieldValue.delete(),
     }, { merge: true });
 }
 
@@ -189,7 +190,7 @@ export async function setActivitySyncRetryingMetadata(params: ErrorMetadataParam
         manual: params.manual === true,
         status: 'retrying' satisfies ActivitySyncStatus,
         lastError: params.error,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
 }
 
@@ -202,7 +203,7 @@ export async function setActivitySyncFailedMetadata(params: ErrorMetadataParams)
         manual: params.manual === true,
         status: 'failed' satisfies ActivitySyncStatus,
         lastError: params.error,
-        completedAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        completedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
 }

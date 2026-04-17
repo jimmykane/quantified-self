@@ -39,6 +39,14 @@ vi.mock('firebase-admin', () => ({
   ),
 }));
 
+vi.mock('firebase-admin/firestore', () => ({
+  FieldValue: {
+    serverTimestamp: mockServerTimestamp,
+    delete: mockDelete,
+    increment: mockIncrement,
+  },
+}));
+
 import {
   setActivitySyncRequeuedMetadata,
   setActivitySyncSkippedMetadata,
