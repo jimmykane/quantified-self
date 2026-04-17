@@ -127,6 +127,9 @@ export {
   backfillGarminAPIActivities,
 } from './garmin/backfill';
 
+export { backfillActivitySyncRoute } from './activity-sync/backfill';
+export { dispatchActivitySyncQueue } from './activity-sync/dispatcher';
+
 // Tokens
 export { refreshCOROSAPIRefreshTokens } from './coros/tokens';
 export { refreshSuuntoAppRefreshTokens } from './suunto/tokens';
@@ -157,6 +160,7 @@ export { listUsers, getQueueStats, getUserCount, getSubscriptionHistoryTrend, ge
 
 // Tasks
 export { processWorkoutTask } from './tasks/workout-processor';
+export { processActivitySyncTask } from './tasks/activity-sync-worker';
 export { processSportsLibReparseTask } from './tasks/sports-lib-reparse-worker';
 export { processDerivedMetricsTask } from './tasks/derived-metrics-worker';
 

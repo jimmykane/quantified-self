@@ -14,6 +14,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import { AppUserInterface } from '../models/app-user.interface';
 import { DASHBOARD_RECOVERY_NOW_CHART_TYPE } from '../helpers/dashboard-special-chart-types';
+import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
 
 describe('AppUserUtilities', () => {
     const mockUser = { uid: 'u1', settings: {} } as any;
@@ -189,6 +190,7 @@ describe('AppUserUtilities', () => {
             expect(settings.dashboardSettings?.includeMergedEvents).toBe(true);
             expect(settings.unitSettings?.startOfTheWeek).toBe(1); // Monday
             expect((settings.myTracksSettings as any)?.showJumpHeatmap).toBe(true);
+            expect(settings.serviceSyncSettings?.activitySyncRoutes?.[ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]?.enabled).toBe(false);
         });
 
         it('should preserve existing settings', () => {
@@ -202,6 +204,21 @@ describe('AppUserUtilities', () => {
             expect(settings.appSettings?.theme).toBe(AppThemes.Dark);
             expect(settings.dashboardSettings?.dateRange).toBe(DateRanges.lastYear);
             expect(settings.dashboardSettings?.includeMergedEvents).toBe(false);
+        });
+
+        it('should preserve explicit service sync route toggle', () => {
+            const user = {
+                settings: {
+                    serviceSyncSettings: {
+                        activitySyncRoutes: {
+                            [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true }
+                        }
+                    }
+                }
+            } as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+            expect(settings.serviceSyncSettings?.activitySyncRoutes?.[ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]?.enabled).toBe(true);
         });
 
         it('should preserve explicit showJumpHeatmap=false', () => {

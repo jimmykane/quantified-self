@@ -165,9 +165,11 @@ describe('importActivityToSuuntoApp', () => {
 
         // 1. Check Init Upload
         expect(requestMocks.post).toHaveBeenCalledWith(expect.objectContaining({
-            url: 'https://cloudapi.suunto.com/v2/upload/',
+            url: 'https://cloudapi.suunto.com/v2/upload',
             headers: expect.objectContaining({
-                'Content-Type': 'application/json'
+                'Authorization': 'Bearer fake-access-token',
+                'Content-Type': 'application/json',
+                'Ocp-Apim-Subscription-Key': 'test-key',
             })
         }));
 
@@ -182,8 +184,41 @@ describe('importActivityToSuuntoApp', () => {
             json: false
         }));
 
+        // 3. Check Status Polling Auth Header
+        expect(requestMocks.get).toHaveBeenCalledWith(expect.objectContaining({
+            headers: expect.objectContaining({
+                'Authorization': 'Bearer fake-access-token',
+                'Ocp-Apim-Subscription-Key': 'test-key',
+            }),
+        }));
+
         // 3. Success Response
         expect(result).toEqual(expect.objectContaining({ status: 'success' }));
+    }, 30000);
+
+    it('should not double-prefix Authorization header when token already has Bearer', async () => {
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'Bearer preformatted-token' });
+
+        requestMocks.post.mockResolvedValue({
+            id: 'test-upload-id',
+            url: 'https://storage.suunto.com/upload-url',
+            headers: { 'x-ms-blob-type': 'BlockBlob' }
+        });
+        requestMocks.put.mockResolvedValue({});
+        requestMocks.get.mockResolvedValue({ status: 'PROCESSED', workoutKey: 'test-workout-key' });
+
+        const fileContent = Buffer.from('fake-fit-file-content');
+        const request = createMockRequest({
+            data: { file: fileContent.toString('base64') }
+        });
+
+        await importActivityToSuuntoApp(request as any);
+
+        expect(requestMocks.post).toHaveBeenCalledWith(expect.objectContaining({
+            headers: expect.objectContaining({
+                'Authorization': 'Bearer preformatted-token',
+            }),
+        }));
     }, 30000);
 
     it('should handle "Already exists" error from Suunto gracefully', async () => {

@@ -183,6 +183,10 @@ export interface QueueStats {
                 queueId: string;
                 pending: number;
             };
+            activitySync?: {
+                queueId: string;
+                pending: number;
+            };
             sportsLibReparse?: {
                 queueId: string;
                 pending: number;
@@ -208,6 +212,19 @@ export interface QueueStats {
         maxLagMs: number;
         retryHistogram: { '0-3': number; '4-7': number; '8-9': number };
         topErrors: { error: string; count: number }[];
+    };
+    activitySync?: {
+        pending: number;
+        succeeded: number;
+        stuck: number;
+        dead: number;
+        dlqByContext: { context: string; count: number }[];
+        advanced: {
+            throughput: number;
+            maxLagMs: number;
+            retryHistogram: { '0-3': number; '4-7': number; '8-9': number };
+            topErrors: { error: string; count: number }[];
+        };
     };
 }
 

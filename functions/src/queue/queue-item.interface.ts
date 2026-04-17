@@ -1,4 +1,6 @@
 import * as admin from 'firebase-admin';
+import { ServiceNames } from '@sports-alliance/sports-lib';
+import { ActivitySyncRouteId } from '../../../shared/activity-sync-routes';
 import DocumentReference = admin.firestore.DocumentReference;
 
 export interface QueueItemInterface {
@@ -34,6 +36,27 @@ export interface GarminAPIActivityQueueItemInterface extends QueueItemInterface 
   token: string,
   userAccessToken: string,
   callbackURL: string
+}
+
+export interface ActivitySyncOriginalFileMetadata {
+  path: string;
+  bucket?: string;
+  startDate?: number;
+  originalFilename?: string;
+  extension?: string;
+}
+
+export interface ActivitySyncQueueItemInterface extends QueueItemInterface {
+  routeId: ActivitySyncRouteId;
+  sourceServiceName: ServiceNames;
+  destinationServiceName: ServiceNames;
+  userID: string;
+  eventID: string;
+  sourceActivityID?: string;
+  originalFile: ActivitySyncOriginalFileMetadata;
+  manual: boolean;
+  resultStatus?: 'success' | 'skipped';
+  successProcessedAt?: number;
 }
 
 export interface QueueItemError {

@@ -28,7 +28,9 @@ vi.mock('../config', () => ({
             projectId: 'test-project',
             location: 'test-location',
             workoutQueue: 'processWorkoutTask',
+            activitySyncQueue: 'processActivitySyncTask',
             sportsLibReparseQueue: 'processSportsLibReparseTask',
+            derivedMetricsQueue: 'processDerivedMetricsTask',
             queue: 'processWorkoutTask',
             serviceAccountEmail: 'sa@test.com'
         }
@@ -487,6 +489,45 @@ describe('Cloud Tasks Utils', () => {
 
             expect(mockCloudTasksClient.createTask).toHaveBeenCalledTimes(2);
             expect(CloudTasksClientSpy).toHaveBeenCalledTimes(2);
+        });
+    });
+
+    describe('enqueueActivitySyncTask', () => {
+        it('should enqueue activity sync task with deterministic name', async () => {
+            const { enqueueActivitySyncTask } = await import('./cloud-tasks');
+
+            mockCloudTasksClient.createTask.mockResolvedValue([{ name: 'task-name' }]);
+
+            await enqueueActivitySyncTask('activitySync__route__user__event', 1234);
+
+            expect(mockCloudTasksClient.createTask).toHaveBeenCalledWith({
+                parent: 'projects/p/locations/l/queues/q',
+                task: expect.objectContaining({
+                    name: expect.stringContaining('/tasks/activity-sync-activitySync__route__user__event-1234'),
+                    httpRequest: expect.objectContaining({
+                        url: expect.stringContaining('test-location-test-project.cloudfunctions.net/processActivitySyncTask'),
+                        httpMethod: 'POST',
+                        body: expect.any(String),
+                    }),
+                }),
+            });
+
+            const call = mockCloudTasksClient.createTask.mock.calls[0][0];
+            const decodedBody = JSON.parse(Buffer.from(call.task.httpRequest.body, 'base64').toString());
+            expect(decodedBody).toEqual({
+                data: { queueItemId: 'activitySync__route__user__event' },
+            });
+        });
+
+        it('should handle ALREADY_EXISTS for activity sync dispatch', async () => {
+            const { enqueueActivitySyncTask } = await import('./cloud-tasks');
+
+            const error = new Error('Already Exists');
+            (error as Error & { code: number }).code = 6;
+            mockCloudTasksClient.createTask.mockRejectedValue(error);
+
+            const enqueued = await enqueueActivitySyncTask('activitySync__route__user__event', 1234);
+            expect(enqueued).toBe(false);
         });
     });
 

@@ -430,6 +430,20 @@ Garmin can deliver imported activities gradually over hours or days.
 
 If Garmin permissions are missing, reconnect the app and grant the required export and history permissions in Garmin Connect.
 
+Garmin -> Suunto activity sync is route-based:
+
+- you must connect both Garmin and Suunto,
+- enable the route toggle in Garmin Services,
+- and keep Garmin ACTIVITY_EXPORT permission enabled.
+
+Automatic sync runs only for newly imported Garmin activities and uses the stored original activity file from your event.
+
+Manual catch-up is available in Garmin Services: choose a date range to queue Garmin -> Suunto sync jobs for events already imported into Quantified Self.
+
+Manual catch-up is a convenience tool for queuing a period on demand. It uses stored original files already attached to existing Quantified Self events.
+
+Manual catch-up can run even when the Garmin -> Suunto auto-sync toggle is off, and it does not enable auto-sync for future imports.
+
 ## COROS
 
 COROS history import is limited to the last **3 months** because of API restrictions.

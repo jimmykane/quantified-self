@@ -207,6 +207,11 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /activitySyncQueue/{queueItemID} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
 
     match /failed_jobs/{document=**} {
       allow read: if isAdmin();

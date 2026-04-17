@@ -21,6 +21,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import { uploadDebugFile } from '../debug-utils';
 import { createParsingOptions } from '../../../shared/parsing-options';
+import { enqueueActivitySyncJobsForImportedEvent } from '../activity-sync/enqueue-imported-event';
 
 interface RequestError extends Error {
   statusCode?: number;
@@ -206,7 +207,22 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
       queueItem.startTimeInSeconds || 0, // 0 is ok here I suppose
       new Date());
     const eventID = await generateEventID(firebaseUserID, event.startDate);
-    await setEvent(firebaseUserID, eventID, event, metaData, { data: result, extension: queueItem.activityFileType.toLowerCase(), startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
+    const setEventResult = await setEvent(firebaseUserID, eventID, event, metaData, { data: result, extension: queueItem.activityFileType.toLowerCase(), startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
+    if (!bulkWriter) {
+      try {
+        const activitySyncEventID = `${(setEventResult as any)?.eventID || eventID}`;
+        const activitySyncOriginalFiles = Array.isArray((setEventResult as any)?.savedOriginalFiles) ? (setEventResult as any).savedOriginalFiles : [];
+        await enqueueActivitySyncJobsForImportedEvent({
+          userID: firebaseUserID,
+          eventID: activitySyncEventID,
+          sourceServiceName: ServiceNames.GarminAPI,
+          sourceActivityID: queueItem.activityFileID,
+          originalFiles: activitySyncOriginalFiles,
+        });
+      } catch (activitySyncError) {
+        logger.error(`[ActivitySync] Failed to enqueue Garmin->destination sync for event ${eventID} and user ${firebaseUserID}. Import remains successful.`, activitySyncError);
+      }
+    }
     logger.info(`Created Event ${event.getID()} for ${queueItem.id} user id ${firebaseUserID} and token user ${(serviceToken as any).userID}`);
     // For each ended so we can set it to processed
     return updateToProcessed(queueItem, bulkWriter);

@@ -86,6 +86,20 @@ import { Firestore, doc, docData, collection, collectionData, setDoc, updateDoc 
 import { AppFunctionsService } from './app.functions.service';
 import { FunctionName } from '@shared/functions-manifest';
 
+export interface ActivitySyncBackfillFailedEvent {
+  eventID: string;
+  reason: string;
+  message: string;
+}
+
+export interface ActivitySyncBackfillSummary {
+  scanned: number;
+  queued: number;
+  skippedByReason: Record<string, number>;
+  failedCount: number;
+  failedEvents: ActivitySyncBackfillFailedEvent[];
+}
+
 
 /**
  * Service for managing user data, subscription roles, and settings.
@@ -510,6 +524,36 @@ export class AppUserService implements OnDestroy {
 
     const result = await this.functionsService.call(functionName, payload);
     return result.data;
+  }
+
+  async backfillActivitySyncRouteForCurrentUser(
+    sourceServiceName: ServiceNames,
+    destinationServiceName: ServiceNames,
+    startDate: Date | string | number,
+    endDate: Date | string | number,
+  ): Promise<ActivitySyncBackfillSummary> {
+    const coercedStartDate = this.coerceValidDate(startDate, 'startDate');
+    const coercedEndDate = this.coerceValidDate(endDate, 'endDate');
+    const normalizedStartDate = new Date(coercedStartDate.getTime());
+    normalizedStartDate.setHours(0, 0, 0, 0);
+    const normalizedEndDate = new Date(coercedEndDate.getTime());
+    normalizedEndDate.setHours(23, 59, 59, 999);
+
+    const result = await this.functionsService.call('backfillActivitySyncRoute', {
+      sourceServiceName,
+      destinationServiceName,
+      startDate: normalizedStartDate.toISOString(),
+      endDate: normalizedEndDate.toISOString(),
+    });
+    return result.data as ActivitySyncBackfillSummary;
+  }
+
+  private coerceValidDate(value: Date | string | number, fieldName: 'startDate' | 'endDate'): Date {
+    const date = value instanceof Date ? value : new Date(value);
+    if (!Number.isFinite(date.getTime())) {
+      throw new Error(`Invalid ${fieldName}`);
+    }
+    return date;
   }
 
   async deauthorizeService(serviceName: ServiceNames): Promise<any> {

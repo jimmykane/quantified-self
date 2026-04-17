@@ -8,6 +8,16 @@ import { MatIconModule } from '@angular/material/icon';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
 import { RouterTestingModule } from '@angular/router/testing';
+import { FormsModule } from '@angular/forms';
+import { MatDatepickerModule } from '@angular/material/datepicker';
+import { MatNativeDateModule } from '@angular/material/core';
+import { MatInputModule } from '@angular/material/input';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { MatButtonModule } from '@angular/material/button';
+import { MatListModule } from '@angular/material/list';
+import { MatDividerModule } from '@angular/material/divider';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { AppFileService } from '../../../services/app.file.service';
 import { Analytics } from 'app/firebase/analytics';
 import { AppEventService } from '../../../services/app.event.service';
@@ -20,6 +30,9 @@ import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { of } from 'rxjs';
+import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
+
+const ACTIVITY_SYNC_ALLOWLISTED_UID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
 
 describe('ServicesGarminComponent', () => {
     let component: ServicesGarminComponent;
@@ -51,6 +64,8 @@ describe('ServicesGarminComponent', () => {
             getCurrentUserServiceTokenAndRedirectURI: vi.fn(),
             getServiceToken: vi.fn().mockReturnValue(of([])),
             getUserMetaForService: vi.fn().mockReturnValue(of(undefined)),
+            updateUserProperties: vi.fn().mockResolvedValue(undefined),
+            backfillActivitySyncRouteForCurrentUser: vi.fn().mockResolvedValue({ scanned: 0, queued: 0, skippedByReason: {}, failedCount: 0, failedEvents: [] }),
         };
 
         await TestBed.configureTestingModule({
@@ -60,7 +75,17 @@ describe('ServicesGarminComponent', () => {
                 MatIconModule,
                 HttpClientTestingModule,
                 MatSnackBarModule,
-                RouterTestingModule
+                RouterTestingModule,
+                FormsModule,
+                MatDatepickerModule,
+                MatNativeDateModule,
+                MatInputModule,
+                MatFormFieldModule,
+                MatSlideToggleModule,
+                MatButtonModule,
+                MatListModule,
+                MatDividerModule,
+                MatProgressBarModule,
             ],
             providers: [
                 { provide: AppFileService, useValue: {} },
@@ -303,6 +328,114 @@ describe('ServicesGarminComponent', () => {
             expect(component.forceConnected).toBe(false);
             expect(component.isLoading).toBe(false);
             expect(component.isConnecting).toBe(false);
+        });
+    });
+
+    describe('Activity Sync Card', () => {
+        it('should show route toggle when Garmin and Suunto are connected', async () => {
+            component.hasProAccess = true;
+            component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
+            mockUserService.getServiceToken
+                .mockReturnValueOnce(of([{ accessToken: 'garmin-token', permissions: [] }]))
+                .mockReturnValueOnce(of([{ accessToken: 'suunto-token' }]));
+
+            await component.ngOnChanges();
+            fixture.detectChanges();
+
+            const routeToggle = fixture.nativeElement.querySelector('mat-slide-toggle');
+            expect(routeToggle).toBeTruthy();
+        });
+
+        it('should persist Garmin->Suunto route toggle to settings', async () => {
+            component.hasProAccess = true;
+            component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
+            component.serviceTokens = [{ accessToken: 'garmin-token', permissions: [] }] as any;
+            (component as any).suuntoTokens = [{ accessToken: 'suunto-token' }];
+
+            await component.onGarminToSuuntoRouteToggle(true);
+
+            expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(component.user, {
+                settings: {
+                    serviceSyncSettings: {
+                        activitySyncRoutes: {
+                            [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: {
+                                enabled: true
+                            }
+                        }
+                    }
+                }
+            });
+        });
+
+        it('should allow manual catch-up when auto-sync toggle is disabled', () => {
+            component.hasProAccess = true;
+            component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
+            component.serviceTokens = [{ accessToken: 'garmin-token', permissions: [] }] as any;
+            (component as any).suuntoTokens = [{ accessToken: 'suunto-token' }];
+            component.isBackfillingSync = false;
+            component.backfillStartDate = new Date('2026-01-01T00:00:00.000Z');
+            component.backfillEndDate = new Date('2026-01-31T00:00:00.000Z');
+
+            fixture.detectChanges();
+
+            const queueButton = Array.from(fixture.nativeElement.querySelectorAll('button'))
+                .find((button: HTMLButtonElement) => (button.textContent || '').includes('Queue now')) as HTMLButtonElement | undefined;
+
+            expect(component.isGarminToSuuntoRouteEnabled).toBe(false);
+            expect(queueButton).toBeTruthy();
+            expect(queueButton?.disabled).toBe(false);
+        });
+
+        it('should hide activity sync card for non-allowlisted users', () => {
+            component.hasProAccess = true;
+            component.user = { uid: 'non-allowlisted-user', settings: {} } as any;
+            fixture.detectChanges();
+
+            expect(fixture.nativeElement.textContent).not.toContain('Garmin -> Suunto Sync');
+        });
+
+        it('should render failed backfill events in the summary', () => {
+            component.hasProAccess = true;
+            component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
+            component.serviceTokens = [{ accessToken: 'garmin-token', permissions: [] }] as any;
+            (component as any).suuntoTokens = [{ accessToken: 'suunto-token' }];
+            component.backfillSummary = {
+                scanned: 10,
+                queued: 8,
+                skippedByReason: {},
+                failedCount: 1,
+                failedEvents: [
+                    {
+                        eventID: 'event-123',
+                        reason: 'event_processing_failed',
+                        message: 'queue enqueue failed',
+                    },
+                ],
+            };
+
+            fixture.detectChanges();
+
+            const content = fixture.nativeElement.textContent;
+            expect(content).toContain('Failed: 1');
+            expect(content).toContain('event-123');
+            expect(content).toContain('queue enqueue failed');
+        });
+
+        it('should explain that manual catch-up only uses already imported Quantified Self events', () => {
+            component.hasProAccess = true;
+            component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
+            component.serviceTokens = [{ accessToken: 'garmin-token', permissions: [] }] as any;
+            (component as any).suuntoTokens = [{ accessToken: 'suunto-token' }];
+
+            fixture.detectChanges();
+
+            const infoBlock = fixture.nativeElement.querySelector('app-status-info[title="Manual Catch-up Scope"]');
+            const content = fixture.nativeElement.textContent;
+            expect(infoBlock).toBeTruthy();
+            expect(content).toContain('Use this anytime to queue Garmin -> Suunto sync jobs');
+            expect(content).toContain('activities already imported into Quantified Self');
+            expect(content).toContain('uses stored original files');
+            expect(content).toContain('can run even when automatic sync is turned off');
         });
     });
 });

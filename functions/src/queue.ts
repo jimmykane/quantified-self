@@ -28,6 +28,29 @@ import { COROSAPIEventMetaData, SuuntoAppEventMetaData } from '@sports-alliance/
 import { uploadDebugFile } from './debug-utils';
 import { createParsingOptions } from '../../shared/parsing-options';
 import { normalizeDownloadedFitPayload } from './shared/fit-payload';
+import { enqueueActivitySyncJobsForImportedEvent } from './activity-sync/enqueue-imported-event';
+
+async function enqueueActivitySyncBestEffort(
+  parentID: string,
+  eventID: string,
+  sourceServiceName: ServiceNames,
+  sourceActivityID: string,
+  setEventResult: unknown
+): Promise<void> {
+  try {
+    const activitySyncEventID = `${(setEventResult as any)?.eventID || eventID}`;
+    const activitySyncOriginalFiles = Array.isArray((setEventResult as any)?.savedOriginalFiles) ? (setEventResult as any).savedOriginalFiles : [];
+    await enqueueActivitySyncJobsForImportedEvent({
+      userID: parentID,
+      eventID: activitySyncEventID,
+      sourceServiceName,
+      sourceActivityID,
+      originalFiles: activitySyncOriginalFiles,
+    });
+  } catch (activitySyncError) {
+    logger.error(`[ActivitySync] Failed to enqueue post-import sync for ${sourceServiceName} event ${eventID} and user ${parentID}. Import remains successful.`, activitySyncError);
+  }
+}
 
 
 function toArrayBuffer(payload: Uint8Array): ArrayBuffer {
@@ -359,14 +382,20 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
           const corosWorkoutQueueItem = queueItem as COROSAPIWorkoutQueueItemInterface;
           const corosMetaData = new COROSAPIEventMetaData(corosWorkoutQueueItem.workoutID, corosWorkoutQueueItem.openId, corosWorkoutQueueItem.FITFileURI, new Date());
           const deterministicID = await generateEventID(parentID, event.startDate);
-          await setEvent(parentID, deterministicID, event, corosMetaData, { data: result, extension: 'fit', startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
+          const setEventResult = await setEvent(parentID, deterministicID, event, corosMetaData, { data: result, extension: 'fit', startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
+          if (!bulkWriter) {
+            await enqueueActivitySyncBestEffort(parentID, deterministicID, ServiceNames.COROSAPI, corosWorkoutQueueItem.workoutID, setEventResult);
+          }
           break;
         }
         case ServiceNames.SuuntoApp: {
           const suuntoWorkoutQueueItem = queueItem as SuuntoAppWorkoutQueueItemInterface;
           const suuntoMetaData = new SuuntoAppEventMetaData(suuntoWorkoutQueueItem.workoutID, suuntoWorkoutQueueItem.userName, new Date());
           const deterministicID = await generateEventID(parentID, event.startDate);
-          await setEvent(parentID, deterministicID, event, suuntoMetaData, { data: result, extension: 'fit', startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
+          const setEventResult = await setEvent(parentID, deterministicID, event, suuntoMetaData, { data: result, extension: 'fit', startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
+          if (!bulkWriter) {
+            await enqueueActivitySyncBestEffort(parentID, deterministicID, ServiceNames.SuuntoApp, suuntoWorkoutQueueItem.workoutID, setEventResult);
+          }
         }
       }
       logger.info('Ending timer: InsertEvent');

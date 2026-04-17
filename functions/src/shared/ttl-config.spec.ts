@@ -1,16 +1,32 @@
 import { describe, it, expect, vi } from 'vitest';
 import { getExpireAtTimestamp, TTL_CONFIG } from './ttl-config';
 import * as admin from 'firebase-admin';
+import { Timestamp as FirestoreTimestamp } from 'firebase-admin/firestore';
 
-// Mock firebase-admin
+const { mockNamespaceFromDate, mockFallbackFromDate } = vi.hoisted(() => ({
+    mockNamespaceFromDate: vi.fn((date: Date) => ({
+        toDate: () => date,
+        toMillis: () => date.getTime()
+    })),
+    mockFallbackFromDate: vi.fn((date: Date) => ({
+        toDate: () => date,
+        toMillis: () => date.getTime()
+    }))
+}));
+
+// Mock firebase-admin namespace API
 vi.mock('firebase-admin', () => ({
     firestore: {
         Timestamp: {
-            fromDate: vi.fn((date: Date) => ({
-                toDate: () => date,
-                toMillis: () => date.getTime()
-            }))
+            fromDate: mockNamespaceFromDate
         }
+    }
+}));
+
+// Mock firebase-admin/firestore module API
+vi.mock('firebase-admin/firestore', () => ({
+    Timestamp: {
+        fromDate: mockFallbackFromDate
     }
 }));
 
@@ -34,7 +50,7 @@ describe('TTL Configuration', () => {
             const timestamp = getExpireAtTimestamp(days);
 
             expect(timestamp.toMillis()).toBe(expectedTime);
-            expect(admin.firestore.Timestamp.fromDate).toHaveBeenCalled(); // Verify mock usage
+            expect(admin.firestore.Timestamp.fromDate).toHaveBeenCalled(); // Verify namespace usage
 
             vi.useRealTimers();
         });
@@ -50,6 +66,29 @@ describe('TTL Configuration', () => {
             expect(timestamp.toMillis()).toBe(expectedTime);
 
             vi.useRealTimers();
+        });
+
+        it('should fallback to firestore module Timestamp when namespace Timestamp is unavailable', () => {
+            const now = 1672531200000; // 2023-01-01T00:00:00.000Z
+            vi.useFakeTimers();
+            vi.setSystemTime(now);
+            mockNamespaceFromDate.mockClear();
+            mockFallbackFromDate.mockClear();
+
+            const originalTimestamp = (admin as any).firestore.Timestamp;
+            (admin as any).firestore.Timestamp = undefined;
+            try {
+                const days = 1;
+                const expectedTime = now + (days * 24 * 60 * 60 * 1000);
+                const timestamp = getExpireAtTimestamp(days);
+                expect(timestamp.toMillis()).toBe(expectedTime);
+                expect(mockNamespaceFromDate).not.toHaveBeenCalled();
+                expect(mockFallbackFromDate).toHaveBeenCalledOnce();
+                expect((FirestoreTimestamp as any).fromDate).toBe(mockFallbackFromDate);
+            } finally {
+                (admin as any).firestore.Timestamp = originalTimestamp;
+                vi.useRealTimers();
+            }
         });
     });
 });
