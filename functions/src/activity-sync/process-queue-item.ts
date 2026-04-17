@@ -44,6 +44,7 @@ function toError(error: unknown): Error {
 
 interface ErrorLike {
     code?: unknown;
+    status?: unknown;
     statusCode?: unknown;
     message?: unknown;
 }
@@ -56,15 +57,59 @@ function asErrorLike(error: unknown): ErrorLike {
     return error as ErrorLike;
 }
 
+const TRANSIENT_ACTIVITY_SYNC_ERROR_CODES = new Set([
+    'aborted',
+    'deadline-exceeded',
+    'unavailable',
+]);
+
+const TRANSIENT_ACTIVITY_SYNC_GRPC_CODES = new Set([
+    4, // DEADLINE_EXCEEDED
+    10, // ABORTED
+    14, // UNAVAILABLE
+]);
+
+const TRANSIENT_ACTIVITY_SYNC_STATUS_CODES = new Set([
+    429,
+    500,
+    502,
+    503,
+    504,
+]);
+
+function toNormalizedErrorCode(value: unknown): string {
+    return `${value || ''}`.trim().toLowerCase().replace(/_/g, '-');
+}
+
+function toFiniteNumber(value: unknown): number | null {
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue)) {
+        return null;
+    }
+
+    return numericValue;
+}
+
 function isTransientActivitySyncError(error: unknown): boolean {
     const errorLike = asErrorLike(error);
-    const httpsCode = `${errorLike.code || ''}`.trim().toLowerCase();
-    if (httpsCode === 'unavailable' || httpsCode === 'deadline-exceeded' || httpsCode === 'aborted') {
+
+    const normalizedCode = toNormalizedErrorCode(errorLike.code);
+    const normalizedStatus = toNormalizedErrorCode(errorLike.status);
+    if (TRANSIENT_ACTIVITY_SYNC_ERROR_CODES.has(normalizedCode) || TRANSIENT_ACTIVITY_SYNC_ERROR_CODES.has(normalizedStatus)) {
         return true;
     }
 
-    const statusCode = Number(errorLike.statusCode);
-    return statusCode === 429 || statusCode === 500 || statusCode === 502 || statusCode === 503 || statusCode === 504;
+    const grpcCode = toFiniteNumber(errorLike.code);
+    const grpcStatus = toFiniteNumber(errorLike.status);
+    if (
+        (grpcCode !== null && TRANSIENT_ACTIVITY_SYNC_GRPC_CODES.has(grpcCode)) ||
+        (grpcStatus !== null && TRANSIENT_ACTIVITY_SYNC_GRPC_CODES.has(grpcStatus))
+    ) {
+        return true;
+    }
+
+    const statusCode = toFiniteNumber(errorLike.statusCode);
+    return statusCode !== null && TRANSIENT_ACTIVITY_SYNC_STATUS_CODES.has(statusCode);
 }
 
 function isSkippableAuthenticationError(error: unknown): boolean {

@@ -278,6 +278,29 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalled();
   });
 
+  it('increments retry for transient upload failures with numeric gRPC code', async () => {
+    mockUploadActivityFileToSuunto.mockRejectedValue({ code: 14, message: 'service unavailable' });
+
+    const result = await processActivitySyncQueueItem(baseQueueItem);
+
+    expect(result).toBe(QueueResult.RetryIncremented);
+    expect(mockSetActivitySyncRetryingMetadata).toHaveBeenCalled();
+    expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalled();
+  });
+
+  it('increments retry for transient pre-check failures with numeric gRPC status', async () => {
+    mockHasProAccess.mockRejectedValue({ status: 4, message: 'deadline exceeded' });
+
+    const result = await processActivitySyncQueueItem(baseQueueItem);
+
+    expect(result).toBe(QueueResult.RetryIncremented);
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+    expect(mockSetActivitySyncRetryingMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+    }));
+    expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalled();
+  });
+
   it('increments retry for transient pre-check failures before upload', async () => {
     mockHasProAccess.mockRejectedValue({ statusCode: 503, message: 'auth store unavailable' });
 
@@ -289,6 +312,16 @@ describe('activity-sync/process-queue-item', () => {
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
     }));
     expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalled();
+  });
+
+  it('moves to DLQ for non-transient numeric gRPC codes', async () => {
+    mockUploadActivityFileToSuunto.mockRejectedValue({ code: 9, message: 'failed precondition' });
+
+    const result = await processActivitySyncQueueItem(baseQueueItem);
+
+    expect(result).toBe(QueueResult.MovedToDLQ);
+    expect(mockSetActivitySyncFailedMetadata).toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).toHaveBeenCalled();
   });
 
   it('moves to DLQ for permanent pre-check failures before upload', async () => {
