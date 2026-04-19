@@ -24,6 +24,8 @@ interface DerivedMetricsFreshnessInput {
     nowMs: number;
     coordinatorStatus: DerivedMetricsCoordinatorStatus;
     coordinatorCompletedAtMs: number | null;
+    coordinatorRequestedAtMs: number | null;
+    coordinatorStartedAtMs: number | null;
     coordinatorUpdatedAtMs: number | null;
     coordinatorEventMutationVersion: number | null;
     formSnapshotStatus: string | null;
@@ -106,7 +108,7 @@ export function decideDerivedMetricsFreshness(input: DerivedMetricsFreshnessInpu
     }
 
     if (input.coordinatorStatus === 'queued') {
-        const queuedSinceMs = input.coordinatorUpdatedAtMs;
+        const queuedSinceMs = input.coordinatorRequestedAtMs ?? input.coordinatorUpdatedAtMs;
         if (Number.isFinite(queuedSinceMs) && (input.nowMs - (queuedSinceMs as number)) >= DERIVED_METRICS_STUCK_QUEUED_THRESHOLD_MS) {
             return { shouldQueue: true, reason: 'queued_stuck' };
         }
@@ -114,7 +116,7 @@ export function decideDerivedMetricsFreshness(input: DerivedMetricsFreshnessInpu
     }
 
     if (input.coordinatorStatus === 'processing') {
-        const processingSinceMs = input.coordinatorUpdatedAtMs;
+        const processingSinceMs = input.coordinatorStartedAtMs ?? input.coordinatorUpdatedAtMs;
         if (Number.isFinite(processingSinceMs) && (input.nowMs - (processingSinceMs as number)) >= DERIVED_METRICS_STUCK_PROCESSING_THRESHOLD_MS) {
             return { shouldQueue: true, reason: 'processing_stuck' };
         }
@@ -202,6 +204,8 @@ export const ensureDerivedMetrics = onCall({
     const coordinatorData = coordinatorSnapshot.data() || {};
     const coordinatorStatus = parseCoordinatorStatus(coordinatorData.status);
     const coordinatorCompletedAtMs = toFiniteNumber(coordinatorData.completedAtMs);
+    const coordinatorRequestedAtMs = toFiniteNumber(coordinatorData.requestedAtMs);
+    const coordinatorStartedAtMs = toFiniteNumber(coordinatorData.startedAtMs);
     const coordinatorUpdatedAtMs = toFiniteNumber(coordinatorData.updatedAtMs);
     const coordinatorGeneration = toFiniteNumber(coordinatorData.generation);
     const coordinatorEventMutationVersion = toFiniteNumber(coordinatorData.eventMutationVersion);
@@ -218,6 +222,8 @@ export const ensureDerivedMetrics = onCall({
         nowMs: Date.now(),
         coordinatorStatus,
         coordinatorCompletedAtMs,
+        coordinatorRequestedAtMs,
+        coordinatorStartedAtMs,
         coordinatorUpdatedAtMs,
         coordinatorEventMutationVersion,
         formSnapshotStatus,
