@@ -1725,7 +1725,11 @@ function resolveImplicitEventLookupMetricAlias(prompt: string): string | null {
     return null;
   }
 
-  const hasActivitySubject = /\b(ride|rides|run|runs|swim|swims|workout|workouts|session|sessions|activity|activities|event|events)\b/.test(normalizedPrompt);
+  const promptActivityTypeGroups = resolvePromptActivityTypeGroups(prompt);
+  const promptActivityTypes = resolvePromptActivityTypes(prompt, promptActivityTypeGroups);
+  const hasResolvedActivityFilter = promptActivityTypeGroups.length > 0 || promptActivityTypes.length > 0;
+  const hasActivitySubject = /\b(ride|rides|run|runs|swim|swims|workout|workouts|session|sessions|activity|activities|event|events)\b/.test(normalizedPrompt)
+    || hasResolvedActivityFilter;
   const hasDistanceSuperlative = /\b(longest|shortest|farthest|furthest)\b/.test(normalizedPrompt);
   if (!hasActivitySubject || !hasDistanceSuperlative) {
     return null;
