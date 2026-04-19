@@ -62,6 +62,12 @@ interface KpiPresentation {
   trend: Array<{ time: number; value: number | null }>;
 }
 
+interface KpiSparklineStyle {
+  lineColor: string;
+  areaColor: string;
+  areaOpacity: number;
+}
+
 @Component({
   selector: 'app-kpi-chart',
   templateUrl: './charts.kpi.component.html',
@@ -329,6 +335,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   private buildOption(presentation: KpiPresentation): ChartOption {
     const chartWidth = this.chartDiv?.nativeElement?.clientWidth || 0;
     const style = buildDashboardEChartsStyleTokens(this.darkTheme, chartWidth);
+    const sparklineStyle = this.resolveSparklineStyle(style.trendLineColor);
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
     const rawTrendData = presentation.trend
       .filter(point => Number.isFinite(point.time))
@@ -386,7 +393,13 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
         trigger: 'axis',
         // Keep tooltip available on compact KPI cards across desktop/mobile.
         triggerOn: resolveEChartsTooltipTriggerOn(true, false),
-        axisPointer: { type: 'line' },
+        axisPointer: {
+          type: 'line',
+          lineStyle: {
+            color: this.withAlpha(sparklineStyle.lineColor, 0.42),
+            width: 1,
+          },
+        },
         renderMode: 'html',
         ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),
         borderWidth: 1,
@@ -420,16 +433,210 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
           symbol: 'none',
           connectNulls: true,
           lineStyle: {
-            width: 1.4,
-            color: style.trendLineColor,
+            width: 1,
+            color: sparklineStyle.lineColor,
           },
           areaStyle: {
-            color: style.trendLineColor,
-            opacity: 0.15,
+            color: {
+              type: 'linear',
+              x: 0,
+              y: 0,
+              x2: 0,
+              y2: 1,
+              colorStops: [
+                {
+                  offset: 0,
+                  color: this.withAlpha(sparklineStyle.areaColor, sparklineStyle.areaOpacity),
+                },
+                {
+                  offset: 1,
+                  color: this.withAlpha(sparklineStyle.areaColor, 0.02),
+                },
+              ],
+            },
           },
         },
       ],
     };
+  }
+
+  private resolveSparklineStyle(fallbackColor: string): KpiSparklineStyle {
+    const positiveColor = this.resolveThemeColor('--mat-sys-primary', '#1b7f38');
+    const negativeColor = this.resolveThemeColor('--mat-sys-error', '#c62828');
+    const neutralColor = this.resolveThemeColor('--mat-sys-secondary', '#2c6cb0');
+    const readinessColor = this.resolveThemeColor('--mat-sys-tertiary', '#7a3db8');
+    const hardLoadColor = this.resolveThemeColor('--mat-sys-error', '#e65100');
+    const monotonyColor = this.resolveThemeColor('--mat-sys-secondary', '#7b5e57');
+
+    if (
+      this.chartType === DASHBOARD_FORM_NOW_KPI_CHART_TYPE
+      || this.chartType === DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE
+    ) {
+      const readinessValue = this.chartType === DASHBOARD_FORM_NOW_KPI_CHART_TYPE
+        ? this.formNow?.value ?? null
+        : this.formPlus7d?.value ?? null;
+      return {
+        lineColor: this.resolveDirectionalColor(readinessValue, {
+          positiveColor,
+          negativeColor,
+          neutralColor: readinessColor,
+          neutralThreshold: 1,
+        }),
+        areaColor: readinessColor,
+        areaOpacity: 0.16,
+      };
+    }
+
+    if (this.chartType === DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE) {
+      return {
+        lineColor: positiveColor,
+        areaColor: positiveColor,
+        areaOpacity: 0.16,
+      };
+    }
+
+    if (this.chartType === DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE) {
+      return {
+        lineColor: hardLoadColor,
+        areaColor: hardLoadColor,
+        areaOpacity: 0.14,
+      };
+    }
+
+    if (this.chartType === DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE) {
+      const deltaValue = this.efficiencyDelta4w?.deltaAbs ?? null;
+      return {
+        lineColor: this.resolveDirectionalColor(deltaValue, {
+          positiveColor,
+          negativeColor,
+          neutralColor,
+          neutralThreshold: 0.02,
+        }),
+        areaColor: neutralColor,
+        areaOpacity: 0.14,
+      };
+    }
+
+    if (this.chartType === DASHBOARD_RAMP_RATE_KPI_CHART_TYPE) {
+      return {
+        lineColor: this.resolveDirectionalColor(this.rampRate?.rampRate ?? null, {
+          positiveColor,
+          negativeColor,
+          neutralColor,
+          neutralThreshold: 0.15,
+        }),
+        areaColor: neutralColor,
+        areaOpacity: 0.14,
+      };
+    }
+
+    if (this.chartType === DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE) {
+      return {
+        lineColor: monotonyColor,
+        areaColor: monotonyColor,
+        areaOpacity: 0.12,
+      };
+    }
+
+    if (this.chartType === DASHBOARD_ACWR_KPI_CHART_TYPE) {
+      const acwrRatio = this.acwr?.ratio ?? null;
+      // Training-risk zones: <0.8 too low stimulus, >1.3 spike risk.
+      if (Number.isFinite(acwrRatio as number) && (acwrRatio as number) > 1.3) {
+        return {
+          lineColor: negativeColor,
+          areaColor: negativeColor,
+          areaOpacity: 0.14,
+        };
+      }
+      if (Number.isFinite(acwrRatio as number) && (acwrRatio as number) < 0.8) {
+        return {
+          lineColor: this.resolveThemeColor('--mat-sys-tertiary', '#8854d0'),
+          areaColor: this.resolveThemeColor('--mat-sys-tertiary', '#8854d0'),
+          areaOpacity: 0.12,
+        };
+      }
+      return {
+        lineColor: positiveColor,
+        areaColor: positiveColor,
+        areaOpacity: 0.16,
+      };
+    }
+
+    return {
+      lineColor: fallbackColor,
+      areaColor: fallbackColor,
+      areaOpacity: 0.12,
+    };
+  }
+
+  private resolveThemeColor(cssVariableName: string, fallbackColor: string): string {
+    if (typeof window === 'undefined') {
+      return fallbackColor;
+    }
+    const color = window.getComputedStyle(document.documentElement)
+      .getPropertyValue(cssVariableName)
+      .trim();
+    if (!color || color.startsWith('var(')) {
+      return fallbackColor;
+    }
+    return color;
+  }
+
+  private resolveDirectionalColor(
+    value: number | null | undefined,
+    options: {
+      positiveColor: string;
+      negativeColor: string;
+      neutralColor: string;
+      neutralThreshold: number;
+    },
+  ): string {
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue)) {
+      return options.neutralColor;
+    }
+    if (numericValue > options.neutralThreshold) {
+      return options.positiveColor;
+    }
+    if (numericValue < -options.neutralThreshold) {
+      return options.negativeColor;
+    }
+    return options.neutralColor;
+  }
+
+  private withAlpha(color: string, alpha: number): string {
+    const normalizedAlpha = Math.max(0, Math.min(1, alpha));
+    const rgb = this.parseRgbColor(color);
+    if (!rgb) {
+      return color;
+    }
+    return `rgba(${rgb.r},${rgb.g},${rgb.b},${normalizedAlpha})`;
+  }
+
+  private parseRgbColor(
+    color: string,
+  ): { r: number; g: number; b: number } | null {
+    const normalized = `${color || ''}`.trim().toLowerCase();
+    const hexMatch = normalized.match(/^#([0-9a-f]{6})$/i);
+    if (hexMatch) {
+      const hex = hexMatch[1];
+      return {
+        r: Number.parseInt(hex.slice(0, 2), 16),
+        g: Number.parseInt(hex.slice(2, 4), 16),
+        b: Number.parseInt(hex.slice(4, 6), 16),
+      };
+    }
+
+    const rgbMatch = normalized.match(/^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})/i);
+    if (rgbMatch) {
+      return {
+        r: Number.parseInt(rgbMatch[1], 10),
+        g: Number.parseInt(rgbMatch[2], 10),
+        b: Number.parseInt(rgbMatch[3], 10),
+      };
+    }
+
+    return null;
   }
 
   private trimNullEdgeTrendPoints(

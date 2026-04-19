@@ -290,7 +290,14 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private async unsubscribeAndCreateCharts() {
     this.unsubscribeThemeSubscription();
     this.appThemeSubscription = this.themeService.getAppTheme().subscribe((theme) => {
-      this.darkTheme = theme === AppThemes.Dark;
+      const nextDarkTheme = theme === AppThemes.Dark;
+      if (this.darkTheme === nextDarkTheme) {
+        return;
+      }
+      this.darkTheme = nextDarkTheme;
+      // OnPush component: explicit mark ensures chart inputs update immediately
+      // when theme toggles so ECharts axis/label colors switch correctly.
+      this.changeDetector.markForCheck();
     });
     this.syncDerivedMetricsSubscription();
     await this.rebuildTilesFromCurrentState();

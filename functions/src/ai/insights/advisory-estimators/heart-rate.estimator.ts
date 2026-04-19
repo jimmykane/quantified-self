@@ -1,7 +1,6 @@
 import { DataHeartRateMax, type EventInterface } from '@sports-alliance/sports-lib';
 import type {
   AdvisoryEstimatorEstimateResult,
-  AdvisoryEstimatorInput,
   AdvisoryMetricEstimator,
 } from '../advisory-estimator';
 
