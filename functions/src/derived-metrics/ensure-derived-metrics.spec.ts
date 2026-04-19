@@ -12,6 +12,7 @@ describe('decideDerivedMetricsFreshness', () => {
         coordinatorEventMutationVersion: 10,
         formSnapshotStatus: 'ready',
         formSnapshotBuiltFromEventMutationVersion: 10,
+        latestEventUpdatedAtMs: Date.UTC(2026, 3, 15, 9, 0, 0),
     };
 
     it('returns fresh when coordinator and form snapshot are aligned with latest events', () => {
@@ -156,6 +157,17 @@ describe('decideDerivedMetricsFreshness', () => {
         expect(decision).toEqual({
             shouldQueue: false,
             reason: 'fresh',
+        });
+    });
+
+    it('requeues when latest event write is newer than the last completed run', () => {
+        const decision = decideDerivedMetricsFreshness({
+            ...baseInput,
+            latestEventUpdatedAtMs: Date.UTC(2026, 3, 15, 11, 0, 0),
+        });
+        expect(decision).toEqual({
+            shouldQueue: true,
+            reason: 'latest_event_update_after_completion',
         });
     });
 });

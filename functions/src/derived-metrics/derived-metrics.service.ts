@@ -260,6 +260,30 @@ function hasSameDerivedMetricKinds(
     return rightMetricKinds.every((metricKind) => leftSet.has(metricKind));
 }
 
+function resolveInFlightMetricKinds(
+    rawCoordinatorData: unknown,
+    dirtyMetricKinds: readonly DerivedMetricKind[],
+): DerivedMetricKind[] {
+    const normalizedData = (rawCoordinatorData && typeof rawCoordinatorData === 'object')
+        ? rawCoordinatorData as Record<string, unknown>
+        : {};
+    const persistedInFlightMetricKinds = normalizeDerivedMetricKindsStrict(
+        normalizedData.processingMetricKinds as unknown[],
+    );
+    if (persistedInFlightMetricKinds.length) {
+        return persistedInFlightMetricKinds;
+    }
+
+    const fallbackDirtyMetricKinds = normalizeDerivedMetricKindsStrict(dirtyMetricKinds);
+    if (fallbackDirtyMetricKinds.length) {
+        return fallbackDirtyMetricKinds;
+    }
+
+    // Legacy coordinator docs can still be recovered when a processing worker
+    // becomes stuck and persisted processing metric kinds are missing.
+    return [...DEFAULT_DERIVED_METRIC_KINDS];
+}
+
 function isDerivedMetricsCoordinatorStuck(
     coordinator: DerivedMetricsCoordinator,
     nowMs: number,
@@ -1530,15 +1554,41 @@ export async function startDerivedMetricsProcessing(
             return;
         }
 
-        const coordinator = parseCoordinator(coordinatorSnapshot.data());
+        const rawCoordinatorData = coordinatorSnapshot.data();
+        const coordinator = parseCoordinator(rawCoordinatorData);
         if (coordinator.generation !== generation) {
             startedResult = null;
             return;
         }
 
-        // Single-flight claim: only queued generations are allowed to start.
-        // Duplicate Cloud Tasks deliveries for an already-processing generation
-        // must return null so concurrent workers cannot race snapshot writes.
+        if (coordinator.status === 'processing') {
+            // Keep healthy in-flight generations single-flight only.
+            if (!isDerivedMetricsCoordinatorStuck(coordinator, nowMs)) {
+                startedResult = null;
+                return;
+            }
+
+            const inFlightMetricKinds = resolveInFlightMetricKinds(
+                rawCoordinatorData,
+                coordinator.dirtyMetricKinds,
+            );
+            transaction.set(coordinatorRef, {
+                entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
+                status: 'processing',
+                processingMetricKinds: inFlightMetricKinds,
+                startedAtMs: nowMs,
+                updatedAtMs: nowMs,
+                lastError: null,
+            }, { merge: true });
+            startedResult = {
+                dirtyMetricKinds: inFlightMetricKinds,
+                startedAtMs: nowMs,
+                eventMutationVersion: coordinator.eventMutationVersion,
+            };
+            return;
+        }
+
+        // A generation can only be freshly claimed from queued state.
         if (coordinator.status !== 'queued') {
             startedResult = null;
             return;

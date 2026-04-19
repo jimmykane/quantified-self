@@ -167,6 +167,10 @@ describe('startDerivedMetricsProcessing', () => {
         });
     });
 
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
     it('claims queued generation and persists processing metric kinds for retries', async () => {
         const { startDerivedMetricsProcessing } = await import('./derived-metrics.service');
         hoisted.transactionGet.mockResolvedValueOnce({
@@ -218,8 +222,11 @@ describe('startDerivedMetricsProcessing', () => {
         expect(hoisted.transactionSet).not.toHaveBeenCalled();
     });
 
-    it('returns null for legacy processing docs instead of reclaiming', async () => {
+    it('reclaims stuck processing generations using in-flight metric kinds', async () => {
         const { startDerivedMetricsProcessing } = await import('./derived-metrics.service');
+        vi.useFakeTimers();
+        vi.setSystemTime(Date.UTC(2026, 3, 11, 9, 0, 0));
+        const nowMs = Date.now();
         hoisted.transactionGet.mockResolvedValueOnce({
             exists: true,
             data: () => ({
@@ -227,14 +234,27 @@ describe('startDerivedMetricsProcessing', () => {
                 generation: 9,
                 eventMutationVersion: 77,
                 dirtyMetricKinds: [],
-                updatedAtMs: Date.now(),
+                processingMetricKinds: [DERIVED_METRIC_KINDS.RecoveryNow],
+                startedAtMs: nowMs - (20 * 60 * 1000),
+                updatedAtMs: nowMs - (20 * 60 * 1000),
             }),
         });
 
         const result = await startDerivedMetricsProcessing('user-1', 9);
 
-        expect(result).toBeNull();
-        expect(hoisted.transactionSet).not.toHaveBeenCalled();
+        expect(result).toEqual({
+            dirtyMetricKinds: [DERIVED_METRIC_KINDS.RecoveryNow],
+            startedAtMs: expect.any(Number),
+            eventMutationVersion: 77,
+        });
+        expect(hoisted.transactionSet).toHaveBeenCalledWith(
+            hoisted.coordinatorRef,
+            expect.objectContaining({
+                status: 'processing',
+                processingMetricKinds: [DERIVED_METRIC_KINDS.RecoveryNow],
+            }),
+            { merge: true },
+        );
     });
 });
 

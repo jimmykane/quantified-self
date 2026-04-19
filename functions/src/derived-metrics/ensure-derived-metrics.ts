@@ -28,6 +28,7 @@ interface DerivedMetricsFreshnessInput {
     coordinatorEventMutationVersion: number | null;
     formSnapshotStatus: string | null;
     formSnapshotBuiltFromEventMutationVersion: number | null;
+    latestEventUpdatedAtMs: number | null;
 }
 
 interface DerivedMetricsFreshnessDecision {
@@ -42,6 +43,7 @@ interface DerivedMetricsFreshnessDecision {
     | 'missing_snapshot_event_mutation_version'
     | 'missing_completed_at'
     | 'event_mutation_version_behind'
+    | 'latest_event_update_after_completion'
     | 'fresh';
 }
 
@@ -61,6 +63,33 @@ function toFiniteNumber(value: unknown): number | null {
         return null;
     }
     return numericValue;
+}
+
+function toMillis(value: unknown): number | null {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        return value;
+    }
+    if (value instanceof Date) {
+        const time = value.getTime();
+        return Number.isFinite(time) ? time : null;
+    }
+    if (typeof (value as { toMillis?: unknown } | null | undefined)?.toMillis === 'function') {
+        const time = Number((value as { toMillis: () => unknown }).toMillis());
+        return Number.isFinite(time) ? time : null;
+    }
+    if (typeof (value as { toDate?: unknown } | null | undefined)?.toDate === 'function') {
+        const date = (value as { toDate: () => Date }).toDate();
+        return Number.isFinite(date.getTime()) ? date.getTime() : null;
+    }
+    if (typeof value === 'object' && value !== null && 'seconds' in (value as Record<string, unknown>)) {
+        const seconds = Number((value as Record<string, unknown>).seconds);
+        const nanos = Number((value as Record<string, unknown>).nanoseconds || 0);
+        if (!Number.isFinite(seconds) || !Number.isFinite(nanos)) {
+            return null;
+        }
+        return Math.floor((seconds * 1000) + (nanos / 1_000_000));
+    }
+    return null;
 }
 
 function parseCoordinatorStatus(value: unknown): DerivedMetricsCoordinatorStatus {
@@ -122,6 +151,14 @@ export function decideDerivedMetricsFreshness(input: DerivedMetricsFreshnessInpu
     if (formSnapshotBuiltFromEventMutationVersion < coordinatorEventMutationVersion) {
         return { shouldQueue: true, reason: 'event_mutation_version_behind' };
     }
+    // Fallback safety net for missed trigger executions:
+    // if the most recent event document update is newer than the last successful
+    // completion, force a rebuild even when mutation-version metadata did not advance.
+    if (Number.isFinite(input.latestEventUpdatedAtMs)
+        && Number.isFinite(input.coordinatorCompletedAtMs)
+        && (input.latestEventUpdatedAtMs as number) > (input.coordinatorCompletedAtMs as number)) {
+        return { shouldQueue: true, reason: 'latest_event_update_after_completion' };
+    }
 
     return { shouldQueue: false, reason: 'fresh' };
 }
@@ -147,12 +184,19 @@ export const ensureDerivedMetrics = onCall({
     const formSnapshotRef = admin
         .firestore()
         .doc(`users/${uid}/${DERIVED_METRICS_COLLECTION_ID}/${getDerivedMetricDocId(DERIVED_METRIC_KINDS.Form)}`);
+    const eventsCollectionRef = admin
+        .firestore()
+        .collection('users')
+        .doc(uid)
+        .collection('events');
     const [
         coordinatorSnapshot,
         formSnapshot,
+        latestEventSnapshot,
     ] = await Promise.all([
         coordinatorRef.get(),
         formSnapshotRef.get(),
+        eventsCollectionRef.orderBy('startDate', 'desc').limit(1).select('startDate').get(),
     ]);
 
     const coordinatorData = coordinatorSnapshot.data() || {};
@@ -167,6 +211,8 @@ export const ensureDerivedMetrics = onCall({
     const formSnapshotBuiltFromEventMutationVersion = toFiniteNumber(
         formSnapshotData.builtFromEventMutationVersion,
     );
+    const latestEventDoc = latestEventSnapshot.docs[0];
+    const latestEventUpdatedAtMs = toMillis(latestEventDoc?.updateTime);
     const freshnessDecision = decideDerivedMetricsFreshness({
         metricKinds,
         nowMs: Date.now(),
@@ -176,6 +222,7 @@ export const ensureDerivedMetrics = onCall({
         coordinatorEventMutationVersion,
         formSnapshotStatus,
         formSnapshotBuiltFromEventMutationVersion,
+        latestEventUpdatedAtMs,
     });
     if (!freshnessDecision.shouldQueue) {
         return {
