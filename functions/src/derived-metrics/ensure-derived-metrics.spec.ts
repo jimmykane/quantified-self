@@ -9,12 +9,9 @@ describe('decideDerivedMetricsFreshness', () => {
         coordinatorStatus: 'idle' as const,
         coordinatorCompletedAtMs: Date.UTC(2026, 3, 15, 10, 0, 0),
         coordinatorUpdatedAtMs: Date.UTC(2026, 3, 15, 10, 0, 0),
+        coordinatorEventMutationVersion: 10,
         formSnapshotStatus: 'ready',
-        formSnapshotSourceDocCount: 10,
-        formRangeEndDayMs: Date.UTC(2026, 3, 15),
-        latestEventStartDayMs: Date.UTC(2026, 3, 15),
-        latestEventUpdatedAtMs: Date.UTC(2026, 3, 15, 9, 30, 0),
-        latestEventCount: 10,
+        formSnapshotBuiltFromEventMutationVersion: 10,
     };
 
     it('returns fresh when coordinator and form snapshot are aligned with latest events', () => {
@@ -36,22 +33,22 @@ describe('decideDerivedMetricsFreshness', () => {
         });
     });
 
-    it('requests queue when raw event count differs from form snapshot source doc count', () => {
+    it('requests queue when snapshot build version is behind coordinator mutation version', () => {
         const decision = decideDerivedMetricsFreshness({
             ...baseInput,
-            latestEventCount: 11,
+            coordinatorEventMutationVersion: 11,
         });
         expect(decision).toEqual({
             shouldQueue: true,
-            reason: 'event_count_mismatch',
+            reason: 'event_mutation_version_behind',
         });
     });
 
-    it('uses source doc count as freshness comparator for raw event parity', () => {
+    it('marks fresh when snapshot build version matches coordinator mutation version', () => {
         const decision = decideDerivedMetricsFreshness({
             ...baseInput,
-            formSnapshotSourceDocCount: 12,
-            latestEventCount: 12,
+            coordinatorEventMutationVersion: 12,
+            formSnapshotBuiltFromEventMutationVersion: 12,
         });
         expect(decision).toEqual({
             shouldQueue: false,
@@ -59,25 +56,25 @@ describe('decideDerivedMetricsFreshness', () => {
         });
     });
 
-    it('requeues once when legacy snapshots are missing source doc count', () => {
+    it('requeues once when legacy snapshots are missing build mutation version', () => {
         const decision = decideDerivedMetricsFreshness({
             ...baseInput,
-            formSnapshotSourceDocCount: null,
+            formSnapshotBuiltFromEventMutationVersion: null,
         });
         expect(decision).toEqual({
             shouldQueue: true,
-            reason: 'missing_source_doc_count',
+            reason: 'missing_snapshot_event_mutation_version',
         });
     });
 
-    it('requests queue when latest event date is beyond form snapshot range', () => {
+    it('requeues when coordinator mutation version is missing', () => {
         const decision = decideDerivedMetricsFreshness({
             ...baseInput,
-            latestEventStartDayMs: Date.UTC(2026, 3, 16),
+            coordinatorEventMutationVersion: null,
         });
         expect(decision).toEqual({
             shouldQueue: true,
-            reason: 'latest_event_beyond_form_range',
+            reason: 'missing_event_mutation_version',
         });
     });
 
@@ -150,10 +147,11 @@ describe('decideDerivedMetricsFreshness', () => {
         });
     });
 
-    it('does not requeue when latest event is on same UTC day as form range end', () => {
+    it('keeps fresh when mutation versions match exactly', () => {
         const decision = decideDerivedMetricsFreshness({
             ...baseInput,
-            latestEventStartDayMs: baseInput.formRangeEndDayMs,
+            coordinatorEventMutationVersion: 25,
+            formSnapshotBuiltFromEventMutationVersion: 25,
         });
         expect(decision).toEqual({
             shouldQueue: false,

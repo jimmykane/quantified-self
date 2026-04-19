@@ -25,12 +25,9 @@ interface DerivedMetricsFreshnessInput {
     coordinatorStatus: DerivedMetricsCoordinatorStatus;
     coordinatorCompletedAtMs: number | null;
     coordinatorUpdatedAtMs: number | null;
+    coordinatorEventMutationVersion: number | null;
     formSnapshotStatus: string | null;
-    formSnapshotSourceDocCount: number | null;
-    formRangeEndDayMs: number | null;
-    latestEventStartDayMs: number | null;
-    latestEventUpdatedAtMs: number | null;
-    latestEventCount: number | null;
+    formSnapshotBuiltFromEventMutationVersion: number | null;
 }
 
 interface DerivedMetricsFreshnessDecision {
@@ -40,14 +37,11 @@ interface DerivedMetricsFreshnessDecision {
     | 'queued_stuck'
     | 'processing_stuck'
     | 'requested_metric_without_form'
-    | 'no_form_freshness_signal'
-    | 'missing_event_count'
     | 'missing_form_snapshot'
-    | 'missing_source_doc_count'
+    | 'missing_event_mutation_version'
+    | 'missing_snapshot_event_mutation_version'
     | 'missing_completed_at'
-    | 'event_count_mismatch'
-    | 'latest_event_beyond_form_range'
-    | 'latest_event_update_after_completion'
+    | 'event_mutation_version_behind'
     | 'fresh';
 }
 
@@ -67,45 +61,6 @@ function toFiniteNumber(value: unknown): number | null {
         return null;
     }
     return numericValue;
-}
-
-function toMillis(value: unknown): number | null {
-    if (typeof value === 'number' && Number.isFinite(value)) {
-        return value;
-    }
-    if (value instanceof Date) {
-        const dateMs = value.getTime();
-        return Number.isFinite(dateMs) ? dateMs : null;
-    }
-    if (typeof (value as { toMillis?: unknown } | null | undefined)?.toMillis === 'function') {
-        const millis = Number((value as { toMillis: () => unknown }).toMillis());
-        return Number.isFinite(millis) ? millis : null;
-    }
-    if (typeof (value as { toDate?: unknown } | null | undefined)?.toDate === 'function') {
-        return toMillis((value as { toDate: () => Date }).toDate());
-    }
-    if (typeof value === 'object' && value !== null && 'seconds' in (value as Record<string, unknown>)) {
-        const seconds = Number((value as Record<string, unknown>).seconds);
-        const nanos = Number((value as Record<string, unknown>).nanoseconds || 0);
-        if (!Number.isFinite(seconds) || !Number.isFinite(nanos)) {
-            return null;
-        }
-        return Math.floor((seconds * 1000) + (nanos / 1_000_000));
-    }
-    if (typeof value === 'string' && value.trim().length > 0) {
-        const parsed = new Date(value).getTime();
-        return Number.isFinite(parsed) ? parsed : null;
-    }
-    return null;
-}
-
-function toUtcDayStartMs(value: number): number {
-    const date = new Date(value);
-    return Date.UTC(
-        date.getUTCFullYear(),
-        date.getUTCMonth(),
-        date.getUTCDate(),
-    );
 }
 
 function parseCoordinatorStatus(value: unknown): DerivedMetricsCoordinatorStatus {
@@ -144,26 +99,10 @@ export function decideDerivedMetricsFreshness(input: DerivedMetricsFreshnessInpu
         return { shouldQueue: true, reason: 'requested_metric_without_form' };
     }
 
-    if (!Number.isFinite(input.latestEventCount)) {
-        return { shouldQueue: true, reason: 'missing_event_count' };
+    if (!Number.isFinite(input.coordinatorEventMutationVersion)) {
+        return { shouldQueue: true, reason: 'missing_event_mutation_version' };
     }
-    const latestEventCount = Math.max(0, Math.floor(input.latestEventCount as number));
-
-    if (latestEventCount <= 0) {
-        if (input.formSnapshotStatus !== 'ready') {
-            return { shouldQueue: true, reason: 'missing_form_snapshot' };
-        }
-        if (!Number.isFinite(input.formSnapshotSourceDocCount)) {
-            return { shouldQueue: true, reason: 'missing_source_doc_count' };
-        }
-        if ((input.formSnapshotSourceDocCount ?? -1) !== 0) {
-            return { shouldQueue: true, reason: 'event_count_mismatch' };
-        }
-        if (!Number.isFinite(input.coordinatorCompletedAtMs)) {
-            return { shouldQueue: true, reason: 'missing_completed_at' };
-        }
-        return { shouldQueue: false, reason: 'fresh' };
-    }
+    const coordinatorEventMutationVersion = Math.max(0, Math.floor(input.coordinatorEventMutationVersion as number));
 
     if (input.formSnapshotStatus !== 'ready') {
         return { shouldQueue: true, reason: 'missing_form_snapshot' };
@@ -171,20 +110,17 @@ export function decideDerivedMetricsFreshness(input: DerivedMetricsFreshnessInpu
     if (!Number.isFinite(input.coordinatorCompletedAtMs)) {
         return { shouldQueue: true, reason: 'missing_completed_at' };
     }
-    if (!Number.isFinite(input.formSnapshotSourceDocCount)) {
-        return { shouldQueue: true, reason: 'missing_source_doc_count' };
+    if (!Number.isFinite(input.formSnapshotBuiltFromEventMutationVersion)) {
+        return { shouldQueue: true, reason: 'missing_snapshot_event_mutation_version' };
     }
-    if ((input.formSnapshotSourceDocCount ?? -1) !== latestEventCount) {
-        return { shouldQueue: true, reason: 'event_count_mismatch' };
-    }
-    if (Number.isFinite(input.latestEventStartDayMs) && Number.isFinite(input.formRangeEndDayMs)
-        && (input.latestEventStartDayMs as number) > (input.formRangeEndDayMs as number)) {
-        return { shouldQueue: true, reason: 'latest_event_beyond_form_range' };
-    }
-    if (Number.isFinite(input.latestEventUpdatedAtMs)
-        && Number.isFinite(input.coordinatorCompletedAtMs)
-        && (input.latestEventUpdatedAtMs as number) > (input.coordinatorCompletedAtMs as number)) {
-        return { shouldQueue: true, reason: 'latest_event_update_after_completion' };
+    const formSnapshotBuiltFromEventMutationVersion = Math.max(
+        0,
+        Math.floor(input.formSnapshotBuiltFromEventMutationVersion as number),
+    );
+    // Freshness is revision-based instead of count-based so snapshot metadata drift
+    // (for example duplicate task races) cannot cause perpetual rebuild loops.
+    if (formSnapshotBuiltFromEventMutationVersion < coordinatorEventMutationVersion) {
+        return { shouldQueue: true, reason: 'event_mutation_version_behind' };
     }
 
     return { shouldQueue: false, reason: 'fresh' };
@@ -211,22 +147,12 @@ export const ensureDerivedMetrics = onCall({
     const formSnapshotRef = admin
         .firestore()
         .doc(`users/${uid}/${DERIVED_METRICS_COLLECTION_ID}/${getDerivedMetricDocId(DERIVED_METRIC_KINDS.Form)}`);
-    const eventsCollectionRef = admin
-        .firestore()
-        .collection('users')
-        .doc(uid)
-        .collection('events');
-
     const [
         coordinatorSnapshot,
         formSnapshot,
-        eventCountSnapshot,
-        latestEventSnapshot,
     ] = await Promise.all([
         coordinatorRef.get(),
         formSnapshotRef.get(),
-        eventsCollectionRef.count().get(),
-        eventsCollectionRef.orderBy('startDate', 'desc').limit(1).select('startDate').get(),
     ]);
 
     const coordinatorData = coordinatorSnapshot.data() || {};
@@ -234,34 +160,22 @@ export const ensureDerivedMetrics = onCall({
     const coordinatorCompletedAtMs = toFiniteNumber(coordinatorData.completedAtMs);
     const coordinatorUpdatedAtMs = toFiniteNumber(coordinatorData.updatedAtMs);
     const coordinatorGeneration = toFiniteNumber(coordinatorData.generation);
+    const coordinatorEventMutationVersion = toFiniteNumber(coordinatorData.eventMutationVersion);
 
     const formSnapshotData = formSnapshot.data() || {};
     const formSnapshotStatus = toSafeString(formSnapshotData.status) || null;
-    const formSnapshotSourceDocCount = toFiniteNumber(formSnapshotData.sourceDocCount);
-    const formRangeEndDayMs = toFiniteNumber(
-        ((formSnapshotData.payload as Record<string, unknown> | undefined)?.rangeEndDayMs) || null,
+    const formSnapshotBuiltFromEventMutationVersion = toFiniteNumber(
+        formSnapshotData.builtFromEventMutationVersion,
     );
-
-    const latestEventDoc = latestEventSnapshot.docs[0];
-    const latestEventData = latestEventDoc?.data() || {};
-    const latestEventStartDateMs = toMillis(latestEventData.startDate);
-    const latestEventStartDayMs = Number.isFinite(latestEventStartDateMs)
-        ? toUtcDayStartMs(latestEventStartDateMs as number)
-        : null;
-    const latestEventUpdatedAtMs = toMillis(latestEventDoc?.updateTime);
-    const latestEventCount = toFiniteNumber(eventCountSnapshot.data().count);
     const freshnessDecision = decideDerivedMetricsFreshness({
         metricKinds,
         nowMs: Date.now(),
         coordinatorStatus,
         coordinatorCompletedAtMs,
         coordinatorUpdatedAtMs,
+        coordinatorEventMutationVersion,
         formSnapshotStatus,
-        formSnapshotSourceDocCount,
-        formRangeEndDayMs,
-        latestEventStartDayMs,
-        latestEventUpdatedAtMs,
-        latestEventCount,
+        formSnapshotBuiltFromEventMutationVersion,
     });
     if (!freshnessDecision.shouldQueue) {
         return {

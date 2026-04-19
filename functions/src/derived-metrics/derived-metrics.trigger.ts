@@ -21,7 +21,12 @@ export const onDashboardDerivedMetricsEventWrite = onDocumentWritten({
     }
 
     const metricKinds = getDefaultDerivedMetricKindsForDashboard();
-    const queueResult = await markDerivedMetricsDirtyAndMaybeQueue(uid, metricKinds);
+    // Event writes are the source-of-truth mutation boundary for derived metrics.
+    // Incrementing eventMutationVersion here guarantees freshness checks requeue only
+    // when a newer event mutation exists than the latest completed snapshot build.
+    const queueResult = await markDerivedMetricsDirtyAndMaybeQueue(uid, metricKinds, {
+        incrementEventMutationVersion: true,
+    });
 
     logger.info('[derived-metrics] Event write marked dashboard derived metrics dirty', {
         uid,
