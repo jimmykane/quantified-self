@@ -7,6 +7,7 @@ import {
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
 import type {
+  AiInsightsAdvisoryOkResponse,
   AiInsightsAggregateOkResponse,
   AiInsightsEmptyResponse,
   AiInsightsEventLookupOkResponse,
@@ -182,6 +183,51 @@ describe('resolveAiInsightsDisplayTitle', () => {
 
     const title = resolveAiInsightsDisplayTitle(response);
     expect(title).toBe('Latest event for cycling');
+  });
+
+  it('builds an advisory title from metric key', () => {
+    const response: AiInsightsAdvisoryOkResponse = {
+      status: 'ok',
+      resultKind: 'advisory',
+      narrative: 'Narrative',
+      query: {
+        resultKind: 'advisory',
+        metricKey: 'heart_rate',
+        advisoryKind: 'expected_value',
+        horizon: 'current_year',
+        categoryType: ChartDataCategoryTypes.DateType,
+        activityTypeGroups: [],
+        activityTypes: [ActivityTypes.Cycling],
+        activityFilters: {
+          activityTypeGroups: [],
+          activityTypes: [ActivityTypes.Cycling],
+        },
+        dateRange: {
+          kind: 'bounded',
+          startDate: '2025-12-01',
+          endDate: '2026-03-01',
+          timezone: 'Europe/Helsinki',
+          source: 'prompt',
+        },
+        chartType: ChartTypes.LinesVertical,
+      },
+      advisory: {
+        status: 'available',
+        metricKey: 'heart_rate',
+        estimate: 186,
+        rangeLow: 182,
+        rangeHigh: 190,
+        confidenceTier: 'medium',
+        evidenceSummary: 'Deterministic evidence.',
+      },
+      presentation: {
+        title: 'Backend title',
+        chartType: ChartTypes.LinesVertical,
+      },
+    };
+
+    const title = resolveAiInsightsDisplayTitle(response);
+    expect(title).toBe('Expected heart rate for cycling');
   });
 
   it('returns null when metric labels cannot be resolved for multi-metric empty responses', () => {

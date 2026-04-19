@@ -315,12 +315,60 @@ describe('Ai insights shared response contract', () => {
         chartType: ChartTypes.LinesVertical,
       },
     });
+    const advisory = validateAiInsightsResponse({
+      status: 'ok',
+      resultKind: 'advisory',
+      narrative: 'Expected heart rate estimate',
+      query: {
+        resultKind: 'advisory',
+        metricKey: 'heart_rate',
+        advisoryKind: 'expected_value',
+        horizon: 'current_year',
+        categoryType: ChartDataCategoryTypes.DateType,
+        activityTypeGroups: [],
+        activityTypes: [ActivityTypes.Cycling],
+        activityFilters: {
+          activityTypeGroups: [],
+          activityTypes: [ActivityTypes.Cycling],
+        },
+        dateRange: {
+          kind: 'bounded',
+          startDate: '2026-01-01T00:00:00.000Z',
+          endDate: '2026-03-22T23:59:59.999Z',
+          timezone: 'UTC',
+          source: 'prompt',
+        },
+        chartType: ChartTypes.LinesVertical,
+      },
+      advisory: {
+        status: 'available',
+        metricKey: 'heart_rate',
+        estimate: 186,
+        rangeLow: 182,
+        rangeHigh: 190,
+        confidenceTier: 'medium',
+        evidenceSummary: 'Based on 12 events with max heart-rate samples.',
+      },
+      synthesis: {
+        attempted: true,
+        applied: true,
+        mode: 'supported_optimize',
+        executedPrompt: 'what should my max heart rate be this year',
+        confidence: 0.92,
+        decisionReason: 'Candidate matched deterministic parse and improved advisory routing.',
+      },
+      presentation: {
+        title: 'Expected heart rate for Cycling',
+        chartType: ChartTypes.LinesVertical,
+      },
+    });
 
     expect(aggregate.ok).toBe(true);
     expect(eventLookup.ok).toBe(true);
     expect(latestEvent.ok).toBe(true);
     expect(multiMetric.ok).toBe(true);
     expect(powerCurve.ok).toBe(true);
+    expect(advisory.ok).toBe(true);
   });
 
   it('rejects malformed digest payloads with a dedicated reason', () => {

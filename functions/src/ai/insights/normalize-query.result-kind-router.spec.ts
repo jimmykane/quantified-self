@@ -14,6 +14,7 @@ describe('normalize-query.result-kind-router', () => {
       hasPowerCurveIntent: false,
       hasDigestIntent: false,
       hasMultiMetricIntent: false,
+      hasAdvisoryIntent: false,
       hasLatestEventIntent: false,
     });
 
@@ -30,6 +31,7 @@ describe('normalize-query.result-kind-router', () => {
       hasPowerCurveIntent: false,
       hasDigestIntent: true,
       hasMultiMetricIntent: true,
+      hasAdvisoryIntent: false,
       hasLatestEventIntent: false,
     });
 
@@ -45,6 +47,7 @@ describe('normalize-query.result-kind-router', () => {
       hasPowerCurveIntent: false,
       hasDigestIntent: false,
       hasMultiMetricIntent: false,
+      hasAdvisoryIntent: false,
       hasLatestEventIntent: true,
     });
 
@@ -54,12 +57,29 @@ describe('normalize-query.result-kind-router', () => {
     }));
   });
 
+  it('routes advisory prompts to advisory mode before single-metric fallback', () => {
+    const decision = resolveNormalizeQueryRouteDecision({
+      hasUnsupportedCapability: false,
+      hasPowerCurveIntent: false,
+      hasDigestIntent: false,
+      hasMultiMetricIntent: false,
+      hasAdvisoryIntent: true,
+      hasLatestEventIntent: false,
+    });
+
+    expect(decision).toEqual(expect.objectContaining({
+      routeId: 'advisory',
+      resultKind: 'advisory',
+    }));
+  });
+
   it('falls back to single-metric route when no specialized route matches', () => {
     const decision = resolveNormalizeQueryRouteDecision({
       hasUnsupportedCapability: false,
       hasPowerCurveIntent: false,
       hasDigestIntent: false,
       hasMultiMetricIntent: false,
+      hasAdvisoryIntent: false,
       hasLatestEventIntent: false,
     });
 

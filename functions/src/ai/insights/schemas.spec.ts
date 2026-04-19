@@ -159,6 +159,50 @@ describe('AiInsightsResponseSchema', () => {
     expect(parsed.success).toBe(true);
   });
 
+  it('parses advisory responses through the result-kind discriminator', () => {
+    const parsed = AiInsightsResponseSchema.safeParse({
+      status: 'ok',
+      resultKind: 'advisory',
+      narrative: 'Expected heart-rate estimate.',
+      query: {
+        resultKind: 'advisory',
+        metricKey: 'heart_rate',
+        advisoryKind: 'expected_value',
+        horizon: 'current_year',
+        categoryType: ChartDataCategoryTypes.DateType,
+        activityTypeGroups: [],
+        activityTypes: [ActivityTypes.Cycling],
+        activityFilters: {
+          activityTypeGroups: [],
+          activityTypes: [ActivityTypes.Cycling],
+        },
+        dateRange: {
+          kind: 'bounded',
+          startDate: '2026-01-01T00:00:00.000Z',
+          endDate: '2026-03-18T23:59:59.999Z',
+          timezone: 'UTC',
+          source: 'prompt',
+        },
+        chartType: ChartTypes.LinesVertical,
+      },
+      advisory: {
+        status: 'available',
+        metricKey: 'heart_rate',
+        estimate: 186,
+        rangeLow: 182,
+        rangeHigh: 190,
+        confidenceTier: 'medium',
+        evidenceSummary: 'Based on 12 events with max heart-rate samples.',
+      },
+      presentation: {
+        title: 'Expected heart rate for Cycling',
+        chartType: ChartTypes.LinesVertical,
+      },
+    });
+
+    expect(parsed.success).toBe(true);
+  });
+
   it('parses multi-metric digest responses with period-level payloads', () => {
     const parsed = AiInsightsResponseSchema.safeParse({
       status: 'ok',

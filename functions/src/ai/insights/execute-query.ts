@@ -15,6 +15,7 @@ import {
 } from '@sports-alliance/sports-lib';
 
 import type {
+  AiInsightAdvisoryResult,
   AiInsightPowerCurve,
   AiInsightPowerCurvePoint,
   AiInsightPowerCurveSeries,
@@ -150,12 +151,23 @@ interface PowerCurveExecutionResult {
   powerCurve: AiInsightPowerCurve;
 }
 
+interface AdvisoryExecutionResult {
+  resultKind: 'advisory';
+  matchedEventsCount: number;
+  matchedActivityTypeCounts: Array<{
+    activityType: string;
+    eventCount: number;
+  }>;
+  advisory: AiInsightAdvisoryResult;
+}
+
 export type AiInsightsExecutionResult =
   | AggregateExecutionResult
   | EventLookupExecutionResult
   | LatestEventExecutionResult
   | MultiMetricAggregateExecutionResult
-  | PowerCurveExecutionResult;
+  | PowerCurveExecutionResult
+  | AdvisoryExecutionResult;
 
 type ActivityPrefilterMode = 'none' | 'contains' | 'contains_any' | 'chunked';
 
@@ -1319,6 +1331,7 @@ export function createExecuteQuery(
           query.resultKind === 'aggregate'
           || query.resultKind === 'event_lookup'
         ) ? query.valueType : null,
+        advisoryMetricKey: query.resultKind === 'advisory' ? query.metricKey : null,
         rankedTopResultsLimit: (
           query.resultKind === 'event_lookup'
           || (

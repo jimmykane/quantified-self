@@ -251,8 +251,10 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Latest event**: most recent matching event in scope (single primary event card).
 - **Multi-metric aggregate**: combined chart for multiple metrics with merged summary cards.
 - **Digest narrative**: ask for a weekly, monthly, or yearly digest to get deterministic period-by-period summaries with explicit no-data periods.
+- **Advisory**: metric-generic expected-value estimates (for example expected heart rate) with deterministic estimate/range/confidence/evidence payload fields.
 - **Anomaly callouts**: deterministic spike/drop/activity-mix shift callouts for aggregate and date-grouped multi-metric results.
 - **Confidence & evidence chips**: compact chips under supported AI result narratives and callouts that show confidence tier and linked deterministic evidence.
+- **Interpreted badge**: shown when query synthesis rewrites your prompt and the synthesized prompt passes score-gated deterministic validation.
 - **Empty**: the request shape is valid but no matching data was found in scope.
 - **Unsupported**: the request could not be mapped confidently; suggested prompts are returned.
 

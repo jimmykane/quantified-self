@@ -71,6 +71,7 @@ export const NORMALIZE_QUERY_ROUTE_IDS = [
   'power_curve',
   'digest',
   'multi_metric',
+  'advisory',
   'latest_event',
   'single_metric',
 ] as const;
@@ -83,6 +84,7 @@ export const NORMALIZE_QUERY_ROUTE_RESULT_KINDS = [
   'latest_event',
   'multi_metric_aggregate',
   'power_curve',
+  'advisory',
 ] as const;
 
 export type NormalizeQueryRouteResultKind = (typeof NORMALIZE_QUERY_ROUTE_RESULT_KINDS)[number];
@@ -92,6 +94,7 @@ export interface NormalizeQueryRouteMatchContext {
   hasPowerCurveIntent: boolean;
   hasDigestIntent: boolean;
   hasMultiMetricIntent: boolean;
+  hasAdvisoryIntent: boolean;
   hasLatestEventIntent: boolean;
 }
 
@@ -213,6 +216,25 @@ export const DEFAULT_NORMALIZE_QUERY_ROUTE_DEFINITIONS: ReadonlyArray<
     ],
     reason: 'Prompt indicates latest-event lookup mode.',
     match: (context) => context.hasLatestEventIntent,
+  },
+  {
+    id: 'advisory',
+    priority: 50,
+    resultKind: 'advisory',
+    intentHints: [
+      'should/expected/target guidance wording',
+      'metric expectation request for selected horizon',
+    ],
+    constraints: [
+      'must resolve to deterministic advisory estimator input',
+      'must preserve explicit activity/date/location constraints',
+    ],
+    examples: [
+      'What should my max heart rate be this year?',
+      'Expected ftp this year for cycling',
+    ],
+    reason: 'Prompt indicates advisory estimate mode.',
+    match: (context) => context.hasAdvisoryIntent,
   },
   {
     id: 'single_metric',

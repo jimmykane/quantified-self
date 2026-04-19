@@ -41,8 +41,10 @@ import {
   resolveInsightMetric,
   type InsightMetricKey,
 } from './metric-catalog';
+import { resolveAdvisoryEstimator } from './advisory-estimator';
 import { canonicalizeInsightPrompt, normalizePromptSearchText } from './prompt-normalization';
 import {
+  buildAdvisoryInsightQuery,
   buildAggregateInsightQuery,
   buildEventLookupInsightQuery,
   buildLatestEventInsightQuery,
@@ -246,6 +248,11 @@ const LATEST_EVENT_SUBJECT_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
 const EVENT_LOOKUP_RANKING_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
   /\b(longest|shortest|highest|lowest|fastest|slowest|biggest|farthest|furthest)\b/i,
   /\b(max|maximum|min|minimum|peak)\b/i,
+];
+const ADVISORY_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
+  /\b(expected|expectation|predict|prediction|projected|projection|forecast|target|goal)\b/i,
+  /\b(what|when)\s+(should|would)\s+my\b/i,
+  /\bshould\s+my\b/i,
 ];
 const AGGREGATE_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
   /\b(over time|by month|by week|by day|by year|timeline|trend|chart)\b/i,
@@ -1680,6 +1687,29 @@ function promptImpliesPowerCurve(prompt: string): boolean {
   return /\bpower\b/.test(normalizedPrompt) && /\bcurve\b/.test(normalizedPrompt);
 }
 
+function promptImpliesAdvisory(prompt: string): boolean {
+  const normalizedPrompt = normalizePromptSearchText(prompt);
+  if (!normalizedPrompt) {
+    return false;
+  }
+
+  return ADVISORY_PROMPT_PATTERNS.some(pattern => pattern.test(normalizedPrompt));
+}
+
+function resolveAdvisoryHorizon(
+  dateRangeIntent: DateRangeIntent | undefined,
+): 'current_year' | 'requested_range' {
+  if (!dateRangeIntent) {
+    return 'current_year';
+  }
+
+  if ((dateRangeIntent.kind === 'current_period' || dateRangeIntent.kind === 'this') && dateRangeIntent.unit === 'year') {
+    return 'current_year';
+  }
+
+  return 'requested_range';
+}
+
 function resolvePowerCurveMode(prompt: string): AiInsightsPowerCurveMode {
   const normalizedPrompt = normalizePromptSearchText(prompt);
   if (!normalizedPrompt) {
@@ -2183,6 +2213,9 @@ export function resolveNormalizedInsightQueryFromIntent(
   promptContext: NormalizeQueryPromptContext,
   intent: ModelInsightIntent,
   dependencies: NormalizeQueryDependencies = defaultNormalizeQueryDependencies,
+  options: {
+    routeHint?: string | null;
+  } = {},
 ): NormalizeInsightQueryResult {
   const {
     prompt,
@@ -2192,7 +2225,8 @@ export function resolveNormalizedInsightQueryFromIntent(
     promptChartPreference,
   } = promptContext;
   const modelReturnedUnsupported = intent.status === 'unsupported';
-  const latestEventRequested = promptImpliesLatestEventLookup(prompt);
+  const advisoryRequested = options.routeHint === 'advisory';
+  const latestEventRequested = !advisoryRequested && promptImpliesLatestEventLookup(prompt);
 
   if (latestEventRequested) {
     const resolvedDateRangeIntent = promptDateSelection.effectiveDateRangeIntent
@@ -2265,6 +2299,98 @@ export function resolveNormalizedInsightQueryFromIntent(
   }
 
   const promptMetricMatch = findInsightMetricAliasMatch(canonicalizeInsightPrompt(prompt));
+
+  if (advisoryRequested) {
+    const metric = promptMetricMatch?.metric || resolveInsightMetric(intent.metric || '');
+    if (!metric) {
+      return buildUnsupportedResult(
+        modelReturnedUnsupported
+          ? (intent.unsupportedReasonCode || 'unsupported_metric')
+          : 'unsupported_metric',
+        prompt,
+      );
+    }
+
+    const advisoryEstimator = resolveAdvisoryEstimator(metric.key);
+    if (!advisoryEstimator || !advisoryEstimator.enabled) {
+      // Advisory intent is only executable when a metric estimator is enabled.
+      // Fall through to the deterministic single-metric path to preserve
+      // aggregate/event behavior for metrics that do not yet support advisory.
+    } else {
+      const resolvedDateRangeIntent = promptDateSelection.effectiveDateRangeIntent
+        ?? (modelReturnedUnsupported ? undefined : intent.dateRange);
+      const activityTypes = normalizeActivityTypes(modelReturnedUnsupported ? undefined : intent.activityTypes);
+      const activityTypeGroups = normalizeActivityTypeGroups(modelReturnedUnsupported ? undefined : intent.activityTypeGroups);
+      if (!activityTypes || !activityTypeGroups) {
+        return buildUnsupportedResult('invalid_prompt', prompt);
+      }
+
+      const promptWithoutActivityExclusions = stripPromptActivityExclusionClauses(prompt);
+      const promptExcludedActivityTypeGroups = extractPromptActivityExclusionClauses(prompt)
+        .flatMap((clause) => resolvePromptActivityTypeGroups(clause));
+      const promptExcludedActivityTypes = extractPromptActivityExclusionClauses(prompt)
+        .flatMap((clause) => {
+          const clauseGroups = resolvePromptActivityTypeGroups(clause);
+          return [
+            ...resolvePromptActivityTypes(clause, clauseGroups),
+            ...resolveKeywordActivityTypeExclusions(clause),
+          ];
+        });
+      const excludedActivityTypeSet = new Set<ActivityTypes>([
+        ...promptExcludedActivityTypes,
+        ...expandActivityTypeGroups(promptExcludedActivityTypeGroups),
+      ]);
+      const promptActivityTypeGroups = resolvePromptActivityTypeGroups(promptWithoutActivityExclusions);
+      const promptActivityTypes = resolvePromptActivityTypes(promptWithoutActivityExclusions, promptActivityTypeGroups);
+      const resolvedActivityTypeGroups = activityTypeGroups.length > 0
+        ? activityTypeGroups
+        : promptActivityTypeGroups;
+      const resolvedActivityTypes = activityTypes.length > 0
+        ? activityTypes
+        : promptActivityTypes;
+      const filteredResolvedActivityTypes = excludeActivityTypes(
+        resolvedActivityTypes,
+        excludedActivityTypeSet,
+      );
+      const filteredResolvedActivityTypeGroups = resolvedActivityTypeGroups
+        .filter(activityTypeGroup => !promptExcludedActivityTypeGroups.includes(activityTypeGroup));
+      const finalActivityTypeGroups = filteredResolvedActivityTypes.length > 0 ? [] : filteredResolvedActivityTypeGroups;
+      const expandedActivityTypes = finalActivityTypeGroups.length > 0
+        ? excludeActivityTypes(expandActivityTypeGroups(finalActivityTypeGroups), excludedActivityTypeSet)
+        : [];
+      const finalActivityTypes = filteredResolvedActivityTypes.length > 0
+        ? filteredResolvedActivityTypes
+        : expandedActivityTypes.length > 0
+          ? expandedActivityTypes
+          : excludedActivityTypeSet.size > 0
+            ? excludeActivityTypes(CANONICAL_ACTIVITY_TYPES, excludedActivityTypeSet)
+            : [];
+
+      const dateRange = resolveDateRange(resolvedDateRangeIntent, input.clientTimezone, dependencies.now());
+      const requestedDateRanges = resolveRequestedDateRanges(
+        promptDateSelection.requestedDateRangeIntents,
+        input.clientTimezone,
+        dependencies.now(),
+      );
+
+      return {
+        status: 'ok',
+        metricKey: metric.key,
+        query: buildAdvisoryInsightQuery({
+          metricKey: metric.key,
+          advisoryKind: 'expected_value',
+          horizon: resolveAdvisoryHorizon(resolvedDateRangeIntent),
+          activityTypeGroups: finalActivityTypeGroups,
+          activityTypes: finalActivityTypes,
+          dateRange,
+          requestedDateRanges,
+          periodMode: promptDateSelection.periodMode,
+          chartType: ChartTypes.LinesVertical,
+        }),
+      };
+    }
+  }
+
   const baseMetric = promptMetricMatch?.metric || resolveInsightMetric(intent.metric || '');
   if (!baseMetric) {
     return buildUnsupportedResult(
@@ -2488,6 +2614,7 @@ export function createNormalizeQuery(
         hasPowerCurveIntent: false,
         hasDigestIntent: false,
         hasMultiMetricIntent: false,
+        hasAdvisoryIntent: false,
         hasLatestEventIntent: false,
       });
       return buildUnsupportedResult('unsupported_capability', prompt, routeDecision);
@@ -2509,6 +2636,7 @@ export function createNormalizeQuery(
       hasPowerCurveIntent: promptImpliesPowerCurve(prompt),
       hasDigestIntent: digestMode !== null,
       hasMultiMetricIntent: multiMetricIntent !== null,
+      hasAdvisoryIntent: promptImpliesAdvisory(prompt),
       hasLatestEventIntent: promptImpliesLatestEventLookup(prompt),
     });
 
@@ -2789,13 +2917,42 @@ export function createNormalizeQuery(
       };
     }
 
+    if (routeDecision.routeId === 'advisory') {
+      const intent = buildDeterministicIntent(prompt);
+      const advisoryResult = resolveNormalizedInsightQueryFromIntent(
+        input,
+        promptContext,
+        intent,
+        resolvedDependencies,
+        { routeHint: 'advisory' },
+      );
+      const effectiveRouteDecision = advisoryResult.status === 'ok' && advisoryResult.query.resultKind !== 'advisory'
+        ? {
+          ...routeDecision,
+          routeId: 'single_metric' as const,
+          resultKind: advisoryResult.query.resultKind,
+          reason: 'Advisory intent matched, but no enabled advisory estimator was available for the resolved metric. Fell back to single-metric normalization.',
+        }
+        : routeDecision;
+      return attachRoutingToResult(
+        advisoryResult,
+        effectiveRouteDecision,
+      );
+    }
+
     if (routeDecision.routeId === 'latest_event' || routeDecision.routeId === 'single_metric') {
       const intent = await resolvedDependencies.generateIntent({
         ...input,
         prompt,
       });
       return attachRoutingToResult(
-        resolveNormalizedInsightQueryFromIntent(input, promptContext, intent, resolvedDependencies),
+        resolveNormalizedInsightQueryFromIntent(
+          input,
+          promptContext,
+          intent,
+          resolvedDependencies,
+          { routeHint: routeDecision.routeId },
+        ),
         routeDecision,
       );
     }

@@ -8,12 +8,14 @@ import {
 } from '@sports-alliance/sports-lib';
 
 import type {
+  AiInsightAdvisoryResult,
   AiInsightsDigest,
   AiInsightPresentation,
   AiInsightSummaryBucket,
   AiInsightSummary,
   AiInsightsMultiMetricAggregateMetricResult,
   NormalizedInsightAggregateQuery,
+  NormalizedInsightAdvisoryQuery,
   NormalizedInsightEventLookupQuery,
   NormalizedInsightMultiMetricAggregateQuery,
   NormalizedInsightQuery,
@@ -75,10 +77,16 @@ export interface SummarizeInsightMultiMetricAggregateInput extends SummarizeInsi
   digest?: AiInsightsDigest;
 }
 
+export interface SummarizeInsightAdvisoryInput extends SummarizeInsightBaseInput {
+  query: NormalizedInsightAdvisoryQuery;
+  advisory: AiInsightAdvisoryResult;
+}
+
 export type SummarizeInsightResultInput =
   | SummarizeInsightAggregateInput
   | SummarizeInsightEventLookupInput
-  | SummarizeInsightMultiMetricAggregateInput;
+  | SummarizeInsightMultiMetricAggregateInput
+  | SummarizeInsightAdvisoryInput;
 
 export interface SummarizeInsightNarrativeResult {
   narrative: string;
@@ -227,6 +235,12 @@ function joinMetricLabels(metricLabels: string[]): string {
   }
 
   return `${metricLabels.slice(0, -1).join(', ')}, and ${metricLabels[metricLabels.length - 1]}`;
+}
+
+function formatAdvisoryMetricLabel(metricKey: string): string {
+  return metricKey
+    .replace(/_/g, ' ')
+    .trim();
 }
 
 function formatNumber(value: number): string {
@@ -795,6 +809,39 @@ function buildNarrativeFallback(input: SummarizeInsightResultInput): string {
   const dateRangeText = formatLocalizedDateRange(input.query, input.clientLocale);
   const scopeText = resolveNarrativeScope(input.query).scopeLabel;
   const isAllTime = input.query.dateRange.kind === 'all_time';
+  if ('advisory' in input) {
+    const metricLabel = formatAdvisoryMetricLabel(input.query.metricKey);
+    if (input.advisory.status === 'available') {
+      const estimateLabel = input.advisory.estimate === null
+        ? null
+        : formatNumber(input.advisory.estimate);
+      const rangeLowLabel = input.advisory.rangeLow === null
+        ? null
+        : formatNumber(input.advisory.rangeLow);
+      const rangeHighLabel = input.advisory.rangeHigh === null
+        ? null
+        : formatNumber(input.advisory.rangeHigh);
+      const confidenceLabel = input.advisory.confidenceTier
+        ? `${input.advisory.confidenceTier} confidence`
+        : 'confidence unavailable';
+
+      if (estimateLabel && rangeLowLabel && rangeHighLabel) {
+        return isAllTime
+          ? `Expected ${metricLabel} ${scopeText} is ${estimateLabel} (range ${rangeLowLabel}-${rangeHighLabel}, ${confidenceLabel}). ${input.advisory.evidenceSummary}`
+          : `Expected ${metricLabel} ${scopeText} for ${dateRangeText} is ${estimateLabel} (range ${rangeLowLabel}-${rangeHighLabel}, ${confidenceLabel}). ${input.advisory.evidenceSummary}`;
+      }
+
+      return `Expected ${metricLabel} ${scopeText}: ${input.advisory.evidenceSummary}`;
+    }
+
+    if (input.advisory.status === 'insufficient_data') {
+      const reason = input.advisory.insufficientDataReason || input.advisory.evidenceSummary;
+      return `I could not estimate expected ${metricLabel} ${scopeText} for ${dateRangeText}. ${reason}`;
+    }
+
+    return `I could not estimate expected ${metricLabel} ${scopeText}. ${input.advisory.evidenceSummary}`;
+  }
+
   const metricLabelText = 'metricResults' in input
     ? joinMetricLabels(input.metricLabels)
     : input.metricLabel;
@@ -884,6 +931,31 @@ export function buildNarrativeFacts(input: SummarizeInsightResultInput): Record<
   const dateRangeLabel = formatLocalizedDateRange(input.query, input.clientLocale);
   const narrativeScope = resolveNarrativeScope(input.query);
   const narrativeLead = buildDeterministicNarrativeLead(input.query, dateRangeLabel);
+
+  if ('advisory' in input) {
+    return {
+      status: input.status,
+      resultKind: 'advisory',
+      title: input.presentation.title,
+      chartType: input.presentation.chartType,
+      metricKey: input.query.metricKey,
+      metricLabel: formatAdvisoryMetricLabel(input.query.metricKey),
+      advisoryKind: input.query.advisoryKind,
+      horizon: input.query.horizon,
+      advisoryStatus: input.advisory.status,
+      estimate: input.advisory.estimate,
+      rangeLow: input.advisory.rangeLow,
+      rangeHigh: input.advisory.rangeHigh,
+      confidenceTier: input.advisory.confidenceTier,
+      evidenceSummary: input.advisory.evidenceSummary,
+      insufficientDataReason: input.advisory.insufficientDataReason ?? null,
+      dateRangeLabel,
+      narrativeLead,
+      activityFilterLabel: narrativeScope.activityFilterLabel,
+      ...(narrativeScope.locationScopeLabel ? { locationFilterLabel: narrativeScope.locationScopeLabel } : {}),
+      scopeLabel: narrativeScope.scopeLabel,
+    };
+  }
 
   if ('metricResults' in input) {
     const metricSummaryFacts = buildMultiMetricSummaryFacts(input);
@@ -1028,7 +1100,8 @@ const defaultSummarizeInsightDependencies: SummarizeInsightDependencies = {
         'Use the provided formatted display values and labels exactly as supplied.',
         'Do not invent units, dates, metrics, or calculations.',
         'Do not restate raw storage values or infer new numeric calculations.',
-        'If status is ok, do not claim that no matching data was found and do not mention any date range other than the supplied effective range.',
+        'If status is ok and resultKind is not advisory, do not claim that no matching data was found and do not mention any date range other than the supplied effective range.',
+        'For advisory facts, if advisoryStatus is insufficient_data or unsupported, clearly state that estimate status and the provided reason without inventing numbers.',
         'If the status is empty, clearly say that no matching data was found.',
       ].join(' '),
       prompt: JSON.stringify(buildNarrativeFacts(input)),

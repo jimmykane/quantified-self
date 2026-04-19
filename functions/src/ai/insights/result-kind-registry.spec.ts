@@ -5,6 +5,7 @@ import { DEFAULT_NORMALIZE_QUERY_ROUTE_DEFINITIONS } from './normalize-query.res
 
 const EXPECTED_RESULT_KINDS = [
   'aggregate',
+  'advisory',
   'event_lookup',
   'latest_event',
   'multi_metric_aggregate',
@@ -36,6 +37,7 @@ describe('AI insights result-kind registries', () => {
     );
 
     expect([...routableResultKinds].sort()).toEqual([
+      'advisory',
       'latest_event',
       'multi_metric_aggregate',
       'power_curve',
