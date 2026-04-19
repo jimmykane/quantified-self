@@ -1233,6 +1233,36 @@ describe('normalizeInsightQuery', () => {
     });
   });
 
+  it('deterministically resolves longest cycling prompts with location and year phrasing', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-24T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'when was my longest cycling in Zagori Greece for 2026',
+      clientTimezone: 'Europe/Athens',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('distance');
+    expect(result.query.resultKind).toBe('event_lookup');
+    expect(result.query.dataType).toBe(DataDistance.type);
+    expect(result.query.valueType).toBe(ChartDataValueTypes.Maximum);
+    expect(result.query.categoryType).toBe(ChartDataCategoryTypes.DateType);
+    expect(result.query.activityTypes).toEqual([ActivityTypes.Cycling]);
+    expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
+      startDate: '2025-12-31T22:00:00.000Z',
+      endDate: '2026-12-31T21:59:59.999Z',
+      timezone: 'Europe/Athens',
+      source: 'prompt',
+    });
+  });
+
   it('treats "Which rides had my highest power output this month?" as ranked event lookup', async () => {
     setNormalizeQueryDependenciesForTesting({
       now: () => new Date('2026-03-19T12:00:00.000Z'),

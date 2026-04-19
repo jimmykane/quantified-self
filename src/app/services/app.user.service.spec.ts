@@ -865,6 +865,95 @@ describe('AppUserService', () => {
             });
         });
 
+        describe('backfillActivitySyncRouteForCurrentUser', () => {
+            it('should call cloud function for activity sync route backfill', async () => {
+                const expectedStartDate = new Date(startDate.getTime());
+                expectedStartDate.setHours(0, 0, 0, 0);
+                const expectedEndDate = new Date(endDate.getTime());
+                expectedEndDate.setHours(23, 59, 59, 999);
+                await service.backfillActivitySyncRouteForCurrentUser('Garmin API' as any, 'Suunto app' as any, startDate, endDate);
+
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('backfillActivitySyncRoute', {
+                    sourceServiceName: 'Garmin API',
+                    destinationServiceName: 'Suunto app',
+                    startDate: expectedStartDate.toISOString(),
+                    endDate: expectedEndDate.toISOString(),
+                });
+            });
+
+            it('should normalize backfill request dates to local day boundaries', async () => {
+                const startDateWithTime = new Date('2026-04-01T14:21:00.000Z');
+                const endDateAtMidnight = new Date('2026-04-16T00:00:00.000Z');
+                const expectedStartDate = new Date(startDateWithTime.getTime());
+                expectedStartDate.setHours(0, 0, 0, 0);
+                const expectedEndDate = new Date(endDateAtMidnight.getTime());
+                expectedEndDate.setHours(23, 59, 59, 999);
+
+                await service.backfillActivitySyncRouteForCurrentUser(
+                    'Garmin API' as any,
+                    'Suunto app' as any,
+                    startDateWithTime,
+                    endDateAtMidnight,
+                );
+
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('backfillActivitySyncRoute', {
+                    sourceServiceName: 'Garmin API',
+                    destinationServiceName: 'Suunto app',
+                    startDate: expectedStartDate.toISOString(),
+                    endDate: expectedEndDate.toISOString(),
+                });
+            });
+
+            it('should accept ISO date string inputs and normalize to local day boundaries', async () => {
+                const startDateIso = '2026-04-01T14:21:00.000Z';
+                const endDateIso = '2026-04-16T00:00:00.000Z';
+                const expectedStartDate = new Date(startDateIso);
+                expectedStartDate.setHours(0, 0, 0, 0);
+                const expectedEndDate = new Date(endDateIso);
+                expectedEndDate.setHours(23, 59, 59, 999);
+
+                await service.backfillActivitySyncRouteForCurrentUser(
+                    'Garmin API' as any,
+                    'Suunto app' as any,
+                    startDateIso as any,
+                    endDateIso as any,
+                );
+
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('backfillActivitySyncRoute', {
+                    sourceServiceName: 'Garmin API',
+                    destinationServiceName: 'Suunto app',
+                    startDate: expectedStartDate.toISOString(),
+                    endDate: expectedEndDate.toISOString(),
+                });
+            });
+
+            it('should reject null startDate values and avoid triggering backfill', async () => {
+                await expect(
+                    service.backfillActivitySyncRouteForCurrentUser(
+                        'Garmin API' as any,
+                        'Suunto app' as any,
+                        null as any,
+                        endDate,
+                    )
+                ).rejects.toThrow('Invalid startDate');
+
+                expect(mockFunctionsService.call).not.toHaveBeenCalledWith('backfillActivitySyncRoute', expect.anything());
+            });
+
+            it('should reject undefined endDate values and avoid triggering backfill', async () => {
+                await expect(
+                    service.backfillActivitySyncRouteForCurrentUser(
+                        'Garmin API' as any,
+                        'Suunto app' as any,
+                        startDate,
+                        undefined as any,
+                    )
+                ).rejects.toThrow('Invalid endDate');
+
+                expect(mockFunctionsService.call).not.toHaveBeenCalledWith('backfillActivitySyncRoute', expect.anything());
+            });
+        });
+
         describe('deauthorizeService', () => {
             it('should call cloud function for COROS', async () => {
                 const serviceName = 'COROS API' as any;

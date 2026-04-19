@@ -28,7 +28,7 @@ export class AdminQueueMonitorComponent implements OnInit, OnDestroy {
     isLoadingStats = true;
     queueView: AdminQueueStatsView = 'all';
     pageTitle = 'Queue Monitoring';
-    pageSubtitle = 'Operational health for ingestion, reparse, and derived metrics pipelines';
+    pageSubtitle = 'Operational health for ingestion, activity sync, reparse, and derived metrics pipelines';
 
     private readonly destroy$ = new Subject<void>();
 
@@ -50,7 +50,7 @@ export class AdminQueueMonitorComponent implements OnInit, OnDestroy {
 
     private configureView(): void {
         const rawView = this.route.snapshot.data['queueView'];
-        if (rawView === 'workout' || rawView === 'reparse' || rawView === 'derived') {
+        if (rawView === 'workout' || rawView === 'activity-sync' || rawView === 'reparse' || rawView === 'derived') {
             this.queueView = rawView;
         } else {
             this.queueView = 'all';
@@ -68,6 +68,12 @@ export class AdminQueueMonitorComponent implements OnInit, OnDestroy {
             return;
         }
 
+        if (this.queueView === 'activity-sync') {
+            this.pageTitle = 'Activity Sync Queue';
+            this.pageSubtitle = 'Monitor cross-service activity sync queue depth';
+            return;
+        }
+
         if (this.queueView === 'derived') {
             this.pageTitle = 'Derived Metrics Queue';
             this.pageSubtitle = 'Monitor derived metrics queue depth, coordinator status, and failure diagnostics';
@@ -75,7 +81,7 @@ export class AdminQueueMonitorComponent implements OnInit, OnDestroy {
         }
 
         this.pageTitle = 'Queue Monitoring';
-        this.pageSubtitle = 'Operational health for ingestion, reparse, and derived metrics pipelines';
+        this.pageSubtitle = 'Operational health for ingestion, activity sync, reparse, and derived metrics pipelines';
     }
 
     fetchQueueStats(): void {

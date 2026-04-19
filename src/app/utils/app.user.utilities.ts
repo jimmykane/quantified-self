@@ -66,6 +66,7 @@ import {
     DASHBOARD_RECOVERY_NOW_CHART_TYPE,
     isDashboardRecoveryNowChartType,
 } from '../helpers/dashboard-special-chart-types';
+import { ACTIVITY_SYNC_ROUTES, ActivitySyncRouteId } from '@shared/activity-sync-routes';
 
 /**
  * Utility class for AppUser related static methods and default settings.
@@ -517,6 +518,16 @@ export class AppUserUtilities {
         settings.exportToCSVSettings.maximumPower = settings.exportToCSVSettings.maximumPower !== false;
         settings.exportToCSVSettings.vO2Max = settings.exportToCSVSettings.vO2Max !== false;
         settings.exportToCSVSettings.includeLink = settings.exportToCSVSettings.includeLink !== false;
+
+        settings.serviceSyncSettings = settings.serviceSyncSettings || {};
+        const existingRouteSettings = settings.serviceSyncSettings.activitySyncRoutes || {};
+        const normalizedRouteSettings: Partial<Record<ActivitySyncRouteId, { enabled?: boolean }>> = {};
+        for (const routeID of Object.keys(ACTIVITY_SYNC_ROUTES) as ActivitySyncRouteId[]) {
+            normalizedRouteSettings[routeID] = {
+                enabled: existingRouteSettings[routeID]?.enabled === true,
+            };
+        }
+        settings.serviceSyncSettings.activitySyncRoutes = normalizedRouteSettings;
 
         // @warning !!!!!! Enums with 0 as start value default to the override
         return settings;

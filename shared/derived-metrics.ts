@@ -57,6 +57,7 @@ export interface DerivedMetricsCoordinator {
   entryType: typeof DERIVED_METRICS_ENTRY_TYPES.Coordinator;
   status: DerivedMetricsCoordinatorStatus;
   generation: number;
+  eventMutationVersion: number;
   dirtyMetricKinds: DerivedMetricKind[];
   requestedAtMs: number | null;
   startedAtMs: number | null;
@@ -84,6 +85,7 @@ export interface DerivedMetricSnapshotBase<TPayload> {
   schemaVersion: number;
   status: DerivedMetricSnapshotStatus;
   updatedAtMs: number;
+  builtFromEventMutationVersion?: number | null;
   sourceEventCount: number;
   payload: TPayload | null;
   lastError?: string | null;

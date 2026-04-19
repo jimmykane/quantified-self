@@ -25,6 +25,7 @@ describe('AdminQueueMonitorComponent', () => {
             pending: 11,
             queues: {
                 workout: { queueId: 'processWorkoutTask', pending: 3 },
+                activitySync: { queueId: 'processActivitySyncTask', pending: 0 },
                 sportsLibReparse: { queueId: 'processSportsLibReparseTask', pending: 2 },
                 derivedMetrics: { queueId: 'processDerivedMetricsTask', pending: 6 }
             }
@@ -131,11 +132,22 @@ describe('AdminQueueMonitorComponent', () => {
         expect(derivedComponent.pageTitle).toContain('Derived Metrics Queue');
     });
 
+    it('should configure activity sync queue view from route data', () => {
+        routeData.queueView = 'activity-sync';
+        const activitySyncFixture = TestBed.createComponent(AdminQueueMonitorComponent);
+        const activitySyncComponent = activitySyncFixture.componentInstance;
+        activitySyncFixture.detectChanges();
+
+        expect(activitySyncComponent.queueView).toBe('activity-sync');
+        expect(activitySyncComponent.pageTitle).toContain('Activity Sync Queue');
+    });
+
     it('should render route navigation buttons', () => {
         const host: HTMLElement = fixture.nativeElement;
         const text = host.textContent || '';
         expect(text).toContain('Back To Dashboard');
         expect(text).toContain('Workout Queue');
+        expect(text).toContain('Activity Sync Queue');
         expect(text).toContain('Reparse Queue');
         expect(text).toContain('Derived Metrics Queue');
     });

@@ -61,6 +61,7 @@ describe('processDerivedMetricsTask', () => {
         hoisted.startDerivedMetricsProcessing.mockResolvedValue({
             dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.RecoveryNow],
             startedAtMs: Date.now(),
+            eventMutationVersion: 11,
         });
         hoisted.markDerivedMetricSnapshotsBuilding.mockResolvedValue(undefined);
         hoisted.fetchDerivedMetricsEventDocs.mockResolvedValue([{ id: 'form-doc' }] as any);
@@ -88,6 +89,8 @@ describe('processDerivedMetricsTask', () => {
         ], {
             formDocs: [{ id: 'form-doc' }],
             recoveryNowDocs: [{ id: 'recovery-doc' }],
+        }, {
+            builtFromEventMutationVersion: 11,
         });
     });
 
@@ -95,6 +98,7 @@ describe('processDerivedMetricsTask', () => {
         hoisted.startDerivedMetricsProcessing.mockResolvedValueOnce({
             dirtyMetricKinds: [DERIVED_METRIC_KINDS.Acwr],
             startedAtMs: Date.now(),
+            eventMutationVersion: 12,
         });
         hoisted.fetchDerivedMetricsEventDocs.mockResolvedValueOnce([{ id: 'tss-doc' }] as any);
         hoisted.fetchRecoveryLookbackEventDocs.mockResolvedValueOnce([] as any);
@@ -113,6 +117,8 @@ describe('processDerivedMetricsTask', () => {
         ], {
             formDocs: [{ id: 'tss-doc' }],
             recoveryNowDocs: [],
+        }, {
+            builtFromEventMutationVersion: 12,
         });
     });
 
@@ -120,6 +126,7 @@ describe('processDerivedMetricsTask', () => {
         hoisted.startDerivedMetricsProcessing.mockResolvedValueOnce({
             dirtyMetricKinds: [DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.EasyPercent],
             startedAtMs: Date.now(),
+            eventMutationVersion: 13,
         });
         hoisted.fetchDerivedMetricsEventDocs.mockResolvedValueOnce([{ id: 'kpi-doc' }] as any);
 
@@ -137,6 +144,8 @@ describe('processDerivedMetricsTask', () => {
         ], {
             formDocs: [{ id: 'kpi-doc' }],
             recoveryNowDocs: [],
+        }, {
+            builtFromEventMutationVersion: 13,
         });
     });
 

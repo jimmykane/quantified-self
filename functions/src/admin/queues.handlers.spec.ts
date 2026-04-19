@@ -241,6 +241,10 @@ describe('getQueueStats Cloud Function', () => {
                     queueId: 'processWorkoutTask',
                     pending: 42,
                 },
+                activitySync: {
+                    queueId: 'processActivitySyncTask',
+                    pending: 0,
+                },
                 sportsLibReparse: {
                     queueId: 'processSportsLibReparseTask',
                     pending: 8,
@@ -285,24 +289,52 @@ describe('getQueueStats Cloud Function', () => {
                 }
             ],
         });
+        expect(result.activitySync).toEqual({
+            pending: 5,
+            succeeded: 5,
+            stuck: 5,
+            dead: 5,
+            dlqByContext: expect.arrayContaining([
+                { context: 'NO_TOKEN_FOUND', count: 1 },
+                { context: 'MAX_RETRY_REACHED', count: 1 },
+            ]),
+            advanced: {
+                throughput: 5,
+                maxLagMs: expect.any(Number),
+                retryHistogram: {
+                    '0-3': 5,
+                    '4-7': 5,
+                    '8-9': 5,
+                },
+                topErrors: expect.arrayContaining([
+                    { error: 'Token expired', count: 1 },
+                    { error: 'Timeout', count: 1 },
+                ]),
+            },
+        });
     });
 
     it('should handle single-queue Cloud Task depth error and return 0 for that queue', async () => {
         mockGetCloudTaskQueueDepthForQueue
             .mockResolvedValueOnce(42)
             .mockRejectedValueOnce(new Error('Queue depth error'))
+            .mockResolvedValueOnce(8)
             .mockResolvedValueOnce(6);
         const result = await (getQueueStats as any)(request);
         expect(result.cloudTasks).toEqual({
-            pending: 48,
+            pending: 56,
             queues: {
                 workout: {
                     queueId: 'processWorkoutTask',
                     pending: 42,
                 },
+                activitySync: {
+                    queueId: 'processActivitySyncTask',
+                    pending: 0,
+                },
                 sportsLibReparse: {
                     queueId: 'processSportsLibReparseTask',
-                    pending: 0,
+                    pending: 8,
                 },
                 derivedMetrics: {
                     queueId: 'processDerivedMetricsTask',
@@ -378,6 +410,320 @@ describe('getQueueStats Cloud Function', () => {
         });
     });
 
+    it('counts only successful activity-sync completions and throughput', async () => {
+        const resolveActivitySyncCount = (filters: Array<{ field: string; op: string; value: unknown }>): number => {
+            const has = (field: string, op: string, value?: unknown): boolean =>
+                filters.some((filter) => filter.field === field && filter.op === op && (value === undefined || filter.value === value));
+
+            if (has('successProcessedAt', '>')) {
+                return 1;
+            }
+            if (has('resultStatus', '==', 'success')) {
+                return 2;
+            }
+            if (has('processed', '==', false) && has('retryCount', '>=', 10)) {
+                return 1;
+            }
+            if (has('processed', '==', false) && has('retryCount', '<', 4)) {
+                return 3;
+            }
+            if (has('processed', '==', false) && has('retryCount', '>=', 4) && has('retryCount', '<', 8)) {
+                return 1;
+            }
+            if (has('processed', '==', false) && has('retryCount', '>=', 8) && has('retryCount', '<', 10)) {
+                return 0;
+            }
+            if (has('processed', '==', false) && has('retryCount', '<', 10)) {
+                return 4;
+            }
+
+            return 0;
+        };
+
+        mockCollection.mockImplementation((collectionName: string) => {
+            if (collectionName === 'activitySyncQueue') {
+                const buildQuery = (filters: Array<{ field: string; op: string; value: unknown }>) => ({
+                    where: vi.fn((field: string, op: string, value: unknown) => buildQuery([...filters, { field, op, value }])),
+                    orderBy: vi.fn(() => buildQuery(filters)),
+                    limit: vi.fn(() => buildQuery(filters)),
+                    count: vi.fn(() => ({
+                        get: vi.fn().mockResolvedValue({
+                            data: () => ({ count: resolveActivitySyncCount(filters) }),
+                        }),
+                    })),
+                    get: vi.fn().mockResolvedValue({
+                        empty: false,
+                        docs: [{ data: () => ({ dateCreated: Date.now() - 20000 }) }],
+                    }),
+                });
+
+                return buildQuery([]);
+            }
+
+            if (collectionName === 'derivedMetrics') {
+                return {
+                    where: vi.fn().mockReturnValue({
+                        get: vi.fn().mockResolvedValue({ docs: [] })
+                    })
+                };
+            }
+
+            if (collectionName === 'failed_jobs') {
+                const filters: Array<{ field: string; op: string; value: unknown }> = [];
+                const failedJobsMock: any = {
+                    where: vi.fn((field: string, op: string, value: unknown) => {
+                        filters.push({ field, op, value });
+                        return failedJobsMock;
+                    }),
+                    count: vi.fn(() => ({
+                        get: vi.fn().mockResolvedValue({
+                            data: () => ({
+                                count: filters.some((f) => f.field === 'originalCollection' && f.value === 'activitySyncQueue') ? 2 : 5,
+                            }),
+                        }),
+                    })),
+                    orderBy: vi.fn().mockReturnValue({
+                        limit: vi.fn().mockReturnValue({
+                            get: vi.fn().mockResolvedValue({
+                                size: 0,
+                                docs: [],
+                            }),
+                        }),
+                    }),
+                    get: vi.fn().mockResolvedValue({
+                        size: 0,
+                        docs: [],
+                    }),
+                };
+                return failedJobsMock;
+            }
+
+            const mockCount = vi.fn().mockReturnValue({
+                get: vi.fn().mockResolvedValue({
+                    data: () => ({ count: 5 })
+                })
+            });
+            return {
+                where: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockReturnThis(),
+                count: mockCount,
+                get: vi.fn().mockResolvedValue({
+                    empty: false,
+                    docs: [{ data: () => ({ dateCreated: Date.now() - 10000 }) }],
+                    data: () => ({ count: 5 })
+                })
+            };
+        });
+
+        request.data = { includeAnalysis: false };
+        const result = await (getQueueStats as any)(request);
+
+        expect(result.activitySync).toEqual(expect.objectContaining({
+            pending: 4,
+            succeeded: 2,
+            stuck: 1,
+            dead: 2,
+            advanced: expect.objectContaining({
+                throughput: 1,
+                retryHistogram: {
+                    '0-3': 3,
+                    '4-7': 1,
+                    '8-9': 0,
+                },
+            }),
+        }));
+    });
+
+    it('keeps ingestion DLQ/top-errors isolated from activity-sync failures', async () => {
+        type FailedJobDoc = {
+            context: string;
+            originalCollection: string;
+            error: string;
+            failedAt: number;
+        };
+
+        const failedJobsDocs: FailedJobDoc[] = [
+            {
+                context: 'NO_TOKEN_FOUND',
+                originalCollection: 'suuntoAppWorkoutQueue',
+                error: 'Token expired',
+                failedAt: 20,
+            },
+            {
+                context: 'ACTIVITY_SYNC_PERMANENT_FAILURE',
+                originalCollection: 'activitySyncQueue',
+                error: 'Sync auth failed',
+                failedAt: 30,
+            },
+        ];
+
+        const matchesFilters = (doc: FailedJobDoc, filters: Array<{ field: string; op: string; value: unknown }>) => (
+            filters.every((filter) => {
+                if (filter.op === '==') {
+                    return (doc as Record<string, unknown>)[filter.field] === filter.value;
+                }
+                if (filter.op === 'in' && Array.isArray(filter.value)) {
+                    return (filter.value as unknown[]).includes((doc as Record<string, unknown>)[filter.field]);
+                }
+                return true;
+            })
+        );
+
+        mockCollection.mockImplementation((collectionName: string) => {
+            const defaultCount = vi.fn().mockReturnValue({
+                get: vi.fn().mockResolvedValue({
+                    data: () => ({ count: 5 })
+                })
+            });
+
+            if (collectionName === 'failed_jobs') {
+                const buildFailedJobsQuery = (
+                    filters: Array<{ field: string; op: string; value: unknown }>,
+                    limitCount?: number
+                ) => ({
+                    where: vi.fn((field: string, op: string, value: unknown) =>
+                        buildFailedJobsQuery([...filters, { field, op, value }], limitCount)),
+                    orderBy: vi.fn(() => buildFailedJobsQuery(filters, limitCount)),
+                    limit: vi.fn((nextLimit: number) => buildFailedJobsQuery(filters, nextLimit)),
+                    count: vi.fn(() => ({
+                        get: vi.fn().mockResolvedValue({
+                            data: () => ({
+                                count: failedJobsDocs.filter((doc) => matchesFilters(doc, filters)).length,
+                            }),
+                        }),
+                    })),
+                    get: vi.fn().mockResolvedValue({
+                        size: failedJobsDocs.filter((doc) => matchesFilters(doc, filters)).length,
+                        docs: failedJobsDocs
+                            .filter((doc) => matchesFilters(doc, filters))
+                            .sort((a, b) => b.failedAt - a.failedAt)
+                            .slice(0, limitCount ?? failedJobsDocs.length)
+                            .map((doc) => ({ data: () => doc })),
+                    }),
+                });
+
+                return buildFailedJobsQuery([]);
+            }
+
+            if (collectionName === 'derivedMetrics') {
+                return {
+                    where: vi.fn().mockReturnValue({
+                        get: vi.fn().mockResolvedValue({ docs: [] })
+                    })
+                };
+            }
+
+            return {
+                where: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockReturnThis(),
+                count: defaultCount,
+                get: vi.fn().mockResolvedValue({
+                    empty: false,
+                    docs: [{ data: () => ({ dateCreated: Date.now() - 10000 }) }],
+                    data: () => ({ count: 5 })
+                })
+            };
+        });
+
+        request.data = { includeAnalysis: true };
+        const result = await (getQueueStats as any)(request);
+
+        expect(result.dlq?.total).toBe(1);
+        expect(result.dlq?.byProvider).toEqual(expect.arrayContaining([
+            { provider: 'suuntoAppWorkoutQueue', count: 1 },
+        ]));
+        expect(result.dlq?.byProvider).not.toEqual(expect.arrayContaining([
+            { provider: 'activitySyncQueue', count: 1 },
+        ]));
+        expect(result.advanced.topErrors).toEqual(expect.arrayContaining([
+            { error: 'Token expired', count: 1 },
+        ]));
+        expect(result.advanced.topErrors).not.toEqual(expect.arrayContaining([
+            { error: 'Sync auth failed', count: 1 },
+        ]));
+
+        expect(result.activitySync.advanced.topErrors).toEqual(expect.arrayContaining([
+            { error: 'Sync auth failed', count: 1 },
+        ]));
+    });
+
+    it('uses bounded ordered query for activity-sync DLQ preview', async () => {
+        const whereOrderedGet = vi.fn().mockResolvedValue({
+            size: 1,
+            docs: [
+                { data: () => ({ context: 'ACTIVITY_SYNC_PERMANENT_FAILURE', originalCollection: 'activitySyncQueue', error: 'timeout' }) }
+            ]
+        });
+        const whereLimit = vi.fn().mockReturnValue({
+            get: whereOrderedGet,
+        });
+        const whereOrderBy = vi.fn().mockReturnValue({
+            limit: whereLimit,
+        });
+        const whereDirectGet = vi.fn().mockResolvedValue({
+            size: 999,
+            docs: [],
+        });
+
+        mockCollection.mockImplementation((collectionName: string) => {
+            const mockCount = vi.fn().mockReturnValue({
+                get: vi.fn().mockResolvedValue({
+                    data: () => ({ count: 5 })
+                })
+            });
+
+            if (collectionName === 'failed_jobs') {
+                const failedJobsMock: any = {
+                    count: mockCount,
+                    orderBy: vi.fn().mockReturnValue({
+                        limit: vi.fn().mockReturnValue({
+                            get: vi.fn().mockResolvedValue({
+                                size: 0,
+                                docs: []
+                            })
+                        })
+                    }),
+                    where: vi.fn().mockReturnValue({
+                        orderBy: whereOrderBy,
+                        count: mockCount,
+                        get: whereDirectGet,
+                    }),
+                };
+                return failedJobsMock;
+            }
+
+            if (collectionName === 'derivedMetrics') {
+                return {
+                    where: vi.fn().mockReturnValue({
+                        get: vi.fn().mockResolvedValue({ docs: [] })
+                    })
+                };
+            }
+
+            return {
+                where: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockReturnThis(),
+                count: mockCount,
+                get: vi.fn().mockResolvedValue({
+                    empty: false,
+                    docs: [{ data: () => ({ dateCreated: Date.now() - 10000 }) }],
+                    data: () => ({ count: 5 })
+                })
+            };
+        });
+
+        request.data = { includeAnalysis: true };
+        await (getQueueStats as any)(request);
+
+        expect(whereOrderBy).toHaveBeenCalledWith('failedAt', 'desc');
+        expect(whereLimit).toHaveBeenCalledWith(50);
+        expect(whereDirectGet).not.toHaveBeenCalled();
+        expect(whereOrderedGet).toHaveBeenCalled();
+    });
+
     it('should return only basic statistics when includeAnalysis is false', async () => {
         request.data = { includeAnalysis: false };
         const result = await (getQueueStats as any)(request);
@@ -385,6 +731,8 @@ describe('getQueueStats Cloud Function', () => {
         expect(result.pending).toBeDefined();
         expect(result.dlq).toBeUndefined(); // Should be skipped
         expect(result.advanced.topErrors).toHaveLength(0); // Should be empty
+        expect(result.activitySync.advanced.topErrors).toHaveLength(0); // Should be empty
+        expect(result.activitySync.dlqByContext).toHaveLength(0); // Should be empty
     });
 
     it('should require authentication', async () => {

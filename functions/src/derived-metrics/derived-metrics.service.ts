@@ -104,6 +104,7 @@ interface DerivedLoadPoint {
 export interface StartDerivedMetricsProcessingResult {
     dirtyMetricKinds: DerivedMetricKind[];
     startedAtMs: number;
+    eventMutationVersion: number;
 }
 
 export interface CompleteDerivedMetricsProcessingResult {
@@ -213,6 +214,7 @@ function parseCoordinator(data: unknown): DerivedMetricsCoordinator {
     const normalizedData = (data && typeof data === 'object') ? data as Record<string, unknown> : {};
     const status = toSafeString(normalizedData.status) as DerivedMetricsCoordinator['status'];
     const generationRaw = toFiniteNumber(normalizedData.generation);
+    const eventMutationVersionRaw = toFiniteNumber(normalizedData.eventMutationVersion);
     const requestedAtMs = toFiniteNumber(normalizedData.requestedAtMs);
     const startedAtMs = toFiniteNumber(normalizedData.startedAtMs);
     const completedAtMs = toFiniteNumber(normalizedData.completedAtMs);
@@ -223,6 +225,9 @@ function parseCoordinator(data: unknown): DerivedMetricsCoordinator {
         entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
         status: status === 'queued' || status === 'processing' || status === 'failed' ? status : 'idle',
         generation: generationRaw === null ? 0 : Math.max(0, Math.floor(generationRaw)),
+        eventMutationVersion: eventMutationVersionRaw === null
+            ? 0
+            : Math.max(0, Math.floor(eventMutationVersionRaw)),
         dirtyMetricKinds,
         requestedAtMs,
         startedAtMs,
@@ -274,8 +279,8 @@ function resolveInFlightMetricKinds(
         return fallbackDirtyMetricKinds;
     }
 
-    // Legacy coordinator docs written before processingMetricKinds existed can be
-    // left in "processing" with an empty dirty set after task crashes/timeouts.
+    // Legacy coordinator docs can still be recovered when a processing worker
+    // becomes stuck and persisted processing metric kinds are missing.
     return [...DEFAULT_DERIVED_METRIC_KINDS];
 }
 
@@ -1410,6 +1415,9 @@ export async function fetchRecoveryLookbackEventDocs(
 export async function markDerivedMetricsDirtyAndMaybeQueue(
     uid: string,
     requestedMetricKinds: readonly unknown[] | null | undefined,
+    options?: {
+        incrementEventMutationVersion?: boolean;
+    },
 ): Promise<EnsureDerivedMetricsResponse> {
     const metricKinds = normalizeDerivedMetricKinds(requestedMetricKinds);
     if (!isDerivedMetricsUidAllowed(uid)) {
@@ -1439,11 +1447,21 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
         const dirtyMetricKindsChanged = !hasSameDerivedMetricKinds(coordinator.dirtyMetricKinds, nextDirtyMetricKinds);
         const coordinatorLikelyStuck = isAlreadyQueuedOrProcessing
             && isDerivedMetricsCoordinatorStuck(coordinator, nowMs);
+        const shouldIncrementEventMutationVersion = options?.incrementEventMutationVersion === true;
+        const nextEventMutationVersion = shouldIncrementEventMutationVersion
+            ? coordinator.eventMutationVersion + 1
+            : coordinator.eventMutationVersion;
+        const eventMutationVersionChanged = nextEventMutationVersion !== coordinator.eventMutationVersion;
 
         // Coalesce repeated writes during bulk updates:
         // if a user is already queued/processing and the dirty set did not change,
         // avoid writing the coordinator doc again.
-        if (isAlreadyQueuedOrProcessing && !dirtyMetricKindsChanged && !coordinatorLikelyStuck) {
+        // Exception: event-write triggers increment the mutation version so completion
+        // freshness can be evaluated against an immutable source revision.
+        if (isAlreadyQueuedOrProcessing
+            && !dirtyMetricKindsChanged
+            && !coordinatorLikelyStuck
+            && !eventMutationVersionChanged) {
             shouldEnqueue = false;
             generationToQueue = coordinator.generation;
             return;
@@ -1475,6 +1493,7 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
             entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
             status: nextStatus,
             generation: nextGeneration,
+            eventMutationVersion: nextEventMutationVersion,
             dirtyMetricKinds: nextDirtyMetricKinds,
             requestedAtMs: nowMs,
             updatedAtMs: nowMs,
@@ -1543,7 +1562,16 @@ export async function startDerivedMetricsProcessing(
         }
 
         if (coordinator.status === 'processing') {
-            const inFlightMetricKinds = resolveInFlightMetricKinds(rawCoordinatorData, coordinator.dirtyMetricKinds);
+            // Keep healthy in-flight generations single-flight only.
+            if (!isDerivedMetricsCoordinatorStuck(coordinator, nowMs)) {
+                startedResult = null;
+                return;
+            }
+
+            const inFlightMetricKinds = resolveInFlightMetricKinds(
+                rawCoordinatorData,
+                coordinator.dirtyMetricKinds,
+            );
             transaction.set(coordinatorRef, {
                 entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
                 status: 'processing',
@@ -1555,6 +1583,7 @@ export async function startDerivedMetricsProcessing(
             startedResult = {
                 dirtyMetricKinds: inFlightMetricKinds,
                 startedAtMs: nowMs,
+                eventMutationVersion: coordinator.eventMutationVersion,
             };
             return;
         }
@@ -1592,6 +1621,7 @@ export async function startDerivedMetricsProcessing(
         startedResult = {
             dirtyMetricKinds,
             startedAtMs: nowMs,
+            eventMutationVersion: coordinator.eventMutationVersion,
         };
     });
 
@@ -1763,12 +1793,18 @@ export async function writeDerivedMetricSnapshotsReady(
         formDocs?: readonly FirestoreQueryDocumentSnapshot[];
         recoveryNowDocs?: readonly FirestoreQueryDocumentSnapshot[];
     },
+    options?: {
+        builtFromEventMutationVersion?: number | null;
+    },
 ): Promise<void> {
     const nowMs = Date.now();
     const batch = admin.firestore().batch();
     const formSourceDocCount = sourceDocs.formDocs?.length || 0;
     const recoveryNowSourceDocCount = sourceDocs.recoveryNowDocs?.length || 0;
     const buildContext = createDerivedMetricBuildExecutionContext(sourceDocs, nowMs);
+    const builtFromEventMutationVersion = Number.isFinite(options?.builtFromEventMutationVersion)
+        ? Math.max(0, Math.floor(options?.builtFromEventMutationVersion as number))
+        : null;
 
     const resolveSourceDocCountForDependencies = (
         sourceDependencies: readonly DerivedMetricBuildSourceDependency[],
@@ -1794,6 +1830,7 @@ export async function writeDerivedMetricSnapshotsReady(
             schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
             status: 'ready',
             updatedAtMs: nowMs,
+            builtFromEventMutationVersion,
             sourceEventCount: buildResult.sourceEventCount,
             sourceDocCount,
             payload: buildResult.payload,

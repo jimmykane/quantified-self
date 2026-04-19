@@ -16,6 +16,7 @@ import { generateIDFromParts as sharedGenerateIDFromParts, generateEventID as sh
 import { SPORTS_LIB_VERSION } from './shared/sports-lib-version.node';
 import { ProcessingMetaData } from './shared/processing-metadata.interface';
 import { sportsLibVersionToCode } from './reparse/sports-lib-reparse.service';
+import { OriginalFileMetaData } from '../../shared/app-event.interface';
 
 
 export function generateIDFromPartsOld(parts: string[]): string {
@@ -142,7 +143,12 @@ export function isCorsAllowed(req: Request) {
   });
 }
 
-export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData | GarminAPIEventMetaData | COROSAPIEventMetaData, originalFile?: OriginalFile, bulkWriter?: admin.firestore.BulkWriter, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>) {
+export interface SetEventResult {
+  eventID: string;
+  savedOriginalFiles: OriginalFileMetaData[];
+}
+
+export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData | GarminAPIEventMetaData | COROSAPIEventMetaData, originalFile?: OriginalFile, bulkWriter?: admin.firestore.BulkWriter, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>): Promise<SetEventResult> {
   // Enforce Usage Limit
   await checkEventUsageLimit(userID, usageCache, pendingWrites);
 
@@ -215,7 +221,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
   };
 
   const writer = new EventWriter(adapter, storageAdapter, undefined, logAdapter);
-  await writer.writeAllEventData(userID, event, originalFile);
+  const savedOriginalFiles = await writer.writeAllEventData(userID, event, originalFile);
 
   const processingMetaData: ProcessingMetaData = {
     sportsLibVersion: SPORTS_LIB_VERSION,
@@ -251,6 +257,11 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
   } else {
     await metaRef.set(metaData.toJSON());
   }
+
+  return {
+    eventID: <string>event.getID(),
+    savedOriginalFiles,
+  };
 }
 
 /**
@@ -418,6 +429,7 @@ export async function hasBasicAccess(userID: string): Promise<boolean> {
 export {
   getCloudTaskQueueDepth,
   getCloudTaskQueueDepthForQueue,
+  enqueueActivitySyncTask,
   enqueueWorkoutTask,
   resetCloudTaskQueueDepthCache,
 } from './shared/cloud-tasks';

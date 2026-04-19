@@ -12,11 +12,11 @@ import {
 } from '@angular/core';
 import { FormControl, FormGroup, Validators } from '@angular/forms';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatDialog } from '@angular/material/dialog';
 import { LoggerService } from '../../services/logger.service';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { combineLatest, of, Subscription } from 'rxjs';
+import { combineLatest, firstValueFrom, of, Subscription } from 'rxjs';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
-import { User } from '@sports-alliance/sports-lib';
 import { ActivatedRoute, ParamMap, Router } from '@angular/router';
 import { switchMap, take, tap } from 'rxjs/operators';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
@@ -29,13 +29,16 @@ import { AppUserService } from '../../services/app.user.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppEventService } from '../../services/app.event.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { AppUserInterface } from '../../models/app-user.interface';
+import { ACTIVITY_SYNC_ROUTES, ActivitySyncRoute } from '@shared/activity-sync-routes';
+import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
 
 
 @Directive()
 export abstract class ServicesAbstractComponentDirective implements OnInit, OnDestroy, OnChanges {
   public abstract serviceName: ServiceNames;
 
-  @Input() user!: User;
+  @Input() user!: AppUserInterface;
 
   @Input() hasProAccess!: boolean;
   @Input() isAdmin: boolean = false;
@@ -56,6 +59,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   protected changeDetectorRef = inject(ChangeDetectorRef);
   protected analyticsService = inject(AppAnalyticsService);
   protected logger = inject(LoggerService);
+  protected dialog = inject(MatDialog, { optional: true });
 
   constructor(protected http: HttpClient,
     protected fileService: AppFileService,
@@ -176,6 +180,10 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
       this.triggerUpsell();
       return;
     }
+    const shouldContinue = await this.confirmDisconnectWithRouteImpact();
+    if (!shouldContinue) {
+      return;
+    }
     this.isDisconnecting = true;
     try {
       await this.userService.deauthorizeService(this.serviceName);
@@ -203,6 +211,17 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
     this.forceConnected = false;
   }
 
+  get hasActiveSyncRoutesUsingService(): boolean {
+    return this.activeSyncRoutesUsingService.length > 0;
+  }
+
+  get activeSyncRouteWarningLabel(): string {
+    const activeRouteCount = this.activeSyncRoutesUsingService.length;
+    return activeRouteCount === 1
+      ? 'Used by active auto-sync route'
+      : `Used by ${activeRouteCount} active auto-sync routes`;
+  }
+
   triggerUpsell() {
     this.analyticsService.logEvent('upsell_triggered', { serviceName: this.serviceName, source: 'locked_card' });
     const snackBarRef = this.snackBar.open('This feature is available for Pro users.', 'UPGRADE', {
@@ -214,7 +233,11 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   }
 
   protected getPartnerDisplayName(): string {
-    switch (this.serviceName) {
+    return this.getServiceDisplayName(this.serviceName);
+  }
+
+  private getServiceDisplayName(serviceName: ServiceNames): string {
+    switch (serviceName) {
       case ServiceNames.GarminAPI:
         return 'Garmin';
       case ServiceNames.SuuntoApp:
@@ -224,6 +247,54 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
       default:
         return 'Partner service';
     }
+  }
+
+  private get activeSyncRoutesUsingService(): ActivitySyncRoute[] {
+    const routeSettings = this.user?.settings?.serviceSyncSettings?.activitySyncRoutes;
+    if (!routeSettings) {
+      return [];
+    }
+
+    return Object.values(ACTIVITY_SYNC_ROUTES).filter((route) => {
+      const routeUsesCurrentService = (
+        route.sourceServiceName === this.serviceName ||
+        route.destinationServiceName === this.serviceName
+      );
+      return routeUsesCurrentService && routeSettings[route.id]?.enabled === true;
+    });
+  }
+
+  private formatRouteLabel(route: ActivitySyncRoute): string {
+    return `${this.getServiceDisplayName(route.sourceServiceName)} -> ${this.getServiceDisplayName(route.destinationServiceName)}`;
+  }
+
+  private buildDisconnectImpactMessageHtml(routes: ActivitySyncRoute[]): string {
+    const isSingleRoute = routes.length === 1;
+    const heading = isSingleRoute
+      ? 'Disconnecting now will disable this active auto-sync route:'
+      : `Disconnecting now will disable ${routes.length} active auto-sync routes:`;
+    const routeListHtml = routes.map((route) => `<li><strong>${this.formatRouteLabel(route)}</strong></li>`).join('');
+    return `${heading}<ul>${routeListHtml}</ul>Automatic sync will stop until you reconnect and re-enable the route${isSingleRoute ? '' : 's'}.`;
+  }
+
+  private async confirmDisconnectWithRouteImpact(): Promise<boolean> {
+    const impactedRoutes = this.activeSyncRoutesUsingService;
+    if (impactedRoutes.length === 0 || !this.dialog) {
+      return true;
+    }
+
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: `Disconnect ${this.getPartnerDisplayName()}?`,
+        message: this.buildDisconnectImpactMessageHtml(impactedRoutes),
+        confirmLabel: 'Disconnect and disable sync',
+        cancelLabel: 'Keep connected',
+        confirmColor: 'warn',
+      } as ConfirmationDialogData,
+    });
+
+    const confirmed = await firstValueFrom(dialogRef.afterClosed());
+    return confirmed === true;
   }
 
   ngOnDestroy(): void {

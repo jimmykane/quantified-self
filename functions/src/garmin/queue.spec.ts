@@ -1,6 +1,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { UsageLimitExceededError } from '../utils';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 
 // Mock dependencies using vi.hoisted
 const {
@@ -16,6 +17,7 @@ const {
     mockGetTokenData,
     mockUploadDebugFile,
     mockCreateParsingOptions,
+    mockEnqueueActivitySyncJobsForImportedEvent,
 } = vi.hoisted(() => {
     return {
         mockSetEvent: vi.fn(),
@@ -30,6 +32,7 @@ const {
         mockGetTokenData: vi.fn(),
         mockUploadDebugFile: vi.fn(),
         mockCreateParsingOptions: vi.fn(() => ({ generateUnitStreams: false, deviceInfoMode: 'changes' })),
+        mockEnqueueActivitySyncJobsForImportedEvent: vi.fn().mockResolvedValue({ queued: 1, skippedByReason: {} }),
     };
 });
 
@@ -88,6 +91,10 @@ vi.mock('../debug-utils', () => ({
 
 vi.mock('../../../shared/parsing-options', () => ({
     createParsingOptions: mockCreateParsingOptions,
+}));
+
+vi.mock('../activity-sync/enqueue-imported-event', () => ({
+    enqueueActivitySyncJobsForImportedEvent: mockEnqueueActivitySyncJobsForImportedEvent,
 }));
 
 // Mock queue utilities
@@ -275,7 +282,10 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                 userID: 'garmin-user-id',
             } as any);
 
-            mockSetEvent.mockResolvedValue(undefined);
+            mockSetEvent.mockResolvedValue({
+                eventID: 'saved-event-id',
+                savedOriginalFiles: [{ path: 'users/firebase-user-id/events/saved-event-id/original.fit' }],
+            });
             mockIncreaseRetryCountForQueueItem.mockResolvedValue('RETRY_INCREMENTED');
             mockMoveToDeadLetterQueue.mockResolvedValue('MOVED_TO_DLQ');
             vi.mocked(updateToProcessed).mockResolvedValue('PROCESSED' as any);
@@ -300,7 +310,22 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                 undefined,
                 undefined
             );
+            expect(mockEnqueueActivitySyncJobsForImportedEvent).toHaveBeenCalledWith(expect.objectContaining({
+                userID: firebaseUserID,
+                eventID: 'saved-event-id',
+                sourceServiceName: ServiceNames.GarminAPI,
+                sourceActivityID: queueItem.activityFileID,
+            }));
             expect(updateToProcessed).toHaveBeenCalledWith(queueItem, undefined);
+        });
+
+        it('should not enqueue activity sync when processing with bulkWriter', async () => {
+            const bulkWriter = { set: vi.fn(), update: vi.fn(), delete: vi.fn() } as any;
+
+            const result = await processGarminAPIActivityQueueItem(queueItem, bulkWriter);
+
+            expect(result).toBe('PROCESSED');
+            expect(mockEnqueueActivitySyncJobsForImportedEvent).not.toHaveBeenCalled();
         });
 
         it('should successfully process a GPX file', async () => {

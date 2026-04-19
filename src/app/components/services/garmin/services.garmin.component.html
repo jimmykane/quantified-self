@@ -83,6 +83,12 @@
         }
 
         <div style="margin-top: auto; padding-top: 16px;">
+          @if (isConnectedToService() && hasActiveSyncRoutesUsingService) {
+          <div class="active-sync-warning-pill">
+            <mat-icon>warning</mat-icon>
+            <span>{{ activeSyncRouteWarningLabel }}</span>
+          </div>
+          }
           @if (!isConnectedToService()) {
           <button mat-flat-button class="qs-mat-primary" style="width: 100%"
             [disabled]="!user || isLoading || isConnecting || !hasProAccess" (click)="connectWithService($event)">
@@ -159,6 +165,116 @@
         }
       </div>
     </mat-card>
+
+    @if (isGarminToSuuntoRouteAvailableForUser) {
+    <mat-card class="feature-card" [class.locked]="!hasProAccess" (click)="!hasProAccess && triggerUpsell()">
+      @if (!hasProAccess) {
+      <div class="lock-overlay">
+        <mat-icon class="lock-icon-large">lock</mat-icon>
+        <span class="pro-badge">PRO</span>
+      </div>
+      }
+      <mat-card-header>
+        <mat-card-subtitle class="tab-subtitle">
+          <mat-icon>published_with_changes</mat-icon>
+          <span>Garmin -> Suunto Sync</span>
+        </mat-card-subtitle>
+      </mat-card-header>
+      <mat-divider></mat-divider>
+
+      <div class="feature-card-content" style="align-items: stretch; text-align: left;">
+        <p class="feature-description">
+          Automatically upload newly imported Garmin FIT activities to Suunto using stored original files.
+        </p>
+
+        @if (hasProAccess) {
+        @if (!isConnectedToService() || !isSuuntoConnected) {
+        <div
+          style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 16px; text-align: center; color: var(--mat-sys-on-surface-variant);">
+          <mat-icon
+            style="font-size: 36px; height: 36px; width: 36px; margin-bottom: 10px; opacity: 0.6;">link_off</mat-icon>
+          <div style="font-weight: 500; font-size: 0.95rem;">Connect Garmin + Suunto First</div>
+          <div style="font-size: 0.82rem; margin-top: 4px; opacity: 0.8; max-width: 280px;">
+            Garmin and Suunto must both be connected before route sync can run.
+          </div>
+        </div>
+        } @else {
+        <mat-slide-toggle [checked]="isGarminToSuuntoRouteEnabled" [disabled]="isSavingSyncRoute || isBackfillingSync"
+          (change)="onGarminToSuuntoRouteToggle($event.checked)">
+          Enable automatic sync for new Garmin imports
+        </mat-slide-toggle>
+
+        @if (missingPermissions.includes('ACTIVITY_EXPORT')) {
+        <div class="qs-warning-box" style="margin-top: 12px;">
+          <mat-icon>warning</mat-icon>
+          <div class="qs-warning-content">
+            <strong>Garmin Activity Export Permission Needed</strong>
+            <p style="margin: 0;">Grant Garmin <code>ACTIVITY_EXPORT</code> permission to receive new activity
+              callbacks for sync.</p>
+          </div>
+        </div>
+        }
+
+        <mat-divider style="margin: 16px 0;"></mat-divider>
+
+        <div style="font-weight: 600; margin-bottom: 8px;">Manual Catch-up</div>
+        <app-status-info type="info" title="Manual Catch-up Scope" style="margin-bottom: 12px;">
+          Use this anytime to queue Garmin -> Suunto sync jobs for activities already imported into Quantified Self in
+          the selected date range. It uses stored original files and can run even when automatic sync is turned off.
+        </app-status-info>
+        <div class="date-fields">
+          <mat-form-field appearance="outline">
+            <mat-label>Start Date</mat-label>
+            <input matInput [matDatepicker]="syncStartDatePicker" [max]="backfillEndDate" [(ngModel)]="backfillStartDate"
+              [ngModelOptions]="{standalone: true}" (click)="syncStartDatePicker.open()">
+            <mat-datepicker-toggle matSuffix [for]="syncStartDatePicker"></mat-datepicker-toggle>
+            <mat-datepicker #syncStartDatePicker></mat-datepicker>
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>End Date</mat-label>
+            <input matInput [matDatepicker]="syncEndDatePicker" [min]="backfillStartDate" [(ngModel)]="backfillEndDate"
+              [ngModelOptions]="{standalone: true}" (click)="syncEndDatePicker.open()">
+            <mat-datepicker-toggle matSuffix [for]="syncEndDatePicker"></mat-datepicker-toggle>
+            <mat-datepicker #syncEndDatePicker></mat-datepicker>
+          </mat-form-field>
+        </div>
+
+        <button mat-flat-button class="qs-mat-primary" style="width: 100%; margin-top: 8px;"
+          [disabled]="isBackfillingSync || isBackfillDateRangeInvalid"
+          (click)="runGarminToSuuntoBackfill($event)">
+          @if (isBackfillingSync) {
+          <ng-container>
+            <mat-spinner diameter="20" style="display:inline-block; vertical-align: middle; margin-right: 8px;"
+              class="qs-spinner-accent"></mat-spinner>
+            Running Backfill...
+          </ng-container>
+          } @else {
+          <ng-container>
+            Queue now
+          </ng-container>
+          }
+        </button>
+
+        @if (backfillSummary) {
+        <app-status-info type="success" title="Backfill Summary" style="margin-top: 12px;">
+          <div>Scanned: {{ backfillSummary.scanned }} | Queued: {{ backfillSummary.queued }}</div>
+          @if (backfillSummary.failedCount > 0) {
+          <div style="margin-top: 6px;">Failed: {{ backfillSummary.failedCount }}</div>
+          @if (backfillSummary.failedEvents?.length) {
+          <ul style="margin: 6px 0 0 18px; padding: 0;">
+            <li *ngFor="let failedEvent of backfillSummary.failedEvents">
+              <code>{{ failedEvent.eventID }}</code>: {{ failedEvent.message }}
+            </li>
+          </ul>
+          }
+          }
+        </app-status-info>
+        }
+        }
+        }
+      </div>
+    </mat-card>
+    }
 
   </div>
 </div>

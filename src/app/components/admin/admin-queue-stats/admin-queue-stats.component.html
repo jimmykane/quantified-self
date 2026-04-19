@@ -97,7 +97,7 @@
                     <mat-spinner diameter="40"></mat-spinner>
                 </div>
 
-                <div class="chart-wrapper" *ngIf="!loading && stats?.advanced?.retryHistogram">
+                <div class="chart-wrapper" *ngIf="!loading">
                     <div #retryChart class="echart-surface"></div>
                     <div class="chart-empty-overlay" *ngIf="!hasRetryData">
                         <mat-icon>check_circle</mat-icon>
@@ -197,6 +197,139 @@
                     <tr mat-row *matRowDef="let row; columns: ['provider', 'pending', 'succeeded', 'stuck', 'dead'];">
                     </tr>
                 </table>
+            </div>
+        </mat-card>
+    </div>
+
+    <div class="pipeline-section" *ngIf="showActivitySyncSection">
+        <h3 class="pipeline-title">
+            <mat-icon>published_with_changes</mat-icon>
+            Activity Sync
+        </h3>
+
+        <div class="stats-grid">
+            <mat-card class="app-stat-card status-pending">
+                <div class="app-stat-header">
+                    <mat-icon>hourglass_empty</mat-icon>
+                    <span>Pending (DB)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.activitySync?.pending ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+                <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">waiting in Firestore</span>
+            </mat-card>
+            <mat-card class="app-stat-card status-info"
+                matTooltip="Tasks currently in flight or scheduled in the activity sync Cloud Tasks queue.">
+                <div class="app-stat-header">
+                    <mat-icon>published_with_changes</mat-icon>
+                    <span>Cloud Tasks (Activity Sync)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.cloudTasks?.queues?.activitySync?.pending ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+                <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">queue: activity sync</span>
+            </mat-card>
+            <mat-card class="app-stat-card status-success">
+                <div class="app-stat-header">
+                    <mat-icon>check_circle</mat-icon>
+                    <span>Succeeded (Sync)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.activitySync?.succeeded ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+            <mat-card class="app-stat-card status-error">
+                <div class="app-stat-header">
+                    <mat-icon>error</mat-icon>
+                    <span>Stuck (Sync)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.activitySync?.stuck ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+            <mat-card class="app-stat-card status-dlq" *ngIf="stats?.activitySync"
+                style="background: rgba(244, 67, 54, 0.1);">
+                <div class="app-stat-header">
+                    <mat-icon style="color: #f44336;">error_outline</mat-icon>
+                    <span style="color: #f44336;">Dead Letter Queue (Sync)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading" style="color: #f44336;">{{ stats?.activitySync?.dead ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+        </div>
+
+        <div class="stats-grid" *ngIf="stats?.activitySync?.advanced">
+            <mat-card class="app-stat-card status-success">
+                <div class="app-stat-header">
+                    <mat-icon>speed</mat-icon>
+                    <span>Throughput (1h)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.activitySync?.advanced?.throughput ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+                <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">items processed</span>
+            </mat-card>
+
+            <mat-card class="app-stat-card status-pending">
+                <div class="app-stat-header">
+                    <mat-icon>update</mat-icon>
+                    <span>Max Lag</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ formatDuration(stats?.activitySync?.advanced?.maxLagMs || 0) }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+                <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">oldest pending</span>
+            </mat-card>
+        </div>
+
+        <div class="pipeline-grid" *ngIf="queueView === 'activity-sync'">
+            <mat-card style="margin-bottom: 0;">
+                <h3 class="chart-header">Retry Distribution (Pending Items)</h3>
+
+                <div class="spinner-container" *ngIf="loading" style="height: 180px; justify-content: center;">
+                    <mat-spinner diameter="40"></mat-spinner>
+                </div>
+
+                <div class="chart-wrapper" *ngIf="!loading">
+                    <div #retryChart class="echart-surface"></div>
+                    <div class="chart-empty-overlay" *ngIf="!hasRetryData">
+                        <mat-icon>check_circle</mat-icon>
+                        <span>No pending retries right now</span>
+                    </div>
+                </div>
+            </mat-card>
+        </div>
+
+        <mat-card class="table-container"
+            *ngIf="(stats?.activitySync?.dlqByContext?.length || 0) > 0 || (stats?.activitySync?.advanced?.topErrors?.length || 0) > 0"
+            style="margin-bottom: 0;">
+            <h3 class="card-title">Recent Activity Sync Failures (Last 50)</h3>
+            <div class="failures-analysis-container">
+                <div class="analysis-column">
+                    <h4 class="subsection-title">By Reason</h4>
+                    <div *ngFor="let item of stats?.activitySync?.dlqByContext" class="analysis-item">
+                        <span class="analysis-label">{{ item.context }}</span>
+                        <span class="status-badge disabled">{{ item.count }}</span>
+                    </div>
+                </div>
+                <div class="analysis-column">
+                    <h4 class="subsection-title">Top Errors</h4>
+                    <div *ngFor="let item of stats?.activitySync?.advanced?.topErrors" class="analysis-item">
+                        <span class="analysis-error-text" [matTooltip]="item.error">{{ item.error }}</span>
+                        <span class="status-badge disabled" style="flex-shrink: 0; margin-left: 8px;">{{ item.count }}</span>
+                    </div>
+                    <div *ngIf="!stats?.activitySync?.advanced?.topErrors?.length" class="empty-state">
+                        No errors recorded
+                    </div>
+                </div>
             </div>
         </mat-card>
     </div>

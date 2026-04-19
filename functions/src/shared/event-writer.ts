@@ -1,4 +1,4 @@
-import { AppEventInterface, FirestoreActivityJSON, FirestoreEventJSON } from '../../../shared/app-event.interface';
+import { AppEventInterface, FirestoreActivityJSON, FirestoreEventJSON, OriginalFileMetaData } from '../../../shared/app-event.interface';
 import { sanitizeActivityFirestoreWritePayload, sanitizeEventFirestoreWritePayload } from '../../../shared/firestore-write-sanitizer';
 
 /**
@@ -133,10 +133,11 @@ export class EventWriter {
      * @param event - The event to write (must have activities attached)
      * @param originalFiles - Optional original file(s) to upload to Storage
      */
-    public async writeAllEventData(userID: string, event: AppEventInterface, originalFiles?: OriginalFile[] | OriginalFile): Promise<void> {
+    public async writeAllEventData(userID: string, event: AppEventInterface, originalFiles?: OriginalFile[] | OriginalFile): Promise<OriginalFileMetaData[]> {
         const startTotal = Date.now();
         this.logger.info('writeAllEventData called', { userID, eventID: event.getID(), adapterPresent: !!this.storageAdapter });
         const writePromises: Promise<void>[] = [];
+        let persistedOriginalFiles: OriginalFileMetaData[] = [];
 
         // Ensure Event ID
         if (!event.getID()) {
@@ -230,6 +231,7 @@ export class EventWriter {
                     eventJSON.originalFiles = uploadedFilesMetadata;
                     // Legacy: Always points to first file for backwards compatibility
                     eventJSON.originalFile = uploadedFilesMetadata[0];
+                    persistedOriginalFiles = [...uploadedFilesMetadata];
                 }
 
             } else {
@@ -237,9 +239,13 @@ export class EventWriter {
                 // Preserve existing file metadata if no new files are being uploaded
                 if (event.originalFiles) {
                     eventJSON.originalFiles = event.originalFiles;
+                    persistedOriginalFiles = [...event.originalFiles];
                 }
                 if (event.originalFile) {
                     eventJSON.originalFile = event.originalFile;
+                    if (!persistedOriginalFiles.length) {
+                        persistedOriginalFiles = [event.originalFile];
+                    }
                 }
             }
 
@@ -251,6 +257,7 @@ export class EventWriter {
             await Promise.all(writePromises);
             this.logger.info(`Promise.all complete in ${Date.now() - startWrites}ms`);
             this.logger.info(`Total writeAllEventData execution time: ${Date.now() - startTotal}ms`);
+            return persistedOriginalFiles;
         } catch (e) {
             const error = e as Error;
             this.logger.error(error);

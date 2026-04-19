@@ -24,11 +24,14 @@ import {
     QueueStatsResponse,
     SportsLibReparseJobDocData,
 } from '../shared/types';
+import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from '../../activity-sync/constants';
 
 const SPORTS_LIB_REPARSE_JOBS_COLLECTION = 'sportsLibReparseJobs';
 const SPORTS_LIB_REPARSE_CHECKPOINT_DOC_PATH = 'systemJobs/sportsLibReparse';
 const SPORTS_LIB_REPARSE_FAILURE_PREVIEW_LIMIT = 10;
 const DERIVED_METRICS_FAILURE_PREVIEW_LIMIT = 10;
+const INGESTION_DLQ_PREVIEW_LIMIT = 50;
+const ACTIVITY_SYNC_DLQ_PREVIEW_LIMIT = 50;
 
 const DERIVED_METRICS_COORDINATOR_STATUSES = ['idle', 'queued', 'processing', 'failed'] as const;
 type DerivedMetricsCoordinatorStatus = typeof DERIVED_METRICS_COORDINATOR_STATUSES[number];
@@ -54,10 +57,14 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
 
     try {
         const db = admin.firestore();
-        const { workoutQueue, sportsLibReparseQueue, derivedMetricsQueue } = config.cloudtasks;
-        const [workoutCloudTaskDepth, sportsLibReparseCloudTaskDepth, derivedMetricsCloudTaskDepth] = await Promise.all([
+        const { workoutQueue, activitySyncQueue, sportsLibReparseQueue, derivedMetricsQueue } = config.cloudtasks;
+        const [workoutCloudTaskDepth, activitySyncCloudTaskDepth, sportsLibReparseCloudTaskDepth, derivedMetricsCloudTaskDepth] = await Promise.all([
             getCloudTaskQueueDepthForQueue(workoutQueue).catch(e => {
                 logger.error(`Error getting Cloud Task depth for queue ${workoutQueue}:`, e);
+                return 0;
+            }),
+            getCloudTaskQueueDepthForQueue(activitySyncQueue).catch(e => {
+                logger.error(`Error getting Cloud Task depth for queue ${activitySyncQueue}:`, e);
                 return 0;
             }),
             getCloudTaskQueueDepthForQueue(sportsLibReparseQueue).catch(e => {
@@ -69,7 +76,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 return 0;
             }),
         ]);
-        const totalCloudTaskDepth = workoutCloudTaskDepth + sportsLibReparseCloudTaskDepth + derivedMetricsCloudTaskDepth;
+        const totalCloudTaskDepth = workoutCloudTaskDepth + activitySyncCloudTaskDepth + sportsLibReparseCloudTaskDepth + derivedMetricsCloudTaskDepth;
         const reparseJobsCollection = db.collection(SPORTS_LIB_REPARSE_JOBS_COLLECTION);
 
         const [
@@ -202,6 +209,74 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
         const retryHistogram = { '0-3': 0, '4-7': 0, '8-9': 0 };
 
         const ONE_HOUR_AGO = Date.now() - (60 * 60 * 1000);
+        const activitySyncCollection = db.collection(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME);
+
+        const [
+            activitySyncPendingSnap,
+            activitySyncSucceededSnap,
+            activitySyncStuckSnap,
+            activitySyncRetry0to3Snap,
+            activitySyncRetry4to7Snap,
+            activitySyncRetry8to9Snap,
+            activitySyncThroughputSnap,
+            activitySyncOldestPendingSnap,
+            activitySyncDeadSnap,
+        ] = await Promise.all([
+            activitySyncCollection.where('processed', '==', false).where('retryCount', '<', 10).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count activity sync pending jobs:', e);
+                return null;
+            }),
+            activitySyncCollection.where('resultStatus', '==', 'success').count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count activity sync succeeded jobs:', e);
+                return null;
+            }),
+            activitySyncCollection.where('processed', '==', false).where('retryCount', '>=', 10).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count activity sync stuck jobs:', e);
+                return null;
+            }),
+            activitySyncCollection.where('processed', '==', false).where('retryCount', '<', 4).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count activity sync retry bucket 0-3:', e);
+                return null;
+            }),
+            activitySyncCollection.where('processed', '==', false).where('retryCount', '>=', 4).where('retryCount', '<', 8).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count activity sync retry bucket 4-7:', e);
+                return null;
+            }),
+            activitySyncCollection.where('processed', '==', false).where('retryCount', '>=', 8).where('retryCount', '<', 10).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count activity sync retry bucket 8-9:', e);
+                return null;
+            }),
+            activitySyncCollection.where('successProcessedAt', '>', ONE_HOUR_AGO).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count activity sync throughput:', e);
+                return null;
+            }),
+            activitySyncCollection.where('processed', '==', false).orderBy('dateCreated', 'asc').limit(1).get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to query oldest activity sync pending job:', e);
+                return null;
+            }),
+            db.collection('failed_jobs').where('originalCollection', '==', ACTIVITY_SYNC_QUEUE_COLLECTION_NAME).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count activity sync dead-letter jobs:', e);
+                return null;
+            }),
+        ]);
+
+        const activitySyncPending = activitySyncPendingSnap?.data().count || 0;
+        const activitySyncSucceeded = activitySyncSucceededSnap?.data().count || 0;
+        const activitySyncStuck = activitySyncStuckSnap?.data().count || 0;
+        const activitySyncDead = activitySyncDeadSnap?.data().count || 0;
+        const activitySyncRetryHistogram = {
+            '0-3': activitySyncRetry0to3Snap?.data().count || 0,
+            '4-7': activitySyncRetry4to7Snap?.data().count || 0,
+            '8-9': activitySyncRetry8to9Snap?.data().count || 0,
+        };
+        const activitySyncThroughput = activitySyncThroughputSnap?.data().count || 0;
+        let activitySyncMaxLagMs = 0;
+        const activitySyncOldestPendingDate = activitySyncOldestPendingSnap?.empty === false
+            ? activitySyncOldestPendingSnap.docs[0]?.data()?.dateCreated
+            : null;
+        if (activitySyncOldestPendingDate) {
+            activitySyncMaxLagMs = Math.max(0, Date.now() - activitySyncOldestPendingDate);
+        }
 
         const providers: { name: string; pending: number; succeeded: number; stuck: number; dead: number }[] = [];
 
@@ -278,21 +353,38 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
         // Dead Letter Queue stats & Error Clustering (Expensive)
         let dlq: QueueStatsResponse['dlq'] = undefined;
         let topErrors: { error: string; count: number }[] = [];
+        let activitySyncTopErrors: { error: string; count: number }[] = [];
+        let activitySyncByContext: { context: string; count: number }[] = [];
 
         if (includeAnalysis) {
             const dlqCol = db.collection('failed_jobs');
+            const ingestionDlqCollections = Array.from(new Set(Object.values(PROVIDER_QUEUES).flat()));
+            const ingestionDlqQuery = dlqCol.where('originalCollection', 'in', ingestionDlqCollections);
 
-            // Use limited query for clustering to save reads
+            // Use filtered + limited queries for ingestion clustering to save reads and avoid mixing activity-sync entries.
             const [dlqCountSnap, dlqRecentSnap] = await Promise.all([
-                dlqCol.count().get(),
-                dlqCol.orderBy('failedAt', 'desc').limit(50).get()
+                ingestionDlqQuery.count().get(),
+                ingestionDlqQuery
+                    .orderBy('failedAt', 'desc')
+                    .limit(INGESTION_DLQ_PREVIEW_LIMIT)
+                    .get()
+                    .catch(async (e) => {
+                        logger.error('[admin/getQueueStats] Failed to load ordered ingestion DLQ preview:', e);
+                        return ingestionDlqQuery
+                            .limit(INGESTION_DLQ_PREVIEW_LIMIT)
+                            .get()
+                            .catch(fallbackError => {
+                                logger.error('[admin/getQueueStats] Failed to load fallback ingestion DLQ preview:', fallbackError);
+                                return null;
+                            });
+                    })
             ]);
 
             const dlqByContext: Record<string, number> = {};
             const dlqByProvider: Record<string, number> = {};
             const errorCounts: Record<string, number> = {};
 
-            dlqRecentSnap.docs.forEach(doc => {
+            (dlqRecentSnap?.docs || []).forEach(doc => {
                 const data = doc.data();
                 const context = data.context || 'UNKNOWN';
                 const originalCollection = data.originalCollection || 'unknown';
@@ -313,6 +405,38 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 .sort((a, b) => b[1] - a[1])
                 .slice(0, 5)
                 .map(([error, count]) => ({ error, count }));
+
+            const activitySyncDlqQuery = dlqCol.where('originalCollection', '==', ACTIVITY_SYNC_QUEUE_COLLECTION_NAME);
+            const activitySyncRecentDlqSnap = await activitySyncDlqQuery
+                .orderBy('failedAt', 'desc')
+                .limit(ACTIVITY_SYNC_DLQ_PREVIEW_LIMIT)
+                .get()
+                .catch(async (e) => {
+                    logger.error('[admin/getQueueStats] Failed to load ordered activity sync DLQ preview:', e);
+                    return activitySyncDlqQuery
+                        .limit(ACTIVITY_SYNC_DLQ_PREVIEW_LIMIT)
+                        .get()
+                        .catch(fallbackError => {
+                            logger.error('[admin/getQueueStats] Failed to load fallback activity sync DLQ preview:', fallbackError);
+                            return null;
+                        });
+                });
+            const activitySyncContextCounts: Record<string, number> = {};
+            const activitySyncErrorCounts: Record<string, number> = {};
+            for (const doc of (activitySyncRecentDlqSnap?.docs || [])) {
+                const data = doc.data();
+                const context = `${data.context || 'UNKNOWN'}`;
+                const errorMsg = normalizeError(data.error || 'Unknown Error');
+                activitySyncContextCounts[context] = (activitySyncContextCounts[context] || 0) + 1;
+                activitySyncErrorCounts[errorMsg] = (activitySyncErrorCounts[errorMsg] || 0) + 1;
+            }
+            activitySyncByContext = Object.entries(activitySyncContextCounts)
+                .map(([context, count]) => ({ context, count }))
+                .sort((a, b) => b.count - a.count);
+            activitySyncTopErrors = Object.entries(activitySyncErrorCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5)
+                .map(([error, count]) => ({ error, count }));
         }
 
         return {
@@ -325,6 +449,10 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                     workout: {
                         queueId: workoutQueue,
                         pending: workoutCloudTaskDepth,
+                    },
+                    activitySync: {
+                        queueId: activitySyncQueue,
+                        pending: activitySyncCloudTaskDepth,
                     },
                     sportsLibReparse: {
                         queueId: sportsLibReparseQueue,
@@ -368,7 +496,20 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 maxLagMs,
                 retryHistogram,
                 topErrors
-            }
+            },
+            activitySync: {
+                pending: activitySyncPending,
+                succeeded: activitySyncSucceeded,
+                stuck: activitySyncStuck,
+                dead: activitySyncDead,
+                dlqByContext: activitySyncByContext,
+                advanced: {
+                    throughput: activitySyncThroughput,
+                    maxLagMs: activitySyncMaxLagMs,
+                    retryHistogram: activitySyncRetryHistogram,
+                    topErrors: activitySyncTopErrors,
+                },
+            },
         };
     } catch (error: unknown) {
         logger.error('Error getting queue stats:', error);

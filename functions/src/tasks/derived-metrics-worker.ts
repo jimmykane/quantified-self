@@ -72,6 +72,8 @@ export const processDerivedMetricsTask = onTaskDispatched({
         await writeDerivedMetricSnapshotsReady(uid, dirtyMetricKinds, {
             formDocs,
             recoveryNowDocs,
+        }, {
+            builtFromEventMutationVersion: startResult.eventMutationVersion,
         });
         const completion = await completeDerivedMetricsProcessing(uid, Math.floor(generation));
 
@@ -79,6 +81,7 @@ export const processDerivedMetricsTask = onTaskDispatched({
             uid,
             generation,
             dirtyMetricKinds,
+            builtFromEventMutationVersion: startResult.eventMutationVersion,
             formEventDocsScanned: formDocs.length,
             recoveryEventDocsScanned: recoveryNowDocs.length,
             recoveryLookbackWindowSeconds: getDerivedRecoveryLookbackWindowSeconds(),
@@ -94,6 +97,7 @@ export const processDerivedMetricsTask = onTaskDispatched({
             uid,
             generation,
             dirtyMetricKinds,
+            builtFromEventMutationVersion: startResult.eventMutationVersion,
             error: processingError,
             durationMs: Date.now() - processingStart,
         });

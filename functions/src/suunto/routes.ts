@@ -2,6 +2,7 @@
 
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import * as requestPromise from '../request-helper';
 import { executeWithTokenRetry } from './retry-helper';
 import { hasProAccess, PRO_REQUIRED_MESSAGE } from '../utils';
@@ -109,7 +110,7 @@ export const importRouteToSuuntoApp = onCall({
     try {
       const userServiceMetaDocumentSnapshot = admin.firestore().collection('users').doc(userID).collection('meta').doc(SERVICE_NAME);
       await userServiceMetaDocumentSnapshot.set({
-        uploadedRoutesCount: admin.firestore.FieldValue.increment(1),
+        uploadedRoutesCount: FieldValue.increment(1),
       }, { merge: true });
     } catch (e: unknown) {
       logger.error('Could not update uploadedRoutes count', e);

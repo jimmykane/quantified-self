@@ -62,6 +62,16 @@ describe('HomeComponent', () => {
         expect(text).not.toContain('New Feature');
     });
 
+    it('should include Garmin -> Suunto in offerings copy without dedicated CTA promotion', () => {
+        const text = fixture.nativeElement.textContent as string;
+        expect(text).toContain('Cross-Platform Sync');
+        expect(text).toContain('Garmin -> Suunto sync is built in');
+        expect(text).toContain('reliable and instant sync');
+        expect(text).not.toContain('Set up sync');
+        expect(text).not.toContain('How it works');
+        expect(fixture.nativeElement.querySelector('.garmin-suunto-launch')).toBeNull();
+    });
+
     it('should render the shared typed prompt rotator in the examples area', () => {
         const sharedHeroPrompts = getAiInsightsHeroPrompts();
         const text = fixture.nativeElement.textContent as string;

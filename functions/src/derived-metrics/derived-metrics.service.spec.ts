@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-    DEFAULT_DERIVED_METRIC_KINDS,
     DERIVED_METRIC_KINDS,
     DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS,
 } from '../../../shared/derived-metrics';
@@ -168,6 +167,10 @@ describe('startDerivedMetricsProcessing', () => {
         });
     });
 
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
     it('claims queued generation and persists processing metric kinds for retries', async () => {
         const { startDerivedMetricsProcessing } = await import('./derived-metrics.service');
         hoisted.transactionGet.mockResolvedValueOnce({
@@ -175,6 +178,7 @@ describe('startDerivedMetricsProcessing', () => {
             data: () => ({
                 status: 'queued',
                 generation: 42,
+                eventMutationVersion: 101,
                 dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form],
                 updatedAtMs: Date.now(),
             }),
@@ -185,6 +189,7 @@ describe('startDerivedMetricsProcessing', () => {
         expect(result).toEqual({
             dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form],
             startedAtMs: expect.any(Number),
+            eventMutationVersion: 101,
         });
         expect(hoisted.transactionSet).toHaveBeenCalledWith(
             hoisted.coordinatorRef,
@@ -197,13 +202,14 @@ describe('startDerivedMetricsProcessing', () => {
         );
     });
 
-    it('reclaims processing generation using persisted in-flight metric kinds', async () => {
+    it('rejects duplicate processing claims for the same generation', async () => {
         const { startDerivedMetricsProcessing } = await import('./derived-metrics.service');
         hoisted.transactionGet.mockResolvedValueOnce({
             exists: true,
             data: () => ({
                 status: 'processing',
                 generation: 7,
+                eventMutationVersion: 55,
                 dirtyMetricKinds: [],
                 processingMetricKinds: [DERIVED_METRIC_KINDS.RecoveryNow],
                 updatedAtMs: Date.now(),
@@ -212,43 +218,40 @@ describe('startDerivedMetricsProcessing', () => {
 
         const result = await startDerivedMetricsProcessing('user-1', 7);
 
-        expect(result).toEqual({
-            dirtyMetricKinds: [DERIVED_METRIC_KINDS.RecoveryNow],
-            startedAtMs: expect.any(Number),
-        });
-        expect(hoisted.transactionSet).toHaveBeenCalledWith(
-            hoisted.coordinatorRef,
-            expect.objectContaining({
-                status: 'processing',
-                processingMetricKinds: [DERIVED_METRIC_KINDS.RecoveryNow],
-            }),
-            { merge: true },
-        );
+        expect(result).toBeNull();
+        expect(hoisted.transactionSet).not.toHaveBeenCalled();
     });
 
-    it('recovers legacy processing coordinator docs by falling back to default metric kinds', async () => {
+    it('reclaims stuck processing generations using in-flight metric kinds', async () => {
         const { startDerivedMetricsProcessing } = await import('./derived-metrics.service');
+        vi.useFakeTimers();
+        vi.setSystemTime(Date.UTC(2026, 3, 11, 9, 0, 0));
+        const nowMs = Date.now();
         hoisted.transactionGet.mockResolvedValueOnce({
             exists: true,
             data: () => ({
                 status: 'processing',
                 generation: 9,
+                eventMutationVersion: 77,
                 dirtyMetricKinds: [],
-                updatedAtMs: Date.now(),
+                processingMetricKinds: [DERIVED_METRIC_KINDS.RecoveryNow],
+                startedAtMs: nowMs - (20 * 60 * 1000),
+                updatedAtMs: nowMs - (20 * 60 * 1000),
             }),
         });
 
         const result = await startDerivedMetricsProcessing('user-1', 9);
 
         expect(result).toEqual({
-            dirtyMetricKinds: DEFAULT_DERIVED_METRIC_KINDS,
+            dirtyMetricKinds: [DERIVED_METRIC_KINDS.RecoveryNow],
             startedAtMs: expect.any(Number),
+            eventMutationVersion: 77,
         });
         expect(hoisted.transactionSet).toHaveBeenCalledWith(
             hoisted.coordinatorRef,
             expect.objectContaining({
                 status: 'processing',
-                processingMetricKinds: DEFAULT_DERIVED_METRIC_KINDS,
+                processingMetricKinds: [DERIVED_METRIC_KINDS.RecoveryNow],
             }),
             { merge: true },
         );
@@ -299,6 +302,48 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
             metricKinds: [DERIVED_METRIC_KINDS.Form],
         });
         expect(hoisted.transactionSet).not.toHaveBeenCalled();
+        expect(hoisted.enqueueDerivedMetricsTask).not.toHaveBeenCalled();
+    });
+
+    it('increments event mutation version without requeue when queued coordinator is healthy', async () => {
+        const { markDerivedMetricsDirtyAndMaybeQueue } = await import('./derived-metrics.service');
+        vi.useFakeTimers();
+        vi.setSystemTime(Date.UTC(2026, 3, 11, 9, 0, 0));
+        const nowMs = Date.now();
+        hoisted.transactionGet.mockResolvedValueOnce({
+            exists: true,
+            data: () => ({
+                status: 'queued',
+                generation: 12,
+                eventMutationVersion: 99,
+                dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form],
+                requestedAtMs: nowMs - 2 * 60 * 1000,
+                updatedAtMs: nowMs - 2 * 60 * 1000,
+            }),
+        });
+
+        const response = await markDerivedMetricsDirtyAndMaybeQueue(
+            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            [DERIVED_METRIC_KINDS.Form],
+            { incrementEventMutationVersion: true },
+        );
+
+        expect(response).toEqual({
+            accepted: true,
+            queued: false,
+            generation: 12,
+            metricKinds: [DERIVED_METRIC_KINDS.Form],
+        });
+        expect(hoisted.transactionSet).toHaveBeenCalledWith(
+            hoisted.coordinatorRef,
+            expect.objectContaining({
+                status: 'queued',
+                generation: 12,
+                eventMutationVersion: 100,
+                dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form],
+            }),
+            { merge: true },
+        );
         expect(hoisted.enqueueDerivedMetricsTask).not.toHaveBeenCalled();
     });
 
@@ -488,9 +533,13 @@ describe('writeDerivedMetricSnapshotsReady', () => {
                 formDocs: formDocs as any,
                 recoveryNowDocs: [] as any,
             },
+            {
+                builtFromEventMutationVersion: 42,
+            },
         );
 
         const formPersistedSnapshot = findPersistedPayload(DERIVED_METRIC_KINDS.Form);
+        expect(formPersistedSnapshot.builtFromEventMutationVersion).toBe(42);
         expect(formPersistedSnapshot.sourceDocCount).toBe(formDocs.length);
         const formPayload = formPersistedSnapshot.payload as Record<string, unknown>;
         expect(formPayload.dailyLoads).toEqual([

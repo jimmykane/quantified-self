@@ -4,6 +4,7 @@ import { logEvent, setAnalyticsCollectionEnabled } from 'firebase/analytics';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { LoggerService } from './logger.service';
+import { ACTIVITY_SYNC_ROUTES, ActivitySyncRouteId } from '@shared/activity-sync-routes';
 
 import { environment } from '../../environments/environment';
 
@@ -100,5 +101,39 @@ export class AppAnalyticsService {
 
     logDismissWhatsNew(): void {
         this.logEvent('dismiss_whats_new');
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Activity Sync Route Events
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    private getActivitySyncRouteParams(routeId: ActivitySyncRouteId): Record<string, string> {
+        const route = ACTIVITY_SYNC_ROUTES[routeId];
+        return {
+            route_id: route.id,
+            source_service: `${route.sourceServiceName}`,
+            destination_service: `${route.destinationServiceName}`,
+        };
+    }
+
+    logActivitySyncRouteToggle(routeId: ActivitySyncRouteId, enabled: boolean): void {
+        this.logEvent('activity_sync_route_toggle', {
+            ...this.getActivitySyncRouteParams(routeId),
+            enabled,
+            action: enabled ? 'enable' : 'disable',
+        });
+    }
+
+    logActivitySyncRouteBackfill(routeId: ActivitySyncRouteId, summary: {
+        scanned: number;
+        queued: number;
+        failedCount: number;
+    }): void {
+        this.logEvent('activity_sync_route_backfill', {
+            ...this.getActivitySyncRouteParams(routeId),
+            scanned_count: summary.scanned,
+            queued_count: summary.queued,
+            failed_count: summary.failedCount,
+        });
     }
 }
