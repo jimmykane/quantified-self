@@ -3,7 +3,7 @@ import { ACTIVITY_SYNC_ROUTE_ALLOWED_UIDS, isActivitySyncRouteUIDAllowlisted } f
 
 export function getActivitySyncRouteAllowlistConfigError(routeId: ActivitySyncRouteId): string | null {
     const routeAllowlist = ACTIVITY_SYNC_ROUTE_ALLOWED_UIDS[routeId];
-    if (!Array.isArray(routeAllowlist) || routeAllowlist.length === 0) {
+    if (!Array.isArray(routeAllowlist)) {
         return `Activity sync allowlist for route ${routeId} is not configured.`;
     }
 

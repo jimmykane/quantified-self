@@ -453,12 +453,12 @@ describe('ServicesGarminComponent', () => {
             expect(queueButton?.disabled).toBe(false);
         });
 
-        it('should hide activity sync card for non-allowlisted users', () => {
+        it('should show activity sync card for users outside the old rollout UID list', () => {
             component.hasProAccess = true;
             component.user = { uid: 'non-allowlisted-user', settings: {} } as any;
             fixture.detectChanges();
 
-            expect(fixture.nativeElement.textContent).not.toContain('Garmin -> Suunto Sync');
+            expect(fixture.nativeElement.textContent).toContain('Garmin -> Suunto Sync');
         });
 
         it('should render failed backfill events in the summary', () => {
