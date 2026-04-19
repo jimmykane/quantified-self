@@ -1,4 +1,5 @@
 import type {
+  AiInsightAdvisoryResult,
   AiInsightConfidenceTier,
   AiInsightEvidenceRef,
   AiInsightEventLookup,
@@ -391,6 +392,27 @@ export function buildPowerCurveStatementChips(powerCurve: AiInsightPowerCurve): 
     if (evidenceChip) {
       chips.push(evidenceChip);
     }
+  }
+
+  return chips;
+}
+
+export function buildAdvisoryStatementChips(advisory: AiInsightAdvisoryResult): AiInsightStatementChip[] {
+  if (advisory.status !== 'available' || !advisory.confidenceTier) {
+    return [];
+  }
+
+  const chips: AiInsightStatementChip[] = [
+    buildConfidenceChip('advisory:narrative', advisory.confidenceTier),
+  ];
+
+  const evidenceChip = buildEvidenceChip('advisory:narrative', [{
+    kind: 'metric',
+    label: `${advisory.metricKey} estimate`,
+    metricKey: advisory.metricKey,
+  }]);
+  if (evidenceChip) {
+    chips.push(evidenceChip);
   }
 
   return chips;

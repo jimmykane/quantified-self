@@ -22,6 +22,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import type {
   AiInsightsLatestSnapshot,
+  AiInsightsAdvisoryOkResponse,
   AiInsightsAggregateOkResponse,
   AiInsightsEmptyResponse,
   AiInsightsEventLookupOkResponse,
@@ -1369,6 +1370,81 @@ function buildPowerCurveResponse(): AiInsightsPowerCurveOkResponse {
   };
 }
 
+function buildAdvisoryResponse(): AiInsightsAdvisoryOkResponse {
+  return {
+    status: 'ok',
+    resultKind: 'advisory',
+    narrative: 'Expected heart rate estimate for this year is 186.',
+    query: {
+      resultKind: 'advisory',
+      metricKey: 'heart_rate',
+      advisoryKind: 'expected_value',
+      horizon: 'current_year',
+      categoryType: ChartDataCategoryTypes.DateType,
+      activityTypeGroups: [],
+      activityTypes: [ActivityTypes.Cycling],
+      activityFilters: {
+        activityTypeGroups: [],
+        activityTypes: [ActivityTypes.Cycling],
+      },
+      dateRange: {
+        kind: 'bounded',
+        startDate: '2026-01-01T00:00:00.000Z',
+        endDate: '2026-03-18T23:59:59.999Z',
+        timezone: 'Europe/Helsinki',
+        source: 'default',
+      },
+      chartType: ChartTypes.LinesVertical,
+    },
+    advisory: {
+      status: 'available',
+      metricKey: 'heart_rate',
+      estimate: 186,
+      rangeLow: 182,
+      rangeHigh: 190,
+      confidenceTier: 'medium',
+      evidenceSummary: 'Based on deterministic heart-rate samples.',
+    },
+    synthesis: {
+      attempted: true,
+      applied: true,
+      mode: 'supported_optimize',
+      executedPrompt: 'what should my max heart rate be this year',
+      confidence: 0.92,
+      decisionReason: 'Applied synthesized prompt candidate.',
+    },
+    presentation: {
+      title: 'Expected heart rate for Cycling',
+      chartType: ChartTypes.LinesVertical,
+    },
+  };
+}
+
+function buildAdvisoryInsufficientDataResponse(): AiInsightsAdvisoryOkResponse {
+  return {
+    ...buildAdvisoryResponse(),
+    narrative: 'I could not estimate expected heart rate for this range. Not enough heart-rate samples were found.',
+    advisory: {
+      status: 'insufficient_data',
+      metricKey: 'heart_rate',
+      estimate: null,
+      rangeLow: null,
+      rangeHigh: null,
+      confidenceTier: null,
+      evidenceSummary: 'Need at least 3 events with max heart-rate values in the selected scope.',
+      insufficientDataReason: 'Not enough heart-rate samples were found in the selected range.',
+    },
+    synthesis: {
+      attempted: true,
+      applied: false,
+      mode: 'supported_optimize',
+      executedPrompt: 'what should my max heart rate be this year',
+      confidence: 0.77,
+      decisionReason: 'Synthesized candidate did not pass deterministic equivalence gate.',
+    },
+  };
+}
+
 function buildMockEvent(options: {
   id: string;
   startDate: string;
@@ -2213,6 +2289,74 @@ describe('AiInsightsPageComponent', () => {
     expect(summaryCards).toHaveLength(0);
     expect(warningChips.some((chip) => chip.nativeElement.textContent.includes('defaults to Cycling'))).toBe(true);
     expect(resultTitle?.textContent?.toLowerCase()).toContain('best power curve');
+  });
+
+  it('should render advisory responses with interpreted badge and metric-generic detail cards', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue(buildAdvisoryResponse());
+    component.promptControl.setValue('what should my max heartrate be this year');
+
+    await component.submitPrompt();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const resultStatusChips = fixture.debugElement
+      .queryAll(By.css('.result-status-chip'))
+      .map((chip) => (chip.nativeElement.textContent || '').trim());
+    const sectionHeading = fixture.debugElement.query(By.css('.suggestions-title'))?.nativeElement as HTMLElement | undefined;
+    const narrative = fixture.debugElement.query(By.css('.narrative'))?.nativeElement as HTMLElement | undefined;
+    const summaryLabels = fixture.debugElement
+      .queryAll(By.css('.summary-label'))
+      .map((label) => (label.nativeElement.textContent || '').trim());
+    const summaryValues = fixture.debugElement
+      .queryAll(By.css('.summary-value'))
+      .map((value) => (value.nativeElement.textContent || '').trim());
+    const aggregateChart = fixture.debugElement.query(By.css('.chart-stub'));
+    const multiMetricChart = fixture.debugElement.query(By.css('.multi-chart-stub'));
+    const powerCurveChart = fixture.debugElement.query(By.css('.power-curve-chart-stub'));
+
+    expect(resultStatusChips.some((chip) => chip.includes('Interpreted'))).toBe(true);
+    expect(sectionHeading?.textContent).toContain('Advisory details');
+    expect(narrative?.textContent).toContain('Expected heart rate estimate for this year is 186.');
+    expect(summaryLabels).toContain('Status');
+    expect(summaryLabels).toContain('Metric');
+    expect(summaryLabels).toContain('Expected value');
+    expect(summaryLabels).toContain('Evidence');
+    expect(summaryValues).toContain('Available');
+    expect(summaryValues).toContain('Heart rate');
+    expect(summaryValues.some((value) => value.includes('186'))).toBe(true);
+    expect(summaryValues.some((value) => value.includes('Based on deterministic heart-rate samples.'))).toBe(true);
+    expect(aggregateChart).toBeNull();
+    expect(multiMetricChart).toBeNull();
+    expect(powerCurveChart).toBeNull();
+  });
+
+  it('should render advisory insufficient-data reason without interpreted badge', async () => {
+    aiInsightsServiceMock.runInsight.mockResolvedValue(buildAdvisoryInsufficientDataResponse());
+    component.promptControl.setValue('what should my max heart rate be this year');
+
+    await component.submitPrompt();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const resultStatusChips = fixture.debugElement
+      .queryAll(By.css('.result-status-chip'))
+      .map((chip) => (chip.nativeElement.textContent || '').trim());
+    const summaryLabels = fixture.debugElement
+      .queryAll(By.css('.summary-label'))
+      .map((label) => (label.nativeElement.textContent || '').trim());
+    const summaryValues = fixture.debugElement
+      .queryAll(By.css('.summary-value'))
+      .map((value) => (value.nativeElement.textContent || '').trim());
+    const statementChipSet = fixture.debugElement.query(By.css('.statement-chip-set'));
+
+    expect(resultStatusChips.some((chip) => chip.includes('Interpreted'))).toBe(false);
+    expect(summaryLabels).toContain('Status');
+    expect(summaryLabels).toContain('Reason');
+    expect(summaryLabels).toContain('Evidence');
+    expect(summaryLabels).not.toContain('Expected value');
+    expect(summaryValues).toContain('Insufficient data');
+    expect(summaryValues.some((value) => value.includes('Not enough heart-rate samples'))).toBe(true);
+    expect(statementChipSet).toBeNull();
   });
 
   it('should trigger haptics on submit, processing start, and successful response', async () => {

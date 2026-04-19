@@ -3507,6 +3507,38 @@ describe('normalizeInsightQuery', () => {
     expect(result.query.resultKind).toBe('aggregate');
   });
 
+  it('routes advisory prompts to metric-agnostic advisory query mode', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-22T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'What should my max heart rate be this year?',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok' || result.query.resultKind !== 'advisory') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('heart_rate');
+    expect(result.query.metricKey).toBe('heart_rate');
+    expect(result.query.advisoryKind).toBe('expected_value');
+    expect(result.query.horizon).toBe('current_year');
+    expect(result.query.activityFilters).toEqual({
+      activityTypeGroups: [],
+      activityTypes: [],
+    });
+    expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
+      startDate: '2026-01-01T00:00:00.000Z',
+      endDate: '2026-03-22T23:59:59.999Z',
+      timezone: 'UTC',
+      source: 'prompt',
+    });
+  });
+
   it('rejects unsupported split prompts before calling the model', async () => {
     const generateIntent = vi.fn();
     setNormalizeQueryDependenciesForTesting({

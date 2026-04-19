@@ -15,6 +15,7 @@ import type {
   NormalizedInsightPeriodMode,
   NormalizedInsightQuery,
 } from '../../../../shared/ai-insights.types';
+import type { AiInsightsPromptMetricKey } from '../../../../shared/ai-insights-prompts';
 
 interface BuildQueryCommonInput {
   activityTypeGroups: ActivityTypeGroup[];
@@ -136,5 +137,33 @@ export function buildPowerCurveInsightQuery(
     periodMode: input.periodMode,
     chartType: input.chartType,
     defaultedToCycling: input.defaultedToCycling,
+  };
+}
+
+interface BuildAdvisoryQueryInput extends BuildQueryCommonInput {
+  metricKey: AiInsightsPromptMetricKey;
+  advisoryKind: 'expected_value';
+  horizon: 'current_year' | 'requested_range';
+}
+
+export function buildAdvisoryInsightQuery(
+  input: BuildAdvisoryQueryInput,
+): Extract<NormalizedInsightQuery, { resultKind: 'advisory' }> {
+  return {
+    resultKind: 'advisory',
+    categoryType: ChartDataCategoryTypes.DateType,
+    metricKey: input.metricKey,
+    advisoryKind: input.advisoryKind,
+    horizon: input.horizon,
+    activityTypeGroups: input.activityTypeGroups,
+    activityTypes: input.activityTypes,
+    activityFilters: {
+      activityTypeGroups: input.activityTypeGroups,
+      activityTypes: input.activityTypes,
+    },
+    dateRange: input.dateRange,
+    requestedDateRanges: input.requestedDateRanges,
+    periodMode: input.periodMode,
+    chartType: input.chartType,
   };
 }

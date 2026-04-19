@@ -14,6 +14,7 @@ import type {
   RankedInsightEvent,
 } from './execute-query';
 import { buildExecutionPromptLogContext } from './execute-query.logging';
+import { executeAdvisoryEstimator } from './advisory-estimator';
 
 interface ExecuteQueryResultKindHelpers {
   buildLatestEvent: (events: EventInterface[]) => { eventId: string; startDate: string } | null;
@@ -227,6 +228,42 @@ const EXECUTE_QUERY_RESULT_KIND_REGISTRY = {
         matchedEventsCount: matchedEvents.length,
         matchedActivityTypeCounts: helpers.buildMatchedActivityTypeCounts(matchedEvents, dependencies.logger),
         metricResults,
+      };
+    },
+  },
+  advisory: {
+    execute: (context) => {
+      const {
+        dependencies,
+        helpers,
+        matchedEvents,
+        prompt,
+        query,
+        userID,
+      } = context;
+      const advisory = executeAdvisoryEstimator({
+        query,
+        matchedEvents,
+      });
+
+      dependencies.logger.info('[aiInsights] Advisory estimate summary', {
+        ...buildExecutionPromptLogContext(prompt),
+        userID,
+        metricKey: query.metricKey,
+        advisoryKind: query.advisoryKind,
+        horizon: query.horizon,
+        advisoryStatus: advisory.status,
+        estimate: advisory.estimate,
+        rangeLow: advisory.rangeLow,
+        rangeHigh: advisory.rangeHigh,
+        confidenceTier: advisory.confidenceTier,
+      });
+
+      return {
+        resultKind: 'advisory',
+        matchedEventsCount: matchedEvents.length,
+        matchedActivityTypeCounts: helpers.buildMatchedActivityTypeCounts(matchedEvents, dependencies.logger),
+        advisory,
       };
     },
   },

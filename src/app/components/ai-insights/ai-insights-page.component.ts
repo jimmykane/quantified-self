@@ -12,6 +12,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import type { EventInterface } from '@sports-alliance/sports-lib';
 import type {
+  AiInsightsAdvisoryOkResponse,
   AiInsightsAggregateOkResponse,
   AiInsightsEmptyResponse,
   AiInsightsEventLookupOkResponse,
@@ -264,6 +265,10 @@ export class AiInsightsPageComponent {
     const response = this.okResponse();
     return response?.resultKind === 'power_curve' ? response : null;
   });
+  readonly advisoryOkResponse = computed<AiInsightsAdvisoryOkResponse | null>(() => {
+    const response = this.okResponse();
+    return response?.resultKind === 'advisory' ? response : null;
+  });
   readonly emptyResponse = computed<AiInsightsEmptyResponse | null>(() => {
     const response = this.response();
     return response?.status === 'empty' ? response : null;
@@ -309,6 +314,9 @@ export class AiInsightsPageComponent {
   ));
   readonly powerCurveNarrative = computed(() => (
     formatAiInsightsNarrativeForDisplay(this.powerCurveOkResponse()?.narrative)
+  ));
+  readonly advisoryNarrative = computed(() => (
+    formatAiInsightsNarrativeForDisplay(this.advisoryOkResponse()?.narrative)
   ));
   readonly emptyNarrative = computed(() => (
     formatAiInsightsNarrativeForDisplay(this.emptyResponse()?.narrative)
@@ -360,12 +368,18 @@ export class AiInsightsPageComponent {
     return resolveResultCardSubtitle(response);
   });
   readonly resultCardMetaText = computed(() => {
+    const synthesis = this.response()?.synthesis;
+    const interpretedLabel = synthesis?.attempted && synthesis.applied ? 'Interpreted' : null;
     const savedAtLabel = formatSavedInsightDate(this.latestSnapshotSavedAt(), this.locale);
-    if (!savedAtLabel) {
+    if (!interpretedLabel && !savedAtLabel) {
       return null;
     }
 
-    return `Saved ${savedAtLabel}`;
+    if (interpretedLabel && savedAtLabel) {
+      return `${interpretedLabel} • Saved ${savedAtLabel}`;
+    }
+
+    return interpretedLabel ?? `Saved ${savedAtLabel}`;
   });
   readonly resultNotes = computed<ResultNote[]>(() => {
     if (!this.hasCompletedResponse()) {
@@ -767,9 +781,11 @@ export class AiInsightsPageComponent {
     const rows: Array<{ label: string; value: string }> = [];
     const valueType = response.query.resultKind === 'multi_metric_aggregate'
       ? response.query.metricSelections[0]?.valueType
-      : response.query.resultKind === 'latest_event' || response.query.resultKind === 'power_curve'
+      : response.query.resultKind === 'latest_event'
+        || response.query.resultKind === 'power_curve'
+        || response.query.resultKind === 'advisory'
         ? null
-      : response.query.valueType;
+        : response.query.valueType;
 
     if (valueType) {
       rows.push({
@@ -802,11 +818,21 @@ export class AiInsightsPageComponent {
       });
     }
 
+    if (response.status === 'ok' && response.resultKind === 'advisory') {
+      rows.push({
+        label: 'Advisory',
+        value: response.query.horizon === 'current_year'
+          ? 'Expected value for current year'
+          : 'Expected value for selected range',
+      });
+    }
+
     return rows;
   });
   readonly aggregationContextLine = computed(() => {
     const response = this.aggregateOkResponse()
       || this.multiMetricOkResponse()
+      || this.advisoryOkResponse()
       || this.powerCurveOkResponse()
       || this.emptyResponse();
     if (!response) {
@@ -815,9 +841,11 @@ export class AiInsightsPageComponent {
 
     const valueType = response.query.resultKind === 'multi_metric_aggregate'
       ? response.query.metricSelections[0]?.valueType
-      : response.query.resultKind === 'latest_event' || response.query.resultKind === 'power_curve'
+      : response.query.resultKind === 'latest_event'
+        || response.query.resultKind === 'power_curve'
+        || response.query.resultKind === 'advisory'
         ? null
-      : response.query.valueType;
+        : response.query.valueType;
     if (!valueType) {
       return this.resultSubtitle();
     }
@@ -838,6 +866,77 @@ export class AiInsightsPageComponent {
     ?? this.powerCurveOkResponse()?.presentation.warnings
     ?? []
   ));
+  readonly advisorySummaryCards = computed<InsightSummaryCard[]>(() => {
+    const response = this.advisoryOkResponse();
+    if (!response) {
+      return [];
+    }
+
+    const metricLabel = response.query.metricKey
+      .replace(/_/g, ' ')
+      .trim()
+      .replace(/\s+/g, ' ');
+    const formattedMetricLabel = metricLabel
+      ? `${metricLabel[0]?.toUpperCase() || ''}${metricLabel.slice(1)}`
+      : response.query.metricKey;
+    const cards: InsightSummaryCard[] = [
+      {
+        label: 'Status',
+        value: response.advisory.status === 'available'
+          ? 'Available'
+          : response.advisory.status === 'insufficient_data'
+            ? 'Insufficient data'
+            : 'Unsupported',
+      },
+      {
+        label: 'Metric',
+        value: formattedMetricLabel,
+      },
+    ];
+
+    if (
+      response.advisory.status === 'available'
+      && response.advisory.estimate !== null
+      && response.advisory.rangeLow !== null
+      && response.advisory.rangeHigh !== null
+    ) {
+      cards.push({
+        label: 'Expected value',
+        value: new Intl.NumberFormat(this.locale || undefined, {
+          maximumFractionDigits: 1,
+        }).format(response.advisory.estimate),
+        detailRows: [
+          {
+            label: 'Range',
+            value: `${new Intl.NumberFormat(this.locale || undefined, {
+              maximumFractionDigits: 1,
+            }).format(response.advisory.rangeLow)} – ${new Intl.NumberFormat(this.locale || undefined, {
+              maximumFractionDigits: 1,
+            }).format(response.advisory.rangeHigh)}`,
+          },
+          {
+            label: 'Confidence',
+            value: response.advisory.confidenceTier
+              ? `${response.advisory.confidenceTier[0]?.toUpperCase() || ''}${response.advisory.confidenceTier.slice(1)}`
+              : 'Unknown',
+          },
+        ],
+      });
+    }
+
+    if (response.advisory.status === 'insufficient_data' && response.advisory.insufficientDataReason) {
+      cards.push({
+        label: 'Reason',
+        value: response.advisory.insufficientDataReason,
+      });
+    }
+
+    cards.push({
+      label: 'Evidence',
+      value: response.advisory.evidenceSummary,
+    });
+    return cards;
+  });
   readonly resultSummaryCards = computed<InsightSummaryCard[]>(() => {
     const response = this.aggregateOkResponse();
     if (!response) {

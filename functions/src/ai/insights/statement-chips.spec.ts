@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildAggregateStatementChips,
+  buildAdvisoryStatementChips,
   buildEventLookupStatementChips,
   buildLatestEventStatementChips,
   buildMultiMetricStatementChips,
@@ -143,5 +144,31 @@ describe('statement-chips', () => {
 
     expect(withSeries.some(chip => chip.chipType === 'evidence')).toBe(true);
     expect(withoutSeries.some(chip => chip.chipType === 'evidence')).toBe(false);
+  });
+
+  it('builds advisory chips only for available advisory estimates', () => {
+    const available = buildAdvisoryStatementChips({
+      status: 'available',
+      metricKey: 'heart_rate',
+      estimate: 186,
+      rangeLow: 182,
+      rangeHigh: 190,
+      confidenceTier: 'medium',
+      evidenceSummary: 'Based on deterministic samples.',
+    });
+    const insufficient = buildAdvisoryStatementChips({
+      status: 'insufficient_data',
+      metricKey: 'heart_rate',
+      estimate: null,
+      rangeLow: null,
+      rangeHigh: null,
+      confidenceTier: null,
+      evidenceSummary: 'Not enough data.',
+      insufficientDataReason: 'At least 3 events are required.',
+    });
+
+    expect(available.some(chip => chip.statementId === 'advisory:narrative' && chip.chipType === 'confidence')).toBe(true);
+    expect(available.some(chip => chip.statementId === 'advisory:narrative' && chip.chipType === 'evidence')).toBe(true);
+    expect(insufficient).toEqual([]);
   });
 });

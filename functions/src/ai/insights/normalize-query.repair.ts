@@ -283,7 +283,9 @@ export function createRepairInsightQuery(
 
         return {
           result: attachRepairRoutingMetadata(
-            resolveNormalizedInsightQueryFromIntent(input, promptContext, repairedIntent),
+            resolveNormalizedInsightQueryFromIntent(input, promptContext, repairedIntent, undefined, {
+              routeHint: repairedIntent.routing.routeId,
+            }),
             repairedIntent.routing,
           ),
           source: 'genkit',

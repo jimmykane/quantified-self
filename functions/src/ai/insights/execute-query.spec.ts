@@ -9,6 +9,7 @@ import {
   DataCadenceAvg,
   DataDistance,
   DataEndPosition,
+  DataHeartRateMax,
   DataPowerAvg,
   DataStartPosition,
   TimeIntervals,
@@ -170,6 +171,32 @@ function createPowerCurveQuery(
     chartType: ChartTypes.LinesVertical,
     defaultedToCycling: false,
     ...overrides,
+  };
+}
+
+function createAdvisoryQuery(
+  metricKey: Extract<NormalizedInsightQuery, { resultKind: 'advisory' }>['metricKey'] = 'heart_rate',
+): Extract<NormalizedInsightQuery, { resultKind: 'advisory' }> {
+  return {
+    resultKind: 'advisory',
+    metricKey,
+    advisoryKind: 'expected_value',
+    horizon: 'current_year',
+    categoryType: ChartDataCategoryTypes.DateType,
+    activityTypeGroups: [],
+    activityTypes: [ActivityTypes.Cycling],
+    activityFilters: {
+      activityTypeGroups: [],
+      activityTypes: [ActivityTypes.Cycling],
+    },
+    dateRange: {
+      kind: 'bounded',
+      startDate: '2026-01-01T00:00:00.000Z',
+      endDate: '2026-03-31T23:59:59.999Z',
+      timezone: 'UTC',
+      source: 'prompt',
+    },
+    chartType: ChartTypes.LinesVertical,
   };
 }
 
@@ -438,6 +465,69 @@ describe('execute-query', () => {
     expect(result.matchedEventsCount).toBe(0);
     expect(result.latestEvent.eventId).toBeNull();
     expect(result.latestEvent.startDate).toBeNull();
+  });
+
+  it('computes advisory estimates with deterministic evidence for advisory queries', async () => {
+    const fetchEventDocs = vi.fn(async () => [
+      { id: 'e1', data: () => ({ startDate: new Date('2026-01-10T12:00:00.000Z') }) },
+      { id: 'e2', data: () => ({ startDate: new Date('2026-01-12T12:00:00.000Z') }) },
+      { id: 'e3', data: () => ({ startDate: new Date('2026-02-12T12:00:00.000Z') }) },
+      { id: 'e4', data: () => ({ startDate: new Date('2026-03-12T12:00:00.000Z') }) },
+    ]);
+    const importEvent = vi
+      .fn()
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'e1',
+        startDate: new Date('2026-01-10T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: { [DataHeartRateMax.type]: 176 },
+      }))
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'e2',
+        startDate: new Date('2026-01-12T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: { [DataHeartRateMax.type]: 180 },
+      }))
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'e3',
+        startDate: new Date('2026-02-12T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: { [DataHeartRateMax.type]: 183 },
+      }))
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'e4',
+        startDate: new Date('2026-03-12T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: { [DataHeartRateMax.type]: 181 },
+      }));
+
+    setExecuteQueryDependenciesForTesting({
+      fetchEventDocs,
+      fetchDebugEventSnapshot: vi.fn(async () => ({
+        totalEventsCount: 4,
+        recentEventsSample: [],
+      })),
+      importEvent,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+    });
+
+    const result = await executeAiInsightsQuery(
+      'user-1',
+      createAdvisoryQuery('heart_rate'),
+      'what should my max heart rate be this year',
+    );
+
+    expect(result.resultKind).toBe('advisory');
+    if (result.resultKind !== 'advisory') {
+      return;
+    }
+
+    expect(result.advisory.status).toBe('available');
+    expect(result.advisory.metricKey).toBe('heart_rate');
+    expect(result.advisory.estimate).not.toBeNull();
+    expect(result.advisory.rangeLow).not.toBeNull();
+    expect(result.advisory.rangeHigh).not.toBeNull();
+    expect(result.advisory.evidenceSummary.length).toBeGreaterThan(0);
   });
 
   it('builds a best power-curve envelope across matching events', async () => {

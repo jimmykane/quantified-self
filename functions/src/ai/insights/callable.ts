@@ -5,6 +5,7 @@ import type {
   AiInsightsQuotaStatusResponse,
   AiInsightsRequest,
   AiInsightsResponse,
+  AiInsightsSynthesisMetadata,
   NormalizedInsightAggregateQuery,
 } from '../../../../shared/ai-insights.types';
 import {
@@ -41,6 +42,7 @@ import {
   resolveCallableResultKindHandler,
 } from './callable.result-kind-handlers';
 import { stripUndefinedDeep } from './strip-undefined-deep';
+import { synthesizeSupportedPromptCandidate } from './query-synthesizer';
 
 interface AiInsightsCallableContext {
   auth?: {
@@ -53,6 +55,8 @@ interface AiInsightsCallableContext {
 const AI_INSIGHTS_UNAVAILABLE_MESSAGE = 'AI Insights is unavailable for this account.';
 const DEFAULT_EMPTY_STATE = 'No matching events were found for this insight in the requested range.';
 const AI_INSIGHTS_LOG_PROMPT_PREVIEW_MAX_CHARS = 60;
+const SUPPORTED_SYNTHESIS_SCORE_GATE = 0.8;
+const SUPPORTED_SYNTHESIS_NORMALIZE_TIMEOUT_MS = 1200;
 
 function buildPromptLogContext(
   prompt: string | null | undefined,
@@ -82,6 +86,13 @@ function buildPromptLogContext(
           : null,
       }),
   };
+}
+
+function areNormalizedQueriesEquivalent(
+  leftQuery: unknown,
+  rightQuery: unknown,
+): boolean {
+  return JSON.stringify(stripUndefinedDeep(leftQuery)) === JSON.stringify(stripUndefinedDeep(rightQuery));
 }
 
 function shouldUseCallableTokenForQuotaRoleContext(): boolean {
@@ -230,6 +241,15 @@ export async function runAiInsights(
 
   try {
   let effectivePrompt = prompt;
+  let synthesisMetadata: AiInsightsSynthesisMetadata | undefined;
+  const withSynthesisMetadata = <T extends AiInsightsResponse>(response: T): T => (
+    synthesisMetadata
+      ? {
+        ...response,
+        synthesis: synthesisMetadata,
+      } as T
+      : response
+  );
   const promptLanguage = aiInsightsRuntime.detectPromptLanguageDeterministic(prompt);
   logger.info('[aiInsights] Prompt language gate result', {
     userID,
@@ -260,9 +280,9 @@ export async function runAiInsights(
         reasonCode: sanitizationResult.reasonCode,
         source: 'sanitize',
       });
-      return persistLatestSnapshot(buildUnsupportedResponse(sanitizationResult.reasonCode, quota, {
+      return persistLatestSnapshot(withSynthesisMetadata(buildUnsupportedResponse(sanitizationResult.reasonCode, quota, {
         suggestedPrompts: sanitizationResult.suggestedPrompts,
-      }));
+      })));
     }
 
     effectivePrompt = sanitizationResult.prompt;
@@ -273,6 +293,68 @@ export async function runAiInsights(
     prompt: effectivePrompt,
     clientTimezone,
   });
+
+  if (normalizeResult.status === 'ok') {
+    const synthesisCandidate = synthesizeSupportedPromptCandidate(effectivePrompt);
+    if (synthesisCandidate) {
+      let candidateNormalizeError: unknown = null;
+      let synthesisTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
+      const candidateNormalizePromise = aiInsightsRuntime.normalizeInsightQuery({
+        ...input,
+        prompt: synthesisCandidate.prompt,
+        clientTimezone,
+      }).catch((error) => {
+        candidateNormalizeError = error;
+        return null;
+      });
+      const candidateNormalizeResult = await Promise.race([
+        candidateNormalizePromise,
+        new Promise<null>((resolve) => {
+          synthesisTimeoutHandle = setTimeout(
+            () => resolve(null),
+            SUPPORTED_SYNTHESIS_NORMALIZE_TIMEOUT_MS,
+          );
+        }),
+      ]);
+      if (synthesisTimeoutHandle !== null) {
+        clearTimeout(synthesisTimeoutHandle);
+      }
+      if (candidateNormalizeError) {
+        logger.warn('[aiInsights] Supported synthesis candidate normalization failed; keeping deterministic parse.', {
+          userID,
+          ...buildPromptLogContext(prompt, effectivePrompt),
+          candidatePromptPreview: trimPromptSample(synthesisCandidate.prompt, AI_INSIGHTS_LOG_PROMPT_PREVIEW_MAX_CHARS),
+          error: candidateNormalizeError,
+        });
+      }
+      if (candidateNormalizeResult === null && !candidateNormalizeError) {
+        logger.warn('[aiInsights] Supported synthesis candidate normalization timed out; keeping deterministic parse.', {
+          userID,
+          ...buildPromptLogContext(prompt, effectivePrompt),
+          candidatePromptPreview: trimPromptSample(synthesisCandidate.prompt, AI_INSIGHTS_LOG_PROMPT_PREVIEW_MAX_CHARS),
+          timeoutMs: SUPPORTED_SYNTHESIS_NORMALIZE_TIMEOUT_MS,
+        });
+      }
+      const confidencePassed = synthesisCandidate.confidence >= SUPPORTED_SYNTHESIS_SCORE_GATE;
+      const hasEquivalentQuery = candidateNormalizeResult?.status === 'ok'
+        && areNormalizedQueriesEquivalent(normalizeResult.query, candidateNormalizeResult.query);
+      const shouldApplyCandidate = confidencePassed && hasEquivalentQuery;
+      if (shouldApplyCandidate) {
+        effectivePrompt = synthesisCandidate.prompt;
+        normalizeResult = candidateNormalizeResult;
+        synthesisMetadata = {
+          attempted: true,
+          applied: true,
+          mode: 'supported_optimize',
+          originalPrompt: prompt,
+          executedPrompt: effectivePrompt,
+          confidence: synthesisCandidate.confidence,
+          candidatesConsidered: 1,
+          decisionReason: `Applied synthesized prompt candidate: ${synthesisCandidate.reason}`,
+        };
+      }
+    }
+  }
 
   if (normalizeResult.status === 'unsupported') {
     const shouldAttemptRepair = normalizeResult.reasonCode === 'invalid_prompt'
@@ -300,6 +382,18 @@ export async function runAiInsights(
       });
 
       normalizeResult = repairedResult.result;
+      if (repairedResult.source === 'genkit' && normalizeResult.status === 'ok') {
+        synthesisMetadata = {
+          attempted: true,
+          applied: true,
+          mode: 'unsupported_rescue',
+          originalPrompt: prompt,
+          executedPrompt: effectivePrompt,
+          confidence: 0.82,
+          candidatesConsidered: 1,
+          decisionReason: 'Applied AI rescue candidate after deterministic unsupported parse.',
+        };
+      }
       if (repairedResult.source === 'genkit' && normalizeResult.status === 'ok') {
         let intentDocID: string | null = null;
         try {
@@ -346,9 +440,9 @@ export async function runAiInsights(
           resultCategory: 'unsupported',
           reasonCode: normalizeResult.reasonCode,
         });
-        return persistLatestSnapshot(buildUnsupportedResponse(normalizeResult.reasonCode, quota, {
+        return persistLatestSnapshot(withSynthesisMetadata(buildUnsupportedResponse(normalizeResult.reasonCode, quota, {
           suggestedPrompts: normalizeResult.suggestedPrompts,
-        }));
+        })));
       }
     } else {
       const quota = await resolveQuotaForResponse();
@@ -366,9 +460,9 @@ export async function runAiInsights(
         resultCategory: 'unsupported',
         reasonCode: normalizeResult.reasonCode,
       });
-      return persistLatestSnapshot(buildUnsupportedResponse(normalizeResult.reasonCode, quota, {
+      return persistLatestSnapshot(withSynthesisMetadata(buildUnsupportedResponse(normalizeResult.reasonCode, quota, {
         suggestedPrompts: normalizeResult.suggestedPrompts,
-      }));
+      })));
     }
   }
 
@@ -387,6 +481,7 @@ export async function runAiInsights(
     };
   }
   const aggregateQueryInput = effectiveQuery.resultKind === 'aggregate' ? effectiveQuery : null;
+  const advisoryQueryInput = effectiveQuery.resultKind === 'advisory' ? effectiveQuery : null;
   const eventLookupQueryInput = effectiveQuery.resultKind === 'event_lookup' ? effectiveQuery : null;
   const latestEventQueryInput = effectiveQuery.resultKind === 'latest_event' ? effectiveQuery : null;
   const multiMetricQueryInput = effectiveQuery.resultKind === 'multi_metric_aggregate' ? effectiveQuery : null;
@@ -413,9 +508,9 @@ export async function runAiInsights(
       resultCategory: 'unsupported',
       reasonCode: 'unsupported_metric',
     });
-    return persistLatestSnapshot(buildUnsupportedResponse('unsupported_metric', quota, {
+    return persistLatestSnapshot(withSynthesisMetadata(buildUnsupportedResponse('unsupported_metric', quota, {
       sourceText: effectivePrompt,
-    }));
+    })));
   }
   const multiMetricDefinitions = effectiveQuery.resultKind === 'multi_metric_aggregate'
     ? effectiveQuery.metricSelections
@@ -442,9 +537,9 @@ export async function runAiInsights(
       resultCategory: 'unsupported',
       reasonCode: 'unsupported_multi_metric_combination',
     });
-    return persistLatestSnapshot(buildUnsupportedResponse('unsupported_multi_metric_combination', quota, {
+    return persistLatestSnapshot(withSynthesisMetadata(buildUnsupportedResponse('unsupported_multi_metric_combination', quota, {
       sourceText: effectivePrompt,
-    }));
+    })));
   }
   logger.info('[aiInsights] Query normalization debug', {
     userID,
@@ -469,6 +564,7 @@ export async function runAiInsights(
         effectiveQuery.resultKind === 'multi_metric_aggregate'
         || effectiveQuery.resultKind === 'latest_event'
         || effectiveQuery.resultKind === 'power_curve'
+        || effectiveQuery.resultKind === 'advisory'
       )
         ? null
         : effectiveQuery.dataType,
@@ -476,6 +572,7 @@ export async function runAiInsights(
         effectiveQuery.resultKind === 'multi_metric_aggregate'
         || effectiveQuery.resultKind === 'latest_event'
         || effectiveQuery.resultKind === 'power_curve'
+        || effectiveQuery.resultKind === 'advisory'
       )
         ? null
         : effectiveQuery.valueType,
@@ -499,7 +596,7 @@ export async function runAiInsights(
         : effectiveQuery.resultKind === 'latest_event'
           || effectiveQuery.resultKind === 'power_curve'
           ? 0
-        : 1,
+          : 1,
     },
   });
   const unitSettings = await aiInsightsRuntime.loadUserUnitSettings(userID);
@@ -656,6 +753,19 @@ export async function runAiInsights(
       };
     }
 
+    if (executionResult.resultKind === 'advisory') {
+      if (!advisoryQueryInput) {
+        throw new HttpsError('internal', 'Could not summarize AI insights.');
+      }
+
+      return {
+        ...contextBase,
+        resultKind: 'advisory',
+        query: advisoryQueryInput,
+        executionResult,
+      };
+    }
+
     if (executionResult.resultKind === 'multi_metric_aggregate') {
       if (!multiMetricQueryInput) {
         throw new HttpsError('internal', 'Could not summarize AI insights.');
@@ -698,7 +808,7 @@ export async function runAiInsights(
       resultCategory: 'empty',
       resultKind: callableResultKindContext.resultKind,
     });
-    return persistLatestSnapshot({
+    return persistLatestSnapshot(withSynthesisMetadata({
       status: 'empty',
       narrative: narrativeResult.narrative,
       quota,
@@ -709,7 +819,7 @@ export async function runAiInsights(
       summary: aggregateSummary ?? buildNonAggregateEmptySummary(),
       ...(digest ? { digest } : {}),
       presentation: emptyPresentation,
-    });
+    }));
   }
   logger.info('[aiInsights] Terminal result', {
     userID,
@@ -717,9 +827,9 @@ export async function runAiInsights(
     resultCategory: 'ok',
     resultKind: callableResultKindContext.resultKind,
   });
-  return persistLatestSnapshot(
+  return persistLatestSnapshot(withSynthesisMetadata(
     resultKindHandler.buildOkResponse(callableResultKindContext, narrativeResult, quota),
-  );
+  ));
   } catch (error) {
     if (quotaReservation) {
       const reservationToRelease = quotaReservation as NonNullable<typeof quotaReservation>;
