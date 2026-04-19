@@ -41,6 +41,7 @@ import {
   resolveInsightMetric,
   type InsightMetricKey,
 } from './metric-catalog';
+import { resolveAdvisoryEstimator } from './advisory-estimator';
 import { canonicalizeInsightPrompt, normalizePromptSearchText } from './prompt-normalization';
 import {
   buildAdvisoryInsightQuery,
@@ -2225,7 +2226,7 @@ export function resolveNormalizedInsightQueryFromIntent(
   } = promptContext;
   const modelReturnedUnsupported = intent.status === 'unsupported';
   const advisoryRequested = options.routeHint === 'advisory';
-  const latestEventRequested = promptImpliesLatestEventLookup(prompt);
+  const latestEventRequested = !advisoryRequested && promptImpliesLatestEventLookup(prompt);
 
   if (latestEventRequested) {
     const resolvedDateRangeIntent = promptDateSelection.effectiveDateRangeIntent
@@ -2297,8 +2298,9 @@ export function resolveNormalizedInsightQueryFromIntent(
     };
   }
 
+  const promptMetricMatch = findInsightMetricAliasMatch(canonicalizeInsightPrompt(prompt));
+
   if (advisoryRequested) {
-    const promptMetricMatch = findInsightMetricAliasMatch(canonicalizeInsightPrompt(prompt));
     const metric = promptMetricMatch?.metric || resolveInsightMetric(intent.metric || '');
     if (!metric) {
       return buildUnsupportedResult(
@@ -2309,80 +2311,86 @@ export function resolveNormalizedInsightQueryFromIntent(
       );
     }
 
-    const resolvedDateRangeIntent = promptDateSelection.effectiveDateRangeIntent
-      ?? (modelReturnedUnsupported ? undefined : intent.dateRange);
-    const activityTypes = normalizeActivityTypes(modelReturnedUnsupported ? undefined : intent.activityTypes);
-    const activityTypeGroups = normalizeActivityTypeGroups(modelReturnedUnsupported ? undefined : intent.activityTypeGroups);
-    if (!activityTypes || !activityTypeGroups) {
-      return buildUnsupportedResult('invalid_prompt', prompt);
-    }
+    const advisoryEstimator = resolveAdvisoryEstimator(metric.key);
+    if (!advisoryEstimator || !advisoryEstimator.enabled) {
+      // Advisory intent is only executable when a metric estimator is enabled.
+      // Fall through to the deterministic single-metric path to preserve
+      // aggregate/event behavior for metrics that do not yet support advisory.
+    } else {
+      const resolvedDateRangeIntent = promptDateSelection.effectiveDateRangeIntent
+        ?? (modelReturnedUnsupported ? undefined : intent.dateRange);
+      const activityTypes = normalizeActivityTypes(modelReturnedUnsupported ? undefined : intent.activityTypes);
+      const activityTypeGroups = normalizeActivityTypeGroups(modelReturnedUnsupported ? undefined : intent.activityTypeGroups);
+      if (!activityTypes || !activityTypeGroups) {
+        return buildUnsupportedResult('invalid_prompt', prompt);
+      }
 
-    const promptWithoutActivityExclusions = stripPromptActivityExclusionClauses(prompt);
-    const promptExcludedActivityTypeGroups = extractPromptActivityExclusionClauses(prompt)
-      .flatMap((clause) => resolvePromptActivityTypeGroups(clause));
-    const promptExcludedActivityTypes = extractPromptActivityExclusionClauses(prompt)
-      .flatMap((clause) => {
-        const clauseGroups = resolvePromptActivityTypeGroups(clause);
-        return [
-          ...resolvePromptActivityTypes(clause, clauseGroups),
-          ...resolveKeywordActivityTypeExclusions(clause),
-        ];
-      });
-    const excludedActivityTypeSet = new Set<ActivityTypes>([
-      ...promptExcludedActivityTypes,
-      ...expandActivityTypeGroups(promptExcludedActivityTypeGroups),
-    ]);
-    const promptActivityTypeGroups = resolvePromptActivityTypeGroups(promptWithoutActivityExclusions);
-    const promptActivityTypes = resolvePromptActivityTypes(promptWithoutActivityExclusions, promptActivityTypeGroups);
-    const resolvedActivityTypeGroups = activityTypeGroups.length > 0
-      ? activityTypeGroups
-      : promptActivityTypeGroups;
-    const resolvedActivityTypes = activityTypes.length > 0
-      ? activityTypes
-      : promptActivityTypes;
-    const filteredResolvedActivityTypes = excludeActivityTypes(
-      resolvedActivityTypes,
-      excludedActivityTypeSet,
-    );
-    const filteredResolvedActivityTypeGroups = resolvedActivityTypeGroups
-      .filter(activityTypeGroup => !promptExcludedActivityTypeGroups.includes(activityTypeGroup));
-    const finalActivityTypeGroups = filteredResolvedActivityTypes.length > 0 ? [] : filteredResolvedActivityTypeGroups;
-    const expandedActivityTypes = finalActivityTypeGroups.length > 0
-      ? excludeActivityTypes(expandActivityTypeGroups(finalActivityTypeGroups), excludedActivityTypeSet)
-      : [];
-    const finalActivityTypes = filteredResolvedActivityTypes.length > 0
-      ? filteredResolvedActivityTypes
-      : expandedActivityTypes.length > 0
-        ? expandedActivityTypes
-        : excludedActivityTypeSet.size > 0
-          ? excludeActivityTypes(CANONICAL_ACTIVITY_TYPES, excludedActivityTypeSet)
-          : [];
+      const promptWithoutActivityExclusions = stripPromptActivityExclusionClauses(prompt);
+      const promptExcludedActivityTypeGroups = extractPromptActivityExclusionClauses(prompt)
+        .flatMap((clause) => resolvePromptActivityTypeGroups(clause));
+      const promptExcludedActivityTypes = extractPromptActivityExclusionClauses(prompt)
+        .flatMap((clause) => {
+          const clauseGroups = resolvePromptActivityTypeGroups(clause);
+          return [
+            ...resolvePromptActivityTypes(clause, clauseGroups),
+            ...resolveKeywordActivityTypeExclusions(clause),
+          ];
+        });
+      const excludedActivityTypeSet = new Set<ActivityTypes>([
+        ...promptExcludedActivityTypes,
+        ...expandActivityTypeGroups(promptExcludedActivityTypeGroups),
+      ]);
+      const promptActivityTypeGroups = resolvePromptActivityTypeGroups(promptWithoutActivityExclusions);
+      const promptActivityTypes = resolvePromptActivityTypes(promptWithoutActivityExclusions, promptActivityTypeGroups);
+      const resolvedActivityTypeGroups = activityTypeGroups.length > 0
+        ? activityTypeGroups
+        : promptActivityTypeGroups;
+      const resolvedActivityTypes = activityTypes.length > 0
+        ? activityTypes
+        : promptActivityTypes;
+      const filteredResolvedActivityTypes = excludeActivityTypes(
+        resolvedActivityTypes,
+        excludedActivityTypeSet,
+      );
+      const filteredResolvedActivityTypeGroups = resolvedActivityTypeGroups
+        .filter(activityTypeGroup => !promptExcludedActivityTypeGroups.includes(activityTypeGroup));
+      const finalActivityTypeGroups = filteredResolvedActivityTypes.length > 0 ? [] : filteredResolvedActivityTypeGroups;
+      const expandedActivityTypes = finalActivityTypeGroups.length > 0
+        ? excludeActivityTypes(expandActivityTypeGroups(finalActivityTypeGroups), excludedActivityTypeSet)
+        : [];
+      const finalActivityTypes = filteredResolvedActivityTypes.length > 0
+        ? filteredResolvedActivityTypes
+        : expandedActivityTypes.length > 0
+          ? expandedActivityTypes
+          : excludedActivityTypeSet.size > 0
+            ? excludeActivityTypes(CANONICAL_ACTIVITY_TYPES, excludedActivityTypeSet)
+            : [];
 
-    const dateRange = resolveDateRange(resolvedDateRangeIntent, input.clientTimezone, dependencies.now());
-    const requestedDateRanges = resolveRequestedDateRanges(
-      promptDateSelection.requestedDateRangeIntents,
-      input.clientTimezone,
-      dependencies.now(),
-    );
+      const dateRange = resolveDateRange(resolvedDateRangeIntent, input.clientTimezone, dependencies.now());
+      const requestedDateRanges = resolveRequestedDateRanges(
+        promptDateSelection.requestedDateRangeIntents,
+        input.clientTimezone,
+        dependencies.now(),
+      );
 
-    return {
-      status: 'ok',
-      metricKey: metric.key,
-      query: buildAdvisoryInsightQuery({
+      return {
+        status: 'ok',
         metricKey: metric.key,
-        advisoryKind: 'expected_value',
-        horizon: resolveAdvisoryHorizon(resolvedDateRangeIntent),
-        activityTypeGroups: finalActivityTypeGroups,
-        activityTypes: finalActivityTypes,
-        dateRange,
-        requestedDateRanges,
-        periodMode: promptDateSelection.periodMode,
-        chartType: ChartTypes.LinesVertical,
-      }),
-    };
+        query: buildAdvisoryInsightQuery({
+          metricKey: metric.key,
+          advisoryKind: 'expected_value',
+          horizon: resolveAdvisoryHorizon(resolvedDateRangeIntent),
+          activityTypeGroups: finalActivityTypeGroups,
+          activityTypes: finalActivityTypes,
+          dateRange,
+          requestedDateRanges,
+          periodMode: promptDateSelection.periodMode,
+          chartType: ChartTypes.LinesVertical,
+        }),
+      };
+    }
   }
 
-  const promptMetricMatch = findInsightMetricAliasMatch(canonicalizeInsightPrompt(prompt));
   const baseMetric = promptMetricMatch?.metric || resolveInsightMetric(intent.metric || '');
   if (!baseMetric) {
     return buildUnsupportedResult(
@@ -2911,15 +2919,24 @@ export function createNormalizeQuery(
 
     if (routeDecision.routeId === 'advisory') {
       const intent = buildDeterministicIntent(prompt);
+      const advisoryResult = resolveNormalizedInsightQueryFromIntent(
+        input,
+        promptContext,
+        intent,
+        resolvedDependencies,
+        { routeHint: 'advisory' },
+      );
+      const effectiveRouteDecision = advisoryResult.status === 'ok' && advisoryResult.query.resultKind !== 'advisory'
+        ? {
+          ...routeDecision,
+          routeId: 'single_metric' as const,
+          resultKind: advisoryResult.query.resultKind,
+          reason: 'Advisory intent matched, but no enabled advisory estimator was available for the resolved metric. Fell back to single-metric normalization.',
+        }
+        : routeDecision;
       return attachRoutingToResult(
-        resolveNormalizedInsightQueryFromIntent(
-          input,
-          promptContext,
-          intent,
-          resolvedDependencies,
-          { routeHint: 'advisory' },
-        ),
-        routeDecision,
+        advisoryResult,
+        effectiveRouteDecision,
       );
     }
 

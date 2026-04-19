@@ -36,8 +36,10 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => await importOri
 
 import {
   createNormalizeQuery,
+  resolveNormalizedInsightQueryFromIntent,
   type NormalizeQueryApi,
   type NormalizeQueryDependencies,
+  type NormalizeQueryPromptContext,
 } from './normalize-query.flow';
 import { getActivityTypesForGroup } from '../../../../shared/activity-type-group.metadata';
 import {
@@ -3537,6 +3539,77 @@ describe('normalizeInsightQuery', () => {
       timezone: 'UTC',
       source: 'prompt',
     });
+  });
+
+  it('falls back to single-metric normalization when advisory wording targets a metric without an enabled estimator', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-22T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'show my goal distance over time this year',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result).toMatchObject({
+      status: 'ok',
+      metricKey: 'distance',
+      query: {
+        resultKind: 'aggregate',
+        dataType: DataDistance.type,
+      },
+      routing: {
+        routeId: 'single_metric',
+        source: 'deterministic',
+        resultKind: 'aggregate',
+      },
+    });
+  });
+
+  it('honors advisory route hints before latest-event shortcut parsing', () => {
+    const promptContext: NormalizeQueryPromptContext = {
+      prompt: 'when was my last ride?',
+      promptAggregation: undefined,
+      promptCategory: undefined,
+      promptDateSelection: {
+        effectiveDateRangeIntent: {
+          kind: 'current_period',
+          unit: 'year',
+        },
+      },
+      promptRequestedTimeInterval: undefined,
+      promptChartPreference: undefined,
+    };
+
+    const result = resolveNormalizedInsightQueryFromIntent(
+      {
+        prompt: promptContext.prompt,
+        clientTimezone: 'UTC',
+      },
+      promptContext,
+      {
+        status: 'supported',
+        metric: 'heart rate',
+        aggregation: 'maximum',
+        activityTypes: ['Cycling'],
+      },
+      {
+        now: () => new Date('2026-03-22T12:00:00.000Z'),
+        generateIntent: async () => ({
+          status: 'unsupported',
+          unsupportedReasonCode: 'unsupported_metric',
+        }),
+      },
+      { routeHint: 'advisory' },
+    );
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('heart_rate');
+    expect(result.query.resultKind).toBe('advisory');
   });
 
   it('rejects unsupported split prompts before calling the model', async () => {
