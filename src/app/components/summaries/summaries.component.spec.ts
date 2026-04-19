@@ -112,6 +112,7 @@ describe('SummariesComponent', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     Object.defineProperty(window, 'matchMedia', {
       configurable: true,
       writable: true,
@@ -394,6 +395,7 @@ describe('SummariesComponent', () => {
         },
       },
     } as any;
+    (component as any).derivedMetricsHydrated = true;
     (component as any).derivedFormStatus = 'failed';
     (component as any).derivedRecoveryNowStatus = 'ready';
     (component as any).refreshDerivedMetricsBannerState();
@@ -414,6 +416,7 @@ describe('SummariesComponent', () => {
   });
 
   it('should show a pending banner while derived metrics are stale', () => {
+    vi.useFakeTimers();
     component.user = {
       settings: {
         dashboardSettings: {
@@ -429,13 +432,39 @@ describe('SummariesComponent', () => {
         },
       },
     } as any;
+    (component as any).derivedMetricsHydrated = true;
     (component as any).derivedFormStatus = 'stale';
     (component as any).derivedRecoveryNowStatus = 'ready';
     (component as any).refreshDerivedMetricsBannerState();
 
+    expect(component.derivedMetricsBanner).toBeNull();
+    vi.advanceTimersByTime(250);
     expect(component.derivedMetricsBanner?.type).toBe('pending');
     expect(component.derivedMetricsBanner?.title).toContain('Refreshing');
     expect(component.derivedMetricsBanner?.showRetry).toBe(false);
+  });
+
+  it('should suppress derived banner until first derived state hydration completes', () => {
+    component.user = {
+      settings: {
+        dashboardSettings: {
+          tiles: [{
+            type: TileTypes.Chart,
+            order: 0,
+            chartType: 'Form',
+            dataType: 'Training Stress Score',
+            dataValueType: ChartDataValueTypes.Total,
+            dataCategoryType: ChartDataCategoryTypes.DateType,
+            size: { columns: 1, rows: 1 },
+          }],
+        },
+      },
+    } as any;
+    (component as any).derivedMetricsHydrated = false;
+    (component as any).derivedFormStatus = 'missing';
+    (component as any).refreshDerivedMetricsBannerState();
+
+    expect(component.derivedMetricsBanner).toBeNull();
   });
 
   it('should remove tiles that are no longer returned by the tile builder', async () => {

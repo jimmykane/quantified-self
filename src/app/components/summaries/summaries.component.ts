@@ -93,6 +93,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private static readonly desktopMinWidthMediaQuery = '(min-width: 960px)';
   private static readonly finePointerMediaQuery = '(pointer: fine)';
   private static readonly hoverMediaQuery = '(hover: hover)';
+  private static readonly derivedPendingBannerDebounceMs = 250;
 
   @Input() events: EventInterface[];
   @Input() user: User;
@@ -146,6 +147,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private derivedFreshnessForecastStatus: DashboardDerivedMetricStatus = 'missing';
   private derivedIntensityDistributionStatus: DashboardDerivedMetricStatus = 'missing';
   private derivedEfficiencyTrendStatus: DashboardDerivedMetricStatus = 'missing';
+  private derivedMetricsHydrated = false;
+  private derivedPendingBannerTimeout: ReturnType<typeof setTimeout> | null = null;
   public derivedMetricsBanner: DashboardDerivedMetricsBanner | null = null;
 
   constructor(
@@ -198,6 +201,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   ngOnDestroy(): void {
+    this.clearDerivedPendingBannerTimeout();
     this.unsubscribeFromAll();
   }
 
@@ -389,6 +393,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
     this.derivedMetricsSubscription = this.dashboardDerivedMetricsService.watch(this.user).subscribe((state) => {
       this.dashboardDerivedMetricsService.ensureForDashboard(this.user, state);
+      const wasHydrated = this.derivedMetricsHydrated;
+      if (!wasHydrated) {
+        this.derivedMetricsHydrated = true;
+      }
 
       const hasFormPointsChanged = !equal(this.derivedFormPoints, state.formPoints);
       const hasRecoveryContextChanged = !equal(this.derivedRecoveryNowContext, state.recoveryNow);
@@ -442,7 +450,13 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         || hasFreshnessForecastChanged
         || hasIntensityDistributionChanged
         || hasEfficiencyTrendChanged;
-      if (!hasTileDataChanged && !hasBannerStateChanged) {
+      if (!hasTileDataChanged && !hasBannerStateChanged && wasHydrated) {
+        return;
+      }
+
+      if (!hasTileDataChanged && !hasBannerStateChanged && !wasHydrated) {
+        this.refreshDerivedMetricsBannerState();
+        this.changeDetector.markForCheck();
         return;
       }
 
@@ -492,6 +506,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   private resetDerivedMetricsState(): void {
+    this.derivedMetricsHydrated = false;
+    this.clearDerivedPendingBannerTimeout();
     this.derivedFormPoints = null;
     this.derivedRecoveryNowContext = null;
     this.derivedAcwrContext = null;
@@ -676,6 +692,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   private unsubscribeFromAll() {
     this.unsubscribeThemeSubscription();
+    this.clearDerivedPendingBannerTimeout();
     if (this.derivedMetricsSubscription) {
       this.derivedMetricsSubscription.unsubscribe();
       this.derivedMetricsSubscription = null;
@@ -730,11 +747,19 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       .filter((status): status is DashboardDerivedMetricStatus => !!status);
 
     if (!relevantStatuses.length) {
+      this.clearDerivedPendingBannerTimeout();
+      this.derivedMetricsBanner = null;
+      return;
+    }
+
+    if (!this.derivedMetricsHydrated) {
+      this.clearDerivedPendingBannerTimeout();
       this.derivedMetricsBanner = null;
       return;
     }
 
     if (relevantStatuses.some(status => status === 'failed')) {
+      this.clearDerivedPendingBannerTimeout();
       this.derivedMetricsBanner = {
         type: 'warning',
         title: 'Training metrics update failed',
@@ -746,7 +771,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
     if (relevantStatuses.some(status => status === 'missing' || isDerivedMetricPendingStatus(status))) {
       const isUsingStaleData = relevantStatuses.some(status => status === 'stale');
-      this.derivedMetricsBanner = {
+      const pendingBanner: DashboardDerivedMetricsBanner = {
         type: 'pending',
         title: isUsingStaleData ? 'Refreshing training metrics' : 'Building training metrics',
         description: isUsingStaleData
@@ -754,10 +779,33 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
           : 'Derived dashboard metrics are being prepared in the background.',
         showRetry: false,
       };
+
+      if (
+        this.derivedMetricsBanner?.type === 'pending'
+        && this.derivedMetricsBanner.title === pendingBanner.title
+        && this.derivedMetricsBanner.description === pendingBanner.description
+      ) {
+        return;
+      }
+
+      this.clearDerivedPendingBannerTimeout();
+      this.derivedPendingBannerTimeout = setTimeout(() => {
+        this.derivedPendingBannerTimeout = null;
+        this.derivedMetricsBanner = pendingBanner;
+        this.changeDetector.markForCheck();
+      }, SummariesComponent.derivedPendingBannerDebounceMs);
       return;
     }
 
+    this.clearDerivedPendingBannerTimeout();
     this.derivedMetricsBanner = null;
+  }
+
+  private clearDerivedPendingBannerTimeout(): void {
+    if (this.derivedPendingBannerTimeout) {
+      clearTimeout(this.derivedPendingBannerTimeout);
+      this.derivedPendingBannerTimeout = null;
+    }
   }
 
   private getAggregationPreferences(): EventStatAggregationPreferences {
