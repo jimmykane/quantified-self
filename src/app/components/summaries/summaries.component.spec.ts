@@ -9,11 +9,11 @@ import {
   ChartDataValueTypes,
   ChartTypes,
   DataAscent,
+  AppThemes,
   TileTypes,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
 import { AppThemeService } from '../../services/app.theme.service';
-import { AppThemes } from '../../services/color/app.themes';
 import { LoggerService } from '../../services/logger.service';
 import { AppUserService } from '../../services/app.user.service';
 import { DashboardDerivedMetricsService } from '../../services/dashboard-derived-metrics.service';
