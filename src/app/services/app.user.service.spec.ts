@@ -219,6 +219,43 @@ describe('AppUserService', () => {
         expect(service.hasIncompleteProfileReads('u1')).toBe(false);
     });
 
+    it('should cap transient profile-read retries and fall back to a synthetic user', async () => {
+        const unavailableError = Object.assign(new Error('Service unavailable'), {
+            code: 'unavailable'
+        });
+        const transientReadRetryCount = (AppUserService as any).transientReadRetryCount as number;
+        let docDataCallCount = 0;
+        let userDocSubscriptions = 0;
+
+        (docData as any).mockImplementation(() => {
+            docDataCallCount += 1;
+            if (docDataCallCount === 1) {
+                return defer(() => {
+                    userDocSubscriptions += 1;
+                    return throwError(() => unavailableError);
+                });
+            }
+
+            return of({});
+        });
+
+        vi.useFakeTimers();
+        try {
+            service = TestBed.inject(AppUserService);
+            const mergedUserPromise = firstValueFrom(service.user$.pipe(filter((user): user is AppUserInterface => !!user), take(1)));
+
+            await vi.runAllTimersAsync();
+            const mergedUser = await mergedUserPromise;
+
+            expect(userDocSubscriptions).toBe(transientReadRetryCount + 1);
+            expect(mergedUser.uid).toBe('u1');
+            expect(mergedUser.acceptedPrivacyPolicy).toBe(false);
+            expect(service.hasIncompleteProfileReads('u1')).toBe(true);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     it('should log permission-denied diagnostics as error events for legal sub-document reads', async () => {
         const permissionDeniedError = Object.assign(new Error('Missing or insufficient permissions.'), {
             code: 'permission-denied'

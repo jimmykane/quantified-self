@@ -172,7 +172,7 @@ describe('onboardingGuard', () => {
         expect(result).toBe(true);
     });
 
-    it('should defer onboarding decision when profile reads are incomplete', async () => {
+    it('should redirect to onboarding when profile reads are incomplete', async () => {
         const user = {
             uid: '123',
             acceptedPrivacyPolicy: false,
@@ -182,6 +182,8 @@ describe('onboardingGuard', () => {
         mockUserService.hasIncompleteProfileReads.mockReturnValue(true);
 
         const result = await (runGuard(user, [{ path: 'dashboard' }] as any) as any).toPromise();
-        expect(result).toBe(true);
+        expect(result).not.toBe(true);
+        expect(result).not.toBe(false);
+        expect((result as any).toString()).toContain('/onboarding');
     });
 });

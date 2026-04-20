@@ -115,6 +115,7 @@ export class AppUserService implements OnDestroy {
     'lastSignInDate',
   ];
   private static readonly transientReadRetryDelayMs = 750;
+  private static readonly transientReadRetryCount = 4;
 
   private firestore = inject(Firestore);
   private auth = inject(Auth);
@@ -234,6 +235,11 @@ export class AppUserService implements OnDestroy {
     return from(firebaseUser.getIdToken()).pipe(
       switchMap(() => loadUserProfile()),
       catchError((error) => {
+        if (this.isFirestoreTransientReadError(error)) {
+          this.markIncompleteProfileRead(firebaseUser.uid);
+          return of(null);
+        }
+
         if (!this.isFirestorePermissionDenied(error)) {
           return throwError(() => error);
         }
@@ -261,6 +267,7 @@ export class AppUserService implements OnDestroy {
   private retryTransientProfileReads<T>(source$: Observable<T>, userID: string): Observable<T> {
     return source$.pipe(
       retry({
+        count: AppUserService.transientReadRetryCount,
         delay: (error) => {
           if (!this.isFirestoreTransientReadError(error)) {
             return throwError(() => error);
