@@ -177,6 +177,18 @@ function resolveAdvisoryEstimateLabel(
   return 'Current achievable max';
 }
 
+function resolveAdvisoryContextLabel(
+  query: AiInsightsAdvisoryOkResponse['query'],
+): string {
+  const advisoryKindLabel = query.advisoryKind === 'potential_value'
+    ? 'Potential value'
+    : 'Expected value';
+  const horizonLabel = query.horizon === 'current_year'
+    ? 'current year'
+    : 'selected range';
+  return `${advisoryKindLabel} for ${horizonLabel}`;
+}
+
 @Component({
   selector: 'app-ai-insights-page',
   standalone: true,
@@ -870,9 +882,7 @@ export class AiInsightsPageComponent {
     if (response.status === 'ok' && response.resultKind === 'advisory') {
       rows.push({
         label: 'Advisory',
-        value: response.query.horizon === 'current_year'
-          ? 'Expected value for current year'
-          : 'Expected value for selected range',
+        value: resolveAdvisoryContextLabel(response.query),
       });
     }
 

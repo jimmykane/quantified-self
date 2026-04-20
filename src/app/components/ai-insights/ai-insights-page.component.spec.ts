@@ -2370,6 +2370,9 @@ describe('AiInsightsPageComponent', () => {
     const detailRows = fixture.debugElement
       .queryAll(By.css('.summary-detail-row'))
       .map((row) => (row.nativeElement.textContent || '').replace(/\s+/g, ' ').trim());
+    const contextRows = fixture.debugElement
+      .queryAll(By.css('.result-card-context-row'))
+      .map((row) => (row.nativeElement.textContent || '').replace(/\s+/g, ' ').trim());
     const aggregateChart = fixture.debugElement.query(By.css('.chart-stub'));
     const multiMetricChart = fixture.debugElement.query(By.css('.multi-chart-stub'));
     const powerCurveChart = fixture.debugElement.query(By.css('.power-curve-chart-stub'));
@@ -2397,9 +2400,39 @@ describe('AiInsightsPageComponent', () => {
     expect(detailRows.some((row) => row.includes('Qualifying tail sessions') && row.includes('4'))).toBe(true);
     expect(detailRows.some((row) => row.includes('Upper bound calc') && row.includes('186') && row.includes('190') && row.toLowerCase().includes('bpm'))).toBe(true);
     expect(detailRows.some((row) => row.includes('Lower bound calc') && row.includes('186') && row.includes('182') && row.toLowerCase().includes('bpm'))).toBe(true);
+    expect(contextRows.some((row) => row.includes('Advisory') && row.includes('Expected value for current year'))).toBe(true);
     expect(aggregateChart).toBeNull();
     expect(multiMetricChart).toBeNull();
     expect(powerCurveChart).toBeNull();
+  });
+
+  it('should render potential advisory context with potential semantics', async () => {
+    const baseAdvisoryResponse = buildAdvisoryResponse();
+    const potentialAdvisoryResponse: AiInsightsAdvisoryOkResponse = {
+      ...baseAdvisoryResponse,
+      query: {
+        ...baseAdvisoryResponse.query,
+        advisoryKind: 'potential_value',
+        horizon: 'requested_range',
+      },
+      advisory: {
+        ...baseAdvisoryResponse.advisory,
+        semanticKind: 'potential_ceiling',
+      },
+    };
+    aiInsightsServiceMock.runInsight.mockResolvedValue(potentialAdvisoryResponse);
+    component.promptControl.setValue('what should my max heartrate be for this range');
+
+    await component.submitPrompt();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const contextRows = fixture.debugElement
+      .queryAll(By.css('.result-card-context-row'))
+      .map((row) => (row.nativeElement.textContent || '').replace(/\s+/g, ' ').trim());
+
+    expect(contextRows.some((row) => row.includes('Advisory') && row.includes('Potential value for selected range'))).toBe(true);
+    expect(contextRows.some((row) => row.includes('Advisory') && row.includes('Expected value for selected range'))).toBe(false);
   });
 
   it('should render advisory insufficient-data reason without interpreted badge', async () => {
