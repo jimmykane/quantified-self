@@ -256,7 +256,81 @@ describe('resolveAiInsightsDisplayTitle', () => {
     };
 
     const title = resolveAiInsightsDisplayTitle(response);
-    expect(title).toBe('Expected heart rate for cycling');
+    expect(title).toBe('Current achievable heart rate for cycling');
+  });
+
+  it('builds a potential advisory title when advisory kind requests potential mode', () => {
+    const response: AiInsightsAdvisoryOkResponse = {
+      status: 'ok',
+      resultKind: 'advisory',
+      narrative: 'Narrative',
+      query: {
+        resultKind: 'advisory',
+        metricKey: 'heart_rate',
+        advisoryKind: 'potential_value',
+        horizon: 'current_year',
+        categoryType: ChartDataCategoryTypes.DateType,
+        activityTypeGroups: [],
+        activityTypes: [ActivityTypes.Cycling],
+        activityFilters: {
+          activityTypeGroups: [],
+          activityTypes: [ActivityTypes.Cycling],
+        },
+        dateRange: {
+          kind: 'bounded',
+          startDate: '2025-12-01',
+          endDate: '2026-03-01',
+          timezone: 'Europe/Helsinki',
+          source: 'prompt',
+        },
+        chartType: ChartTypes.LinesVertical,
+      },
+      advisory: {
+        status: 'available',
+        metricKey: 'heart_rate',
+        semanticKind: 'potential_ceiling',
+        estimate: {
+          value: 188,
+          unit: 'bpm',
+        },
+        interval: {
+          low: 184,
+          high: 192,
+          kind: 'deterministic_range',
+          confidenceLevel: 'medium',
+        },
+        observed: {
+          bestValue: 186,
+          bestDate: '2026-03-10T08:00:00.000Z',
+          sampleCount: 12,
+          qualifyingSampleCount: 4,
+          trainingWeeks: 7,
+          recencyDays: 3,
+        },
+        confidence: {
+          tier: 'medium',
+          score: 0.64,
+          reasons: ['Deterministic evidence quality checks passed.'],
+        },
+        method: {
+          id: 'heart_rate_potential_ceiling_deterministic',
+          version: 'v2',
+          deterministic: true,
+        },
+        evidence: [{
+          code: 'summary',
+          label: 'Summary',
+          value: 'Deterministic evidence.',
+        }],
+      },
+      presentation: {
+        title: 'Backend title',
+        chartType: ChartTypes.LinesVertical,
+      },
+    };
+
+    const title = resolveAiInsightsDisplayTitle(response);
+    expect(title).toBe('Potential heart rate for cycling');
   });
 
   it('returns null when metric labels cannot be resolved for multi-metric empty responses', () => {

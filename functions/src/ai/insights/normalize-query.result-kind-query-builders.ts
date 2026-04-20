@@ -142,7 +142,7 @@ export function buildPowerCurveInsightQuery(
 
 interface BuildAdvisoryQueryInput extends BuildQueryCommonInput {
   metricKey: AiInsightsPromptMetricKey;
-  advisoryKind: 'expected_value';
+  advisoryKind: Extract<NormalizedInsightQuery, { resultKind: 'advisory' }>['advisoryKind'];
   horizon: 'current_year' | 'requested_range';
 }
 

@@ -176,11 +176,12 @@ function createPowerCurveQuery(
 
 function createAdvisoryQuery(
   metricKey: Extract<NormalizedInsightQuery, { resultKind: 'advisory' }>['metricKey'] = 'heart_rate',
+  advisoryKind: Extract<NormalizedInsightQuery, { resultKind: 'advisory' }>['advisoryKind'] = 'expected_value',
 ): Extract<NormalizedInsightQuery, { resultKind: 'advisory' }> {
   return {
     resultKind: 'advisory',
     metricKey,
-    advisoryKind: 'expected_value',
+    advisoryKind,
     horizon: 'current_year',
     categoryType: ChartDataCategoryTypes.DateType,
     activityTypeGroups: [],
@@ -563,6 +564,36 @@ describe('execute-query', () => {
 
     expect(result.advisory.estimate?.value ?? 0).toBeGreaterThanOrEqual(192);
     expect(result.advisory.interval?.high ?? 0).toBeGreaterThanOrEqual(192);
+  });
+
+  it('supports potential advisory mode with potential-ceiling semantics', async () => {
+    const { docs, eventsById } = buildWeeklyHeartRateFixtures([166, 171, 175, 178, 189, 190, 191, 192]);
+    const fetchEventDocs = vi.fn(async () => docs);
+    const importEvent = vi.fn((_eventPayload, eventID) => eventsById[eventID] || null);
+
+    setExecuteQueryDependenciesForTesting({
+      fetchEventDocs,
+      fetchDebugEventSnapshot: vi.fn(async () => ({
+        totalEventsCount: docs.length,
+        recentEventsSample: [],
+      })),
+      importEvent,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+    });
+
+    const result = await executeAiInsightsQuery(
+      'user-1',
+      createAdvisoryQuery('heart_rate', 'potential_value'),
+      'what should my max heart rate be this year',
+    );
+
+    expect(result.resultKind).toBe('advisory');
+    if (result.resultKind !== 'advisory' || result.advisory.status !== 'available') {
+      return;
+    }
+
+    expect(result.advisory.semanticKind).toBe('potential_ceiling');
+    expect(result.advisory.estimate?.value ?? 0).toBeGreaterThanOrEqual(192);
   });
 
   it('builds a best power-curve envelope across matching events', async () => {

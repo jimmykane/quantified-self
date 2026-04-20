@@ -1890,7 +1890,7 @@ describe('aiInsights callable', () => {
       },
       narrative: 'Narrative',
       presentation: expect.objectContaining({
-        title: 'Expected heart rate for Cycling',
+        title: 'Current achievable heart rate for Cycling',
       }),
     }));
   });

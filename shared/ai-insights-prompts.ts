@@ -450,7 +450,7 @@ export const AI_INSIGHTS_PROMPT_CATALOG = [
   },
   {
     id: 'advisory-max-heart-rate-cycling-this-year',
-    prompt: 'What should my max heart rate be this year for cycling?',
+    prompt: 'Estimate my potential max heart rate this year for cycling with confidence and evidence.',
     category: 'Advanced Examples',
     featured: false,
     surfaces: ['picker'],

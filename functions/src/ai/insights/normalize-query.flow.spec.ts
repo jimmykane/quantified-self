@@ -989,6 +989,31 @@ describe('normalizeInsightQuery', () => {
     });
   });
 
+  it('resolves month-day-year to today ranges instead of falling back to full-year bounds', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-25T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'compare cadence for cycling from jan 1, 2026 to today',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('cadence');
+    expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
+      startDate: '2026-01-01T00:00:00.000Z',
+      endDate: '2026-03-25T23:59:59.999Z',
+      timezone: 'UTC',
+      source: 'prompt',
+    });
+  });
+
   it('treats month-year ranges with until as continuous ranges instead of discrete month lists', async () => {
     setNormalizeQueryDependenciesForTesting({
       now: () => new Date('2026-03-25T12:00:00.000Z'),
@@ -3526,12 +3551,78 @@ describe('normalizeInsightQuery', () => {
 
     expect(result.metricKey).toBe('heart_rate');
     expect(result.query.metricKey).toBe('heart_rate');
-    expect(result.query.advisoryKind).toBe('expected_value');
+    expect(result.query.advisoryKind).toBe('potential_value');
     expect(result.query.horizon).toBe('current_year');
     expect(result.query.activityFilters).toEqual({
       activityTypeGroups: [],
       activityTypes: [],
     });
+    expect(result.query.dateRange).toEqual({
+      kind: 'bounded',
+      startDate: '2026-01-01T00:00:00.000Z',
+      endDate: '2026-03-22T23:59:59.999Z',
+      timezone: 'UTC',
+      source: 'prompt',
+    });
+  });
+
+  it('routes current achievable max-heart-rate prompts to advisory mode', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-22T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'What is my current achievable max heart rate this year based on my cycling workouts?',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok' || result.query.resultKind !== 'advisory') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('heart_rate');
+    expect(result.query.metricKey).toBe('heart_rate');
+    expect(result.query.advisoryKind).toBe('expected_value');
+    expect(result.query.horizon).toBe('current_year');
+  });
+
+  it('routes estimate-style max-heart-rate prompts to advisory mode', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-22T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Estimate my current max heart rate for cycling this year with confidence and evidence.',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok' || result.query.resultKind !== 'advisory') {
+      return;
+    }
+
+    expect(result.metricKey).toBe('heart_rate');
+    expect(result.query.metricKey).toBe('heart_rate');
+    expect(result.query.advisoryKind).toBe('expected_value');
+    expect(result.query.horizon).toBe('current_year');
+  });
+
+  it('uses today as advisory range end for month-day-year to today phrasing', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-22T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Estimate my current max heart rate for cycling from Jan 1, 2026 to today, with confidence and evidence.',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok' || result.query.resultKind !== 'advisory') {
+      return;
+    }
+
     expect(result.query.dateRange).toEqual({
       kind: 'bounded',
       startDate: '2026-01-01T00:00:00.000Z',
@@ -3636,6 +3727,42 @@ describe('normalizeInsightQuery', () => {
 
     const result = await normalizeInsightQuery({
       prompt: 'show my goal max heart rate over time this year',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result).toMatchObject({
+      status: 'ok',
+      metricKey: 'heart_rate',
+      query: {
+        resultKind: 'aggregate',
+        dataType: DataHeartRateMax.type,
+      },
+      routing: {
+        routeId: 'single_metric',
+        source: 'deterministic',
+        resultKind: 'aggregate',
+      },
+    });
+  });
+
+  it('keeps estimate phrasing in aggregate mode when the prompt explicitly asks for an over-time chart', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-22T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'max heart rate',
+        aggregation: 'maximum',
+        category: 'date',
+        requestedTimeInterval: 'auto',
+        dateRange: {
+          kind: 'current_period',
+          unit: 'year',
+        },
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'Estimate my max heart rate over time for cycling this year.',
       clientTimezone: 'UTC',
     });
 

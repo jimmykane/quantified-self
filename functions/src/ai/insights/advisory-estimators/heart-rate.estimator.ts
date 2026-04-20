@@ -42,10 +42,19 @@ const HIGH_CONFIDENCE_RANGE_LOW_DELTA = 7;
 const LOW_CONFIDENCE_RANGE_HIGH_MARGIN = 3;
 const MEDIUM_CONFIDENCE_RANGE_HIGH_MARGIN = 2;
 const HIGH_CONFIDENCE_RANGE_HIGH_MARGIN = 1;
+const LOW_CONFIDENCE_POTENTIAL_RANGE_HIGH_MARGIN = 4;
+const MEDIUM_CONFIDENCE_POTENTIAL_RANGE_HIGH_MARGIN = 3;
+const HIGH_CONFIDENCE_POTENTIAL_RANGE_HIGH_MARGIN = 2;
 const SAMPLE_VOLUME_WEIGHT = 0.35;
 const COVERAGE_WEIGHT = 0.25;
 const RECENCY_WEIGHT = 0.20;
 const TAIL_STRENGTH_WEIGHT = 0.20;
+const HIGH_CONFIDENCE_POTENTIAL_HEADROOM_BPM = 1;
+const MEDIUM_CONFIDENCE_POTENTIAL_HEADROOM_BPM = 2;
+const LOW_CONFIDENCE_POTENTIAL_HEADROOM_BPM = 3;
+const MAX_POTENTIAL_HEADROOM_BPM = 4;
+const WEAK_TAIL_CONFIDENCE_CAP_SCORE = 0.74;
+const SPARSE_TAIL_CONFIDENCE_CAP_SCORE = 0.69;
 const LOW_INTENSITY_MAX_HR_ACTIVITY_TYPES = new Set<ActivityTypes>([
   ActivityTypes.Walking,
   ActivityTypes.Hiking,
@@ -150,6 +159,73 @@ function resolveRangeHighMargin(
   return LOW_CONFIDENCE_RANGE_HIGH_MARGIN;
 }
 
+function resolvePotentialRangeHighMargin(
+  confidenceTier: AdvisoryEstimatorEstimateResult['confidence']['tier'],
+): number {
+  if (confidenceTier === 'high') {
+    return HIGH_CONFIDENCE_POTENTIAL_RANGE_HIGH_MARGIN;
+  }
+  if (confidenceTier === 'medium') {
+    return MEDIUM_CONFIDENCE_POTENTIAL_RANGE_HIGH_MARGIN;
+  }
+  return LOW_CONFIDENCE_POTENTIAL_RANGE_HIGH_MARGIN;
+}
+
+function resolvePotentialHeadroomBpm(
+  confidenceTier: AdvisoryEstimatorEstimateResult['confidence']['tier'],
+  sampleCount: number,
+  recencyDays: number | null,
+  tailQuality: ReturnType<typeof resolveTailQuality>,
+): number {
+  let headroom = confidenceTier === 'high'
+    ? HIGH_CONFIDENCE_POTENTIAL_HEADROOM_BPM
+    : confidenceTier === 'medium'
+      ? MEDIUM_CONFIDENCE_POTENTIAL_HEADROOM_BPM
+      : LOW_CONFIDENCE_POTENTIAL_HEADROOM_BPM;
+
+  if (sampleCount >= 24) {
+    headroom -= 1;
+  }
+
+  if (recencyDays !== null && recencyDays >= 45) {
+    headroom += 1;
+  }
+
+  if (tailQuality.qualifyingSampleCount >= 5 || tailQuality.topDecileDensity >= 0.25) {
+    headroom -= 1;
+  } else if (tailQuality.qualifyingSampleCount <= 2 && tailQuality.topDecileDensity < 0.15) {
+    headroom += 1;
+  }
+
+  return roundToInteger(clamp(headroom, 0, MAX_POTENTIAL_HEADROOM_BPM));
+}
+
+function resolveTailConfidenceCap(
+  tailQuality: ReturnType<typeof resolveTailQuality>,
+): {
+  maxScore: number | null;
+  reason: string | null;
+} {
+  if (tailQuality.qualifyingSampleCount >= 3) {
+    return {
+      maxScore: null,
+      reason: null,
+    };
+  }
+
+  if (tailQuality.qualifyingSampleCount >= 2) {
+    return {
+      maxScore: WEAK_TAIL_CONFIDENCE_CAP_SCORE,
+      reason: 'Tail-confidence cap applied: only two sessions are within 3 bpm of observed max.',
+    };
+  }
+
+  return {
+    maxScore: SPARSE_TAIL_CONFIDENCE_CAP_SCORE,
+    reason: 'Tail-confidence cap applied: fewer than two sessions are within 3 bpm of observed max.',
+  };
+}
+
 function hasSupportSignal(event: EventInterface, dataType: string): boolean {
   const stat = event.getStat?.(dataType);
   const value = Number(stat?.getValue?.());
@@ -211,12 +287,40 @@ function resolveEligibility(
   input: AdvisoryEstimatorInput,
   samples: AdvisorySample[],
 ): AdvisoryEstimatorEligibilityResult {
+  const dateRangeEndTime = resolveDateRangeEndTime(
+    input.query.dateRange.kind === 'bounded' ? input.query.dateRange.endDate : null,
+  );
+  const sampleCount = samples.length;
+  const trainingWeeks = resolveTrainingWeekCoverage(samples);
+  const recencyDays = resolveRecencyDays(samples, dateRangeEndTime);
+  const observedSample = sampleCount > 0 ? samples[sampleCount - 1] : null;
+  const observedMax = observedSample?.value ?? null;
+  const tailQuality = observedMax === null
+    ? {
+      qualifyingSampleCount: 0,
+      topDecileDensity: 0,
+      hasStrongTail: false,
+    }
+    : resolveTailQuality(samples, observedMax);
+  const baseDetails = {
+    sampleCount,
+    qualifyingSampleCount: tailQuality.qualifyingSampleCount,
+    trainingWeeks,
+    recencyDays,
+    observedMax,
+    bestValue: observedMax,
+    bestDate: observedSample?.startTime === null || observedSample?.startTime === undefined
+      ? null
+      : new Date(observedSample.startTime).toISOString(),
+  };
+
   if (!samples.length) {
     return {
       status: 'insufficient_data',
       reasonCode: 'no_samples',
       message: 'No events with max heart-rate samples were found in this scope.',
       suggestedQuery: DEFAULT_SUGGESTED_QUERY,
+      details: baseDetails,
     };
   }
 
@@ -227,63 +331,50 @@ function resolveEligibility(
       reasonCode: 'low_intensity_scope',
       message: 'Selected activities are low-intensity for max-heart-rate estimation. Include higher-intensity workouts or ask across all activities.',
       suggestedQuery: DEFAULT_SUGGESTED_QUERY,
+      details: baseDetails,
     };
   }
 
-  const sampleCount = samples.length;
   if (sampleCount < MIN_HEART_RATE_SAMPLE_COUNT) {
     return {
       status: 'insufficient_data',
       reasonCode: 'too_few_samples',
       message: `At least ${MIN_HEART_RATE_SAMPLE_COUNT} valid max-heart-rate sessions are required.`,
       suggestedQuery: DEFAULT_SUGGESTED_QUERY,
-      details: {
-        sampleCount,
-      },
+      details: baseDetails,
     };
   }
 
-  const trainingWeeks = resolveTrainingWeekCoverage(samples);
   if (trainingWeeks < MIN_HEART_RATE_COVERAGE_WEEKS) {
     return {
       status: 'insufficient_data',
       reasonCode: 'too_few_weeks',
       message: `At least ${MIN_HEART_RATE_COVERAGE_WEEKS} distinct training weeks with valid max-heart-rate samples are required.`,
       suggestedQuery: DEFAULT_SUGGESTED_QUERY,
-      details: {
-        trainingWeeks,
-      },
+      details: baseDetails,
     };
   }
 
-  const dateRangeEndTime = resolveDateRangeEndTime(
-    input.query.dateRange.kind === 'bounded' ? input.query.dateRange.endDate : null,
-  );
-  const recencyDays = resolveRecencyDays(samples, dateRangeEndTime);
   if (recencyDays !== null && recencyDays > MAX_STALE_SAMPLE_DAYS) {
     return {
       status: 'insufficient_data',
       reasonCode: 'stale_data',
       message: `Latest valid max-heart-rate sample is stale (${recencyDays} days old).`,
       suggestedQuery: DEFAULT_SUGGESTED_QUERY,
-      details: {
-        recencyDays,
-      },
+      details: baseDetails,
     };
   }
 
-  const observedMax = samples[samples.length - 1]?.value ?? null;
-  const tailQuality = observedMax === null
-    ? {
-      hasStrongTail: false,
-    }
-    : resolveTailQuality(samples, observedMax);
   if (!tailQuality.hasStrongTail) {
     return {
       status: 'insufficient_data',
       reasonCode: 'weak_tail_signal',
       message: 'Tail signal is weak: not enough sessions close to observed max and top-decile density is low.',
       suggestedQuery: DEFAULT_SUGGESTED_QUERY,
+      details: {
+        ...baseDetails,
+        topDecileDensity: tailQuality.topDecileDensity,
+      },
     };
   }
 
@@ -340,7 +431,29 @@ function buildEstimateFromSamples(
     0,
     1,
   );
-  const confidenceTier = resolveConfidenceTierFromScore(confidenceScore);
+  const tailConfidenceCap = resolveTailConfidenceCap(tailQuality);
+  const cappedConfidenceScore = tailConfidenceCap.maxScore === null
+    ? confidenceScore
+    : Math.min(confidenceScore, tailConfidenceCap.maxScore);
+  const confidenceTier = resolveConfidenceTierFromScore(cappedConfidenceScore);
+  const advisoryKind = input.query.advisoryKind;
+  const isPotentialEstimate = advisoryKind === 'potential_value';
+  const potentialHeadroom = isPotentialEstimate
+    ? resolvePotentialHeadroomBpm(
+      confidenceTier,
+      sampleCount,
+      recencyDays,
+      tailQuality,
+    )
+    : 0;
+
+  const estimateValue = isPotentialEstimate
+    ? roundToInteger(clamp(
+      observedMax + potentialHeadroom,
+      observedMax,
+      BPM_CAP,
+    ))
+    : roundToInteger(observedMax);
 
   const rangeLow = roundToInteger(clamp(
     Math.max(p90, observedMax - resolveRangeLowDelta(confidenceTier)),
@@ -348,23 +461,27 @@ function buildEstimateFromSamples(
     BPM_CAP,
   ));
   const rangeHigh = roundToInteger(clamp(
-    observedMax + resolveRangeHighMargin(confidenceTier),
+    estimateValue + (
+      isPotentialEstimate
+        ? resolvePotentialRangeHighMargin(confidenceTier)
+        : resolveRangeHighMargin(confidenceTier)
+    ),
     BPM_MIN,
     BPM_CAP,
   ));
 
   const roundedObservedMax = roundToInteger(observedMax);
-  const roundedConfidenceScore = Math.round(confidenceScore * 1000) / 1000;
+  const roundedConfidenceScore = Math.round(cappedConfidenceScore * 1000) / 1000;
 
   return {
-    semanticKind: 'current_ceiling',
+    semanticKind: isPotentialEstimate ? 'potential_ceiling' : 'current_ceiling',
     estimate: {
-      value: roundedObservedMax,
+      value: estimateValue,
       unit: 'bpm',
     },
     interval: {
       low: rangeLow,
-      high: Math.max(rangeHigh, roundedObservedMax),
+      high: Math.max(rangeHigh, estimateValue, roundedObservedMax),
       kind: 'deterministic_range',
       confidenceLevel: confidenceTier,
     },
@@ -389,11 +506,14 @@ function buildEstimateFromSamples(
         isolatedPeakPenalty > 0
           ? `Isolated peak penalty applied (${Math.round(isolatedPeakPenalty * 100)}%).`
           : 'No isolated peak penalty applied.',
+        ...(tailConfidenceCap.reason ? [tailConfidenceCap.reason] : []),
         supportSignalModifier.reason,
       ],
     },
     method: {
-      id: 'heart_rate_current_ceiling_deterministic',
+      id: isPotentialEstimate
+        ? 'heart_rate_potential_ceiling_deterministic'
+        : 'heart_rate_current_ceiling_deterministic',
       version: 'v2',
       deterministic: true,
     },
@@ -408,10 +528,17 @@ function buildEstimateFromSamples(
         label: 'Observed max',
         value: `${roundedObservedMax} bpm`,
       },
+      ...(isPotentialEstimate
+        ? [{
+          code: 'potential_headroom',
+          label: 'Potential headroom',
+          value: `${potentialHeadroom} bpm above observed max`,
+        }]
+        : []),
       {
         code: 'tail_quality',
         label: 'Tail quality',
-        value: `${tailQuality.qualifyingSampleCount} sessions within 3 bpm of observed max; top-decile density ${Math.round(tailQuality.topDecileDensity * 100)}%`,
+        value: `${tailQuality.qualifyingSampleCount} ${tailQuality.qualifyingSampleCount === 1 ? 'session' : 'sessions'} within 3 bpm of observed max; top-decile density ${Math.round(tailQuality.topDecileDensity * 100)}%`,
       },
       {
         code: 'training_weeks',
@@ -423,7 +550,7 @@ function buildEstimateFromSamples(
         label: 'Recency',
         value: recencyDays === null
           ? 'unavailable'
-          : `${recencyDays} days before range end`,
+          : `${recencyDays} ${recencyDays === 1 ? 'day' : 'days'} before range end`,
       },
       {
         code: 'confidence_score',
@@ -454,7 +581,11 @@ export const HEART_RATE_ADVISORY_ESTIMATOR: AdvisoryMetricEstimator = {
     const trainingWeeks = output.observed.trainingWeeks;
     const recencySuffix = output.observed.recencyDays === null
       ? ''
-      : ` Latest sample is ${output.observed.recencyDays} days before range end.`;
+      : ` Latest sample is ${output.observed.recencyDays} ${output.observed.recencyDays === 1 ? 'day' : 'days'} before range end.`;
+
+    if (output.semanticKind === 'potential_ceiling') {
+      return `Potential max heart-rate ceiling is ${estimateValue} bpm (range ${intervalLow}-${intervalHigh} bpm, ${confidenceTier} confidence), based on ${sampleCount} valid sessions across ${trainingWeeks} training weeks with observed max ${output.observed.bestValue ?? 'n/a'} bpm.${recencySuffix}`;
+    }
 
     return `Current achievable max heart rate is ${estimateValue} bpm (range ${intervalLow}-${intervalHigh} bpm, ${confidenceTier} confidence), based on ${sampleCount} valid sessions across ${trainingWeeks} training weeks.${recencySuffix}`;
   },

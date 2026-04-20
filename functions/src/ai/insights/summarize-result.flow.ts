@@ -243,6 +243,26 @@ function formatAdvisoryMetricLabel(metricKey: string): string {
     .trim();
 }
 
+function resolveAdvisorySemanticPrefix(
+  semanticKind: AiInsightAdvisoryResult['semanticKind'],
+): string {
+  if (semanticKind === 'potential_ceiling') {
+    return 'Potential ceiling';
+  }
+
+  return 'Current achievable';
+}
+
+function resolveAdvisoryEstimateVerb(
+  semanticKind: AiInsightAdvisoryResult['semanticKind'],
+): string {
+  if (semanticKind === 'potential_ceiling') {
+    return 'potential';
+  }
+
+  return 'expected';
+}
+
 function formatNumber(value: number): string {
   if (!Number.isFinite(value)) {
     return '0';
@@ -870,6 +890,8 @@ function buildNarrativeFallback(input: SummarizeInsightResultInput): string {
         .join('; ')
       : 'No deterministic evidence available.';
     const metricLabel = formatAdvisoryMetricLabel(input.query.metricKey);
+    const advisorySemanticPrefix = resolveAdvisorySemanticPrefix(input.advisory.semanticKind);
+    const advisoryEstimateVerb = resolveAdvisoryEstimateVerb(input.advisory.semanticKind);
     if (input.advisory.status === 'available') {
       const estimateLabel = input.advisory.estimate === null
         ? null
@@ -886,19 +908,19 @@ function buildNarrativeFallback(input: SummarizeInsightResultInput): string {
 
       if (estimateLabel && rangeLowLabel && rangeHighLabel) {
         return isAllTime
-          ? `Current achievable ${metricLabel} ${scopeText} is ${estimateLabel} (range ${rangeLowLabel}-${rangeHighLabel}, ${confidenceLabel}). ${evidenceSummary}`
-          : `Current achievable ${metricLabel} ${scopeText} for ${dateRangeText} is ${estimateLabel} (range ${rangeLowLabel}-${rangeHighLabel}, ${confidenceLabel}). ${evidenceSummary}`;
+          ? `${advisorySemanticPrefix} ${metricLabel} ${scopeText} is ${estimateLabel} (range ${rangeLowLabel}-${rangeHighLabel}, ${confidenceLabel}). ${evidenceSummary}`
+          : `${advisorySemanticPrefix} ${metricLabel} ${scopeText} for ${dateRangeText} is ${estimateLabel} (range ${rangeLowLabel}-${rangeHighLabel}, ${confidenceLabel}). ${evidenceSummary}`;
       }
 
-      return `Current achievable ${metricLabel} ${scopeText}: ${evidenceSummary}`;
+      return `${advisorySemanticPrefix} ${metricLabel} ${scopeText}: ${evidenceSummary}`;
     }
 
     if (input.advisory.status === 'insufficient_data') {
       const reason = input.advisory.insufficientData?.message || evidenceSummary;
-      return `I could not estimate expected ${metricLabel} ${scopeText} for ${dateRangeText}. ${reason}`;
+      return `I could not estimate ${advisoryEstimateVerb} ${metricLabel} ${scopeText} for ${dateRangeText}. ${reason}`;
     }
 
-    return `I could not estimate expected ${metricLabel} ${scopeText}. ${evidenceSummary}`;
+    return `I could not estimate ${advisoryEstimateVerb} ${metricLabel} ${scopeText}. ${evidenceSummary}`;
   }
 
   const metricLabelText = 'metricResults' in input

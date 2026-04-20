@@ -60,7 +60,10 @@ function resolveInsightTitle(query: NormalizedInsightQuery, metricLabelOrLabels:
   }
 
   if (query.resultKind === 'advisory') {
-    return `Expected ${metricLabel}${activityLabel}`;
+    if (query.advisoryKind === 'potential_value') {
+      return `Potential ${metricLabel}${activityLabel}`;
+    }
+    return `Current achievable ${metricLabel}${activityLabel}`;
   }
 
   if (query.categoryType === ChartDataCategoryTypes.ActivityType) {

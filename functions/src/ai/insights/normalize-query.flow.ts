@@ -251,8 +251,31 @@ const EVENT_LOOKUP_RANKING_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
 ];
 const ADVISORY_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
   /\b(expected|expectation|predict|prediction|projected|projection|forecast)\b/i,
+  /\b(estimat(?:e|es|ed|ing|ion|ions))\b/i,
   /\b(what|when)\s+(should|would)\s+my\b/i,
   /\bshould\s+my\b/i,
+  /\bcurrent\s+(achievable|attainable|ceiling)\b/i,
+  /\bcurrent\s+max\b/i,
+];
+const ADVISORY_STRONG_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
+  /\b(expected|expectation|predict|prediction|projected|projection|forecast)\b/i,
+  /\b(what|when)\s+(should|would)\s+my\b/i,
+  /\bshould\s+my\b/i,
+  /\bcurrent\s+(achievable|attainable|ceiling)\b/i,
+];
+const ADVISORY_CURRENT_CEILING_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
+  /\bcurrent\s+(?:max|ceiling|achievable|attainable)\b/i,
+  /\bmy\s+current\s+max\b/i,
+  /\bcurrent\s+year\s+ceiling\b/i,
+  /\bcurrent\b.*\b(heart rate|hr|ftp|power|pace)\b/i,
+  /\bright\s+now\b/i,
+];
+const ADVISORY_POTENTIAL_CEILING_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
+  /\b(what|when)\s+(?:should|would)\s+my\b/i,
+  /\bshould\s+my\b/i,
+  /\b(expected|expectation|predict|prediction|projected|projection|forecast)\b/i,
+  /\bpotential\b/i,
+  /\bpossible\b/i,
 ];
 const AGGREGATE_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
   /\b(over time|by month|by week|by day|by year|timeline|trend|chart)\b/i,
@@ -804,6 +827,52 @@ function resolvePromptMonthYearToNowDateSelection(
   };
 }
 
+function resolvePromptMonthDayYearToNowDateSelection(
+  prompt: string,
+  category: ModelCategoryCode | undefined,
+  aggregation: ModelAggregationCode | undefined,
+  options: ResolvePromptDateSelectionOptions,
+): PromptDateSelectionIntent | null {
+  const normalizedPrompt = normalizePromptSearchText(prompt);
+  if (!normalizedPrompt) {
+    return null;
+  }
+
+  const monthNamePattern = '(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
+  const monthDayYearToNowMatch = normalizedPrompt.match(
+    new RegExp(`\\b(?:from|since)\\s+${monthNamePattern}\\s+(\\d{1,2})(?:st|nd|rd|th)?\\s+(${YEAR_PATTERN.source})\\s+(?:(?:to|through|until|till|-)\\s+)?(?:now|today)\\b`),
+  ) || normalizedPrompt.match(
+    new RegExp(`\\bbetween\\s+${monthNamePattern}\\s+(\\d{1,2})(?:st|nd|rd|th)?\\s+(${YEAR_PATTERN.source})\\s+and\\s+(?:now|today)\\b`),
+  );
+  if (!monthDayYearToNowMatch) {
+    return null;
+  }
+
+  const startMonth = resolveMonthNameToNumber(monthDayYearToNowMatch[1] || '');
+  const startDay = Number(monthDayYearToNowMatch[2]);
+  const startYear = Number(monthDayYearToNowMatch[3]);
+  if (!startMonth || !Number.isInteger(startYear) || !Number.isInteger(startDay)) {
+    return null;
+  }
+
+  if (startDay < 1 || startDay > getDaysInMonth(startYear, startMonth)) {
+    return null;
+  }
+
+  const today = getZonedDateParts(options.now, options.timeZone);
+  const periodMode = resolveMultiPeriodMode(prompt, category, aggregation);
+  return {
+    effectiveDateRangeIntent: buildNormalizedAbsoluteRange(
+      { year: startYear, month: startMonth, day: startDay },
+      today,
+    ),
+    periodMode,
+    compareRequestedTimeInterval: category === 'activity' || periodMode !== 'compare'
+      ? undefined
+      : 'monthly',
+  };
+}
+
 function areConsecutiveCalendarMonths(
   left: { year: number; month: number },
   right: { year: number; month: number },
@@ -1019,6 +1088,16 @@ function resolvePromptDateSelection(
   );
   if (monthYearToNowSelection) {
     return monthYearToNowSelection;
+  }
+
+  const monthDayYearToNowSelection = resolvePromptMonthDayYearToNowDateSelection(
+    prompt,
+    category,
+    aggregation,
+    options,
+  );
+  if (monthDayYearToNowSelection) {
+    return monthDayYearToNowSelection;
   }
 
   const monthYearListSelection = resolvePromptMonthYearListDateSelection(
@@ -1734,7 +1813,19 @@ function promptImpliesAdvisory(prompt: string): boolean {
     return false;
   }
 
-  return ADVISORY_PROMPT_PATTERNS.some(pattern => pattern.test(normalizedPrompt));
+  const hasAdvisorySignal = ADVISORY_PROMPT_PATTERNS.some(pattern => pattern.test(normalizedPrompt));
+  if (!hasAdvisorySignal) {
+    return false;
+  }
+
+  const hasAggregateSignal = AGGREGATE_PROMPT_PATTERNS.some(pattern => pattern.test(normalizedPrompt));
+  if (!hasAggregateSignal) {
+    return true;
+  }
+
+  // Keep explicit chart/timeline prompts in aggregate mode unless the phrasing
+  // clearly requests advisory guidance semantics.
+  return ADVISORY_STRONG_PROMPT_PATTERNS.some(pattern => pattern.test(normalizedPrompt));
 }
 
 function resolveAdvisoryHorizon(
@@ -1749,6 +1840,25 @@ function resolveAdvisoryHorizon(
   }
 
   return 'requested_range';
+}
+
+function resolveAdvisoryKind(
+  prompt: string,
+): 'expected_value' | 'potential_value' {
+  const normalizedPrompt = normalizePromptSearchText(prompt);
+  if (!normalizedPrompt) {
+    return 'expected_value';
+  }
+
+  if (ADVISORY_CURRENT_CEILING_PROMPT_PATTERNS.some(pattern => pattern.test(normalizedPrompt))) {
+    return 'expected_value';
+  }
+
+  if (ADVISORY_POTENTIAL_CEILING_PROMPT_PATTERNS.some(pattern => pattern.test(normalizedPrompt))) {
+    return 'potential_value';
+  }
+
+  return 'expected_value';
 }
 
 function resolvePowerCurveMode(prompt: string): AiInsightsPowerCurveMode {
@@ -2425,7 +2535,7 @@ export function resolveNormalizedInsightQueryFromIntent(
         metricKey: metric.key,
         query: buildAdvisoryInsightQuery({
           metricKey: metric.key,
-          advisoryKind: 'expected_value',
+          advisoryKind: resolveAdvisoryKind(prompt),
           horizon: resolveAdvisoryHorizon(resolvedDateRangeIntent),
           activityTypeGroups: finalActivityTypeGroups,
           activityTypes: advisoryActivityTypes,

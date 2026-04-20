@@ -37,7 +37,7 @@ export interface AdvisoryEstimatorEligibilityResult {
 }
 
 export interface AdvisoryEstimatorEstimateResult {
-  semanticKind: 'current_ceiling';
+  semanticKind: 'current_ceiling' | 'potential_ceiling';
   estimate: {
     value: number;
     unit: string;
@@ -114,6 +114,16 @@ const HEART_RATE_INVARIANT_SPIKE_TRIM_FLOOR_BPM = 220;
 const HEART_RATE_INVARIANT_SPIKE_TRIM_GAP_BPM = 6;
 const DEFAULT_METHOD_VERSION = 'v2';
 const DEFAULT_INSUFFICIENT_QUERY = 'Show my max heart rate over time this year.';
+const ADVISORY_SEMANTIC_KIND_BY_KIND = {
+  expected_value: 'current_ceiling',
+  potential_value: 'potential_ceiling',
+} as const;
+
+function resolveExpectedSemanticKind(
+  query: NormalizedInsightAdvisoryQuery,
+): AiInsightAdvisoryResult['semanticKind'] {
+  return ADVISORY_SEMANTIC_KIND_BY_KIND[query.advisoryKind] ?? 'current_ceiling';
+}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -198,13 +208,13 @@ function resolveObservedDiagnosticsFromDetails(
 }
 
 function buildBaseResult(
-  metricKey: AiInsightsPromptMetricKey,
+  query: NormalizedInsightAdvisoryQuery,
   status: AiInsightAdvisoryResult['status'],
 ): AiInsightAdvisoryResult {
   return {
     status,
-    metricKey,
-    semanticKind: 'current_ceiling',
+    metricKey: query.metricKey,
+    semanticKind: resolveExpectedSemanticKind(query),
     estimate: null,
     interval: null,
     observed: {
@@ -221,7 +231,7 @@ function buildBaseResult(
       reasons: [],
     },
     method: {
-      id: `advisory-${metricKey}`,
+      id: `advisory-${query.metricKey}`,
       version: DEFAULT_METHOD_VERSION,
       deterministic: true,
     },
@@ -230,17 +240,17 @@ function buildBaseResult(
 }
 
 function buildUnsupportedResult(
-  metricKey: AiInsightsPromptMetricKey,
+  query: NormalizedInsightAdvisoryQuery,
   message: string,
 ): AiInsightAdvisoryResult {
-  const result = buildBaseResult(metricKey, 'unsupported');
+  const result = buildBaseResult(query, 'unsupported');
   result.evidence = [{
     code: 'unsupported',
     label: 'Unsupported',
     value: message,
   }];
   result.method = {
-    id: `advisory-${metricKey}-unsupported`,
+    id: `advisory-${query.metricKey}-unsupported`,
     version: DEFAULT_METHOD_VERSION,
     deterministic: true,
   };
@@ -248,13 +258,13 @@ function buildUnsupportedResult(
 }
 
 function buildInsufficientDataResult(
-  metricKey: AiInsightsPromptMetricKey,
+  query: NormalizedInsightAdvisoryQuery,
   reasonCode: AdvisoryEstimatorReasonCode,
   message: string,
   suggestedQuery: string,
   details: AdvisoryEstimatorEligibilityResult['details'] | undefined,
 ): AiInsightAdvisoryResult {
-  const result = buildBaseResult(metricKey, 'insufficient_data');
+  const result = buildBaseResult(query, 'insufficient_data');
   result.observed = resolveObservedDiagnosticsFromDetails(details);
   result.insufficientData = {
     reasonCode,
@@ -304,7 +314,7 @@ function buildInsufficientDataResult(
     value: message,
   }, ...observedDiagnosticsEvidence];
   result.method = {
-    id: `advisory-${metricKey}-insufficient`,
+    id: `advisory-${query.metricKey}-insufficient`,
     version: DEFAULT_METHOD_VERSION,
     deterministic: true,
   };
@@ -348,7 +358,10 @@ function normalizeEvidence(
 function normalizeEstimateResult(
   estimate: AdvisoryEstimatorEstimateResult,
 ): AdvisoryEstimatorEstimateResult | null {
-  if (!estimate || estimate.semanticKind !== 'current_ceiling') {
+  if (
+    !estimate
+    || (estimate.semanticKind !== 'current_ceiling' && estimate.semanticKind !== 'potential_ceiling')
+  ) {
     return null;
   }
   if (
@@ -419,7 +432,7 @@ function normalizeEstimateResult(
   }
 
   return {
-    semanticKind: 'current_ceiling',
+    semanticKind: estimate.semanticKind,
     estimate: {
       value: pointEstimate,
       unit: `${estimate.estimate.unit}`.trim(),
@@ -529,7 +542,7 @@ export function executeAdvisoryEstimatorWithResolvedEstimator(
 ): AiInsightAdvisoryResult {
   if (!estimator || !estimator.enabled) {
     return buildUnsupportedResult(
-      input.query.metricKey,
+      input.query,
       `Advisory support for ${input.query.metricKey} is not enabled yet.`,
     );
   }
@@ -539,21 +552,21 @@ export function executeAdvisoryEstimatorWithResolvedEstimator(
     eligibility = estimator.isEligible(input);
   } catch {
     return buildUnsupportedResult(
-      input.query.metricKey,
+      input.query,
       `Advisory estimator for ${input.query.metricKey} failed eligibility checks.`,
     );
   }
 
   if (eligibility.status === 'unsupported') {
     return buildUnsupportedResult(
-      input.query.metricKey,
+      input.query,
       eligibility.message || `Advisory support for ${input.query.metricKey} is not available.`,
     );
   }
 
   if (eligibility.status === 'insufficient_data') {
     return buildInsufficientDataResult(
-      input.query.metricKey,
+      input.query,
       eligibility.reasonCode || 'too_few_samples',
       eligibility.message || `Not enough ${input.query.metricKey} data was found in the selected range.`,
       eligibility.suggestedQuery || DEFAULT_INSUFFICIENT_QUERY,
@@ -566,7 +579,7 @@ export function executeAdvisoryEstimatorWithResolvedEstimator(
     rawEstimate = estimator.estimate(input);
   } catch {
     return buildUnsupportedResult(
-      input.query.metricKey,
+      input.query,
       `Advisory estimator for ${input.query.metricKey} failed while estimating.`,
     );
   }
@@ -574,8 +587,14 @@ export function executeAdvisoryEstimatorWithResolvedEstimator(
   const normalizedEstimate = normalizeEstimateResult(rawEstimate);
   if (!normalizedEstimate) {
     return buildUnsupportedResult(
-      input.query.metricKey,
+      input.query,
       `Advisory estimator for ${input.query.metricKey} returned invalid estimate output.`,
+    );
+  }
+  if (normalizedEstimate.semanticKind !== resolveExpectedSemanticKind(input.query)) {
+    return buildUnsupportedResult(
+      input.query,
+      `Advisory estimator for ${input.query.metricKey} returned mismatched semantic output.`,
     );
   }
   const estimate = applyMetricSpecificInvariants(input, normalizedEstimate);

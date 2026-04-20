@@ -19,11 +19,14 @@ import {
 
 vi.mock('@sports-alliance/sports-lib', async (importOriginal) => await importOriginal());
 
-function buildAdvisoryQuery(metricKey: NormalizedInsightAdvisoryQuery['metricKey']): NormalizedInsightAdvisoryQuery {
+function buildAdvisoryQuery(
+  metricKey: NormalizedInsightAdvisoryQuery['metricKey'],
+  advisoryKind: NormalizedInsightAdvisoryQuery['advisoryKind'] = 'expected_value',
+): NormalizedInsightAdvisoryQuery {
   return {
     resultKind: 'advisory',
     metricKey,
-    advisoryKind: 'expected_value',
+    advisoryKind,
     horizon: 'current_year',
     categoryType: ChartDataCategoryTypes.DateType,
     activityTypeGroups: [],
@@ -128,7 +131,11 @@ function runSharedEstimatorContract(
 
   if (eligibility.status === 'eligible') {
     const estimate = estimator.estimate(input);
-    expect(estimate.semanticKind).toBe('current_ceiling');
+    expect(estimate.semanticKind).toBe(
+      input.query.advisoryKind === 'potential_value'
+        ? 'potential_ceiling'
+        : 'current_ceiling',
+    );
     expect(Number.isFinite(estimate.estimate.value)).toBe(true);
     expect(Number.isFinite(estimate.interval.low)).toBe(true);
     expect(Number.isFinite(estimate.interval.high)).toBe(true);
@@ -166,6 +173,23 @@ describe('advisory-estimator', () => {
     expect(result.evidence.length).toBeGreaterThan(0);
   });
 
+  it('returns potential-ceiling estimates for heart_rate when advisory kind requests potential mode', () => {
+    const query = buildAdvisoryQuery('heart_rate', 'potential_value');
+    const result = executeAdvisoryEstimator({
+      query,
+      matchedEvents: buildWeeklyHeartRateEvents([170, 173, 176, 179, 182, 184, 184, 185]),
+    });
+
+    expect(result.status).toBe('available');
+    if (result.status !== 'available' || !result.estimate || !result.interval) {
+      return;
+    }
+
+    expect(result.semanticKind).toBe('potential_ceiling');
+    expect(result.estimate.value).toBeGreaterThanOrEqual(185);
+    expect(result.interval.high).toBeGreaterThanOrEqual(result.estimate.value);
+  });
+
   it('never estimates below observed max heart-rate in the selected scope', () => {
     const query = buildAdvisoryQuery('heart_rate');
     const result = executeAdvisoryEstimator({
@@ -182,7 +206,7 @@ describe('advisory-estimator', () => {
     expect(result.interval.high).toBeGreaterThanOrEqual(192);
   });
 
-  it('anchors heart-rate expected value to the observed max and keeps the high bound conservative', () => {
+  it('anchors current-ceiling heart-rate expected value to the observed max and keeps the high bound conservative', () => {
     const query = buildAdvisoryQuery('heart_rate');
     const result = executeAdvisoryEstimator({
       query,
@@ -217,6 +241,28 @@ describe('advisory-estimator', () => {
 
     expect(result.estimate?.value).toBe(189);
     expect(result.confidence.tier).toBe('high');
+  });
+
+  it('caps confidence when near-max tail support is sparse despite high coverage', () => {
+    const query = buildAdvisoryQuery('heart_rate');
+    const result = executeAdvisoryEstimator({
+      query,
+      matchedEvents: buildWeeklyHeartRateEvents([
+        170, 170, 171, 171, 172, 172, 173, 173,
+        174, 174, 175, 175, 176, 176, 177, 177,
+        178, 178, 189, 189, 189, 189, 189, 193,
+      ]),
+    });
+
+    expect(result.status).toBe('available');
+    if (result.status !== 'available') {
+      return;
+    }
+
+    expect(result.observed.qualifyingSampleCount).toBe(1);
+    expect(result.confidence.tier).toBe('medium');
+    expect(result.confidence.score).toBeLessThanOrEqual(0.69);
+    expect(result.confidence.reasons.some(reason => reason.includes('Tail-confidence cap applied'))).toBe(true);
   });
 
   it('downgrades confidence by one tier when the observed max is an isolated spike', () => {
@@ -263,6 +309,25 @@ describe('advisory-estimator', () => {
 
     expect(result.status).toBe('insufficient_data');
     expect(result.insufficientData?.reasonCode).toBe('low_intensity_scope');
+  });
+
+  it('returns weak-tail insufficient_data with observed diagnostics preserved', () => {
+    const query = buildAdvisoryQuery('heart_rate');
+    const result = executeAdvisoryEstimator({
+      query,
+      matchedEvents: buildWeeklyHeartRateEvents([160, 165, 170, 172, 174, 176, 178, 188]),
+    });
+
+    expect(result.status).toBe('insufficient_data');
+    if (result.status !== 'insufficient_data') {
+      return;
+    }
+
+    expect(result.insufficientData?.reasonCode).toBe('weak_tail_signal');
+    expect(result.observed.sampleCount).toBe(8);
+    expect(result.observed.trainingWeeks).toBe(8);
+    expect(result.observed.bestValue).toBe(188);
+    expect(result.observed.qualifyingSampleCount).toBe(1);
   });
 
   it('ignores implausible heart-rate spikes above the physiologic cap', () => {

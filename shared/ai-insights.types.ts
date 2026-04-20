@@ -83,7 +83,8 @@ export type NormalizedInsightPeriodMode =
   | 'compare';
 
 export type AiInsightsAdvisoryKind =
-  | 'expected_value';
+  | 'expected_value'
+  | 'potential_value';
 
 export type AiInsightsAdvisoryHorizon =
   | 'current_year'
@@ -500,7 +501,7 @@ export interface AiInsightsPowerCurveOkResponse {
 export interface AiInsightAdvisoryResult {
   status: 'available' | 'insufficient_data' | 'unsupported';
   metricKey: AiInsightsPromptMetricKey;
-  semanticKind: 'current_ceiling';
+  semanticKind: 'current_ceiling' | 'potential_ceiling';
   estimate: {
     value: number;
     unit: string;

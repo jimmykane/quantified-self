@@ -117,8 +117,9 @@ export const NormalizedInsightMetricSelectionSchema = z.object({
 
 const NormalizedInsightPowerCurveModeSchema = z.enum(['best', 'compare_over_time']);
 const AiInsightsDigestGranularitySchema = z.enum(['weekly', 'monthly', 'yearly']);
-const AiInsightsAdvisoryKindSchema = z.enum(['expected_value']);
+const AiInsightsAdvisoryKindSchema = z.enum(['expected_value', 'potential_value']);
 const AiInsightsAdvisoryHorizonSchema = z.enum(['current_year', 'requested_range']);
+const AiInsightAdvisorySemanticKindSchema = z.enum(['current_ceiling', 'potential_ceiling']);
 
 const NormalizedInsightAdvisoryActivityFiltersSchema = z.object({
   activityTypeGroups: z.array(z.nativeEnum(ActivityTypeGroups)),
@@ -571,7 +572,7 @@ const AiInsightAdvisoryInsufficientDataSchema = z.object({
 
 const AiInsightAdvisoryResultBaseSchema = z.object({
   metricKey: AiInsightsPromptMetricKeySchema,
-  semanticKind: z.literal('current_ceiling'),
+  semanticKind: AiInsightAdvisorySemanticKindSchema,
   observed: AiInsightAdvisoryObservedSchema,
   confidence: AiInsightAdvisoryConfidenceSchema,
   method: AiInsightAdvisoryMethodSchema,

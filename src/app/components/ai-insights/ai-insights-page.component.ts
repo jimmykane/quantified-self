@@ -159,8 +159,22 @@ function resolveAdvisorySemanticLabel(
   if (normalizedSemanticKind === 'current_ceiling') {
     return 'Current achievable max';
   }
+  if (normalizedSemanticKind === 'potential_ceiling') {
+    return 'Potential ceiling';
+  }
 
   return normalizedSemanticKind.replace(/_/g, ' ');
+}
+
+function resolveAdvisoryEstimateLabel(
+  semanticKind: AiInsightsAdvisoryOkResponse['advisory']['semanticKind'] | string | null | undefined,
+): string {
+  const normalizedSemanticKind = `${semanticKind || ''}`.trim().toLowerCase();
+  if (normalizedSemanticKind === 'potential_ceiling') {
+    return 'Potential ceiling estimate';
+  }
+
+  return 'Current achievable max';
 }
 
 @Component({
@@ -945,7 +959,7 @@ export class AiInsightsPageComponent {
         ? `${formatAdvisoryNumber((response.advisory.confidence.score as number) * 100, this.locale)}%`
         : null;
       cards.push({
-        label: 'Current achievable max',
+        label: resolveAdvisoryEstimateLabel(response.advisory.semanticKind),
         value: `${formatAdvisoryNumber(estimatedValue, this.locale)} ${estimateUnit}`,
         detailRows: [
           {

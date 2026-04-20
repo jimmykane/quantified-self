@@ -102,8 +102,11 @@ export function resolveAiInsightsDisplayTitle(
 
   if (response.query.resultKind === 'advisory') {
     const metricLabel = response.query.metricKey.replace(/_/g, ' ').trim();
+    const advisoryPrefix = response.query.advisoryKind === 'potential_value'
+      ? 'potential'
+      : 'current achievable';
     return metricLabel
-      ? toSentenceCase(`expected ${metricLabel}${activitySuffix}`)
+      ? toSentenceCase(`${advisoryPrefix} ${metricLabel}${activitySuffix}`)
       : null;
   }
 
