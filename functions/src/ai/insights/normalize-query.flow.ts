@@ -41,8 +41,10 @@ import {
   resolveInsightMetric,
   type InsightMetricKey,
 } from './metric-catalog';
+import { resolveAdvisoryEstimator } from './advisory-estimator';
 import { canonicalizeInsightPrompt, normalizePromptSearchText } from './prompt-normalization';
 import {
+  buildAdvisoryInsightQuery,
   buildAggregateInsightQuery,
   buildEventLookupInsightQuery,
   buildLatestEventInsightQuery,
@@ -246,6 +248,34 @@ const LATEST_EVENT_SUBJECT_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
 const EVENT_LOOKUP_RANKING_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
   /\b(longest|shortest|highest|lowest|fastest|slowest|biggest|farthest|furthest)\b/i,
   /\b(max|maximum|min|minimum|peak)\b/i,
+];
+const ADVISORY_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
+  /\b(expected|expectation|predict|prediction|projected|projection|forecast)\b/i,
+  /\b(estimat(?:e|es|ed|ing|ion|ions))\b/i,
+  /\b(what|when)\s+(should|would)\s+my\b/i,
+  /\bshould\s+my\b/i,
+  /\bcurrent\s+(achievable|attainable|ceiling)\b/i,
+  /\bcurrent\s+max\b/i,
+];
+const ADVISORY_STRONG_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
+  /\b(expected|expectation|predict|prediction|projected|projection|forecast)\b/i,
+  /\b(what|when)\s+(should|would)\s+my\b/i,
+  /\bshould\s+my\b/i,
+  /\bcurrent\s+(achievable|attainable|ceiling)\b/i,
+];
+const ADVISORY_CURRENT_CEILING_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
+  /\bcurrent\s+(?:max|ceiling|achievable|attainable)\b/i,
+  /\bmy\s+current\s+max\b/i,
+  /\bcurrent\s+year\s+ceiling\b/i,
+  /\bcurrent\b.*\b(heart rate|hr|ftp|power|pace)\b/i,
+  /\bright\s+now\b/i,
+];
+const ADVISORY_POTENTIAL_CEILING_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
+  /\b(what|when)\s+(?:should|would)\s+my\b/i,
+  /\bshould\s+my\b/i,
+  /\b(expected|expectation|predict|prediction|projected|projection|forecast)\b/i,
+  /\bpotential\b/i,
+  /\bpossible\b/i,
 ];
 const AGGREGATE_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
   /\b(over time|by month|by week|by day|by year|timeline|trend|chart)\b/i,
@@ -797,6 +827,52 @@ function resolvePromptMonthYearToNowDateSelection(
   };
 }
 
+function resolvePromptMonthDayYearToNowDateSelection(
+  prompt: string,
+  category: ModelCategoryCode | undefined,
+  aggregation: ModelAggregationCode | undefined,
+  options: ResolvePromptDateSelectionOptions,
+): PromptDateSelectionIntent | null {
+  const normalizedPrompt = normalizePromptSearchText(prompt);
+  if (!normalizedPrompt) {
+    return null;
+  }
+
+  const monthNamePattern = '(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
+  const monthDayYearToNowMatch = normalizedPrompt.match(
+    new RegExp(`\\b(?:from|since)\\s+${monthNamePattern}\\s+(\\d{1,2})(?:st|nd|rd|th)?\\s+(${YEAR_PATTERN.source})\\s+(?:(?:to|through|until|till|-)\\s+)?(?:now|today)\\b`),
+  ) || normalizedPrompt.match(
+    new RegExp(`\\bbetween\\s+${monthNamePattern}\\s+(\\d{1,2})(?:st|nd|rd|th)?\\s+(${YEAR_PATTERN.source})\\s+and\\s+(?:now|today)\\b`),
+  );
+  if (!monthDayYearToNowMatch) {
+    return null;
+  }
+
+  const startMonth = resolveMonthNameToNumber(monthDayYearToNowMatch[1] || '');
+  const startDay = Number(monthDayYearToNowMatch[2]);
+  const startYear = Number(monthDayYearToNowMatch[3]);
+  if (!startMonth || !Number.isInteger(startYear) || !Number.isInteger(startDay)) {
+    return null;
+  }
+
+  if (startDay < 1 || startDay > getDaysInMonth(startYear, startMonth)) {
+    return null;
+  }
+
+  const today = getZonedDateParts(options.now, options.timeZone);
+  const periodMode = resolveMultiPeriodMode(prompt, category, aggregation);
+  return {
+    effectiveDateRangeIntent: buildNormalizedAbsoluteRange(
+      { year: startYear, month: startMonth, day: startDay },
+      today,
+    ),
+    periodMode,
+    compareRequestedTimeInterval: category === 'activity' || periodMode !== 'compare'
+      ? undefined
+      : 'monthly',
+  };
+}
+
 function areConsecutiveCalendarMonths(
   left: { year: number; month: number },
   right: { year: number; month: number },
@@ -1012,6 +1088,16 @@ function resolvePromptDateSelection(
   );
   if (monthYearToNowSelection) {
     return monthYearToNowSelection;
+  }
+
+  const monthDayYearToNowSelection = resolvePromptMonthDayYearToNowDateSelection(
+    prompt,
+    category,
+    aggregation,
+    options,
+  );
+  if (monthDayYearToNowSelection) {
+    return monthDayYearToNowSelection;
   }
 
   const monthYearListSelection = resolvePromptMonthYearListDateSelection(
@@ -1371,6 +1457,47 @@ function excludeActivityTypes(
   return activityTypes.filter(activityType => !excludedActivityTypes.has(activityType));
 }
 
+function expandAdvisoryCyclingActivityFamily(
+  prompt: string,
+  activityTypes: ActivityTypes[],
+  activityTypeGroups: ActivityTypeGroup[],
+  excludedActivityTypes: ReadonlySet<ActivityTypes>,
+): ActivityTypes[] {
+  if (activityTypes.length === 0 || activityTypeGroups.length > 0) {
+    return activityTypes;
+  }
+
+  const normalizedPrompt = normalizePromptSearchText(prompt);
+  if (!normalizedPrompt || !/\bcycling\b/.test(normalizedPrompt)) {
+    return activityTypes;
+  }
+
+  if (!activityTypes.includes(ActivityTypes.Cycling)) {
+    return activityTypes;
+  }
+
+  const advisoryCyclingGroups: ActivityTypeGroup[] = [
+    ActivityTypeGroups.CyclingGroup,
+    ActivityTypeGroups.MountainBikingGroup,
+  ];
+  const expandedActivityTypes = Array.from(new Set<ActivityTypes>([
+    ...activityTypes,
+    ...expandActivityTypeGroups(advisoryCyclingGroups),
+  ]));
+  const expandedExcludedActivityTypes = new Set<ActivityTypes>(excludedActivityTypes);
+  for (const advisoryGroup of advisoryCyclingGroups) {
+    const advisoryGroupActivityTypes = getActivityTypesForGroup(advisoryGroup);
+    if (!advisoryGroupActivityTypes.some(activityType => excludedActivityTypes.has(activityType))) {
+      continue;
+    }
+    for (const advisoryGroupActivityType of advisoryGroupActivityTypes) {
+      expandedExcludedActivityTypes.add(advisoryGroupActivityType);
+    }
+  }
+
+  return excludeActivityTypes(expandedActivityTypes, expandedExcludedActivityTypes);
+}
+
 function resolveKeywordActivityTypeExclusions(promptClause: string): ActivityTypes[] {
   const normalizedClause = normalizePromptSearchText(promptClause);
   if (!normalizedClause) {
@@ -1678,6 +1805,60 @@ function promptImpliesPowerCurve(prompt: string): boolean {
   }
 
   return /\bpower\b/.test(normalizedPrompt) && /\bcurve\b/.test(normalizedPrompt);
+}
+
+function promptImpliesAdvisory(prompt: string): boolean {
+  const normalizedPrompt = normalizePromptSearchText(prompt);
+  if (!normalizedPrompt) {
+    return false;
+  }
+
+  const hasAdvisorySignal = ADVISORY_PROMPT_PATTERNS.some(pattern => pattern.test(normalizedPrompt));
+  if (!hasAdvisorySignal) {
+    return false;
+  }
+
+  const hasAggregateSignal = AGGREGATE_PROMPT_PATTERNS.some(pattern => pattern.test(normalizedPrompt));
+  if (!hasAggregateSignal) {
+    return true;
+  }
+
+  // Keep explicit chart/timeline prompts in aggregate mode unless the phrasing
+  // clearly requests advisory guidance semantics.
+  return ADVISORY_STRONG_PROMPT_PATTERNS.some(pattern => pattern.test(normalizedPrompt));
+}
+
+function resolveAdvisoryHorizon(
+  dateRangeIntent: DateRangeIntent | undefined,
+): 'current_year' | 'requested_range' {
+  if (!dateRangeIntent) {
+    return 'current_year';
+  }
+
+  if ((dateRangeIntent.kind === 'current_period' || dateRangeIntent.kind === 'this') && dateRangeIntent.unit === 'year') {
+    return 'current_year';
+  }
+
+  return 'requested_range';
+}
+
+function resolveAdvisoryKind(
+  prompt: string,
+): 'expected_value' | 'potential_value' {
+  const normalizedPrompt = normalizePromptSearchText(prompt);
+  if (!normalizedPrompt) {
+    return 'expected_value';
+  }
+
+  if (ADVISORY_CURRENT_CEILING_PROMPT_PATTERNS.some(pattern => pattern.test(normalizedPrompt))) {
+    return 'expected_value';
+  }
+
+  if (ADVISORY_POTENTIAL_CEILING_PROMPT_PATTERNS.some(pattern => pattern.test(normalizedPrompt))) {
+    return 'potential_value';
+  }
+
+  return 'expected_value';
 }
 
 function resolvePowerCurveMode(prompt: string): AiInsightsPowerCurveMode {
@@ -2183,6 +2364,9 @@ export function resolveNormalizedInsightQueryFromIntent(
   promptContext: NormalizeQueryPromptContext,
   intent: ModelInsightIntent,
   dependencies: NormalizeQueryDependencies = defaultNormalizeQueryDependencies,
+  options: {
+    routeHint?: string | null;
+  } = {},
 ): NormalizeInsightQueryResult {
   const {
     prompt,
@@ -2192,7 +2376,8 @@ export function resolveNormalizedInsightQueryFromIntent(
     promptChartPreference,
   } = promptContext;
   const modelReturnedUnsupported = intent.status === 'unsupported';
-  const latestEventRequested = promptImpliesLatestEventLookup(prompt);
+  const advisoryRequested = options.routeHint === 'advisory';
+  const latestEventRequested = !advisoryRequested && promptImpliesLatestEventLookup(prompt);
 
   if (latestEventRequested) {
     const resolvedDateRangeIntent = promptDateSelection.effectiveDateRangeIntent
@@ -2265,6 +2450,104 @@ export function resolveNormalizedInsightQueryFromIntent(
   }
 
   const promptMetricMatch = findInsightMetricAliasMatch(canonicalizeInsightPrompt(prompt));
+
+  if (advisoryRequested) {
+    const metric = promptMetricMatch?.metric || resolveInsightMetric(intent.metric || '');
+    if (!metric) {
+      return buildUnsupportedResult(
+        modelReturnedUnsupported
+          ? (intent.unsupportedReasonCode || 'unsupported_metric')
+          : 'unsupported_metric',
+        prompt,
+      );
+    }
+
+    const advisoryEstimator = resolveAdvisoryEstimator(metric.key);
+    if (!advisoryEstimator || !advisoryEstimator.enabled) {
+      // Advisory intent is only executable when a metric estimator is enabled.
+      // Fall through to the deterministic single-metric path to preserve
+      // aggregate/event behavior for metrics that do not yet support advisory.
+    } else {
+      const resolvedDateRangeIntent = promptDateSelection.effectiveDateRangeIntent
+        ?? (modelReturnedUnsupported ? undefined : intent.dateRange);
+      const activityTypes = normalizeActivityTypes(modelReturnedUnsupported ? undefined : intent.activityTypes);
+      const activityTypeGroups = normalizeActivityTypeGroups(modelReturnedUnsupported ? undefined : intent.activityTypeGroups);
+      if (!activityTypes || !activityTypeGroups) {
+        return buildUnsupportedResult('invalid_prompt', prompt);
+      }
+
+      const promptWithoutActivityExclusions = stripPromptActivityExclusionClauses(prompt);
+      const promptExcludedActivityTypeGroups = extractPromptActivityExclusionClauses(prompt)
+        .flatMap((clause) => resolvePromptActivityTypeGroups(clause));
+      const promptExcludedActivityTypes = extractPromptActivityExclusionClauses(prompt)
+        .flatMap((clause) => {
+          const clauseGroups = resolvePromptActivityTypeGroups(clause);
+          return [
+            ...resolvePromptActivityTypes(clause, clauseGroups),
+            ...resolveKeywordActivityTypeExclusions(clause),
+          ];
+        });
+      const excludedActivityTypeSet = new Set<ActivityTypes>([
+        ...promptExcludedActivityTypes,
+        ...expandActivityTypeGroups(promptExcludedActivityTypeGroups),
+      ]);
+      const promptActivityTypeGroups = resolvePromptActivityTypeGroups(promptWithoutActivityExclusions);
+      const promptActivityTypes = resolvePromptActivityTypes(promptWithoutActivityExclusions, promptActivityTypeGroups);
+      const resolvedActivityTypeGroups = activityTypeGroups.length > 0
+        ? activityTypeGroups
+        : promptActivityTypeGroups;
+      const resolvedActivityTypes = activityTypes.length > 0
+        ? activityTypes
+        : promptActivityTypes;
+      const filteredResolvedActivityTypes = excludeActivityTypes(
+        resolvedActivityTypes,
+        excludedActivityTypeSet,
+      );
+      const filteredResolvedActivityTypeGroups = resolvedActivityTypeGroups
+        .filter(activityTypeGroup => !promptExcludedActivityTypeGroups.includes(activityTypeGroup));
+      const finalActivityTypeGroups = filteredResolvedActivityTypes.length > 0 ? [] : filteredResolvedActivityTypeGroups;
+      const expandedActivityTypes = finalActivityTypeGroups.length > 0
+        ? excludeActivityTypes(expandActivityTypeGroups(finalActivityTypeGroups), excludedActivityTypeSet)
+        : [];
+      const finalActivityTypes = filteredResolvedActivityTypes.length > 0
+        ? filteredResolvedActivityTypes
+        : expandedActivityTypes.length > 0
+          ? expandedActivityTypes
+          : excludedActivityTypeSet.size > 0
+            ? excludeActivityTypes(CANONICAL_ACTIVITY_TYPES, excludedActivityTypeSet)
+            : [];
+      const advisoryActivityTypes = expandAdvisoryCyclingActivityFamily(
+        promptWithoutActivityExclusions,
+        finalActivityTypes,
+        finalActivityTypeGroups,
+        excludedActivityTypeSet,
+      );
+
+      const dateRange = resolveDateRange(resolvedDateRangeIntent, input.clientTimezone, dependencies.now());
+      const requestedDateRanges = resolveRequestedDateRanges(
+        promptDateSelection.requestedDateRangeIntents,
+        input.clientTimezone,
+        dependencies.now(),
+      );
+
+      return {
+        status: 'ok',
+        metricKey: metric.key,
+        query: buildAdvisoryInsightQuery({
+          metricKey: metric.key,
+          advisoryKind: resolveAdvisoryKind(prompt),
+          horizon: resolveAdvisoryHorizon(resolvedDateRangeIntent),
+          activityTypeGroups: finalActivityTypeGroups,
+          activityTypes: advisoryActivityTypes,
+          dateRange,
+          requestedDateRanges,
+          periodMode: promptDateSelection.periodMode,
+          chartType: ChartTypes.LinesVertical,
+        }),
+      };
+    }
+  }
+
   const baseMetric = promptMetricMatch?.metric || resolveInsightMetric(intent.metric || '');
   if (!baseMetric) {
     return buildUnsupportedResult(
@@ -2488,6 +2771,7 @@ export function createNormalizeQuery(
         hasPowerCurveIntent: false,
         hasDigestIntent: false,
         hasMultiMetricIntent: false,
+        hasAdvisoryIntent: false,
         hasLatestEventIntent: false,
       });
       return buildUnsupportedResult('unsupported_capability', prompt, routeDecision);
@@ -2509,6 +2793,7 @@ export function createNormalizeQuery(
       hasPowerCurveIntent: promptImpliesPowerCurve(prompt),
       hasDigestIntent: digestMode !== null,
       hasMultiMetricIntent: multiMetricIntent !== null,
+      hasAdvisoryIntent: promptImpliesAdvisory(prompt),
       hasLatestEventIntent: promptImpliesLatestEventLookup(prompt),
     });
 
@@ -2789,13 +3074,42 @@ export function createNormalizeQuery(
       };
     }
 
+    if (routeDecision.routeId === 'advisory') {
+      const intent = buildDeterministicIntent(prompt);
+      const advisoryResult = resolveNormalizedInsightQueryFromIntent(
+        input,
+        promptContext,
+        intent,
+        resolvedDependencies,
+        { routeHint: 'advisory' },
+      );
+      const effectiveRouteDecision = advisoryResult.status === 'ok' && advisoryResult.query.resultKind !== 'advisory'
+        ? {
+          ...routeDecision,
+          routeId: 'single_metric' as const,
+          resultKind: advisoryResult.query.resultKind,
+          reason: 'Advisory intent matched, but no enabled advisory estimator was available for the resolved metric. Fell back to single-metric normalization.',
+        }
+        : routeDecision;
+      return attachRoutingToResult(
+        advisoryResult,
+        effectiveRouteDecision,
+      );
+    }
+
     if (routeDecision.routeId === 'latest_event' || routeDecision.routeId === 'single_metric') {
       const intent = await resolvedDependencies.generateIntent({
         ...input,
         prompt,
       });
       return attachRoutingToResult(
-        resolveNormalizedInsightQueryFromIntent(input, promptContext, intent, resolvedDependencies),
+        resolveNormalizedInsightQueryFromIntent(
+          input,
+          promptContext,
+          intent,
+          resolvedDependencies,
+          { routeHint: routeDecision.routeId },
+        ),
         routeDecision,
       );
     }

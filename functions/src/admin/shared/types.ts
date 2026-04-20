@@ -124,6 +124,8 @@ export interface DerivedMetricsCoordinatorDocData {
     status?: unknown;
     generation?: unknown;
     dirtyMetricKinds?: unknown;
+    requestedAtMs?: unknown;
+    startedAtMs?: unknown;
     updatedAtMs?: unknown;
     lastError?: unknown;
 }
@@ -140,6 +142,8 @@ export interface DerivedMetricsCoordinatorStats {
     idle: number;
     queued: number;
     processing: number;
+    staleQueued: number;
+    staleProcessing: number;
     failed: number;
     total: number;
 }

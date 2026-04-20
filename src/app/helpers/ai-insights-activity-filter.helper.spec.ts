@@ -7,6 +7,7 @@ import {
   resolveAiInsightsActivityFilterLabel,
   resolveAiInsightsActivityFilterSummary,
 } from '@shared/ai-insights-activity-filter';
+import { getActivityTypesForGroup } from '../../../shared/activity-type-group.metadata';
 
 describe('ai-insights-activity-filter', () => {
   it('formats exact activity filters without group context', () => {
@@ -19,6 +20,25 @@ describe('ai-insights-activity-filter', () => {
       activityTypeGroups: [],
       activityTypes: [ActivityTypes.Cycling, ActivityTypes.Running],
     })).toBe('2 activity types');
+  });
+
+  it('collapses expanded cycling-family type filters into a cycling label', () => {
+    const cyclingFamily = [
+      ...new Set([
+        ...getActivityTypesForGroup(ActivityTypeGroups.CyclingGroup),
+        ...getActivityTypesForGroup(ActivityTypeGroups.MountainBikingGroup),
+      ]),
+    ];
+
+    expect(resolveAiInsightsActivityFilterLabel({
+      activityTypeGroups: [],
+      activityTypes: cyclingFamily,
+    })).toBe('Cycling');
+
+    expect(resolveAiInsightsActivityFilterSummary({
+      activityTypeGroups: [],
+      activityTypes: cyclingFamily,
+    })).toBe('Cycling');
   });
 
   it('formats a single activity group with compact member details', () => {

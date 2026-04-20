@@ -8,12 +8,14 @@ import {
 } from '@sports-alliance/sports-lib';
 
 import type {
+  AiInsightAdvisoryResult,
   AiInsightsDigest,
   AiInsightPresentation,
   AiInsightSummaryBucket,
   AiInsightSummary,
   AiInsightsMultiMetricAggregateMetricResult,
   NormalizedInsightAggregateQuery,
+  NormalizedInsightAdvisoryQuery,
   NormalizedInsightEventLookupQuery,
   NormalizedInsightMultiMetricAggregateQuery,
   NormalizedInsightQuery,
@@ -75,10 +77,16 @@ export interface SummarizeInsightMultiMetricAggregateInput extends SummarizeInsi
   digest?: AiInsightsDigest;
 }
 
+export interface SummarizeInsightAdvisoryInput extends SummarizeInsightBaseInput {
+  query: NormalizedInsightAdvisoryQuery;
+  advisory: AiInsightAdvisoryResult;
+}
+
 export type SummarizeInsightResultInput =
   | SummarizeInsightAggregateInput
   | SummarizeInsightEventLookupInput
-  | SummarizeInsightMultiMetricAggregateInput;
+  | SummarizeInsightMultiMetricAggregateInput
+  | SummarizeInsightAdvisoryInput;
 
 export interface SummarizeInsightNarrativeResult {
   narrative: string;
@@ -227,6 +235,32 @@ function joinMetricLabels(metricLabels: string[]): string {
   }
 
   return `${metricLabels.slice(0, -1).join(', ')}, and ${metricLabels[metricLabels.length - 1]}`;
+}
+
+function formatAdvisoryMetricLabel(metricKey: string): string {
+  return metricKey
+    .replace(/_/g, ' ')
+    .trim();
+}
+
+function resolveAdvisorySemanticPrefix(
+  semanticKind: AiInsightAdvisoryResult['semanticKind'],
+): string {
+  if (semanticKind === 'potential_ceiling') {
+    return 'Potential ceiling';
+  }
+
+  return 'Current achievable';
+}
+
+function resolveAdvisoryEstimateVerb(
+  semanticKind: AiInsightAdvisoryResult['semanticKind'],
+): string {
+  if (semanticKind === 'potential_ceiling') {
+    return 'potential';
+  }
+
+  return 'expected';
 }
 
 function formatNumber(value: number): string {
@@ -713,12 +747,65 @@ function hasEffectiveRangeReference(
   return narrative.includes(startDateText) && narrative.includes(endDateText);
 }
 
+function hasAdvisoryFactConsistency(
+  input: SummarizeInsightResultInput,
+  narrative: string,
+): boolean {
+  if (!('advisory' in input) || input.advisory.status !== 'available') {
+    return true;
+  }
+
+  const normalizedNarrative = narrative.replace(/[\u2013\u2014]/g, '-');
+  const estimateLabel = input.advisory.estimate === null
+    ? null
+    : formatNumber(input.advisory.estimate.value);
+  const rangeLowLabel = input.advisory.interval === null
+    ? null
+    : formatNumber(input.advisory.interval.low);
+  const rangeHighLabel = input.advisory.interval === null
+    ? null
+    : formatNumber(input.advisory.interval.high);
+
+  if (estimateLabel && !normalizedNarrative.includes(estimateLabel)) {
+    return false;
+  }
+
+  if (rangeLowLabel && rangeHighLabel) {
+    const hasRangeReference = normalizedNarrative.includes(`${rangeLowLabel}-${rangeHighLabel}`)
+      || normalizedNarrative.includes(`between ${rangeLowLabel} and ${rangeHighLabel}`)
+      || normalizedNarrative.includes(`${rangeLowLabel} to ${rangeHighLabel}`);
+    if (!hasRangeReference) {
+      return false;
+    }
+  }
+
+  if (input.advisory.confidence.tier) {
+    const confidencePattern = new RegExp(`\\b${input.advisory.confidence.tier}\\s+confidence\\b`, 'i');
+    if (!confidencePattern.test(normalizedNarrative)) {
+      return false;
+    }
+  }
+
+  if (input.advisory.observed.bestValue !== null) {
+    const observedMaxLabel = formatNumber(input.advisory.observed.bestValue);
+    if (observedMaxLabel && !normalizedNarrative.includes(observedMaxLabel)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 function resolveNarrativeOverrideReason(
   input: SummarizeInsightResultInput,
   narrative: string,
-): 'empty_result' | 'contains_no_data_phrasing' | 'missing_effective_range' | 'missing_scope_reference' | 'unexpected_scope_reference' | null {
+): 'empty_result' | 'contains_no_data_phrasing' | 'missing_effective_range' | 'missing_scope_reference' | 'unexpected_scope_reference' | 'advisory_fact_mismatch' | null {
   if (input.status === 'empty') {
     return 'empty_result';
+  }
+
+  if (!hasAdvisoryFactConsistency(input, narrative)) {
+    return 'advisory_fact_mismatch';
   }
 
   if (!hasResolvedScopeReference(input, narrative)) {
@@ -795,6 +882,47 @@ function buildNarrativeFallback(input: SummarizeInsightResultInput): string {
   const dateRangeText = formatLocalizedDateRange(input.query, input.clientLocale);
   const scopeText = resolveNarrativeScope(input.query).scopeLabel;
   const isAllTime = input.query.dateRange.kind === 'all_time';
+  if ('advisory' in input) {
+    const evidenceSummary = input.advisory.evidence.length > 0
+      ? input.advisory.evidence
+        .slice(0, 4)
+        .map(evidenceEntry => `${evidenceEntry.label}: ${evidenceEntry.value}`)
+        .join('; ')
+      : 'No deterministic evidence available.';
+    const metricLabel = formatAdvisoryMetricLabel(input.query.metricKey);
+    const advisorySemanticPrefix = resolveAdvisorySemanticPrefix(input.advisory.semanticKind);
+    const advisoryEstimateVerb = resolveAdvisoryEstimateVerb(input.advisory.semanticKind);
+    if (input.advisory.status === 'available') {
+      const estimateLabel = input.advisory.estimate === null
+        ? null
+        : formatNumber(input.advisory.estimate.value);
+      const rangeLowLabel = input.advisory.interval === null
+        ? null
+        : formatNumber(input.advisory.interval.low);
+      const rangeHighLabel = input.advisory.interval === null
+        ? null
+        : formatNumber(input.advisory.interval.high);
+      const confidenceLabel = input.advisory.confidence.tier
+        ? `${input.advisory.confidence.tier} confidence`
+        : 'confidence unavailable';
+
+      if (estimateLabel && rangeLowLabel && rangeHighLabel) {
+        return isAllTime
+          ? `${advisorySemanticPrefix} ${metricLabel} ${scopeText} is ${estimateLabel} (range ${rangeLowLabel}-${rangeHighLabel}, ${confidenceLabel}). ${evidenceSummary}`
+          : `${advisorySemanticPrefix} ${metricLabel} ${scopeText} for ${dateRangeText} is ${estimateLabel} (range ${rangeLowLabel}-${rangeHighLabel}, ${confidenceLabel}). ${evidenceSummary}`;
+      }
+
+      return `${advisorySemanticPrefix} ${metricLabel} ${scopeText}: ${evidenceSummary}`;
+    }
+
+    if (input.advisory.status === 'insufficient_data') {
+      const reason = input.advisory.insufficientData?.message || evidenceSummary;
+      return `I could not estimate ${advisoryEstimateVerb} ${metricLabel} ${scopeText} for ${dateRangeText}. ${reason}`;
+    }
+
+    return `I could not estimate ${advisoryEstimateVerb} ${metricLabel} ${scopeText}. ${evidenceSummary}`;
+  }
+
   const metricLabelText = 'metricResults' in input
     ? joinMetricLabels(input.metricLabels)
     : input.metricLabel;
@@ -884,6 +1012,39 @@ export function buildNarrativeFacts(input: SummarizeInsightResultInput): Record<
   const dateRangeLabel = formatLocalizedDateRange(input.query, input.clientLocale);
   const narrativeScope = resolveNarrativeScope(input.query);
   const narrativeLead = buildDeterministicNarrativeLead(input.query, dateRangeLabel);
+
+  if ('advisory' in input) {
+    const evidenceSummary = input.advisory.evidence.length > 0
+      ? input.advisory.evidence
+        .map(entry => `${entry.label}: ${entry.value}`)
+        .join('; ')
+      : null;
+    return {
+      status: input.status,
+      resultKind: 'advisory',
+      title: input.presentation.title,
+      chartType: input.presentation.chartType,
+      metricKey: input.query.metricKey,
+      metricLabel: formatAdvisoryMetricLabel(input.query.metricKey),
+      advisoryKind: input.query.advisoryKind,
+      horizon: input.query.horizon,
+      advisoryStatus: input.advisory.status,
+      semanticKind: input.advisory.semanticKind,
+      estimate: input.advisory.estimate,
+      interval: input.advisory.interval,
+      observed: input.advisory.observed,
+      confidence: input.advisory.confidence,
+      method: input.advisory.method,
+      evidence: input.advisory.evidence,
+      evidenceSummary,
+      insufficientData: input.advisory.insufficientData ?? null,
+      dateRangeLabel,
+      narrativeLead,
+      activityFilterLabel: narrativeScope.activityFilterLabel,
+      ...(narrativeScope.locationScopeLabel ? { locationFilterLabel: narrativeScope.locationScopeLabel } : {}),
+      scopeLabel: narrativeScope.scopeLabel,
+    };
+  }
 
   if ('metricResults' in input) {
     const metricSummaryFacts = buildMultiMetricSummaryFacts(input);
@@ -1028,7 +1189,8 @@ const defaultSummarizeInsightDependencies: SummarizeInsightDependencies = {
         'Use the provided formatted display values and labels exactly as supplied.',
         'Do not invent units, dates, metrics, or calculations.',
         'Do not restate raw storage values or infer new numeric calculations.',
-        'If status is ok, do not claim that no matching data was found and do not mention any date range other than the supplied effective range.',
+        'If status is ok and resultKind is not advisory, do not claim that no matching data was found and do not mention any date range other than the supplied effective range.',
+        'For advisory facts, if advisoryStatus is insufficient_data or unsupported, clearly state that estimate status and the provided reason without inventing numbers.',
         'If the status is empty, clearly say that no matching data was found.',
       ].join(' '),
       prompt: JSON.stringify(buildNarrativeFacts(input)),

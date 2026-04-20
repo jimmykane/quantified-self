@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildAggregateStatementChips,
+  buildAdvisoryStatementChips,
   buildEventLookupStatementChips,
   buildLatestEventStatementChips,
   buildMultiMetricStatementChips,
@@ -143,5 +144,85 @@ describe('statement-chips', () => {
 
     expect(withSeries.some(chip => chip.chipType === 'evidence')).toBe(true);
     expect(withoutSeries.some(chip => chip.chipType === 'evidence')).toBe(false);
+  });
+
+  it('builds advisory chips only for available advisory estimates', () => {
+    const available = buildAdvisoryStatementChips({
+      status: 'available',
+      metricKey: 'heart_rate',
+      semanticKind: 'current_ceiling',
+      estimate: {
+        value: 186,
+        unit: 'bpm',
+      },
+      interval: {
+        low: 182,
+        high: 190,
+        kind: 'deterministic_range',
+        confidenceLevel: 'medium',
+      },
+      observed: {
+        bestValue: 188,
+        bestDate: '2026-03-10T08:00:00.000Z',
+        sampleCount: 12,
+        qualifyingSampleCount: 4,
+        trainingWeeks: 7,
+        recencyDays: 3,
+      },
+      confidence: {
+        tier: 'medium',
+        score: 0.63,
+        reasons: ['Sufficient deterministic sample volume.'],
+      },
+      method: {
+        id: 'heart_rate_current_ceiling_deterministic',
+        version: 'v2',
+        deterministic: true,
+      },
+      evidence: [{
+        code: 'summary',
+        label: 'Summary',
+        value: 'Based on deterministic samples.',
+      }],
+    });
+    const insufficient = buildAdvisoryStatementChips({
+      status: 'insufficient_data',
+      metricKey: 'heart_rate',
+      semanticKind: 'current_ceiling',
+      estimate: null,
+      interval: null,
+      observed: {
+        bestValue: null,
+        bestDate: null,
+        sampleCount: 1,
+        qualifyingSampleCount: 0,
+        trainingWeeks: 1,
+        recencyDays: 3,
+      },
+      confidence: {
+        tier: null,
+        score: null,
+        reasons: [],
+      },
+      method: {
+        id: 'advisory-heart_rate-insufficient',
+        version: 'v2',
+        deterministic: true,
+      },
+      evidence: [{
+        code: 'too_few_samples',
+        label: 'Insufficient data',
+        value: 'Not enough data.',
+      }],
+      insufficientData: {
+        reasonCode: 'too_few_samples',
+        message: 'At least 3 events are required.',
+        suggestedQuery: 'Show my max heart rate over time this year.',
+      },
+    });
+
+    expect(available.some(chip => chip.statementId === 'advisory:narrative' && chip.chipType === 'confidence')).toBe(true);
+    expect(available.some(chip => chip.statementId === 'advisory:narrative' && chip.chipType === 'evidence')).toBe(true);
+    expect(insufficient).toEqual([]);
   });
 });

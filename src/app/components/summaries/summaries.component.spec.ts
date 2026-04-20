@@ -1,7 +1,7 @@
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
-import { of } from 'rxjs';
+import { of, Subject } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
 import {
   ActivityTypes,
@@ -9,6 +9,7 @@ import {
   ChartDataValueTypes,
   ChartTypes,
   DataAscent,
+  AppThemes,
   TileTypes,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
@@ -828,5 +829,47 @@ describe('SummariesComponent', () => {
     component.ngOnDestroy();
 
     expect(unsubscribe).toHaveBeenCalledOnce();
+  });
+
+  it('should mark for check when app theme toggles dark mode', async () => {
+    const theme$ = new Subject<any>();
+    mockThemeService.getAppTheme.mockReturnValue(theme$ as any);
+    const markForCheckSpy = vi.spyOn((component as any).changeDetector, 'markForCheck');
+
+    component.user = {
+      settings: {
+        dashboardSettings: {
+          tiles: [],
+        },
+      },
+    } as any;
+    component.events = [];
+
+    await component.ngOnChanges({
+      user: {
+        currentValue: component.user,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+      events: {
+        currentValue: component.events,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+    });
+
+    theme$.next(AppThemes.Normal);
+    expect(component.darkTheme).toBe(false);
+    expect(markForCheckSpy).not.toHaveBeenCalled();
+
+    theme$.next(AppThemes.Dark);
+    expect(component.darkTheme).toBe(true);
+    expect(markForCheckSpy).toHaveBeenCalledTimes(1);
+
+    // No redundant marks when theme emission repeats.
+    theme$.next(AppThemes.Dark);
+    expect(markForCheckSpy).toHaveBeenCalledTimes(1);
   });
 });

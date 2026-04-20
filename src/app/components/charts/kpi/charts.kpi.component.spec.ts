@@ -291,4 +291,29 @@ describe('ChartsKpiComponent', () => {
       [Date.UTC(2025, 11, 8), 1.0],
     ]);
   });
+
+  it('renders thinner sparkline with chart-type color accents', async () => {
+    component.chartType = DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE;
+    component.hardPercent = {
+      latestWeekStartMs: Date.UTC(2026, 0, 1),
+      value: 14.3,
+      trend8Weeks: [{ time: Date.UTC(2025, 11, 1), value: 12.2 }],
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await (component as any).refreshChart();
+
+    const latestSetOptionArgs = mockLoader.setOption.mock.calls.at(-1) || [];
+    const option = latestSetOptionArgs.find((arg) => (
+      !!arg
+      && typeof arg === 'object'
+      && 'series' in (arg as Record<string, unknown>)
+    )) as Record<string, any> | undefined;
+
+    expect(option).toBeTruthy();
+    expect(option?.series?.[0]?.lineStyle?.width).toBe(1);
+    expect(option?.series?.[0]?.lineStyle?.color).toBe('#e65100');
+    expect(option?.series?.[0]?.areaStyle?.color?.type).toBe('linear');
+  });
 });

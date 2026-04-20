@@ -1,5 +1,6 @@
 import { TimeIntervals, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import type {
+  AiInsightsAdvisoryOkResponse,
   AiInsightsDigest,
   AiInsightPresentation,
   AiInsightSummary,
@@ -14,6 +15,7 @@ import type {
   AiInsightsRequest,
   AiInsightsResultKind,
   NormalizedInsightAggregateQuery,
+  NormalizedInsightAdvisoryQuery,
   NormalizedInsightEventLookupQuery,
   NormalizedInsightLatestEventQuery,
   NormalizedInsightMultiMetricAggregateQuery,
@@ -27,6 +29,7 @@ import type {
 } from './summarize-result.flow';
 import {
   buildAggregateStatementChips,
+  buildAdvisoryStatementChips,
   buildEventLookupStatementChips,
   buildLatestEventStatementChips,
   buildMultiMetricStatementChips,
@@ -81,12 +84,19 @@ interface PowerCurveCallableResultKindContext extends CallableResultKindContextB
   executionResult: Extract<AiInsightsExecutionResult, { resultKind: 'power_curve' }>;
 }
 
+interface AdvisoryCallableResultKindContext extends CallableResultKindContextBase {
+  resultKind: 'advisory';
+  query: NormalizedInsightAdvisoryQuery;
+  executionResult: Extract<AiInsightsExecutionResult, { resultKind: 'advisory' }>;
+}
+
 export type CallableResultKindContext =
   | AggregateCallableResultKindContext
   | EventLookupCallableResultKindContext
   | LatestEventCallableResultKindContext
   | MultiMetricCallableResultKindContext
-  | PowerCurveCallableResultKindContext;
+  | PowerCurveCallableResultKindContext
+  | AdvisoryCallableResultKindContext;
 
 interface CallableResultKindContextMap {
   aggregate: AggregateCallableResultKindContext;
@@ -94,6 +104,7 @@ interface CallableResultKindContextMap {
   latest_event: LatestEventCallableResultKindContext;
   multi_metric_aggregate: MultiMetricCallableResultKindContext;
   power_curve: PowerCurveCallableResultKindContext;
+  advisory: AdvisoryCallableResultKindContext;
 }
 
 export type InsightNarrativeResult = SummarizeInsightNarrativeResult;
@@ -331,6 +342,28 @@ const CALLABLE_RESULT_KIND_REGISTRY = {
       powerCurve: context.executionResult.powerCurve,
       presentation: context.presentation,
     } satisfies AiInsightsPowerCurveOkResponse),
+  },
+  advisory: {
+    isEmpty: () => false,
+    summarize: async (context) => context.summarizeAiInsightResult({
+      status: 'ok',
+      prompt: context.effectivePrompt,
+      query: context.query,
+      advisory: context.executionResult.advisory,
+      presentation: context.presentation,
+      clientLocale: context.input.clientLocale,
+      unitSettings: context.unitSettings,
+    }),
+    buildOkResponse: (context, narrativeResult, quota) => ({
+      status: 'ok',
+      resultKind: 'advisory',
+      narrative: narrativeResult.narrative,
+      quota,
+      statementChips: buildAdvisoryStatementChips(context.executionResult.advisory),
+      query: context.query,
+      advisory: context.executionResult.advisory,
+      presentation: context.presentation,
+    } satisfies AiInsightsAdvisoryOkResponse),
   },
 } satisfies CallableResultKindRegistry;
 

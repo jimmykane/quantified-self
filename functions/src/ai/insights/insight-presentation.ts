@@ -59,6 +59,13 @@ function resolveInsightTitle(query: NormalizedInsightQuery, metricLabelOrLabels:
       : `Best power curve${activityLabel}`;
   }
 
+  if (query.resultKind === 'advisory') {
+    if (query.advisoryKind === 'potential_value') {
+      return `Potential ${metricLabel}${activityLabel}`;
+    }
+    return `Current achievable ${metricLabel}${activityLabel}`;
+  }
+
   if (query.categoryType === ChartDataCategoryTypes.ActivityType) {
     return `${query.valueType} ${metricLabel} by activity type${activityLabel}`;
   }
@@ -76,6 +83,10 @@ function resolvePresentationWarnings(query: NormalizedInsightQuery): string[] | 
   }
 
   if (query.resultKind === 'power_curve') {
+    return undefined;
+  }
+
+  if (query.resultKind === 'advisory') {
     return undefined;
   }
 
@@ -108,6 +119,8 @@ export function buildEmptyAggregation(query: NormalizedInsightQuery) {
       ? 'Latest Event'
       : query.resultKind === 'power_curve'
         ? 'Power Curve'
+        : query.resultKind === 'advisory'
+          ? 'Advisory Estimate'
     : query.dataType;
   const valueType = query.resultKind === 'multi_metric_aggregate'
     ? (query.metricSelections[0]?.valueType ?? null)
@@ -115,6 +128,8 @@ export function buildEmptyAggregation(query: NormalizedInsightQuery) {
       ? ChartDataValueTypes.Total
       : query.resultKind === 'power_curve'
         ? ChartDataValueTypes.Maximum
+        : query.resultKind === 'advisory'
+          ? ChartDataValueTypes.Average
     : query.valueType;
 
   return {

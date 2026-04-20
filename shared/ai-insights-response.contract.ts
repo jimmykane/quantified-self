@@ -117,6 +117,14 @@ export const NormalizedInsightMetricSelectionSchema = z.object({
 
 const NormalizedInsightPowerCurveModeSchema = z.enum(['best', 'compare_over_time']);
 const AiInsightsDigestGranularitySchema = z.enum(['weekly', 'monthly', 'yearly']);
+const AiInsightsAdvisoryKindSchema = z.enum(['expected_value', 'potential_value']);
+const AiInsightsAdvisoryHorizonSchema = z.enum(['current_year', 'requested_range']);
+const AiInsightAdvisorySemanticKindSchema = z.enum(['current_ceiling', 'potential_ceiling']);
+
+const NormalizedInsightAdvisoryActivityFiltersSchema = z.object({
+  activityTypeGroups: z.array(z.nativeEnum(ActivityTypeGroups)),
+  activityTypes: z.array(ActivityTypeSchema),
+});
 
 export const NormalizedInsightQuerySchema = z.discriminatedUnion('resultKind', [
   NormalizedInsightQueryBaseSchema.extend({
@@ -148,6 +156,14 @@ export const NormalizedInsightQuerySchema = z.discriminatedUnion('resultKind', [
     mode: NormalizedInsightPowerCurveModeSchema,
     categoryType: z.literal(ChartDataCategoryTypes.DateType),
     defaultedToCycling: z.boolean(),
+  }),
+  NormalizedInsightQueryBaseSchema.extend({
+    resultKind: z.literal('advisory'),
+    categoryType: z.literal(ChartDataCategoryTypes.DateType),
+    metricKey: AiInsightsPromptMetricKeySchema,
+    advisoryKind: AiInsightsAdvisoryKindSchema,
+    horizon: AiInsightsAdvisoryHorizonSchema,
+    activityFilters: NormalizedInsightAdvisoryActivityFiltersSchema,
   }),
 ]);
 
@@ -186,6 +202,15 @@ export const NormalizedInsightPowerCurveQuerySchema = NormalizedInsightQueryBase
   defaultedToCycling: z.boolean(),
 });
 
+export const NormalizedInsightAdvisoryQuerySchema = NormalizedInsightQueryBaseSchema.extend({
+  resultKind: z.literal('advisory'),
+  categoryType: z.literal(ChartDataCategoryTypes.DateType),
+  metricKey: AiInsightsPromptMetricKeySchema,
+  advisoryKind: AiInsightsAdvisoryKindSchema,
+  horizon: AiInsightsAdvisoryHorizonSchema,
+  activityFilters: NormalizedInsightAdvisoryActivityFiltersSchema,
+});
+
 const BucketKeySchema: z.ZodType<string | number> = z.custom<string | number>(
   (value): value is string | number => typeof value === 'string' || typeof value === 'number',
   { message: 'Expected bucketKey to be a string or number.' },
@@ -213,6 +238,17 @@ export const AiInsightPresentationSchema = z.object({
   chartType: z.nativeEnum(ChartTypes),
   emptyState: z.string().optional(),
   warnings: z.array(z.string()).optional(),
+});
+
+const AiInsightsSynthesisMetadataSchema = z.object({
+  attempted: z.boolean(),
+  applied: z.boolean(),
+  mode: z.enum(['supported_optimize', 'unsupported_rescue']).optional(),
+  originalPrompt: z.string().min(1).optional(),
+  executedPrompt: z.string().min(1).optional(),
+  confidence: z.number().min(0).max(1).optional(),
+  candidatesConsidered: z.number().int().nonnegative().optional(),
+  decisionReason: z.string().min(1).optional(),
 });
 
 export const AiInsightsQuotaStatusSchema = z.object({
@@ -440,6 +476,7 @@ const AiInsightsOkResponseBaseSchema = z.object({
   narrative: z.string().min(1),
   quota: AiInsightsQuotaStatusSchema.optional(),
   statementChips: z.array(AiInsightStatementChipSchema).optional(),
+  synthesis: AiInsightsSynthesisMetadataSchema.optional(),
 });
 
 const AiInsightsAggregateOkResponseSchema = AiInsightsOkResponseBaseSchema.extend({
@@ -481,12 +518,113 @@ const AiInsightsPowerCurveOkResponseSchema = AiInsightsOkResponseBaseSchema.exte
   presentation: AiInsightPresentationSchema,
 });
 
+const AiInsightAdvisoryEstimateSchema = z.object({
+  value: z.number(),
+  unit: z.string().min(1),
+});
+
+const AiInsightAdvisoryIntervalSchema = z.object({
+  low: z.number(),
+  high: z.number(),
+  kind: z.literal('deterministic_range'),
+  confidenceLevel: AiInsightConfidenceTierSchema,
+});
+
+const AiInsightAdvisoryObservedSchema = z.object({
+  bestValue: z.number().nullable(),
+  bestDate: z.string().datetime().nullable(),
+  sampleCount: z.number().int().min(0),
+  qualifyingSampleCount: z.number().int().min(0),
+  trainingWeeks: z.number().int().min(0),
+  recencyDays: z.number().int().min(0).nullable(),
+});
+
+const AiInsightAdvisoryConfidenceSchema = z.object({
+  tier: AiInsightConfidenceTierSchema.nullable(),
+  score: z.number().min(0).max(1).nullable(),
+  reasons: z.array(z.string().min(1)),
+});
+
+const AiInsightAdvisoryMethodSchema = z.object({
+  id: z.string().min(1),
+  version: z.string().min(1),
+  deterministic: z.boolean(),
+});
+
+const AiInsightAdvisoryEvidenceEntrySchema = z.object({
+  code: z.string().min(1),
+  label: z.string().min(1),
+  value: z.string().min(1),
+});
+
+const AiInsightAdvisoryInsufficientDataSchema = z.object({
+  reasonCode: z.enum([
+    'no_samples',
+    'low_intensity_scope',
+    'too_few_samples',
+    'too_few_weeks',
+    'stale_data',
+    'weak_tail_signal',
+  ]),
+  message: z.string().min(1),
+  suggestedQuery: z.string().min(1),
+});
+
+const AiInsightAdvisoryResultBaseSchema = z.object({
+  metricKey: AiInsightsPromptMetricKeySchema,
+  semanticKind: AiInsightAdvisorySemanticKindSchema,
+  observed: AiInsightAdvisoryObservedSchema,
+  confidence: AiInsightAdvisoryConfidenceSchema,
+  method: AiInsightAdvisoryMethodSchema,
+  evidence: z.array(AiInsightAdvisoryEvidenceEntrySchema),
+});
+
+const AiInsightAdvisoryAvailableResultSchema = AiInsightAdvisoryResultBaseSchema.extend({
+  status: z.literal('available'),
+  estimate: AiInsightAdvisoryEstimateSchema,
+  interval: AiInsightAdvisoryIntervalSchema,
+  confidence: z.object({
+    tier: AiInsightConfidenceTierSchema,
+    score: z.number().min(0).max(1),
+    reasons: z.array(z.string().min(1)),
+  }),
+  insufficientData: z.undefined().optional(),
+});
+
+const AiInsightAdvisoryInsufficientDataResultSchema = AiInsightAdvisoryResultBaseSchema.extend({
+  status: z.literal('insufficient_data'),
+  estimate: z.null(),
+  interval: z.null(),
+  insufficientData: AiInsightAdvisoryInsufficientDataSchema,
+});
+
+const AiInsightAdvisoryUnsupportedResultSchema = AiInsightAdvisoryResultBaseSchema.extend({
+  status: z.literal('unsupported'),
+  estimate: z.null(),
+  interval: z.null(),
+  insufficientData: z.undefined().optional(),
+});
+
+const AiInsightAdvisoryResultSchema = z.discriminatedUnion('status', [
+  AiInsightAdvisoryAvailableResultSchema,
+  AiInsightAdvisoryInsufficientDataResultSchema,
+  AiInsightAdvisoryUnsupportedResultSchema,
+]);
+
+const AiInsightsAdvisoryOkResponseSchema = AiInsightsOkResponseBaseSchema.extend({
+  resultKind: z.literal('advisory'),
+  query: NormalizedInsightAdvisoryQuerySchema,
+  advisory: AiInsightAdvisoryResultSchema,
+  presentation: AiInsightPresentationSchema,
+});
+
 const AiInsightsOkStrictSchema = z.discriminatedUnion('resultKind', [
   AiInsightsAggregateOkResponseSchema,
   AiInsightsEventLookupOkResponseSchema,
   AiInsightsLatestEventOkResponseSchema,
   AiInsightsMultiMetricAggregateOkResponseSchema,
   AiInsightsPowerCurveOkResponseSchema,
+  AiInsightsAdvisoryOkResponseSchema,
 ]);
 
 const AiInsightsEmptyResponseSchema = z.object({
@@ -500,6 +638,7 @@ const AiInsightsEmptyResponseSchema = z.object({
   presentation: AiInsightPresentationSchema.extend({
     emptyState: z.string().min(1),
   }),
+  synthesis: AiInsightsSynthesisMetadataSchema.optional(),
 });
 
 const AiInsightsUnsupportedResponseSchema = z.object({
@@ -508,6 +647,7 @@ const AiInsightsUnsupportedResponseSchema = z.object({
   quota: AiInsightsQuotaStatusSchema.optional(),
   reasonCode: AiInsightsUnsupportedReasonCodeSchema,
   suggestedPrompts: z.array(z.string()),
+  synthesis: AiInsightsSynthesisMetadataSchema.optional(),
 });
 
 export const AiInsightsResponseSchema = z.union([
@@ -594,6 +734,9 @@ function resolveResponseValidationReason(
   if (firstIssuePathKey === 'powerCurve') {
     return 'power_curve_invalid';
   }
+  if (firstIssuePathKey === 'advisory') {
+    return 'advisory_invalid';
+  }
   if (firstIssuePathKey === 'metricResults') {
     if (hasSummaryAnomalyCalloutPath) {
       return 'anomaly_callouts_invalid';
@@ -605,6 +748,9 @@ function resolveResponseValidationReason(
   }
   if (firstIssuePathKey === 'statementChips') {
     return 'statement_chips_invalid';
+  }
+  if (firstIssuePathKey === 'synthesis') {
+    return 'synthesis_invalid';
   }
   if (firstIssuePathKey === 'narrative') {
     return 'narrative_invalid';
@@ -650,6 +796,10 @@ function resolveAllowedStatementIds(response: ParsedAiInsightsOkResponse): Set<s
 
   if (response.resultKind === 'latest_event') {
     return new Set(['latest_event:narrative']);
+  }
+
+  if (response.resultKind === 'advisory') {
+    return new Set(['advisory:narrative']);
   }
 
   return new Set(['power_curve:narrative']);

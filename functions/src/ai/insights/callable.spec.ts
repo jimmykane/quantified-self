@@ -294,6 +294,22 @@ const powerCurveQuery = {
   defaultedToCycling: true,
 };
 
+const advisoryQuery = {
+  resultKind: 'advisory' as const,
+  metricKey: 'heart_rate' as const,
+  advisoryKind: 'expected_value' as const,
+  horizon: 'current_year' as const,
+  categoryType: ChartDataCategoryTypes.DateType,
+  activityTypeGroups: [],
+  activityTypes: [ActivityTypes.Cycling],
+  activityFilters: {
+    activityTypeGroups: [],
+    activityTypes: [ActivityTypes.Cycling],
+  },
+  dateRange: normalizedQuery.dateRange,
+  chartType: ChartTypes.LinesVertical,
+};
+
 const athensRadiusLocationFilter = {
   requestedText: 'Athens',
   effectiveText: 'Athens',
@@ -1766,6 +1782,192 @@ describe('aiInsights callable', () => {
     }));
   });
 
+  it('returns advisory responses with metric-generic payload fields', async () => {
+    hoisted.getInsightMetricDefinition.mockReturnValue({
+      key: 'heart_rate',
+      label: 'heart rate',
+    });
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'ok',
+      metricKey: 'heart_rate',
+      query: advisoryQuery,
+    });
+    hoisted.executeAiInsightsQuery.mockResolvedValue({
+      resultKind: 'advisory',
+      matchedEventsCount: 4,
+      matchedActivityTypeCounts: [
+        {
+          activityType: ActivityTypes.Cycling,
+          eventCount: 4,
+        },
+      ],
+      advisory: {
+        status: 'available',
+        metricKey: 'heart_rate',
+        semanticKind: 'current_ceiling',
+        estimate: {
+          value: 186,
+          unit: 'bpm',
+        },
+        interval: {
+          low: 182,
+          high: 190,
+          kind: 'deterministic_range',
+          confidenceLevel: 'medium',
+        },
+        observed: {
+          bestValue: 188,
+          bestDate: '2026-03-15T08:00:00.000Z',
+          sampleCount: 4,
+          qualifyingSampleCount: 2,
+          trainingWeeks: 4,
+          recencyDays: 2,
+        },
+        confidence: {
+          tier: 'medium',
+          score: 0.58,
+          reasons: ['Deterministic evidence quality checks passed.'],
+        },
+        method: {
+          id: 'heart_rate_current_ceiling_deterministic',
+          version: 'v2',
+          deterministic: true,
+        },
+        evidence: [{
+          code: 'summary',
+          label: 'Summary',
+          value: 'Based on 4 events with max heart-rate samples.',
+        }],
+      },
+    });
+
+    const result = await aiInsights({
+      prompt: 'What should my max heart rate be this year?',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(result).toEqual(expect.objectContaining({
+      status: 'ok',
+      resultKind: 'advisory',
+      query: advisoryQuery,
+      advisory: {
+        status: 'available',
+        metricKey: 'heart_rate',
+        semanticKind: 'current_ceiling',
+        estimate: {
+          value: 186,
+          unit: 'bpm',
+        },
+        interval: {
+          low: 182,
+          high: 190,
+          kind: 'deterministic_range',
+          confidenceLevel: 'medium',
+        },
+        observed: {
+          bestValue: 188,
+          bestDate: '2026-03-15T08:00:00.000Z',
+          sampleCount: 4,
+          qualifyingSampleCount: 2,
+          trainingWeeks: 4,
+          recencyDays: 2,
+        },
+        confidence: {
+          tier: 'medium',
+          score: 0.58,
+          reasons: ['Deterministic evidence quality checks passed.'],
+        },
+        method: {
+          id: 'heart_rate_current_ceiling_deterministic',
+          version: 'v2',
+          deterministic: true,
+        },
+        evidence: [{
+          code: 'summary',
+          label: 'Summary',
+          value: 'Based on 4 events with max heart-rate samples.',
+        }],
+      },
+      narrative: 'Narrative',
+      presentation: expect.objectContaining({
+        title: 'Current achievable heart rate for Cycling',
+      }),
+    }));
+  });
+
+  it('returns advisory insufficient-data responses without converting them to empty', async () => {
+    hoisted.getInsightMetricDefinition.mockReturnValue({
+      key: 'heart_rate',
+      label: 'heart rate',
+    });
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'ok',
+      metricKey: 'heart_rate',
+      query: advisoryQuery,
+    });
+    hoisted.executeAiInsightsQuery.mockResolvedValue({
+      resultKind: 'advisory',
+      matchedEventsCount: 1,
+      matchedActivityTypeCounts: [
+        {
+          activityType: ActivityTypes.Cycling,
+          eventCount: 1,
+        },
+      ],
+      advisory: {
+        status: 'insufficient_data',
+        metricKey: 'heart_rate',
+        semanticKind: 'current_ceiling',
+        estimate: null,
+        interval: null,
+        observed: {
+          bestValue: null,
+          bestDate: null,
+          sampleCount: 1,
+          qualifyingSampleCount: 0,
+          trainingWeeks: 1,
+          recencyDays: 5,
+        },
+        confidence: {
+          tier: null,
+          score: null,
+          reasons: [],
+        },
+        method: {
+          id: 'advisory-heart_rate-insufficient',
+          version: 'v2',
+          deterministic: true,
+        },
+        evidence: [{
+          code: 'too_few_samples',
+          label: 'Insufficient data',
+          value: 'Not enough heart-rate samples for estimate.',
+        }],
+        insufficientData: {
+          reasonCode: 'too_few_samples',
+          message: 'At least 3 events are required.',
+          suggestedQuery: 'Show my max heart rate over time this year.',
+        },
+      },
+    });
+
+    const result = await aiInsights({
+      prompt: 'What should my max heart rate be this year?',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(result).toEqual(expect.objectContaining({
+      status: 'ok',
+      resultKind: 'advisory',
+      advisory: expect.objectContaining({
+        status: 'insufficient_data',
+        insufficientData: expect.objectContaining({
+          message: 'At least 3 events are required.',
+        }),
+      }),
+    }));
+  });
+
   it('returns an event lookup response for longest-jump prompts', async () => {
     hoisted.getInsightMetricDefinition.mockReturnValue({
       key: 'jump_distance',
@@ -2358,6 +2560,153 @@ describe('aiInsights callable', () => {
       status: 'ok',
       quota: quotaStatus,
     });
+  });
+
+  it('applies supported synthesis candidates only when score-gated and query-equivalent', async () => {
+    const result = await aiInsights({
+      prompt: 'show heartrate distance',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(hoisted.normalizeInsightQuery).toHaveBeenCalledTimes(2);
+    expect(hoisted.executeAiInsightsQuery).toHaveBeenCalledWith(
+      'user-1',
+      normalizedQuery,
+      'show heart rate distance',
+    );
+    expect(result).toMatchObject({
+      status: 'ok',
+      synthesis: {
+        attempted: true,
+        applied: true,
+        mode: 'supported_optimize',
+        executedPrompt: 'show heart rate distance',
+      },
+    });
+  });
+
+  it('falls back to deterministic prompt execution when synthesis candidate normalization times out', async () => {
+    vi.useFakeTimers();
+    hoisted.normalizeInsightQuery
+      .mockResolvedValueOnce({
+        status: 'ok',
+        metricKey: 'distance',
+        query: normalizedQuery,
+      })
+      .mockImplementationOnce(() => new Promise(() => {}));
+
+    try {
+      const resultPromise = aiInsights({
+        prompt: 'show heartrate distance',
+        clientTimezone: 'UTC',
+      } as any);
+
+      await vi.advanceTimersByTimeAsync(1300);
+      const result = await resultPromise;
+
+      expect(hoisted.normalizeInsightQuery).toHaveBeenCalledTimes(2);
+      expect(hoisted.executeAiInsightsQuery).toHaveBeenCalledWith(
+        'user-1',
+        normalizedQuery,
+        'show heartrate distance',
+      );
+      expect(result).not.toHaveProperty('synthesis');
+      expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+        '[aiInsights] Supported synthesis candidate normalization timed out; keeping deterministic parse.',
+        expect.objectContaining({
+          timeoutMs: 1200,
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps deterministic prompt execution when a supported synthesis candidate changes the normalized query', async () => {
+    hoisted.normalizeInsightQuery
+      .mockResolvedValueOnce({
+        status: 'ok',
+        metricKey: 'distance',
+        query: normalizedQuery,
+      })
+      .mockResolvedValueOnce({
+        status: 'ok',
+        metricKey: 'distance',
+        query: {
+          ...normalizedQuery,
+          chartType: ChartTypes.LinesVertical,
+        },
+      });
+
+    const result = await aiInsights({
+      prompt: 'show heartrate distance',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(hoisted.normalizeInsightQuery).toHaveBeenCalledTimes(2);
+    expect(hoisted.executeAiInsightsQuery).toHaveBeenCalledWith(
+      'user-1',
+      normalizedQuery,
+      'show heartrate distance',
+    );
+    expect(result).not.toHaveProperty('synthesis');
+  });
+
+  it('attaches unsupported_rescue synthesis metadata when AI repair rescues an unsupported deterministic parse', async () => {
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'unsupported',
+      reasonCode: 'unsupported_metric',
+      suggestedPrompts: ['show my distance'],
+    });
+    hoisted.repairUnsupportedInsightQuery.mockResolvedValue({
+      source: 'genkit',
+      result: {
+        status: 'ok',
+        metricKey: 'distance',
+        query: normalizedQuery,
+      },
+    });
+
+    const result = await aiInsights({
+      prompt: 'show my max cardio in cycling',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(result).toMatchObject({
+      status: 'ok',
+      synthesis: {
+        attempted: true,
+        applied: true,
+        mode: 'unsupported_rescue',
+      },
+    });
+  });
+
+  it('does not attach unsupported_rescue synthesis metadata when AI repair fails to produce a supported query', async () => {
+    hoisted.normalizeInsightQuery.mockResolvedValue({
+      status: 'unsupported',
+      reasonCode: 'unsupported_metric',
+      suggestedPrompts: ['show my distance'],
+    });
+    hoisted.repairUnsupportedInsightQuery.mockResolvedValue({
+      source: 'genkit',
+      result: {
+        status: 'unsupported',
+        reasonCode: 'unsupported_metric',
+        suggestedPrompts: ['show my distance'],
+      },
+    });
+
+    const result = await aiInsights({
+      prompt: 'show my max cardio in cycling',
+      clientTimezone: 'UTC',
+    } as any);
+
+    expect(result).toMatchObject({
+      status: 'unsupported',
+      reasonCode: 'unsupported_metric',
+    });
+    expect(result).not.toHaveProperty('synthesis');
   });
 
   it('does not record repaired prompts when AI repair source is none', async () => {

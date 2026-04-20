@@ -1489,13 +1489,12 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
         shouldEnqueue = !isAlreadyQueuedOrProcessing || coordinatorLikelyStuck;
         generationToQueue = nextGeneration;
 
-        transaction.set(coordinatorRef, {
+        const coordinatorUpdatePayload: Record<string, unknown> = {
             entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
             status: nextStatus,
             generation: nextGeneration,
             eventMutationVersion: nextEventMutationVersion,
             dirtyMetricKinds: nextDirtyMetricKinds,
-            requestedAtMs: nowMs,
             updatedAtMs: nowMs,
             ...(shouldResetLifecycleFields ? {
                 startedAtMs: null,
@@ -1503,7 +1502,14 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
                 lastError: null,
                 processingMetricKinds: [],
             } : {}),
-        }, { merge: true });
+        };
+        // Keep queued-age stable while coalescing metadata updates so stuck queued
+        // coordinators can still be detected and force-requeued.
+        if (nextStatus === 'queued' && shouldEnqueue) {
+            coordinatorUpdatePayload.requestedAtMs = nowMs;
+        }
+
+        transaction.set(coordinatorRef, coordinatorUpdatePayload, { merge: true });
     });
 
     if (shouldEnqueue && generationToQueue !== null) {

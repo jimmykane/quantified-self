@@ -344,6 +344,8 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
             }),
             { merge: true },
         );
+        const transactionPayload = hoisted.transactionSet.mock.calls[0]?.[1] as Record<string, unknown>;
+        expect(transactionPayload?.requestedAtMs).toBeUndefined();
         expect(hoisted.enqueueDerivedMetricsTask).not.toHaveBeenCalled();
     });
 

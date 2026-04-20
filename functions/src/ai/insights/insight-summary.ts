@@ -557,15 +557,20 @@ function resolveSummaryValueType(
   query: NormalizedInsightQuery,
   aggregationValueType: ChartDataValueTypes | undefined,
 ): ChartDataValueTypes | null {
-  if (
-    query.resultKind === 'multi_metric_aggregate'
-    || query.resultKind === 'latest_event'
-    || query.resultKind === 'power_curve'
-  ) {
-    return aggregationValueType ?? null;
+  switch (query.resultKind) {
+    case 'aggregate':
+    case 'event_lookup':
+      return query.valueType ?? aggregationValueType ?? null;
+    case 'multi_metric_aggregate':
+    case 'latest_event':
+    case 'power_curve':
+    case 'advisory':
+      return aggregationValueType ?? null;
+    default: {
+      const exhaustiveCheck: never = query;
+      return exhaustiveCheck;
+    }
   }
-
-  return query.valueType ?? aggregationValueType ?? null;
 }
 
 export function buildNonAggregateEmptySummary(): AiInsightSummary {

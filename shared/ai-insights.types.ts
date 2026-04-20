@@ -67,7 +67,8 @@ export type AiInsightsResultKind =
   | 'event_lookup'
   | 'latest_event'
   | 'multi_metric_aggregate'
-  | 'power_curve';
+  | 'power_curve'
+  | 'advisory';
 
 export type AiInsightsPowerCurveMode =
   | 'best'
@@ -80,6 +81,14 @@ export type AiInsightsMultiMetricGroupingMode =
 export type NormalizedInsightPeriodMode =
   | 'combined'
   | 'compare';
+
+export type AiInsightsAdvisoryKind =
+  | 'expected_value'
+  | 'potential_value';
+
+export type AiInsightsAdvisoryHorizon =
+  | 'current_year'
+  | 'requested_range';
 
 export interface NormalizedInsightQueryBase {
   resultKind: AiInsightsResultKind;
@@ -135,12 +144,27 @@ export interface NormalizedInsightPowerCurveQuery extends NormalizedInsightQuery
   defaultedToCycling: boolean;
 }
 
+export interface NormalizedInsightAdvisoryActivityFilters {
+  activityTypeGroups: ActivityTypeGroup[];
+  activityTypes: ActivityTypes[];
+}
+
+export interface NormalizedInsightAdvisoryQuery extends NormalizedInsightQueryBase {
+  resultKind: 'advisory';
+  categoryType: ChartDataCategoryTypes.DateType;
+  metricKey: AiInsightsPromptMetricKey;
+  advisoryKind: AiInsightsAdvisoryKind;
+  horizon: AiInsightsAdvisoryHorizon;
+  activityFilters: NormalizedInsightAdvisoryActivityFilters;
+}
+
 export type NormalizedInsightQuery =
   | NormalizedInsightAggregateQuery
   | NormalizedInsightEventLookupQuery
   | NormalizedInsightLatestEventQuery
   | NormalizedInsightMultiMetricAggregateQuery
-  | NormalizedInsightPowerCurveQuery;
+  | NormalizedInsightPowerCurveQuery
+  | NormalizedInsightAdvisoryQuery;
 
 export type AiInsightsQuotaPeriodKind =
   | 'subscription'
@@ -368,6 +392,17 @@ export interface AiInsightsDigest {
   periods: AiInsightsDigestPeriod[];
 }
 
+export interface AiInsightsSynthesisMetadata {
+  attempted: boolean;
+  applied: boolean;
+  mode?: 'supported_optimize' | 'unsupported_rescue';
+  originalPrompt?: string;
+  executedPrompt?: string;
+  confidence?: number;
+  candidatesConsidered?: number;
+  decisionReason?: string;
+}
+
 export type AiInsightStatementChipType =
   | 'confidence'
   | 'evidence';
@@ -402,6 +437,7 @@ export interface AiInsightsAggregateOkResponse {
   deterministicCompareSummary?: string;
   eventRanking?: AiInsightEventLookup;
   presentation: AiInsightPresentation;
+  synthesis?: AiInsightsSynthesisMetadata;
 }
 
 export interface AiInsightsEventLookupOkResponse {
@@ -413,6 +449,7 @@ export interface AiInsightsEventLookupOkResponse {
   query: NormalizedInsightEventLookupQuery;
   eventLookup: AiInsightEventLookup;
   presentation: AiInsightPresentation;
+  synthesis?: AiInsightsSynthesisMetadata;
 }
 
 export interface AiInsightsLatestEventOkResponse {
@@ -424,6 +461,7 @@ export interface AiInsightsLatestEventOkResponse {
   query: NormalizedInsightLatestEventQuery;
   latestEvent: AiInsightLatestEvent;
   presentation: AiInsightPresentation;
+  synthesis?: AiInsightsSynthesisMetadata;
 }
 
 export interface AiInsightsMultiMetricAggregateMetricResult {
@@ -445,6 +483,7 @@ export interface AiInsightsMultiMetricAggregateOkResponse {
   metricResults: AiInsightsMultiMetricAggregateMetricResult[];
   digest?: AiInsightsDigest;
   presentation: AiInsightPresentation;
+  synthesis?: AiInsightsSynthesisMetadata;
 }
 
 export interface AiInsightsPowerCurveOkResponse {
@@ -456,6 +495,69 @@ export interface AiInsightsPowerCurveOkResponse {
   query: NormalizedInsightPowerCurveQuery;
   powerCurve: AiInsightPowerCurve;
   presentation: AiInsightPresentation;
+  synthesis?: AiInsightsSynthesisMetadata;
+}
+
+export interface AiInsightAdvisoryResult {
+  status: 'available' | 'insufficient_data' | 'unsupported';
+  metricKey: AiInsightsPromptMetricKey;
+  semanticKind: 'current_ceiling' | 'potential_ceiling';
+  estimate: {
+    value: number;
+    unit: string;
+  } | null;
+  interval: {
+    low: number;
+    high: number;
+    kind: 'deterministic_range';
+    confidenceLevel: AiInsightConfidenceTier;
+  } | null;
+  observed: {
+    bestValue: number | null;
+    bestDate: string | null;
+    sampleCount: number;
+    qualifyingSampleCount: number;
+    trainingWeeks: number;
+    recencyDays: number | null;
+  };
+  confidence: {
+    tier: AiInsightConfidenceTier | null;
+    score: number | null;
+    reasons: string[];
+  };
+  method: {
+    id: string;
+    version: string;
+    deterministic: boolean;
+  };
+  evidence: Array<{
+    code: string;
+    label: string;
+    value: string;
+  }>;
+  insufficientData?: {
+    reasonCode:
+      | 'no_samples'
+      | 'low_intensity_scope'
+      | 'too_few_samples'
+      | 'too_few_weeks'
+      | 'stale_data'
+      | 'weak_tail_signal';
+    message: string;
+    suggestedQuery: string;
+  };
+}
+
+export interface AiInsightsAdvisoryOkResponse {
+  status: 'ok';
+  resultKind: 'advisory';
+  narrative: string;
+  quota?: AiInsightsQuotaStatus;
+  statementChips?: AiInsightStatementChip[];
+  query: NormalizedInsightAdvisoryQuery;
+  advisory: AiInsightAdvisoryResult;
+  presentation: AiInsightPresentation;
+  synthesis?: AiInsightsSynthesisMetadata;
 }
 
 export type AiInsightsOkResponse =
@@ -463,7 +565,8 @@ export type AiInsightsOkResponse =
   | AiInsightsEventLookupOkResponse
   | AiInsightsLatestEventOkResponse
   | AiInsightsMultiMetricAggregateOkResponse
-  | AiInsightsPowerCurveOkResponse;
+  | AiInsightsPowerCurveOkResponse
+  | AiInsightsAdvisoryOkResponse;
 
 export interface AiInsightsEmptyResponse {
   status: 'empty';
@@ -476,6 +579,7 @@ export interface AiInsightsEmptyResponse {
   presentation: AiInsightPresentation & {
     emptyState: string;
   };
+  synthesis?: AiInsightsSynthesisMetadata;
 }
 
 export interface AiInsightsUnsupportedResponse {
@@ -484,6 +588,7 @@ export interface AiInsightsUnsupportedResponse {
   quota?: AiInsightsQuotaStatus;
   reasonCode: AiInsightsUnsupportedReasonCode;
   suggestedPrompts: string[];
+  synthesis?: AiInsightsSynthesisMetadata;
 }
 
 export type AiInsightsResponse =

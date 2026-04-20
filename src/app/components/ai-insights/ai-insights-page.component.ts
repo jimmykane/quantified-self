@@ -12,6 +12,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import type { EventInterface } from '@sports-alliance/sports-lib';
 import type {
+  AiInsightsAdvisoryOkResponse,
   AiInsightsAggregateOkResponse,
   AiInsightsEmptyResponse,
   AiInsightsEventLookupOkResponse,
@@ -126,6 +127,67 @@ const AI_INSIGHTS_SUPPORT_SUBJECTS = {
   noPromptResults: 'AI Insights - No prompt results',
   promptError: 'AI Insights - Prompt error',
 } as const;
+
+function formatAdvisoryNumber(
+  value: number,
+  locale: string,
+): string {
+  return new Intl.NumberFormat(locale || undefined, {
+    maximumFractionDigits: 1,
+  }).format(value);
+}
+
+function formatConfidenceTierLabel(
+  tier: string | null | undefined,
+): string {
+  const normalizedTier = `${tier || ''}`.trim().toLowerCase();
+  if (!normalizedTier) {
+    return 'Unknown';
+  }
+
+  return `${normalizedTier[0]?.toUpperCase() || ''}${normalizedTier.slice(1)}`;
+}
+
+function resolveAdvisorySemanticLabel(
+  semanticKind: AiInsightsAdvisoryOkResponse['advisory']['semanticKind'] | string | null | undefined,
+): string {
+  const normalizedSemanticKind = `${semanticKind || ''}`.trim().toLowerCase();
+  if (!normalizedSemanticKind) {
+    return 'Advisory';
+  }
+
+  if (normalizedSemanticKind === 'current_ceiling') {
+    return 'Current achievable max';
+  }
+  if (normalizedSemanticKind === 'potential_ceiling') {
+    return 'Potential ceiling';
+  }
+
+  return normalizedSemanticKind.replace(/_/g, ' ');
+}
+
+function resolveAdvisoryEstimateLabel(
+  semanticKind: AiInsightsAdvisoryOkResponse['advisory']['semanticKind'] | string | null | undefined,
+): string {
+  const normalizedSemanticKind = `${semanticKind || ''}`.trim().toLowerCase();
+  if (normalizedSemanticKind === 'potential_ceiling') {
+    return 'Potential ceiling estimate';
+  }
+
+  return 'Current achievable max';
+}
+
+function resolveAdvisoryContextLabel(
+  query: AiInsightsAdvisoryOkResponse['query'],
+): string {
+  const advisoryKindLabel = query.advisoryKind === 'potential_value'
+    ? 'Potential value'
+    : 'Expected value';
+  const horizonLabel = query.horizon === 'current_year'
+    ? 'current year'
+    : 'selected range';
+  return `${advisoryKindLabel} for ${horizonLabel}`;
+}
 
 @Component({
   selector: 'app-ai-insights-page',
@@ -264,6 +326,10 @@ export class AiInsightsPageComponent {
     const response = this.okResponse();
     return response?.resultKind === 'power_curve' ? response : null;
   });
+  readonly advisoryOkResponse = computed<AiInsightsAdvisoryOkResponse | null>(() => {
+    const response = this.okResponse();
+    return response?.resultKind === 'advisory' ? response : null;
+  });
   readonly emptyResponse = computed<AiInsightsEmptyResponse | null>(() => {
     const response = this.response();
     return response?.status === 'empty' ? response : null;
@@ -309,6 +375,9 @@ export class AiInsightsPageComponent {
   ));
   readonly powerCurveNarrative = computed(() => (
     formatAiInsightsNarrativeForDisplay(this.powerCurveOkResponse()?.narrative)
+  ));
+  readonly advisoryNarrative = computed(() => (
+    formatAiInsightsNarrativeForDisplay(this.advisoryOkResponse()?.narrative)
   ));
   readonly emptyNarrative = computed(() => (
     formatAiInsightsNarrativeForDisplay(this.emptyResponse()?.narrative)
@@ -360,12 +429,18 @@ export class AiInsightsPageComponent {
     return resolveResultCardSubtitle(response);
   });
   readonly resultCardMetaText = computed(() => {
+    const synthesis = this.response()?.synthesis;
+    const interpretedLabel = synthesis?.attempted && synthesis.applied ? 'Interpreted' : null;
     const savedAtLabel = formatSavedInsightDate(this.latestSnapshotSavedAt(), this.locale);
-    if (!savedAtLabel) {
+    if (!interpretedLabel && !savedAtLabel) {
       return null;
     }
 
-    return `Saved ${savedAtLabel}`;
+    if (interpretedLabel && savedAtLabel) {
+      return `${interpretedLabel} • Saved ${savedAtLabel}`;
+    }
+
+    return interpretedLabel ?? `Saved ${savedAtLabel}`;
   });
   readonly resultNotes = computed<ResultNote[]>(() => {
     if (!this.hasCompletedResponse()) {
@@ -767,9 +842,11 @@ export class AiInsightsPageComponent {
     const rows: Array<{ label: string; value: string }> = [];
     const valueType = response.query.resultKind === 'multi_metric_aggregate'
       ? response.query.metricSelections[0]?.valueType
-      : response.query.resultKind === 'latest_event' || response.query.resultKind === 'power_curve'
+      : response.query.resultKind === 'latest_event'
+        || response.query.resultKind === 'power_curve'
+        || response.query.resultKind === 'advisory'
         ? null
-      : response.query.valueType;
+        : response.query.valueType;
 
     if (valueType) {
       rows.push({
@@ -802,11 +879,19 @@ export class AiInsightsPageComponent {
       });
     }
 
+    if (response.status === 'ok' && response.resultKind === 'advisory') {
+      rows.push({
+        label: 'Advisory',
+        value: resolveAdvisoryContextLabel(response.query),
+      });
+    }
+
     return rows;
   });
   readonly aggregationContextLine = computed(() => {
     const response = this.aggregateOkResponse()
       || this.multiMetricOkResponse()
+      || this.advisoryOkResponse()
       || this.powerCurveOkResponse()
       || this.emptyResponse();
     if (!response) {
@@ -815,9 +900,11 @@ export class AiInsightsPageComponent {
 
     const valueType = response.query.resultKind === 'multi_metric_aggregate'
       ? response.query.metricSelections[0]?.valueType
-      : response.query.resultKind === 'latest_event' || response.query.resultKind === 'power_curve'
+      : response.query.resultKind === 'latest_event'
+        || response.query.resultKind === 'power_curve'
+        || response.query.resultKind === 'advisory'
         ? null
-      : response.query.valueType;
+        : response.query.valueType;
     if (!valueType) {
       return this.resultSubtitle();
     }
@@ -838,6 +925,173 @@ export class AiInsightsPageComponent {
     ?? this.powerCurveOkResponse()?.presentation.warnings
     ?? []
   ));
+  readonly advisorySummaryCards = computed<InsightSummaryCard[]>(() => {
+    const response = this.advisoryOkResponse();
+    if (!response) {
+      return [];
+    }
+
+    const metricLabel = response.query.metricKey
+      .replace(/_/g, ' ')
+      .trim()
+      .replace(/\s+/g, ' ');
+    const formattedMetricLabel = metricLabel
+      ? `${metricLabel[0]?.toUpperCase() || ''}${metricLabel.slice(1)}`
+      : response.query.metricKey;
+    const cards: InsightSummaryCard[] = [
+      {
+        label: 'Status',
+        value: response.advisory.status === 'available'
+          ? 'Available'
+          : response.advisory.status === 'insufficient_data'
+            ? 'Insufficient data'
+            : 'Unsupported',
+      },
+      {
+        label: 'Metric',
+        value: formattedMetricLabel,
+      },
+      {
+        label: 'Semantic',
+        value: resolveAdvisorySemanticLabel(response.advisory.semanticKind),
+      },
+    ];
+
+    if (response.advisory.status === 'available' && response.advisory.estimate !== null && response.advisory.interval !== null) {
+      const estimatedValue = response.advisory.estimate.value;
+      const estimateUnit = `${response.advisory.estimate.unit || ''}`.trim() || 'units';
+      const rangeLow = response.advisory.interval.low;
+      const rangeHigh = response.advisory.interval.high;
+      const upperMargin = Math.max(0, rangeHigh - estimatedValue);
+      const lowerMargin = Math.max(0, estimatedValue - rangeLow);
+      const confidenceTierLabel = formatConfidenceTierLabel(response.advisory.confidence.tier);
+      const confidenceScoreLabel = Number.isFinite(response.advisory.confidence.score)
+        ? `${formatAdvisoryNumber((response.advisory.confidence.score as number) * 100, this.locale)}%`
+        : null;
+      cards.push({
+        label: resolveAdvisoryEstimateLabel(response.advisory.semanticKind),
+        value: `${formatAdvisoryNumber(estimatedValue, this.locale)} ${estimateUnit}`,
+        detailRows: [
+          {
+            label: 'Range',
+            value: `${formatAdvisoryNumber(rangeLow, this.locale)} – ${formatAdvisoryNumber(rangeHigh, this.locale)} ${estimateUnit}`,
+          },
+          {
+            label: 'Confidence',
+            value: confidenceScoreLabel
+              ? `${confidenceTierLabel} (${confidenceScoreLabel})`
+              : confidenceTierLabel,
+          },
+          {
+            label: 'Interval kind',
+            value: response.advisory.interval.kind.replace(/_/g, ' '),
+          },
+          {
+            label: 'Upper bound calc',
+            value: `${formatAdvisoryNumber(estimatedValue, this.locale)} + ${formatAdvisoryNumber(upperMargin, this.locale)} = ${formatAdvisoryNumber(rangeHigh, this.locale)} ${estimateUnit}`,
+          },
+          {
+            label: 'Lower bound calc',
+            value: `${formatAdvisoryNumber(estimatedValue, this.locale)} - ${formatAdvisoryNumber(lowerMargin, this.locale)} = ${formatAdvisoryNumber(rangeLow, this.locale)} ${estimateUnit}`,
+          },
+        ],
+      });
+
+      cards.push({
+        label: 'Observed evidence',
+        value: response.advisory.observed.bestValue === null
+          ? 'No observed best sample'
+          : `${formatAdvisoryNumber(response.advisory.observed.bestValue, this.locale)} ${estimateUnit}`,
+        detailRows: [
+          ...(response.advisory.observed.bestDate
+            ? [{
+              label: 'Best sample date',
+              value: new Date(response.advisory.observed.bestDate).toLocaleString(this.locale || undefined),
+            }]
+            : []),
+          {
+            label: 'Valid sessions',
+            value: `${response.advisory.observed.sampleCount}`,
+          },
+          {
+            label: 'Qualifying tail sessions',
+            value: `${response.advisory.observed.qualifyingSampleCount}`,
+          },
+          {
+            label: 'Training weeks',
+            value: `${response.advisory.observed.trainingWeeks}`,
+          },
+          {
+            label: 'Recency',
+            value: response.advisory.observed.recencyDays === null
+              ? 'Unknown'
+              : `${response.advisory.observed.recencyDays} days before range end`,
+          },
+        ],
+      });
+    }
+
+    if (response.advisory.confidence.reasons.length > 0) {
+      cards.push({
+        label: 'Confidence reasons',
+        value: `${formatConfidenceTierLabel(response.advisory.confidence.tier)} confidence`,
+        detailRows: response.advisory.confidence.reasons
+          .slice(0, 4)
+          .map((reason, index) => ({
+            label: `Reason ${index + 1}`,
+            value: reason,
+          })),
+      });
+    }
+
+    cards.push({
+      label: 'Method',
+      value: response.advisory.method.id,
+      detailRows: [
+        {
+          label: 'Version',
+          value: response.advisory.method.version,
+        },
+        {
+          label: 'Deterministic',
+          value: response.advisory.method.deterministic ? 'Yes' : 'No',
+        },
+      ],
+    });
+
+    if (response.advisory.status === 'insufficient_data' && response.advisory.insufficientData) {
+      cards.push({
+        label: 'Insufficient data',
+        value: response.advisory.insufficientData.message,
+        detailRows: [
+          {
+            label: 'Reason code',
+            value: response.advisory.insufficientData.reasonCode,
+          },
+          {
+            label: 'Suggested query',
+            value: response.advisory.insufficientData.suggestedQuery,
+          },
+        ],
+      });
+    }
+
+    const evidenceEntries = response.advisory.evidence;
+    if (evidenceEntries.length > 0) {
+      cards.push({
+        label: 'Evidence',
+        value: `${evidenceEntries[0].label}: ${evidenceEntries[0].value}`,
+        detailRows: evidenceEntries
+          .slice(1, 6)
+          .map((entry) => ({
+            label: entry.label,
+            value: entry.value,
+          })),
+      });
+    }
+
+    return cards;
+  });
   readonly resultSummaryCards = computed<InsightSummaryCard[]>(() => {
     const response = this.aggregateOkResponse();
     if (!response) {

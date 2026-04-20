@@ -100,6 +100,16 @@ export function resolveAiInsightsDisplayTitle(
     );
   }
 
+  if (response.query.resultKind === 'advisory') {
+    const metricLabel = response.query.metricKey.replace(/_/g, ' ').trim();
+    const advisoryPrefix = response.query.advisoryKind === 'potential_value'
+      ? 'potential'
+      : 'current achievable';
+    return metricLabel
+      ? toSentenceCase(`${advisoryPrefix} ${metricLabel}${activitySuffix}`)
+      : null;
+  }
+
   if (response.query.resultKind === 'multi_metric_aggregate') {
     const defaultValueType = response.query.metricSelections[0]?.valueType ?? ChartDataValueTypes.Total;
     const incomingLabels = (options?.metricLabels ?? [])

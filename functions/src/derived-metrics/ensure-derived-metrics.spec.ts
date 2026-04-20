@@ -8,6 +8,8 @@ describe('decideDerivedMetricsFreshness', () => {
         nowMs: Date.UTC(2026, 3, 15, 12, 0, 0),
         coordinatorStatus: 'idle' as const,
         coordinatorCompletedAtMs: Date.UTC(2026, 3, 15, 10, 0, 0),
+        coordinatorRequestedAtMs: Date.UTC(2026, 3, 15, 10, 0, 0),
+        coordinatorStartedAtMs: Date.UTC(2026, 3, 15, 10, 0, 0),
         coordinatorUpdatedAtMs: Date.UTC(2026, 3, 15, 10, 0, 0),
         coordinatorEventMutationVersion: 10,
         formSnapshotStatus: 'ready',
@@ -94,6 +96,7 @@ describe('decideDerivedMetricsFreshness', () => {
         const healthyDecision = decideDerivedMetricsFreshness({
             ...baseInput,
             coordinatorStatus: 'queued',
+            coordinatorRequestedAtMs: baseInput.nowMs - (9 * 60 * 1000),
             coordinatorUpdatedAtMs: baseInput.nowMs - (9 * 60 * 1000),
         });
         expect(healthyDecision).toEqual({
@@ -104,6 +107,7 @@ describe('decideDerivedMetricsFreshness', () => {
         const stuckDecision = decideDerivedMetricsFreshness({
             ...baseInput,
             coordinatorStatus: 'queued',
+            coordinatorRequestedAtMs: baseInput.nowMs - (11 * 60 * 1000),
             coordinatorUpdatedAtMs: baseInput.nowMs - (11 * 60 * 1000),
         });
         expect(stuckDecision).toEqual({
@@ -116,7 +120,34 @@ describe('decideDerivedMetricsFreshness', () => {
         const decision = decideDerivedMetricsFreshness({
             ...baseInput,
             coordinatorStatus: 'processing',
+            coordinatorStartedAtMs: baseInput.nowMs - (16 * 60 * 1000),
             coordinatorUpdatedAtMs: baseInput.nowMs - (16 * 60 * 1000),
+        });
+        expect(decision).toEqual({
+            shouldQueue: true,
+            reason: 'processing_stuck',
+        });
+    });
+
+    it('uses requestedAt for queued stuck detection even when updatedAt is recent', () => {
+        const decision = decideDerivedMetricsFreshness({
+            ...baseInput,
+            coordinatorStatus: 'queued',
+            coordinatorRequestedAtMs: baseInput.nowMs - (11 * 60 * 1000),
+            coordinatorUpdatedAtMs: baseInput.nowMs - (2 * 60 * 1000),
+        });
+        expect(decision).toEqual({
+            shouldQueue: true,
+            reason: 'queued_stuck',
+        });
+    });
+
+    it('uses startedAt for processing stuck detection even when updatedAt is recent', () => {
+        const decision = decideDerivedMetricsFreshness({
+            ...baseInput,
+            coordinatorStatus: 'processing',
+            coordinatorStartedAtMs: baseInput.nowMs - (16 * 60 * 1000),
+            coordinatorUpdatedAtMs: baseInput.nowMs - (2 * 60 * 1000),
         });
         expect(decision).toEqual({
             shouldQueue: true,
@@ -140,6 +171,7 @@ describe('decideDerivedMetricsFreshness', () => {
             ...baseInput,
             metricKinds: [DERIVED_METRIC_KINDS.RecoveryNow],
             coordinatorStatus: 'queued',
+            coordinatorRequestedAtMs: baseInput.nowMs - (9 * 60 * 1000),
             coordinatorUpdatedAtMs: baseInput.nowMs - (9 * 60 * 1000),
         });
         expect(decision).toEqual({

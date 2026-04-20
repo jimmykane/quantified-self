@@ -30,6 +30,13 @@ export const onboardingGuard: CanMatchFn = (route, segments) => {
                 return true; // Let authGuard handle unauthenticated users
             }
 
+            const profileReadsIncomplete = userService.hasIncompleteProfileReads(user.uid);
+            if (profileReadsIncomplete) {
+                logger.warn('[OnboardingGuard] Profile reads are incomplete; treating onboarding as incomplete until reads recover.', {
+                    uid: user.uid
+                });
+            }
+
             // Dynamically check all policies that require acceptance (exclude optional ones)
             const requiredPolicies = POLICY_CONTENT.filter(p => !!p.checkboxLabel && !p.isOptional);
             const termsAccepted = requiredPolicies.every(policy => {
@@ -43,7 +50,7 @@ export const onboardingGuard: CanMatchFn = (route, segments) => {
             const explicitlyCompleted = (user as any).onboardingCompleted === true;
 
             // User must have accepted terms AND (be pro OR have subscribed once OR explicitly completed free onboarding)
-            const onboardingCompleted = termsAccepted && (hasPaidAccess || hasSubscribedOnce || explicitlyCompleted);
+            const onboardingCompleted = !profileReadsIncomplete && termsAccepted && (hasPaidAccess || hasSubscribedOnce || explicitlyCompleted);
 
             logger.log('[OnboardingGuard] User Assessment:', {
                 uid: user.uid,

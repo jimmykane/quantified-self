@@ -320,30 +320,34 @@ export class AppShellComponent implements OnInit, OnDestroy {
     const user = this.currentUser;
 
     if (user) {
-      const termsAccepted = user.acceptedPrivacyPolicy === true &&
-        user.acceptedDataPolicy === true &&
-        user.acceptedTos === true;
+      if (this.userService.hasIncompleteProfileReads(user.uid)) {
+        this.onboardingCompleted = true;
+      } else {
+        const termsAccepted = user.acceptedPrivacyPolicy === true &&
+          user.acceptedDataPolicy === true &&
+          user.acceptedTos === true;
 
-      const hasSubscribedOnce = user.hasSubscribedOnce === true;
-      const hasPaidAccess = AppUserUtilities.hasPaidAccessUser(user);
+        const hasSubscribedOnce = user.hasSubscribedOnce === true;
+        const hasPaidAccess = AppUserUtilities.hasPaidAccessUser(user);
 
-      const explicitOnboardingComplete = user.onboardingCompleted === true;
-      this.onboardingCompleted = termsAccepted && (hasPaidAccess || hasSubscribedOnce || explicitOnboardingComplete);
+        const explicitOnboardingComplete = user.onboardingCompleted === true;
+        this.onboardingCompleted = termsAccepted && (hasPaidAccess || hasSubscribedOnce || explicitOnboardingComplete);
 
-      const onboardingPatch: Partial<Pick<AppUserInterface, 'hasSubscribedOnce' | 'onboardingCompleted'>> = {};
+        const onboardingPatch: Partial<Pick<AppUserInterface, 'hasSubscribedOnce' | 'onboardingCompleted'>> = {};
 
-      // If user has paid access now, persist the historical marker for future downgrades.
-      if (hasPaidAccess && !hasSubscribedOnce) {
-        onboardingPatch.hasSubscribedOnce = true;
-      }
+        // If user has paid access now, persist the historical marker for future downgrades.
+        if (hasPaidAccess && !hasSubscribedOnce) {
+          onboardingPatch.hasSubscribedOnce = true;
+        }
 
-      // Auto-heal users that are paid and legally accepted but missing explicit onboarding flag.
-      if (hasPaidAccess && termsAccepted && !explicitOnboardingComplete) {
-        onboardingPatch.onboardingCompleted = true;
-      }
+        // Auto-heal users that are paid and legally accepted but missing explicit onboarding flag.
+        if (hasPaidAccess && termsAccepted && !explicitOnboardingComplete) {
+          onboardingPatch.onboardingCompleted = true;
+        }
 
-      if (Object.keys(onboardingPatch).length > 0) {
-        this.userService.updateUserProperties(user, onboardingPatch).catch(err => this.logger.error('Failed to persist onboarding state', err));
+        if (Object.keys(onboardingPatch).length > 0) {
+          this.userService.updateUserProperties(user, onboardingPatch).catch(err => this.logger.error('Failed to persist onboarding state', err));
+        }
       }
     } else {
       // Not logged in - show chrome (login/landing page)

@@ -1111,6 +1111,12 @@ app-ai-insights-power-curve-chart {
   gap: 12px;
 }
 
+@media (min-width: 64rem) {
+  .summary-grid.summary-grid--advisory {
+    grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  }
+}
+
 .multi-metric-section-list,
 .multi-metric-section {
   display: grid;

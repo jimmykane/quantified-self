@@ -13,6 +13,7 @@ import type {
   AiInsightStatementChip,
   AiInsightSummaryAnomalyCallout,
   AiInsightSummaryBucket,
+  AiInsightsAdvisoryOkResponse,
   AiInsightsAggregateOkResponse,
   AiInsightsEmptyResponse,
   AiInsightsEventLookupOkResponse,
@@ -236,6 +237,9 @@ export function buildStatementChipDisplays(
     }
     if (response.resultKind === 'multi_metric_aggregate') {
       return 'multi_metric:narrative';
+    }
+    if (response.resultKind === 'advisory') {
+      return 'advisory:narrative';
     }
     return 'power_curve:narrative';
   })();
@@ -1112,6 +1116,11 @@ const RESULT_CARD_SUBTITLE_BY_RESULT_KIND: {
     response.query.groupingMode === 'date'
       ? 'Combined chart and merged metric summaries for this prompt.'
       : 'Merged metric summaries for this prompt.'
+  ),
+  advisory: (response: AiInsightsAdvisoryOkResponse) => (
+    response.advisory.status === 'available'
+      ? 'Deterministic advisory estimate for this prompt.'
+      : 'Advisory request parsed, but estimate data is limited for this prompt.'
   ),
 };
 

@@ -504,6 +504,7 @@ async function downloadOriginalFilesForMerge(sourceFiles: SourceFileMeta[]): Pro
 
 export const mergeEvents = onCall({
   region: FUNCTIONS_MANIFEST.mergeEvents.region,
+  memory: '1GiB',
   cors: ALLOWED_CORS_ORIGINS,
   timeoutSeconds: 540,
   maxInstances: 20,

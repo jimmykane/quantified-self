@@ -9,6 +9,7 @@ import {
   DataCadenceAvg,
   DataDistance,
   DataEndPosition,
+  DataHeartRateMax,
   DataPowerAvg,
   DataStartPosition,
   TimeIntervals,
@@ -171,6 +172,61 @@ function createPowerCurveQuery(
     defaultedToCycling: false,
     ...overrides,
   };
+}
+
+function createAdvisoryQuery(
+  metricKey: Extract<NormalizedInsightQuery, { resultKind: 'advisory' }>['metricKey'] = 'heart_rate',
+  advisoryKind: Extract<NormalizedInsightQuery, { resultKind: 'advisory' }>['advisoryKind'] = 'expected_value',
+): Extract<NormalizedInsightQuery, { resultKind: 'advisory' }> {
+  return {
+    resultKind: 'advisory',
+    metricKey,
+    advisoryKind,
+    horizon: 'current_year',
+    categoryType: ChartDataCategoryTypes.DateType,
+    activityTypeGroups: [],
+    activityTypes: [ActivityTypes.Cycling],
+    activityFilters: {
+      activityTypeGroups: [],
+      activityTypes: [ActivityTypes.Cycling],
+    },
+    dateRange: {
+      kind: 'bounded',
+      startDate: '2026-01-01T00:00:00.000Z',
+      endDate: '2026-03-31T23:59:59.999Z',
+      timezone: 'UTC',
+      source: 'prompt',
+    },
+    chartType: ChartTypes.LinesVertical,
+  };
+}
+
+function buildWeeklyHeartRateFixtures(
+  heartRateMaxValues: number[],
+): {
+  docs: Array<{ id: string; data: () => { startDate: Date } }>;
+  eventsById: Record<string, ReturnType<typeof createMockEvent>>;
+} {
+  const baseTime = Date.parse('2026-01-05T12:00:00.000Z');
+  const docs: Array<{ id: string; data: () => { startDate: Date } }> = [];
+  const eventsById: Record<string, ReturnType<typeof createMockEvent>> = {};
+
+  heartRateMaxValues.forEach((heartRateMax, index) => {
+    const eventId = `e${index + 1}`;
+    const eventDate = new Date(baseTime + (index * 7 * 24 * 60 * 60 * 1000));
+    docs.push({
+      id: eventId,
+      data: () => ({ startDate: eventDate }),
+    });
+    eventsById[eventId] = createMockEvent({
+      id: eventId,
+      startDate: eventDate,
+      activityTypes: [ActivityTypes.Cycling],
+      stats: { [DataHeartRateMax.type]: heartRateMax },
+    });
+  });
+
+  return { docs, eventsById };
 }
 
 describe('execute-query', () => {
@@ -438,6 +494,106 @@ describe('execute-query', () => {
     expect(result.matchedEventsCount).toBe(0);
     expect(result.latestEvent.eventId).toBeNull();
     expect(result.latestEvent.startDate).toBeNull();
+  });
+
+  it('computes advisory estimates with deterministic evidence for advisory queries', async () => {
+    const { docs, eventsById } = buildWeeklyHeartRateFixtures([172, 174, 176, 178, 180, 181, 182, 183]);
+    const fetchEventDocs = vi.fn(async () => docs);
+    const importEvent = vi.fn((_eventPayload, eventID) => eventsById[eventID] || null);
+
+    setExecuteQueryDependenciesForTesting({
+      fetchEventDocs,
+      fetchDebugEventSnapshot: vi.fn(async () => ({
+        totalEventsCount: docs.length,
+        recentEventsSample: [],
+      })),
+      importEvent,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+    });
+
+    const result = await executeAiInsightsQuery(
+      'user-1',
+      createAdvisoryQuery('heart_rate'),
+      'what should my max heart rate be this year',
+    );
+
+    expect(result.resultKind).toBe('advisory');
+    if (result.resultKind !== 'advisory') {
+      return;
+    }
+
+    expect(result.advisory.status).toBe('available');
+    expect(result.advisory.metricKey).toBe('heart_rate');
+    expect(result.advisory.semanticKind).toBe('current_ceiling');
+    expect(result.advisory.estimate).not.toBeNull();
+    expect(result.advisory.interval).not.toBeNull();
+    expect(result.advisory.confidence.tier).not.toBeNull();
+    expect(result.advisory.evidence.length).toBeGreaterThan(0);
+  });
+
+  it('keeps advisory estimate at or above the observed max heart-rate sample', async () => {
+    const { docs, eventsById } = buildWeeklyHeartRateFixtures([166, 171, 175, 178, 189, 190, 191, 192]);
+    const fetchEventDocs = vi.fn(async () => docs);
+    const importEvent = vi.fn((_eventPayload, eventID) => eventsById[eventID] || null);
+
+    setExecuteQueryDependenciesForTesting({
+      fetchEventDocs,
+      fetchDebugEventSnapshot: vi.fn(async () => ({
+        totalEventsCount: docs.length,
+        recentEventsSample: [],
+      })),
+      importEvent,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+    });
+
+    const result = await executeAiInsightsQuery(
+      'user-1',
+      createAdvisoryQuery('heart_rate'),
+      'what should my max heart rate be this year',
+    );
+
+    expect(result.resultKind).toBe('advisory');
+    if (result.resultKind !== 'advisory') {
+      return;
+    }
+
+    expect(result.advisory.status).toBe('available');
+    if (result.advisory.status !== 'available') {
+      return;
+    }
+
+    expect(result.advisory.estimate?.value ?? 0).toBeGreaterThanOrEqual(192);
+    expect(result.advisory.interval?.high ?? 0).toBeGreaterThanOrEqual(192);
+  });
+
+  it('supports potential advisory mode with potential-ceiling semantics', async () => {
+    const { docs, eventsById } = buildWeeklyHeartRateFixtures([166, 171, 175, 178, 189, 190, 191, 192]);
+    const fetchEventDocs = vi.fn(async () => docs);
+    const importEvent = vi.fn((_eventPayload, eventID) => eventsById[eventID] || null);
+
+    setExecuteQueryDependenciesForTesting({
+      fetchEventDocs,
+      fetchDebugEventSnapshot: vi.fn(async () => ({
+        totalEventsCount: docs.length,
+        recentEventsSample: [],
+      })),
+      importEvent,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+    });
+
+    const result = await executeAiInsightsQuery(
+      'user-1',
+      createAdvisoryQuery('heart_rate', 'potential_value'),
+      'what should my max heart rate be this year',
+    );
+
+    expect(result.resultKind).toBe('advisory');
+    if (result.resultKind !== 'advisory' || result.advisory.status !== 'available') {
+      return;
+    }
+
+    expect(result.advisory.semanticKind).toBe('potential_ceiling');
+    expect(result.advisory.estimate?.value ?? 0).toBeGreaterThanOrEqual(192);
   });
 
   it('builds a best power-curve envelope across matching events', async () => {

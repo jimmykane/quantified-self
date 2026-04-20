@@ -8,7 +8,7 @@ import { AppEventService } from './app.event.service';
 import { AppWindowService } from './app.window.service';
 import { AppUserInterface } from '../models/app-user.interface';
 import { AppUserUtilities } from '../utils/app.user.utilities';
-import { of, firstValueFrom, take, from, filter, throwError } from 'rxjs';
+import { of, firstValueFrom, take, from, filter, throwError, defer } from 'rxjs';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { DataAltitude, DataCadence, DataGradeAdjustedSpeed, DataHeartRate, DataPace, DataPower, DataSpeed, DynamicDataLoader, ServiceNames } from '@sports-alliance/sports-lib';
 import { LoggerService } from './logger.service';
@@ -166,6 +166,93 @@ describe('AppUserService', () => {
         expect(mergedUser.emailVerified).toBe(true);
         expect(mergedUser.email).toBe('test@example.com');
         expect(mergedUser.acceptedPrivacyPolicy).toBe(false);
+        expect(service.hasIncompleteProfileReads('u1')).toBe(true);
+    });
+
+    it('should recover from sub-document read failures without leaving incomplete flag set', async () => {
+        const unavailableError = Object.assign(new Error('Service unavailable'), {
+            code: 'unavailable'
+        });
+
+        (authState as any).mockReturnValue(of(null));
+        (user as any).mockReturnValue(of(null));
+        (docData as any)
+            .mockReturnValueOnce(of({ uid: 'u1' }))
+            .mockReturnValueOnce(throwError(() => unavailableError))
+            .mockReturnValueOnce(of({}))
+            .mockReturnValueOnce(throwError(() => unavailableError));
+
+        service = TestBed.inject(AppUserService);
+        const loadedUser = await firstValueFrom(service.getUserByID('u1').pipe(take(1)));
+
+        expect(loadedUser?.uid).toBe('u1');
+        expect(service.hasIncompleteProfileReads('u1')).toBe(false);
+    });
+
+    it('should recover transient profile reads without requiring a new auth emission', async () => {
+        const unavailableError = Object.assign(new Error('Service unavailable'), {
+            code: 'unavailable'
+        });
+        let userDocSubscriptions = 0;
+        let docDataCallCount = 0;
+
+        (docData as any).mockImplementation(() => {
+            docDataCallCount += 1;
+            if (docDataCallCount === 1) {
+                return defer(() => {
+                    userDocSubscriptions += 1;
+                    if (userDocSubscriptions === 1) {
+                        return throwError(() => unavailableError);
+                    }
+                    return of({ uid: 'u1', email: 'transient-recovered@example.com', acceptedPrivacyPolicy: true });
+                });
+            }
+            return of({});
+        });
+
+        service = TestBed.inject(AppUserService);
+        const mergedUser = await firstValueFrom(service.user$.pipe(filter((user): user is AppUserInterface => !!user), take(1)));
+
+        expect(mergedUser.email).toBe('transient-recovered@example.com');
+        expect(mergedUser.acceptedPrivacyPolicy).toBe(true);
+        expect(service.hasIncompleteProfileReads('u1')).toBe(false);
+    });
+
+    it('should cap transient profile-read retries and fall back to a synthetic user', async () => {
+        const unavailableError = Object.assign(new Error('Service unavailable'), {
+            code: 'unavailable'
+        });
+        const transientReadRetryCount = (AppUserService as any).transientReadRetryCount as number;
+        let docDataCallCount = 0;
+        let userDocSubscriptions = 0;
+
+        (docData as any).mockImplementation(() => {
+            docDataCallCount += 1;
+            if (docDataCallCount === 1) {
+                return defer(() => {
+                    userDocSubscriptions += 1;
+                    return throwError(() => unavailableError);
+                });
+            }
+
+            return of({});
+        });
+
+        vi.useFakeTimers();
+        try {
+            service = TestBed.inject(AppUserService);
+            const mergedUserPromise = firstValueFrom(service.user$.pipe(filter((user): user is AppUserInterface => !!user), take(1)));
+
+            await vi.runAllTimersAsync();
+            const mergedUser = await mergedUserPromise;
+
+            expect(userDocSubscriptions).toBe(transientReadRetryCount + 1);
+            expect(mergedUser.uid).toBe('u1');
+            expect(mergedUser.acceptedPrivacyPolicy).toBe(false);
+            expect(service.hasIncompleteProfileReads('u1')).toBe(true);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('should log permission-denied diagnostics as error events for legal sub-document reads', async () => {
@@ -200,9 +287,10 @@ describe('AppUserService', () => {
             .mockReturnValueOnce(of({}));
 
         service = TestBed.inject(AppUserService);
-        await firstValueFrom(service.getUserByID('u1').pipe(take(1)));
+        const loadedUser = await firstValueFrom(service.getUserByID('u1').pipe(take(1)));
         await new Promise((resolve) => setTimeout(resolve, 0));
 
+        expect(loadedUser?.uid).toBe('u1');
         expect(loggerErrorSpy).toHaveBeenCalledWith(
             '[AppUserService] Error fetching legal doc',
             expect.objectContaining({
@@ -232,6 +320,29 @@ describe('AppUserService', () => {
                 code: 'permission-denied'
             })
         );
+    });
+
+    it('should continue profile loading when legal/system/settings reads fail', async () => {
+        const unavailableError = Object.assign(new Error('Service unavailable'), {
+            code: 'unavailable'
+        });
+
+        (authState as any).mockReturnValue(of(null));
+        (user as any).mockReturnValue(of(null));
+        (docData as any)
+            .mockReturnValueOnce(of({ uid: 'u1', acceptedPrivacyPolicy: true }))
+            .mockReturnValueOnce(throwError(() => unavailableError))
+            .mockReturnValueOnce(throwError(() => unavailableError))
+            .mockReturnValueOnce(throwError(() => unavailableError));
+
+        service = TestBed.inject(AppUserService);
+        const loggerErrorSpy = vi.spyOn((service as any).logger, 'error');
+        const loadedUser = await firstValueFrom(service.getUserByID('u1').pipe(take(1)));
+
+        expect(loadedUser?.uid).toBe('u1');
+        expect(loadedUser?.acceptedPrivacyPolicy).toBe(true);
+        expect(loadedUser?.settings).toBeTruthy();
+        expect(loggerErrorSpy).toHaveBeenCalledTimes(3);
     });
 
     it('returns enabled chart data types in canonical order with event chart priority overrides', () => {
@@ -630,6 +741,18 @@ describe('AppUserService', () => {
         beforeEach(() => {
             service = TestBed.inject(AppUserService);
         });
+
+        it('should skip settings writes when profile reads are incomplete', async () => {
+            const user = { uid: 'u1' } as any;
+            const settings = { theme: 'dark' };
+
+            (service as any).usersWithIncompleteProfileReads.add('u1');
+            await service.updateUserProperties(user, { settings });
+
+            expect(setDoc).not.toHaveBeenCalled();
+            expect(updateDoc).not.toHaveBeenCalled();
+        });
+
         it('should split settings and other properties', async () => {
             const user = { uid: 'u1' } as any;
             const settings = { theme: 'dark' };

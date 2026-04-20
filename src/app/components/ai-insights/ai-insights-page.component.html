@@ -876,6 +876,85 @@
                   </div>
                 }
               }
+              @case ('advisory') {
+                @if (advisoryOkResponse(); as result) {
+                  <div class="result-content">
+              <div class="result-header">
+                @if (resultDateRangeNote(); as dateRangeNote) {
+                  <div class="result-date-range-note">
+                    <mat-icon>info</mat-icon>
+                    <p class="mat-body-small">{{ dateRangeNote }}</p>
+                  </div>
+                }
+                @if (canRefreshResult()) {
+                  <div class="result-actions">
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      class="result-refresh-button"
+                      [disabled]="isSubmitting()"
+                      (click)="refreshCurrentResult()">
+                      <mat-icon>refresh</mat-icon>
+                      <span>Refresh with latest data &amp; dates</span>
+                    </button>
+                  </div>
+                }
+              </div>
+
+              <div class="narrative-info qs-glass-card-panel">
+                <p class="description-text narrative">{{ advisoryNarrative() }}</p>
+                @if (resultStatementChips().length) {
+                  <mat-chip-set class="statement-chip-set" aria-label="Confidence and evidence chips">
+                    @for (chip of resultStatementChips(); track chip.statementId + ':' + chip.chipKind + ':' + chip.label + ':' + $index) {
+                      <mat-chip
+                        disableRipple
+                        class="statement-chip"
+                        [class.statement-chip--confidence]="chip.chipKind === 'confidence'"
+                        [class.statement-chip--evidence]="chip.chipKind === 'evidence'"
+                        [class.statement-chip--kind]="chip.chipKind === 'kind'"
+                        [class.statement-chip--confidence-low]="chip.confidenceTier === 'low'"
+                        [class.statement-chip--confidence-medium]="chip.confidenceTier === 'medium'"
+                        [class.statement-chip--confidence-high]="chip.confidenceTier === 'high'">
+                        {{ chip.label }}
+                      </mat-chip>
+                    }
+                  </mat-chip-set>
+                }
+              </div>
+
+              <mat-divider></mat-divider>
+
+              <div class="section-heading">
+                <div>
+                  <p class="mat-label-medium suggestions-title">Advisory details</p>
+                  <p class="mat-body-small section-supporting-copy">Deterministic estimate output with metric-generic fields.</p>
+                </div>
+              </div>
+              <div class="summary-grid summary-grid--advisory">
+                @for (summaryCard of advisorySummaryCards(); track summaryCard.label) {
+                  <section class="summary-card qs-glass-card-panel">
+                    <div class="summary-label-row">
+                      <p class="mat-label-medium summary-label">{{ summaryCard.label }}</p>
+                    </div>
+                    @if (summaryCard.value) {
+                      <p class="summary-value">{{ summaryCard.value }}</p>
+                    }
+                    @if (summaryCard.detailRows?.length) {
+                      <div class="summary-detail-list">
+                        @for (detailRow of summaryCard.detailRows; track detailRow.label + ':' + detailRow.value) {
+                          <div class="summary-detail-row">
+                            <span class="summary-detail-label">{{ detailRow.label }}</span>
+                            <span class="summary-detail-value">{{ detailRow.value }}</span>
+                          </div>
+                        }
+                      </div>
+                    }
+                  </section>
+                }
+              </div>
+                  </div>
+                }
+              }
               @case ('aggregate') {
                 @if (aggregateOkResponse(); as result) {
                   <div class="result-content">

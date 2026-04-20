@@ -251,8 +251,16 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Latest event**: most recent matching event in scope (single primary event card).
 - **Multi-metric aggregate**: combined chart for multiple metrics with merged summary cards.
 - **Digest narrative**: ask for a weekly, monthly, or yearly digest to get deterministic period-by-period summaries with explicit no-data periods.
+- **Advisory**: metric-generic deterministic advisory payloads with structured fields (\`semanticKind\`, \`estimate\`, \`interval\`, \`observed\`, \`confidence\`, \`method\`, and \`evidence\`).
+  - For max-heart-rate advisory, \`semanticKind\` can be **current ceiling** (current achievable max based on observed tail) or **potential ceiling** (deterministic potential estimate constrained by observed evidence quality).
+  - Current-ceiling max-heart-rate output anchors the point estimate to the strongest observed max-heart-rate sample in scope after deterministic quality filtering.
+  - Potential-ceiling max-heart-rate output can estimate above observed max when deterministic headroom is justified by tail/coverage/recency signals.
+  - Max-heart-rate advisory requires enough effort-quality signal (at least 8 valid sessions across at least 3 training weeks, plus tail-quality checks near observed max).
+  - Low-intensity-only scopes (for example hiking, walking, or yoga), sparse samples, stale recency, or weak tail signal return **insufficient data** with an explicit reason code and a suggested executable fallback query.
+  - Confidence includes both a deterministic tier and score, and method metadata includes an explicit deterministic method id/version.
 - **Anomaly callouts**: deterministic spike/drop/activity-mix shift callouts for aggregate and date-grouped multi-metric results.
 - **Confidence & evidence chips**: compact chips under supported AI result narratives and callouts that show confidence tier and linked deterministic evidence.
+- **Interpreted badge**: shown when query synthesis rewrites your prompt and the synthesized prompt passes score-gated deterministic validation.
 - **Empty**: the request shape is valid but no matching data was found in scope.
 - **Unsupported**: the request could not be mapped confidently; suggested prompts are returned.
 
@@ -436,7 +444,7 @@ Garmin -> Suunto activity sync is route-based:
 - enable the route toggle in Garmin Services,
 - and keep Garmin ACTIVITY_EXPORT permission enabled.
 
-Disconnecting Garmin or Suunto automatically disables related route auto-sync settings. After reconnecting, re-enable the route toggle if you want automatic sync to resume.
+Disconnecting Garmin, COROS, or Suunto automatically disables related route auto-sync settings. After reconnecting, re-enable the route toggle if you want automatic sync to resume.
 
 Automatic sync runs only for newly imported Garmin activities and uses the stored original activity file from your event.
 
@@ -449,6 +457,18 @@ Manual catch-up can run even when the Garmin -> Suunto auto-sync toggle is off, 
 ## COROS
 
 COROS history import is limited to the last **3 months** because of API restrictions.
+
+COROS -> Suunto activity sync is route-based:
+
+- you must connect both COROS and Suunto,
+- enable the route toggle in COROS Services,
+- and keep both service connections active.
+
+Automatic sync runs only for newly imported COROS activities and uses the stored original activity file from your event.
+
+Manual catch-up is available in COROS Services: choose a date range to queue COROS -> Suunto sync jobs for events already imported into Quantified Self.
+
+Manual catch-up can run even when the COROS -> Suunto auto-sync toggle is off, and it does not enable auto-sync for future imports.
 
 ## Queue behavior
 

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  ActivityTypeGroups,
   ActivityTypes,
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -34,6 +35,7 @@ import {
   type SummarizeInsightDependencies,
   type SummarizeInsightResultInput,
 } from './summarize-result.flow';
+import { getActivityTypesForGroup } from '../../../../shared/activity-type-group.metadata';
 
 let summarizeInsightSubject = createSummarizeInsight();
 
@@ -372,6 +374,75 @@ const compareDeltaInput = {
   },
 };
 
+const advisoryInput = {
+  status: 'ok' as const,
+  prompt: 'What should my max heart rate be this year?',
+  query: {
+    resultKind: 'advisory' as const,
+    metricKey: 'heart_rate' as const,
+    advisoryKind: 'expected_value' as const,
+    horizon: 'current_year' as const,
+    categoryType: ChartDataCategoryTypes.DateType,
+    requestedTimeInterval: TimeIntervals.Monthly,
+    activityTypeGroups: [],
+    activityTypes: [ActivityTypes.Cycling],
+    activityFilters: {
+      activityTypeGroups: [],
+      activityTypes: [ActivityTypes.Cycling],
+    },
+    dateRange: {
+      kind: 'bounded' as const,
+      startDate: '2026-01-01T00:00:00.000Z',
+      endDate: '2026-04-19T23:59:59.999Z',
+      timezone: 'UTC',
+      source: 'prompt' as const,
+    },
+    chartType: ChartTypes.LinesVertical,
+  },
+  advisory: {
+    status: 'available' as const,
+    metricKey: 'heart_rate' as const,
+    semanticKind: 'current_ceiling' as const,
+    estimate: {
+      value: 196,
+      unit: 'bpm',
+    },
+    interval: {
+      low: 190,
+      high: 204,
+      kind: 'deterministic_range' as const,
+      confidenceLevel: 'medium' as const,
+    },
+    observed: {
+      bestValue: 196,
+      bestDate: '2026-04-18T08:00:00.000Z',
+      sampleCount: 16,
+      qualifyingSampleCount: 4,
+      trainingWeeks: 8,
+      recencyDays: 1,
+    },
+    confidence: {
+      tier: 'medium' as const,
+      score: 0.66,
+      reasons: ['Deterministic evidence quality checks passed.'],
+    },
+    method: {
+      id: 'heart_rate_current_ceiling_deterministic',
+      version: 'v2',
+      deterministic: true,
+    },
+    evidence: [{
+      code: 'summary',
+      label: 'Summary',
+      value: 'Based on 16 events with max heart-rate samples.',
+    }],
+  },
+  presentation: {
+    title: 'Expected heart rate for Cycling',
+    chartType: ChartTypes.LinesVertical,
+  },
+};
+
 describe('summarizeAiInsightResult', () => {
   afterEach(() => {
     setSummarizeInsightDependenciesForTesting();
@@ -583,6 +654,52 @@ describe('summarizeAiInsightResult', () => {
     expect(result.narrative).toContain('from Jan 01, 2026 to Mar 18, 2026');
     expect(result.narrative).toContain('07:02 min/km');
     expect(result.narrative).not.toContain('recently');
+  });
+
+  it('replaces advisory narratives that contradict deterministic estimate facts', async () => {
+    setSummarizeInsightDependenciesForTesting({
+      generateNarrative: async () => ({
+        source: 'genkit',
+        narrative: 'For cycling, from Jan 01, 2026 to Apr 19, 2026, expected max heart rate is 184 bpm (range 169-192 bpm, medium confidence).',
+      }),
+    });
+
+    const result = await summarizeAiInsightResult(advisoryInput);
+
+    expect(result.source).toBe('genkit');
+    expect(result.narrative).toContain('196');
+    expect(result.narrative).toContain('190-204');
+    expect(result.narrative).toContain('medium confidence');
+    expect(result.narrative).not.toContain('184');
+    expect(result.narrative).not.toContain('169-192');
+  });
+
+  it('replaces advisory narratives that omit observed-max evidence when provided', async () => {
+    setSummarizeInsightDependenciesForTesting({
+      generateNarrative: async () => ({
+        source: 'genkit',
+        narrative: 'For cycling, this answer covers Jan 01, 2026 to Apr 19, 2026. Your expected max heart rate is 196 bpm (range 190-204 bpm, medium confidence), based on 16 events.',
+      }),
+    });
+
+    const result = await summarizeAiInsightResult({
+      ...advisoryInput,
+      advisory: {
+        ...advisoryInput.advisory,
+        observed: {
+          ...advisoryInput.advisory.observed,
+          bestValue: 180,
+        },
+        evidence: [{
+          code: 'summary',
+          label: 'Summary',
+          value: 'Based on 16 events with max heart-rate samples, observed max 180 bpm.',
+        }],
+      },
+    });
+
+    expect(result.source).toBe('genkit');
+    expect(result.narrative.toLowerCase()).toContain('observed max 180');
   });
 
   it('keeps successful default-range narratives that already match the effective range', async () => {
@@ -1133,6 +1250,36 @@ describe('summarizeAiInsightResult', () => {
     expect(facts.scopeLabel).toBe('across all activities within 20 km of athens, greece');
     expect(facts.narrativeLead).toBe(
       'Across all activities within 20 km of athens, greece, this answer covers Jan 01, 2026 to Mar 19, 2026.',
+    );
+  });
+
+  it('uses a narrative-friendly cycling scope label when advisory filters expand to many cycling activity types', () => {
+    const cyclingFamily = [
+      ...new Set([
+        ...getActivityTypesForGroup(ActivityTypeGroups.CyclingGroup),
+        ...getActivityTypesForGroup(ActivityTypeGroups.MountainBikingGroup),
+      ]),
+    ];
+    const facts = buildNarrativeFacts({
+      ...advisoryInput,
+      query: {
+        ...advisoryInput.query,
+        activityTypes: cyclingFamily,
+        activityFilters: {
+          activityTypeGroups: [],
+          activityTypes: cyclingFamily,
+        },
+      },
+    }) as {
+      activityFilterLabel: string;
+      scopeLabel: string;
+      narrativeLead: string;
+    };
+
+    expect(facts.activityFilterLabel).toBe('cycling');
+    expect(facts.scopeLabel).toBe('for cycling');
+    expect(facts.narrativeLead).toBe(
+      'For cycling, this answer covers Jan 01, 2026 to Apr 19, 2026.',
     );
   });
 

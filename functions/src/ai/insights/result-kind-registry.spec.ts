@@ -1,10 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { CALLABLE_RESULT_KIND_KEYS, resolveCallableResultKindHandler } from './callable.result-kind-handlers';
 import { EXECUTE_QUERY_RESULT_KIND_KEYS } from './execute-query.result-kind-handlers';
 import { DEFAULT_NORMALIZE_QUERY_ROUTE_DEFINITIONS } from './normalize-query.result-kind-router';
 
+vi.mock('@sports-alliance/sports-lib', async (importOriginal) => await importOriginal());
+
 const EXPECTED_RESULT_KINDS = [
   'aggregate',
+  'advisory',
   'event_lookup',
   'latest_event',
   'multi_metric_aggregate',
@@ -36,6 +39,7 @@ describe('AI insights result-kind registries', () => {
     );
 
     expect([...routableResultKinds].sort()).toEqual([
+      'advisory',
       'latest_event',
       'multi_metric_aggregate',
       'power_curve',

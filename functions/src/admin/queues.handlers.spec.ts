@@ -97,6 +97,7 @@ describe('getQueueStats Cloud Function', () => {
     });
 
     it('should return queue statistics including DLQ', async () => {
+        const nowMs = Date.now();
         // Mock permissions
         mockCollection.mockImplementation((collectionName: string) => {
             const mockCount = vi.fn().mockReturnValue({
@@ -155,7 +156,8 @@ describe('getQueueStats Cloud Function', () => {
                             generation: 7,
                             dirtyMetricKinds: ['form', 'recovery_now'],
                             lastError: '',
-                            updatedAtMs: 1700000004000
+                            requestedAtMs: nowMs - (2 * 60 * 1000),
+                            updatedAtMs: nowMs - (2 * 60 * 1000),
                         }),
                         ref: { parent: { parent: { id: 'uid-queued' } } }
                     },
@@ -167,7 +169,8 @@ describe('getQueueStats Cloud Function', () => {
                             generation: 6,
                             dirtyMetricKinds: ['form'],
                             lastError: '',
-                            updatedAtMs: 1700000003000
+                            startedAtMs: nowMs - (2 * 60 * 1000),
+                            updatedAtMs: nowMs - (2 * 60 * 1000),
                         }),
                         ref: { parent: { parent: { id: 'uid-processing' } } }
                     },
@@ -276,6 +279,8 @@ describe('getQueueStats Cloud Function', () => {
                 idle: 1,
                 queued: 1,
                 processing: 1,
+                staleQueued: 0,
+                staleProcessing: 0,
                 failed: 1,
                 total: 4,
             },
@@ -311,6 +316,101 @@ describe('getQueueStats Cloud Function', () => {
                     { error: 'Timeout', count: 1 },
                 ]),
             },
+        });
+    });
+
+    it('excludes stale queued and processing coordinators from active counts', async () => {
+        const nowMs = Date.now();
+        mockCollection.mockImplementation((collectionName: string) => {
+            const mockCount = vi.fn().mockReturnValue({
+                get: vi.fn().mockResolvedValue({
+                    data: () => ({ count: 0 }),
+                }),
+            });
+
+            if (collectionName === 'derivedMetrics') {
+                return {
+                    where: vi.fn().mockReturnValue({
+                        get: vi.fn().mockResolvedValue({
+                            docs: [
+                                {
+                                    id: 'coordinator',
+                                    data: () => ({
+                                        entryType: 'coordinator',
+                                        status: 'queued',
+                                        generation: 3,
+                                        dirtyMetricKinds: ['form'],
+                                        requestedAtMs: nowMs - (20 * 60 * 1000),
+                                        updatedAtMs: nowMs - (20 * 60 * 1000),
+                                    }),
+                                    ref: { parent: { parent: { id: 'uid-stale-queued' } } },
+                                },
+                                {
+                                    id: 'coordinator',
+                                    data: () => ({
+                                        entryType: 'coordinator',
+                                        status: 'processing',
+                                        generation: 4,
+                                        dirtyMetricKinds: ['recovery_now'],
+                                        startedAtMs: nowMs - (20 * 60 * 1000),
+                                        updatedAtMs: nowMs - (20 * 60 * 1000),
+                                    }),
+                                    ref: { parent: { parent: { id: 'uid-stale-processing' } } },
+                                },
+                                {
+                                    id: 'coordinator',
+                                    data: () => ({
+                                        entryType: 'coordinator',
+                                        status: 'failed',
+                                        generation: 5,
+                                        dirtyMetricKinds: ['form'],
+                                        lastError: 'boom',
+                                        updatedAtMs: 1700000001000,
+                                    }),
+                                    ref: { parent: { parent: { id: 'uid-failed' } } },
+                                },
+                            ],
+                        }),
+                    }),
+                };
+            }
+
+            if (collectionName === 'failed_jobs') {
+                const failedJobsMock: any = {
+                    count: mockCount,
+                    orderBy: vi.fn().mockReturnValue({
+                        limit: vi.fn().mockReturnValue({
+                            get: vi.fn().mockResolvedValue({ size: 0, docs: [] }),
+                        }),
+                    }),
+                    get: vi.fn().mockResolvedValue({ size: 0, docs: [] }),
+                };
+                failedJobsMock.where = vi.fn().mockReturnValue(failedJobsMock);
+                return failedJobsMock;
+            }
+
+            return {
+                where: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockReturnThis(),
+                count: mockCount,
+                get: vi.fn().mockResolvedValue({
+                    empty: false,
+                    docs: [{ data: () => ({ dateCreated: nowMs - 10000 }) }],
+                    data: () => ({ count: 0 }),
+                }),
+            };
+        });
+
+        const result = await (getQueueStats as any)(request);
+        expect(result.derivedMetrics.coordinators).toEqual({
+            idle: 0,
+            queued: 0,
+            processing: 0,
+            staleQueued: 1,
+            staleProcessing: 1,
+            failed: 1,
+            total: 3,
         });
     });
 
@@ -403,6 +503,8 @@ describe('getQueueStats Cloud Function', () => {
                 idle: 0,
                 queued: 0,
                 processing: 0,
+                staleQueued: 0,
+                staleProcessing: 0,
                 failed: 0,
                 total: 0,
             },

@@ -30,6 +30,8 @@ const SPORTS_LIB_REPARSE_JOBS_COLLECTION = 'sportsLibReparseJobs';
 const SPORTS_LIB_REPARSE_CHECKPOINT_DOC_PATH = 'systemJobs/sportsLibReparse';
 const SPORTS_LIB_REPARSE_FAILURE_PREVIEW_LIMIT = 10;
 const DERIVED_METRICS_FAILURE_PREVIEW_LIMIT = 10;
+const DERIVED_METRICS_STALE_QUEUED_THRESHOLD_MS = 10 * 60 * 1000;
+const DERIVED_METRICS_STALE_PROCESSING_THRESHOLD_MS = 15 * 60 * 1000;
 const INGESTION_DLQ_PREVIEW_LIMIT = 50;
 const ACTIVITY_SYNC_DLQ_PREVIEW_LIMIT = 50;
 
@@ -38,6 +40,18 @@ type DerivedMetricsCoordinatorStatus = typeof DERIVED_METRICS_COORDINATOR_STATUS
 
 function isDerivedMetricsCoordinatorStatus(value: unknown): value is DerivedMetricsCoordinatorStatus {
     return DERIVED_METRICS_COORDINATOR_STATUSES.includes(`${value}` as DerivedMetricsCoordinatorStatus);
+}
+
+function toFiniteEpochMs(value: unknown): number | null {
+    const epochMs = toEpochMillis(value);
+    if (epochMs !== null && Number.isFinite(epochMs)) {
+        return epochMs;
+    }
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue)) {
+        return null;
+    }
+    return numericValue;
 }
 
 /**
@@ -121,27 +135,51 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             idle: 0,
             queued: 0,
             processing: 0,
+            staleQueued: 0,
+            staleProcessing: 0,
             failed: 0,
             total: 0,
         };
         const derivedFailures: DerivedMetricsFailurePreview[] = [];
+        const nowMs = Date.now();
 
         (derivedMetricsCoordinatorSnapshot?.docs || []).forEach((doc) => {
             const rawData = doc.data() as DerivedMetricsCoordinatorDocData;
             const rawStatus = `${rawData.status || ''}`.trim();
             const status = isDerivedMetricsCoordinatorStatus(rawStatus) ? rawStatus : null;
             const generation = Math.max(0, Math.floor(toSafeNumber(rawData.generation)));
-            const updatedAtMs = Math.max(
-                0,
-                toEpochMillis(rawData.updatedAtMs) ?? toSafeNumber(rawData.updatedAtMs),
-            );
+            const requestedAtMs = toFiniteEpochMs(rawData.requestedAtMs);
+            const startedAtMs = toFiniteEpochMs(rawData.startedAtMs);
+            const updatedAtMs = Math.max(0, toFiniteEpochMs(rawData.updatedAtMs) ?? 0);
             const dirtyMetricKinds = normalizeDerivedMetricKindsStrict(
                 Array.isArray(rawData.dirtyMetricKinds) ? rawData.dirtyMetricKinds : [],
             );
             const lastError = `${rawData.lastError || ''}`.trim();
             const uid = `${doc.ref.parent?.parent?.id || ''}`.trim();
-
             derivedCoordinatorCounts.total += 1;
+
+            const queuedSinceMs = requestedAtMs ?? updatedAtMs;
+            const processingSinceMs = startedAtMs ?? updatedAtMs;
+            const isStaleQueued = status === 'queued'
+                && Number.isFinite(queuedSinceMs)
+                && (nowMs - queuedSinceMs) >= DERIVED_METRICS_STALE_QUEUED_THRESHOLD_MS;
+            const isStaleProcessing = status === 'processing'
+                && Number.isFinite(processingSinceMs)
+                && (nowMs - processingSinceMs) >= DERIVED_METRICS_STALE_PROCESSING_THRESHOLD_MS;
+
+            // Exclude stale in-flight docs from active queued/processing counts.
+            // They remain recoverable via ensure/event-write paths without inflating
+            // queue-health dashboards with permanently dormant coordinator docs.
+            if (isStaleQueued || isStaleProcessing) {
+                if (isStaleQueued) {
+                    derivedCoordinatorCounts.staleQueued += 1;
+                }
+                if (isStaleProcessing) {
+                    derivedCoordinatorCounts.staleProcessing += 1;
+                }
+                return;
+            }
+
             if (status) {
                 derivedCoordinatorCounts[status] += 1;
             }
@@ -156,6 +194,13 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 });
             }
         });
+
+        if (derivedCoordinatorCounts.staleQueued > 0 || derivedCoordinatorCounts.staleProcessing > 0) {
+            logger.warn('[admin/getQueueStats] Classified stale derived-metrics coordinators in queue stats.', {
+                staleQueuedCount: derivedCoordinatorCounts.staleQueued,
+                staleProcessingCount: derivedCoordinatorCounts.staleProcessing,
+            });
+        }
 
         derivedFailures.sort((left, right) => right.updatedAtMs - left.updatedAtMs);
 
