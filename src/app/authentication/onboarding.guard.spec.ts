@@ -33,7 +33,8 @@ describe('onboardingGuard', () => {
     };
 
     const mockUserService = {
-        hasPaidAccessSignal: signal(false)
+        hasPaidAccessSignal: signal(false),
+        hasIncompleteProfileReads: vi.fn().mockReturnValue(false)
     };
 
     beforeEach(() => {
@@ -51,6 +52,7 @@ describe('onboardingGuard', () => {
         authService = TestBed.inject(AppAuthService);
         logger = TestBed.inject(LoggerService);
         mockUserService.hasPaidAccessSignal.set(false); // Reset state
+        mockUserService.hasIncompleteProfileReads.mockReturnValue(false);
         vi.clearAllMocks();
     });
 
@@ -167,6 +169,19 @@ describe('onboardingGuard', () => {
         };
 
         const result = await (runGuard(user) as any).toPromise();
+        expect(result).toBe(true);
+    });
+
+    it('should defer onboarding decision when profile reads are incomplete', async () => {
+        const user = {
+            uid: '123',
+            acceptedPrivacyPolicy: false,
+            acceptedDataPolicy: false,
+            acceptedTos: false
+        };
+        mockUserService.hasIncompleteProfileReads.mockReturnValue(true);
+
+        const result = await (runGuard(user, [{ path: 'dashboard' }] as any) as any).toPromise();
         expect(result).toBe(true);
     });
 });

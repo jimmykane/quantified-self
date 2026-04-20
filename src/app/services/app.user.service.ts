@@ -2,12 +2,12 @@ import { inject, Injectable, OnDestroy, computed } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 
 
-import { Observable, from, firstValueFrom, of, combineLatest, distinctUntilChanged, throwError } from 'rxjs';
+import { Observable, from, firstValueFrom, of, combineLatest, distinctUntilChanged, throwError, timer } from 'rxjs';
 import { StripeRole } from '../models/stripe-role.model';
 import { User } from '@sports-alliance/sports-lib';
 import { Privacy } from '@sports-alliance/sports-lib';
 import { AppEventService } from './app.event.service';
-import { catchError, map, take, switchMap, shareReplay } from 'rxjs/operators';
+import { catchError, map, take, switchMap, shareReplay, retry } from 'rxjs/operators';
 import {
   AppThemes,
   UserAppSettingsInterface
@@ -114,6 +114,7 @@ export class AppUserService implements OnDestroy {
     'creationDate',
     'lastSignInDate',
   ];
+  private static readonly transientReadRetryDelayMs = 750;
 
   private firestore = inject(Firestore);
   private auth = inject(Auth);
@@ -122,6 +123,7 @@ export class AppUserService implements OnDestroy {
   private eventService = inject(AppEventService);
   private http = inject(HttpClient);
   private windowService = inject(AppWindowService);
+  private usersWithIncompleteProfileReads = new Set<string>();
 
   public readonly user$ = user(this.auth).pipe(
     switchMap(u => {
@@ -224,7 +226,10 @@ export class AppUserService implements OnDestroy {
   }
 
   private getUserProfileWithAuthRetry(firebaseUser: any): Observable<AppUserInterface | null> {
-    const loadUserProfile = () => this.getUserByID(firebaseUser.uid);
+    const loadUserProfile = () => this.retryTransientProfileReads(
+      this.getUserByID(firebaseUser.uid),
+      firebaseUser.uid
+    );
 
     return from(firebaseUser.getIdToken()).pipe(
       switchMap(() => loadUserProfile()),
@@ -240,6 +245,7 @@ export class AppUserService implements OnDestroy {
               return throwError(() => retryError);
             }
 
+            this.markIncompleteProfileRead(firebaseUser.uid);
             return of(null);
           })
         );
@@ -250,6 +256,55 @@ export class AppUserService implements OnDestroy {
   private isFirestorePermissionDenied(error: unknown): boolean {
     const code = (error as { code?: string } | null)?.code;
     return code === 'permission-denied' || code === 'firestore/permission-denied';
+  }
+
+  private retryTransientProfileReads<T>(source$: Observable<T>, userID: string): Observable<T> {
+    return source$.pipe(
+      retry({
+        delay: (error) => {
+          if (!this.isFirestoreTransientReadError(error)) {
+            return throwError(() => error);
+          }
+          this.markIncompleteProfileRead(userID);
+          return timer(AppUserService.transientReadRetryDelayMs);
+        }
+      })
+    );
+  }
+
+  private isFirestoreTransientReadError(error: unknown): boolean {
+    const code = (error as { code?: string } | null)?.code;
+    return code === 'unavailable'
+      || code === 'firestore/unavailable'
+      || code === 'deadline-exceeded'
+      || code === 'firestore/deadline-exceeded'
+      || code === 'aborted'
+      || code === 'firestore/aborted'
+      || code === 'cancelled'
+      || code === 'firestore/cancelled'
+      || code === 'network-request-failed'
+      || code === 'auth/network-request-failed';
+  }
+
+  private markIncompleteProfileRead(userID: string | null | undefined): void {
+    if (!userID) {
+      return;
+    }
+    this.usersWithIncompleteProfileReads.add(userID);
+  }
+
+  private clearIncompleteProfileRead(userID: string | null | undefined): void {
+    if (!userID) {
+      return;
+    }
+    this.usersWithIncompleteProfileReads.delete(userID);
+  }
+
+  public hasIncompleteProfileReads(userID: string | null | undefined): boolean {
+    if (!userID) {
+      return false;
+    }
+    return this.usersWithIncompleteProfileReads.has(userID);
   }
 
   private buildFirestoreReadErrorContext(userID: string, path: string, error: unknown) {
@@ -419,28 +474,43 @@ export class AppUserService implements OnDestroy {
       user: (docData(userDoc) as Observable<AppUserInterface | null>).pipe(
         catchError((err) => throwError(() => err))
       ),
-      legal: (docData(legalDoc) as Observable<any>).pipe(catchError((err) => {
-        this.logUserSubDocumentReadError('legal', userID, `users/${userID}/legal/agreements`, err);
-        return of({});
-      })),
-      system: (docData(systemDoc) as Observable<any>).pipe(catchError((err) => {
-        this.logUserSubDocumentReadError('system', userID, `users/${userID}/system/status`, err);
-        return of({});
-      })),
-      settings: (docData(settingsDoc) as Observable<any>).pipe(catchError((err) => {
-        this.logUserSubDocumentReadError('settings', userID, `users/${userID}/config/settings`, err);
-        return of({});
-      }))
+      legal: (docData(legalDoc) as Observable<Record<string, unknown>>).pipe(
+        catchError((err) => {
+          this.markIncompleteProfileRead(userID);
+          this.logUserSubDocumentReadError('legal', userID, `users/${userID}/legal/agreements`, err);
+          return throwError(() => err);
+        })
+      ),
+      system: (docData(systemDoc) as Observable<Record<string, unknown>>).pipe(
+        catchError((err) => {
+          this.markIncompleteProfileRead(userID);
+          this.logUserSubDocumentReadError('system', userID, `users/${userID}/system/status`, err);
+          return throwError(() => err);
+        })
+      ),
+      settings: (docData(settingsDoc) as Observable<Record<string, unknown>>).pipe(
+        catchError((err) => {
+          this.markIncompleteProfileRead(userID);
+          this.logUserSubDocumentReadError('settings', userID, `users/${userID}/config/settings`, err);
+          return throwError(() => err);
+        })
+      )
     }).pipe(
       distinctUntilChanged((prev, curr) => JSON.stringify(prev) === JSON.stringify(curr)),
       map(({ user, legal, system, settings }) => {
         if (!user) {
+          this.clearIncompleteProfileRead(userID);
           return null;
         }
 
-        // Merge all sources
         // Merge order: Main Doc -> Legal -> System (System overrides if overlap)
-        const u = { ...user, ...(legal || {}), ...(system || {}) } as AppUserInterface;
+        const u = { ...user } as AppUserInterface;
+        if (legal && Object.keys(legal).length > 0) {
+          Object.assign(u, legal);
+        }
+        if (system && Object.keys(system).length > 0) {
+          Object.assign(u, system);
+        }
 
         // Settings is a special case (nested object)
         if (settings && Object.keys(settings).length > 0) {
@@ -448,6 +518,7 @@ export class AppUserService implements OnDestroy {
         }
 
         u.settings = AppUserUtilities.fillMissingAppSettings(u);
+        this.clearIncompleteProfileRead(userID);
 
         return u;
       }));
@@ -637,12 +708,18 @@ export class AppUserService implements OnDestroy {
   public async updateUserProperties(user: AppUserInterface, propertiesToUpdate: any) {
     const promises = [];
     if (propertiesToUpdate.settings) {
-      promises.push(setDoc(doc(this.firestore, `users/${user.uid}/config/settings`), propertiesToUpdate.settings, { merge: true })
-        .catch(err => {
-          this.logger.error('[AppUserService] Settings update FAILED', err);
-          throw err;
-        })
-      );
+      if (this.hasIncompleteProfileReads(user?.uid)) {
+        this.logger.warn('[AppUserService] Skipping settings write because profile reads are incomplete.', {
+          uid: user?.uid ?? null,
+        });
+      } else {
+        promises.push(setDoc(doc(this.firestore, `users/${user.uid}/config/settings`), propertiesToUpdate.settings, { merge: true })
+          .catch(err => {
+            this.logger.error('[AppUserService] Settings update FAILED', err);
+            throw err;
+          })
+        );
+      }
       delete propertiesToUpdate.settings;
     }
 

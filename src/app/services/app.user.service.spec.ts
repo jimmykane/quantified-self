@@ -8,7 +8,7 @@ import { AppEventService } from './app.event.service';
 import { AppWindowService } from './app.window.service';
 import { AppUserInterface } from '../models/app-user.interface';
 import { AppUserUtilities } from '../utils/app.user.utilities';
-import { of, firstValueFrom, take, from, filter, throwError } from 'rxjs';
+import { of, firstValueFrom, take, from, filter, throwError, defer } from 'rxjs';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { DataAltitude, DataCadence, DataGradeAdjustedSpeed, DataHeartRate, DataPace, DataPower, DataSpeed, DynamicDataLoader, ServiceNames } from '@sports-alliance/sports-lib';
 import { LoggerService } from './logger.service';
@@ -166,6 +166,57 @@ describe('AppUserService', () => {
         expect(mergedUser.emailVerified).toBe(true);
         expect(mergedUser.email).toBe('test@example.com');
         expect(mergedUser.acceptedPrivacyPolicy).toBe(false);
+        expect(service.hasIncompleteProfileReads('u1')).toBe(true);
+    });
+
+    it('should mark profile reads as incomplete when sub-document reads fail', async () => {
+        const unavailableError = Object.assign(new Error('Service unavailable'), {
+            code: 'unavailable'
+        });
+
+        (authState as any).mockReturnValue(of(null));
+        (user as any).mockReturnValue(of(null));
+        (docData as any)
+            .mockReturnValueOnce(of({ uid: 'u1' }))
+            .mockReturnValueOnce(throwError(() => unavailableError))
+            .mockReturnValueOnce(of({}))
+            .mockReturnValueOnce(throwError(() => unavailableError));
+
+        service = TestBed.inject(AppUserService);
+        await expect(firstValueFrom(service.getUserByID('u1').pipe(take(1)))).rejects.toMatchObject({
+            code: 'unavailable'
+        });
+
+        expect(service.hasIncompleteProfileReads('u1')).toBe(true);
+    });
+
+    it('should recover transient profile reads without requiring a new auth emission', async () => {
+        const unavailableError = Object.assign(new Error('Service unavailable'), {
+            code: 'unavailable'
+        });
+        let userDocSubscriptions = 0;
+        let docDataCallCount = 0;
+
+        (docData as any).mockImplementation(() => {
+            docDataCallCount += 1;
+            if (docDataCallCount === 1) {
+                return defer(() => {
+                    userDocSubscriptions += 1;
+                    if (userDocSubscriptions === 1) {
+                        return throwError(() => unavailableError);
+                    }
+                    return of({ uid: 'u1', email: 'transient-recovered@example.com', acceptedPrivacyPolicy: true });
+                });
+            }
+            return of({});
+        });
+
+        service = TestBed.inject(AppUserService);
+        const mergedUser = await firstValueFrom(service.user$.pipe(filter((user): user is AppUserInterface => !!user), take(1)));
+
+        expect(mergedUser.email).toBe('transient-recovered@example.com');
+        expect(mergedUser.acceptedPrivacyPolicy).toBe(true);
+        expect(service.hasIncompleteProfileReads('u1')).toBe(false);
     });
 
     it('should log permission-denied diagnostics as error events for legal sub-document reads', async () => {
@@ -200,7 +251,9 @@ describe('AppUserService', () => {
             .mockReturnValueOnce(of({}));
 
         service = TestBed.inject(AppUserService);
-        await firstValueFrom(service.getUserByID('u1').pipe(take(1)));
+        await expect(firstValueFrom(service.getUserByID('u1').pipe(take(1)))).rejects.toMatchObject({
+            code: 'permission-denied'
+        });
         await new Promise((resolve) => setTimeout(resolve, 0));
 
         expect(loggerErrorSpy).toHaveBeenCalledWith(
@@ -630,6 +683,18 @@ describe('AppUserService', () => {
         beforeEach(() => {
             service = TestBed.inject(AppUserService);
         });
+
+        it('should skip settings writes when profile reads are incomplete', async () => {
+            const user = { uid: 'u1' } as any;
+            const settings = { theme: 'dark' };
+
+            (service as any).usersWithIncompleteProfileReads.add('u1');
+            await service.updateUserProperties(user, { settings });
+
+            expect(setDoc).not.toHaveBeenCalled();
+            expect(updateDoc).not.toHaveBeenCalled();
+        });
+
         it('should split settings and other properties', async () => {
             const user = { uid: 'u1' } as any;
             const settings = { theme: 'dark' };

@@ -30,6 +30,13 @@ export const onboardingGuard: CanMatchFn = (route, segments) => {
                 return true; // Let authGuard handle unauthenticated users
             }
 
+            if (userService.hasIncompleteProfileReads(user.uid)) {
+                logger.warn('[OnboardingGuard] Deferring onboarding decision because profile reads are incomplete.', {
+                    uid: user.uid
+                });
+                return true;
+            }
+
             // Dynamically check all policies that require acceptance (exclude optional ones)
             const requiredPolicies = POLICY_CONTENT.filter(p => !!p.checkboxLabel && !p.isOptional);
             const termsAccepted = requiredPolicies.every(policy => {

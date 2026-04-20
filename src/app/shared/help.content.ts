@@ -253,6 +253,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Digest narrative**: ask for a weekly, monthly, or yearly digest to get deterministic period-by-period summaries with explicit no-data periods.
 - **Advisory**: metric-generic expected-value estimates (for example expected heart rate) with deterministic estimate/range/confidence/evidence payload fields.
   - For max-heart-rate advisory, the expected value is anchored to the highest observed max-heart-rate sample in the selected scope and date range.
+  - Max-heart-rate advisory requires enough signal (at least 8 events with max-heart-rate samples across at least 3 training weeks).
+  - Low-intensity-only scopes (for example hiking, walking, or yoga) return **insufficient data** and suggest using broader or higher-intensity activity scope.
   - Confidence is reduced when that peak is isolated from the next-highest sample, signaling a one-off spike or limited maximal efforts.
 - **Anomaly callouts**: deterministic spike/drop/activity-mix shift callouts for aggregate and date-grouped multi-metric results.
 - **Confidence & evidence chips**: compact chips under supported AI result narratives and callouts that show confidence tier and linked deterministic evidence.

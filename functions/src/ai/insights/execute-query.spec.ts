@@ -200,6 +200,34 @@ function createAdvisoryQuery(
   };
 }
 
+function buildWeeklyHeartRateFixtures(
+  heartRateMaxValues: number[],
+): {
+  docs: Array<{ id: string; data: () => { startDate: Date } }>;
+  eventsById: Record<string, ReturnType<typeof createMockEvent>>;
+} {
+  const baseTime = Date.parse('2026-01-05T12:00:00.000Z');
+  const docs: Array<{ id: string; data: () => { startDate: Date } }> = [];
+  const eventsById: Record<string, ReturnType<typeof createMockEvent>> = {};
+
+  heartRateMaxValues.forEach((heartRateMax, index) => {
+    const eventId = `e${index + 1}`;
+    const eventDate = new Date(baseTime + (index * 7 * 24 * 60 * 60 * 1000));
+    docs.push({
+      id: eventId,
+      data: () => ({ startDate: eventDate }),
+    });
+    eventsById[eventId] = createMockEvent({
+      id: eventId,
+      startDate: eventDate,
+      activityTypes: [ActivityTypes.Cycling],
+      stats: { [DataHeartRateMax.type]: heartRateMax },
+    });
+  });
+
+  return { docs, eventsById };
+}
+
 describe('execute-query', () => {
   afterEach(() => {
     setExecuteQueryDependenciesForTesting();
@@ -468,43 +496,14 @@ describe('execute-query', () => {
   });
 
   it('computes advisory estimates with deterministic evidence for advisory queries', async () => {
-    const fetchEventDocs = vi.fn(async () => [
-      { id: 'e1', data: () => ({ startDate: new Date('2026-01-10T12:00:00.000Z') }) },
-      { id: 'e2', data: () => ({ startDate: new Date('2026-01-12T12:00:00.000Z') }) },
-      { id: 'e3', data: () => ({ startDate: new Date('2026-02-12T12:00:00.000Z') }) },
-      { id: 'e4', data: () => ({ startDate: new Date('2026-03-12T12:00:00.000Z') }) },
-    ]);
-    const importEvent = vi
-      .fn()
-      .mockImplementationOnce(() => createMockEvent({
-        id: 'e1',
-        startDate: new Date('2026-01-10T12:00:00.000Z'),
-        activityTypes: [ActivityTypes.Cycling],
-        stats: { [DataHeartRateMax.type]: 176 },
-      }))
-      .mockImplementationOnce(() => createMockEvent({
-        id: 'e2',
-        startDate: new Date('2026-01-12T12:00:00.000Z'),
-        activityTypes: [ActivityTypes.Cycling],
-        stats: { [DataHeartRateMax.type]: 180 },
-      }))
-      .mockImplementationOnce(() => createMockEvent({
-        id: 'e3',
-        startDate: new Date('2026-02-12T12:00:00.000Z'),
-        activityTypes: [ActivityTypes.Cycling],
-        stats: { [DataHeartRateMax.type]: 183 },
-      }))
-      .mockImplementationOnce(() => createMockEvent({
-        id: 'e4',
-        startDate: new Date('2026-03-12T12:00:00.000Z'),
-        activityTypes: [ActivityTypes.Cycling],
-        stats: { [DataHeartRateMax.type]: 181 },
-      }));
+    const { docs, eventsById } = buildWeeklyHeartRateFixtures([172, 174, 176, 178, 180, 181, 182, 183]);
+    const fetchEventDocs = vi.fn(async () => docs);
+    const importEvent = vi.fn((_eventPayload, eventID) => eventsById[eventID] || null);
 
     setExecuteQueryDependenciesForTesting({
       fetchEventDocs,
       fetchDebugEventSnapshot: vi.fn(async () => ({
-        totalEventsCount: 4,
+        totalEventsCount: docs.length,
         recentEventsSample: [],
       })),
       importEvent,
@@ -531,43 +530,14 @@ describe('execute-query', () => {
   });
 
   it('keeps advisory estimate at or above the observed max heart-rate sample', async () => {
-    const fetchEventDocs = vi.fn(async () => [
-      { id: 'e1', data: () => ({ startDate: new Date('2026-01-10T12:00:00.000Z') }) },
-      { id: 'e2', data: () => ({ startDate: new Date('2026-01-12T12:00:00.000Z') }) },
-      { id: 'e3', data: () => ({ startDate: new Date('2026-02-12T12:00:00.000Z') }) },
-      { id: 'e4', data: () => ({ startDate: new Date('2026-03-12T12:00:00.000Z') }) },
-    ]);
-    const importEvent = vi
-      .fn()
-      .mockImplementationOnce(() => createMockEvent({
-        id: 'e1',
-        startDate: new Date('2026-01-10T12:00:00.000Z'),
-        activityTypes: [ActivityTypes.Cycling],
-        stats: { [DataHeartRateMax.type]: 166 },
-      }))
-      .mockImplementationOnce(() => createMockEvent({
-        id: 'e2',
-        startDate: new Date('2026-01-12T12:00:00.000Z'),
-        activityTypes: [ActivityTypes.Cycling],
-        stats: { [DataHeartRateMax.type]: 171 },
-      }))
-      .mockImplementationOnce(() => createMockEvent({
-        id: 'e3',
-        startDate: new Date('2026-02-12T12:00:00.000Z'),
-        activityTypes: [ActivityTypes.Cycling],
-        stats: { [DataHeartRateMax.type]: 175 },
-      }))
-      .mockImplementationOnce(() => createMockEvent({
-        id: 'e4',
-        startDate: new Date('2026-03-12T12:00:00.000Z'),
-        activityTypes: [ActivityTypes.Cycling],
-        stats: { [DataHeartRateMax.type]: 192 },
-      }));
+    const { docs, eventsById } = buildWeeklyHeartRateFixtures([166, 171, 175, 178, 181, 186, 190, 192]);
+    const fetchEventDocs = vi.fn(async () => docs);
+    const importEvent = vi.fn((_eventPayload, eventID) => eventsById[eventID] || null);
 
     setExecuteQueryDependenciesForTesting({
       fetchEventDocs,
       fetchDebugEventSnapshot: vi.fn(async () => ({
-        totalEventsCount: 4,
+        totalEventsCount: docs.length,
         recentEventsSample: [],
       })),
       importEvent,

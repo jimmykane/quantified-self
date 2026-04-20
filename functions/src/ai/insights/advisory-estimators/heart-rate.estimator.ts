@@ -1,11 +1,17 @@
-import { DataHeartRateMax, type EventInterface } from '@sports-alliance/sports-lib';
+import {
+  ActivityTypes,
+  ActivityTypesHelper,
+  DataHeartRateMax,
+  type EventInterface,
+} from '@sports-alliance/sports-lib';
 import type {
   AdvisoryEstimatorInput,
   AdvisoryEstimatorEstimateResult,
   AdvisoryMetricEstimator,
 } from '../advisory-estimator';
 
-const MIN_HEART_RATE_SAMPLE_COUNT = 3;
+const MIN_HEART_RATE_SAMPLE_COUNT = 8;
+const MIN_HEART_RATE_COVERAGE_WEEKS = 3;
 const MEDIUM_CONFIDENCE_SAMPLE_COUNT = 8;
 const HIGH_CONFIDENCE_SAMPLE_COUNT = 20;
 const MEDIUM_CONFIDENCE_COVERAGE_WEEKS = 3;
@@ -24,6 +30,18 @@ const ISOLATED_SPIKE_TRIM_FLOOR_BPM = 220;
 const ISOLATED_SPIKE_TRIM_GAP_BPM = 6;
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 const MILLISECONDS_PER_WEEK = 7 * MILLISECONDS_PER_DAY;
+const LOW_INTENSITY_MAX_HR_ACTIVITY_TYPES = new Set<ActivityTypes>([
+  ActivityTypes.Walking,
+  ActivityTypes.Hiking,
+  ActivityTypes.NordicWalking,
+  ActivityTypes.Yoga,
+  ActivityTypes.Pilates,
+  ActivityTypes.Stretching,
+  ActivityTypes.FlexibilityTraining,
+  ActivityTypes.WeightTraining,
+  ActivityTypes.StrengthTraining,
+  ActivityTypes.Training,
+]);
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -71,6 +89,45 @@ function collectHeartRateSamples(
     .filter((value): value is number => value !== null)
     .sort((left, right) => left - right);
   return trimIsolatedHeartRateSpikes(sortedSamples);
+}
+
+function resolveCanonicalActivityTypes(
+  event: EventInterface,
+): ActivityTypes[] {
+  const rawActivityTypes = event.getActivityTypesAsArray?.();
+  if (!Array.isArray(rawActivityTypes)) {
+    return [];
+  }
+
+  const resolved = rawActivityTypes
+    .map(rawType => ActivityTypesHelper.resolveActivityType(`${rawType || ''}`))
+    .filter((activityType): activityType is ActivityTypes => Boolean(activityType));
+  return [...new Set(resolved)];
+}
+
+function resolveSampleActivityTypes(
+  events: EventInterface[],
+): ActivityTypes[] {
+  const resolved = new Set<ActivityTypes>();
+
+  events.forEach((event) => {
+    if (resolveHeartRateMax(event) === null) {
+      return;
+    }
+    resolveCanonicalActivityTypes(event).forEach(activityType => resolved.add(activityType));
+  });
+
+  return [...resolved];
+}
+
+function isLowIntensityScope(
+  activityTypes: ActivityTypes[],
+): boolean {
+  if (!activityTypes.length) {
+    return false;
+  }
+
+  return activityTypes.every(activityType => LOW_INTENSITY_MAX_HR_ACTIVITY_TYPES.has(activityType));
 }
 
 function resolveEventStartTime(event: EventInterface): number | null {
@@ -302,10 +359,26 @@ export const HEART_RATE_ADVISORY_ESTIMATOR: AdvisoryMetricEstimator = {
       };
     }
 
+    const sampleActivityTypes = resolveSampleActivityTypes(input.matchedEvents);
+    if (isLowIntensityScope(sampleActivityTypes)) {
+      return {
+        status: 'insufficient_data',
+        reason: 'Selected activities are low-intensity for max-heart-rate estimation (for example hiking or walking). Include higher-intensity workouts or ask across all activities.',
+      };
+    }
+
     if (heartRateSamples.length < MIN_HEART_RATE_SAMPLE_COUNT) {
       return {
         status: 'insufficient_data',
         reason: `At least ${MIN_HEART_RATE_SAMPLE_COUNT} events with max heart-rate samples are required. Try "Show my max heart rate over time this year."`,
+      };
+    }
+
+    const coverageSignals = resolveHeartRateCoverageSignals(input);
+    if (coverageSignals.distinctWeekCount < MIN_HEART_RATE_COVERAGE_WEEKS) {
+      return {
+        status: 'insufficient_data',
+        reason: `At least ${MIN_HEART_RATE_COVERAGE_WEEKS} distinct training weeks with max heart-rate samples are required. Try a broader date range or "Show my max heart rate over time this year."`,
       };
     }
 

@@ -127,6 +127,32 @@ const AI_INSIGHTS_SUPPORT_SUBJECTS = {
   noPromptResults: 'AI Insights - No prompt results',
   promptError: 'AI Insights - Prompt error',
 } as const;
+const ADVISORY_OBSERVED_MAX_PATTERN = /\bobserved max(?: is)?\s+(-?\d+(?:\.\d+)?)\s*bpm\b/i;
+
+function formatAdvisoryNumber(
+  value: number,
+  locale: string,
+): string {
+  return new Intl.NumberFormat(locale || undefined, {
+    maximumFractionDigits: 1,
+  }).format(value);
+}
+
+function parseObservedMaxFromEvidenceSummary(
+  evidenceSummary: string,
+): number | null {
+  const match = evidenceSummary.match(ADVISORY_OBSERVED_MAX_PATTERN);
+  if (!match) {
+    return null;
+  }
+
+  const parsedValue = Number(match[1]);
+  if (!Number.isFinite(parsedValue)) {
+    return null;
+  }
+
+  return parsedValue;
+}
 
 @Component({
   selector: 'app-ai-insights-page',
@@ -900,25 +926,39 @@ export class AiInsightsPageComponent {
       && response.advisory.rangeLow !== null
       && response.advisory.rangeHigh !== null
     ) {
+      const estimatedValue = response.advisory.estimate;
+      const rangeLow = response.advisory.rangeLow;
+      const rangeHigh = response.advisory.rangeHigh;
+      const upperMargin = Math.max(0, rangeHigh - estimatedValue);
+      const lowerMargin = Math.max(0, estimatedValue - rangeLow);
+      const observedMax = parseObservedMaxFromEvidenceSummary(response.advisory.evidenceSummary);
       cards.push({
         label: 'Expected value',
-        value: new Intl.NumberFormat(this.locale || undefined, {
-          maximumFractionDigits: 1,
-        }).format(response.advisory.estimate),
+        value: formatAdvisoryNumber(estimatedValue, this.locale),
         detailRows: [
           {
             label: 'Range',
-            value: `${new Intl.NumberFormat(this.locale || undefined, {
-              maximumFractionDigits: 1,
-            }).format(response.advisory.rangeLow)} – ${new Intl.NumberFormat(this.locale || undefined, {
-              maximumFractionDigits: 1,
-            }).format(response.advisory.rangeHigh)}`,
+            value: `${formatAdvisoryNumber(rangeLow, this.locale)} – ${formatAdvisoryNumber(rangeHigh, this.locale)}`,
           },
           {
             label: 'Confidence',
             value: response.advisory.confidenceTier
               ? `${response.advisory.confidenceTier[0]?.toUpperCase() || ''}${response.advisory.confidenceTier.slice(1)}`
               : 'Unknown',
+          },
+          ...(observedMax === null
+            ? []
+            : [{
+              label: 'Observed max sample',
+              value: formatAdvisoryNumber(observedMax, this.locale),
+            }]),
+          {
+            label: 'Upper bound calc',
+            value: `${formatAdvisoryNumber(estimatedValue, this.locale)} + ${formatAdvisoryNumber(upperMargin, this.locale)} = ${formatAdvisoryNumber(rangeHigh, this.locale)}`,
+          },
+          {
+            label: 'Lower bound calc',
+            value: `${formatAdvisoryNumber(estimatedValue, this.locale)} - ${formatAdvisoryNumber(lowerMargin, this.locale)} = ${formatAdvisoryNumber(rangeLow, this.locale)}`,
           },
         ],
       });

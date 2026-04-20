@@ -46,11 +46,12 @@ function buildHeartRateEvent(
   eventID: string,
   heartRateMax: number,
   startDate = '2026-03-10T08:00:00.000Z',
+  activityType: ActivityTypes = ActivityTypes.Cycling,
 ): EventInterface {
   return {
     startDate: new Date(startDate),
     getID: () => eventID,
-    getActivityTypesAsArray: () => [ActivityTypes.Cycling],
+    getActivityTypesAsArray: () => [activityType],
     getStat: (dataType: string) => {
       if (dataType === DataHeartRateMax.type) {
         return {
@@ -60,6 +61,21 @@ function buildHeartRateEvent(
       return null;
     },
   } as unknown as EventInterface;
+}
+
+function buildWeeklyHeartRateEvents(
+  heartRateValues: number[],
+  activityType: ActivityTypes = ActivityTypes.Cycling,
+): EventInterface[] {
+  const firstEventTime = Date.parse('2026-01-05T08:00:00.000Z');
+  return heartRateValues.map((heartRateMax, index) => (
+    buildHeartRateEvent(
+      `event-${index + 1}`,
+      heartRateMax,
+      new Date(firstEventTime + (index * 7 * 24 * 60 * 60 * 1000)).toISOString(),
+      activityType,
+    )
+  ));
 }
 
 function runSharedEstimatorContract(
@@ -89,12 +105,7 @@ describe('advisory-estimator', () => {
     const query = buildAdvisoryQuery('heart_rate');
     const result = executeAdvisoryEstimator({
       query,
-      matchedEvents: [
-        buildHeartRateEvent('event-1', 178),
-        buildHeartRateEvent('event-2', 182),
-        buildHeartRateEvent('event-3', 185),
-        buildHeartRateEvent('event-4', 181),
-      ],
+      matchedEvents: buildWeeklyHeartRateEvents([170, 173, 175, 178, 180, 181, 182, 185]),
     });
 
     expect(result.status).toBe('available');
@@ -114,12 +125,7 @@ describe('advisory-estimator', () => {
     const query = buildAdvisoryQuery('heart_rate');
     const result = executeAdvisoryEstimator({
       query,
-      matchedEvents: [
-        buildHeartRateEvent('event-1', 162),
-        buildHeartRateEvent('event-2', 168),
-        buildHeartRateEvent('event-3', 172),
-        buildHeartRateEvent('event-4', 192),
-      ],
+      matchedEvents: buildWeeklyHeartRateEvents([162, 168, 172, 176, 180, 184, 189, 192]),
     });
 
     expect(result.status).toBe('available');
@@ -135,12 +141,7 @@ describe('advisory-estimator', () => {
     const query = buildAdvisoryQuery('heart_rate');
     const result = executeAdvisoryEstimator({
       query,
-      matchedEvents: [
-        buildHeartRateEvent('event-1', 166),
-        buildHeartRateEvent('event-2', 171),
-        buildHeartRateEvent('event-3', 175),
-        buildHeartRateEvent('event-4', 192),
-      ],
+      matchedEvents: buildWeeklyHeartRateEvents([166, 171, 175, 178, 181, 186, 190, 192]),
     });
 
     expect(result.status).toBe('available');
@@ -207,16 +208,22 @@ describe('advisory-estimator', () => {
     expect(result.insufficientDataReason?.length).toBeGreaterThan(0);
   });
 
+  it('returns insufficient_data for low-intensity-only scopes such as hiking', () => {
+    const query = buildAdvisoryQuery('heart_rate');
+    const result = executeAdvisoryEstimator({
+      query,
+      matchedEvents: buildWeeklyHeartRateEvents([132, 134, 135, 136, 137, 138, 139, 140], ActivityTypes.Hiking),
+    });
+
+    expect(result.status).toBe('insufficient_data');
+    expect(result.insufficientDataReason).toContain('low-intensity');
+  });
+
   it('ignores implausible heart-rate spikes above the physiologic cap', () => {
     const query = buildAdvisoryQuery('heart_rate');
     const result = executeAdvisoryEstimator({
       query,
-      matchedEvents: [
-        buildHeartRateEvent('event-1', 170),
-        buildHeartRateEvent('event-2', 175),
-        buildHeartRateEvent('event-3', 182),
-        buildHeartRateEvent('event-4', 252),
-      ],
+      matchedEvents: buildWeeklyHeartRateEvents([168, 170, 172, 174, 176, 178, 180, 182, 252]),
     });
 
     expect(result.status).toBe('available');
@@ -233,12 +240,7 @@ describe('advisory-estimator', () => {
     const query = buildAdvisoryQuery('heart_rate');
     const result = executeAdvisoryEstimator({
       query,
-      matchedEvents: [
-        buildHeartRateEvent('event-1', 170),
-        buildHeartRateEvent('event-2', 175),
-        buildHeartRateEvent('event-3', 182),
-        buildHeartRateEvent('event-4', 230),
-      ],
+      matchedEvents: buildWeeklyHeartRateEvents([168, 170, 172, 174, 176, 178, 180, 182, 230]),
     });
 
     expect(result.status).toBe('available');

@@ -1403,7 +1403,7 @@ function buildAdvisoryResponse(): AiInsightsAdvisoryOkResponse {
       rangeLow: 182,
       rangeHigh: 190,
       confidenceTier: 'medium',
-      evidenceSummary: 'Based on deterministic heart-rate samples.',
+      evidenceSummary: 'Based on deterministic heart-rate samples, observed max is 188 bpm.',
     },
     synthesis: {
       attempted: true,
@@ -2310,6 +2310,9 @@ describe('AiInsightsPageComponent', () => {
     const summaryValues = fixture.debugElement
       .queryAll(By.css('.summary-value'))
       .map((value) => (value.nativeElement.textContent || '').trim());
+    const detailRows = fixture.debugElement
+      .queryAll(By.css('.summary-detail-row'))
+      .map((row) => (row.nativeElement.textContent || '').replace(/\s+/g, ' ').trim());
     const aggregateChart = fixture.debugElement.query(By.css('.chart-stub'));
     const multiMetricChart = fixture.debugElement.query(By.css('.multi-chart-stub'));
     const powerCurveChart = fixture.debugElement.query(By.css('.power-curve-chart-stub'));
@@ -2324,7 +2327,10 @@ describe('AiInsightsPageComponent', () => {
     expect(summaryValues).toContain('Available');
     expect(summaryValues).toContain('Heart rate');
     expect(summaryValues.some((value) => value.includes('186'))).toBe(true);
-    expect(summaryValues.some((value) => value.includes('Based on deterministic heart-rate samples.'))).toBe(true);
+    expect(summaryValues.some((value) => value.includes('Based on deterministic heart-rate samples, observed max is 188 bpm.'))).toBe(true);
+    expect(detailRows.some((row) => row.includes('Observed max sample') && row.includes('188'))).toBe(true);
+    expect(detailRows.some((row) => row.includes('Upper bound calc') && row.includes('186 + 4 = 190'))).toBe(true);
+    expect(detailRows.some((row) => row.includes('Lower bound calc') && row.includes('186 - 4 = 182'))).toBe(true);
     expect(aggregateChart).toBeNull();
     expect(multiMetricChart).toBeNull();
     expect(powerCurveChart).toBeNull();

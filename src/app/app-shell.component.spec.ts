@@ -120,7 +120,8 @@ describe('AppShellComponent', () => {
                         updateUserProperties: vi.fn().mockReturnValue(Promise.resolve()),
                         getSubscriptionRole: vi.fn().mockReturnValue(Promise.resolve('free')),
                         gracePeriodUntil: signal(null),
-                        isAdmin: vi.fn().mockReturnValue(Promise.resolve(false))
+                        isAdmin: vi.fn().mockReturnValue(Promise.resolve(false)),
+                        hasIncompleteProfileReads: vi.fn().mockReturnValue(false)
                     }
                 },
                 {
@@ -670,6 +671,28 @@ describe('AppShellComponent', () => {
             component['currentUser'],
             { hasSubscribedOnce: true }
         );
+    });
+
+    it('should defer onboarding persistence when profile reads are incomplete', () => {
+        const appUserService = TestBed.inject(AppUserService) as any;
+        appUserService.updateUserProperties.mockClear();
+        appUserService.hasIncompleteProfileReads.mockReturnValue(true);
+
+        component['currentUser'] = {
+            uid: 'u1',
+            acceptedPrivacyPolicy: false,
+            acceptedDataPolicy: false,
+            acceptedTos: false,
+            stripeRole: 'pro',
+            hasSubscribedOnce: false,
+            onboardingCompleted: false
+        };
+        mockRouter.url = '/dashboard';
+
+        (component as any).updateOnboardingState();
+
+        expect(component.onboardingCompleted).toBe(true);
+        expect(appUserService.updateUserProperties).not.toHaveBeenCalled();
     });
 
     it('should clear pending initial loader timeout on destroy', () => {
