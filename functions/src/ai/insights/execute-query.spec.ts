@@ -530,6 +530,70 @@ describe('execute-query', () => {
     expect(result.advisory.evidenceSummary.length).toBeGreaterThan(0);
   });
 
+  it('keeps advisory estimate at or above the observed max heart-rate sample', async () => {
+    const fetchEventDocs = vi.fn(async () => [
+      { id: 'e1', data: () => ({ startDate: new Date('2026-01-10T12:00:00.000Z') }) },
+      { id: 'e2', data: () => ({ startDate: new Date('2026-01-12T12:00:00.000Z') }) },
+      { id: 'e3', data: () => ({ startDate: new Date('2026-02-12T12:00:00.000Z') }) },
+      { id: 'e4', data: () => ({ startDate: new Date('2026-03-12T12:00:00.000Z') }) },
+    ]);
+    const importEvent = vi
+      .fn()
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'e1',
+        startDate: new Date('2026-01-10T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: { [DataHeartRateMax.type]: 166 },
+      }))
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'e2',
+        startDate: new Date('2026-01-12T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: { [DataHeartRateMax.type]: 171 },
+      }))
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'e3',
+        startDate: new Date('2026-02-12T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: { [DataHeartRateMax.type]: 175 },
+      }))
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'e4',
+        startDate: new Date('2026-03-12T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: { [DataHeartRateMax.type]: 192 },
+      }));
+
+    setExecuteQueryDependenciesForTesting({
+      fetchEventDocs,
+      fetchDebugEventSnapshot: vi.fn(async () => ({
+        totalEventsCount: 4,
+        recentEventsSample: [],
+      })),
+      importEvent,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+    });
+
+    const result = await executeAiInsightsQuery(
+      'user-1',
+      createAdvisoryQuery('heart_rate'),
+      'what should my max heart rate be this year',
+    );
+
+    expect(result.resultKind).toBe('advisory');
+    if (result.resultKind !== 'advisory') {
+      return;
+    }
+
+    expect(result.advisory.status).toBe('available');
+    if (result.advisory.status !== 'available') {
+      return;
+    }
+
+    expect(result.advisory.estimate).toBeGreaterThanOrEqual(192);
+    expect(result.advisory.rangeHigh).toBeGreaterThanOrEqual(192);
+  });
+
   it('builds a best power-curve envelope across matching events', async () => {
     const fetchEventDocs = vi.fn(async () => [
       { id: 'e1', data: () => ({ startDate: new Date('2026-01-10T12:00:00.000Z') }) },

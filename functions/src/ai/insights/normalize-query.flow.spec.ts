@@ -3541,6 +3541,58 @@ describe('normalizeInsightQuery', () => {
     });
   });
 
+  it('expands advisory cycling prompts to the full cycling family', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-22T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'What should my max heart rate be this year for cycling?',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok' || result.query.resultKind !== 'advisory') {
+      return;
+    }
+
+    const expectedActivityTypes = [
+      ...new Set([
+        ...getActivityTypesForGroup(ActivityTypeGroups.CyclingGroup),
+        ...getActivityTypesForGroup(ActivityTypeGroups.MountainBikingGroup),
+      ]),
+    ];
+    const resolvedActivityTypeSet = new Set(result.query.activityFilters.activityTypes);
+
+    for (const activityType of expectedActivityTypes) {
+      expect(resolvedActivityTypeSet.has(activityType)).toBe(true);
+    }
+  });
+
+  it('preserves advisory cycling exclusions when expanding activity families', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-22T12:00:00.000Z'),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'What should my max heart rate be this year for cycling excluding mountain biking?',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok' || result.query.resultKind !== 'advisory') {
+      return;
+    }
+
+    const resolvedActivityTypeSet = new Set(result.query.activityFilters.activityTypes);
+    const mountainBikingFamily = new Set(getActivityTypesForGroup(ActivityTypeGroups.MountainBikingGroup));
+
+    for (const activityType of mountainBikingFamily) {
+      expect(resolvedActivityTypeSet.has(activityType)).toBe(false);
+    }
+    expect(resolvedActivityTypeSet.has(ActivityTypes.Cycling)).toBe(true);
+  });
+
   it('falls back to single-metric normalization when advisory wording targets a metric without an enabled estimator', async () => {
     setNormalizeQueryDependenciesForTesting({
       now: () => new Date('2026-03-22T12:00:00.000Z'),
@@ -3557,6 +3609,42 @@ describe('normalizeInsightQuery', () => {
       query: {
         resultKind: 'aggregate',
         dataType: DataDistance.type,
+      },
+      routing: {
+        routeId: 'single_metric',
+        source: 'deterministic',
+        resultKind: 'aggregate',
+      },
+    });
+  });
+
+  it('keeps explicit over-time goal prompts in single-metric mode even when advisory estimators exist', async () => {
+    setNormalizeQueryDependenciesForTesting({
+      now: () => new Date('2026-03-22T12:00:00.000Z'),
+      generateIntent: async () => ({
+        status: 'supported',
+        metric: 'max heart rate',
+        aggregation: 'maximum',
+        category: 'date',
+        requestedTimeInterval: 'auto',
+        dateRange: {
+          kind: 'current_period',
+          unit: 'year',
+        },
+      }),
+    });
+
+    const result = await normalizeInsightQuery({
+      prompt: 'show my goal max heart rate over time this year',
+      clientTimezone: 'UTC',
+    });
+
+    expect(result).toMatchObject({
+      status: 'ok',
+      metricKey: 'heart_rate',
+      query: {
+        resultKind: 'aggregate',
+        dataType: DataHeartRateMax.type,
       },
       routing: {
         routeId: 'single_metric',

@@ -727,12 +727,66 @@ function hasEffectiveRangeReference(
   return narrative.includes(startDateText) && narrative.includes(endDateText);
 }
 
+function hasAdvisoryFactConsistency(
+  input: SummarizeInsightResultInput,
+  narrative: string,
+): boolean {
+  if (!('advisory' in input) || input.advisory.status !== 'available') {
+    return true;
+  }
+
+  const normalizedNarrative = narrative.replace(/[\u2013\u2014]/g, '-');
+  const estimateLabel = input.advisory.estimate === null
+    ? null
+    : formatNumber(input.advisory.estimate);
+  const rangeLowLabel = input.advisory.rangeLow === null
+    ? null
+    : formatNumber(input.advisory.rangeLow);
+  const rangeHighLabel = input.advisory.rangeHigh === null
+    ? null
+    : formatNumber(input.advisory.rangeHigh);
+
+  if (estimateLabel && !normalizedNarrative.includes(estimateLabel)) {
+    return false;
+  }
+
+  if (rangeLowLabel && rangeHighLabel) {
+    const hasRangeReference = normalizedNarrative.includes(`${rangeLowLabel}-${rangeHighLabel}`)
+      || normalizedNarrative.includes(`between ${rangeLowLabel} and ${rangeHighLabel}`)
+      || normalizedNarrative.includes(`${rangeLowLabel} to ${rangeHighLabel}`);
+    if (!hasRangeReference) {
+      return false;
+    }
+  }
+
+  if (input.advisory.confidenceTier) {
+    const confidencePattern = new RegExp(`\\b${input.advisory.confidenceTier}\\s+confidence\\b`, 'i');
+    if (!confidencePattern.test(normalizedNarrative)) {
+      return false;
+    }
+  }
+
+  const observedMaxMatch = input.advisory.evidenceSummary.match(/observed\s+max\s+([0-9]+(?:\.[0-9]+)?)/i);
+  if (observedMaxMatch) {
+    const observedMaxLabel = formatNumber(Number(observedMaxMatch[1]));
+    if (observedMaxLabel && !normalizedNarrative.includes(observedMaxLabel)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 function resolveNarrativeOverrideReason(
   input: SummarizeInsightResultInput,
   narrative: string,
-): 'empty_result' | 'contains_no_data_phrasing' | 'missing_effective_range' | 'missing_scope_reference' | 'unexpected_scope_reference' | null {
+): 'empty_result' | 'contains_no_data_phrasing' | 'missing_effective_range' | 'missing_scope_reference' | 'unexpected_scope_reference' | 'advisory_fact_mismatch' | null {
   if (input.status === 'empty') {
     return 'empty_result';
+  }
+
+  if (!hasAdvisoryFactConsistency(input, narrative)) {
+    return 'advisory_fact_mismatch';
   }
 
   if (!hasResolvedScopeReference(input, narrative)) {

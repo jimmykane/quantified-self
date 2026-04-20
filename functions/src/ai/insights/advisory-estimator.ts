@@ -1,4 +1,7 @@
-import type { EventInterface } from '@sports-alliance/sports-lib';
+import {
+  DataHeartRateMax,
+  type EventInterface,
+} from '@sports-alliance/sports-lib';
 import type {
   AiInsightAdvisoryResult,
   AiInsightConfidenceTier,
@@ -139,6 +142,49 @@ function normalizeEstimateResult(
   };
 }
 
+function resolveObservedHeartRateMax(
+  matchedEvents: EventInterface[],
+): number | null {
+  const observedValues = matchedEvents
+    .map((event) => {
+      const stat = event.getStat?.(DataHeartRateMax.type);
+      const value = Number(stat?.getValue?.());
+      return Number.isFinite(value) && value > 0 ? value : null;
+    })
+    .filter((value): value is number => value !== null);
+
+  if (!observedValues.length) {
+    return null;
+  }
+
+  return Math.max(...observedValues);
+}
+
+function applyMetricSpecificInvariants(
+  input: AdvisoryEstimatorInput,
+  estimate: AdvisoryEstimatorEstimateResult,
+): AdvisoryEstimatorEstimateResult {
+  if (input.query.metricKey !== 'heart_rate') {
+    return estimate;
+  }
+
+  const observedMax = resolveObservedHeartRateMax(input.matchedEvents);
+  if (observedMax === null) {
+    return estimate;
+  }
+
+  const pointEstimate = Math.max(estimate.pointEstimate, observedMax);
+  const rangeLow = Math.min(estimate.rangeLow, pointEstimate);
+  const rangeHigh = Math.max(estimate.rangeHigh, pointEstimate, observedMax);
+
+  return {
+    ...estimate,
+    pointEstimate,
+    rangeLow,
+    rangeHigh,
+  };
+}
+
 export function executeAdvisoryEstimatorWithResolvedEstimator(
   input: AdvisoryEstimatorInput,
   estimator: AdvisoryMetricEstimator | null,
@@ -165,13 +211,14 @@ export function executeAdvisoryEstimatorWithResolvedEstimator(
     );
   }
 
-  const estimate = normalizeEstimateResult(estimator.estimate(input));
-  if (!estimate) {
+  const normalizedEstimate = normalizeEstimateResult(estimator.estimate(input));
+  if (!normalizedEstimate) {
     return buildUnsupportedResult(
       input.query.metricKey,
       `Advisory estimator for ${input.query.metricKey} returned invalid estimate output.`,
     );
   }
+  const estimate = applyMetricSpecificInvariants(input, normalizedEstimate);
 
   const explainabilitySummary = `${estimator.explainability(input, estimate) || ''}`.trim();
   const evidenceSummary = explainabilitySummary

@@ -124,6 +124,8 @@ export interface DerivedMetricsCoordinatorDocData {
     status?: unknown;
     generation?: unknown;
     dirtyMetricKinds?: unknown;
+    requestedAtMs?: unknown;
+    startedAtMs?: unknown;
     updatedAtMs?: unknown;
     lastError?: unknown;
 }

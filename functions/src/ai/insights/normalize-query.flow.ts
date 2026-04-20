@@ -250,7 +250,7 @@ const EVENT_LOOKUP_RANKING_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
   /\b(max|maximum|min|minimum|peak)\b/i,
 ];
 const ADVISORY_PROMPT_PATTERNS: ReadonlyArray<RegExp> = [
-  /\b(expected|expectation|predict|prediction|projected|projection|forecast|target|goal)\b/i,
+  /\b(expected|expectation|predict|prediction|projected|projection|forecast)\b/i,
   /\b(what|when)\s+(should|would)\s+my\b/i,
   /\bshould\s+my\b/i,
 ];
@@ -1378,6 +1378,47 @@ function excludeActivityTypes(
   return activityTypes.filter(activityType => !excludedActivityTypes.has(activityType));
 }
 
+function expandAdvisoryCyclingActivityFamily(
+  prompt: string,
+  activityTypes: ActivityTypes[],
+  activityTypeGroups: ActivityTypeGroup[],
+  excludedActivityTypes: ReadonlySet<ActivityTypes>,
+): ActivityTypes[] {
+  if (activityTypes.length === 0 || activityTypeGroups.length > 0) {
+    return activityTypes;
+  }
+
+  const normalizedPrompt = normalizePromptSearchText(prompt);
+  if (!normalizedPrompt || !/\bcycling\b/.test(normalizedPrompt)) {
+    return activityTypes;
+  }
+
+  if (!activityTypes.includes(ActivityTypes.Cycling)) {
+    return activityTypes;
+  }
+
+  const advisoryCyclingGroups: ActivityTypeGroup[] = [
+    ActivityTypeGroups.CyclingGroup,
+    ActivityTypeGroups.MountainBikingGroup,
+  ];
+  const expandedActivityTypes = Array.from(new Set<ActivityTypes>([
+    ...activityTypes,
+    ...expandActivityTypeGroups(advisoryCyclingGroups),
+  ]));
+  const expandedExcludedActivityTypes = new Set<ActivityTypes>(excludedActivityTypes);
+  for (const advisoryGroup of advisoryCyclingGroups) {
+    const advisoryGroupActivityTypes = getActivityTypesForGroup(advisoryGroup);
+    if (!advisoryGroupActivityTypes.some(activityType => excludedActivityTypes.has(activityType))) {
+      continue;
+    }
+    for (const advisoryGroupActivityType of advisoryGroupActivityTypes) {
+      expandedExcludedActivityTypes.add(advisoryGroupActivityType);
+    }
+  }
+
+  return excludeActivityTypes(expandedActivityTypes, expandedExcludedActivityTypes);
+}
+
 function resolveKeywordActivityTypeExclusions(promptClause: string): ActivityTypes[] {
   const normalizedClause = normalizePromptSearchText(promptClause);
   if (!normalizedClause) {
@@ -2365,6 +2406,12 @@ export function resolveNormalizedInsightQueryFromIntent(
           : excludedActivityTypeSet.size > 0
             ? excludeActivityTypes(CANONICAL_ACTIVITY_TYPES, excludedActivityTypeSet)
             : [];
+      const advisoryActivityTypes = expandAdvisoryCyclingActivityFamily(
+        promptWithoutActivityExclusions,
+        finalActivityTypes,
+        finalActivityTypeGroups,
+        excludedActivityTypeSet,
+      );
 
       const dateRange = resolveDateRange(resolvedDateRangeIntent, input.clientTimezone, dependencies.now());
       const requestedDateRanges = resolveRequestedDateRanges(
@@ -2381,7 +2428,7 @@ export function resolveNormalizedInsightQueryFromIntent(
           advisoryKind: 'expected_value',
           horizon: resolveAdvisoryHorizon(resolvedDateRangeIntent),
           activityTypeGroups: finalActivityTypeGroups,
-          activityTypes: finalActivityTypes,
+          activityTypes: advisoryActivityTypes,
           dateRange,
           requestedDateRanges,
           periodMode: promptDateSelection.periodMode,

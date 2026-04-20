@@ -106,6 +106,27 @@ describe('advisory-estimator', () => {
     expect(result.evidenceSummary.length).toBeGreaterThan(0);
   });
 
+  it('never estimates below observed max heart-rate in the selected scope', () => {
+    const query = buildAdvisoryQuery('heart_rate');
+    const result = executeAdvisoryEstimator({
+      query,
+      matchedEvents: [
+        buildHeartRateEvent('event-1', 162),
+        buildHeartRateEvent('event-2', 168),
+        buildHeartRateEvent('event-3', 172),
+        buildHeartRateEvent('event-4', 192),
+      ],
+    });
+
+    expect(result.status).toBe('available');
+    if (result.status !== 'available') {
+      return;
+    }
+
+    expect(result.estimate).toBeGreaterThanOrEqual(192);
+    expect(result.rangeHigh).toBeGreaterThanOrEqual(192);
+  });
+
   it('returns insufficient_data for heart_rate when samples are sparse', () => {
     const query = buildAdvisoryQuery('heart_rate');
     const result = executeAdvisoryEstimator({
@@ -177,6 +198,39 @@ describe('advisory-estimator', () => {
     expect(result.rangeHigh).toBe(209);
     expect(result.estimate).toBe(203);
     expect(result.evidenceSummary).toBe('Synthetic deterministic evidence');
+  });
+
+  it('enforces heart-rate invariant when custom estimator outputs below observed max', () => {
+    const query = buildAdvisoryQuery('heart_rate');
+    const result = executeAdvisoryEstimatorWithResolvedEstimator({
+      query,
+      matchedEvents: [
+        buildHeartRateEvent('event-1', 171),
+        buildHeartRateEvent('event-2', 176),
+        buildHeartRateEvent('event-3', 192),
+      ],
+    }, {
+      metricKey: 'heart_rate',
+      enabled: true,
+      isEligible: () => ({ status: 'eligible' }),
+      estimate: () => ({
+        pointEstimate: 184,
+        rangeLow: 169,
+        rangeHigh: 192,
+        confidenceTier: 'medium',
+        evidence: ['Synthetic deterministic evidence'],
+      }),
+      explainability: () => 'Synthetic deterministic evidence',
+    } satisfies AdvisoryMetricEstimator);
+
+    expect(result.status).toBe('available');
+    if (result.status !== 'available') {
+      return;
+    }
+
+    expect(result.estimate).toBeGreaterThanOrEqual(192);
+    expect(result.rangeHigh).toBeGreaterThanOrEqual(192);
+    expect(result.rangeLow).toBeLessThanOrEqual(result.estimate ?? 0);
   });
 
   it('returns unsupported when an advisory estimator produces invalid numeric output', () => {

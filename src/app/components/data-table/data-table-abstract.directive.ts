@@ -135,6 +135,7 @@ export abstract class DataTableAbstractDirective extends LoadingAbstractDirectiv
     statRowElement[`sort.${DataAerobicTrainingEffect.type}`] = TTE ? <number>TTE.getValue() : 0;
     statRowElement[`sort.${DataSpeedAvg.type}`] = avgSpeed ? <number>avgSpeed.getValue() : 0;
     statRowElement[`sort.${DataPowerAvg.type}`] = avgPower ? <number>avgPower.getValue() : 0;
+    statRowElement[`sort.${DataHeartRateAvg.type}`] = heartRateAverage ? <number>heartRateAverage.getValue() : 0;
     statRowElement[`sort.${DataPowerMax.type}`] = avgPower ? <number>avgPower.getValue() : 0;
 
     return statRowElement;
