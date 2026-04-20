@@ -9,6 +9,7 @@ import {
     ChartDataValueTypes,
     ChartTypes,
     DataRecoveryTime,
+    DataHeartRateAvg,
     TileTypes,
     TimeIntervals
 } from '@sports-alliance/sports-lib';
@@ -450,10 +451,28 @@ describe('AppUserUtilities', () => {
             expect(settings.unitSettings.paceUnits).toEqual(AppUserUtilities.getDefaultPaceUnits());
             expect(settings.unitSettings.swimPaceUnits).toEqual(AppUserUtilities.getDefaultSwimPaceUnits());
             expect(settings.unitSettings.verticalSpeedUnits).toEqual(AppUserUtilities.getDefaultVerticalSpeedUnits());
-            expect(settings.dashboardSettings.tableSettings.active).toBe('startDate');
+            expect(settings.dashboardSettings.tableSettings.active).toBe('Start Date');
             expect(settings.dashboardSettings.tableSettings.direction).toBe('desc');
             expect(settings.dashboardSettings.tableSettings.eventsPerPage).toBe(10);
             expect(settings.dashboardSettings.tableSettings.selectedColumns.length).toBeGreaterThan(0);
+        });
+
+        it('should normalize legacy table column aliases for sorting and selected columns', () => {
+            const user = {
+                settings: {
+                    dashboardSettings: {
+                        tableSettings: {
+                            active: 'Average Heartrate',
+                            selectedColumns: ['Average Heartrate', 'Distance', 'Average Heart Rate']
+                        }
+                    }
+                }
+            } as unknown as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+
+            expect(settings.dashboardSettings.tableSettings.active).toBe(DataHeartRateAvg.type);
+            expect(settings.dashboardSettings.tableSettings.selectedColumns).toEqual([DataHeartRateAvg.type, 'Distance']);
         });
     });
 });

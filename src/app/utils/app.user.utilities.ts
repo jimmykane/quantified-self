@@ -311,10 +311,54 @@ export class AppUserUtilities {
     static getDefaultTableSettings(): TableSettings {
         return {
             eventsPerPage: 10,
-            active: 'startDate',
+            active: 'Start Date',
             direction: 'desc',
             selectedColumns: this.getDefaultSelectedTableColumns()
         }
+    }
+
+    private static normalizeTableColumnName(column: unknown): string | null {
+        if (typeof column !== 'string') {
+            return null;
+        }
+
+        const trimmedColumn = column.trim();
+        if (!trimmedColumn) {
+            return null;
+        }
+
+        const normalized = trimmedColumn.toLowerCase();
+        const compact = normalized.replace(/\s+/g, '');
+
+        if (normalized === 'startdate') {
+            return 'Start Date';
+        }
+
+        if (compact === 'averageheartrate') {
+            return DataHeartRateAvg.type;
+        }
+
+        return trimmedColumn;
+    }
+
+    private static normalizeTableSelectedColumns(columns: unknown): string[] {
+        if (!Array.isArray(columns)) {
+            return [];
+        }
+
+        const normalizedColumns: string[] = [];
+        const seenColumns = new Set<string>();
+
+        for (const column of columns) {
+            const normalizedColumn = AppUserUtilities.normalizeTableColumnName(column);
+            if (!normalizedColumn || seenColumns.has(normalizedColumn)) {
+                continue;
+            }
+            seenColumns.add(normalizedColumn);
+            normalizedColumns.push(normalizedColumn);
+        }
+
+        return normalizedColumns;
     }
 
     static getDefaultSelectedTableColumns(): string[] {
@@ -462,14 +506,15 @@ export class AppUserUtilities {
         }
         // Patch missing defaults
         settings.dashboardSettings.tableSettings = settings.dashboardSettings.tableSettings || defaultTableSettings;
-        settings.dashboardSettings.tableSettings.active = settings.dashboardSettings.tableSettings.active || defaultTableSettings.active;
+        settings.dashboardSettings.tableSettings.active = AppUserUtilities.normalizeTableColumnName(settings.dashboardSettings.tableSettings.active)
+            || defaultTableSettings.active;
         settings.dashboardSettings.tableSettings.direction = settings.dashboardSettings.tableSettings.direction || defaultTableSettings.direction;
         settings.dashboardSettings.tableSettings.eventsPerPage = isNumber(settings.dashboardSettings.tableSettings.eventsPerPage)
             ? settings.dashboardSettings.tableSettings.eventsPerPage
             : defaultTableSettings.eventsPerPage;
-        settings.dashboardSettings.tableSettings.selectedColumns = Array.isArray(settings.dashboardSettings.tableSettings.selectedColumns)
-            && settings.dashboardSettings.tableSettings.selectedColumns.length > 0
-            ? settings.dashboardSettings.tableSettings.selectedColumns
+        const normalizedSelectedColumns = AppUserUtilities.normalizeTableSelectedColumns(settings.dashboardSettings.tableSettings.selectedColumns);
+        settings.dashboardSettings.tableSettings.selectedColumns = normalizedSelectedColumns.length > 0
+            ? normalizedSelectedColumns
             : AppUserUtilities.getDefaultSelectedTableColumns();
 
         // Summaries
