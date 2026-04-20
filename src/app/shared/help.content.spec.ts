@@ -111,7 +111,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('horizontal scroll lane');
   });
 
-  it('should document Garmin to Suunto route-based activity sync and manual catch-up', () => {
+  it('should document Garmin/COROS to Suunto route-based activity sync and manual catch-up', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
 
     expect(serviceConnectionsSection?.content).toContain('Garmin -> Suunto activity sync is route-based');
@@ -120,6 +120,11 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('convenience tool for queuing a period on demand');
     expect(serviceConnectionsSection?.content).toContain('stored original files already attached to existing Quantified Self events');
     expect(serviceConnectionsSection?.content).toContain('can run even when the Garmin -> Suunto auto-sync toggle is off');
-    expect(serviceConnectionsSection?.content).toContain('Disconnecting Garmin or Suunto automatically disables related route auto-sync settings');
+    expect(serviceConnectionsSection?.content).toContain('Disconnecting Garmin, COROS, or Suunto automatically disables related route auto-sync settings');
+    expect(serviceConnectionsSection?.content).toContain('COROS -> Suunto activity sync is route-based');
+    expect(serviceConnectionsSection?.content).toContain('enable the route toggle in COROS Services');
+    expect(serviceConnectionsSection?.content).toContain('Automatic sync runs only for newly imported COROS activities');
+    expect(serviceConnectionsSection?.content).toContain('Manual catch-up is available in COROS Services');
+    expect(serviceConnectionsSection?.content).toContain('can run even when the COROS -> Suunto auto-sync toggle is off');
   });
 });

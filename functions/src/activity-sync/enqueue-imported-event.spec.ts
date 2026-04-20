@@ -95,6 +95,42 @@ describe('activity-sync/enqueue-imported-event', () => {
     }));
   });
 
+  it('queues COROS->Suunto route when source event comes from COROS and FIT original exists', async () => {
+    const result = await enqueueActivitySyncJobsForImportedEvent({
+      userID: 'user-1',
+      eventID: 'event-coros-1',
+      sourceServiceName: ServiceNames.COROSAPI,
+      sourceActivityID: 'coros-activity-1',
+      routeIdFilter: ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp,
+      originalFiles: [
+        fitOriginalFile('users/user-1/events/event-coros-1/original.fit'),
+      ],
+    });
+
+    expect(result).toEqual({ queued: 1, skippedByReason: {} });
+    expect(mockIsActivitySyncRouteEnabledForUser).toHaveBeenCalledWith(
+      'user-1',
+      ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp,
+    );
+    expect(mockEnqueueActivitySyncQueueItem).toHaveBeenCalledWith(expect.objectContaining({
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp,
+      userID: 'user-1',
+      eventID: 'event-coros-1',
+      sourceActivityID: 'coros-activity-1',
+      originalFile: expect.objectContaining({
+        path: 'users/user-1/events/event-coros-1/original.fit',
+        extension: 'fit',
+      }),
+      manual: false,
+    }));
+    expect(mockSetActivitySyncQueuedMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp,
+      userID: 'user-1',
+      eventID: 'event-coros-1',
+      manual: false,
+    }));
+  });
+
   it('marks route as skipped when user is not allowlisted', async () => {
     mockIsActivitySyncRouteUserAllowlisted.mockReturnValue(false);
 

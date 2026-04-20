@@ -2,17 +2,18 @@ import { Component } from '@angular/core';
 import { ServiceNames, Auth2ServiceTokenInterface, Auth1ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { HttpClient } from '@angular/common/http';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { Router, ActivatedRoute } from '@angular/router';
-import { Analytics } from 'app/firebase/analytics';
-import { LoggerService } from '../../../services/logger.service';
+import { ActivatedRoute } from '@angular/router';
 import { AppFileService } from '../../../services/app.file.service';
 import { AppEventService } from '../../../services/app.event.service';
 import { AppAuthService } from '../../../authentication/app.auth.service';
-import { AppUserService } from '../../../services/app.user.service';
+import { ActivitySyncBackfillSummary, AppUserService } from '../../../services/app.user.service';
 import { AppWindowService } from '../../../services/app.window.service';
 import { ServicesAbstractComponentDirective } from '../services-abstract-component.directive';
 import { COROS_HISTORY_IMPORT_LIMIT_MONTHS } from '../../../constants/coros';
+import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
+import { isActivitySyncRouteUIDAllowlisted } from '@shared/activity-sync-rollout';
 import dayjs from 'dayjs';
+import { Subscription } from 'rxjs';
 
 
 @Component({
@@ -25,6 +26,15 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
 
   public serviceName = ServiceNames.COROSAPI;
   public minDate = dayjs().subtract(COROS_HISTORY_IMPORT_LIMIT_MONTHS, 'month').toDate();
+  public readonly corosToSuuntoRouteID = ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp;
+  public isSavingSyncRoute = false;
+  public isBackfillingSync = false;
+  public backfillStartDate: Date = new Date(Date.now() - (30 * 24 * 60 * 60 * 1000));
+  public backfillEndDate: Date = new Date();
+  public backfillSummary: ActivitySyncBackfillSummary | null = null;
+
+  private suuntoTokensSubscription: Subscription | null = null;
+  private suuntoTokens: Auth2ServiceTokenInterface[] | undefined;
 
   constructor(protected http: HttpClient,
     protected fileService: AppFileService,
@@ -45,6 +55,17 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
     }
   }
 
+  override async ngOnChanges() {
+    await super.ngOnChanges();
+    this.watchSuuntoConnectionState();
+  }
+
+  override ngOnDestroy(): void {
+    super.ngOnDestroy();
+    this.suuntoTokensSubscription?.unsubscribe();
+    this.suuntoTokensSubscription = null;
+  }
+
   isConnectedToService = () => (!!this.serviceTokens && !!this.serviceTokens.length) || this.forceConnected;
 
   buildRedirectURIFromServiceToken(token: { redirect_uri: string }): string {
@@ -57,5 +78,123 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
 
   getCorosOpenId(token: Auth2ServiceTokenInterface | Auth1ServiceTokenInterface): string | undefined {
     return (token as Auth2ServiceTokenInterface).openId;
+  }
+
+  private watchSuuntoConnectionState(): void {
+    this.suuntoTokensSubscription?.unsubscribe();
+    this.suuntoTokensSubscription = null;
+
+    if (!this.user) {
+      this.suuntoTokens = undefined;
+      return;
+    }
+
+    this.suuntoTokensSubscription = this.userService.getServiceToken(this.user, ServiceNames.SuuntoApp).subscribe((tokens) => {
+      this.suuntoTokens = tokens as Auth2ServiceTokenInterface[];
+    });
+  }
+
+  get isSuuntoConnected(): boolean {
+    return !!this.suuntoTokens?.length && !!this.suuntoTokens?.[0]?.accessToken;
+  }
+
+  get isCorosToSuuntoRouteEnabled(): boolean {
+    return this.user?.settings?.serviceSyncSettings?.activitySyncRoutes?.[this.corosToSuuntoRouteID]?.enabled === true;
+  }
+
+  get isCorosToSuuntoRouteAvailableForUser(): boolean {
+    const userID = `${this.user?.uid || ''}`.trim();
+    return isActivitySyncRouteUIDAllowlisted(this.corosToSuuntoRouteID, userID);
+  }
+
+  get isBackfillDateRangeInvalid(): boolean {
+    return this.backfillStartDate > this.backfillEndDate;
+  }
+
+  async onCorosToSuuntoRouteToggle(enabled: boolean): Promise<void> {
+    if (!this.user || this.isSavingSyncRoute) {
+      return;
+    }
+
+    if (!this.isCorosToSuuntoRouteAvailableForUser) {
+      this.snackBar.open('This activity sync route is not available for this account.', undefined, { duration: 4000 });
+      return;
+    }
+
+    if (enabled && (!this.isConnectedToService() || !this.isSuuntoConnected)) {
+      this.snackBar.open('Connect both COROS and Suunto accounts before enabling sync.', undefined, { duration: 4000 });
+      return;
+    }
+
+    this.isSavingSyncRoute = true;
+    try {
+      await this.userService.updateUserProperties(this.user as any, {
+        settings: {
+          serviceSyncSettings: {
+            activitySyncRoutes: {
+              [this.corosToSuuntoRouteID]: {
+                enabled,
+              },
+            },
+          },
+        },
+      });
+
+      const settings: any = this.user.settings || {};
+      settings.serviceSyncSettings = settings.serviceSyncSettings || {};
+      settings.serviceSyncSettings.activitySyncRoutes = settings.serviceSyncSettings.activitySyncRoutes || {};
+      settings.serviceSyncSettings.activitySyncRoutes[this.corosToSuuntoRouteID] = { enabled };
+      this.user.settings = settings;
+
+      this.analyticsService.logActivitySyncRouteToggle(this.corosToSuuntoRouteID, enabled);
+      this.snackBar.open(enabled ? 'COROS to Suunto auto-sync enabled.' : 'COROS to Suunto auto-sync disabled.', undefined, { duration: 3000 });
+    } catch (error: any) {
+      this.logger.error(error);
+      this.snackBar.open(`Could not update sync setting: ${error?.message || 'Unknown error'}`, undefined, { duration: 5000 });
+    } finally {
+      this.isSavingSyncRoute = false;
+    }
+  }
+
+  async runCorosToSuuntoBackfill(event: Event): Promise<void> {
+    event.preventDefault();
+
+    if (!this.user || this.isBackfillingSync) {
+      return;
+    }
+
+    if (!this.isCorosToSuuntoRouteAvailableForUser) {
+      this.snackBar.open('This activity sync route is not available for this account.', undefined, { duration: 4000 });
+      return;
+    }
+
+    if (this.isBackfillDateRangeInvalid) {
+      this.snackBar.open('Backfill start date must be before end date.', undefined, { duration: 3500 });
+      return;
+    }
+
+    this.isBackfillingSync = true;
+    try {
+      const summary = await this.userService.backfillActivitySyncRouteForCurrentUser(
+        ServiceNames.COROSAPI,
+        ServiceNames.SuuntoApp,
+        this.backfillStartDate,
+        this.backfillEndDate,
+      );
+
+      this.backfillSummary = summary;
+      this.analyticsService.logActivitySyncRouteBackfill(this.corosToSuuntoRouteID, {
+        scanned: summary.scanned,
+        queued: summary.queued,
+        failedCount: summary.failedCount,
+      });
+      const failureSuffix = summary.failedCount > 0 ? ` Failed: ${summary.failedCount}.` : '';
+      this.snackBar.open(`Backfill complete. Queued ${summary.queued} sync job(s).${failureSuffix}`, undefined, { duration: 4000 });
+    } catch (error: any) {
+      this.logger.error(error);
+      this.snackBar.open(`Backfill failed: ${error?.message || 'Unknown error'}`, undefined, { duration: 5000 });
+    } finally {
+      this.isBackfillingSync = false;
+    }
   }
 }

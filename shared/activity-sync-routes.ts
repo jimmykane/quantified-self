@@ -2,6 +2,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 
 export const ACTIVITY_SYNC_ROUTE_IDS = {
     GarminAPI_to_SuuntoApp: 'GarminAPI_to_SuuntoApp',
+    COROSAPI_to_SuuntoApp: 'COROSAPI_to_SuuntoApp',
 } as const;
 
 export type ActivitySyncRouteId = typeof ACTIVITY_SYNC_ROUTE_IDS[keyof typeof ACTIVITY_SYNC_ROUTE_IDS];
@@ -20,6 +21,12 @@ export const ACTIVITY_SYNC_ROUTES: Record<ActivitySyncRouteId, ActivitySyncRoute
         destinationServiceName: ServiceNames.SuuntoApp,
         supportedFileExtensions: ['fit'],
     },
+    [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: {
+        id: ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp,
+        sourceServiceName: ServiceNames.COROSAPI,
+        destinationServiceName: ServiceNames.SuuntoApp,
+        supportedFileExtensions: ['fit'],
+    },
 };
 
 export function getActivitySyncRouteId(
@@ -34,4 +41,3 @@ export function getActivitySyncRouteId(
 
     return null;
 }
-

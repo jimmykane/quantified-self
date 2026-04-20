@@ -3,6 +3,7 @@ import { ACTIVITY_SYNC_ROUTE_IDS, ActivitySyncRouteId } from './activity-sync-ro
 export const ACTIVITY_SYNC_ROUTE_ALLOWED_UIDS: Record<ActivitySyncRouteId, ReadonlyArray<string>> = {
     // Empty allowlist disables UID-gating for the route (production-wide rollout).
     [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: [],
+    [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: [],
 };
 
 export function isActivitySyncRouteUIDAllowlisted(routeId: ActivitySyncRouteId, uid: string): boolean {

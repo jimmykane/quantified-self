@@ -444,7 +444,7 @@ Garmin -> Suunto activity sync is route-based:
 - enable the route toggle in Garmin Services,
 - and keep Garmin ACTIVITY_EXPORT permission enabled.
 
-Disconnecting Garmin or Suunto automatically disables related route auto-sync settings. After reconnecting, re-enable the route toggle if you want automatic sync to resume.
+Disconnecting Garmin, COROS, or Suunto automatically disables related route auto-sync settings. After reconnecting, re-enable the route toggle if you want automatic sync to resume.
 
 Automatic sync runs only for newly imported Garmin activities and uses the stored original activity file from your event.
 
@@ -457,6 +457,18 @@ Manual catch-up can run even when the Garmin -> Suunto auto-sync toggle is off, 
 ## COROS
 
 COROS history import is limited to the last **3 months** because of API restrictions.
+
+COROS -> Suunto activity sync is route-based:
+
+- you must connect both COROS and Suunto,
+- enable the route toggle in COROS Services,
+- and keep both service connections active.
+
+Automatic sync runs only for newly imported COROS activities and uses the stored original activity file from your event.
+
+Manual catch-up is available in COROS Services: choose a date range to queue COROS -> Suunto sync jobs for events already imported into Quantified Self.
+
+Manual catch-up can run even when the COROS -> Suunto auto-sync toggle is off, and it does not enable auto-sync for future imports.
 
 ## Queue behavior
 

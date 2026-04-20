@@ -102,18 +102,28 @@ describe('activity-sync/disconnect-routes', () => {
           [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: {
             enabled: false,
           },
+          [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: {
+            enabled: false,
+          },
         },
       },
     }, { merge: true });
   });
 
-  it('does not write route settings when COROS token root is deleted', async () => {
+  it('disables COROS -> Suunto route when COROS token root is deleted', async () => {
     await (disableActivitySyncRoutesOnCOROSTokenRootDelete as unknown as (event: unknown) => Promise<void>)({
       params: { uid: 'user-1' },
     });
 
-    expect(mockUsersDocGet).not.toHaveBeenCalled();
-    expect(mockSettingsSet).not.toHaveBeenCalled();
+    expect(mockSettingsSet).toHaveBeenCalledWith({
+      serviceSyncSettings: {
+        activitySyncRoutes: {
+          [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: {
+            enabled: false,
+          },
+        },
+      },
+    }, { merge: true });
   });
 
   it('does not write route settings when user root does not exist', async () => {

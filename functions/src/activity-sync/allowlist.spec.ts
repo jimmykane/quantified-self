@@ -5,11 +5,16 @@ import { getActivitySyncRouteAllowlistConfigError, isActivitySyncRouteUserAllowl
 describe('activity-sync/allowlist', () => {
   it('has configured allowlist structure for known routes', () => {
     expect(getActivitySyncRouteAllowlistConfigError(ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp)).toBeNull();
+    expect(getActivitySyncRouteAllowlistConfigError(ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp)).toBeNull();
   });
 
   it('allows any non-empty uid when route allowlist is empty (gate disabled)', () => {
     expect(isActivitySyncRouteUserAllowlisted(
       ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+      'any-user-id',
+    )).toBe(true);
+    expect(isActivitySyncRouteUserAllowlisted(
+      ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp,
       'any-user-id',
     )).toBe(true);
   });

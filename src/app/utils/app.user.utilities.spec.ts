@@ -192,6 +192,7 @@ describe('AppUserUtilities', () => {
             expect(settings.unitSettings?.startOfTheWeek).toBe(1); // Monday
             expect((settings.myTracksSettings as any)?.showJumpHeatmap).toBe(true);
             expect(settings.serviceSyncSettings?.activitySyncRoutes?.[ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]?.enabled).toBe(false);
+            expect(settings.serviceSyncSettings?.activitySyncRoutes?.[ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]?.enabled).toBe(false);
         });
 
         it('should preserve existing settings', () => {
