@@ -535,6 +535,28 @@
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
             </mat-card>
+            <mat-card class="app-stat-card status-dlq"
+                matTooltip="Queued coordinators older than the stale threshold (10 minutes).">
+                <div class="app-stat-header">
+                    <mat-icon>hourglass_top</mat-icon>
+                    <span>Coordinators (Stale Queued)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.derivedMetrics?.coordinators?.staleQueued ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+            <mat-card class="app-stat-card status-dlq"
+                matTooltip="Processing coordinators older than the stale threshold (15 minutes).">
+                <div class="app-stat-header">
+                    <mat-icon>running_with_errors</mat-icon>
+                    <span>Coordinators (Stale Processing)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.derivedMetrics?.coordinators?.staleProcessing ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
             <mat-card class="app-stat-card status-error">
                 <div class="app-stat-header">
                     <mat-icon>error</mat-icon>

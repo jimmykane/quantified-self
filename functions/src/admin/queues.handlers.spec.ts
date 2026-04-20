@@ -279,6 +279,8 @@ describe('getQueueStats Cloud Function', () => {
                 idle: 1,
                 queued: 1,
                 processing: 1,
+                staleQueued: 0,
+                staleProcessing: 0,
                 failed: 1,
                 total: 4,
             },
@@ -405,8 +407,10 @@ describe('getQueueStats Cloud Function', () => {
             idle: 0,
             queued: 0,
             processing: 0,
+            staleQueued: 1,
+            staleProcessing: 1,
             failed: 1,
-            total: 1,
+            total: 3,
         });
     });
 
@@ -499,6 +503,8 @@ describe('getQueueStats Cloud Function', () => {
                 idle: 0,
                 queued: 0,
                 processing: 0,
+                staleQueued: 0,
+                staleProcessing: 0,
                 failed: 0,
                 total: 0,
             },

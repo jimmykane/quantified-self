@@ -1,7 +1,13 @@
-import { ActivityTypes } from '@sports-alliance/sports-lib';
+import {
+  ActivityTypeGroups,
+  ActivityTypes,
+} from '@sports-alliance/sports-lib';
 import type { NormalizedInsightQuery } from '../../../../shared/ai-insights.types';
 import { resolveAiInsightsActivityFilterLabel } from '../../../../shared/ai-insights-activity-filter';
-import { getActivityTypeGroupMetadataList } from '../../../../shared/activity-type-group.metadata';
+import {
+  getActivityTypeGroupMetadataList,
+  getActivityTypesForGroup,
+} from '../../../../shared/activity-type-group.metadata';
 import { normalizePromptSearchText } from './prompt-normalization';
 
 const MONTH_AND_DAY_TOKENS = new Set([
@@ -53,6 +59,12 @@ const GENERIC_LOCATION_SCOPE_PATTERNS: ReadonlyArray<RegExp> = [
 const GENERIC_IN_LOCATION_SCOPE_PATTERN =
   /\bin\s+([a-z][a-z0-9 ]{2,}?)(?=\s+(?:and|but|with|where|because|from|over|across|by|while|that|which|on|at|during|before|after)\b|[,.!?;]|$)/gi;
 
+const COUNT_BASED_ACTIVITY_FILTER_LABEL_PATTERN = /^\d+\s+activity\s+(?:types|groups)$/i;
+const CYCLING_FAMILY_ACTIVITY_TYPE_SET = new Set<ActivityTypes>([
+  ...getActivityTypesForGroup(ActivityTypeGroups.CyclingGroup),
+  ...getActivityTypesForGroup(ActivityTypeGroups.MountainBikingGroup),
+]);
+
 function normalizeNarrativeScopeText(
   value: string | null | undefined,
 ): string {
@@ -90,6 +102,31 @@ function formatLocationScopeLabel(
   }
 
   return `within ${query.locationFilter.radiusKm} km of ${resolvedLabel}`;
+}
+
+function resolveFriendlyActivityFilterLabel(
+  query: NormalizedInsightQuery,
+  activityFilterLabel: string,
+): string {
+  if (!COUNT_BASED_ACTIVITY_FILTER_LABEL_PATTERN.test(activityFilterLabel)) {
+    return activityFilterLabel;
+  }
+
+  const selectedActivityTypes = query.activityTypes || [];
+  if (!selectedActivityTypes.length) {
+    return 'selected activities';
+  }
+
+  const selectedActivityTypeSet = new Set<ActivityTypes>(selectedActivityTypes);
+  const isCyclingFamilyScope = (
+    selectedActivityTypeSet.has(ActivityTypes.Cycling)
+    && [...selectedActivityTypeSet].every(activityType => CYCLING_FAMILY_ACTIVITY_TYPE_SET.has(activityType))
+  );
+  if (isCyclingFamilyScope) {
+    return 'cycling activities';
+  }
+
+  return 'selected activities';
 }
 
 function buildKnownActivityScopePattern(): RegExp {
@@ -157,7 +194,10 @@ export interface ResolvedNarrativeScope {
 export function resolveNarrativeScope(
   query: NormalizedInsightQuery,
 ): ResolvedNarrativeScope {
-  const activityFilterLabel = resolveAiInsightsActivityFilterLabel(query).toLowerCase();
+  const activityFilterLabel = resolveFriendlyActivityFilterLabel(
+    query,
+    resolveAiInsightsActivityFilterLabel(query).toLowerCase(),
+  );
   const locationScopeLabel = formatLocationScopeLabel(query);
   const scopeLabel = activityFilterLabel === 'all activities'
     ? (locationScopeLabel ? `across all activities ${locationScopeLabel}` : 'across all activities')

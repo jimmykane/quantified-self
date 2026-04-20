@@ -100,6 +100,9 @@ const CONFIDENCE_TIERS: ReadonlySet<AiInsightConfidenceTier> = new Set([
   'medium',
   'high',
 ]);
+const HEART_RATE_INVARIANT_MAX_BPM = 230;
+const HEART_RATE_INVARIANT_SPIKE_TRIM_FLOOR_BPM = 220;
+const HEART_RATE_INVARIANT_SPIKE_TRIM_GAP_BPM = 6;
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
@@ -149,7 +152,9 @@ function resolveObservedHeartRateMax(
     .map((event) => {
       const stat = event.getStat?.(DataHeartRateMax.type);
       const value = Number(stat?.getValue?.());
-      return Number.isFinite(value) && value > 0 ? value : null;
+      return Number.isFinite(value) && value > 0 && value <= HEART_RATE_INVARIANT_MAX_BPM
+        ? value
+        : null;
     })
     .filter((value): value is number => value !== null);
 
@@ -157,7 +162,21 @@ function resolveObservedHeartRateMax(
     return null;
   }
 
-  return Math.max(...observedValues);
+  const sortedObservedValues = observedValues.sort((left, right) => left - right);
+  while (sortedObservedValues.length >= 2) {
+    const observedMax = sortedObservedValues[sortedObservedValues.length - 1] ?? 0;
+    const secondHighest = sortedObservedValues[sortedObservedValues.length - 2] ?? observedMax;
+    if (
+      observedMax > HEART_RATE_INVARIANT_SPIKE_TRIM_FLOOR_BPM
+      && (observedMax - secondHighest) >= HEART_RATE_INVARIANT_SPIKE_TRIM_GAP_BPM
+    ) {
+      sortedObservedValues.pop();
+      continue;
+    }
+    break;
+  }
+
+  return sortedObservedValues[sortedObservedValues.length - 1] ?? null;
 }
 
 function applyMetricSpecificInvariants(

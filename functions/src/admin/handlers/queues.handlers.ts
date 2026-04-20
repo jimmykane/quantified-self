@@ -135,13 +135,13 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             idle: 0,
             queued: 0,
             processing: 0,
+            staleQueued: 0,
+            staleProcessing: 0,
             failed: 0,
             total: 0,
         };
         const derivedFailures: DerivedMetricsFailurePreview[] = [];
         const nowMs = Date.now();
-        let staleQueuedCount = 0;
-        let staleProcessingCount = 0;
 
         (derivedMetricsCoordinatorSnapshot?.docs || []).forEach((doc) => {
             const rawData = doc.data() as DerivedMetricsCoordinatorDocData;
@@ -156,6 +156,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             );
             const lastError = `${rawData.lastError || ''}`.trim();
             const uid = `${doc.ref.parent?.parent?.id || ''}`.trim();
+            derivedCoordinatorCounts.total += 1;
 
             const queuedSinceMs = requestedAtMs ?? updatedAtMs;
             const processingSinceMs = startedAtMs ?? updatedAtMs;
@@ -171,15 +172,14 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             // queue-health dashboards with permanently dormant coordinator docs.
             if (isStaleQueued || isStaleProcessing) {
                 if (isStaleQueued) {
-                    staleQueuedCount += 1;
+                    derivedCoordinatorCounts.staleQueued += 1;
                 }
                 if (isStaleProcessing) {
-                    staleProcessingCount += 1;
+                    derivedCoordinatorCounts.staleProcessing += 1;
                 }
                 return;
             }
 
-            derivedCoordinatorCounts.total += 1;
             if (status) {
                 derivedCoordinatorCounts[status] += 1;
             }
@@ -195,10 +195,10 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             }
         });
 
-        if (staleQueuedCount > 0 || staleProcessingCount > 0) {
-            logger.warn('[admin/getQueueStats] Excluding stale derived-metrics coordinators from active queue counts.', {
-                staleQueuedCount,
-                staleProcessingCount,
+        if (derivedCoordinatorCounts.staleQueued > 0 || derivedCoordinatorCounts.staleProcessing > 0) {
+            logger.warn('[admin/getQueueStats] Classified stale derived-metrics coordinators in queue stats.', {
+                staleQueuedCount: derivedCoordinatorCounts.staleQueued,
+                staleProcessingCount: derivedCoordinatorCounts.staleProcessing,
             });
         }
 

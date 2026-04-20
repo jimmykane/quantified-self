@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  ActivityTypeGroups,
   ActivityTypes,
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -34,6 +35,7 @@ import {
   type SummarizeInsightDependencies,
   type SummarizeInsightResultInput,
 } from './summarize-result.flow';
+import { getActivityTypesForGroup } from '../../../../shared/activity-type-group.metadata';
 
 let summarizeInsightSubject = createSummarizeInsight();
 
@@ -1211,6 +1213,36 @@ describe('summarizeAiInsightResult', () => {
     expect(facts.scopeLabel).toBe('across all activities within 20 km of athens, greece');
     expect(facts.narrativeLead).toBe(
       'Across all activities within 20 km of athens, greece, this answer covers Jan 01, 2026 to Mar 19, 2026.',
+    );
+  });
+
+  it('uses a narrative-friendly cycling scope label when advisory filters expand to many cycling activity types', () => {
+    const cyclingFamily = [
+      ...new Set([
+        ...getActivityTypesForGroup(ActivityTypeGroups.CyclingGroup),
+        ...getActivityTypesForGroup(ActivityTypeGroups.MountainBikingGroup),
+      ]),
+    ];
+    const facts = buildNarrativeFacts({
+      ...advisoryInput,
+      query: {
+        ...advisoryInput.query,
+        activityTypes: cyclingFamily,
+        activityFilters: {
+          activityTypeGroups: [],
+          activityTypes: cyclingFamily,
+        },
+      },
+    }) as {
+      activityFilterLabel: string;
+      scopeLabel: string;
+      narrativeLead: string;
+    };
+
+    expect(facts.activityFilterLabel).toBe('cycling');
+    expect(facts.scopeLabel).toBe('for cycling');
+    expect(facts.narrativeLead).toBe(
+      'For cycling, this answer covers Jan 01, 2026 to Apr 19, 2026.',
     );
   });
 

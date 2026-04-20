@@ -567,7 +567,15 @@ describe('AdminQueueStatsComponent', () => {
                     }
                 },
                 derivedMetrics: {
-                    coordinators: { idle: 2, queued: 3, processing: 1, failed: 1, total: 7 },
+                    coordinators: {
+                        idle: 2,
+                        queued: 3,
+                        processing: 1,
+                        staleQueued: 1,
+                        staleProcessing: 0,
+                        failed: 1,
+                        total: 7,
+                    },
                     recentFailures: [
                         {
                             uid: 'uid-derived',
@@ -585,6 +593,8 @@ describe('AdminQueueStatsComponent', () => {
             expect(host.textContent).toContain('Cloud Tasks (Derived Metrics)');
             expect(host.textContent).toContain('Coordinators (Queued)');
             expect(host.textContent).toContain('Coordinators (Processing)');
+            expect(host.textContent).toContain('Coordinators (Stale Queued)');
+            expect(host.textContent).toContain('Coordinators (Stale Processing)');
             expect(host.textContent).toContain('Coordinators (Failed)');
             expect(host.textContent).toContain('Coordinators (Idle)');
             expect(host.textContent).toContain('Coordinators (Total)');

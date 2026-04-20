@@ -42,9 +42,13 @@ function buildAdvisoryQuery(metricKey: NormalizedInsightAdvisoryQuery['metricKey
   };
 }
 
-function buildHeartRateEvent(eventID: string, heartRateMax: number): EventInterface {
+function buildHeartRateEvent(
+  eventID: string,
+  heartRateMax: number,
+  startDate = '2026-03-10T08:00:00.000Z',
+): EventInterface {
   return {
-    startDate: new Date('2026-03-10T08:00:00.000Z'),
+    startDate: new Date(startDate),
     getID: () => eventID,
     getActivityTypesAsArray: () => [ActivityTypes.Cycling],
     getStat: (dataType: string) => {
@@ -127,6 +131,69 @@ describe('advisory-estimator', () => {
     expect(result.rangeHigh).toBeGreaterThanOrEqual(192);
   });
 
+  it('anchors heart-rate expected value to the observed max and keeps the high bound conservative', () => {
+    const query = buildAdvisoryQuery('heart_rate');
+    const result = executeAdvisoryEstimator({
+      query,
+      matchedEvents: [
+        buildHeartRateEvent('event-1', 166),
+        buildHeartRateEvent('event-2', 171),
+        buildHeartRateEvent('event-3', 175),
+        buildHeartRateEvent('event-4', 192),
+      ],
+    });
+
+    expect(result.status).toBe('available');
+    if (result.status !== 'available') {
+      return;
+    }
+
+    expect(result.estimate).toBe(192);
+    expect(result.rangeHigh).toBeLessThanOrEqual(196);
+  });
+
+  it('retains high confidence when top heart-rate samples are clustered', () => {
+    const query = buildAdvisoryQuery('heart_rate');
+    const matchedEvents = Array.from({ length: 24 }, (_value, index) => {
+      const heartRateMax = index < 20 ? 175 : 186 + (index - 20);
+      const startDate = new Date(Date.UTC(2026, 0, 1 + (index * 3), 8, 0, 0, 0)).toISOString();
+      return buildHeartRateEvent(`event-${index + 1}`, heartRateMax, startDate);
+    });
+    const result = executeAdvisoryEstimator({
+      query,
+      matchedEvents,
+    });
+
+    expect(result.status).toBe('available');
+    if (result.status !== 'available') {
+      return;
+    }
+
+    expect(result.estimate).toBe(189);
+    expect(result.confidenceTier).toBe('high');
+  });
+
+  it('downgrades confidence by one tier when the observed max is an isolated spike', () => {
+    const query = buildAdvisoryQuery('heart_rate');
+    const matchedEvents = Array.from({ length: 24 }, (_value, index) => {
+      const heartRateMax = index < 23 ? 172 + (index % 4) : 189;
+      const startDate = new Date(Date.UTC(2026, 0, 1 + (index * 3), 8, 0, 0, 0)).toISOString();
+      return buildHeartRateEvent(`event-${index + 1}`, heartRateMax, startDate);
+    });
+    const result = executeAdvisoryEstimator({
+      query,
+      matchedEvents,
+    });
+
+    expect(result.status).toBe('available');
+    if (result.status !== 'available') {
+      return;
+    }
+
+    expect(result.estimate).toBe(189);
+    expect(result.confidenceTier).toBe('medium');
+  });
+
   it('returns insufficient_data for heart_rate when samples are sparse', () => {
     const query = buildAdvisoryQuery('heart_rate');
     const result = executeAdvisoryEstimator({
@@ -138,6 +205,50 @@ describe('advisory-estimator', () => {
 
     expect(result.status).toBe('insufficient_data');
     expect(result.insufficientDataReason?.length).toBeGreaterThan(0);
+  });
+
+  it('ignores implausible heart-rate spikes above the physiologic cap', () => {
+    const query = buildAdvisoryQuery('heart_rate');
+    const result = executeAdvisoryEstimator({
+      query,
+      matchedEvents: [
+        buildHeartRateEvent('event-1', 170),
+        buildHeartRateEvent('event-2', 175),
+        buildHeartRateEvent('event-3', 182),
+        buildHeartRateEvent('event-4', 252),
+      ],
+    });
+
+    expect(result.status).toBe('available');
+    if (result.status !== 'available') {
+      return;
+    }
+
+    expect(result.estimate).toBe(182);
+    expect(result.rangeHigh).toBeLessThanOrEqual(230);
+    expect(result.evidenceSummary).toContain('observed max is 182 bpm');
+  });
+
+  it('trims isolated extreme peaks above 220 bpm before estimating', () => {
+    const query = buildAdvisoryQuery('heart_rate');
+    const result = executeAdvisoryEstimator({
+      query,
+      matchedEvents: [
+        buildHeartRateEvent('event-1', 170),
+        buildHeartRateEvent('event-2', 175),
+        buildHeartRateEvent('event-3', 182),
+        buildHeartRateEvent('event-4', 230),
+      ],
+    });
+
+    expect(result.status).toBe('available');
+    if (result.status !== 'available') {
+      return;
+    }
+
+    expect(result.estimate).toBe(182);
+    expect(result.rangeHigh).toBeLessThanOrEqual(230);
+    expect(result.evidenceSummary).toContain('observed max is 182 bpm');
   });
 
   it('returns unsupported for scaffolded ftp estimator until enabled', () => {

@@ -1,4 +1,5 @@
 import {
+  ActivityTypeGroups,
   type ActivityTypeGroup,
   ActivityTypes,
 } from '@sports-alliance/sports-lib';
@@ -25,6 +26,24 @@ function getUniqueGroupMembers(activityTypeGroups: ActivityTypeGroup[]): Activit
   return members;
 }
 
+const CYCLING_FAMILY_ACTIVITY_TYPES = new Set<ActivityTypes>([
+  ...getActivityTypesForGroup(ActivityTypeGroups.CyclingGroup),
+  ...getActivityTypesForGroup(ActivityTypeGroups.MountainBikingGroup),
+]);
+
+function isCyclingFamilySelection(activityTypes: ActivityTypes[]): boolean {
+  if (!activityTypes.length) {
+    return false;
+  }
+
+  const uniqueActivityTypes = [...new Set(activityTypes)];
+  if (!uniqueActivityTypes.includes(ActivityTypes.Cycling)) {
+    return false;
+  }
+
+  return uniqueActivityTypes.every(activityType => CYCLING_FAMILY_ACTIVITY_TYPES.has(activityType));
+}
+
 export function resolveAiInsightsActivityFilterLabel(
   filter: AiInsightsActivityFilterLike,
 ): string {
@@ -42,6 +61,10 @@ export function resolveAiInsightsActivityFilterLabel(
 
   if (filter.activityTypes.length === 1) {
     return filter.activityTypes[0];
+  }
+
+  if (isCyclingFamilySelection(filter.activityTypes)) {
+    return 'Cycling';
   }
 
   return `${filter.activityTypes.length} activity types`;
