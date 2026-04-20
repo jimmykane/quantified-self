@@ -485,21 +485,21 @@ export class AppUserService implements OnDestroy {
         catchError((err) => {
           this.markIncompleteProfileRead(userID);
           this.logUserSubDocumentReadError('legal', userID, `users/${userID}/legal/agreements`, err);
-          return throwError(() => err);
+          return of({});
         })
       ),
       system: (docData(systemDoc) as Observable<Record<string, unknown>>).pipe(
         catchError((err) => {
           this.markIncompleteProfileRead(userID);
           this.logUserSubDocumentReadError('system', userID, `users/${userID}/system/status`, err);
-          return throwError(() => err);
+          return of({});
         })
       ),
       settings: (docData(settingsDoc) as Observable<Record<string, unknown>>).pipe(
         catchError((err) => {
           this.markIncompleteProfileRead(userID);
           this.logUserSubDocumentReadError('settings', userID, `users/${userID}/config/settings`, err);
-          return throwError(() => err);
+          return of({});
         })
       )
     }).pipe(

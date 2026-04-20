@@ -169,7 +169,7 @@ describe('AppUserService', () => {
         expect(service.hasIncompleteProfileReads('u1')).toBe(true);
     });
 
-    it('should mark profile reads as incomplete when sub-document reads fail', async () => {
+    it('should recover from sub-document read failures without leaving incomplete flag set', async () => {
         const unavailableError = Object.assign(new Error('Service unavailable'), {
             code: 'unavailable'
         });
@@ -183,11 +183,10 @@ describe('AppUserService', () => {
             .mockReturnValueOnce(throwError(() => unavailableError));
 
         service = TestBed.inject(AppUserService);
-        await expect(firstValueFrom(service.getUserByID('u1').pipe(take(1)))).rejects.toMatchObject({
-            code: 'unavailable'
-        });
+        const loadedUser = await firstValueFrom(service.getUserByID('u1').pipe(take(1)));
 
-        expect(service.hasIncompleteProfileReads('u1')).toBe(true);
+        expect(loadedUser?.uid).toBe('u1');
+        expect(service.hasIncompleteProfileReads('u1')).toBe(false);
     });
 
     it('should recover transient profile reads without requiring a new auth emission', async () => {
@@ -288,11 +287,10 @@ describe('AppUserService', () => {
             .mockReturnValueOnce(of({}));
 
         service = TestBed.inject(AppUserService);
-        await expect(firstValueFrom(service.getUserByID('u1').pipe(take(1)))).rejects.toMatchObject({
-            code: 'permission-denied'
-        });
+        const loadedUser = await firstValueFrom(service.getUserByID('u1').pipe(take(1)));
         await new Promise((resolve) => setTimeout(resolve, 0));
 
+        expect(loadedUser?.uid).toBe('u1');
         expect(loggerErrorSpy).toHaveBeenCalledWith(
             '[AppUserService] Error fetching legal doc',
             expect.objectContaining({
