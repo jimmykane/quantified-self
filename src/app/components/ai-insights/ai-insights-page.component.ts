@@ -127,7 +127,6 @@ const AI_INSIGHTS_SUPPORT_SUBJECTS = {
   noPromptResults: 'AI Insights - No prompt results',
   promptError: 'AI Insights - Prompt error',
 } as const;
-const ADVISORY_OBSERVED_MAX_PATTERN = /\bobserved max(?: is)?\s+(-?\d+(?:\.\d+)?)\s*bpm\b/i;
 
 function formatAdvisoryNumber(
   value: number,
@@ -138,20 +137,30 @@ function formatAdvisoryNumber(
   }).format(value);
 }
 
-function parseObservedMaxFromEvidenceSummary(
-  evidenceSummary: string,
-): number | null {
-  const match = evidenceSummary.match(ADVISORY_OBSERVED_MAX_PATTERN);
-  if (!match) {
-    return null;
+function formatConfidenceTierLabel(
+  tier: string | null | undefined,
+): string {
+  const normalizedTier = `${tier || ''}`.trim().toLowerCase();
+  if (!normalizedTier) {
+    return 'Unknown';
   }
 
-  const parsedValue = Number(match[1]);
-  if (!Number.isFinite(parsedValue)) {
-    return null;
+  return `${normalizedTier[0]?.toUpperCase() || ''}${normalizedTier.slice(1)}`;
+}
+
+function resolveAdvisorySemanticLabel(
+  semanticKind: AiInsightsAdvisoryOkResponse['advisory']['semanticKind'] | string | null | undefined,
+): string {
+  const normalizedSemanticKind = `${semanticKind || ''}`.trim().toLowerCase();
+  if (!normalizedSemanticKind) {
+    return 'Advisory';
   }
 
-  return parsedValue;
+  if (normalizedSemanticKind === 'current_ceiling') {
+    return 'Current achievable max';
+  }
+
+  return normalizedSemanticKind.replace(/_/g, ' ');
 }
 
 @Component({
@@ -918,63 +927,145 @@ export class AiInsightsPageComponent {
         label: 'Metric',
         value: formattedMetricLabel,
       },
+      {
+        label: 'Semantic',
+        value: resolveAdvisorySemanticLabel(response.advisory.semanticKind),
+      },
     ];
 
-    if (
-      response.advisory.status === 'available'
-      && response.advisory.estimate !== null
-      && response.advisory.rangeLow !== null
-      && response.advisory.rangeHigh !== null
-    ) {
-      const estimatedValue = response.advisory.estimate;
-      const rangeLow = response.advisory.rangeLow;
-      const rangeHigh = response.advisory.rangeHigh;
+    if (response.advisory.status === 'available' && response.advisory.estimate !== null && response.advisory.interval !== null) {
+      const estimatedValue = response.advisory.estimate.value;
+      const estimateUnit = `${response.advisory.estimate.unit || ''}`.trim() || 'units';
+      const rangeLow = response.advisory.interval.low;
+      const rangeHigh = response.advisory.interval.high;
       const upperMargin = Math.max(0, rangeHigh - estimatedValue);
       const lowerMargin = Math.max(0, estimatedValue - rangeLow);
-      const observedMax = parseObservedMaxFromEvidenceSummary(response.advisory.evidenceSummary);
+      const confidenceTierLabel = formatConfidenceTierLabel(response.advisory.confidence.tier);
+      const confidenceScoreLabel = Number.isFinite(response.advisory.confidence.score)
+        ? `${formatAdvisoryNumber((response.advisory.confidence.score as number) * 100, this.locale)}%`
+        : null;
       cards.push({
-        label: 'Expected value',
-        value: formatAdvisoryNumber(estimatedValue, this.locale),
+        label: 'Current achievable max',
+        value: `${formatAdvisoryNumber(estimatedValue, this.locale)} ${estimateUnit}`,
         detailRows: [
           {
             label: 'Range',
-            value: `${formatAdvisoryNumber(rangeLow, this.locale)} – ${formatAdvisoryNumber(rangeHigh, this.locale)}`,
+            value: `${formatAdvisoryNumber(rangeLow, this.locale)} – ${formatAdvisoryNumber(rangeHigh, this.locale)} ${estimateUnit}`,
           },
           {
             label: 'Confidence',
-            value: response.advisory.confidenceTier
-              ? `${response.advisory.confidenceTier[0]?.toUpperCase() || ''}${response.advisory.confidenceTier.slice(1)}`
-              : 'Unknown',
+            value: confidenceScoreLabel
+              ? `${confidenceTierLabel} (${confidenceScoreLabel})`
+              : confidenceTierLabel,
           },
-          ...(observedMax === null
-            ? []
-            : [{
-              label: 'Observed max sample',
-              value: formatAdvisoryNumber(observedMax, this.locale),
-            }]),
+          {
+            label: 'Interval kind',
+            value: response.advisory.interval.kind.replace(/_/g, ' '),
+          },
           {
             label: 'Upper bound calc',
-            value: `${formatAdvisoryNumber(estimatedValue, this.locale)} + ${formatAdvisoryNumber(upperMargin, this.locale)} = ${formatAdvisoryNumber(rangeHigh, this.locale)}`,
+            value: `${formatAdvisoryNumber(estimatedValue, this.locale)} + ${formatAdvisoryNumber(upperMargin, this.locale)} = ${formatAdvisoryNumber(rangeHigh, this.locale)} ${estimateUnit}`,
           },
           {
             label: 'Lower bound calc',
-            value: `${formatAdvisoryNumber(estimatedValue, this.locale)} - ${formatAdvisoryNumber(lowerMargin, this.locale)} = ${formatAdvisoryNumber(rangeLow, this.locale)}`,
+            value: `${formatAdvisoryNumber(estimatedValue, this.locale)} - ${formatAdvisoryNumber(lowerMargin, this.locale)} = ${formatAdvisoryNumber(rangeLow, this.locale)} ${estimateUnit}`,
+          },
+        ],
+      });
+
+      cards.push({
+        label: 'Observed evidence',
+        value: response.advisory.observed.bestValue === null
+          ? 'No observed best sample'
+          : `${formatAdvisoryNumber(response.advisory.observed.bestValue, this.locale)} ${estimateUnit}`,
+        detailRows: [
+          ...(response.advisory.observed.bestDate
+            ? [{
+              label: 'Best sample date',
+              value: new Date(response.advisory.observed.bestDate).toLocaleString(this.locale || undefined),
+            }]
+            : []),
+          {
+            label: 'Valid sessions',
+            value: `${response.advisory.observed.sampleCount}`,
+          },
+          {
+            label: 'Qualifying tail sessions',
+            value: `${response.advisory.observed.qualifyingSampleCount}`,
+          },
+          {
+            label: 'Training weeks',
+            value: `${response.advisory.observed.trainingWeeks}`,
+          },
+          {
+            label: 'Recency',
+            value: response.advisory.observed.recencyDays === null
+              ? 'Unknown'
+              : `${response.advisory.observed.recencyDays} days before range end`,
           },
         ],
       });
     }
 
-    if (response.advisory.status === 'insufficient_data' && response.advisory.insufficientDataReason) {
+    if (response.advisory.confidence.reasons.length > 0) {
       cards.push({
-        label: 'Reason',
-        value: response.advisory.insufficientDataReason,
+        label: 'Confidence reasons',
+        value: `${formatConfidenceTierLabel(response.advisory.confidence.tier)} confidence`,
+        detailRows: response.advisory.confidence.reasons
+          .slice(0, 4)
+          .map((reason, index) => ({
+            label: `Reason ${index + 1}`,
+            value: reason,
+          })),
       });
     }
 
     cards.push({
-      label: 'Evidence',
-      value: response.advisory.evidenceSummary,
+      label: 'Method',
+      value: response.advisory.method.id,
+      detailRows: [
+        {
+          label: 'Version',
+          value: response.advisory.method.version,
+        },
+        {
+          label: 'Deterministic',
+          value: response.advisory.method.deterministic ? 'Yes' : 'No',
+        },
+      ],
     });
+
+    if (response.advisory.status === 'insufficient_data' && response.advisory.insufficientData) {
+      cards.push({
+        label: 'Insufficient data',
+        value: response.advisory.insufficientData.message,
+        detailRows: [
+          {
+            label: 'Reason code',
+            value: response.advisory.insufficientData.reasonCode,
+          },
+          {
+            label: 'Suggested query',
+            value: response.advisory.insufficientData.suggestedQuery,
+          },
+        ],
+      });
+    }
+
+    const evidenceEntries = response.advisory.evidence;
+    if (evidenceEntries.length > 0) {
+      cards.push({
+        label: 'Evidence',
+        value: `${evidenceEntries[0].label}: ${evidenceEntries[0].value}`,
+        detailRows: evidenceEntries
+          .slice(1, 6)
+          .map((entry) => ({
+            label: entry.label,
+            value: entry.value,
+          })),
+      });
+    }
+
     return cards;
   });
   readonly resultSummaryCards = computed<InsightSummaryCard[]>(() => {

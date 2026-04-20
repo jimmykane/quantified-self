@@ -738,13 +738,13 @@ function hasAdvisoryFactConsistency(
   const normalizedNarrative = narrative.replace(/[\u2013\u2014]/g, '-');
   const estimateLabel = input.advisory.estimate === null
     ? null
-    : formatNumber(input.advisory.estimate);
-  const rangeLowLabel = input.advisory.rangeLow === null
+    : formatNumber(input.advisory.estimate.value);
+  const rangeLowLabel = input.advisory.interval === null
     ? null
-    : formatNumber(input.advisory.rangeLow);
-  const rangeHighLabel = input.advisory.rangeHigh === null
+    : formatNumber(input.advisory.interval.low);
+  const rangeHighLabel = input.advisory.interval === null
     ? null
-    : formatNumber(input.advisory.rangeHigh);
+    : formatNumber(input.advisory.interval.high);
 
   if (estimateLabel && !normalizedNarrative.includes(estimateLabel)) {
     return false;
@@ -759,16 +759,15 @@ function hasAdvisoryFactConsistency(
     }
   }
 
-  if (input.advisory.confidenceTier) {
-    const confidencePattern = new RegExp(`\\b${input.advisory.confidenceTier}\\s+confidence\\b`, 'i');
+  if (input.advisory.confidence.tier) {
+    const confidencePattern = new RegExp(`\\b${input.advisory.confidence.tier}\\s+confidence\\b`, 'i');
     if (!confidencePattern.test(normalizedNarrative)) {
       return false;
     }
   }
 
-  const observedMaxMatch = input.advisory.evidenceSummary.match(/observed\s+max\s+([0-9]+(?:\.[0-9]+)?)/i);
-  if (observedMaxMatch) {
-    const observedMaxLabel = formatNumber(Number(observedMaxMatch[1]));
+  if (input.advisory.observed.bestValue !== null) {
+    const observedMaxLabel = formatNumber(input.advisory.observed.bestValue);
     if (observedMaxLabel && !normalizedNarrative.includes(observedMaxLabel)) {
       return false;
     }
@@ -864,36 +863,42 @@ function buildNarrativeFallback(input: SummarizeInsightResultInput): string {
   const scopeText = resolveNarrativeScope(input.query).scopeLabel;
   const isAllTime = input.query.dateRange.kind === 'all_time';
   if ('advisory' in input) {
+    const evidenceSummary = input.advisory.evidence.length > 0
+      ? input.advisory.evidence
+        .slice(0, 4)
+        .map(evidenceEntry => `${evidenceEntry.label}: ${evidenceEntry.value}`)
+        .join('; ')
+      : 'No deterministic evidence available.';
     const metricLabel = formatAdvisoryMetricLabel(input.query.metricKey);
     if (input.advisory.status === 'available') {
       const estimateLabel = input.advisory.estimate === null
         ? null
-        : formatNumber(input.advisory.estimate);
-      const rangeLowLabel = input.advisory.rangeLow === null
+        : formatNumber(input.advisory.estimate.value);
+      const rangeLowLabel = input.advisory.interval === null
         ? null
-        : formatNumber(input.advisory.rangeLow);
-      const rangeHighLabel = input.advisory.rangeHigh === null
+        : formatNumber(input.advisory.interval.low);
+      const rangeHighLabel = input.advisory.interval === null
         ? null
-        : formatNumber(input.advisory.rangeHigh);
-      const confidenceLabel = input.advisory.confidenceTier
-        ? `${input.advisory.confidenceTier} confidence`
+        : formatNumber(input.advisory.interval.high);
+      const confidenceLabel = input.advisory.confidence.tier
+        ? `${input.advisory.confidence.tier} confidence`
         : 'confidence unavailable';
 
       if (estimateLabel && rangeLowLabel && rangeHighLabel) {
         return isAllTime
-          ? `Expected ${metricLabel} ${scopeText} is ${estimateLabel} (range ${rangeLowLabel}-${rangeHighLabel}, ${confidenceLabel}). ${input.advisory.evidenceSummary}`
-          : `Expected ${metricLabel} ${scopeText} for ${dateRangeText} is ${estimateLabel} (range ${rangeLowLabel}-${rangeHighLabel}, ${confidenceLabel}). ${input.advisory.evidenceSummary}`;
+          ? `Current achievable ${metricLabel} ${scopeText} is ${estimateLabel} (range ${rangeLowLabel}-${rangeHighLabel}, ${confidenceLabel}). ${evidenceSummary}`
+          : `Current achievable ${metricLabel} ${scopeText} for ${dateRangeText} is ${estimateLabel} (range ${rangeLowLabel}-${rangeHighLabel}, ${confidenceLabel}). ${evidenceSummary}`;
       }
 
-      return `Expected ${metricLabel} ${scopeText}: ${input.advisory.evidenceSummary}`;
+      return `Current achievable ${metricLabel} ${scopeText}: ${evidenceSummary}`;
     }
 
     if (input.advisory.status === 'insufficient_data') {
-      const reason = input.advisory.insufficientDataReason || input.advisory.evidenceSummary;
+      const reason = input.advisory.insufficientData?.message || evidenceSummary;
       return `I could not estimate expected ${metricLabel} ${scopeText} for ${dateRangeText}. ${reason}`;
     }
 
-    return `I could not estimate expected ${metricLabel} ${scopeText}. ${input.advisory.evidenceSummary}`;
+    return `I could not estimate expected ${metricLabel} ${scopeText}. ${evidenceSummary}`;
   }
 
   const metricLabelText = 'metricResults' in input
@@ -987,6 +992,11 @@ export function buildNarrativeFacts(input: SummarizeInsightResultInput): Record<
   const narrativeLead = buildDeterministicNarrativeLead(input.query, dateRangeLabel);
 
   if ('advisory' in input) {
+    const evidenceSummary = input.advisory.evidence.length > 0
+      ? input.advisory.evidence
+        .map(entry => `${entry.label}: ${entry.value}`)
+        .join('; ')
+      : null;
     return {
       status: input.status,
       resultKind: 'advisory',
@@ -997,12 +1007,15 @@ export function buildNarrativeFacts(input: SummarizeInsightResultInput): Record<
       advisoryKind: input.query.advisoryKind,
       horizon: input.query.horizon,
       advisoryStatus: input.advisory.status,
+      semanticKind: input.advisory.semanticKind,
       estimate: input.advisory.estimate,
-      rangeLow: input.advisory.rangeLow,
-      rangeHigh: input.advisory.rangeHigh,
-      confidenceTier: input.advisory.confidenceTier,
-      evidenceSummary: input.advisory.evidenceSummary,
-      insufficientDataReason: input.advisory.insufficientDataReason ?? null,
+      interval: input.advisory.interval,
+      observed: input.advisory.observed,
+      confidence: input.advisory.confidence,
+      method: input.advisory.method,
+      evidence: input.advisory.evidence,
+      evidenceSummary,
+      insufficientData: input.advisory.insufficientData ?? null,
       dateRangeLabel,
       narrativeLead,
       activityFilterLabel: narrativeScope.activityFilterLabel,

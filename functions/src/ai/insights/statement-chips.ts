@@ -398,12 +398,12 @@ export function buildPowerCurveStatementChips(powerCurve: AiInsightPowerCurve): 
 }
 
 export function buildAdvisoryStatementChips(advisory: AiInsightAdvisoryResult): AiInsightStatementChip[] {
-  if (advisory.status !== 'available' || !advisory.confidenceTier) {
+  if (advisory.status !== 'available' || !advisory.confidence.tier) {
     return [];
   }
 
   const chips: AiInsightStatementChip[] = [
-    buildConfidenceChip('advisory:narrative', advisory.confidenceTier),
+    buildConfidenceChip('advisory:narrative', advisory.confidence.tier),
   ];
 
   const evidenceChip = buildEvidenceChip('advisory:narrative', [{

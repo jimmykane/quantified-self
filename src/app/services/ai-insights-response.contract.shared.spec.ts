@@ -343,11 +343,40 @@ describe('Ai insights shared response contract', () => {
       advisory: {
         status: 'available',
         metricKey: 'heart_rate',
-        estimate: 186,
-        rangeLow: 182,
-        rangeHigh: 190,
-        confidenceTier: 'medium',
-        evidenceSummary: 'Based on 12 events with max heart-rate samples.',
+        semanticKind: 'current_ceiling',
+        estimate: {
+          value: 186,
+          unit: 'bpm',
+        },
+        interval: {
+          low: 182,
+          high: 190,
+          kind: 'deterministic_range',
+          confidenceLevel: 'medium',
+        },
+        observed: {
+          bestValue: 188,
+          bestDate: '2026-03-20T10:00:00.000Z',
+          sampleCount: 12,
+          qualifyingSampleCount: 4,
+          trainingWeeks: 7,
+          recencyDays: 2,
+        },
+        confidence: {
+          tier: 'medium',
+          score: 0.62,
+          reasons: ['Deterministic evidence quality checks passed.'],
+        },
+        method: {
+          id: 'heart_rate_current_ceiling_deterministic',
+          version: 'v2',
+          deterministic: true,
+        },
+        evidence: [{
+          code: 'summary',
+          label: 'Summary',
+          value: 'Based on 12 events with max heart-rate samples.',
+        }],
       },
       synthesis: {
         attempted: true,
@@ -473,6 +502,144 @@ describe('Ai insights shared response contract', () => {
     }
 
     expect(invalidDigestResponse.reason).toBe('digest_invalid');
+  });
+
+  it('rejects advisory available responses when estimate or interval are null', () => {
+    const result = validateAiInsightsResponse({
+      status: 'ok',
+      resultKind: 'advisory',
+      narrative: 'Expected heart rate estimate',
+      query: {
+        resultKind: 'advisory',
+        metricKey: 'heart_rate',
+        advisoryKind: 'expected_value',
+        horizon: 'current_year',
+        categoryType: ChartDataCategoryTypes.DateType,
+        activityTypeGroups: [],
+        activityTypes: [ActivityTypes.Cycling],
+        activityFilters: {
+          activityTypeGroups: [],
+          activityTypes: [ActivityTypes.Cycling],
+        },
+        dateRange: {
+          kind: 'bounded',
+          startDate: '2026-01-01T00:00:00.000Z',
+          endDate: '2026-03-22T23:59:59.999Z',
+          timezone: 'UTC',
+          source: 'prompt',
+        },
+        chartType: ChartTypes.LinesVertical,
+      },
+      advisory: {
+        status: 'available',
+        metricKey: 'heart_rate',
+        semanticKind: 'current_ceiling',
+        estimate: null,
+        interval: null,
+        observed: {
+          bestValue: 188,
+          bestDate: '2026-03-20T10:00:00.000Z',
+          sampleCount: 12,
+          qualifyingSampleCount: 4,
+          trainingWeeks: 7,
+          recencyDays: 2,
+        },
+        confidence: {
+          tier: 'medium',
+          score: 0.62,
+          reasons: ['Deterministic evidence quality checks passed.'],
+        },
+        method: {
+          id: 'heart_rate_current_ceiling_deterministic',
+          version: 'v2',
+          deterministic: true,
+        },
+        evidence: [{
+          code: 'summary',
+          label: 'Summary',
+          value: 'Based on 12 events with max heart-rate samples.',
+        }],
+      },
+      presentation: {
+        title: 'Expected heart rate for Cycling',
+        chartType: ChartTypes.LinesVertical,
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.reason).toBe('advisory_invalid');
+  });
+
+  it('rejects advisory insufficient_data responses that omit insufficientData metadata', () => {
+    const result = validateAiInsightsResponse({
+      status: 'ok',
+      resultKind: 'advisory',
+      narrative: 'Not enough data to estimate.',
+      query: {
+        resultKind: 'advisory',
+        metricKey: 'heart_rate',
+        advisoryKind: 'expected_value',
+        horizon: 'current_year',
+        categoryType: ChartDataCategoryTypes.DateType,
+        activityTypeGroups: [],
+        activityTypes: [ActivityTypes.Cycling],
+        activityFilters: {
+          activityTypeGroups: [],
+          activityTypes: [ActivityTypes.Cycling],
+        },
+        dateRange: {
+          kind: 'bounded',
+          startDate: '2026-01-01T00:00:00.000Z',
+          endDate: '2026-03-22T23:59:59.999Z',
+          timezone: 'UTC',
+          source: 'prompt',
+        },
+        chartType: ChartTypes.LinesVertical,
+      },
+      advisory: {
+        status: 'insufficient_data',
+        metricKey: 'heart_rate',
+        semanticKind: 'current_ceiling',
+        estimate: null,
+        interval: null,
+        observed: {
+          bestValue: null,
+          bestDate: null,
+          sampleCount: 2,
+          qualifyingSampleCount: 0,
+          trainingWeeks: 1,
+          recencyDays: 9,
+        },
+        confidence: {
+          tier: null,
+          score: null,
+          reasons: [],
+        },
+        method: {
+          id: 'advisory-heart_rate-insufficient',
+          version: 'v2',
+          deterministic: true,
+        },
+        evidence: [{
+          code: 'too_few_samples',
+          label: 'Insufficient data',
+          value: 'Not enough heart-rate samples.',
+        }],
+      },
+      presentation: {
+        title: 'Expected heart rate for Cycling',
+        chartType: ChartTypes.LinesVertical,
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.reason).toBe('advisory_invalid');
   });
 
   it('rejects invalid query combinations with deterministic reason', () => {

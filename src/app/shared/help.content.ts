@@ -251,11 +251,12 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Latest event**: most recent matching event in scope (single primary event card).
 - **Multi-metric aggregate**: combined chart for multiple metrics with merged summary cards.
 - **Digest narrative**: ask for a weekly, monthly, or yearly digest to get deterministic period-by-period summaries with explicit no-data periods.
-- **Advisory**: metric-generic expected-value estimates (for example expected heart rate) with deterministic estimate/range/confidence/evidence payload fields.
-  - For max-heart-rate advisory, the expected value is anchored to the highest observed max-heart-rate sample in the selected scope and date range.
-  - Max-heart-rate advisory requires enough signal (at least 8 events with max-heart-rate samples across at least 3 training weeks).
-  - Low-intensity-only scopes (for example hiking, walking, or yoga) return **insufficient data** and suggest using broader or higher-intensity activity scope.
-  - Confidence is reduced when that peak is isolated from the next-highest sample, signaling a one-off spike or limited maximal efforts.
+- **Advisory**: metric-generic deterministic advisory payloads with structured fields (\`semanticKind\`, \`estimate\`, \`interval\`, \`observed\`, \`confidence\`, \`method\`, and \`evidence\`).
+  - For max-heart-rate advisory, \`semanticKind\` is **current ceiling** (current achievable max), not a future potential prediction.
+  - For max-heart-rate advisory, the point estimate is anchored to the strongest observed max-heart-rate sample in scope after deterministic quality filtering.
+  - Max-heart-rate advisory requires enough effort-quality signal (at least 8 valid sessions across at least 3 training weeks, plus tail-quality checks near observed max).
+  - Low-intensity-only scopes (for example hiking, walking, or yoga), sparse samples, stale recency, or weak tail signal return **insufficient data** with an explicit reason code and a suggested executable fallback query.
+  - Confidence includes both a deterministic tier and score, and method metadata includes an explicit deterministic method id/version.
 - **Anomaly callouts**: deterministic spike/drop/activity-mix shift callouts for aggregate and date-grouped multi-metric results.
 - **Confidence & evidence chips**: compact chips under supported AI result narratives and callouts that show confidence tier and linked deterministic evidence.
 - **Interpreted badge**: shown when query synthesis rewrites your prompt and the synthesized prompt passes score-gated deterministic validation.

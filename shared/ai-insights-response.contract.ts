@@ -517,16 +517,98 @@ const AiInsightsPowerCurveOkResponseSchema = AiInsightsOkResponseBaseSchema.exte
   presentation: AiInsightPresentationSchema,
 });
 
-const AiInsightAdvisoryResultSchema = z.object({
-  status: z.enum(['available', 'insufficient_data', 'unsupported']),
-  metricKey: AiInsightsPromptMetricKeySchema,
-  estimate: z.number().nullable(),
-  rangeLow: z.number().nullable(),
-  rangeHigh: z.number().nullable(),
-  confidenceTier: AiInsightConfidenceTierSchema.nullable(),
-  evidenceSummary: z.string().min(1),
-  insufficientDataReason: z.string().min(1).optional(),
+const AiInsightAdvisoryEstimateSchema = z.object({
+  value: z.number(),
+  unit: z.string().min(1),
 });
+
+const AiInsightAdvisoryIntervalSchema = z.object({
+  low: z.number(),
+  high: z.number(),
+  kind: z.literal('deterministic_range'),
+  confidenceLevel: AiInsightConfidenceTierSchema,
+});
+
+const AiInsightAdvisoryObservedSchema = z.object({
+  bestValue: z.number().nullable(),
+  bestDate: z.string().datetime().nullable(),
+  sampleCount: z.number().int().min(0),
+  qualifyingSampleCount: z.number().int().min(0),
+  trainingWeeks: z.number().int().min(0),
+  recencyDays: z.number().int().min(0).nullable(),
+});
+
+const AiInsightAdvisoryConfidenceSchema = z.object({
+  tier: AiInsightConfidenceTierSchema.nullable(),
+  score: z.number().min(0).max(1).nullable(),
+  reasons: z.array(z.string().min(1)),
+});
+
+const AiInsightAdvisoryMethodSchema = z.object({
+  id: z.string().min(1),
+  version: z.string().min(1),
+  deterministic: z.boolean(),
+});
+
+const AiInsightAdvisoryEvidenceEntrySchema = z.object({
+  code: z.string().min(1),
+  label: z.string().min(1),
+  value: z.string().min(1),
+});
+
+const AiInsightAdvisoryInsufficientDataSchema = z.object({
+  reasonCode: z.enum([
+    'no_samples',
+    'low_intensity_scope',
+    'too_few_samples',
+    'too_few_weeks',
+    'stale_data',
+    'weak_tail_signal',
+  ]),
+  message: z.string().min(1),
+  suggestedQuery: z.string().min(1),
+});
+
+const AiInsightAdvisoryResultBaseSchema = z.object({
+  metricKey: AiInsightsPromptMetricKeySchema,
+  semanticKind: z.literal('current_ceiling'),
+  observed: AiInsightAdvisoryObservedSchema,
+  confidence: AiInsightAdvisoryConfidenceSchema,
+  method: AiInsightAdvisoryMethodSchema,
+  evidence: z.array(AiInsightAdvisoryEvidenceEntrySchema),
+});
+
+const AiInsightAdvisoryAvailableResultSchema = AiInsightAdvisoryResultBaseSchema.extend({
+  status: z.literal('available'),
+  estimate: AiInsightAdvisoryEstimateSchema,
+  interval: AiInsightAdvisoryIntervalSchema,
+  confidence: z.object({
+    tier: AiInsightConfidenceTierSchema,
+    score: z.number().min(0).max(1),
+    reasons: z.array(z.string().min(1)),
+  }),
+  insufficientData: z.undefined().optional(),
+});
+
+const AiInsightAdvisoryInsufficientDataResultSchema = AiInsightAdvisoryResultBaseSchema.extend({
+  status: z.literal('insufficient_data'),
+  estimate: z.null(),
+  interval: z.null(),
+  insufficientData: AiInsightAdvisoryInsufficientDataSchema,
+});
+
+const AiInsightAdvisoryUnsupportedResultSchema = AiInsightAdvisoryResultBaseSchema.extend({
+  status: z.literal('unsupported'),
+  estimate: z.null(),
+  interval: z.null(),
+  insufficientData: z.undefined().optional(),
+});
+
+const AiInsightAdvisoryResultSchema = z.discriminatedUnion('status', [
+  AiInsightAdvisoryAvailableResultSchema,
+  AiInsightAdvisoryInsufficientDataResultSchema,
+  AiInsightAdvisoryUnsupportedResultSchema,
+]);
 
 const AiInsightsAdvisoryOkResponseSchema = AiInsightsOkResponseBaseSchema.extend({
   resultKind: z.literal('advisory'),

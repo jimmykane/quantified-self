@@ -500,12 +500,51 @@ export interface AiInsightsPowerCurveOkResponse {
 export interface AiInsightAdvisoryResult {
   status: 'available' | 'insufficient_data' | 'unsupported';
   metricKey: AiInsightsPromptMetricKey;
-  estimate: number | null;
-  rangeLow: number | null;
-  rangeHigh: number | null;
-  confidenceTier: AiInsightConfidenceTier | null;
-  evidenceSummary: string;
-  insufficientDataReason?: string;
+  semanticKind: 'current_ceiling';
+  estimate: {
+    value: number;
+    unit: string;
+  } | null;
+  interval: {
+    low: number;
+    high: number;
+    kind: 'deterministic_range';
+    confidenceLevel: AiInsightConfidenceTier;
+  } | null;
+  observed: {
+    bestValue: number | null;
+    bestDate: string | null;
+    sampleCount: number;
+    qualifyingSampleCount: number;
+    trainingWeeks: number;
+    recencyDays: number | null;
+  };
+  confidence: {
+    tier: AiInsightConfidenceTier | null;
+    score: number | null;
+    reasons: string[];
+  };
+  method: {
+    id: string;
+    version: string;
+    deterministic: boolean;
+  };
+  evidence: Array<{
+    code: string;
+    label: string;
+    value: string;
+  }>;
+  insufficientData?: {
+    reasonCode:
+      | 'no_samples'
+      | 'low_intensity_scope'
+      | 'too_few_samples'
+      | 'too_few_weeks'
+      | 'stale_data'
+      | 'weak_tail_signal';
+    message: string;
+    suggestedQuery: string;
+  };
 }
 
 export interface AiInsightsAdvisoryOkResponse {

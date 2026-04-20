@@ -1399,11 +1399,43 @@ function buildAdvisoryResponse(): AiInsightsAdvisoryOkResponse {
     advisory: {
       status: 'available',
       metricKey: 'heart_rate',
-      estimate: 186,
-      rangeLow: 182,
-      rangeHigh: 190,
-      confidenceTier: 'medium',
-      evidenceSummary: 'Based on deterministic heart-rate samples, observed max is 188 bpm.',
+      semanticKind: 'current_ceiling',
+      estimate: {
+        value: 186,
+        unit: 'bpm',
+      },
+      interval: {
+        low: 182,
+        high: 190,
+        kind: 'deterministic_range',
+        confidenceLevel: 'medium',
+      },
+      observed: {
+        bestValue: 188,
+        bestDate: '2026-03-17T10:00:00.000Z',
+        sampleCount: 12,
+        qualifyingSampleCount: 4,
+        trainingWeeks: 7,
+        recencyDays: 2,
+      },
+      confidence: {
+        tier: 'medium',
+        score: 0.62,
+        reasons: [
+          'Sample volume score 62%.',
+          'Coverage score 77%.',
+        ],
+      },
+      method: {
+        id: 'heart_rate_current_ceiling_deterministic',
+        version: 'v2',
+        deterministic: true,
+      },
+      evidence: [{
+        code: 'summary',
+        label: 'Summary',
+        value: 'Based on deterministic heart-rate samples, observed max is 188 bpm.',
+      }],
     },
     synthesis: {
       attempted: true,
@@ -1427,12 +1459,37 @@ function buildAdvisoryInsufficientDataResponse(): AiInsightsAdvisoryOkResponse {
     advisory: {
       status: 'insufficient_data',
       metricKey: 'heart_rate',
+      semanticKind: 'current_ceiling',
       estimate: null,
-      rangeLow: null,
-      rangeHigh: null,
-      confidenceTier: null,
-      evidenceSummary: 'Need at least 3 events with max heart-rate values in the selected scope.',
-      insufficientDataReason: 'Not enough heart-rate samples were found in the selected range.',
+      interval: null,
+      observed: {
+        bestValue: null,
+        bestDate: null,
+        sampleCount: 2,
+        qualifyingSampleCount: 0,
+        trainingWeeks: 1,
+        recencyDays: 9,
+      },
+      confidence: {
+        tier: null,
+        score: null,
+        reasons: [],
+      },
+      method: {
+        id: 'advisory-heart_rate-insufficient',
+        version: 'v2',
+        deterministic: true,
+      },
+      evidence: [{
+        code: 'too_few_samples',
+        label: 'Insufficient data',
+        value: 'Need at least 3 events with max heart-rate values in the selected scope.',
+      }],
+      insufficientData: {
+        reasonCode: 'too_few_samples',
+        message: 'Not enough heart-rate samples were found in the selected range.',
+        suggestedQuery: 'Show my max heart rate over time this year.',
+      },
     },
     synthesis: {
       attempted: true,
@@ -2322,15 +2379,24 @@ describe('AiInsightsPageComponent', () => {
     expect(narrative?.textContent).toContain('Expected heart rate estimate for this year is 186.');
     expect(summaryLabels).toContain('Status');
     expect(summaryLabels).toContain('Metric');
-    expect(summaryLabels).toContain('Expected value');
+    expect(summaryLabels).toContain('Semantic');
+    expect(summaryLabels).toContain('Current achievable max');
+    expect(summaryLabels).toContain('Observed evidence');
+    expect(summaryLabels).toContain('Method');
     expect(summaryLabels).toContain('Evidence');
     expect(summaryValues).toContain('Available');
     expect(summaryValues).toContain('Heart rate');
-    expect(summaryValues.some((value) => value.includes('186'))).toBe(true);
-    expect(summaryValues.some((value) => value.includes('Based on deterministic heart-rate samples, observed max is 188 bpm.'))).toBe(true);
-    expect(detailRows.some((row) => row.includes('Observed max sample') && row.includes('188'))).toBe(true);
-    expect(detailRows.some((row) => row.includes('Upper bound calc') && row.includes('186 + 4 = 190'))).toBe(true);
-    expect(detailRows.some((row) => row.includes('Lower bound calc') && row.includes('186 - 4 = 182'))).toBe(true);
+    expect(summaryValues).toContain('Current achievable max');
+    expect(summaryValues.some((value) => value.includes('186') && value.toLowerCase().includes('bpm'))).toBe(true);
+    expect(summaryValues.some((value) => value.includes('188') && value.toLowerCase().includes('bpm'))).toBe(true);
+    expect(summaryValues).toContain('heart_rate_current_ceiling_deterministic');
+    expect(summaryValues.some((value) => value.includes('Summary: Based on deterministic heart-rate samples, observed max is 188 bpm.'))).toBe(true);
+    expect(detailRows.some((row) => row.includes('Range') && row.includes('182') && row.includes('190') && row.toLowerCase().includes('bpm'))).toBe(true);
+    expect(detailRows.some((row) => row.includes('Confidence') && row.includes('Medium') && row.includes('%'))).toBe(true);
+    expect(detailRows.some((row) => row.includes('Valid sessions') && row.includes('12'))).toBe(true);
+    expect(detailRows.some((row) => row.includes('Qualifying tail sessions') && row.includes('4'))).toBe(true);
+    expect(detailRows.some((row) => row.includes('Upper bound calc') && row.includes('186') && row.includes('190') && row.toLowerCase().includes('bpm'))).toBe(true);
+    expect(detailRows.some((row) => row.includes('Lower bound calc') && row.includes('186') && row.includes('182') && row.toLowerCase().includes('bpm'))).toBe(true);
     expect(aggregateChart).toBeNull();
     expect(multiMetricChart).toBeNull();
     expect(powerCurveChart).toBeNull();
@@ -2357,9 +2423,10 @@ describe('AiInsightsPageComponent', () => {
 
     expect(resultStatusChips.some((chip) => chip.includes('Interpreted'))).toBe(false);
     expect(summaryLabels).toContain('Status');
-    expect(summaryLabels).toContain('Reason');
+    expect(summaryLabels).toContain('Insufficient data');
+    expect(summaryLabels).toContain('Method');
     expect(summaryLabels).toContain('Evidence');
-    expect(summaryLabels).not.toContain('Expected value');
+    expect(summaryLabels).not.toContain('Current achievable max');
     expect(summaryValues).toContain('Insufficient data');
     expect(summaryValues.some((value) => value.includes('Not enough heart-rate samples'))).toBe(true);
     expect(statementChipSet).toBeNull();

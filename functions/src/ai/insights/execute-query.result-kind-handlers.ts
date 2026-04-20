@@ -253,10 +253,13 @@ const EXECUTE_QUERY_RESULT_KIND_REGISTRY = {
         advisoryKind: query.advisoryKind,
         horizon: query.horizon,
         advisoryStatus: advisory.status,
-        estimate: advisory.estimate,
-        rangeLow: advisory.rangeLow,
-        rangeHigh: advisory.rangeHigh,
-        confidenceTier: advisory.confidenceTier,
+        semanticKind: advisory.semanticKind,
+        estimateValue: advisory.estimate?.value ?? null,
+        intervalLow: advisory.interval?.low ?? null,
+        intervalHigh: advisory.interval?.high ?? null,
+        confidenceTier: advisory.confidence.tier,
+        confidenceScore: advisory.confidence.score,
+        insufficientReasonCode: advisory.insufficientData?.reasonCode ?? null,
       });
 
       return {

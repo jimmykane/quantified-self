@@ -214,11 +214,40 @@ describe('resolveAiInsightsDisplayTitle', () => {
       advisory: {
         status: 'available',
         metricKey: 'heart_rate',
-        estimate: 186,
-        rangeLow: 182,
-        rangeHigh: 190,
-        confidenceTier: 'medium',
-        evidenceSummary: 'Deterministic evidence.',
+        semanticKind: 'current_ceiling',
+        estimate: {
+          value: 186,
+          unit: 'bpm',
+        },
+        interval: {
+          low: 182,
+          high: 190,
+          kind: 'deterministic_range',
+          confidenceLevel: 'medium',
+        },
+        observed: {
+          bestValue: 188,
+          bestDate: '2026-03-10T08:00:00.000Z',
+          sampleCount: 12,
+          qualifyingSampleCount: 4,
+          trainingWeeks: 7,
+          recencyDays: 3,
+        },
+        confidence: {
+          tier: 'medium',
+          score: 0.64,
+          reasons: ['Deterministic evidence quality checks passed.'],
+        },
+        method: {
+          id: 'heart_rate_current_ceiling_deterministic',
+          version: 'v2',
+          deterministic: true,
+        },
+        evidence: [{
+          code: 'summary',
+          label: 'Summary',
+          value: 'Deterministic evidence.',
+        }],
       },
       presentation: {
         title: 'Backend title',

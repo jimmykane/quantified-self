@@ -523,14 +523,15 @@ describe('execute-query', () => {
 
     expect(result.advisory.status).toBe('available');
     expect(result.advisory.metricKey).toBe('heart_rate');
+    expect(result.advisory.semanticKind).toBe('current_ceiling');
     expect(result.advisory.estimate).not.toBeNull();
-    expect(result.advisory.rangeLow).not.toBeNull();
-    expect(result.advisory.rangeHigh).not.toBeNull();
-    expect(result.advisory.evidenceSummary.length).toBeGreaterThan(0);
+    expect(result.advisory.interval).not.toBeNull();
+    expect(result.advisory.confidence.tier).not.toBeNull();
+    expect(result.advisory.evidence.length).toBeGreaterThan(0);
   });
 
   it('keeps advisory estimate at or above the observed max heart-rate sample', async () => {
-    const { docs, eventsById } = buildWeeklyHeartRateFixtures([166, 171, 175, 178, 181, 186, 190, 192]);
+    const { docs, eventsById } = buildWeeklyHeartRateFixtures([166, 171, 175, 178, 189, 190, 191, 192]);
     const fetchEventDocs = vi.fn(async () => docs);
     const importEvent = vi.fn((_eventPayload, eventID) => eventsById[eventID] || null);
 
@@ -560,8 +561,8 @@ describe('execute-query', () => {
       return;
     }
 
-    expect(result.advisory.estimate).toBeGreaterThanOrEqual(192);
-    expect(result.advisory.rangeHigh).toBeGreaterThanOrEqual(192);
+    expect(result.advisory.estimate?.value ?? 0).toBeGreaterThanOrEqual(192);
+    expect(result.advisory.interval?.high ?? 0).toBeGreaterThanOrEqual(192);
   });
 
   it('builds a best power-curve envelope across matching events', async () => {

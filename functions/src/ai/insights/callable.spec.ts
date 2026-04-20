@@ -1804,11 +1804,40 @@ describe('aiInsights callable', () => {
       advisory: {
         status: 'available',
         metricKey: 'heart_rate',
-        estimate: 186,
-        rangeLow: 182,
-        rangeHigh: 190,
-        confidenceTier: 'medium',
-        evidenceSummary: 'Based on 4 events with max heart-rate samples.',
+        semanticKind: 'current_ceiling',
+        estimate: {
+          value: 186,
+          unit: 'bpm',
+        },
+        interval: {
+          low: 182,
+          high: 190,
+          kind: 'deterministic_range',
+          confidenceLevel: 'medium',
+        },
+        observed: {
+          bestValue: 188,
+          bestDate: '2026-03-15T08:00:00.000Z',
+          sampleCount: 4,
+          qualifyingSampleCount: 2,
+          trainingWeeks: 4,
+          recencyDays: 2,
+        },
+        confidence: {
+          tier: 'medium',
+          score: 0.58,
+          reasons: ['Deterministic evidence quality checks passed.'],
+        },
+        method: {
+          id: 'heart_rate_current_ceiling_deterministic',
+          version: 'v2',
+          deterministic: true,
+        },
+        evidence: [{
+          code: 'summary',
+          label: 'Summary',
+          value: 'Based on 4 events with max heart-rate samples.',
+        }],
       },
     });
 
@@ -1824,11 +1853,40 @@ describe('aiInsights callable', () => {
       advisory: {
         status: 'available',
         metricKey: 'heart_rate',
-        estimate: 186,
-        rangeLow: 182,
-        rangeHigh: 190,
-        confidenceTier: 'medium',
-        evidenceSummary: 'Based on 4 events with max heart-rate samples.',
+        semanticKind: 'current_ceiling',
+        estimate: {
+          value: 186,
+          unit: 'bpm',
+        },
+        interval: {
+          low: 182,
+          high: 190,
+          kind: 'deterministic_range',
+          confidenceLevel: 'medium',
+        },
+        observed: {
+          bestValue: 188,
+          bestDate: '2026-03-15T08:00:00.000Z',
+          sampleCount: 4,
+          qualifyingSampleCount: 2,
+          trainingWeeks: 4,
+          recencyDays: 2,
+        },
+        confidence: {
+          tier: 'medium',
+          score: 0.58,
+          reasons: ['Deterministic evidence quality checks passed.'],
+        },
+        method: {
+          id: 'heart_rate_current_ceiling_deterministic',
+          version: 'v2',
+          deterministic: true,
+        },
+        evidence: [{
+          code: 'summary',
+          label: 'Summary',
+          value: 'Based on 4 events with max heart-rate samples.',
+        }],
       },
       narrative: 'Narrative',
       presentation: expect.objectContaining({
@@ -1859,12 +1917,37 @@ describe('aiInsights callable', () => {
       advisory: {
         status: 'insufficient_data',
         metricKey: 'heart_rate',
+        semanticKind: 'current_ceiling',
         estimate: null,
-        rangeLow: null,
-        rangeHigh: null,
-        confidenceTier: null,
-        evidenceSummary: 'Not enough heart-rate samples for estimate.',
-        insufficientDataReason: 'At least 3 events are required.',
+        interval: null,
+        observed: {
+          bestValue: null,
+          bestDate: null,
+          sampleCount: 1,
+          qualifyingSampleCount: 0,
+          trainingWeeks: 1,
+          recencyDays: 5,
+        },
+        confidence: {
+          tier: null,
+          score: null,
+          reasons: [],
+        },
+        method: {
+          id: 'advisory-heart_rate-insufficient',
+          version: 'v2',
+          deterministic: true,
+        },
+        evidence: [{
+          code: 'too_few_samples',
+          label: 'Insufficient data',
+          value: 'Not enough heart-rate samples for estimate.',
+        }],
+        insufficientData: {
+          reasonCode: 'too_few_samples',
+          message: 'At least 3 events are required.',
+          suggestedQuery: 'Show my max heart rate over time this year.',
+        },
       },
     });
 
@@ -1878,7 +1961,9 @@ describe('aiInsights callable', () => {
       resultKind: 'advisory',
       advisory: expect.objectContaining({
         status: 'insufficient_data',
-        insufficientDataReason: 'At least 3 events are required.',
+        insufficientData: expect.objectContaining({
+          message: 'At least 3 events are required.',
+        }),
       }),
     }));
   });

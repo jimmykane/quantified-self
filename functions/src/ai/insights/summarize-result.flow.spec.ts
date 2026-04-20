@@ -402,11 +402,40 @@ const advisoryInput = {
   advisory: {
     status: 'available' as const,
     metricKey: 'heart_rate' as const,
-    estimate: 196,
-    rangeLow: 190,
-    rangeHigh: 204,
-    confidenceTier: 'medium' as const,
-    evidenceSummary: 'Based on 16 events with max heart-rate samples.',
+    semanticKind: 'current_ceiling' as const,
+    estimate: {
+      value: 196,
+      unit: 'bpm',
+    },
+    interval: {
+      low: 190,
+      high: 204,
+      kind: 'deterministic_range' as const,
+      confidenceLevel: 'medium' as const,
+    },
+    observed: {
+      bestValue: 196,
+      bestDate: '2026-04-18T08:00:00.000Z',
+      sampleCount: 16,
+      qualifyingSampleCount: 4,
+      trainingWeeks: 8,
+      recencyDays: 1,
+    },
+    confidence: {
+      tier: 'medium' as const,
+      score: 0.66,
+      reasons: ['Deterministic evidence quality checks passed.'],
+    },
+    method: {
+      id: 'heart_rate_current_ceiling_deterministic',
+      version: 'v2',
+      deterministic: true,
+    },
+    evidence: [{
+      code: 'summary',
+      label: 'Summary',
+      value: 'Based on 16 events with max heart-rate samples.',
+    }],
   },
   presentation: {
     title: 'Expected heart rate for Cycling',
@@ -657,7 +686,15 @@ describe('summarizeAiInsightResult', () => {
       ...advisoryInput,
       advisory: {
         ...advisoryInput.advisory,
-        evidenceSummary: 'Based on 16 events with max heart-rate samples, observed max 180 bpm.',
+        observed: {
+          ...advisoryInput.advisory.observed,
+          bestValue: 180,
+        },
+        evidence: [{
+          code: 'summary',
+          label: 'Summary',
+          value: 'Based on 16 events with max heart-rate samples, observed max 180 bpm.',
+        }],
       },
     });
 
