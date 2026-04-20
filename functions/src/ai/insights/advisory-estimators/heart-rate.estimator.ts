@@ -302,16 +302,17 @@ function resolveEligibility(
       hasStrongTail: false,
     }
     : resolveTailQuality(samples, observedMax);
+  const bestDate = observedSample?.startTime === null || observedSample?.startTime === undefined
+    ? null
+    : new Date(observedSample.startTime).toISOString();
   const baseDetails = {
     sampleCount,
     qualifyingSampleCount: tailQuality.qualifyingSampleCount,
     trainingWeeks,
-    recencyDays,
-    observedMax,
-    bestValue: observedMax,
-    bestDate: observedSample?.startTime === null || observedSample?.startTime === undefined
-      ? null
-      : new Date(observedSample.startTime).toISOString(),
+    recencyDays: recencyDays ?? 'unavailable',
+    observedMax: observedMax ?? 'unavailable',
+    bestValue: observedMax ?? 'unavailable',
+    bestDate: bestDate ?? 'unavailable',
   };
 
   if (!samples.length) {
