@@ -324,6 +324,29 @@ describe('AppUserService', () => {
         );
     });
 
+    it('should continue profile loading when legal/system/settings reads fail', async () => {
+        const unavailableError = Object.assign(new Error('Service unavailable'), {
+            code: 'unavailable'
+        });
+
+        (authState as any).mockReturnValue(of(null));
+        (user as any).mockReturnValue(of(null));
+        (docData as any)
+            .mockReturnValueOnce(of({ uid: 'u1', acceptedPrivacyPolicy: true }))
+            .mockReturnValueOnce(throwError(() => unavailableError))
+            .mockReturnValueOnce(throwError(() => unavailableError))
+            .mockReturnValueOnce(throwError(() => unavailableError));
+
+        service = TestBed.inject(AppUserService);
+        const loggerErrorSpy = vi.spyOn((service as any).logger, 'error');
+        const loadedUser = await firstValueFrom(service.getUserByID('u1').pipe(take(1)));
+
+        expect(loadedUser?.uid).toBe('u1');
+        expect(loadedUser?.acceptedPrivacyPolicy).toBe(true);
+        expect(loadedUser?.settings).toBeTruthy();
+        expect(loggerErrorSpy).toHaveBeenCalledTimes(3);
+    });
+
     it('returns enabled chart data types in canonical order with event chart priority overrides', () => {
         service = TestBed.inject(AppUserService);
         const user = {
