@@ -9,6 +9,7 @@ import {
   SimpleChanges,
   ViewChild,
 } from '@angular/core';
+import { MatTooltip } from '@angular/material/tooltip';
 import type { EChartsType } from 'echarts/core';
 import {
   ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS,
@@ -46,6 +47,7 @@ import {
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   type DashboardKpiChartType,
 } from '../../../helpers/dashboard-special-chart-types';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
 
@@ -80,6 +82,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() isLoading = false;
   @Input() chartType: DashboardKpiChartType = DASHBOARD_ACWR_KPI_CHART_TYPE;
   @Input() infoTooltip?: string | null;
+  @Input() reserveTitleActionSpace = false;
   @Input() acwr?: DashboardAcwrContext | null;
   @Input() rampRate?: DashboardRampRateContext | null;
   @Input() monotonyStrain?: DashboardMonotonyStrainContext | null;
@@ -98,10 +101,13 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() efficiencyDelta4wStatus?: DashboardDerivedMetricStatus | null;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
+  @ViewChild(MatTooltip) infoTooltipDirective?: MatTooltip;
 
   private readonly chartHost: EChartsHostController;
+  private infoTooltipHideTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   public title = 'ACWR';
+  public titleDisplay = 'ACWR';
   public primaryValueText = '--';
   public primaryLabel = 'Ratio';
   public secondaryLabel = 'Acute / chronic load';
@@ -114,6 +120,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   constructor(
     private eChartsLoader: EChartsLoaderService,
     private logger: LoggerService,
+    private hapticsService: AppHapticsService,
   ) {
     this.chartHost = new EChartsHostController({
       eChartsLoader: this.eChartsLoader,
@@ -131,7 +138,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       this.updatePresentationAndOverlay();
       return;
     }
-    if (
+    const requiresChartRefresh = (
       changes.darkTheme
       || changes.isLoading
       || changes.chartType
@@ -151,13 +158,40 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       || changes.easyPercentStatus
       || changes.hardPercentStatus
       || changes.efficiencyDelta4wStatus
-    ) {
+    );
+
+    if (requiresChartRefresh) {
       void this.refreshChart();
+      return;
+    }
+
+    if (changes.reserveTitleActionSpace) {
+      // Header action-space reservation changes text aliasing only; no chart rerender needed.
+      this.titleDisplay = this.resolveDisplayTitle();
     }
   }
 
   ngOnDestroy(): void {
+    this.clearInfoTooltipTimer();
     this.chartHost.dispose();
+  }
+
+  onKpiLayoutClick(event: MouseEvent): void {
+    if (!this.infoTooltip) {
+      return;
+    }
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('.title-info-button')) {
+      return;
+    }
+    this.hapticsService.selection();
+    this.showInfoTooltip();
+  }
+
+  onInfoButtonClick(event: MouseEvent): void {
+    event.stopPropagation();
+    this.hapticsService.selection();
+    this.showInfoTooltip();
   }
 
   private async refreshChart(): Promise<void> {
@@ -179,6 +213,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   private updatePresentationAndOverlay(): KpiPresentation {
     const presentation = this.resolvePresentation();
     this.title = presentation.title;
+    this.titleDisplay = this.resolveDisplayTitle();
     this.primaryLabel = presentation.primaryLabel;
     this.secondaryLabel = presentation.secondaryLabel;
     this.primaryValueText = this.formatPrimaryValue(presentation.primaryValue, {
@@ -332,6 +367,42 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     return this.acwrStatus || null;
   }
 
+  private resolveDisplayTitle(): string {
+    if (this.reserveTitleActionSpace !== true) {
+      return this.title;
+    }
+    if (this.chartType === DASHBOARD_RAMP_RATE_KPI_CHART_TYPE) {
+      return 'Ramp';
+    }
+    if (this.chartType === DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE) {
+      return 'M/S';
+    }
+    if (this.chartType === DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE) {
+      return 'Eff Δ';
+    }
+    return this.title;
+  }
+
+  private showInfoTooltip(): void {
+    if (!this.infoTooltipDirective || !this.infoTooltip) {
+      return;
+    }
+    this.infoTooltipDirective.show(0);
+    this.clearInfoTooltipTimer();
+    this.infoTooltipHideTimeoutId = setTimeout(() => {
+      this.infoTooltipDirective?.hide(0);
+      this.infoTooltipHideTimeoutId = null;
+    }, 2200);
+  }
+
+  private clearInfoTooltipTimer(): void {
+    if (this.infoTooltipHideTimeoutId === null) {
+      return;
+    }
+    clearTimeout(this.infoTooltipHideTimeoutId);
+    this.infoTooltipHideTimeoutId = null;
+  }
+
   private buildOption(presentation: KpiPresentation): ChartOption {
     const chartWidth = this.chartDiv?.nativeElement?.clientWidth || 0;
     const style = buildDashboardEChartsStyleTokens(this.darkTheme, chartWidth);
@@ -346,6 +417,24 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
         return [point.time, Number.isFinite(numericValue) ? numericValue : null] as const;
       });
     const trendData = this.trimNullEdgeTrendPoints(rawTrendData);
+    const trendNumericValues = trendData
+      .map(([, value]) => value)
+      .filter((value): value is number => Number.isFinite(value));
+    const minTrendValue = trendNumericValues.length ? Math.min(...trendNumericValues) : 0;
+    const maxTrendValue = trendNumericValues.length ? Math.max(...trendNumericValues) : 0;
+    const yAxisRangePadding = this.resolveYAxisPadding(minTrendValue, maxTrendValue);
+    const hasNegativeTrend = minTrendValue < 0;
+    const yAxisBounds = this.resolveYAxisBounds(
+      minTrendValue,
+      maxTrendValue,
+      yAxisRangePadding,
+      hasNegativeTrend,
+    );
+    const negativeBandColor = this.withAlpha(
+      this.resolveThemeColor('--mat-sys-error', '#c62828'),
+      this.darkTheme ? 0.12 : 0.08,
+    );
+    const zeroGuideLineColor = this.withAlpha(style.axisColor, this.darkTheme ? 0.24 : 0.18);
 
     if (!trendData.length) {
       return {
@@ -383,6 +472,9 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       },
       yAxis: {
         type: 'value',
+        min: yAxisBounds.min,
+        max: yAxisBounds.max,
+        scale: true,
         axisLabel: { show: false },
         axisTick: { show: false },
         axisLine: { show: false },
@@ -450,11 +542,40 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
                 },
                 {
                   offset: 1,
-                  color: this.withAlpha(sparklineStyle.areaColor, 0.02),
+                  color: this.withAlpha(sparklineStyle.areaColor, 0.06),
                 },
               ],
             },
+            origin: 'auto',
           },
+          markLine: hasNegativeTrend
+            ? {
+              symbol: 'none',
+              silent: true,
+              label: { show: false },
+              lineStyle: {
+                color: zeroGuideLineColor,
+                width: 0.75,
+                type: 'dotted',
+              },
+              data: [{ yAxis: 0 }],
+            }
+            : undefined,
+          markArea: hasNegativeTrend
+            ? {
+              silent: true,
+              label: { show: false },
+              itemStyle: {
+                color: negativeBandColor,
+              },
+              data: [
+                [
+                  { yAxis: minTrendValue },
+                  { yAxis: 0 },
+                ],
+              ],
+            }
+            : undefined,
         },
       ],
     };
@@ -611,6 +732,33 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       return color;
     }
     return `rgba(${rgb.r},${rgb.g},${rgb.b},${normalizedAlpha})`;
+  }
+
+  private resolveYAxisPadding(minValue: number, maxValue: number): number {
+    const span = Math.max(0, maxValue - minValue);
+    const magnitude = Math.max(Math.abs(minValue), Math.abs(maxValue), 1);
+    return Math.max(0.35, span * 0.2, magnitude * 0.08);
+  }
+
+  private resolveYAxisBounds(
+    minValue: number,
+    maxValue: number,
+    padding: number,
+    includeZeroBaseline: boolean,
+  ): { min: number; max: number } {
+    const min = minValue - padding;
+    let max = maxValue + padding;
+
+    if (includeZeroBaseline) {
+      // Keep y=0 visible when negative-band overlays are active.
+      max = Math.max(0, max);
+    }
+
+    if (max > min) {
+      return { min, max };
+    }
+
+    return { min, max: min + Math.max(padding, 1) };
   }
 
   private parseRgbColor(

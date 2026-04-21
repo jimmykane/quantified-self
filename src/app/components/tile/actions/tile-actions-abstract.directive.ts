@@ -7,10 +7,12 @@ import { AppUserUtilities } from '../../../utils/app.user.utilities';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { EventEmitter, Input, Output, Directive, inject } from '@angular/core';
 import { User } from '@sports-alliance/sports-lib';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 
 @Directive()
 export class TileActionsAbstractDirective extends TileAbstractDirective {
   protected analyticsService = inject(AppAnalyticsService);
+  protected hapticsService = inject(AppHapticsService);
   @Output() savingChange = new EventEmitter<boolean>();
 
   constructor(protected userService: AppUserService) {
@@ -40,6 +42,7 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
 
   async changeTileColumnSize(event) {
     this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeTileSize' });
+    this.hapticsService.selection();
     const tile = <TileSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tileToFind => tileToFind.order === this.order);
     tile.size.columns = event.value;
     return this.persistUserSettings();
@@ -47,6 +50,7 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
 
   async changeTileRowSize(event) {
     this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeTileSize' });
+    this.hapticsService.selection();
     const tile = <TileSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tileToFind => tileToFind.order === this.order);
     tile.size.rows = event.value;
     return this.persistUserSettings();
@@ -62,6 +66,7 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
 
   async deleteTile(event) {
     this.analyticsService.logEvent('dashboard_tile_action', { method: 'deleteTile' });
+    this.hapticsService.selection();
     if (this.user.settings.dashboardSettings.tiles.length === 1) {
       throw new Error('Cannot delete tile there is only one left');
     }
@@ -88,10 +93,12 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
   }
 
   async moveTileBackward() {
+    this.hapticsService.selection();
     return this.moveTileByOffset(-1, 'moveTileBackward');
   }
 
   async moveTileForward() {
+    this.hapticsService.selection();
     return this.moveTileByOffset(1, 'moveTileForward');
   }
 
@@ -125,6 +132,7 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
    * see https://github.com/angular/components/issues/11677
    */
   fixDisappearIOSBug() {
+    this.hapticsService.selection();
     document.getElementById('panel-fix')?.remove();
     const styleNode = document.createElement('style');
     styleNode.type = 'text/css';

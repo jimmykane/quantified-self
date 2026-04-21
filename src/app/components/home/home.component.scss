@@ -386,6 +386,26 @@
                 background-color: var(--mat-sys-tertiary-container);
                 color: var(--mat-sys-on-tertiary-container);
             }
+
+            &.auto-sync {
+                background-color: var(--mat-sys-tertiary-container);
+                color: var(--mat-sys-on-tertiary-container);
+            }
+
+            &.service-sync {
+                background-color: var(--mat-sys-secondary-container);
+                color: var(--mat-sys-on-secondary-container);
+            }
+
+            &.route-upload {
+                background-color: var(--mat-sys-error-container);
+                color: var(--mat-sys-on-error-container);
+            }
+
+            &.activity-upload {
+                background-color: var(--mat-sys-primary-container);
+                color: var(--mat-sys-on-primary-container);
+            }
         }
     }
 }
@@ -406,6 +426,16 @@
         font-size: 2.5rem;
         margin-bottom: 4rem;
         font-weight: 600;
+        @extend .animate-on-scroll;
+    }
+
+    .section-subtitle {
+        max-width: 820px;
+        margin: -2.5rem auto 2.5rem;
+        text-align: center;
+        font-size: 1.1rem;
+        line-height: 1.7;
+        color: var(--mat-sys-on-surface-variant);
         @extend .animate-on-scroll;
     }
 
@@ -478,6 +508,43 @@
             &.sync {
                 background-color: var(--mat-sys-tertiary-container);
                 color: var(--mat-sys-on-tertiary-container);
+            }
+        }
+
+        .metric-chip-list {
+            margin-top: 1rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .metric-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            min-height: 2rem;
+            padding: 0.25rem 0.65rem;
+            border-radius: 999px;
+            border: 1px solid var(--mat-sys-outline-variant);
+            background: var(--mat-sys-surface-container-low);
+            color: var(--mat-sys-on-surface-variant);
+            font-size: 0.8rem;
+            line-height: 1.2;
+            font-weight: 600;
+            letter-spacing: 0.01em;
+            cursor: help;
+
+            .metric-chip-info {
+                width: 0.9rem;
+                height: 0.9rem;
+                font-size: 0.9rem;
+                opacity: 0.75;
+            }
+
+            &:hover .metric-chip-info,
+            &:focus-visible .metric-chip-info {
+                opacity: 1;
+                color: var(--mat-sys-primary);
             }
         }
     }
@@ -953,6 +1020,11 @@
                 cursor: help;
             }
         }
+
+        mat-icon[svgIcon="firebase"] {
+            width: 120px;
+            height: 64px;
+        }
     }
 
     .legal-links {
@@ -988,6 +1060,14 @@
 
     .features-grid {
         grid-template-columns: 1fr;
+    }
+
+    .features-section {
+        .section-subtitle {
+            margin-top: -2rem;
+            margin-bottom: 2rem;
+            font-size: 1rem;
+        }
     }
 
     .integrations-section {

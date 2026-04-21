@@ -4,6 +4,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { TileChartActionsComponent } from './tile.chart.actions.component';
 import { AppUserService } from '../../../../services/app.user.service';
 import { AppAnalyticsService } from '../../../../services/app.analytics.service';
+import { AppHapticsService } from '../../../../services/app.haptics.service';
 import { TileActionsFooterComponent } from '../footer/tile.actions.footer.component';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatSelectModule } from '@angular/material/select';
@@ -19,6 +20,7 @@ describe('TileChartActionsComponent', () => {
   let fixture: ComponentFixture<TileChartActionsComponent>;
   let userMock: any;
   let analyticsMock: any;
+  let hapticsMock: { selection: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
     userMock = {
@@ -50,6 +52,9 @@ describe('TileChartActionsComponent', () => {
     analyticsMock = {
       logEvent: vi.fn(),
     };
+    hapticsMock = {
+      selection: vi.fn(),
+    };
 
     await TestBed.configureTestingModule({
       declarations: [TileChartActionsComponent, TileActionsFooterComponent],
@@ -63,6 +68,7 @@ describe('TileChartActionsComponent', () => {
       providers: [
         { provide: AppUserService, useValue: userMock },
         { provide: AppAnalyticsService, useValue: analyticsMock },
+        { provide: AppHapticsService, useValue: hapticsMock },
       ],
     }).compileComponents();
 
@@ -118,6 +124,7 @@ describe('TileChartActionsComponent', () => {
     expect(preventDefault).toHaveBeenCalledTimes(1);
     expect(stopPropagation).toHaveBeenCalledTimes(1);
     expect(emittedOrders).toEqual([1]);
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
   });
 
   it('should emit savingChange while persisting structural settings', async () => {
@@ -128,6 +135,7 @@ describe('TileChartActionsComponent', () => {
 
     expect(emittedStates).toEqual([true, false]);
     expect(userMock.updateUserProperties).toHaveBeenCalled();
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
   });
 
   it('should expose move boundaries for the first tile', () => {
@@ -143,6 +151,7 @@ describe('TileChartActionsComponent', () => {
     expect(userMock.settings.dashboardSettings.tiles[0].chartType).toBe(ChartTypes.Line);
     expect(userMock.settings.dashboardSettings.tiles[1].chartType).toBe(ChartTypes.Bar);
     expect(userMock.updateUserProperties).toHaveBeenCalled();
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
   });
 
   it('should not persist when trying to move the first tile backward', async () => {
@@ -177,5 +186,6 @@ describe('TileChartActionsComponent', () => {
     expect(userMock.settings.dashboardSettings.dismissedCuratedRecoveryNowTile).toBe(true);
     expect(userMock.settings.dashboardSettings.tiles).toHaveLength(1);
     expect(userMock.updateUserProperties).toHaveBeenCalled();
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
   });
 });

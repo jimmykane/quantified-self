@@ -2,7 +2,7 @@
 <section class="pie">
   @if (showActions) {
   <div class="dashboard-summary-actions">
-    <button mat-flat-button class="qs-mat-primary" (click)="openDashboardManagerDialog()" [disabled]="isDashboardManagerOpen">
+    <button mat-flat-button class="qs-mat-primary" appHapticTap (click)="openDashboardManagerDialog()" [disabled]="isDashboardManagerOpen">
       <mat-icon>add_chart</mat-icon>
       <span>Dashboard manager</span>
     </button>
@@ -16,7 +16,7 @@
       <div class="derived-metrics-banner-description">{{derivedMetricsBanner.description}}</div>
     </div>
     @if (derivedMetricsBanner.showRetry) {
-    <button type="button" class="derived-metrics-banner-action" (click)="retryDerivedMetricsRebuild()">Retry</button>
+    <button type="button" class="derived-metrics-banner-action" appHapticTap (click)="retryDerivedMetricsRebuild()">Retry</button>
     }
   </div>
   }

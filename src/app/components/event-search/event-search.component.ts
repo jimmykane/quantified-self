@@ -23,6 +23,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { firstValueFrom } from 'rxjs';
 import { take } from 'rxjs/operators';
+import { AppHapticsService } from '../../services/app.haptics.service';
 
 @Component({
   selector: 'app-event-search',
@@ -69,6 +70,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   constructor(
     changeDetector: ChangeDetectorRef,
     private dialog?: MatDialog,
+    private hapticsService?: AppHapticsService,
   ) {
     super(changeDetector);
   }
@@ -159,6 +161,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   }
 
   async dateToggleChange(event: MatButtonToggleChange) {
+    this.hapticsService?.selection();
     const nextRange = event.source.value;
     const previousRange = this.selectedDateRange;
     if (nextRange === DateRanges.all && previousRange !== DateRanges.all) {
@@ -192,15 +195,18 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     if (this.searchFormGroup.hasError('endDateSmallerThanStartDate') || this.searchFormGroup.hasError('dateRange')) {
       return;
     }
+    this.hapticsService?.selection();
     this.selectedDateRange = this.dateRanges.custom;
     return this.search();
   }
 
   setCustomDateRange() {
+    this.hapticsService?.selection();
     this.selectedDateRange = this.dateRanges.custom;
   }
 
   async onActivityTypesChange(activityTypes) {
+    this.hapticsService?.selection();
     this.selectedActivityTypes = activityTypes;
     return this.search();
   }
@@ -209,6 +215,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     if (this.mergedEventsToggleDisabled) {
       return;
     }
+    this.hapticsService?.selection();
     const selected = Array.isArray(event.value) ? event.value : [];
     this.includeMergedEvents = selected.includes('merged');
     return this.search();

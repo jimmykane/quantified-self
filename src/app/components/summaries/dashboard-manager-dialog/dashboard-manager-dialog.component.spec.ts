@@ -31,6 +31,7 @@ import {
 } from '../../../helpers/dashboard-special-chart-types';
 import { DASHBOARD_MANAGER_PRESET_IDS } from '../../../helpers/dashboard-manager-presets.helper';
 import { AppUserService } from '../../../services/app.user.service';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 import { DashboardManagerDialogComponent } from './dashboard-manager-dialog.component';
 
 function createUser(tiles: any[] = []): any {
@@ -52,6 +53,11 @@ describe('DashboardManagerDialogComponent', () => {
   let fixture: ComponentFixture<DashboardManagerDialogComponent>;
   let userServiceMock: { updateUserProperties: ReturnType<typeof vi.fn> };
   let dialogRefMock: { close: ReturnType<typeof vi.fn> };
+  let hapticsMock: {
+    selection: ReturnType<typeof vi.fn>;
+    success: ReturnType<typeof vi.fn>;
+    error: ReturnType<typeof vi.fn>;
+  };
   let dialogData: { user: any; initialMode?: 'add' | 'edit'; initialEditTileOrder?: number | null };
 
   beforeEach(async () => {
@@ -76,11 +82,17 @@ describe('DashboardManagerDialogComponent', () => {
     dialogRefMock = {
       close: vi.fn(),
     };
+    hapticsMock = {
+      selection: vi.fn(),
+      success: vi.fn(),
+      error: vi.fn(),
+    };
 
     await TestBed.configureTestingModule({
       declarations: [DashboardManagerDialogComponent],
       providers: [
         { provide: AppUserService, useValue: userServiceMock },
+        { provide: AppHapticsService, useValue: hapticsMock },
         { provide: MatDialogRef, useValue: dialogRefMock },
         { provide: MAT_DIALOG_DATA, useValue: dialogData },
       ],
@@ -132,6 +144,7 @@ describe('DashboardManagerDialogComponent', () => {
     expect(userServiceMock.updateUserProperties).toHaveBeenCalledWith(dialogData.user, {
       settings: dialogData.user.settings,
     });
+    expect(hapticsMock.success).toHaveBeenCalledTimes(1);
     expect(dialogRefMock.close).toHaveBeenCalledWith({ saved: true });
   });
 
@@ -502,7 +515,23 @@ describe('DashboardManagerDialogComponent', () => {
     expect(component.saveError).toBe('Could not save dashboard tile settings.');
     expect(dialogData.user.settings.dashboardSettings.tiles).toEqual(originalTiles);
     expect(dialogData.user.settings.dashboardSettings.dismissedCuratedRecoveryNowTile).toBe(true);
+    expect(hapticsMock.error).toHaveBeenCalledTimes(1);
     expect(dialogRefMock.close).not.toHaveBeenCalledWith({ saved: true });
+  });
+
+  it('triggers selection haptics for manager interaction changes and close', () => {
+    component.onModeChange('edit');
+    component.onWorkflowTabChange(1);
+    component.onEditTileSelectionChange(0);
+    component.onCategoryChange('custom');
+    component.onPresetCategoryChange('custom');
+    component.onKpiGroupChange('load');
+    component.onPresetKpiGroupChange('load');
+    component.onPresetSelectionChange(DASHBOARD_MANAGER_PRESET_IDS.CUSTOM_WEEKLY_DISTANCE_TREND);
+    component.onCustomChartTypeChange(ChartTypes.Pie);
+    component.close();
+
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(10);
   });
 
   it('allows add save flow when dashboard already has many tiles', async () => {

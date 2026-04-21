@@ -56,20 +56,64 @@ describe('HomeComponent', () => {
 
     it('should keep the original hero messaging and render the AI Insights section', () => {
         const text = fixture.nativeElement.textContent as string;
+        const footerIcons = Array.from(
+            fixture.nativeElement.querySelectorAll('.tech-stack mat-icon')
+        ) as HTMLElement[];
+        const firebaseIcon = fixture.nativeElement.querySelector('.tech-stack mat-icon[svgIcon="firebase"]');
+        const contactLink = fixture.nativeElement.querySelector('.legal-links a[href="mailto:support@quantified-self.io"]') as HTMLElement | null;
         expect(text).toContain('Quantify. Analyze. Improve.');
         expect(text).toContain('Measure Performance. Get AI Insights.');
         expect(text).toContain('AI Insights');
+        expect(footerIcons.length).toBe(1);
+        expect(firebaseIcon).toBeTruthy();
+        expect(contactLink).toBeTruthy();
+        expect(contactLink?.textContent).toContain('Contact');
+        expect(contactLink?.getAttribute('href')).toBe('mailto:support@quantified-self.io');
         expect(text).not.toContain('New Feature');
     });
 
-    it('should include Garmin -> Suunto in offerings copy without dedicated CTA promotion', () => {
+    it('should render expanded integration capability cards without dedicated CTA promotion', () => {
         const text = fixture.nativeElement.textContent as string;
-        expect(text).toContain('Cross-Platform Sync');
-        expect(text).toContain('Garmin -> Suunto sync is built in');
+        const integrationCards = fixture.nativeElement.querySelectorAll('.integration-followup-grid .feature-card');
+
+        expect(integrationCards.length).toBe(5);
+        expect(text).toContain('Garmin -> Suunto and COROS -> Suunto sync are built in');
+        expect(text).toContain('Automatic Sync for All Services');
+        expect(text).toContain('Automatic Sync Between Services');
+        expect(text).toContain('Manual Route Uploads');
+        expect(text).toContain('Manual Activity Uploads to Suunto');
         expect(text).toContain('reliable and instant sync');
         expect(text).not.toContain('Set up sync');
         expect(text).not.toContain('How it works');
         expect(fixture.nativeElement.querySelector('.garmin-suunto-launch')).toBeNull();
+    });
+
+    it('should surface KPI and derived metric charts in Engineered for Performance section', () => {
+        const text = fixture.nativeElement.textContent as string;
+        const performanceCards = fixture.nativeElement.querySelectorAll(
+            '.features-section:not(.ai-insights-section) .features-grid .feature-card'
+        );
+        const metricChips = fixture.nativeElement.querySelectorAll('.metric-chip');
+        const metricChipInfoIcons = fixture.nativeElement.querySelectorAll('.metric-chip .metric-chip-info');
+
+        expect(performanceCards.length).toBe(6);
+        expect(metricChips.length).toBe(11);
+        expect(metricChipInfoIcons.length).toBe(11);
+        expect(text).toContain('Engineered for Performance');
+        expect(text).toContain('Reliable and instant analytics');
+        expect(text).toContain('KPI Lane for Fast Decisions');
+        expect(text).toContain('ACWR');
+        expect(text).toContain('Ramp Rate');
+        expect(text).toContain('Monotony / Strain');
+        expect(text).toContain('Form Now');
+        expect(text).toContain('Form +7d');
+        expect(text).toContain('Easy %');
+        expect(text).toContain('Hard %');
+        expect(text).toContain('Efficiency Δ (4w)');
+        expect(text).toContain('Freshness Forecast');
+        expect(text).toContain('Intensity Distribution');
+        expect(text).toContain('Efficiency Trend');
+        expect(text).toContain('Form Model (CTL / ATL / TSB)');
     });
 
     it('should render the shared typed prompt rotator in the examples area', () => {

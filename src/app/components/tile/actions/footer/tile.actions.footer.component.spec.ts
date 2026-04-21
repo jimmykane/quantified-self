@@ -11,7 +11,7 @@ describe('TileActionsFooterComponent', () => {
     beforeEach(async () => {
         await TestBed.configureTestingModule({
             declarations: [TileActionsFooterComponent],
-            imports: [MatIconModule, MatButtonModule]
+            imports: [MatIconModule, MatButtonModule],
         })
             .compileComponents();
 

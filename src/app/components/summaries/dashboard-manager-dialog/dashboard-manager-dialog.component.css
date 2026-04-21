@@ -43,6 +43,29 @@
   margin: 0;
 }
 
+.dashboard-manager-tip-hint {
+  align-items: center;
+  background: color-mix(in srgb, var(--mat-sys-secondary-container) 24%, transparent);
+  border-radius: 0.5rem;
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.45rem;
+  padding: 0.38rem 0.55rem;
+}
+
+.dashboard-manager-tip-hint mat-icon {
+  color: var(--mat-sys-on-secondary-container);
+  font-size: 1rem;
+  height: 1rem;
+  line-height: 1;
+  width: 1rem;
+}
+
+.dashboard-manager-tip-hint > span {
+  color: var(--mat-sys-on-secondary-container);
+  font-style: italic;
+}
+
 .dashboard-manager-icon-label {
   align-items: center;
   display: flex;
