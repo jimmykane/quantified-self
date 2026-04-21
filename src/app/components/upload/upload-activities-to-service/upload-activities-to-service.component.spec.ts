@@ -15,6 +15,7 @@ import { AppUserService } from '../../../services/app.user.service';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 
 describe('UploadActivitiesToServiceComponent', () => {
     let component: UploadActivitiesToServiceComponent;
@@ -99,6 +100,31 @@ describe('UploadActivitiesToServiceComponent', () => {
         const callArgs = mockFunctionsService.call.mock.calls[0];
         const sentData = callArgs[1];
         expect(sentData.file.length).toBeGreaterThan(0);
+
+        await promise;
+    });
+
+    it('should call COROS callable when serviceName is COROSAPI', async () => {
+        component.serviceName = ServiceNames.COROSAPI;
+
+        const file = {
+            file: new File(['<fit></fit>'], 'activity.fit', { type: 'application/octet-stream' }),
+            filename: 'activity',
+            extension: 'fit',
+            data: null,
+            id: '1',
+            name: 'activity.fit',
+            status: UPLOAD_STATUS.PROCESSING,
+            jobId: '1'
+        };
+
+        const promise = component.processAndUploadFile(file);
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        expect(mockFunctionsService.call).toHaveBeenCalledWith(
+            'importActivityToCOROSAPI',
+            expect.objectContaining({ file: expect.any(String) })
+        );
 
         await promise;
     });

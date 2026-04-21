@@ -143,6 +143,36 @@ describe('ServicesCorosComponent', () => {
         });
     });
 
+    describe('FIT Upload Card', () => {
+        it('should render upload component when user has pro access and is connected', () => {
+            component.hasProAccess = true;
+            component.serviceTokens = [{ accessToken: 'coros-token' } as any];
+            fixture.detectChanges();
+
+            const uploadComponent = fixture.nativeElement.querySelector('app-upload-activity-to-service');
+            expect(uploadComponent).toBeTruthy();
+        });
+
+        it('should show connect message when user has pro access but is not connected', () => {
+            component.hasProAccess = true;
+            component.serviceTokens = [];
+            fixture.detectChanges();
+
+            const content = fixture.nativeElement.textContent;
+            expect(content).toContain('You need to connect your COROS account in the section above before uploading activities.');
+        });
+
+        it('should show uploaded activities count when available', () => {
+            component.hasProAccess = true;
+            component.serviceTokens = [{ accessToken: 'coros-token' } as any];
+            component.serviceMeta = { uploadedActivitiesCount: 7 } as any;
+            fixture.detectChanges();
+
+            const content = fixture.nativeElement.textContent;
+            expect(content).toContain('7 uploaded');
+        });
+    });
+
     describe('Activity Sync Card', () => {
         it('should show route toggle when COROS and Suunto are connected', () => {
             component.hasProAccess = true;

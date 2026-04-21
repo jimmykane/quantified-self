@@ -1,4 +1,4 @@
-import { Component, inject, Inject, Optional } from '@angular/core';
+import { Component, inject, Input, Inject, Optional } from '@angular/core';
 import { Router } from '@angular/router';
 import { MatDialog, MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -31,7 +31,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
   private analyticsService = inject(AppAnalyticsService);
 
   private functionsService = inject(AppFunctionsService);
-  private serviceName: ServiceNames = ServiceNames.SuuntoApp;
+  @Input() serviceName: ServiceNames = ServiceNames.SuuntoApp;
 
   constructor() {
     super();
@@ -46,7 +46,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
    * @param file
    */
   async processAndUploadFile(file: FileInterface) {
-    this.analyticsService.logEvent('upload_activity_to_service', { service: ServiceNames.SuuntoApp });
+    this.analyticsService.logEvent('upload_activity_to_service', { service: this.serviceName });
     return new Promise<{ success: boolean; duplicate: boolean }>((resolve, reject) => {
       const fileReader = new FileReader();
       fileReader.onload = async () => {
@@ -61,7 +61,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
         const idToken = await getIdToken(this.auth.currentUser, true);
         try {
           if (getSize(fileReader.result) > 10485760) {
-            throw new Error(`Cannot upload route because the size is greater than 10MB`);
+            throw new Error('Cannot upload activity because the size is greater than 10MB');
           }
 
           // Convert ArrayBuffer to Base64
@@ -71,19 +71,21 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
             this.processingService.updateJob(file.jobId, { progress: 50 });
           }
 
+          const destinationName = this.serviceName === ServiceNames.COROSAPI ? 'COROS' : 'Suunto';
+          const callableFunction = this.serviceName === ServiceNames.COROSAPI ? 'importActivityToCOROSAPI' : 'importActivityToSuuntoApp';
           this.functionsService.call<any, { status: string; code?: string; message?: string; result?: { status: string; code?: string; message?: string } }>(
-            'importActivityToSuuntoApp',
+            callableFunction,
             { file: base64String }
           ).then((response) => {
             if (file.jobId) {
               this.processingService.updateJob(file.jobId, { progress: 100 });
             }
             // Log for debugging - helps identify response structure issues
-            this.logger.info('Suunto upload response:', response.data);
+            this.logger.info(`${destinationName} upload response:`, response.data);
 
             if (response.data.code === 'ALREADY_EXISTS') {
               if (file.jobId) {
-                this.processingService.updateJob(file.jobId, { status: 'duplicate', details: 'Activity already exists in Suunto' });
+                this.processingService.updateJob(file.jobId, { status: 'duplicate', details: `Activity already exists in ${destinationName}` });
               }
               resolve({ success: true, duplicate: true });
             } else {

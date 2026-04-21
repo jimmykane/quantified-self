@@ -1,5 +1,5 @@
 import { Component } from '@angular/core';
-import { ServiceNames, Auth2ServiceTokenInterface, Auth1ServiceTokenInterface } from '@sports-alliance/sports-lib';
+import { ServiceNames, Auth2ServiceTokenInterface, Auth1ServiceTokenInterface, UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { HttpClient } from '@angular/common/http';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute } from '@angular/router';
@@ -53,6 +53,10 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
     if (state && code) {
       await this.userService.requestAndSetCurrentUserCOROSAPIAccessToken(state, code);
     }
+  }
+
+  get corosServiceMeta(): UserServiceMetaInterface & { uploadedActivitiesCount?: number } | undefined {
+    return this.serviceMeta;
   }
 
   override async ngOnChanges() {

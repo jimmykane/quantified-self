@@ -144,6 +144,7 @@ export { refreshGarminAPIRefreshTokens } from './garmin/tokens';
 export { importActivityToSuuntoApp } from './suunto/activities';
 export { importRouteToSuuntoApp } from './suunto/routes';
 export { getSuuntoFITFile } from './suunto/get-suunto-fit-file';
+export { importActivityToCOROSAPI } from './coros/activities';
 
 // Events
 export { cleanupEventFile } from './events/cleanup';
