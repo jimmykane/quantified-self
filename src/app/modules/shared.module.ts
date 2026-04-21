@@ -34,6 +34,7 @@ import { MapLayersMenuPanelComponent } from '../components/map/shared/map-layers
 import { EventIntensityZonesComponent } from '../components/event/intensity-zones/event.intensity-zones.component';
 import { MenuRadioListComponent } from '../components/shared/menu-radio-list/menu-radio-list.component';
 import { TypedPromptRotatorComponent } from '../components/shared/typed-prompt-rotator/typed-prompt-rotator.component';
+import { HapticTapDirective } from '../directives/haptic-tap.directive';
 
 @NgModule({
     imports: [
@@ -72,6 +73,7 @@ import { TypedPromptRotatorComponent } from '../components/shared/typed-prompt-r
         EventIntensityZonesComponent,
         MenuRadioListComponent,
         TypedPromptRotatorComponent,
+        HapticTapDirective,
     ],
     providers: [],
     exports: [
@@ -106,6 +108,7 @@ import { TypedPromptRotatorComponent } from '../components/shared/typed-prompt-r
         EventIntensityZonesComponent,
         MenuRadioListComponent,
         TypedPromptRotatorComponent,
+        HapticTapDirective,
     ]
 })
 

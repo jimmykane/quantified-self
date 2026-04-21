@@ -43,7 +43,7 @@
   || chartType === efficiencyDelta4wKpiChartType
   ) {
   <app-kpi-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme" [chartType]="chartType"
-    [infoTooltip]="chartInfoTooltip"
+    [infoTooltip]="chartInfoTooltip" [reserveTitleActionSpace]="showActions"
     [acwr]="acwr" [rampRate]="rampRate" [monotonyStrain]="monotonyStrain"
     [formNow]="formNow" [formPlus7d]="formPlus7d" [easyPercent]="easyPercent" [hardPercent]="hardPercent"
     [efficiencyDelta4w]="efficiencyDelta4w"

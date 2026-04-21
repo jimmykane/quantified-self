@@ -27,6 +27,7 @@ export class TileMapActionsComponent extends TileActionsAbstractDirective implem
   openEditInDashboardManager(event: MouseEvent): void {
     event.preventDefault();
     event.stopPropagation();
+    this.hapticsService.selection();
     this.editInDashboardManager.emit(this.order);
   }
 }

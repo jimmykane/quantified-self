@@ -110,6 +110,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 - On mobile, KPI cards use a horizontal scroll lane while the chart/map grid stays unchanged below.
 - KPI choices in Dashboard manager are grouped as **Load**, **Readiness**, and **Execution** for both manual and preset flows.
 - Curated and KPI tiles include an **info** icon beside the title with formulas and interpretation guidance.
+- On supported mobile devices, dashboard buttons and chart interactions provide lightweight haptic feedback.
+- Haptics automatically fall back to no-op when vibration support is unavailable or reduced-motion is enabled.
 - **Custom** charts keep the existing configurable behavior and react to dashboard filters/date range.
 - **Map** keeps the existing map behavior and reacts to dashboard filters/date range.
 - Derived curated and KPI chart types are unique: only one tile per special derived chart type can exist at a time.

@@ -80,6 +80,7 @@ import {
   type DashboardManagerPresetDefinition,
   type DashboardManagerPresetId,
 } from '../../../helpers/dashboard-manager-presets.helper';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 
 export interface DashboardManagerDialogData {
   user: AppUserInterface;
@@ -314,6 +315,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
     @Inject(MAT_DIALOG_DATA) public data: DashboardManagerDialogData,
     private dialogRef: MatDialogRef<DashboardManagerDialogComponent, DashboardManagerDialogResult>,
     private userService: AppUserService,
+    private hapticsService: AppHapticsService,
   ) { }
 
   ngOnInit(): void {
@@ -431,6 +433,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
   }
 
   onModeChange(nextMode: 'add' | 'edit'): void {
+    this.hapticsService.selection();
     this.mode = nextMode;
     this.saveError = '';
 
@@ -448,12 +451,14 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
   }
 
   onWorkflowTabChange(nextIndex: number): void {
+    this.hapticsService.selection();
     this.activeWorkflowTab = nextIndex === 1 ? 'presets' : 'manual';
     this.saveError = '';
     this.ensurePresetSelection();
   }
 
   onEditTileSelectionChange(nextOrder: number): void {
+    this.hapticsService.selection();
     this.editTileOrder = Number(nextOrder);
     const editTarget = this.resolveEditTile();
     if (!editTarget) {
@@ -465,6 +470,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
   }
 
   onCategoryChange(nextCategory: DashboardManagerCategory): void {
+    this.hapticsService.selection();
     this.category = nextCategory;
     this.saveError = '';
 
@@ -493,12 +499,14 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
   }
 
   onPresetCategoryChange(nextCategory: DashboardManagerPresetCategory): void {
+    this.hapticsService.selection();
     this.presetCategory = nextCategory;
     this.saveError = '';
     this.ensurePresetSelection(true);
   }
 
   onKpiGroupChange(nextGroup: DashboardKpiGroup): void {
+    this.hapticsService.selection();
     this.kpiGroup = nextGroup;
     this.saveError = '';
     const nextAvailable = this.filteredKpiChartDefinitions.find(def => !this.isKpiOptionDisabled(def.chartType));
@@ -508,12 +516,14 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
   }
 
   onPresetKpiGroupChange(nextGroup: DashboardKpiGroup): void {
+    this.hapticsService.selection();
     this.presetKpiGroup = nextGroup;
     this.saveError = '';
     this.ensurePresetSelection(true);
   }
 
   onPresetSelectionChange(nextPresetId: DashboardManagerPresetId): void {
+    this.hapticsService.selection();
     this.selectedPresetId = nextPresetId;
     this.saveError = '';
   }
@@ -539,6 +549,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
   }
 
   onCustomChartTypeChange(nextChartType: ChartTypes): void {
+    this.hapticsService.selection();
     this.customChartType = nextChartType;
     if (nextChartType === ChartTypes.Pie) {
       this.customDataValueType = ChartDataValueTypes.Total;
@@ -580,6 +591,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
   }
 
   close(): void {
+    this.hapticsService.selection();
     this.dialogRef.close({ saved: false });
   }
 
@@ -657,6 +669,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
       }
 
       await this.userService.updateUserProperties(this.data.user, { settings: this.data.user.settings });
+      this.hapticsService.success();
       this.dialogRef.close({ saved: true });
     } catch (error) {
       dashboardSettings.tiles = previousTiles.map((tile: TileSettingsInterface) => ({
@@ -665,6 +678,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
       }));
       dashboardSettings.dismissedCuratedRecoveryNowTile = previousDismissedRecoveryTile;
       this.saveError = 'Could not save dashboard tile settings.';
+      this.hapticsService.error();
       console.error('[DashboardManagerDialogComponent] Failed to save dashboard tile settings', error);
     } finally {
       this.isSaving = false;

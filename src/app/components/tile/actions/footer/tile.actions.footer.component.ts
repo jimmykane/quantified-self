@@ -8,4 +8,8 @@ import { Component, EventEmitter, Output } from '@angular/core';
 })
 export class TileActionsFooterComponent {
     @Output() delete = new EventEmitter<MouseEvent>();
+
+    onDeleteClick(event: MouseEvent): void {
+        this.delete.emit(event);
+    }
 }

@@ -111,6 +111,15 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('horizontal scroll lane');
   });
 
+  it('should document mobile dashboard haptic feedback behavior and fallback', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+
+    expect(gettingStartedSection?.content).toContain('haptic feedback');
+    expect(gettingStartedSection?.content).toContain('supported mobile devices');
+    expect(gettingStartedSection?.content).toContain('vibration support is unavailable');
+    expect(gettingStartedSection?.content).toContain('reduced-motion is enabled');
+  });
+
   it('should document Garmin/COROS to Suunto route-based activity sync and manual catch-up', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
 

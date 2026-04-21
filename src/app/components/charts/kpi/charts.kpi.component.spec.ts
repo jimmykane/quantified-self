@@ -1,7 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MatTooltip } from '@angular/material/tooltip';
 import { ChartsKpiComponent } from './charts.kpi.component';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
 import {
@@ -26,6 +28,7 @@ describe('ChartsKpiComponent', () => {
     subscribeToViewportResize: ReturnType<typeof vi.fn>;
     attachMobileSeriesTapFeedback: ReturnType<typeof vi.fn>;
   };
+  let hapticsMock: { selection: ReturnType<typeof vi.fn> };
   let originalResizeObserver: typeof ResizeObserver | undefined;
 
   beforeEach(async () => {
@@ -51,10 +54,12 @@ describe('ChartsKpiComponent', () => {
       subscribeToViewportResize: vi.fn(() => () => { }),
       attachMobileSeriesTapFeedback: vi.fn(() => () => { }),
     };
+    hapticsMock = { selection: vi.fn() };
 
     await TestBed.configureTestingModule({
       declarations: [ChartsKpiComponent],
       providers: [
+        { provide: AppHapticsService, useValue: hapticsMock },
         { provide: EChartsLoaderService, useValue: mockLoader },
         { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn() } },
       ],
@@ -123,6 +128,24 @@ describe('ChartsKpiComponent', () => {
 
     expect(component.title).toBe('Monotony / Strain');
     expect(component.primaryValueText).toBe('612');
+  });
+
+  it('uses compact title aliases when action space is reserved', async () => {
+    component.reserveTitleActionSpace = true;
+    component.chartType = DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE;
+    component.monotonyStrain = {
+      latestDayMs: Date.UTC(2026, 0, 1),
+      weeklyLoad7: 360,
+      monotony: 1.7,
+      strain: 612,
+      trend8Weeks: [{ time: Date.UTC(2025, 11, 1), value: 520 }],
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.title).toBe('Monotony / Strain');
+    expect(component.titleDisplay).toBe('M/S');
   });
 
   it('shows pending no-data messaging when context is unavailable and status is stale', async () => {
@@ -292,6 +315,38 @@ describe('ChartsKpiComponent', () => {
     ]);
   });
 
+  it('shows the info tooltip when clicking the KPI layout', () => {
+    vi.useFakeTimers();
+    const tooltip = {
+      show: vi.fn(),
+      hide: vi.fn(),
+    } as unknown as MatTooltip;
+    component.infoTooltip = 'KPI info';
+    component.infoTooltipDirective = tooltip;
+
+    component.onKpiLayoutClick(new MouseEvent('click'));
+
+    expect((tooltip.show as any)).toHaveBeenCalledWith(0);
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(2200);
+    expect((tooltip.hide as any)).toHaveBeenCalledWith(0);
+    vi.useRealTimers();
+  });
+
+  it('triggers haptics when info button is clicked', () => {
+    const stopPropagation = vi.fn();
+    component.infoTooltip = 'KPI info';
+    component.infoTooltipDirective = {
+      show: vi.fn(),
+      hide: vi.fn(),
+    } as unknown as MatTooltip;
+
+    component.onInfoButtonClick({ stopPropagation } as unknown as MouseEvent);
+
+    expect(stopPropagation).toHaveBeenCalledTimes(1);
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+  });
+
   it('renders thinner sparkline with chart-type color accents', async () => {
     component.chartType = DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE;
     component.hardPercent = {
@@ -315,5 +370,37 @@ describe('ChartsKpiComponent', () => {
     expect(option?.series?.[0]?.lineStyle?.width).toBe(1);
     expect(option?.series?.[0]?.lineStyle?.color).toBe('#e65100');
     expect(option?.series?.[0]?.areaStyle?.color?.type).toBe('linear');
+  });
+
+  it('adds a below-zero band and zero guide line when sparkline includes negative values', async () => {
+    component.chartType = DASHBOARD_FORM_NOW_KPI_CHART_TYPE;
+    component.formNow = {
+      latestDayMs: Date.UTC(2026, 2, 9),
+      value: -14.9,
+      trend8Weeks: [
+        { time: Date.UTC(2026, 1, 26), value: 4.2 },
+        { time: Date.UTC(2026, 2, 5), value: -3.6 },
+        { time: Date.UTC(2026, 2, 9), value: -14.9 },
+      ],
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await (component as any).refreshChart();
+
+    const latestSetOptionArgs = mockLoader.setOption.mock.calls.at(-1) || [];
+    const option = latestSetOptionArgs.find((arg) => (
+      !!arg
+      && typeof arg === 'object'
+      && 'series' in (arg as Record<string, unknown>)
+    )) as Record<string, any> | undefined;
+
+    expect(option).toBeTruthy();
+    expect(option?.series?.[0]?.markLine?.data).toEqual([{ yAxis: 0 }]);
+    expect(option?.series?.[0]?.markArea?.data).toEqual([
+      [{ yAxis: -14.9 }, { yAxis: 0 }],
+    ]);
+    expect(option?.yAxis?.min).toBeLessThan(-14.9);
+    expect(option?.yAxis?.max).toBeGreaterThan(4.2);
   });
 });

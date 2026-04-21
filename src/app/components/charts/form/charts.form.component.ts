@@ -45,6 +45,7 @@ import {
   type DashboardDerivedMetricStatus,
   isDerivedMetricPendingStatus,
 } from '../../../helpers/derived-metric-status.helper';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type EChartsTooltipPositionSize = {
@@ -124,6 +125,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
   constructor(
     private eChartsLoader: EChartsLoaderService,
     private logger: LoggerService,
+    private hapticsService: AppHapticsService,
   ) {
     this.chartHost = new EChartsHostController({
       eChartsLoader: this.eChartsLoader,
@@ -159,6 +161,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
     if (this.selectedTimelineWindowSignal() === value) {
       return;
     }
+    this.hapticsService.selection();
     this.selectedTimelineWindowSignal.set(value);
     if (this.chartDiv?.nativeElement) {
       void this.refreshChart();

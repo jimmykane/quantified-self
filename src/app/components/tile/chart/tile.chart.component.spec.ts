@@ -124,6 +124,7 @@ class MockKpiChartComponent {
   @Input() darkTheme = false;
   @Input() chartType: any;
   @Input() infoTooltip?: string | null;
+  @Input() reserveTitleActionSpace = false;
   @Input() acwr: any;
   @Input() rampRate: any;
   @Input() monotonyStrain: any;
@@ -512,6 +513,7 @@ describe('TileChartComponent', () => {
 
     expect(component.chartInfoTooltip).toContain('7 days');
     expect(getKpiComponent().infoTooltip).toContain('7 days');
+    expect(getKpiComponent().reserveTitleActionSpace).toBe(true);
   });
 
   it('should keep tooltip text null for custom chart types', () => {
