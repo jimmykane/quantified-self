@@ -140,6 +140,44 @@ describe('PricingComponent', () => {
         expect(component.getAiInsightsLimitLabel('pro')).toBe(`AI Insights up to ${AI_INSIGHTS_REQUEST_LIMITS.pro} requests per billing period`);
     });
 
+    it('should show cross-device sync in the Pro plan feature list without service names', async () => {
+        const paymentService = TestBed.inject(AppPaymentService);
+        const userService = TestBed.inject(AppUserService);
+        const proProduct: StripeProduct = {
+            id: 'prod_pro',
+            active: true,
+            name: 'Pro',
+            description: 'Pro plan',
+            role: 'pro',
+            images: [],
+            metadata: { role: 'pro' },
+            prices: [{
+                id: 'price_pro',
+                active: true,
+                currency: 'usd',
+                unit_amount: 2000,
+                description: 'Monthly pro',
+                type: 'recurring',
+                interval: 'month',
+                interval_count: 1,
+                trial_period_days: null,
+                recurring: { interval: 'month' }
+            }]
+        };
+
+        vi.spyOn(userService, 'getSubscriptionRole').mockResolvedValue('free');
+        vi.spyOn(paymentService, 'getProducts').mockReturnValue(of([proProduct]));
+        vi.spyOn(paymentService, 'hasPaidSubscriptionHistory').mockResolvedValue(false);
+
+        await component.ngOnInit();
+        fixture.detectChanges();
+
+        const content = fixture.nativeElement.textContent as string;
+        expect(content).toContain('Cross-device sync');
+        expect(content).not.toContain('Garmin/COROS');
+        expect(content).not.toContain('routes');
+    });
+
     it('should show downgrade warning for pro users', async () => {
         component.currentRole = 'pro';
         const dialog = TestBed.inject(MatDialog);
