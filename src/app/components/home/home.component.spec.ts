@@ -78,6 +78,30 @@ describe('HomeComponent', () => {
         expect(fixture.nativeElement.querySelector('.garmin-suunto-launch')).toBeNull();
     });
 
+    it('should surface KPI and derived metric charts in Engineered for Performance section', () => {
+        const text = fixture.nativeElement.textContent as string;
+        const performanceCards = fixture.nativeElement.querySelectorAll(
+            '.features-section:not(.ai-insights-section) .features-grid .feature-card'
+        );
+
+        expect(performanceCards.length).toBe(6);
+        expect(text).toContain('Engineered for Performance');
+        expect(text).toContain('Reliable and instant analytics');
+        expect(text).toContain('KPI Lane for Fast Decisions');
+        expect(text).toContain('ACWR');
+        expect(text).toContain('Ramp Rate');
+        expect(text).toContain('Monotony / Strain');
+        expect(text).toContain('Form Now');
+        expect(text).toContain('Form +7d');
+        expect(text).toContain('Easy %');
+        expect(text).toContain('Hard %');
+        expect(text).toContain('Efficiency Δ (4w)');
+        expect(text).toContain('Freshness Forecast');
+        expect(text).toContain('Intensity Distribution');
+        expect(text).toContain('Efficiency Trend');
+        expect(text).toContain('Form Model (CTL / ATL / TSB)');
+    });
+
     it('should render the shared typed prompt rotator in the examples area', () => {
         const sharedHeroPrompts = getAiInsightsHeroPrompts();
         const text = fixture.nativeElement.textContent as string;
