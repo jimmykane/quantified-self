@@ -327,6 +327,7 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
       DataDescent.type,
       DataPowerAvg.type,
       DataPowerNormalized.type,
+      DataPowerTrainingStressScore.type,
       DataCadenceAvg.type,
       DataRecoveryTime.type,
       DataVO2Max.type,
