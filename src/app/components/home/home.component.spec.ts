@@ -56,9 +56,18 @@ describe('HomeComponent', () => {
 
     it('should keep the original hero messaging and render the AI Insights section', () => {
         const text = fixture.nativeElement.textContent as string;
+        const footerIcons = Array.from(
+            fixture.nativeElement.querySelectorAll('.tech-stack mat-icon')
+        ) as HTMLElement[];
+        const firebaseIcon = fixture.nativeElement.querySelector('.tech-stack mat-icon[svgIcon="firebase"]');
+        const contactButton = fixture.nativeElement.querySelector('.footer-contact-button') as HTMLElement | null;
         expect(text).toContain('Quantify. Analyze. Improve.');
         expect(text).toContain('Measure Performance. Get AI Insights.');
         expect(text).toContain('AI Insights');
+        expect(footerIcons.length).toBe(1);
+        expect(firebaseIcon).toBeTruthy();
+        expect(contactButton).toBeTruthy();
+        expect(contactButton?.textContent).toContain('Contact');
         expect(text).not.toContain('New Feature');
     });
 
@@ -83,8 +92,12 @@ describe('HomeComponent', () => {
         const performanceCards = fixture.nativeElement.querySelectorAll(
             '.features-section:not(.ai-insights-section) .features-grid .feature-card'
         );
+        const metricChips = fixture.nativeElement.querySelectorAll('.metric-chip');
+        const metricChipInfoIcons = fixture.nativeElement.querySelectorAll('.metric-chip .metric-chip-info');
 
         expect(performanceCards.length).toBe(6);
+        expect(metricChips.length).toBe(11);
+        expect(metricChipInfoIcons.length).toBe(11);
         expect(text).toContain('Engineered for Performance');
         expect(text).toContain('Reliable and instant analytics');
         expect(text).toContain('KPI Lane for Fast Decisions');

@@ -521,6 +521,7 @@
         .metric-chip {
             display: inline-flex;
             align-items: center;
+            gap: 0.35rem;
             min-height: 2rem;
             padding: 0.25rem 0.65rem;
             border-radius: 999px;
@@ -531,6 +532,20 @@
             line-height: 1.2;
             font-weight: 600;
             letter-spacing: 0.01em;
+            cursor: help;
+
+            .metric-chip-info {
+                width: 0.9rem;
+                height: 0.9rem;
+                font-size: 0.9rem;
+                opacity: 0.75;
+            }
+
+            &:hover .metric-chip-info,
+            &:focus-visible .metric-chip-info {
+                opacity: 1;
+                color: var(--mat-sys-primary);
+            }
         }
     }
 }
@@ -1004,6 +1019,21 @@
                 opacity: 1;
                 cursor: help;
             }
+        }
+
+        mat-icon[svgIcon="firebase"] {
+            width: 120px;
+            height: 64px;
+        }
+    }
+
+    .footer-actions {
+        display: flex;
+        justify-content: center;
+
+        .footer-contact-button {
+            border-radius: 999px;
+            gap: 0.35rem;
         }
     }
 

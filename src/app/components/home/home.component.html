@@ -194,14 +194,70 @@
         <mat-card-content>
           <p>Compact KPI cards keep key load and readiness indicators visible above your main dashboard grid.</p>
           <div class="metric-chip-list" aria-label="KPI metrics">
-            <span class="metric-chip">ACWR</span>
-            <span class="metric-chip">Ramp Rate</span>
-            <span class="metric-chip">Monotony / Strain</span>
-            <span class="metric-chip">Form Now</span>
-            <span class="metric-chip">Form +7d</span>
-            <span class="metric-chip">Easy %</span>
-            <span class="metric-chip">Hard %</span>
-            <span class="metric-chip">Efficiency Δ (4w)</span>
+            <span
+              class="metric-chip"
+              tabindex="0"
+              matTooltip="Acute 7-day load versus chronic 28-day load to spot risk from sudden load spikes."
+              matTooltipPosition="above">
+              ACWR
+              <mat-icon class="metric-chip-info">info</mat-icon>
+            </span>
+            <span
+              class="metric-chip"
+              tabindex="0"
+              matTooltip="Change in fitness load over 7 days, calculated from CTL(today) minus CTL(7 days ago)."
+              matTooltipPosition="above">
+              Ramp Rate
+              <mat-icon class="metric-chip-info">info</mat-icon>
+            </span>
+            <span
+              class="metric-chip"
+              tabindex="0"
+              matTooltip="Monotony is weekly load mean divided by weekly load variability; strain combines load and monotony."
+              matTooltipPosition="above">
+              Monotony / Strain
+              <mat-icon class="metric-chip-info">info</mat-icon>
+            </span>
+            <span
+              class="metric-chip"
+              tabindex="0"
+              matTooltip="Current readiness based on prior-day TSB from your derived load model."
+              matTooltipPosition="above">
+              Form Now
+              <mat-icon class="metric-chip-info">info</mat-icon>
+            </span>
+            <span
+              class="metric-chip"
+              tabindex="0"
+              matTooltip="Projected readiness in 7 days assuming zero additional training load."
+              matTooltipPosition="above">
+              Form +7d
+              <mat-icon class="metric-chip-info">info</mat-icon>
+            </span>
+            <span
+              class="metric-chip"
+              tabindex="0"
+              matTooltip="Percentage of weekly training load that falls in easy intensity ranges."
+              matTooltipPosition="above">
+              Easy %
+              <mat-icon class="metric-chip-info">info</mat-icon>
+            </span>
+            <span
+              class="metric-chip"
+              tabindex="0"
+              matTooltip="Percentage of weekly training load that falls in hard intensity ranges."
+              matTooltipPosition="above">
+              Hard %
+              <mat-icon class="metric-chip-info">info</mat-icon>
+            </span>
+            <span
+              class="metric-chip"
+              tabindex="0"
+              matTooltip="Current efficiency against your previous 4-week baseline, shown as absolute and percent delta."
+              matTooltipPosition="above">
+              Efficiency Δ (4w)
+              <mat-icon class="metric-chip-info">info</mat-icon>
+            </span>
           </div>
         </mat-card-content>
       </mat-card>
@@ -217,9 +273,30 @@
         <mat-card-content>
           <p>Use projected readiness and execution views computed from your full training history.</p>
           <div class="metric-chip-list" aria-label="Derived curated charts">
-            <span class="metric-chip">Freshness Forecast</span>
-            <span class="metric-chip">Intensity Distribution</span>
-            <span class="metric-chip">Efficiency Trend</span>
+            <span
+              class="metric-chip"
+              tabindex="0"
+              matTooltip="Forecasts the next 7 days of freshness and form from your latest derived state."
+              matTooltipPosition="above">
+              Freshness Forecast
+              <mat-icon class="metric-chip-info">info</mat-icon>
+            </span>
+            <span
+              class="metric-chip"
+              tabindex="0"
+              matTooltip="Weekly easy/moderate/hard intensity mix using power zones when available, otherwise heart-rate zones."
+              matTooltipPosition="above">
+              Intensity Distribution
+              <mat-icon class="metric-chip-info">info</mat-icon>
+            </span>
+            <span
+              class="metric-chip"
+              tabindex="0"
+              matTooltip="Weekly trend of duration-weighted average power-to-heart-rate efficiency."
+              matTooltipPosition="above">
+              Efficiency Trend
+              <mat-icon class="metric-chip-info">info</mat-icon>
+            </span>
           </div>
         </mat-card-content>
       </mat-card>
@@ -416,8 +493,13 @@
 
       <div class="tech-stack">
         <mat-icon svgIcon="firebase" matTooltip="Built with Firebase"></mat-icon>
+      </div>
 
-        <mat-icon matTooltip="Coded with Antigravity">antigravity</mat-icon>
+      <div class="footer-actions">
+        <a mat-stroked-button class="footer-contact-button" routerLink="/help">
+          Contact
+          <mat-icon iconPositionEnd>mail_outline</mat-icon>
+        </a>
       </div>
 
       <div class="legal-links">
