@@ -60,14 +60,15 @@ describe('HomeComponent', () => {
             fixture.nativeElement.querySelectorAll('.tech-stack mat-icon')
         ) as HTMLElement[];
         const firebaseIcon = fixture.nativeElement.querySelector('.tech-stack mat-icon[svgIcon="firebase"]');
-        const contactButton = fixture.nativeElement.querySelector('.footer-contact-button') as HTMLElement | null;
+        const contactLink = fixture.nativeElement.querySelector('.legal-links a[href="mailto:support@quantified-self.io"]') as HTMLElement | null;
         expect(text).toContain('Quantify. Analyze. Improve.');
         expect(text).toContain('Measure Performance. Get AI Insights.');
         expect(text).toContain('AI Insights');
         expect(footerIcons.length).toBe(1);
         expect(firebaseIcon).toBeTruthy();
-        expect(contactButton).toBeTruthy();
-        expect(contactButton?.textContent).toContain('Contact');
+        expect(contactLink).toBeTruthy();
+        expect(contactLink?.textContent).toContain('Contact');
+        expect(contactLink?.getAttribute('href')).toBe('mailto:support@quantified-self.io');
         expect(text).not.toContain('New Feature');
     });
 
