@@ -62,10 +62,16 @@ describe('HomeComponent', () => {
         expect(text).not.toContain('New Feature');
     });
 
-    it('should include Garmin -> Suunto in offerings copy without dedicated CTA promotion', () => {
+    it('should render expanded integration capability cards without dedicated CTA promotion', () => {
         const text = fixture.nativeElement.textContent as string;
-        expect(text).toContain('Cross-Platform Sync');
-        expect(text).toContain('Garmin -> Suunto sync is built in');
+        const integrationCards = fixture.nativeElement.querySelectorAll('.integration-followup-grid .feature-card');
+
+        expect(integrationCards.length).toBe(5);
+        expect(text).toContain('Garmin -> Suunto and COROS -> Suunto sync are built in');
+        expect(text).toContain('Automatic Sync for All Services');
+        expect(text).toContain('Automatic Sync Between Services');
+        expect(text).toContain('Manual Route Uploads');
+        expect(text).toContain('Manual Activity Uploads to Suunto');
         expect(text).toContain('reliable and instant sync');
         expect(text).not.toContain('Set up sync');
         expect(text).not.toContain('How it works');

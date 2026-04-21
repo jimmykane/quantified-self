@@ -386,6 +386,26 @@
                 background-color: var(--mat-sys-tertiary-container);
                 color: var(--mat-sys-on-tertiary-container);
             }
+
+            &.auto-sync {
+                background-color: var(--mat-sys-tertiary-container);
+                color: var(--mat-sys-on-tertiary-container);
+            }
+
+            &.service-sync {
+                background-color: var(--mat-sys-secondary-container);
+                color: var(--mat-sys-on-secondary-container);
+            }
+
+            &.route-upload {
+                background-color: var(--mat-sys-error-container);
+                color: var(--mat-sys-on-error-container);
+            }
+
+            &.activity-upload {
+                background-color: var(--mat-sys-primary-container);
+                color: var(--mat-sys-on-primary-container);
+            }
         }
     }
 }
