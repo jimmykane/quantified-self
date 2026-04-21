@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { NO_ERRORS_SCHEMA, SimpleChange } from '@angular/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MatTooltip } from '@angular/material/tooltip';
 import { ChartsKpiComponent } from './charts.kpi.component';
@@ -145,6 +145,29 @@ describe('ChartsKpiComponent', () => {
     await fixture.whenStable();
 
     expect(component.title).toBe('Monotony / Strain');
+    expect(component.titleDisplay).toBe('M/S');
+  });
+
+  it('updates compact title alias when action-space reservation toggles without data changes', async () => {
+    component.chartType = DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE;
+    component.monotonyStrain = {
+      latestDayMs: Date.UTC(2026, 0, 1),
+      weeklyLoad7: 360,
+      monotony: 1.7,
+      strain: 612,
+      trend8Weeks: [{ time: Date.UTC(2025, 11, 1), value: 520 }],
+    };
+    component.reserveTitleActionSpace = false;
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.titleDisplay).toBe('Monotony / Strain');
+
+    component.reserveTitleActionSpace = true;
+    component.ngOnChanges({
+      reserveTitleActionSpace: new SimpleChange(false, true, false),
+    });
+
     expect(component.titleDisplay).toBe('M/S');
   });
 
@@ -402,5 +425,37 @@ describe('ChartsKpiComponent', () => {
     ]);
     expect(option?.yAxis?.min).toBeLessThan(-14.9);
     expect(option?.yAxis?.max).toBeGreaterThan(4.2);
+  });
+
+  it('keeps zero baseline visible when sparkline window is entirely negative', async () => {
+    component.chartType = DASHBOARD_FORM_NOW_KPI_CHART_TYPE;
+    component.formNow = {
+      latestDayMs: Date.UTC(2026, 2, 9),
+      value: -7.2,
+      trend8Weeks: [
+        { time: Date.UTC(2026, 1, 26), value: -2.1 },
+        { time: Date.UTC(2026, 2, 5), value: -5.4 },
+        { time: Date.UTC(2026, 2, 9), value: -7.2 },
+      ],
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await (component as any).refreshChart();
+
+    const latestSetOptionArgs = mockLoader.setOption.mock.calls.at(-1) || [];
+    const option = latestSetOptionArgs.find((arg) => (
+      !!arg
+      && typeof arg === 'object'
+      && 'series' in (arg as Record<string, unknown>)
+    )) as Record<string, any> | undefined;
+
+    expect(option).toBeTruthy();
+    expect(option?.series?.[0]?.markLine?.data).toEqual([{ yAxis: 0 }]);
+    expect(option?.series?.[0]?.markArea?.data).toEqual([
+      [{ yAxis: -7.2 }, { yAxis: 0 }],
+    ]);
+    expect(option?.yAxis?.min).toBeLessThan(-7.2);
+    expect(option?.yAxis?.max).toBeGreaterThanOrEqual(0);
   });
 });

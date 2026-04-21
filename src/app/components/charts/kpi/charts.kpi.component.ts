@@ -138,7 +138,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       this.updatePresentationAndOverlay();
       return;
     }
-    if (
+    const requiresChartRefresh = (
       changes.darkTheme
       || changes.isLoading
       || changes.chartType
@@ -158,8 +158,16 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       || changes.easyPercentStatus
       || changes.hardPercentStatus
       || changes.efficiencyDelta4wStatus
-    ) {
+    );
+
+    if (requiresChartRefresh) {
       void this.refreshChart();
+      return;
+    }
+
+    if (changes.reserveTitleActionSpace) {
+      // Header action-space reservation changes text aliasing only; no chart rerender needed.
+      this.titleDisplay = this.resolveDisplayTitle();
     }
   }
 
@@ -416,6 +424,12 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     const maxTrendValue = trendNumericValues.length ? Math.max(...trendNumericValues) : 0;
     const yAxisRangePadding = this.resolveYAxisPadding(minTrendValue, maxTrendValue);
     const hasNegativeTrend = minTrendValue < 0;
+    const yAxisBounds = this.resolveYAxisBounds(
+      minTrendValue,
+      maxTrendValue,
+      yAxisRangePadding,
+      hasNegativeTrend,
+    );
     const negativeBandColor = this.withAlpha(
       this.resolveThemeColor('--mat-sys-error', '#c62828'),
       this.darkTheme ? 0.12 : 0.08,
@@ -458,8 +472,8 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       },
       yAxis: {
         type: 'value',
-        min: minTrendValue - yAxisRangePadding,
-        max: maxTrendValue + yAxisRangePadding,
+        min: yAxisBounds.min,
+        max: yAxisBounds.max,
         scale: true,
         axisLabel: { show: false },
         axisTick: { show: false },
@@ -724,6 +738,27 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     const span = Math.max(0, maxValue - minValue);
     const magnitude = Math.max(Math.abs(minValue), Math.abs(maxValue), 1);
     return Math.max(0.35, span * 0.2, magnitude * 0.08);
+  }
+
+  private resolveYAxisBounds(
+    minValue: number,
+    maxValue: number,
+    padding: number,
+    includeZeroBaseline: boolean,
+  ): { min: number; max: number } {
+    const min = minValue - padding;
+    let max = maxValue + padding;
+
+    if (includeZeroBaseline) {
+      // Keep y=0 visible when negative-band overlays are active.
+      max = Math.max(0, max);
+    }
+
+    if (max > min) {
+      return { min, max };
+    }
+
+    return { min, max: min + Math.max(padding, 1) };
   }
 
   private parseRgbColor(
