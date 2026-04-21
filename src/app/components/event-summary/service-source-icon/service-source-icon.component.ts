@@ -14,6 +14,8 @@ import { AppEventService } from '../../../services/app.event.service';
 export class ServiceSourceIconComponent implements OnChanges, OnDestroy {
     @Input() event!: EventInterface;
     @Input() user!: User;
+    @Input() showIcon = true;
+    @Input() showText = false;
 
     serviceName: ServiceNames | null = null;
     serviceLogo: string | null = null;
@@ -59,6 +61,19 @@ export class ServiceSourceIconComponent implements OnChanges, OnDestroy {
 
     ngOnDestroy(): void {
         this.metadataKeysSubscription?.unsubscribe();
+    }
+
+    get serviceDisplayName(): string {
+        switch (this.serviceName) {
+            case ServiceNames.COROSAPI:
+                return 'COROS';
+            case ServiceNames.SuuntoApp:
+                return 'Suunto';
+            case ServiceNames.GarminAPI:
+                return 'Garmin';
+            default:
+                return '';
+        }
     }
 
     private getServiceLogo(serviceName: ServiceNames): string {

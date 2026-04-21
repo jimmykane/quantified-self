@@ -101,4 +101,15 @@ describe('ServiceSourceIconComponent', () => {
         expect(component.serviceName).toBeNull();
         expect(component.serviceLogo).toBeNull();
     });
+
+    it('should map service names to user-friendly sync labels', () => {
+        component.serviceName = ServiceNames.GarminAPI;
+        expect(component.serviceDisplayName).toBe('Garmin');
+
+        component.serviceName = ServiceNames.SuuntoApp;
+        expect(component.serviceDisplayName).toBe('Suunto');
+
+        component.serviceName = ServiceNames.COROSAPI;
+        expect(component.serviceDisplayName).toBe('COROS');
+    });
 });

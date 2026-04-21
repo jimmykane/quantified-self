@@ -93,6 +93,36 @@
   box-sizing: border-box;
 }
 
+.device-info-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 24px;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+  background: var(--mat-sys-surface-container-lowest);
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.82rem;
+}
+
+.device-info-banner-primary {
+  display: block;
+  min-width: 0;
+}
+
+.device-info-banner-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.device-info-banner-source {
+  flex: 0 0 auto;
+}
+
 .summary-stats-layout {
   display: block;
   width: 100%;
@@ -116,6 +146,11 @@
 @include bp.xsmall {
   .summary-stats-area {
     padding: 12px;
+  }
+
+  .device-info-banner {
+    padding-left: 12px;
+    padding-right: 12px;
   }
 
   .summary-activities-toggles {

@@ -2,3 +2,10 @@
     height: 20px;
     opacity: 0.8;
 }
+
+.service-source-text {
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 0.75rem;
+    line-height: 1.2;
+    white-space: nowrap;
+}

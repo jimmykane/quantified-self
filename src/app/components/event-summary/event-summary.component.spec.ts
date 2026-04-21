@@ -155,6 +155,98 @@ describe('EventSummaryComponent', () => {
             expect(dynamicSpy).toHaveBeenCalled();
             dynamicSpy.mockRestore();
         });
+
+        it('should expose single selected device name in the summary chip', () => {
+            component.selectedActivities = [
+                {
+                    creator: {
+                        name: 'Garmin Edge 540',
+                        swInfo: '21.19',
+                        devices: [],
+                    },
+                } as any,
+            ];
+
+            fixture.detectChanges();
+
+            expect(component.showDeviceChip).toBe(true);
+            expect(component.deviceChipLabel).toBe('Garmin Edge 540 21.19');
+            expect(component.deviceChipTooltip).toBe('Garmin Edge 540 21.19');
+        });
+
+        it('should collapse multiple selected device names into a count chip with tooltip list', () => {
+            component.selectedActivities = [
+                {
+                    creator: {
+                        name: 'Garmin Edge 540',
+                        swInfo: '',
+                        devices: [],
+                    },
+                } as any,
+                {
+                    creator: {
+                        name: 'Wahoo ELEMNT',
+                        swInfo: '',
+                        devices: [],
+                    },
+                } as any,
+                {
+                    creator: {
+                        name: 'Garmin Edge 540',
+                        swInfo: '',
+                        devices: [],
+                    },
+                } as any,
+            ];
+
+            fixture.detectChanges();
+
+            expect(component.showDeviceChip).toBe(true);
+            expect(component.deviceChipLabel).toBe('2 devices');
+            expect(component.deviceChipTooltip).toContain('Garmin Edge 540');
+            expect(component.deviceChipTooltip).toContain('Wahoo ELEMNT');
+        });
+
+        it('should resolve fallback device name from device details when creator name is missing', () => {
+            component.selectedActivities = [
+                {
+                    creator: {
+                        name: '',
+                        swInfo: '',
+                        devices: [{ type: 'bike_power' }],
+                    },
+                } as any,
+            ];
+
+            fixture.detectChanges();
+
+            expect(component.showDeviceChip).toBe(true);
+            expect(component.hasDevices).toBe(true);
+            expect(component.deviceChipLabel).toBe('Bike Power');
+            expect(component.deviceChipTooltip).toBe('Bike Power');
+        });
+
+        it('should prefer event device names string like dashboard table', () => {
+            component.event = {
+                ...mockEvent,
+                getDeviceNamesAsString: () => 'Garmin Edge 540, HRM Pro',
+            } as any;
+            component.selectedActivities = [
+                {
+                    creator: {
+                        name: 'Fallback Device',
+                        swInfo: '',
+                        devices: [],
+                    },
+                } as any,
+            ];
+
+            fixture.detectChanges();
+
+            expect(component.showDeviceChip).toBe(true);
+            expect(component.deviceChipLabel).toBe('Garmin Edge 540, HRM Pro');
+            expect(component.deviceChipTooltip).toBe('Garmin Edge 540, HRM Pro');
+        });
     });
 
     describe('summary actions placement', () => {
@@ -185,6 +277,42 @@ describe('EventSummaryComponent', () => {
             const sensorsAction = devicesFixture.nativeElement.querySelector('.event-summary-actions .devices-button');
             expect(devicesComponent.hasDevices).toBe(true);
             expect(sensorsAction).toBeTruthy();
+        });
+
+        it('should expose clickable device-chip state when device details exist', () => {
+            component.selectedActivities = [
+                {
+                    creator: {
+                        name: 'Garmin Edge 540',
+                        swInfo: '',
+                        devices: [{ name: 'HRM Pro' }],
+                    },
+                } as any,
+            ];
+
+            fixture.detectChanges();
+
+            expect(component.showDeviceChip).toBe(true);
+            expect(component.hasDevices).toBe(true);
+            expect(component.deviceChipLabel).toBe('Garmin Edge 540');
+        });
+
+        it('should expose non-clickable device-chip state when only creator name is available', () => {
+            component.selectedActivities = [
+                {
+                    creator: {
+                        name: 'Garmin Edge 540',
+                        swInfo: '',
+                        devices: [],
+                    },
+                } as any,
+            ];
+
+            fixture.detectChanges();
+
+            expect(component.showDeviceChip).toBe(true);
+            expect(component.hasDevices).toBe(false);
+            expect(component.deviceChipLabel).toBe('Garmin Edge 540');
         });
     });
 

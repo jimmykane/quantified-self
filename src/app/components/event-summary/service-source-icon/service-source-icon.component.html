@@ -1,3 +1,6 @@
-@if (serviceLogo) {
+@if (showIcon && serviceLogo) {
 <mat-icon [svgIcon]="serviceLogo" class="service-logo" [matTooltip]="'Synced from ' + serviceName"></mat-icon>
+}
+@if (showText && serviceName) {
+<span class="service-source-text">Synced from {{ serviceDisplayName || serviceName }}</span>
 }
