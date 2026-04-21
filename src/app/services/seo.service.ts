@@ -139,7 +139,14 @@ export class SeoService implements OnDestroy {
                 "name": "Quantified Self",
                 "applicationCategory": "HealthApplication",
                 "operatingSystem": "Web",
-                "description": "A premium analytical tool for your activity data.",
+                "description": "Reliable and instant performance analytics with AI Insights, history imports, and Garmin -> Suunto plus COROS -> Suunto sync for newly imported activities with catch-up sync for stored events.",
+                "featureList": [
+                    "AI Insights with chart-backed answers",
+                    "Full history imports for Garmin, Suunto, and COROS",
+                    "Automatic Garmin -> Suunto sync for newly imported Garmin activities",
+                    "Automatic COROS -> Suunto sync for newly imported COROS activities",
+                    "Manual catch-up sync for events already stored in Quantified Self"
+                ],
                 "offers": {
                     "@type": "Offer",
                     "price": "0",

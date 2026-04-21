@@ -13,8 +13,8 @@ describe('AppRoutingModule routes', () => {
     expect(helpRoute?.loadComponent).toBeTypeOf('function');
     expect(helpRoute?.data).toMatchObject({
       title: 'Help & Support',
-      description: 'Get help with AI Insights, account setup, uploads, device integrations, billing, privacy, and common troubleshooting in Quantified Self.',
-      keywords: 'help, support, faq, ai insights, garmin, suunto, coros, uploads, billing, privacy, quantified self',
+      description: 'Get help with Garmin -> Suunto and COROS -> Suunto sync routes, catch-up sync, AI Insights, account setup, uploads, billing, privacy, and troubleshooting in Quantified Self.',
+      keywords: 'help, support, faq, garmin to suunto sync, coros to suunto sync, catch-up sync, ai insights, uploads, billing, privacy, quantified self',
       animation: 'Help',
       preload: true,
       jsonLd: {
@@ -25,6 +25,10 @@ describe('AppRoutingModule routes', () => {
         inLanguage: 'en',
       },
     });
+    const helpAbout = (helpRoute?.data?.['jsonLd'] as any)?.about as string[] | undefined;
+    expect(helpAbout).toContain('Garmin -> Suunto sync');
+    expect(helpAbout).toContain('COROS -> Suunto sync');
+    expect(helpAbout).toContain('Catch-up sync');
   });
 
   it('should allow any authenticated onboarded user to access mytracks', () => {
@@ -47,14 +51,23 @@ describe('AppRoutingModule routes', () => {
     });
   });
 
-  it('should include AI insights launch metadata on the public home route', () => {
+  it('should include sync-focused metadata on the public home route', () => {
     const homeRoute = routes.find(route => route.path === '');
 
     expect(homeRoute).toBeTruthy();
     expect(homeRoute?.data).toMatchObject({
       animation: 'Home',
     });
-    expect(homeRoute?.data?.['description']).toContain('AI Insights');
+    expect(homeRoute?.data?.['description']).toContain('Garmin -> Suunto');
+    expect(homeRoute?.data?.['description']).toContain('COROS -> Suunto');
+    expect(homeRoute?.data?.['description']).toContain('catch-up sync');
+    expect(homeRoute?.data?.['keywords']).toContain('garmin to suunto sync');
+    expect(homeRoute?.data?.['keywords']).toContain('coros to suunto sync');
     expect(homeRoute?.data?.['keywords']).toContain('ai insights');
+    expect(homeRoute?.data?.['jsonLd']).toMatchObject({
+      '@context': 'https://schema.org',
+      '@type': 'SoftwareApplication',
+      name: 'Quantified Self',
+    });
   });
 });

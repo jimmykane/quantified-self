@@ -127,6 +127,9 @@ describe('SeoService', () => {
         expect(mockScript.setAttribute).toHaveBeenCalledWith('type', 'application/ld+json');
         expect(mockDocument.head.appendChild).toHaveBeenCalledWith(mockScript);
         expect(mockScript.textContent).toContain('"@type":"SoftwareApplication"');
+        expect(mockScript.textContent).toContain('Garmin -> Suunto');
+        expect(mockScript.textContent).toContain('COROS -> Suunto');
+        expect(mockScript.textContent).toContain('catch-up sync');
     });
 
     it('should remove JSON-LD on non-home page', () => {
