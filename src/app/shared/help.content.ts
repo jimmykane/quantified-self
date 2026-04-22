@@ -327,6 +327,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Garmin, Suunto, and COROS integration workflows
 - History import workflows (provider limits still apply)
 - Suunto FIT activity upload and GPX route upload tools
+- COROS FIT activity upload tool
 
 ## Feature access by area
 
@@ -340,6 +341,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Paid plans renew automatically until you cancel.
 - You can manage billing from the subscription area.
 - Cancellation takes effect at the end of the current billing period.
+- When a paid plan has a trial configured, the pricing card shows the exact trial length in days.
+- Trial offers are only shown for accounts without prior paid subscription history.
 
 ## Downgrades and grace period
 
@@ -459,6 +462,12 @@ Manual catch-up can run even when the Garmin -> Suunto auto-sync toggle is off, 
 ## COROS
 
 COROS history import is limited to the last **3 months** because of API restrictions.
+
+COROS tools currently include:
+
+- connecting your account,
+- importing history,
+- uploading FIT activities to COROS.
 
 COROS -> Suunto activity sync is route-based:
 

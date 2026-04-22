@@ -51,12 +51,12 @@
   }
 
   @if (user) {
-  <mat-list-item [routerLinkActive]="hasPaidAccess ? 'active' : ''" [routerLinkActiveOptions]="{exact: true}" [routerLink]="aiInsightsRoute"
+  <mat-list-item [routerLinkActive]="hasAiInsightsAccess ? 'active' : ''" [routerLinkActiveOptions]="{exact: true}" [routerLink]="aiInsightsRoute"
     (click)="closeSideNav()">
     <mat-icon>insights</mat-icon>
     <span>AI Insights <span class="beta-badge">Beta</span></span>
     <span class="fill-space"></span>
-    @if (!hasPaidAccess) {
+    @if (!hasAiInsightsAccess) {
     <mat-icon class="lock-icon">lock</mat-icon>
     <span class="pro-badge">PAID</span>
     }

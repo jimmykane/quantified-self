@@ -15,6 +15,7 @@ import { AppWhatsNewService } from '../../services/app.whats-new.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { environment } from '../../../environments/environment';
 import { AppThemePreference, SYSTEM_THEME_PREFERENCE } from '../../models/app-theme-preference.type';
+import { getAiInsightsRequestLimitForRole } from '@shared/limits';
 
 @Component({
   selector: 'app-sidenav',
@@ -58,7 +59,25 @@ export class SideNavComponent {
   }
 
   get aiInsightsRoute(): string {
-    return this.userService.hasPaidAccessSignal() ? '/ai-insights' : '/subscriptions';
+    return this.hasAiInsightsAccess ? '/ai-insights' : '/subscriptions';
+  }
+
+  get hasAiInsightsAccess(): boolean {
+    const currentUser = this.user;
+    if (!currentUser) {
+      return false;
+    }
+
+    if ((currentUser as any).admin === true) {
+      return true;
+    }
+
+    const stripeRole = `${(currentUser as any).stripeRole || 'free'}`;
+    try {
+      return getAiInsightsRequestLimitForRole(stripeRole) > 0;
+    } catch {
+      return this.hasPaidAccess;
+    }
   }
 
   get user(): User | null {

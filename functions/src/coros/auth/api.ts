@@ -1,10 +1,20 @@
 import * as requestPromise from '../../request-helper';
 import * as logger from 'firebase-functions/logger';
+import { PRODUCTION_URL, STAGING_URL, USE_STAGING } from '../constants';
 
-export async function getCOROSUserId(accessToken: string): Promise<string> {
+function getActiveCOROSBaseUrl(): string {
+    return USE_STAGING ? STAGING_URL : PRODUCTION_URL;
+}
+
+function normalizeBaseUrl(baseUrl: string): string {
+    return baseUrl.replace(/\/+$/, '');
+}
+
+export async function getCOROSUserId(accessToken: string, baseUrl = getActiveCOROSBaseUrl()): Promise<string> {
+    const resolvedBaseUrl = normalizeBaseUrl(baseUrl);
     try {
         const userResponse = await requestPromise.get({
-            url: 'https://open.coros.com/v2/user',
+            url: `${resolvedBaseUrl}/v2/user`,
             headers: {
                 Authorization: `Bearer ${accessToken}`,
             },

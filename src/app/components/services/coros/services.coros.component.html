@@ -129,6 +129,50 @@
       </div>
     </mat-card>
 
+    @if (showCorosUploadActivityCard) {
+    <!-- FIT Upload Card -->
+    <mat-card class="feature-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess">
+      @if (!hasProAccess) {
+      <div class="lock-overlay" (click)="triggerUpsell()">
+        <mat-icon class="lock-icon-large">lock</mat-icon>
+        <span class="pro-badge">PRO</span>
+      </div>
+      }
+      <mat-card-header>
+        <mat-card-subtitle class="tab-subtitle">
+          <mat-icon>cloud_upload</mat-icon>
+          <span>Upload FIT Activity</span>
+        </mat-card-subtitle>
+        @if (corosServiceMeta && corosServiceMeta.uploadedActivitiesCount && corosServiceMeta.uploadedActivitiesCount > 0) {
+        <mat-card-subtitle class="smaller">
+          {{corosServiceMeta.uploadedActivitiesCount}} uploaded
+        </mat-card-subtitle>
+        }
+      </mat-card-header>
+      <mat-divider></mat-divider>
+
+      <div class="feature-card-content">
+        <p class="feature-description" *ngIf="!hasProAccess">Upload standard FIT files to COROS.</p>
+        @if (hasProAccess) {
+        @if (isConnectedToService()) {
+        <app-upload-activity-to-service [user]="user" [hasProAccess]="hasProAccess"
+          [serviceName]="serviceName"></app-upload-activity-to-service>
+        } @else {
+        <div
+          style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; color: var(--mat-sys-on-surface-variant);">
+          <mat-icon
+            style="font-size: 40px; height: 40px; width: 40px; margin-bottom: 12px; opacity: 0.5;">link_off</mat-icon>
+          <div style="font-weight: 500; font-size: 1rem;">Connect Account First</div>
+          <div style="font-size: 0.85rem; margin-top: 4px; opacity: 0.8; max-width: 280px;">
+            You need to connect your COROS account in the section above before uploading activities.
+          </div>
+        </div>
+        }
+        }
+      </div>
+    </mat-card>
+    }
+
     @if (isCorosToSuuntoRouteAvailableForUser) {
     <mat-card class="feature-card" [class.locked]="!hasProAccess" (click)="!hasProAccess && triggerUpsell()">
       @if (!hasProAccess) {

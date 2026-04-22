@@ -116,6 +116,7 @@ describe('buildSummaryMetricTabs', () => {
     const overallTab = tabs.find((tab) => tab.id === 'overall');
     expect(overallTab?.metricTypes).toEqual([
       'Power Normalized',
+      DataPowerTrainingStressScore.type,
     ]);
 
     const performanceTab = tabs.find((tab) => tab.id === 'performance');

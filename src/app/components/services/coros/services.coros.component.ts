@@ -1,5 +1,5 @@
 import { Component } from '@angular/core';
-import { ServiceNames, Auth2ServiceTokenInterface, Auth1ServiceTokenInterface } from '@sports-alliance/sports-lib';
+import { ServiceNames, Auth2ServiceTokenInterface, Auth1ServiceTokenInterface, UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { HttpClient } from '@angular/common/http';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute } from '@angular/router';
@@ -25,6 +25,7 @@ import { Subscription } from 'rxjs';
 export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
 
   public serviceName = ServiceNames.COROSAPI;
+  public showCorosUploadActivityCard = false;
   public minDate = dayjs().subtract(COROS_HISTORY_IMPORT_LIMIT_MONTHS, 'month').toDate();
   public readonly corosToSuuntoRouteID = ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp;
   public isSavingSyncRoute = false;
@@ -53,6 +54,10 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
     if (state && code) {
       await this.userService.requestAndSetCurrentUserCOROSAPIAccessToken(state, code);
     }
+  }
+
+  get corosServiceMeta(): UserServiceMetaInterface & { uploadedActivitiesCount?: number } | undefined {
+    return this.serviceMeta;
   }
 
   override async ngOnChanges() {

@@ -284,7 +284,7 @@ describe('SideNavComponent', () => {
         expect(component.aiInsightsRoute).toBe('/ai-insights');
     });
 
-    it('should route unpaid users to subscriptions for AI Insights and show the paid lock state', () => {
+    it('should link free users directly to AI Insights without paid lock state', () => {
         mockUserService.user = vi.fn().mockReturnValue({
             uid: 'user-3',
             displayName: 'Free User',
@@ -302,8 +302,8 @@ describe('SideNavComponent', () => {
             .find(item => item.nativeElement.textContent.includes('AI Insights'));
 
         expect(aiInsightsItem).toBeTruthy();
-        expect(component.aiInsightsRoute).toBe('/subscriptions');
+        expect(component.aiInsightsRoute).toBe('/ai-insights');
         expect(aiInsightsItem?.nativeElement.textContent).toContain('Beta');
-        expect(aiInsightsItem?.nativeElement.textContent).toContain('PAID');
+        expect(aiInsightsItem?.nativeElement.textContent).not.toContain('PAID');
     });
 });

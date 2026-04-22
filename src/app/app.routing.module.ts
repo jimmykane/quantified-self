@@ -67,13 +67,13 @@ export const routes: Routes = [
       title: 'Help & Support',
       preload: true,
       animation: 'Help',
-      description: 'Get help with AI Insights, account setup, uploads, device integrations, billing, privacy, and common troubleshooting in Quantified Self.',
-      keywords: 'help, support, faq, ai insights, garmin, suunto, coros, uploads, billing, privacy, quantified self',
+      description: 'Get help with Garmin -> Suunto and COROS -> Suunto sync routes, catch-up sync, AI Insights, account setup, uploads, billing, privacy, and troubleshooting in Quantified Self.',
+      keywords: 'help, support, faq, garmin to suunto sync, coros to suunto sync, catch-up sync, ai insights, uploads, billing, privacy, quantified self',
       jsonLd: {
         "@context": "https://schema.org",
         "@type": "WebPage",
         "name": "Quantified Self Help & Support",
-        "description": "Get help with AI Insights, account setup, uploads, device integrations, billing, privacy, and common troubleshooting in Quantified Self.",
+        "description": "Get help with Garmin -> Suunto and COROS -> Suunto sync routes, catch-up sync, AI Insights, account setup, uploads, billing, privacy, and troubleshooting in Quantified Self.",
         "url": "https://www.quantified-self.io/help",
         "inLanguage": "en",
         "isPartOf": {
@@ -86,6 +86,9 @@ export const routes: Routes = [
           "Account setup",
           "Manual uploads",
           "Membership and billing",
+          "Garmin -> Suunto sync",
+          "COROS -> Suunto sync",
+          "Catch-up sync",
           "Garmin integration",
           "Suunto integration",
           "COROS integration",
@@ -172,8 +175,29 @@ export const routes: Routes = [
     loadChildren: () => import('./modules/home.module').then(module => module.HomeModule),
     data: {
       animation: 'Home',
-      description: 'Quantified Self AI Insights helps performance athletes ask focused training questions and get narrative summaries plus chart or event-level answers from persisted activity stats.',
-      keywords: 'ai insights, quantified self, training analytics, fitness ai, performance metrics, event lookup, activity trends, garmin connect sync, suunto app, coros integration, history import'
+      description: 'Quantified Self delivers reliable and instant performance analytics with AI Insights, full history imports, and automatic Garmin -> Suunto plus COROS -> Suunto sync for newly imported activities, plus catch-up sync for events already stored in Quantified Self.',
+      keywords: 'quantified self, ai insights, performance analytics, training analytics, garmin connect sync, suunto app, garmin to suunto sync, coros to suunto sync, automatic sync between services, catch-up sync, history import',
+      jsonLd: {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Quantified Self",
+        "applicationCategory": "HealthApplication",
+        "operatingSystem": "Web",
+        "description": "Reliable and instant performance analytics with AI Insights, full history imports, and automatic Garmin -> Suunto plus COROS -> Suunto sync for newly imported activities, plus catch-up sync for events already stored in Quantified Self.",
+        "featureList": [
+          "AI Insights with chart-backed answers",
+          "Full history imports for Garmin, Suunto, and COROS",
+          "Automatic Garmin -> Suunto sync for newly imported Garmin activities",
+          "Automatic COROS -> Suunto sync for newly imported COROS activities",
+          "Manual catch-up sync for events already stored in Quantified Self"
+        ],
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        },
+        "url": "https://www.quantified-self.io/"
+      }
     },
     canMatch: [loggedInGuard, onboardingGuard],
     pathMatch: 'full'

@@ -154,6 +154,7 @@
           <ul>
             <li><mat-icon class="qs-color-primary">check_circle</mat-icon> {{ getActivityLimitLabel(product.metadata['role']) }}</li>
             <li><mat-icon class="qs-color-primary">check_circle</mat-icon> Auto-sync from your watch</li>
+            <li><mat-icon class="qs-color-primary">check_circle</mat-icon> Cross-device sync</li>
             <li><mat-icon class="qs-color-primary">check_circle</mat-icon> {{ getAiInsightsLimitLabel(product.metadata['role']) }}</li>
             <li><mat-icon class="qs-color-warn">favorite</mat-icon> Helps fund faster feature releases</li>
           </ul>
@@ -164,6 +165,7 @@
         <div class="card-spacer"></div>
         <!-- Since we split into virtual products, each product has exactly 1 price usually -->
         <div *ngFor="let price of product.prices" class="price-section">
+          @let trialDays = getEligibleTrialDays(product, price);
           <h3 class="price">
             @if (price.unit_amount === 0) {
             $0
@@ -173,9 +175,9 @@
             <span *ngIf="price.recurring" class="interval">/ {{ price.recurring?.interval }}</span>
           </h3>
 
-          @if (shouldShowFirstMonthFreeCopy(product, price)) {
+          @if (trialDays !== null) {
           <p class="trial-offer-copy">
-            Start with confidence: your first month is free for new members. No card needed to begin.
+            Start with confidence: enjoy a {{ trialDays }}-day free trial for new members. No card needed to begin.
           </p>
           }
 
@@ -216,8 +218,8 @@
             {{ price.recurring ? 'Choose ' + (product.metadata['role'] | titlecase) : 'Buy Now' }}
             }
           </button>
-          @if (shouldShowFirstMonthFreeCopy(product, price)) {
-          <p class="trial-cta-note">No card needed to start your free month.</p>
+          @if (trialDays !== null) {
+          <p class="trial-cta-note">No card needed to start your free {{ trialDays }}-day trial.</p>
           }
           }
           }

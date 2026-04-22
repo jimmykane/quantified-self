@@ -143,6 +143,19 @@ describe('ServicesCorosComponent', () => {
         });
     });
 
+    describe('FIT Upload Card', () => {
+        it('should hide upload card by default', () => {
+            component.hasProAccess = true;
+            component.serviceTokens = [{ accessToken: 'coros-token' } as any];
+            fixture.detectChanges();
+
+            const uploadComponent = fixture.nativeElement.querySelector('app-upload-activity-to-service');
+            const content = fixture.nativeElement.textContent;
+            expect(uploadComponent).toBeFalsy();
+            expect(content).not.toContain('Upload FIT Activity');
+        });
+    });
+
     describe('Activity Sync Card', () => {
         it('should show route toggle when COROS and Suunto are connected', () => {
             component.hasProAccess = true;

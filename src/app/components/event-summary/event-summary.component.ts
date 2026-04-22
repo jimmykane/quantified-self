@@ -20,6 +20,7 @@ import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.servi
 import { resolvePrimaryUnitAwareDisplayStat, buildHeroMetric } from '../../helpers/summary-display.helper';
 import { resolvePreferredSpeedDerivedAverageTypeForActivity } from '../../helpers/summary-stats.helper';
 import { SummaryPrimaryInfoMetric } from '../shared/summary-primary-info/summary-primary-info.component';
+import { EventDevicesService } from '../../services/event-devices.service';
 
 @Component({
   selector: 'app-event-summary',
@@ -54,6 +55,9 @@ export class EventSummaryComponent implements OnChanges {
   private rpeValue: RPEBorgCR10SCale | null = null;
   private rpeLabelValue = '';
   private feelingIconValue = '';
+  private showDeviceChipValue = false;
+  private deviceChipLabelValue = '';
+  private deviceChipTooltipValue = '';
   private cachedEventRef: AppEventInterface | null = null;
   private cachedSelectedActivitiesRef: ActivityInterface[] | null = null;
   private templateStateInitialized = false;
@@ -61,7 +65,8 @@ export class EventSummaryComponent implements OnChanges {
   constructor(
     private cd: ChangeDetectorRef,
     private bottomSheet: MatBottomSheet,
-    private benchmarkFlow: AppBenchmarkFlowService
+    private benchmarkFlow: AppBenchmarkFlowService,
+    private eventDevicesService: EventDevicesService,
   ) {
   }
 
@@ -90,6 +95,21 @@ export class EventSummaryComponent implements OnChanges {
   get hasDevices(): boolean {
     this.ensureTemplateState();
     return this.hasDevicesValue;
+  }
+
+  get showDeviceChip(): boolean {
+    this.ensureTemplateState();
+    return this.showDeviceChipValue;
+  }
+
+  get deviceChipLabel(): string {
+    this.ensureTemplateState();
+    return this.deviceChipLabelValue;
+  }
+
+  get deviceChipTooltip(): string {
+    this.ensureTemplateState();
+    return this.deviceChipTooltipValue;
   }
 
   get heroStats(): string[] {
@@ -251,14 +271,29 @@ export class EventSummaryComponent implements OnChanges {
 
   private rebuildTemplateState(): void {
     const activities = this.event?.getActivities?.() ?? [];
+    const selectedActivities = this.selectedActivities?.length
+      ? this.selectedActivities
+      : activities;
     this.eventActivitiesCountValue = activities.length;
     this.mainActivityTypeValue = activities[0]?.type || 'Other';
     this.heroEffortStatTypeValue = resolvePreferredSpeedDerivedAverageTypeForActivity(this.mainActivityTypeValue) || DataSpeedAvg.type;
     this.heroStatsValue = this.resolveHeroStats(this.mainActivityTypeValue);
     this.heroStatLookup = this.buildHeroStatLookup();
-    this.hasDevicesValue = this.selectedActivities?.some(a =>
-      a.creator?.devices?.some(d => d.name || d.manufacturer)
-    ) ?? false;
+    this.hasDevicesValue = selectedActivities.some((activity) => this.hasActivityDeviceDetails(activity));
+    const eventDeviceNamesAsString = this.getEventDeviceNamesAsString();
+    const selectedActivityDeviceNames = this.resolveSelectedActivityDeviceNames(selectedActivities);
+    const hasEventDeviceNames = !!eventDeviceNamesAsString;
+    this.showDeviceChipValue = hasEventDeviceNames || selectedActivityDeviceNames.length > 0 || this.hasDevicesValue;
+    this.deviceChipLabelValue = hasEventDeviceNames
+      ? eventDeviceNamesAsString
+      : (selectedActivityDeviceNames.length <= 1
+        ? (selectedActivityDeviceNames[0] || (this.hasDevicesValue ? 'Device' : ''))
+        : `${selectedActivityDeviceNames.length} devices`);
+    this.deviceChipTooltipValue = hasEventDeviceNames
+      ? eventDeviceNamesAsString
+      : (selectedActivityDeviceNames.length > 0
+        ? selectedActivityDeviceNames.join('\n')
+        : (this.hasDevicesValue ? 'Device details available' : ''));
     this.benchmarkCountValue = this.event?.benchmarkResults ? Object.keys(this.event.benchmarkResults).length : 0;
 
     const feelingStat = this.event?.getStat(DataFeeling.type) as DataFeeling;
@@ -305,6 +340,62 @@ export class EventSummaryComponent implements OnChanges {
       [Feelings.Poor]: 'sentiment_dissatisfied',
     };
     return iconMap[feeling] || '';
+  }
+
+  private resolveSelectedActivityDeviceNames(activities: ActivityInterface[]): string[] {
+    const uniqueDeviceNames = new Set<string>();
+    activities.forEach((activity) => {
+      const deviceName = this.resolveActivityDeviceName(activity);
+      if (deviceName) {
+        uniqueDeviceNames.add(deviceName);
+      }
+    });
+
+    return [...uniqueDeviceNames.values()];
+  }
+
+  private resolveActivityDeviceName(activity: ActivityInterface): string {
+    const creatorName = `${activity?.creator?.name || ''}`.trim();
+    const swInfo = `${activity?.creator?.swInfo || ''}`.trim();
+    const creatorLabel = swInfo ? `${creatorName} ${swInfo}`.trim() : creatorName;
+    if (creatorLabel) {
+      return creatorLabel;
+    }
+
+    const creatorDevices = activity?.creator?.devices;
+    if (Array.isArray(creatorDevices) && creatorDevices.length > 0) {
+      const groupedDeviceName = this.eventDevicesService
+        .getDeviceGroups(activity)
+        .map((group) => `${group.displayName || ''}`.trim())
+        .find((name) => !!name);
+      if (groupedDeviceName) {
+        return groupedDeviceName;
+      }
+    }
+
+    const fallbackDeviceName = (Array.isArray(creatorDevices) ? creatorDevices : [])
+      .map((device) => `${device?.name || device?.manufacturer || device?.type || ''}`.trim())
+      .find((name) => !!name);
+
+    return fallbackDeviceName || '';
+  }
+
+  private hasActivityDeviceDetails(activity: ActivityInterface): boolean {
+    const creatorDevices = activity?.creator?.devices;
+    return Array.isArray(creatorDevices) && creatorDevices.length > 0;
+  }
+
+  private getEventDeviceNamesAsString(): string {
+    const sourceEvent = this.event as AppEventInterface & { getDeviceNamesAsString?: () => string };
+    if (!sourceEvent || typeof sourceEvent.getDeviceNamesAsString !== 'function') {
+      return '';
+    }
+
+    try {
+      return `${sourceEvent.getDeviceNamesAsString() || ''}`.trim();
+    } catch {
+      return '';
+    }
   }
 
   private ensureTemplateState(): void {

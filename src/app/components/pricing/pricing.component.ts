@@ -163,20 +163,41 @@ export class PricingComponent implements OnInit, OnDestroy {
     }
 
     shouldShowFirstMonthFreeCopy(product: StripeProduct, price: StripePrice): boolean {
+        return this.getEligibleTrialDays(product, price) !== null;
+    }
+
+    getEligibleTrialDays(product: StripeProduct, price: StripePrice): number | null {
         if (this.hasPaidSubscriptionHistory !== false) {
-            return false;
+            return null;
         }
 
         const role = product.metadata?.['role'];
         if (role !== 'basic' && role !== 'pro') {
-            return false;
+            return null;
         }
 
         if (!price.recurring) {
-            return false;
+            return null;
         }
 
-        return !this.currentRole || this.currentRole === 'free';
+        if (!!this.currentRole && this.currentRole !== 'free') {
+            return null;
+        }
+
+        return this.resolveMetadataTrialDays(price.metadata?.trial_days);
+    }
+
+    private resolveMetadataTrialDays(metadataTrialDays: string | undefined): number | null {
+        if (typeof metadataTrialDays !== 'string') {
+            return null;
+        }
+
+        const normalizedTrialDays = metadataTrialDays.trim();
+        if (!/^[1-9]\d*$/.test(normalizedTrialDays)) {
+            return null;
+        }
+
+        return Number.parseInt(normalizedTrialDays, 10);
     }
 
     shouldShowOnboardingFreeContinue(product: StripeProduct): boolean {

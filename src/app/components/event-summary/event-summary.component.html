@@ -11,9 +11,6 @@
     <div summary-icon-badge class="privacy-mini-wrapper">
       <app-privacy-icon [privacy]="event.privacy"></app-privacy-icon>
     </div>
-
-    <app-service-source-icon summary-top-meta-suffix [event]="event" [user]="user"></app-service-source-icon>
-
     @if (feelingIcon) {
     <span summary-chips class="chip feeling-chip" [matTooltip]="'Feeling: ' + feelingLabel" [attr.aria-label]="'Feeling: ' + feelingLabel">
       <mat-icon aria-hidden="true">{{ feelingIcon }}</mat-icon>
@@ -56,6 +53,15 @@
       </div>
     </div>
   </app-summary-primary-info>
+  @if (showDeviceChip) {
+  <div class="device-info-banner" [matTooltip]="deviceChipTooltip" [matTooltipDisabled]="!deviceChipTooltip">
+    <div class="device-info-banner-primary">
+      <span class="device-info-banner-label">{{ deviceChipLabel }}</span>
+    </div>
+    <app-service-source-icon class="device-info-banner-source" [event]="event" [user]="user" [showIcon]="false"
+      [showText]="true"></app-service-source-icon>
+  </div>
+  }
 
   <!-- Activities Toggles Section -->
   @if (eventActivitiesCount > 1) {
