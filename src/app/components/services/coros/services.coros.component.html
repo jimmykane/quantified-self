@@ -129,6 +129,7 @@
       </div>
     </mat-card>
 
+    @if (showCorosUploadActivityCard) {
     <!-- FIT Upload Card -->
     <mat-card class="feature-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess">
       @if (!hasProAccess) {
@@ -170,6 +171,7 @@
         }
       </div>
     </mat-card>
+    }
 
     @if (isCorosToSuuntoRouteAvailableForUser) {
     <mat-card class="feature-card" [class.locked]="!hasProAccess" (click)="!hasProAccess && triggerUpsell()">

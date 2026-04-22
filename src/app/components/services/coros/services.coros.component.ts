@@ -25,6 +25,7 @@ import { Subscription } from 'rxjs';
 export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
 
   public serviceName = ServiceNames.COROSAPI;
+  public showCorosUploadActivityCard = false;
   public minDate = dayjs().subtract(COROS_HISTORY_IMPORT_LIMIT_MONTHS, 'month').toDate();
   public readonly corosToSuuntoRouteID = ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp;
   public isSavingSyncRoute = false;
