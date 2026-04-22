@@ -143,11 +143,13 @@ export class AppPaymentService {
         for (const product of products) {
             this.logger.log(`Processing product ${product.id}`, product);
 
+            const monthlyRecurringPrices = (product.prices ?? []).filter((price) => this.isMonthlyRecurringPrice(price));
+
             // Check if this product has prices with 'firebaseRole' metadata
             const getRole = (p: StripePrice) => p.metadata?.firebaseRole?.toLowerCase();
 
-            const basicPrices = product.prices?.filter(p => getRole(p) === 'basic');
-            const proPrices = product.prices?.filter(p => getRole(p) === 'pro');
+            const basicPrices = monthlyRecurringPrices.filter(p => getRole(p) === 'basic');
+            const proPrices = monthlyRecurringPrices.filter(p => getRole(p) === 'pro');
 
             this.logger.log(`Product ${product.id} prices split:`, { basicPrices, proPrices });
 
@@ -183,8 +185,11 @@ export class AppPaymentService {
                 }
 
                 // Ignore strictly free products if we are killing the free tier?
-                if (product.metadata?.role !== 'free') {
-                    virtualProducts.push(product);
+                if (product.metadata?.role !== 'free' && monthlyRecurringPrices.length > 0) {
+                    virtualProducts.push({
+                        ...product,
+                        prices: monthlyRecurringPrices
+                    });
                 }
             }
         }
@@ -198,6 +203,15 @@ export class AppPaymentService {
             const rB = (b.role || b.metadata?.role || '') as string;
             return (roleOrder[rA] || 99) - (roleOrder[rB] || 99);
         });
+    }
+
+    private isMonthlyRecurringPrice(price: StripePrice): boolean {
+        if (price.type !== 'recurring') {
+            return false;
+        }
+
+        const interval = price.recurring?.interval ?? price.interval;
+        return interval === 'month';
     }
 
     /**

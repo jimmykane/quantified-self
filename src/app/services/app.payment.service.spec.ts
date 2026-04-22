@@ -587,4 +587,86 @@ describe('AppPaymentService', () => {
             expect(hasHistory).toBe(false);
         });
     });
+
+    describe('transformProductsForPricing', () => {
+        it('should keep only monthly recurring prices for role-split products', () => {
+            const result = (service as any).transformProductsForPricing([
+                {
+                    id: 'prod_role_split',
+                    metadata: {},
+                    prices: [
+                        {
+                            id: 'price_basic_monthly',
+                            type: 'recurring',
+                            interval: 'month',
+                            metadata: { firebaseRole: 'basic' }
+                        },
+                        {
+                            id: 'price_basic_yearly',
+                            type: 'recurring',
+                            interval: 'year',
+                            metadata: { firebaseRole: 'basic' }
+                        },
+                        {
+                            id: 'price_pro_monthly',
+                            type: 'recurring',
+                            interval: 'month',
+                            metadata: { firebaseRole: 'pro' }
+                        },
+                        {
+                            id: 'price_pro_yearly',
+                            type: 'recurring',
+                            interval: 'year',
+                            metadata: { firebaseRole: 'pro' }
+                        }
+                    ]
+                }
+            ]);
+
+            expect(result).toHaveLength(2);
+            expect(result[0].role).toBe('basic');
+            expect(result[0].prices).toEqual([
+                expect.objectContaining({ id: 'price_basic_monthly' })
+            ]);
+            expect(result[1].role).toBe('pro');
+            expect(result[1].prices).toEqual([
+                expect.objectContaining({ id: 'price_pro_monthly' })
+            ]);
+        });
+
+        it('should hide fallback products when they only have yearly prices', () => {
+            const result = (service as any).transformProductsForPricing([
+                {
+                    id: 'prod_legacy_yearly_only',
+                    metadata: { role: 'basic' },
+                    prices: [
+                        {
+                            id: 'price_yearly_only',
+                            type: 'recurring',
+                            interval: 'year',
+                            metadata: {}
+                        }
+                    ]
+                },
+                {
+                    id: 'prod_legacy_monthly',
+                    metadata: { role: 'pro' },
+                    prices: [
+                        {
+                            id: 'price_monthly_only',
+                            type: 'recurring',
+                            interval: 'month',
+                            metadata: {}
+                        }
+                    ]
+                }
+            ]);
+
+            expect(result).toHaveLength(1);
+            expect(result[0].id).toBe('prod_legacy_monthly');
+            expect(result[0].prices).toEqual([
+                expect.objectContaining({ id: 'price_monthly_only' })
+            ]);
+        });
+    });
 });
