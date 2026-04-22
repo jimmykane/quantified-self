@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../components/confirmation-dialog/confirmation-dialog.component';
 import { environment } from '../../environments/environment';
-import { Firestore, collection, collectionData, addDoc, doc, docData, getDoc, getDocs, getDocsFromServer, limit, query, where } from 'app/firebase/firestore';
+import { Firestore, collection, collectionData, addDoc, doc, docData, getDocs, getDocsFromServer, limit, query, where } from 'app/firebase/firestore';
 
 // ... (other imports)
 
@@ -58,7 +58,6 @@ type CheckoutMode = 'subscription' | 'payment';
 interface CheckoutInput {
     priceId: string;
     mode: CheckoutMode;
-    productId: string | null;
 }
 
 interface CheckoutSessionPayload {
@@ -70,15 +69,8 @@ interface CheckoutSessionPayload {
     automatic_tax: { enabled: true };
     metadata: { firebaseUID: string };
     payment_method_collection?: 'if_required';
+    trial_period_days?: number;
     promotion_code?: string;
-    subscription_data?: {
-        metadata: { firebaseUID: string };
-        trial_settings?: {
-            end_behavior: {
-                missing_payment_method: 'cancel';
-            };
-        };
-    };
 }
 
 interface CheckoutSessionDocumentData {
@@ -237,9 +229,7 @@ export class AppPaymentService {
         attempt: number
     ): Promise<void> {
         const checkoutInput = this.resolveCheckoutInput(price);
-        const resolvedPromotionCodeId = await this.resolvePromotionCodeIdForCheckout(price, checkoutInput);
-        const hasPaidHistory = resolvedPromotionCodeId ? await this.hasPaidSubscriptionHistoryForCheckoutEligibility() : false;
-        const promotionCodeId = hasPaidHistory ? null : resolvedPromotionCodeId;
+        const trialPeriodDays = await this.resolveTrialPeriodDaysForCheckout(price);
 
         await this.runPreCheckoutLinkCheck(user);
 
@@ -250,7 +240,7 @@ export class AppPaymentService {
 
         this.logger.log('Creating checkout session for price:', checkoutInput.priceId, 'mode:', checkoutInput.mode);
         const checkoutSessionsRef = collection(this.firestore, `customers/${userId}/checkout_sessions`);
-        const sessionPayload = this.buildCheckoutSessionPayload(checkoutInput, userId, successUrl, cancelUrl, promotionCodeId);
+        const sessionPayload = this.buildCheckoutSessionPayload(checkoutInput, userId, successUrl, cancelUrl, trialPeriodDays);
 
         let checkoutSessionDocId = '';
         try {
@@ -305,27 +295,48 @@ export class AppPaymentService {
             return {
                 priceId: price,
                 mode: 'subscription',
-                productId: null
             };
         }
 
         return {
             priceId: price.id,
             mode: price.type === 'recurring' ? 'subscription' : 'payment',
-            productId: price.product ?? null
         };
     }
 
-    private async resolvePromotionCodeIdForCheckout(
-        price: string | StripePrice,
-        checkoutInput: CheckoutInput
-    ): Promise<string | null> {
-        const promotionCodeId = this.resolvePromotionCodeId(price);
-        if (promotionCodeId || typeof price === 'string') {
-            return promotionCodeId;
+    private async resolveTrialPeriodDaysForCheckout(price: string | StripePrice): Promise<number | null> {
+        if (typeof price === 'string') {
+            return null;
         }
 
-        return this.resolvePromotionCodeIdFromFirestoreDocument(checkoutInput.priceId, checkoutInput.productId);
+        if (price.type !== 'recurring') {
+            return null;
+        }
+
+        const trialPeriodDays = this.resolveMetadataTrialDays(price.metadata?.trial_days);
+        if (trialPeriodDays === null) {
+            return null;
+        }
+
+        const hasPaidHistory = await this.hasPaidSubscriptionHistoryForCheckoutEligibility();
+        if (hasPaidHistory) {
+            return null;
+        }
+
+        return trialPeriodDays;
+    }
+
+    private resolveMetadataTrialDays(metadataTrialDays: string | undefined): number | null {
+        if (typeof metadataTrialDays !== 'string') {
+            return null;
+        }
+
+        const normalizedTrialDays = metadataTrialDays.trim();
+        if (!/^[1-9]\d*$/.test(normalizedTrialDays)) {
+            return null;
+        }
+
+        return Number.parseInt(normalizedTrialDays, 10);
     }
 
     private async runPreCheckoutLinkCheck(user: { getIdToken: (forceRefresh?: boolean) => Promise<string> }): Promise<void> {
@@ -391,7 +402,7 @@ export class AppPaymentService {
         userId: string,
         successUrl: string,
         cancelUrl: string,
-        promotionCodeId: string | null
+        trialPeriodDays: number | null
     ): CheckoutSessionPayload {
         const payload: CheckoutSessionPayload = {
             price: checkoutInput.priceId,
@@ -403,20 +414,11 @@ export class AppPaymentService {
             metadata: { firebaseUID: userId }
         };
 
-        if (promotionCodeId) {
-            payload.promotion_code = promotionCodeId;
-        }
-
         if (checkoutInput.mode === 'subscription') {
             payload.payment_method_collection = 'if_required';
-            payload.subscription_data = {
-                metadata: { firebaseUID: userId },
-                trial_settings: {
-                    end_behavior: {
-                        missing_payment_method: 'cancel'
-                    }
-                }
-            };
+            if (trialPeriodDays) {
+                payload.trial_period_days = trialPeriodDays;
+            }
         }
 
         return payload;
@@ -451,81 +453,6 @@ export class AppPaymentService {
         }
 
         return 'Unknown payment error.';
-    }
-
-    private resolvePromotionCodeId(price: string | StripePrice): string | null {
-        if (typeof price === 'string') {
-            return null;
-        }
-
-        const prefixedMetadataValue = price.stripe_metadata_promotion_code_id ?? null;
-        const strictMetadataValue = price.metadata?.promotion_code_id ?? null;
-        const rawValue = strictMetadataValue ?? prefixedMetadataValue;
-        if (!rawValue) {
-            return null;
-        }
-
-        const promotionCodeId = rawValue.trim();
-        if (!promotionCodeId) {
-            return null;
-        }
-
-        if (promotionCodeId.startsWith('promo_')) {
-            return promotionCodeId;
-        }
-
-        const sourceKey = strictMetadataValue ? 'promotion_code_id' : 'stripe_metadata_promotion_code_id';
-        this.logger.warn(`[appendCheckoutSession] Ignoring metadata '${sourceKey}' because '${promotionCodeId}' is not a Stripe promotion code ID (expected prefix: promo_).`);
-        return null;
-    }
-
-    private async resolvePromotionCodeIdFromFirestoreDocument(priceId: string, productId: string | null): Promise<string | null> {
-        const candidatePaths: string[] = [];
-        if (productId) {
-            candidatePaths.push(`products/${productId}/prices/${priceId}`);
-        }
-
-        try {
-            if (!candidatePaths.length) {
-                const productsRef = collection(this.firestore, 'products');
-                const activeProductsQuery = query(productsRef, where('active', '==', true));
-                const productsSnapshot = await getDocs(activeProductsQuery);
-                for (const productDoc of productsSnapshot.docs) {
-                    candidatePaths.push(`products/${productDoc.id}/prices/${priceId}`);
-                }
-            }
-
-            for (const path of candidatePaths) {
-                const priceRef = doc(this.firestore, path);
-                const priceSnapshot = await getDoc(priceRef);
-                if (!priceSnapshot.exists()) {
-                    continue;
-                }
-
-                const data = priceSnapshot.data() as {
-                    metadata?: { [key: string]: string };
-                    stripe_metadata_promotion_code_id?: string;
-                };
-                const strictMetadataValue = data.metadata?.promotion_code_id ?? null;
-                const prefixedMetadataValue = data.stripe_metadata_promotion_code_id ?? null;
-                const rawValue = strictMetadataValue ?? prefixedMetadataValue;
-
-                if (!rawValue) {
-                    return null;
-                }
-
-                const promotionCodeId = rawValue.trim();
-                if (!promotionCodeId.startsWith('promo_')) {
-                    return null;
-                }
-
-                return promotionCodeId;
-            }
-        } catch {
-            // If fallback lookup fails, continue without a promotion code.
-        }
-
-        return null;
     }
 
     /**
@@ -601,7 +528,7 @@ export class AppPaymentService {
             return snapshot.docs.length > 0;
         } catch (error) {
             if (onError === 'fail-closed') {
-                this.logger.warn('Could not verify subscription history for checkout gating. Blocking auto promo application (fail-closed).', error);
+                this.logger.warn('Could not verify subscription history for checkout gating. Blocking trial eligibility (fail-closed).', error);
                 return true;
             }
 

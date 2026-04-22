@@ -341,6 +341,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Paid plans renew automatically until you cancel.
 - You can manage billing from the subscription area.
 - Cancellation takes effect at the end of the current billing period.
+- When a paid plan has a trial configured, the pricing card shows the exact trial length in days.
+- Trial offers are only shown for accounts without prior paid subscription history.
 
 ## Downgrades and grace period
 

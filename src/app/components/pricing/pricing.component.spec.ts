@@ -453,28 +453,32 @@ describe('PricingComponent', () => {
         expect(logSpy).toHaveBeenCalledWith('success', 'pro');
     });
 
-    it('should show first-month-free copy for recurring paid plans when user is free', () => {
+    it('should show trial copy for recurring paid plans when user is free and trial metadata is valid', () => {
         component.hasPaidSubscriptionHistory = false;
         component.currentRole = 'free';
         const product = {
             metadata: { role: 'basic' }
         } as StripeProduct;
         const price = {
+            metadata: { trial_days: '30' },
             recurring: { interval: 'month' }
         } as StripePrice;
 
         expect(component.shouldShowFirstMonthFreeCopy(product, price)).toBe(true);
+        expect(component.getEligibleTrialDays(product, price)).toBe(30);
     });
 
-    it('should not show first-month-free copy for one-time prices or paid users', () => {
+    it('should not show trial copy for one-time prices or paid users', () => {
         component.hasPaidSubscriptionHistory = false;
         const product = {
             metadata: { role: 'pro' }
         } as StripeProduct;
         const oneTimePrice = {
+            metadata: { trial_days: '30' },
             recurring: null
         } as StripePrice;
         const recurringPrice = {
+            metadata: { trial_days: '30' },
             recurring: { interval: 'month' }
         } as StripePrice;
 
@@ -485,20 +489,22 @@ describe('PricingComponent', () => {
         expect(component.shouldShowFirstMonthFreeCopy(product, recurringPrice)).toBe(false);
     });
 
-    it('should not show first-month-free copy when user has paid subscription history', () => {
+    it('should not show trial copy when user has paid subscription history', () => {
         component.hasPaidSubscriptionHistory = true;
         component.currentRole = 'free';
         const product = {
             metadata: { role: 'pro' }
         } as StripeProduct;
         const recurringPrice = {
+            metadata: { trial_days: '30' },
             recurring: { interval: 'month' }
         } as StripePrice;
 
         expect(component.shouldShowFirstMonthFreeCopy(product, recurringPrice)).toBe(false);
+        expect(component.getEligibleTrialDays(product, recurringPrice)).toBeNull();
     });
 
-    it('should render first-month-free copy on paid plans for eligible users', async () => {
+    it('should render trial copy with the configured trial days on paid plans for eligible users', async () => {
         const paymentService = TestBed.inject(AppPaymentService);
         const userService = TestBed.inject(AppUserService);
         const recurringPaidProduct: StripeProduct = {
@@ -519,6 +525,7 @@ describe('PricingComponent', () => {
                 interval: 'month',
                 interval_count: 1,
                 trial_period_days: null,
+                metadata: { trial_days: '30' },
                 recurring: { interval: 'month' }
             }]
         };
@@ -531,11 +538,11 @@ describe('PricingComponent', () => {
         fixture.detectChanges();
 
         const content = fixture.nativeElement.textContent as string;
-        expect(content).toContain('your first month is free for new members');
-        expect(content).toContain('No card needed');
+        expect(content).toContain('30-day free trial for new members');
+        expect(content).toContain('No card needed to start your free 30-day trial.');
     });
 
-    it('should not render first-month-free copy for returning users with paid history', async () => {
+    it('should not render trial copy for returning users with paid history', async () => {
         const paymentService = TestBed.inject(AppPaymentService);
         const userService = TestBed.inject(AppUserService);
         const recurringPaidProduct: StripeProduct = {
@@ -556,6 +563,7 @@ describe('PricingComponent', () => {
                 interval: 'month',
                 interval_count: 1,
                 trial_period_days: null,
+                metadata: { trial_days: '30' },
                 recurring: { interval: 'month' }
             }]
         };
@@ -568,8 +576,29 @@ describe('PricingComponent', () => {
         fixture.detectChanges();
 
         const content = fixture.nativeElement.textContent as string;
-        expect(content).not.toContain('your first month is free for new members');
-        expect(content).not.toContain('No card needed');
+        expect(content).not.toContain('free trial for new members');
+        expect(content).not.toContain('No card needed to start your free 30-day trial.');
+    });
+
+    it('should not show trial copy when trial_days metadata is missing or invalid', () => {
+        component.hasPaidSubscriptionHistory = false;
+        component.currentRole = 'free';
+        const product = {
+            metadata: { role: 'basic' }
+        } as StripeProduct;
+
+        const missingMetadataPrice = {
+            recurring: { interval: 'month' }
+        } as StripePrice;
+        const invalidMetadataPrice = {
+            metadata: { trial_days: '0' },
+            recurring: { interval: 'month' }
+        } as StripePrice;
+
+        expect(component.shouldShowFirstMonthFreeCopy(product, missingMetadataPrice)).toBe(false);
+        expect(component.getEligibleTrialDays(product, missingMetadataPrice)).toBeNull();
+        expect(component.shouldShowFirstMonthFreeCopy(product, invalidMetadataPrice)).toBe(false);
+        expect(component.getEligibleTrialDays(product, invalidMetadataPrice)).toBeNull();
     });
 
     it('should render the current free plan state as a disabled button', async () => {
