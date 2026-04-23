@@ -335,6 +335,23 @@ describe('PricingComponent', () => {
         expect(component.getPriceIntervalLabel(biennialPrice)).toBe('2 years');
     });
 
+    it('should preserve the synthetic free forever cadence in interval label display', () => {
+        const freePrice: StripePrice = {
+            id: 'free_price',
+            active: true,
+            currency: 'usd',
+            unit_amount: 0,
+            description: 'Free forever',
+            type: 'recurring',
+            interval: 'year',
+            interval_count: 1,
+            trial_period_days: null,
+            recurring: { interval: 'forever' as any }
+        };
+
+        expect(component.getPriceIntervalLabel(freePrice)).toBe('forever');
+    });
+
     it('should render real yearly plans with distinct monthly/yearly CTAs and savings label', async () => {
         const paymentService = TestBed.inject(AppPaymentService);
         const userService = TestBed.inject(AppUserService);

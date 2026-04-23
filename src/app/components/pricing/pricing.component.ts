@@ -195,6 +195,11 @@ export class PricingComponent implements OnInit, OnDestroy {
     }
 
     getPriceIntervalLabel(price: StripePrice): string {
+        const recurringInterval = (price.recurring?.interval as string | undefined) ?? null;
+        if (recurringInterval === 'forever') {
+            return 'forever';
+        }
+
         const cadence = this.getRecurringCadence(price);
         if (!cadence) {
             return 'billing period';
