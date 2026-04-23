@@ -2,3 +2,6 @@ export const ACTIVE_SUBSCRIPTION_STATUSES = ['active', 'trialing', 'past_due'] a
 export const ACTIVE_SUBSCRIPTION_STATUS_SET = new Set<string>(ACTIVE_SUBSCRIPTION_STATUSES);
 export const SUBSCRIPTION_ROLE_BASIC = 'basic';
 export const SUBSCRIPTION_ROLE_PRO = 'pro';
+export const SUBSCRIPTION_INTERVAL_MONTH = 'month';
+export const SUBSCRIPTION_INTERVAL_YEAR = 'year';
+export const SUBSCRIPTION_INTERVAL_FIELD_PATH = 'items.`0`.plan.interval';

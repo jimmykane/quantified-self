@@ -51,6 +51,8 @@ export interface UserCountResponse {
     pro: number;
     basic: number;
     free: number;
+    monthlyPaid: number;
+    yearlyPaid: number;
     onboardingCompleted: number;
     providers: Record<string, number>;
 }

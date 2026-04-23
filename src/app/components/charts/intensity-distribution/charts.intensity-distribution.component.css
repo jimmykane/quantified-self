@@ -12,7 +12,7 @@
   min-height: 0;
   min-width: 0;
   box-sizing: border-box;
-  padding: 8px 10px 8px;
+  padding: 8px 0 8px;
   overflow: hidden;
 }
 
@@ -20,6 +20,7 @@
   display: grid;
   gap: 4px;
   min-width: 0;
+  padding: 0 10px;
 }
 
 .title-row {
@@ -76,6 +77,13 @@
   margin-top: 2px;
   font-size: 0.66rem;
   color: var(--mat-sys-on-surface-variant);
+}
+
+.intensity-context-label {
+  font-size: 0.62rem;
+  line-height: 1.15;
+  color: var(--mat-sys-on-surface-variant);
+  opacity: 0.92;
 }
 
 .intensity-chart {

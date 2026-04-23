@@ -172,6 +172,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Efficiency Δ (4w)** shows current efficiency versus the prior 4-week baseline as absolute + percent delta.
 - **Freshness Forecast** projects 7 future days with zero load from the latest derived day.
 - **Intensity Distribution** uses power zones when available, otherwise heart-rate zones, grouped to Easy/Moderate/Hard by week.
+- Intensity Distribution headline percentages are labeled as **Current week**; when no current-week bucket exists they are labeled **Latest week**.
 - **Efficiency Trend** uses weekly duration-weighted average of avgPower/avgHeartRate.
 - These tiles are derived-only and do not fall back to currently loaded dashboard events.
 

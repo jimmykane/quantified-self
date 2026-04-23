@@ -90,6 +90,8 @@ describe('AdminService', () => {
             pro: 50,
             basic: 130,
             free: 0,
+            monthlyPaid: 120,
+            yearlyPaid: 60,
             everPaid: 160,
             canceled: 20,
             cancelScheduled: 12,

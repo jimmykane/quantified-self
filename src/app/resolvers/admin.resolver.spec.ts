@@ -37,6 +37,8 @@ describe('adminResolver', () => {
             pro: 5,
             basic: 5,
             free: 0,
+            monthlyPaid: 5,
+            yearlyPaid: 0,
             everPaid: 8,
             canceled: 3,
             cancelScheduled: 1,

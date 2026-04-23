@@ -105,6 +105,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Load');
     expect(gettingStartedSection?.content).toContain('Readiness');
     expect(gettingStartedSection?.content).toContain('Execution');
+    expect(gettingStartedSection?.content).toContain('Current week');
+    expect(gettingStartedSection?.content).toContain('Latest week');
     expect(gettingStartedSection?.content).toContain('derived-only');
     expect(gettingStartedSection?.content).toContain('**info** icon');
     expect(gettingStartedSection?.content).toContain('KPI lane');

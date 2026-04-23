@@ -57,6 +57,30 @@
                 </div>
             </mat-card>
 
+            <!-- Monthly Paid -->
+            <mat-card class="app-stat-card status-success">
+                <div class="app-stat-header">
+                    <mat-icon>calendar_view_month</mat-icon>
+                    <span>Monthly Paid</span>
+                </div>
+                <div class="app-stat-value" *ngIf="userStats">{{ userStats.monthlyPaid }}</div>
+                <div class="app-spinner-mini" *ngIf="!userStats">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+
+            <!-- Yearly Paid -->
+            <mat-card class="app-stat-card status-pending">
+                <div class="app-stat-header">
+                    <mat-icon>calendar_today</mat-icon>
+                    <span>Yearly Paid</span>
+                </div>
+                <div class="app-stat-value" *ngIf="userStats">{{ userStats.yearlyPaid }}</div>
+                <div class="app-spinner-mini" *ngIf="!userStats">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+
             <!-- Free Users -->
             <mat-card class="app-stat-card">
                 <div class="app-stat-header">

@@ -56,6 +56,8 @@ export interface UserCountStats {
     pro: number;
     basic: number;
     free: number;
+    monthlyPaid: number;
+    yearlyPaid: number;
     everPaid: number;
     canceled: number;
     cancelScheduled: number;
@@ -282,6 +284,8 @@ export class AdminService {
             pro: number;
             basic: number;
             free: number;
+            monthlyPaid?: number;
+            yearlyPaid?: number;
             everPaid?: number;
             canceled?: number;
             cancelScheduled?: number;
@@ -293,6 +297,8 @@ export class AdminService {
                 pro: result.data.pro ?? 0,
                 basic: result.data.basic ?? 0,
                 free: result.data.free ?? 0,
+                monthlyPaid: result.data.monthlyPaid ?? 0,
+                yearlyPaid: result.data.yearlyPaid ?? 0,
                 everPaid: result.data.everPaid ?? 0,
                 canceled: result.data.canceled ?? 0,
                 cancelScheduled: result.data.cancelScheduled ?? 0,
