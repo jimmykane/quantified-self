@@ -343,6 +343,9 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Cancellation takes effect at the end of the current billing period.
 - When a paid plan has a trial configured, the pricing card shows the exact trial length in days.
 - Trial offers are only shown for accounts without prior paid subscription history.
+- Yearly paid plans appear automatically when active yearly Stripe prices are available.
+- Yearly plans can show a **Save X% vs monthly** label based on the matching monthly price.
+- If you start monthly, you can switch to yearly later from the billing portal.
 
 ## Downgrades and grace period
 

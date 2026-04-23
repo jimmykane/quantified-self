@@ -233,6 +233,26 @@
         text-align: center;
       }
 
+      .yearly-savings-label {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 0 12px;
+        padding: 7px 12px;
+        border-radius: 999px;
+        font-size: 0.8rem;
+        line-height: 1;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        background: linear-gradient(
+          120deg,
+          color-mix(in srgb, var(--mat-sys-primary) 22%, transparent),
+          color-mix(in srgb, var(--mat-sys-secondary) 20%, transparent)
+        );
+        border: 1px solid color-mix(in srgb, var(--mat-sys-primary) 42%, transparent);
+        box-shadow: 0 4px 12px color-mix(in srgb, var(--mat-sys-primary) 20%, transparent);
+      }
+
       button {
         width: 100%;
         min-height: 44px;
@@ -246,11 +266,63 @@
 
       .trial-cta-note {
         margin: 8px 0 0;
+        padding: 8px 10px;
+        border-radius: 10px;
+        background: color-mix(in srgb, var(--mat-sys-secondary) 10%, transparent);
+        border: 1px solid color-mix(in srgb, var(--mat-sys-secondary) 24%, transparent);
         font-size: 0.78rem;
         line-height: 1.3;
-        opacity: 0.76;
+        opacity: 0.9;
         text-align: center;
       }
+    }
+
+    .plan-price-section {
+      margin-top: 0;
+      padding: 10px 0 0;
+      border-top: 0;
+      border-radius: 0;
+      background: transparent;
+      border: 0;
+
+      .price {
+        margin: 0 0 10px;
+      }
+
+      .trial-offer-copy {
+        margin: 0 0 10px;
+        padding: 0;
+        border-radius: 0;
+        background: transparent;
+        border: 0;
+        font-size: 0.78rem;
+        line-height: 1.3;
+        opacity: 0.82;
+        font-weight: 500;
+      }
+
+      .yearly-savings-label {
+        margin: 0 0 10px;
+        padding: 6px 11px;
+        font-size: 0.79rem;
+      }
+
+      .trial-cta-note {
+        margin: 8px 0 0;
+        padding: 0;
+        border-radius: 0;
+        background: transparent;
+        border: 0;
+        font-size: 0.76rem;
+        line-height: 1.28;
+        opacity: 0.72;
+      }
+    }
+
+    .plan-price-section + .plan-price-section {
+      margin-top: 14px;
+      padding-top: 16px;
+      border-top: 1px solid color-mix(in srgb, var(--mat-sys-outline) 28%, transparent);
     }
   }
 
@@ -261,6 +333,14 @@
 
   :host-context(.dark-theme) .price-section {
     border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  :host-context(.dark-theme) .plan-price-section {
+    border-top: 0;
+  }
+
+  :host-context(.dark-theme) .plan-price-section + .plan-price-section {
+    border-top-color: color-mix(in srgb, var(--mat-sys-outline) 45%, transparent);
   }
 
   :host-context(.dark-theme) .manage-subscription-container .manage-header {

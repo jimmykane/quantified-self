@@ -99,7 +99,7 @@ export class PricingComponent implements OnInit, OnDestroy {
         };
 
         this.products$ = this.paymentService.getProducts().pipe(
-            map(products => [freeProduct, ...products])
+            map((products) => [freeProduct, ...products])
         );
 
         // Initial load
@@ -160,6 +160,81 @@ export class PricingComponent implements OnInit, OnDestroy {
     private setLoadingState(isLoading: boolean): void {
         this.isLoading = isLoading;
         this.loadingStateChange.emit(isLoading);
+    }
+
+    private isYearlyRecurringPrice(price: StripePrice): boolean {
+        if (price.type !== 'recurring') {
+            return false;
+        }
+
+        const interval = price.recurring?.interval ?? price.interval;
+        return interval === 'year';
+    }
+
+    getYearlySavingsLabel(product: StripeProduct, price: StripePrice): string | null {
+        if (!this.isYearlyRecurringPrice(price)) {
+            return null;
+        }
+
+        if (typeof price.unit_amount !== 'number' || price.unit_amount <= 0) {
+            return null;
+        }
+
+        const monthlyPrice = (product.prices ?? []).find((candidatePrice) => {
+            if (candidatePrice.id === price.id) {
+                return false;
+            }
+
+            if (candidatePrice.type !== 'recurring') {
+                return false;
+            }
+
+            const candidateInterval = candidatePrice.recurring?.interval ?? candidatePrice.interval;
+            if (candidateInterval !== 'month') {
+                return false;
+            }
+
+            if (typeof candidatePrice.unit_amount !== 'number' || candidatePrice.unit_amount <= 0) {
+                return false;
+            }
+
+            return candidatePrice.currency?.toLowerCase() === price.currency?.toLowerCase();
+        });
+
+        if (!monthlyPrice || typeof monthlyPrice.unit_amount !== 'number') {
+            return null;
+        }
+
+        const yearlyFromMonthly = monthlyPrice.unit_amount * 12;
+        const savingsMinor = yearlyFromMonthly - price.unit_amount;
+        if (savingsMinor <= 0) {
+            return null;
+        }
+
+        const savingsPercent = Math.round((savingsMinor / yearlyFromMonthly) * 100);
+        if (savingsPercent <= 0) {
+            return null;
+        }
+
+        return `Save ${savingsPercent}% vs monthly`;
+    }
+
+    shouldShowYearlySwitchHint(product: StripeProduct, price: StripePrice): boolean {
+        const role = product.metadata?.['role'];
+        if (role !== 'basic' && role !== 'pro') {
+            return false;
+        }
+
+        if (price.type !== 'recurring') {
+            return false;
+        }
+
+        const interval = price.recurring?.interval ?? price.interval;
+        if (interval !== 'month') {
+            return false;
+        }
+
+        return (product.prices ?? []).some((candidatePrice) => this.isYearlyRecurringPrice(candidatePrice));
     }
 
     shouldShowFirstMonthFreeCopy(product: StripeProduct, price: StripePrice): boolean {

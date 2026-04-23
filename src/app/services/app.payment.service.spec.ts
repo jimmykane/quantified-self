@@ -511,7 +511,7 @@ describe('AppPaymentService', () => {
     });
 
     describe('transformProductsForPricing', () => {
-        it('should keep only monthly recurring prices for role-split products', () => {
+        it('should keep monthly and yearly recurring prices for role-split products', () => {
             const result = (service as any).transformProductsForPricing([
                 {
                     id: 'prod_role_split',
@@ -548,15 +548,17 @@ describe('AppPaymentService', () => {
             expect(result).toHaveLength(2);
             expect(result[0].role).toBe('basic');
             expect(result[0].prices).toEqual([
-                expect.objectContaining({ id: 'price_basic_monthly' })
+                expect.objectContaining({ id: 'price_basic_monthly' }),
+                expect.objectContaining({ id: 'price_basic_yearly' })
             ]);
             expect(result[1].role).toBe('pro');
             expect(result[1].prices).toEqual([
-                expect.objectContaining({ id: 'price_pro_monthly' })
+                expect.objectContaining({ id: 'price_pro_monthly' }),
+                expect.objectContaining({ id: 'price_pro_yearly' })
             ]);
         });
 
-        it('should hide fallback products when they only have yearly prices', () => {
+        it('should keep fallback products when they only have yearly prices', () => {
             const result = (service as any).transformProductsForPricing([
                 {
                     id: 'prod_legacy_yearly_only',
@@ -584,9 +586,13 @@ describe('AppPaymentService', () => {
                 }
             ]);
 
-            expect(result).toHaveLength(1);
-            expect(result[0].id).toBe('prod_legacy_monthly');
+            expect(result).toHaveLength(2);
+            expect(result[0].id).toBe('prod_legacy_yearly_only');
             expect(result[0].prices).toEqual([
+                expect.objectContaining({ id: 'price_yearly_only' })
+            ]);
+            expect(result[1].id).toBe('prod_legacy_monthly');
+            expect(result[1].prices).toEqual([
                 expect.objectContaining({ id: 'price_monthly_only' })
             ]);
         });

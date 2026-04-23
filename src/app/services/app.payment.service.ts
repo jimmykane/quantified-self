@@ -135,13 +135,13 @@ export class AppPaymentService {
         for (const product of products) {
             this.logger.log(`Processing product ${product.id}`, product);
 
-            const monthlyRecurringPrices = (product.prices ?? []).filter((price) => this.isMonthlyRecurringPrice(price));
+            const paidRecurringPrices = (product.prices ?? []).filter((price) => this.isPaidRecurringPrice(price));
 
             // Check if this product has prices with 'firebaseRole' metadata
             const getRole = (p: StripePrice) => p.metadata?.firebaseRole?.toLowerCase();
 
-            const basicPrices = monthlyRecurringPrices.filter(p => getRole(p) === 'basic');
-            const proPrices = monthlyRecurringPrices.filter(p => getRole(p) === 'pro');
+            const basicPrices = paidRecurringPrices.filter(p => getRole(p) === 'basic');
+            const proPrices = paidRecurringPrices.filter(p => getRole(p) === 'pro');
 
             this.logger.log(`Product ${product.id} prices split:`, { basicPrices, proPrices });
 
@@ -177,10 +177,10 @@ export class AppPaymentService {
                 }
 
                 // Ignore strictly free products if we are killing the free tier?
-                if (product.metadata?.role !== 'free' && monthlyRecurringPrices.length > 0) {
+                if (product.metadata?.role !== 'free' && paidRecurringPrices.length > 0) {
                     virtualProducts.push({
                         ...product,
-                        prices: monthlyRecurringPrices
+                        prices: paidRecurringPrices
                     });
                 }
             }
@@ -197,13 +197,13 @@ export class AppPaymentService {
         });
     }
 
-    private isMonthlyRecurringPrice(price: StripePrice): boolean {
+    private isPaidRecurringPrice(price: StripePrice): boolean {
         if (price.type !== 'recurring') {
             return false;
         }
 
         const interval = price.recurring?.interval ?? price.interval;
-        return interval === 'month';
+        return interval === 'month' || interval === 'year';
     }
 
     /**

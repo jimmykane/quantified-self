@@ -164,8 +164,9 @@
 
         <div class="card-spacer"></div>
         <!-- Since we split into virtual products, each product has exactly 1 price usually -->
-        <div *ngFor="let price of product.prices" class="price-section">
+        <div *ngFor="let price of product.prices; let isFirst = first" class="price-section plan-price-section">
           @let trialDays = getEligibleTrialDays(product, price);
+          @let yearlySavingsLabel = getYearlySavingsLabel(product, price);
           <h3 class="price">
             @if (price.unit_amount === 0) {
             $0
@@ -175,9 +176,13 @@
             <span *ngIf="price.recurring" class="interval">/ {{ price.recurring?.interval }}</span>
           </h3>
 
+          @if (yearlySavingsLabel) {
+          <p class="yearly-savings-label">{{ yearlySavingsLabel }}</p>
+          }
+
           @if (trialDays !== null) {
           <p class="trial-offer-copy">
-            Start with confidence: enjoy a {{ trialDays }}-day free trial for new members. No card needed to begin.
+            {{ trialDays }}-day free trial for new members. No card needed.
           </p>
           }
 
@@ -202,6 +207,14 @@
           @if (currentRole) {
           <!-- Paid user looking at free -->
           <button mat-stroked-button disabled>Included</button>
+          } @else if (shouldShowOnboardingFreeContinue(product) && isFirst) {
+          <button mat-stroked-button type="button" class="continue-free-button" (click)="selectFreeTier()" [disabled]="isLoading">
+            @if (isLoading) {
+            <mat-spinner diameter="20"></mat-spinner>
+            } @else {
+            Continue for Free
+            }
+          </button>
           } @else if (!shouldShowOnboardingFreeContinue(product)) {
           <!-- New User (Role is null) choosing Free -->
           <button mat-stroked-button (click)="selectFreeTier()" [disabled]="isLoading">
@@ -215,28 +228,18 @@
             @if (loadingPriceId === price.id) {
             <mat-spinner diameter="20"></mat-spinner>
             } @else {
-            {{ price.recurring ? 'Choose ' + (product.metadata['role'] | titlecase) : 'Buy Now' }}
+            {{ price.recurring ? (price.recurring?.interval === 'year' ? 'Choose Yearly' : 'Choose Monthly') : 'Buy Now' }}
             }
           </button>
-          @if (trialDays !== null) {
-          <p class="trial-cta-note">No card needed to start your free {{ trialDays }}-day trial.</p>
+          @if (shouldShowYearlySwitchHint(product, price)) {
+          <p class="trial-cta-note">
+            Switch to yearly anytime.
+          </p>
           }
           }
           }
 
         </div>
-
-        @if (shouldShowOnboardingFreeContinue(product)) {
-        <div class="price-section">
-          <button mat-stroked-button type="button" class="continue-free-button" (click)="selectFreeTier()" [disabled]="isLoading">
-            @if (isLoading) {
-            <mat-spinner diameter="20"></mat-spinner>
-            } @else {
-            Continue for Free
-            }
-          </button>
-        </div>
-        }
       </mat-card-content>
     </mat-card>
     }
