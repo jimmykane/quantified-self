@@ -64,6 +64,7 @@ describe('ChartsIntensityDistributionComponent', () => {
   });
 
   it('renders easy/moderate/hard percentages from the latest week', async () => {
+    const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2025, 11, 31, 12, 0, 0, 0));
     component.distribution = {
       latestWeekStartMs: Date.UTC(2026, 0, 5),
       latestEasyPercent: 50,
@@ -82,10 +83,37 @@ describe('ChartsIntensityDistributionComponent', () => {
 
     fixture.detectChanges();
     await fixture.whenStable();
+    dateNowSpy.mockRestore();
 
     expect(component.easyText).toBe('57%');
     expect(component.moderateText).toBe('29%');
     expect(component.hardText).toBe('14%');
+    expect(component.weekContextText.startsWith('Current week')).toBe(true);
+  });
+
+  it('shows latest-week context when latest bucket is not current week', async () => {
+    const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 2, 10, 12, 0, 0, 0));
+    component.distribution = {
+      latestWeekStartMs: Date.UTC(2025, 11, 29),
+      latestEasyPercent: 57,
+      latestModeratePercent: 29,
+      latestHardPercent: 14,
+      weeks: [
+        {
+          weekStartMs: Date.UTC(2025, 11, 29),
+          easySeconds: 7200,
+          moderateSeconds: 3600,
+          hardSeconds: 1800,
+          source: 'power',
+        },
+      ],
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    dateNowSpy.mockRestore();
+
+    expect(component.weekContextText.startsWith('Latest week')).toBe(true);
   });
 
   it('shows pending no-data message when empty and stale', async () => {
@@ -131,7 +159,7 @@ describe('ChartsIntensityDistributionComponent', () => {
       { axisValueLabel: 'Dec 29', seriesName: 'Hard', value: 14.285714 },
     ]);
 
-    expect(tooltipHtml).toContain('Dec 29');
+    expect(tooltipHtml).toContain('Week of Dec 29');
     expect(tooltipHtml).toContain('Easy: 57%');
     expect(tooltipHtml).toContain('Moderate: 29%');
     expect(tooltipHtml).toContain('Hard: 14%');

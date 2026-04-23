@@ -6,7 +6,12 @@ import { GARMIN_API_TOKENS_COLLECTION_NAME } from '../../garmin/constants';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../../suunto/constants';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../../coros/constants';
 import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
-import { ACTIVE_SUBSCRIPTION_STATUSES } from '../shared/subscription.constants';
+import {
+    ACTIVE_SUBSCRIPTION_STATUSES,
+    SUBSCRIPTION_INTERVAL_FIELD_PATH,
+    SUBSCRIPTION_INTERVAL_MONTH,
+    SUBSCRIPTION_INTERVAL_YEAR
+} from '../shared/subscription.constants';
 import { clampListUsersPageSize } from '../shared/date.utils';
 import { enrichUsers } from '../shared/user-enrichment';
 import { BasicUser, ListUsersRequest, ListUsersResponse, UserCountResponse } from '../shared/types';
@@ -211,7 +216,7 @@ export const getUserCount = onAdminCall<void, UserCountResponse>({
 
         // 1. Get stats from Firestore (subscriptions)
         // Parallel efficient count queries
-        const [totalSnapshot, proSnapshot, basicSnapshot, onboardedSnapshot] = await Promise.all([
+        const [totalSnapshot, proSnapshot, basicSnapshot, monthlyPaidSnapshot, yearlyPaidSnapshot, onboardedSnapshot] = await Promise.all([
             db.collection('users').count().get(),
             db.collectionGroup('subscriptions')
                 .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
@@ -221,6 +226,14 @@ export const getUserCount = onAdminCall<void, UserCountResponse>({
                 .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
                 .where('role', '==', 'basic')
                 .count().get(),
+            db.collectionGroup('subscriptions')
+                .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
+                .where(SUBSCRIPTION_INTERVAL_FIELD_PATH, '==', SUBSCRIPTION_INTERVAL_MONTH)
+                .count().get(),
+            db.collectionGroup('subscriptions')
+                .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
+                .where(SUBSCRIPTION_INTERVAL_FIELD_PATH, '==', SUBSCRIPTION_INTERVAL_YEAR)
+                .count().get(),
             db.collection('users')
                 .where('onboardingCompleted', '==', true)
                 .count().get()
@@ -229,9 +242,21 @@ export const getUserCount = onAdminCall<void, UserCountResponse>({
         const total = totalSnapshot.data().count;
         const pro = proSnapshot.data().count;
         const basic = basicSnapshot.data().count;
+        const monthlyPaid = monthlyPaidSnapshot.data().count;
+        const yearlyPaid = yearlyPaidSnapshot.data().count;
         const activePaid = pro + basic;
+        const unknownCadencePaid = Math.max(0, activePaid - monthlyPaid - yearlyPaid);
         const onboardingCompleted = onboardedSnapshot.data().count;
         const free = Math.max(0, total - activePaid);
+
+        if (unknownCadencePaid > 0) {
+            logger.warn('Detected active paid subscriptions without supported monthly/yearly cadence.', {
+                unknownCadencePaid,
+                activePaid,
+                monthlyPaid,
+                yearlyPaid
+            });
+        }
 
         // 2. Get provider breakdown from Firebase Auth
         const providerCounts: Record<string, number> = {};
@@ -258,6 +283,8 @@ export const getUserCount = onAdminCall<void, UserCountResponse>({
             pro,
             basic,
             free,
+            monthlyPaid,
+            yearlyPaid,
             onboardingCompleted,
             providers: providerCounts
         };

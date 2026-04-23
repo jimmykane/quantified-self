@@ -21,9 +21,11 @@ describe('getUserCount Cloud Function', () => {
         const mockTotalCount = vi.fn().mockResolvedValue({
             data: () => ({ count: 150 })
         });
-        const mockProCount = vi.fn().mockResolvedValue({
-            data: () => ({ count: 50 })
-        });
+        const mockCountGet = vi.fn()
+            .mockResolvedValueOnce({ data: () => ({ count: 50 }) }) // pro
+            .mockResolvedValueOnce({ data: () => ({ count: 50 }) }) // basic
+            .mockResolvedValueOnce({ data: () => ({ count: 45 }) }) // monthly
+            .mockResolvedValueOnce({ data: () => ({ count: 5 }) }); // yearly
         const mockOnboardingCount = vi.fn().mockResolvedValue({
             data: () => ({ count: 40 })
         });
@@ -32,7 +34,7 @@ describe('getUserCount Cloud Function', () => {
         const mockQuery = {
             where: vi.fn().mockReturnThis(),
             count: vi.fn().mockReturnValue({
-                get: mockProCount
+                get: mockCountGet
             })
         };
 
@@ -64,6 +66,8 @@ describe('getUserCount Cloud Function', () => {
             pro: 50,
             basic: 50,
             free: 50,
+            monthlyPaid: 45,
+            yearlyPaid: 5,
             onboardingCompleted: 40,
             providers: {}
         });
@@ -71,4 +75,3 @@ describe('getUserCount Cloud Function', () => {
         expect(mockCollection).toHaveBeenCalledWith('subscriptions'); // collectionGroup calls this name
     });
 });
-

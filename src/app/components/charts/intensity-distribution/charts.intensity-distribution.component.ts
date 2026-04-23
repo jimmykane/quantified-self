@@ -55,6 +55,7 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
   public easyText = '--';
   public moderateText = '--';
   public hardText = '--';
+  public weekContextText = 'Current week';
   public showNoDataError = false;
   public noDataErrorMessage = 'No data yet';
   public noDataErrorHint = 'This chart needs derived intensity distribution data.';
@@ -119,10 +120,12 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
       this.easyText = total > 0 ? `${Math.round((latest.easySeconds / total) * 100)}%` : '--';
       this.moderateText = total > 0 ? `${Math.round((latest.moderateSeconds / total) * 100)}%` : '--';
       this.hardText = total > 0 ? `${Math.round((latest.hardSeconds / total) * 100)}%` : '--';
+      this.weekContextText = this.resolveWeekContextText(latest.weekStartMs);
     } else {
       this.easyText = '--';
       this.moderateText = '--';
       this.hardText = '--';
+      this.weekContextText = 'Current week';
     }
 
     this.showNoDataError = weeks.length === 0;
@@ -201,6 +204,7 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
             return '';
           }
           const axisValueLabel = `${params[0]?.axisValueLabel || ''}`.trim();
+          const axisHeading = axisValueLabel ? `Week of ${axisValueLabel}` : '';
           const lines = params
             .map((entry) => {
               const seriesName = `${entry?.seriesName || ''}`.trim();
@@ -209,9 +213,9 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
             })
             .filter((line) => line.trim().length > 0);
           if (!lines.length) {
-            return axisValueLabel;
+            return axisHeading;
           }
-          return axisValueLabel ? `${axisValueLabel}<br/>${lines.join('<br/>')}` : lines.join('<br/>');
+          return axisHeading ? `${axisHeading}<br/>${lines.join('<br/>')}` : lines.join('<br/>');
         },
       },
       xAxis: {
@@ -272,5 +276,30 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
       return '--';
     }
     return `${Math.round(Number(value))}%`;
+  }
+
+  private resolveWeekContextText(weekStartMs: number): string {
+    const currentWeekStartMs = this.resolveUtcWeekStartMs(Date.now());
+    const contextPrefix = weekStartMs === currentWeekStartMs ? 'Current week' : 'Latest week';
+    const weekEndMs = weekStartMs + (6 * 24 * 60 * 60 * 1000);
+    const startLabel = new Date(weekStartMs).toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+    });
+    const endLabel = new Date(weekEndMs).toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+    });
+    return `${contextPrefix} (${startLabel} - ${endLabel})`;
+  }
+
+  private resolveUtcWeekStartMs(timeMs: number): number {
+    const date = new Date(timeMs);
+    const dayIndexMondayFirst = (date.getUTCDay() + 6) % 7;
+    return Date.UTC(
+      date.getUTCFullYear(),
+      date.getUTCMonth(),
+      date.getUTCDate() - dayIndexMondayFirst,
+    );
   }
 }
