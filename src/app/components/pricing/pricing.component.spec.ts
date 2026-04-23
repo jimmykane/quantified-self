@@ -260,6 +260,47 @@ describe('PricingComponent', () => {
         expect(component.getYearlySavingsLabel(product, yearlyPrice)).toBe('Save 17% vs monthly');
     });
 
+    it('should compute a dynamic yearly savings percentage and not use a fixed value', () => {
+        const product: StripeProduct = {
+            id: 'prod_basic_dynamic_savings',
+            active: true,
+            name: 'Basic',
+            description: 'Basic plan',
+            role: 'basic',
+            images: [],
+            metadata: { role: 'basic' },
+            prices: [
+                {
+                    id: 'price_basic_monthly',
+                    active: true,
+                    currency: 'eur',
+                    unit_amount: 200,
+                    description: 'Monthly basic',
+                    type: 'recurring',
+                    interval: 'month',
+                    interval_count: 1,
+                    trial_period_days: null,
+                    recurring: { interval: 'month', interval_count: 1 }
+                },
+                {
+                    id: 'price_basic_yearly_discounted',
+                    active: true,
+                    currency: 'eur',
+                    unit_amount: 1200,
+                    description: 'Yearly basic',
+                    type: 'recurring',
+                    interval: 'year',
+                    interval_count: 1,
+                    trial_period_days: null,
+                    recurring: { interval: 'year', interval_count: 1 }
+                }
+            ]
+        };
+        const yearlyPrice = product.prices?.find((price) => price.id === 'price_basic_yearly_discounted') as StripePrice;
+
+        expect(component.getYearlySavingsLabel(product, yearlyPrice)).toBe('Save 50% vs monthly');
+    });
+
     it('should show yearly switch hint only for monthly paid prices when a yearly option exists', () => {
         const product: StripeProduct = {
             id: 'prod_basic',
