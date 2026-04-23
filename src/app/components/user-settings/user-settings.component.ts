@@ -107,7 +107,7 @@ export class UserSettingsComponent implements OnChanges {
   public isAdminUser = false;
   private initializedUserUID: string | null = null;
   private readonly controlLabels: Record<string, string> = {
-    displayName: 'Public Name',
+    displayName: 'Name',
     appTheme: 'Interface Theme',
     dataTypesToUse: 'Visible Metrics',
     xAxisType: 'Data Scaling (X-Axis)',
@@ -192,9 +192,7 @@ export class UserSettingsComponent implements OnChanges {
       : (isAppThemePreference(settings.appSettings.theme) ? settings.appSettings.theme : AppThemes.Normal);
 
     this.userSettingsFormGroup = new UntypedFormGroup({
-      displayName: new UntypedFormControl(this.user.displayName, [
-        Validators.required,
-      ]),
+      displayName: new UntypedFormControl(this.user.displayName, []),
       description: new UntypedFormControl(this.user.description, []),
       dataTypesToUse: new UntypedFormControl(dataTypesToUse, [
         Validators.required,
