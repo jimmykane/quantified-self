@@ -1183,6 +1183,10 @@ describe('PricingComponent', () => {
         (subscription as any).items = {
             data: [{
                 price: {
+                    recurring: {
+                        interval: 'month',
+                        interval_count: 1
+                    },
                     unit_amount: 1200,
                     currency: 'usd'
                 }
@@ -1198,10 +1202,13 @@ describe('PricingComponent', () => {
         fixture.detectChanges();
 
         const content = fixture.nativeElement.textContent as string;
+        const title = fixture.nativeElement.querySelector('.manage-title') as HTMLElement | null;
         expect(content).toContain('Pro Membership');
         expect(content).toContain('Renews on');
-        expect(content).toContain('Manage Subscription');
+        expect(content).toContain('Manage & Change Plan');
         expect(content).toContain('Next renewal');
+        expect(title?.textContent).toContain('Pro Membership');
+        expect(title?.textContent).toContain('Monthly');
         expect(content).toContain('Amount unavailable');
     });
 
@@ -1230,6 +1237,40 @@ describe('PricingComponent', () => {
         expect(content).toContain('Ends on');
         expect(content).toContain('Ends at period end');
         expect(content).toContain('Amount unavailable');
+    });
+
+    it('should show yearly cadence in manage container when active subscription is yearly', async () => {
+        const paymentService = TestBed.inject(AppPaymentService);
+        const userService = TestBed.inject(AppUserService);
+        const subscription: StripeSubscription = {
+            id: 'sub_yearly',
+            status: 'active',
+            current_period_end: new Date('2026-12-31T00:00:00Z'),
+            current_period_start: new Date('2026-01-01T00:00:00Z'),
+            cancel_at_period_end: false
+        };
+        (subscription as any).items = [{
+            price: {
+                recurring: {
+                    interval: 'year',
+                    interval_count: 1
+                }
+            }
+        }];
+
+        vi.spyOn(userService, 'getSubscriptionRole').mockResolvedValue('basic');
+        vi.spyOn(paymentService, 'getUserSubscriptions').mockReturnValue(of([subscription]));
+
+        await component.ngOnInit();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        const content = fixture.nativeElement.textContent as string;
+        const title = fixture.nativeElement.querySelector('.manage-title') as HTMLElement | null;
+        expect(title?.textContent).toContain('Basic Membership');
+        expect(title?.textContent).toContain('Yearly');
+        expect(content).not.toContain('Current billing cadence:');
     });
 
     it('should render Calculating… while renewal callable is pending, then render exact amount', async () => {

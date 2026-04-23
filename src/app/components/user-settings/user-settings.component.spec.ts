@@ -116,6 +116,25 @@ describe('UserSettingsComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it('shows email in the profile header when available', () => {
+        component.user = { ...(component.user as any), email: 'runner@example.com' } as any;
+        component.ngOnChanges();
+        fixture.detectChanges();
+
+        const emailLine = fixture.nativeElement.querySelector('.user-email') as HTMLElement | null;
+        expect(emailLine).toBeTruthy();
+        expect(emailLine?.textContent).toContain('runner@example.com');
+    });
+
+    it('hides the profile header email when unavailable', () => {
+        component.user = { ...(component.user as any), email: null } as any;
+        component.ngOnChanges();
+        fixture.detectChanges();
+
+        const emailLine = fixture.nativeElement.querySelector('.user-email');
+        expect(emailLine).toBeNull();
+    });
+
     it('should map section id to tab index and back', () => {
         expect(component.sectionIdToIndex('profile')).toBe(0);
         expect(component.sectionIdToIndex('units')).toBe(5);
@@ -400,7 +419,7 @@ describe('UserSettingsComponent', () => {
 
     it('keeps save actions visible and disabled when form is invalid', () => {
         component.ngOnChanges();
-        component.userSettingsFormGroup.get('displayName').setValue('');
+        component.userSettingsFormGroup.get('dataTypesToUse').setValue([]);
         fixture.detectChanges();
 
         const desktopSaveButton = fixture.nativeElement.querySelector('.qs-form-actions-floating button') as HTMLButtonElement;
@@ -412,6 +431,14 @@ describe('UserSettingsComponent', () => {
         expect(mobileSaveButton.disabled).toBe(true);
     });
 
+    it('allows an empty display name', () => {
+        component.ngOnChanges();
+        component.userSettingsFormGroup.get('displayName').setValue('');
+
+        expect(component.userSettingsFormGroup.get('displayName').valid).toBe(true);
+        expect(component.userSettingsFormGroup.valid).toBe(true);
+    });
+
     it('should not open delete dialog when a deletion is already in progress', () => {
         const dialog = TestBed.inject(MatDialog) as { open: ReturnType<typeof vi.fn> };
         component.isDeleting = true;
@@ -421,20 +448,14 @@ describe('UserSettingsComponent', () => {
         expect(dialog.open).not.toHaveBeenCalled();
     });
 
-    it('shows validation helper immediately on load when profile is already invalid', () => {
-        component.userSettingsFormGroup.markAsPristine();
-        component.user = {
-            ...(component.user as any),
-            displayName: ''
-        } as any;
-
+    it('shows validation helper when required profile controls are invalid', () => {
         component.ngOnChanges();
+        component.userSettingsFormGroup.get('dataTypesToUse').setValue([]);
         expect(component.userSettingsFormGroup.invalid).toBe(true);
-        expect(component.userSettingsFormGroup.dirty).toBe(false);
         expect(component.shouldShowValidationDebug).toBe(true);
         expect(component.invalidControlDiagnostics).toEqual(expect.arrayContaining([
             expect.objectContaining({
-                control: 'displayName'
+                control: 'dataTypesToUse'
             })
         ]));
     });
@@ -444,8 +465,8 @@ describe('UserSettingsComponent', () => {
         const warnSpy = vi.spyOn(logger, 'warn');
 
         component.ngOnChanges();
-        component.userSettingsFormGroup.get('displayName').setValue('');
-        component.userSettingsFormGroup.get('displayName').markAsTouched();
+        component.userSettingsFormGroup.get('dataTypesToUse').setValue([]);
+        component.userSettingsFormGroup.get('dataTypesToUse').markAsTouched();
 
         await component.onSubmit(new Event('submit'));
 
@@ -455,7 +476,7 @@ describe('UserSettingsComponent', () => {
                 uid: 'test-uid',
                 invalidControls: expect.arrayContaining([
                     expect.objectContaining({
-                        control: 'displayName'
+                        control: 'dataTypesToUse'
                     })
                 ])
             })
@@ -529,14 +550,14 @@ describe('UserSettingsComponent', () => {
 
     it('exposes invalid control diagnostics with labels', () => {
         component.ngOnChanges();
-        component.userSettingsFormGroup.get('displayName').setValue('');
-        component.userSettingsFormGroup.get('displayName').markAsTouched();
+        component.userSettingsFormGroup.get('dataTypesToUse').setValue([]);
+        component.userSettingsFormGroup.get('dataTypesToUse').markAsTouched();
 
         const diagnostics = component.invalidControlDiagnostics;
-        const displayNameDiagnostic = diagnostics.find(entry => entry.control === 'displayName');
+        const dataTypeDiagnostic = diagnostics.find(entry => entry.control === 'dataTypesToUse');
 
-        expect(displayNameDiagnostic).toBeTruthy();
-        expect(displayNameDiagnostic?.label).toBe('Public Name');
-        expect(displayNameDiagnostic?.errors).toContain('required');
+        expect(dataTypeDiagnostic).toBeTruthy();
+        expect(dataTypeDiagnostic?.label).toBe('Visible Metrics');
+        expect(dataTypeDiagnostic?.errors).toContain('required');
     });
 });

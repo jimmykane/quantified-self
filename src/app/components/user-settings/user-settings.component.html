@@ -24,6 +24,9 @@
               }
             </div>
           </div>
+          @if (user.email) {
+          <p class="user-email">Email: {{ user.email }}</p>
+          }
           <p class="user-id">ID: {{ user.uid }}</p>
           @if (user.description) {
           <p class="user-bio">{{ user.description }}</p>
@@ -72,12 +75,9 @@
         </div>
         <div class="card-content">
           <mat-form-field appearance="outline">
-            <mat-label>Public Name</mat-label>
+            <mat-label>Name</mat-label>
             <input matInput formControlName="displayName">
-            <mat-hint>The name other users will see on your profile.</mat-hint>
-            @if (hasError('displayName')) {
-            <mat-error>Public name is required</mat-error>
-            }
+            <mat-hint>The name shown on your profile.</mat-hint>
           </mat-form-field>
 
           <mat-form-field appearance="outline">
