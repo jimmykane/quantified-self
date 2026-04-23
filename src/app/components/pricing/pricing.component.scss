@@ -437,6 +437,19 @@
     font-weight: 500;
     line-height: 1.1;
     letter-spacing: -0.35px;
+    display: flex;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .manage-subscription-container .manage-title-cadence {
+    font-size: 0.6em;
+    font-weight: 600;
+    opacity: 0.82;
+    letter-spacing: 0;
+    align-self: flex-start;
+    line-height: 1.05;
   }
 
   .manage-subscription-container .manage-subtitle {
@@ -613,7 +626,7 @@
       opacity: 0.75;
     }
 
-    .upgrade-hint {
+    .manage-switch-hint {
       margin: 0;
       font-size: 0.84rem;
       opacity: 0.8;
@@ -696,7 +709,7 @@
       grid-column: 1 / -1;
     }
 
-    .manage-subscription-container .manage-content .upgrade-hint {
+    .manage-subscription-container .manage-content .manage-switch-hint {
       text-align: left;
     }
 
@@ -822,7 +835,7 @@
       gap: 8px;
     }
 
-    .manage-subscription-container .manage-content .upgrade-hint {
+    .manage-subscription-container .manage-content .manage-switch-hint {
       max-width: none;
       text-align: initial;
     }

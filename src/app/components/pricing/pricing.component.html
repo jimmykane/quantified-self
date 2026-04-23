@@ -13,7 +13,12 @@
       <div class="manage-header">
         <div class="manage-heading">
           <div class="manage-kicker">Membership overview</div>
-          <div class="manage-title">{{ currentRole === 'pro' ? 'Pro Membership' : 'Basic Membership' }}</div>
+          <div class="manage-title">
+            {{ currentRole === 'pro' ? 'Pro Membership' : 'Basic Membership' }}
+            @if (subscriptionSummary$ | async; as summary) {
+            <span class="manage-title-cadence">{{ summary.billingCadenceDisplay }}</span>
+            }
+          </div>
           <div class="manage-subtitle">{{ currentRole === 'pro' ? 'Full access plan' : 'Essential access plan' }}</div>
         </div>
         @if (subscriptionSummary$ | async; as summary) {
@@ -77,26 +82,21 @@
 
         <div class="price-section manage-actions">
           <p class="manage-actions-help">Manage billing securely to update your payment method, invoices, and subscription status.</p>
+          <p class="manage-switch-hint">Switch between Basic and Pro, and change monthly or yearly billing from the billing portal.</p>
           @if (currentRole === 'basic') {
-          <p class="upgrade-hint">Unlock unlimited activities and watch auto-sync with Pro.</p>
-          <div class="manage-actions-buttons">
-            <button mat-stroked-button (click)="manageSubscription()" [disabled]="isLoading">
-              Manage Billing
-            </button>
-            <button mat-flat-button class="qs-mat-primary" (click)="upgradeToPro()" [disabled]="isLoading">
-              @if (isLoading) {
-              <mat-spinner diameter="20"></mat-spinner>
-              } @else {
-              Upgrade to Pro
-              }
-            </button>
-          </div>
+          <button mat-flat-button class="qs-mat-primary" (click)="changePlanAndBilling()" [disabled]="isLoading">
+            @if (isLoading) {
+            <mat-spinner diameter="20"></mat-spinner>
+            } @else {
+            Manage & Change Plan
+            }
+          </button>
           } @else {
           <button mat-flat-button class="qs-mat-primary" (click)="manageSubscription()" [disabled]="isLoading">
             @if (isLoading) {
             <mat-spinner diameter="20"></mat-spinner>
             } @else {
-            Manage Subscription
+            Manage & Change Plan
             }
           </button>
           }

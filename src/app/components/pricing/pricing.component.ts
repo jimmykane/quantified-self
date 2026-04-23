@@ -31,6 +31,7 @@ interface SubscriptionSummary {
     cancelAtPeriodEnd: boolean;
     currentPeriodEnd: Date | null;
     isTrialing: boolean;
+    billingCadenceDisplay: string;
     renewalAmountDisplay: string;
 }
 
@@ -499,18 +500,22 @@ export class PricingComponent implements OnInit, OnDestroy {
         }
     }
 
-    async upgradeToPro() {
-        if (this.currentRole !== 'basic') {
+    async changePlanAndBilling() {
+        if (this.currentRole !== 'basic' && this.currentRole !== 'pro') {
             await this.manageSubscription();
             return;
         }
 
+        const changeDescription = this.currentRole === 'basic'
+            ? 'switch from Basic to Pro, keep Basic, and choose monthly or yearly billing'
+            : 'switch between Pro and Basic and choose monthly or yearly billing';
+
         const confirmed = await firstValueFrom(
             this.dialog.open(ConfirmationDialogComponent, {
                 data: {
-                    title: 'Upgrade to Pro',
-                    message: 'You will be redirected to our secure billing portal to switch from Basic to Pro.',
-                    confirmText: 'Upgrade to Pro',
+                    title: 'Change Plan & Billing',
+                    message: `You will be redirected to our secure billing portal where you can ${changeDescription}.`,
+                    confirmText: 'Open Billing Portal',
                     cancelText: 'Cancel'
                 }
             }).afterClosed()
@@ -525,7 +530,7 @@ export class PricingComponent implements OnInit, OnDestroy {
         try {
             await this.paymentService.manageSubscriptions();
         } catch (error) {
-            this.logger.error('Error redirecting to upgrade flow:', error);
+            this.logger.error('Error redirecting to plan/billing change flow:', error);
             alert('Failed to open billing portal. Please try again.');
             this.setLoadingState(false);
         }
@@ -682,7 +687,8 @@ export class PricingComponent implements OnInit, OnDestroy {
             status: primary.sub.status,
             cancelAtPeriodEnd: !!primary.sub.cancel_at_period_end,
             currentPeriodEnd: primary.periodEnd,
-            isTrialing: primary.sub.status === 'trialing'
+            isTrialing: primary.sub.status === 'trialing',
+            billingCadenceDisplay: this.getSubscriptionBillingCadenceDisplay(primary.sub)
         };
     }
 
@@ -733,6 +739,118 @@ export class PricingComponent implements OnInit, OnDestroy {
         });
 
         return formatter.format(amountMajor);
+    }
+
+    private getSubscriptionBillingCadenceDisplay(subscription: StripeSubscription): string {
+        const cadence = this.resolveSubscriptionCadence(subscription);
+        if (!cadence) {
+            return 'Not available';
+        }
+
+        if (cadence.intervalCount === 1) {
+            if (cadence.interval === 'month') {
+                return 'Monthly';
+            }
+            if (cadence.interval === 'year') {
+                return 'Yearly';
+            }
+            if (cadence.interval === 'week') {
+                return 'Weekly';
+            }
+            return 'Daily';
+        }
+
+        return `Every ${cadence.intervalCount} ${this.getIntervalUnit(cadence.interval, cadence.intervalCount)}`;
+    }
+
+    private resolveSubscriptionCadence(subscription: StripeSubscription): { interval: 'day' | 'week' | 'month' | 'year'; intervalCount: number } | null {
+        const topLevelPriceCadence = this.extractCadenceFromPriceLike((subscription as { price?: unknown }).price);
+        if (topLevelPriceCadence) {
+            return topLevelPriceCadence;
+        }
+
+        const topLevelPrices = (subscription as { prices?: unknown }).prices;
+        if (Array.isArray(topLevelPrices)) {
+            for (const candidatePrice of topLevelPrices) {
+                const cadence = this.extractCadenceFromPriceLike(candidatePrice);
+                if (cadence) {
+                    return cadence;
+                }
+            }
+        }
+
+        const subscriptionItems = this.getSubscriptionItems(subscription);
+        for (const item of subscriptionItems) {
+            if (!item || typeof item !== 'object') {
+                continue;
+            }
+
+            const itemObject = item as { price?: unknown; plan?: unknown };
+            const priceCadence = this.extractCadenceFromPriceLike(itemObject.price);
+            if (priceCadence) {
+                return priceCadence;
+            }
+
+            const legacyPlanCadence = this.extractCadenceFromPriceLike(itemObject.plan);
+            if (legacyPlanCadence) {
+                return legacyPlanCadence;
+            }
+        }
+
+        return null;
+    }
+
+    private getSubscriptionItems(subscription: StripeSubscription): unknown[] {
+        const rawItems = (subscription as { items?: unknown }).items;
+        if (!rawItems) {
+            return [];
+        }
+
+        if (Array.isArray(rawItems)) {
+            return rawItems;
+        }
+
+        if (typeof rawItems === 'object') {
+            const listItems = (rawItems as { data?: unknown }).data;
+            if (Array.isArray(listItems)) {
+                return listItems;
+            }
+        }
+
+        return [];
+    }
+
+    private extractCadenceFromPriceLike(priceLike: unknown): { interval: 'day' | 'week' | 'month' | 'year'; intervalCount: number } | null {
+        if (!priceLike || typeof priceLike !== 'object') {
+            return null;
+        }
+
+        const recurringSource = (priceLike as { recurring?: { interval?: unknown; interval_count?: unknown } }).recurring;
+        const rawInterval = recurringSource?.interval ?? (priceLike as { interval?: unknown }).interval;
+        const interval = this.normalizeRecurringInterval(typeof rawInterval === 'string' ? rawInterval : null);
+        if (!interval) {
+            return null;
+        }
+
+        const rawIntervalCount = recurringSource?.interval_count ?? (priceLike as { interval_count?: unknown }).interval_count ?? 1;
+        const intervalCount = this.normalizePositiveInteger(rawIntervalCount);
+        if (!intervalCount) {
+            return null;
+        }
+
+        return { interval, intervalCount };
+    }
+
+    private normalizePositiveInteger(value: unknown): number | null {
+        if (typeof value === 'number') {
+            return Number.isInteger(value) && value > 0 ? value : null;
+        }
+
+        if (typeof value === 'string' && /^[1-9]\d*$/.test(value)) {
+            return Number.parseInt(value, 10);
+        }
+
+        return null;
     }
 
     private normalizeToDate(value: unknown): Date | null {
