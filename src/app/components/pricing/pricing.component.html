@@ -173,7 +173,7 @@
             } @else {
             {{ (price.unit_amount || 0) / 100 | currency: price.currency.toUpperCase() : 'symbol' : ((price.unit_amount || 0) % 100 === 0 ? '1.0-0' : '1.2-2') }}
             }
-            <span *ngIf="price.recurring" class="interval">/ {{ price.recurring?.interval }}</span>
+            <span *ngIf="price.type === 'recurring'" class="interval">/ {{ getPriceIntervalLabel(price) }}</span>
           </h3>
 
           @if (yearlySavingsLabel) {
@@ -228,7 +228,7 @@
             @if (loadingPriceId === price.id) {
             <mat-spinner diameter="20"></mat-spinner>
             } @else {
-            {{ price.recurring ? (price.recurring?.interval === 'year' ? 'Choose Yearly' : 'Choose Monthly') : 'Buy Now' }}
+            {{ getSubscribeButtonLabel(price) }}
             }
           </button>
           @if (shouldShowYearlySwitchHint(product, price)) {

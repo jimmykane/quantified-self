@@ -219,6 +219,47 @@ describe('PricingComponent', () => {
         expect(component.getYearlySavingsLabel(product, yearlyPrice)).toBe('Save 17% vs monthly');
     });
 
+    it('should compute yearly savings using interval_count-aware annualization for multi-month prices', () => {
+        const product: StripeProduct = {
+            id: 'prod_basic_multi_month',
+            active: true,
+            name: 'Basic',
+            description: 'Basic plan',
+            role: 'basic',
+            images: [],
+            metadata: { role: 'basic' },
+            prices: [
+                {
+                    id: 'price_basic_every_3_months',
+                    active: true,
+                    currency: 'eur',
+                    unit_amount: 900,
+                    description: 'Every 3 months',
+                    type: 'recurring',
+                    interval: 'month',
+                    interval_count: 3,
+                    trial_period_days: null,
+                    recurring: { interval: 'month', interval_count: 3 }
+                },
+                {
+                    id: 'price_basic_yearly',
+                    active: true,
+                    currency: 'eur',
+                    unit_amount: 3000,
+                    description: 'Yearly basic',
+                    type: 'recurring',
+                    interval: 'year',
+                    interval_count: 1,
+                    trial_period_days: null,
+                    recurring: { interval: 'year', interval_count: 1 }
+                }
+            ]
+        };
+        const yearlyPrice = product.prices?.find((price) => price.id === 'price_basic_yearly') as StripePrice;
+
+        expect(component.getYearlySavingsLabel(product, yearlyPrice)).toBe('Save 17% vs monthly');
+    });
+
     it('should show yearly switch hint only for monthly paid prices when a yearly option exists', () => {
         const product: StripeProduct = {
             id: 'prod_basic',
@@ -260,6 +301,38 @@ describe('PricingComponent', () => {
 
         expect(component.shouldShowYearlySwitchHint(product, monthlyPrice)).toBe(true);
         expect(component.shouldShowYearlySwitchHint(product, yearlyPrice)).toBe(false);
+    });
+
+    it('should label paid recurring CTA by actual cadence and interval count', () => {
+        const quarterlyPrice: StripePrice = {
+            id: 'price_basic_quarterly',
+            active: true,
+            currency: 'eur',
+            unit_amount: 900,
+            description: 'Quarterly basic',
+            type: 'recurring',
+            interval: 'month',
+            interval_count: 3,
+            trial_period_days: null,
+            recurring: { interval: 'month', interval_count: 3 }
+        };
+        const biennialPrice: StripePrice = {
+            id: 'price_basic_biennial',
+            active: true,
+            currency: 'eur',
+            unit_amount: 3000,
+            description: 'Biennial basic',
+            type: 'recurring',
+            interval: 'year',
+            interval_count: 2,
+            trial_period_days: null,
+            recurring: { interval: 'year', interval_count: 2 }
+        };
+
+        expect(component.getSubscribeButtonLabel(quarterlyPrice)).toBe('Choose Every 3 Months');
+        expect(component.getPriceIntervalLabel(quarterlyPrice)).toBe('3 months');
+        expect(component.getSubscribeButtonLabel(biennialPrice)).toBe('Choose Every 2 Years');
+        expect(component.getPriceIntervalLabel(biennialPrice)).toBe('2 years');
     });
 
     it('should render real yearly plans with distinct monthly/yearly CTAs and savings label', async () => {
@@ -316,6 +389,48 @@ describe('PricingComponent', () => {
         expect(chooseYearlyButtons.length).toBe(1);
         expect(fixture.nativeElement.textContent as string).toContain('Save 17% vs monthly');
         expect(fixture.nativeElement.textContent as string).toContain('Switch to yearly anytime.');
+    });
+
+    it('should render cadence-aware CTA text for multi-month recurring prices', async () => {
+        const paymentService = TestBed.inject(AppPaymentService);
+        const userService = TestBed.inject(AppUserService);
+        const recurringPaidProduct: StripeProduct = {
+            id: 'prod_basic',
+            active: true,
+            name: 'Basic',
+            description: 'Basic plan',
+            role: 'basic',
+            images: [],
+            metadata: { role: 'basic' },
+            prices: [
+                {
+                    id: 'price_basic_quarterly',
+                    active: true,
+                    currency: 'eur',
+                    unit_amount: 900,
+                    description: 'Quarterly basic',
+                    type: 'recurring',
+                    interval: 'month',
+                    interval_count: 3,
+                    trial_period_days: null,
+                    recurring: { interval: 'month', interval_count: 3 }
+                }
+            ]
+        };
+
+        vi.spyOn(userService, 'getSubscriptionRole').mockResolvedValue('free');
+        vi.spyOn(paymentService, 'getProducts').mockReturnValue(of([recurringPaidProduct]));
+        vi.spyOn(paymentService, 'hasPaidSubscriptionHistory').mockResolvedValue(false);
+
+        await component.ngOnInit();
+        fixture.detectChanges();
+
+        const allButtons = Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[];
+        const cadenceButtons = allButtons.filter((button) => button.textContent?.includes('Choose Every 3 Months'));
+
+        expect(cadenceButtons.length).toBe(1);
+        expect(fixture.nativeElement.textContent as string).toContain('/ 3 months');
+        expect(fixture.nativeElement.textContent as string).not.toContain('Choose Monthly');
     });
 
     it('should show downgrade warning for pro users', async () => {
