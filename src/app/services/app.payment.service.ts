@@ -186,15 +186,96 @@ export class AppPaymentService {
             }
         }
 
-        this.logger.log('getProducts virtual output:', virtualProducts);
+        const mergedRoleProducts = this.mergeRecurringProductsByRole(virtualProducts);
+        this.logger.log('getProducts virtual output:', mergedRoleProducts);
 
         // Sort: Basic first, then Pro
         const roleOrder: Record<string, number> = { 'basic': 1, 'pro': 2 };
-        return virtualProducts.sort((a, b) => {
+        return mergedRoleProducts.sort((a, b) => {
             const rA = (a.role || a.metadata?.role || '') as string;
             const rB = (b.role || b.metadata?.role || '') as string;
             return (roleOrder[rA] || 99) - (roleOrder[rB] || 99);
         });
+    }
+
+    private mergeRecurringProductsByRole(products: StripeProduct[]): StripeProduct[] {
+        const mergedByRole = new Map<'basic' | 'pro', StripeProduct>();
+        const passthroughProducts: StripeProduct[] = [];
+
+        for (const product of products) {
+            const normalizedRole = this.normalizePlanRole(product.role ?? product.metadata?.role ?? null);
+            if (!normalizedRole) {
+                passthroughProducts.push(product);
+                continue;
+            }
+
+            const existingProduct = mergedByRole.get(normalizedRole);
+            if (!existingProduct) {
+                mergedByRole.set(normalizedRole, {
+                    ...product,
+                    role: normalizedRole,
+                    metadata: { ...product.metadata, role: normalizedRole },
+                    prices: this.sortRecurringPrices(product.prices ?? [])
+                });
+                continue;
+            }
+
+            existingProduct.prices = this.sortRecurringPrices([
+                ...(existingProduct.prices ?? []),
+                ...(product.prices ?? [])
+            ]);
+        }
+
+        return [...mergedByRole.values(), ...passthroughProducts];
+    }
+
+    private normalizePlanRole(role: string | null | undefined): 'basic' | 'pro' | null {
+        if (typeof role !== 'string') {
+            return null;
+        }
+
+        const normalizedRole = role.toLowerCase();
+        if (normalizedRole === 'basic' || normalizedRole === 'pro') {
+            return normalizedRole;
+        }
+
+        return null;
+    }
+
+    private sortRecurringPrices(prices: StripePrice[]): StripePrice[] {
+        const seenPriceIds = new Set<string>();
+        const recurringIntervalOrder: Record<string, number> = { month: 1, year: 2 };
+
+        return prices
+            .filter((price) => {
+                if (!price?.id || seenPriceIds.has(price.id)) {
+                    return false;
+                }
+                seenPriceIds.add(price.id);
+                return true;
+            })
+            .sort((leftPrice, rightPrice) => {
+                const leftInterval = leftPrice.recurring?.interval ?? leftPrice.interval ?? '';
+                const rightInterval = rightPrice.recurring?.interval ?? rightPrice.interval ?? '';
+                const intervalDelta = (recurringIntervalOrder[leftInterval] ?? 99) - (recurringIntervalOrder[rightInterval] ?? 99);
+                if (intervalDelta !== 0) {
+                    return intervalDelta;
+                }
+
+                const leftIntervalCount = leftPrice.recurring?.interval_count ?? leftPrice.interval_count ?? 1;
+                const rightIntervalCount = rightPrice.recurring?.interval_count ?? rightPrice.interval_count ?? 1;
+                if (leftIntervalCount !== rightIntervalCount) {
+                    return leftIntervalCount - rightIntervalCount;
+                }
+
+                const leftAmount = typeof leftPrice.unit_amount === 'number' ? leftPrice.unit_amount : Number.MAX_SAFE_INTEGER;
+                const rightAmount = typeof rightPrice.unit_amount === 'number' ? rightPrice.unit_amount : Number.MAX_SAFE_INTEGER;
+                if (leftAmount !== rightAmount) {
+                    return leftAmount - rightAmount;
+                }
+
+                return leftPrice.id.localeCompare(rightPrice.id);
+            });
     }
 
     private isPaidRecurringPrice(price: StripePrice): boolean {

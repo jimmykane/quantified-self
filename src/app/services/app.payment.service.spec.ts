@@ -596,5 +596,63 @@ describe('AppPaymentService', () => {
                 expect.objectContaining({ id: 'price_monthly_only' })
             ]);
         });
+
+        it('should merge same-role recurring prices across separate Stripe products into one pricing card', () => {
+            const result = (service as any).transformProductsForPricing([
+                {
+                    id: 'prod_basic_monthly',
+                    metadata: { role: 'basic' },
+                    prices: [
+                        {
+                            id: 'price_basic_monthly',
+                            type: 'recurring',
+                            interval: 'month',
+                            interval_count: 1,
+                            unit_amount: 99,
+                            metadata: {}
+                        }
+                    ]
+                },
+                {
+                    id: 'prod_basic_yearly',
+                    metadata: { role: 'basic' },
+                    prices: [
+                        {
+                            id: 'price_basic_yearly',
+                            type: 'recurring',
+                            interval: 'year',
+                            interval_count: 1,
+                            unit_amount: 1999,
+                            metadata: {}
+                        }
+                    ]
+                },
+                {
+                    id: 'prod_pro_monthly',
+                    metadata: { role: 'pro' },
+                    prices: [
+                        {
+                            id: 'price_pro_monthly',
+                            type: 'recurring',
+                            interval: 'month',
+                            interval_count: 1,
+                            unit_amount: 399,
+                            metadata: {}
+                        }
+                    ]
+                }
+            ]);
+
+            expect(result).toHaveLength(2);
+            expect(result[0].role).toBe('basic');
+            expect(result[0].prices).toEqual([
+                expect.objectContaining({ id: 'price_basic_monthly' }),
+                expect.objectContaining({ id: 'price_basic_yearly' })
+            ]);
+            expect(result[1].role).toBe('pro');
+            expect(result[1].prices).toEqual([
+                expect.objectContaining({ id: 'price_pro_monthly' })
+            ]);
+        });
     });
 });
