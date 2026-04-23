@@ -99,7 +99,7 @@ export class PricingComponent implements OnInit, OnDestroy {
         };
 
         this.products$ = this.paymentService.getProducts().pipe(
-            map(products => [freeProduct, ...products])
+            map((products) => [freeProduct, ...products])
         );
 
         // Initial load
@@ -160,6 +160,180 @@ export class PricingComponent implements OnInit, OnDestroy {
     private setLoadingState(isLoading: boolean): void {
         this.isLoading = isLoading;
         this.loadingStateChange.emit(isLoading);
+    }
+
+    private isYearlyRecurringPrice(price: StripePrice): boolean {
+        const cadence = this.getRecurringCadence(price);
+        return cadence?.interval === 'year';
+    }
+
+    getSubscribeButtonLabel(price: StripePrice): string {
+        if (price.type !== 'recurring') {
+            return 'Buy Now';
+        }
+
+        const cadence = this.getRecurringCadence(price);
+        if (!cadence) {
+            return 'Choose Plan';
+        }
+
+        if (cadence.intervalCount === 1) {
+            if (cadence.interval === 'year') {
+                return 'Choose Yearly';
+            }
+            if (cadence.interval === 'month') {
+                return 'Choose Monthly';
+            }
+            if (cadence.interval === 'week') {
+                return 'Choose Weekly';
+            }
+            return 'Choose Daily';
+        }
+
+        const intervalUnit = this.getIntervalUnit(cadence.interval, cadence.intervalCount);
+        return `Choose Every ${cadence.intervalCount} ${this.capitalize(intervalUnit)}`;
+    }
+
+    getPriceIntervalLabel(price: StripePrice): string {
+        const recurringInterval = (price.recurring?.interval as string | undefined) ?? null;
+        if (recurringInterval === 'forever') {
+            return 'forever';
+        }
+
+        const cadence = this.getRecurringCadence(price);
+        if (!cadence) {
+            return 'billing period';
+        }
+
+        if (cadence.intervalCount === 1) {
+            return cadence.interval;
+        }
+
+        return `${cadence.intervalCount} ${this.getIntervalUnit(cadence.interval, cadence.intervalCount)}`;
+    }
+
+    getYearlySavingsLabel(product: StripeProduct, price: StripePrice): string | null {
+        if (!this.isYearlyRecurringPrice(price)) {
+            return null;
+        }
+
+        const yearlyAnnualizedAmount = this.getAnnualizedAmount(price);
+        if (yearlyAnnualizedAmount === null) {
+            return null;
+        }
+
+        const monthlyCandidates = (product.prices ?? []).filter((candidatePrice) => {
+            if (candidatePrice.id === price.id || candidatePrice.type !== 'recurring') {
+                return false;
+            }
+
+            const candidateInterval = candidatePrice.recurring?.interval ?? candidatePrice.interval;
+            if (candidateInterval !== 'month') {
+                return false;
+            }
+
+            if (candidatePrice.currency?.toLowerCase() !== price.currency?.toLowerCase()) {
+                return false;
+            }
+
+            return this.getAnnualizedAmount(candidatePrice) !== null;
+        });
+        const monthlyPrice = monthlyCandidates.find((candidatePrice) => this.getRecurringIntervalCount(candidatePrice) === 1)
+            ?? monthlyCandidates[0];
+        const monthlyAnnualizedAmount = monthlyPrice ? this.getAnnualizedAmount(monthlyPrice) : null;
+
+        if (monthlyAnnualizedAmount === null) {
+            return null;
+        }
+
+        const savingsMinor = monthlyAnnualizedAmount - yearlyAnnualizedAmount;
+        if (savingsMinor <= 0) {
+            return null;
+        }
+
+        const savingsPercent = Math.round((savingsMinor / monthlyAnnualizedAmount) * 100);
+        if (savingsPercent <= 0) {
+            return null;
+        }
+
+        return `Save ${savingsPercent}% vs monthly`;
+    }
+
+    private getAnnualizedAmount(price: StripePrice): number | null {
+        if (typeof price.unit_amount !== 'number' || price.unit_amount <= 0) {
+            return null;
+        }
+
+        const cadence = this.getRecurringCadence(price);
+        if (!cadence) {
+            return null;
+        }
+
+        if (cadence.interval === 'month') {
+            return price.unit_amount * (12 / cadence.intervalCount);
+        }
+
+        if (cadence.interval === 'year') {
+            return price.unit_amount / cadence.intervalCount;
+        }
+
+        return null;
+    }
+
+    private getRecurringCadence(price: StripePrice): { interval: 'day' | 'week' | 'month' | 'year'; intervalCount: number } | null {
+        if (price.type !== 'recurring') {
+            return null;
+        }
+
+        const interval = this.normalizeRecurringInterval(price.recurring?.interval) ?? this.normalizeRecurringInterval(price.interval);
+        const intervalCount = this.getRecurringIntervalCount(price);
+        if (!interval || !intervalCount) {
+            return null;
+        }
+
+        return { interval, intervalCount };
+    }
+
+    private getRecurringIntervalCount(price: StripePrice): number | null {
+        const intervalCount = price.recurring?.interval_count ?? price.interval_count ?? 1;
+        if (!Number.isInteger(intervalCount) || intervalCount <= 0) {
+            return null;
+        }
+        return intervalCount;
+    }
+
+    private getIntervalUnit(interval: 'day' | 'week' | 'month' | 'year', intervalCount: number): string {
+        const plural = intervalCount === 1 ? '' : 's';
+        return `${interval}${plural}`;
+    }
+
+    private capitalize(value: string): string {
+        return value.length > 0 ? value[0].toUpperCase() + value.slice(1) : value;
+    }
+
+    private normalizeRecurringInterval(interval: string | null | undefined): 'day' | 'week' | 'month' | 'year' | null {
+        if (interval === 'day' || interval === 'week' || interval === 'month' || interval === 'year') {
+            return interval;
+        }
+        return null;
+    }
+
+    shouldShowYearlySwitchHint(product: StripeProduct, price: StripePrice): boolean {
+        const role = product.metadata?.['role'];
+        if (role !== 'basic' && role !== 'pro') {
+            return false;
+        }
+
+        if (price.type !== 'recurring') {
+            return false;
+        }
+
+        const cadence = this.getRecurringCadence(price);
+        if (!cadence || cadence.interval !== 'month') {
+            return false;
+        }
+
+        return (product.prices ?? []).some((candidatePrice) => this.isYearlyRecurringPrice(candidatePrice));
     }
 
     shouldShowFirstMonthFreeCopy(product: StripeProduct, price: StripePrice): boolean {

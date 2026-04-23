@@ -35,6 +35,7 @@ import { EventIntensityZonesComponent } from '../components/event/intensity-zone
 import { MenuRadioListComponent } from '../components/shared/menu-radio-list/menu-radio-list.component';
 import { TypedPromptRotatorComponent } from '../components/shared/typed-prompt-rotator/typed-prompt-rotator.component';
 import { HapticTapDirective } from '../directives/haptic-tap.directive';
+import { TooltipTapDirective } from '../directives/tooltip-tap.directive';
 
 @NgModule({
     imports: [
@@ -74,6 +75,7 @@ import { HapticTapDirective } from '../directives/haptic-tap.directive';
         MenuRadioListComponent,
         TypedPromptRotatorComponent,
         HapticTapDirective,
+        TooltipTapDirective,
     ],
     providers: [],
     exports: [
@@ -109,6 +111,7 @@ import { HapticTapDirective } from '../directives/haptic-tap.directive';
         MenuRadioListComponent,
         TypedPromptRotatorComponent,
         HapticTapDirective,
+        TooltipTapDirective,
     ]
 })
 
