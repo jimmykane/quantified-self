@@ -4,4 +4,4 @@ export const SUBSCRIPTION_ROLE_BASIC = 'basic';
 export const SUBSCRIPTION_ROLE_PRO = 'pro';
 export const SUBSCRIPTION_INTERVAL_MONTH = 'month';
 export const SUBSCRIPTION_INTERVAL_YEAR = 'year';
-export const SUBSCRIPTION_INTERVAL_FIELD_PATH = 'items.0.price.recurring.interval';
+export const SUBSCRIPTION_INTERVAL_FIELD_PATH = 'items.`0`.plan.interval';

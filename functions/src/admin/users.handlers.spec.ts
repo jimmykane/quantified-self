@@ -766,6 +766,9 @@ describe('listUsers Cloud Function', () => {
             mockCollection.mockReturnValue({
                 count: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ data: () => ({ count: 100 }) }) }),
                 where: vi.fn().mockReturnThis(),
+                select: vi.fn().mockReturnValue({
+                    get: vi.fn().mockResolvedValue({ docs: [] })
+                }),
                 get: vi.fn().mockResolvedValue({ empty: true })
             });
 
@@ -908,4 +911,3 @@ describe('listUsers Cloud Function', () => {
         await expect((stopImpersonation as any)(request)).rejects.toThrow('token gen failed');
     });
 });
-

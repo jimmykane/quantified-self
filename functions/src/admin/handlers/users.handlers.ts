@@ -8,13 +8,42 @@ import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../../coros/constants';
 import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
 import {
     ACTIVE_SUBSCRIPTION_STATUSES,
-    SUBSCRIPTION_INTERVAL_FIELD_PATH,
     SUBSCRIPTION_INTERVAL_MONTH,
     SUBSCRIPTION_INTERVAL_YEAR
 } from '../shared/subscription.constants';
 import { clampListUsersPageSize } from '../shared/date.utils';
 import { enrichUsers } from '../shared/user-enrichment';
 import { BasicUser, ListUsersRequest, ListUsersResponse, UserCountResponse } from '../shared/types';
+
+const resolveSubscriptionInterval = (subscription: Record<string, unknown>): string | null => {
+    const items = Array.isArray(subscription.items) ? subscription.items : [];
+    const firstItem = items.length > 0 && typeof items[0] === 'object' && items[0] !== null
+        ? items[0] as Record<string, unknown>
+        : null;
+
+    if (!firstItem) {
+        return null;
+    }
+
+    const plan = typeof firstItem.plan === 'object' && firstItem.plan !== null
+        ? firstItem.plan as Record<string, unknown>
+        : null;
+    if (typeof plan?.interval === 'string') {
+        return plan.interval;
+    }
+
+    const price = typeof firstItem.price === 'object' && firstItem.price !== null
+        ? firstItem.price as Record<string, unknown>
+        : null;
+    const recurring = typeof price?.recurring === 'object' && price.recurring !== null
+        ? price.recurring as Record<string, unknown>
+        : null;
+    if (typeof recurring?.interval === 'string') {
+        return recurring.interval;
+    }
+
+    return null;
+};
 
 /**
  * Lists all users with pagination, search, and sorting support.
@@ -216,7 +245,7 @@ export const getUserCount = onAdminCall<void, UserCountResponse>({
 
         // 1. Get stats from Firestore (subscriptions)
         // Parallel efficient count queries
-        const [totalSnapshot, proSnapshot, basicSnapshot, monthlyPaidSnapshot, yearlyPaidSnapshot, onboardedSnapshot] = await Promise.all([
+        const [totalSnapshot, proSnapshot, basicSnapshot, onboardedSnapshot] = await Promise.all([
             db.collection('users').count().get(),
             db.collectionGroup('subscriptions')
                 .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
@@ -226,14 +255,6 @@ export const getUserCount = onAdminCall<void, UserCountResponse>({
                 .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
                 .where('role', '==', 'basic')
                 .count().get(),
-            db.collectionGroup('subscriptions')
-                .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
-                .where(SUBSCRIPTION_INTERVAL_FIELD_PATH, '==', SUBSCRIPTION_INTERVAL_MONTH)
-                .count().get(),
-            db.collectionGroup('subscriptions')
-                .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
-                .where(SUBSCRIPTION_INTERVAL_FIELD_PATH, '==', SUBSCRIPTION_INTERVAL_YEAR)
-                .count().get(),
             db.collection('users')
                 .where('onboardingCompleted', '==', true)
                 .count().get()
@@ -242,12 +263,31 @@ export const getUserCount = onAdminCall<void, UserCountResponse>({
         const total = totalSnapshot.data().count;
         const pro = proSnapshot.data().count;
         const basic = basicSnapshot.data().count;
-        const monthlyPaid = monthlyPaidSnapshot.data().count;
-        const yearlyPaid = yearlyPaidSnapshot.data().count;
         const activePaid = pro + basic;
-        const unknownCadencePaid = Math.max(0, activePaid - monthlyPaid - yearlyPaid);
         const onboardingCompleted = onboardedSnapshot.data().count;
         const free = Math.max(0, total - activePaid);
+
+        let monthlyPaid = 0;
+        let yearlyPaid = 0;
+
+        if (activePaid > 0) {
+            const activeSubscriptionSnapshot = await db.collectionGroup('subscriptions')
+                .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
+                .select('items')
+                .get();
+
+            activeSubscriptionSnapshot.docs.forEach((doc) => {
+                const subscription = doc.data() as Record<string, unknown>;
+                const interval = resolveSubscriptionInterval(subscription);
+                if (interval === SUBSCRIPTION_INTERVAL_MONTH) {
+                    monthlyPaid += 1;
+                } else if (interval === SUBSCRIPTION_INTERVAL_YEAR) {
+                    yearlyPaid += 1;
+                }
+            });
+        }
+
+        const unknownCadencePaid = Math.max(0, activePaid - monthlyPaid - yearlyPaid);
 
         if (unknownCadencePaid > 0) {
             logger.warn('Detected active paid subscriptions without supported monthly/yearly cadence.', {

@@ -23,19 +23,26 @@ describe('getUserCount Cloud Function', () => {
         });
         const mockCountGet = vi.fn()
             .mockResolvedValueOnce({ data: () => ({ count: 50 }) }) // pro
-            .mockResolvedValueOnce({ data: () => ({ count: 50 }) }) // basic
-            .mockResolvedValueOnce({ data: () => ({ count: 45 }) }) // monthly
-            .mockResolvedValueOnce({ data: () => ({ count: 5 }) }); // yearly
+            .mockResolvedValueOnce({ data: () => ({ count: 50 }) }); // basic
         const mockOnboardingCount = vi.fn().mockResolvedValue({
             data: () => ({ count: 40 })
+        });
+        const mockActiveSubscriptionsGet = vi.fn().mockResolvedValue({
+            docs: [
+                ...Array.from({ length: 45 }, () => ({
+                    data: () => ({ items: [{ plan: { interval: 'month' } }] })
+                })),
+                ...Array.from({ length: 5 }, () => ({
+                    data: () => ({ items: [{ plan: { interval: 'year' } }] })
+                }))
+            ]
         });
 
         // Mock implementation for chainable queries
         const mockQuery = {
             where: vi.fn().mockReturnThis(),
-            count: vi.fn().mockReturnValue({
-                get: mockCountGet
-            })
+            count: vi.fn().mockReturnValue({ get: mockCountGet }),
+            select: vi.fn().mockReturnValue({ get: mockActiveSubscriptionsGet })
         };
 
         mockCollection.mockImplementation((name) => {
