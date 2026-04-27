@@ -22,6 +22,7 @@ import { User, ACTIVITIES_EXCLUDED_FROM_ASCENT, ACTIVITIES_EXCLUDED_FROM_DESCENT
 describe('UserSettingsComponent', () => {
     let component: UserSettingsComponent;
     let fixture: ComponentFixture<UserSettingsComponent>;
+    let mockActivatedRoute: any;
 
     const mockUser: Partial<User> = {
         uid: 'test-uid',
@@ -80,13 +81,22 @@ describe('UserSettingsComponent', () => {
     };
 
     beforeEach(async () => {
+        mockActivatedRoute = {
+            snapshot: {
+                data: {},
+                queryParams: {},
+                queryParamMap: {
+                    get: vi.fn(() => null)
+                }
+            }
+        };
+
         await TestBed.configureTestingModule({
             declarations: [UserSettingsComponent],
             imports: [ReactiveFormsModule, MaterialModule, NoopAnimationsModule],
             providers: [
                 { provide: AppAuthService, useValue: { user$: of(null) } },
-                { provide: ActivatedRoute, useValue: { snapshot: { data: {} } } },
-                { provide: ActivatedRoute, useValue: { snapshot: { data: {} } } },
+                { provide: ActivatedRoute, useValue: mockActivatedRoute },
                 { provide: AppUserService, useValue: { isBranded: vi.fn().mockResolvedValue(false), updateUserProperties: vi.fn(), isAdmin: vi.fn().mockResolvedValue(false) } },
                 { provide: Router, useValue: {} },
                 { provide: MatSnackBar, useValue: { open: vi.fn() } },
@@ -148,6 +158,16 @@ describe('UserSettingsComponent', () => {
         component.onSelectedSectionIndexChange(3);
         expect(component.activeSection).toBe('map');
         expect(component.selectedSectionIndex).toBe(3);
+    });
+
+    it('should open the units tab from the section query param', () => {
+        mockActivatedRoute.snapshot.queryParamMap.get.mockReturnValue('units');
+        component.activeSection = 'profile';
+
+        component.ngOnInit();
+
+        expect(component.activeSection).toBe('units');
+        expect(component.selectedSectionIndex).toBe(5);
     });
 
     it('should enable sticky tabs config for shared tabs wrapper', () => {
@@ -284,6 +304,45 @@ describe('UserSettingsComponent', () => {
                 })
             })
         );
+    });
+
+    it('should complete unit setup when saving a changed unit preference', async () => {
+        const userService = TestBed.inject(AppUserService);
+        const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
+
+        (component.user.settings.appSettings as any).unitSetupCompleted = false;
+        component.ngOnChanges();
+        component.userSettingsFormGroup.get('distanceUnitsToUse').setValue(DistanceUnits.Miles);
+
+        await component.onSubmit(new Event('submit'));
+
+        expect(updateUserPropertiesSpy).toHaveBeenCalledWith(
+            expect.objectContaining({ uid: 'test-uid' }),
+            expect.objectContaining({
+                settings: expect.objectContaining({
+                    appSettings: expect.objectContaining({
+                        unitSetupCompleted: true
+                    }),
+                    unitSettings: expect.objectContaining({
+                        distanceUnits: DistanceUnits.Miles
+                    })
+                })
+            })
+        );
+    });
+
+    it('should not complete unit setup when saving without unit changes', async () => {
+        const userService = TestBed.inject(AppUserService);
+        const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
+
+        (component.user.settings.appSettings as any).unitSetupCompleted = false;
+        component.ngOnChanges();
+        component.userSettingsFormGroup.get('displayName').setValue('Same Units');
+
+        await component.onSubmit(new Event('submit'));
+
+        const payload = updateUserPropertiesSpy.mock.calls[0][1];
+        expect(payload.settings.appSettings.unitSetupCompleted).toBe(false);
     });
 
     it('should expose kilometers and miles labels for distance unit choices', () => {

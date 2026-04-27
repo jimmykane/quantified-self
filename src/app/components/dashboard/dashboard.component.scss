@@ -41,6 +41,102 @@ app-event-search {
     // margin-top: 16px;
 }
 
+.unit-setup-prompt {
+    margin: 1rem 0;
+    border-color: var(--mat-sys-outline-variant);
+    background: var(--mat-sys-surface-container-low);
+}
+
+.unit-setup-prompt__content {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 1rem;
+    padding: 1rem 1rem 0.75rem;
+    align-items: flex-start;
+}
+
+.unit-setup-prompt__icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    color: var(--mat-sys-primary);
+    background: var(--mat-sys-primary-container);
+}
+
+.unit-setup-prompt__copy {
+    min-width: 0;
+}
+
+.unit-setup-prompt__copy h2 {
+    margin: 0;
+    font-size: 1.125rem;
+    line-height: 1.3;
+    font-weight: 700;
+    color: var(--mat-sys-on-surface);
+}
+
+.unit-setup-prompt__copy p {
+    margin: 0.25rem 0 0.875rem;
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 0.925rem;
+}
+
+.unit-setup-prompt__choices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.unit-setup-prompt__choices mat-button-toggle {
+    min-width: 168px;
+}
+
+.unit-setup-prompt__choice-label,
+.unit-setup-prompt__choice-preview {
+    display: block;
+    line-height: 1.25;
+}
+
+.unit-setup-prompt__choice-label {
+    font-weight: 700;
+}
+
+.unit-setup-prompt__choice-preview {
+    margin-top: 0.15rem;
+    font-size: 0.75rem;
+    color: var(--mat-sys-on-surface-variant);
+}
+
+.unit-setup-prompt__error {
+    color: var(--mat-sys-error) !important;
+}
+
+.unit-setup-prompt__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    padding: 0 1rem 1rem;
+    flex-wrap: wrap;
+}
+
+@media (max-width: 640px) {
+    .unit-setup-prompt__content {
+        grid-template-columns: 1fr;
+    }
+
+    .unit-setup-prompt__actions {
+        justify-content: stretch;
+    }
+
+    .unit-setup-prompt__actions button,
+    .unit-setup-prompt__choices,
+    .unit-setup-prompt__choices mat-button-toggle {
+        width: 100%;
+    }
+}
+
 /* Fade in animation */
 @keyframes fadeIn {
     from {

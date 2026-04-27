@@ -1,7 +1,7 @@
-import { Component, Input, OnChanges, inject } from '@angular/core';
+import { Component, Input, OnChanges, OnInit, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AppWindowService } from '../../services/app.window.service';
-import { AppChartSettingsInterface, AppUserInterface } from '../../models/app-user.interface';
+import { AppChartSettingsInterface, AppUserInterface, AppUserSettingsInterface } from '../../models/app-user.interface';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppUserService } from '../../services/app.user.service';
 import { AppUserUtilities } from '../../utils/app.user.utilities';
@@ -43,7 +43,7 @@ import { AppThemePreference, isAppThemePreference, SYSTEM_THEME_PREFERENCE } fro
   styleUrls: ['./user-settings.component.scss'],
   standalone: false
 })
-export class UserSettingsComponent implements OnChanges {
+export class UserSettingsComponent implements OnChanges, OnInit {
 
   public mandatoryAscentExclusions = ACTIVITIES_EXCLUDED_FROM_ASCENT;
   public mandatoryDescentExclusions = ACTIVITIES_EXCLUDED_FROM_DESCENT;
@@ -156,6 +156,10 @@ export class UserSettingsComponent implements OnChanges {
     private windowService: AppWindowService,
     private dialog: MatDialog,
     private logger: LoggerService) {
+  }
+
+  ngOnInit(): void {
+    this.applyRouteSectionParam();
   }
 
 
@@ -383,6 +387,17 @@ export class UserSettingsComponent implements OnChanges {
         ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? AppThemes.Dark : AppThemes.Normal)
         : selectedThemePreference;
       const settings = AppUserUtilities.fillMissingAppSettings(this.user as unknown as User);
+      const shouldCompleteUnitSetup = this.shouldCompleteUnitSetupFromForm(settings);
+      const appSettingsToSave: UserAppSettingsInterface & { themePreference?: AppThemePreference; unitSetupCompleted?: boolean } = {
+        theme: resolvedTheme,
+        themePreference: selectedThemePreference
+      };
+      if ((settings.appSettings as any)?.unitSetupCompleted !== undefined) {
+        appSettingsToSave.unitSetupCompleted = (settings.appSettings as any).unitSetupCompleted;
+      }
+      if (shouldCompleteUnitSetup) {
+        appSettingsToSave.unitSetupCompleted = true;
+      }
 
       const propertiesToUpdate: any = {
         displayName: this.userSettingsFormGroup.get('displayName').value,
@@ -391,10 +406,7 @@ export class UserSettingsComponent implements OnChanges {
         acceptedMarketingPolicy: this.userSettingsFormGroup.get('acceptedMarketingPolicy').value,
         settings: <UserSettingsInterface>{
           chartSettings: userChartSettings as unknown as UserSettingsInterface['chartSettings'],
-          appSettings: <UserAppSettingsInterface & { themePreference?: AppThemePreference }>{
-            theme: resolvedTheme,
-            themePreference: selectedThemePreference
-          },
+          appSettings: appSettingsToSave,
           mapSettings: <UserMapSettingsInterface>{
             showLaps: this.userSettingsFormGroup.get('showMapLaps').value,
 
@@ -481,6 +493,44 @@ export class UserSettingsComponent implements OnChanges {
     if (brandTextControl.enabled) {
       brandTextControl.disable({ emitEvent: false });
     }
+  }
+
+  private applyRouteSectionParam(): void {
+    const section = this.route.snapshot.queryParamMap?.get('section')
+      || this.route.snapshot.queryParams?.['section'];
+    if (this.isSettingsSection(section)) {
+      this.activeSection = section;
+    }
+  }
+
+  private isSettingsSection(section: unknown): section is 'profile' | 'app' | 'dashboard' | 'map' | 'charts' | 'units' {
+    return typeof section === 'string' && this.sectionOrder.includes(section as any);
+  }
+
+  private shouldCompleteUnitSetupFromForm(settings: AppUserSettingsInterface): boolean {
+    if ((settings.appSettings as any)?.unitSetupCompleted !== false || !this.userSettingsFormGroup) {
+      return false;
+    }
+
+    const unitSettings = settings.unitSettings;
+    return this.userSettingsFormGroup.get('startOfTheWeek')?.value !== unitSettings.startOfTheWeek
+      || this.userSettingsFormGroup.get('distanceUnitsToUse')?.value !== unitSettings.distanceUnits
+      || !this.areFormArraysEqual(this.userSettingsFormGroup.get('speedUnitsToUse')?.value, unitSettings.speedUnits)
+      || !this.areFormArraysEqual(this.userSettingsFormGroup.get('paceUnitsToUse')?.value, unitSettings.paceUnits)
+      || !this.areFormArraysEqual(this.userSettingsFormGroup.get('swimPaceUnitsToUse')?.value, unitSettings.swimPaceUnits)
+      || !this.areFormArraysEqual(this.userSettingsFormGroup.get('verticalSpeedUnitsToUse')?.value, unitSettings.verticalSpeedUnits);
+  }
+
+  private areFormArraysEqual(left: unknown, right: unknown): boolean {
+    if (!Array.isArray(left) || !Array.isArray(right)) {
+      return false;
+    }
+
+    if (left.length !== right.length) {
+      return false;
+    }
+
+    return left.every((value, index) => value === right[index]);
   }
 
   private maxTrimmedLength(maxLength: number): ValidatorFn {

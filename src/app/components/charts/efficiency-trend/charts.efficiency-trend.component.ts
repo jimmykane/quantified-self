@@ -143,6 +143,15 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
     const chartWidth = this.chartDiv?.nativeElement?.clientWidth || 0;
     const style = buildDashboardEChartsStyleTokens(this.darkTheme, chartWidth);
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
+    const mobileAxisPointerHandle = isMobileTooltipViewport
+      ? {
+        show: true,
+        size: 20,
+        margin: 4,
+        throttle: 16,
+        color: style.axisColor,
+      }
+      : { show: false };
 
     const values = points.map(point => point.value);
     const valueAxis = buildDashboardValueAxisConfig(values);
@@ -180,6 +189,13 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
       },
       xAxis: {
         type: 'time',
+        axisPointer: {
+          show: true,
+          snap: true,
+          triggerTooltip: true,
+          label: { show: false },
+          handle: mobileAxisPointerHandle,
+        },
         axisTick: { show: false },
         axisLine: { lineStyle: { color: style.axisColor } },
         splitLine: { show: false },

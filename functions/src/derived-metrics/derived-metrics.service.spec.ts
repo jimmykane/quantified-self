@@ -578,6 +578,9 @@ describe('writeDerivedMetricSnapshotsReady', () => {
         expect(forecastPoints).toHaveLength(8);
         expect(forecastPoints[0].isForecast).toBe(false);
         expect(forecastPoints[forecastPoints.length - 1].isForecast).toBe(true);
+        expect(formNowPayload.value).toBe(forecastPoints[0].formSameDay);
+        expect(formNowPayload.value).not.toBe(forecastPoints[0].formPriorDay);
+        expect(formPlus7dPayload.value).toBe(forecastPoints[forecastPoints.length - 1].formSameDay);
 
         const intensityPayload = findPersistedPayload(DERIVED_METRIC_KINDS.IntensityDistribution).payload as Record<string, unknown>;
         expect(Array.isArray(intensityPayload.weeks)).toBe(true);

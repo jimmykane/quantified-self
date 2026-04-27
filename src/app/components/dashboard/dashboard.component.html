@@ -11,6 +11,51 @@
       </app-event-search>
       }
 
+      @if (showUnitSetupPrompt) {
+      <mat-card class="unit-setup-prompt" appearance="outlined">
+        <div class="unit-setup-prompt__content">
+          <div class="unit-setup-prompt__icon" aria-hidden="true">
+            <mat-icon>straighten</mat-icon>
+          </div>
+          <div class="unit-setup-prompt__copy">
+            <h2>Choose your default units</h2>
+            <p>Pick one preset now. You can fine-tune individual units later in Settings.</p>
+            <mat-button-toggle-group
+              class="unit-setup-prompt__choices"
+              [value]="selectedUnitSetupPreset"
+              [disabled]="isSavingUnitSetup"
+              (change)="onUnitSetupPresetChange($event.value)"
+              aria-label="Default unit preset">
+              @for (option of unitSetupOptions; track option.value) {
+              <mat-button-toggle [value]="option.value">
+                <span class="unit-setup-prompt__choice-label">{{ option.label }}</span>
+                <span class="unit-setup-prompt__choice-preview">{{ option.preview }}</span>
+              </mat-button-toggle>
+              }
+            </mat-button-toggle-group>
+            @if (unitSetupError) {
+            <p class="unit-setup-prompt__error">{{ unitSetupError }}</p>
+            }
+          </div>
+        </div>
+        <div class="unit-setup-prompt__actions">
+          <button mat-button type="button" [disabled]="isSavingUnitSetup" (click)="openUnitSettings()">
+            Advanced settings
+          </button>
+          <button mat-button type="button" [disabled]="isSavingUnitSetup" (click)="dismissUnitSetupPrompt()">
+            Not now
+          </button>
+          <button mat-flat-button class="qs-mat-primary" type="button" [disabled]="isSavingUnitSetup" (click)="applyUnitSetupPreset()">
+            @if (isSavingUnitSetup) {
+            Saving...
+            } @else {
+            Apply
+            }
+          </button>
+        </div>
+      </mat-card>
+      }
+
       <!-- Removed mat-divider in favor of CSS spacing/gap -->
 
       @if (user) {

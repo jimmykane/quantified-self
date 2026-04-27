@@ -113,6 +113,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - On supported mobile devices, dashboard buttons and chart interactions provide lightweight haptic feedback.
 - Haptics automatically fall back to no-op when vibration support is unavailable or reduced-motion is enabled.
 - **Custom** charts keep the existing configurable behavior and react to dashboard filters/date range.
+- New users can choose a kilometers or miles preset from the dashboard unit prompt; choose **Advanced settings** there, or open **Settings -> Units**, to fine-tune individual unit preferences later.
 - Distance values in dashboards, event charts, activity chips, and CSV exports follow your kilometers or miles preference from **Settings -> Units**; jump distances display in feet when miles are selected.
 - **Map** keeps the existing map behavior and reacts to dashboard filters/date range.
 - Derived curated and KPI chart types are unique: only one tile per special derived chart type can exist at a time.
@@ -143,7 +144,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - The tile derives daily load from **Training Stress Score**.
 - Legacy **Power Training Stress Score** is used automatically when current TSS is missing.
 - It shows three headline stats: **Fitness (CTL)**, **Fatigue (ATL)**, and **Form (TSB)**.
-- **Form (TSB)** is shown as **prior-day readiness** using the prior day CTL - ATL.
+- **Form (TSB)** is shown as **same-day readiness** using same-day CTL - ATL.
 - Form and RecoveryNow tiles use precomputed derived snapshots from your full history (UTC day buckets).
 - Form/TSS trend lines keep full history and are explored with compact **W / M / Y** timeline buttons.
 - The chart does not use slider or reload/reset toolbar controls.
@@ -167,8 +168,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **ACWR** uses acute 7-day load versus chronic 28-day load/4 and shows an 8-week sparkline.
 - **Ramp Rate** uses CTL(today) - CTL(today-7d) with an 8-week sparkline.
 - **Monotony / Strain** uses 7-day load mean/stddev for monotony, and load * monotony for strain.
-- **Form Now** uses prior-day TSB readiness from the latest derived load state.
-- **Form +7d** projects prior-day TSB at day +7 assuming zero load.
+- **Form Now** uses same-day TSB readiness from the latest derived load state.
+- **Form +7d** projects same-day TSB at day +7 assuming zero load.
 - **Easy %** and **Hard %** use the latest weekly intensity distribution bucket.
 - **Efficiency Δ (4w)** shows current efficiency versus the prior 4-week baseline as absolute + percent delta.
 - **Freshness Forecast** projects 7 future days with zero load from the latest derived day.

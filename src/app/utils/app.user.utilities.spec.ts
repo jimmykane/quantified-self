@@ -186,6 +186,7 @@ describe('AppUserUtilities', () => {
             const user = { settings: {} } as User;
             const settings = AppUserUtilities.fillMissingAppSettings(user);
             expect(settings.appSettings?.theme).toBe(AppThemes.Normal);
+            expect((settings.appSettings as any)?.unitSetupCompleted).toBeUndefined();
             expect(settings.chartSettings?.stackYAxes).toBe(false);
             expect(settings.chartSettings?.syncChartHoverToMap).toBe(false);
             expect(settings.dashboardSettings?.dateRange).toBe(DateRanges.all);
@@ -200,12 +201,13 @@ describe('AppUserUtilities', () => {
         it('should preserve existing settings', () => {
             const user = {
                 settings: {
-                    appSettings: { theme: AppThemes.Dark },
+                    appSettings: { theme: AppThemes.Dark, unitSetupCompleted: false } as any,
                     dashboardSettings: { dateRange: DateRanges.lastYear, includeMergedEvents: false }
                 }
             } as User;
             const settings = AppUserUtilities.fillMissingAppSettings(user);
             expect(settings.appSettings?.theme).toBe(AppThemes.Dark);
+            expect((settings.appSettings as any)?.unitSetupCompleted).toBe(false);
             expect(settings.dashboardSettings?.dateRange).toBe(DateRanges.lastYear);
             expect(settings.dashboardSettings?.includeMergedEvents).toBe(false);
         });

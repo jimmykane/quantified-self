@@ -159,6 +159,12 @@ export class AppUserService implements OnDestroy {
       ? new Date(firebaseUser.metadata.lastSignInTime)
       : authCreationDate;
 
+    const defaultNewUserSettings = AppUserUtilities.fillMissingAppSettings({} as any);
+    defaultNewUserSettings.appSettings = {
+      ...defaultNewUserSettings.appSettings,
+      unitSetupCompleted: false,
+    };
+
     // Use current DB user or create a synthetic one for new accounts/loading states
     const identity: AppUserInterface = dbUser ? { ...dbUser } : {
       uid: firebaseUser.uid,
@@ -166,7 +172,7 @@ export class AppUserService implements OnDestroy {
       displayName: firebaseUser.displayName,
       photoURL: firebaseUser.photoURL,
       emailVerified: firebaseUser.emailVerified,
-      settings: AppUserUtilities.fillMissingAppSettings({} as any),
+      settings: defaultNewUserSettings,
       acceptedPrivacyPolicy: false,
       acceptedDataPolicy: false,
       acceptedTrackingPolicy: false,

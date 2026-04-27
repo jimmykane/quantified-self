@@ -193,6 +193,7 @@ describe('ChartsKpiComponent', () => {
     fixture.detectChanges();
     await fixture.whenStable();
     expect(component.title).toBe('Form Now');
+    expect(component.primaryLabel).toBe('Same-day TSB');
     expect(component.primaryValueText).toBe('-2.4');
   });
 
@@ -207,6 +208,7 @@ describe('ChartsKpiComponent', () => {
     fixture.detectChanges();
     await fixture.whenStable();
     expect(component.title).toBe('Form +7d');
+    expect(component.primaryLabel).toBe('Projected same-day TSB');
     expect(component.primaryValueText).toBe('+3.2');
   });
 

@@ -18,6 +18,13 @@ import { LoggerService } from '../../services/logger.service';
 
 import { getDatesForDateRange } from '../../helpers/date-range-helper';
 import { WhereFilterOp } from 'firebase/firestore';
+import {
+  buildUnitSettingsForUnitSetupPreset,
+  resolveSuggestedUnitSetupPreset,
+  shouldShowUnitSetupPrompt,
+  UNIT_SETUP_PRESET_OPTIONS,
+  UnitSetupPreset,
+} from '../../helpers/unit-setup-preset.helper';
 
 
 @Component({
@@ -39,6 +46,11 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   public showUpload = false;
   public isInitialized = false;
   public hasMergedEvents = false;
+  public readonly unitSetupOptions = UNIT_SETUP_PRESET_OPTIONS;
+  public selectedUnitSetupPreset: UnitSetupPreset = resolveSuggestedUnitSetupPreset();
+  public showUnitSetupPrompt = false;
+  public isSavingUnitSetup = false;
+  public unitSetupError: string | null = null;
 
   private shouldSearch: boolean;
   private manualSearchTrigger$ = new Subject<{ user: AppUserInterface | null; refreshToken: number }>();
@@ -91,6 +103,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         }
         this.startOfTheWeek = this.user.settings.unitSettings?.startOfTheWeek;
       }
+      this.syncUnitSetupPromptState();
       this.logPerf('resolved_dashboard_data', resolvedDataStart, {
         events: this.events?.length || 0,
         eventsPrefetchSkipped: isEventsPrefetchSkipped,
@@ -105,6 +118,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       const targetUserFetchStart = performance.now();
       try {
         this.targetUser = await this.userService.getUserByID(userID).pipe(take(1)).toPromise();
+        this.syncUnitSetupPromptState();
         this.logPerf('target_user_fetch', targetUserFetchStart, { userID });
       } catch (e) {
         void this.router.navigate(['dashboard'])
@@ -283,6 +297,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       this.user = eventsAndUser.user;
       this.isLoading = false;
       this.isInitialized = true;
+      this.syncUnitSetupPromptState();
       this.logger.info('[perf] dashboard_state_update', { events: this.events.length });
 
     });
@@ -346,6 +361,90 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
 
   }
 
+  onUnitSetupPresetChange(preset: UnitSetupPreset): void {
+    this.selectedUnitSetupPreset = preset;
+    this.unitSetupError = null;
+  }
+
+  async applyUnitSetupPreset(): Promise<void> {
+    if (!this.user) {
+      return;
+    }
+
+    this.isSavingUnitSetup = true;
+    this.unitSetupError = null;
+
+    try {
+      const nextUnitSettings = buildUnitSettingsForUnitSetupPreset(this.selectedUnitSetupPreset);
+      const unitSetupCompletedAppSettings = {
+        unitSetupCompleted: true,
+      };
+      const nextAppSettings = {
+        ...(this.user.settings?.appSettings || {}),
+        ...unitSetupCompletedAppSettings,
+      };
+
+      await this.userService.updateUserProperties(this.user, {
+        settings: {
+          unitSettings: nextUnitSettings,
+          appSettings: unitSetupCompletedAppSettings,
+        },
+      });
+      this.user.settings = {
+        ...(this.user.settings || {} as any),
+        unitSettings: nextUnitSettings,
+        appSettings: nextAppSettings as any,
+      };
+      this.syncUnitSetupPromptState();
+      this.snackBar.open('Unit preferences saved', undefined, { duration: 2000 });
+      this.analyticsService.logEvent('unit_setup_complete', { preset: this.selectedUnitSetupPreset });
+    } catch (error) {
+      this.unitSetupError = 'Could not save unit preferences.';
+      this.logger.error('[DashboardComponent] Failed to apply unit setup preset', error);
+    } finally {
+      this.isSavingUnitSetup = false;
+    }
+  }
+
+  async dismissUnitSetupPrompt(): Promise<void> {
+    if (!this.user) {
+      return;
+    }
+
+    this.isSavingUnitSetup = true;
+    this.unitSetupError = null;
+
+    try {
+      const unitSetupCompletedAppSettings = {
+        unitSetupCompleted: true,
+      };
+      const nextAppSettings = {
+        ...(this.user.settings?.appSettings || {}),
+        ...unitSetupCompletedAppSettings,
+      };
+
+      await this.userService.updateUserProperties(this.user, {
+        settings: {
+          appSettings: unitSetupCompletedAppSettings,
+        },
+      });
+      this.user.settings = this.user.settings || {} as any;
+      this.user.settings.appSettings = nextAppSettings as any;
+      this.syncUnitSetupPromptState();
+      this.snackBar.open('You can change units in Settings anytime', undefined, { duration: 2500 });
+      this.analyticsService.logEvent('unit_setup_skip');
+    } catch (error) {
+      this.unitSetupError = 'Could not save this choice.';
+      this.logger.error('[DashboardComponent] Failed to dismiss unit setup prompt', error);
+    } finally {
+      this.isSavingUnitSetup = false;
+    }
+  }
+
+  openUnitSettings(): void {
+    void this.router.navigate(['/settings'], { queryParams: { section: 'units' } });
+  }
+
 
 
   ngOnDestroy(): void {
@@ -363,6 +462,10 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
     const emitStart = performance.now();
     this.hasMergedEvents = eventsArray.some(event => event.isMerge);
     this.logPerf('events_listener_emit', emitStart, { incomingEvents: eventsArray?.length || 0 });
+  }
+
+  private syncUnitSetupPromptState(): void {
+    this.showUnitSetupPrompt = shouldShowUnitSetupPrompt(this.user, this.targetUser);
   }
 
   private areEventsEquivalentByIdentity(previousEvents: EventInterface[] = [], currentEvents: EventInterface[] = []): boolean {

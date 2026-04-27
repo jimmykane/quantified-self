@@ -528,7 +528,7 @@ function buildWeeklyKpiTrendFromDailyPoints(
     );
 }
 
-function projectPriorDayFormWithZeroLoad(
+function projectSameDayFormWithZeroLoad(
     ctl: number,
     atl: number,
     projectionDays: number,
@@ -539,16 +539,16 @@ function projectPriorDayFormWithZeroLoad(
 
     let previousCtl = ctl;
     let previousAtl = atl;
-    let projectedPriorDayForm = previousCtl - previousAtl;
+    let projectedSameDayForm = previousCtl - previousAtl;
     for (let dayOffset = 1; dayOffset <= projectionDays; dayOffset += 1) {
         const nextCtl = previousCtl + ((0 - previousCtl) / CTL_TIME_CONSTANT_DAYS);
         const nextAtl = previousAtl + ((0 - previousAtl) / ATL_TIME_CONSTANT_DAYS);
-        projectedPriorDayForm = previousCtl - previousAtl;
+        projectedSameDayForm = nextCtl - nextAtl;
         previousCtl = nextCtl;
         previousAtl = nextAtl;
     }
 
-    return projectedPriorDayForm;
+    return projectedSameDayForm;
 }
 
 function buildFormMetricPayload(
@@ -754,8 +754,8 @@ function buildFormNowMetricPayload(
         payload: {
             dayBoundary: 'UTC',
             latestDayMs: latestPoint.dayMs,
-            value: latestPoint.formPriorDay === null ? null : toRoundedNumber(latestPoint.formPriorDay, 4),
-            trend8Weeks: buildWeeklyKpiTrendFromDailyPoints(points, (point) => point.formPriorDay),
+            value: toRoundedNumber(latestPoint.formSameDay, 4),
+            trend8Weeks: buildWeeklyKpiTrendFromDailyPoints(points, (point) => point.formSameDay),
         },
     };
 }
@@ -778,9 +778,9 @@ function buildFormPlus7dMetricPayload(
     }
 
     const latestPoint = points[points.length - 1];
-    // Form +7d uses the same prior-day TSB semantics as Form Now, projected 7 days
+    // Form +7d uses the same-day TSB semantics as Form Now, projected 7 days
     // ahead by decaying CTL/ATL with zero load.
-    const latestProjection = projectPriorDayFormWithZeroLoad(latestPoint.ctl, latestPoint.atl, 7);
+    const latestProjection = projectSameDayFormWithZeroLoad(latestPoint.ctl, latestPoint.atl, 7);
     return {
         sourceEventCount,
         payload: {
@@ -789,7 +789,7 @@ function buildFormPlus7dMetricPayload(
             projectedDayMs: latestPoint.dayMs + (7 * DAY_MS),
             value: toRoundedNumber(latestProjection, 4),
             trend8Weeks: buildWeeklyKpiTrendFromDailyPoints(points, (point) => (
-                projectPriorDayFormWithZeroLoad(point.ctl, point.atl, 7)
+                projectSameDayFormWithZeroLoad(point.ctl, point.atl, 7)
             )),
         },
     };
