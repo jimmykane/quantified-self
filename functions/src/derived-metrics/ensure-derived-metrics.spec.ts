@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
+import { DERIVED_METRIC_KINDS, DERIVED_METRIC_SCHEMA_VERSION } from '../../../shared/derived-metrics';
 import { decideDerivedMetricsFreshness } from './ensure-derived-metrics';
 
 describe('decideDerivedMetricsFreshness', () => {
@@ -13,6 +13,7 @@ describe('decideDerivedMetricsFreshness', () => {
         coordinatorUpdatedAtMs: Date.UTC(2026, 3, 15, 10, 0, 0),
         coordinatorEventMutationVersion: 10,
         formSnapshotStatus: 'ready',
+        formSnapshotSchemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
         formSnapshotBuiltFromEventMutationVersion: 10,
         latestEventUpdatedAtMs: Date.UTC(2026, 3, 15, 9, 0, 0),
     };
@@ -33,6 +34,17 @@ describe('decideDerivedMetricsFreshness', () => {
         expect(decision).toEqual({
             shouldQueue: true,
             reason: 'missing_form_snapshot',
+        });
+    });
+
+    it('requests queue when form snapshot schema version is behind current schema', () => {
+        const decision = decideDerivedMetricsFreshness({
+            ...baseInput,
+            formSnapshotSchemaVersion: DERIVED_METRIC_SCHEMA_VERSION - 1,
+        });
+        expect(decision).toEqual({
+            shouldQueue: true,
+            reason: 'schema_version_mismatch',
         });
     });
 
