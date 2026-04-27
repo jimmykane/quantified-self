@@ -350,6 +350,16 @@
         </div>
         <div class="card-content">
           <mat-form-field appearance="outline">
+            <mat-label>Distance Units</mat-label>
+            <mat-select formControlName="distanceUnitsToUse">
+              @for (unit of distanceUnitOptions; track unit.value) {
+              <mat-option [value]="unit.value">{{unit.label}}</mat-option>
+              }
+            </mat-select>
+            <mat-hint>Show dashboard distance totals and activity distances in kilometers or miles.</mat-hint>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
             <mat-label>Preferred Speed Units</mat-label>
             <mat-select formControlName="speedUnitsToUse" multiple>
               @for (unit of speedUnits | keyvalue; track unit.key) {

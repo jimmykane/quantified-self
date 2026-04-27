@@ -6,6 +6,7 @@ import {
   ChartDataValueTypes,
   DataDistance,
   DataPaceAvg,
+  DistanceUnits,
   PaceUnits,
   TimeIntervals
 } from '@sports-alliance/sports-lib';
@@ -275,6 +276,31 @@ describe('ChartsColumnsComponent', () => {
     );
     expect(option.graphic[0].children[1].style.text).toBe(expectedValue);
     expect(option.yAxis.axisLabel.formatter(422.3478623928474)).toBe(expectedValue);
+  });
+
+  it('should format distance summary and axis labels using passed unit settings', async () => {
+    component.chartDataType = DataDistance.type;
+    component.chartDataValueType = ChartDataValueTypes.Total;
+    component.chartDataCategoryType = ChartDataCategoryTypes.ActivityType;
+    component.userUnitSettings = normalizeUserUnitSettings({
+      distanceUnits: DistanceUnits.Miles,
+    });
+    component.data = [
+      { type: 'Running', [ChartDataValueTypes.Total]: 10000, count: 1 },
+    ];
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const option = getLastOption();
+    const expectedValue = formatDashboardNumericValue(
+      DataDistance.type,
+      10000,
+      undefined as any,
+      component.userUnitSettings,
+    );
+    expect(option.graphic[0].children[1].style.text).toBe(expectedValue);
+    expect(option.yAxis.axisLabel.formatter(10000)).toBe(expectedValue);
   });
 
   it('should fill missing daily date buckets with zero-valued bars', async () => {

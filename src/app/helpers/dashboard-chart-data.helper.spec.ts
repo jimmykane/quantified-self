@@ -1,10 +1,12 @@
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
+  DataDistance,
   DataDuration,
   DataPaceAvg,
   DataSpeedAvg,
   DaysOfTheWeek,
+  DistanceUnits,
   PaceUnits,
   SpeedUnits,
   SwimPaceUnits,
@@ -153,6 +155,19 @@ describe('dashboard-chart-data.helper', () => {
     );
 
     expect(value).toBe('22.37 mph');
+  });
+
+  it('should format distance values using the provided unit settings', () => {
+    const value = formatDashboardNumericValue(
+      DataDistance.type,
+      10000,
+      undefined,
+      normalizeUserUnitSettings({
+        distanceUnits: DistanceUnits.Miles,
+      }),
+    );
+
+    expect(value).toBe('6.22 mi');
   });
 
   it('should sort activity rows by their selected aggregate value', () => {

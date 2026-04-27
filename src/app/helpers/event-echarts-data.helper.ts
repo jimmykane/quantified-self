@@ -33,6 +33,7 @@ import {
 } from './event-echarts-style.helper';
 import { EventChartRange, normalizeEventRange } from './event-echarts-xaxis.helper';
 import { normalizeUnitDerivedTypeLabel } from './stat-label.helper';
+import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 
 export { normalizeEventLapType } from './event-lap-type.helper';
 
@@ -301,6 +302,7 @@ export function buildEventLapMarkers(input: {
   xAxisType: XAxisTypes;
   lapTypes: LapTypes[];
   eventColorService: AppEventColorService;
+  userUnitSettings?: UserUnitSettingsInterface | null;
 }): EventChartLapMarker[] {
   const markers: EventChartLapMarker[] = [];
 
@@ -338,7 +340,7 @@ export function buildEventLapMarkers(input: {
         activityID: activity.getID() || '',
         activityName: activity.creator?.name || 'Activity',
         tooltipTitle: `Lap ${index + 1}`,
-        tooltipDetails: buildLapTooltipDetails(lap),
+        tooltipDetails: buildLapTooltipDetails(lap, input.userUnitSettings),
       });
     });
   });
@@ -873,7 +875,10 @@ function createActivityNumericCache(
   };
 }
 
-function buildLapTooltipDetails(lap: LapInterface): Array<{ label: string; value: string }> {
+function buildLapTooltipDetails(
+  lap: LapInterface,
+  unitSettings?: UserUnitSettingsInterface | null
+): Array<{ label: string; value: string }> {
   const details: Array<{ label: string; value: string }> = [];
 
   const duration = lap.getDuration?.();
@@ -882,7 +887,7 @@ function buildLapTooltipDetails(lap: LapInterface): Array<{ label: string; value
     details.push({ label: 'Duration', value: durationValue });
   }
 
-  const distanceValue = formatLapDataValue(lap.getDistance?.());
+  const distanceValue = formatLapDataValue(lap.getDistance?.(), undefined, unitSettings);
   if (distanceValue) {
     details.push({ label: 'Distance', value: distanceValue });
   }
@@ -891,15 +896,15 @@ function buildLapTooltipDetails(lap: LapInterface): Array<{ label: string; value
   const averagePaceOrSpeedLabel = averagePaceOrSpeed && averagePaceOrSpeed.getType() === DataPaceAvg.type
     ? 'Avg Pace'
     : 'Avg Speed';
-  const averagePaceOrSpeedValue = formatLapDataValue(averagePaceOrSpeed);
+  const averagePaceOrSpeedValue = formatLapDataValue(averagePaceOrSpeed, undefined, unitSettings);
   if (averagePaceOrSpeedValue) {
     details.push({ label: averagePaceOrSpeedLabel, value: averagePaceOrSpeedValue });
   }
 
   appendLapDetail(details, 'Avg Heart Rate', lap.getStat(DataHeartRateAvg.type));
   appendLapDetail(details, 'Avg Power', lap.getStat(DataPowerAvg.type));
-  appendLapDetail(details, 'Ascent', lap.getStat(DataAscent.type));
-  appendLapDetail(details, 'Descent', lap.getStat(DataDescent.type));
+  appendLapDetail(details, 'Ascent', lap.getStat(DataAscent.type), unitSettings);
+  appendLapDetail(details, 'Descent', lap.getStat(DataDescent.type), unitSettings);
   appendLapDetail(details, 'Avg Cadence', lap.getStat(DataCadenceAvg.type));
 
   return details;
@@ -908,9 +913,10 @@ function buildLapTooltipDetails(lap: LapInterface): Array<{ label: string; value
 function appendLapDetail(
   details: Array<{ label: string; value: string }>,
   label: string,
-  data: DataInterface | void
+  data: DataInterface | void,
+  unitSettings?: UserUnitSettingsInterface | null
 ): void {
-  const value = formatLapDataValue(data);
+  const value = formatLapDataValue(data, undefined, unitSettings);
   if (!value) {
     return;
   }
@@ -920,7 +926,8 @@ function appendLapDetail(
 
 function formatLapDataValue(
   data: DataInterface | void,
-  options?: { compactDuration?: boolean }
+  options?: { compactDuration?: boolean },
+  unitSettings?: UserUnitSettingsInterface | null
 ): string {
   if (!data) {
     return '';
@@ -934,6 +941,15 @@ function formatLapDataValue(
   if (data.getType?.() === DataDuration.type) {
     const duration = data as DataDuration;
     return `${duration.getDisplayValue(false, true, false, options?.compactDuration === true)}`.trim();
+  }
+
+  if (unitSettings) {
+    const unitAwareValue = resolveUnitAwareDisplayStat(data, unitSettings, {
+      stripRepeatedUnit: true,
+    })?.text;
+    if (unitAwareValue) {
+      return unitAwareValue;
+    }
   }
 
   const displayValue = `${data.getDisplayValue?.() ?? ''}`.trim();

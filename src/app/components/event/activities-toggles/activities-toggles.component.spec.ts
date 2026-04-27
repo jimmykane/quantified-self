@@ -10,6 +10,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { AppEventService } from '../../../services/app.event.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { LoggerService } from '../../../services/logger.service';
+import { DataDistance, DistanceUnits } from '@sports-alliance/sports-lib';
 
 const createActivity = (id: string, creatorName: string, serialNumber: string, swInfo = ''): any => ({
   getID: () => id,
@@ -20,7 +21,7 @@ const createActivity = (id: string, creatorName: string, serialNumber: string, s
     swInfo,
   },
   getDuration: () => ({ getDisplayValue: () => '1:00:00' }),
-  getDistance: () => ({ getDisplayValue: () => 10, getDisplayUnit: () => 'km' }),
+  getDistance: () => new DataDistance(10000),
 });
 
 describe('ActivitiesTogglesComponent', () => {
@@ -78,7 +79,14 @@ describe('ActivitiesTogglesComponent', () => {
     getActivityColor: vi.fn(() => '#ff0000'),
   };
 
-  const user = { uid: 'user-1' } as any;
+  const user = {
+    uid: 'user-1',
+    settings: {
+      unitSettings: {
+        distanceUnits: DistanceUnits.Miles,
+      },
+    },
+  } as any;
 
   beforeEach(async () => {
     mockDialog = { open: vi.fn(() => ({ afterClosed: () => of(undefined) })) };
@@ -184,6 +192,12 @@ describe('ActivitiesTogglesComponent', () => {
 
     expect(component.shouldShowDeviceNames()).toBe(false);
     expect(component.getPrimaryLabel(a1)).toBe('Run');
+  });
+
+  it('formats chip distance values with the user distance preference', () => {
+    setupInputs(false);
+
+    expect(fixture.nativeElement.textContent).toContain('6.22 mi');
   });
 
   it('edit button click does not toggle activity selection', () => {

@@ -15,7 +15,7 @@ import { MaterialModule } from '../../modules/material.module';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { of } from 'rxjs';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
-import { User, ACTIVITIES_EXCLUDED_FROM_ASCENT, ACTIVITIES_EXCLUDED_FROM_DESCENT } from '@sports-alliance/sports-lib';
+import { User, ACTIVITIES_EXCLUDED_FROM_ASCENT, ACTIVITIES_EXCLUDED_FROM_DESCENT, DistanceUnits } from '@sports-alliance/sports-lib';
 
 
 
@@ -56,6 +56,7 @@ describe('UserSettingsComponent', () => {
                 paceUnits: ['min/km'],
                 swimPaceUnits: ['min/100m'],
                 verticalSpeedUnits: ['m/h'],
+                distanceUnits: DistanceUnits.Kilometers,
                 startOfTheWeek: 1
             } as any,
             mapSettings: {
@@ -259,6 +260,37 @@ describe('UserSettingsComponent', () => {
                 acceptedMarketingPolicy: true
             })
         );
+    });
+
+    it('should initialize and save distance unit preference when form is submitted', async () => {
+        const userService = TestBed.inject(AppUserService);
+        const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
+
+        component.ngOnChanges();
+
+        expect(component.userSettingsFormGroup.get('distanceUnitsToUse').value).toBe(DistanceUnits.Kilometers);
+
+        component.userSettingsFormGroup.get('distanceUnitsToUse').setValue(DistanceUnits.Miles);
+
+        await component.onSubmit(new Event('submit'));
+
+        expect(updateUserPropertiesSpy).toHaveBeenCalledWith(
+            expect.objectContaining({ uid: 'test-uid' }),
+            expect.objectContaining({
+                settings: expect.objectContaining({
+                    unitSettings: expect.objectContaining({
+                        distanceUnits: DistanceUnits.Miles
+                    })
+                })
+            })
+        );
+    });
+
+    it('should expose kilometers and miles labels for distance unit choices', () => {
+        expect(component.distanceUnitOptions).toEqual([
+            { label: 'Kilometers', value: DistanceUnits.Kilometers },
+            { label: 'Miles', value: DistanceUnits.Miles },
+        ]);
     });
 
     it('should save trimmed brandText for paid users', async () => {
@@ -529,7 +561,8 @@ describe('UserSettingsComponent', () => {
                     speedUnits: [],
                     paceUnits: [],
                     swimPaceUnits: [],
-                    verticalSpeedUnits: []
+                    verticalSpeedUnits: [],
+                    distanceUnits: 'not-real'
                 },
                 dashboardSettings: {
                     ...(component.user as any).settings.dashboardSettings,
@@ -545,6 +578,7 @@ describe('UserSettingsComponent', () => {
         expect(component.userSettingsFormGroup.get('paceUnitsToUse').value.length).toBeGreaterThan(0);
         expect(component.userSettingsFormGroup.get('swimPaceUnitsToUse').value.length).toBeGreaterThan(0);
         expect(component.userSettingsFormGroup.get('verticalSpeedUnitsToUse').value.length).toBeGreaterThan(0);
+        expect(component.userSettingsFormGroup.get('distanceUnitsToUse').value).toBe(DistanceUnits.Kilometers);
         expect(component.userSettingsFormGroup.get('eventsPerPage').value).toBe(10);
     });
 

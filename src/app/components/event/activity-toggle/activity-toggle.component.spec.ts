@@ -6,6 +6,8 @@ import { ActivityToggleComponent } from './activity-toggle.component';
 import { AppActivitySelectionService } from '../../../services/activity-selection-service/app-activity-selection.service';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { MatSlideToggleChange } from '@angular/material/slide-toggle';
+import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
+import { DataDistance, DistanceUnits } from '@sports-alliance/sports-lib';
 
 const createActivity = (id: string): any => ({
   getID: () => id,
@@ -13,7 +15,7 @@ const createActivity = (id: string): any => ({
   creator: { name: 'Garmin', swInfo: '1.0' },
   startDate: new Date('2025-01-01T10:00:00.000Z'),
   getDuration: () => ({ getDisplayValue: () => '1:00:00' }),
-  getDistance: () => ({ getDisplayValue: () => 10, getDisplayUnit: () => 'km' }),
+  getDistance: () => new DataDistance(10000),
 });
 
 describe('ActivityToggleComponent', () => {
@@ -59,6 +61,9 @@ describe('ActivityToggleComponent', () => {
   const mockColorService = {
     getActivityColor: vi.fn(() => '#ff0000'),
   };
+  const mockUserSettingsQuery = {
+    unitSettings: vi.fn(() => ({ distanceUnits: DistanceUnits.Miles })),
+  };
 
   const setRequiredInputs = (activity: any, selectedActivities: any[], eventOverrides: Record<string, unknown> = {}) => {
     const event = {
@@ -81,6 +86,7 @@ describe('ActivityToggleComponent', () => {
       providers: [
         { provide: AppActivitySelectionService, useValue: mockSelectionService },
         { provide: AppEventColorService, useValue: mockColorService },
+        { provide: AppUserSettingsQueryService, useValue: mockUserSettingsQuery },
       ],
       schemas: [NO_ERRORS_SCHEMA],
     }).compileComponents();
@@ -154,5 +160,12 @@ describe('ActivityToggleComponent', () => {
     setRequiredInputs(renderedActivity, [renderedActivity], { isMerge: false, hasBenchmark: false });
 
     expect(component.primaryLabel()).toBe('Run');
+  });
+
+  it('formats the activity distance with the user distance preference', () => {
+    const renderedActivity = createActivity('a1');
+    setRequiredInputs(renderedActivity, [renderedActivity], { isMerge: false, hasBenchmark: false });
+
+    expect(fixture.nativeElement.textContent).toContain('6.22 mi');
   });
 });

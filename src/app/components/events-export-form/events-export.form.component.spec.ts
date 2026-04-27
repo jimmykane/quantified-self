@@ -10,6 +10,7 @@ import { AppUserService } from '../../services/app.user.service';
 import { AppFileService } from '../../services/app.file.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { LoggerService } from '../../services/logger.service';
+import { DataDistance, DistanceUnits } from '@sports-alliance/sports-lib';
 
 describe('EventsExportFormComponent', () => {
   let fixture: ComponentFixture<EventsExportFormComponent>;
@@ -19,6 +20,13 @@ describe('EventsExportFormComponent', () => {
   let mockAnalyticsService: { logEvent: ReturnType<typeof vi.fn> };
   let mockLogger: { error: ReturnType<typeof vi.fn> };
   let mockDialogRef: { close: ReturnType<typeof vi.fn> };
+
+  const readBlobText = (blob: Blob): Promise<string> => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(`${reader.result ?? ''}`);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(blob);
+  });
 
   beforeEach(async () => {
     mockUserService = {
@@ -80,6 +88,7 @@ describe('EventsExportFormComponent', () => {
               name: 'Example Event',
               description: '',
               getStat: vi.fn().mockReturnValue(null),
+              getDistance: vi.fn(() => new DataDistance(10000)),
               getID: vi.fn().mockReturnValue('event-1'),
             }],
           },
@@ -120,5 +129,20 @@ describe('EventsExportFormComponent', () => {
       expect.any(Error),
     );
     expect(mockAnalyticsService.logEvent).toHaveBeenCalledWith('download_csv', {});
+  });
+
+  it('exports distance using the user distance preference', async () => {
+    component.user.settings.unitSettings = {
+      distanceUnits: DistanceUnits.Miles,
+    } as any;
+    component.exportFromGroup.get('distance')?.setValue(true);
+
+    await component.onSubmit({
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    });
+
+    const blob = mockFileService.downloadFile.mock.calls[0][0] as Blob;
+    await expect(readBlobText(blob)).resolves.toContain('"6.22 mi"');
   });
 });

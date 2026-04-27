@@ -113,6 +113,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - On supported mobile devices, dashboard buttons and chart interactions provide lightweight haptic feedback.
 - Haptics automatically fall back to no-op when vibration support is unavailable or reduced-motion is enabled.
 - **Custom** charts keep the existing configurable behavior and react to dashboard filters/date range.
+- Distance values in dashboards, event charts, activity chips, and CSV exports follow your kilometers or miles preference from **Settings -> Units**; jump distances display in feet when miles are selected.
 - **Map** keeps the existing map behavior and reacts to dashboard filters/date range.
 - Derived curated and KPI chart types are unique: only one tile per special derived chart type can exist at a time.
 - Map tiles are also unique: only one map tile can exist at a time.

@@ -10,6 +10,7 @@ import {
     ChartTypes,
     DataRecoveryTime,
     DataHeartRateAvg,
+    DistanceUnits,
     TileTypes,
     TimeIntervals
 } from '@sports-alliance/sports-lib';
@@ -189,6 +190,7 @@ describe('AppUserUtilities', () => {
             expect(settings.chartSettings?.syncChartHoverToMap).toBe(false);
             expect(settings.dashboardSettings?.dateRange).toBe(DateRanges.all);
             expect(settings.dashboardSettings?.includeMergedEvents).toBe(true);
+            expect(settings.unitSettings?.distanceUnits).toBe(DistanceUnits.Kilometers);
             expect(settings.unitSettings?.startOfTheWeek).toBe(1); // Monday
             expect((settings.myTracksSettings as any)?.showJumpHeatmap).toBe(true);
             expect(settings.serviceSyncSettings?.activitySyncRoutes?.[ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]?.enabled).toBe(false);
@@ -434,7 +436,8 @@ describe('AppUserUtilities', () => {
                         speedUnits: [],
                         paceUnits: [],
                         swimPaceUnits: [],
-                        verticalSpeedUnits: []
+                        verticalSpeedUnits: [],
+                        distanceUnits: 'bad-value'
                     },
                     dashboardSettings: {
                         tableSettings: {}
@@ -452,10 +455,31 @@ describe('AppUserUtilities', () => {
             expect(settings.unitSettings.paceUnits).toEqual(AppUserUtilities.getDefaultPaceUnits());
             expect(settings.unitSettings.swimPaceUnits).toEqual(AppUserUtilities.getDefaultSwimPaceUnits());
             expect(settings.unitSettings.verticalSpeedUnits).toEqual(AppUserUtilities.getDefaultVerticalSpeedUnits());
+            expect(settings.unitSettings.distanceUnits).toBe(DistanceUnits.Kilometers);
             expect(settings.dashboardSettings.tableSettings.active).toBe('Start Date');
             expect(settings.dashboardSettings.tableSettings.direction).toBe('desc');
             expect(settings.dashboardSettings.tableSettings.eventsPerPage).toBe(10);
             expect(settings.dashboardSettings.tableSettings.selectedColumns.length).toBeGreaterThan(0);
+        });
+
+        it('should normalize legacy distance unit strings', () => {
+            const metricSettings = AppUserUtilities.fillMissingAppSettings({
+                settings: {
+                    unitSettings: {
+                        distanceUnits: 'Metric'
+                    }
+                }
+            } as unknown as User);
+            const imperialSettings = AppUserUtilities.fillMissingAppSettings({
+                settings: {
+                    unitSettings: {
+                        distanceUnits: 'Imperial'
+                    }
+                }
+            } as unknown as User);
+
+            expect(metricSettings.unitSettings.distanceUnits).toBe(DistanceUnits.Kilometers);
+            expect(imperialSettings.unitSettings.distanceUnits).toBe(DistanceUnits.Miles);
         });
 
         it('should normalize legacy table column aliases for sorting and selected columns', () => {

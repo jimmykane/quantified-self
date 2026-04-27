@@ -1,7 +1,14 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA, SimpleChange } from '@angular/core';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { ChartCursorBehaviours, DynamicDataLoader, LapTypes, XAxisTypes } from '@sports-alliance/sports-lib';
+import {
+  ChartCursorBehaviours,
+  DataDistance,
+  DistanceUnits,
+  DynamicDataLoader,
+  LapTypes,
+  XAxisTypes,
+} from '@sports-alliance/sports-lib';
 import {
   ENABLE_LIVE_SELECTION_PREVIEW_STATS,
   ENABLE_LIVE_SELECTION_SYNC,
@@ -1258,6 +1265,23 @@ describe('EventCardChartPanelComponent', () => {
     expect(component.selectedRangeStartLabel).toBe('01:05');
     expect(component.selectedRangeEndLabel).toBe('02:20');
     expect(component.selectedRangeSpanLabel).toBe('01:15');
+  });
+
+  it('formats distance range labels with the user distance preference', () => {
+    component.xAxisType = XAxisTypes.Distance;
+    component.userUnitSettings = { distanceUnits: DistanceUnits.Miles } as any;
+    component.selectedRange = { start: 0, end: 10000 };
+
+    expect(component.selectedRangeStartLabel).toBe('0.00mi');
+    expect(component.selectedRangeEndLabel).toBe('6.22mi');
+    expect(component.selectedRangeSpanLabel).toBe('6.22mi');
+  });
+
+  it('formats distance data values with the user distance preference', () => {
+    component.userUnitSettings = { distanceUnits: DistanceUnits.Miles } as any;
+
+    expect((component as any).formatDataValue(DataDistance.type, 10000)).toBe('6.22mi');
+    expect((component as any).formatDataValue(DataDistance.type, 10000, false)).toBe('6.22');
   });
 
   it('follows live selection sync constant for active selection labels', () => {

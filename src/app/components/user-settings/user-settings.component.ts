@@ -19,6 +19,7 @@ import {
 import { AppThemes, UserAppSettingsInterface } from '@sports-alliance/sports-lib';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import {
+  DistanceUnits,
   PaceUnits,
   SpeedUnits,
   SwimPaceUnits,
@@ -94,6 +95,10 @@ export class UserSettingsComponent implements OnChanges {
   public mapTypes = MapTypes;
 
   public speedUnits = SpeedUnits;
+  public readonly distanceUnitOptions: Array<{ label: string; value: DistanceUnits }> = [
+    { label: 'Kilometers', value: DistanceUnits.Kilometers },
+    { label: 'Miles', value: DistanceUnits.Miles },
+  ];
   public verticalSpeedUnits = VerticalSpeedUnits;
   public paceUnits = PaceUnits;
   public swimPaceUnits = SwimPaceUnits;
@@ -114,6 +119,7 @@ export class UserSettingsComponent implements OnChanges {
     chartStrokeWidth: 'Line Width',
     chartFillOpacity: 'Fill Intensity',
     startOfTheWeek: 'Start of the Week',
+    distanceUnitsToUse: 'Distance Units',
     speedUnitsToUse: 'Preferred Speed Units',
     paceUnitsToUse: 'Preferred Pace Units',
     swimPaceUnitsToUse: 'Swim Pace Preference',
@@ -240,6 +246,9 @@ export class UserSettingsComponent implements OnChanges {
       removeDescentForActivitiesSummaries: new UntypedFormControl([...new Set([...((settings.summariesSettings as any)?.removeDescentForEventTypes || []), ...this.mandatoryDescentExclusions])], []),
       chartCursorBehaviour: new UntypedFormControl(settings.chartSettings.chartCursorBehaviour === ChartCursorBehaviours.SelectX, []),
       startOfTheWeek: new UntypedFormControl(settings.unitSettings.startOfTheWeek, [
+        Validators.required,
+      ]),
+      distanceUnitsToUse: new UntypedFormControl(settings.unitSettings.distanceUnits, [
         Validators.required,
       ]),
       speedUnitsToUse: new UntypedFormControl(settings.unitSettings.speedUnits, [
@@ -401,6 +410,7 @@ export class UserSettingsComponent implements OnChanges {
             gradeAdjustedPaceUnits: AppUserUtilities.getGradeAdjustedPaceUnitsFromPaceUnits(this.userSettingsFormGroup.get('paceUnitsToUse').value),
             swimPaceUnits: this.userSettingsFormGroup.get('swimPaceUnitsToUse').value,
             verticalSpeedUnits: this.userSettingsFormGroup.get('verticalSpeedUnitsToUse').value,
+            distanceUnits: this.userSettingsFormGroup.get('distanceUnitsToUse').value,
             startOfTheWeek: this.userSettingsFormGroup.get('startOfTheWeek').value,
           },
           dashboardSettings: <AppDashboardSettingsInterface>{

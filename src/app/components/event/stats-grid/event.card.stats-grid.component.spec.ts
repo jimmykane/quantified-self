@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { EventCardStatsGridComponent } from './event.card.stats-grid.component';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import { ElementRef, signal, NO_ERRORS_SCHEMA } from '@angular/core';
-import { ActivityTypes, UserSummariesSettingsInterface, UserUnitSettingsInterface, ActivityUtilities, DynamicDataLoader } from '@sports-alliance/sports-lib';
+import { ActivityTypes, UserSummariesSettingsInterface, UserUnitSettingsInterface, ActivityUtilities, DynamicDataLoader, DistanceUnits } from '@sports-alliance/sports-lib';
 import { SimpleChange } from '@angular/core';
 import { DataAscent, DataDescent, DataDuration, DataPaceAvg, DataPowerAvg, DataPowerMax, DataPowerMin, DataTemperatureMax } from '@sports-alliance/sports-lib';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
@@ -73,7 +73,7 @@ describe('EventCardStatsGridComponent', () => {
     const originalResizeObserver = globalThis.ResizeObserver;
 
     const mockUnitSettings: UserUnitSettingsInterface = {
-        distanceUnits: 'kilometers',
+        distanceUnits: DistanceUnits.Kilometers,
         speedUnits: 'km/h',
         paceUnits: 'min/km',
         weightUnits: 'kg',

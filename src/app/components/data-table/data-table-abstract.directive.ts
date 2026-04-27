@@ -22,6 +22,7 @@ import { DataAerobicTrainingEffect } from '@sports-alliance/sports-lib';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib';
 import { DataGradeAdjustedPace } from '@sports-alliance/sports-lib';
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
+import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 
 @Directive()
 export abstract class DataTableAbstractDirective extends LoadingAbstractDirective {
@@ -81,7 +82,9 @@ export abstract class DataTableAbstractDirective extends LoadingAbstractDirectiv
     const recoveryTime = getStat(DataRecoveryTime.type);
 
     statRowElement[DataDuration.type] = duration ? `${duration.getDisplayValue()}` : '';
-    statRowElement[DataDistance.type] = distance ? `${distance.getDisplayValue()} ${distance.getDisplayUnit()}` : '';
+    statRowElement[DataDistance.type] = distance
+      ? resolveUnitAwareDisplayStat(distance, unitSettings, { stripRepeatedUnit: true })?.text ?? `${distance.getDisplayValue()} ${distance.getDisplayUnit()}`
+      : '';
     statRowElement[DataAscent.type] = ascent ? `${ascent.getDisplayValue()} ${ascent.getDisplayUnit()}` : '';
     statRowElement[DataDescent.type] = descent ? `${descent.getDisplayValue()} ${descent.getDisplayUnit()}` : '';
     statRowElement[DataEnergy.type] = energy ? `${energy.getDisplayValue()} ${energy.getDisplayUnit()}` : '';

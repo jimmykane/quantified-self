@@ -507,6 +507,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
             xAxisType: effectiveXAxisType,
             lapTypes: this.lapTypes,
             eventColorService: this.eventColorService,
+            userUnitSettings: this.userUnitSettings,
           })
           : [];
         this.lastLapMarkersKey = lapMarkersKey;
@@ -711,6 +712,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       .map((lapType) => `${lapType}`)
       .sort((left, right) => left.localeCompare(right))
       .join(',');
+    const unitSettingsKey = this.buildUnitSettingsKey(this.userUnitSettings);
 
     return [
       eventID,
@@ -718,6 +720,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       selectedActivityKey,
       allActivitiesKey,
       lapTypesKey,
+      unitSettingsKey,
     ].join('|');
   }
 
