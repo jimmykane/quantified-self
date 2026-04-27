@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildUnitSettingsForUnitSetupPreset,
+  getRawBrowserLocale,
   resolveStartOfTheWeekForUnitSetup,
   resolveSuggestedUnitSetupPreset,
   shouldShowUnitSetupPrompt,
@@ -19,16 +20,43 @@ import {
 describe('unit setup preset helper', () => {
   it('suggests miles for mile-distance locales', () => {
     expect(resolveSuggestedUnitSetupPreset('en-US')).toBe('miles');
+    expect(resolveSuggestedUnitSetupPreset('en_US')).toBe('miles');
     expect(resolveSuggestedUnitSetupPreset('en-GB')).toBe('miles');
     expect(resolveSuggestedUnitSetupPreset('en-LR')).toBe('miles');
     expect(resolveSuggestedUnitSetupPreset('my-MM')).toBe('miles');
   });
 
   it('suggests kilometers for other locales and malformed values', () => {
+    expect(resolveSuggestedUnitSetupPreset('en')).toBe('kilometers');
+    expect(resolveSuggestedUnitSetupPreset('en-Latn')).toBe('kilometers');
+    expect(resolveSuggestedUnitSetupPreset('el')).toBe('kilometers');
     expect(resolveSuggestedUnitSetupPreset('fi-FI')).toBe('kilometers');
     expect(resolveSuggestedUnitSetupPreset('fr-FR')).toBe('kilometers');
     expect(resolveSuggestedUnitSetupPreset('not a locale')).toBe('kilometers');
     expect(resolveSuggestedUnitSetupPreset(null)).toBe('kilometers');
+  });
+
+  it('reads the raw navigator locale before Intl resolved fallback', () => {
+    const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true,
+      value: {
+        language: 'en-US',
+        languages: ['en'],
+      },
+    });
+
+    try {
+      expect(getRawBrowserLocale()).toBe('en');
+      expect(resolveSuggestedUnitSetupPreset()).toBe('kilometers');
+    } finally {
+      if (originalNavigator) {
+        Object.defineProperty(globalThis, 'navigator', originalNavigator);
+      } else {
+        delete (globalThis as { navigator?: Navigator }).navigator;
+      }
+    }
   });
 
   it('resolves week start from locale when available', () => {

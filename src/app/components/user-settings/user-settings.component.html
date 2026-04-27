@@ -349,55 +349,80 @@
           <p style="margin: 0; opacity: 0.7; font-size: 1rem;">Choose your preferred units for sporting data.</p>
         </div>
         <div class="card-content">
-          <mat-form-field appearance="outline">
-            <mat-label>Distance Units</mat-label>
-            <mat-select formControlName="distanceUnitsToUse">
-              @for (unit of distanceUnitOptions; track unit.value) {
-              <mat-option [value]="unit.value">{{unit.label}}</mat-option>
+          <div class="unit-simple-settings">
+            <div class="unit-simple-settings__copy">
+              <h2>Simple preset</h2>
+              <p>Choose the units most of the app should use.</p>
+            </div>
+            <mat-button-toggle-group
+              class="unit-simple-settings__choices"
+              [value]="selectedUnitPreset"
+              hideSingleSelectionIndicator
+              aria-label="Unit preset"
+              (change)="onUnitPresetChange($event.value)">
+              @for (option of unitPresetOptions; track option.value) {
+              <mat-button-toggle [value]="option.value">{{ option.label }}</mat-button-toggle>
               }
-            </mat-select>
-            <mat-hint>Show dashboard distance totals and activity distances in kilometers or miles.</mat-hint>
-          </mat-form-field>
+            </mat-button-toggle-group>
+          </div>
 
-          <mat-form-field appearance="outline">
-            <mat-label>Preferred Speed Units</mat-label>
-            <mat-select formControlName="speedUnitsToUse" multiple>
-              @for (unit of speedUnits | keyvalue; track unit.key) {
-              <mat-option [value]="unit.value">{{unit.value}}</mat-option>
-              }
-            </mat-select>
-            <mat-hint>Metrics used for running, cycling, etc.</mat-hint>
-          </mat-form-field>
+          <mat-expansion-panel class="unit-advanced-settings">
+            <mat-expansion-panel-header>
+              <mat-panel-title>Fine-tune units</mat-panel-title>
+              <mat-panel-description>Individual settings</mat-panel-description>
+            </mat-expansion-panel-header>
+            <div class="unit-advanced-settings__fields">
+              <mat-form-field class="unit-advanced-settings__field" appearance="outline">
+                <mat-label>Distance</mat-label>
+                <mat-select formControlName="distanceUnitsToUse">
+                  @for (unit of distanceUnitOptions; track unit.value) {
+                  <mat-option [value]="unit.value">{{unit.label}}</mat-option>
+                  }
+                </mat-select>
+                <mat-hint>Dashboard and activity distances.</mat-hint>
+              </mat-form-field>
 
-          <mat-form-field appearance="outline">
-            <mat-label>Preferred Pace Units</mat-label>
-            <mat-select formControlName="paceUnitsToUse" multiple>
-              @for (unit of paceUnits | keyvalue; track unit.key) {
-              <mat-option [value]="unit.value">{{unit.value}}</mat-option>
-              }
-            </mat-select>
-            <mat-hint>Time per kilometer or mile calculations.</mat-hint>
-          </mat-form-field>
+              <mat-form-field class="unit-advanced-settings__field" appearance="outline">
+                <mat-label>Speed</mat-label>
+                <mat-select formControlName="speedUnitsToUse" multiple>
+                  @for (unit of speedUnits | keyvalue; track unit.key) {
+                  <mat-option [value]="unit.value">{{unit.value}}</mat-option>
+                  }
+                </mat-select>
+                <mat-hint>Running, cycling, and activity speed.</mat-hint>
+              </mat-form-field>
 
-          <mat-form-field appearance="outline">
-            <mat-label>Swim Pace Preference</mat-label>
-            <mat-select formControlName="swimPaceUnitsToUse" multiple>
-              @for (unit of swimPaceUnits | keyvalue; track unit.key) {
-              <mat-option [value]="unit.value">{{unit.value}}</mat-option>
-              }
-            </mat-select>
-            <mat-hint>Specific units for swimming segments.</mat-hint>
-          </mat-form-field>
+              <mat-form-field class="unit-advanced-settings__field" appearance="outline">
+                <mat-label>Pace</mat-label>
+                <mat-select formControlName="paceUnitsToUse" multiple>
+                  @for (unit of paceUnits | keyvalue; track unit.key) {
+                  <mat-option [value]="unit.value">{{unit.value}}</mat-option>
+                  }
+                </mat-select>
+                <mat-hint>Time per kilometer or mile.</mat-hint>
+              </mat-form-field>
 
-          <mat-form-field appearance="outline">
-            <mat-label>Vertical Speed Preference</mat-label>
-            <mat-select formControlName="verticalSpeedUnitsToUse" multiple>
-              @for (unit of verticalSpeedUnits | keyvalue; track unit.key) {
-              <mat-option [value]="unit.value">{{unit.value}}</mat-option>
-              }
-            </mat-select>
-            <mat-hint>Climbing and descent rate indicators.</mat-hint>
-          </mat-form-field>
+              <mat-form-field class="unit-advanced-settings__field" appearance="outline">
+                <mat-label>Swim pace</mat-label>
+                <mat-select formControlName="swimPaceUnitsToUse" multiple>
+                  @for (unit of swimPaceUnits | keyvalue; track unit.key) {
+                  <mat-option [value]="unit.value">{{unit.value}}</mat-option>
+                  }
+                </mat-select>
+                <mat-hint>Pool and swim segment pace.</mat-hint>
+              </mat-form-field>
+
+              <mat-form-field class="unit-advanced-settings__field" appearance="outline">
+                <mat-label>Vertical speed</mat-label>
+                <mat-select formControlName="verticalSpeedUnitsToUse" multiple>
+                  @for (unit of verticalSpeedUnits | keyvalue; track unit.key) {
+                  <mat-option [value]="unit.value">{{unit.value}}</mat-option>
+                  }
+                </mat-select>
+                <mat-hint>Climb and descent rate.</mat-hint>
+              </mat-form-field>
+            </div>
+          </mat-expansion-panel>
         </div>
       </mat-card>
         </ng-template>

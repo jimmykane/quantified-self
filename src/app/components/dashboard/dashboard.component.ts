@@ -441,12 +441,6 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
     }
   }
 
-  openUnitSettings(): void {
-    void this.router.navigate(['/settings'], { queryParams: { section: 'units' } });
-  }
-
-
-
   ngOnDestroy(): void {
     this.manualSearchTrigger$.complete();
   }

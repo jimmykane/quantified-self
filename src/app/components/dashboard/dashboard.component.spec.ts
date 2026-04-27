@@ -212,12 +212,6 @@ describe('DashboardComponent', () => {
         expect(component.showUnitSetupPrompt).toBe(false);
     });
 
-    it('opens advanced unit settings from the prompt', () => {
-        component.openUnitSettings();
-
-        expect(mockRouter.navigate).toHaveBeenCalledWith(['/settings'], { queryParams: { section: 'units' } });
-    });
-
     it('should attach initial live query when resolver already returned user data', async () => {
         mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
         mockActivatedRoute.snapshot.data.dashboardData.events = [{ id: 'event1' }];

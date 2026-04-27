@@ -18,12 +18,11 @@ export type UnitSetupPreset = 'kilometers' | 'miles';
 export interface UnitSetupPresetOption {
   label: string;
   value: UnitSetupPreset;
-  preview: string;
 }
 
 export const UNIT_SETUP_PRESET_OPTIONS: UnitSetupPresetOption[] = [
-  { label: 'Kilometers', value: 'kilometers', preview: '10.00 km · 5:00 min/km' },
-  { label: 'Miles', value: 'miles', preview: '6.22 mi · 8:03 min/mi' },
+  { label: 'Kilometers', value: 'kilometers' },
+  { label: 'Miles', value: 'miles' },
 ];
 
 const MILE_DISTANCE_REGIONS = new Set(['US', 'GB', 'LR', 'MM']);
@@ -31,17 +30,22 @@ const FALLBACK_SUNDAY_WEEK_REGIONS = new Set(['US']);
 const SATURDAY_WEEK_START = 6 as DaysOfTheWeek;
 
 export function getRawBrowserLocale(): string | null {
+  const navigatorLocale = globalThis.navigator?.languages?.find(locale => !!locale)
+    || globalThis.navigator?.language;
+  if (navigatorLocale) {
+    return navigatorLocale;
+  }
+
   try {
     const intlLocale = Intl.DateTimeFormat().resolvedOptions().locale;
     if (intlLocale) {
       return intlLocale;
     }
   } catch {
-    // Fall through to navigator.
+    // Fall through to no locale.
   }
 
-  const navigatorLocale = globalThis.navigator?.language;
-  return navigatorLocale || null;
+  return null;
 }
 
 export function resolveLocaleRegion(locale: string | null | undefined): string | null {
@@ -59,7 +63,7 @@ export function resolveLocaleRegion(locale: string | null | undefined): string |
 }
 
 export function resolveSuggestedUnitSetupPreset(locale: string | null = getRawBrowserLocale()): UnitSetupPreset {
-  const region = resolveLocaleRegion(locale);
+  const region = resolveExplicitLocaleRegion(locale);
   return region && MILE_DISTANCE_REGIONS.has(region) ? 'miles' : 'kilometers';
 }
 
@@ -136,6 +140,20 @@ function getIntlLocaleFirstDay(locale: string | null | undefined): number | null
     return typeof weekInfo?.firstDay === 'number' ? weekInfo.firstDay : null;
   } catch {
     return null;
+  }
+}
+
+function resolveExplicitLocaleRegion(locale: string | null | undefined): string | null {
+  if (!locale || typeof locale !== 'string') {
+    return null;
+  }
+
+  try {
+    const intlLocale = new Intl.Locale(locale.replace(/_/g, '-'));
+    return typeof intlLocale.region === 'string' ? intlLocale.region.toUpperCase() : null;
+  } catch {
+    const match = locale.match(/[-_]([A-Za-z]{2}|\d{3})(?:[-_]|$)/);
+    return match?.[1]?.toUpperCase() || null;
   }
 }
 

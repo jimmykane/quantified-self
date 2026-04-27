@@ -1,5 +1,6 @@
-import { Component, Input, OnChanges, OnInit, inject } from '@angular/core';
+import { Component, Input, OnChanges, OnDestroy, OnInit, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
+import { Subscription } from 'rxjs';
 import { AppWindowService } from '../../services/app.window.service';
 import { AppChartSettingsInterface, AppUserInterface, AppUserSettingsInterface } from '../../models/app-user.interface';
 import { AppAuthService } from '../../authentication/app.auth.service';
@@ -36,6 +37,11 @@ import {
   UserMapSettingsInterface
 } from '@sports-alliance/sports-lib';
 import { AppThemePreference, isAppThemePreference, SYSTEM_THEME_PREFERENCE } from '../../models/app-theme-preference.type';
+import {
+  buildUnitSettingsForUnitSetupPreset,
+  UNIT_SETUP_PRESET_OPTIONS,
+  UnitSetupPreset,
+} from '../../helpers/unit-setup-preset.helper';
 
 @Component({
   selector: 'app-user-settings',
@@ -43,7 +49,7 @@ import { AppThemePreference, isAppThemePreference, SYSTEM_THEME_PREFERENCE } fro
   styleUrls: ['./user-settings.component.scss'],
   standalone: false
 })
-export class UserSettingsComponent implements OnChanges, OnInit {
+export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
 
   public mandatoryAscentExclusions = ACTIVITIES_EXCLUDED_FROM_ASCENT;
   public mandatoryDescentExclusions = ACTIVITIES_EXCLUDED_FROM_DESCENT;
@@ -99,6 +105,8 @@ export class UserSettingsComponent implements OnChanges, OnInit {
     { label: 'Kilometers', value: DistanceUnits.Kilometers },
     { label: 'Miles', value: DistanceUnits.Miles },
   ];
+  public readonly unitPresetOptions = UNIT_SETUP_PRESET_OPTIONS;
+  public selectedUnitPreset: UnitSetupPreset = 'kilometers';
   public verticalSpeedUnits = VerticalSpeedUnits;
   public paceUnits = PaceUnits;
   public swimPaceUnits = SwimPaceUnits;
@@ -111,6 +119,7 @@ export class UserSettingsComponent implements OnChanges, OnInit {
 
   public isAdminUser = false;
   private initializedUserUID: string | null = null;
+  private routeSubscription?: Subscription;
   private readonly controlLabels: Record<string, string> = {
     displayName: 'Name',
     appTheme: 'Interface Theme',
@@ -160,6 +169,13 @@ export class UserSettingsComponent implements OnChanges, OnInit {
 
   ngOnInit(): void {
     this.applyRouteSectionParam();
+    this.routeSubscription = this.route.queryParamMap.subscribe(params => {
+      this.applySectionParam(params.get('section'));
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.routeSubscription?.unsubscribe();
   }
 
 
@@ -278,6 +294,7 @@ export class UserSettingsComponent implements OnChanges, OnInit {
     });
 
     this.initializedUserUID = this.user.uid;
+    this.selectedUnitPreset = this.resolveUnitPresetFromUnitSettings(settings.unitSettings);
     this.syncBrandTextControlState();
   }
 
@@ -319,8 +336,33 @@ export class UserSettingsComponent implements OnChanges, OnInit {
     return index >= 0 ? index : 0;
   }
 
-  onSelectedSectionIndexChange(index: number) {
-    this.activeSection = this.indexToSectionId(index);
+  async onSelectedSectionIndexChange(index: number): Promise<void> {
+    const nextSection = this.indexToSectionId(index);
+    if (nextSection !== this.activeSection) {
+      await this.selectSettingsSection(nextSection);
+    }
+  }
+
+  async selectSettingsSection(section: 'profile' | 'app' | 'dashboard' | 'map' | 'charts' | 'units'): Promise<void> {
+    await this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { section },
+      queryParamsHandling: 'merge',
+    });
+  }
+
+  onUnitPresetChange(preset: UnitSetupPreset): void {
+    this.selectedUnitPreset = preset;
+    const presetSettings = buildUnitSettingsForUnitSetupPreset(preset);
+
+    this.userSettingsFormGroup.patchValue({
+      distanceUnitsToUse: presetSettings.distanceUnits,
+      speedUnitsToUse: presetSettings.speedUnits,
+      paceUnitsToUse: presetSettings.paceUnits,
+      swimPaceUnitsToUse: presetSettings.swimPaceUnits,
+      verticalSpeedUnitsToUse: presetSettings.verticalSpeedUnits,
+    });
+    this.userSettingsFormGroup.markAsDirty();
   }
 
   sectionIdToIndex(section: 'profile' | 'app' | 'dashboard' | 'map' | 'charts' | 'units'): number {
@@ -498,9 +540,16 @@ export class UserSettingsComponent implements OnChanges, OnInit {
   private applyRouteSectionParam(): void {
     const section = this.route.snapshot.queryParamMap?.get('section')
       || this.route.snapshot.queryParams?.['section'];
+    this.applySectionParam(section);
+  }
+
+  private applySectionParam(section: unknown): void {
     if (this.isSettingsSection(section)) {
       this.activeSection = section;
+      return;
     }
+
+    this.activeSection = 'profile';
   }
 
   private isSettingsSection(section: unknown): section is 'profile' | 'app' | 'dashboard' | 'map' | 'charts' | 'units' {
@@ -531,6 +580,10 @@ export class UserSettingsComponent implements OnChanges, OnInit {
     }
 
     return left.every((value, index) => value === right[index]);
+  }
+
+  private resolveUnitPresetFromUnitSettings(unitSettings: UserUnitSettingsInterface): UnitSetupPreset {
+    return unitSettings?.distanceUnits === DistanceUnits.Miles ? 'miles' : 'kilometers';
   }
 
   private maxTrimmedLength(maxLength: number): ValidatorFn {
