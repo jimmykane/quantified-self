@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
 import { Privacy } from '@sports-alliance/sports-lib';
-import { DataDistance } from '@sports-alliance/sports-lib';
+import { DataDistance, DataDistanceFeet, DataDistanceMiles } from '@sports-alliance/sports-lib';
 import { DataDuration } from '@sports-alliance/sports-lib';
 import { DataVO2Max } from '@sports-alliance/sports-lib';
 import { DataDeviceNames } from '@sports-alliance/sports-lib';
@@ -132,6 +132,8 @@ export class DataTypeIconComponent {
   getColumnHeaderIcon(statName): string {
     switch (statName) {
       case DataDistance.type:
+      case DataDistanceMiles.type:
+      case DataDistanceFeet.type:
         return 'route';
       case DataDuration.type:
         return 'timer';

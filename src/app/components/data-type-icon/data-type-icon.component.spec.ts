@@ -6,6 +6,9 @@ import {
   DataCadenceMax,
   DataCadenceMin,
   DataDescent,
+  DataDistance,
+  DataDistanceFeet,
+  DataDistanceMiles,
   DataEnergy,
   DataFeeling,
   DataGradeAdjustedPaceAvg,
@@ -91,6 +94,14 @@ describe('DataTypeIconComponent', () => {
 
     expect(component.getColumnHeaderIcon(DataAscent.type)).toBe('elevation');
     expect(component.getColumnHeaderIcon(DataDescent.type)).toBe('elevation');
+  });
+
+  it('should map distance unit variants to the normal distance icon', () => {
+    const component = new DataTypeIconComponent();
+
+    expect(component.getColumnHeaderIcon(DataDistance.type)).toBe('route');
+    expect(component.getColumnHeaderIcon(DataDistanceMiles.type)).toBe('route');
+    expect(component.getColumnHeaderIcon(DataDistanceFeet.type)).toBe('route');
   });
 
   it('should return mirror class for descent only', () => {
