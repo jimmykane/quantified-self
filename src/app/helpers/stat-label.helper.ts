@@ -63,11 +63,7 @@ const addCandidatesFromFamilyMaps = (familyMap?: Record<string, string>): void =
   });
 };
 
-const selectParentCandidate = (candidates: Set<string>, fallbackLabel?: string): string => {
-  if (candidates.size <= 1) {
-    return [...candidates.values()][0];
-  }
-
+const selectParentCandidate = (candidates: Set<string>, fallbackLabel?: string, variantBaseType?: string): string => {
   const fallbackBaseType = parseTypeQualifier(fallbackLabel || '').baseType.trim().toLowerCase();
   if (fallbackBaseType.length) {
     const exactFallbackMatch = [...candidates.values()]
@@ -75,6 +71,18 @@ const selectParentCandidate = (candidates: Set<string>, fallbackLabel?: string):
     if (exactFallbackMatch) {
       return exactFallbackMatch;
     }
+
+    const normalizedVariantBaseType = (variantBaseType || '').trim().toLowerCase();
+    if (
+      fallbackBaseType !== normalizedVariantBaseType
+      && !UNIT_DERIVED_PARENTS_BY_VARIANT.has(fallbackBaseType)
+    ) {
+      return parseTypeQualifier(fallbackLabel || '').baseType.trim();
+    }
+  }
+
+  if (candidates.size <= 1) {
+    return [...candidates.values()][0];
   }
 
   return [...candidates.values()]
@@ -102,7 +110,7 @@ export const normalizeUnitDerivedTypeLabel = (type: string, fallbackLabel?: stri
     return fallbackLabel ?? trimmedType;
   }
 
-  const parentType = selectParentCandidate(parentCandidates, fallbackLabel);
+  const parentType = selectParentCandidate(parentCandidates, fallbackLabel, baseType);
   if (!qualifier) {
     return parentType;
   }
