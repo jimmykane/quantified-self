@@ -218,7 +218,7 @@ describe('ChartsFormComponent', () => {
     expect(mockChart.on).not.toHaveBeenCalledWith('restore', expect.any(Function));
   });
 
-  it('should expose dynamic status title and rounded headline stats from latest real point', async () => {
+  it('should expose current-day readiness stats while keeping Latest TSS from latest real point', async () => {
     component.absoluteLatestPoint = {
       time: Date.UTC(2024, 1, 5),
       trainingStressScore: 18,
@@ -234,10 +234,10 @@ describe('ChartsFormComponent', () => {
     expect(component.status().title).toBe('Maintaining fitness');
     expect(component.headlineStats()).toEqual({
       fitness: {
-        value: '42',
+        value: '11',
       },
       fatigue: {
-        value: '44',
+        value: '12',
       },
       form: {
         value: '-2',
@@ -288,6 +288,8 @@ describe('ChartsFormComponent', () => {
     expect(formSeries.data.length).toBe(10);
     expect(option.xAxis[1].max).toBe(Date.UTC(2024, 0, 10));
     expect(option.xAxis[1].max).toBeGreaterThan(points[points.length - 1].time);
+    expect(component.headlineStats().tss.value).toBe('22');
+    expect(component.headlineStats().fitness.value).not.toBe('11');
   });
 
   it('should emit empty chart option when there are no form points', async () => {

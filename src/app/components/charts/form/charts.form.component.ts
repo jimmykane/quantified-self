@@ -99,25 +99,29 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
   public noDataErrorIcon = 'monitoring';
 
   readonly hasData = computed(() => this.pointsSignal().length > 0);
-  readonly latestPoint = computed(() => resolveDashboardFormLatestPoint(this.pointsSignal()));
-  readonly displayPoint = computed(() => this.absoluteLatestPointSignal() || this.latestPoint());
-  readonly selectedFormValue = computed(() => resolveDashboardFormValue(this.displayPoint(), ChartsFormComponent.FORM_MODE));
+  readonly latestRealWorkoutPoint = computed(() => this.absoluteLatestPointSignal() || resolveDashboardFormLatestPoint(this.pointsSignal()));
+  readonly latestCurrentDayPoint = computed(() => {
+    const pointsUntilToday = extendDashboardFormPointsWithZeroLoadUntil(this.pointsSignal(), Date.now());
+    return resolveDashboardFormLatestPoint(pointsUntilToday);
+  });
+  readonly selectedFormValue = computed(() => resolveDashboardFormValue(this.latestCurrentDayPoint(), ChartsFormComponent.FORM_MODE));
   readonly status = computed(() => resolveDashboardFormStatus(this.selectedFormValue()));
   readonly selectedGranularity = computed(() => this.selectedTimelineWindowSignal());
   readonly headlineStats = computed(() => {
-    const latest = this.displayPoint();
+    const latestCurrent = this.latestCurrentDayPoint();
+    const latestReal = this.latestRealWorkoutPoint();
     return {
       fitness: {
-        value: this.formatRoundedValue(latest?.ctl),
+        value: this.formatRoundedValue(latestCurrent?.ctl),
       },
       fatigue: {
-        value: this.formatRoundedValue(latest?.atl),
+        value: this.formatRoundedValue(latestCurrent?.atl),
       },
       form: {
         value: this.formatRoundedValue(this.selectedFormValue()),
       },
       tss: {
-        value: this.formatRoundedValue(latest?.trainingStressScore),
+        value: this.formatRoundedValue(latestReal?.trainingStressScore),
       },
     };
   });
@@ -219,7 +223,6 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
     const chartStyle = buildDashboardEChartsStyleTokens(this.darkTheme, chartWidth);
     const renderTimeInterval = this.resolveRenderTimeInterval(this.selectedTimelineWindowSignal());
     // Keep the trend continuous through today by extending with zero-load decay days.
-    // Headline stats still use the absolute latest real workout point.
     const pointsUntilToday = extendDashboardFormPointsWithZeroLoadUntil(sourcePoints, Date.now());
     const points = buildDashboardFormRenderPoints(pointsUntilToday, renderTimeInterval);
     const viewBounds = this.resolveVisibleBounds(points, this.selectedTimelineWindowSignal());
