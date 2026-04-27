@@ -12,7 +12,7 @@ import {
   SimpleChanges,
   ViewChild
 } from '@angular/core';
-import { ChartCursorBehaviours, LapTypes, XAxisTypes } from '@sports-alliance/sports-lib';
+import { ChartCursorBehaviours, LapTypes, UserUnitSettingsInterface, XAxisTypes } from '@sports-alliance/sports-lib';
 import type { ECElementEvent, EChartsType } from 'echarts/core';
 import { AppBreakpoints } from '../../../../constants/breakpoints';
 import { EChartsLoaderService } from '../../../../services/echarts-loader.service';
@@ -50,6 +50,7 @@ import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import type { EventChartPoint } from '../../../../helpers/event-echarts-data.helper';
 import { AppUserUtilities } from '../../../../utils/app.user.utilities';
 import type { LineSeriesOption } from 'echarts/charts';
+import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type ChartAction = Parameters<EChartsType['dispatchAction']>[0];
@@ -152,6 +153,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @Input() showActivityNamesInTooltip = false;
   @Input() zoomBarOverviewData: Array<[number, number]> = [];
   @Input() sharedZoomRange: EventChartRange | null = null;
+  @Input() userUnitSettings: UserUnitSettingsInterface | null = null;
 
   @Output() cursorPositionChange = new EventEmitter<number>();
   @Output() previewRangeChange = new EventEmitter<EventChartRange | null>();
@@ -300,7 +302,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     return formatEventXAxisValue(
       normalizedRange.start,
       this.xAxisType,
-      { includeDateForTime: this.showDateOnTimeAxis }
+      { includeDateForTime: this.showDateOnTimeAxis, unitSettings: this.userUnitSettings }
     );
   }
 
@@ -313,7 +315,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     return formatEventXAxisValue(
       normalizedRange.end,
       this.xAxisType,
-      { includeDateForTime: this.showDateOnTimeAxis }
+      { includeDateForTime: this.showDateOnTimeAxis, unitSettings: this.userUnitSettings }
     );
   }
 
@@ -332,7 +334,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       case XAxisTypes.Time:
         return formatDurationSeconds(span / 1000);
       case XAxisTypes.Distance:
-        return formatEventXAxisValue(span, XAxisTypes.Distance);
+        return formatEventXAxisValue(span, XAxisTypes.Distance, { unitSettings: this.userUnitSettings });
       case XAxisTypes.Duration:
       default:
         return formatDurationSeconds(span);
@@ -369,7 +371,11 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       || changes.fillOpacity
       || changes.waterMark
       || changes.zoomBarOverviewData
+      || changes.userUnitSettings
     ) {
+      if (changes.userUnitSettings) {
+        this.formattedValueCache.clear();
+      }
       this.queueChartRefresh('ngOnChanges');
     }
 
@@ -636,7 +642,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           formatter: (value: number) => formatEventXAxisValue(
             Number(value),
             this.xAxisType,
-            { includeDateForTime: this.showDateOnTimeAxis }
+            { includeDateForTime: this.showDateOnTimeAxis, unitSettings: this.userUnitSettings }
           )
         }
       },
@@ -1109,7 +1115,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           labelFormatter: (value: number) => formatEventXAxisValue(
             Number(value),
             this.xAxisType,
-            { includeDateForTime: this.showDateOnTimeAxis }
+            { includeDateForTime: this.showDateOnTimeAxis, unitSettings: this.userUnitSettings }
           ),
           handleSize: ZOOM_BAR_HANDLE_SIZE,
           disabled: !interactionArmed,
@@ -1191,7 +1197,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const header = formatEventXAxisValue(
       xValue,
       this.xAxisType,
-      { includeDateForTime: this.showDateOnTimeAxis }
+      { includeDateForTime: this.showDateOnTimeAxis, unitSettings: this.userUnitSettings }
     );
     const tooltipLines: string[] = [];
     const resolvedPoints = this.resolveTooltipPointsAtX(xValue);
@@ -1720,7 +1726,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return '--';
     }
 
-    const cacheKey = `${streamType}|${includeUnit ? 1 : 0}|${value}`;
+    const cacheKey = `${streamType}|${includeUnit ? 1 : 0}|${value}|${JSON.stringify(this.userUnitSettings || {})}`;
     const cachedValue = this.formattedValueCache.get(cacheKey);
     if (cachedValue !== undefined) {
       return cachedValue;
@@ -1728,10 +1734,21 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     let formattedValue: string;
     try {
-      const dataInstance = DynamicDataLoader.getDataInstanceFromDataType(streamType, value);
-      formattedValue = includeUnit
-        ? `${dataInstance.getDisplayValue()}${dataInstance.getDisplayUnit()}`
-        : `${dataInstance.getDisplayValue()}`;
+      const unitAwareDisplay = this.userUnitSettings
+        ? resolveUnitAwareDisplayFromValue(streamType, value, this.userUnitSettings, {
+          stripRepeatedUnit: true,
+        })
+        : null;
+      if (unitAwareDisplay) {
+        formattedValue = includeUnit
+          ? unitAwareDisplay.text.replace(/\s+(?=\S+$)/, '')
+          : unitAwareDisplay.value;
+      } else {
+        const dataInstance = DynamicDataLoader.getDataInstanceFromDataType(streamType, value);
+        formattedValue = includeUnit
+          ? `${dataInstance.getDisplayValue()}${dataInstance.getDisplayUnit()}`
+          : `${dataInstance.getDisplayValue()}`;
+      }
     } catch {
       formattedValue = `${value.toFixed(2)}`;
     }

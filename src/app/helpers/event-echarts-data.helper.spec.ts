@@ -10,6 +10,7 @@ import {
   DataPace,
   DataPower,
   DataSpeed,
+  DistanceUnits,
   DynamicDataLoader,
   LapTypes,
   XAxisTypes
@@ -754,6 +755,19 @@ describe('event-echarts-data.helper', () => {
         { label: 'Avg Cadence', value: '172spm' },
       ],
     }));
+
+    const milesMarkers = buildEventLapMarkers({
+      selectedActivities: [activity],
+      allActivities: [activity],
+      xAxisType: XAxisTypes.Distance,
+      lapTypes: [] as any,
+      eventColorService: {
+        getActivityColor: () => '#ff0000'
+      } as any,
+      userUnitSettings: { distanceUnits: DistanceUnits.Miles } as any,
+    });
+
+    expect(milesMarkers[0].tooltipDetails).toContainEqual({ label: 'Distance', value: '0.62 mi' });
   });
 
   it('normalizes lap type aliases so chart lap filtering keeps auto laps visible', () => {

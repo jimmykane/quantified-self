@@ -7,6 +7,7 @@ import {
   DataDistance,
   DataPaceAvg,
   DataRecoveryTime,
+  DistanceUnits,
   PaceUnits,
   TimeIntervals
 } from '@sports-alliance/sports-lib';
@@ -367,6 +368,39 @@ describe('ChartsPieComponent', () => {
         value: 422.3478623928474,
         percent: 100,
         count: 5,
+      },
+    })).toContain(expectedValue);
+  });
+
+  it('should format distance pie center and tooltip values using passed unit settings', async () => {
+    component.chartDataType = DataDistance.type;
+    component.chartDataValueType = ChartDataValueTypes.Total;
+    component.chartDataCategoryType = ChartDataCategoryTypes.ActivityType;
+    component.userUnitSettings = normalizeUserUnitSettings({
+      distanceUnits: DistanceUnits.Miles,
+    });
+    component.data = [
+      { type: 'Running', [ChartDataValueTypes.Total]: 10000, count: 1 },
+    ];
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    const option = mockLoader.setOption.mock.calls.at(-1)?.[1] as Record<string, any>;
+    const expectedValue = formatDashboardNumericValue(
+      DataDistance.type,
+      10000,
+      undefined as any,
+      component.userUnitSettings,
+    );
+    expect(option.graphic[0].children[1].style.text).toBe(expectedValue);
+    expect(option.tooltip.formatter({
+      data: {
+        name: 'Running',
+        value: 10000,
+        percent: 100,
+        count: 1,
       },
     })).toContain(expectedValue);
   });

@@ -11,6 +11,43 @@
       </app-event-search>
       }
 
+      @if (showUnitSetupPrompt) {
+      <mat-card class="unit-setup-prompt" appearance="outlined">
+        <div class="unit-setup-prompt__main">
+          <div class="unit-setup-prompt__copy">
+            <h2>Default units</h2>
+            <p>Kilometers or miles. You can change this later in Settings.</p>
+          </div>
+          <mat-button-toggle-group
+            class="unit-setup-prompt__choices"
+            [value]="selectedUnitSetupPreset"
+            [disabled]="isSavingUnitSetup"
+            hideSingleSelectionIndicator
+            (change)="onUnitSetupPresetChange($event.value)"
+            aria-label="Default unit preset">
+            @for (option of unitSetupOptions; track option.value) {
+            <mat-button-toggle [value]="option.value">{{ option.label }}</mat-button-toggle>
+            }
+          </mat-button-toggle-group>
+          <div class="unit-setup-prompt__actions">
+            <button mat-button type="button" [disabled]="isSavingUnitSetup" (click)="dismissUnitSetupPrompt()">
+              Not now
+            </button>
+            <button mat-flat-button class="qs-mat-primary unit-setup-prompt__apply" type="button" [disabled]="isSavingUnitSetup" (click)="applyUnitSetupPreset()">
+              @if (isSavingUnitSetup) {
+              Saving...
+              } @else {
+              Apply
+              }
+            </button>
+          </div>
+        </div>
+        @if (unitSetupError) {
+        <p class="unit-setup-prompt__error">{{ unitSetupError }}</p>
+        }
+      </mat-card>
+      }
+
       <!-- Removed mat-divider in favor of CSS spacing/gap -->
 
       @if (user) {

@@ -1,7 +1,8 @@
-import { Component, Input, OnChanges, inject } from '@angular/core';
+import { Component, Input, OnChanges, OnDestroy, OnInit, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
+import { Subscription } from 'rxjs';
 import { AppWindowService } from '../../services/app.window.service';
-import { AppChartSettingsInterface, AppUserInterface } from '../../models/app-user.interface';
+import { AppChartSettingsInterface, AppUserInterface, AppUserSettingsInterface } from '../../models/app-user.interface';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppUserService } from '../../services/app.user.service';
 import { AppUserUtilities } from '../../utils/app.user.utilities';
@@ -19,6 +20,7 @@ import {
 import { AppThemes, UserAppSettingsInterface } from '@sports-alliance/sports-lib';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import {
+  DistanceUnits,
   PaceUnits,
   SpeedUnits,
   SwimPaceUnits,
@@ -35,6 +37,11 @@ import {
   UserMapSettingsInterface
 } from '@sports-alliance/sports-lib';
 import { AppThemePreference, isAppThemePreference, SYSTEM_THEME_PREFERENCE } from '../../models/app-theme-preference.type';
+import {
+  buildUnitSettingsForUnitSetupPreset,
+  UNIT_SETUP_PRESET_OPTIONS,
+  UnitSetupPreset,
+} from '../../helpers/unit-setup-preset.helper';
 
 @Component({
   selector: 'app-user-settings',
@@ -42,7 +49,7 @@ import { AppThemePreference, isAppThemePreference, SYSTEM_THEME_PREFERENCE } fro
   styleUrls: ['./user-settings.component.scss'],
   standalone: false
 })
-export class UserSettingsComponent implements OnChanges {
+export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
 
   public mandatoryAscentExclusions = ACTIVITIES_EXCLUDED_FROM_ASCENT;
   public mandatoryDescentExclusions = ACTIVITIES_EXCLUDED_FROM_DESCENT;
@@ -94,6 +101,12 @@ export class UserSettingsComponent implements OnChanges {
   public mapTypes = MapTypes;
 
   public speedUnits = SpeedUnits;
+  public readonly distanceUnitOptions: Array<{ label: string; value: DistanceUnits }> = [
+    { label: 'Kilometers', value: DistanceUnits.Kilometers },
+    { label: 'Miles', value: DistanceUnits.Miles },
+  ];
+  public readonly unitPresetOptions = UNIT_SETUP_PRESET_OPTIONS;
+  public selectedUnitPreset: UnitSetupPreset = 'kilometers';
   public verticalSpeedUnits = VerticalSpeedUnits;
   public paceUnits = PaceUnits;
   public swimPaceUnits = SwimPaceUnits;
@@ -106,6 +119,7 @@ export class UserSettingsComponent implements OnChanges {
 
   public isAdminUser = false;
   private initializedUserUID: string | null = null;
+  private routeSubscription?: Subscription;
   private readonly controlLabels: Record<string, string> = {
     displayName: 'Name',
     appTheme: 'Interface Theme',
@@ -114,6 +128,7 @@ export class UserSettingsComponent implements OnChanges {
     chartStrokeWidth: 'Line Width',
     chartFillOpacity: 'Fill Intensity',
     startOfTheWeek: 'Start of the Week',
+    distanceUnitsToUse: 'Distance Units',
     speedUnitsToUse: 'Preferred Speed Units',
     paceUnitsToUse: 'Preferred Pace Units',
     swimPaceUnitsToUse: 'Swim Pace Preference',
@@ -150,6 +165,17 @@ export class UserSettingsComponent implements OnChanges {
     private windowService: AppWindowService,
     private dialog: MatDialog,
     private logger: LoggerService) {
+  }
+
+  ngOnInit(): void {
+    this.applyRouteSectionParam();
+    this.routeSubscription = this.route.queryParamMap.subscribe(params => {
+      this.applySectionParam(params.get('section'));
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.routeSubscription?.unsubscribe();
   }
 
 
@@ -242,6 +268,9 @@ export class UserSettingsComponent implements OnChanges {
       startOfTheWeek: new UntypedFormControl(settings.unitSettings.startOfTheWeek, [
         Validators.required,
       ]),
+      distanceUnitsToUse: new UntypedFormControl(settings.unitSettings.distanceUnits, [
+        Validators.required,
+      ]),
       speedUnitsToUse: new UntypedFormControl(settings.unitSettings.speedUnits, [
         Validators.required,
       ]),
@@ -265,6 +294,7 @@ export class UserSettingsComponent implements OnChanges {
     });
 
     this.initializedUserUID = this.user.uid;
+    this.selectedUnitPreset = this.resolveUnitPresetFromUnitSettings(settings.unitSettings);
     this.syncBrandTextControlState();
   }
 
@@ -306,8 +336,33 @@ export class UserSettingsComponent implements OnChanges {
     return index >= 0 ? index : 0;
   }
 
-  onSelectedSectionIndexChange(index: number) {
-    this.activeSection = this.indexToSectionId(index);
+  async onSelectedSectionIndexChange(index: number): Promise<void> {
+    const nextSection = this.indexToSectionId(index);
+    if (nextSection !== this.activeSection) {
+      await this.selectSettingsSection(nextSection);
+    }
+  }
+
+  async selectSettingsSection(section: 'profile' | 'app' | 'dashboard' | 'map' | 'charts' | 'units'): Promise<void> {
+    await this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { section },
+      queryParamsHandling: 'merge',
+    });
+  }
+
+  onUnitPresetChange(preset: UnitSetupPreset): void {
+    this.selectedUnitPreset = preset;
+    const presetSettings = buildUnitSettingsForUnitSetupPreset(preset);
+
+    this.userSettingsFormGroup.patchValue({
+      distanceUnitsToUse: presetSettings.distanceUnits,
+      speedUnitsToUse: presetSettings.speedUnits,
+      paceUnitsToUse: presetSettings.paceUnits,
+      swimPaceUnitsToUse: presetSettings.swimPaceUnits,
+      verticalSpeedUnitsToUse: presetSettings.verticalSpeedUnits,
+    });
+    this.userSettingsFormGroup.markAsDirty();
   }
 
   sectionIdToIndex(section: 'profile' | 'app' | 'dashboard' | 'map' | 'charts' | 'units'): number {
@@ -374,6 +429,17 @@ export class UserSettingsComponent implements OnChanges {
         ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? AppThemes.Dark : AppThemes.Normal)
         : selectedThemePreference;
       const settings = AppUserUtilities.fillMissingAppSettings(this.user as unknown as User);
+      const shouldCompleteUnitSetup = this.shouldCompleteUnitSetupFromForm(settings);
+      const appSettingsToSave: UserAppSettingsInterface & { themePreference?: AppThemePreference; unitSetupCompleted?: boolean } = {
+        theme: resolvedTheme,
+        themePreference: selectedThemePreference
+      };
+      if ((settings.appSettings as any)?.unitSetupCompleted !== undefined) {
+        appSettingsToSave.unitSetupCompleted = (settings.appSettings as any).unitSetupCompleted;
+      }
+      if (shouldCompleteUnitSetup) {
+        appSettingsToSave.unitSetupCompleted = true;
+      }
 
       const propertiesToUpdate: any = {
         displayName: this.userSettingsFormGroup.get('displayName').value,
@@ -382,10 +448,7 @@ export class UserSettingsComponent implements OnChanges {
         acceptedMarketingPolicy: this.userSettingsFormGroup.get('acceptedMarketingPolicy').value,
         settings: <UserSettingsInterface>{
           chartSettings: userChartSettings as unknown as UserSettingsInterface['chartSettings'],
-          appSettings: <UserAppSettingsInterface & { themePreference?: AppThemePreference }>{
-            theme: resolvedTheme,
-            themePreference: selectedThemePreference
-          },
+          appSettings: appSettingsToSave,
           mapSettings: <UserMapSettingsInterface>{
             showLaps: this.userSettingsFormGroup.get('showMapLaps').value,
 
@@ -401,6 +464,7 @@ export class UserSettingsComponent implements OnChanges {
             gradeAdjustedPaceUnits: AppUserUtilities.getGradeAdjustedPaceUnitsFromPaceUnits(this.userSettingsFormGroup.get('paceUnitsToUse').value),
             swimPaceUnits: this.userSettingsFormGroup.get('swimPaceUnitsToUse').value,
             verticalSpeedUnits: this.userSettingsFormGroup.get('verticalSpeedUnitsToUse').value,
+            distanceUnits: this.userSettingsFormGroup.get('distanceUnitsToUse').value,
             startOfTheWeek: this.userSettingsFormGroup.get('startOfTheWeek').value,
           },
           dashboardSettings: <AppDashboardSettingsInterface>{
@@ -471,6 +535,55 @@ export class UserSettingsComponent implements OnChanges {
     if (brandTextControl.enabled) {
       brandTextControl.disable({ emitEvent: false });
     }
+  }
+
+  private applyRouteSectionParam(): void {
+    const section = this.route.snapshot.queryParamMap?.get('section')
+      || this.route.snapshot.queryParams?.['section'];
+    this.applySectionParam(section);
+  }
+
+  private applySectionParam(section: unknown): void {
+    if (this.isSettingsSection(section)) {
+      this.activeSection = section;
+      return;
+    }
+
+    this.activeSection = 'profile';
+  }
+
+  private isSettingsSection(section: unknown): section is 'profile' | 'app' | 'dashboard' | 'map' | 'charts' | 'units' {
+    return typeof section === 'string' && this.sectionOrder.includes(section as any);
+  }
+
+  private shouldCompleteUnitSetupFromForm(settings: AppUserSettingsInterface): boolean {
+    if ((settings.appSettings as any)?.unitSetupCompleted !== false || !this.userSettingsFormGroup) {
+      return false;
+    }
+
+    const unitSettings = settings.unitSettings;
+    return this.userSettingsFormGroup.get('startOfTheWeek')?.value !== unitSettings.startOfTheWeek
+      || this.userSettingsFormGroup.get('distanceUnitsToUse')?.value !== unitSettings.distanceUnits
+      || !this.areFormArraysEqual(this.userSettingsFormGroup.get('speedUnitsToUse')?.value, unitSettings.speedUnits)
+      || !this.areFormArraysEqual(this.userSettingsFormGroup.get('paceUnitsToUse')?.value, unitSettings.paceUnits)
+      || !this.areFormArraysEqual(this.userSettingsFormGroup.get('swimPaceUnitsToUse')?.value, unitSettings.swimPaceUnits)
+      || !this.areFormArraysEqual(this.userSettingsFormGroup.get('verticalSpeedUnitsToUse')?.value, unitSettings.verticalSpeedUnits);
+  }
+
+  private areFormArraysEqual(left: unknown, right: unknown): boolean {
+    if (!Array.isArray(left) || !Array.isArray(right)) {
+      return false;
+    }
+
+    if (left.length !== right.length) {
+      return false;
+    }
+
+    return left.every((value, index) => value === right[index]);
+  }
+
+  private resolveUnitPresetFromUnitSettings(unitSettings: UserUnitSettingsInterface): UnitSetupPreset {
+    return unitSettings?.distanceUnits === DistanceUnits.Miles ? 'miles' : 'kilometers';
   }
 
   private maxTrimmedLength(maxLength: number): ValidatorFn {

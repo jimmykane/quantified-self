@@ -16,6 +16,7 @@ import { LoggerService } from '../../../services/logger.service';
 import { DeviceNameEditDialogComponent } from './device-name-edit-dialog/device-name-edit-dialog.component';
 import { firstValueFrom } from 'rxjs';
 import { isMergeOrBenchmarkEvent } from '../../../helpers/event-visibility.helper';
+import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 
 @Component({
   selector: 'app-activities-toggles',
@@ -51,6 +52,28 @@ export class ActivitiesTogglesComponent {
       colorMap.set(activity.getID(), this.eventColorService.getActivityColor(acts, activity));
     });
     return colorMap;
+  });
+
+  activityDisplayRows = computed(() => {
+    const unitSettings = this.user()?.settings?.unitSettings ?? null;
+    return this.activities().map((activity, index) => {
+      const duration = activity.getDuration?.();
+      const distance = activity.getDistance?.();
+      const fallbackDistance = distance
+        ? `${distance.getDisplayValue?.() ?? ''}${distance.getDisplayUnit?.() ?? ''}`.trim()
+        : '';
+
+      return {
+        activity,
+        trackKey: activity.getID?.() || `idx-${index}`,
+        color: this.activityColors().get(activity.getID()) || '#000',
+        primaryLabel: this.getPrimaryLabel(activity),
+        duration: `${duration?.getDisplayValue?.() ?? ''}`.trim(),
+        distance: distance
+          ? resolveUnitAwareDisplayStat(distance, unitSettings, { stripRepeatedUnit: true })?.text ?? fallbackDistance
+          : '',
+      };
+    });
   });
 
   // Computed: check if device names should show

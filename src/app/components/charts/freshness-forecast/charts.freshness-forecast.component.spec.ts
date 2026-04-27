@@ -169,4 +169,58 @@ describe('ChartsFreshnessForecastComponent', () => {
     expect(tooltipHtml).toContain('Δ Form vs prev: +11');
     expect(tooltipHtml).toContain('Assumes zero load.');
   });
+
+  it('enables draggable x-axis tooltip handle on mobile viewport', async () => {
+    const originalMatchMedia = window.matchMedia;
+    const matchMediaSpy = vi.fn().mockImplementation(() => ({
+      matches: true,
+      media: '',
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    window.matchMedia = matchMediaSpy as unknown as typeof window.matchMedia;
+
+    try {
+      component.forecast = {
+        generatedAtMs: Date.now(),
+        points: [
+          {
+            dayMs: Date.UTC(2026, 0, 8),
+            trainingStressScore: 20,
+            ctl: 50,
+            atl: 55,
+            formSameDay: -5,
+            formPriorDay: -4,
+            isForecast: false,
+          },
+          {
+            dayMs: Date.UTC(2026, 0, 9),
+            trainingStressScore: 0,
+            ctl: 49,
+            atl: 53,
+            formSameDay: -4,
+            formPriorDay: -5,
+            isForecast: true,
+          },
+        ],
+      };
+      fixture.detectChanges();
+      await fixture.whenStable();
+      await vi.waitFor(() => {
+        expect(mockLoader.setOption).toHaveBeenCalled();
+      });
+
+      const setOptionCall = mockLoader.setOption.mock.calls.at(-1) || [];
+      const optionCandidate = setOptionCall[1] || setOptionCall[0];
+      const option = optionCandidate as Record<string, any>;
+      expect(option?.xAxis?.axisPointer?.handle?.show).toBe(true);
+      expect(option?.xAxis?.axisPointer?.handle?.size).toBe(20);
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
 });

@@ -177,7 +177,7 @@ describe('ChartsFormComponent', () => {
     return (call?.[1] || {}) as Record<string, any>;
   };
 
-  it('should initialize echarts with two panes and default prior-day form series', async () => {
+  it('should initialize echarts with two panes and default same-day form series', async () => {
     fixture.detectChanges();
     await waitForChartStabilization();
 
@@ -199,7 +199,7 @@ describe('ChartsFormComponent', () => {
     expect(option.xAxis[1].type).toBe('time');
     expect(Array.isArray(formSeries.data)).toBe(true);
     expect(formSeries.data).toHaveLength(points.length);
-    expect(formSeries.data[formSeries.data.length - 1][1]).toBe(points[points.length - 1].formPriorDay);
+    expect(formSeries.data[formSeries.data.length - 1][1]).toBe(points[points.length - 1].formSameDay);
     expect(formSeries.symbol).toBe('none');
     expect(option.dataZoom).toBeUndefined();
     expect(option.toolbox).toBeUndefined();
@@ -413,5 +413,32 @@ describe('ChartsFormComponent', () => {
       { contentSize: [320, 150], viewSize: [360, 400] },
     );
     expect(position).toEqual([20, 8]);
+  });
+
+  it('should enable draggable x-axis tooltip handle on mobile viewport', async () => {
+    const originalMatchMedia = window.matchMedia;
+    const matchMediaSpy = vi.fn().mockImplementation(() => ({
+      matches: true,
+      media: '',
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    window.matchMedia = matchMediaSpy as unknown as typeof window.matchMedia;
+
+    try {
+      fixture.detectChanges();
+      await waitForChartStabilization();
+
+      const option = getLastFullChartOption();
+      expect(option.xAxis?.[0]?.axisPointer?.handle?.show).toBe(false);
+      expect(option.xAxis?.[1]?.axisPointer?.handle?.show).toBe(true);
+      expect(option.xAxis?.[1]?.axisPointer?.handle?.size).toBe(20);
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
   });
 });

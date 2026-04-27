@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ActivityTypes, DataDistance, XAxisTypes } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DataDistance, DistanceUnits, XAxisTypes } from '@sports-alliance/sports-lib';
 import {
   buildEventCanonicalXAxisScaleOptions,
   canSelectEventChartDistanceXAxis,
@@ -85,6 +85,12 @@ describe('event-echarts-xaxis.helper', () => {
   it('formats axis values safely', () => {
     expect(formatEventXAxisValue(90, XAxisTypes.Duration)).toBe('01:30');
     expect(formatEventXAxisValue(Number.NaN, XAxisTypes.Distance)).toBe('');
+  });
+
+  it('formats distance axis values with the user distance preference', () => {
+    expect(formatEventXAxisValue(10000, XAxisTypes.Distance, {
+      unitSettings: { distanceUnits: DistanceUnits.Miles } as any,
+    })).toBe('6.22mi');
   });
 
   it('formats time axis with optional date visibility', () => {

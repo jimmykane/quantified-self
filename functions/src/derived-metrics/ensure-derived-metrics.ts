@@ -4,6 +4,7 @@ import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { enforceAppCheck } from '../utils';
 import {
     DERIVED_METRIC_KINDS,
+    DERIVED_METRIC_SCHEMA_VERSION,
     DERIVED_METRICS_COLLECTION_ID,
     DERIVED_METRICS_COORDINATOR_DOC_ID,
     getDerivedMetricDocId,
@@ -29,6 +30,7 @@ interface DerivedMetricsFreshnessInput {
     coordinatorUpdatedAtMs: number | null;
     coordinatorEventMutationVersion: number | null;
     formSnapshotStatus: string | null;
+    formSnapshotSchemaVersion: number | null;
     formSnapshotBuiltFromEventMutationVersion: number | null;
     latestEventUpdatedAtMs: number | null;
 }
@@ -41,6 +43,7 @@ interface DerivedMetricsFreshnessDecision {
     | 'processing_stuck'
     | 'requested_metric_without_form'
     | 'missing_form_snapshot'
+    | 'schema_version_mismatch'
     | 'missing_event_mutation_version'
     | 'missing_snapshot_event_mutation_version'
     | 'missing_completed_at'
@@ -138,6 +141,9 @@ export function decideDerivedMetricsFreshness(input: DerivedMetricsFreshnessInpu
     if (input.formSnapshotStatus !== 'ready') {
         return { shouldQueue: true, reason: 'missing_form_snapshot' };
     }
+    if (!Number.isFinite(input.formSnapshotSchemaVersion) || (input.formSnapshotSchemaVersion as number) < DERIVED_METRIC_SCHEMA_VERSION) {
+        return { shouldQueue: true, reason: 'schema_version_mismatch' };
+    }
     if (!Number.isFinite(input.coordinatorCompletedAtMs)) {
         return { shouldQueue: true, reason: 'missing_completed_at' };
     }
@@ -212,6 +218,7 @@ export const ensureDerivedMetrics = onCall({
 
     const formSnapshotData = formSnapshot.data() || {};
     const formSnapshotStatus = toSafeString(formSnapshotData.status) || null;
+    const formSnapshotSchemaVersion = toFiniteNumber(formSnapshotData.schemaVersion);
     const formSnapshotBuiltFromEventMutationVersion = toFiniteNumber(
         formSnapshotData.builtFromEventMutationVersion,
     );
@@ -227,6 +234,7 @@ export const ensureDerivedMetrics = onCall({
         coordinatorUpdatedAtMs,
         coordinatorEventMutationVersion,
         formSnapshotStatus,
+        formSnapshotSchemaVersion,
         formSnapshotBuiltFromEventMutationVersion,
         latestEventUpdatedAtMs,
     });

@@ -10,6 +10,8 @@ import { AppEventColorService } from '../../../services/color/app.event.color.se
 import { AppActivitySelectionService } from '../../../services/activity-selection-service/app-activity-selection.service';
 import { MatSlideToggleChange } from '@angular/material/slide-toggle';
 import { isMergeOrBenchmarkEvent } from '../../../helpers/event-visibility.helper';
+import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
+import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 
 @Component({
   selector: 'app-activity-toggle',
@@ -30,12 +32,29 @@ export class ActivityToggleComponent {
   // Injected services
   public eventColorService = inject(AppEventColorService);
   public activitySelectionService = inject(AppActivitySelectionService);
+  private userSettingsQuery = inject(AppUserSettingsQueryService);
 
   // Computed: cache selection status
   isSelected = computed(() => this.isActivitySelected(this.activity()));
 
   // Computed: cache activity color
   activityColor = computed(() => this.eventColorService.getActivityColor(this.event().getActivities(), this.activity()));
+
+  durationDisplay = computed(() => {
+    const duration = this.activity()?.getDuration?.();
+    return `${duration?.getDisplayValue?.() ?? ''}`.trim();
+  });
+
+  distanceDisplay = computed(() => {
+    const distance = this.activity()?.getDistance?.();
+    if (!distance) {
+      return '';
+    }
+
+    return resolveUnitAwareDisplayStat(distance, this.userSettingsQuery.unitSettings(), {
+      stripRepeatedUnit: true,
+    })?.text ?? `${distance.getDisplayValue?.() ?? ''}${distance.getDisplayUnit?.() ?? ''}`.trim();
+  });
 
   // Merge or benchmark events should use device name as the primary label.
   useDeviceNameAsPrimaryLabel = computed(() => isMergeOrBenchmarkEvent(this.event()));

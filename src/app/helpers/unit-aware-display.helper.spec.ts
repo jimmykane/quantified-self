@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   DataAscent,
   DataDescent,
+  DataDistance,
   DataDuration,
   DataHeartRateMax,
+  DataJumpDistance,
   DataPaceAvg,
   DataSpeedAvg,
   DaysOfTheWeek,
+  DistanceUnits,
   PaceUnits,
   SpeedUnits,
   SwimPaceUnits,
@@ -28,6 +31,7 @@ describe('unit-aware-display', () => {
       gradeAdjustedPaceUnits: ['Grade Adjusted Pace'],
       swimPaceUnits: [SwimPaceUnits.MinutesPer100Meter],
       verticalSpeedUnits: [VerticalSpeedUnits.MetersPerSecond],
+      distanceUnits: DistanceUnits.Kilometers,
       startOfTheWeek: DaysOfTheWeek.Monday,
     });
   });
@@ -47,8 +51,16 @@ describe('unit-aware-display', () => {
       gradeAdjustedPaceUnits: ['Grade Adjusted Pace in minutes per mile'],
       swimPaceUnits: [SwimPaceUnits.MinutesPer100Meter],
       verticalSpeedUnits: [VerticalSpeedUnits.MetersPerSecond],
+      distanceUnits: DistanceUnits.Kilometers,
       startOfTheWeek: DaysOfTheWeek.Monday,
     });
+  });
+
+  it('should normalize legacy distance unit names to concrete distance units', () => {
+    expect(normalizeUserUnitSettings({ distanceUnits: 'Metric' }).distanceUnits)
+      .toBe(DistanceUnits.Kilometers);
+    expect(normalizeUserUnitSettings({ distanceUnits: 'Imperial' }).distanceUnits)
+      .toBe(DistanceUnits.Miles);
   });
 
   it('should format pace values using the preferred pace units', () => {
@@ -82,6 +94,26 @@ describe('unit-aware-display', () => {
     expect(formatUnitAwareDataValue(DataSpeedAvg.type, 10, unitSettings, {
       stripRepeatedUnit: true,
     })).toBe('22.37 mph');
+  });
+
+  it('should format distance values using the preferred distance units', () => {
+    const unitSettings = normalizeUserUnitSettings({
+      distanceUnits: DistanceUnits.Miles,
+    });
+
+    expect(formatUnitAwareDataValue(DataDistance.type, 10000, unitSettings, {
+      stripRepeatedUnit: true,
+    })).toBe('6.22 mi');
+  });
+
+  it('should format jump distance values in feet when distance preference is miles', () => {
+    const unitSettings = normalizeUserUnitSettings({
+      distanceUnits: DistanceUnits.Miles,
+    });
+
+    expect(formatUnitAwareDataValue(DataJumpDistance.type, 2, unitSettings, {
+      stripRepeatedUnit: true,
+    })).toBe('6.6 ft');
   });
 
   it('should keep stable-unit metrics readable', () => {

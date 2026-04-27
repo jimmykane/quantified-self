@@ -8,6 +8,7 @@ import {
     DataTypeSettings,
     DateRanges,
     DaysOfTheWeek,
+    DistanceUnits,
     DynamicDataLoader,
     GradeAdjustedPaceUnits,
     GradeAdjustedSpeedUnits,
@@ -67,6 +68,7 @@ import {
     isDashboardRecoveryNowChartType,
 } from '../helpers/dashboard-special-chart-types';
 import { ACTIVITY_SYNC_ROUTES, ActivitySyncRouteId } from '@shared/activity-sync-routes';
+import { normalizeDistanceUnits } from '@shared/unit-aware-display';
 
 /**
  * Utility class for AppUser related static methods and default settings.
@@ -268,6 +270,10 @@ export class AppUserUtilities {
         return [VerticalSpeedUnits.MetersPerSecond];
     }
 
+    static getDefaultDistanceUnits(): DistanceUnits {
+        return DistanceUnits.Kilometers;
+    }
+
     static getDefaultUserUnitSettings(): UserUnitSettingsInterface {
         const unitSettings = <UserUnitSettingsInterface>{};
         unitSettings.speedUnits = AppUserUtilities.getDefaultSpeedUnits();
@@ -276,6 +282,7 @@ export class AppUserUtilities {
         unitSettings.gradeAdjustedPaceUnits = AppUserUtilities.getDefaultGradeAdjustedPaceUnits();
         unitSettings.swimPaceUnits = AppUserUtilities.getDefaultSwimPaceUnits();
         unitSettings.verticalSpeedUnits = AppUserUtilities.getDefaultVerticalSpeedUnits();
+        unitSettings.distanceUnits = AppUserUtilities.getDefaultDistanceUnits();
         unitSettings.startOfTheWeek = AppUserUtilities.getDefaultStartOfTheWeek();
         return unitSettings;
     }
@@ -453,6 +460,10 @@ export class AppUserUtilities {
         settings.unitSettings.verticalSpeedUnits = Array.isArray(settings.unitSettings.verticalSpeedUnits) && settings.unitSettings.verticalSpeedUnits.length > 0
             ? settings.unitSettings.verticalSpeedUnits
             : AppUserUtilities.getDefaultVerticalSpeedUnits();
+        settings.unitSettings.distanceUnits = normalizeDistanceUnits(
+            settings.unitSettings.distanceUnits,
+            AppUserUtilities.getDefaultDistanceUnits(),
+        );
         settings.unitSettings.startOfTheWeek = isNumber(settings.unitSettings.startOfTheWeek) ? settings.unitSettings.startOfTheWeek : AppUserUtilities.getDefaultStartOfTheWeek();
 
         // Dashboard

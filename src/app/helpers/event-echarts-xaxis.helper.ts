@@ -3,12 +3,13 @@ import {
   ActivityTypes,
   DataDistance,
   DataStrydDistance,
-  DynamicDataLoader,
   EventInterface,
+  UserUnitSettingsInterface,
   XAxisTypes,
 } from '@sports-alliance/sports-lib';
 import { getBrowserLocale } from '../shared/adapters/date-locale.config';
 import { isIndoorActivityType } from '@shared/activity-type-group.metadata';
+import { formatUnitAwareDataValue } from '@shared/unit-aware-display';
 
 export interface EventChartRange {
   start: number;
@@ -18,6 +19,7 @@ export interface EventChartRange {
 export interface EventXAxisFormatOptions {
   includeDateForTime?: boolean;
   locale?: string;
+  unitSettings?: UserUnitSettingsInterface | null;
 }
 
 export interface EventXAxisScaleOptions {
@@ -108,7 +110,7 @@ export function formatEventXAxisValue(value: number, axisType: XAxisTypes, optio
     case XAxisTypes.Duration:
       return formatDurationSeconds(value);
     case XAxisTypes.Distance:
-      return formatDistance(value);
+      return formatDistance(value, options?.unitSettings);
     default:
       return `${value}`;
   }
@@ -239,13 +241,22 @@ export function formatDurationSeconds(seconds: number): string {
   return `${pad2(minutes)}:${pad2(secs)}`;
 }
 
-export function formatDistance(distanceMeters: number): string {
+export function formatDistance(
+  distanceMeters: number,
+  unitSettings?: UserUnitSettingsInterface | null
+): string {
   try {
-    const distanceInstance = DynamicDataLoader.getDataInstanceFromDataType(DataDistance.type, distanceMeters);
-    return `${distanceInstance.getDisplayValue()}${distanceInstance.getDisplayUnit()}`;
+    const display = formatUnitAwareDataValue(DataDistance.type, distanceMeters, unitSettings, {
+      stripRepeatedUnit: true,
+    });
+    return display ? compactUnitSpacing(display) : `${distanceMeters.toFixed(0)}m`;
   } catch {
     return `${distanceMeters.toFixed(0)}m`;
   }
+}
+
+function compactUnitSpacing(display: string): string {
+  return display.trim().replace(/\s+(?=\S+$)/, '');
 }
 
 function pad2(value: number): string {

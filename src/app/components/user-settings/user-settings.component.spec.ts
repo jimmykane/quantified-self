@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { UserSettingsComponent } from './user-settings.component';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppUserService } from '../../services/app.user.service';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, convertToParamMap } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppWindowService } from '../../services/app.window.service';
 import { MatDialog } from '@angular/material/dialog';
@@ -13,15 +13,27 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { MaterialModule } from '../../modules/material.module';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { of } from 'rxjs';
+import { BehaviorSubject, of } from 'rxjs';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
-import { User, ACTIVITIES_EXCLUDED_FROM_ASCENT, ACTIVITIES_EXCLUDED_FROM_DESCENT } from '@sports-alliance/sports-lib';
+import {
+    ACTIVITIES_EXCLUDED_FROM_ASCENT,
+    ACTIVITIES_EXCLUDED_FROM_DESCENT,
+    DistanceUnits,
+    PaceUnits,
+    SpeedUnits,
+    SwimPaceUnits,
+    User,
+    VerticalSpeedUnits
+} from '@sports-alliance/sports-lib';
 
 
 
 describe('UserSettingsComponent', () => {
     let component: UserSettingsComponent;
     let fixture: ComponentFixture<UserSettingsComponent>;
+    let mockActivatedRoute: any;
+    let mockRouter: any;
+    let queryParamMapSubject: BehaviorSubject<any>;
 
     const mockUser: Partial<User> = {
         uid: 'test-uid',
@@ -56,6 +68,7 @@ describe('UserSettingsComponent', () => {
                 paceUnits: ['min/km'],
                 swimPaceUnits: ['min/100m'],
                 verticalSpeedUnits: ['m/h'],
+                distanceUnits: DistanceUnits.Kilometers,
                 startOfTheWeek: 1
             } as any,
             mapSettings: {
@@ -79,15 +92,30 @@ describe('UserSettingsComponent', () => {
     };
 
     beforeEach(async () => {
+        queryParamMapSubject = new BehaviorSubject(convertToParamMap({}));
+        mockRouter = {
+            navigate: vi.fn().mockImplementation(async (_commands, extras) => {
+                queryParamMapSubject.next(convertToParamMap(extras?.queryParams || {}));
+                return true;
+            })
+        };
+        mockActivatedRoute = {
+            snapshot: {
+                data: {},
+                queryParams: {},
+                queryParamMap: convertToParamMap({})
+            },
+            queryParamMap: queryParamMapSubject.asObservable()
+        };
+
         await TestBed.configureTestingModule({
             declarations: [UserSettingsComponent],
             imports: [ReactiveFormsModule, MaterialModule, NoopAnimationsModule],
             providers: [
                 { provide: AppAuthService, useValue: { user$: of(null) } },
-                { provide: ActivatedRoute, useValue: { snapshot: { data: {} } } },
-                { provide: ActivatedRoute, useValue: { snapshot: { data: {} } } },
+                { provide: ActivatedRoute, useValue: mockActivatedRoute },
                 { provide: AppUserService, useValue: { isBranded: vi.fn().mockResolvedValue(false), updateUserProperties: vi.fn(), isAdmin: vi.fn().mockResolvedValue(false) } },
-                { provide: Router, useValue: {} },
+                { provide: Router, useValue: mockRouter },
                 { provide: MatSnackBar, useValue: { open: vi.fn() } },
                 { provide: AppWindowService, useValue: {} },
                 {
@@ -142,11 +170,35 @@ describe('UserSettingsComponent', () => {
         expect(component.indexToSectionId(99)).toBe('profile');
     });
 
-    it('should update active section when selected tab index changes', () => {
+    it('should update section query param when selected tab index changes', async () => {
         component.activeSection = 'profile';
-        component.onSelectedSectionIndexChange(3);
+        await component.onSelectedSectionIndexChange(3);
+
+        expect(mockRouter.navigate).toHaveBeenCalledWith([], {
+            relativeTo: mockActivatedRoute,
+            queryParams: { section: 'map' },
+            queryParamsHandling: 'merge',
+        });
         expect(component.activeSection).toBe('map');
         expect(component.selectedSectionIndex).toBe(3);
+    });
+
+    it('should update the active tab from section query param changes', () => {
+        component.activeSection = 'profile';
+
+        queryParamMapSubject.next(convertToParamMap({ section: 'units' }));
+
+        expect(component.activeSection).toBe('units');
+        expect(component.selectedSectionIndex).toBe(5);
+    });
+
+    it('should restore the profile tab when the section query param is missing', () => {
+        component.activeSection = 'units';
+
+        queryParamMapSubject.next(convertToParamMap({}));
+
+        expect(component.activeSection).toBe('profile');
+        expect(component.selectedSectionIndex).toBe(0);
     });
 
     it('should enable sticky tabs config for shared tabs wrapper', () => {
@@ -259,6 +311,90 @@ describe('UserSettingsComponent', () => {
                 acceptedMarketingPolicy: true
             })
         );
+    });
+
+    it('should initialize and save distance unit preference when form is submitted', async () => {
+        const userService = TestBed.inject(AppUserService);
+        const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
+
+        component.ngOnChanges();
+
+        expect(component.userSettingsFormGroup.get('distanceUnitsToUse').value).toBe(DistanceUnits.Kilometers);
+
+        component.userSettingsFormGroup.get('distanceUnitsToUse').setValue(DistanceUnits.Miles);
+
+        await component.onSubmit(new Event('submit'));
+
+        expect(updateUserPropertiesSpy).toHaveBeenCalledWith(
+            expect.objectContaining({ uid: 'test-uid' }),
+            expect.objectContaining({
+                settings: expect.objectContaining({
+                    unitSettings: expect.objectContaining({
+                        distanceUnits: DistanceUnits.Miles
+                    })
+                })
+            })
+        );
+    });
+
+    it('should complete unit setup when saving a changed unit preference', async () => {
+        const userService = TestBed.inject(AppUserService);
+        const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
+
+        (component.user.settings.appSettings as any).unitSetupCompleted = false;
+        component.ngOnChanges();
+        component.userSettingsFormGroup.get('distanceUnitsToUse').setValue(DistanceUnits.Miles);
+
+        await component.onSubmit(new Event('submit'));
+
+        expect(updateUserPropertiesSpy).toHaveBeenCalledWith(
+            expect.objectContaining({ uid: 'test-uid' }),
+            expect.objectContaining({
+                settings: expect.objectContaining({
+                    appSettings: expect.objectContaining({
+                        unitSetupCompleted: true
+                    }),
+                    unitSettings: expect.objectContaining({
+                        distanceUnits: DistanceUnits.Miles
+                    })
+                })
+            })
+        );
+    });
+
+    it('should not complete unit setup when saving without unit changes', async () => {
+        const userService = TestBed.inject(AppUserService);
+        const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
+
+        (component.user.settings.appSettings as any).unitSetupCompleted = false;
+        component.ngOnChanges();
+        component.userSettingsFormGroup.get('displayName').setValue('Same Units');
+
+        await component.onSubmit(new Event('submit'));
+
+        const payload = updateUserPropertiesSpy.mock.calls[0][1];
+        expect(payload.settings.appSettings.unitSetupCompleted).toBe(false);
+    });
+
+    it('should expose kilometers and miles labels for distance unit choices', () => {
+        expect(component.distanceUnitOptions).toEqual([
+            { label: 'Kilometers', value: DistanceUnits.Kilometers },
+            { label: 'Miles', value: DistanceUnits.Miles },
+        ]);
+    });
+
+    it('should apply a simple miles unit preset to advanced controls', () => {
+        component.ngOnChanges();
+
+        component.onUnitPresetChange('miles');
+
+        expect(component.selectedUnitPreset).toBe('miles');
+        expect(component.userSettingsFormGroup.get('distanceUnitsToUse').value).toBe(DistanceUnits.Miles);
+        expect(component.userSettingsFormGroup.get('speedUnitsToUse').value).toEqual([SpeedUnits.MilesPerHour]);
+        expect(component.userSettingsFormGroup.get('paceUnitsToUse').value).toEqual([PaceUnits.MinutesPerMile]);
+        expect(component.userSettingsFormGroup.get('swimPaceUnitsToUse').value).toEqual([SwimPaceUnits.MinutesPer100Yard]);
+        expect(component.userSettingsFormGroup.get('verticalSpeedUnitsToUse').value).toEqual([VerticalSpeedUnits.FeetPerSecond]);
+        expect(component.userSettingsFormGroup.dirty).toBe(true);
     });
 
     it('should save trimmed brandText for paid users', async () => {
@@ -529,7 +665,8 @@ describe('UserSettingsComponent', () => {
                     speedUnits: [],
                     paceUnits: [],
                     swimPaceUnits: [],
-                    verticalSpeedUnits: []
+                    verticalSpeedUnits: [],
+                    distanceUnits: 'not-real'
                 },
                 dashboardSettings: {
                     ...(component.user as any).settings.dashboardSettings,
@@ -545,6 +682,7 @@ describe('UserSettingsComponent', () => {
         expect(component.userSettingsFormGroup.get('paceUnitsToUse').value.length).toBeGreaterThan(0);
         expect(component.userSettingsFormGroup.get('swimPaceUnitsToUse').value.length).toBeGreaterThan(0);
         expect(component.userSettingsFormGroup.get('verticalSpeedUnitsToUse').value.length).toBeGreaterThan(0);
+        expect(component.userSettingsFormGroup.get('distanceUnitsToUse').value).toBe(DistanceUnits.Kilometers);
         expect(component.userSettingsFormGroup.get('eventsPerPage').value).toBe(10);
     });
 

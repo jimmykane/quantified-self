@@ -244,7 +244,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       return {
         title: 'Form Now',
         primaryValue: context?.value ?? null,
-        primaryLabel: 'Prior-day TSB',
+        primaryLabel: 'Same-day TSB',
         secondaryLabel: 'Current readiness state',
         primarySigned: true,
         trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
@@ -256,7 +256,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       return {
         title: 'Form +7d',
         primaryValue: context?.value ?? null,
-        primaryLabel: 'Projected prior-day TSB',
+        primaryLabel: 'Projected same-day TSB',
         secondaryLabel: 'Zero-load forecast',
         primarySigned: true,
         trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),

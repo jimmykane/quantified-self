@@ -33,6 +33,7 @@ import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
+type IntensityXAxisLabelMode = 'day-month' | 'month-year' | 'year';
 
 @Component({
   selector: 'app-intensity-distribution-chart',
@@ -154,10 +155,8 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
     const style = buildDashboardEChartsStyleTokens(this.darkTheme, chartWidth);
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
 
-    const categories = weeks.map((week) => new Date(week.weekStartMs).toLocaleDateString(undefined, {
-      month: 'short',
-      day: 'numeric',
-    }));
+    const categories = weeks.map((week) => week.weekStartMs);
+    const xAxisLabelMode = this.resolveXAxisLabelMode(weeks);
     const percentages = weeks.map((week) => {
       const total = week.easySeconds + week.moderateSeconds + week.hardSeconds;
       if (total <= 0) {
@@ -199,12 +198,12 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
           fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
           fontSize: style.axisFontSize,
         },
-        formatter: (params: Array<{ axisValueLabel?: string; seriesName?: string; value?: number }>) => {
+        formatter: (params: Array<{ axisValue?: string | number; seriesName?: string; value?: number }>) => {
           if (!Array.isArray(params) || params.length === 0) {
             return '';
           }
-          const axisValueLabel = `${params[0]?.axisValueLabel || ''}`.trim();
-          const axisHeading = axisValueLabel ? `Week of ${axisValueLabel}` : '';
+          const axisHeadingLabel = this.formatXAxisLabel(params[0]?.axisValue ?? null, xAxisLabelMode);
+          const axisHeading = axisHeadingLabel ? `Week of ${axisHeadingLabel}` : '';
           const lines = params
             .map((entry) => {
               const seriesName = `${entry?.seriesName || ''}`.trim();
@@ -228,6 +227,7 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
           color: style.textColor,
           fontSize: style.axisFontSize,
           hideOverlap: true,
+          formatter: (value: string | number) => this.formatXAxisLabel(value, xAxisLabelMode),
         },
       },
       yAxis: {
@@ -301,5 +301,40 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
       date.getUTCMonth(),
       date.getUTCDate() - dayIndexMondayFirst,
     );
+  }
+
+  private resolveXAxisLabelMode(weeks: DashboardIntensityDistributionWeek[]): IntensityXAxisLabelMode {
+    if (weeks.length < 2) {
+      return 'day-month';
+    }
+    const firstWeekMs = weeks[0]?.weekStartMs ?? 0;
+    const lastWeekMs = weeks[weeks.length - 1]?.weekStartMs ?? firstWeekMs;
+    const spanMs = Math.max(0, lastWeekMs - firstWeekMs);
+    const spanDays = spanMs / (24 * 60 * 60 * 1000);
+    const spansMultipleYears = new Date(firstWeekMs).getFullYear() !== new Date(lastWeekMs).getFullYear();
+
+    if (spanDays >= 730) {
+      return 'year';
+    }
+    if (spansMultipleYears || spanDays >= 180) {
+      return 'month-year';
+    }
+    return 'day-month';
+  }
+
+  private formatXAxisLabel(value: string | number | null | undefined, mode: IntensityXAxisLabelMode): string {
+    if (value === null || value === undefined || !Number.isFinite(Number(value))) {
+      return '';
+    }
+    const date = new Date(Number(value));
+    switch (mode) {
+      case 'year':
+        return date.toLocaleDateString(undefined, { year: 'numeric' });
+      case 'month-year':
+        return date.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+      case 'day-month':
+      default:
+        return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    }
   }
 }

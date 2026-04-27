@@ -43,6 +43,7 @@ export interface AppChartSettingsInterface extends Omit<UserChartSettingsInterfa
 export interface AppAppSettingsInterface extends UserAppSettingsInterface {
     lastSeenChangelogDate?: AppDateValue;
     themePreference?: AppThemePreference;
+    unitSetupCompleted?: boolean;
 }
 
 export interface ActivitySyncRouteSettingsInterface {

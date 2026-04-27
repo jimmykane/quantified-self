@@ -200,7 +200,7 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     id: DASHBOARD_MANAGER_PRESET_IDS.KPI_FORM_NOW,
     label: 'KPI: Form Now',
     tileName: 'Form Now',
-    description: 'Prior-day TSB readiness KPI with mini trend.',
+    description: 'Same-day TSB readiness KPI with mini trend.',
     icon: 'self_improvement',
     category: 'kpi',
     kpiChartType: DASHBOARD_FORM_NOW_KPI_CHART_TYPE,

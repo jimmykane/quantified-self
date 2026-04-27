@@ -148,6 +148,15 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
     const chartWidth = this.chartDiv?.nativeElement?.clientWidth || 0;
     const style = buildDashboardEChartsStyleTokens(this.darkTheme, chartWidth);
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
+    const mobileAxisPointerHandle = isMobileTooltipViewport
+      ? {
+        show: true,
+        size: 20,
+        margin: 4,
+        throttle: 16,
+        color: style.axisColor,
+      }
+      : { show: false };
 
     const ctlSeries = points.map(point => [point.dayMs, point.ctl] as const);
     const atlSeries = points.map(point => [point.dayMs, point.atl] as const);
@@ -197,6 +206,13 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
       },
       xAxis: {
         type: 'time',
+        axisPointer: {
+          show: true,
+          snap: true,
+          triggerTooltip: true,
+          label: { show: false },
+          handle: mobileAxisPointerHandle,
+        },
         axisLine: { lineStyle: { color: style.axisColor } },
         axisTick: { show: false },
         splitLine: { show: false },

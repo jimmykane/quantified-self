@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   DaysOfTheWeek,
+  DistanceUnits,
   PaceUnits,
   SpeedUnits,
   SwimPaceUnits,
@@ -34,6 +35,7 @@ describe('loadUserUnitSettings', () => {
       gradeAdjustedPaceUnits: ['Grade Adjusted Pace in minutes per mile'],
       swimPaceUnits: [SwimPaceUnits.MinutesPer100Meter],
       verticalSpeedUnits: [VerticalSpeedUnits.MetersPerSecond],
+      distanceUnits: DistanceUnits.Kilometers,
       startOfTheWeek: DaysOfTheWeek.Monday,
     });
   });
@@ -54,6 +56,7 @@ describe('loadUserUnitSettings', () => {
       gradeAdjustedPaceUnits: ['Grade Adjusted Pace'],
       swimPaceUnits: [SwimPaceUnits.MinutesPer100Meter],
       verticalSpeedUnits: [VerticalSpeedUnits.MetersPerSecond],
+      distanceUnits: DistanceUnits.Kilometers,
       startOfTheWeek: DaysOfTheWeek.Monday,
     });
   });

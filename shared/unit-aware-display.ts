@@ -4,6 +4,7 @@ import {
   DataDuration,
   type DataInterface,
   DaysOfTheWeek,
+  DistanceUnits,
   DynamicDataLoader,
   GradeAdjustedPaceUnits,
   GradeAdjustedSpeedUnits,
@@ -51,6 +52,33 @@ function normalizeEnumArray<T extends string>(
 
   const filteredValues = value.filter((entry): entry is T => validValues.includes(entry as T));
   return filteredValues.length > 0 ? filteredValues : [...fallback];
+}
+
+function normalizeEnumValue<T extends string | number>(
+  value: unknown,
+  validValues: readonly T[],
+  fallback: T,
+): T {
+  return validValues.includes(value as T) ? value as T : fallback;
+}
+
+export function normalizeDistanceUnits(
+  value: unknown,
+  fallback: DistanceUnits = DistanceUnits.Kilometers,
+): DistanceUnits {
+  if (value === 'Metric') {
+    return DistanceUnits.Kilometers;
+  }
+
+  if (value === 'Imperial') {
+    return DistanceUnits.Miles;
+  }
+
+  return normalizeEnumValue(
+    value,
+    getValidEnumValues(DistanceUnits),
+    fallback,
+  );
 }
 
 function toDisplayText(value: unknown): string {
@@ -114,6 +142,7 @@ export function getDefaultUserUnitSettings(): UserUnitSettingsInterface {
     gradeAdjustedPaceUnits: resolveGradeAdjustedPaceUnits(paceUnits),
     swimPaceUnits: [SwimPaceUnits.MinutesPer100Meter],
     verticalSpeedUnits: [VerticalSpeedUnits.MetersPerSecond],
+    distanceUnits: DistanceUnits.Kilometers,
     startOfTheWeek: DaysOfTheWeek.Monday,
   };
 }
@@ -158,6 +187,10 @@ export function normalizeUserUnitSettings(raw: unknown): UserUnitSettingsInterfa
       getValidEnumValues(VerticalSpeedUnits),
       defaults.verticalSpeedUnits,
     ),
+    distanceUnits: normalizeDistanceUnits(
+      rawSettings.distanceUnits,
+      defaults.distanceUnits ?? DistanceUnits.Kilometers,
+    ),
     startOfTheWeek,
   };
 }
@@ -194,8 +227,9 @@ export function resolveUnitAwareDisplayStat(
     return null;
   }
 
-  const unitBasedStats = unitSettings
-    ? DynamicDataLoader.getUnitBasedDataFromDataInstance(stat, unitSettings)
+  const normalizedUnitSettings = unitSettings ? normalizeUserUnitSettings(unitSettings) : null;
+  const unitBasedStats = normalizedUnitSettings
+    ? DynamicDataLoader.getUnitBasedDataFromDataInstance(stat, normalizedUnitSettings)
     : [];
 
   const preferredStat = options?.preferredType

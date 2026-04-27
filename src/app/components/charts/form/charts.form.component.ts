@@ -66,7 +66,7 @@ const MONTH_VIEW_SPAN_MS = 365 * DAY_MS;
   standalone: false,
 })
 export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy {
-  private static readonly FORM_MODE = 'prior-day' as const;
+  private static readonly FORM_MODE = 'same-day' as const;
 
   readonly granularityOptions: ReadonlyArray<{ key: DashboardFormTimelineWindow; label: string }> = [
     { key: 'w', label: 'W' },
@@ -237,6 +237,15 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
     const atlAxisValues = points.map(point => point.atl);
     const formAxisValues = points.map(point => resolveDashboardFormValue(point, ChartsFormComponent.FORM_MODE));
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
+    const mobileAxisPointerHandle = isMobileTooltipViewport
+      ? {
+        show: true,
+        size: 20,
+        margin: 4,
+        throttle: 16,
+        color: chartStyle.axisColor,
+      }
+      : { show: false };
 
     const topAxisConfig = buildDashboardValueAxisConfig([...ctlAxisValues, ...atlAxisValues]);
     const bottomAxisConfig = buildDashboardValueAxisConfig(
@@ -254,6 +263,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
         snap: true,
         triggerTooltip: true,
         label: { show: false },
+        handle: { show: false },
       },
       axisLabel: { show: false },
       axisTick: { show: false },
@@ -273,6 +283,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
         snap: true,
         triggerTooltip: true,
         label: { show: false },
+        handle: mobileAxisPointerHandle,
       },
       axisLabel: {
         show: true,

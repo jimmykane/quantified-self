@@ -27,6 +27,7 @@ import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { DataSwimPace } from '@sports-alliance/sports-lib';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { LoggerService } from '../../services/logger.service';
+import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 
 
 @Component({
@@ -222,7 +223,11 @@ export class EventsExportFormComponent extends FormsAbstract {
         row.push(`"${event.getActivityTypesAsString()}"`);
       }
       if (this.user.settings.exportToCSVSettings.distance) {
-        row.push(`"${event.getDistance().getDisplayValue()} ${event.getDistance().getDisplayUnit()}"`);
+        const distance = event.getDistance();
+        const display = resolveUnitAwareDisplayStat(distance, this.user.settings.unitSettings, {
+          stripRepeatedUnit: true,
+        })?.text ?? `${distance.getDisplayValue()} ${distance.getDisplayUnit()}`.trim();
+        row.push(`"${display}"`);
       }
       if (this.user.settings.exportToCSVSettings.duration) {
         row.push(`"${event.getDuration().getDisplayValue()}"`);

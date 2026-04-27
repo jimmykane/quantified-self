@@ -166,6 +166,7 @@ describe('AppUserService', () => {
         expect(mergedUser.emailVerified).toBe(true);
         expect(mergedUser.email).toBe('test@example.com');
         expect(mergedUser.acceptedPrivacyPolicy).toBe(false);
+        expect(mergedUser.settings?.appSettings?.unitSetupCompleted).toBe(false);
         expect(service.hasIncompleteProfileReads('u1')).toBe(true);
     });
 

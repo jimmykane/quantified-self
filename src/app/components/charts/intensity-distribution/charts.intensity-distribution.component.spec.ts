@@ -149,14 +149,14 @@ describe('ChartsIntensityDistributionComponent', () => {
     await fixture.whenStable();
 
     const option = (component as any).buildOption(weeks) as Record<string, any>;
-    const formatter = option?.tooltip?.formatter as ((params: Array<{ axisValueLabel?: string; seriesName?: string; value?: number }>) => string);
+    const formatter = option?.tooltip?.formatter as ((params: Array<{ axisValue?: string | number; seriesName?: string; value?: number }>) => string);
 
     expect(typeof formatter).toBe('function');
 
     const tooltipHtml = formatter([
-      { axisValueLabel: 'Dec 29', seriesName: 'Easy', value: 57.142857 },
-      { axisValueLabel: 'Dec 29', seriesName: 'Moderate', value: 28.571428 },
-      { axisValueLabel: 'Dec 29', seriesName: 'Hard', value: 14.285714 },
+      { axisValue: Date.UTC(2025, 11, 29), seriesName: 'Easy', value: 57.142857 },
+      { axisValue: Date.UTC(2025, 11, 29), seriesName: 'Moderate', value: 28.571428 },
+      { axisValue: Date.UTC(2025, 11, 29), seriesName: 'Hard', value: 14.285714 },
     ]);
 
     expect(tooltipHtml).toContain('Week of Dec 29');
@@ -164,5 +164,31 @@ describe('ChartsIntensityDistributionComponent', () => {
     expect(tooltipHtml).toContain('Moderate: 29%');
     expect(tooltipHtml).toContain('Hard: 14%');
     expect(tooltipHtml).not.toContain('57.1');
+  });
+
+  it('formats x-axis labels with year for cross-year ranges', () => {
+    const weeks = [
+      {
+        weekStartMs: Date.UTC(2025, 11, 29),
+        easySeconds: 7200,
+        moderateSeconds: 3600,
+        hardSeconds: 1800,
+        source: 'power' as const,
+      },
+      {
+        weekStartMs: Date.UTC(2026, 0, 5),
+        easySeconds: 5400,
+        moderateSeconds: 1800,
+        hardSeconds: 900,
+        source: 'power' as const,
+      },
+    ];
+
+    const option = (component as any).buildOption(weeks) as Record<string, any>;
+    const formatter = option?.xAxis?.axisLabel?.formatter as ((value: string | number) => string);
+
+    expect(typeof formatter).toBe('function');
+    const label = formatter(Date.UTC(2026, 0, 5));
+    expect(label).toContain('2026');
   });
 });

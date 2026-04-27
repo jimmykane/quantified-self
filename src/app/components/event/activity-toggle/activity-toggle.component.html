@@ -17,8 +17,8 @@
   }
   @if (showStats()) {
   <mat-card-subtitle>
-    <span><b>{{activity().getDuration().getDisplayValue()}}</b>, </span>
-    <span><b>{{activity().getDistance().getDisplayValue()}}</b>{{activity().getDistance().getDisplayUnit()}}</span>
+    <span><b>{{ durationDisplay() }}</b>, </span>
+    <span><b>{{ distanceDisplay() }}</b></span>
   </mat-card-subtitle>
   }
 </mat-card-header>

@@ -54,6 +54,7 @@ describe('dashboard-chart-info.helper', () => {
 
     expect(formInfo).toContain('CTL');
     expect(formInfo).toContain('ATL');
+    expect(formInfo).toContain('same-day');
     expect(acwrInfo).toContain('7 days');
     expect(acwrInfo).toContain('28 days');
   });

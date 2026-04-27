@@ -70,6 +70,17 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('one map tile');
   });
 
+  it('should document that distance values follow unit preferences across the app', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+
+    expect(gettingStartedSection?.content).toContain('Distance values in dashboards, event charts, activity chips, and CSV exports');
+    expect(gettingStartedSection?.content).toContain('dashboard unit prompt');
+    expect(gettingStartedSection?.content).toContain('Advanced settings');
+    expect(gettingStartedSection?.content).toContain('kilometers or miles');
+    expect(gettingStartedSection?.content).toContain('Settings -> Units');
+    expect(gettingStartedSection?.content).toContain('jump distances display in feet when miles are selected');
+  });
+
   it('should document the dashboard form tile CTL/ATL/TSB behavior', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
@@ -77,7 +88,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Training Stress Score');
     expect(gettingStartedSection?.content).toContain('Power Training Stress Score');
     expect(gettingStartedSection?.content).toContain('Form (TSB)');
-    expect(gettingStartedSection?.content).toContain('prior-day readiness');
+    expect(gettingStartedSection?.content).toContain('same-day readiness');
     expect(gettingStartedSection?.content).toContain('full history');
     expect(gettingStartedSection?.content).toContain('W / M / Y');
     expect(gettingStartedSection?.content).toContain('continue to **today** with zero-load decay');

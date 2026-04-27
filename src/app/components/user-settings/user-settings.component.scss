@@ -190,6 +190,175 @@
     gap: 20px;
 }
 
+.unit-simple-settings {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    padding: 16px;
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: 8px;
+    background: var(--mat-sys-surface-container-low);
+}
+
+.unit-simple-settings__copy {
+    flex: 1 1 220px;
+    min-width: 0;
+
+    h2 {
+        margin: 0;
+        font-size: 1rem;
+        line-height: 1.25;
+        font-weight: 700;
+        color: var(--mat-sys-on-surface);
+    }
+
+    p {
+        margin: 4px 0 0;
+        color: var(--mat-sys-on-surface-variant);
+        font-size: 0.875rem;
+    }
+}
+
+.unit-simple-settings__choices {
+    flex: 0 0 auto;
+    border: 1px solid var(--mat-sys-outline-variant) !important;
+    border-radius: 8px !important;
+    background: var(--mat-sys-surface-container-lowest) !important;
+    overflow: hidden;
+}
+
+.unit-simple-settings__choices mat-button-toggle {
+    min-width: 112px;
+    border-left-color: var(--mat-sys-outline-variant) !important;
+    color: var(--mat-sys-on-surface-variant) !important;
+}
+
+.unit-simple-settings__choices mat-button-toggle:first-child {
+    border-left: 0 !important;
+}
+
+.unit-simple-settings__choices mat-button-toggle.mat-button-toggle-checked {
+    background: var(--mat-sys-primary-container) !important;
+    color: var(--mat-sys-on-primary-container) !important;
+}
+
+:host ::ng-deep .unit-simple-settings__choices .mat-button-toggle-label-content {
+    line-height: 38px;
+    padding: 0 16px;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.unit-advanced-settings {
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: 8px !important;
+    background: var(--mat-sys-surface-container-lowest) !important;
+    box-shadow: none !important;
+}
+
+:host ::ng-deep .unit-advanced-settings .mat-expansion-panel-header {
+    min-height: 48px;
+    padding: 0 14px;
+}
+
+:host ::ng-deep .unit-advanced-settings .mat-content {
+    min-width: 0;
+}
+
+:host ::ng-deep .unit-advanced-settings .mat-expansion-panel-header-title {
+    min-width: 0;
+    font-size: 0.95rem;
+    font-weight: 650;
+    line-height: 1.2;
+}
+
+:host ::ng-deep .unit-advanced-settings .mat-expansion-panel-header-description {
+    flex: 0 1 auto;
+    justify-content: flex-end;
+    min-width: 0;
+    margin-left: 8px;
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 0.8125rem;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.unit-advanced-settings__fields {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding-top: 8px;
+}
+
+.unit-advanced-settings__field {
+    width: 100%;
+}
+
+:host ::ng-deep .unit-advanced-settings__field .mat-mdc-form-field-hint {
+    line-height: 1.25;
+}
+
+@include bp.xsmall {
+    .unit-simple-settings {
+        align-items: stretch;
+        flex-direction: column;
+        padding: 14px;
+    }
+
+    .unit-simple-settings__copy {
+        flex: initial;
+    }
+
+    .unit-simple-settings__choices {
+        width: 100%;
+    }
+
+    .unit-simple-settings__choices mat-button-toggle {
+        flex: 1 1 0;
+        min-width: 0;
+    }
+
+    :host ::ng-deep .unit-simple-settings__choices .mat-button-toggle-label-content {
+        padding: 0 8px;
+    }
+
+    :host ::ng-deep .unit-advanced-settings .mat-expansion-panel-header {
+        min-height: 44px;
+        padding: 0 12px;
+    }
+
+    :host ::ng-deep .unit-advanced-settings .mat-expansion-panel-header-title {
+        margin-right: 8px;
+        font-size: 0.875rem;
+    }
+
+    :host ::ng-deep .unit-advanced-settings .mat-expansion-panel-header-description {
+        display: none;
+    }
+
+    .unit-advanced-settings__fields {
+        gap: 24px;
+        padding-top: 12px;
+    }
+
+    :host ::ng-deep .unit-advanced-settings__field .mat-mdc-form-field-subscript-wrapper {
+        min-height: 18px;
+    }
+
+    :host ::ng-deep .unit-advanced-settings__field .mat-mdc-form-field-hint-wrapper {
+        align-items: flex-start;
+        padding-top: 4px;
+    }
+
+    :host ::ng-deep .unit-advanced-settings__field .mat-mdc-form-field-hint {
+        font-size: 0.72rem;
+        white-space: normal;
+    }
+}
+
 .brand-text-upgrade {
     display: flex;
     align-items: center;

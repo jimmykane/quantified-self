@@ -8,13 +8,20 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { of, Subject } from 'rxjs';
-import { User } from '@sports-alliance/sports-lib';
-import { DateRanges } from '@sports-alliance/sports-lib';
+import {
+    DateRanges,
+    DistanceUnits,
+    EventInterface,
+    PaceUnits,
+    SpeedUnits,
+    SwimPaceUnits,
+    User,
+    VerticalSpeedUnits
+} from '@sports-alliance/sports-lib';
 import { AppUserInterface } from '../../models/app-user.interface';
 import { Analytics } from 'app/firebase/analytics';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { BehaviorSubject } from 'rxjs';
-import { EventInterface } from '@sports-alliance/sports-lib';
 import { LoggerService } from '../../services/logger.service';
 
 describe('DashboardComponent', () => {
@@ -31,19 +38,21 @@ describe('DashboardComponent', () => {
     let mockLogger: any;
 
     const mockUser = new User('testUser') as AppUserInterface;
-    mockUser.settings = {
-        dashboardSettings: {
-            dateRange: 0,
-            startDate: null,
-            endDate: null,
-            activityTypes: [],
-            tableSettings: {}
-        },
-        unitSettings: { startOfTheWeek: 1 },
-        chartSettings: {}
-    } as any;
 
     beforeEach(async () => {
+        mockUser.settings = {
+            appSettings: {},
+            dashboardSettings: {
+                dateRange: 0,
+                startDate: null,
+                endDate: null,
+                activityTypes: [],
+                tableSettings: {}
+            },
+            unitSettings: { startOfTheWeek: 1 },
+            chartSettings: {}
+        } as any;
+
         mockAuthService = {
             user$: of(mockUser),
 
@@ -113,6 +122,94 @@ describe('DashboardComponent', () => {
         expect(mockEventService.getEventsBy).toHaveBeenCalled();
         expect(component.events.length).toBe(1);
         expect(component.isLoading).toBe(false);
+    });
+
+    it('shows unit setup prompt for owner dashboard when setup is explicitly incomplete', async () => {
+        (mockUser.settings.appSettings as any).unitSetupCompleted = false;
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.showUnitSetupPrompt).toBe(true);
+    });
+
+    it('does not show unit setup prompt on another user dashboard', async () => {
+        (mockUser.settings.appSettings as any).unitSetupCompleted = false;
+        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
+        mockActivatedRoute.snapshot.data.dashboardData.targetUser = { uid: 'other-user' };
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.showUnitSetupPrompt).toBe(false);
+    });
+
+    it('does not show unit setup prompt for legacy users missing the marker', async () => {
+        delete (mockUser.settings.appSettings as any).unitSetupCompleted;
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.showUnitSetupPrompt).toBe(false);
+    });
+
+    it('applies the miles unit setup preset and completes setup', async () => {
+        (mockUser.settings.appSettings as any).unitSetupCompleted = false;
+        (mockUser.settings.appSettings as any).otherAppSetting = 'stale-local-value';
+        component.user = mockUser;
+        component.selectedUnitSetupPreset = 'miles';
+
+        await component.applyUnitSetupPreset();
+
+        expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(
+            mockUser,
+            {
+                settings: {
+                    appSettings: {
+                        unitSetupCompleted: true
+                    },
+                    unitSettings: expect.objectContaining({
+                        distanceUnits: DistanceUnits.Miles,
+                        speedUnits: [SpeedUnits.MilesPerHour],
+                        paceUnits: [PaceUnits.MinutesPerMile],
+                        swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard],
+                        verticalSpeedUnits: [VerticalSpeedUnits.FeetPerSecond]
+                    })
+                }
+            }
+        );
+        expect(Object.keys(mockUserService.updateUserProperties.mock.calls[0][1].settings).sort()).toEqual([
+            'appSettings',
+            'unitSettings'
+        ]);
+        expect(component.showUnitSetupPrompt).toBe(false);
+    });
+
+    it('dismisses unit setup prompt without rewriting unit settings', async () => {
+        (mockUser.settings.appSettings as any).unitSetupCompleted = false;
+        (mockUser.settings.appSettings as any).otherAppSetting = 'stale-local-value';
+        mockUser.settings.unitSettings = {
+            distanceUnits: DistanceUnits.Kilometers,
+            speedUnits: [SpeedUnits.KilometersPerHour],
+            paceUnits: [PaceUnits.MinutesPerKilometer],
+            startOfTheWeek: 1
+        } as any;
+        component.user = mockUser;
+
+        await component.dismissUnitSetupPrompt();
+
+        expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(
+            mockUser,
+            {
+                settings: {
+                    appSettings: {
+                        unitSetupCompleted: true
+                    }
+                }
+            }
+        );
+        expect(mockUserService.updateUserProperties.mock.calls[0][1].settings.unitSettings).toBeUndefined();
+        expect(component.showUnitSetupPrompt).toBe(false);
     });
 
     it('should attach initial live query when resolver already returned user data', async () => {
