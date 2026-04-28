@@ -43,7 +43,7 @@ export class AppSleepService {
       sleepCollection,
       where('startTimeMs', '>=', queryStartMs),
       where('startTimeMs', '<=', endTimeMs),
-      orderBy('startTimeMs', 'asc'),
+      orderBy('startTimeMs', 'desc'),
       limit(AppSleepService.FALLBACK_LIMIT),
     );
 

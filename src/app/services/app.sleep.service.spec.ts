@@ -49,8 +49,8 @@ describe('AppSleepService', () => {
     const start = Date.UTC(2026, 0, 5);
     const end = Date.UTC(2026, 0, 6);
     vi.mocked(collectionData).mockReturnValue(of([
-      { id: 'kept-overnight', startTimeMs: start - (2 * 60 * 60 * 1000), endTimeMs: start + 1, source: { provider: 'SuuntoApp' } },
       { id: 'kept-day', startTimeMs: start + 1000, endTimeMs: start + 2000, source: { provider: 'GarminAPI' } },
+      { id: 'kept-overnight', startTimeMs: start - (2 * 60 * 60 * 1000), endTimeMs: start + 1, source: { provider: 'SuuntoApp' } },
       { id: 'filtered-before', startTimeMs: start - (20 * 60 * 60 * 1000), endTimeMs: start - 1, source: { provider: 'COROSAPI' } },
     ] as any));
 
@@ -59,7 +59,7 @@ describe('AppSleepService', () => {
     expect(collection).toHaveBeenCalledWith(expect.anything(), 'users', 'user-1', 'sleepSessions');
     expect(where).toHaveBeenCalledWith('startTimeMs', '>=', start - (18 * 60 * 60 * 1000));
     expect(where).toHaveBeenCalledWith('startTimeMs', '<=', end);
-    expect(orderBy).toHaveBeenCalledWith('startTimeMs', 'asc');
+    expect(orderBy).toHaveBeenCalledWith('startTimeMs', 'desc');
     expect(limit).toHaveBeenCalledWith(250);
     expect(query).toHaveBeenCalled();
     expect(sessions.map(session => session.id)).toEqual(['kept-overnight', 'kept-day']);
