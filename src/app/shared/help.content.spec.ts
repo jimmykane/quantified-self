@@ -105,6 +105,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Freshness Forecast');
     expect(gettingStartedSection?.content).toContain('Intensity Distribution');
     expect(gettingStartedSection?.content).toContain('Efficiency Trend');
+    expect(gettingStartedSection?.content).toContain('**Sleep** shows connected-source sleep duration');
     expect(gettingStartedSection?.content).toContain('ACWR');
     expect(gettingStartedSection?.content).toContain('Ramp Rate');
     expect(gettingStartedSection?.content).toContain('Monotony / Strain');
@@ -118,7 +119,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Execution');
     expect(gettingStartedSection?.content).toContain('Current week');
     expect(gettingStartedSection?.content).toContain('Latest week');
-    expect(gettingStartedSection?.content).toContain('derived-only');
+    expect(gettingStartedSection?.content).toContain('Training-derived tiles do not fall back');
     expect(gettingStartedSection?.content).toContain('**info** icon');
     expect(gettingStartedSection?.content).toContain('KPI lane');
     expect(gettingStartedSection?.content).toContain('horizontal scroll lane');
@@ -143,6 +144,8 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('stored original files already attached to existing Quantified Self events');
     expect(serviceConnectionsSection?.content).toContain('can run even when the Garmin -> Suunto auto-sync toggle is off');
     expect(serviceConnectionsSection?.content).toContain('Disconnecting Garmin, COROS, or Suunto automatically disables related route auto-sync settings');
+    expect(serviceConnectionsSection?.content).toContain('Sleep sync is server-owned health data');
+    expect(serviceConnectionsSection?.content).toContain('V1 does not provide a user-facing historical sleep backfill tool');
     expect(serviceConnectionsSection?.content).toContain('COROS -> Suunto activity sync is route-based');
     expect(serviceConnectionsSection?.content).toContain('enable the route toggle in COROS Services');
     expect(serviceConnectionsSection?.content).toContain('Automatic sync runs only for newly imported COROS activities');

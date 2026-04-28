@@ -54,6 +54,7 @@
         [freshnessForecast]="getChartTile(tile).freshnessForecast" [freshnessForecastStatus]="getFreshnessForecastStatusForTile(tile)"
         [intensityDistribution]="getChartTile(tile).intensityDistribution" [intensityDistributionStatus]="getIntensityDistributionStatusForTile(tile)"
         [efficiencyTrend]="getChartTile(tile).efficiencyTrend" [efficiencyTrendStatus]="getEfficiencyTrendStatusForTile(tile)"
+        [sleepTrend]="getChartTile(tile).sleepTrend"
         [absoluteLatestFormPoint]="getChartTile(tile).absoluteLatestFormPoint"
         [size]="tile.size" [order]="tile.order" [enableDesktopDrag]="desktopTileDragEnabled"
         (editInDashboardManager)="openDashboardManagerForTileOrder($event)"></app-tile-chart>
@@ -100,6 +101,7 @@
         [freshnessForecast]="getChartTile(tile).freshnessForecast" [freshnessForecastStatus]="getFreshnessForecastStatusForTile(tile)"
         [intensityDistribution]="getChartTile(tile).intensityDistribution" [intensityDistributionStatus]="getIntensityDistributionStatusForTile(tile)"
         [efficiencyTrend]="getChartTile(tile).efficiencyTrend" [efficiencyTrendStatus]="getEfficiencyTrendStatusForTile(tile)"
+        [sleepTrend]="getChartTile(tile).sleepTrend"
         [absoluteLatestFormPoint]="getChartTile(tile).absoluteLatestFormPoint"
         [size]="tile.size" [order]="tile.order" [enableDesktopDrag]="desktopTileDragEnabled"
         (editInDashboardManager)="openDashboardManagerForTileOrder($event)"></app-tile-chart>

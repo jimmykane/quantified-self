@@ -160,6 +160,42 @@ export async function enqueueActivitySyncTask(
 }
 
 /**
+ * Enqueue a sleep sync processing task to Cloud Tasks.
+ * Uses deterministic task names for deduplication.
+ */
+export async function enqueueSleepSyncTask(
+    queueItemId: string,
+    dateCreated: number,
+    scheduleDelaySeconds?: number,
+): Promise<boolean> {
+    const client = getCloudTasksClient();
+    const { projectId, location, sleepSyncQueue, serviceAccountEmail } = config.cloudtasks;
+
+    if (!projectId) {
+        throw new Error('Project ID is not defined in config');
+    }
+
+    const url = `https://${location}-${projectId}.cloudfunctions.net/processSleepSyncTask`;
+    const parent = client.queuePath(projectId, location, sleepSyncQueue);
+
+    const safeQueueItemId = `${queueItemId}`.replace(/[^a-zA-Z0-9-_]/g, '-');
+    const safeDateCreated = Number.isFinite(dateCreated) ? Math.max(0, Math.floor(dateCreated)) : 0;
+    const taskName = `${parent}/tasks/sleep-sync-${safeQueueItemId}-${safeDateCreated}`;
+    const payload = { data: { queueItemId } };
+
+    return enqueueTaskWithRetry({
+        parent,
+        taskName,
+        payload,
+        serviceAccountEmail,
+        url,
+        scheduleDelaySeconds,
+        alreadyExistsLogMessage: `[SleepSyncDispatcher] Task already exists for queue item ${queueItemId}, skipping`,
+        failedLogPrefix: `[SleepSyncDispatcher] Failed to enqueue sleep sync task for ${queueItemId}:`,
+    });
+}
+
+/**
  * Enqueue a single sports-lib reparse job task.
  */
 export async function enqueueSportsLibReparseTask(jobId: string, scheduleDelaySeconds?: number): Promise<boolean> {

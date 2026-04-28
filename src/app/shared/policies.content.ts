@@ -22,7 +22,7 @@ export const POLICY_CONTENT: PolicyItem[] = [
             '<strong>Default Privacy:</strong> Visibility defaults to private and is only seen by your account unless platform policy changes.',
             '<strong>No Data Sales:</strong> We don\'t sell or send your data to any other 3rd party nor do we process your private data in any other way rather than allowing you to visualize them.',
             '<strong>Legal Basis:</strong> We process your data based on: (a) your consent for optional features like analytics, (b) contractual necessity to provide the service you subscribed to, and (c) our legitimate interest in maintaining service security.',
-            '<strong>Third-Party Processors:</strong> Your data is processed by: Google Cloud (hosting, EU region), Stripe (payments), and the fitness service providers you connect (Garmin, Suunto, COROS, Polar) solely to sync your activity data.'
+            '<strong>Third-Party Processors:</strong> Your data is processed by: Google Cloud (hosting, EU region), Stripe (payments), and the fitness service providers you connect (Garmin, Suunto, COROS, Polar) solely to sync your activity, sleep, and related health data.'
         ],
         checkboxLabel: 'I have read and agree to the Privacy Policy and acknowledge my data ownership rights.',
         formControlName: 'acceptPrivacyPolicy'

@@ -5,6 +5,7 @@ export const DASHBOARD_FORM_CHART_TYPE = 'Form' as const;
 export const DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE = 'FreshnessForecast' as const;
 export const DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE = 'IntensityDistribution' as const;
 export const DASHBOARD_EFFICIENCY_TREND_CHART_TYPE = 'EfficiencyTrend' as const;
+export const DASHBOARD_SLEEP_TREND_CHART_TYPE = 'SleepTrend' as const;
 export const DASHBOARD_ACWR_KPI_CHART_TYPE = 'KpiAcwr' as const;
 export const DASHBOARD_RAMP_RATE_KPI_CHART_TYPE = 'KpiRampRate' as const;
 export const DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE = 'KpiMonotonyStrain' as const;
@@ -19,6 +20,7 @@ export type DashboardFormChartType = typeof DASHBOARD_FORM_CHART_TYPE;
 export type DashboardFreshnessForecastChartType = typeof DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE;
 export type DashboardIntensityDistributionChartType = typeof DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE;
 export type DashboardEfficiencyTrendChartType = typeof DASHBOARD_EFFICIENCY_TREND_CHART_TYPE;
+export type DashboardSleepTrendChartType = typeof DASHBOARD_SLEEP_TREND_CHART_TYPE;
 export type DashboardKpiAcwrChartType = typeof DASHBOARD_ACWR_KPI_CHART_TYPE;
 export type DashboardKpiRampRateChartType = typeof DASHBOARD_RAMP_RATE_KPI_CHART_TYPE;
 export type DashboardKpiMonotonyStrainChartType = typeof DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE;
@@ -33,7 +35,8 @@ export type DashboardCuratedChartType =
   | DashboardFormChartType
   | DashboardFreshnessForecastChartType
   | DashboardIntensityDistributionChartType
-  | DashboardEfficiencyTrendChartType;
+  | DashboardEfficiencyTrendChartType
+  | DashboardSleepTrendChartType;
 
 export type DashboardKpiChartType =
   | DashboardKpiAcwrChartType
@@ -81,6 +84,10 @@ const DASHBOARD_CURATED_CHART_DEFINITIONS: DashboardCuratedChartDefinition[] = [
   {
     chartType: DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
     label: 'Efficiency Trend',
+  },
+  {
+    chartType: DASHBOARD_SLEEP_TREND_CHART_TYPE,
+    label: 'Sleep',
   },
 ];
 
@@ -147,12 +154,17 @@ export function isDashboardEfficiencyTrendChartType(chartType: unknown): chartTy
   return `${chartType}` === DASHBOARD_EFFICIENCY_TREND_CHART_TYPE;
 }
 
+export function isDashboardSleepTrendChartType(chartType: unknown): chartType is DashboardSleepTrendChartType {
+  return `${chartType}` === DASHBOARD_SLEEP_TREND_CHART_TYPE;
+}
+
 export function isDashboardCuratedChartType(chartType: unknown): chartType is DashboardCuratedChartType {
   return isDashboardRecoveryNowChartType(chartType)
     || isDashboardFormChartType(chartType)
     || isDashboardFreshnessForecastChartType(chartType)
     || isDashboardIntensityDistributionChartType(chartType)
-    || isDashboardEfficiencyTrendChartType(chartType);
+    || isDashboardEfficiencyTrendChartType(chartType)
+    || isDashboardSleepTrendChartType(chartType);
 }
 
 export function isDashboardAcwrKpiChartType(chartType: unknown): chartType is DashboardKpiAcwrChartType {

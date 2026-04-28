@@ -19,15 +19,16 @@ import {
   DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+  DASHBOARD_SLEEP_TREND_CHART_TYPE,
 } from './dashboard-special-chart-types';
 
 describe('dashboard-manager-presets.helper', () => {
-  it('exposes the expanded preset catalog with 21 unique definitions', () => {
+  it('exposes the expanded preset catalog with 22 unique definitions', () => {
     const definitions = getDashboardManagerPresetDefinitions();
 
-    expect(definitions).toHaveLength(21);
-    expect(new Set(definitions.map(definition => definition.id)).size).toBe(21);
-    expect(definitions.filter(definition => definition.category === 'curated')).toHaveLength(5);
+    expect(definitions).toHaveLength(22);
+    expect(new Set(definitions.map(definition => definition.id)).size).toBe(22);
+    expect(definitions.filter(definition => definition.category === 'curated')).toHaveLength(6);
     expect(definitions.filter(definition => definition.category === 'kpi')).toHaveLength(8);
     expect(definitions.filter(definition => definition.category === 'custom')).toHaveLength(7);
     expect(definitions.filter(definition => definition.category === 'map')).toHaveLength(1);
@@ -50,6 +51,11 @@ describe('dashboard-manager-presets.helper', () => {
       order: 5,
       size: { columns: 1, rows: 2 },
     });
+    const sleepTile = buildDashboardManagerPresetTile({
+      presetId: DASHBOARD_MANAGER_PRESET_IDS.CURATED_SLEEP,
+      order: 6,
+      size: { columns: 2, rows: 1 },
+    });
 
     expect(recoveryTile).toMatchObject({
       type: TileTypes.Chart,
@@ -65,6 +71,14 @@ describe('dashboard-manager-presets.helper', () => {
       order: 5,
       size: { columns: 1, rows: 2 },
       chartType: DASHBOARD_FORM_CHART_TYPE,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataTimeInterval: TimeIntervals.Daily,
+    });
+    expect(sleepTile).toMatchObject({
+      type: TileTypes.Chart,
+      order: 6,
+      chartType: DASHBOARD_SLEEP_TREND_CHART_TYPE,
+      dataType: 'SleepDuration',
       dataCategoryType: ChartDataCategoryTypes.DateType,
       dataTimeInterval: TimeIntervals.Daily,
     });

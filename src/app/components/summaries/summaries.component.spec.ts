@@ -17,6 +17,7 @@ import { AppThemeService } from '../../services/app.theme.service';
 import { LoggerService } from '../../services/logger.service';
 import { AppUserService } from '../../services/app.user.service';
 import { DashboardDerivedMetricsService } from '../../services/dashboard-derived-metrics.service';
+import { AppSleepService } from '../../services/app.sleep.service';
 import * as dashboardTileViewModelHelper from '../../helpers/dashboard-tile-view-model.helper';
 import { SummariesComponent } from './summaries.component';
 
@@ -29,6 +30,7 @@ describe('SummariesComponent', () => {
     watch: ReturnType<typeof vi.fn>;
     ensureForDashboard: ReturnType<typeof vi.fn>;
   };
+  let mockSleepService: { watchForDashboard: ReturnType<typeof vi.fn> };
   let mockLogger: { error: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn>; log: ReturnType<typeof vi.fn> };
   let mockDialog: { open: ReturnType<typeof vi.fn> };
   let buildDashboardTileViewModelsSpy: ReturnType<typeof vi.spyOn>;
@@ -73,6 +75,9 @@ describe('SummariesComponent', () => {
       })),
       ensureForDashboard: vi.fn(),
     };
+    mockSleepService = {
+      watchForDashboard: vi.fn().mockReturnValue(of([])),
+    };
     mockLogger = { error: vi.fn(), warn: vi.fn(), log: vi.fn() };
     mockDialog = {
       open: vi.fn().mockReturnValue({
@@ -103,6 +108,7 @@ describe('SummariesComponent', () => {
         { provide: AppThemeService, useValue: mockThemeService },
         { provide: AppUserService, useValue: mockUserService },
         { provide: DashboardDerivedMetricsService, useValue: mockDashboardDerivedMetricsService },
+        { provide: AppSleepService, useValue: mockSleepService },
         { provide: LoggerService, useValue: mockLogger },
         { provide: MatDialog, useValue: mockDialog },
       ],
@@ -187,6 +193,7 @@ describe('SummariesComponent', () => {
         removeAscentForEventTypes: [ActivityTypes.Running],
         removeDescentForEventTypes: [ActivityTypes.Cycling],
       },
+      sleepSessions: [],
       logger: mockLogger,
       derivedMetrics: {
         formPoints: null,
