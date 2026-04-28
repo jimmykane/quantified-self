@@ -544,7 +544,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
     this.sleepListenerKey = listenerKey;
     this.sleepSubscription = this.sleepService
-      .watchForDashboard(uid, this.dashboardStartDate, this.dashboardEndDate)
+      .watchForDashboard(uid, null, null)
       .subscribe((sessions) => {
         if (equal(this.sleepSessions, sessions)) {
           return;
@@ -555,11 +555,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   private buildSleepListenerKey(uid: string): string {
-    return JSON.stringify({
-      uid,
-      start: this.dashboardStartDate instanceof Date ? this.dashboardStartDate.getTime() : this.dashboardStartDate,
-      end: this.dashboardEndDate instanceof Date ? this.dashboardEndDate.getTime() : this.dashboardEndDate,
-    });
+    return uid;
   }
 
   private resetDerivedMetricsState(): void {
