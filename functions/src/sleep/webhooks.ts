@@ -1,11 +1,16 @@
 import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import * as crypto from 'crypto';
+import * as admin from 'firebase-admin';
 import {
     SLEEP_PROVIDERS,
 } from '../../../shared/sleep';
 import { addSleepSyncQueueItem } from './queue';
-import { isSleepProviderEnabled, SLEEP_SYNC_DISABLED_PROVIDERS } from './provider-flags';
+import {
+    getAllowedSleepSyncUserIds,
+    isSleepProviderEnabled,
+    SLEEP_SYNC_DISABLED_PROVIDERS,
+} from './provider-flags';
 import { normalizeTrustedGarminCallbackURL } from './garmin-callback-url';
 
 type ExternalRecord = Record<string, unknown>;
@@ -106,6 +111,28 @@ function verifySuuntoSignature(rawBody: Buffer | undefined, signature: string | 
     return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
 }
 
+async function resolveScopedSuuntoWebhookUserID(providerUserId: string): Promise<string | null | undefined> {
+    const allowedUserIDs = getAllowedSleepSyncUserIds();
+    if (allowedUserIDs.length === 0) {
+        return undefined;
+    }
+
+    for (const userID of allowedUserIDs) {
+        const snapshot = await admin.firestore()
+            .collection('suuntoAppAccessTokens')
+            .doc(userID)
+            .collection('tokens')
+            .where('userName', '==', providerUserId)
+            .limit(1)
+            .get();
+        if (!snapshot.empty) {
+            return userID;
+        }
+    }
+
+    return null;
+}
+
 export const receiveGarminAPISleepData = functions.region('europe-west2').runWith({
     timeoutSeconds: 60,
     memory: '256MB',
@@ -191,9 +218,17 @@ export const receiveSuuntoAppSleepData = functions.region('europe-west2').runWit
     }
 
     try {
+        const scopedUserID = await resolveScopedSuuntoWebhookUserID(providerUserId);
+        if (scopedUserID === null) {
+            logger.info('[SleepSync][Suunto] Ignoring webhook for user outside SLEEP_SYNC_ALLOWED_USER_IDS');
+            res.status(200).send();
+            return;
+        }
+
         await addSleepSyncQueueItem({
             type: 'suunto_webhook',
             provider: SLEEP_PROVIDERS.SuuntoApp,
+            userID: scopedUserID || undefined,
             providerUserId,
             payload: { samples },
             dedupeKey: buildSuuntoSleepDedupeKey(providerUserId, samples),

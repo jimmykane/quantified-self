@@ -29,7 +29,7 @@ import {
     QueueResult,
     updateToProcessed,
 } from '../queue-utils';
-import { isSleepProviderEnabled, SLEEP_SYNC_DISABLED_PROVIDERS } from './provider-flags';
+import { isSleepProviderEnabled, isSleepSyncUserAllowed, SLEEP_SYNC_DISABLED_PROVIDERS } from './provider-flags';
 import { assertTrustedGarminCallbackURL, InvalidGarminCallbackUrlError } from './garmin-callback-url';
 
 type TokenSnapshot = admin.firestore.QueryDocumentSnapshot;
@@ -48,6 +48,19 @@ interface AddSleepSyncQueueItemInput {
 
 function queueCollection(): admin.firestore.CollectionReference {
     return admin.firestore().collection(SLEEP_SYNC_QUEUE_COLLECTION_NAME);
+}
+
+function providerUserIdTokenField(provider: SleepProvider): string | null {
+    switch (provider) {
+        case SLEEP_PROVIDERS.GarminAPI:
+            return 'userID';
+        case SLEEP_PROVIDERS.SuuntoApp:
+            return 'userName';
+        case SLEEP_PROVIDERS.COROSAPI:
+            return 'openId';
+        default:
+            return null;
+    }
 }
 
 function compactQueuePayload(input: AddSleepSyncQueueItemInput): Partial<SleepSyncQueueItemInterface> {
@@ -86,35 +99,30 @@ export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): 
 }
 
 async function findTokenByProviderUserId(provider: SleepProvider, providerUserId: string): Promise<TokenSnapshot | null> {
-    const query = admin.firestore().collectionGroup('tokens')
-        .where('serviceName', '==', provider)
-        .limit(1);
-    let snapshot: admin.firestore.QuerySnapshot;
-    switch (provider) {
-        case SLEEP_PROVIDERS.GarminAPI:
-            snapshot = await query.where('userID', '==', providerUserId).get();
-            break;
-        case SLEEP_PROVIDERS.SuuntoApp:
-            snapshot = await query.where('userName', '==', providerUserId).get();
-            break;
-        case SLEEP_PROVIDERS.COROSAPI:
-            snapshot = await query.where('openId', '==', providerUserId).get();
-            break;
-        default:
-            return null;
+    const tokenField = providerUserIdTokenField(provider);
+    if (!tokenField) {
+        return null;
     }
+    const snapshot = await admin.firestore().collectionGroup('tokens')
+        .where('serviceName', '==', provider)
+        .where(tokenField, '==', providerUserId)
+        .limit(1)
+        .get();
     return snapshot.docs[0] || null;
 }
 
 async function findTokenForQueueItem(queueItem: SleepSyncQueueItemInterface): Promise<TokenSnapshot | null> {
     if (queueItem.userID) {
         const tokenRoot = getTokenRoot(queueItem.provider, queueItem.userID);
-        if (tokenRoot) {
-            const snapshot = await tokenRoot.limit(1).get();
-            if (!snapshot.empty) {
-                return snapshot.docs[0];
-            }
+        const tokenField = providerUserIdTokenField(queueItem.provider);
+        if (!tokenRoot || !tokenField) {
+            return null;
         }
+        const snapshot = await tokenRoot
+            .where(tokenField, '==', queueItem.providerUserId)
+            .limit(1)
+            .get();
+        return snapshot.docs[0] || null;
     }
     return findTokenByProviderUserId(queueItem.provider, queueItem.providerUserId);
 }
@@ -281,11 +289,31 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
     }
 
     try {
+        if (queueItem.userID && !isSleepSyncUserAllowed(queueItem.userID)) {
+            logger.info(`[SleepSync] User ${queueItem.userID} outside SLEEP_SYNC_ALLOWED_USER_IDS; marking queue item ${queueItem.id} processed`);
+            return updateToProcessed(queueItem, undefined, {
+                resultStatus: 'user_not_allowed',
+                userAllowed: false,
+                sessionsWritten: 0,
+                sessionsSkipped: 0,
+            });
+        }
+
         if (queueItem.provider === SLEEP_PROVIDERS.GarminAPI && queueItem.type === 'garmin_ping') {
             assertTrustedGarminCallbackURL(queueItem.callbackURL);
         }
 
         const { tokenSnapshot, firebaseUserID } = await resolveTokenAndUser(queueItem);
+        if (!isSleepSyncUserAllowed(firebaseUserID)) {
+            logger.info(`[SleepSync] Resolved user ${firebaseUserID} outside SLEEP_SYNC_ALLOWED_USER_IDS; marking queue item ${queueItem.id} processed`);
+            return updateToProcessed(queueItem, undefined, {
+                resultStatus: 'user_not_allowed',
+                userAllowed: false,
+                sessionsWritten: 0,
+                sessionsSkipped: 0,
+            });
+        }
+
         let mapperResults: SleepMapperResult[] = [];
         switch (queueItem.provider) {
             case SLEEP_PROVIDERS.GarminAPI:

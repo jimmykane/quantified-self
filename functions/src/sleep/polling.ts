@@ -9,7 +9,12 @@ import {
     SUUNTO_SLEEP_MAX_WINDOW_DAYS,
 } from './constants';
 import { addSleepSyncQueueItem } from './queue';
-import { isSleepProviderEnabled, SLEEP_SYNC_DISABLED_PROVIDERS } from './provider-flags';
+import {
+    getAllowedSleepSyncUserIds,
+    isSleepProviderEnabled,
+    isSleepSyncUserAllowed,
+    SLEEP_SYNC_DISABLED_PROVIDERS,
+} from './provider-flags';
 
 interface PollWindow {
     startMs: number;
@@ -29,7 +34,31 @@ function chunkRecentWindow(nowMs: number, recentWindowDays: number, maxWindowDay
     return windows;
 }
 
-async function getProviderTokenSnapshots(serviceName: ServiceNames): Promise<admin.firestore.QueryDocumentSnapshot[]> {
+function getTokenRoot(provider: SleepProvider, userID: string): admin.firestore.CollectionReference | null {
+    switch (provider) {
+        case SLEEP_PROVIDERS.SuuntoApp:
+            return admin.firestore().collection('suuntoAppAccessTokens').doc(userID).collection('tokens');
+        case SLEEP_PROVIDERS.COROSAPI:
+            return admin.firestore().collection('COROSAPIAccessTokens').doc(userID).collection('tokens');
+        default:
+            return null;
+    }
+}
+
+async function getProviderTokenSnapshots(provider: SleepProvider, serviceName: ServiceNames): Promise<admin.firestore.QueryDocumentSnapshot[]> {
+    const allowedUserIDs = getAllowedSleepSyncUserIds();
+    if (allowedUserIDs.length > 0) {
+        const snapshots = await Promise.all(allowedUserIDs.map(async (userID) => {
+            const tokenRoot = getTokenRoot(provider, userID);
+            if (!tokenRoot) {
+                return [];
+            }
+            const snapshot = await tokenRoot.where('serviceName', '==', serviceName).get();
+            return snapshot.docs;
+        }));
+        return snapshots.flat();
+    }
+
     const snapshot = await admin.firestore()
         .collectionGroup('tokens')
         .where('serviceName', '==', serviceName)
@@ -64,12 +93,12 @@ async function enqueueProviderPolls(
     }
 
     const windows = chunkRecentWindow(nowMs, SLEEP_SYNC_RECENT_WINDOW_DAYS, maxWindowDays);
-    const tokenSnapshots = await getProviderTokenSnapshots(serviceName);
+    const tokenSnapshots = await getProviderTokenSnapshots(provider, serviceName);
     let queued = 0;
     for (const tokenSnapshot of tokenSnapshots) {
         const userID = getFirebaseUserID(tokenSnapshot);
         const providerUserId = getProviderUserId(provider, tokenSnapshot.data());
-        if (!userID || !providerUserId) {
+        if (!userID || !providerUserId || !isSleepSyncUserAllowed(userID)) {
             continue;
         }
         for (const window of windows) {
