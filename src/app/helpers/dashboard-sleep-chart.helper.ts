@@ -113,6 +113,13 @@ function buildPoint(session: SleepSession): DashboardSleepTrendPoint | null {
   };
 }
 
+function compareSleepRecency(left: DashboardSleepTrendPoint, right: DashboardSleepTrendPoint): number {
+  if (left.endTimeMs !== right.endTimeMs) {
+    return left.endTimeMs - right.endTimeMs;
+  }
+  return left.startTimeMs - right.startTimeMs;
+}
+
 export function buildDashboardSleepTrendContext(sessions: readonly SleepSession[] | null | undefined): DashboardSleepTrendContext {
   const points = [...(sessions || [])]
     .map(buildPoint)
@@ -126,10 +133,16 @@ export function buildDashboardSleepTrendContext(sessions: readonly SleepSession[
       }
       return left.startTimeMs - right.startTimeMs;
     });
+  const latestPoint = points.reduce<DashboardSleepTrendPoint | null>((latest, point) => {
+    if (!latest || compareSleepRecency(latest, point) < 0) {
+      return point;
+    }
+    return latest;
+  }, null);
 
   return {
     points,
-    latestPoint: points[points.length - 1] || null,
+    latestPoint,
   };
 }
 

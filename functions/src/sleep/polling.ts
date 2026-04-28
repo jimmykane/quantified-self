@@ -9,7 +9,7 @@ import {
     SUUNTO_SLEEP_MAX_WINDOW_DAYS,
 } from './constants';
 import { addSleepSyncQueueItem } from './queue';
-import { isSleepProviderEnabled, SLEEP_SYNC_DISABLED_PROVIDERS_ENV } from './provider-flags';
+import { isSleepProviderEnabled, SLEEP_SYNC_DISABLED_PROVIDERS } from './provider-flags';
 
 interface PollWindow {
     startMs: number;
@@ -59,7 +59,7 @@ async function enqueueProviderPolls(
     nowMs = Date.now(),
 ): Promise<number> {
     if (!isSleepProviderEnabled(provider)) {
-        logger.info(`[SleepSync][${provider}] Provider disabled by ${SLEEP_SYNC_DISABLED_PROVIDERS_ENV}; skipping sleep polling`);
+        logger.info(`[SleepSync][${provider}] Provider disabled by SLEEP_SYNC_DISABLED_PROVIDERS=${SLEEP_SYNC_DISABLED_PROVIDERS.join(',')}; skipping sleep polling`);
         return 0;
     }
 

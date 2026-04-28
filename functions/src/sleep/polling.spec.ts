@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { SLEEP_PROVIDERS } from '../../../shared/sleep';
-import { SLEEP_SYNC_DISABLED_PROVIDERS_ENV } from './provider-flags';
 
 vi.mock('firebase-functions/v2/scheduler', () => ({
     onSchedule: vi.fn((_options: unknown, handler: unknown) => handler),
@@ -28,7 +27,6 @@ import { addSleepSyncQueueItem } from './queue';
 
 describe('sleep polling', () => {
     afterEach(() => {
-        delete process.env[SLEEP_SYNC_DISABLED_PROVIDERS_ENV];
         vi.clearAllMocks();
     });
 
@@ -46,8 +44,6 @@ describe('sleep polling', () => {
     });
 
     it('skips polling for disabled sleep providers', async () => {
-        process.env[SLEEP_SYNC_DISABLED_PROVIDERS_ENV] = 'GarminAPI,COROSAPI';
-
         const queued = await sleepPollingTestInternals.enqueueProviderPolls(
             SLEEP_PROVIDERS.COROSAPI,
             ServiceNames.COROSAPI,

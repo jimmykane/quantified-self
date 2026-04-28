@@ -1,31 +1,28 @@
 # Sleep Sync Operations
 
 Sleep sync is controlled independently from activity sync. The v1 sleep pipeline supports
-Garmin, Suunto, and COROS, but Garmin and COROS can be temporarily disabled while their
+Garmin, Suunto, and COROS, but Garmin and COROS are currently disabled in code while their
 sleep payloads are not actively testable.
 
 ## Provider Kill Switch
 
-Use the `SLEEP_SYNC_DISABLED_PROVIDERS` environment variable to disable sleep sync for
-one or more providers.
+Sleep provider disablement is source controlled in:
+
+```text
+functions/src/sleep/provider-flags.ts
+```
 
 Current temporary setting:
 
-```bash
-SLEEP_SYNC_DISABLED_PROVIDERS=GarminAPI,COROSAPI
+```ts
+export const SLEEP_SYNC_DISABLED_PROVIDERS: readonly SleepProvider[] = [
+    SLEEP_PROVIDERS.GarminAPI,
+    SLEEP_PROVIDERS.COROSAPI,
+];
 ```
 
-Accepted values are comma- or space-separated. Canonical provider names and short aliases
-are supported:
-
-- `GarminAPI` or `garmin`
-- `COROSAPI` or `coros`
-- `SuuntoApp` or `suunto`
-- `all`
-- `none` or an empty value to enable all providers
-
-This flag only affects sleep sync. Existing activity sync behavior for Garmin, Suunto, and
-COROS is unchanged.
+This constant only affects sleep sync. Existing activity sync behavior for Garmin, Suunto,
+and COROS is unchanged.
 
 ## What Disabled Means
 
@@ -42,58 +39,37 @@ enabled again, new webhooks and scheduled polling runs are expected to create fr
 COROS and Suunto polling use a rolling recent window, so recent data can be picked up on
 the next poll. Garmin sleep data relies on Garmin Health API webhook delivery in v1.
 
-## Local Development
-
-For local emulator runs, set the flag in the ignored `functions/.env` file:
-
-```bash
-SLEEP_SYNC_DISABLED_PROVIDERS=GarminAPI,COROSAPI
-```
-
-Restart the Functions emulator after changing the value.
-
-## Deployed Functions
-
-The Functions code reads `SLEEP_SYNC_DISABLED_PROVIDERS` from `process.env`. For deployed
-environments, set or remove the variable using the same Firebase/Google Cloud environment
-configuration flow used for the other Functions secrets and runtime variables.
-
-If deploying with Firebase CLI dotenv files, put the value in the project-specific
-Functions env file before deploy:
-
-```bash
-# functions/.env.<project-id>
-SLEEP_SYNC_DISABLED_PROVIDERS=GarminAPI,COROSAPI
-```
-
-To re-enable Garmin and COROS, remove the line, set it to `none`, or set it to an empty
-value before redeploying.
-
 ## Re-Enable Garmin And COROS Sleep
 
-1. Remove the provider names from `SLEEP_SYNC_DISABLED_PROVIDERS`, set it to `none`, or
-   unset it entirely.
+1. Edit `functions/src/sleep/provider-flags.ts`.
+2. Remove `SLEEP_PROVIDERS.GarminAPI` and `SLEEP_PROVIDERS.COROSAPI` from
+   `SLEEP_SYNC_DISABLED_PROVIDERS`.
 
-   ```bash
-   SLEEP_SYNC_DISABLED_PROVIDERS=none
+   ```ts
+   export const SLEEP_SYNC_DISABLED_PROVIDERS: readonly SleepProvider[] = [];
    ```
 
-2. Deploy or restart the Functions runtime so the new environment value is loaded.
-3. Verify logs no longer show `Provider disabled by SLEEP_SYNC_DISABLED_PROVIDERS` for
+3. Update the provider flag tests to match the new constant, then run the targeted sleep
+   Functions tests and the Functions build.
+4. Deploy or restart the Functions runtime so the changed constant is loaded.
+5. Verify logs no longer show `Provider disabled by SLEEP_SYNC_DISABLED_PROVIDERS` for
    Garmin or COROS sleep work.
-4. For COROS, wait for the next `scheduleCOROSSleepSync` run or trigger the scheduled
+6. For COROS, wait for the next `scheduleCOROSSleepSync` run or trigger the scheduled
    function manually in the Firebase console.
-5. For Garmin, confirm the Garmin Health API sleep webhook is configured and send a test
+7. For Garmin, confirm the Garmin Health API sleep webhook is configured and send a test
    sleep push or ping payload from Garmin's tooling if available.
-6. Check `users/{uid}/sleepSyncState/{provider}` and `users/{uid}/sleepSessions` for new
+8. Check `users/{uid}/sleepSyncState/{provider}` and `users/{uid}/sleepSessions` for new
    sleep sync state and sessions.
 
 ## Disable Again
 
-To pause Garmin and COROS sleep sync again:
+To pause Garmin and COROS sleep sync again, restore:
 
-```bash
-SLEEP_SYNC_DISABLED_PROVIDERS=GarminAPI,COROSAPI
+```ts
+export const SLEEP_SYNC_DISABLED_PROVIDERS: readonly SleepProvider[] = [
+    SLEEP_PROVIDERS.GarminAPI,
+    SLEEP_PROVIDERS.COROSAPI,
+];
 ```
 
 Then deploy or restart the Functions runtime.

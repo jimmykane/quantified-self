@@ -1,9 +1,10 @@
 import { createHmac } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { SLEEP_SYNC_DISABLED_PROVIDERS_ENV } from './provider-flags';
 
 const hoisted = vi.hoisted(() => ({
     addSleepSyncQueueItem: vi.fn(),
+    garminEnabled: false,
+    suuntoEnabled: true,
 }));
 
 vi.mock('firebase-functions/v1', () => ({
@@ -26,6 +27,19 @@ vi.mock('./queue', () => ({
     addSleepSyncQueueItem: hoisted.addSleepSyncQueueItem,
 }));
 
+vi.mock('./provider-flags', () => ({
+    SLEEP_SYNC_DISABLED_PROVIDERS: ['GarminAPI', 'COROSAPI'],
+    isSleepProviderEnabled: vi.fn((provider: string) => {
+        if (provider === 'GarminAPI') {
+            return hoisted.garminEnabled;
+        }
+        if (provider === 'SuuntoApp') {
+            return hoisted.suuntoEnabled;
+        }
+        return false;
+    }),
+}));
+
 import { receiveGarminAPISleepData, receiveSuuntoAppSleepData } from './webhooks';
 
 function createResponse() {
@@ -38,52 +52,70 @@ function createResponse() {
 describe('sleep webhooks', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        delete process.env[SLEEP_SYNC_DISABLED_PROVIDERS_ENV];
+        hoisted.garminEnabled = false;
+        hoisted.suuntoEnabled = true;
         process.env.SUUNTOAPP_NOTIFICATION_SECRET = 'suunto-notification-secret';
         hoisted.addSleepSyncQueueItem.mockResolvedValue({ id: 'queue-id' });
     });
 
-    it('queues Garmin push and ping sleep payloads separately', async () => {
+    it('acknowledges disabled Garmin sleep webhooks without queueing', async () => {
         const response = createResponse();
 
         await receiveGarminAPISleepData({
             body: {
                 sleeps: [
                     { userId: 'garmin-user-1', summaryId: 'summary-1', startTimeInSeconds: 1760000000 },
-                    { userId: 'garmin-user-1', callbackURL: 'https://healthapi.garmin.com/sleep/callback' },
                 ],
             },
         } as any, response as any);
 
         expect(response.status).toHaveBeenCalledWith(200);
-        expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledWith(expect.objectContaining({
-            type: 'garmin_push',
-            provider: 'GarminAPI',
-            providerUserId: 'garmin-user-1',
-            dedupeKey: 'summary-1',
-            payload: { sleeps: [expect.objectContaining({ summaryId: 'summary-1' })] },
-        }));
+        expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
+    });
+
+    it('queues Garmin ping payloads with trusted Health API callback URLs', async () => {
+        hoisted.garminEnabled = true;
+        const response = createResponse();
+        const callbackURL = 'https://apis.garmin.com/wellness-api/rest/sleeps?uploadStartTimeInSeconds=1760000000&token=garmin-token';
+
+        await receiveGarminAPISleepData({
+            body: {
+                sleeps: [
+                    { userId: 'garmin-user-1', callbackURL },
+                ],
+            },
+        } as any, response as any);
+
+        expect(response.status).toHaveBeenCalledWith(200);
         expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledWith(expect.objectContaining({
             type: 'garmin_ping',
             provider: 'GarminAPI',
             providerUserId: 'garmin-user-1',
-            callbackURL: 'https://healthapi.garmin.com/sleep/callback',
+            callbackURL,
+            dedupeKey: callbackURL,
         }));
     });
 
-    it('acknowledges disabled Garmin sleep webhooks without queueing', async () => {
-        process.env[SLEEP_SYNC_DISABLED_PROVIDERS_ENV] = 'GarminAPI,COROSAPI';
+    it.each([
+        ['missing callback URL', undefined],
+        ['non-HTTPS callback URL', 'http://apis.garmin.com/wellness-api/rest/sleeps?token=garmin-token'],
+        ['attacker host', 'https://attacker.example/wellness-api/rest/sleeps?token=garmin-token'],
+        ['Garmin-looking attacker host', 'https://apis.garmin.com.attacker.example/wellness-api/rest/sleeps?token=garmin-token'],
+        ['custom port', 'https://apis.garmin.com:444/wellness-api/rest/sleeps?token=garmin-token'],
+        ['non-Health API path', 'https://apis.garmin.com/tools/login'],
+    ])('rejects Garmin ping payloads with %s', async (_caseName, callbackURL) => {
+        hoisted.garminEnabled = true;
         const response = createResponse();
 
         await receiveGarminAPISleepData({
             body: {
                 sleeps: [
-                    { userId: 'garmin-user-1', summaryId: 'summary-1', startTimeInSeconds: 1760000000 },
+                    { userId: 'garmin-user-1', callbackURL },
                 ],
             },
         } as any, response as any);
 
-        expect(response.status).toHaveBeenCalledWith(200);
+        expect(response.status).toHaveBeenCalledWith(400);
         expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
     });
 

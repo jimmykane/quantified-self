@@ -60,6 +60,33 @@ describe('dashboard-sleep-chart.helper', () => {
     });
   });
 
+  it('derives the latest sleep point by session time instead of provider display order', () => {
+    const context = buildDashboardSleepTrendContext([
+      {
+        id: 'garmin-later-sleep',
+        startTimeMs: Date.UTC(2026, 0, 5, 23),
+        endTimeMs: Date.UTC(2026, 0, 6, 7),
+        sleepDate: '2026-01-06',
+        durationSeconds: 8 * 3600,
+        source: { provider: 'GarminAPI', sourceSessionKey: 'garmin-source-2' },
+      },
+      {
+        id: 'suunto-earlier-sleep',
+        startTimeMs: Date.UTC(2026, 0, 5, 21),
+        endTimeMs: Date.UTC(2026, 0, 6, 5),
+        sleepDate: '2026-01-06',
+        durationSeconds: 8 * 3600,
+        source: { provider: 'SuuntoApp', sourceSessionKey: 'suunto-source-1' },
+      },
+    ] as any[]);
+
+    expect(context.points.map((point) => point.id)).toEqual([
+      'garmin-later-sleep',
+      'suunto-earlier-sleep',
+    ]);
+    expect(context.latestPoint?.id).toBe('garmin-later-sleep');
+  });
+
   it('formats durations for chart headers and tooltips', () => {
     expect(formatSleepDuration(0)).toBe('--');
     expect(formatSleepDuration(42 * 60)).toBe('42m');

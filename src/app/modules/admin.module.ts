@@ -50,6 +50,14 @@ const routes: Routes = [
         }
     },
     {
+        path: 'queues/sleep-sync',
+        component: AdminQueueMonitorComponent,
+        canActivate: [adminGuard],
+        data: {
+            queueView: 'sleep-sync'
+        }
+    },
+    {
         path: 'queues/reparse',
         component: AdminQueueMonitorComponent,
         canActivate: [adminGuard],

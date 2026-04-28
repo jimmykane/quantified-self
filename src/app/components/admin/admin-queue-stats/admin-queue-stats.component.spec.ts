@@ -222,6 +222,48 @@ describe('AdminQueueStatsComponent', () => {
             expect(optionArg.series[0].data).toEqual([2, 1, 0]);
         });
 
+        it('should use sleep sync retry histogram in sleep-sync view', async () => {
+            component.queueView = 'sleep-sync';
+            component.loading = false;
+            component.stats = {
+                pending: 0,
+                succeeded: 0,
+                stuck: 0,
+                providers: [],
+                cloudTasks: {
+                    pending: 3,
+                    queues: {
+                        sleepSync: { queueId: 'processSleepSyncTask', pending: 3 }
+                    }
+                },
+                sleepSync: {
+                    pending: 5,
+                    succeeded: 20,
+                    providerDisabled: 2,
+                    stuck: 1,
+                    dead: 0,
+                    disabledProviders: ['Garmin', 'COROS'],
+                    providers: [],
+                    dlqByContext: [],
+                    advanced: {
+                        throughput: 9,
+                        maxLagMs: 45000,
+                        retryHistogram: { '0-3': 4, '4-7': 1, '8-9': 0 },
+                        topErrors: []
+                    }
+                }
+            };
+
+            component.ngOnChanges({ stats: new SimpleChange(null, component.stats, true) });
+            fixture.detectChanges();
+            await fixture.whenStable();
+            await new Promise(resolve => setTimeout(resolve, 0));
+
+            expect(mockEchartsService.setOption).toHaveBeenCalled();
+            const optionArg = mockEchartsService.setOption.mock.calls.at(-1)?.[1];
+            expect(optionArg.series[0].data).toEqual([4, 1, 0]);
+        });
+
         it('should render zeroed retry chart when histogram data is missing', async () => {
             component.queueView = 'workout';
             component.loading = false;
@@ -250,7 +292,7 @@ describe('AdminQueueStatsComponent', () => {
     });
 
     describe('Cloud Tasks Queue Breakdown', () => {
-        it('should render workout, reparse, and derived queue pending values', () => {
+        it('should render workout, activity sync, sleep sync, reparse, and derived queue pending values', () => {
             component.loading = false;
             component.stats = {
                 pending: 1,
@@ -262,6 +304,7 @@ describe('AdminQueueStatsComponent', () => {
                     queues: {
                         workout: { queueId: 'processWorkoutTask', pending: 42 },
                         activitySync: { queueId: 'processActivitySyncTask', pending: 4 },
+                        sleepSync: { queueId: 'processSleepSyncTask', pending: 3 },
                         sportsLibReparse: { queueId: 'processSportsLibReparseTask', pending: 8 },
                         derivedMetrics: { queueId: 'processDerivedMetricsTask', pending: 6 }
                     }
@@ -276,11 +319,13 @@ describe('AdminQueueStatsComponent', () => {
             const host: HTMLElement = fixture.nativeElement;
             expect(host.textContent).toContain('Cloud Tasks (Workout)');
             expect(host.textContent).toContain('Cloud Tasks (Activity Sync)');
+            expect(host.textContent).toContain('Cloud Tasks (Sleep Sync)');
             expect(host.textContent).toContain('Cloud Tasks (Reparse)');
             expect(host.textContent).toContain('Cloud Tasks (Derived Metrics)');
             expect(host.textContent).not.toContain('Cloud Tasks (All Queues)');
             expect(host.textContent).toContain('42');
             expect(host.textContent).toContain('4');
+            expect(host.textContent).toContain('3');
             expect(host.textContent).toContain('8');
             expect(host.textContent).toContain('6');
         });
@@ -311,6 +356,7 @@ describe('AdminQueueStatsComponent', () => {
 
             expect(readCardValue('Cloud Tasks (Workout)')).toBe('0');
             expect(readCardValue('Cloud Tasks (Activity Sync)')).toBe('0');
+            expect(readCardValue('Cloud Tasks (Sleep Sync)')).toBe('0');
             expect(readCardValue('Cloud Tasks (Reparse)')).toBe('0');
             expect(readCardValue('Cloud Tasks (Derived Metrics)')).toBe('0');
         });
@@ -347,6 +393,7 @@ describe('AdminQueueStatsComponent', () => {
             const host: HTMLElement = fixture.nativeElement;
             expect(host.textContent).not.toContain('Workout Ingestion');
             expect(host.textContent).toContain('Sports-lib Reparse');
+            expect(host.textContent).not.toContain('Sleep Sync');
             expect(host.textContent).not.toContain('Derived Metrics');
         });
 
@@ -370,6 +417,7 @@ describe('AdminQueueStatsComponent', () => {
             fixture.detectChanges();
             const host: HTMLElement = fixture.nativeElement;
             expect(host.textContent).toContain('Workout Ingestion');
+            expect(host.textContent).not.toContain('Sleep Sync');
             expect(host.textContent).not.toContain('Sports-lib Reparse');
             expect(host.textContent).not.toContain('Derived Metrics');
         });
@@ -398,6 +446,7 @@ describe('AdminQueueStatsComponent', () => {
             const host: HTMLElement = fixture.nativeElement;
             expect(host.textContent).toContain('Derived Metrics');
             expect(host.textContent).not.toContain('Workout Ingestion');
+            expect(host.textContent).not.toContain('Sleep Sync');
             expect(host.textContent).not.toContain('Sports-lib Reparse');
         });
 
@@ -441,6 +490,56 @@ describe('AdminQueueStatsComponent', () => {
             expect(host.textContent).toContain('Throughput (1h)');
             expect(host.textContent).toContain('Retry Distribution (Pending Items)');
             expect(host.textContent).not.toContain('Workout Ingestion');
+            expect(host.textContent).not.toContain('Sleep Sync');
+            expect(host.textContent).not.toContain('Sports-lib Reparse');
+            expect(host.textContent).not.toContain('Derived Metrics');
+        });
+
+        it('should show only sleep sync section in sleep-sync-only view', () => {
+            component.loading = false;
+            component.queueView = 'sleep-sync';
+            component.stats = {
+                pending: 1,
+                succeeded: 1,
+                stuck: 0,
+                providers: [],
+                cloudTasks: {
+                    pending: 3,
+                    queues: {
+                        sleepSync: { queueId: 'processSleepSyncTask', pending: 3 }
+                    }
+                },
+                sleepSync: {
+                    pending: 5,
+                    succeeded: 12,
+                    providerDisabled: 4,
+                    stuck: 1,
+                    dead: 2,
+                    disabledProviders: ['Garmin', 'COROS'],
+                    providers: [
+                        { provider: 'Garmin', pending: 0, succeeded: 0, providerDisabled: 3, stuck: 0, dead: 0 },
+                        { provider: 'Suunto', pending: 5, succeeded: 12, providerDisabled: 0, stuck: 1, dead: 2 },
+                    ],
+                    dlqByContext: [{ context: 'NO_TOKEN_FOUND', count: 2 }],
+                    advanced: {
+                        throughput: 6,
+                        maxLagMs: 45000,
+                        retryHistogram: { '0-3': 4, '4-7': 1, '8-9': 0 },
+                        topErrors: [{ error: 'Token missing', count: 2 }]
+                    }
+                }
+            };
+
+            fixture.detectChanges();
+            const host: HTMLElement = fixture.nativeElement;
+            expect(host.textContent).toContain('Sleep Sync');
+            expect(host.textContent).toContain('Cloud Tasks (Sleep Sync)');
+            expect(host.textContent).toContain('Provider Disabled');
+            expect(host.textContent).toContain('Garmin, COROS');
+            expect(host.textContent).toContain('Provider Queue Status (Sleep)');
+            expect(host.textContent).toContain('Recent Sleep Sync Failures');
+            expect(host.textContent).not.toContain('Workout Ingestion');
+            expect(host.textContent).not.toContain('Activity Sync');
             expect(host.textContent).not.toContain('Sports-lib Reparse');
             expect(host.textContent).not.toContain('Derived Metrics');
         });

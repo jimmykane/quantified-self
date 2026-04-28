@@ -5,7 +5,8 @@ import {
     SLEEP_PROVIDERS,
 } from '../../../shared/sleep';
 import { addSleepSyncQueueItem } from './queue';
-import { isSleepProviderEnabled, SLEEP_SYNC_DISABLED_PROVIDERS_ENV } from './provider-flags';
+import { isSleepProviderEnabled, SLEEP_SYNC_DISABLED_PROVIDERS } from './provider-flags';
+import { normalizeTrustedGarminCallbackURL } from './garmin-callback-url';
 
 type ExternalRecord = Record<string, unknown>;
 
@@ -110,7 +111,7 @@ export const receiveGarminAPISleepData = functions.region('europe-west2').runWit
     memory: '256MB',
 }).https.onRequest(async (req, res) => {
     if (!isSleepProviderEnabled(SLEEP_PROVIDERS.GarminAPI)) {
-        logger.info(`[SleepSync][Garmin] Provider disabled by ${SLEEP_SYNC_DISABLED_PROVIDERS_ENV}; ignoring sleep webhook`);
+        logger.info(`[SleepSync][Garmin] Provider disabled by SLEEP_SYNC_DISABLED_PROVIDERS=${SLEEP_SYNC_DISABLED_PROVIDERS.join(',')}; ignoring sleep webhook`);
         res.status(200).send();
         return;
     }
@@ -123,7 +124,7 @@ export const receiveGarminAPISleepData = functions.region('europe-west2').runWit
     }
 
     try {
-        const refs = [];
+        const queueItems: Parameters<typeof addSleepSyncQueueItem>[0][] = [];
         for (const sleepValue of sleeps) {
             const sleep = asRecord(sleepValue);
             const providerUserId = asString(sleep.userId) || asString(sleep.userID);
@@ -133,15 +134,23 @@ export const receiveGarminAPISleepData = functions.region('europe-west2').runWit
             }
             const callbackURL = asString(sleep.callbackURL);
             const isPushSummary = hasNumberField(sleep, 'startTimeInSeconds') || !!asString(sleep.summaryId);
-            refs.push(await addSleepSyncQueueItem({
+            const trustedCallbackURL = isPushSummary ? null : normalizeTrustedGarminCallbackURL(callbackURL);
+            if (!isPushSummary && !trustedCallbackURL) {
+                logger.warn('[SleepSync][Garmin] Rejected ping payload with untrusted callbackURL');
+                res.status(400).send();
+                return;
+            }
+
+            queueItems.push({
                 type: isPushSummary ? 'garmin_push' : 'garmin_ping',
                 provider: SLEEP_PROVIDERS.GarminAPI,
                 providerUserId,
                 payload: isPushSummary ? { sleeps: [sleep] } : undefined,
-                callbackURL: callbackURL || undefined,
-                dedupeKey: asString(sleep.summaryId) || callbackURL || `${Date.now()}`,
-            }));
+                callbackURL: trustedCallbackURL || undefined,
+                dedupeKey: asString(sleep.summaryId) || trustedCallbackURL || `${Date.now()}`,
+            });
         }
+        const refs = await Promise.all(queueItems.map((queueItem) => addSleepSyncQueueItem(queueItem)));
         logger.info(`[SleepSync][Garmin] Queued ${refs.length} sleep payloads`);
         res.status(200).send();
     } catch (error) {
@@ -155,7 +164,7 @@ export const receiveSuuntoAppSleepData = functions.region('europe-west2').runWit
     memory: '256MB',
 }).https.onRequest(async (req, res) => {
     if (!isSleepProviderEnabled(SLEEP_PROVIDERS.SuuntoApp)) {
-        logger.info(`[SleepSync][Suunto] Provider disabled by ${SLEEP_SYNC_DISABLED_PROVIDERS_ENV}; ignoring sleep webhook`);
+        logger.info(`[SleepSync][Suunto] Provider disabled by SLEEP_SYNC_DISABLED_PROVIDERS=${SLEEP_SYNC_DISABLED_PROVIDERS.join(',')}; ignoring sleep webhook`);
         res.status(200).send();
         return;
     }

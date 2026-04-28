@@ -29,7 +29,8 @@ import {
     QueueResult,
     updateToProcessed,
 } from '../queue-utils';
-import { isSleepProviderEnabled, SLEEP_SYNC_DISABLED_PROVIDERS_ENV } from './provider-flags';
+import { isSleepProviderEnabled, SLEEP_SYNC_DISABLED_PROVIDERS } from './provider-flags';
+import { assertTrustedGarminCallbackURL, InvalidGarminCallbackUrlError } from './garmin-callback-url';
 
 type TokenSnapshot = admin.firestore.QueryDocumentSnapshot;
 
@@ -194,25 +195,24 @@ async function resolveTokenAndUser(queueItem: SleepSyncQueueItemInterface): Prom
 }
 
 async function processGarminQueueItem(queueItem: SleepSyncQueueItemInterface, tokenSnapshot: TokenSnapshot, firebaseUserID: string): Promise<SleepMapperResult[]> {
-    const tokenData = await getTokenData(tokenSnapshot, ServiceNames.GarminAPI);
-    assertGarminSleepPermission(tokenData as unknown as Record<string, unknown>, firebaseUserID);
-
     if (queueItem.type === 'garmin_ping') {
-        if (!queueItem.callbackURL) {
-            throw new Error(`Garmin ping queue item ${queueItem.id} is missing callbackURL`);
-        }
+        const callbackURL = assertTrustedGarminCallbackURL(queueItem.callbackURL);
+        const tokenData = await getTokenData(tokenSnapshot, ServiceNames.GarminAPI);
+        assertGarminSleepPermission(tokenData as unknown as Record<string, unknown>, firebaseUserID);
         const payload = await requestPromise.get({
             headers: {
                 Authorization: `Bearer ${tokenData.accessToken}`,
             },
             json: true,
-            url: queueItem.callbackURL,
+            url: callbackURL,
         });
         return normalizePayloadArray(payload, 'sleeps')
-            .map((summary) => mapGarminSleepSummary(summary, queueItem.providerUserId, Date.now(), queueItem.callbackURL))
+            .map((summary) => mapGarminSleepSummary(summary, queueItem.providerUserId, Date.now(), callbackURL))
             .filter((result): result is SleepMapperResult => result !== null);
     }
 
+    const tokenData = await getTokenData(tokenSnapshot, ServiceNames.GarminAPI);
+    assertGarminSleepPermission(tokenData as unknown as Record<string, unknown>, firebaseUserID);
     return normalizePayloadArray(queueItem.payload, 'sleeps')
         .map((summary) => mapGarminSleepSummary(summary, queueItem.providerUserId, Date.now(), queueItem.callbackURL))
         .filter((result): result is SleepMapperResult => result !== null);
@@ -271,7 +271,7 @@ function formatCorosDate(timestampMs: number): string {
 export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInterface): Promise<QueueResult> {
     logger.info(`[SleepSync] Processing queue item ${queueItem.id}`);
     if (!isSleepProviderEnabled(queueItem.provider)) {
-        logger.info(`[SleepSync] Provider ${queueItem.provider} disabled by ${SLEEP_SYNC_DISABLED_PROVIDERS_ENV}; marking queue item ${queueItem.id} processed`);
+        logger.info(`[SleepSync] Provider ${queueItem.provider} disabled by SLEEP_SYNC_DISABLED_PROVIDERS=${SLEEP_SYNC_DISABLED_PROVIDERS.join(',')}; marking queue item ${queueItem.id} processed`);
         return updateToProcessed(queueItem, undefined, {
             resultStatus: 'provider_disabled',
             providerDisabled: true,
@@ -281,6 +281,10 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
     }
 
     try {
+        if (queueItem.provider === SLEEP_PROVIDERS.GarminAPI && queueItem.type === 'garmin_ping') {
+            assertTrustedGarminCallbackURL(queueItem.callbackURL);
+        }
+
         const { tokenSnapshot, firebaseUserID } = await resolveTokenAndUser(queueItem);
         let mapperResults: SleepMapperResult[] = [];
         switch (queueItem.provider) {
@@ -312,6 +316,10 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
             sessionsSkipped: result.skipped,
         });
     } catch (error) {
+        if (error instanceof InvalidGarminCallbackUrlError) {
+            logger.warn(`[SleepSync] Queue item ${queueItem.id} has untrusted Garmin callback URL; moving to DLQ`);
+            return moveToDeadLetterQueue(queueItem, error, undefined, 'INVALID_GARMIN_CALLBACK_URL');
+        }
         if (error instanceof GarminSleepPermissionError) {
             await updateSleepSyncState(error.userID, SLEEP_PROVIDERS.GarminAPI, {
                 status: SLEEP_SYNC_STATUSES.PermissionMissing,

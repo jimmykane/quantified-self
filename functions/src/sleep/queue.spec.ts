@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueueResult } from '../queue-utils';
-import { SLEEP_SYNC_DISABLED_PROVIDERS_ENV } from './provider-flags';
 
 const hoisted = vi.hoisted(() => ({
     docSet: vi.fn(),
     docUpdate: vi.fn(),
     docIdValues: [] as string[],
+    batchSet: vi.fn(),
+    batchDelete: vi.fn(),
+    batchCommit: vi.fn(),
+    disabledProviders: ['GarminAPI', 'COROSAPI'] as string[],
 }));
 
 vi.mock('firebase-functions/logger', () => ({
@@ -39,6 +42,11 @@ vi.mock('firebase-admin', () => {
             limit: vi.fn().mockReturnThis(),
             get: vi.fn().mockResolvedValue({ docs: [], empty: true }),
         })),
+        batch: vi.fn(() => ({
+            set: hoisted.batchSet,
+            delete: hoisted.batchDelete,
+            commit: hoisted.batchCommit,
+        })),
     }));
     Object.assign(firestoreFn, {
         Timestamp: {
@@ -50,14 +58,20 @@ vi.mock('firebase-admin', () => {
     };
 });
 
+vi.mock('./provider-flags', () => ({
+    SLEEP_SYNC_DISABLED_PROVIDERS: hoisted.disabledProviders,
+    isSleepProviderEnabled: vi.fn((provider: string) => !hoisted.disabledProviders.includes(provider)),
+}));
+
 import { addSleepSyncQueueItem, processSleepSyncQueueItem } from './queue';
 
 describe('sleep queue', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        delete process.env[SLEEP_SYNC_DISABLED_PROVIDERS_ENV];
         hoisted.docIdValues.length = 0;
+        hoisted.disabledProviders.splice(0, hoisted.disabledProviders.length, 'GarminAPI', 'COROSAPI');
         hoisted.docSet.mockResolvedValue(undefined);
+        hoisted.batchCommit.mockResolvedValue(undefined);
     });
 
     it('uses deterministic queue ids for duplicated webhook or poll payloads', async () => {
@@ -86,7 +100,6 @@ describe('sleep queue', () => {
     });
 
     it('marks disabled provider queue items processed without resolving tokens', async () => {
-        process.env[SLEEP_SYNC_DISABLED_PROVIDERS_ENV] = 'GarminAPI,COROSAPI';
         const update = vi.fn().mockResolvedValue(undefined);
 
         const result = await processSleepSyncQueueItem({
@@ -112,6 +125,37 @@ describe('sleep queue', () => {
             sessionsWritten: 0,
             sessionsSkipped: 0,
         }));
+        expect(hoisted.docUpdate).not.toHaveBeenCalled();
+    });
+
+    it('moves Garmin ping queue items with untrusted callback URLs to DLQ without resolving tokens', async () => {
+        hoisted.disabledProviders.splice(0, hoisted.disabledProviders.length, 'COROSAPI');
+        const queueRef = {
+            parent: { id: 'sleepSyncQueue' },
+        };
+
+        const result = await processSleepSyncQueueItem({
+            id: 'garmin-sleep-bad-callback',
+            dateCreated: 1_700_000_000_000,
+            dispatchedToCloudTask: 1_700_000_000_500,
+            processed: false,
+            provider: 'GarminAPI',
+            providerUserId: 'garmin-user-1',
+            retryCount: 0,
+            type: 'garmin_ping',
+            callbackURL: 'https://attacker.example/wellness-api/rest/sleeps?token=garmin-token',
+            ref: queueRef as any,
+        });
+
+        expect(result).toBe(QueueResult.MovedToDLQ);
+        expect(hoisted.batchSet).toHaveBeenCalledWith(expect.objectContaining({
+            id: 'garmin-sleep-bad-callback',
+        }), expect.objectContaining({
+            originalCollection: 'sleepSyncQueue',
+            context: 'INVALID_GARMIN_CALLBACK_URL',
+            error: expect.stringContaining('Untrusted Garmin callback URL'),
+        }));
+        expect(hoisted.batchDelete).toHaveBeenCalledWith(queueRef);
         expect(hoisted.docUpdate).not.toHaveBeenCalled();
     });
 });
