@@ -512,8 +512,9 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
             day: 'numeric',
             year: 'numeric',
           });
+          const heading = this.isWeeklyTrendKpi() ? `Week of ${dateLabel}` : dateLabel;
           const valueText = this.formatPrimaryValue(entry[1]);
-          return `${dateLabel}<br/><strong>${valueText}</strong>`;
+          return `${heading}<br/><strong>${valueText}</strong>`;
         },
       },
       series: [
@@ -827,5 +828,9 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       return `${prefix}${Math.round(numericValue * 10) / 10}${suffix}`;
     }
     return `${prefix}${Math.round(numericValue * 100) / 100}${suffix}`;
+  }
+
+  private isWeeklyTrendKpi(): boolean {
+    return true;
   }
 }

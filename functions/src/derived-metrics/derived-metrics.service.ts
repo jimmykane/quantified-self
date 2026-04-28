@@ -1248,7 +1248,9 @@ const DERIVED_METRIC_BUILD_REGISTRY: Record<DerivedMetricKind, DerivedMetricBuil
         sourceDependencies: ['formDocs'],
         build: (context) => {
             const dailyLoadContext = context.getDailyLoadContext();
-            return buildFreshnessForecastMetricPayload(context.getDerivedLoadPoints(), dailyLoadContext.sourceEventCount);
+            // Align "Now" semantics with Form Now KPI: forecast starts from current-day
+            // decayed state (zero-load extension through today), then projects +7d.
+            return buildFreshnessForecastMetricPayload(context.getKpiDerivedLoadPoints(), dailyLoadContext.sourceEventCount);
         },
     },
     [DERIVED_METRIC_KINDS.IntensityDistribution]: {

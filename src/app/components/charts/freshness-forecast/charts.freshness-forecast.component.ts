@@ -119,8 +119,8 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
     const currentPoint = [...points].reverse().find(point => point.isForecast === false) || null;
     const forecastPoint = [...points].reverse().find(point => point.isForecast === true) || null;
 
-    this.currentFormText = this.formatValue(currentPoint?.formPriorDay ?? currentPoint?.formSameDay ?? null);
-    this.forecastFormText = this.formatValue(forecastPoint?.formPriorDay ?? forecastPoint?.formSameDay ?? null);
+    this.currentFormText = this.formatValue(currentPoint?.formSameDay ?? currentPoint?.formPriorDay ?? null);
+    this.forecastFormText = this.formatValue(forecastPoint?.formSameDay ?? forecastPoint?.formPriorDay ?? null);
 
     this.showNoDataError = points.length === 0;
     this.noDataErrorMessage = 'No data yet';
@@ -161,16 +161,16 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
     const ctlSeries = points.map(point => [point.dayMs, point.ctl] as const);
     const atlSeries = points.map(point => [point.dayMs, point.atl] as const);
     const formActualSeries = points.map((point) => (
-      point.isForecast ? [point.dayMs, null] as const : [point.dayMs, point.formPriorDay ?? point.formSameDay] as const
+      point.isForecast ? [point.dayMs, null] as const : [point.dayMs, point.formSameDay ?? point.formPriorDay] as const
     ));
     const formForecastSeries = points.map((point) => (
-      point.isForecast ? [point.dayMs, point.formPriorDay ?? point.formSameDay] as const : [point.dayMs, null] as const
+      point.isForecast ? [point.dayMs, point.formSameDay ?? point.formPriorDay] as const : [point.dayMs, null] as const
     ));
     const valueAxis = buildDashboardValueAxisConfig([
       ...points.map(point => point.ctl),
       ...points.map(point => point.atl),
       ...points.map(point => point.formSameDay),
-      ...points.map(point => point.formPriorDay ?? point.formSameDay),
+      ...points.map(point => point.formSameDay ?? point.formPriorDay),
     ]);
 
     return {
@@ -298,8 +298,8 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
     }
     const pointIndex = points.findIndex(entry => entry.dayMs === point.dayMs);
     const previousPoint = pointIndex > 0 ? points[pointIndex - 1] : null;
-    const formValue = point.formPriorDay ?? point.formSameDay;
-    const previousFormValue = previousPoint ? (previousPoint.formPriorDay ?? previousPoint.formSameDay) : null;
+    const formValue = point.formSameDay ?? point.formPriorDay;
+    const previousFormValue = previousPoint ? (previousPoint.formSameDay ?? previousPoint.formPriorDay) : null;
     const deltaForm = (
       Number.isFinite(formValue)
       && Number.isFinite(previousFormValue)
