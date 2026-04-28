@@ -171,6 +171,92 @@ describe('DashboardDerivedMetricsService', () => {
     });
   });
 
+  it('keeps Form KPI and Freshness "Now" aligned with current-day Form projection from form daily-loads', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date(Date.UTC(2026, 3, 28, 12, 0, 0)));
+      const uid = 'user-1';
+
+      hoisted.docMock.mockImplementation((_firestore, ...segments: string[]) => ({
+        path: segments.join('/'),
+      }));
+      hoisted.docDataMock.mockImplementation((docRef: { path?: string } | undefined) => {
+        const path = `${docRef?.path || ''}`;
+        if (path.endsWith('/form')) {
+          return of({
+            status: 'ready',
+            schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+            payload: {
+              dailyLoads: [
+                { dayMs: Date.UTC(2026, 3, 24), load: 60 },
+                { dayMs: Date.UTC(2026, 3, 26), load: 275.4 },
+              ],
+            },
+          });
+        }
+        if (path.endsWith('/form_now')) {
+          return of({
+            status: 'ready',
+            schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+            payload: {
+              latestDayMs: Date.UTC(2026, 3, 27),
+              value: -999,
+              trend8Weeks: [],
+            },
+          });
+        }
+        if (path.endsWith('/form_plus_7d')) {
+          return of({
+            status: 'ready',
+            schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+            payload: {
+              latestDayMs: Date.UTC(2026, 3, 27),
+              projectedDayMs: Date.UTC(2026, 4, 4),
+              value: -999,
+              trend8Weeks: [],
+            },
+          });
+        }
+        if (path.endsWith('/freshness_forecast')) {
+          return of({
+            status: 'ready',
+            schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+            payload: {
+              generatedAtMs: Date.UTC(2026, 3, 27, 11, 0, 0),
+              points: [
+                {
+                  dayMs: Date.UTC(2026, 3, 26),
+                  trainingStressScore: 275.4,
+                  ctl: 100,
+                  atl: 150,
+                  formSameDay: -888,
+                  formPriorDay: -777,
+                  isForecast: false,
+                },
+              ],
+            },
+          });
+        }
+        return of(undefined);
+      });
+
+      const state = await firstValueFrom(service.watch({ uid }));
+
+      expect(state.formPoints?.length).toBeGreaterThan(0);
+      expect(state.formNow).not.toBeNull();
+      expect(state.freshnessForecast).not.toBeNull();
+
+      const freshnessNow = state.freshnessForecast?.points.find(point => point.isForecast === false) || null;
+      expect(state.formNow?.latestDayMs).toBe(Date.UTC(2026, 3, 28));
+      expect(freshnessNow?.dayMs).toBe(Date.UTC(2026, 3, 28));
+      expect(state.formNow?.value).toBeCloseTo(freshnessNow?.formSameDay as number, 4);
+      expect(state.formNow?.value).not.toBe(-999);
+      expect(freshnessNow?.formSameDay).not.toBe(-888);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('supports legacy tuple daily-load payloads for backward compatibility', async () => {
     const uid = 'user-1';
     const formDocRef = { path: `users/${uid}/${DERIVED_METRICS_COLLECTION_ID}/${getDerivedMetricDocId(DERIVED_METRIC_KINDS.Form)}` };
