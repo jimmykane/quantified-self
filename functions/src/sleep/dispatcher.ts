@@ -8,6 +8,8 @@ import { config } from '../config';
 import { enqueueSleepSyncTask, getCloudTaskQueueDepthForQueue } from '../utils';
 
 const MAX_SLEEP_SYNC_QUEUE_SCAN = 500;
+const SLEEP_SYNC_REDISPATCH_STALE_MS = 2 * 60 * 60 * 1000;
+const SLEEP_SYNC_RECONCILIATION_PAGE_SIZE = 100;
 
 function toDispatchTimestamp(value: unknown): number | null {
     const timestamp = Number(value);
@@ -22,6 +24,7 @@ function toDateCreatedTimestamp(value: unknown): number {
 export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Promise<{
     inspected: number;
     dispatched: number;
+    skippedRecent: number;
 }> {
     const cloudTaskQueueId = config.cloudtasks.sleepSyncQueue;
     const pendingCloudTasks = await getCloudTaskQueueDepthForQueue(cloudTaskQueueId, true);
@@ -30,39 +33,113 @@ export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Pro
         return {
             inspected: 0,
             dispatched: 0,
+            skippedRecent: 0,
         };
     }
 
     const availableSlots = Math.max(0, MAX_PENDING_TASKS - pendingCloudTasks);
-    const snapshot = await admin.firestore()
-        .collection(SLEEP_SYNC_QUEUE_COLLECTION_NAME)
-        .where('processed', '==', false)
-        .orderBy('dateCreated', 'asc')
-        .limit(Math.min(MAX_SLEEP_SYNC_QUEUE_SCAN, availableSlots))
-        .get();
+    if (availableSlots === 0) {
+        return {
+            inspected: 0,
+            dispatched: 0,
+            skippedRecent: 0,
+        };
+    }
+
+    const scannedDocs: admin.firestore.QueryDocumentSnapshot[] = [];
+    const pageSize = Math.min(SLEEP_SYNC_RECONCILIATION_PAGE_SIZE, MAX_SLEEP_SYNC_QUEUE_SCAN, MAX_PENDING_TASKS);
+    let pageCursor: admin.firestore.QueryDocumentSnapshot | undefined;
+
+    while (scannedDocs.length < MAX_SLEEP_SYNC_QUEUE_SCAN) {
+        const remainingScanCapacity = MAX_SLEEP_SYNC_QUEUE_SCAN - scannedDocs.length;
+        const currentPageSize = Math.min(pageSize, remainingScanCapacity);
+
+        let query = admin.firestore()
+            .collection(SLEEP_SYNC_QUEUE_COLLECTION_NAME)
+            .where('processed', '==', false)
+            .orderBy('dateCreated', 'asc')
+            .limit(currentPageSize);
+
+        if (pageCursor) {
+            query = query.startAfter(pageCursor);
+        }
+
+        const pageSnapshot = await query.get();
+        if (pageSnapshot.empty) {
+            break;
+        }
+
+        scannedDocs.push(...pageSnapshot.docs);
+        if (pageSnapshot.docs.length < currentPageSize) {
+            break;
+        }
+
+        pageCursor = pageSnapshot.docs[pageSnapshot.docs.length - 1];
+    }
+
+    if (!scannedDocs.length) {
+        return {
+            inspected: 0,
+            dispatched: 0,
+            skippedRecent: 0,
+        };
+    }
+
+    const candidates = scannedDocs
+        .map((doc) => {
+            const data = doc.data() as Partial<SleepSyncQueueItemInterface>;
+            const dispatchedToCloudTask = toDispatchTimestamp(data.dispatchedToCloudTask);
+            const isUndispatched = dispatchedToCloudTask === null;
+            const isStale = !isUndispatched && (nowMs - dispatchedToCloudTask) >= SLEEP_SYNC_REDISPATCH_STALE_MS;
+            return {
+                doc,
+                isUndispatched,
+                isStale,
+                dispatchedToCloudTask,
+                dateCreated: toDateCreatedTimestamp(data.dateCreated),
+            };
+        })
+        .sort((left, right) => {
+            const leftPriority = left.isUndispatched ? 0 : (left.isStale ? 1 : 2);
+            const rightPriority = right.isUndispatched ? 0 : (right.isStale ? 1 : 2);
+            if (leftPriority !== rightPriority) {
+                return leftPriority - rightPriority;
+            }
+
+            return (left.dispatchedToCloudTask || 0) - (right.dispatchedToCloudTask || 0);
+        });
 
     let dispatched = 0;
-    for (const doc of snapshot.docs) {
-        const data = doc.data() as Partial<SleepSyncQueueItemInterface>;
-        if (toDispatchTimestamp(data.dispatchedToCloudTask) !== null) {
+    let skippedRecent = 0;
+    const dispatchLimit = Math.min(availableSlots, candidates.length);
+
+    for (const candidate of candidates) {
+        if (dispatched >= dispatchLimit) {
+            break;
+        }
+
+        if (!candidate.isUndispatched && !candidate.isStale) {
+            skippedRecent += 1;
             continue;
         }
+
         try {
-            const dateCreated = toDateCreatedTimestamp(data.dateCreated);
-            const wasTaskEnqueued = await enqueueSleepSyncTask(doc.id, dateCreated);
+            const wasTaskEnqueued = await enqueueSleepSyncTask(candidate.doc.id, candidate.dateCreated);
             if (!wasTaskEnqueued) {
+                logger.info(`[SleepSyncDispatcher] Task not enqueued for ${candidate.doc.id}; leaving dispatch marker unchanged.`);
                 continue;
             }
-            await doc.ref.update({ dispatchedToCloudTask: nowMs });
+            await candidate.doc.ref.update({ dispatchedToCloudTask: nowMs });
             dispatched += 1;
         } catch (error) {
-            logger.error(`[SleepSyncDispatcher] Failed to dispatch queue item ${doc.id}`, error);
+            logger.error(`[SleepSyncDispatcher] Failed to dispatch queue item ${candidate.doc.id}`, error);
         }
     }
 
     return {
-        inspected: snapshot.size,
+        inspected: candidates.length,
         dispatched,
+        skippedRecent,
     };
 }
 

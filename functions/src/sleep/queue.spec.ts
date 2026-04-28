@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { QueueResult } from '../queue-utils';
+import { SLEEP_SYNC_DISABLED_PROVIDERS_ENV } from './provider-flags';
 
 const hoisted = vi.hoisted(() => ({
     docSet: vi.fn(),
@@ -48,11 +50,12 @@ vi.mock('firebase-admin', () => {
     };
 });
 
-import { addSleepSyncQueueItem } from './queue';
+import { addSleepSyncQueueItem, processSleepSyncQueueItem } from './queue';
 
 describe('sleep queue', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        delete process.env[SLEEP_SYNC_DISABLED_PROVIDERS_ENV];
         hoisted.docIdValues.length = 0;
         hoisted.docSet.mockResolvedValue(undefined);
     });
@@ -80,5 +83,35 @@ describe('sleep queue', () => {
             providerUserId: 'suunto-user-1',
             payload: { samples: [{ SleepId: 123 }] },
         }), { merge: false });
+    });
+
+    it('marks disabled provider queue items processed without resolving tokens', async () => {
+        process.env[SLEEP_SYNC_DISABLED_PROVIDERS_ENV] = 'GarminAPI,COROSAPI';
+        const update = vi.fn().mockResolvedValue(undefined);
+
+        const result = await processSleepSyncQueueItem({
+            id: 'garmin-sleep-disabled',
+            dateCreated: 1_700_000_000_000,
+            dispatchedToCloudTask: 1_700_000_000_500,
+            processed: false,
+            provider: 'GarminAPI',
+            providerUserId: 'garmin-user-1',
+            retryCount: 0,
+            type: 'garmin_push',
+            payload: { sleeps: [{ summaryId: 'summary-1' }] },
+            ref: {
+                update,
+            } as any,
+        });
+
+        expect(result).toBe(QueueResult.Processed);
+        expect(update).toHaveBeenCalledWith(expect.objectContaining({
+            processed: true,
+            resultStatus: 'provider_disabled',
+            providerDisabled: true,
+            sessionsWritten: 0,
+            sessionsSkipped: 0,
+        }));
+        expect(hoisted.docUpdate).not.toHaveBeenCalled();
     });
 });

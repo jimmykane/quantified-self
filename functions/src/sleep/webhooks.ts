@@ -5,6 +5,7 @@ import {
     SLEEP_PROVIDERS,
 } from '../../../shared/sleep';
 import { addSleepSyncQueueItem } from './queue';
+import { isSleepProviderEnabled, SLEEP_SYNC_DISABLED_PROVIDERS_ENV } from './provider-flags';
 
 type ExternalRecord = Record<string, unknown>;
 
@@ -20,6 +21,72 @@ function asArray(value: unknown): unknown[] {
 
 function asString(value: unknown): string | null {
     return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+function asDedupePart(value: unknown): string | null {
+    if (typeof value === 'string') {
+        return value.trim().length > 0 ? value.trim() : null;
+    }
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        return `${value}`;
+    }
+    return null;
+}
+
+function stableStringify(value: unknown): string {
+    if (value === null || typeof value !== 'object') {
+        return JSON.stringify(value) ?? 'undefined';
+    }
+    if (Array.isArray(value)) {
+        return `[${value.map((entry) => stableStringify(entry)).join(',')}]`;
+    }
+
+    const record = value as ExternalRecord;
+    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`).join(',')}}`;
+}
+
+function samplePayloadDigest(value: unknown): string {
+    return crypto
+        .createHash('sha256')
+        .update(stableStringify(value))
+        .digest('hex')
+        .slice(0, 32);
+}
+
+function suuntoSleepSampleDedupePart(sampleValue: unknown): string {
+    const sample = asRecord(sampleValue);
+    const entryData = asRecord(sample.entryData);
+    const candidates = [
+        sample.SleepId,
+        sample.sleepId,
+        entryData.SleepId,
+        entryData.sleepId,
+        sample.id,
+        entryData.id,
+        sample.timestamp,
+        sample.DateTime,
+        sample.StartTime,
+        sample.BedtimeStart,
+        entryData.DateTime,
+        entryData.StartTime,
+        entryData.BedtimeStart,
+    ];
+
+    for (const candidate of candidates) {
+        const dedupePart = asDedupePart(candidate);
+        if (dedupePart) {
+            return dedupePart;
+        }
+    }
+
+    return `sample-${samplePayloadDigest(sampleValue)}`;
+}
+
+function buildSuuntoSleepDedupeKey(providerUserId: string, samples: unknown[]): string {
+    const sampleKeys = samples
+        .map((sample) => suuntoSleepSampleDedupePart(sample))
+        .sort();
+    return `${providerUserId}:${sampleKeys.join(':')}`;
 }
 
 function hasNumberField(record: ExternalRecord, fieldName: string): boolean {
@@ -42,6 +109,12 @@ export const receiveGarminAPISleepData = functions.region('europe-west2').runWit
     timeoutSeconds: 60,
     memory: '256MB',
 }).https.onRequest(async (req, res) => {
+    if (!isSleepProviderEnabled(SLEEP_PROVIDERS.GarminAPI)) {
+        logger.info(`[SleepSync][Garmin] Provider disabled by ${SLEEP_SYNC_DISABLED_PROVIDERS_ENV}; ignoring sleep webhook`);
+        res.status(200).send();
+        return;
+    }
+
     const sleeps = asArray(asRecord(req.body).sleeps);
     if (!sleeps.length) {
         logger.warn('[SleepSync][Garmin] Received payload without sleeps');
@@ -81,6 +154,12 @@ export const receiveSuuntoAppSleepData = functions.region('europe-west2').runWit
     timeoutSeconds: 60,
     memory: '256MB',
 }).https.onRequest(async (req, res) => {
+    if (!isSleepProviderEnabled(SLEEP_PROVIDERS.SuuntoApp)) {
+        logger.info(`[SleepSync][Suunto] Provider disabled by ${SLEEP_SYNC_DISABLED_PROVIDERS_ENV}; ignoring sleep webhook`);
+        res.status(200).send();
+        return;
+    }
+
     const signature = asString(req.get('X-HMAC-SHA256-Signature'));
     if (!verifySuuntoSignature(req.rawBody, signature)) {
         logger.warn('[SleepSync][Suunto] Invalid webhook signature');
@@ -108,7 +187,7 @@ export const receiveSuuntoAppSleepData = functions.region('europe-west2').runWit
             provider: SLEEP_PROVIDERS.SuuntoApp,
             providerUserId,
             payload: { samples },
-            dedupeKey: `${providerUserId}:${samples.map((sample) => asString(asRecord(sample).timestamp) || '').join(':')}`,
+            dedupeKey: buildSuuntoSleepDedupeKey(providerUserId, samples),
         });
         logger.info(`[SleepSync][Suunto] Queued ${samples.length} sleep samples for ${providerUserId}`);
         res.status(200).send();

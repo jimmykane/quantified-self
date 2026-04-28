@@ -29,6 +29,7 @@ import {
     QueueResult,
     updateToProcessed,
 } from '../queue-utils';
+import { isSleepProviderEnabled, SLEEP_SYNC_DISABLED_PROVIDERS_ENV } from './provider-flags';
 
 type TokenSnapshot = admin.firestore.QueryDocumentSnapshot;
 
@@ -269,6 +270,16 @@ function formatCorosDate(timestampMs: number): string {
 
 export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInterface): Promise<QueueResult> {
     logger.info(`[SleepSync] Processing queue item ${queueItem.id}`);
+    if (!isSleepProviderEnabled(queueItem.provider)) {
+        logger.info(`[SleepSync] Provider ${queueItem.provider} disabled by ${SLEEP_SYNC_DISABLED_PROVIDERS_ENV}; marking queue item ${queueItem.id} processed`);
+        return updateToProcessed(queueItem, undefined, {
+            resultStatus: 'provider_disabled',
+            providerDisabled: true,
+            sessionsWritten: 0,
+            sessionsSkipped: 0,
+        });
+    }
+
     try {
         const { tokenSnapshot, firebaseUserID } = await resolveTokenAndUser(queueItem);
         let mapperResults: SleepMapperResult[] = [];
