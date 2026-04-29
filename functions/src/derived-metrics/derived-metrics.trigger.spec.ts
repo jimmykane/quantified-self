@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('firebase-functions/v2/firestore', () => ({
-    onDocumentWritten: (_opts: unknown, handler: any) => handler,
+const hoisted = vi.hoisted(() => ({
+    onDocumentWritten: vi.fn((_opts: unknown, handler: any) => handler),
+    enqueueDerivedMetricsIngressTask: vi.fn(),
 }));
 
-const hoisted = vi.hoisted(() => ({
-    enqueueDerivedMetricsIngressTask: vi.fn(),
+vi.mock('firebase-functions/v2/firestore', () => ({
+    onDocumentWritten: hoisted.onDocumentWritten,
 }));
 
 vi.mock('../shared/cloud-tasks', () => ({
@@ -30,8 +31,18 @@ import { onDashboardDerivedMetricsEventWrite } from './derived-metrics.trigger';
 
 describe('onDashboardDerivedMetricsEventWrite', () => {
     beforeEach(() => {
-        vi.clearAllMocks();
+        hoisted.enqueueDerivedMetricsIngressTask.mockClear();
         hoisted.enqueueDerivedMetricsIngressTask.mockResolvedValue(true);
+    });
+
+    it('configures retry-safe Firestore trigger options', () => {
+        expect(hoisted.onDocumentWritten).toHaveBeenCalledWith(
+            expect.objectContaining({
+                document: 'users/{uid}/events/{eventId}',
+                retry: true,
+            }),
+            expect.any(Function),
+        );
     });
 
     it('enqueues a debounced ingress task for valid event writes', async () => {
@@ -43,7 +54,7 @@ describe('onDashboardDerivedMetricsEventWrite', () => {
             },
         });
 
-        expect(hoisted.enqueueDerivedMetricsIngressTask).toHaveBeenCalledWith('user-1', 1);
+        expect(hoisted.enqueueDerivedMetricsIngressTask).toHaveBeenCalledWith('user-1');
     });
 
     it('skips when uid is missing', async () => {
@@ -70,4 +81,3 @@ describe('onDashboardDerivedMetricsEventWrite', () => {
         expect(hoisted.enqueueDerivedMetricsIngressTask).not.toHaveBeenCalled();
     });
 });
-

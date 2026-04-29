@@ -8,6 +8,7 @@ export const onDashboardDerivedMetricsEventWrite = onDocumentWritten({
     document: 'users/{uid}/events/{eventId}',
     maxInstances: 50,
     concurrency: 1,
+    retry: true,
 }, async (event) => {
     const uid = `${event.params?.uid || ''}`.trim();
     if (!uid) {
@@ -23,7 +24,8 @@ export const onDashboardDerivedMetricsEventWrite = onDocumentWritten({
 
     // Debounce mutation ingress by uid + short time bucket.
     // Deterministic Cloud Task naming ensures one pending ingress task per bucket.
-    const queued = await enqueueDerivedMetricsIngressTask(uid, 1);
+    // The ingress helper schedules execution at bucket-close + short buffer.
+    const queued = await enqueueDerivedMetricsIngressTask(uid);
 
     logger.info('[derived-metrics] Event write enqueued derived metrics ingress', {
         uid,

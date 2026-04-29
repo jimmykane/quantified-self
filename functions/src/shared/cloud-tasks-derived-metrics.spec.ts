@@ -92,12 +92,15 @@ describe('enqueueDerivedMetricsIngressTask', () => {
   });
 
   it('enqueues deterministic ingress task per uid + bucket', async () => {
-    await expect(enqueueDerivedMetricsIngressTask('user/with spaces', 1, 1_712_000_015_000)).resolves.toBe(true);
+    await expect(enqueueDerivedMetricsIngressTask('user/with spaces', undefined, 1_712_000_015_000)).resolves.toBe(true);
 
     expect(hoisted.mockCloudTasksClient.createTask).toHaveBeenCalledWith({
       parent: 'projects/p/locations/l/queues/q',
       task: expect.objectContaining({
         name: 'projects/p/locations/l/queues/q/tasks/derived-metrics-ingress-user-with-spaces-1712000010',
+        scheduleTime: {
+          seconds: 1712000042,
+        },
         httpRequest: expect.objectContaining({
           url: 'https://test-location-test-project.cloudfunctions.net/processDerivedMetricsIngressTask',
         }),
@@ -119,12 +122,12 @@ describe('enqueueDerivedMetricsIngressTask', () => {
     err.code = 6;
     hoisted.mockCloudTasksClient.createTask.mockRejectedValue(err);
 
-    await expect(enqueueDerivedMetricsIngressTask('user-1', 1, 1_712_000_015_000)).resolves.toBe(false);
+    await expect(enqueueDerivedMetricsIngressTask('user-1', undefined, 1_712_000_015_000)).resolves.toBe(false);
   });
 
   it('uses different deterministic task names across different buckets', async () => {
-    await expect(enqueueDerivedMetricsIngressTask('user-1', 1, 1_712_000_015_000)).resolves.toBe(true);
-    await expect(enqueueDerivedMetricsIngressTask('user-1', 1, 1_712_000_055_000)).resolves.toBe(true);
+    await expect(enqueueDerivedMetricsIngressTask('user-1', undefined, 1_712_000_015_000)).resolves.toBe(true);
+    await expect(enqueueDerivedMetricsIngressTask('user-1', undefined, 1_712_000_055_000)).resolves.toBe(true);
 
     const firstTaskName = hoisted.mockCloudTasksClient.createTask.mock.calls[0][0].task.name as string;
     const secondTaskName = hoisted.mockCloudTasksClient.createTask.mock.calls[1][0].task.name as string;
@@ -132,5 +135,19 @@ describe('enqueueDerivedMetricsIngressTask', () => {
     expect(firstTaskName).toContain('derived-metrics-ingress-user-1-1712000010');
     expect(secondTaskName).toContain('derived-metrics-ingress-user-1-1712000040');
     expect(firstTaskName).not.toBe(secondTaskName);
+  });
+
+  it('supports explicit schedule delay override for manual enqueue call-sites', async () => {
+    await expect(enqueueDerivedMetricsIngressTask('user-1', 9, 1_712_000_015_000)).resolves.toBe(true);
+
+    expect(hoisted.mockCloudTasksClient.createTask).toHaveBeenCalledWith({
+      parent: 'projects/p/locations/l/queues/q',
+      task: expect.objectContaining({
+        name: 'projects/p/locations/l/queues/q/tasks/derived-metrics-ingress-user-1-1712000010',
+        scheduleTime: {
+          seconds: 1712000024,
+        },
+      }),
+    });
   });
 });

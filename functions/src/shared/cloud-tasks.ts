@@ -284,6 +284,16 @@ export async function enqueueDerivedMetricsIngressTask(
     const bucketSeconds = Math.max(1, Math.floor(Number(derivedMetricsIngressBucketSeconds) || 30));
     const currentEpochSeconds = Math.max(0, Math.floor(((Number.isFinite(nowMs) ? nowMs : Date.now()) as number) / 1000));
     const bucketStartEpochSec = currentEpochSeconds - (currentEpochSeconds % bucketSeconds);
+    const ingressBufferSeconds = 2;
+    const bucketCloseEpochSec = bucketStartEpochSec + bucketSeconds;
+    const computedScheduleEpochSec = Math.max(currentEpochSeconds + 1, bucketCloseEpochSec + ingressBufferSeconds);
+    const overrideScheduleDelaySeconds = Number.isFinite(scheduleDelaySeconds)
+        ? Math.max(1, Math.floor(scheduleDelaySeconds as number))
+        : null;
+    const effectiveScheduleDelaySeconds = overrideScheduleDelaySeconds ?? (computedScheduleEpochSec - currentEpochSeconds);
+    const effectiveScheduleEpochSeconds = overrideScheduleDelaySeconds === null
+        ? computedScheduleEpochSec
+        : (currentEpochSeconds + effectiveScheduleDelaySeconds);
     const taskName = `${parent}/tasks/derived-metrics-ingress-${safeUid}-${bucketStartEpochSec}`;
     const payload = { data: { uid, bucketStartEpochSec } };
 
@@ -293,7 +303,8 @@ export async function enqueueDerivedMetricsIngressTask(
         payload,
         serviceAccountEmail,
         url,
-        scheduleDelaySeconds,
+        scheduleDelaySeconds: effectiveScheduleDelaySeconds,
+        scheduleAtEpochSeconds: effectiveScheduleEpochSeconds,
         alreadyExistsLogMessage: `[DerivedMetricsIngressDispatcher] Task already exists for ${uid} bucket ${bucketStartEpochSec}, skipping`,
         failedLogPrefix: `[DerivedMetricsIngressDispatcher] Failed to enqueue derived metrics ingress task for ${uid} bucket ${bucketStartEpochSec}:`,
     });
@@ -306,6 +317,7 @@ interface EnqueueTaskParams {
     serviceAccountEmail: string;
     url: string;
     scheduleDelaySeconds?: number;
+    scheduleAtEpochSeconds?: number;
     alreadyExistsLogMessage: string;
     failedLogPrefix: string;
 }
@@ -318,6 +330,7 @@ async function enqueueTaskWithRetry(params: EnqueueTaskParams): Promise<boolean>
         serviceAccountEmail,
         url,
         scheduleDelaySeconds,
+        scheduleAtEpochSeconds,
         alreadyExistsLogMessage,
         failedLogPrefix,
     } = params;
@@ -337,10 +350,16 @@ async function enqueueTaskWithRetry(params: EnqueueTaskParams): Promise<boolean>
         },
     };
 
-    const minDelaySeconds = Math.max(scheduleDelaySeconds ?? 1, 1);
-    task.scheduleTime = {
-        seconds: Math.floor(Date.now() / 1000) + minDelaySeconds
-    };
+    if (Number.isFinite(scheduleAtEpochSeconds)) {
+        task.scheduleTime = {
+            seconds: Math.max(1, Math.floor(scheduleAtEpochSeconds as number)),
+        };
+    } else {
+        const minDelaySeconds = Math.max(scheduleDelaySeconds ?? 1, 1);
+        task.scheduleTime = {
+            seconds: Math.floor(Date.now() / 1000) + minDelaySeconds
+        };
+    }
 
     let attempt = 0;
     const MAX_RETRIES = 3;
