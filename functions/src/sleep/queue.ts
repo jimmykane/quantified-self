@@ -282,6 +282,38 @@ function formatCorosDate(timestampMs: number): string {
     return `${year}${month}${day}`;
 }
 
+function assertNeverQueueItemType(type: never): never {
+    throw new Error(`Unsupported sleep queue item type ${type}`);
+}
+
+function isPollQueueItemType(type: SleepSyncQueueItemType): boolean {
+    switch (type) {
+        case 'suunto_poll':
+        case 'coros_poll':
+            return true;
+        case 'garmin_ping':
+        case 'garmin_push':
+        case 'suunto_webhook':
+            return false;
+        default:
+            return assertNeverQueueItemType(type);
+    }
+}
+
+function isWebhookQueueItemType(type: SleepSyncQueueItemType): boolean {
+    switch (type) {
+        case 'garmin_ping':
+        case 'garmin_push':
+        case 'suunto_webhook':
+            return true;
+        case 'suunto_poll':
+        case 'coros_poll':
+            return false;
+        default:
+            return assertNeverQueueItemType(type);
+    }
+}
+
 export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInterface): Promise<QueueResult> {
     logger.info(`[SleepSync] Processing queue item ${queueItem.id}`);
     if (!isSleepProviderEnabled(queueItem.provider)) {
@@ -339,11 +371,12 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
         }
 
         const result = await upsertSleepSessions(firebaseUserID, mapperResults);
+        const stateUpdateMs = Date.now();
         await updateSleepSyncState(firebaseUserID, queueItem.provider, {
             status: SLEEP_SYNC_STATUSES.Ready,
-            lastSyncedAtMs: Date.now(),
-            lastPollAtMs: queueItem.type.endsWith('_poll') ? Date.now() : undefined,
-            lastWebhookAtMs: queueItem.type.endsWith('_webhook') || queueItem.type.endsWith('_push') ? Date.now() : undefined,
+            lastSyncedAtMs: stateUpdateMs,
+            lastPollAtMs: isPollQueueItemType(queueItem.type) ? stateUpdateMs : undefined,
+            lastWebhookAtMs: isWebhookQueueItemType(queueItem.type) ? stateUpdateMs : undefined,
             lastError: null,
         });
         logger.info(`[SleepSync] Queue item ${queueItem.id} wrote ${result.written} sessions and skipped ${result.skipped}`);

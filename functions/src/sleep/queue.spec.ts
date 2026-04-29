@@ -14,6 +14,8 @@ const hoisted = vi.hoisted(() => ({
     tokenRootLimit: vi.fn(),
     tokenRootGet: vi.fn(),
     collectionGroupGet: vi.fn(),
+    getTokenData: vi.fn(),
+    requestGet: vi.fn(),
     markSleepSyncError: vi.fn(),
     updateSleepSyncState: vi.fn(),
     upsertSleepSessions: vi.fn(),
@@ -93,6 +95,14 @@ vi.mock('./writer', () => ({
     upsertSleepSessions: hoisted.upsertSleepSessions,
 }));
 
+vi.mock('../tokens', () => ({
+    getTokenData: hoisted.getTokenData,
+}));
+
+vi.mock('../request-helper', () => ({
+    get: hoisted.requestGet,
+}));
+
 import { addSleepSyncQueueItem, processSleepSyncQueueItem } from './queue';
 
 describe('sleep queue', () => {
@@ -105,6 +115,11 @@ describe('sleep queue', () => {
         hoisted.batchCommit.mockResolvedValue(undefined);
         hoisted.tokenRootGet.mockResolvedValue({ docs: [], empty: true });
         hoisted.collectionGroupGet.mockResolvedValue({ docs: [], empty: true });
+        hoisted.getTokenData.mockResolvedValue({
+            accessToken: 'garmin-access-token',
+            permissions: ['HEALTH_EXPORT'],
+        });
+        hoisted.requestGet.mockResolvedValue({ sleeps: [] });
         hoisted.markSleepSyncError.mockResolvedValue(undefined);
         hoisted.updateSleepSyncState.mockResolvedValue(undefined);
         hoisted.upsertSleepSessions.mockResolvedValue({ written: 0, skipped: 0 });
@@ -162,6 +177,82 @@ describe('sleep queue', () => {
             sessionsSkipped: 0,
         }));
         expect(hoisted.docUpdate).not.toHaveBeenCalled();
+    });
+
+    it('records Garmin ping queue successes as webhook sync activity', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-04-29T06:00:00.000Z'));
+        try {
+            hoisted.disabledProviders.splice(0, hoisted.disabledProviders.length, 'COROSAPI');
+            hoisted.upsertSleepSessions.mockResolvedValue({ written: 1, skipped: 0 });
+            hoisted.requestGet.mockResolvedValue({
+                sleeps: [{
+                    summaryId: 'summary-1',
+                    calendarDate: '2026-04-29',
+                    startTimeInSeconds: 1_777_424_400,
+                    durationInSeconds: 28_800,
+                }],
+            });
+            hoisted.tokenRootGet.mockResolvedValue({
+                docs: [{
+                    id: 'garmin-token-1',
+                    data: () => ({
+                        serviceName: 'GarminAPI',
+                        userID: 'garmin-user-1',
+                    }),
+                    ref: {
+                        parent: {
+                            parent: {
+                                id: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                            },
+                        },
+                    },
+                }],
+                empty: false,
+            });
+            const update = vi.fn().mockResolvedValue(undefined);
+            const callbackURL = 'https://apis.garmin.com/wellness-api/rest/sleeps?uploadStartTimeInSeconds=1777424400';
+
+            const result = await processSleepSyncQueueItem({
+                id: 'garmin-sleep-ping',
+                dateCreated: 1_700_000_000_000,
+                dispatchedToCloudTask: 1_700_000_000_500,
+                processed: false,
+                provider: 'GarminAPI',
+                userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                providerUserId: 'garmin-user-1',
+                retryCount: 0,
+                type: 'garmin_ping',
+                callbackURL,
+                ref: {
+                    update,
+                } as any,
+            });
+
+            expect(result).toBe(QueueResult.Processed);
+            expect(hoisted.requestGet).toHaveBeenCalledWith(expect.objectContaining({
+                url: callbackURL,
+                headers: {
+                    Authorization: 'Bearer garmin-access-token',
+                },
+                json: true,
+            }));
+            expect(hoisted.updateSleepSyncState).toHaveBeenCalledWith('xcsAolLDDTWTgtRN9eYF3lW2YKL2', 'GarminAPI', {
+                status: 'ready',
+                lastSyncedAtMs: Date.now(),
+                lastPollAtMs: undefined,
+                lastWebhookAtMs: Date.now(),
+                lastError: null,
+            });
+            expect(update).toHaveBeenCalledWith(expect.objectContaining({
+                processed: true,
+                resultStatus: 'success',
+                sessionsWritten: 1,
+                sessionsSkipped: 0,
+            }));
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('moves Garmin ping queue items with untrusted callback URLs to DLQ without resolving tokens', async () => {
