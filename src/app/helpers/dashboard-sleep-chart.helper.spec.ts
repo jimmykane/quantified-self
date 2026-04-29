@@ -91,5 +91,6 @@ describe('dashboard-sleep-chart.helper', () => {
     expect(formatSleepDuration(0)).toBe('--');
     expect(formatSleepDuration(42 * 60)).toBe('42m');
     expect(formatSleepDuration((7 * 3600) + (5 * 60))).toBe('7h 05m');
+    expect(formatSleepDuration((1 * 3600) + (59 * 60) + 31)).toBe('2h 00m');
   });
 });

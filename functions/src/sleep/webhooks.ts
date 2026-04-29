@@ -160,21 +160,22 @@ export const receiveGarminAPISleepData = functions.region('europe-west2').runWit
                 continue;
             }
             const callbackURL = asString(sleep.callbackURL);
-            const isPushSummary = hasNumberField(sleep, 'startTimeInSeconds') || !!asString(sleep.summaryId);
-            const trustedCallbackURL = isPushSummary ? null : normalizeTrustedGarminCallbackURL(callbackURL);
-            if (!isPushSummary && !trustedCallbackURL) {
-                logger.warn('[SleepSync][Garmin] Rejected ping payload with untrusted callbackURL');
+            const hasPushSummaryFields = hasNumberField(sleep, 'startTimeInSeconds') || !!asString(sleep.summaryId);
+            const trustedCallbackURL = normalizeTrustedGarminCallbackURL(callbackURL);
+            if (!trustedCallbackURL) {
+                logger.warn(hasPushSummaryFields
+                    ? '[SleepSync][Garmin] Rejected unauthenticated push payload'
+                    : '[SleepSync][Garmin] Rejected ping payload with untrusted callbackURL');
                 res.status(400).send();
                 return;
             }
 
             queueItems.push({
-                type: isPushSummary ? 'garmin_push' : 'garmin_ping',
+                type: 'garmin_ping',
                 provider: SLEEP_PROVIDERS.GarminAPI,
                 providerUserId,
-                payload: isPushSummary ? { sleeps: [sleep] } : undefined,
-                callbackURL: trustedCallbackURL || undefined,
-                dedupeKey: asString(sleep.summaryId) || trustedCallbackURL || `${Date.now()}`,
+                callbackURL: trustedCallbackURL,
+                dedupeKey: trustedCallbackURL,
             });
         }
         const refs = await Promise.all(queueItems.map((queueItem) => addSleepSyncQueueItem(queueItem)));

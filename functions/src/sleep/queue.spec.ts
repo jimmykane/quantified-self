@@ -195,6 +195,38 @@ describe('sleep queue', () => {
         expect(hoisted.docUpdate).not.toHaveBeenCalled();
     });
 
+    it('moves Garmin push queue items to DLQ without persisting payload data', async () => {
+        hoisted.disabledProviders.splice(0, hoisted.disabledProviders.length, 'COROSAPI');
+        const queueRef = {
+            parent: { id: 'sleepSyncQueue' },
+        };
+
+        const result = await processSleepSyncQueueItem({
+            id: 'garmin-sleep-push',
+            dateCreated: 1_700_000_000_000,
+            dispatchedToCloudTask: 1_700_000_000_500,
+            processed: false,
+            provider: 'GarminAPI',
+            providerUserId: 'garmin-user-1',
+            retryCount: 0,
+            type: 'garmin_push',
+            payload: { sleeps: [{ summaryId: 'summary-1', startTimeInSeconds: 1760000000 }] },
+            ref: queueRef as any,
+        });
+
+        expect(result).toBe(QueueResult.MovedToDLQ);
+        expect(hoisted.batchSet).toHaveBeenCalledWith(expect.objectContaining({
+            id: 'garmin-sleep-push',
+        }), expect.objectContaining({
+            originalCollection: 'sleepSyncQueue',
+            context: 'UNSUPPORTED_GARMIN_PUSH_PAYLOAD',
+            error: expect.stringContaining('Garmin push sleep payloads are not accepted'),
+        }));
+        expect(hoisted.batchDelete).toHaveBeenCalledWith(queueRef);
+        expect(hoisted.collectionGroupGet).not.toHaveBeenCalled();
+        expect(hoisted.upsertSleepSessions).not.toHaveBeenCalled();
+    });
+
     it('marks out-of-scope user queue items processed without resolving tokens', async () => {
         const update = vi.fn().mockResolvedValue(undefined);
 

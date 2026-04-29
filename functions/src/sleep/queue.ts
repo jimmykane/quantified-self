@@ -188,6 +188,12 @@ class GarminSleepPermissionError extends Error {
     }
 }
 
+class UnsupportedGarminPushPayloadError extends Error {
+    constructor() {
+        super('Garmin push sleep payloads are not accepted without authenticated delivery');
+    }
+}
+
 async function resolveTokenAndUser(queueItem: SleepSyncQueueItemInterface): Promise<{
     tokenSnapshot: TokenSnapshot;
     firebaseUserID: string;
@@ -302,6 +308,9 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
         if (queueItem.provider === SLEEP_PROVIDERS.GarminAPI && queueItem.type === 'garmin_ping') {
             assertTrustedGarminCallbackURL(queueItem.callbackURL);
         }
+        if (queueItem.provider === SLEEP_PROVIDERS.GarminAPI && queueItem.type === 'garmin_push') {
+            throw new UnsupportedGarminPushPayloadError();
+        }
 
         const { tokenSnapshot, firebaseUserID } = await resolveTokenAndUser(queueItem);
         if (!isSleepSyncUserAllowed(firebaseUserID)) {
@@ -354,6 +363,10 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                 lastError: error.message,
             });
             return moveToDeadLetterQueue(queueItem, error, undefined, 'PERMISSION_MISSING');
+        }
+        if (error instanceof UnsupportedGarminPushPayloadError) {
+            logger.warn(`[SleepSync] Queue item ${queueItem.id} has unsupported Garmin push payload; moving to DLQ`);
+            return moveToDeadLetterQueue(queueItem, error, undefined, 'UNSUPPORTED_GARMIN_PUSH_PAYLOAD');
         }
         if (queueItem.userID) {
             await markSleepSyncError(queueItem.userID, queueItem.provider, error);

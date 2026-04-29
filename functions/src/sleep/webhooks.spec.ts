@@ -116,6 +116,34 @@ describe('sleep webhooks', () => {
             callbackURL,
             dedupeKey: callbackURL,
         }));
+        expect(hoisted.addSleepSyncQueueItem.mock.calls[0][0]).not.toHaveProperty('payload');
+    });
+
+    it('rejects Garmin push summary payloads without timestamp fallback dedupe', async () => {
+        hoisted.garminEnabled = true;
+        const response = createResponse();
+
+        await receiveGarminAPISleepData({
+            body: {
+                sleeps: [
+                    {
+                        userId: 'garmin-user-1',
+                        summaryId: 'summary-1',
+                        startTimeInSeconds: 1760000000,
+                        durationInSeconds: 28800,
+                    },
+                    {
+                        userId: 'garmin-user-1',
+                        summaryId: 'summary-2',
+                        startTimeInSeconds: 1760000001,
+                        durationInSeconds: 28800,
+                    },
+                ],
+            },
+        } as any, response as any);
+
+        expect(response.status).toHaveBeenCalledWith(400);
+        expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
     });
 
     it.each([

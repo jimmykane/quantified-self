@@ -56,8 +56,10 @@ the next poll. Garmin sleep data relies on Garmin Health API webhook delivery in
    Garmin or COROS sleep work.
 6. For COROS, wait for the next `scheduleCOROSSleepSync` run or trigger the scheduled
    function manually in the Firebase console.
-7. For Garmin, confirm the Garmin Health API sleep webhook is configured and send a test
-   sleep push or ping payload from Garmin's tooling if available.
+7. For Garmin, configure the Health API sleep endpoint as a Ping/Pull notification. Direct
+   Push sleep summaries are rejected in v1 because Garmin does not provide an authenticated
+   push signature in the local docs; the worker only persists Garmin sleep data after pulling
+   it from a Garmin-owned callback URL with the user's stored token.
 8. Check `users/{uid}/sleepSyncState/{provider}` and `users/{uid}/sleepSessions` for new
    sleep sync state and sessions.
 
