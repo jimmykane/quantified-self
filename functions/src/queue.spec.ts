@@ -36,6 +36,16 @@ const { mockDocRef, mockBatch, mockDocSnapshot, mockCollection } = vi.hoisted(()
         create: vi.fn(() => Promise.resolve()),
         delete: vi.fn(() => Promise.resolve()),
         id: 'mock-doc-id',
+        get: vi.fn(() => Promise.resolve({
+            exists: true,
+            data: () => ({
+                id: 'user1-work1',
+                dateCreated: 123456,
+                processed: false,
+                retryCount: 0,
+                dispatchedToCloudTask: null,
+            }),
+        })),
         parent: {
             id: 'tokens',
             parent: { id: 'mock-user-id' }
@@ -730,16 +740,28 @@ describe('queue', () => {
             expect(doc.create).toHaveBeenCalledWith(expect.objectContaining({
                 id: 'user1-work1',
                 userName: 'user1',
-                workoutID: 'work1'
+                workoutID: 'work1',
+                dispatchedToCloudTask: null
             }));
             expect(doc.set).not.toHaveBeenCalled();
             expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', expect.any(Number));
+            expect(doc.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
         });
 
-        it('addToQueueForSuunto should skip duplicate queue items without dispatching another task', async () => {
+        it('addToQueueForSuunto should re-dispatch duplicate unprocessed queue items', async () => {
             const alreadyExistsError: any = new Error('ALREADY_EXISTS');
             alreadyExistsError.code = 6;
             mockDocRef.create.mockRejectedValueOnce(alreadyExistsError);
+            mockDocRef.get.mockResolvedValueOnce({
+                exists: true,
+                data: () => ({
+                    id: 'user1-work1',
+                    dateCreated: 123456,
+                    processed: false,
+                    retryCount: 0,
+                    dispatchedToCloudTask: Date.now(),
+                }),
+            });
 
             const result = await addToQueueForSuunto({ userName: 'user1', workoutID: 'work1' });
 
@@ -749,6 +771,30 @@ describe('queue', () => {
                 userName: 'user1',
                 workoutID: 'work1'
             }));
+            expect(mockDocRef.set).not.toHaveBeenCalled();
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', 123456);
+            expect(mockDocRef.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+        });
+
+        it('addToQueueForSuunto should skip duplicate queue items that are already processed', async () => {
+            const alreadyExistsError: any = new Error('ALREADY_EXISTS');
+            alreadyExistsError.code = 6;
+            mockDocRef.create.mockRejectedValueOnce(alreadyExistsError);
+            mockDocRef.get.mockResolvedValueOnce({
+                exists: true,
+                data: () => ({
+                    id: 'user1-work1',
+                    dateCreated: 123456,
+                    processed: true,
+                    retryCount: 0,
+                    dispatchedToCloudTask: Date.now(),
+                }),
+            });
+
+            const result = await addToQueueForSuunto({ userName: 'user1', workoutID: 'work1' });
+
+            expect(result.id).toBe('mock-doc-id');
+            expect(mockDocRef.create).toHaveBeenCalled();
             expect(mockDocRef.set).not.toHaveBeenCalled();
             expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
         });

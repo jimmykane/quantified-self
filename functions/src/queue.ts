@@ -452,7 +452,7 @@ async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface |
   const queueItemDocument = admin.firestore().collection(getServiceWorkoutQueueName(serviceName)).doc(queueItem.id);
   const queuePayload = Object.assign(queueItem, {
     expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
-    dispatchedToCloudTask: deferDispatch ? null : Date.now(),
+    dispatchedToCloudTask: null,
   });
 
   if (createOnly) {
@@ -460,7 +460,19 @@ async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface |
       await queueItemDocument.create(queuePayload);
     } catch (error) {
       if (isFirestoreAlreadyExistsError(error)) {
-        logger.info(`Queue item ${queueItem.id} already exists for ${serviceName}; skipping duplicate enqueue.`);
+        const existingSnapshot = await queueItemDocument.get();
+        const existingQueueItem = existingSnapshot.data() as ({ dateCreated?: number, processed?: boolean } | undefined);
+        if (existingQueueItem?.processed === true) {
+          logger.info(`Queue item ${queueItem.id} already processed for ${serviceName}; skipping duplicate enqueue.`);
+          return queueItemDocument;
+        }
+
+        const dateCreated = typeof existingQueueItem?.dateCreated === 'number'
+          ? existingQueueItem.dateCreated
+          : queueItem.dateCreated;
+        logger.info(`Queue item ${queueItem.id} already exists for ${serviceName}; ensuring duplicate webhook is dispatched.`);
+        await enqueueWorkoutTask(serviceName, queueItem.id, dateCreated);
+        await queueItemDocument.update({ dispatchedToCloudTask: Date.now() });
         return queueItemDocument;
       }
       throw error;
@@ -472,6 +484,7 @@ async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface |
   if (!deferDispatch) {
     // Dispatch a Cloud Task for immediate processing
     await enqueueWorkoutTask(serviceName, queueItem.id, queueItem.dateCreated);
+    await queueItemDocument.update({ dispatchedToCloudTask: Date.now() });
   }
   return queueItemDocument;
 }
