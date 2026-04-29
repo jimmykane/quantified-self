@@ -430,6 +430,7 @@ export {
   getCloudTaskQueueDepth,
   getCloudTaskQueueDepthForQueue,
   enqueueActivitySyncTask,
+  enqueueSleepSyncTask,
   enqueueWorkoutTask,
   resetCloudTaskQueueDepthCache,
 } from './shared/cloud-tasks';

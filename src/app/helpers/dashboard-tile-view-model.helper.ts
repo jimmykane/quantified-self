@@ -44,6 +44,10 @@ import type {
   DashboardRampRateContext,
 } from './dashboard-derived-metrics.helper';
 import {
+  buildDashboardSleepTrendContext,
+  type DashboardSleepTrendContext,
+} from './dashboard-sleep-chart.helper';
+import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
@@ -55,6 +59,7 @@ import {
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+  DASHBOARD_SLEEP_TREND_CHART_TYPE,
   DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
   isDashboardAcwrKpiChartType,
   isDashboardEasyPercentKpiChartType,
@@ -69,7 +74,9 @@ import {
   isDashboardMonotonyStrainKpiChartType,
   isDashboardRampRateKpiChartType,
   isDashboardRecoveryNowChartType,
+  isDashboardSleepTrendChartType,
 } from './dashboard-special-chart-types';
+import type { SleepSession } from '@shared/sleep';
 
 export interface DashboardChartTileViewModel extends TileChartSettingsInterface {
   timeInterval: TimeIntervals;
@@ -87,6 +94,7 @@ export interface DashboardChartTileViewModel extends TileChartSettingsInterface 
   freshnessForecast?: DashboardFreshnessForecastContext | null;
   intensityDistribution?: DashboardIntensityDistributionContext | null;
   efficiencyTrend?: DashboardEfficiencyTrendContext | null;
+  sleepTrend?: DashboardSleepTrendContext | null;
 }
 
 export type DashboardMapTileSettings = Omit<TileMapSettingsInterface, 'mapType'> & {
@@ -102,6 +110,7 @@ export type DashboardTileViewModel = DashboardChartTileViewModel | DashboardMapT
 interface BuildDashboardTileViewModelsInput {
   tiles: TileSettingsInterface[];
   events?: EventInterface[] | null;
+  sleepSessions?: SleepSession[] | null;
   dashboardDateRange?: {
     dateRange?: DateRanges | null;
     startDate?: number | Date | null;
@@ -332,6 +341,7 @@ export function buildDashboardTileViewModels(
   const derivedFreshnessForecastContext = input.derivedMetrics?.freshnessForecast || null;
   const derivedIntensityDistributionContext = input.derivedMetrics?.intensityDistribution || null;
   const derivedEfficiencyTrendContext = input.derivedMetrics?.efficiencyTrend || null;
+  const sleepTrendContext = buildDashboardSleepTrendContext(input.sleepSessions || []);
 
   return (input.tiles || []).reduce<DashboardTileViewModel[]>((viewModels, tile) => {
     if (tile.type === TileTypes.Map) {
@@ -479,6 +489,17 @@ export function buildDashboardTileViewModels(
         timeInterval: TimeIntervals.Weekly,
         data: [],
         efficiencyTrend: derivedEfficiencyTrendContext,
+      });
+      return viewModels;
+    }
+
+    if (isDashboardSleepTrendChartType(chartTile.chartType)) {
+      viewModels.push({
+        ...chartTile,
+        chartType: DASHBOARD_SLEEP_TREND_CHART_TYPE as unknown as ChartTypes,
+        timeInterval: TimeIntervals.Daily,
+        data: [],
+        sleepTrend: sleepTrendContext,
       });
       return viewModels;
     }

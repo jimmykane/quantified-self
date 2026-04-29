@@ -697,6 +697,38 @@ describe('Firestore Security Rules', () => {
                 await assertFails(db.collection('users').doc(userId).collection('derivedMetrics').doc('form').get());
             });
         });
+
+        describe('Sleep Sessions and Sync State', () => {
+            it('should allow owners to read their own sleep session docs', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertSucceeds(db.collection('users').doc(userId).collection('sleepSessions').doc('sleep-1').get());
+            });
+
+            it('should deny reading another user sleep session docs', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertFails(db.collection('users').doc(otherId).collection('sleepSessions').doc('sleep-1').get());
+            });
+
+            it('should deny client writes to sleep sessions', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertFails(db.collection('users').doc(userId).collection('sleepSessions').doc('sleep-1').set({
+                    provider: 'GarminAPI',
+                    durationSeconds: 28800,
+                }));
+            });
+
+            it('should allow owners to read their own sleep sync state docs', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertSucceeds(db.collection('users').doc(userId).collection('sleepSyncState').doc('GarminAPI').get());
+            });
+
+            it('should deny client writes to sleep sync state docs', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertFails(db.collection('users').doc(userId).collection('sleepSyncState').doc('GarminAPI').set({
+                    status: 'ready',
+                }));
+            });
+        });
     });
     // End of main describe block removed here to include appended tests
 
@@ -1025,6 +1057,38 @@ describe('Firestore Security Rules', () => {
             await assertFails(db.doc('activitySyncQueue/queue-item-3').set({
                 processed: false,
                 routeId: 'GarminAPI_to_SuuntoApp'
+            }));
+        });
+
+        it('should deny non-admin reads from sleepSyncQueue', async () => {
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().doc('sleepSyncQueue/queue-item-1').set({
+                    processed: false,
+                    provider: 'GarminAPI'
+                });
+            });
+
+            const db = testEnv.authenticatedContext('regular-user').firestore();
+            await assertFails(db.doc('sleepSyncQueue/queue-item-1').get());
+        });
+
+        it('should allow admin reads from sleepSyncQueue', async () => {
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().doc('sleepSyncQueue/queue-item-2').set({
+                    processed: false,
+                    provider: 'SuuntoApp'
+                });
+            });
+
+            const db = testEnv.authenticatedContext('admin-user', { admin: true }).firestore();
+            await assertSucceeds(db.doc('sleepSyncQueue/queue-item-2').get());
+        });
+
+        it('should deny writes to sleepSyncQueue even for admins', async () => {
+            const db = testEnv.authenticatedContext('admin-user', { admin: true }).firestore();
+            await assertFails(db.doc('sleepSyncQueue/queue-item-3').set({
+                processed: false,
+                provider: 'COROSAPI'
             }));
         });
     });

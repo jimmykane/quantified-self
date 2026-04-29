@@ -138,6 +138,16 @@ service cloud.firestore {
           allow read: if request.auth.uid == userID;
           allow write: if false;
         }
+
+        match /sleepSessions/{sleepSessionID} {
+          allow read: if request.auth.uid == userID;
+          allow write: if false;
+        }
+
+        match /sleepSyncState/{providerID} {
+          allow read: if request.auth.uid == userID;
+          allow write: if false;
+        }
     }
 
     // AI Insights repaired prompt backlog (global / server-owned only)
@@ -208,6 +218,11 @@ service cloud.firestore {
     }
 
     match /activitySyncQueue/{queueItemID} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /sleepSyncQueue/{queueItemID} {
       allow read: if isAdmin();
       allow write: if false;
     }

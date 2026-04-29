@@ -325,9 +325,9 @@ describe('ChartsFormComponent', () => {
     expect(option.xAxis[1].max).toBe(formSeries.data[formSeries.data.length - 1][0]);
     expect(typeof option.xAxis[1].axisLabel.formatter).toBe('function');
     expect(formSeries.symbol).toBe('none');
-    expect(fitnessSeries.lineStyle.width).toBe(1.2);
-    expect(fatigueSeries.lineStyle.width).toBe(1.2);
-    expect(formSeries.lineStyle.width).toBe(1.1);
+    expect(fitnessSeries.lineStyle.width).toBe(1.45);
+    expect(fatigueSeries.lineStyle.width).toBe(1.45);
+    expect(formSeries.lineStyle.width).toBe(1.3);
     expect(option.dataZoom).toBeUndefined();
     expect(option.toolbox).toBeUndefined();
   });

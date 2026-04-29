@@ -173,6 +173,10 @@ export interface QueueStatsResponse {
                 queueId: string;
                 pending: number;
             };
+            sleepSync: {
+                queueId: string;
+                pending: number;
+            };
         };
     };
     reparse: {
@@ -238,6 +242,36 @@ export interface QueueStatsResponse {
         succeeded: number;
         stuck: number;
         dead: number;
+        dlqByContext: { context: string; count: number }[];
+        advanced: {
+            throughput: number;
+            maxLagMs: number;
+            retryHistogram: {
+                '0-3': number;
+                '4-7': number;
+                '8-9': number;
+            };
+            topErrors: {
+                error: string;
+                count: number;
+            }[];
+        };
+    };
+    sleepSync: {
+        pending: number;
+        succeeded: number;
+        providerDisabled: number;
+        stuck: number;
+        dead: number;
+        disabledProviders: string[];
+        providers: Array<{
+            provider: string;
+            pending: number;
+            succeeded: number;
+            providerDisabled: number;
+            stuck: number;
+            dead: number;
+        }>;
         dlqByContext: { context: string; count: number }[];
         advanced: {
             throughput: number;

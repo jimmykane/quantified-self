@@ -551,6 +551,7 @@ describe('writeDerivedMetricSnapshotsReady', () => {
         ]);
 
         const acwrPayload = findPersistedPayload(DERIVED_METRIC_KINDS.Acwr).payload as Record<string, unknown>;
+        expect(acwrPayload.asOfDayMs).toBe(Date.UTC(2026, 0, 3));
         expect(acwrPayload.acuteLoad7).toBe(60);
         expect(acwrPayload.chronicLoad28).toBe(15);
         expect(acwrPayload.ratio).toBe(4);
@@ -566,14 +567,17 @@ describe('writeDerivedMetricSnapshotsReady', () => {
         expect(monotonyPayload.strain).toBeTypeOf('number');
 
         const formNowPayload = findPersistedPayload(DERIVED_METRIC_KINDS.FormNow).payload as Record<string, unknown>;
+        expect(formNowPayload.asOfDayMs).toBe(Date.UTC(2026, 0, 3));
         expect(formNowPayload.value).toBeTypeOf('number');
         expect(Array.isArray(formNowPayload.trend8Weeks)).toBe(true);
 
         const formPlus7dPayload = findPersistedPayload(DERIVED_METRIC_KINDS.FormPlus7d).payload as Record<string, unknown>;
+        expect(formPlus7dPayload.asOfDayMs).toBe(Date.UTC(2026, 0, 3));
         expect(formPlus7dPayload.value).toBeTypeOf('number');
         expect(formPlus7dPayload.projectedDayMs).toBe(Date.UTC(2026, 0, 10));
 
         const forecastPayload = findPersistedPayload(DERIVED_METRIC_KINDS.FreshnessForecast).payload as Record<string, unknown>;
+        expect(forecastPayload.asOfDayMs).toBe(Date.UTC(2026, 0, 3));
         const forecastPoints = forecastPayload.points as Array<Record<string, unknown>>;
         expect(forecastPoints).toHaveLength(8);
         expect(forecastPoints[0].isForecast).toBe(false);
@@ -646,6 +650,7 @@ describe('writeDerivedMetricSnapshotsReady', () => {
                 DERIVED_METRIC_KINDS.MonotonyStrain,
                 DERIVED_METRIC_KINDS.FormNow,
                 DERIVED_METRIC_KINDS.FormPlus7d,
+                DERIVED_METRIC_KINDS.FreshnessForecast,
             ],
             {
                 formDocs: formDocs as any,
@@ -654,29 +659,41 @@ describe('writeDerivedMetricSnapshotsReady', () => {
         );
 
         const acwrPayload = findPersistedPayload(DERIVED_METRIC_KINDS.Acwr).payload as Record<string, unknown>;
+        expect(acwrPayload.asOfDayMs).toBe(Date.UTC(2026, 0, 10));
         expect(acwrPayload.latestDayMs).toBe(Date.UTC(2026, 0, 10));
         expect(acwrPayload.acuteLoad7).toBe(0);
         expect(acwrPayload.chronicLoad28).toBe(15);
         expect(acwrPayload.ratio).toBe(0);
 
         const rampPayload = findPersistedPayload(DERIVED_METRIC_KINDS.RampRate).payload as Record<string, unknown>;
+        expect(rampPayload.asOfDayMs).toBe(Date.UTC(2026, 0, 10));
         expect(rampPayload.latestDayMs).toBe(Date.UTC(2026, 0, 10));
         expect(rampPayload.ctl7DaysAgo).toBeTypeOf('number');
         expect(rampPayload.rampRate).toBeTypeOf('number');
 
         const monotonyPayload = findPersistedPayload(DERIVED_METRIC_KINDS.MonotonyStrain).payload as Record<string, unknown>;
+        expect(monotonyPayload.asOfDayMs).toBe(Date.UTC(2026, 0, 10));
         expect(monotonyPayload.latestDayMs).toBe(Date.UTC(2026, 0, 10));
         expect(monotonyPayload.weeklyLoad7).toBe(0);
         expect(monotonyPayload.monotony).toBeNull();
         expect(monotonyPayload.strain).toBeNull();
 
         const formNowPayload = findPersistedPayload(DERIVED_METRIC_KINDS.FormNow).payload as Record<string, unknown>;
+        expect(formNowPayload.asOfDayMs).toBe(Date.UTC(2026, 0, 10));
         expect(formNowPayload.latestDayMs).toBe(Date.UTC(2026, 0, 10));
         expect(formNowPayload.value).toBeTypeOf('number');
 
         const formPlus7dPayload = findPersistedPayload(DERIVED_METRIC_KINDS.FormPlus7d).payload as Record<string, unknown>;
+        expect(formPlus7dPayload.asOfDayMs).toBe(Date.UTC(2026, 0, 10));
         expect(formPlus7dPayload.latestDayMs).toBe(Date.UTC(2026, 0, 10));
         expect(formPlus7dPayload.projectedDayMs).toBe(Date.UTC(2026, 0, 17));
+
+        const forecastPayload = findPersistedPayload(DERIVED_METRIC_KINDS.FreshnessForecast).payload as Record<string, unknown>;
+        expect(forecastPayload.asOfDayMs).toBe(Date.UTC(2026, 0, 10));
+        const forecastPoints = forecastPayload.points as Array<Record<string, unknown>>;
+        expect(forecastPoints[0]?.dayMs).toBe(Date.UTC(2026, 0, 10));
+        expect(forecastPoints[0]?.isForecast).toBe(false);
+        expect(forecastPoints[0]?.trainingStressScore).toBe(0);
     });
 
     it('handles efficiency delta edge cases with insufficient baseline history', async () => {

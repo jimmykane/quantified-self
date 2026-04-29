@@ -25,6 +25,9 @@ import {
     SportsLibReparseJobDocData,
 } from '../shared/types';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from '../../activity-sync/constants';
+import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from '../../sleep/constants';
+import { getDisabledSleepProviders } from '../../sleep/provider-flags';
+import { SLEEP_PROVIDERS, SleepProvider } from '../../../../shared/sleep';
 
 const SPORTS_LIB_REPARSE_JOBS_COLLECTION = 'sportsLibReparseJobs';
 const SPORTS_LIB_REPARSE_CHECKPOINT_DOC_PATH = 'systemJobs/sportsLibReparse';
@@ -34,6 +37,12 @@ const DERIVED_METRICS_STALE_QUEUED_THRESHOLD_MS = 10 * 60 * 1000;
 const DERIVED_METRICS_STALE_PROCESSING_THRESHOLD_MS = 15 * 60 * 1000;
 const INGESTION_DLQ_PREVIEW_LIMIT = 50;
 const ACTIVITY_SYNC_DLQ_PREVIEW_LIMIT = 50;
+const SLEEP_SYNC_DLQ_PREVIEW_LIMIT = 50;
+const SLEEP_PROVIDER_LABELS: Record<SleepProvider, string> = {
+    [SLEEP_PROVIDERS.GarminAPI]: 'Garmin',
+    [SLEEP_PROVIDERS.SuuntoApp]: 'Suunto',
+    [SLEEP_PROVIDERS.COROSAPI]: 'COROS',
+};
 
 const DERIVED_METRICS_COORDINATOR_STATUSES = ['idle', 'queued', 'processing', 'failed'] as const;
 type DerivedMetricsCoordinatorStatus = typeof DERIVED_METRICS_COORDINATOR_STATUSES[number];
@@ -71,14 +80,18 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
 
     try {
         const db = admin.firestore();
-        const { workoutQueue, activitySyncQueue, sportsLibReparseQueue, derivedMetricsQueue } = config.cloudtasks;
-        const [workoutCloudTaskDepth, activitySyncCloudTaskDepth, sportsLibReparseCloudTaskDepth, derivedMetricsCloudTaskDepth] = await Promise.all([
+        const { workoutQueue, activitySyncQueue, sleepSyncQueue, sportsLibReparseQueue, derivedMetricsQueue } = config.cloudtasks;
+        const [workoutCloudTaskDepth, activitySyncCloudTaskDepth, sleepSyncCloudTaskDepth, sportsLibReparseCloudTaskDepth, derivedMetricsCloudTaskDepth] = await Promise.all([
             getCloudTaskQueueDepthForQueue(workoutQueue).catch(e => {
                 logger.error(`Error getting Cloud Task depth for queue ${workoutQueue}:`, e);
                 return 0;
             }),
             getCloudTaskQueueDepthForQueue(activitySyncQueue).catch(e => {
                 logger.error(`Error getting Cloud Task depth for queue ${activitySyncQueue}:`, e);
+                return 0;
+            }),
+            getCloudTaskQueueDepthForQueue(sleepSyncQueue).catch(e => {
+                logger.error(`Error getting Cloud Task depth for queue ${sleepSyncQueue}:`, e);
                 return 0;
             }),
             getCloudTaskQueueDepthForQueue(sportsLibReparseQueue).catch(e => {
@@ -90,7 +103,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 return 0;
             }),
         ]);
-        const totalCloudTaskDepth = workoutCloudTaskDepth + activitySyncCloudTaskDepth + sportsLibReparseCloudTaskDepth + derivedMetricsCloudTaskDepth;
+        const totalCloudTaskDepth = workoutCloudTaskDepth + activitySyncCloudTaskDepth + sleepSyncCloudTaskDepth + sportsLibReparseCloudTaskDepth + derivedMetricsCloudTaskDepth;
         const reparseJobsCollection = db.collection(SPORTS_LIB_REPARSE_JOBS_COLLECTION);
 
         const [
@@ -323,6 +336,126 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             activitySyncMaxLagMs = Math.max(0, Date.now() - activitySyncOldestPendingDate);
         }
 
+        const sleepSyncCollection = db.collection(SLEEP_SYNC_QUEUE_COLLECTION_NAME);
+        const [
+            sleepSyncPendingSnap,
+            sleepSyncSucceededSnap,
+            sleepSyncProviderDisabledSnap,
+            sleepSyncStuckSnap,
+            sleepSyncRetry0to3Snap,
+            sleepSyncRetry4to7Snap,
+            sleepSyncRetry8to9Snap,
+            sleepSyncThroughputSnap,
+            sleepSyncOldestPendingSnap,
+            sleepSyncDeadSnap,
+        ] = await Promise.all([
+            sleepSyncCollection.where('processed', '==', false).where('retryCount', '<', 10).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count sleep sync pending jobs:', e);
+                return null;
+            }),
+            sleepSyncCollection.where('resultStatus', '==', 'success').count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count sleep sync succeeded jobs:', e);
+                return null;
+            }),
+            sleepSyncCollection.where('resultStatus', '==', 'provider_disabled').count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count sleep sync provider-disabled jobs:', e);
+                return null;
+            }),
+            sleepSyncCollection.where('processed', '==', false).where('retryCount', '>=', 10).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count sleep sync stuck jobs:', e);
+                return null;
+            }),
+            sleepSyncCollection.where('processed', '==', false).where('retryCount', '<', 4).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count sleep sync retry bucket 0-3:', e);
+                return null;
+            }),
+            sleepSyncCollection.where('processed', '==', false).where('retryCount', '>=', 4).where('retryCount', '<', 8).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count sleep sync retry bucket 4-7:', e);
+                return null;
+            }),
+            sleepSyncCollection.where('processed', '==', false).where('retryCount', '>=', 8).where('retryCount', '<', 10).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count sleep sync retry bucket 8-9:', e);
+                return null;
+            }),
+            sleepSyncCollection.where('processedAt', '>', ONE_HOUR_AGO).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count sleep sync throughput:', e);
+                return null;
+            }),
+            sleepSyncCollection.where('processed', '==', false).orderBy('dateCreated', 'asc').limit(1).get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to query oldest sleep sync pending job:', e);
+                return null;
+            }),
+            db.collection('failed_jobs').where('originalCollection', '==', SLEEP_SYNC_QUEUE_COLLECTION_NAME).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count sleep sync dead-letter jobs:', e);
+                return null;
+            }),
+        ]);
+
+        const sleepSyncPending = sleepSyncPendingSnap?.data().count || 0;
+        const sleepSyncSucceeded = sleepSyncSucceededSnap?.data().count || 0;
+        const sleepSyncProviderDisabled = sleepSyncProviderDisabledSnap?.data().count || 0;
+        const sleepSyncStuck = sleepSyncStuckSnap?.data().count || 0;
+        const sleepSyncDead = sleepSyncDeadSnap?.data().count || 0;
+        const sleepSyncRetryHistogram = {
+            '0-3': sleepSyncRetry0to3Snap?.data().count || 0,
+            '4-7': sleepSyncRetry4to7Snap?.data().count || 0,
+            '8-9': sleepSyncRetry8to9Snap?.data().count || 0,
+        };
+        const sleepSyncThroughput = sleepSyncThroughputSnap?.data().count || 0;
+        let sleepSyncMaxLagMs = 0;
+        const sleepSyncOldestPendingDate = sleepSyncOldestPendingSnap?.empty === false
+            ? sleepSyncOldestPendingSnap.docs[0]?.data()?.dateCreated
+            : null;
+        if (sleepSyncOldestPendingDate) {
+            sleepSyncMaxLagMs = Math.max(0, Date.now() - sleepSyncOldestPendingDate);
+        }
+
+        const sleepProviderStats = await Promise.all(Object.values(SLEEP_PROVIDERS).map(async (provider) => {
+            const providerQuery = sleepSyncCollection.where('provider', '==', provider);
+            const [
+                providerPendingSnap,
+                providerSucceededSnap,
+                providerDisabledSnap,
+                providerStuckSnap,
+                providerDeadSnap,
+            ] = await Promise.all([
+                providerQuery.where('processed', '==', false).where('retryCount', '<', 10).count().get().catch(e => {
+                    logger.error(`[admin/getQueueStats] Failed to count sleep sync pending jobs for ${provider}:`, e);
+                    return null;
+                }),
+                providerQuery.where('resultStatus', '==', 'success').count().get().catch(e => {
+                    logger.error(`[admin/getQueueStats] Failed to count sleep sync succeeded jobs for ${provider}:`, e);
+                    return null;
+                }),
+                providerQuery.where('resultStatus', '==', 'provider_disabled').count().get().catch(e => {
+                    logger.error(`[admin/getQueueStats] Failed to count sleep sync provider-disabled jobs for ${provider}:`, e);
+                    return null;
+                }),
+                providerQuery.where('processed', '==', false).where('retryCount', '>=', 10).count().get().catch(e => {
+                    logger.error(`[admin/getQueueStats] Failed to count sleep sync stuck jobs for ${provider}:`, e);
+                    return null;
+                }),
+                db.collection('failed_jobs')
+                    .where('originalCollection', '==', SLEEP_SYNC_QUEUE_COLLECTION_NAME)
+                    .where('provider', '==', provider)
+                    .count()
+                    .get()
+                    .catch(e => {
+                        logger.error(`[admin/getQueueStats] Failed to count sleep sync dead-letter jobs for ${provider}:`, e);
+                        return null;
+                    }),
+            ]);
+
+            return {
+                provider: SLEEP_PROVIDER_LABELS[provider],
+                pending: providerPendingSnap?.data().count || 0,
+                succeeded: providerSucceededSnap?.data().count || 0,
+                providerDisabled: providerDisabledSnap?.data().count || 0,
+                stuck: providerStuckSnap?.data().count || 0,
+                dead: providerDeadSnap?.data().count || 0,
+            };
+        }));
+
         const providers: { name: string; pending: number; succeeded: number; stuck: number; dead: number }[] = [];
 
         // Map over providers to get individual and total stats
@@ -400,6 +533,8 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
         let topErrors: { error: string; count: number }[] = [];
         let activitySyncTopErrors: { error: string; count: number }[] = [];
         let activitySyncByContext: { context: string; count: number }[] = [];
+        let sleepSyncTopErrors: { error: string; count: number }[] = [];
+        let sleepSyncByContext: { context: string; count: number }[] = [];
 
         if (includeAnalysis) {
             const dlqCol = db.collection('failed_jobs');
@@ -482,6 +617,38 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 .sort((a, b) => b[1] - a[1])
                 .slice(0, 5)
                 .map(([error, count]) => ({ error, count }));
+
+            const sleepSyncDlqQuery = dlqCol.where('originalCollection', '==', SLEEP_SYNC_QUEUE_COLLECTION_NAME);
+            const sleepSyncRecentDlqSnap = await sleepSyncDlqQuery
+                .orderBy('failedAt', 'desc')
+                .limit(SLEEP_SYNC_DLQ_PREVIEW_LIMIT)
+                .get()
+                .catch(async (e) => {
+                    logger.error('[admin/getQueueStats] Failed to load ordered sleep sync DLQ preview:', e);
+                    return sleepSyncDlqQuery
+                        .limit(SLEEP_SYNC_DLQ_PREVIEW_LIMIT)
+                        .get()
+                        .catch(fallbackError => {
+                            logger.error('[admin/getQueueStats] Failed to load fallback sleep sync DLQ preview:', fallbackError);
+                            return null;
+                        });
+                });
+            const sleepSyncContextCounts: Record<string, number> = {};
+            const sleepSyncErrorCounts: Record<string, number> = {};
+            for (const doc of (sleepSyncRecentDlqSnap?.docs || [])) {
+                const data = doc.data();
+                const context = `${data.context || 'UNKNOWN'}`;
+                const errorMsg = normalizeError(data.error || 'Unknown Error');
+                sleepSyncContextCounts[context] = (sleepSyncContextCounts[context] || 0) + 1;
+                sleepSyncErrorCounts[errorMsg] = (sleepSyncErrorCounts[errorMsg] || 0) + 1;
+            }
+            sleepSyncByContext = Object.entries(sleepSyncContextCounts)
+                .map(([context, count]) => ({ context, count }))
+                .sort((a, b) => b.count - a.count);
+            sleepSyncTopErrors = Object.entries(sleepSyncErrorCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5)
+                .map(([error, count]) => ({ error, count }));
         }
 
         return {
@@ -498,6 +665,10 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                     activitySync: {
                         queueId: activitySyncQueue,
                         pending: activitySyncCloudTaskDepth,
+                    },
+                    sleepSync: {
+                        queueId: sleepSyncQueue,
+                        pending: sleepSyncCloudTaskDepth,
                     },
                     sportsLibReparse: {
                         queueId: sportsLibReparseQueue,
@@ -553,6 +724,22 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                     maxLagMs: activitySyncMaxLagMs,
                     retryHistogram: activitySyncRetryHistogram,
                     topErrors: activitySyncTopErrors,
+                },
+            },
+            sleepSync: {
+                pending: sleepSyncPending,
+                succeeded: sleepSyncSucceeded,
+                providerDisabled: sleepSyncProviderDisabled,
+                stuck: sleepSyncStuck,
+                dead: sleepSyncDead,
+                disabledProviders: getDisabledSleepProviders().map((provider) => SLEEP_PROVIDER_LABELS[provider] || provider),
+                providers: sleepProviderStats,
+                dlqByContext: sleepSyncByContext,
+                advanced: {
+                    throughput: sleepSyncThroughput,
+                    maxLagMs: sleepSyncMaxLagMs,
+                    retryHistogram: sleepSyncRetryHistogram,
+                    topErrors: sleepSyncTopErrors,
                 },
             },
         };

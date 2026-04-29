@@ -26,6 +26,7 @@ import {
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+  DASHBOARD_SLEEP_TREND_CHART_TYPE,
 } from '../../../helpers/dashboard-special-chart-types';
 
 @Component({
@@ -182,6 +183,18 @@ class MockEfficiencyTrendChartComponent {
   @Input() infoTooltip?: string | null;
 }
 
+@Component({
+  selector: 'app-sleep-trend-chart',
+  template: '',
+  standalone: false
+})
+class MockSleepTrendChartComponent {
+  @Input() isLoading = false;
+  @Input() darkTheme = false;
+  @Input() sleepTrend: any;
+  @Input() infoTooltip?: string | null;
+}
+
 describe('TileChartComponent', () => {
   let fixture: ComponentFixture<TileChartComponent>;
   let component: TileChartComponent;
@@ -199,6 +212,7 @@ describe('TileChartComponent', () => {
         MockFreshnessForecastChartComponent,
         MockIntensityDistributionChartComponent,
         MockEfficiencyTrendChartComponent,
+        MockSleepTrendChartComponent,
       ],
       schemas: [NO_ERRORS_SCHEMA]
     }).compileComponents();
@@ -257,6 +271,11 @@ describe('TileChartComponent', () => {
   const getEfficiencyTrendComponent = (): MockEfficiencyTrendChartComponent => {
     const debugElement = fixture.debugElement.query(By.directive(MockEfficiencyTrendChartComponent));
     return debugElement.componentInstance as MockEfficiencyTrendChartComponent;
+  };
+
+  const getSleepTrendComponent = (): MockSleepTrendChartComponent => {
+    const debugElement = fixture.debugElement.query(By.directive(MockSleepTrendChartComponent));
+    return debugElement.componentInstance as MockSleepTrendChartComponent;
   };
 
   it('should set vertical=false for LinesHorizontal', () => {
@@ -495,6 +514,15 @@ describe('TileChartComponent', () => {
     component.efficiencyTrendStatus = 'failed' as any;
     fixture.detectChanges();
     expect(getEfficiencyTrendComponent().trend).toEqual(component.efficiencyTrend);
+  });
+
+  it('should route sleep trend chart type to dedicated renderer', () => {
+    component.chartType = DASHBOARD_SLEEP_TREND_CHART_TYPE as any;
+    component.sleepTrend = { points: [], latestPoint: null } as any;
+    fixture.detectChanges();
+
+    expect(getSleepTrendComponent().sleepTrend).toEqual(component.sleepTrend);
+    expect(getSleepTrendComponent().infoTooltip).toContain('Sleep Trend');
   });
 
   it('should pass info tooltip text to derived curated chart renderers', () => {

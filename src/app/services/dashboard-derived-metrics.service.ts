@@ -38,6 +38,7 @@ import {
   DERIVED_METRIC_KINDS,
   DERIVED_METRIC_SCHEMA_VERSION,
   DERIVED_METRICS_COLLECTION_ID,
+  PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS,
   getDerivedMetricDocId,
   type DerivedMetricKind,
   type DerivedMetricSnapshotStatus,
@@ -259,7 +260,7 @@ export class DashboardDerivedMetricsService {
         >;
         snapshots.forEach((snapshot, index) => {
           const descriptor = this.metricDescriptors[index];
-          mutableState[descriptor.statusKey] = this.resolveSnapshotStatus(snapshot);
+          mutableState[descriptor.statusKey] = this.resolveSnapshotStatus(descriptor.kind, snapshot);
           mutableState[descriptor.contextKey] = descriptor.resolveContext(snapshot);
         });
         return nextState;
@@ -345,7 +346,10 @@ export class DashboardDerivedMetricsService {
     );
   }
 
-  private resolveSnapshotStatus(snapshot: Record<string, unknown> | undefined): DashboardDerivedMetricStatus {
+  private resolveSnapshotStatus(
+    metricKind: DerivedMetricKind,
+    snapshot: Record<string, unknown> | undefined,
+  ): DashboardDerivedMetricStatus {
     const status = `${snapshot?.status || ''}` as DashboardDerivedMetricStatus;
     if (
       status !== 'ready'
@@ -375,6 +379,17 @@ export class DashboardDerivedMetricsService {
       return 'failed';
     }
 
+    if (
+      status === 'ready'
+      && this.isProjectionSensitiveMetricKind(metricKind)
+    ) {
+      const asOfDayMs = this.resolveSnapshotAsOfDayMs(snapshot);
+      const todayUtcDayMs = this.resolveUtcDayStartMs(Date.now());
+      if (!Number.isFinite(asOfDayMs) || (asOfDayMs as number) < todayUtcDayMs) {
+        return 'stale';
+      }
+    }
+
     return status;
   }
 
@@ -401,6 +416,23 @@ export class DashboardDerivedMetricsService {
       return null;
     }
     return payload;
+  }
+
+  private resolveSnapshotAsOfDayMs(snapshot: SnapshotRecord): number | null {
+    const payload = snapshot?.payload;
+    if (!payload || typeof payload !== 'object') {
+      return null;
+    }
+    return this.toFiniteNumber((payload as Record<string, unknown>).asOfDayMs);
+  }
+
+  private resolveUtcDayStartMs(timeMs: number): number {
+    const date = new Date(timeMs);
+    return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  }
+
+  private isProjectionSensitiveMetricKind(metricKind: DerivedMetricKind): boolean {
+    return PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS.includes(metricKind);
   }
 
   private resolveFormPoints(snapshot: Record<string, unknown> | undefined): DashboardFormPoint[] | null {

@@ -32,6 +32,7 @@ import {
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+  DASHBOARD_SLEEP_TREND_CHART_TYPE,
 } from './dashboard-special-chart-types';
 import type { EventStatAggregationResult } from '@shared/event-stat-aggregation.types';
 
@@ -1026,8 +1027,27 @@ describe('dashboard-tile-view-model.helper', () => {
           dataTimeInterval: TimeIntervals.Weekly,
           size: { columns: 2, rows: 1 },
         },
+        {
+          type: TileTypes.Chart,
+          order: 10,
+          chartType: DASHBOARD_SLEEP_TREND_CHART_TYPE as any,
+          dataType: 'SleepDuration',
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+          dataTimeInterval: TimeIntervals.Daily,
+          size: { columns: 2, rows: 1 },
+        },
       ] as any,
       events: [],
+      sleepSessions: [{
+        id: 'sleep-1',
+        startTimeMs: Date.UTC(2026, 0, 2, 21),
+        endTimeMs: Date.UTC(2026, 0, 3, 5),
+        sleepDate: '2026-01-03',
+        durationSeconds: 8 * 3600,
+        stageDurationsSeconds: { light: 4 * 3600, deep: 2 * 3600, rem: 90 * 60 },
+        source: { provider: 'GarminAPI', sourceSessionKey: 'garmin-sleep-1' },
+      } as any],
       derivedMetrics: {
         rampRate: { rampRate: 2.8, trend8Weeks: [] } as any,
         monotonyStrain: { strain: 630, trend8Weeks: [] } as any,
@@ -1052,5 +1072,7 @@ describe('dashboard-tile-view-model.helper', () => {
     expect((viewModels[7] as any).freshnessForecast).toBeTruthy();
     expect((viewModels[8] as any).intensityDistribution).toBeTruthy();
     expect((viewModels[9] as any).efficiencyTrend).toBeTruthy();
+    expect((viewModels[10] as any).sleepTrend?.points).toHaveLength(1);
+    expect((viewModels[10] as any).timeInterval).toBe(TimeIntervals.Daily);
   });
 });

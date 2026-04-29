@@ -57,6 +57,7 @@ type DashboardFormTimelineWindow = 'w' | 'm' | 'y';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEK_VIEW_SPAN_MS = 84 * DAY_MS;
 const MONTH_VIEW_SPAN_MS = 365 * DAY_MS;
+const FORM_FATIGUE_COLOR = AppColors.Red;
 
 @Component({
   selector: 'app-form-chart',
@@ -441,7 +442,9 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
             symbol: hasSingleVisiblePoint ? 'circle' : 'none',
             symbolSize: hasSingleVisiblePoint ? 4 : 0,
             lineStyle: {
-              width: 1.2,
+              width: 1.45,
+              cap: 'round',
+              join: 'round',
               color: chartStyle.trendLineColor,
             },
             itemStyle: {
@@ -459,11 +462,13 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
             symbol: hasSingleVisiblePoint ? 'circle' : 'none',
             symbolSize: hasSingleVisiblePoint ? 4 : 0,
             lineStyle: {
-              width: 1.2,
-              color: AppColors.Pink,
+              width: 1.45,
+              cap: 'round',
+              join: 'round',
+              color: FORM_FATIGUE_COLOR,
             },
             itemStyle: {
-              color: AppColors.Pink,
+              color: FORM_FATIGUE_COLOR,
             },
           },
           {
@@ -477,7 +482,9 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
             symbol: hasSingleVisiblePoint ? 'circle' : 'none',
             symbolSize: hasSingleVisiblePoint ? 3.5 : 0,
             lineStyle: {
-              width: 1.1,
+              width: 1.3,
+              cap: 'round',
+              join: 'round',
               color: chartStyle.secondaryTextColor,
             },
             itemStyle: {
@@ -553,7 +560,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
       : null;
 
     const dateLabel = formatDashboardDateByInterval(point.time, renderTimeInterval);
-    const statusColor = AppColors.Pink;
+    const statusColor = FORM_FATIGUE_COLOR;
     const valueColor = chartStyle.tooltipTextColor;
     const labelColor = chartStyle.secondaryTextColor;
     const dividerColor = chartStyle.tooltipBorderColor;

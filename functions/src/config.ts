@@ -25,8 +25,10 @@ interface CloudTasksConfig {
     location: string;
     workoutQueue: string;
     activitySyncQueue: string;
+    sleepSyncQueue: string;
     sportsLibReparseQueue: string;
     derivedMetricsQueue: string;
+    derivedMetricsIngressBucketSeconds: number;
     serviceAccountEmail: string;
 }
 
@@ -77,8 +79,10 @@ export const config: AppConfig = {
             location: 'europe-west2',
             workoutQueue: 'processWorkoutTask',
             activitySyncQueue: 'processActivitySyncTask',
+            sleepSyncQueue: 'processSleepSyncTask',
             sportsLibReparseQueue: 'processSportsLibReparseTask',
             derivedMetricsQueue: 'processDerivedMetricsTask',
+            derivedMetricsIngressBucketSeconds: 30,
             serviceAccountEmail: `${process.env.GCLOUD_PROJECT || admin.instanceId().app.options.projectId}@appspot.gserviceaccount.com`,
         };
     },

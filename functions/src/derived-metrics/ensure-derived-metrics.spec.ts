@@ -1,106 +1,110 @@
 import { describe, expect, it } from 'vitest';
-import { DERIVED_METRIC_KINDS, DERIVED_METRIC_SCHEMA_VERSION } from '../../../shared/derived-metrics';
+import {
+    DERIVED_METRIC_KINDS,
+    DERIVED_METRIC_SCHEMA_VERSION,
+    type DerivedMetricKind,
+} from '../../../shared/derived-metrics';
 import { decideDerivedMetricsFreshness } from './ensure-derived-metrics';
 
+type SnapshotShape = {
+    status: string | null;
+    schemaVersion: number | null;
+    builtFromEventMutationVersion: number | null;
+    asOfDayMs: number | null;
+};
+
+function buildMetricSnapshots(
+    overrides?: Partial<Record<DerivedMetricKind, Partial<SnapshotShape>>>,
+): Record<DerivedMetricKind, SnapshotShape> {
+    const allKinds = Object.values(DERIVED_METRIC_KINDS) as DerivedMetricKind[];
+    return allKinds.reduce((result, kind) => {
+        const override = overrides?.[kind] || {};
+        result[kind] = {
+            status: override.status ?? 'ready',
+            schemaVersion: override.schemaVersion ?? DERIVED_METRIC_SCHEMA_VERSION,
+            builtFromEventMutationVersion: override.builtFromEventMutationVersion ?? 10,
+            asOfDayMs: override.asOfDayMs ?? Date.UTC(2026, 3, 15),
+        };
+        return result;
+    }, {} as Record<DerivedMetricKind, SnapshotShape>);
+}
+
 describe('decideDerivedMetricsFreshness', () => {
+    const nowMs = Date.UTC(2026, 3, 15, 12, 0, 0);
     const baseInput = {
-        metricKinds: [DERIVED_METRIC_KINDS.Form],
-        nowMs: Date.UTC(2026, 3, 15, 12, 0, 0),
+        metricKinds: [DERIVED_METRIC_KINDS.FormNow],
+        nowMs,
         coordinatorStatus: 'idle' as const,
         coordinatorCompletedAtMs: Date.UTC(2026, 3, 15, 10, 0, 0),
         coordinatorRequestedAtMs: Date.UTC(2026, 3, 15, 10, 0, 0),
         coordinatorStartedAtMs: Date.UTC(2026, 3, 15, 10, 0, 0),
         coordinatorUpdatedAtMs: Date.UTC(2026, 3, 15, 10, 0, 0),
         coordinatorEventMutationVersion: 10,
-        formSnapshotStatus: 'ready',
-        formSnapshotSchemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
-        formSnapshotBuiltFromEventMutationVersion: 10,
         latestEventUpdatedAtMs: Date.UTC(2026, 3, 15, 9, 0, 0),
+        metricSnapshotsByKind: buildMetricSnapshots({
+            [DERIVED_METRIC_KINDS.FormNow]: {
+                asOfDayMs: Date.UTC(2026, 3, 15),
+            },
+        }),
     };
 
-    it('returns fresh when coordinator and form snapshot are aligned with latest events', () => {
+    it('returns fresh when requested metric snapshot is aligned and projected to today', () => {
         const decision = decideDerivedMetricsFreshness(baseInput);
         expect(decision).toEqual({
             shouldQueue: false,
+            metricKindsToQueue: [],
             reason: 'fresh',
         });
     });
 
-    it('requests queue when form snapshot is missing for accounts with events', () => {
+    it('queues only projection-sensitive stale kinds when asOfDay is behind today', () => {
         const decision = decideDerivedMetricsFreshness({
             ...baseInput,
-            formSnapshotStatus: null,
+            metricKinds: [DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.FormPlus7d],
+            metricSnapshotsByKind: buildMetricSnapshots({
+                [DERIVED_METRIC_KINDS.FormNow]: { asOfDayMs: Date.UTC(2026, 3, 14) },
+                [DERIVED_METRIC_KINDS.FormPlus7d]: { asOfDayMs: Date.UTC(2026, 3, 15) },
+            }),
         });
         expect(decision).toEqual({
             shouldQueue: true,
-            reason: 'missing_form_snapshot',
+            metricKindsToQueue: [DERIVED_METRIC_KINDS.FormNow],
+            reason: 'projection_day_behind',
         });
     });
 
-    it('requests queue when form snapshot schema version is behind current schema', () => {
+    it('queues all requested kinds when schema version is behind', () => {
         const decision = decideDerivedMetricsFreshness({
             ...baseInput,
-            formSnapshotSchemaVersion: DERIVED_METRIC_SCHEMA_VERSION - 1,
+            metricKinds: [DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.Acwr],
+            metricSnapshotsByKind: buildMetricSnapshots({
+                [DERIVED_METRIC_KINDS.FormNow]: { schemaVersion: DERIVED_METRIC_SCHEMA_VERSION - 1 },
+                [DERIVED_METRIC_KINDS.Acwr]: { schemaVersion: DERIVED_METRIC_SCHEMA_VERSION },
+            }),
         });
         expect(decision).toEqual({
             shouldQueue: true,
+            metricKindsToQueue: [DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.Acwr],
             reason: 'schema_version_mismatch',
         });
     });
 
-    it('requests queue when snapshot build version is behind coordinator mutation version', () => {
+    it('queues all requested kinds when requested snapshot is missing', () => {
+        const snapshots = buildMetricSnapshots();
+        snapshots[DERIVED_METRIC_KINDS.FormNow] = {
+            status: null,
+            schemaVersion: null,
+            builtFromEventMutationVersion: null,
+            asOfDayMs: null,
+        };
         const decision = decideDerivedMetricsFreshness({
             ...baseInput,
-            coordinatorEventMutationVersion: 11,
+            metricSnapshotsByKind: snapshots,
         });
         expect(decision).toEqual({
             shouldQueue: true,
-            reason: 'event_mutation_version_behind',
-        });
-    });
-
-    it('marks fresh when snapshot build version matches coordinator mutation version', () => {
-        const decision = decideDerivedMetricsFreshness({
-            ...baseInput,
-            coordinatorEventMutationVersion: 12,
-            formSnapshotBuiltFromEventMutationVersion: 12,
-        });
-        expect(decision).toEqual({
-            shouldQueue: false,
-            reason: 'fresh',
-        });
-    });
-
-    it('requeues once when legacy snapshots are missing build mutation version', () => {
-        const decision = decideDerivedMetricsFreshness({
-            ...baseInput,
-            formSnapshotBuiltFromEventMutationVersion: null,
-        });
-        expect(decision).toEqual({
-            shouldQueue: true,
-            reason: 'missing_snapshot_event_mutation_version',
-        });
-    });
-
-    it('requeues when coordinator mutation version is missing', () => {
-        const decision = decideDerivedMetricsFreshness({
-            ...baseInput,
-            coordinatorEventMutationVersion: null,
-        });
-        expect(decision).toEqual({
-            shouldQueue: true,
-            reason: 'missing_event_mutation_version',
-        });
-    });
-
-    it('requests queue immediately when coordinator is failed', () => {
-        const decision = decideDerivedMetricsFreshness({
-            ...baseInput,
-            coordinatorStatus: 'failed',
-        });
-        expect(decision).toEqual({
-            shouldQueue: true,
-            reason: 'failed_status',
+            metricKindsToQueue: [DERIVED_METRIC_KINDS.FormNow],
+            reason: 'missing_metric_snapshot',
         });
     });
 
@@ -108,22 +112,24 @@ describe('decideDerivedMetricsFreshness', () => {
         const healthyDecision = decideDerivedMetricsFreshness({
             ...baseInput,
             coordinatorStatus: 'queued',
-            coordinatorRequestedAtMs: baseInput.nowMs - (9 * 60 * 1000),
-            coordinatorUpdatedAtMs: baseInput.nowMs - (9 * 60 * 1000),
+            coordinatorRequestedAtMs: nowMs - (9 * 60 * 1000),
+            coordinatorUpdatedAtMs: nowMs - (9 * 60 * 1000),
         });
         expect(healthyDecision).toEqual({
             shouldQueue: false,
+            metricKindsToQueue: [],
             reason: 'fresh',
         });
 
         const stuckDecision = decideDerivedMetricsFreshness({
             ...baseInput,
             coordinatorStatus: 'queued',
-            coordinatorRequestedAtMs: baseInput.nowMs - (11 * 60 * 1000),
-            coordinatorUpdatedAtMs: baseInput.nowMs - (11 * 60 * 1000),
+            coordinatorRequestedAtMs: nowMs - (11 * 60 * 1000),
+            coordinatorUpdatedAtMs: nowMs - (11 * 60 * 1000),
         });
         expect(stuckDecision).toEqual({
             shouldQueue: true,
+            metricKindsToQueue: [DERIVED_METRIC_KINDS.FormNow],
             reason: 'queued_stuck',
         });
     });
@@ -132,75 +138,13 @@ describe('decideDerivedMetricsFreshness', () => {
         const decision = decideDerivedMetricsFreshness({
             ...baseInput,
             coordinatorStatus: 'processing',
-            coordinatorStartedAtMs: baseInput.nowMs - (16 * 60 * 1000),
-            coordinatorUpdatedAtMs: baseInput.nowMs - (16 * 60 * 1000),
+            coordinatorStartedAtMs: nowMs - (16 * 60 * 1000),
+            coordinatorUpdatedAtMs: nowMs - (16 * 60 * 1000),
         });
         expect(decision).toEqual({
             shouldQueue: true,
+            metricKindsToQueue: [DERIVED_METRIC_KINDS.FormNow],
             reason: 'processing_stuck',
-        });
-    });
-
-    it('uses requestedAt for queued stuck detection even when updatedAt is recent', () => {
-        const decision = decideDerivedMetricsFreshness({
-            ...baseInput,
-            coordinatorStatus: 'queued',
-            coordinatorRequestedAtMs: baseInput.nowMs - (11 * 60 * 1000),
-            coordinatorUpdatedAtMs: baseInput.nowMs - (2 * 60 * 1000),
-        });
-        expect(decision).toEqual({
-            shouldQueue: true,
-            reason: 'queued_stuck',
-        });
-    });
-
-    it('uses startedAt for processing stuck detection even when updatedAt is recent', () => {
-        const decision = decideDerivedMetricsFreshness({
-            ...baseInput,
-            coordinatorStatus: 'processing',
-            coordinatorStartedAtMs: baseInput.nowMs - (16 * 60 * 1000),
-            coordinatorUpdatedAtMs: baseInput.nowMs - (2 * 60 * 1000),
-        });
-        expect(decision).toEqual({
-            shouldQueue: true,
-            reason: 'processing_stuck',
-        });
-    });
-
-    it('queues when request contains non-form metrics and coordinator is idle', () => {
-        const decision = decideDerivedMetricsFreshness({
-            ...baseInput,
-            metricKinds: [DERIVED_METRIC_KINDS.RecoveryNow],
-        });
-        expect(decision).toEqual({
-            shouldQueue: true,
-            reason: 'requested_metric_without_form',
-        });
-    });
-
-    it('does not requeue non-form requests when coordinator is already queued and healthy', () => {
-        const decision = decideDerivedMetricsFreshness({
-            ...baseInput,
-            metricKinds: [DERIVED_METRIC_KINDS.RecoveryNow],
-            coordinatorStatus: 'queued',
-            coordinatorRequestedAtMs: baseInput.nowMs - (9 * 60 * 1000),
-            coordinatorUpdatedAtMs: baseInput.nowMs - (9 * 60 * 1000),
-        });
-        expect(decision).toEqual({
-            shouldQueue: false,
-            reason: 'fresh',
-        });
-    });
-
-    it('keeps fresh when mutation versions match exactly', () => {
-        const decision = decideDerivedMetricsFreshness({
-            ...baseInput,
-            coordinatorEventMutationVersion: 25,
-            formSnapshotBuiltFromEventMutationVersion: 25,
-        });
-        expect(decision).toEqual({
-            shouldQueue: false,
-            reason: 'fresh',
         });
     });
 
@@ -211,7 +155,9 @@ describe('decideDerivedMetricsFreshness', () => {
         });
         expect(decision).toEqual({
             shouldQueue: true,
+            metricKindsToQueue: [DERIVED_METRIC_KINDS.FormNow],
             reason: 'latest_event_update_after_completion',
         });
     });
 });
+

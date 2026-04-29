@@ -238,7 +238,7 @@ describe('getQueueStats Cloud Function', () => {
 
         // Check Cloud Tasks stats
         expect(result.cloudTasks).toEqual({
-            pending: 56,
+            pending: 59,
             queues: {
                 workout: {
                     queueId: 'processWorkoutTask',
@@ -248,6 +248,10 @@ describe('getQueueStats Cloud Function', () => {
                     queueId: 'processActivitySyncTask',
                     pending: 0,
                 },
+                sleepSync: {
+                    queueId: 'processSleepSyncTask',
+                    pending: 3,
+                },
                 sportsLibReparse: {
                     queueId: 'processSportsLibReparseTask',
                     pending: 8,
@@ -256,6 +260,36 @@ describe('getQueueStats Cloud Function', () => {
                     queueId: 'processDerivedMetricsTask',
                     pending: 6,
                 },
+            },
+        });
+        expect(result.sleepSync).toEqual({
+            pending: 5,
+            succeeded: 5,
+            providerDisabled: 5,
+            stuck: 5,
+            dead: 5,
+            disabledProviders: ['Garmin', 'COROS'],
+            providers: [
+                { provider: 'Garmin', pending: 5, succeeded: 5, providerDisabled: 5, stuck: 5, dead: 5 },
+                { provider: 'Suunto', pending: 5, succeeded: 5, providerDisabled: 5, stuck: 5, dead: 5 },
+                { provider: 'COROS', pending: 5, succeeded: 5, providerDisabled: 5, stuck: 5, dead: 5 },
+            ],
+            dlqByContext: expect.arrayContaining([
+                { context: 'NO_TOKEN_FOUND', count: 1 },
+                { context: 'MAX_RETRY_REACHED', count: 1 },
+            ]),
+            advanced: {
+                throughput: 5,
+                maxLagMs: expect.any(Number),
+                retryHistogram: {
+                    '0-3': 5,
+                    '4-7': 5,
+                    '8-9': 5,
+                },
+                topErrors: expect.arrayContaining([
+                    { error: 'Token expired', count: 1 },
+                    { error: 'Timeout', count: 1 },
+                ]),
             },
         });
         expect(result.reparse).toEqual(expect.objectContaining({
@@ -418,11 +452,12 @@ describe('getQueueStats Cloud Function', () => {
         mockGetCloudTaskQueueDepthForQueue
             .mockResolvedValueOnce(42)
             .mockRejectedValueOnce(new Error('Queue depth error'))
+            .mockResolvedValueOnce(3)
             .mockResolvedValueOnce(8)
             .mockResolvedValueOnce(6);
         const result = await (getQueueStats as any)(request);
         expect(result.cloudTasks).toEqual({
-            pending: 56,
+            pending: 59,
             queues: {
                 workout: {
                     queueId: 'processWorkoutTask',
@@ -431,6 +466,10 @@ describe('getQueueStats Cloud Function', () => {
                 activitySync: {
                     queueId: 'processActivitySyncTask',
                     pending: 0,
+                },
+                sleepSync: {
+                    queueId: 'processSleepSyncTask',
+                    pending: 3,
                 },
                 sportsLibReparse: {
                     queueId: 'processSportsLibReparseTask',
@@ -779,20 +818,10 @@ describe('getQueueStats Cloud Function', () => {
             if (collectionName === 'failed_jobs') {
                 const failedJobsMock: any = {
                     count: mockCount,
-                    orderBy: vi.fn().mockReturnValue({
-                        limit: vi.fn().mockReturnValue({
-                            get: vi.fn().mockResolvedValue({
-                                size: 0,
-                                docs: []
-                            })
-                        })
-                    }),
-                    where: vi.fn().mockReturnValue({
-                        orderBy: whereOrderBy,
-                        count: mockCount,
-                        get: whereDirectGet,
-                    }),
+                    orderBy: whereOrderBy,
+                    get: whereDirectGet,
                 };
+                failedJobsMock.where = vi.fn().mockReturnValue(failedJobsMock);
                 return failedJobsMock;
             }
 

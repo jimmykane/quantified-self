@@ -24,6 +24,7 @@ vi.mock('../../../shared/functions-manifest', () => ({
 }));
 
 const hoisted = vi.hoisted(() => ({
+    fetchDerivedFormSnapshotSeed: vi.fn(),
     completeDerivedMetricsProcessing: vi.fn(),
     failDerivedMetricsProcessing: vi.fn(),
     fetchDerivedMetricsEventDocs: vi.fn(),
@@ -41,6 +42,7 @@ vi.mock('../derived-metrics/derived-metrics.service', async () => {
     );
     return {
         ...actual,
+        fetchDerivedFormSnapshotSeed: hoisted.fetchDerivedFormSnapshotSeed,
         completeDerivedMetricsProcessing: hoisted.completeDerivedMetricsProcessing,
         failDerivedMetricsProcessing: hoisted.failDerivedMetricsProcessing,
         fetchDerivedMetricsEventDocs: hoisted.fetchDerivedMetricsEventDocs,
@@ -58,6 +60,7 @@ import { processDerivedMetricsTask } from './derived-metrics-worker';
 describe('processDerivedMetricsTask', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        hoisted.fetchDerivedFormSnapshotSeed.mockResolvedValue(null);
         hoisted.startDerivedMetricsProcessing.mockResolvedValue({
             dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.RecoveryNow],
             startedAtMs: Date.now(),
@@ -91,6 +94,9 @@ describe('processDerivedMetricsTask', () => {
             recoveryNowDocs: [{ id: 'recovery-doc' }],
         }, {
             builtFromEventMutationVersion: 11,
+            formDailyLoads: [],
+            formSourceEventCount: null,
+            formSourceDocCount: null,
         });
     });
 
@@ -119,6 +125,52 @@ describe('processDerivedMetricsTask', () => {
             recoveryNowDocs: [],
         }, {
             builtFromEventMutationVersion: 12,
+            formDailyLoads: [],
+            formSourceEventCount: null,
+            formSourceDocCount: null,
+        });
+    });
+
+    it('uses projection form snapshot seed for projection-only kinds without full event scan', async () => {
+        hoisted.startDerivedMetricsProcessing.mockResolvedValueOnce({
+            dirtyMetricKinds: [DERIVED_METRIC_KINDS.Acwr, DERIVED_METRIC_KINDS.FormNow],
+            startedAtMs: Date.now(),
+            eventMutationVersion: 12,
+        });
+        hoisted.fetchDerivedFormSnapshotSeed.mockResolvedValueOnce({
+            status: 'ready',
+            schemaVersion: 7,
+            builtFromEventMutationVersion: 12,
+            sourceEventCount: 5,
+            sourceDocCount: 7,
+            dailyLoads: [
+                { dayMs: Date.UTC(2026, 0, 1), load: 10 },
+                { dayMs: Date.UTC(2026, 0, 2), load: 20 },
+            ],
+        });
+
+        await (processDerivedMetricsTask as any)({
+            data: {
+                uid: 'user-seed',
+                generation: 90,
+            },
+        });
+
+        expect(hoisted.fetchDerivedMetricsEventDocs).not.toHaveBeenCalled();
+        expect(hoisted.writeDerivedMetricSnapshotsReady).toHaveBeenCalledWith('user-seed', [
+            DERIVED_METRIC_KINDS.Acwr,
+            DERIVED_METRIC_KINDS.FormNow,
+        ], {
+            formDocs: [],
+            recoveryNowDocs: [],
+        }, {
+            builtFromEventMutationVersion: 12,
+            formDailyLoads: [
+                { dayMs: Date.UTC(2026, 0, 1), load: 10 },
+                { dayMs: Date.UTC(2026, 0, 2), load: 20 },
+            ],
+            formSourceEventCount: 5,
+            formSourceDocCount: 7,
         });
     });
 
@@ -146,6 +198,9 @@ describe('processDerivedMetricsTask', () => {
             recoveryNowDocs: [],
         }, {
             builtFromEventMutationVersion: 13,
+            formDailyLoads: [],
+            formSourceEventCount: null,
+            formSourceDocCount: null,
         });
     });
 

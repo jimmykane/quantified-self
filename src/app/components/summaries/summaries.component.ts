@@ -36,6 +36,7 @@ import {
 } from '../../helpers/dashboard-tile-view-model.helper';
 import { AppUserService } from '../../services/app.user.service';
 import { DashboardDerivedMetricsService } from '../../services/dashboard-derived-metrics.service';
+import { AppSleepService } from '../../services/app.sleep.service';
 import type { DashboardFormPoint } from '../../helpers/dashboard-form.helper';
 import type { DashboardRecoveryNowContext } from '../../helpers/dashboard-recovery-now.helper';
 import type {
@@ -73,6 +74,7 @@ import {
 } from '../../helpers/dashboard-special-chart-types';
 import { MatDialog } from '@angular/material/dialog';
 import { DashboardManagerDialogComponent } from './dashboard-manager-dialog/dashboard-manager-dialog.component';
+import type { SleepSession } from '@shared/sleep';
 
 interface DashboardDerivedMetricsBanner {
   type: 'pending' | 'warning';
@@ -118,9 +120,12 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private appThemeSubscription: Subscription | null = null;
   private derivedMetricsSubscription: Subscription | null = null;
   private derivedMetricsUserUID: string | null = null;
+  private sleepSubscription: Subscription | null = null;
+  private sleepListenerKey: string | null = null;
   public darkTheme = false;
   private logger: LoggerService;
   private dashboardTileSettingsSnapshot: TileSettingsInterface[] = [];
+  private sleepSessions: SleepSession[] = [];
   private derivedFormPoints: DashboardFormPoint[] | null = null;
   private derivedRecoveryNowContext: DashboardRecoveryNowContext | null = null;
   private derivedAcwrContext: DashboardAcwrContext | null = null;
@@ -155,6 +160,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     private themeService: AppThemeService,
     private userService: AppUserService,
     private dashboardDerivedMetricsService: DashboardDerivedMetricsService,
+    private sleepService: AppSleepService,
     private dialog: MatDialog,
     changeDetector: ChangeDetectorRef,
     logger: LoggerService,
@@ -300,6 +306,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.changeDetector.markForCheck();
     });
     this.syncDerivedMetricsSubscription();
+    this.syncSleepSubscription();
     await this.rebuildTilesFromCurrentState();
   }
 
@@ -310,6 +317,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     const newTiles = buildDashboardTileViewModels({
       tiles: this.user?.settings?.dashboardSettings?.tiles ?? [],
       events: this.events,
+      sleepSessions: this.sleepSessions,
       dashboardDateRange: {
         dateRange: this.dashboardDateRange,
         startDate: this.dashboardStartDate,
@@ -512,6 +520,44 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
   }
 
+  private syncSleepSubscription(): void {
+    const uid = `${this.user?.uid || ''}`.trim();
+    if (!uid) {
+      this.sleepSessions = [];
+      this.sleepListenerKey = null;
+      if (this.sleepSubscription) {
+        this.sleepSubscription.unsubscribe();
+        this.sleepSubscription = null;
+      }
+      return;
+    }
+
+    const listenerKey = this.buildSleepListenerKey(uid);
+    if (this.sleepListenerKey === listenerKey && this.sleepSubscription) {
+      return;
+    }
+
+    if (this.sleepSubscription) {
+      this.sleepSubscription.unsubscribe();
+      this.sleepSubscription = null;
+    }
+
+    this.sleepListenerKey = listenerKey;
+    this.sleepSubscription = this.sleepService
+      .watchForDashboard(uid, null, null)
+      .subscribe((sessions) => {
+        if (equal(this.sleepSessions, sessions)) {
+          return;
+        }
+        this.sleepSessions = sessions;
+        void this.rebuildTilesFromCurrentState();
+      });
+  }
+
+  private buildSleepListenerKey(uid: string): string {
+    return uid;
+  }
+
   private resetDerivedMetricsState(): void {
     this.derivedMetricsHydrated = false;
     this.clearDerivedPendingBannerTimeout();
@@ -704,6 +750,11 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.derivedMetricsSubscription.unsubscribe();
       this.derivedMetricsSubscription = null;
       this.derivedMetricsUserUID = null;
+    }
+    if (this.sleepSubscription) {
+      this.sleepSubscription.unsubscribe();
+      this.sleepSubscription = null;
+      this.sleepListenerKey = null;
     }
   }
 

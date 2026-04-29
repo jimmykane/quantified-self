@@ -1,0 +1,94 @@
+:host {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.sleep-layout {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+  padding: 8px 0 8px;
+  overflow: hidden;
+}
+
+.sleep-header {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 0 10px;
+}
+
+.title-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.sleep-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.title-info-button {
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  min-height: 20px;
+  line-height: 20px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  --mdc-icon-button-state-layer-size: 20px;
+}
+
+.title-info-button mat-icon {
+  width: 16px;
+  height: 16px;
+  line-height: 16px;
+  font-size: 16px;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.sleep-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.sleep-stat-value {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1.14rem;
+  line-height: 1;
+  font-weight: 700;
+  color: var(--mat-sys-on-surface);
+}
+
+.sleep-stat-label {
+  margin-top: 2px;
+  font-size: 0.66rem;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.sleep-context-label {
+  font-size: 0.62rem;
+  line-height: 1.15;
+  color: var(--mat-sys-on-surface-variant);
+  opacity: 0.92;
+}
+
+.sleep-chart {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 90px;
+  min-width: 0;
+}

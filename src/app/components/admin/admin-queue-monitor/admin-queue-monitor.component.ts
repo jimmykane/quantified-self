@@ -28,7 +28,7 @@ export class AdminQueueMonitorComponent implements OnInit, OnDestroy {
     isLoadingStats = true;
     queueView: AdminQueueStatsView = 'all';
     pageTitle = 'Queue Monitoring';
-    pageSubtitle = 'Operational health for ingestion, activity sync, reparse, and derived metrics pipelines';
+    pageSubtitle = 'Operational health for ingestion, activity sync, sleep sync, reparse, and derived metrics pipelines';
 
     private readonly destroy$ = new Subject<void>();
 
@@ -50,7 +50,7 @@ export class AdminQueueMonitorComponent implements OnInit, OnDestroy {
 
     private configureView(): void {
         const rawView = this.route.snapshot.data['queueView'];
-        if (rawView === 'workout' || rawView === 'activity-sync' || rawView === 'reparse' || rawView === 'derived') {
+        if (rawView === 'workout' || rawView === 'activity-sync' || rawView === 'sleep-sync' || rawView === 'reparse' || rawView === 'derived') {
             this.queueView = rawView;
         } else {
             this.queueView = 'all';
@@ -74,6 +74,12 @@ export class AdminQueueMonitorComponent implements OnInit, OnDestroy {
             return;
         }
 
+        if (this.queueView === 'sleep-sync') {
+            this.pageTitle = 'Sleep Sync Queue';
+            this.pageSubtitle = 'Monitor sleep sync queue depth, provider disablement, retries, and failures';
+            return;
+        }
+
         if (this.queueView === 'derived') {
             this.pageTitle = 'Derived Metrics Queue';
             this.pageSubtitle = 'Monitor derived metrics queue depth, coordinator status, and failure diagnostics';
@@ -81,7 +87,7 @@ export class AdminQueueMonitorComponent implements OnInit, OnDestroy {
         }
 
         this.pageTitle = 'Queue Monitoring';
-        this.pageSubtitle = 'Operational health for ingestion, activity sync, reparse, and derived metrics pipelines';
+        this.pageSubtitle = 'Operational health for ingestion, activity sync, sleep sync, reparse, and derived metrics pipelines';
     }
 
     fetchQueueStats(): void {

@@ -129,6 +129,9 @@ export {
 
 export { backfillActivitySyncRoute } from './activity-sync/backfill';
 export { dispatchActivitySyncQueue } from './activity-sync/dispatcher';
+export { receiveGarminAPISleepData, receiveSuuntoAppSleepData } from './sleep/webhooks';
+export { dispatchSleepSyncQueue } from './sleep/dispatcher';
+export { scheduleSuuntoSleepSync, scheduleCOROSSleepSync } from './sleep/polling';
 export {
   disableActivitySyncRoutesOnGarminTokenRootDelete,
   disableActivitySyncRoutesOnSuuntoTokenRootDelete,
@@ -167,8 +170,10 @@ export { listUsers, getQueueStats, getUserCount, getSubscriptionHistoryTrend, ge
 // Tasks
 export { processWorkoutTask } from './tasks/workout-processor';
 export { processActivitySyncTask } from './tasks/activity-sync-worker';
+export { processSleepSyncTask } from './tasks/sleep-sync-worker';
 export { processSportsLibReparseTask } from './tasks/sports-lib-reparse-worker';
 export { processDerivedMetricsTask } from './tasks/derived-metrics-worker';
+export { processDerivedMetricsIngressTask } from './tasks/derived-metrics-ingress-worker';
 
 // Stripe Cleanup
 export { cleanupStripeCustomer } from './stripe/cleanup';

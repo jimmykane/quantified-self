@@ -20,6 +20,7 @@ import type {
   DashboardMonotonyStrainContext,
   DashboardRampRateContext,
 } from '../../../helpers/dashboard-derived-metrics.helper';
+import type { DashboardSleepTrendContext } from '../../../helpers/dashboard-sleep-chart.helper';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
@@ -34,6 +35,7 @@ import {
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+  DASHBOARD_SLEEP_TREND_CHART_TYPE,
   type DashboardChartType,
 } from '../../../helpers/dashboard-special-chart-types';
 import { resolveDashboardChartInfoTooltip } from '../../../helpers/dashboard-chart-info.helper';
@@ -74,6 +76,7 @@ export class TileChartComponent extends TileAbstractDirective {
   @Input() freshnessForecast?: DashboardFreshnessForecastContext | null;
   @Input() intensityDistribution?: DashboardIntensityDistributionContext | null;
   @Input() efficiencyTrend?: DashboardEfficiencyTrendContext | null;
+  @Input() sleepTrend?: DashboardSleepTrendContext | null;
   @Input() acwrStatus?: DashboardDerivedMetricStatus | null;
   @Input() rampRateStatus?: DashboardDerivedMetricStatus | null;
   @Input() monotonyStrainStatus?: DashboardDerivedMetricStatus | null;
@@ -102,6 +105,7 @@ export class TileChartComponent extends TileAbstractDirective {
   public freshnessForecastChartType = DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE;
   public intensityDistributionChartType = DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE;
   public efficiencyTrendChartType = DASHBOARD_EFFICIENCY_TREND_CHART_TYPE;
+  public sleepTrendChartType = DASHBOARD_SLEEP_TREND_CHART_TYPE;
   public isTileActionSaving = false;
 
   get chartInfoTooltip(): string | null {

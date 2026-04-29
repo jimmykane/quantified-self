@@ -68,6 +68,11 @@
     [trend]="efficiencyTrend" [status]="efficiencyTrendStatus" [infoTooltip]="chartInfoTooltip">
   </app-efficiency-trend-chart>
   }
+  @if (chartType === sleepTrendChartType) {
+  <app-sleep-trend-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
+    [sleepTrend]="sleepTrend" [infoTooltip]="chartInfoTooltip">
+  </app-sleep-trend-chart>
+  }
   @if (chartType === chartTypes.LinesHorizontal
   || chartType === chartTypes.LinesVertical) {
   <app-xy-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme" [chartDataType]="dataType"
