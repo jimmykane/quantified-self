@@ -93,11 +93,28 @@ describe('sleep provider mappers', () => {
         }, 'coros-open-id', 3000);
 
         expect(result?.session.source.provider).toBe(SLEEP_PROVIDERS.COROSAPI);
+        expect(result?.sourceSessionKey).toBe('20260428:2026-04-27 22:15:00:2026-04-28 06:45:00');
         expect(result?.session.sleepDate).toBe('2026-04-28');
         expect(result?.session.durationSeconds).toBe(30600);
         expect(result?.session.stageDurationsSeconds[SLEEP_STAGES.Unknown]).toBe(30600);
         expect(result?.session.vitals?.averageHeartRateBpm).toBe(58);
         expect(result?.session.vitals?.overnightHrvMs).toBe(50);
         expect(result?.session.hrvSamples?.[0].value).toBe(25);
+    });
+
+    it('applies COROS timezone offsets when local sleep timestamps include no offset', () => {
+        const result = mapCorosDailySleep({
+            happenDay: 20260428,
+            sleepStartTime: '2026-04-27 22:15:00',
+            sleepEndTime: '2026-04-28 06:45:00',
+            startTimezone: 12,
+            endTimezone: 12,
+        }, 'coros-open-id', 3000);
+
+        expect(result?.session.startTimeMs).toBe(Date.UTC(2026, 3, 27, 19, 15));
+        expect(result?.session.endTimeMs).toBe(Date.UTC(2026, 3, 28, 3, 45));
+        expect(result?.session.timezoneOffsetSeconds).toBe(3 * 60 * 60);
+        expect(result?.session.sleepDate).toBe('2026-04-28');
+        expect(result?.session.durationSeconds).toBe(30600);
     });
 });

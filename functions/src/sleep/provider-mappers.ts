@@ -14,6 +14,8 @@ import {
 type ExternalRecord = Record<string, unknown>;
 
 const UNKNOWN_SLEEP_DATE = 'unknown';
+const EXPLICIT_TIME_ZONE_PATTERN = /(?:z|[+-]\d{2}:?\d{2})$/i;
+const LOCAL_DATE_TIME_PATTERN = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/;
 
 function asRecord(value: unknown): ExternalRecord {
     return value && typeof value === 'object' && !Array.isArray(value)
@@ -49,16 +51,92 @@ function positiveSeconds(value: unknown): number {
     return numberValue !== null && numberValue > 0 ? Math.floor(numberValue) : 0;
 }
 
-function parseDateMs(value: unknown): number | null {
+function parseLocalDateTimeComponentsMs(value: string, timezoneOffsetSeconds: number): number | null {
+    const match = LOCAL_DATE_TIME_PATTERN.exec(value);
+    if (!match) {
+        return null;
+    }
+
+    const [, year, month, day, hour, minute, second = '0', millisecond = '0'] = match;
+    const wallClockUtcMs = Date.UTC(
+        Number(year),
+        Number(month) - 1,
+        Number(day),
+        Number(hour),
+        Number(minute),
+        Number(second),
+        Number(millisecond.padEnd(3, '0').slice(0, 3)),
+    );
+    return Number.isFinite(wallClockUtcMs)
+        ? wallClockUtcMs - (timezoneOffsetSeconds * 1000)
+        : null;
+}
+
+function normalizeDateTimeSeparator(value: string): string {
+    return value.includes('T') ? value : value.replace(' ', 'T');
+}
+
+function parseDateMs(value: unknown, timezoneOffsetSeconds?: number | null): number | null {
     const stringValue = asString(value);
     if (!stringValue) {
         return null;
     }
-    const normalized = stringValue.includes('T')
-        ? stringValue
-        : stringValue.replace(' ', 'T') + 'Z';
+    const normalized = normalizeDateTimeSeparator(stringValue);
+    if (!EXPLICIT_TIME_ZONE_PATTERN.test(normalized) && Number.isFinite(timezoneOffsetSeconds)) {
+        const timestamp = parseLocalDateTimeComponentsMs(normalized, timezoneOffsetSeconds || 0);
+        if (timestamp !== null) {
+            return timestamp;
+        }
+    }
     const timestamp = Date.parse(normalized);
     return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function parseTimezoneOffsetLabelSeconds(value: unknown): number | null {
+    const stringValue = asString(value);
+    if (!stringValue) {
+        return null;
+    }
+
+    const match = /^(?:UTC|GMT)?([+-])(\d{1,2})(?::?(\d{2}))?$/.exec(stringValue.toUpperCase());
+    if (!match) {
+        return null;
+    }
+
+    const [, sign, hours, minutes = '0'] = match;
+    const totalSeconds = ((Number(hours) * 60) + Number(minutes)) * 60;
+    return Number.isFinite(totalSeconds) ? (sign === '-' ? -totalSeconds : totalSeconds) : null;
+}
+
+function parseCorosTimezoneUnitOffsetSeconds(value: unknown): number | null {
+    const numericValue = asNumber(value);
+    if (numericValue === null) {
+        return parseTimezoneOffsetLabelSeconds(value);
+    }
+
+    // COROS documents timezone fields in 15-minute units: 32 means UTC+08:00.
+    return Math.round(numericValue * 15 * 60);
+}
+
+function resolveCorosTimezoneOffsetSeconds(
+    daily: ExternalRecord,
+    timezoneUnitFields: readonly string[],
+): number | null {
+    const explicitOffsetSeconds = asNumber(daily.timezoneOffsetSeconds)
+        ?? asNumber(daily.timeZoneOffsetSeconds);
+    if (explicitOffsetSeconds !== null) {
+        return explicitOffsetSeconds;
+    }
+
+    for (const field of timezoneUnitFields) {
+        const offsetSeconds = parseCorosTimezoneUnitOffsetSeconds(daily[field]);
+        if (offsetSeconds !== null) {
+            return offsetSeconds;
+        }
+    }
+
+    return parseTimezoneOffsetLabelSeconds(daily.timezone)
+        ?? parseTimezoneOffsetLabelSeconds(daily.timeZone);
 }
 
 function localDateFromEpochSeconds(epochSeconds: number, offsetSeconds?: number | null): string {
@@ -325,13 +403,16 @@ export function mapCorosDailySleep(
     receivedAtMs = Date.now(),
 ): SleepMapperResult | null {
     const daily = asRecord(dailyInput);
-    const startTimeMs = parseDateMs(daily.sleepStartTime);
-    const endTimeMs = parseDateMs(daily.sleepEndTime);
+    const startTimezoneOffsetSeconds = resolveCorosTimezoneOffsetSeconds(daily, ['startTimezone']);
+    const endTimezoneOffsetSeconds = resolveCorosTimezoneOffsetSeconds(daily, ['endTimezone']);
+    const timezoneOffsetSeconds = startTimezoneOffsetSeconds ?? endTimezoneOffsetSeconds;
+    const startTimeMs = parseDateMs(daily.sleepStartTime, startTimezoneOffsetSeconds ?? endTimezoneOffsetSeconds);
+    const endTimeMs = parseDateMs(daily.sleepEndTime, endTimezoneOffsetSeconds ?? startTimezoneOffsetSeconds);
     if (!startTimeMs || !endTimeMs || endTimeMs <= startTimeMs) {
         return null;
     }
 
-    const happenDay = asString(daily.happenDay) || isoDateFromMs(endTimeMs).replace(/-/g, '');
+    const happenDay = asScalarString(daily.happenDay) || isoDateFromMs(endTimeMs).replace(/-/g, '');
     const sourceSessionKey = `${happenDay}:${asString(daily.sleepStartTime) || startTimeMs}:${asString(daily.sleepEndTime) || endTimeMs}`;
     const hrvSamples = asArray(daily.hrvList)
         .map((value): SleepSamplePoint | null => {
@@ -353,9 +434,12 @@ export function mapCorosDailySleep(
         sourceSessionKey,
         session: {
             source: buildSource(SLEEP_PROVIDERS.COROSAPI, providerUserId, sourceSessionKey, receivedAtMs),
-            sleepDate: isoDateFromMs(endTimeMs),
+            sleepDate: happenDay.length === 8
+                ? `${happenDay.slice(0, 4)}-${happenDay.slice(4, 6)}-${happenDay.slice(6, 8)}`
+                : isoDateFromMs(endTimeMs),
             startTimeMs,
             endTimeMs,
+            timezoneOffsetSeconds,
             durationSeconds: Math.max(0, Math.round((endTimeMs - startTimeMs) / 1000)),
             inBedDurationSeconds: null,
             isNap: false,
@@ -378,6 +462,9 @@ export function mapCorosDailySleep(
                     rhr: daily.rhr,
                     ppgHrv: daily.ppgHrv,
                     sleepAvgHr: daily.sleepAvgHr,
+                    startTimezone: daily.startTimezone,
+                    endTimezone: daily.endTimezone,
+                    timezoneOffsetSeconds,
                 }),
             },
         },

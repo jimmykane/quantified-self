@@ -255,6 +255,61 @@ describe('sleep queue', () => {
         }
     });
 
+    it('prefixes Suunto sleep poll access tokens with Bearer', async () => {
+        hoisted.getTokenData.mockResolvedValue({
+            accessToken: 'raw-suunto-access-token',
+        });
+        hoisted.requestGet.mockResolvedValue({ samples: [] });
+        hoisted.tokenRootGet.mockResolvedValue({
+            docs: [{
+                id: 'suunto-token-1',
+                data: () => ({
+                    serviceName: 'SuuntoApp',
+                    userName: 'suunto-user-1',
+                }),
+                ref: {
+                    parent: {
+                        parent: {
+                            id: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                        },
+                    },
+                },
+            }],
+            empty: false,
+        });
+        const update = vi.fn().mockResolvedValue(undefined);
+
+        const result = await processSleepSyncQueueItem({
+            id: 'suunto-sleep-poll',
+            dateCreated: 1_700_000_000_000,
+            dispatchedToCloudTask: 1_700_000_000_500,
+            processed: false,
+            provider: 'SuuntoApp',
+            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            providerUserId: 'suunto-user-1',
+            retryCount: 0,
+            type: 'suunto_poll',
+            rangeStartMs: 1_777_392_000_000,
+            rangeEndMs: 1_777_478_400_000,
+            ref: {
+                update,
+            } as any,
+        });
+
+        expect(result).toBe(QueueResult.Processed);
+        expect(hoisted.requestGet).toHaveBeenCalledWith(expect.objectContaining({
+            url: 'https://cloudapi.suunto.com/247samples/sleep?from=1777392000000&to=1777478400000',
+            headers: expect.objectContaining({
+                Authorization: 'Bearer raw-suunto-access-token',
+            }),
+            json: true,
+        }));
+        expect(update).toHaveBeenCalledWith(expect.objectContaining({
+            processed: true,
+            resultStatus: 'success',
+        }));
+    });
+
     it('moves Garmin ping queue items with untrusted callback URLs to DLQ without resolving tokens', async () => {
         hoisted.disabledProviders.splice(0, hoisted.disabledProviders.length, 'COROSAPI');
         const queueRef = {

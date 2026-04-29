@@ -23,6 +23,7 @@ import { markSleepSyncError, updateSleepSyncState, upsertSleepSessions } from '.
 import { getTokenData } from '../tokens';
 import * as requestPromise from '../request-helper';
 import { config } from '../config';
+import { toSuuntoAuthorizationHeader } from '../suunto/authorization-header';
 import {
     increaseRetryCountForQueueItem,
     moveToDeadLetterQueue,
@@ -240,7 +241,7 @@ async function processSuuntoQueueItem(queueItem: SleepSyncQueueItemInterface, to
         const tokenData = await getTokenData(tokenSnapshot, ServiceNames.SuuntoApp);
         const payload = await requestPromise.get({
             headers: {
-                Authorization: tokenData.accessToken,
+                Authorization: toSuuntoAuthorizationHeader(tokenData.accessToken),
                 'Content-Type': 'application/json',
                 'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
             },
