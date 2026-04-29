@@ -153,7 +153,7 @@ export async function addToQueueForSuunto(queueItem: { userName: string, workout
     retryCount: 0,
     processed: false,
     dispatchedToCloudTask: null,
-  }, ServiceNames.SuuntoApp);
+  }, ServiceNames.SuuntoApp, false, true);
 }
 
 /**
@@ -442,12 +442,32 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
   return increaseRetryCountForQueueItem(queueItem, lastError, retryIncrement, bulkWriter);
 }
 
-async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface, serviceName: ServiceNames, deferDispatch: boolean = false): Promise<admin.firestore.DocumentReference> {
+function isFirestoreAlreadyExistsError(error: unknown): boolean {
+  const code = (error as any)?.code;
+  const message = `${(error as any)?.message || ''}`;
+  return code === 6 || code === 'already-exists' || code === 'ALREADY_EXISTS' || message.includes('ALREADY_EXISTS');
+}
+
+async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface, serviceName: ServiceNames, deferDispatch: boolean = false, createOnly: boolean = false): Promise<admin.firestore.DocumentReference> {
   const queueItemDocument = admin.firestore().collection(getServiceWorkoutQueueName(serviceName)).doc(queueItem.id);
-  await queueItemDocument.set(Object.assign(queueItem, {
+  const queuePayload = Object.assign(queueItem, {
     expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
     dispatchedToCloudTask: deferDispatch ? null : Date.now(),
-  }));
+  });
+
+  if (createOnly) {
+    try {
+      await queueItemDocument.create(queuePayload);
+    } catch (error) {
+      if (isFirestoreAlreadyExistsError(error)) {
+        logger.info(`Queue item ${queueItem.id} already exists for ${serviceName}; skipping duplicate enqueue.`);
+        return queueItemDocument;
+      }
+      throw error;
+    }
+  } else {
+    await queueItemDocument.set(queuePayload);
+  }
 
   if (!deferDispatch) {
     // Dispatch a Cloud Task for immediate processing

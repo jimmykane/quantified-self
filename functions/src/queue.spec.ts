@@ -33,6 +33,7 @@ const { mockDocRef, mockBatch, mockDocSnapshot, mockCollection } = vi.hoisted(()
     const docRef = {
         update: vi.fn(() => Promise.resolve()),
         set: vi.fn(() => Promise.resolve()),
+        create: vi.fn(() => Promise.resolve()),
         delete: vi.fn(() => Promise.resolve()),
         id: 'mock-doc-id',
         parent: {
@@ -726,11 +727,30 @@ describe('queue', () => {
             expect(result.id).toBe('mock-doc-id');
             const admin = await import('firebase-admin');
             const doc = admin.firestore().collection('suuntoAppWorkoutQueue').doc('user1-work1');
-            expect(doc.set).toHaveBeenCalledWith(expect.objectContaining({
+            expect(doc.create).toHaveBeenCalledWith(expect.objectContaining({
                 id: 'user1-work1',
                 userName: 'user1',
                 workoutID: 'work1'
             }));
+            expect(doc.set).not.toHaveBeenCalled();
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', expect.any(Number));
+        });
+
+        it('addToQueueForSuunto should skip duplicate queue items without dispatching another task', async () => {
+            const alreadyExistsError: any = new Error('ALREADY_EXISTS');
+            alreadyExistsError.code = 6;
+            mockDocRef.create.mockRejectedValueOnce(alreadyExistsError);
+
+            const result = await addToQueueForSuunto({ userName: 'user1', workoutID: 'work1' });
+
+            expect(result.id).toBe('mock-doc-id');
+            expect(mockDocRef.create).toHaveBeenCalledWith(expect.objectContaining({
+                id: 'user1-work1',
+                userName: 'user1',
+                workoutID: 'work1'
+            }));
+            expect(mockDocRef.set).not.toHaveBeenCalled();
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
         });
 
         it('addToQueueForCOROS should insert item', async () => {

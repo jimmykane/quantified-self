@@ -6,6 +6,7 @@ import {
     SLEEP_PROVIDERS,
 } from '../../../shared/sleep';
 import { addSleepSyncQueueItem } from './queue';
+import { verifySuuntoWebhookSignature } from '../suunto/webhook-signature';
 import {
     getAllowedSleepSyncUserIds,
     isSleepProviderEnabled,
@@ -100,17 +101,6 @@ function hasNumberField(record: ExternalRecord, fieldName: string): boolean {
     return Number.isFinite(value);
 }
 
-function verifySuuntoSignature(rawBody: Buffer | undefined, signature: string | null): boolean {
-    const secret = process.env.SUUNTOAPP_NOTIFICATION_SECRET;
-    if (!secret || !rawBody || !signature) {
-        return false;
-    }
-    const digest = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
-    const expected = Buffer.from(digest, 'hex');
-    const actual = Buffer.from(signature, 'hex');
-    return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
-}
-
 async function resolveScopedSuuntoWebhookUserID(providerUserId: string): Promise<string | null | undefined> {
     const allowedUserIDs = getAllowedSleepSyncUserIds();
     if (allowedUserIDs.length === 0) {
@@ -198,7 +188,7 @@ export const receiveSuuntoAppSleepData = functions.region('europe-west2').runWit
     }
 
     const signature = asString(req.get('X-HMAC-SHA256-Signature'));
-    if (!verifySuuntoSignature(req.rawBody, signature)) {
+    if (!verifySuuntoWebhookSignature(req.rawBody, signature)) {
         logger.warn('[SleepSync][Suunto] Invalid webhook signature');
         res.status(403).send();
         return;
