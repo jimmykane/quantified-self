@@ -85,10 +85,6 @@ const DASHBOARD_CURATED_CHART_DEFINITIONS: DashboardCuratedChartDefinition[] = [
     chartType: DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
     label: 'Efficiency Trend',
   },
-  {
-    chartType: DASHBOARD_SLEEP_TREND_CHART_TYPE,
-    label: 'Sleep',
-  },
 ];
 
 const DASHBOARD_KPI_CHART_DEFINITIONS: DashboardKpiChartDefinition[] = [

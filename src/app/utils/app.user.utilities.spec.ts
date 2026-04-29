@@ -15,7 +15,7 @@ import {
     TimeIntervals
 } from '@sports-alliance/sports-lib';
 import { AppUserInterface } from '../models/app-user.interface';
-import { DASHBOARD_RECOVERY_NOW_CHART_TYPE } from '../helpers/dashboard-special-chart-types';
+import { DASHBOARD_RECOVERY_NOW_CHART_TYPE, DASHBOARD_SLEEP_TREND_CHART_TYPE } from '../helpers/dashboard-special-chart-types';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
 
 describe('AppUserUtilities', () => {
@@ -182,6 +182,16 @@ describe('AppUserUtilities', () => {
             expect(recoveryTiles).toHaveLength(0);
         });
 
+        it('should not include sleep tile in default dashboard tiles', () => {
+            const tiles = AppUserUtilities.getDefaultUserDashboardTiles();
+            const sleepTiles = tiles.filter((tile: any) => (
+                tile?.type === TileTypes.Chart
+                && (tile?.chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE || tile?.dataType === 'SleepDuration')
+            ));
+
+            expect(sleepTiles).toHaveLength(0);
+        });
+
         it('should fill defaults for empty settings', () => {
             const user = { settings: {} } as User;
             const settings = AppUserUtilities.fillMissingAppSettings(user);
@@ -191,6 +201,10 @@ describe('AppUserUtilities', () => {
             expect(settings.chartSettings?.syncChartHoverToMap).toBe(false);
             expect(settings.dashboardSettings?.dateRange).toBe(DateRanges.all);
             expect(settings.dashboardSettings?.includeMergedEvents).toBe(true);
+            expect(settings.dashboardSettings?.tiles?.some((tile: any) => (
+                tile?.type === TileTypes.Chart
+                && (tile?.chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE || tile?.dataType === 'SleepDuration')
+            ))).toBe(false);
             expect(settings.unitSettings?.distanceUnits).toBe(DistanceUnits.Kilometers);
             expect(settings.unitSettings?.startOfTheWeek).toBe(1); // Monday
             expect((settings.myTracksSettings as any)?.showJumpHeatmap).toBe(true);

@@ -105,7 +105,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Freshness Forecast');
     expect(gettingStartedSection?.content).toContain('Intensity Distribution');
     expect(gettingStartedSection?.content).toContain('Efficiency Trend');
-    expect(gettingStartedSection?.content).toContain('**Sleep** shows connected-source sleep duration');
+    expect(gettingStartedSection?.content).not.toContain('**Sleep** shows connected-source sleep duration');
     expect(gettingStartedSection?.content).toContain('ACWR');
     expect(gettingStartedSection?.content).toContain('Ramp Rate');
     expect(gettingStartedSection?.content).toContain('Monotony / Strain');

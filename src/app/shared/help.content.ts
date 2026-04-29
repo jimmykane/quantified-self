@@ -104,7 +104,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Presets** provide quick-start tile templates and can be applied in both **Add** and **Edit** modes.
 - **Curated Recovery** remains a fixed insight and does not react to dashboard date-range changes.
 - **Curated Form/TSS** computes from full history and does not react to dashboard date-range changes.
-- New curated charts: **Freshness Forecast**, **Intensity Distribution**, **Efficiency Trend**, and **Sleep**.
+- New curated charts: **Freshness Forecast**, **Intensity Distribution**, and **Efficiency Trend**.
 - KPI cards are derived-only compact tiles: **ACWR**, **Ramp Rate**, **Monotony / Strain**, **Form Now**, **Form +7d**, **Easy %**, **Hard %**, and **Efficiency Δ (4w)**.
 - KPI cards are shown in a dedicated compact **KPI lane** above the main dashboard grid.
 - On mobile, KPI cards use a horizontal scroll lane while the chart/map grid stays unchanged below.
@@ -176,7 +176,6 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Intensity Distribution** uses power zones when available, otherwise heart-rate zones, grouped to Easy/Moderate/Hard by week.
 - Intensity Distribution headline percentages are labeled as **Current week**; when no current-week bucket exists they are labeled **Latest week**.
 - **Efficiency Trend** uses weekly duration-weighted average of avgPower/avgHeartRate.
-- **Sleep** shows connected-source sleep duration and stage trends by sleep date. COROS sessions render as total/unknown sleep when stage data is unavailable.
 - Training-derived tiles do not fall back to currently loaded dashboard events.
 
 ### Merge events
