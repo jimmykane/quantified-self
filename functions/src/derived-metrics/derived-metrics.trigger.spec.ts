@@ -63,6 +63,23 @@ describe('onDashboardDerivedMetricsEventWrite', () => {
         expect(hoisted.enqueueDerivedMetricsIngressTask).toHaveBeenCalledWith('user-1');
     });
 
+    it('uses event timestamp for ingress bucketing when CloudEvent time is present', async () => {
+        await (onDashboardDerivedMetricsEventWrite as any)({
+            time: '2026-04-29T10:00:15.000Z',
+            params: { uid: 'user-1', eventId: 'event-1' },
+            data: {
+                before: { exists: true },
+                after: { exists: true },
+            },
+        });
+
+        expect(hoisted.enqueueDerivedMetricsIngressTask).toHaveBeenCalledWith(
+            'user-1',
+            undefined,
+            Date.parse('2026-04-29T10:00:15.000Z'),
+        );
+    });
+
     it('skips when uid is missing', async () => {
         await (onDashboardDerivedMetricsEventWrite as any)({
             params: { uid: '', eventId: 'event-1' },
