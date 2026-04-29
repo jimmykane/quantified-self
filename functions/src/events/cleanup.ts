@@ -5,6 +5,10 @@ import * as logger from 'firebase-functions/logger';
 export const cleanupEventFile = onDocumentDeleted({
     document: 'users/{userId}/events/{eventId}',
     region: 'europe-west2',
+    memory: '1GiB',
+    maxInstances: 10,
+    concurrency: 5,
+    timeoutSeconds: 300,
 }, async (event) => {
     const snap = event.data;
     const eventId = event.params.eventId;

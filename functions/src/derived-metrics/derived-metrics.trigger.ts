@@ -6,7 +6,8 @@ import { getDefaultDerivedMetricKindsForDashboard, markDerivedMetricsDirtyAndMay
 export const onDashboardDerivedMetricsEventWrite = onDocumentWritten({
     region: FUNCTIONS_MANIFEST.ensureDerivedMetrics.region,
     document: 'users/{uid}/events/{eventId}',
-    maxInstances: 50,
+    maxInstances: 1,
+    concurrency: 1,
 }, async (event) => {
     const uid = `${event.params?.uid || ''}`.trim();
     if (!uid) {
