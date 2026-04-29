@@ -173,6 +173,7 @@ export { processActivitySyncTask } from './tasks/activity-sync-worker';
 export { processSleepSyncTask } from './tasks/sleep-sync-worker';
 export { processSportsLibReparseTask } from './tasks/sports-lib-reparse-worker';
 export { processDerivedMetricsTask } from './tasks/derived-metrics-worker';
+export { processDerivedMetricsIngressTask } from './tasks/derived-metrics-ingress-worker';
 
 // Stripe Cleanup
 export { cleanupStripeCustomer } from './stripe/cleanup';

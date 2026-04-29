@@ -56,6 +56,7 @@ export const FUNCTIONS_MANIFEST = {
     aiInsights: { name: 'aiInsights', region: 'europe-west2' },
     getAiInsightsQuotaStatus: { name: 'getAiInsightsQuotaStatus', region: 'europe-west2' },
     ensureDerivedMetrics: { name: 'ensureDerivedMetrics', region: 'europe-west2' },
+    processDerivedMetricsIngressTask: { name: 'processDerivedMetricsIngressTask', region: 'europe-west2' },
 } as const;
 
 export type FunctionName = keyof typeof FUNCTIONS_MANIFEST;

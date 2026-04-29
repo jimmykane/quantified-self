@@ -257,6 +257,59 @@ export async function enqueueDerivedMetricsTask(
     });
 }
 
+/**
+ * Enqueue a debounced derived-metrics ingress task for one uid + time bucket.
+ * Task name is deterministic to guarantee at most one ingress task per bucket.
+ */
+export async function enqueueDerivedMetricsIngressTask(
+    uid: string,
+    scheduleDelaySeconds?: number,
+    nowMs?: number,
+): Promise<boolean> {
+    const client = getCloudTasksClient();
+    const {
+        projectId,
+        location,
+        derivedMetricsQueue,
+        derivedMetricsIngressBucketSeconds,
+        serviceAccountEmail,
+    } = config.cloudtasks;
+    if (!projectId) {
+        throw new Error('Project ID is not defined in config');
+    }
+
+    const parent = client.queuePath(projectId, location, derivedMetricsQueue);
+    const url = `https://${location}-${projectId}.cloudfunctions.net/processDerivedMetricsIngressTask`;
+    const safeUid = `${uid}`.replace(/[^a-zA-Z0-9-_]/g, '-');
+    const bucketSeconds = Math.max(1, Math.floor(Number(derivedMetricsIngressBucketSeconds) || 30));
+    const currentEpochSeconds = Math.max(0, Math.floor(((Number.isFinite(nowMs) ? nowMs : Date.now()) as number) / 1000));
+    const bucketStartEpochSec = currentEpochSeconds - (currentEpochSeconds % bucketSeconds);
+    const ingressBufferSeconds = 2;
+    const bucketCloseEpochSec = bucketStartEpochSec + bucketSeconds;
+    const computedScheduleEpochSec = Math.max(currentEpochSeconds + 1, bucketCloseEpochSec + ingressBufferSeconds);
+    const overrideScheduleDelaySeconds = Number.isFinite(scheduleDelaySeconds)
+        ? Math.max(1, Math.floor(scheduleDelaySeconds as number))
+        : null;
+    const effectiveScheduleDelaySeconds = overrideScheduleDelaySeconds ?? (computedScheduleEpochSec - currentEpochSeconds);
+    const effectiveScheduleEpochSeconds = overrideScheduleDelaySeconds === null
+        ? computedScheduleEpochSec
+        : (currentEpochSeconds + effectiveScheduleDelaySeconds);
+    const taskName = `${parent}/tasks/derived-metrics-ingress-${safeUid}-${bucketStartEpochSec}`;
+    const payload = { data: { uid, bucketStartEpochSec } };
+
+    return enqueueTaskWithRetry({
+        parent,
+        taskName,
+        payload,
+        serviceAccountEmail,
+        url,
+        scheduleDelaySeconds: effectiveScheduleDelaySeconds,
+        scheduleAtEpochSeconds: effectiveScheduleEpochSeconds,
+        alreadyExistsLogMessage: `[DerivedMetricsIngressDispatcher] Task already exists for ${uid} bucket ${bucketStartEpochSec}, skipping`,
+        failedLogPrefix: `[DerivedMetricsIngressDispatcher] Failed to enqueue derived metrics ingress task for ${uid} bucket ${bucketStartEpochSec}:`,
+    });
+}
+
 interface EnqueueTaskParams {
     parent: string;
     taskName: string;
@@ -264,6 +317,7 @@ interface EnqueueTaskParams {
     serviceAccountEmail: string;
     url: string;
     scheduleDelaySeconds?: number;
+    scheduleAtEpochSeconds?: number;
     alreadyExistsLogMessage: string;
     failedLogPrefix: string;
 }
@@ -276,6 +330,7 @@ async function enqueueTaskWithRetry(params: EnqueueTaskParams): Promise<boolean>
         serviceAccountEmail,
         url,
         scheduleDelaySeconds,
+        scheduleAtEpochSeconds,
         alreadyExistsLogMessage,
         failedLogPrefix,
     } = params;
@@ -295,10 +350,16 @@ async function enqueueTaskWithRetry(params: EnqueueTaskParams): Promise<boolean>
         },
     };
 
-    const minDelaySeconds = Math.max(scheduleDelaySeconds ?? 1, 1);
-    task.scheduleTime = {
-        seconds: Math.floor(Date.now() / 1000) + minDelaySeconds
-    };
+    if (Number.isFinite(scheduleAtEpochSeconds)) {
+        task.scheduleTime = {
+            seconds: Math.max(1, Math.floor(scheduleAtEpochSeconds as number)),
+        };
+    } else {
+        const minDelaySeconds = Math.max(scheduleDelaySeconds ?? 1, 1);
+        task.scheduleTime = {
+            seconds: Math.floor(Date.now() / 1000) + minDelaySeconds
+        };
+    }
 
     let attempt = 0;
     const MAX_RETRIES = 3;

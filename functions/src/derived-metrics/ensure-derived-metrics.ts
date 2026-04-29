@@ -3,10 +3,10 @@ import * as admin from 'firebase-admin';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { enforceAppCheck } from '../utils';
 import {
-    DERIVED_METRIC_KINDS,
     DERIVED_METRIC_SCHEMA_VERSION,
     DERIVED_METRICS_COLLECTION_ID,
     DERIVED_METRICS_COORDINATOR_DOC_ID,
+    PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS,
     getDerivedMetricDocId,
     normalizeDerivedMetricKinds,
     type EnsureDerivedMetricsRequest,
@@ -29,25 +29,30 @@ interface DerivedMetricsFreshnessInput {
     coordinatorStartedAtMs: number | null;
     coordinatorUpdatedAtMs: number | null;
     coordinatorEventMutationVersion: number | null;
-    formSnapshotStatus: string | null;
-    formSnapshotSchemaVersion: number | null;
-    formSnapshotBuiltFromEventMutationVersion: number | null;
+    metricSnapshotsByKind: Record<DerivedMetricKind, {
+        status: string | null;
+        schemaVersion: number | null;
+        builtFromEventMutationVersion: number | null;
+        asOfDayMs: number | null;
+    }>;
     latestEventUpdatedAtMs: number | null;
 }
 
 interface DerivedMetricsFreshnessDecision {
     shouldQueue: boolean;
+    metricKindsToQueue: DerivedMetricKind[];
     reason:
     | 'failed_status'
     | 'queued_stuck'
     | 'processing_stuck'
-    | 'requested_metric_without_form'
-    | 'missing_form_snapshot'
+    | 'missing_metric_snapshot'
+    | 'metric_snapshot_not_ready'
     | 'schema_version_mismatch'
     | 'missing_event_mutation_version'
     | 'missing_snapshot_event_mutation_version'
     | 'missing_completed_at'
     | 'event_mutation_version_behind'
+    | 'projection_day_behind'
     | 'latest_event_update_after_completion'
     | 'fresh';
 }
@@ -105,59 +110,139 @@ function parseCoordinatorStatus(value: unknown): DerivedMetricsCoordinatorStatus
     return 'idle';
 }
 
+function resolveUtcDayStartMs(timeMs: number): number {
+    const date = new Date(timeMs);
+    return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+}
+
+function isProjectionSensitiveMetricKind(kind: DerivedMetricKind): boolean {
+    return PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS.includes(kind);
+}
+
 export function decideDerivedMetricsFreshness(input: DerivedMetricsFreshnessInput): DerivedMetricsFreshnessDecision {
     if (input.coordinatorStatus === 'failed') {
-        return { shouldQueue: true, reason: 'failed_status' };
+        return {
+            shouldQueue: true,
+            metricKindsToQueue: [...input.metricKinds],
+            reason: 'failed_status',
+        };
     }
 
     if (input.coordinatorStatus === 'queued') {
         const queuedSinceMs = input.coordinatorRequestedAtMs ?? input.coordinatorUpdatedAtMs;
         if (Number.isFinite(queuedSinceMs) && (input.nowMs - (queuedSinceMs as number)) >= DERIVED_METRICS_STUCK_QUEUED_THRESHOLD_MS) {
-            return { shouldQueue: true, reason: 'queued_stuck' };
+            return {
+                shouldQueue: true,
+                metricKindsToQueue: [...input.metricKinds],
+                reason: 'queued_stuck',
+            };
         }
-        return { shouldQueue: false, reason: 'fresh' };
+        return { shouldQueue: false, metricKindsToQueue: [], reason: 'fresh' };
     }
 
     if (input.coordinatorStatus === 'processing') {
         const processingSinceMs = input.coordinatorStartedAtMs ?? input.coordinatorUpdatedAtMs;
         if (Number.isFinite(processingSinceMs) && (input.nowMs - (processingSinceMs as number)) >= DERIVED_METRICS_STUCK_PROCESSING_THRESHOLD_MS) {
-            return { shouldQueue: true, reason: 'processing_stuck' };
+            return {
+                shouldQueue: true,
+                metricKindsToQueue: [...input.metricKinds],
+                reason: 'processing_stuck',
+            };
         }
-        return { shouldQueue: false, reason: 'fresh' };
-    }
-
-    const includesForm = input.metricKinds.includes(DERIVED_METRIC_KINDS.Form);
-    if (!includesForm) {
-        // Non-form request paths are used to recover stale/missing non-form metrics.
-        // Queue directly unless an active queued/processing coordinator is already handling work.
-        return { shouldQueue: true, reason: 'requested_metric_without_form' };
+        return { shouldQueue: false, metricKindsToQueue: [], reason: 'fresh' };
     }
 
     if (!Number.isFinite(input.coordinatorEventMutationVersion)) {
-        return { shouldQueue: true, reason: 'missing_event_mutation_version' };
+        return {
+            shouldQueue: true,
+            metricKindsToQueue: [...input.metricKinds],
+            reason: 'missing_event_mutation_version',
+        };
     }
     const coordinatorEventMutationVersion = Math.max(0, Math.floor(input.coordinatorEventMutationVersion as number));
 
-    if (input.formSnapshotStatus !== 'ready') {
-        return { shouldQueue: true, reason: 'missing_form_snapshot' };
-    }
-    if (!Number.isFinite(input.formSnapshotSchemaVersion) || (input.formSnapshotSchemaVersion as number) < DERIVED_METRIC_SCHEMA_VERSION) {
-        return { shouldQueue: true, reason: 'schema_version_mismatch' };
-    }
     if (!Number.isFinite(input.coordinatorCompletedAtMs)) {
-        return { shouldQueue: true, reason: 'missing_completed_at' };
+        return {
+            shouldQueue: true,
+            metricKindsToQueue: [...input.metricKinds],
+            reason: 'missing_completed_at',
+        };
     }
-    if (!Number.isFinite(input.formSnapshotBuiltFromEventMutationVersion)) {
-        return { shouldQueue: true, reason: 'missing_snapshot_event_mutation_version' };
+
+    const projectionStaleKinds: DerivedMetricKind[] = [];
+    const hardStaleKinds: DerivedMetricKind[] = [];
+    const todayUtcDayMs = resolveUtcDayStartMs(input.nowMs);
+
+    for (const metricKind of input.metricKinds) {
+        const snapshot = input.metricSnapshotsByKind[metricKind];
+        if (!snapshot) {
+            hardStaleKinds.push(metricKind);
+            continue;
+        }
+        if (!snapshot.status) {
+            hardStaleKinds.push(metricKind);
+            continue;
+        }
+        if (snapshot.status !== 'ready') {
+            hardStaleKinds.push(metricKind);
+            continue;
+        }
+        if (!Number.isFinite(snapshot.schemaVersion) || (snapshot.schemaVersion as number) < DERIVED_METRIC_SCHEMA_VERSION) {
+            hardStaleKinds.push(metricKind);
+            continue;
+        }
+        if (!Number.isFinite(snapshot.builtFromEventMutationVersion)) {
+            hardStaleKinds.push(metricKind);
+            continue;
+        }
+        const builtFromEventMutationVersion = Math.max(0, Math.floor(snapshot.builtFromEventMutationVersion as number));
+        if (builtFromEventMutationVersion < coordinatorEventMutationVersion) {
+            hardStaleKinds.push(metricKind);
+            continue;
+        }
+        if (isProjectionSensitiveMetricKind(metricKind)) {
+            const asOfDayMs = toFiniteNumber(snapshot.asOfDayMs);
+            if (!Number.isFinite(asOfDayMs) || (asOfDayMs as number) < todayUtcDayMs) {
+                projectionStaleKinds.push(metricKind);
+            }
+        }
     }
-    const formSnapshotBuiltFromEventMutationVersion = Math.max(
-        0,
-        Math.floor(input.formSnapshotBuiltFromEventMutationVersion as number),
-    );
-    // Freshness is revision-based instead of count-based so snapshot metadata drift
-    // (for example duplicate task races) cannot cause perpetual rebuild loops.
-    if (formSnapshotBuiltFromEventMutationVersion < coordinatorEventMutationVersion) {
-        return { shouldQueue: true, reason: 'event_mutation_version_behind' };
+
+    if (hardStaleKinds.length > 0) {
+        const hasMissingSnapshot = hardStaleKinds.some((metricKind) => !input.metricSnapshotsByKind[metricKind]?.status);
+        return {
+            shouldQueue: true,
+            metricKindsToQueue: [...input.metricKinds],
+            reason: hasMissingSnapshot
+                ? 'missing_metric_snapshot'
+                : (
+                    input.metricKinds.some((kind) => {
+                        const snapshot = input.metricSnapshotsByKind[kind];
+                        return snapshot?.status !== 'ready';
+                    })
+                        ? 'metric_snapshot_not_ready'
+                        : (
+                            input.metricKinds.some((kind) => {
+                                const snapshot = input.metricSnapshotsByKind[kind];
+                                return !Number.isFinite(snapshot?.schemaVersion) || (snapshot?.schemaVersion as number) < DERIVED_METRIC_SCHEMA_VERSION;
+                            })
+                                ? 'schema_version_mismatch'
+                                : (
+                                    input.metricKinds.some((kind) => !Number.isFinite(input.metricSnapshotsByKind[kind]?.builtFromEventMutationVersion))
+                                        ? 'missing_snapshot_event_mutation_version'
+                                        : 'event_mutation_version_behind'
+                                )
+                        )
+                ),
+        };
+    }
+
+    if (projectionStaleKinds.length > 0) {
+        return {
+            shouldQueue: true,
+            metricKindsToQueue: projectionStaleKinds,
+            reason: 'projection_day_behind',
+        };
     }
     // Fallback safety net for missed trigger executions:
     // if the most recent event document update is newer than the last successful
@@ -165,10 +250,14 @@ export function decideDerivedMetricsFreshness(input: DerivedMetricsFreshnessInpu
     if (Number.isFinite(input.latestEventUpdatedAtMs)
         && Number.isFinite(input.coordinatorCompletedAtMs)
         && (input.latestEventUpdatedAtMs as number) > (input.coordinatorCompletedAtMs as number)) {
-        return { shouldQueue: true, reason: 'latest_event_update_after_completion' };
+        return {
+            shouldQueue: true,
+            metricKindsToQueue: [...input.metricKinds],
+            reason: 'latest_event_update_after_completion',
+        };
     }
 
-    return { shouldQueue: false, reason: 'fresh' };
+    return { shouldQueue: false, metricKindsToQueue: [], reason: 'fresh' };
 }
 
 export const ensureDerivedMetrics = onCall({
@@ -189,9 +278,9 @@ export const ensureDerivedMetrics = onCall({
     const coordinatorRef = admin
         .firestore()
         .doc(`users/${uid}/${DERIVED_METRICS_COLLECTION_ID}/${DERIVED_METRICS_COORDINATOR_DOC_ID}`);
-    const formSnapshotRef = admin
+    const metricSnapshotRefs = metricKinds.map((metricKind) => admin
         .firestore()
-        .doc(`users/${uid}/${DERIVED_METRICS_COLLECTION_ID}/${getDerivedMetricDocId(DERIVED_METRIC_KINDS.Form)}`);
+        .doc(`users/${uid}/${DERIVED_METRICS_COLLECTION_ID}/${getDerivedMetricDocId(metricKind)}`));
     const eventsCollectionRef = admin
         .firestore()
         .collection('users')
@@ -199,11 +288,11 @@ export const ensureDerivedMetrics = onCall({
         .collection('events');
     const [
         coordinatorSnapshot,
-        formSnapshot,
+        metricSnapshots,
         latestEventSnapshot,
     ] = await Promise.all([
         coordinatorRef.get(),
-        formSnapshotRef.get(),
+        Promise.all(metricSnapshotRefs.map((snapshotRef) => snapshotRef.get())),
         eventsCollectionRef.orderBy('startDate', 'desc').limit(1).select('startDate').get(),
     ]);
 
@@ -216,12 +305,24 @@ export const ensureDerivedMetrics = onCall({
     const coordinatorGeneration = toFiniteNumber(coordinatorData.generation);
     const coordinatorEventMutationVersion = toFiniteNumber(coordinatorData.eventMutationVersion);
 
-    const formSnapshotData = formSnapshot.data() || {};
-    const formSnapshotStatus = toSafeString(formSnapshotData.status) || null;
-    const formSnapshotSchemaVersion = toFiniteNumber(formSnapshotData.schemaVersion);
-    const formSnapshotBuiltFromEventMutationVersion = toFiniteNumber(
-        formSnapshotData.builtFromEventMutationVersion,
-    );
+    const metricSnapshotsByKind = metricKinds.reduce((result, metricKind, index) => {
+        const snapshotData = (metricSnapshots[index]?.data() || {}) as Record<string, unknown>;
+        const payload = (snapshotData?.payload && typeof snapshotData.payload === 'object')
+            ? snapshotData.payload as Record<string, unknown>
+            : {};
+        result[metricKind] = {
+            status: toSafeString(snapshotData.status) || null,
+            schemaVersion: toFiniteNumber(snapshotData.schemaVersion),
+            builtFromEventMutationVersion: toFiniteNumber(snapshotData.builtFromEventMutationVersion),
+            asOfDayMs: toFiniteNumber(payload.asOfDayMs),
+        };
+        return result;
+    }, {} as Record<DerivedMetricKind, {
+        status: string | null;
+        schemaVersion: number | null;
+        builtFromEventMutationVersion: number | null;
+        asOfDayMs: number | null;
+    }>);
     const latestEventDoc = latestEventSnapshot.docs[0];
     const latestEventUpdatedAtMs = toMillis(latestEventDoc?.updateTime);
     const freshnessDecision = decideDerivedMetricsFreshness({
@@ -233,9 +334,7 @@ export const ensureDerivedMetrics = onCall({
         coordinatorStartedAtMs,
         coordinatorUpdatedAtMs,
         coordinatorEventMutationVersion,
-        formSnapshotStatus,
-        formSnapshotSchemaVersion,
-        formSnapshotBuiltFromEventMutationVersion,
+        metricSnapshotsByKind,
         latestEventUpdatedAtMs,
     });
     if (!freshnessDecision.shouldQueue) {
@@ -247,5 +346,10 @@ export const ensureDerivedMetrics = onCall({
         };
     }
 
-    return markDerivedMetricsDirtyAndMaybeQueue(uid, metricKinds);
+    return markDerivedMetricsDirtyAndMaybeQueue(
+        uid,
+        freshnessDecision.metricKindsToQueue.length
+            ? freshnessDecision.metricKindsToQueue
+            : metricKinds,
+    );
 });
