@@ -40,6 +40,9 @@ const STAGE_SERIES = [
   { key: 'awakeSeconds', name: 'Awake', color: '#F9A825' },
 ] as const;
 
+const GRID_BOTTOM_WITH_LEGEND = 58;
+const GRID_BOTTOM_COMPACT = 34;
+
 @Component({
   selector: 'app-sleep-trend-chart',
   templateUrl: './charts.sleep-trend.component.html',
@@ -152,7 +155,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
         left: 26,
         right: 8,
         top: 8,
-        bottom: 34,
+        bottom: style.isCompactLayout ? GRID_BOTTOM_COMPACT : GRID_BOTTOM_WITH_LEGEND,
       },
       tooltip: {
         show: true,
