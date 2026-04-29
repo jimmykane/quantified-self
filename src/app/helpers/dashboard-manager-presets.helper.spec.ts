@@ -31,6 +31,7 @@ describe('dashboard-manager-presets.helper', () => {
     expect(definitions.filter(definition => definition.category === 'kpi')).toHaveLength(8);
     expect(definitions.filter(definition => definition.category === 'custom')).toHaveLength(7);
     expect(definitions.filter(definition => definition.category === 'map')).toHaveLength(1);
+    expect(definitions.map(definition => definition.id)).not.toContain(DASHBOARD_MANAGER_PRESET_IDS.CURATED_SLEEP);
   });
 
   it('returns null for unknown preset ids', () => {
@@ -68,6 +69,15 @@ describe('dashboard-manager-presets.helper', () => {
       dataCategoryType: ChartDataCategoryTypes.DateType,
       dataTimeInterval: TimeIntervals.Daily,
     });
+  });
+
+  it('does not expose the hidden sleep preset through dashboard manager helpers', () => {
+    expect(getDashboardManagerPresetDefinition(DASHBOARD_MANAGER_PRESET_IDS.CURATED_SLEEP)).toBeNull();
+    expect(() => buildDashboardManagerPresetTile({
+      presetId: DASHBOARD_MANAGER_PRESET_IDS.CURATED_SLEEP,
+      order: 6,
+      size: { columns: 2, rows: 1 },
+    })).toThrow(/Unknown dashboard manager preset id/);
   });
 
   it('builds deterministic custom and map preset tiles', () => {

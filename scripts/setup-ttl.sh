@@ -7,6 +7,7 @@ COLLECTIONS=(
     "suuntoAppWorkoutQueue"
     "garminAPIActivityQueue"
     "activitySyncQueue"
+    "sleepSyncQueue"
     "sportsLibReparseJobs"
     "failed_jobs"
     "mail"

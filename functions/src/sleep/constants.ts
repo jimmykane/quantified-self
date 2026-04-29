@@ -1,0 +1,4 @@
+export const SLEEP_SYNC_QUEUE_COLLECTION_NAME = 'sleepSyncQueue';
+export const SLEEP_SYNC_RECENT_WINDOW_DAYS = 7;
+export const SUUNTO_SLEEP_MAX_WINDOW_DAYS = 28;
+export const COROS_DAILY_MAX_WINDOW_DAYS = 30;

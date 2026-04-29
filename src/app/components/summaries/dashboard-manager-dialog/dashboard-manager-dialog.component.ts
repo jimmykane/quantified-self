@@ -57,6 +57,7 @@ import {
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+  DASHBOARD_SLEEP_TREND_CHART_TYPE,
   type DashboardCuratedChartType,
   type DashboardKpiGroup,
   getDashboardCuratedChartDefinitions,
@@ -236,6 +237,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
     [DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE]: 'trending_up',
     [DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE]: 'bar_chart',
     [DASHBOARD_EFFICIENCY_TREND_CHART_TYPE]: 'show_chart',
+    [DASHBOARD_SLEEP_TREND_CHART_TYPE]: 'hotel',
   };
   public readonly curatedChartDescriptionByType: Record<DashboardCuratedChartType, string> = {
     [DASHBOARD_RECOVERY_NOW_CHART_TYPE]: 'Recovery left now vs elapsed recovery.',
@@ -243,6 +245,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
     [DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE]: '7-day projected freshness from current CTL/ATL decay.',
     [DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE]: 'Weekly easy/moderate/hard intensity split (Power or HR fallback).',
     [DASHBOARD_EFFICIENCY_TREND_CHART_TYPE]: 'Weekly duration-weighted power/heart-rate efficiency trend.',
+    [DASHBOARD_SLEEP_TREND_CHART_TYPE]: 'Sleep duration and stages by connected source.',
   };
   public readonly kpiChartIconByType: Record<DashboardKpiChartType, string> = {
     [DASHBOARD_ACWR_KPI_CHART_TYPE]: 'monitoring',
@@ -836,6 +839,20 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
         dataValueType: ChartDataValueTypes.Total,
         dataCategoryType: ChartDataCategoryTypes.DateType,
         dataTimeInterval: TimeIntervals.Weekly,
+      };
+    }
+
+    if (chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE) {
+      return {
+        name: 'Sleep',
+        type: TileTypes.Chart,
+        order,
+        size,
+        chartType: DASHBOARD_SLEEP_TREND_CHART_TYPE as unknown as ChartTypes,
+        dataType: 'SleepDuration',
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        dataTimeInterval: TimeIntervals.Daily,
       };
     }
 

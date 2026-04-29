@@ -19,7 +19,7 @@ import {
 } from '../../../helpers/echarts-host-controller';
 import { buildOfficialEChartsThemeTokens, ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
 
-export type AdminQueueStatsView = 'all' | 'workout' | 'activity-sync' | 'reparse' | 'derived';
+export type AdminQueueStatsView = 'all' | 'workout' | 'activity-sync' | 'sleep-sync' | 'reparse' | 'derived';
 
 @Component({
     selector: 'app-admin-queue-stats',
@@ -219,6 +219,10 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
             return this.stats?.activitySync?.advanced?.retryHistogram || null;
         }
 
+        if (this.queueView === 'sleep-sync') {
+            return this.stats?.sleepSync?.advanced?.retryHistogram || null;
+        }
+
         return this.stats?.advanced?.retryHistogram || null;
     }
 
@@ -264,12 +268,21 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
         return this.stats?.derivedMetrics?.recentFailures || [];
     }
 
+    getSleepDisabledProvidersLabel(): string {
+        const providers = this.stats?.sleepSync?.disabledProviders || [];
+        return providers.length ? providers.join(', ') : 'None';
+    }
+
     get showWorkoutSection(): boolean {
         return this.queueView === 'all' || this.queueView === 'workout';
     }
 
     get showActivitySyncSection(): boolean {
         return this.queueView === 'all' || this.queueView === 'activity-sync';
+    }
+
+    get showSleepSyncSection(): boolean {
+        return this.queueView === 'all' || this.queueView === 'sleep-sync';
     }
 
     get showReparseSection(): boolean {

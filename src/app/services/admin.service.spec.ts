@@ -58,6 +58,7 @@ describe('AdminService', () => {
                 queues: {
                     workout: { queueId: 'processWorkoutTask', pending: 10 },
                     activitySync: { queueId: 'processActivitySyncTask', pending: 0 },
+                    sleepSync: { queueId: 'processSleepSyncTask', pending: 0 },
                     sportsLibReparse: { queueId: 'processSportsLibReparseTask', pending: 2 },
                     derivedMetrics: { queueId: 'processDerivedMetricsTask', pending: 6 },
                 },

@@ -8,6 +8,7 @@ import * as requestPromise from '../request-helper';
 import { executeWithTokenRetry } from './retry-helper';
 import { hasProAccess, PRO_REQUIRED_MESSAGE } from '../utils';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
+import { toSuuntoAuthorizationHeader } from './authorization-header';
 
 
 
@@ -54,15 +55,6 @@ function getSuuntoErrorMessage(error: unknown): string | undefined {
   }
 
   return undefined;
-}
-
-function toSuuntoAuthorizationHeader(accessToken: string): string {
-  const trimmed = `${accessToken || ''}`.trim();
-  if (trimmed.length === 0) {
-    return '';
-  }
-
-  return /^Bearer\s+/i.test(trimmed) ? trimmed : `Bearer ${trimmed}`;
 }
 
 function isLikelyPermanentSuunto500(error: unknown): boolean {

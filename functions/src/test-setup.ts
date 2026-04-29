@@ -11,6 +11,7 @@ process.env.FIREBASE_CONFIG = JSON.stringify({
 process.env.SUUNTOAPP_CLIENT_ID = 'test-suunto-client-id';
 process.env.SUUNTOAPP_CLIENT_SECRET = 'test-suunto-client-secret';
 process.env.SUUNTOAPP_SUBSCRIPTION_KEY = 'test-suunto-subscription-key';
+process.env.SUUNTOAPP_NOTIFICATION_SECRET = 'test-suunto-notification-secret';
 process.env.COROSAPI_CLIENT_ID = 'test-coros-client-id';
 process.env.COROSAPI_CLIENT_SECRET = 'test-coros-client-secret';
 process.env.GARMINHEALTHAPI_CONSUMER_KEY = 'test-garmin-consumer-key';

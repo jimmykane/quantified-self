@@ -59,6 +59,7 @@ describe('AdminDashboardComponent', () => {
 
         expect(buttons.join(' ')).toContain('Workout Queue');
         expect(buttons.join(' ')).toContain('Activity Sync Queue');
+        expect(buttons.join(' ')).toContain('Sleep Sync Queue');
         expect(buttons.join(' ')).toContain('Reparse Queue');
         expect(buttons.join(' ')).toContain('Derived Metrics Queue');
     });

@@ -28,6 +28,7 @@ import {
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+  DASHBOARD_SLEEP_TREND_CHART_TYPE,
 } from '../../../helpers/dashboard-special-chart-types';
 import { DASHBOARD_MANAGER_PRESET_IDS } from '../../../helpers/dashboard-manager-presets.helper';
 import { AppUserService } from '../../../services/app.user.service';
@@ -113,6 +114,8 @@ describe('DashboardManagerDialogComponent', () => {
       DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
       DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
     ]);
+    expect(component.curatedChartDefinitions.map(definition => definition.chartType)).not.toContain(DASHBOARD_SLEEP_TREND_CHART_TYPE);
+    expect(component.presetDefinitions.map(definition => definition.id)).not.toContain(DASHBOARD_MANAGER_PRESET_IDS.CURATED_SLEEP);
     expect(component.kpiChartDefinitions.map(definition => definition.chartType)).toEqual([
       DASHBOARD_ACWR_KPI_CHART_TYPE,
       DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,

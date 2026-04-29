@@ -30,6 +30,7 @@ import {
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+  DASHBOARD_SLEEP_TREND_CHART_TYPE,
   type DashboardChartCategory,
   type DashboardCuratedChartType,
   type DashboardKpiGroup,
@@ -43,6 +44,7 @@ export const DASHBOARD_MANAGER_PRESET_IDS = {
   CURATED_FRESHNESS_FORECAST: 'curated-freshness-forecast',
   CURATED_INTENSITY_DISTRIBUTION: 'curated-intensity-distribution',
   CURATED_EFFICIENCY_TREND: 'curated-efficiency-trend',
+  CURATED_SLEEP: 'curated-sleep',
   KPI_ACWR: 'kpi-acwr',
   KPI_RAMP_RATE: 'kpi-ramp-rate',
   KPI_MONOTONY_STRAIN: 'kpi-monotony-strain',
@@ -395,6 +397,21 @@ export function buildDashboardManagerPresetTile(
         dataTimeInterval: TimeIntervals.Daily,
       };
       return formTile;
+    }
+
+    if (definition.curatedChartType === DASHBOARD_SLEEP_TREND_CHART_TYPE) {
+      const sleepTile: TileChartSettingsInterface = {
+        name: definition.tileName,
+        type: TileTypes.Chart,
+        order: input.order,
+        size: input.size,
+        chartType: DASHBOARD_SLEEP_TREND_CHART_TYPE as unknown as ChartTypes,
+        dataType: 'SleepDuration',
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        dataTimeInterval: TimeIntervals.Daily,
+      };
+      return sleepTile;
     }
 
     const curatedTile: TileChartSettingsInterface = {

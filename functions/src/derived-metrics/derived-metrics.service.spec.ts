@@ -646,6 +646,7 @@ describe('writeDerivedMetricSnapshotsReady', () => {
                 DERIVED_METRIC_KINDS.MonotonyStrain,
                 DERIVED_METRIC_KINDS.FormNow,
                 DERIVED_METRIC_KINDS.FormPlus7d,
+                DERIVED_METRIC_KINDS.FreshnessForecast,
             ],
             {
                 formDocs: formDocs as any,
@@ -677,6 +678,12 @@ describe('writeDerivedMetricSnapshotsReady', () => {
         const formPlus7dPayload = findPersistedPayload(DERIVED_METRIC_KINDS.FormPlus7d).payload as Record<string, unknown>;
         expect(formPlus7dPayload.latestDayMs).toBe(Date.UTC(2026, 0, 10));
         expect(formPlus7dPayload.projectedDayMs).toBe(Date.UTC(2026, 0, 17));
+
+        const forecastPayload = findPersistedPayload(DERIVED_METRIC_KINDS.FreshnessForecast).payload as Record<string, unknown>;
+        const forecastPoints = forecastPayload.points as Array<Record<string, unknown>>;
+        expect(forecastPoints[0]?.dayMs).toBe(Date.UTC(2026, 0, 10));
+        expect(forecastPoints[0]?.isForecast).toBe(false);
+        expect(forecastPoints[0]?.trainingStressScore).toBe(0);
     });
 
     it('handles efficiency delta edge cases with insufficient baseline history', async () => {

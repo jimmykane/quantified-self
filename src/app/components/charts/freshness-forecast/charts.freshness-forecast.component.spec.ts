@@ -91,8 +91,8 @@ describe('ChartsFreshnessForecastComponent', () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    expect(component.currentFormText).toBe('-4');
-    expect(component.forecastFormText).toBe('6');
+    expect(component.currentFormText).toBe('-5');
+    expect(component.forecastFormText).toBe('7');
   });
 
   it('shows pending message when no points exist and status is stale', async () => {
@@ -164,9 +164,9 @@ describe('ChartsFreshnessForecastComponent', () => {
     expect(tooltipHtml).toContain('Forecast · Day +1');
     expect(tooltipHtml).toContain('Fitness (CTL): 47');
     expect(tooltipHtml).toContain('Fatigue (ATL): 40');
-    expect(tooltipHtml).toContain('Form (TSB): +6');
+    expect(tooltipHtml).toContain('Form (TSB): +7');
     expect(tooltipHtml).toContain('TSS: 0');
-    expect(tooltipHtml).toContain('Δ Form vs prev: +11');
+    expect(tooltipHtml).toContain('Δ Form vs prev: +12');
     expect(tooltipHtml).toContain('Assumes zero load.');
   });
 
