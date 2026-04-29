@@ -3,11 +3,7 @@ import { Firestore, doc, docData } from 'app/firebase/firestore';
 import { combineLatest, from, Observable, of } from 'rxjs';
 import { catchError, finalize, map, tap } from 'rxjs/operators';
 import type { DashboardFormPoint } from '../helpers/dashboard-form.helper';
-import {
-  buildDashboardFormPointsFromDailyLoads,
-  extendDashboardFormPointsWithZeroLoadUntil,
-  resolveDashboardFormLatestPoint,
-} from '../helpers/dashboard-form.helper';
+import { buildDashboardFormPointsFromDailyLoads } from '../helpers/dashboard-form.helper';
 import type {
   DashboardAcwrContext,
   DashboardEasyPercentContext,
@@ -42,6 +38,7 @@ import {
   DERIVED_METRIC_KINDS,
   DERIVED_METRIC_SCHEMA_VERSION,
   DERIVED_METRICS_COLLECTION_ID,
+  PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS,
   getDerivedMetricDocId,
   type DerivedMetricKind,
   type DerivedMetricSnapshotStatus,
@@ -124,11 +121,6 @@ const DASHBOARD_DERIVED_METRIC_KINDS = Object.values(DERIVED_METRIC_KINDS) as De
   providedIn: 'root',
 })
 export class DashboardDerivedMetricsService {
-  private static readonly DAY_MS = 24 * 60 * 60 * 1000;
-  private static readonly CTL_TIME_CONSTANT_DAYS = 42;
-  private static readonly ATL_TIME_CONSTANT_DAYS = 7;
-  private static readonly KPI_TREND_WEEKS = 8;
-  private static readonly FORM_FORECAST_DAYS = 7;
   private static readonly ENSURE_COOLDOWN_MS = 30 * 1000;
   private static readonly HEALTHY_PROBE_COOLDOWN_MS = 5 * 60 * 1000;
   private static readonly ENSURE_FAILURE_NOTIFICATION_THRESHOLD = 2;
@@ -268,10 +260,9 @@ export class DashboardDerivedMetricsService {
         >;
         snapshots.forEach((snapshot, index) => {
           const descriptor = this.metricDescriptors[index];
-          mutableState[descriptor.statusKey] = this.resolveSnapshotStatus(snapshot);
+          mutableState[descriptor.statusKey] = this.resolveSnapshotStatus(descriptor.kind, snapshot);
           mutableState[descriptor.contextKey] = descriptor.resolveContext(snapshot);
         });
-        this.applyCanonicalFormDerivedContexts(nextState);
         return nextState;
       }),
     );
@@ -355,7 +346,10 @@ export class DashboardDerivedMetricsService {
     );
   }
 
-  private resolveSnapshotStatus(snapshot: Record<string, unknown> | undefined): DashboardDerivedMetricStatus {
+  private resolveSnapshotStatus(
+    metricKind: DerivedMetricKind,
+    snapshot: Record<string, unknown> | undefined,
+  ): DashboardDerivedMetricStatus {
     const status = `${snapshot?.status || ''}` as DashboardDerivedMetricStatus;
     if (
       status !== 'ready'
@@ -383,6 +377,17 @@ export class DashboardDerivedMetricsService {
 
     if (this.isStuckPendingStatus(status, updatedAtMs)) {
       return 'failed';
+    }
+
+    if (
+      status === 'ready'
+      && this.isProjectionSensitiveMetricKind(metricKind)
+    ) {
+      const asOfDayMs = this.resolveSnapshotAsOfDayMs(snapshot);
+      const todayUtcDayMs = this.resolveUtcDayStartMs(Date.now());
+      if (!Number.isFinite(asOfDayMs) || (asOfDayMs as number) < todayUtcDayMs) {
+        return 'stale';
+      }
     }
 
     return status;
@@ -413,6 +418,23 @@ export class DashboardDerivedMetricsService {
     return payload;
   }
 
+  private resolveSnapshotAsOfDayMs(snapshot: SnapshotRecord): number | null {
+    const payload = snapshot?.payload;
+    if (!payload || typeof payload !== 'object') {
+      return null;
+    }
+    return this.toFiniteNumber((payload as Record<string, unknown>).asOfDayMs);
+  }
+
+  private resolveUtcDayStartMs(timeMs: number): number {
+    const date = new Date(timeMs);
+    return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  }
+
+  private isProjectionSensitiveMetricKind(metricKind: DerivedMetricKind): boolean {
+    return PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS.includes(metricKind);
+  }
+
   private resolveFormPoints(snapshot: Record<string, unknown> | undefined): DashboardFormPoint[] | null {
     const payload = snapshot?.payload as { dailyLoads?: unknown } | undefined;
     const dailyLoads = Array.isArray(payload?.dailyLoads)
@@ -422,148 +444,6 @@ export class DashboardDerivedMetricsService {
       return null;
     }
     return buildDashboardFormPointsFromDailyLoads(dailyLoads);
-  }
-
-  private applyCanonicalFormDerivedContexts(state: DashboardDerivedMetricsState): void {
-    const formPoints = Array.isArray(state.formPoints) ? state.formPoints : [];
-    if (!formPoints.length) {
-      return;
-    }
-
-    const pointsUntilToday = extendDashboardFormPointsWithZeroLoadUntil(formPoints, Date.now());
-    if (!pointsUntilToday.length) {
-      return;
-    }
-
-    state.formNow = this.buildFormNowContextFromPoints(pointsUntilToday);
-    state.formPlus7d = this.buildFormPlus7dContextFromPoints(pointsUntilToday);
-    state.freshnessForecast = this.buildFreshnessForecastContextFromPoints(pointsUntilToday);
-  }
-
-  private buildFormNowContextFromPoints(points: readonly DashboardFormPoint[]): DashboardFormNowContext | null {
-    const latestPoint = resolveDashboardFormLatestPoint(points);
-    if (!latestPoint) {
-      return null;
-    }
-    return {
-      latestDayMs: latestPoint.time,
-      value: this.toRoundedNumber(latestPoint.formSameDay, 4),
-      trend8Weeks: this.buildWeeklyTrendFromFormPoints(points, (point) => point.formSameDay),
-    };
-  }
-
-  private buildFormPlus7dContextFromPoints(points: readonly DashboardFormPoint[]): DashboardFormPlus7dContext | null {
-    const latestPoint = resolveDashboardFormLatestPoint(points);
-    if (!latestPoint) {
-      return null;
-    }
-    return {
-      latestDayMs: latestPoint.time,
-      projectedDayMs: latestPoint.time + (7 * DashboardDerivedMetricsService.DAY_MS),
-      value: this.toRoundedNumber(
-        this.projectSameDayFormWithZeroLoad(latestPoint.ctl, latestPoint.atl, 7),
-        4,
-      ),
-      trend8Weeks: this.buildWeeklyTrendFromFormPoints(points, (point) => (
-        this.projectSameDayFormWithZeroLoad(point.ctl, point.atl, 7)
-      )),
-    };
-  }
-
-  private buildFreshnessForecastContextFromPoints(points: readonly DashboardFormPoint[]): DashboardFreshnessForecastContext | null {
-    const latestPoint = resolveDashboardFormLatestPoint(points);
-    if (!latestPoint) {
-      return null;
-    }
-
-    const forecastPoints: DashboardFreshnessForecastContext['points'] = [
-      {
-        dayMs: latestPoint.time,
-        trainingStressScore: this.toRoundedNumber(latestPoint.trainingStressScore, 4) || 0,
-        ctl: this.toRoundedNumber(latestPoint.ctl, 4),
-        atl: this.toRoundedNumber(latestPoint.atl, 4),
-        formSameDay: this.toRoundedNumber(latestPoint.formSameDay, 4),
-        formPriorDay: latestPoint.formPriorDay === null
-          ? null
-          : this.toRoundedNumber(latestPoint.formPriorDay, 4),
-        isForecast: false,
-      },
-    ];
-
-    let previousCtl = latestPoint.ctl;
-    let previousAtl = latestPoint.atl;
-    for (let dayOffset = 1; dayOffset <= DashboardDerivedMetricsService.FORM_FORECAST_DAYS; dayOffset += 1) {
-      const load = 0;
-      const ctl = previousCtl + ((load - previousCtl) / DashboardDerivedMetricsService.CTL_TIME_CONSTANT_DAYS);
-      const atl = previousAtl + ((load - previousAtl) / DashboardDerivedMetricsService.ATL_TIME_CONSTANT_DAYS);
-      forecastPoints.push({
-        dayMs: latestPoint.time + (dayOffset * DashboardDerivedMetricsService.DAY_MS),
-        trainingStressScore: 0,
-        ctl: this.toRoundedNumber(ctl, 4),
-        atl: this.toRoundedNumber(atl, 4),
-        formSameDay: this.toRoundedNumber(ctl - atl, 4),
-        formPriorDay: this.toRoundedNumber(previousCtl - previousAtl, 4),
-        isForecast: true,
-      });
-      previousCtl = ctl;
-      previousAtl = atl;
-    }
-
-    return {
-      generatedAtMs: Date.now(),
-      points: forecastPoints,
-    };
-  }
-
-  private buildWeeklyTrendFromFormPoints(
-    points: readonly DashboardFormPoint[],
-    valueSelector: (point: DashboardFormPoint) => number | null,
-  ): DashboardFormNowContext['trend8Weeks'] {
-    const trendByWeek = new Map<number, { time: number; value: number | null }>();
-    points.forEach((point) => {
-      const weekStartMs = this.resolveUtcWeekStartMs(point.time);
-      const rawValue = valueSelector(point);
-      trendByWeek.set(weekStartMs, {
-        time: weekStartMs,
-        value: Number.isFinite(rawValue as number)
-          ? this.toRoundedNumber(rawValue as number, 4)
-          : null,
-      });
-    });
-    return [...trendByWeek.values()]
-      .sort((left, right) => left.time - right.time)
-      .slice(-DashboardDerivedMetricsService.KPI_TREND_WEEKS);
-  }
-
-  private resolveUtcWeekStartMs(timeMs: number): number {
-    const date = new Date(timeMs);
-    const dayIndexMondayFirst = (date.getUTCDay() + 6) % 7;
-    return Date.UTC(
-      date.getUTCFullYear(),
-      date.getUTCMonth(),
-      date.getUTCDate() - dayIndexMondayFirst,
-    );
-  }
-
-  private projectSameDayFormWithZeroLoad(
-    ctl: number,
-    atl: number,
-    projectionDays: number,
-  ): number {
-    if (!Number.isFinite(ctl) || !Number.isFinite(atl) || projectionDays <= 0) {
-      return Number.isFinite(ctl) && Number.isFinite(atl) ? (ctl - atl) : 0;
-    }
-    let previousCtl = ctl;
-    let previousAtl = atl;
-    let projectedSameDayForm = previousCtl - previousAtl;
-    for (let dayOffset = 1; dayOffset <= projectionDays; dayOffset += 1) {
-      const nextCtl = previousCtl + ((0 - previousCtl) / DashboardDerivedMetricsService.CTL_TIME_CONSTANT_DAYS);
-      const nextAtl = previousAtl + ((0 - previousAtl) / DashboardDerivedMetricsService.ATL_TIME_CONSTANT_DAYS);
-      projectedSameDayForm = nextCtl - nextAtl;
-      previousCtl = nextCtl;
-      previousAtl = nextAtl;
-    }
-    return projectedSameDayForm;
   }
 
   private resolveRecoveryNowContext(snapshot: Record<string, unknown> | undefined): DashboardRecoveryNowContext | null {
@@ -621,14 +501,6 @@ export class DashboardDerivedMetricsService {
     }
     const numericValue = typeof value === 'number' ? value : Number(value);
     return Number.isFinite(numericValue) ? numericValue : null;
-  }
-
-  private toRoundedNumber(value: number, precision = 4): number {
-    if (!Number.isFinite(value)) {
-      return 0;
-    }
-    const factor = Math.pow(10, precision);
-    return Math.round(value * factor) / factor;
   }
 
   private toFinitePositiveNumber(value: unknown): number | null {

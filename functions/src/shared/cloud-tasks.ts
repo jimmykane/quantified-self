@@ -257,6 +257,48 @@ export async function enqueueDerivedMetricsTask(
     });
 }
 
+/**
+ * Enqueue a debounced derived-metrics ingress task for one uid + time bucket.
+ * Task name is deterministic to guarantee at most one ingress task per bucket.
+ */
+export async function enqueueDerivedMetricsIngressTask(
+    uid: string,
+    scheduleDelaySeconds?: number,
+    nowMs?: number,
+): Promise<boolean> {
+    const client = getCloudTasksClient();
+    const {
+        projectId,
+        location,
+        derivedMetricsQueue,
+        derivedMetricsIngressBucketSeconds,
+        serviceAccountEmail,
+    } = config.cloudtasks;
+    if (!projectId) {
+        throw new Error('Project ID is not defined in config');
+    }
+
+    const parent = client.queuePath(projectId, location, derivedMetricsQueue);
+    const url = `https://${location}-${projectId}.cloudfunctions.net/processDerivedMetricsIngressTask`;
+    const safeUid = `${uid}`.replace(/[^a-zA-Z0-9-_]/g, '-');
+    const bucketSeconds = Math.max(1, Math.floor(Number(derivedMetricsIngressBucketSeconds) || 30));
+    const currentEpochSeconds = Math.max(0, Math.floor(((Number.isFinite(nowMs) ? nowMs : Date.now()) as number) / 1000));
+    const bucketStartEpochSec = currentEpochSeconds - (currentEpochSeconds % bucketSeconds);
+    const taskName = `${parent}/tasks/derived-metrics-ingress-${safeUid}-${bucketStartEpochSec}`;
+    const payload = { data: { uid, bucketStartEpochSec } };
+
+    return enqueueTaskWithRetry({
+        parent,
+        taskName,
+        payload,
+        serviceAccountEmail,
+        url,
+        scheduleDelaySeconds,
+        alreadyExistsLogMessage: `[DerivedMetricsIngressDispatcher] Task already exists for ${uid} bucket ${bucketStartEpochSec}, skipping`,
+        failedLogPrefix: `[DerivedMetricsIngressDispatcher] Failed to enqueue derived metrics ingress task for ${uid} bucket ${bucketStartEpochSec}:`,
+    });
+}
+
 interface EnqueueTaskParams {
     parent: string;
     taskName: string;

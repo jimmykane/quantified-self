@@ -2,9 +2,12 @@ import { onTaskDispatched } from 'firebase-functions/v2/tasks';
 import * as logger from 'firebase-functions/logger';
 import { CLOUD_TASK_RETRY_CONFIG } from '../shared/queue-config';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
+import { DERIVED_METRIC_SCHEMA_VERSION } from '../../../shared/derived-metrics';
 import {
+    areOnlyProjectionSensitiveMetricKinds,
     completeDerivedMetricsProcessing,
     failDerivedMetricsProcessing,
+    fetchDerivedFormSnapshotSeed,
     fetchDerivedMetricsEventDocs,
     fetchRecoveryLookbackEventDocs,
     getDerivedRecoveryLookbackWindowSeconds,
@@ -60,8 +63,30 @@ export const processDerivedMetricsTask = onTaskDispatched({
     try {
         await markDerivedMetricSnapshotsBuilding(uid, dirtyMetricKinds);
         const sourceRequirements = resolveDerivedMetricSourceRequirements(dirtyMetricKinds);
+        const projectionOnlyKinds = areOnlyProjectionSensitiveMetricKinds(dirtyMetricKinds);
+        let projectionFormSnapshotSeed: Awaited<ReturnType<typeof fetchDerivedFormSnapshotSeed>> = null;
+        const canUseProjectionSeed = sourceRequirements.needsFormDocs && projectionOnlyKinds;
+        if (canUseProjectionSeed) {
+            const candidateProjectionSeed = await fetchDerivedFormSnapshotSeed(uid);
+            const hasCompatibleSchema = Number.isFinite(candidateProjectionSeed?.schemaVersion)
+                && (candidateProjectionSeed?.schemaVersion as number) >= DERIVED_METRIC_SCHEMA_VERSION;
+            const hasCompatibleBuildMutationVersion = Number.isFinite(candidateProjectionSeed?.builtFromEventMutationVersion)
+                && (candidateProjectionSeed?.builtFromEventMutationVersion as number) >= startResult.eventMutationVersion;
+            if (
+                candidateProjectionSeed
+                && candidateProjectionSeed.status === 'ready'
+                && hasCompatibleSchema
+                && hasCompatibleBuildMutationVersion
+            ) {
+                projectionFormSnapshotSeed = candidateProjectionSeed;
+            }
+        }
         const formDocs = sourceRequirements.needsFormDocs
-            ? await fetchDerivedMetricsEventDocs(uid)
+            ? (
+                projectionFormSnapshotSeed
+                    ? []
+                    : await fetchDerivedMetricsEventDocs(uid)
+            )
             : [];
         const recoveryNowDocs = sourceRequirements.needsRecoveryNowDocs
             // Recovery-now must always use bounded lookback docs, even when Form is processed in the same task.
@@ -74,6 +99,9 @@ export const processDerivedMetricsTask = onTaskDispatched({
             recoveryNowDocs,
         }, {
             builtFromEventMutationVersion: startResult.eventMutationVersion,
+            formDailyLoads: projectionFormSnapshotSeed?.dailyLoads || [],
+            formSourceEventCount: projectionFormSnapshotSeed?.sourceEventCount ?? null,
+            formSourceDocCount: projectionFormSnapshotSeed?.sourceDocCount ?? null,
         });
         const completion = await completeDerivedMetricsProcessing(uid, Math.floor(generation));
 
@@ -84,6 +112,8 @@ export const processDerivedMetricsTask = onTaskDispatched({
             builtFromEventMutationVersion: startResult.eventMutationVersion,
             formEventDocsScanned: formDocs.length,
             recoveryEventDocsScanned: recoveryNowDocs.length,
+            usedProjectionFormSnapshotSeed: !!projectionFormSnapshotSeed,
+            projectionFormSnapshotDailyLoadDays: projectionFormSnapshotSeed?.dailyLoads?.length || 0,
             recoveryLookbackWindowSeconds: getDerivedRecoveryLookbackWindowSeconds(),
             requeued: completion.requeued,
             nextGeneration: completion.nextGeneration,

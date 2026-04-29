@@ -171,7 +171,7 @@ describe('DashboardDerivedMetricsService', () => {
     });
   });
 
-  it('keeps Form KPI and Freshness "Now" aligned with current-day Form projection from form daily-loads', async () => {
+  it('marks projection-sensitive snapshots stale when asOfDayMs is behind today and keeps backend payload values', async () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date(Date.UTC(2026, 3, 28, 12, 0, 0)));
@@ -199,6 +199,7 @@ describe('DashboardDerivedMetricsService', () => {
             status: 'ready',
             schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
             payload: {
+              asOfDayMs: Date.UTC(2026, 3, 27),
               latestDayMs: Date.UTC(2026, 3, 27),
               value: -999,
               trend8Weeks: [],
@@ -210,6 +211,7 @@ describe('DashboardDerivedMetricsService', () => {
             status: 'ready',
             schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
             payload: {
+              asOfDayMs: Date.UTC(2026, 3, 27),
               latestDayMs: Date.UTC(2026, 3, 27),
               projectedDayMs: Date.UTC(2026, 4, 4),
               value: -999,
@@ -222,6 +224,7 @@ describe('DashboardDerivedMetricsService', () => {
             status: 'ready',
             schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
             payload: {
+              asOfDayMs: Date.UTC(2026, 3, 27),
               generatedAtMs: Date.UTC(2026, 3, 27, 11, 0, 0),
               points: [
                 {
@@ -245,13 +248,13 @@ describe('DashboardDerivedMetricsService', () => {
       expect(state.formPoints?.length).toBeGreaterThan(0);
       expect(state.formNow).not.toBeNull();
       expect(state.freshnessForecast).not.toBeNull();
-
-      const freshnessNow = state.freshnessForecast?.points.find(point => point.isForecast === false) || null;
-      expect(state.formNow?.latestDayMs).toBe(Date.UTC(2026, 3, 28));
-      expect(freshnessNow?.dayMs).toBe(Date.UTC(2026, 3, 28));
-      expect(state.formNow?.value).toBeCloseTo(freshnessNow?.formSameDay as number, 4);
-      expect(state.formNow?.value).not.toBe(-999);
-      expect(freshnessNow?.formSameDay).not.toBe(-888);
+      expect(state.formNowStatus).toBe('stale');
+      expect(state.formPlus7dStatus).toBe('stale');
+      expect(state.freshnessForecastStatus).toBe('stale');
+      expect(state.formNow?.latestDayMs).toBe(Date.UTC(2026, 3, 27));
+      expect(state.formNow?.value).toBe(-999);
+      expect(state.freshnessForecast?.points[0]?.dayMs).toBe(Date.UTC(2026, 3, 26));
+      expect(state.freshnessForecast?.points[0]?.formSameDay).toBe(-888);
     } finally {
       vi.useRealTimers();
     }

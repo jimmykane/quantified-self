@@ -32,9 +32,18 @@ export const DEFAULT_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
   DERIVED_METRIC_KINDS.EfficiencyTrend,
 ];
 
+export const PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
+  DERIVED_METRIC_KINDS.Acwr,
+  DERIVED_METRIC_KINDS.RampRate,
+  DERIVED_METRIC_KINDS.MonotonyStrain,
+  DERIVED_METRIC_KINDS.FormNow,
+  DERIVED_METRIC_KINDS.FormPlus7d,
+  DERIVED_METRIC_KINDS.FreshnessForecast,
+];
+
 export const DERIVED_METRICS_COLLECTION_ID = 'derivedMetrics';
 export const DERIVED_METRICS_COORDINATOR_DOC_ID = 'coordinator';
-export const DERIVED_METRIC_SCHEMA_VERSION = 6;
+export const DERIVED_METRIC_SCHEMA_VERSION = 7;
 export const DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS = 14 * 24 * 60 * 60;
 export const DERIVED_RECOVERY_QUERY_DURATION_BUFFER_SECONDS = 2 * 24 * 60 * 60;
 export const DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS =
@@ -122,6 +131,7 @@ export interface DerivedAcwrTrendPoint {
 
 export interface DerivedAcwrMetricPayload {
   dayBoundary: 'UTC';
+  asOfDayMs: number | null;
   latestDayMs: number | null;
   acuteLoad7: number;
   chronicLoad28: number;
@@ -136,6 +146,7 @@ export interface DerivedRampRateTrendPoint {
 
 export interface DerivedRampRateMetricPayload {
   dayBoundary: 'UTC';
+  asOfDayMs: number | null;
   latestDayMs: number | null;
   ctlToday: number | null;
   ctl7DaysAgo: number | null;
@@ -150,6 +161,7 @@ export interface DerivedMonotonyStrainTrendPoint {
 
 export interface DerivedMonotonyStrainMetricPayload {
   dayBoundary: 'UTC';
+  asOfDayMs: number | null;
   latestDayMs: number | null;
   weeklyLoad7: number;
   monotony: number | null;
@@ -164,6 +176,7 @@ export interface DerivedKpiTrendPoint {
 
 export interface DerivedFormNowMetricPayload {
   dayBoundary: 'UTC';
+  asOfDayMs: number | null;
   latestDayMs: number | null;
   value: number | null;
   trend8Weeks: DerivedKpiTrendPoint[];
@@ -171,6 +184,7 @@ export interface DerivedFormNowMetricPayload {
 
 export interface DerivedFormPlus7dMetricPayload {
   dayBoundary: 'UTC';
+  asOfDayMs: number | null;
   latestDayMs: number | null;
   projectedDayMs: number | null;
   value: number | null;
@@ -214,6 +228,7 @@ export interface DerivedFreshnessForecastPoint {
 
 export interface DerivedFreshnessForecastMetricPayload {
   dayBoundary: 'UTC';
+  asOfDayMs: number | null;
   generatedAtMs: number;
   points: DerivedFreshnessForecastPoint[];
 }

@@ -28,6 +28,7 @@ interface CloudTasksConfig {
     sleepSyncQueue: string;
     sportsLibReparseQueue: string;
     derivedMetricsQueue: string;
+    derivedMetricsIngressBucketSeconds: number;
     serviceAccountEmail: string;
 }
 
@@ -81,6 +82,7 @@ export const config: AppConfig = {
             sleepSyncQueue: 'processSleepSyncTask',
             sportsLibReparseQueue: 'processSportsLibReparseTask',
             derivedMetricsQueue: 'processDerivedMetricsTask',
+            derivedMetricsIngressBucketSeconds: 30,
             serviceAccountEmail: `${process.env.GCLOUD_PROJECT || admin.instanceId().app.options.projectId}@appspot.gserviceaccount.com`,
         };
     },

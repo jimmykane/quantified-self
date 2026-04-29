@@ -1,7 +1,7 @@
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import * as logger from 'firebase-functions/logger';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
-import { getDefaultDerivedMetricKindsForDashboard, markDerivedMetricsDirtyAndMaybeQueue } from './derived-metrics.service';
+import { enqueueDerivedMetricsIngressTask } from '../shared/cloud-tasks';
 
 export const onDashboardDerivedMetricsEventWrite = onDocumentWritten({
     region: FUNCTIONS_MANIFEST.ensureDerivedMetrics.region,
@@ -21,22 +21,15 @@ export const onDashboardDerivedMetricsEventWrite = onDocumentWritten({
         return;
     }
 
-    const metricKinds = getDefaultDerivedMetricKindsForDashboard();
-    // Event writes are the source-of-truth mutation boundary for derived metrics.
-    // Incrementing eventMutationVersion here guarantees freshness checks requeue only
-    // when a newer event mutation exists than the latest completed snapshot build.
-    const queueResult = await markDerivedMetricsDirtyAndMaybeQueue(uid, metricKinds, {
-        incrementEventMutationVersion: true,
-    });
+    // Debounce mutation ingress by uid + short time bucket.
+    // Deterministic Cloud Task naming ensures one pending ingress task per bucket.
+    const queued = await enqueueDerivedMetricsIngressTask(uid, 1);
 
-    logger.info('[derived-metrics] Event write marked dashboard derived metrics dirty', {
+    logger.info('[derived-metrics] Event write enqueued derived metrics ingress', {
         uid,
         eventId: event.params?.eventId || null,
         beforeExists,
         afterExists,
-        queued: queueResult.queued,
-        generation: queueResult.generation,
-        accepted: queueResult.accepted,
-        metricKinds: queueResult.metricKinds,
+        queued,
     });
 });
