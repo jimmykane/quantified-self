@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const hoisted = vi.hoisted(() => ({
     onDocumentWritten: vi.fn((_opts: unknown, handler: any) => handler),
     enqueueDerivedMetricsIngressTask: vi.fn(),
+    isDerivedMetricsUidAllowed: vi.fn(),
 }));
 
 vi.mock('firebase-functions/v2/firestore', () => ({
@@ -11,6 +12,9 @@ vi.mock('firebase-functions/v2/firestore', () => ({
 
 vi.mock('../shared/cloud-tasks', () => ({
     enqueueDerivedMetricsIngressTask: hoisted.enqueueDerivedMetricsIngressTask,
+}));
+vi.mock('./derived-metrics-uid-gate', () => ({
+    isDerivedMetricsUidAllowed: hoisted.isDerivedMetricsUidAllowed,
 }));
 
 vi.mock('firebase-functions/logger', () => ({
@@ -33,6 +37,8 @@ describe('onDashboardDerivedMetricsEventWrite', () => {
     beforeEach(() => {
         hoisted.enqueueDerivedMetricsIngressTask.mockClear();
         hoisted.enqueueDerivedMetricsIngressTask.mockResolvedValue(true);
+        hoisted.isDerivedMetricsUidAllowed.mockReset();
+        hoisted.isDerivedMetricsUidAllowed.mockReturnValue(true);
     });
 
     it('configures retry-safe Firestore trigger options', () => {
@@ -60,6 +66,20 @@ describe('onDashboardDerivedMetricsEventWrite', () => {
     it('skips when uid is missing', async () => {
         await (onDashboardDerivedMetricsEventWrite as any)({
             params: { uid: '', eventId: 'event-1' },
+            data: {
+                before: { exists: true },
+                after: { exists: true },
+            },
+        });
+
+        expect(hoisted.enqueueDerivedMetricsIngressTask).not.toHaveBeenCalled();
+    });
+
+    it('skips when uid is not allowlisted', async () => {
+        hoisted.isDerivedMetricsUidAllowed.mockReturnValue(false);
+
+        await (onDashboardDerivedMetricsEventWrite as any)({
+            params: { uid: 'user-1', eventId: 'event-1' },
             data: {
                 before: { exists: true },
                 after: { exists: true },

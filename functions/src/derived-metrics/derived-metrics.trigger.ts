@@ -1,6 +1,7 @@
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import * as logger from 'firebase-functions/logger';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
+import { isDerivedMetricsUidAllowed } from './derived-metrics-uid-gate';
 import { enqueueDerivedMetricsIngressTask } from '../shared/cloud-tasks';
 
 export const onDashboardDerivedMetricsEventWrite = onDocumentWritten({
@@ -12,6 +13,9 @@ export const onDashboardDerivedMetricsEventWrite = onDocumentWritten({
 }, async (event) => {
     const uid = `${event.params?.uid || ''}`.trim();
     if (!uid) {
+        return;
+    }
+    if (!isDerivedMetricsUidAllowed(uid)) {
         return;
     }
 
