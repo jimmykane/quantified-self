@@ -70,7 +70,8 @@ describe('sleep provider mappers', () => {
 
         expect(result?.sourceSessionKey).toBe('12345');
         expect(result?.session.source.provider).toBe(SLEEP_PROVIDERS.SuuntoApp);
-        expect(result?.session.durationSeconds).toBe(28800);
+        expect(result?.session.durationSeconds).toBe(24000);
+        expect(result?.session.inBedDurationSeconds).toBe(28800);
         expect(result?.session.stageDurationsSeconds[SLEEP_STAGES.Awake]).toBe(720);
         expect(result?.session.vitals?.averageHeartRateBpm).toBe(52);
         expect(result?.session.vitals?.maxSpo2Percent).toBe(97);

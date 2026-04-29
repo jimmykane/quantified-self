@@ -5,6 +5,7 @@ import {
     SleepMapperResult,
     SleepProvider,
     SLEEP_PROVIDERS,
+    SLEEP_STAGES,
     SLEEP_SYNC_STATUSES,
 } from '../../../shared/sleep';
 import {
@@ -173,6 +174,50 @@ function normalizePayloadArray(payload: unknown, key?: string): unknown[] {
     return [];
 }
 
+function mapperResultStageSeconds(result: SleepMapperResult, stages: readonly string[]): number {
+    const stageDurations = result.session.stageDurationsSeconds || {};
+    return stages.reduce((total, stage) => total + Math.max(0, Number(stageDurations[stage as keyof typeof stageDurations]) || 0), 0);
+}
+
+function compareMapperResultCompleteness(left: SleepMapperResult, right: SleepMapperResult): number {
+    const leftSleepStageSeconds = mapperResultStageSeconds(left, [SLEEP_STAGES.Deep, SLEEP_STAGES.Light, SLEEP_STAGES.Rem]);
+    const rightSleepStageSeconds = mapperResultStageSeconds(right, [SLEEP_STAGES.Deep, SLEEP_STAGES.Light, SLEEP_STAGES.Rem]);
+    if (leftSleepStageSeconds !== rightSleepStageSeconds) {
+        return leftSleepStageSeconds - rightSleepStageSeconds;
+    }
+
+    const leftKnownStageSeconds = mapperResultStageSeconds(left, [SLEEP_STAGES.Deep, SLEEP_STAGES.Light, SLEEP_STAGES.Rem, SLEEP_STAGES.Awake]);
+    const rightKnownStageSeconds = mapperResultStageSeconds(right, [SLEEP_STAGES.Deep, SLEEP_STAGES.Light, SLEEP_STAGES.Rem, SLEEP_STAGES.Awake]);
+    if (leftKnownStageSeconds !== rightKnownStageSeconds) {
+        return leftKnownStageSeconds - rightKnownStageSeconds;
+    }
+
+    const leftNonNapScore = left.session.isNap ? 0 : 1;
+    const rightNonNapScore = right.session.isNap ? 0 : 1;
+    if (leftNonNapScore !== rightNonNapScore) {
+        return leftNonNapScore - rightNonNapScore;
+    }
+
+    const leftScorePresent = Number.isFinite(Number(left.session.score?.value)) ? 1 : 0;
+    const rightScorePresent = Number.isFinite(Number(right.session.score?.value)) ? 1 : 0;
+    if (leftScorePresent !== rightScorePresent) {
+        return leftScorePresent - rightScorePresent;
+    }
+
+    return Math.max(0, Number(left.session.durationSeconds) || 0) - Math.max(0, Number(right.session.durationSeconds) || 0);
+}
+
+function keepBestMapperResultPerSourceSession(mapperResults: readonly SleepMapperResult[]): SleepMapperResult[] {
+    const bestResults = new Map<string, SleepMapperResult>();
+    for (const mapperResult of mapperResults) {
+        const current = bestResults.get(mapperResult.sourceSessionKey);
+        if (!current || compareMapperResultCompleteness(current, mapperResult) < 0) {
+            bestResults.set(mapperResult.sourceSessionKey, mapperResult);
+        }
+    }
+    return [...bestResults.values()];
+}
+
 function assertGarminSleepPermission(tokenData: Record<string, unknown>, userID: string): void {
     const permissions = tokenData.permissions;
     if (!Array.isArray(permissions) || permissions.length === 0) {
@@ -248,14 +293,14 @@ async function processSuuntoQueueItem(queueItem: SleepSyncQueueItemInterface, to
             json: true,
             url: `https://cloudapi.suunto.com/247samples/sleep?from=${Math.floor(queueItem.rangeStartMs || 0)}&to=${Math.floor(queueItem.rangeEndMs || 0)}`,
         });
-        return normalizePayloadArray(payload, 'samples')
+        return keepBestMapperResultPerSourceSession(normalizePayloadArray(payload, 'samples')
             .map((sample) => mapSuuntoSleepSample(sample, queueItem.providerUserId, Date.now()))
-            .filter((result): result is SleepMapperResult => result !== null);
+            .filter((result): result is SleepMapperResult => result !== null));
     }
 
-    return normalizePayloadArray(queueItem.payload, 'samples')
+    return keepBestMapperResultPerSourceSession(normalizePayloadArray(queueItem.payload, 'samples')
         .map((sample) => mapSuuntoSleepSample(sample, queueItem.providerUserId, Date.now()))
-        .filter((result): result is SleepMapperResult => result !== null);
+        .filter((result): result is SleepMapperResult => result !== null));
 }
 
 async function processCorosQueueItem(queueItem: SleepSyncQueueItemInterface, tokenSnapshot: TokenSnapshot): Promise<SleepMapperResult[]> {

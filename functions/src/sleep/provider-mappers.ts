@@ -342,13 +342,29 @@ export function mapSuuntoSleepSample(
     }
 
     const resolvedEndTimeMs = endTimeMs || resolveSleepSessionEndTimeMs(startTimeMs, durationSeconds);
-    const resolvedDurationSeconds = durationSeconds || Math.max(0, Math.round((resolvedEndTimeMs - startTimeMs) / 1000));
     const sourceSessionKey = asScalarString(entryData.SleepId)
         || asString(entryData.DateTime)
         || asString(sample.timestamp)
         || `${providerUserId}:${startTimeMs}`;
+    const deepSeconds = positiveSeconds(entryData.DeepSleepDuration);
+    const lightSeconds = positiveSeconds(entryData.LightSleepDuration);
+    const remSeconds = positiveSeconds(entryData.REMSleepDuration);
     const wakeAfterSleepOnsetSeconds = positiveSeconds(entryData.WakeAfterSleepOnsetDuration);
     const wakeBeforeOffBedSeconds = positiveSeconds(entryData.WakeBeforeOffBedDuration);
+    const stagedSleepSeconds = deepSeconds + lightSeconds + remSeconds;
+    const resolvedDurationSeconds = stagedSleepSeconds
+        || durationSeconds
+        || Math.max(0, Math.round((resolvedEndTimeMs - startTimeMs) / 1000));
+    const resolvedInBedDurationSeconds = Math.max(
+        durationSeconds,
+        resolvedDurationSeconds + wakeAfterSleepOnsetSeconds + wakeBeforeOffBedSeconds,
+    );
+    const stageDurationsSeconds = buildStageDurations({
+        [SLEEP_STAGES.Deep]: deepSeconds,
+        [SLEEP_STAGES.Light]: lightSeconds,
+        [SLEEP_STAGES.Rem]: remSeconds,
+        [SLEEP_STAGES.Awake]: wakeAfterSleepOnsetSeconds + wakeBeforeOffBedSeconds,
+    });
     const maxSpo2 = asNumber(entryData.MaxSpo2);
     const vitals: SleepVitals = {
         averageHeartRateBpm: asNumber(entryData.HRAvg),
@@ -366,16 +382,11 @@ export function mapSuuntoSleepSample(
             startTimeMs,
             endTimeMs: resolvedEndTimeMs,
             durationSeconds: resolvedDurationSeconds,
-            inBedDurationSeconds: resolvedDurationSeconds + wakeBeforeOffBedSeconds,
+            inBedDurationSeconds: resolvedInBedDurationSeconds,
             isNap: entryData.IsNap === true,
             validation: null,
             stages: [],
-            stageDurationsSeconds: buildStageDurations({
-                [SLEEP_STAGES.Deep]: positiveSeconds(entryData.DeepSleepDuration),
-                [SLEEP_STAGES.Light]: positiveSeconds(entryData.LightSleepDuration),
-                [SLEEP_STAGES.Rem]: positiveSeconds(entryData.REMSleepDuration),
-                [SLEEP_STAGES.Awake]: wakeAfterSleepOnsetSeconds + wakeBeforeOffBedSeconds,
-            }),
+            stageDurationsSeconds,
             score: {
                 value: asNumber(entryData.SleepQualityScore),
                 qualifier: null,

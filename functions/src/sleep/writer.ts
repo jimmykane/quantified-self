@@ -6,6 +6,7 @@ import {
     SleepSession,
     SleepSyncStatus,
     SLEEP_SESSIONS_COLLECTION_ID,
+    SLEEP_STAGES,
     SLEEP_SYNC_STATE_COLLECTION_ID,
     SLEEP_SYNC_STATUSES,
 } from '../../../shared/sleep';
@@ -34,11 +35,38 @@ export async function buildSleepSessionDocumentId(userID: string, provider: Slee
     return generateIDFromParts([userID, provider, sourceSessionKey]);
 }
 
+function stageDurationSeconds(session: Pick<SleepSession, 'stageDurationsSeconds'>, stages: readonly string[]): number {
+    const stageDurations = session.stageDurationsSeconds || {};
+    return stages.reduce((total, stage) => total + Math.max(0, Number(stageDurations[stage as keyof typeof stageDurations]) || 0), 0);
+}
+
+function shouldKeepExistingSleepSession(existing: SleepSession, incoming: SleepMapperResult['session']): boolean {
+    if (existing.source?.provider !== incoming.source?.provider
+        || existing.source?.sourceSessionKey !== incoming.source?.sourceSessionKey) {
+        return false;
+    }
+
+    const sleepStages = [SLEEP_STAGES.Deep, SLEEP_STAGES.Light, SLEEP_STAGES.Rem];
+    const knownStages = [...sleepStages, SLEEP_STAGES.Awake];
+    const existingSleepStageSeconds = stageDurationSeconds(existing, sleepStages);
+    const incomingSleepStageSeconds = stageDurationSeconds(incoming as Pick<SleepSession, 'stageDurationsSeconds'>, sleepStages);
+    const existingKnownStageSeconds = stageDurationSeconds(existing, knownStages);
+    const incomingKnownStageSeconds = stageDurationSeconds(incoming as Pick<SleepSession, 'stageDurationsSeconds'>, knownStages);
+
+    if (existingKnownStageSeconds > 0 && incomingKnownStageSeconds === 0) {
+        return true;
+    }
+
+    return existing.isNap !== true
+        && incoming.isNap === true
+        && existingSleepStageSeconds > incomingSleepStageSeconds;
+}
+
 export async function upsertSleepSession(
     userID: string,
     mapperResult: SleepMapperResult,
     nowMs = Date.now(),
-): Promise<{ id: string; session: SleepSession }> {
+): Promise<{ id: string; session: SleepSession; written: boolean }> {
     const id = await buildSleepSessionDocumentId(
         userID,
         mapperResult.session.source.provider,
@@ -46,8 +74,14 @@ export async function upsertSleepSession(
     );
     const docRef = userSleepSessionsRef(userID).doc(id);
     const existing = await docRef.get();
-    const createdAtMs = existing.exists && typeof existing.data()?.createdAtMs === 'number'
-        ? existing.data()?.createdAtMs as number
+    const existingSession = existing.exists ? existing.data() as SleepSession : null;
+    if (existingSession && shouldKeepExistingSleepSession(existingSession, mapperResult.session)) {
+        logger.info(`[SleepSync] Preserved fuller ${mapperResult.session.source.provider} sleep session ${id} for ${userID}`);
+        return { id, session: existingSession, written: false };
+    }
+
+    const createdAtMs = existingSession && typeof existingSession.createdAtMs === 'number'
+        ? existingSession.createdAtMs
         : nowMs;
     const session: SleepSession = {
         ...mapperResult.session,
@@ -58,7 +92,7 @@ export async function upsertSleepSession(
     };
     await docRef.set(cleanUndefined(session), { merge: true });
     logger.info(`[SleepSync] Upserted ${mapperResult.session.source.provider} sleep session ${id} for ${userID}`);
-    return { id, session };
+    return { id, session, written: true };
 }
 
 export async function upsertSleepSessions(
@@ -73,8 +107,12 @@ export async function upsertSleepSessions(
             skipped += 1;
             continue;
         }
-        await upsertSleepSession(userID, mapperResult, nowMs);
-        written += 1;
+        const result = await upsertSleepSession(userID, mapperResult, nowMs);
+        if (result.written) {
+            written += 1;
+        } else {
+            skipped += 1;
+        }
     }
     return { written, skipped };
 }

@@ -310,6 +310,98 @@ describe('sleep queue', () => {
         }));
     });
 
+    it('keeps the fullest Suunto sample when a poll returns interim and final records for the same sleep id', async () => {
+        hoisted.getTokenData.mockResolvedValue({
+            accessToken: 'raw-suunto-access-token',
+        });
+        hoisted.requestGet.mockResolvedValue([
+            {
+                timestamp: '2026-04-28T21:51:00.000+03:00',
+                entryData: {
+                    SleepId: 1777402260,
+                    DateTime: '2026-04-28T21:51:00.000+03:00',
+                    IsNap: true,
+                    Duration: 2040,
+                    DeepSleepDuration: 0,
+                    LightSleepDuration: 0,
+                    REMSleepDuration: 0,
+                    WakeAfterSleepOnsetDuration: 0,
+                },
+            },
+            {
+                timestamp: '2026-04-28T21:51:00.000+03:00',
+                entryData: {
+                    SleepId: 1777402260,
+                    DateTime: '2026-04-28T21:51:00.000+03:00',
+                    IsNap: false,
+                    Duration: 34260,
+                    DeepSleepDuration: 6210,
+                    LightSleepDuration: 20070,
+                    REMSleepDuration: 7020,
+                    WakeAfterSleepOnsetDuration: 960,
+                    SleepQualityScore: 67,
+                },
+            },
+        ]);
+        hoisted.upsertSleepSessions.mockResolvedValue({ written: 1, skipped: 0 });
+        hoisted.tokenRootGet.mockResolvedValue({
+            docs: [{
+                id: 'suunto-token-1',
+                data: () => ({
+                    serviceName: 'SuuntoApp',
+                    userName: 'suunto-user-1',
+                }),
+                ref: {
+                    parent: {
+                        parent: {
+                            id: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                        },
+                    },
+                },
+            }],
+            empty: false,
+        });
+        const update = vi.fn().mockResolvedValue(undefined);
+
+        const result = await processSleepSyncQueueItem({
+            id: 'suunto-sleep-poll-with-duplicates',
+            dateCreated: 1_700_000_000_000,
+            dispatchedToCloudTask: 1_700_000_000_500,
+            processed: false,
+            provider: 'SuuntoApp',
+            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            providerUserId: 'suunto-user-1',
+            retryCount: 0,
+            type: 'suunto_poll',
+            rangeStartMs: 1_777_392_000_000,
+            rangeEndMs: 1_777_478_400_000,
+            ref: {
+                update,
+            } as any,
+        });
+
+        expect(result).toBe(QueueResult.Processed);
+        expect(hoisted.upsertSleepSessions).toHaveBeenCalledWith('xcsAolLDDTWTgtRN9eYF3lW2YKL2', [
+            expect.objectContaining({
+                sourceSessionKey: '1777402260',
+                session: expect.objectContaining({
+                    isNap: false,
+                    durationSeconds: 33300,
+                    inBedDurationSeconds: 34260,
+                    stageDurationsSeconds: expect.objectContaining({
+                        deep: 6210,
+                        light: 20070,
+                        rem: 7020,
+                        awake: 960,
+                    }),
+                    score: expect.objectContaining({
+                        value: 67,
+                    }),
+                }),
+            }),
+        ]);
+    });
+
     it('moves Garmin ping queue items with untrusted callback URLs to DLQ without resolving tokens', async () => {
         hoisted.disabledProviders.splice(0, hoisted.disabledProviders.length, 'COROSAPI');
         const queueRef = {
