@@ -70,7 +70,11 @@
   }
   @if (chartType === sleepTrendChartType) {
   <app-sleep-trend-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
-    [sleepTrend]="sleepTrend" [infoTooltip]="chartInfoTooltip">
+    [sleepTrend]="sleepTrend" [sleepRange]="sleepTrendRange" [sleepWindowLabel]="sleepTrendWindowLabel"
+    [canNavigateOlder]="sleepTrendCanNavigateOlder" [canNavigateNewer]="sleepTrendCanNavigateNewer"
+    [infoTooltip]="chartInfoTooltip" [reserveTitleActionSpace]="showActions"
+    (sleepRangeChange)="sleepTrendRangeChange.emit($event)"
+    (sleepNavigate)="sleepTrendNavigate.emit($event)">
   </app-sleep-trend-chart>
   }
   @if (chartType === chartTypes.LinesHorizontal

@@ -11,7 +11,6 @@ import {
   computed,
   signal,
 } from '@angular/core';
-import type { MatButtonToggleChange } from '@angular/material/button-toggle';
 import type { EChartsType } from 'echarts/core';
 import { TimeIntervals } from '@sports-alliance/sports-lib';
 import { AppColors } from '../../../services/color/app.colors';
@@ -46,6 +45,7 @@ import {
   isDerivedMetricPendingStatus,
 } from '../../../helpers/derived-metric-status.helper';
 import { AppHapticsService } from '../../../services/app.haptics.service';
+import type { ChartRangeSelectorOption } from '../shared/chart-range-selector/chart-range-selector.component';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type EChartsTooltipPositionSize = {
@@ -74,6 +74,10 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
     { key: 'm', label: 'M' },
     { key: 'y', label: 'Y' },
   ];
+  readonly granularityRangeOptions: ReadonlyArray<ChartRangeSelectorOption> = this.granularityOptions.map(option => ({
+    value: option.key,
+    label: option.label,
+  }));
 
   @Input() darkTheme = false;
   @Input() isLoading = false;
@@ -108,6 +112,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
   readonly selectedFormValue = computed(() => resolveDashboardFormValue(this.latestCurrentDayPoint(), ChartsFormComponent.FORM_MODE));
   readonly status = computed(() => resolveDashboardFormStatus(this.selectedFormValue()));
   readonly selectedGranularity = computed(() => this.selectedTimelineWindowSignal());
+  readonly selectedGranularityLabel = computed(() => this.resolveGranularityLabel(this.selectedTimelineWindowSignal()));
   readonly headlineStats = computed(() => {
     const latestCurrent = this.latestCurrentDayPoint();
     const latestReal = this.latestRealWorkoutPoint();
@@ -158,8 +163,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
     this.chartHost.dispose();
   }
 
-  onGranularityChange(event: MatButtonToggleChange | DashboardFormTimelineWindow | null | undefined): void {
-    const value = typeof event === 'string' ? event : `${event?.value || ''}`;
+  onGranularityChange(value: unknown): void {
     if (value !== 'w' && value !== 'm' && value !== 'y') {
       return;
     }
@@ -171,6 +175,10 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
     if (this.chartDiv?.nativeElement) {
       void this.refreshChart();
     }
+  }
+
+  private resolveGranularityLabel(value: DashboardFormTimelineWindow): string {
+    return this.granularityOptions.find(option => option.key === value)?.label || 'W';
   }
 
   private async refreshChart(): Promise<void> {

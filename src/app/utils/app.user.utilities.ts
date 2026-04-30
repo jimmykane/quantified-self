@@ -67,6 +67,7 @@ import {
     DASHBOARD_RECOVERY_NOW_CHART_TYPE,
     isDashboardRecoveryNowChartType,
 } from '../helpers/dashboard-special-chart-types';
+import { normalizeDashboardSleepTrendRange } from '../helpers/dashboard-sleep-range.helper';
 import { ACTIVITY_SYNC_ROUTES, ActivitySyncRouteId } from '@shared/activity-sync-routes';
 import { normalizeDistanceUnits } from '@shared/unit-aware-display';
 
@@ -474,6 +475,10 @@ export class AppUserUtilities {
         settings.dashboardSettings.activityTypes = settings.dashboardSettings.activityTypes || [];
         settings.dashboardSettings.includeMergedEvents = settings.dashboardSettings.includeMergedEvents !== false;
         settings.dashboardSettings.dismissedCuratedRecoveryNowTile = settings.dashboardSettings.dismissedCuratedRecoveryNowTile === true;
+        settings.dashboardSettings.sleepTrend = {
+            ...(settings.dashboardSettings.sleepTrend || {}),
+            range: normalizeDashboardSleepTrendRange(settings.dashboardSettings.sleepTrend?.range),
+        };
         settings.dashboardSettings.tiles = settings.dashboardSettings.tiles || AppUserUtilities.getDefaultUserDashboardTiles();
         let hasNormalizedRecoveryDashboardTile = false;
         let hasNormalizedMapDashboardTile = false;

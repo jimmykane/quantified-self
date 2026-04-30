@@ -192,7 +192,14 @@ class MockSleepTrendChartComponent {
   @Input() isLoading = false;
   @Input() darkTheme = false;
   @Input() sleepTrend: any;
+  @Input() sleepRange: any;
+  @Input() sleepWindowLabel?: string | null;
+  @Input() canNavigateOlder = false;
+  @Input() canNavigateNewer = false;
   @Input() infoTooltip?: string | null;
+  @Input() reserveTitleActionSpace = false;
+  @Output() sleepRangeChange = new EventEmitter<any>();
+  @Output() sleepNavigate = new EventEmitter<any>();
 }
 
 describe('TileChartComponent', () => {
@@ -518,11 +525,38 @@ describe('TileChartComponent', () => {
 
   it('should route sleep trend chart type to dedicated renderer', () => {
     component.chartType = DASHBOARD_SLEEP_TREND_CHART_TYPE as any;
+    component.showActions = true;
     component.sleepTrend = { points: [], latestPoint: null } as any;
+    component.sleepTrendRange = '30d';
+    component.sleepTrendWindowLabel = 'Last 30 days';
+    component.sleepTrendCanNavigateOlder = true;
+    component.sleepTrendCanNavigateNewer = false;
     fixture.detectChanges();
 
-    expect(getSleepTrendComponent().sleepTrend).toEqual(component.sleepTrend);
-    expect(getSleepTrendComponent().infoTooltip).toContain('Sleep Trend');
+    const sleepTrend = getSleepTrendComponent();
+    expect(sleepTrend.sleepTrend).toEqual(component.sleepTrend);
+    expect(sleepTrend.sleepRange).toBe('30d');
+    expect(sleepTrend.sleepWindowLabel).toBe('Last 30 days');
+    expect(sleepTrend.canNavigateOlder).toBe(true);
+    expect(sleepTrend.canNavigateNewer).toBe(false);
+    expect(sleepTrend.infoTooltip).toContain('Sleep Trend');
+    expect(sleepTrend.reserveTitleActionSpace).toBe(true);
+  });
+
+  it('should re-emit sleep trend range and navigation events from the renderer', () => {
+    component.chartType = DASHBOARD_SLEEP_TREND_CHART_TYPE as any;
+    const ranges: string[] = [];
+    const directions: string[] = [];
+    component.sleepTrendRangeChange.subscribe(range => ranges.push(range));
+    component.sleepTrendNavigate.subscribe(direction => directions.push(direction));
+    fixture.detectChanges();
+
+    const sleepTrend = getSleepTrendComponent();
+    sleepTrend.sleepRangeChange.emit('90d');
+    sleepTrend.sleepNavigate.emit('older');
+
+    expect(ranges).toEqual(['90d']);
+    expect(directions).toEqual(['older']);
   });
 
   it('should pass info tooltip text to derived curated chart renderers', () => {

@@ -60,8 +60,47 @@ describe('AppSleepService', () => {
     expect(where).toHaveBeenCalledWith('startTimeMs', '>=', start - (18 * 60 * 60 * 1000));
     expect(where).toHaveBeenCalledWith('startTimeMs', '<=', end);
     expect(orderBy).toHaveBeenCalledWith('startTimeMs', 'desc');
-    expect(limit).toHaveBeenCalledWith(250);
+    expect(limit).not.toHaveBeenCalled();
     expect(query).toHaveBeenCalled();
     expect(sessions.map(session => session.id)).toEqual(['kept-overnight', 'kept-day']);
+  });
+
+  it('does not cap explicit 90-day windows before client-side sorting and filtering', async () => {
+    const end = Date.UTC(2026, 3, 30);
+    const start = end - (90 * 24 * 60 * 60 * 1000);
+
+    await firstValueFrom(service.watchForDashboard('user-1', start, end));
+
+    expect(where).toHaveBeenCalledWith('startTimeMs', '>=', start - (18 * 60 * 60 * 1000));
+    expect(where).toHaveBeenCalledWith('startTimeMs', '<=', end);
+    expect(orderBy).toHaveBeenCalledWith('startTimeMs', 'desc');
+    expect(limit).not.toHaveBeenCalled();
+  });
+
+  it('queries all sleep sessions without applying the fallback limit when start is zero', async () => {
+    const end = Date.UTC(2026, 3, 30);
+    vi.mocked(collectionData).mockReturnValue(of([
+      { id: 'later', startTimeMs: Date.UTC(2026, 0, 2), endTimeMs: Date.UTC(2026, 0, 2, 7), source: { provider: 'SuuntoApp' } },
+      { id: 'earlier', startTimeMs: Date.UTC(2026, 0, 1), endTimeMs: Date.UTC(2026, 0, 1, 7), source: { provider: 'SuuntoApp' } },
+    ] as any));
+
+    const sessions = await firstValueFrom(service.watchForDashboard('user-1', 0, end));
+
+    expect(where).toHaveBeenCalledWith('startTimeMs', '>=', 0);
+    expect(where).toHaveBeenCalledWith('startTimeMs', '<=', end);
+    expect(orderBy).toHaveBeenCalledWith('startTimeMs', 'desc');
+    expect(limit).not.toHaveBeenCalled();
+    expect(sessions.map(session => session.id)).toEqual(['earlier', 'later']);
+  });
+
+  it('keeps the fallback query bounded when no explicit start is provided', async () => {
+    const end = Date.UTC(2026, 3, 30);
+
+    await firstValueFrom(service.watchForDashboard('user-1', null, end));
+
+    expect(where).toHaveBeenCalledWith('startTimeMs', '>=', end - (90 * 24 * 60 * 60 * 1000) - (18 * 60 * 60 * 1000));
+    expect(where).toHaveBeenCalledWith('startTimeMs', '<=', end);
+    expect(orderBy).toHaveBeenCalledWith('startTimeMs', 'desc');
+    expect(limit).toHaveBeenCalledWith(250);
   });
 });

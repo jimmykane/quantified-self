@@ -54,10 +54,14 @@
         [freshnessForecast]="getChartTile(tile).freshnessForecast" [freshnessForecastStatus]="getFreshnessForecastStatusForTile(tile)"
         [intensityDistribution]="getChartTile(tile).intensityDistribution" [intensityDistributionStatus]="getIntensityDistributionStatusForTile(tile)"
         [efficiencyTrend]="getChartTile(tile).efficiencyTrend" [efficiencyTrendStatus]="getEfficiencyTrendStatusForTile(tile)"
-        [sleepTrend]="getChartTile(tile).sleepTrend"
+        [sleepTrend]="getChartTile(tile).sleepTrend" [sleepTrendRange]="sleepTrendRange"
+        [sleepTrendWindowLabel]="sleepTrendWindowLabel" [sleepTrendCanNavigateOlder]="sleepTrendCanNavigateOlder"
+        [sleepTrendCanNavigateNewer]="sleepTrendCanNavigateNewer"
         [absoluteLatestFormPoint]="getChartTile(tile).absoluteLatestFormPoint"
         [size]="tile.size" [order]="tile.order" [enableDesktopDrag]="desktopTileDragEnabled"
-        (editInDashboardManager)="openDashboardManagerForTileOrder($event)"></app-tile-chart>
+        (editInDashboardManager)="openDashboardManagerForTileOrder($event)"
+        (sleepTrendRangeChange)="onSleepTrendRangeChange($event)"
+        (sleepTrendNavigate)="onSleepTrendNavigate($event)"></app-tile-chart>
     </div>
     }
   </div>
@@ -101,10 +105,14 @@
         [freshnessForecast]="getChartTile(tile).freshnessForecast" [freshnessForecastStatus]="getFreshnessForecastStatusForTile(tile)"
         [intensityDistribution]="getChartTile(tile).intensityDistribution" [intensityDistributionStatus]="getIntensityDistributionStatusForTile(tile)"
         [efficiencyTrend]="getChartTile(tile).efficiencyTrend" [efficiencyTrendStatus]="getEfficiencyTrendStatusForTile(tile)"
-        [sleepTrend]="getChartTile(tile).sleepTrend"
+        [sleepTrend]="getChartTile(tile).sleepTrend" [sleepTrendRange]="sleepTrendRange"
+        [sleepTrendWindowLabel]="sleepTrendWindowLabel" [sleepTrendCanNavigateOlder]="sleepTrendCanNavigateOlder"
+        [sleepTrendCanNavigateNewer]="sleepTrendCanNavigateNewer"
         [absoluteLatestFormPoint]="getChartTile(tile).absoluteLatestFormPoint"
         [size]="tile.size" [order]="tile.order" [enableDesktopDrag]="desktopTileDragEnabled"
-        (editInDashboardManager)="openDashboardManagerForTileOrder($event)"></app-tile-chart>
+        (editInDashboardManager)="openDashboardManagerForTileOrder($event)"
+        (sleepTrendRangeChange)="onSleepTrendRangeChange($event)"
+        (sleepTrendNavigate)="onSleepTrendNavigate($event)"></app-tile-chart>
       }
       @if (tile.type === tileTypes.Map) {
       <app-tile-map class="qs-glass-card-panel" [user]="user" [type]="tile.type" [isLoading]="isLoading"

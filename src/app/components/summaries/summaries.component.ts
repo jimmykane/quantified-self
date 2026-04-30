@@ -75,6 +75,17 @@ import {
 import { MatDialog } from '@angular/material/dialog';
 import { DashboardManagerDialogComponent } from './dashboard-manager-dialog/dashboard-manager-dialog.component';
 import type { SleepSession } from '@shared/sleep';
+import type {
+  AppDashboardSettingsInterface,
+  AppDashboardSleepTrendRange,
+  AppUserInterface,
+} from '../../models/app-user.interface';
+import {
+  dashboardSleepTrendRangeDays,
+  type DashboardSleepTrendNavigationDirection,
+  DASHBOARD_SLEEP_TREND_DEFAULT_RANGE,
+  normalizeDashboardSleepTrendRange,
+} from '../../helpers/dashboard-sleep-range.helper';
 
 interface DashboardDerivedMetricsBanner {
   type: 'pending' | 'warning';
@@ -115,6 +126,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public tileTypes = TileTypes;
   public desktopTileDragEnabled = false;
   public isDashboardManagerOpen = false;
+  public sleepTrendRange: AppDashboardSleepTrendRange = DASHBOARD_SLEEP_TREND_DEFAULT_RANGE;
+  public sleepTrendWindowLabel = 'Last 14 days';
+  public sleepTrendCanNavigateOlder = true;
+  public sleepTrendCanNavigateNewer = false;
 
 
   private appThemeSubscription: Subscription | null = null;
@@ -122,6 +137,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private derivedMetricsUserUID: string | null = null;
   private sleepSubscription: Subscription | null = null;
   private sleepListenerKey: string | null = null;
+  private sleepTrendAnchorEndMs: number | null = null;
   public darkTheme = false;
   private logger: LoggerService;
   private dashboardTileSettingsSnapshot: TileSettingsInterface[] = [];
@@ -525,6 +541,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     if (!uid) {
       this.sleepSessions = [];
       this.sleepListenerKey = null;
+      this.sleepTrendRange = DASHBOARD_SLEEP_TREND_DEFAULT_RANGE;
+      this.sleepTrendAnchorEndMs = null;
+      this.updateSleepTrendWindowState(this.buildSleepTrendWindow());
       if (this.sleepSubscription) {
         this.sleepSubscription.unsubscribe();
         this.sleepSubscription = null;
@@ -532,7 +551,15 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       return;
     }
 
-    const listenerKey = this.buildSleepListenerKey(uid);
+    const previousRange = this.sleepTrendRange;
+    this.sleepTrendRange = this.getSleepTrendRange();
+    if (previousRange !== this.sleepTrendRange) {
+      this.sleepTrendAnchorEndMs = null;
+    }
+
+    const window = this.buildSleepTrendWindow();
+    this.updateSleepTrendWindowState(window);
+    const listenerKey = this.buildSleepListenerKey(uid, window);
     if (this.sleepListenerKey === listenerKey && this.sleepSubscription) {
       return;
     }
@@ -544,7 +571,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
     this.sleepListenerKey = listenerKey;
     this.sleepSubscription = this.sleepService
-      .watchForDashboard(uid, null, null)
+      .watchForDashboard(uid, window.startMs, window.endMs)
       .subscribe((sessions) => {
         if (equal(this.sleepSessions, sessions)) {
           return;
@@ -554,8 +581,126 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       });
   }
 
-  private buildSleepListenerKey(uid: string): string {
-    return uid;
+  public async onSleepTrendRangeChange(range: AppDashboardSleepTrendRange): Promise<void> {
+    const nextRange = normalizeDashboardSleepTrendRange(range);
+    if (nextRange === this.getSleepTrendRange()) {
+      return;
+    }
+    if (!this.user) {
+      return;
+    }
+
+    const userWithSettings = this.user as AppUserInterface;
+    userWithSettings.settings = userWithSettings.settings || {};
+    const dashboardSettings = (userWithSettings.settings.dashboardSettings || {}) as AppDashboardSettingsInterface;
+    userWithSettings.settings.dashboardSettings = dashboardSettings;
+    const previousSleepTrend = { ...(dashboardSettings.sleepTrend || {}) };
+
+    dashboardSettings.sleepTrend = {
+      ...previousSleepTrend,
+      range: nextRange,
+    };
+    this.sleepTrendRange = nextRange;
+    this.sleepTrendAnchorEndMs = null;
+    this.syncSleepSubscription();
+    this.changeDetector.markForCheck();
+
+    try {
+      await this.userService.updateUserProperties(this.user as AppUserInterface, { settings: userWithSettings.settings });
+    } catch (error) {
+      dashboardSettings.sleepTrend = previousSleepTrend;
+      this.sleepTrendRange = normalizeDashboardSleepTrendRange(previousSleepTrend.range);
+      this.sleepTrendAnchorEndMs = null;
+      this.syncSleepSubscription();
+      this.changeDetector.markForCheck();
+      this.logger.error('[SummariesComponent] Failed to persist sleep trend range update', error);
+    }
+  }
+
+  public onSleepTrendNavigate(direction: DashboardSleepTrendNavigationDirection): void {
+    const days = dashboardSleepTrendRangeDays(this.sleepTrendRange);
+    if (days === null) {
+      return;
+    }
+
+    const nowMs = Date.now();
+    const windowMs = days * 24 * 60 * 60 * 1000;
+    const currentWindow = this.buildSleepTrendWindow(nowMs);
+    if (direction === 'older') {
+      this.sleepTrendAnchorEndMs = Math.max(windowMs, currentWindow.endMs - windowMs);
+    } else {
+      const nextEndMs = currentWindow.endMs + windowMs;
+      this.sleepTrendAnchorEndMs = nextEndMs >= nowMs ? null : nextEndMs;
+    }
+
+    this.syncSleepSubscription();
+    this.changeDetector.markForCheck();
+  }
+
+  private buildSleepListenerKey(uid: string, window: { range: AppDashboardSleepTrendRange; startMs: number; endMs: number; isAll: boolean }): string {
+    if (window.isAll) {
+      return `${uid}:${window.range}:all`;
+    }
+    const anchorKey = this.sleepTrendAnchorEndMs === null ? 'latest' : `${window.startMs}:${window.endMs}`;
+    return `${uid}:${window.range}:${anchorKey}`;
+  }
+
+  private getSleepTrendRange(): AppDashboardSleepTrendRange {
+    return normalizeDashboardSleepTrendRange((this.user as AppUserInterface)?.settings?.dashboardSettings?.sleepTrend?.range);
+  }
+
+  private buildSleepTrendWindow(nowMs = Date.now()): {
+    range: AppDashboardSleepTrendRange;
+    startMs: number;
+    endMs: number;
+    isAll: boolean;
+  } {
+    const range = this.sleepTrendRange || this.getSleepTrendRange();
+    const days = dashboardSleepTrendRangeDays(range);
+    if (days === null) {
+      return {
+        range,
+        startMs: 0,
+        endMs: nowMs,
+        isAll: true,
+      };
+    }
+
+    const windowMs = days * 24 * 60 * 60 * 1000;
+    const anchorEndMs = Number.isFinite(this.sleepTrendAnchorEndMs) && this.sleepTrendAnchorEndMs !== null
+      ? Math.min(this.sleepTrendAnchorEndMs, nowMs)
+      : nowMs;
+    return {
+      range,
+      startMs: Math.max(0, anchorEndMs - windowMs),
+      endMs: anchorEndMs,
+      isAll: false,
+    };
+  }
+
+  private updateSleepTrendWindowState(window: { range: AppDashboardSleepTrendRange; startMs: number; endMs: number; isAll: boolean }): void {
+    this.sleepTrendRange = window.range;
+    this.sleepTrendCanNavigateOlder = !window.isAll;
+    this.sleepTrendCanNavigateNewer = !window.isAll && this.sleepTrendAnchorEndMs !== null;
+    this.sleepTrendWindowLabel = this.formatSleepTrendWindowLabel(window);
+  }
+
+  private formatSleepTrendWindowLabel(window: { range: AppDashboardSleepTrendRange; startMs: number; endMs: number; isAll: boolean }): string {
+    if (window.isAll) {
+      return 'All sleep';
+    }
+    const days = dashboardSleepTrendRangeDays(window.range) || 14;
+    if (this.sleepTrendAnchorEndMs === null) {
+      return `Last ${days} days`;
+    }
+    return `${this.formatSleepTrendWindowDate(window.startMs)} - ${this.formatSleepTrendWindowDate(window.endMs)}`;
+  }
+
+  private formatSleepTrendWindowDate(timestampMs: number): string {
+    return new Intl.DateTimeFormat(undefined, {
+      month: 'short',
+      day: 'numeric',
+    }).format(new Date(timestampMs));
   }
 
   private resetDerivedMetricsState(): void {

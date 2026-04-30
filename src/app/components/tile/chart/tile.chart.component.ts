@@ -21,6 +21,9 @@ import type {
   DashboardRampRateContext,
 } from '../../../helpers/dashboard-derived-metrics.helper';
 import type { DashboardSleepTrendContext } from '../../../helpers/dashboard-sleep-chart.helper';
+import type {
+  DashboardSleepTrendNavigationDirection,
+} from '../../../helpers/dashboard-sleep-range.helper';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
@@ -41,6 +44,7 @@ import {
 import { resolveDashboardChartInfoTooltip } from '../../../helpers/dashboard-chart-info.helper';
 import type { DerivedMetricSnapshotStatus } from '@shared/derived-metrics';
 import type { DashboardDerivedMetricStatus } from '../../../helpers/derived-metric-status.helper';
+import type { AppDashboardSleepTrendRange } from '../../../models/app-user.interface';
 
 type DashboardRecoveryNowSnapshotStatus = DerivedMetricSnapshotStatus | 'missing' | 'queued' | 'processing';
 
@@ -77,6 +81,10 @@ export class TileChartComponent extends TileAbstractDirective {
   @Input() intensityDistribution?: DashboardIntensityDistributionContext | null;
   @Input() efficiencyTrend?: DashboardEfficiencyTrendContext | null;
   @Input() sleepTrend?: DashboardSleepTrendContext | null;
+  @Input() sleepTrendRange?: AppDashboardSleepTrendRange;
+  @Input() sleepTrendWindowLabel?: string | null;
+  @Input() sleepTrendCanNavigateOlder = false;
+  @Input() sleepTrendCanNavigateNewer = false;
   @Input() acwrStatus?: DashboardDerivedMetricStatus | null;
   @Input() rampRateStatus?: DashboardDerivedMetricStatus | null;
   @Input() monotonyStrainStatus?: DashboardDerivedMetricStatus | null;
@@ -90,6 +98,8 @@ export class TileChartComponent extends TileAbstractDirective {
   @Input() efficiencyTrendStatus?: DashboardDerivedMetricStatus | null;
   @Input() absoluteLatestFormPoint?: DashboardFormPoint | null;
   @Output() editInDashboardManager = new EventEmitter<number>();
+  @Output() sleepTrendRangeChange = new EventEmitter<AppDashboardSleepTrendRange>();
+  @Output() sleepTrendNavigate = new EventEmitter<DashboardSleepTrendNavigationDirection>();
 
   public chartTypes = ChartTypes;
   public recoveryNowChartType = DASHBOARD_RECOVERY_NOW_CHART_TYPE;

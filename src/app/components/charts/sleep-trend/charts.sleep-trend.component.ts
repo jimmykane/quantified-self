@@ -3,9 +3,11 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  EventEmitter,
   Input,
   OnChanges,
   OnDestroy,
+  Output,
   SimpleChanges,
   ViewChild,
 } from '@angular/core';
@@ -26,8 +28,17 @@ import {
   DashboardSleepTrendPoint,
   formatSleepDuration,
 } from '../../../helpers/dashboard-sleep-chart.helper';
+import {
+  DASHBOARD_SLEEP_TREND_DEFAULT_RANGE,
+  DASHBOARD_SLEEP_TREND_RANGE_OPTIONS,
+  normalizeDashboardSleepTrendRange,
+  type DashboardSleepTrendNavigationDirection,
+} from '../../../helpers/dashboard-sleep-range.helper';
+import type { AppDashboardSleepTrendRange } from '../../../models/app-user.interface';
+import { AppColors } from '../../../services/color/app.colors';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
+import type { ChartRangeSelectorOption } from '../shared/chart-range-selector/chart-range-selector.component';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type AxisTooltipParam = { dataIndex?: number; seriesName?: string; value?: number };
@@ -39,6 +50,11 @@ const STAGE_SERIES = [
   { key: 'unknownSeconds', name: 'Unknown', color: '#90A4AE' },
   { key: 'awakeSeconds', name: 'Awake', color: '#F9A825' },
 ] as const;
+
+const HRV_SERIES = {
+  name: 'HRV',
+  color: AppColors.Green,
+} as const;
 
 const GRID_BOTTOM_WITH_LEGEND = 58;
 const GRID_BOTTOM_COMPACT = 34;
@@ -54,11 +70,26 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
   @Input() darkTheme = false;
   @Input() isLoading = false;
   @Input() sleepTrend?: DashboardSleepTrendContext | null;
+  @Input()
+  set sleepRange(value: AppDashboardSleepTrendRange | null | undefined) {
+    this._sleepRange = normalizeDashboardSleepTrendRange(value);
+    this.sleepRangeLabel = this.resolveSleepRangeLabel(this._sleepRange);
+  }
+  get sleepRange(): AppDashboardSleepTrendRange {
+    return this._sleepRange;
+  }
+  @Input() sleepWindowLabel?: string | null;
+  @Input() canNavigateOlder = false;
+  @Input() canNavigateNewer = false;
   @Input() infoTooltip?: string | null;
+  @Input() reserveTitleActionSpace = false;
+  @Output() sleepRangeChange = new EventEmitter<AppDashboardSleepTrendRange>();
+  @Output() sleepNavigate = new EventEmitter<DashboardSleepTrendNavigationDirection>();
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
   private readonly chartHost: EChartsHostController;
+  private _sleepRange: AppDashboardSleepTrendRange = DASHBOARD_SLEEP_TREND_DEFAULT_RANGE;
 
   public latestDurationText = '--';
   public latestScoreText = '--';
@@ -68,6 +99,12 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
   public noDataErrorMessage = 'No sleep data yet';
   public noDataErrorHint = 'Connect Garmin, Suunto, or COROS sleep sync to populate this chart.';
   public noDataErrorIcon = 'hotel';
+  public rangeOptions = DASHBOARD_SLEEP_TREND_RANGE_OPTIONS;
+  public rangeSelectorOptions: ReadonlyArray<ChartRangeSelectorOption> = DASHBOARD_SLEEP_TREND_RANGE_OPTIONS.map(option => ({
+    value: option.range,
+    label: option.label,
+  }));
+  public sleepRangeLabel = this.resolveSleepRangeLabel(DASHBOARD_SLEEP_TREND_DEFAULT_RANGE);
 
   constructor(
     private eChartsLoader: EChartsLoaderService,
@@ -98,6 +135,27 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
     this.chartHost.dispose();
   }
 
+  public onSleepRangeSelection(value: unknown): void {
+    const nextRange = normalizeDashboardSleepTrendRange(value);
+    if (nextRange === this.sleepRange) {
+      return;
+    }
+    this.sleepRangeChange.emit(nextRange);
+  }
+
+  public navigateSleep(direction: DashboardSleepTrendNavigationDirection): void {
+    if (this.sleepRange === 'all') {
+      return;
+    }
+    if (direction === 'older' && !this.canNavigateOlder) {
+      return;
+    }
+    if (direction === 'newer' && !this.canNavigateNewer) {
+      return;
+    }
+    this.sleepNavigate.emit(direction);
+  }
+
   private async refreshChart(): Promise<void> {
     const points = this.getPoints();
     this.updateHeaderAndErrorState(points);
@@ -121,9 +179,10 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
 
   private updateHeaderAndErrorState(points: DashboardSleepTrendPoint[] = this.getPoints()): void {
     const latest = this.sleepTrend?.latestPoint || points[points.length - 1] || null;
+    const latestHrvMs = this.toFiniteMetric(latest?.averageHrvMs);
     this.latestDurationText = latest ? formatSleepDuration(latest.totalSeconds) : '--';
     this.latestScoreText = latest?.score !== null && latest?.score !== undefined ? `${Math.round(latest.score)}` : '--';
-    this.latestHrvText = latest?.averageHrvMs !== null && latest?.averageHrvMs !== undefined ? `${Math.round(latest.averageHrvMs)}` : '--';
+    this.latestHrvText = latestHrvMs !== null ? `${Math.round(latestHrvMs)}` : '--';
     this.latestContextText = latest ? `${latest.providerLabel} · ${this.formatDateTime(latest.endTimeMs)}` : 'Latest sleep';
     this.showNoDataError = points.length === 0;
   }
@@ -143,6 +202,81 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
     const style = buildDashboardEChartsStyleTokens(this.darkTheme, chartWidth);
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
     const categories = points.map(point => point.categoryLabel);
+    const hrvData = points.map(point => this.toFiniteMetric(point.averageHrvMs));
+    const hasHrvSeries = hrvData.some(value => value !== null);
+    const averageHrvMs = this.averageMetric(hrvData);
+    const sleepDurationAxis = {
+      type: 'value',
+      min: 0,
+      axisLabel: {
+        color: style.secondaryTextColor,
+        fontSize: style.axisFontSize,
+        formatter: (value: number) => `${value}h`,
+      },
+      splitLine: { lineStyle: { color: style.gridColor } },
+    };
+    const hrvAxis = {
+      type: 'value',
+      min: 0,
+      axisLabel: {
+        color: style.secondaryTextColor,
+        fontSize: style.axisFontSize,
+        formatter: (value: number) => `${Math.round(value)}ms`,
+      },
+      splitLine: { show: false },
+    };
+    const stageSeries = STAGE_SERIES.map((stage) => ({
+      name: stage.name,
+      type: 'bar',
+      stack: 'sleep',
+      barMaxWidth: 32,
+      yAxisIndex: 0,
+      itemStyle: {
+        color: stage.color,
+        borderRadius: stage.key === 'awakeSeconds' ? [3, 3, 0, 0] : 0,
+      },
+      emphasis: { focus: 'series' },
+      data: points.map(point => this.secondsToHours(point[stage.key])),
+    }));
+    const hrvSeries = hasHrvSeries ? [{
+      name: HRV_SERIES.name,
+      type: 'line',
+      yAxisIndex: 1,
+      smooth: false,
+      connectNulls: false,
+      showSymbol: true,
+      symbolSize: 5,
+      lineStyle: {
+        color: HRV_SERIES.color,
+        width: 2,
+      },
+      itemStyle: {
+        color: HRV_SERIES.color,
+      },
+      emphasis: { focus: 'series' },
+      markLine: averageHrvMs === null ? undefined : {
+        silent: true,
+        symbol: 'none',
+        lineStyle: {
+          color: HRV_SERIES.color,
+          type: 'dashed',
+          width: 1.5,
+          opacity: 0.72,
+        },
+        label: {
+          show: true,
+          color: style.secondaryTextColor,
+          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+          fontSize: style.axisFontSize,
+          formatter: `Avg ${Math.round(averageHrvMs)}ms`,
+        },
+        data: [{
+          name: 'Avg HRV',
+          yAxis: averageHrvMs,
+        }],
+      },
+      data: hrvData,
+    }] : [];
 
     return {
       animation: false,
@@ -153,7 +287,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       },
       grid: {
         left: 26,
-        right: 8,
+        right: hasHrvSeries ? 32 : 8,
         top: 8,
         bottom: style.isCompactLayout ? GRID_BOTTOM_COMPACT : GRID_BOTTOM_WITH_LEGEND,
       },
@@ -197,28 +331,11 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
           interval: 0,
         },
       },
-      yAxis: {
-        type: 'value',
-        min: 0,
-        axisLabel: {
-          color: style.secondaryTextColor,
-          fontSize: style.axisFontSize,
-          formatter: (value: number) => `${value}h`,
-        },
-        splitLine: { lineStyle: { color: style.gridColor } },
-      },
-      series: STAGE_SERIES.map((stage) => ({
-        name: stage.name,
-        type: 'bar',
-        stack: 'sleep',
-        barMaxWidth: 32,
-        itemStyle: {
-          color: stage.color,
-          borderRadius: stage.key === 'awakeSeconds' ? [3, 3, 0, 0] : 0,
-        },
-        emphasis: { focus: 'series' },
-        data: points.map(point => this.secondsToHours(point[stage.key])),
-      })),
+      yAxis: hasHrvSeries ? [sleepDurationAxis, hrvAxis] : sleepDurationAxis,
+      series: [
+        ...stageSeries,
+        ...hrvSeries,
+      ],
     };
   }
 
@@ -231,6 +348,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
     if (!point) {
       return '';
     }
+    const averageHrvMs = this.toFiniteMetric(point.averageHrvMs);
 
     const lines = [
       `${point.providerLabel} · ${point.sleepDate}`,
@@ -241,7 +359,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
         .map(stage => `${stage.name}: ${formatSleepDuration(point[stage.key])}`),
       point.score !== null ? `Score: ${Math.round(point.score)}` : '',
       point.averageHeartRateBpm !== null ? `HR avg: ${Math.round(point.averageHeartRateBpm)} bpm` : '',
-      point.averageHrvMs !== null ? `HRV: ${Math.round(point.averageHrvMs)} ms` : '',
+      averageHrvMs !== null ? `HRV: ${Math.round(averageHrvMs)} ms` : '',
       point.maxSpo2Percent !== null ? `SpO2 max: ${Math.round(point.maxSpo2Percent)}%` : '',
     ].filter(line => line.length > 0);
 
@@ -250,6 +368,23 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
 
   private secondsToHours(seconds: number): number {
     return Math.round((seconds / 3600) * 100) / 100;
+  }
+
+  private toFiniteMetric(value: number | null | undefined): number | null {
+    return Number.isFinite(value) ? Number(value) : null;
+  }
+
+  private averageMetric(values: ReadonlyArray<number | null>): number | null {
+    const finiteValues = values.filter((value): value is number => value !== null);
+    if (!finiteValues.length) {
+      return null;
+    }
+    const total = finiteValues.reduce((sum, value) => sum + value, 0);
+    return total / finiteValues.length;
+  }
+
+  private resolveSleepRangeLabel(range: AppDashboardSleepTrendRange): string {
+    return DASHBOARD_SLEEP_TREND_RANGE_OPTIONS.find(option => option.range === range)?.label || DASHBOARD_SLEEP_TREND_DEFAULT_RANGE;
   }
 
   private formatDateTime(timestampMs: number): string {

@@ -201,6 +201,7 @@ describe('AppUserUtilities', () => {
             expect(settings.chartSettings?.syncChartHoverToMap).toBe(false);
             expect(settings.dashboardSettings?.dateRange).toBe(DateRanges.all);
             expect(settings.dashboardSettings?.includeMergedEvents).toBe(true);
+            expect(settings.dashboardSettings?.sleepTrend?.range).toBe('14d');
             expect(settings.dashboardSettings?.tiles?.some((tile: any) => (
                 tile?.type === TileTypes.Chart
                 && (tile?.chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE || tile?.dataType === 'SleepDuration')
@@ -216,7 +217,7 @@ describe('AppUserUtilities', () => {
             const user = {
                 settings: {
                     appSettings: { theme: AppThemes.Dark, unitSetupCompleted: false } as any,
-                    dashboardSettings: { dateRange: DateRanges.lastYear, includeMergedEvents: false }
+                    dashboardSettings: { dateRange: DateRanges.lastYear, includeMergedEvents: false, sleepTrend: { range: '90d' } }
                 }
             } as User;
             const settings = AppUserUtilities.fillMissingAppSettings(user);
@@ -224,6 +225,23 @@ describe('AppUserUtilities', () => {
             expect((settings.appSettings as any)?.unitSetupCompleted).toBe(false);
             expect(settings.dashboardSettings?.dateRange).toBe(DateRanges.lastYear);
             expect(settings.dashboardSettings?.includeMergedEvents).toBe(false);
+            expect(settings.dashboardSettings?.sleepTrend?.range).toBe('90d');
+        });
+
+        it('should normalize invalid sleep trend range settings to 14d', () => {
+            const user = {
+                settings: {
+                    dashboardSettings: {
+                        sleepTrend: {
+                            range: '7d',
+                        },
+                    },
+                },
+            } as any;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+
+            expect(settings.dashboardSettings?.sleepTrend?.range).toBe('14d');
         });
 
         it('should preserve explicit service sync route toggle', () => {

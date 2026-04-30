@@ -36,7 +36,7 @@
 .kpi-title {
   flex: 0 0 auto;
   min-width: auto;
-  font-size: 0.82rem;
+  font-size: 0.9rem;
   font-weight: 600;
   line-height: 1.1;
   color: var(--mat-sys-on-surface-variant);

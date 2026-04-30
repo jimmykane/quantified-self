@@ -1,9 +1,15 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatMenu, MatMenuModule } from '@angular/material/menu';
+import { By } from '@angular/platform-browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SLEEP_PROVIDERS } from '@shared/sleep';
 import { ChartsSleepTrendComponent } from './charts.sleep-trend.component';
+import { ChartRangeSelectorComponent } from '../shared/chart-range-selector/chart-range-selector.component';
 import type { DashboardSleepTrendPoint } from '../../../helpers/dashboard-sleep-chart.helper';
+import { AppColors } from '../../../services/color/app.colors';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
 
@@ -45,7 +51,8 @@ describe('ChartsSleepTrendComponent', () => {
     };
 
     await TestBed.configureTestingModule({
-      declarations: [ChartsSleepTrendComponent],
+      declarations: [ChartsSleepTrendComponent, ChartRangeSelectorComponent],
+      imports: [MatButtonModule, MatIconModule, MatMenuModule],
       providers: [
         { provide: EChartsLoaderService, useValue: mockLoader },
         { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn() } },
@@ -86,9 +93,145 @@ describe('ChartsSleepTrendComponent', () => {
     expect(option?.legend?.bottom).toBe(0);
     expect(option?.grid?.bottom).toBeGreaterThan(34);
   });
+
+  it('renders sleep range controls and navigation buttons', () => {
+    component.sleepRange = '30d';
+    component.sleepWindowLabel = 'Last 30 days';
+    component.canNavigateOlder = true;
+    component.canNavigateNewer = false;
+    component.reserveTitleActionSpace = true;
+
+    fixture.detectChanges();
+
+    const element = fixture.nativeElement as HTMLElement;
+    const rangeMenuButton = element.querySelector('.chart-range-selector-button');
+    const reservedHeader = element.querySelector('.sleep-header.sleep-header-reserve-actions');
+    const controlsInTitleRow = element.querySelector('.title-row .sleep-controls');
+    const rangeMenu = fixture.debugElement.query(By.directive(MatMenu));
+    const navButtons = element.querySelectorAll('.sleep-nav-button');
+
+    expect(rangeMenuButton).toBeTruthy();
+    expect(reservedHeader).toBeTruthy();
+    expect(controlsInTitleRow).toBeTruthy();
+    expect(rangeMenuButton?.textContent).toContain('30d');
+    expect(rangeMenu).toBeTruthy();
+    expect(component.rangeOptions.map(option => option.label)).toEqual(['14d', '30d', '90d', 'All']);
+    expect(navButtons).toHaveLength(2);
+    expect((navButtons[0] as HTMLButtonElement).disabled).toBe(false);
+    expect((navButtons[1] as HTMLButtonElement).disabled).toBe(true);
+    expect(element.querySelector('.sleep-context-label')?.textContent).toContain('Last 30 days');
+  });
+
+  it('emits sleep range and navigation events from component controls', () => {
+    const ranges: string[] = [];
+    const directions: string[] = [];
+    component.sleepRange = '14d';
+    component.canNavigateOlder = true;
+    component.canNavigateNewer = true;
+    component.sleepRangeChange.subscribe(range => ranges.push(range));
+    component.sleepNavigate.subscribe(direction => directions.push(direction));
+
+    component.onSleepRangeSelection('90d');
+    component.navigateSleep('older');
+    component.navigateSleep('newer');
+
+    expect(ranges).toEqual(['90d']);
+    expect(directions).toEqual(['older', 'newer']);
+  });
+
+  it('does not emit disabled newer navigation or redundant range changes', () => {
+    const ranges: string[] = [];
+    const directions: string[] = [];
+    component.sleepRange = '14d';
+    component.canNavigateOlder = true;
+    component.canNavigateNewer = false;
+    component.sleepRangeChange.subscribe(range => ranges.push(range));
+    component.sleepNavigate.subscribe(direction => directions.push(direction));
+
+    component.onSleepRangeSelection('14d');
+    component.navigateSleep('newer');
+    component.sleepRange = 'all';
+    component.navigateSleep('older');
+
+    expect(ranges).toEqual([]);
+    expect(directions).toEqual([]);
+  });
+
+  it('renders recorded sleep HRV as a secondary-axis line', async () => {
+    const point = buildSleepPoint();
+    const secondPoint = buildSleepPoint({
+      id: 'suunto-sleep-2',
+      categoryLabel: 'Apr 29\nSuunto',
+      sleepDate: '2026-04-29',
+      startTimeMs: Date.UTC(2026, 3, 28, 21, 45),
+      endTimeMs: Date.UTC(2026, 3, 29, 5, 30),
+      averageHrvMs: 42,
+    });
+    component.sleepTrend = {
+      points: [point, secondPoint],
+      latestPoint: secondPoint,
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => {
+      expect(mockLoader.setOption).toHaveBeenCalled();
+    });
+
+    const setOptionCall = mockLoader.setOption.mock.calls.at(-1) || [];
+    const optionCandidate = setOptionCall[1] || setOptionCall[0];
+    const option = optionCandidate as Record<string, any>;
+    const hrvSeries = option.series.find((series: any) => series.name === 'HRV');
+
+    expect(Array.isArray(option.yAxis)).toBe(true);
+    expect(option.yAxis).toHaveLength(2);
+    expect(option.grid.right).toBeGreaterThan(8);
+    expect(hrvSeries).toMatchObject({
+      name: 'HRV',
+      type: 'line',
+      yAxisIndex: 1,
+      connectNulls: false,
+      lineStyle: { color: AppColors.Green },
+      itemStyle: { color: AppColors.Green },
+      data: [62, 42],
+      markLine: {
+        data: [{ name: 'Avg HRV', yAxis: 52 }],
+      },
+    });
+    expect(hrvSeries.markLine.label.formatter).toBe('Avg 52ms');
+    expect(hrvSeries.markLine.lineStyle).toMatchObject({
+      color: AppColors.Green,
+      type: 'dashed',
+    });
+  });
+
+  it('omits the HRV line and secondary axis when no sleep point has HRV', async () => {
+    const point = {
+      ...buildSleepPoint(),
+      averageHrvMs: null,
+    };
+    component.sleepTrend = {
+      points: [point],
+      latestPoint: point,
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => {
+      expect(mockLoader.setOption).toHaveBeenCalled();
+    });
+
+    const setOptionCall = mockLoader.setOption.mock.calls.at(-1) || [];
+    const optionCandidate = setOptionCall[1] || setOptionCall[0];
+    const option = optionCandidate as Record<string, any>;
+
+    expect(Array.isArray(option.yAxis)).toBe(false);
+    expect(option.grid.right).toBe(8);
+    expect(option.series.some((series: any) => series.name === 'HRV')).toBe(false);
+  });
 });
 
-function buildSleepPoint(): DashboardSleepTrendPoint {
+function buildSleepPoint(overrides: Partial<DashboardSleepTrendPoint> = {}): DashboardSleepTrendPoint {
   const startTimeMs = Date.UTC(2026, 3, 27, 21, 45);
   const endTimeMs = Date.UTC(2026, 3, 28, 5, 30);
 
@@ -110,5 +253,6 @@ function buildSleepPoint(): DashboardSleepTrendPoint {
     averageHeartRateBpm: 48,
     averageHrvMs: 62,
     maxSpo2Percent: 98,
+    ...overrides,
   };
 }

@@ -15,12 +15,10 @@
         </div>
         <div class="form-status-controls">
           <div class="form-status-meta">Latest TSS: {{ headlineStats().tss.value }}</div>
-          <mat-button-toggle-group class="form-granularity-toggle" [value]="selectedGranularity()"
-            (change)="onGranularityChange($event)" hideSingleSelectionIndicator>
-            @for (option of granularityOptions; track option.key) {
-            <mat-button-toggle [value]="option.key">{{ option.label }}</mat-button-toggle>
-            }
-          </mat-button-toggle-group>
+          <app-chart-range-selector class="form-granularity-selector" [options]="granularityRangeOptions"
+            [value]="selectedGranularity()" ariaLabel="Select Form and TSS timeline window"
+            (valueChange)="onGranularityChange($event)">
+          </app-chart-range-selector>
         </div>
       </div>
 

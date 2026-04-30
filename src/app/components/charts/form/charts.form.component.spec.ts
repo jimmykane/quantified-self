@@ -1,7 +1,12 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatMenu, MatMenuModule } from '@angular/material/menu';
+import { By } from '@angular/platform-browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChartsFormComponent } from './charts.form.component';
+import { ChartRangeSelectorComponent } from '../shared/chart-range-selector/chart-range-selector.component';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
@@ -131,7 +136,8 @@ describe('ChartsFormComponent', () => {
     hapticsMock = { selection: vi.fn() };
 
     await TestBed.configureTestingModule({
-      declarations: [ChartsFormComponent],
+      declarations: [ChartsFormComponent, ChartRangeSelectorComponent],
+      imports: [MatButtonModule, MatIconModule, MatMenuModule],
       providers: [
         { provide: AppHapticsService, useValue: hapticsMock },
         { provide: EChartsLoaderService, useValue: mockLoader },
@@ -332,7 +338,7 @@ describe('ChartsFormComponent', () => {
     expect(option.toolbox).toBeUndefined();
   });
 
-  it('should switch render granularity and timeline window via compact buttons without zoom/restore toolbar', async () => {
+  it('should switch render granularity and timeline window via Material toggles without zoom/restore toolbar', async () => {
     const longRangePoints = buildLongRangePoints(1200);
     component.data = longRangePoints;
     fixture.detectChanges();
@@ -344,11 +350,13 @@ describe('ChartsFormComponent', () => {
     const weeklyMin = weeklyOption.xAxis[1].min;
     const weeklyMax = weeklyOption.xAxis[1].max;
 
-    const granularityToggle = fixture.nativeElement.querySelector('mat-button-toggle-group.form-granularity-toggle');
-    expect(granularityToggle).toBeTruthy();
-    expect((fixture.nativeElement.textContent || '')).toContain('W');
-    expect((fixture.nativeElement.textContent || '')).toContain('M');
-    expect((fixture.nativeElement.textContent || '')).toContain('Y');
+    const granularityMenuButton = fixture.nativeElement.querySelector('.chart-range-selector-button');
+    const granularityMenu = fixture.debugElement.query(By.directive(MatMenu));
+    expect(granularityMenuButton).toBeTruthy();
+    expect(granularityMenuButton?.getAttribute('aria-label')).toBe('Select Form and TSS timeline window');
+    expect(granularityMenuButton?.textContent).toContain('W');
+    expect(granularityMenu).toBeTruthy();
+    expect(component.granularityOptions.map(option => option.label)).toEqual(['W', 'M', 'Y']);
 
     component.onGranularityChange('m');
     fixture.detectChanges();

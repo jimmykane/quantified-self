@@ -278,6 +278,10 @@ describe('SummariesComponent', () => {
   });
 
   it('should keep sleep listening independent from dashboard event date filters', async () => {
+    const nowMs = Date.UTC(2026, 3, 30, 12, 0, 0);
+    const fourteenDaysMs = 14 * 24 * 60 * 60 * 1000;
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(nowMs));
     buildDashboardTileViewModelsSpy.mockReturnValue([]);
     component.user = {
       uid: 'user-1',
@@ -320,7 +324,9 @@ describe('SummariesComponent', () => {
       } as any,
     });
 
-    expect(mockSleepService.watchForDashboard).toHaveBeenCalledWith('user-1', null, null);
+    expect(component.sleepTrendRange).toBe('14d');
+    expect(component.sleepTrendWindowLabel).toBe('Last 14 days');
+    expect(mockSleepService.watchForDashboard).toHaveBeenCalledWith('user-1', nowMs - fourteenDaysMs, nowMs);
 
     component.dashboardStartDate = new Date('2025-01-01T00:00:00.000Z');
     component.dashboardEndDate = new Date('2025-01-31T23:59:59.999Z');
@@ -341,6 +347,101 @@ describe('SummariesComponent', () => {
     });
 
     expect(mockSleepService.watchForDashboard).toHaveBeenCalledTimes(1);
+  });
+
+  it('should persist sleep range changes and reset the listener to the latest selected window', async () => {
+    const nowMs = Date.UTC(2026, 3, 30, 12, 0, 0);
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(nowMs));
+    buildDashboardTileViewModelsSpy.mockReturnValue([]);
+    component.user = {
+      uid: 'user-1',
+      settings: {
+        dashboardSettings: {
+          sleepTrend: { range: '14d' },
+          tiles: [],
+        },
+      },
+    } as any;
+    component.events = [];
+
+    await component.ngOnChanges({
+      user: {
+        currentValue: component.user,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+      events: {
+        currentValue: component.events,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+    });
+    mockSleepService.watchForDashboard.mockClear();
+
+    await component.onSleepTrendRangeChange('30d');
+
+    expect(component.user.settings.dashboardSettings.sleepTrend.range).toBe('30d');
+    expect(component.sleepTrendRange).toBe('30d');
+    expect(component.sleepTrendWindowLabel).toBe('Last 30 days');
+    expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(component.user, { settings: component.user.settings });
+    expect(mockSleepService.watchForDashboard).toHaveBeenCalledWith('user-1', nowMs - thirtyDaysMs, nowMs);
+  });
+
+  it('should page sleep windows by the selected range and cap newer navigation at latest', async () => {
+    const nowMs = Date.UTC(2026, 3, 30, 12, 0, 0);
+    const fourteenDaysMs = 14 * 24 * 60 * 60 * 1000;
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(nowMs));
+    buildDashboardTileViewModelsSpy.mockReturnValue([]);
+    component.user = {
+      uid: 'user-1',
+      settings: {
+        dashboardSettings: {
+          sleepTrend: { range: '14d' },
+          tiles: [],
+        },
+      },
+    } as any;
+    component.events = [];
+
+    await component.ngOnChanges({
+      user: {
+        currentValue: component.user,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+      events: {
+        currentValue: component.events,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+    });
+    mockSleepService.watchForDashboard.mockClear();
+
+    component.onSleepTrendNavigate('older');
+
+    expect(component.sleepTrendCanNavigateNewer).toBe(true);
+    expect(mockSleepService.watchForDashboard).toHaveBeenLastCalledWith(
+      'user-1',
+      nowMs - (2 * fourteenDaysMs),
+      nowMs - fourteenDaysMs,
+    );
+
+    component.onSleepTrendNavigate('newer');
+
+    expect(component.sleepTrendCanNavigateNewer).toBe(false);
+    expect(component.sleepTrendWindowLabel).toBe('Last 14 days');
+    expect(mockSleepService.watchForDashboard).toHaveBeenLastCalledWith(
+      'user-1',
+      nowMs - fourteenDaysMs,
+      nowMs,
+    );
   });
 
   it('should rebuild tiles when dashboard settings mutate in place', async () => {

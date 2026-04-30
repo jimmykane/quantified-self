@@ -1,15 +1,30 @@
 <app-loading-overlay [isLoading]="isLoading" [hasError]="showNoDataError" [allowErrorPassthrough]="true" [errorMessage]="noDataErrorMessage"
   [errorHint]="noDataErrorHint" [errorIcon]="noDataErrorIcon" [showSkeleton]="false" height="100%" [style.height.%]="100">
   <section class="sleep-layout">
-    <header class="sleep-header">
+    <header class="sleep-header" [class.sleep-header-reserve-actions]="reserveTitleActionSpace">
       <div class="title-row">
-        <div class="sleep-title">Sleep</div>
-        @if (infoTooltip) {
-        <button mat-icon-button class="title-info-button" appHapticTap appTooltipTap [matTooltip]="infoTooltip" matTooltipPosition="below"
-          aria-label="How this chart is calculated">
-          <mat-icon>info</mat-icon>
-        </button>
-        }
+        <div class="sleep-title-group">
+          <div class="sleep-title">Sleep</div>
+          @if (infoTooltip) {
+          <button mat-icon-button class="title-info-button" appHapticTap appTooltipTap [matTooltip]="infoTooltip" matTooltipPosition="below"
+            aria-label="How this chart is calculated">
+            <mat-icon>info</mat-icon>
+          </button>
+          }
+        </div>
+        <nav class="sleep-controls" aria-label="Sleep trend range navigation">
+          <button mat-icon-button class="sleep-nav-button" appHapticTap [disabled]="sleepRange === 'all' || !canNavigateOlder"
+            (click)="navigateSleep('older')" matTooltip="Older sleep window" matTooltipPosition="below" aria-label="Show older sleep window">
+            <mat-icon>chevron_left</mat-icon>
+          </button>
+          <app-chart-range-selector class="sleep-range-selector" [options]="rangeSelectorOptions" [value]="sleepRange"
+            ariaLabel="Select sleep range" (valueChange)="onSleepRangeSelection($event)">
+          </app-chart-range-selector>
+          <button mat-icon-button class="sleep-nav-button" appHapticTap [disabled]="sleepRange === 'all' || !canNavigateNewer"
+            (click)="navigateSleep('newer')" matTooltip="Newer sleep window" matTooltipPosition="below" aria-label="Show newer sleep window">
+            <mat-icon>chevron_right</mat-icon>
+          </button>
+        </nav>
       </div>
       <div class="sleep-stats">
         <div class="sleep-stat">
@@ -25,7 +40,7 @@
           <div class="sleep-stat-label">HRV</div>
         </div>
       </div>
-      <div class="sleep-context-label">{{ latestContextText }}</div>
+      <div class="sleep-context-label">{{ sleepWindowLabel || 'Sleep window' }} · {{ latestContextText }}</div>
     </header>
     <div #chartDiv class="sleep-chart"></div>
   </section>

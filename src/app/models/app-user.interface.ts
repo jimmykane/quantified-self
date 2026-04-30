@@ -29,9 +29,16 @@ export interface AppMyTracksSettings extends UserMyTracksSettingsInterface {
     showJumpHeatmap?: boolean;
 }
 
+export type AppDashboardSleepTrendRange = '14d' | '30d' | '90d' | 'all';
+
+export interface AppDashboardSleepTrendSettingsInterface {
+    range?: AppDashboardSleepTrendRange;
+}
+
 export interface AppDashboardSettingsInterface extends UserDashboardSettingsInterface {
     includeMergedEvents?: boolean;
     dismissedCuratedRecoveryNowTile?: boolean;
+    sleepTrend?: AppDashboardSleepTrendSettingsInterface;
 }
 
 export interface AppChartSettingsInterface extends Omit<UserChartSettingsInterface, 'theme' | 'extraMaxForPower' | 'extraMaxForPace'> {

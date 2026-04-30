@@ -35,16 +35,18 @@ export class AppSleepService {
       return of([]);
     }
 
-    const endTimeMs = this.toMs(endDate) || Date.now();
-    const startTimeMs = this.toMs(startDate) || (endTimeMs - AppSleepService.FALLBACK_LOOKBACK_MS);
+    const requestedStartTimeMs = this.toMs(startDate);
+    const endTimeMs = this.toMs(endDate) ?? Date.now();
+    const startTimeMs = requestedStartTimeMs ?? (endTimeMs - AppSleepService.FALLBACK_LOOKBACK_MS);
     const queryStartMs = Math.max(0, startTimeMs - AppSleepService.OVERNIGHT_LOOKBACK_MS);
+    const isFallbackWindow = requestedStartTimeMs === null;
     const sleepCollection = collection(this.firestore, 'users', uid, SLEEP_SESSIONS_COLLECTION_ID);
     const sleepQuery = query(
       sleepCollection,
       where('startTimeMs', '>=', queryStartMs),
       where('startTimeMs', '<=', endTimeMs),
       orderBy('startTimeMs', 'desc'),
-      limit(AppSleepService.FALLBACK_LIMIT),
+      ...(isFallbackWindow ? [limit(AppSleepService.FALLBACK_LIMIT)] : []),
     );
 
     return (collectionData(sleepQuery, { idField: 'id' }) as Observable<SleepSession[]>).pipe(

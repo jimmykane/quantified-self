@@ -23,18 +23,76 @@
   padding: 0 10px;
 }
 
+.sleep-header.sleep-header-reserve-actions {
+  padding-right: 72px;
+}
+
 .title-row {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 4px;
+  justify-content: space-between;
+  gap: 8px;
   min-width: 0;
 }
 
+.sleep-title-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
 .sleep-title {
-  font-size: 0.82rem;
+  font-size: 0.9rem;
   font-weight: 600;
   line-height: 1.1;
   color: var(--mat-sys-on-surface-variant);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sleep-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  width: fit-content;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.sleep-range-selector {
+  flex: 0 0 auto;
+  --chart-range-selector-height: 30px;
+  --chart-range-selector-font-size: 0.82rem;
+  --chart-range-selector-icon-size: 18px;
+}
+
+.sleep-nav-button {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  min-height: 30px;
+  line-height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  --mdc-icon-button-state-layer-size: 30px;
+  --mat-icon-button-state-layer-size: 30px;
+  --mat-icon-button-touch-target-size: 30px;
+  --mat-icon-button-touch-target-display: none;
+}
+
+.sleep-nav-button mat-icon {
+  width: 20px;
+  height: 20px;
+  line-height: 20px;
+  font-size: 20px;
 }
 
 .title-info-button {
@@ -84,6 +142,10 @@
   line-height: 1.15;
   color: var(--mat-sys-on-surface-variant);
   opacity: 0.92;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sleep-chart {
@@ -91,4 +153,10 @@
   flex: 1 1 auto;
   min-height: 90px;
   min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .sleep-header.sleep-header-reserve-actions {
+    padding-right: 44px;
+  }
 }

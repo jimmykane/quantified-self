@@ -29,6 +29,8 @@
 .form-status-controls {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 5px;
   min-width: 0;
 }
@@ -42,7 +44,7 @@
 
 .form-status-title {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: 0.96rem;
   font-weight: 700;
   line-height: 1.1;
   color: var(--mat-sys-on-surface);
@@ -87,27 +89,19 @@
 }
 
 .form-status-meta {
-  font-size: 0.68rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.1;
   color: var(--mat-sys-on-surface-variant);
   white-space: nowrap;
 }
 
-.form-granularity-toggle {
-  --mat-standard-button-toggle-height: 18px;
-  --mat-standard-button-toggle-shape: 999px;
+.form-granularity-selector {
   flex: 0 0 auto;
   margin-right: 2px;
-}
-
-:host ::ng-deep .form-granularity-toggle .mat-button-toggle-button {
-  min-width: 16px !important;
-}
-
-:host ::ng-deep .form-granularity-toggle .mat-button-toggle-label-content {
-  line-height: 18px !important;
-  font-size: 0.56rem !important;
-  font-weight: 600 !important;
-  padding: 0 4px !important;
+  --chart-range-selector-height: 30px;
+  --chart-range-selector-font-size: 0.82rem;
+  --chart-range-selector-icon-size: 18px;
 }
 
 .form-stats-row {
@@ -157,7 +151,7 @@
   }
 
   .form-status-title {
-    font-size: 0.86rem;
+    font-size: 0.9rem;
   }
 
   .form-status-row {

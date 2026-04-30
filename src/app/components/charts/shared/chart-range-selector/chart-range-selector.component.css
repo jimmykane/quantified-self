@@ -1,0 +1,44 @@
+:host {
+  display: inline-flex;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.chart-range-selector-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  box-sizing: border-box;
+  min-width: 0;
+  height: var(--chart-range-selector-height, 30px);
+  min-height: var(--chart-range-selector-height, 30px);
+  padding: 0 var(--chart-range-selector-horizontal-padding, 10px);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--mat-sys-primary), transparent 91%);
+  color: var(--mat-sys-primary);
+  font-size: var(--chart-range-selector-font-size, 0.82rem);
+  font-weight: 600;
+  line-height: var(--chart-range-selector-height, 30px);
+}
+
+.chart-range-selector-button:hover {
+  background: color-mix(in srgb, var(--mat-sys-primary), transparent 87%);
+}
+
+.chart-range-selector-label {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.chart-range-selector-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--chart-range-selector-icon-size, 18px);
+  height: var(--chart-range-selector-icon-size, 18px);
+  font-size: var(--chart-range-selector-icon-size, 18px);
+  line-height: var(--chart-range-selector-icon-size, 18px);
+  margin: 0 0 0 1px;
+}
