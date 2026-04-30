@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { buildDashboardSleepTrendContext, formatSleepDuration } from './dashboard-sleep-chart.helper';
 
+function expectedSleepDateLabel(sleepDate: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  }).format(new Date(`${sleepDate}T00:00:00.000Z`));
+}
+
 describe('dashboard-sleep-chart.helper', () => {
   it('builds stacked sleep points for staged provider sessions', () => {
     const context = buildDashboardSleepTrendContext([{
@@ -37,6 +45,7 @@ describe('dashboard-sleep-chart.helper', () => {
       averageHrvMs: 67,
       maxSpo2Percent: 98,
     });
+    expect(context.points[0].categoryLabel).toBe(expectedSleepDateLabel('2026-01-03'));
     expect(context.points[0].unknownSeconds).toBe(0);
     expect(context.latestPoint?.id).toBe('garmin-sleep-1');
   });
@@ -81,6 +90,10 @@ describe('dashboard-sleep-chart.helper', () => {
     ] as any[]);
 
     expect(context.points.map(point => point.providerLabel)).toEqual(['Suunto', 'Suunto']);
+    expect(context.points.map(point => point.categoryLabel)).toEqual([
+      expectedSleepDateLabel('2026-01-04'),
+      expectedSleepDateLabel('2026-01-05'),
+    ]);
     expect(context.points.every(point => !point.categoryLabel.includes('Suunto'))).toBe(true);
     expect(context.points.every(point => !point.categoryLabel.includes('\n'))).toBe(true);
   });
@@ -110,8 +123,8 @@ describe('dashboard-sleep-chart.helper', () => {
       'suunto-earlier-sleep',
     ]);
     expect(context.points.map((point) => point.categoryLabel)).toEqual([
-      expect.stringContaining('\nGarmin'),
-      expect.stringContaining('\nSuunto'),
+      `${expectedSleepDateLabel('2026-01-06')}\nGarmin`,
+      `${expectedSleepDateLabel('2026-01-06')}\nSuunto`,
     ]);
     expect(context.latestPoint?.id).toBe('garmin-later-sleep');
   });

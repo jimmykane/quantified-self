@@ -64,6 +64,7 @@ function dateLabel(sleepDate: string): string {
     return sleepDate || 'Sleep';
   }
   return new Intl.DateTimeFormat(undefined, {
+    weekday: 'short',
     month: 'short',
     day: 'numeric',
   }).format(new Date(parsed));
