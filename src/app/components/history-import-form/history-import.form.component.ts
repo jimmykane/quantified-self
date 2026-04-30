@@ -378,6 +378,11 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
     try {
       this.analyticsService.logEvent('backfilled_sleep_history', { method: ServiceNames.SuuntoApp });
+    } catch (e) {
+      this.logger.error(e);
+    }
+
+    try {
       const result = await this.userService.backfillSuuntoSleepForCurrentUser();
       this.pendingSleepBackfillResult.set(result);
       this.snackBar.open(`Sleep backfill queued: ${result.queued} windows.`, undefined, {

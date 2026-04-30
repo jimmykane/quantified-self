@@ -191,6 +191,27 @@ describe('HistoryImportFormComponent', () => {
         } as any);
 
         expect(mockUserService.backfillSuuntoSleepForCurrentUser).toHaveBeenCalled();
+        expect(mockAnalyticsService.logEvent).toHaveBeenCalledWith('backfilled_sleep_history', { method: ServiceNames.SuuntoApp });
+        expect(component.pendingSleepBackfillResult()?.queued).toBe(135);
+    });
+
+    it('should still queue Suunto sleep backfill when analytics logging fails', async () => {
+        await fixture.whenStable();
+        component.serviceName = ServiceNames.SuuntoApp;
+        component.userMetaForService = {} as UserServiceMetaInterface;
+        component.isPro = true;
+        mockAnalyticsService.logEvent.mockImplementationOnce(() => {
+            throw new Error('analytics unavailable');
+        });
+        (component as any).processChanges();
+
+        await component.onSuuntoSleepBackfill({
+            preventDefault: vi.fn(),
+            stopPropagation: vi.fn(),
+        } as any);
+
+        expect(mockLoggerService.error).toHaveBeenCalledWith(expect.any(Error));
+        expect(mockUserService.backfillSuuntoSleepForCurrentUser).toHaveBeenCalled();
         expect(component.pendingSleepBackfillResult()?.queued).toBe(135);
     });
 
