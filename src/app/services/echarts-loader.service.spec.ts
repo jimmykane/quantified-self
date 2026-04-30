@@ -356,13 +356,16 @@ describe('EChartsLoaderService', () => {
     const clickHandler = handlers.get('click');
     const dataZoomHandler = handlers.get('datazoom');
     const brushEndHandler = handlers.get('brushEnd');
+    const axisPointerHandler = handlers.get('updateAxisPointer');
 
     expect(chart.on).toHaveBeenCalledWith('click', expect.any(Function));
     expect(chart.on).toHaveBeenCalledWith('datazoom', expect.any(Function));
     expect(chart.on).toHaveBeenCalledWith('brushEnd', expect.any(Function));
+    expect(chart.on).toHaveBeenCalledWith('updateAxisPointer', expect.any(Function));
     expect(clickHandler).toBeTypeOf('function');
     expect(dataZoomHandler).toBeTypeOf('function');
     expect(brushEndHandler).toBeTypeOf('function');
+    expect(axisPointerHandler).toBeTypeOf('function');
 
     clickHandler?.({ componentType: 'legend' });
     expect(hapticsMock.selection).not.toHaveBeenCalled();
@@ -400,10 +403,26 @@ describe('EChartsLoaderService', () => {
     brushEndHandler?.({ $from: 'event-chart-brush-zoom', areas: [{ coordRange: [10, 20] }] });
     expect(hapticsMock.selection).toHaveBeenCalledTimes(7);
 
+    axisPointerHandler?.({ axesInfo: [{ axisDim: 'y', axisIndex: 0, value: 90 }] });
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(7);
+
+    axisPointerHandler?.({ axesInfo: [{ axisDim: 'x', axisIndex: 0, value: 100 }] });
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(8);
+
+    axisPointerHandler?.({ axesInfo: [{ axisDim: 'x', axisIndex: 0, value: 100 }] });
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(8);
+
+    axisPointerHandler?.({ axesInfo: [{ axisDim: 'x', axisIndex: 0, value: 101 }] });
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(9);
+
+    axisPointerHandler?.({ $from: 'event-chart-tooltip-sync', axesInfo: [{ axisDim: 'x', axisIndex: 0, value: 102 }] });
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(9);
+
     unsubscribe();
     expect(chart.off).toHaveBeenCalledWith('click', clickHandler);
     expect(chart.off).toHaveBeenCalledWith('datazoom', dataZoomHandler);
     expect(chart.off).toHaveBeenCalledWith('brushEnd', brushEndHandler);
+    expect(chart.off).toHaveBeenCalledWith('updateAxisPointer', axisPointerHandler);
   });
 
   it('should throw when loading in non-browser platform', async () => {
