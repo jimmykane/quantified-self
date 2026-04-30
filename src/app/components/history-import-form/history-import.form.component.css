@@ -232,9 +232,27 @@
   flex-shrink: 0;
 }
 
-.sleep-backfill-button mat-icon,
-.sleep-backfill-button mat-spinner {
-  margin-right: 0.35rem;
+.sleep-backfill-button-content {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 24px;
+  line-height: 20px;
+}
+
+.sleep-backfill-button-content mat-icon {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  font-size: 18px;
+  line-height: 18px;
+}
+
+.sleep-backfill-progress {
+  flex: 0 0 18px;
+  margin: 0;
+  --mdc-circular-progress-active-indicator-color: currentColor;
 }
 
 @media (max-width: 640px) {
