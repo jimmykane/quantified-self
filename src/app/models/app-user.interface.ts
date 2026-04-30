@@ -29,7 +29,7 @@ export interface AppMyTracksSettings extends UserMyTracksSettingsInterface {
     showJumpHeatmap?: boolean;
 }
 
-export type AppDashboardSleepTrendRange = '14d' | '30d' | '90d' | 'all';
+export type AppDashboardSleepTrendRange = '14d' | '30d' | '90d' | '1y';
 
 export interface AppDashboardSleepTrendSettingsInterface {
     range?: AppDashboardSleepTrendRange;

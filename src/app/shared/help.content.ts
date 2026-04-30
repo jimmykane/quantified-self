@@ -431,7 +431,7 @@ Garmin, Suunto, and COROS connections are part of **Pro**.
 
 ## Sleep data
 
-Sleep sync is server-owned health data. When available, Garmin, Suunto, and COROS sleep sessions are imported as separate source records and shown by the dashboard **Sleep** tile. The sleep chart has its own 14d, 30d, 90d, and All range control with older/newer paging, independent from dashboard event filters. It stacks sleep stages and overlays recorded sleep HRV with an average HRV reference line when the provider includes it. Suunto Pro users can queue **Backfill Sleep History** from History Import; it requests Suunto sleep from Jan 1, 2016 to today and uses a 7-day sleep backfill cooldown.
+Sleep sync is server-owned health data. When available, Garmin, Suunto, and COROS sleep sessions are imported as separate source records and shown by the dashboard **Sleep** tile. The sleep chart has its own 14d, 30d, 90d, and 1y range control with older/newer paging, independent from dashboard event filters. It stacks sleep stages and overlays recorded sleep HRV with an average HRV reference line when the provider includes it. Suunto Pro users can queue **Backfill Sleep History** from History Import; it requests Suunto sleep from Jan 1, 2016 to today and uses a 7-day sleep backfill cooldown.
 
 ## Suunto
 

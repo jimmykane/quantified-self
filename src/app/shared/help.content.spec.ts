@@ -145,7 +145,7 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('can run even when the Garmin -> Suunto auto-sync toggle is off');
     expect(serviceConnectionsSection?.content).toContain('Disconnecting Garmin, COROS, or Suunto automatically disables related route auto-sync settings');
     expect(serviceConnectionsSection?.content).toContain('Sleep sync is server-owned health data');
-    expect(serviceConnectionsSection?.content).toContain('14d, 30d, 90d, and All range control');
+    expect(serviceConnectionsSection?.content).toContain('14d, 30d, 90d, and 1y range control');
     expect(serviceConnectionsSection?.content).toContain('independent from dashboard event filters');
     expect(serviceConnectionsSection?.content).toContain('overlays recorded sleep HRV with an average HRV reference line');
     expect(serviceConnectionsSection?.content).toContain('Backfill Sleep History');

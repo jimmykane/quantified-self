@@ -619,10 +619,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   public onSleepTrendNavigate(direction: DashboardSleepTrendNavigationDirection): void {
     const days = dashboardSleepTrendRangeDays(this.sleepTrendRange);
-    if (days === null) {
-      return;
-    }
-
     const nowMs = Date.now();
     const windowMs = days * 24 * 60 * 60 * 1000;
     const currentWindow = this.buildSleepTrendWindow(nowMs);
@@ -637,10 +633,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.changeDetector.markForCheck();
   }
 
-  private buildSleepListenerKey(uid: string, window: { range: AppDashboardSleepTrendRange; startMs: number; endMs: number; isAll: boolean }): string {
-    if (window.isAll) {
-      return `${uid}:${window.range}:all`;
-    }
+  private buildSleepListenerKey(uid: string, window: { range: AppDashboardSleepTrendRange; startMs: number; endMs: number }): string {
     const anchorKey = this.sleepTrendAnchorEndMs === null ? 'latest' : `${window.startMs}:${window.endMs}`;
     return `${uid}:${window.range}:${anchorKey}`;
   }
@@ -653,19 +646,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     range: AppDashboardSleepTrendRange;
     startMs: number;
     endMs: number;
-    isAll: boolean;
   } {
     const range = this.sleepTrendRange || this.getSleepTrendRange();
     const days = dashboardSleepTrendRangeDays(range);
-    if (days === null) {
-      return {
-        range,
-        startMs: 0,
-        endMs: nowMs,
-        isAll: true,
-      };
-    }
-
     const windowMs = days * 24 * 60 * 60 * 1000;
     const anchorEndMs = Number.isFinite(this.sleepTrendAnchorEndMs) && this.sleepTrendAnchorEndMs !== null
       ? Math.min(this.sleepTrendAnchorEndMs, nowMs)
@@ -674,23 +657,22 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       range,
       startMs: Math.max(0, anchorEndMs - windowMs),
       endMs: anchorEndMs,
-      isAll: false,
     };
   }
 
-  private updateSleepTrendWindowState(window: { range: AppDashboardSleepTrendRange; startMs: number; endMs: number; isAll: boolean }): void {
+  private updateSleepTrendWindowState(window: { range: AppDashboardSleepTrendRange; startMs: number; endMs: number }): void {
     this.sleepTrendRange = window.range;
-    this.sleepTrendCanNavigateOlder = !window.isAll;
-    this.sleepTrendCanNavigateNewer = !window.isAll && this.sleepTrendAnchorEndMs !== null;
+    this.sleepTrendCanNavigateOlder = true;
+    this.sleepTrendCanNavigateNewer = this.sleepTrendAnchorEndMs !== null;
     this.sleepTrendWindowLabel = this.formatSleepTrendWindowLabel(window);
   }
 
-  private formatSleepTrendWindowLabel(window: { range: AppDashboardSleepTrendRange; startMs: number; endMs: number; isAll: boolean }): string {
-    if (window.isAll) {
-      return 'All sleep';
-    }
-    const days = dashboardSleepTrendRangeDays(window.range) || 14;
+  private formatSleepTrendWindowLabel(window: { range: AppDashboardSleepTrendRange; startMs: number; endMs: number }): string {
+    const days = dashboardSleepTrendRangeDays(window.range);
     if (this.sleepTrendAnchorEndMs === null) {
+      if (window.range === '1y') {
+        return 'Last 1 year';
+      }
       return `Last ${days} days`;
     }
     return `${this.formatSleepTrendWindowDate(window.startMs)} - ${this.formatSleepTrendWindowDate(window.endMs)}`;
@@ -698,6 +680,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   private formatSleepTrendWindowDate(timestampMs: number): string {
     return new Intl.DateTimeFormat(undefined, {
+      year: 'numeric',
       month: 'short',
       day: 'numeric',
     }).format(new Date(timestampMs));

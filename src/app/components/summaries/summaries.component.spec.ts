@@ -444,6 +444,60 @@ describe('SummariesComponent', () => {
     );
   });
 
+  it('should treat the 1y sleep range as a bounded pageable window', async () => {
+    const nowMs = Date.UTC(2026, 3, 30, 12, 0, 0);
+    const yearMs = 365 * 24 * 60 * 60 * 1000;
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(nowMs));
+    buildDashboardTileViewModelsSpy.mockReturnValue([]);
+    component.user = {
+      uid: 'user-1',
+      settings: {
+        dashboardSettings: {
+          sleepTrend: { range: '1y' },
+          tiles: [],
+        },
+      },
+    } as any;
+    component.events = [];
+
+    await component.ngOnChanges({
+      user: {
+        currentValue: component.user,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+      events: {
+        currentValue: component.events,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+    });
+
+    expect(component.sleepTrendRange).toBe('1y');
+    expect(component.sleepTrendWindowLabel).toBe('Last 1 year');
+    expect(component.sleepTrendCanNavigateOlder).toBe(true);
+    expect(mockSleepService.watchForDashboard).toHaveBeenLastCalledWith(
+      'user-1',
+      nowMs - yearMs,
+      nowMs,
+    );
+
+    mockSleepService.watchForDashboard.mockClear();
+    component.onSleepTrendNavigate('older');
+
+    expect(component.sleepTrendCanNavigateNewer).toBe(true);
+    expect(component.sleepTrendWindowLabel).toContain('2024');
+    expect(component.sleepTrendWindowLabel).toContain('2025');
+    expect(mockSleepService.watchForDashboard).toHaveBeenLastCalledWith(
+      'user-1',
+      nowMs - (2 * yearMs),
+      nowMs - yearMs,
+    );
+  });
+
   it('should rebuild tiles when dashboard settings mutate in place', async () => {
     const initialTiles = [{
       type: TileTypes.Chart,

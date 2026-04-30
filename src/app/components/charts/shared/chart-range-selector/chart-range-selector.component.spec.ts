@@ -36,6 +36,7 @@ describe('ChartRangeSelectorComponent', () => {
 
     expect(button).toBeTruthy();
     expect(button.getAttribute('aria-label')).toBe('Select sleep range');
+    expect(button.hasAttribute('appHapticTap')).toBe(true);
     expect(button.textContent).toContain('14d');
     expect(label.compareDocumentPosition(icon) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(menu).toBeTruthy();

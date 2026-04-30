@@ -94,6 +94,45 @@ describe('ChartsSleepTrendComponent', () => {
     expect(option?.grid?.bottom).toBeGreaterThan(34);
   });
 
+  it('thins x-axis labels for dense 90-day sleep windows', async () => {
+    const points = Array.from({ length: 90 }, (_, index) => {
+      const startTimeMs = Date.UTC(2026, 2, index + 1, 21);
+      const endTimeMs = Date.UTC(2026, 2, index + 2, 5);
+      const sleepDate = new Date(endTimeMs).toISOString().slice(0, 10);
+      return buildSleepPoint({
+        id: `suunto-sleep-${index + 1}`,
+        sleepDate,
+        categoryLabel: `Mar ${index + 1}`,
+        startTimeMs,
+        endTimeMs,
+      });
+    });
+    component.sleepRange = '90d';
+    component.sleepTrend = {
+      points,
+      latestPoint: points[points.length - 1],
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => {
+      expect(mockLoader.setOption).toHaveBeenCalled();
+    });
+
+    const setOptionCall = mockLoader.setOption.mock.calls.at(-1) || [];
+    const optionCandidate = setOptionCall[1] || setOptionCall[0];
+    const option = optionCandidate as Record<string, any>;
+    const interval = option?.xAxis?.axisLabel?.interval as ((index: number) => boolean);
+    const visibleLabelCount = points.filter((_point, index) => interval(index)).length;
+
+    expect(typeof interval).toBe('function');
+    expect(option?.xAxis?.axisLabel?.hideOverlap).toBe(true);
+    expect(interval(0)).toBe(true);
+    expect(interval(points.length - 1)).toBe(true);
+    expect(interval(1)).toBe(false);
+    expect(visibleLabelCount).toBeLessThanOrEqual(10);
+  });
+
   it('renders sleep range controls and navigation buttons', () => {
     component.sleepRange = '30d';
     component.sleepWindowLabel = 'Last 30 days';
@@ -115,7 +154,7 @@ describe('ChartsSleepTrendComponent', () => {
     expect(controlsInTitleRow).toBeTruthy();
     expect(rangeMenuButton?.textContent).toContain('30d');
     expect(rangeMenu).toBeTruthy();
-    expect(component.rangeOptions.map(option => option.label)).toEqual(['14d', '30d', '90d', 'All']);
+    expect(component.rangeOptions.map(option => option.label)).toEqual(['14d', '30d', '90d', '1y']);
     expect(navButtons).toHaveLength(2);
     expect((navButtons[0] as HTMLButtonElement).disabled).toBe(false);
     expect((navButtons[1] as HTMLButtonElement).disabled).toBe(true);
@@ -150,7 +189,7 @@ describe('ChartsSleepTrendComponent', () => {
 
     component.onSleepRangeSelection('14d');
     component.navigateSleep('newer');
-    component.sleepRange = 'all';
+    component.canNavigateOlder = false;
     component.navigateSleep('older');
 
     expect(ranges).toEqual([]);
@@ -228,6 +267,50 @@ describe('ChartsSleepTrendComponent', () => {
     expect(Array.isArray(option.yAxis)).toBe(false);
     expect(option.grid.right).toBe(8);
     expect(option.series.some((series: any) => series.name === 'HRV')).toBe(false);
+  });
+
+  it('enables the draggable x-axis tooltip handle on mobile viewport', async () => {
+    const originalMatchMedia = window.matchMedia;
+    const matchMediaSpy = vi.fn().mockImplementation(() => ({
+      matches: true,
+      media: '',
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    window.matchMedia = matchMediaSpy as unknown as typeof window.matchMedia;
+
+    try {
+      const point = buildSleepPoint();
+      component.sleepTrend = {
+        points: [point],
+        latestPoint: point,
+      };
+
+      fixture.detectChanges();
+      await fixture.whenStable();
+      await vi.waitFor(() => {
+        expect(mockLoader.setOption).toHaveBeenCalled();
+      });
+
+      const setOptionCall = mockLoader.setOption.mock.calls.at(-1) || [];
+      const optionCandidate = setOptionCall[1] || setOptionCall[0];
+      const option = optionCandidate as Record<string, any>;
+      expect(option?.tooltip?.triggerOn).toBe('click');
+      expect(option?.tooltip?.axisPointer).toMatchObject({
+        type: 'shadow',
+        axis: 'x',
+        snap: true,
+      });
+      expect(option?.xAxis?.axisPointer?.triggerTooltip).toBe(true);
+      expect(option?.xAxis?.axisPointer?.handle?.show).toBe(true);
+      expect(option?.xAxis?.axisPointer?.handle?.size).toBe(20);
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
   });
 });
 

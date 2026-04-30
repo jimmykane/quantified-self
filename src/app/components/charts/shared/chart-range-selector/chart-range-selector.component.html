@@ -1,12 +1,12 @@
 <button mat-button type="button" class="chart-range-selector-button" [matMenuTriggerFor]="rangeMenu"
-  [attr.aria-label]="ariaLabel" [disabled]="disabled" disableRipple>
+  [attr.aria-label]="ariaLabel" [disabled]="disabled" appHapticTap disableRipple>
   <span class="chart-range-selector-label">{{ selectedLabel }}</span>
   <mat-icon class="chart-range-selector-icon" iconPositionEnd>keyboard_arrow_down</mat-icon>
 </button>
 
 <mat-menu #rangeMenu="matMenu" class="chart-range-selector-menu">
   @for (option of options; track option.value) {
-  <button mat-menu-item type="button" [disabled]="option.value === value" (click)="selectValue(option.value)">
+  <button mat-menu-item type="button" appHapticTap [disabled]="option.value === value" (click)="selectValue(option.value)">
     <span>{{ option.label }}</span>
   </button>
   }

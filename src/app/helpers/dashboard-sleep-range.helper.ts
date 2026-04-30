@@ -5,12 +5,12 @@ export const DASHBOARD_SLEEP_TREND_DEFAULT_RANGE: AppDashboardSleepTrendRange = 
 export const DASHBOARD_SLEEP_TREND_RANGE_OPTIONS: ReadonlyArray<{
   range: AppDashboardSleepTrendRange;
   label: string;
-  days: number | null;
+  days: number;
 }> = [
   { range: '14d', label: '14d', days: 14 },
   { range: '30d', label: '30d', days: 30 },
   { range: '90d', label: '90d', days: 90 },
-  { range: 'all', label: 'All', days: null },
+  { range: '1y', label: '1y', days: 365 },
 ];
 
 export type DashboardSleepTrendNavigationDirection = 'older' | 'newer';
@@ -22,6 +22,6 @@ export function normalizeDashboardSleepTrendRange(value: unknown): AppDashboardS
     : DASHBOARD_SLEEP_TREND_DEFAULT_RANGE;
 }
 
-export function dashboardSleepTrendRangeDays(range: AppDashboardSleepTrendRange): number | null {
-  return DASHBOARD_SLEEP_TREND_RANGE_OPTIONS.find(option => option.range === range)?.days ?? null;
+export function dashboardSleepTrendRangeDays(range: AppDashboardSleepTrendRange): number {
+  return DASHBOARD_SLEEP_TREND_RANGE_OPTIONS.find(option => option.range === range)?.days ?? 14;
 }

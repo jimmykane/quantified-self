@@ -58,6 +58,9 @@ const HRV_SERIES = {
 
 const GRID_BOTTOM_WITH_LEGEND = 58;
 const GRID_BOTTOM_COMPACT = 34;
+const MIN_SINGLE_SOURCE_AXIS_LABEL_WIDTH = 38;
+const MIN_MULTI_SOURCE_AXIS_LABEL_WIDTH = 52;
+const FALLBACK_MAX_AXIS_LABELS = 8;
 
 @Component({
   selector: 'app-sleep-trend-chart',
@@ -144,9 +147,6 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
   }
 
   public navigateSleep(direction: DashboardSleepTrendNavigationDirection): void {
-    if (this.sleepRange === 'all') {
-      return;
-    }
     if (direction === 'older' && !this.canNavigateOlder) {
       return;
     }
@@ -201,7 +201,17 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
     const chartWidth = this.chartDiv?.nativeElement?.clientWidth || 0;
     const style = buildDashboardEChartsStyleTokens(this.darkTheme, chartWidth);
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
+    const mobileAxisPointerHandle = isMobileTooltipViewport
+      ? {
+        show: true,
+        size: 20,
+        margin: 4,
+        throttle: 16,
+        color: style.axisColor,
+      }
+      : { show: false };
     const categories = points.map(point => point.categoryLabel);
+    const xAxisLabelInterval = this.buildXAxisLabelInterval(points, chartWidth);
     const hrvData = points.map(point => this.toFiniteMetric(point.averageHrvMs));
     const hasHrvSeries = hrvData.some(value => value !== null);
     const averageHrvMs = this.averageMetric(hrvData);
@@ -294,8 +304,12 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       tooltip: {
         show: true,
         trigger: 'axis',
-        triggerOn: resolveEChartsTooltipTriggerOn(true, false),
-        axisPointer: { type: 'shadow' },
+        triggerOn: resolveEChartsTooltipTriggerOn(true, isMobileTooltipViewport),
+        axisPointer: {
+          type: 'shadow',
+          axis: 'x',
+          snap: true,
+        },
         renderMode: 'html',
         ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),
         borderWidth: 1,
@@ -322,13 +336,21 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       xAxis: {
         type: 'category',
         data: categories,
+        axisPointer: {
+          show: true,
+          snap: true,
+          triggerTooltip: true,
+          label: { show: false },
+          handle: mobileAxisPointerHandle,
+        },
         axisTick: { show: false },
         axisLine: { lineStyle: { color: style.axisColor } },
         axisLabel: {
           color: style.secondaryTextColor,
           fontSize: style.axisFontSize,
           lineHeight: 14,
-          interval: 0,
+          interval: xAxisLabelInterval,
+          hideOverlap: true,
         },
       },
       yAxis: hasHrvSeries ? [sleepDurationAxis, hrvAxis] : sleepDurationAxis,
@@ -381,6 +403,38 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
     }
     const total = finiteValues.reduce((sum, value) => sum + value, 0);
     return total / finiteValues.length;
+  }
+
+  private buildXAxisLabelInterval(points: DashboardSleepTrendPoint[], chartWidth: number): 0 | ((index: number) => boolean) {
+    if (points.length <= 1) {
+      return 0;
+    }
+
+    const hasProviderLine = points.some(point => point.categoryLabel.includes('\n'));
+    const minimumLabelWidth = hasProviderLine ? MIN_MULTI_SOURCE_AXIS_LABEL_WIDTH : MIN_SINGLE_SOURCE_AXIS_LABEL_WIDTH;
+    const availableWidth = Math.max(0, chartWidth - 68);
+    const maxLabels = availableWidth > 0
+      ? Math.max(2, Math.floor(availableWidth / minimumLabelWidth))
+      : FALLBACK_MAX_AXIS_LABELS;
+
+    if (points.length <= maxLabels) {
+      return 0;
+    }
+
+    const lastIndex = points.length - 1;
+    const step = Math.max(1, Math.ceil(points.length / maxLabels));
+    const visibleIndexes = new Set<number>();
+    for (let index = 0; index < points.length; index += step) {
+      visibleIndexes.add(index);
+    }
+
+    const previousVisibleIndex = Math.max(...Array.from(visibleIndexes).filter(index => index < lastIndex));
+    if (Number.isFinite(previousVisibleIndex) && previousVisibleIndex > 0 && lastIndex - previousVisibleIndex < Math.ceil(step / 2)) {
+      visibleIndexes.delete(previousVisibleIndex);
+    }
+    visibleIndexes.add(lastIndex);
+
+    return (index: number) => visibleIndexes.has(index);
   }
 
   private resolveSleepRangeLabel(range: AppDashboardSleepTrendRange): string {

@@ -196,6 +196,7 @@ export const backfillSuuntoAppSleep = onCall({
         await updateSleepSyncState(userID, SLEEP_PROVIDERS.SuuntoApp, {
             status: SLEEP_SYNC_STATUSES.Failed,
             lastBackfillQueueItems: queued,
+            nextBackfillAllowedAtMs: null,
             lastError: message,
         }, Date.now());
         throw new HttpsError('internal', 'Could not queue Suunto sleep backfill.');

@@ -274,6 +274,27 @@ describe('backfillSuuntoAppSleep', () => {
         expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
     });
 
+    it('clears the claimed cooldown when queueing sleep backfill windows fails', async () => {
+        seedSuuntoToken();
+        hoisted.addSleepSyncQueueItem
+            .mockResolvedValueOnce({ id: 'queue-item-1' })
+            .mockRejectedValueOnce(new Error('queue write failed'));
+
+        await expect(backfillSuuntoAppSleep(createRequest() as any))
+            .rejects.toMatchObject({ code: 'internal' });
+
+        expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+            nextBackfillAllowedAtMs: nowMs + SLEEP_BACKFILL_COOLDOWN_MS,
+        }), { merge: true });
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledTimes(2);
+        expect(hoisted.updateSleepSyncState).toHaveBeenCalledWith('user-1', SLEEP_PROVIDERS.SuuntoApp, {
+            status: 'failed',
+            lastBackfillQueueItems: 1,
+            nextBackfillAllowedAtMs: null,
+            lastError: 'queue write failed',
+        }, nowMs);
+    });
+
     it('rejects a concurrent caller when the transaction observes a freshly claimed cooldown', async () => {
         seedSuuntoToken();
         hoisted.stateData = null;
