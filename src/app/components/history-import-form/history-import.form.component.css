@@ -193,6 +193,57 @@
   margin-top: 0.5rem;
 }
 
+.sleep-backfill-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+  background: var(--mat-sys-surface-container-low);
+}
+
+.sleep-backfill-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.sleep-backfill-title {
+  color: var(--mat-sys-on-surface);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.sleep-backfill-copy p {
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.sleep-backfill-note {
+  opacity: 0.85;
+}
+
+.sleep-backfill-button {
+  flex-shrink: 0;
+}
+
+.sleep-backfill-button mat-icon,
+.sleep-backfill-button mat-spinner {
+  margin-right: 0.35rem;
+}
+
+@media (max-width: 640px) {
+  .sleep-backfill-section {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
 /* Robust fix for Material Checkbox visibility and clickability */
 mat-checkbox {
   display: inline-flex !important;

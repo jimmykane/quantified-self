@@ -3,6 +3,8 @@ import {
   Firestore,
   collection,
   collectionData,
+  doc,
+  docData,
   limit,
   orderBy,
   query,
@@ -11,8 +13,11 @@ import {
 import { Observable, of } from 'rxjs';
 import { map } from 'rxjs/operators';
 import {
+  SleepProvider,
   SleepSession,
+  SleepSyncState,
   SLEEP_SESSIONS_COLLECTION_ID,
+  SLEEP_SYNC_STATE_COLLECTION_ID,
 } from '@shared/sleep';
 
 @Injectable({
@@ -53,6 +58,21 @@ export class AppSleepService {
       map((sessions) => sessions
         .filter((session) => this.overlapsDashboardRange(session, startTimeMs, endTimeMs))
         .sort((left, right) => left.startTimeMs - right.startTimeMs)),
+    );
+  }
+
+  watchSyncState(
+    userID: string | null | undefined,
+    provider: SleepProvider,
+  ): Observable<SleepSyncState | null> {
+    const uid = `${userID || ''}`.trim();
+    if (!uid) {
+      return of(null);
+    }
+
+    const stateDoc = doc(this.firestore, 'users', uid, SLEEP_SYNC_STATE_COLLECTION_ID, provider);
+    return (docData(stateDoc) as Observable<SleepSyncState | undefined>).pipe(
+      map((state) => state || null),
     );
   }
 

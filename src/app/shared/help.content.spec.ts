@@ -148,7 +148,9 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('14d, 30d, 90d, and All range control');
     expect(serviceConnectionsSection?.content).toContain('independent from dashboard event filters');
     expect(serviceConnectionsSection?.content).toContain('overlays recorded sleep HRV with an average HRV reference line');
-    expect(serviceConnectionsSection?.content).toContain('V1 does not provide a user-facing historical sleep backfill tool');
+    expect(serviceConnectionsSection?.content).toContain('Backfill Sleep History');
+    expect(serviceConnectionsSection?.content).toContain('Jan 1, 2016');
+    expect(serviceConnectionsSection?.content).toContain('7-day sleep backfill cooldown');
     expect(serviceConnectionsSection?.content).toContain('COROS -> Suunto activity sync is route-based');
     expect(serviceConnectionsSection?.content).toContain('enable the route toggle in COROS Services');
     expect(serviceConnectionsSection?.content).toContain('Automatic sync runs only for newly imported COROS activities');

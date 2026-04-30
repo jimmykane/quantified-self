@@ -5,6 +5,8 @@ import {
   Firestore,
   collection,
   collectionData,
+  doc,
+  docData,
   limit,
   orderBy,
   query,
@@ -18,6 +20,8 @@ vi.mock('app/firebase/firestore', () => {
     Firestore: MockFirestore,
     collection: vi.fn((_firestore, ...path: string[]) => ({ path })),
     collectionData: vi.fn(() => of([])),
+    doc: vi.fn((_firestore, ...path: string[]) => ({ path })),
+    docData: vi.fn(() => of(undefined)),
     limit: vi.fn((value: number) => ({ type: 'limit', value })),
     orderBy: vi.fn((field: string, direction: string) => ({ type: 'orderBy', field, direction })),
     query: vi.fn((collectionRef: unknown, ...constraints: unknown[]) => ({ collectionRef, constraints })),
@@ -31,6 +35,7 @@ describe('AppSleepService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(collectionData).mockReturnValue(of([]));
+    vi.mocked(docData).mockReturnValue(of(undefined));
     TestBed.configureTestingModule({
       providers: [
         AppSleepService,
@@ -102,5 +107,19 @@ describe('AppSleepService', () => {
     expect(where).toHaveBeenCalledWith('startTimeMs', '<=', end);
     expect(orderBy).toHaveBeenCalledWith('startTimeMs', 'desc');
     expect(limit).toHaveBeenCalledWith(250);
+  });
+
+  it('watches a provider sleep sync state document', async () => {
+    vi.mocked(docData).mockReturnValue(of({
+      provider: 'SuuntoApp',
+      status: 'ready',
+      nextBackfillAllowedAtMs: 1_800_000_000_000,
+      updatedAtMs: 1_700_000_000_000,
+    } as any));
+
+    const state = await firstValueFrom(service.watchSyncState('user-1', 'SuuntoApp'));
+
+    expect(doc).toHaveBeenCalledWith(expect.anything(), 'users', 'user-1', 'sleepSyncState', 'SuuntoApp');
+    expect(state?.nextBackfillAllowedAtMs).toBe(1_800_000_000_000);
   });
 });

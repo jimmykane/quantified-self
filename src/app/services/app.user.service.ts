@@ -85,6 +85,7 @@ import { DataRecoveryTime } from '@sports-alliance/sports-lib';
 import { Firestore, doc, docData, collection, collectionData, setDoc, updateDoc } from 'app/firebase/firestore';
 import { AppFunctionsService } from './app.functions.service';
 import { FunctionName } from '@shared/functions-manifest';
+import { SleepBackfillQueueResponse } from '@shared/sleep-backfill';
 
 export interface ActivitySyncBackfillFailedEvent {
   eventID: string;
@@ -607,6 +608,11 @@ export class AppUserService implements OnDestroy {
     }
 
     const result = await this.functionsService.call(functionName, payload);
+    return result.data;
+  }
+
+  async backfillSuuntoSleepForCurrentUser(): Promise<SleepBackfillQueueResponse> {
+    const result = await this.functionsService.call<undefined, SleepBackfillQueueResponse>('backfillSuuntoAppSleep');
     return result.data;
   }
 

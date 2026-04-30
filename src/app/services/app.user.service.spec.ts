@@ -989,6 +989,22 @@ describe('AppUserService', () => {
             });
         });
 
+        describe('backfillSuuntoSleepForCurrentUser', () => {
+            it('should call cloud function for Suunto sleep backfill', async () => {
+                const response = {
+                    queued: 135,
+                    startDate: '2016-01-01T00:00:00.000Z',
+                    endDate: '2026-04-30T12:00:00.000Z',
+                    nextAllowedAtMs: 1_778_244_000_000,
+                };
+                mockFunctionsService.call.mockResolvedValueOnce({ data: response });
+
+                await expect(service.backfillSuuntoSleepForCurrentUser()).resolves.toEqual(response);
+
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('backfillSuuntoAppSleep');
+            });
+        });
+
         describe('backfillActivitySyncRouteForCurrentUser', () => {
             it('should call cloud function for activity sync route backfill', async () => {
                 const expectedStartDate = new Date(startDate.getTime());

@@ -17,6 +17,7 @@ import { AppUserService } from '../../services/app.user.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { LoggerService } from '../../services/logger.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
+import { AppSleepService } from '../../services/app.sleep.service';
 import { APP_STORAGE } from '../../services/storage/app.storage.token';
 import { Firestore } from 'app/firebase/firestore';
 import { of } from 'rxjs';
@@ -52,6 +53,7 @@ describe('HistoryImportFormComponent', () => {
     let mockAnalyticsService: any;
     let mockLoggerService: any;
     let mockAuthService: any;
+    let mockSleepService: any;
     let snackBar: MatSnackBar;
 
     beforeEach(async () => {
@@ -59,6 +61,12 @@ describe('HistoryImportFormComponent', () => {
         mockUserService = {
             isPro: vi.fn().mockResolvedValue(true),
             importServiceHistoryForCurrentUser: vi.fn().mockResolvedValue(true),
+            backfillSuuntoSleepForCurrentUser: vi.fn().mockResolvedValue({
+                queued: 135,
+                startDate: '2016-01-01T00:00:00.000Z',
+                endDate: '2026-04-30T12:00:00.000Z',
+                nextAllowedAtMs: 1_778_244_000_000,
+            }),
             user$: of({ uid: '123' }),
             hasPaidAccessSignal: vi.fn(() => true)
         };
@@ -69,8 +77,11 @@ describe('HistoryImportFormComponent', () => {
             error: vi.fn()
         };
         mockAuthService = {
-            getUser: vi.fn().mockResolvedValue({ stripeRole: 'pro' }),
+            getUser: vi.fn().mockResolvedValue({ uid: '123', stripeRole: 'pro' }),
             user$: of({ uid: '123' })
+        };
+        mockSleepService = {
+            watchSyncState: vi.fn().mockReturnValue(of(null)),
         };
 
         await TestBed.configureTestingModule({
@@ -97,6 +108,7 @@ describe('HistoryImportFormComponent', () => {
                 { provide: AppAnalyticsService, useValue: mockAnalyticsService },
                 { provide: LoggerService, useValue: mockLoggerService },
                 { provide: AppAuthService, useValue: mockAuthService },
+                { provide: AppSleepService, useValue: mockSleepService },
                 { provide: Firestore, useValue: {} },
                 { provide: APP_STORAGE, useValue: localStorage },
             ]
@@ -119,6 +131,67 @@ describe('HistoryImportFormComponent', () => {
 
     it('should have correct processing capacity constant', () => {
         expect(component.processingCapacityPerDay).toBe(5000);
+    });
+
+    it('should render Suunto sleep backfill button for connected Pro users', async () => {
+        await fixture.whenStable();
+        component.serviceName = ServiceNames.SuuntoApp;
+        component.userMetaForService = {} as UserServiceMetaInterface;
+        component.isPro = true;
+        (component as any).processChanges();
+        fixture.detectChanges();
+
+        const text = fixture.nativeElement.textContent;
+        expect(text).toContain('Backfill Sleep History');
+        expect(text).toContain('Queues Suunto sleep');
+        expect(text).toContain('once every 7 days');
+    });
+
+    it('should not render Suunto sleep backfill button for other providers', async () => {
+        await fixture.whenStable();
+        component.serviceName = ServiceNames.COROSAPI;
+        component.userMetaForService = {} as UserServiceMetaInterface;
+        component.isPro = true;
+        (component as any).processChanges();
+        fixture.detectChanges();
+
+        expect(fixture.nativeElement.textContent).not.toContain('Backfill Sleep History');
+    });
+
+    it('should disable Suunto sleep backfill during cooldown', async () => {
+        await fixture.whenStable();
+        mockSleepService.watchSyncState.mockReturnValueOnce(of({
+            provider: 'SuuntoApp',
+            status: 'ready',
+            nextBackfillAllowedAtMs: Date.now() + 60_000,
+            updatedAtMs: Date.now(),
+        }));
+        component.serviceName = ServiceNames.SuuntoApp;
+        component.userMetaForService = {} as UserServiceMetaInterface;
+        component.isPro = true;
+        (component as any).processChanges();
+        fixture.detectChanges();
+
+        const buttons = Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[];
+        const sleepButton = buttons.find(button => button.textContent?.includes('Backfill Sleep History'));
+        expect(sleepButton?.disabled).toBe(true);
+        expect(fixture.nativeElement.textContent).toContain('Next available');
+    });
+
+    it('should queue Suunto sleep backfill from the separate action', async () => {
+        await fixture.whenStable();
+        component.serviceName = ServiceNames.SuuntoApp;
+        component.userMetaForService = {} as UserServiceMetaInterface;
+        component.isPro = true;
+        (component as any).processChanges();
+
+        await component.onSuuntoSleepBackfill({
+            preventDefault: vi.fn(),
+            stopPropagation: vi.fn(),
+        } as any);
+
+        expect(mockUserService.backfillSuuntoSleepForCurrentUser).toHaveBeenCalled();
+        expect(component.pendingSleepBackfillResult()?.queued).toBe(135);
     });
 
     it('should calculate cooldownDays correctly', () => {
