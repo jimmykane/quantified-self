@@ -159,6 +159,10 @@
   margin-top: 0.25rem;
 }
 
+.dashboard-manager-activity-filter {
+  min-width: 0;
+}
+
 .dashboard-manager-option-description {
   color: var(--mat-sys-on-surface-variant);
   font-size: 0.78rem;

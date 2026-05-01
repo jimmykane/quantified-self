@@ -18,7 +18,14 @@ import { LoggerService } from '../../services/logger.service';
 import { AppUserService } from '../../services/app.user.service';
 import { DashboardDerivedMetricsService } from '../../services/dashboard-derived-metrics.service';
 import { AppSleepService } from '../../services/app.sleep.service';
+import { AppEventService } from '../../services/app.event.service';
 import * as dashboardTileViewModelHelper from '../../helpers/dashboard-tile-view-model.helper';
+import {
+  DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_FORM_CHART_TYPE,
+  DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+  DASHBOARD_SLEEP_TREND_CHART_TYPE,
+} from '../../helpers/dashboard-special-chart-types';
 import { SummariesComponent } from './summaries.component';
 
 describe('SummariesComponent', () => {
@@ -31,6 +38,7 @@ describe('SummariesComponent', () => {
     ensureForDashboard: ReturnType<typeof vi.fn>;
   };
   let mockSleepService: { watchForDashboard: ReturnType<typeof vi.fn> };
+  let mockEventService: { getEventsBy: ReturnType<typeof vi.fn> };
   let mockLogger: { error: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn>; log: ReturnType<typeof vi.fn> };
   let mockDialog: { open: ReturnType<typeof vi.fn> };
   let buildDashboardTileViewModelsSpy: ReturnType<typeof vi.spyOn>;
@@ -78,6 +86,9 @@ describe('SummariesComponent', () => {
     mockSleepService = {
       watchForDashboard: vi.fn().mockReturnValue(of([])),
     };
+    mockEventService = {
+      getEventsBy: vi.fn().mockReturnValue(of([])),
+    };
     mockLogger = { error: vi.fn(), warn: vi.fn(), log: vi.fn() };
     mockDialog = {
       open: vi.fn().mockReturnValue({
@@ -109,6 +120,7 @@ describe('SummariesComponent', () => {
         { provide: AppUserService, useValue: mockUserService },
         { provide: DashboardDerivedMetricsService, useValue: mockDashboardDerivedMetricsService },
         { provide: AppSleepService, useValue: mockSleepService },
+        { provide: AppEventService, useValue: mockEventService },
         { provide: LoggerService, useValue: mockLogger },
         { provide: MatDialog, useValue: mockDialog },
       ],
@@ -163,7 +175,6 @@ describe('SummariesComponent', () => {
         },
       },
     } as any;
-    component.events = [{ id: 'event-1' }] as any;
 
     await component.ngOnChanges({
       user: {
@@ -172,23 +183,12 @@ describe('SummariesComponent', () => {
         firstChange: true,
         isFirstChange: () => true,
       } as any,
-      events: {
-        currentValue: component.events,
-        previousValue: null,
-        firstChange: true,
-        isFirstChange: () => true,
-      } as any,
     });
 
     expect(buildDashboardTileViewModelsSpy).toHaveBeenCalledWith({
       tiles: component.user.settings.dashboardSettings.tiles,
-      events: component.events,
-      dashboardDateRange: {
-        dateRange: null,
-        startDate: null,
-        endDate: null,
-        startOfTheWeek: undefined,
-      },
+      events: [],
+      tileEventsByOrder: {},
       preferences: {
         removeAscentForEventTypes: [ActivityTypes.Running],
         removeDescentForEventTypes: [ActivityTypes.Cycling],
@@ -214,7 +214,7 @@ describe('SummariesComponent', () => {
     expect(component.tiles).toBe(builtTiles);
   });
 
-  it('should pass dashboard date-range input values to tile view-model building', async () => {
+  it('should keep table date-range state out of tile view-model building', async () => {
     const builtTiles = [{
       type: TileTypes.Chart,
       order: 0,
@@ -242,26 +242,10 @@ describe('SummariesComponent', () => {
         },
       },
     } as any;
-    component.events = [{ id: 'event-1' }] as any;
-    component.dashboardDateRange = 2 as any;
-    component.dashboardStartDate = new Date('2026-03-01T00:00:00.000Z');
-    component.dashboardEndDate = new Date('2026-03-31T23:59:59.999Z');
 
     await component.ngOnChanges({
-      dashboardDateRange: {
-        currentValue: component.dashboardDateRange,
-        previousValue: null,
-        firstChange: true,
-        isFirstChange: () => true,
-      } as any,
-      dashboardStartDate: {
-        currentValue: component.dashboardStartDate,
-        previousValue: null,
-        firstChange: true,
-        isFirstChange: () => true,
-      } as any,
-      dashboardEndDate: {
-        currentValue: component.dashboardEndDate,
+      user: {
+        currentValue: component.user,
         previousValue: null,
         firstChange: true,
         isFirstChange: () => true,
@@ -269,12 +253,364 @@ describe('SummariesComponent', () => {
     });
 
     expect(buildDashboardTileViewModelsSpy).toHaveBeenCalledWith(expect.objectContaining({
-      dashboardDateRange: expect.objectContaining({
-        dateRange: component.dashboardDateRange,
-        startDate: component.dashboardStartDate,
-        endDate: component.dashboardEndDate,
-      }),
+      events: [],
+      tileEventsByOrder: {},
     }));
+    expect(buildDashboardTileViewModelsSpy.mock.calls[0][0]).not.toHaveProperty('dashboardDateRange');
+  });
+
+  it('should subscribe per custom and map tile using the event owner, not derived tiles', async () => {
+    const nowMs = Date.UTC(2026, 3, 30, 12, 0, 0);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(nowMs));
+    buildDashboardTileViewModelsSpy.mockReturnValue([]);
+    component.user = {
+      uid: 'viewer-user',
+      settings: {
+        unitSettings: { startOfTheWeek: 1 },
+        dashboardSettings: {
+          tiles: [
+            {
+              type: TileTypes.Chart,
+              order: 0,
+              chartType: ChartTypes.ColumnsVertical,
+              dataType: DataAscent.type,
+              dataValueType: ChartDataValueTypes.Total,
+              dataCategoryType: ChartDataCategoryTypes.DateType,
+              size: { columns: 1, rows: 1 },
+              eventFilters: { range: '90d', activityTypes: [] },
+            },
+            {
+              type: TileTypes.Map,
+              order: 1,
+              mapStyle: 'default',
+              clusterMarkers: true,
+              size: { columns: 1, rows: 1 },
+              eventFilters: { range: '30d', activityTypes: [ActivityTypes.Running] },
+            },
+            {
+              type: TileTypes.Chart,
+              order: 2,
+              chartType: DASHBOARD_FORM_CHART_TYPE,
+              dataType: 'Training Stress Score',
+              dataValueType: ChartDataValueTypes.Total,
+              dataCategoryType: ChartDataCategoryTypes.DateType,
+              size: { columns: 1, rows: 1 },
+            },
+            {
+              type: TileTypes.Chart,
+              order: 3,
+              chartType: DASHBOARD_ACWR_KPI_CHART_TYPE,
+              dataType: 'Training Stress Score',
+              dataValueType: ChartDataValueTypes.Total,
+              dataCategoryType: ChartDataCategoryTypes.DateType,
+              size: { columns: 1, rows: 1 },
+            },
+            {
+              type: TileTypes.Chart,
+              order: 4,
+              chartType: DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+              dataType: 'Recovery Time',
+              dataValueType: ChartDataValueTypes.Total,
+              dataCategoryType: ChartDataCategoryTypes.DateType,
+              size: { columns: 1, rows: 1 },
+            },
+            {
+              type: TileTypes.Chart,
+              order: 5,
+              chartType: DASHBOARD_SLEEP_TREND_CHART_TYPE,
+              dataType: 'SleepDuration',
+              dataValueType: ChartDataValueTypes.Total,
+              dataCategoryType: ChartDataCategoryTypes.DateType,
+              size: { columns: 1, rows: 1 },
+            },
+          ],
+        },
+      },
+    } as any;
+    component.eventUser = { uid: 'event-owner' } as any;
+
+    await component.ngOnChanges({
+      user: {
+        currentValue: component.user,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+      eventUser: {
+        currentValue: component.eventUser,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+    });
+
+    expect(mockEventService.getEventsBy).toHaveBeenCalledTimes(2);
+    expect(mockEventService.getEventsBy.mock.calls.map(call => call[0].uid)).toEqual(['event-owner', 'event-owner']);
+    expect(mockEventService.getEventsBy.mock.calls[0][1]).toEqual([
+      { fieldPath: 'startDate', opStr: '>=', value: nowMs - (90 * 24 * 60 * 60 * 1000) },
+      { fieldPath: 'startDate', opStr: '<=', value: nowMs },
+    ]);
+    expect(mockEventService.getEventsBy.mock.calls[1][1]).toEqual([
+      { fieldPath: 'startDate', opStr: '>=', value: nowMs - (30 * 24 * 60 * 60 * 1000) },
+      { fieldPath: 'startDate', opStr: '<=', value: nowMs },
+    ]);
+  });
+
+  it('should maintain independent tile event loading states and pass per-tile events into the builder', async () => {
+    const customEventsSubject = new Subject<any[]>();
+    const mapEventsSubject = new Subject<any[]>();
+    const customEvent = { id: 'custom-1', isMerge: false };
+    const mergedEvent = { id: 'merged-1', isMerge: true };
+    const mapEvent = { id: 'map-1', isMerge: false };
+    mockEventService.getEventsBy
+      .mockReturnValueOnce(customEventsSubject.asObservable())
+      .mockReturnValueOnce(mapEventsSubject.asObservable());
+    buildDashboardTileViewModelsSpy.mockReturnValue([]);
+    component.user = {
+      uid: 'user-1',
+      settings: {
+        unitSettings: { startOfTheWeek: 1 },
+        dashboardSettings: {
+          tiles: [
+            {
+              type: TileTypes.Chart,
+              order: 0,
+              chartType: ChartTypes.ColumnsVertical,
+              dataType: DataAscent.type,
+              dataValueType: ChartDataValueTypes.Total,
+              dataCategoryType: ChartDataCategoryTypes.DateType,
+              size: { columns: 1, rows: 1 },
+              eventFilters: { range: '90d', activityTypes: [] },
+            },
+            {
+              type: TileTypes.Map,
+              order: 1,
+              mapStyle: 'default',
+              clusterMarkers: true,
+              size: { columns: 1, rows: 1 },
+              eventFilters: { range: '30d', activityTypes: [] },
+            },
+          ],
+        },
+      },
+    } as any;
+
+    await component.ngOnChanges({
+      user: {
+        currentValue: component.user,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+    });
+
+    expect(component.tileEventLoadingByOrder[0]).toBe(true);
+    expect(component.tileEventLoadingByOrder[1]).toBe(true);
+
+    customEventsSubject.next([customEvent, mergedEvent]);
+    await Promise.resolve();
+
+    expect(component.tileEventLoadingByOrder[0]).toBe(false);
+    expect(component.tileEventLoadingByOrder[1]).toBe(true);
+    expect(buildDashboardTileViewModelsSpy).toHaveBeenLastCalledWith(expect.objectContaining({
+      tileEventsByOrder: {
+        0: [customEvent],
+      },
+    }));
+
+    mapEventsSubject.next([mapEvent]);
+    await Promise.resolve();
+
+    expect(component.tileEventLoadingByOrder[1]).toBe(false);
+    expect(buildDashboardTileViewModelsSpy).toHaveBeenLastCalledWith(expect.objectContaining({
+      tileEventsByOrder: {
+        0: [customEvent],
+        1: [mapEvent],
+      },
+    }));
+  });
+
+  it('should not drive derived tile loading from table loading state', () => {
+    component.isLoading = true;
+    component.tileEventLoadingByOrder[0] = true;
+
+    expect(component.isTileLoading({
+      type: TileTypes.Chart,
+      order: 0,
+      chartType: ChartTypes.ColumnsVertical,
+    } as any)).toBe(true);
+    expect(component.isTileLoading({
+      type: TileTypes.Chart,
+      order: 1,
+      chartType: DASHBOARD_FORM_CHART_TYPE,
+    } as any)).toBe(false);
+    expect(component.isTileLoading({
+      type: TileTypes.Chart,
+      order: 2,
+      chartType: DASHBOARD_ACWR_KPI_CHART_TYPE,
+    } as any)).toBe(false);
+  });
+
+  it('should navigate duration tile event windows transiently without persisting filters', async () => {
+    const nowMs = Date.UTC(2026, 3, 30, 12, 0, 0);
+    const fourteenDaysMs = 14 * 24 * 60 * 60 * 1000;
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(nowMs));
+    buildDashboardTileViewModelsSpy.mockReturnValue([]);
+    component.user = {
+      uid: 'user-1',
+      settings: {
+        unitSettings: { startOfTheWeek: 1 },
+        dashboardSettings: {
+          tiles: [{
+            type: TileTypes.Chart,
+            order: 0,
+            chartType: ChartTypes.ColumnsVertical,
+            dataType: DataAscent.type,
+            dataValueType: ChartDataValueTypes.Total,
+            dataCategoryType: ChartDataCategoryTypes.DateType,
+            size: { columns: 1, rows: 1 },
+            eventFilters: { range: '14d', activityTypes: [] },
+          }],
+        },
+      },
+    } as any;
+
+    await component.ngOnChanges({
+      user: {
+        currentValue: component.user,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+    });
+    mockEventService.getEventsBy.mockClear();
+
+    expect(component.canNavigateTileEventsNewer({ type: TileTypes.Chart, order: 0 } as any)).toBe(false);
+
+    component.onTileEventFilterNavigate(0, 'older');
+
+    expect(component.canNavigateTileEventsNewer({ type: TileTypes.Chart, order: 0 } as any)).toBe(true);
+    expect(component.user.settings.dashboardSettings.tiles[0].eventFilters).toEqual({ range: '14d', activityTypes: [] });
+    expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+    expect(mockEventService.getEventsBy).toHaveBeenLastCalledWith(
+      component.user,
+      [
+        { fieldPath: 'startDate', opStr: '>=', value: nowMs - (2 * fourteenDaysMs) },
+        { fieldPath: 'startDate', opStr: '<=', value: nowMs - fourteenDaysMs },
+      ],
+      'startDate',
+      false,
+      0,
+    );
+
+    mockEventService.getEventsBy.mockClear();
+    component.onTileEventFilterNavigate(0, 'newer');
+
+    expect(component.canNavigateTileEventsNewer({ type: TileTypes.Chart, order: 0 } as any)).toBe(false);
+    expect(component.user.settings.dashboardSettings.tiles[0].eventFilters).toEqual({ range: '14d', activityTypes: [] });
+    expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+    expect(mockEventService.getEventsBy).toHaveBeenLastCalledWith(
+      component.user,
+      [
+        { fieldPath: 'startDate', opStr: '>=', value: nowMs - fourteenDaysMs },
+        { fieldPath: 'startDate', opStr: '<=', value: nowMs },
+      ],
+      'startDate',
+      false,
+      0,
+    );
+  });
+
+  it('should keep latest duration tile event listeners stable across repeated syncs', async () => {
+    const nowMs = Date.UTC(2026, 3, 30, 12, 0, 0);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(nowMs));
+    buildDashboardTileViewModelsSpy.mockReturnValue([]);
+    component.user = {
+      uid: 'user-1',
+      settings: {
+        unitSettings: { startOfTheWeek: 1 },
+        dashboardSettings: {
+          tiles: [{
+            type: TileTypes.Chart,
+            order: 0,
+            chartType: ChartTypes.ColumnsVertical,
+            dataType: DataAscent.type,
+            dataValueType: ChartDataValueTypes.Total,
+            dataCategoryType: ChartDataCategoryTypes.DateType,
+            size: { columns: 1, rows: 1 },
+            eventFilters: { range: '90d', activityTypes: [] },
+          }],
+        },
+      },
+    } as any;
+
+    await component.ngOnChanges({
+      user: {
+        currentValue: component.user,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+    });
+    expect(mockEventService.getEventsBy).toHaveBeenCalledTimes(1);
+
+    mockEventService.getEventsBy.mockClear();
+    vi.setSystemTime(new Date(nowMs + 1000));
+    (component as any).syncTileEventSubscriptions();
+
+    expect(component.canNavigateTileEventsNewer({ type: TileTypes.Chart, order: 0 } as any)).toBe(false);
+    expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
+  });
+
+  it('should require confirmation before switching a tile event range to all', async () => {
+    buildDashboardTileViewModelsSpy.mockReturnValue([]);
+    component.user = {
+      uid: 'user-1',
+      settings: {
+        unitSettings: { startOfTheWeek: 1 },
+        dashboardSettings: {
+          tiles: [{
+            type: TileTypes.Chart,
+            order: 0,
+            chartType: ChartTypes.ColumnsVertical,
+            dataType: DataAscent.type,
+            dataValueType: ChartDataValueTypes.Total,
+            dataCategoryType: ChartDataCategoryTypes.DateType,
+            size: { columns: 1, rows: 1 },
+            eventFilters: { range: '90d', activityTypes: [] },
+          }],
+        },
+      },
+    } as any;
+
+    await component.ngOnChanges({
+      user: {
+        currentValue: component.user,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+    });
+    mockEventService.getEventsBy.mockClear();
+    mockDialog.open.mockReturnValueOnce({ afterClosed: () => of(false) });
+
+    await component.onTileEventFilterRangeChange(0, 'all');
+
+    expect(mockDialog.open).toHaveBeenCalledTimes(1);
+    expect(component.user.settings.dashboardSettings.tiles[0].eventFilters.range).toBe('90d');
+    expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+    expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
+
+    mockDialog.open.mockReturnValueOnce({ afterClosed: () => of(true) });
+
+    await component.onTileEventFilterRangeChange(0, 'all');
+
+    expect(component.user.settings.dashboardSettings.tiles[0].eventFilters).toEqual({ range: 'all', activityTypes: [] });
+    expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(component.user, { settings: component.user.settings });
+    expect(mockEventService.getEventsBy).toHaveBeenLastCalledWith(component.user, [], 'startDate', false, 0);
   });
 
   it('should keep sleep listening independent from dashboard event date filters', async () => {
@@ -299,25 +635,10 @@ describe('SummariesComponent', () => {
         },
       },
     } as any;
-    component.events = [];
-    component.dashboardStartDate = new Date('2026-03-01T00:00:00.000Z');
-    component.dashboardEndDate = new Date('2026-03-31T23:59:59.999Z');
 
     await component.ngOnChanges({
       user: {
         currentValue: component.user,
-        previousValue: null,
-        firstChange: true,
-        isFirstChange: () => true,
-      } as any,
-      dashboardStartDate: {
-        currentValue: component.dashboardStartDate,
-        previousValue: null,
-        firstChange: true,
-        isFirstChange: () => true,
-      } as any,
-      dashboardEndDate: {
-        currentValue: component.dashboardEndDate,
         previousValue: null,
         firstChange: true,
         isFirstChange: () => true,
@@ -327,24 +648,6 @@ describe('SummariesComponent', () => {
     expect(component.sleepTrendRange).toBe('14d');
     expect(component.sleepTrendWindowLabel).toBe('Last 14 days');
     expect(mockSleepService.watchForDashboard).toHaveBeenCalledWith('user-1', nowMs - fourteenDaysMs, nowMs);
-
-    component.dashboardStartDate = new Date('2025-01-01T00:00:00.000Z');
-    component.dashboardEndDate = new Date('2025-01-31T23:59:59.999Z');
-
-    await component.ngOnChanges({
-      dashboardStartDate: {
-        currentValue: component.dashboardStartDate,
-        previousValue: new Date('2026-03-01T00:00:00.000Z'),
-        firstChange: false,
-        isFirstChange: () => false,
-      } as any,
-      dashboardEndDate: {
-        currentValue: component.dashboardEndDate,
-        previousValue: new Date('2026-03-31T23:59:59.999Z'),
-        firstChange: false,
-        isFirstChange: () => false,
-      } as any,
-    });
 
     expect(mockSleepService.watchForDashboard).toHaveBeenCalledTimes(1);
   });
@@ -364,17 +667,10 @@ describe('SummariesComponent', () => {
         },
       },
     } as any;
-    component.events = [];
 
     await component.ngOnChanges({
       user: {
         currentValue: component.user,
-        previousValue: null,
-        firstChange: true,
-        isFirstChange: () => true,
-      } as any,
-      events: {
-        currentValue: component.events,
         previousValue: null,
         firstChange: true,
         isFirstChange: () => true,
@@ -406,17 +702,10 @@ describe('SummariesComponent', () => {
         },
       },
     } as any;
-    component.events = [];
 
     await component.ngOnChanges({
       user: {
         currentValue: component.user,
-        previousValue: null,
-        firstChange: true,
-        isFirstChange: () => true,
-      } as any,
-      events: {
-        currentValue: component.events,
         previousValue: null,
         firstChange: true,
         isFirstChange: () => true,
@@ -459,17 +748,10 @@ describe('SummariesComponent', () => {
         },
       },
     } as any;
-    component.events = [];
 
     await component.ngOnChanges({
       user: {
         currentValue: component.user,
-        previousValue: null,
-        firstChange: true,
-        isFirstChange: () => true,
-      } as any,
-      events: {
-        currentValue: component.events,
         previousValue: null,
         firstChange: true,
         isFirstChange: () => true,
@@ -535,17 +817,10 @@ describe('SummariesComponent', () => {
         },
       },
     } as any;
-    component.events = [];
 
     await component.ngOnChanges({
       user: {
         currentValue: component.user,
-        previousValue: null,
-        firstChange: true,
-        isFirstChange: () => true,
-      } as any,
-      events: {
-        currentValue: component.events,
         previousValue: null,
         firstChange: true,
         isFirstChange: () => true,
@@ -586,17 +861,10 @@ describe('SummariesComponent', () => {
         },
       },
     } as any;
-    component.events = [];
 
     await component.ngOnChanges({
       user: {
         currentValue: component.user,
-        previousValue: null,
-        firstChange: true,
-        isFirstChange: () => true,
-      } as any,
-      events: {
-        currentValue: component.events,
         previousValue: null,
         firstChange: true,
         isFirstChange: () => true,
@@ -606,6 +874,34 @@ describe('SummariesComponent', () => {
     component.ngDoCheck();
 
     expect(buildDashboardTileViewModelsSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('should snapshot tile event filter activity arrays without retaining mutable references', () => {
+    component.user = {
+      settings: {
+        dashboardSettings: {
+          tiles: [{
+            type: TileTypes.Chart,
+            order: 0,
+            chartType: ChartTypes.ColumnsVertical,
+            dataType: DataAscent.type,
+            dataValueType: ChartDataValueTypes.Total,
+            dataCategoryType: ChartDataCategoryTypes.ActivityType,
+            size: { columns: 1, rows: 1 },
+            eventFilters: {
+              range: '90d',
+              activityTypes: [],
+            },
+          }],
+        },
+      },
+    } as any;
+
+    const snapshot = (component as any).getDashboardTileSettingsSnapshot();
+    component.user.settings.dashboardSettings.tiles[0].eventFilters.activityTypes.push(ActivityTypes.Running);
+
+    expect(snapshot[0].eventFilters.activityTypes).toEqual([]);
+    expect((component as any).getDashboardTileSettingsSnapshot()[0].eventFilters.activityTypes).toEqual([ActivityTypes.Running]);
   });
 
   it('should show a warning banner and force retry when derived metrics fail for a form tile', () => {
@@ -744,17 +1040,10 @@ describe('SummariesComponent', () => {
         },
       },
     } as any;
-    component.events = [];
 
     await component.ngOnChanges({
       user: {
         currentValue: component.user,
-        previousValue: null,
-        firstChange: true,
-        isFirstChange: () => true,
-      } as any,
-      events: {
-        currentValue: component.events,
         previousValue: null,
         firstChange: true,
         isFirstChange: () => true,
@@ -843,7 +1132,6 @@ describe('SummariesComponent', () => {
         },
       },
     } as any;
-    component.events = [];
     component.showActions = true;
     mockDialog.open.mockReturnValue({
       afterClosed: () => of({ saved: true }),
@@ -880,7 +1168,6 @@ describe('SummariesComponent', () => {
         },
       },
     } as any;
-    component.events = [];
     component.showActions = true;
     mockDialog.open.mockReturnValue({
       afterClosed: () => of({ saved: false }),
@@ -911,7 +1198,6 @@ describe('SummariesComponent', () => {
         },
       },
     } as any;
-    component.events = [];
     component.showActions = true;
     mockDialog.open.mockReturnValue({
       afterClosed: () => of({ saved: false }),
@@ -966,6 +1252,65 @@ describe('SummariesComponent', () => {
     expect(component.tiles[0].type).toBe(TileTypes.Map);
     expect(component.tiles[1].type).toBe(TileTypes.Chart);
     expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(component.user, { settings: component.user.settings });
+  });
+
+  it('should reset per-order tile event state after dashboard tile reorder', async () => {
+    const nowMs = Date.UTC(2026, 3, 30, 12, 0, 0);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(nowMs));
+    component.showActions = true;
+    component.desktopTileDragEnabled = true;
+    component.user = {
+      uid: 'user-1',
+      settings: {
+        unitSettings: { startOfTheWeek: 1 },
+        dashboardSettings: {
+          tiles: [
+            {
+              type: TileTypes.Chart,
+              order: 0,
+              size: { columns: 1, rows: 1 },
+              chartType: ChartTypes.ColumnsVertical,
+              dataType: DataAscent.type,
+              dataValueType: ChartDataValueTypes.Total,
+              dataCategoryType: ChartDataCategoryTypes.DateType,
+              eventFilters: { range: '14d', activityTypes: [] },
+            },
+            {
+              type: TileTypes.Map,
+              order: 1,
+              size: { columns: 1, rows: 1 },
+              clusterMarkers: true,
+              mapStyle: 'default',
+              eventFilters: { range: '30d', activityTypes: [] },
+            },
+          ],
+        },
+      },
+    } as any;
+    component.tiles = [
+      { type: TileTypes.Chart, order: 0, size: { columns: 1, rows: 1 }, chartType: ChartTypes.ColumnsVertical } as any,
+      { type: TileTypes.Map, order: 1, size: { columns: 1, rows: 1 }, clusterMarkers: true, mapStyle: 'default' } as any,
+    ];
+    (component as any).tileEventsByOrder = {
+      0: [{ id: 'old-chart-event' }],
+      1: [{ id: 'old-map-event' }],
+    };
+
+    component.onTilesSort({ previousIndex: 0, currentIndex: 1 } as any);
+    mockEventService.getEventsBy.mockClear();
+    await component.onTilesDrop({ previousIndex: 0, currentIndex: 1 } as any);
+
+    expect((component as any).tileEventsByOrder).toEqual({ 0: [], 1: [] });
+    expect(mockEventService.getEventsBy).toHaveBeenCalledTimes(2);
+    expect(mockEventService.getEventsBy.mock.calls[0][1]).toEqual([
+      { fieldPath: 'startDate', opStr: '>=', value: nowMs - (30 * 24 * 60 * 60 * 1000) },
+      { fieldPath: 'startDate', opStr: '<=', value: nowMs },
+    ]);
+    expect(mockEventService.getEventsBy.mock.calls[1][1]).toEqual([
+      { fieldPath: 'startDate', opStr: '>=', value: nowMs - (14 * 24 * 60 * 60 * 1000) },
+      { fieldPath: 'startDate', opStr: '<=', value: nowMs },
+    ]);
   });
 
   it('should not persist when dropped at the same index', async () => {
@@ -1071,17 +1416,10 @@ describe('SummariesComponent', () => {
         },
       },
     } as any;
-    component.events = [];
 
     await component.ngOnChanges({
       user: {
         currentValue: component.user,
-        previousValue: null,
-        firstChange: true,
-        isFirstChange: () => true,
-      } as any,
-      events: {
-        currentValue: component.events,
         previousValue: null,
         firstChange: true,
         isFirstChange: () => true,

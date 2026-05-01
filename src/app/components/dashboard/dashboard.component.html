@@ -1,16 +1,6 @@
 <section class="component-container">
   <app-loading-overlay [isLoading]="!isInitialized" [showSkeleton]="false" height="auto">
     <div class="dashboard-content">
-      @if (user) {
-      <app-event-search [isLoading]="isLoading" [selectedDateRange]="user.settings.dashboardSettings.dateRange"
-        [selectedStartDate]="searchStartDate" [selectedEndDate]="searchEndDate" [startOfTheWeek]="startOfTheWeek"
-        [selectedActivityTypes]="user.settings.dashboardSettings.activityTypes"
-        [showMergedEventsToggle]="hasMergedEvents"
-        [includeMergedEvents]="user.settings.dashboardSettings.includeMergedEvents !== false"
-        (searchChange)="search($event)">
-      </app-event-search>
-      }
-
       @if (showUnitSetupPrompt) {
       <mat-card class="unit-setup-prompt" appearance="outlined">
         <div class="unit-setup-prompt__main">
@@ -53,10 +43,7 @@
       @if (user) {
       @defer (on idle) {
       <app-summaries [isLoading]="isLoading" [user]="user" [showActions]="!targetUser || targetUser.uid === user.uid"
-        [dashboardDateRange]="user.settings.dashboardSettings.dateRange"
-        [dashboardStartDate]="searchStartDate"
-        [dashboardEndDate]="searchEndDate"
-        [events]="events">
+        [eventUser]="targetUser || user">
       </app-summaries>
       } @placeholder {
       <div style="min-height: 120px;"></div>
@@ -64,6 +51,13 @@
       }
 
       @if (user) {
+      <app-event-search [isLoading]="isLoading" [selectedDateRange]="eventTableFilters.dateRange"
+        [selectedStartDate]="searchStartDate" [selectedEndDate]="searchEndDate" [startOfTheWeek]="startOfTheWeek"
+        [selectedActivityTypes]="eventTableFilters.activityTypes"
+        [showMergedEventsToggle]="hasMergedEvents"
+        [includeMergedEvents]="eventTableFilters.includeMergedEvents !== false"
+        (searchChange)="search($event)">
+      </app-event-search>
       <app-event-table [targetUser]="targetUser" [isLoading]="isLoading" [user]="user"
         [showActions]="!targetUser || targetUser.uid === user.uid" [events]="events"></app-event-table>
       }

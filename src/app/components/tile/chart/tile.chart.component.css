@@ -26,6 +26,13 @@ app-form-chart {
   height: 100%;
 }
 
+.tile-event-filter-controls {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  z-index: 2;
+}
+
 .pie {
   /*max-height: 40%;*/
   /*min-height: 40%;*/

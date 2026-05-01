@@ -11,7 +11,6 @@ import { of, Subject } from 'rxjs';
 import {
     DateRanges,
     DistanceUnits,
-    EventInterface,
     PaceUnits,
     SpeedUnits,
     SwimPaceUnits,
@@ -20,7 +19,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import { AppUserInterface } from '../../models/app-user.interface';
 import { Analytics } from 'app/firebase/analytics';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { BehaviorSubject } from 'rxjs';
 import { LoggerService } from '../../services/logger.service';
 
@@ -38,6 +37,10 @@ describe('DashboardComponent', () => {
     let mockLogger: any;
 
     const mockUser = new User('testUser') as AppUserInterface;
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
 
     beforeEach(async () => {
         mockUser.settings = {
@@ -73,7 +76,7 @@ describe('DashboardComponent', () => {
         mockActivatedRoute = {
             snapshot: {
                 paramMap: {
-                    get: (key: string) => null
+                    get: (_key: string) => null
                 },
                 data: {
                     dashboardData: {
@@ -493,7 +496,51 @@ describe('DashboardComponent', () => {
         expect(component.user.settings.dashboardSettings.startDate).toBe(previousStartDate.getTime());
         expect(component.user.settings.dashboardSettings.endDate).toBe(previousEndDate.getTime());
         expect(component.user.settings.dashboardSettings.activityTypes).toEqual(previousActivityTypes);
-        expect(mockSnackBar.open).toHaveBeenCalledWith('Could not update dashboard filters');
+        expect(mockSnackBar.open).toHaveBeenCalledWith('Could not update event table filters');
+    });
+
+    it('should persist event search changes only to event table filters', async () => {
+        const userForSearch = {
+            ...mockUser,
+            settings: {
+                ...mockUser.settings,
+                dashboardSettings: {
+                    ...mockUser.settings.dashboardSettings,
+                    includeMergedEvents: true,
+                    dateRange: DateRanges.all,
+                    startDate: null,
+                    endDate: null,
+                    activityTypes: []
+                }
+            }
+        } as any;
+        const startDate = new Date('2025-02-01T00:00:00.000Z');
+        const endDate = new Date('2025-02-10T23:59:59.000Z');
+        component.user = userForSearch;
+
+        await component.search({
+            searchTerm: 'tempo',
+            startDate,
+            endDate,
+            dateRange: DateRanges.lastThirtyDays,
+            activityTypes: ['cycling'] as any,
+            includeMergedEvents: false
+        });
+
+        expect(component.user.settings.dashboardSettings.eventTableFilters).toEqual({
+            searchTerm: 'tempo',
+            includeMergedEvents: false,
+            dateRange: DateRanges.lastThirtyDays,
+            startDate: startDate.getTime(),
+            endDate: endDate.getTime(),
+            activityTypes: ['cycling']
+        });
+        expect(component.user.settings.dashboardSettings.includeMergedEvents).toBe(true);
+        expect(component.user.settings.dashboardSettings.dateRange).toBe(DateRanges.all);
+        expect(component.user.settings.dashboardSettings.startDate).toBeNull();
+        expect(component.user.settings.dashboardSettings.endDate).toBeNull();
+        expect(component.user.settings.dashboardSettings.activityTypes).toEqual([]);
+        expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(component.user, { settings: component.user.settings });
     });
 
     it('should re-run manual search when submitting identical filters twice', async () => {
@@ -544,5 +591,27 @@ describe('DashboardComponent', () => {
 
         expect(component.isLoading).toBe(false);
         expect(mockEventService.getEventsBy.mock.calls.length).toBeGreaterThan(callsAfterFirstSearch);
+    });
+
+    it('should default bounded event table ranges to Monday when unit start of week is missing', () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-04-30T12:00:00.000Z'));
+
+        (component as any).applyEventTableFilterDates({
+            searchTerm: null,
+            dateRange: DateRanges.thisWeek,
+            startDate: null,
+            endDate: null,
+            activityTypes: [],
+            includeMergedEvents: true,
+        }, {
+            settings: {
+                unitSettings: {},
+                dashboardSettings: {},
+            },
+        });
+
+        expect(component.searchStartDate).toEqual(new Date('2026-04-27T00:00:00.000'));
+        expect(component.searchEndDate).toEqual(new Date('2026-05-03T23:59:59.999'));
     });
 });

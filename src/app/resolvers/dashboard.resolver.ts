@@ -2,15 +2,19 @@ import { inject } from '@angular/core';
 import { ActivatedRouteSnapshot, ResolveFn, Router, RouterStateSnapshot } from '@angular/router';
 import { AppEventService, type EventsOnceSource } from '../services/app.event.service';
 import { AppUserService } from '../services/app.user.service';
-import { EventInterface, ActivityTypes, DateRanges, DaysOfTheWeek } from '@sports-alliance/sports-lib';
+import { EventInterface, DateRanges, DaysOfTheWeek } from '@sports-alliance/sports-lib';
 import { AppUserInterface } from '../models/app-user.interface';
 import { map, switchMap, take } from 'rxjs/operators';
-import { of, EMPTY, Observable, firstValueFrom } from 'rxjs';
+import { firstValueFrom } from 'rxjs';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { WhereFilterOp } from 'firebase/firestore';
 import { getDatesForDateRange } from '../helpers/date-range-helper';
 import { LoggerService } from '../services/logger.service';
+import {
+    eventMatchesDashboardActivityTypes,
+    normalizeDashboardEventTableFilters,
+} from '../helpers/dashboard-tile-event-filters.helper';
 
 export interface DashboardResolverData {
     events: EventInterface[];
@@ -71,7 +75,7 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
                         durationMs: Number((performance.now() - targetUserFetchStart).toFixed(2)),
                         targetUserID,
                     });
-                } catch (e) {
+                } catch {
                     snackBar.open('Page not found');
                     router.navigate(['dashboard']);
                     logger.warn('[perf] dashboard_resolver_target_user_fetch_failed', {
@@ -98,26 +102,35 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
                 return { events: [], user: user, targetUser, hasMergedEvents: false };
             }
 
+            const eventTableFilters = normalizeDashboardEventTableFilters(dashboardSettings.eventTableFilters, {
+                dateRange: dashboardSettings.dateRange,
+                startDate: dashboardSettings.startDate,
+                endDate: dashboardSettings.endDate,
+                activityTypes: dashboardSettings.activityTypes,
+                includeMergedEvents: dashboardSettings.includeMergedEvents,
+            });
+
             let searchStartDate: Date | null = null;
             let searchEndDate: Date | null = null;
 
-            if (dashboardSettings.dateRange === DateRanges.custom && dashboardSettings.startDate && dashboardSettings.endDate) {
-                searchStartDate = new Date(dashboardSettings.startDate);
-                searchEndDate = new Date(dashboardSettings.endDate);
-            } else if (user.settings.unitSettings?.startOfTheWeek !== undefined) {
-                const range = getDatesForDateRange(dashboardSettings.dateRange, user.settings.unitSettings.startOfTheWeek);
+            if (eventTableFilters.dateRange === DateRanges.custom && eventTableFilters.startDate !== null && eventTableFilters.endDate !== null) {
+                searchStartDate = new Date(eventTableFilters.startDate);
+                searchEndDate = new Date(eventTableFilters.endDate);
+            } else {
+                const startOfTheWeek = user.settings.unitSettings?.startOfTheWeek ?? DaysOfTheWeek.Monday;
+                const range = getDatesForDateRange(eventTableFilters.dateRange, startOfTheWeek);
                 searchStartDate = range.startDate;
                 searchEndDate = range.endDate;
             }
 
             const where: any[] = [];
-            const includeMergedEvents = dashboardSettings.includeMergedEvents !== false;
+            const includeMergedEvents = eventTableFilters.includeMergedEvents !== false;
 
-            if ((!searchStartDate || !searchEndDate) && dashboardSettings.dateRange === DateRanges.custom) {
+            if ((!searchStartDate || !searchEndDate) && eventTableFilters.dateRange !== DateRanges.all) {
                 return { events: [], user: user, targetUser, hasMergedEvents: false };
             }
 
-            if (dashboardSettings.dateRange !== DateRanges.all && searchStartDate && searchEndDate) {
+            if (eventTableFilters.dateRange !== DateRanges.all && searchStartDate && searchEndDate) {
                 where.push({
                     fieldPath: 'startDate',
                     opStr: <WhereFilterOp>'>=',
@@ -132,7 +145,7 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
 
             // For all-time dashboards, one-shot prefetch can spend tens of seconds deserializing thousands
             // of events before first paint. Skip this read and let the live listener hydrate initial data.
-            const shouldSkipEventsPrefetch = dashboardSettings.dateRange === DateRanges.all;
+            const shouldSkipEventsPrefetch = eventTableFilters.dateRange === DateRanges.all;
             if (shouldSkipEventsPrefetch) {
                 logger.info('[perf] dashboard_resolver_skip_events_prefetch', {
                     runId,
@@ -181,8 +194,8 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
             const filteredByMerge = includeMergedEvents ? rawEvents : rawEvents.filter(event => !event.isMerge);
 
             // Filter by Activity Types
-            const dashboardActivityTypes = dashboardSettings.activityTypes ?? [];
-            if (!dashboardActivityTypes.length) {
+            const eventTableActivityTypes = eventTableFilters.activityTypes ?? [];
+            if (!eventTableActivityTypes.length) {
                 logger.info('[perf] dashboard_resolver_complete', {
                     runId,
                     durationMs: Number((performance.now() - resolverStart).toFixed(2)),
@@ -197,11 +210,8 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
                 };
             }
 
-            const filteredEvents = (filteredByMerge || []).filter(event => {
-                return event.getActivityTypesAsArray().some(activityType => (
-                    dashboardActivityTypes.includes(ActivityTypes[activityType as unknown as keyof typeof ActivityTypes])
-                ));
-            });
+            const filteredEvents = (filteredByMerge || [])
+                .filter(event => eventMatchesDashboardActivityTypes(event, eventTableActivityTypes));
 
             logger.info('[perf] dashboard_resolver_complete', {
                 runId,

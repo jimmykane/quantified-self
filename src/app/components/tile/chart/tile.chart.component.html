@@ -1,4 +1,12 @@
 <section>
+  @if (showEventFilters) {
+  <app-dashboard-tile-event-filters class="tile-event-filter-controls" [eventFilters]="eventFilters"
+    [canNavigateNewer]="canNavigateTileEventsNewer"
+    (rangeChange)="eventFilterRangeChange.emit($event)"
+    (activityTypesChange)="eventFilterActivityTypesChange.emit($event)"
+    (navigate)="eventFilterNavigate.emit($event)">
+  </app-dashboard-tile-event-filters>
+  }
   @if (showActions) {
   <div class="actions">
     @if (enableDesktopDrag) {

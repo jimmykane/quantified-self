@@ -1,0 +1,34 @@
+<nav class="tile-event-filters" aria-label="Tile event filters">
+  @if (showNavigation) {
+  <button mat-icon-button class="tile-event-filter-button" appHapticTap [disabled]="disabled"
+    (click)="onNavigate('older')" matTooltip="Older window" matTooltipPosition="below" aria-label="Show older window">
+    <mat-icon>chevron_left</mat-icon>
+  </button>
+  }
+
+  <app-chart-range-selector class="tile-event-range-selector" [options]="rangeSelectorOptions"
+    [value]="selectedRange" ariaLabel="Select tile range" [disabled]="disabled"
+    (valueChange)="onRangeSelection($event)">
+  </app-chart-range-selector>
+
+  @if (showNavigation) {
+  <button mat-icon-button class="tile-event-filter-button" appHapticTap [disabled]="disabled || !canNavigateNewer"
+    (click)="onNavigate('newer')" matTooltip="Newer window" matTooltipPosition="below" aria-label="Show newer window">
+    <mat-icon>chevron_right</mat-icon>
+  </button>
+  }
+
+  <button mat-icon-button class="tile-event-filter-button" appHapticTap [matMenuTriggerFor]="activityMenu"
+    [disabled]="disabled" [matTooltip]="activityFilterLabel" matTooltipPosition="below"
+    aria-label="Filter tile activities">
+    <mat-icon>filter_alt</mat-icon>
+  </button>
+</nav>
+
+<mat-menu #activityMenu="matMenu" class="tile-event-activity-menu">
+  <div class="tile-event-activity-menu-content" (click)="$event.stopPropagation()">
+    <app-activity-types-multi-select [selectedActivityTypes]="selectedActivityTypes"
+      (selectedActivityTypesChange)="onActivityTypesChange($event)">
+    </app-activity-types-multi-select>
+  </div>
+</mat-menu>

@@ -2,8 +2,6 @@ import type { EventInterface } from '@sports-alliance/sports-lib';
 import {
   ChartTypes,
   DataRecoveryTime,
-  DateRanges,
-  DaysOfTheWeek,
   TileChartSettingsInterface,
   TileMapSettingsInterface,
   TileSettingsInterface,
@@ -26,7 +24,6 @@ import {
   type DashboardFormPoint,
   resolveDashboardFormLatestPoint,
 } from './dashboard-form.helper';
-import { getDatesForDateRange } from './date-range-helper';
 import {
   type DashboardRecoveryNowContext,
 } from './dashboard-recovery-now.helper';
@@ -47,6 +44,10 @@ import {
   buildDashboardSleepTrendContext,
   type DashboardSleepTrendContext,
 } from './dashboard-sleep-chart.helper';
+import {
+  filterDashboardTileEventsByActivityTypes,
+  normalizeDashboardTileEventFilters,
+} from './dashboard-tile-event-filters.helper';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
@@ -110,13 +111,8 @@ export type DashboardTileViewModel = DashboardChartTileViewModel | DashboardMapT
 interface BuildDashboardTileViewModelsInput {
   tiles: TileSettingsInterface[];
   events?: EventInterface[] | null;
+  tileEventsByOrder?: Record<number, EventInterface[] | undefined> | null;
   sleepSessions?: SleepSession[] | null;
-  dashboardDateRange?: {
-    dateRange?: DateRanges | null;
-    startDate?: number | Date | null;
-    endDate?: number | Date | null;
-    startOfTheWeek?: DaysOfTheWeek | null;
-  } | null;
   preferences?: EventStatAggregationPreferences;
   logger?: EventStatAggregationLogger;
   derivedMetrics?: {
@@ -248,68 +244,6 @@ function resolveEventStartDateTimeMs(event: EventInterface): number | null {
   return null;
 }
 
-function resolveDateRangeTimeMs(value: unknown): number | null {
-  if (value instanceof Date) {
-    const dateTimeMs = value.getTime();
-    return Number.isFinite(dateTimeMs) ? dateTimeMs : null;
-  }
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
-  }
-  return null;
-}
-
-function resolveDashboardDateRangeBounds(
-  dashboardDateRange?: BuildDashboardTileViewModelsInput['dashboardDateRange'],
-): { startTimeMs: number; endTimeMs: number } | null {
-  if (!dashboardDateRange || dashboardDateRange.dateRange === DateRanges.all) {
-    return null;
-  }
-
-  const explicitStartTimeMs = resolveDateRangeTimeMs(dashboardDateRange.startDate);
-  const explicitEndTimeMs = resolveDateRangeTimeMs(dashboardDateRange.endDate);
-  if (explicitStartTimeMs !== null && explicitEndTimeMs !== null) {
-    return {
-      startTimeMs: explicitStartTimeMs,
-      endTimeMs: explicitEndTimeMs,
-    };
-  }
-
-  if (dashboardDateRange.dateRange === DateRanges.custom) {
-    return null;
-  }
-
-  const startOfTheWeek = dashboardDateRange.startOfTheWeek ?? DaysOfTheWeek.Monday;
-  const resolvedRange = getDatesForDateRange(dashboardDateRange.dateRange, startOfTheWeek);
-  const presetStartTimeMs = resolveDateRangeTimeMs(resolvedRange.startDate);
-  const presetEndTimeMs = resolveDateRangeTimeMs(resolvedRange.endDate);
-  if (presetStartTimeMs === null || presetEndTimeMs === null) {
-    return null;
-  }
-
-  return {
-    startTimeMs: presetStartTimeMs,
-    endTimeMs: presetEndTimeMs,
-  };
-}
-
-function applyDashboardDateRangeFilter(
-  events: EventInterface[],
-  dashboardDateRange?: BuildDashboardTileViewModelsInput['dashboardDateRange'],
-): EventInterface[] {
-  const bounds = resolveDashboardDateRangeBounds(dashboardDateRange);
-  if (!bounds) {
-    return events;
-  }
-
-  return events.filter((event) => {
-    const eventStartTimeMs = resolveEventStartDateTimeMs(event);
-    return eventStartTimeMs !== null
-      && eventStartTimeMs >= bounds.startTimeMs
-      && eventStartTimeMs <= bounds.endTimeMs;
-  });
-}
-
 function normalizeDashboardTileEvents(
   events?: EventInterface[] | null,
 ): EventInterface[] {
@@ -323,11 +257,24 @@ function normalizeDashboardTileEvents(
   return normalizedEvents;
 }
 
+function resolveEventsForTile(
+  input: BuildDashboardTileViewModelsInput,
+  tile: TileSettingsInterface,
+  fallbackEvents: EventInterface[],
+): EventInterface[] {
+  const rawTileEvents = input.tileEventsByOrder?.[tile.order] || fallbackEvents;
+  const normalizedTileEvents = normalizeDashboardTileEvents(rawTileEvents);
+  const tileWithFilters = tile as TileSettingsInterface & {
+    eventFilters?: unknown;
+  };
+  const filters = normalizeDashboardTileEventFilters(tileWithFilters.eventFilters);
+  return filterDashboardTileEventsByActivityTypes(normalizedTileEvents, filters.activityTypes);
+}
+
 export function buildDashboardTileViewModels(
   input: BuildDashboardTileViewModelsInput,
 ): DashboardTileViewModel[] {
   const normalizedEvents = normalizeDashboardTileEvents(input.events);
-  const filteredEvents = applyDashboardDateRangeFilter(normalizedEvents, input.dashboardDateRange);
   const derivedFormPoints = Array.isArray(input.derivedMetrics?.formPoints) ? input.derivedMetrics?.formPoints : null;
   const derivedRecoveryNowContext = input.derivedMetrics?.recoveryNow || null;
   const derivedAcwrContext = input.derivedMetrics?.acwr || null;
@@ -346,9 +293,10 @@ export function buildDashboardTileViewModels(
   return (input.tiles || []).reduce<DashboardTileViewModel[]>((viewModels, tile) => {
     if (tile.type === TileTypes.Map) {
       const mapTile = tile as DashboardMapTileSettings;
+      const tileEvents = resolveEventsForTile(input, mapTile, normalizedEvents);
       viewModels.push({
         ...mapTile,
-        events: filteredEvents,
+        events: tileEvents,
       });
       return viewModels;
     }
@@ -505,10 +453,11 @@ export function buildDashboardTileViewModels(
     }
 
     if (chartTile.chartType === ChartTypes.IntensityZones) {
+      const tileEvents = resolveEventsForTile(input, chartTile, normalizedEvents);
       viewModels.push({
         ...chartTile,
         timeInterval: TimeIntervals.Auto,
-        data: filteredEvents,
+        data: tileEvents,
       });
       return viewModels;
     }
@@ -528,7 +477,7 @@ export function buildDashboardTileViewModels(
         chartType: `${effectiveChartType}`,
         source: derivedRecoveryNowContext ? 'derived' : 'none',
         derivedAvailable: !!derivedRecoveryNowContext,
-        filteredEvents: filteredEvents.length,
+        filteredEvents: 0,
         contextTotalSeconds: recoveryNowContextForTile?.totalSeconds ?? null,
         contextEndTimeMs: recoveryNowContextForTile?.endTimeMs ?? null,
         contextSegments: segments.length,
@@ -543,7 +492,8 @@ export function buildDashboardTileViewModels(
       return viewModels;
     }
 
-    const aggregation = buildEventStatAggregation(filteredEvents, {
+    const tileEvents = resolveEventsForTile(input, chartTile, normalizedEvents);
+    const aggregation = buildEventStatAggregation(tileEvents, {
       dataType: chartTile.dataType,
       valueType: chartTile.dataValueType,
       categoryType: chartTile.dataCategoryType,
@@ -551,8 +501,8 @@ export function buildDashboardTileViewModels(
       preferences: input.preferences,
     }, input.logger);
     const chartRowsForTile = buildAggregatedChartRows(aggregation);
-    const filteredTimeBounds = resolveStatTimeBounds(filteredEvents);
-    const metricCoverage = resolveMetricCoverageDebug(filteredEvents, chartTile.dataType);
+    const filteredTimeBounds = resolveStatTimeBounds(tileEvents);
+    const metricCoverage = resolveMetricCoverageDebug(tileEvents, chartTile.dataType);
     const firstBucket = aggregation.buckets[0];
     const lastBucket = aggregation.buckets[aggregation.buckets.length - 1];
     logCustomChartDebug(input.logger, {
@@ -564,7 +514,7 @@ export function buildDashboardTileViewModels(
       requestedInterval: requestedTimeInterval,
       resolvedInterval: aggregation.resolvedTimeInterval,
       totalInputEvents: normalizedEvents.length,
-      filteredEvents: filteredEvents.length,
+      filteredEvents: tileEvents.length,
       filteredFirstEventTime: filteredTimeBounds.first,
       filteredLastEventTime: filteredTimeBounds.last,
       metricWithValueEvents: metricCoverage.withMetricCount,

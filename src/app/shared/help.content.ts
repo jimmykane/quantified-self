@@ -102,8 +102,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Dashboard manager supports two workflows: **Manual** and **Presets**.
 - You can choose between **Curated**, **KPI**, **Custom**, and **Map** categories.
 - **Presets** provide quick-start tile templates and can be applied in both **Add** and **Edit** modes.
-- **Curated Recovery** remains a fixed insight and does not react to dashboard date-range changes.
-- **Curated Form/TSS** computes from full history and does not react to dashboard date-range changes.
+- **Curated Recovery** remains a fixed insight and does not react to event table or custom tile date ranges.
+- **Curated Form/TSS** computes from full history and does not react to event table or custom tile date ranges.
 - New curated charts: **Freshness Forecast**, **Intensity Distribution**, and **Efficiency Trend**.
 - KPI cards are derived-only compact tiles: **ACWR**, **Ramp Rate**, **Monotony / Strain**, **Form Now**, **Form +7d**, **Easy %**, **Hard %**, and **Efficiency Δ (4w)**.
 - KPI cards are shown in a dedicated compact **KPI lane** above the main dashboard grid.
@@ -112,10 +112,12 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Curated and KPI tiles include an **info** icon beside the title with formulas and interpretation guidance.
 - On supported mobile devices, dashboard buttons and chart interactions provide lightweight haptic feedback.
 - Haptics automatically fall back to no-op when vibration support is unavailable or reduced-motion is enabled.
-- **Custom** charts keep the existing configurable behavior and react to dashboard filters/date range.
+- Event search filters only the dashboard event table.
+- **Custom** charts use their own tile date-range and activity filters, with matching controls in Dashboard manager.
 - New users can choose a kilometers or miles preset from the dashboard unit prompt; choose **Advanced settings** there, or open **Settings -> Units**, to fine-tune individual unit preferences later.
 - Distance values in dashboards, event charts, activity chips, and CSV exports follow your kilometers or miles preference from **Settings -> Units**; jump distances display in feet when miles are selected.
-- **Map** keeps the existing map behavior and reacts to dashboard filters/date range.
+- **Map** tiles use their own tile date-range and activity filters, independent from the event table search.
+- Curated, KPI, form, recovery, sleep, and other derived tiles stay independent from event table filters and custom/map tile filters.
 - Derived curated and KPI chart types are unique: only one tile per special derived chart type can exist at a time.
 - Map tiles are also unique: only one map tile can exist at a time.
 - Map style and cluster-marker settings are edited inside Dashboard manager.

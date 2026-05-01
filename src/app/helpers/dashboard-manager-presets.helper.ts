@@ -37,6 +37,11 @@ import {
   type DashboardKpiChartType,
 } from './dashboard-special-chart-types';
 import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from './dashboard-form.helper';
+import type {
+  AppDashboardChartTileSettingsInterface,
+  AppDashboardMapTileSettingsInterface,
+} from '../models/app-user.interface';
+import { AppUserUtilities } from '../utils/app.user.utilities';
 
 export const DASHBOARD_MANAGER_PRESET_IDS = {
   CURATED_RECOVERY: 'curated-recovery',
@@ -370,7 +375,7 @@ export function buildDashboardManagerPresetTile(
   }
 
   if (definition.category === 'map') {
-    const mapTile = <DashboardManagerPresetMapTileSettings><unknown>{
+    const mapTile = <DashboardManagerPresetMapTileSettings & AppDashboardMapTileSettingsInterface><unknown>{
       name: definition.tileName,
       type: TileTypes.Map,
       order: input.order,
@@ -379,6 +384,7 @@ export function buildDashboardManagerPresetTile(
       mapTheme: MapThemes.Normal,
       showHeatMap: true,
       clusterMarkers: definition.clusterMarkers,
+      eventFilters: AppUserUtilities.getDefaultDashboardTileEventFilters(),
     };
     return mapTile;
   }
@@ -447,7 +453,7 @@ export function buildDashboardManagerPresetTile(
     return kpiTile;
   }
 
-  const customTile: TileChartSettingsInterface = {
+  const customTile: AppDashboardChartTileSettingsInterface = {
     name: definition.tileName,
     type: TileTypes.Chart,
     order: input.order,
@@ -457,6 +463,7 @@ export function buildDashboardManagerPresetTile(
     dataValueType: definition.dataValueType,
     dataCategoryType: definition.dataCategoryType,
     dataTimeInterval: definition.dataTimeInterval,
+    eventFilters: AppUserUtilities.getDefaultDashboardTileEventFilters(),
   };
   return customTile;
 }

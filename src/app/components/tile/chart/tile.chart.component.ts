@@ -2,7 +2,8 @@ import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output } from 
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
-  ChartTypes, TimeIntervals
+  ChartTypes, TimeIntervals,
+  ActivityTypes,
 } from '@sports-alliance/sports-lib';
 import { TileAbstractDirective } from '../tile-abstract.directive';
 import type { DashboardFormPoint } from '../../../helpers/dashboard-form.helper';
@@ -40,11 +41,17 @@ import {
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
   type DashboardChartType,
+  isDashboardSpecialChartType,
 } from '../../../helpers/dashboard-special-chart-types';
 import { resolveDashboardChartInfoTooltip } from '../../../helpers/dashboard-chart-info.helper';
 import type { DerivedMetricSnapshotStatus } from '@shared/derived-metrics';
 import type { DashboardDerivedMetricStatus } from '../../../helpers/derived-metric-status.helper';
 import type { AppDashboardSleepTrendRange } from '../../../models/app-user.interface';
+import type {
+  AppDashboardTileEventFilterRange,
+  AppDashboardTileEventFiltersInterface,
+} from '../../../models/app-user.interface';
+import type { DashboardTileEventNavigationDirection } from '../../../helpers/dashboard-tile-event-filters.helper';
 
 type DashboardRecoveryNowSnapshotStatus = DerivedMetricSnapshotStatus | 'missing' | 'queued' | 'processing';
 
@@ -66,6 +73,8 @@ export class TileChartComponent extends TileAbstractDirective {
   @Input() enableDesktopDrag = false;
   @Input() dataTimeInterval: TimeIntervals;
   @Input() data: any;
+  @Input() eventFilters?: AppDashboardTileEventFiltersInterface | null;
+  @Input() canNavigateTileEventsNewer = false;
   @Input() recoveryNow?: DashboardRecoveryNowContext | null;
   @Input() recoveryNowStatus?: DashboardRecoveryNowSnapshotStatus | null;
   @Input() formStatus?: DashboardDerivedMetricStatus | null;
@@ -100,6 +109,9 @@ export class TileChartComponent extends TileAbstractDirective {
   @Output() editInDashboardManager = new EventEmitter<number>();
   @Output() sleepTrendRangeChange = new EventEmitter<AppDashboardSleepTrendRange>();
   @Output() sleepTrendNavigate = new EventEmitter<DashboardSleepTrendNavigationDirection>();
+  @Output() eventFilterRangeChange = new EventEmitter<AppDashboardTileEventFilterRange>();
+  @Output() eventFilterActivityTypesChange = new EventEmitter<ActivityTypes[]>();
+  @Output() eventFilterNavigate = new EventEmitter<DashboardTileEventNavigationDirection>();
 
   public chartTypes = ChartTypes;
   public recoveryNowChartType = DASHBOARD_RECOVERY_NOW_CHART_TYPE;
@@ -120,6 +132,10 @@ export class TileChartComponent extends TileAbstractDirective {
 
   get chartInfoTooltip(): string | null {
     return resolveDashboardChartInfoTooltip(this.chartType);
+  }
+
+  get showEventFilters(): boolean {
+    return this.chartType !== undefined && !isDashboardSpecialChartType(this.chartType);
   }
 
   onTileActionSaving(isSaving: boolean): void {

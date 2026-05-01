@@ -68,6 +68,10 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Custom');
     expect(gettingStartedSection?.content).toContain('Map');
     expect(gettingStartedSection?.content).toContain('one map tile');
+    expect(gettingStartedSection?.content).toContain('Event search filters only the dashboard event table');
+    expect(gettingStartedSection?.content).toContain('Custom** charts use their own tile date-range and activity filters');
+    expect(gettingStartedSection?.content).toContain('Map** tiles use their own tile date-range and activity filters');
+    expect(gettingStartedSection?.content).toContain('derived tiles stay independent from event table filters and custom/map tile filters');
   });
 
   it('should document that distance values follow unit preferences across the app', () => {

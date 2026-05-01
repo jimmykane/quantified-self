@@ -103,12 +103,14 @@ describe('dashboard-manager-presets.helper', () => {
       dataType: DataDuration.type,
       dataValueType: ChartDataValueTypes.Total,
       dataCategoryType: ChartDataCategoryTypes.ActivityType,
+      eventFilters: { range: '90d', activityTypes: [] },
     });
     expect(weeklyDistance).toMatchObject({
       type: TileTypes.Chart,
       chartType: ChartTypes.LinesVertical,
       dataType: DataDistance.type,
       dataTimeInterval: TimeIntervals.Weekly,
+      eventFilters: { range: '90d', activityTypes: [] },
     });
     expect(defaultMap).toMatchObject({
       type: TileTypes.Map,
@@ -116,6 +118,7 @@ describe('dashboard-manager-presets.helper', () => {
       clusterMarkers: true,
       order: 4,
       size: { columns: 2, rows: 2 },
+      eventFilters: { range: '90d', activityTypes: [] },
     });
   });
 

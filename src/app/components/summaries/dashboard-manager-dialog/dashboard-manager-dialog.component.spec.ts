@@ -1,13 +1,15 @@
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { of } from 'rxjs';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   ChartTypes,
+  ActivityTypes,
   DataDistance,
   DataDuration,
   TileTypes,
@@ -54,6 +56,7 @@ describe('DashboardManagerDialogComponent', () => {
   let fixture: ComponentFixture<DashboardManagerDialogComponent>;
   let userServiceMock: { updateUserProperties: ReturnType<typeof vi.fn> };
   let dialogRefMock: { close: ReturnType<typeof vi.fn> };
+  let dialogMock: { open: ReturnType<typeof vi.fn> };
   let hapticsMock: {
     selection: ReturnType<typeof vi.fn>;
     success: ReturnType<typeof vi.fn>;
@@ -83,6 +86,11 @@ describe('DashboardManagerDialogComponent', () => {
     dialogRefMock = {
       close: vi.fn(),
     };
+    dialogMock = {
+      open: vi.fn().mockReturnValue({
+        afterClosed: () => of(false),
+      }),
+    };
     hapticsMock = {
       selection: vi.fn(),
       success: vi.fn(),
@@ -95,6 +103,7 @@ describe('DashboardManagerDialogComponent', () => {
         { provide: AppUserService, useValue: userServiceMock },
         { provide: AppHapticsService, useValue: hapticsMock },
         { provide: MatDialogRef, useValue: dialogRefMock },
+        { provide: MatDialog, useValue: dialogMock },
         { provide: MAT_DIALOG_DATA, useValue: dialogData },
       ],
       schemas: [NO_ERRORS_SCHEMA],
@@ -136,6 +145,8 @@ describe('DashboardManagerDialogComponent', () => {
     component.customDataCategoryType = ChartDataCategoryTypes.ActivityType;
     component.customDataValueType = ChartDataValueTypes.Maximum;
     component.customTimeInterval = TimeIntervals.Monthly;
+    component.customEventRange = '30d';
+    component.customEventActivityTypes = [ActivityTypes.Running];
 
     await component.save();
 
@@ -144,6 +155,10 @@ describe('DashboardManagerDialogComponent', () => {
     expect(tiles[1].chartType).toBe(ChartTypes.Pie);
     expect(tiles[1].dataType).toBe(DataDistance.type);
     expect(tiles[1].dataValueType).toBe(ChartDataValueTypes.Total);
+    expect(tiles[1].eventFilters).toEqual({
+      range: '30d',
+      activityTypes: [ActivityTypes.Running],
+    });
     expect(userServiceMock.updateUserProperties).toHaveBeenCalledWith(dialogData.user, {
       settings: dialogData.user.settings,
     });
@@ -156,6 +171,8 @@ describe('DashboardManagerDialogComponent', () => {
     component.category = 'map' as any;
     component.mapStyle = 'satellite';
     component.mapClusterMarkers = false;
+    component.mapEventRange = '1y';
+    component.mapEventActivityTypes = [ActivityTypes.Cycling];
 
     await component.save();
 
@@ -164,6 +181,10 @@ describe('DashboardManagerDialogComponent', () => {
     expect(tiles[1].type).toBe(TileTypes.Map);
     expect(tiles[1].mapStyle).toBe('satellite');
     expect(tiles[1].clusterMarkers).toBe(false);
+    expect(tiles[1].eventFilters).toEqual({
+      range: '1y',
+      activityTypes: [ActivityTypes.Cycling],
+    });
     expect(userServiceMock.updateUserProperties).toHaveBeenCalledTimes(1);
   });
 
@@ -274,6 +295,7 @@ describe('DashboardManagerDialogComponent', () => {
       dataType: DataDistance.type,
       order: 1,
       size: { columns: 1, rows: 1 },
+      eventFilters: { range: '90d', activityTypes: [] },
     });
   });
 
@@ -469,6 +491,7 @@ describe('DashboardManagerDialogComponent', () => {
     expect(tile.type).toBe(TileTypes.Map);
     expect(tile.mapStyle).toBe('satellite');
     expect(tile.clusterMarkers).toBe(true);
+    expect(tile.eventFilters).toEqual({ range: '90d', activityTypes: [] });
   });
 
   it('converts a map tile to custom chart in edit mode', async () => {
@@ -499,6 +522,95 @@ describe('DashboardManagerDialogComponent', () => {
     expect(tile.type).toBe(TileTypes.Chart);
     expect(tile.chartType).toBe(ChartTypes.ColumnsHorizontal);
     expect(tile.dataType).toBe(DataDistance.type);
+    expect(tile.eventFilters).toEqual({ range: '90d', activityTypes: [] });
+  });
+
+  it('resets stale event filters when converting selected tiles into custom or map tiles', () => {
+    dialogData.user.settings.dashboardSettings.tiles = [{
+      type: TileTypes.Chart,
+      order: 0,
+      name: 'Custom distance',
+      chartType: ChartTypes.ColumnsVertical,
+      dataType: DataDistance.type,
+      dataValueType: ChartDataValueTypes.Total,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataTimeInterval: TimeIntervals.Auto,
+      size: { columns: 1, rows: 1 },
+      eventFilters: { range: '2y', activityTypes: [ActivityTypes.Running] },
+    }, {
+      type: TileTypes.Map,
+      order: 1,
+      name: 'Map tile',
+      mapStyle: 'default',
+      mapTheme: 'normal',
+      showHeatMap: true,
+      clusterMarkers: true,
+      size: { columns: 1, rows: 1 },
+      eventFilters: { range: '3y', activityTypes: [ActivityTypes.Cycling] },
+    }];
+    component.ngOnInit();
+    component.onModeChange('edit');
+
+    component.onEditTileSelectionChange(0);
+    expect(component.customEventRange).toBe('2y');
+    expect(component.customEventActivityTypes).toEqual([ActivityTypes.Running]);
+
+    component.mapEventRange = '4y';
+    component.mapEventActivityTypes = [ActivityTypes.Swimming];
+    component.onCategoryChange('map');
+    expect(component.mapEventRange).toBe('90d');
+    expect(component.mapEventActivityTypes).toEqual([]);
+
+    component.onEditTileSelectionChange(1);
+    expect(component.mapEventRange).toBe('3y');
+    expect(component.mapEventActivityTypes).toEqual([ActivityTypes.Cycling]);
+
+    component.customEventRange = '1y';
+    component.customEventActivityTypes = [ActivityTypes.Swimming];
+    component.onCategoryChange('custom');
+    expect(component.customEventRange).toBe('90d');
+    expect(component.customEventActivityTypes).toEqual([]);
+  });
+
+  it('resets event filters when returning to add mode', () => {
+    dialogData.user.settings.dashboardSettings.tiles[0].eventFilters = {
+      range: '2y',
+      activityTypes: [ActivityTypes.Running],
+    };
+    component.ngOnInit();
+
+    component.onModeChange('edit');
+    component.onEditTileSelectionChange(0);
+    expect(component.customEventRange).toBe('2y');
+
+    component.mapEventRange = '3y';
+    component.mapEventActivityTypes = [ActivityTypes.Cycling];
+    component.onModeChange('add');
+
+    expect(component.category).toBe('custom');
+    expect(component.customEventRange).toBe('90d');
+    expect(component.customEventActivityTypes).toEqual([]);
+    expect(component.mapEventRange).toBe('90d');
+    expect(component.mapEventActivityTypes).toEqual([]);
+  });
+
+  it('requires confirmation before selecting all events in manager tile filters', async () => {
+    component.customEventRange = '90d';
+    dialogMock.open.mockReturnValueOnce({
+      afterClosed: () => of(false),
+    });
+
+    await component.onCustomEventRangeChange('all');
+
+    expect(component.customEventRange).toBe('90d');
+
+    dialogMock.open.mockReturnValueOnce({
+      afterClosed: () => of(true),
+    });
+
+    await component.onCustomEventRangeChange('all');
+
+    expect(component.customEventRange).toBe('all');
   });
 
   it('restores dashboard settings when saving fails', async () => {
@@ -516,10 +628,38 @@ describe('DashboardManagerDialogComponent', () => {
     await component.save();
 
     expect(component.saveError).toBe('Could not save dashboard tile settings.');
-    expect(dialogData.user.settings.dashboardSettings.tiles).toEqual(originalTiles);
+    expect(dialogData.user.settings.dashboardSettings.tiles).toStrictEqual(originalTiles);
+    expect(dialogData.user.settings.dashboardSettings.tiles[0]).not.toHaveProperty('eventFilters');
     expect(dialogData.user.settings.dashboardSettings.dismissedCuratedRecoveryNowTile).toBe(true);
     expect(hapticsMock.error).toHaveBeenCalledTimes(1);
     expect(dialogRefMock.close).not.toHaveBeenCalledWith({ saved: true });
+  });
+
+  it('restores nested event filters when saving an edit fails', async () => {
+    dialogData.user.settings.dashboardSettings.tiles[0].eventFilters = {
+      range: '30d',
+      activityTypes: [ActivityTypes.Running],
+    };
+    userServiceMock.updateUserProperties.mockRejectedValueOnce(new Error('network down'));
+    component.ngOnInit();
+    component.mode = 'edit';
+    component.editTileOrder = 0;
+    component.category = 'custom';
+    component.customChartType = ChartTypes.ColumnsVertical;
+    component.customDataType = DataDistance.type;
+    component.customDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.customDataValueType = ChartDataValueTypes.Total;
+    component.customTimeInterval = TimeIntervals.Auto;
+    component.customEventRange = '1y';
+    component.customEventActivityTypes = [ActivityTypes.Cycling];
+
+    await component.save();
+
+    expect(dialogData.user.settings.dashboardSettings.tiles[0].eventFilters).toEqual({
+      range: '30d',
+      activityTypes: [ActivityTypes.Running],
+    });
+    expect(dialogData.user.settings.dashboardSettings.tiles[0].eventFilters.activityTypes).toEqual([ActivityTypes.Running]);
   });
 
   it('triggers selection haptics for manager interaction changes and close', () => {
@@ -604,6 +744,20 @@ describe('DashboardManagerDialogComponent', () => {
     expect(component.customDataType).toBe(DataDistance.type);
   });
 
+  it('loads current custom event filters when edit mode selects a custom tile', () => {
+    dialogData.user.settings.dashboardSettings.tiles[0].eventFilters = {
+      range: '2y',
+      activityTypes: [ActivityTypes.Running],
+    };
+    component.ngOnInit();
+
+    component.onModeChange('edit');
+    component.onEditTileSelectionChange(0);
+
+    expect(component.customEventRange).toBe('2y');
+    expect(component.customEventActivityTypes).toEqual([ActivityTypes.Running]);
+  });
+
   it('loads current map values when edit mode selects a map tile', () => {
     dialogData.user.settings.dashboardSettings.tiles.push({
       type: TileTypes.Map,
@@ -614,6 +768,7 @@ describe('DashboardManagerDialogComponent', () => {
       showHeatMap: true,
       clusterMarkers: false,
       size: { columns: 1, rows: 1 },
+      eventFilters: { range: '3y', activityTypes: [ActivityTypes.Cycling] },
     });
     component.ngOnInit();
     component.onModeChange('edit');
@@ -622,6 +777,8 @@ describe('DashboardManagerDialogComponent', () => {
     expect(component.category).toBe('map');
     expect(component.mapStyle).toBe('outdoors');
     expect(component.mapClusterMarkers).toBe(false);
+    expect(component.mapEventRange).toBe('3y');
+    expect(component.mapEventActivityTypes).toEqual([ActivityTypes.Cycling]);
   });
 
   it('initializes in edit mode when dialog receives initial edit state', () => {

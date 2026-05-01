@@ -179,6 +179,22 @@
               </mat-select>
             </mat-form-field>
             }
+
+            <mat-form-field appearance="outline" class="dashboard-manager-full-width">
+              <mat-label>Tile date range</mat-label>
+              <mat-icon matPrefix>date_range</mat-icon>
+              <mat-select [value]="customEventRange" (selectionChange)="onCustomEventRangeChange($event.value)">
+                @for (rangeOption of tileEventRangeOptions; track rangeOption.range) {
+                <mat-option [value]="rangeOption.range">{{ rangeOption.label }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+
+            <div class="dashboard-manager-full-width dashboard-manager-activity-filter">
+              <app-activity-types-multi-select [selectedActivityTypes]="customEventActivityTypes"
+                (selectedActivityTypesChange)="onCustomEventActivityTypesChange($event)">
+              </app-activity-types-multi-select>
+            </div>
           </div>
         </section>
         }
@@ -198,6 +214,20 @@
             <mat-slide-toggle class="dashboard-manager-map-toggle" [checked]="mapClusterMarkers" (change)="mapClusterMarkers = $event.checked">
               Cluster markers
             </mat-slide-toggle>
+            <mat-form-field appearance="outline" class="dashboard-manager-full-width">
+              <mat-label>Tile date range</mat-label>
+              <mat-icon matPrefix>date_range</mat-icon>
+              <mat-select [value]="mapEventRange" (selectionChange)="onMapEventRangeChange($event.value)">
+                @for (rangeOption of tileEventRangeOptions; track rangeOption.range) {
+                <mat-option [value]="rangeOption.range">{{ rangeOption.label }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+            <div class="dashboard-manager-full-width dashboard-manager-activity-filter">
+              <app-activity-types-multi-select [selectedActivityTypes]="mapEventActivityTypes"
+                (selectedActivityTypesChange)="onMapEventActivityTypesChange($event)">
+              </app-activity-types-multi-select>
+            </div>
           </div>
 
           @if (isMapOptionDisabled()) {

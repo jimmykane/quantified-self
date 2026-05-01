@@ -56,18 +56,27 @@ import {
 import { isNumber } from 'lodash-es';
 import {
     AppChartSettingsInterface,
+    AppDashboardChartTileSettingsInterface,
+    AppDashboardMapTileSettingsInterface,
     AppMapStyleName,
     AppDashboardSettingsInterface,
+    AppDashboardTileEventFiltersInterface,
     AppMapSettingsInterface,
     AppUserInterface,
     AppUserSettingsInterface
 } from '../models/app-user.interface';
-import { StripeRole } from '../models/stripe-role.model';
 import {
     DASHBOARD_RECOVERY_NOW_CHART_TYPE,
     isDashboardRecoveryNowChartType,
+    isDashboardSpecialChartType,
 } from '../helpers/dashboard-special-chart-types';
 import { normalizeDashboardSleepTrendRange } from '../helpers/dashboard-sleep-range.helper';
+import {
+    DASHBOARD_TILE_EVENT_DEFAULT_RANGE,
+    normalizeDashboardEventTableFilters,
+    normalizeDashboardTileEventFilters,
+    resolveLegacyDashboardTileEventFilterRange,
+} from '../helpers/dashboard-tile-event-filters.helper';
 import { ACTIVITY_SYNC_ROUTES, ActivitySyncRouteId } from '@shared/activity-sync-routes';
 import { normalizeDistanceUnits } from '@shared/unit-aware-display';
 
@@ -108,7 +117,7 @@ export class AppUserUtilities {
     }
 
     static getDefaultUserDashboardChartTile(): TileChartSettingsInterface {
-        return {
+        return <AppDashboardChartTileSettingsInterface>{
             name: 'Distance',
             order: 0,
             type: TileTypes.Chart,
@@ -118,11 +127,12 @@ export class AppUserUtilities {
             dataCategoryType: ChartDataCategoryTypes.ActivityType,
             dataValueType: ChartDataValueTypes.Total,
             size: { columns: 1, rows: 1 },
+            eventFilters: AppUserUtilities.getDefaultDashboardTileEventFilters(),
         };
     }
 
     static getDefaultUserDashboardMapTile(): TileMapSettingsInterface {
-        return <TileMapSettingsInterface><unknown>{
+        return <AppDashboardMapTileSettingsInterface><unknown>{
             name: 'Clustered HeatMap',
             order: 0,
             type: TileTypes.Map,
@@ -131,11 +141,19 @@ export class AppUserUtilities {
             showHeatMap: true,
             clusterMarkers: true,
             size: { columns: 1, rows: 1 },
+            eventFilters: AppUserUtilities.getDefaultDashboardTileEventFilters(),
+        };
+    }
+
+    static getDefaultDashboardTileEventFilters(): AppDashboardTileEventFiltersInterface {
+        return {
+            range: DASHBOARD_TILE_EVENT_DEFAULT_RANGE,
+            activityTypes: [],
         };
     }
 
     static getDefaultUserDashboardTiles(): TileSettingsInterface[] {
-        return [<TileMapSettingsInterface><unknown>{
+        return [<AppDashboardMapTileSettingsInterface><unknown>{
             name: 'Clustered HeatMap',
             order: 0,
             type: TileTypes.Map,
@@ -144,7 +162,8 @@ export class AppUserUtilities {
             showHeatMap: true,
             clusterMarkers: true,
             size: { columns: 1, rows: 1 },
-        }, <TileChartSettingsInterface>{
+            eventFilters: AppUserUtilities.getDefaultDashboardTileEventFilters(),
+        }, <AppDashboardChartTileSettingsInterface>{
             name: 'Duration',
             order: 1,
             type: TileTypes.Chart,
@@ -154,7 +173,8 @@ export class AppUserUtilities {
             dataTimeInterval: TimeIntervals.Auto,
             dataValueType: ChartDataValueTypes.Total,
             size: { columns: 1, rows: 1 },
-        }, <TileChartSettingsInterface>{
+            eventFilters: AppUserUtilities.getDefaultDashboardTileEventFilters(),
+        }, <AppDashboardChartTileSettingsInterface>{
             name: 'Distance',
             order: 2,
             type: TileTypes.Chart,
@@ -164,7 +184,8 @@ export class AppUserUtilities {
             dataCategoryType: ChartDataCategoryTypes.ActivityType,
             dataValueType: ChartDataValueTypes.Total,
             size: { columns: 1, rows: 1 },
-        }, <TileChartSettingsInterface>{
+            eventFilters: AppUserUtilities.getDefaultDashboardTileEventFilters(),
+        }, <AppDashboardChartTileSettingsInterface>{
             name: 'Ascent',
             order: 3,
             type: TileTypes.Chart,
@@ -174,6 +195,7 @@ export class AppUserUtilities {
             dataTimeInterval: TimeIntervals.Auto,
             dataValueType: ChartDataValueTypes.Total,
             size: { columns: 1, rows: 1 },
+            eventFilters: AppUserUtilities.getDefaultDashboardTileEventFilters(),
         }]
     }
 
@@ -199,8 +221,10 @@ export class AppUserUtilities {
     }
 
     private static normalizeRecoveryDashboardChartTile(tile: TileChartSettingsInterface): TileChartSettingsInterface {
+        const tileWithoutEventFilters = { ...(tile as AppDashboardChartTileSettingsInterface) };
+        delete tileWithoutEventFilters.eventFilters;
         return {
-            ...tile,
+            ...tileWithoutEventFilters,
             ...AppUserUtilities.getDefaultUserDashboardRecoveryTile(tile.order),
             order: Number.isFinite(Number(tile.order)) ? Number(tile.order) : 0,
             size: tile.size || { columns: 1, rows: 1 },
@@ -474,6 +498,16 @@ export class AppUserUtilities {
         settings.dashboardSettings.endDate = settings.dashboardSettings.endDate || null;
         settings.dashboardSettings.activityTypes = settings.dashboardSettings.activityTypes || [];
         settings.dashboardSettings.includeMergedEvents = settings.dashboardSettings.includeMergedEvents !== false;
+        settings.dashboardSettings.eventTableFilters = normalizeDashboardEventTableFilters(
+            settings.dashboardSettings.eventTableFilters,
+            {
+                dateRange: settings.dashboardSettings.dateRange,
+                startDate: settings.dashboardSettings.startDate,
+                endDate: settings.dashboardSettings.endDate,
+                activityTypes: settings.dashboardSettings.activityTypes,
+                includeMergedEvents: settings.dashboardSettings.includeMergedEvents,
+            },
+        );
         settings.dashboardSettings.dismissedCuratedRecoveryNowTile = settings.dashboardSettings.dismissedCuratedRecoveryNowTile === true;
         settings.dashboardSettings.sleepTrend = {
             ...(settings.dashboardSettings.sleepTrend || {}),
@@ -482,12 +516,18 @@ export class AppUserUtilities {
         settings.dashboardSettings.tiles = settings.dashboardSettings.tiles || AppUserUtilities.getDefaultUserDashboardTiles();
         let hasNormalizedRecoveryDashboardTile = false;
         let hasNormalizedMapDashboardTile = false;
+        const legacyTileEventFilterRange = resolveLegacyDashboardTileEventFilterRange(
+            settings.dashboardSettings.dateRange,
+            settings.dashboardSettings.startDate,
+            settings.dashboardSettings.endDate,
+        );
+        const legacyTileEventFilterActivityTypes = settings.dashboardSettings.activityTypes || [];
         const orderedDashboardTiles = [...settings.dashboardSettings.tiles]
             .sort((left: TileSettingsInterface, right: TileSettingsInterface) => Number(left?.order || 0) - Number(right?.order || 0));
         settings.dashboardSettings.tiles = orderedDashboardTiles
             .map((tile: TileSettingsInterface) => {
             if (tile.type === TileTypes.Chart) {
-                const chartTile = tile as TileChartSettingsInterface;
+                const chartTile = tile as AppDashboardChartTileSettingsInterface;
                 if (chartTile.chartType === ChartTypes.Spiral) {
                     chartTile.chartType = ChartTypes.LinesVertical;
                 }
@@ -498,6 +538,15 @@ export class AppUserUtilities {
                     }
                     hasNormalizedRecoveryDashboardTile = true;
                     return AppUserUtilities.normalizeRecoveryDashboardChartTile(chartTile);
+                }
+                if (!isDashboardSpecialChartType(chartTile.chartType)) {
+                    chartTile.eventFilters = normalizeDashboardTileEventFilters(
+                        chartTile.eventFilters,
+                        legacyTileEventFilterRange,
+                        legacyTileEventFilterActivityTypes,
+                    );
+                } else {
+                    delete chartTile.eventFilters;
                 }
                 return chartTile;
             }
@@ -511,8 +560,13 @@ export class AppUserUtilities {
             }
             hasNormalizedMapDashboardTile = true;
 
-            const mapTile = tile as any;
+            const mapTile = tile as AppDashboardMapTileSettingsInterface;
             mapTile.mapStyle = mapTile.mapStyle || AppUserUtilities.getDefaultDashboardMapStyle();
+            mapTile.eventFilters = normalizeDashboardTileEventFilters(
+                mapTile.eventFilters,
+                legacyTileEventFilterRange,
+                legacyTileEventFilterActivityTypes,
+            );
             delete mapTile.mapType;
             return mapTile;
         })

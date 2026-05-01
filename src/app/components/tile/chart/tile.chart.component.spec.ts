@@ -7,6 +7,7 @@ import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   ChartTypes,
+  ActivityTypes,
   TimeIntervals
 } from '@sports-alliance/sports-lib';
 import { describe, expect, it, beforeEach } from 'vitest';
@@ -64,6 +65,19 @@ class MockTileChartActionsComponent {
   @Input() chartDataValueType?: ChartDataValueTypes;
   @Output() savingChange = new EventEmitter<boolean>();
   @Output() editInDashboardManager = new EventEmitter<number>();
+}
+
+@Component({
+  selector: 'app-dashboard-tile-event-filters',
+  template: '',
+  standalone: false
+})
+class MockDashboardTileEventFiltersComponent {
+  @Input() eventFilters: any;
+  @Input() canNavigateNewer = false;
+  @Output() rangeChange = new EventEmitter<any>();
+  @Output() activityTypesChange = new EventEmitter<any>();
+  @Output() navigate = new EventEmitter<any>();
 }
 
 @Component({
@@ -212,6 +226,7 @@ describe('TileChartComponent', () => {
         TileChartComponent,
         MockColumnsChartComponent,
         MockTileChartActionsComponent,
+        MockDashboardTileEventFiltersComponent,
         MockXYChartComponent,
         MockPieChartComponent,
         MockFormChartComponent,
@@ -248,6 +263,11 @@ describe('TileChartComponent', () => {
   const getActionsComponent = (): MockTileChartActionsComponent => {
     const actionsDebugElement = fixture.debugElement.query(By.directive(MockTileChartActionsComponent));
     return actionsDebugElement.componentInstance as MockTileChartActionsComponent;
+  };
+
+  const getEventFiltersComponent = (): MockDashboardTileEventFiltersComponent => {
+    const filtersDebugElement = fixture.debugElement.query(By.directive(MockDashboardTileEventFiltersComponent));
+    return filtersDebugElement?.componentInstance as MockDashboardTileEventFiltersComponent;
   };
 
   const getPieComponent = (): MockPieChartComponent => {
@@ -375,6 +395,40 @@ describe('TileChartComponent', () => {
     actions.editInDashboardManager.emit(4);
 
     expect(emittedOrders).toEqual([4]);
+  });
+
+  it('should render and re-emit event filter controls for custom chart tiles', () => {
+    component.chartType = ChartTypes.ColumnsVertical;
+    component.eventFilters = { range: '90d', activityTypes: [] };
+    component.canNavigateTileEventsNewer = true;
+    const ranges: string[] = [];
+    const activitySelections: ActivityTypes[][] = [];
+    const directions: string[] = [];
+    component.eventFilterRangeChange.subscribe(range => ranges.push(range));
+    component.eventFilterActivityTypesChange.subscribe(activityTypes => activitySelections.push(activityTypes));
+    component.eventFilterNavigate.subscribe(direction => directions.push(direction));
+
+    fixture.detectChanges();
+
+    const filters = getEventFiltersComponent();
+    expect(filters.eventFilters).toEqual(component.eventFilters);
+    expect(filters.canNavigateNewer).toBe(true);
+
+    filters.rangeChange.emit('30d');
+    filters.activityTypesChange.emit([ActivityTypes.Running]);
+    filters.navigate.emit('older');
+
+    expect(ranges).toEqual(['30d']);
+    expect(activitySelections).toEqual([[ActivityTypes.Running]]);
+    expect(directions).toEqual(['older']);
+  });
+
+  it('should hide event filter controls for derived chart tiles', () => {
+    component.chartType = DASHBOARD_FORM_CHART_TYPE as any;
+
+    fixture.detectChanges();
+
+    expect(getEventFiltersComponent()).toBeFalsy();
   });
 
   it('should keep generic pie renderer in non-curated mode', () => {

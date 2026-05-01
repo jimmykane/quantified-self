@@ -7,7 +7,10 @@ import {
     ActivityTypes,
     UserAppSettingsInterface,
     UserDashboardSettingsInterface,
-    UserMapSettingsInterface
+    UserMapSettingsInterface,
+    DateRanges,
+    TileChartSettingsInterface,
+    TileMapSettingsInterface,
 } from '@sports-alliance/sports-lib';
 import { Timestamp } from 'app/firebase/firestore';
 import { StripeRole } from './stripe-role.model';
@@ -35,10 +38,46 @@ export interface AppDashboardSleepTrendSettingsInterface {
     range?: AppDashboardSleepTrendRange;
 }
 
+export type AppDashboardTileEventFilterRange =
+    'thisWeek'
+    | 'thisMonth'
+    | '14d'
+    | '30d'
+    | '90d'
+    | '1y'
+    | '2y'
+    | '3y'
+    | '4y'
+    | 'all';
+
+export interface AppDashboardEventTableFiltersInterface {
+    searchTerm: string | null;
+    dateRange: DateRanges;
+    startDate: number | null;
+    endDate: number | null;
+    activityTypes: ActivityTypes[];
+    includeMergedEvents: boolean;
+}
+
+export interface AppDashboardTileEventFiltersInterface {
+    range?: AppDashboardTileEventFilterRange;
+    activityTypes?: ActivityTypes[];
+}
+
+export interface AppDashboardChartTileSettingsInterface extends TileChartSettingsInterface {
+    eventFilters?: AppDashboardTileEventFiltersInterface;
+}
+
+export interface AppDashboardMapTileSettingsInterface extends TileMapSettingsInterface {
+    mapStyle?: AppMapStyleName;
+    eventFilters?: AppDashboardTileEventFiltersInterface;
+}
+
 export interface AppDashboardSettingsInterface extends UserDashboardSettingsInterface {
     includeMergedEvents?: boolean;
     dismissedCuratedRecoveryNowTile?: boolean;
     sleepTrend?: AppDashboardSleepTrendSettingsInterface;
+    eventTableFilters?: AppDashboardEventTableFiltersInterface;
 }
 
 export interface AppChartSettingsInterface extends Omit<UserChartSettingsInterface, 'theme' | 'extraMaxForPower' | 'extraMaxForPace'> {

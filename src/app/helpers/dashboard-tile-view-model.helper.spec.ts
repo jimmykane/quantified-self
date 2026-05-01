@@ -7,14 +7,11 @@ import {
   DataAscent,
   DataDistance,
   DataRecoveryTime,
-  DateRanges,
-  DaysOfTheWeek,
   TileTypes,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
 import { buildDashboardCartesianPoints } from './dashboard-echarts-cartesian.helper';
 import { buildAggregatedChartRows } from './aggregated-chart-row.helper';
-import { getDatesForDateRange } from './date-range-helper';
 import {
   buildDashboardTileViewModels,
 } from './dashboard-tile-view-model.helper';
@@ -306,7 +303,7 @@ describe('dashboard-tile-view-model.helper', () => {
     expect((viewModels[0] as any).data).toEqual(precomputedPoints);
   });
 
-  it('should keep full derived form points regardless of dashboard date range while preserving absolute latest form point metadata', () => {
+  it('should keep full derived form points while preserving absolute latest form point metadata', () => {
     const derivedPoints = [
       {
         time: Date.UTC(2024, 0, 2),
@@ -350,11 +347,6 @@ describe('dashboard-tile-view-model.helper', () => {
           stats: { 'Training Stress Score': 30 },
         }),
       ],
-      dashboardDateRange: {
-        dateRange: DateRanges.custom,
-        startDate: new Date('2024-01-01T00:00:00.000Z'),
-        endDate: new Date('2024-01-31T23:59:59.999Z'),
-      },
       derivedMetrics: {
         formPoints: derivedPoints as any,
       },
@@ -364,10 +356,9 @@ describe('dashboard-tile-view-model.helper', () => {
     expect((viewModels[0] as any).absoluteLatestFormPoint).toEqual(derivedPoints[1]);
   });
 
-  it('should ignore preset dashboard date range clipping for form points when explicit start/end are missing', () => {
-    const currentWeekRange = getDatesForDateRange(DateRanges.thisWeek, DaysOfTheWeek.Monday);
-    const insideWeekTimeMs = currentWeekRange.startDate.getTime() + (2 * 24 * 60 * 60 * 1000);
-    const beforeWeekTimeMs = currentWeekRange.startDate.getTime() - (24 * 60 * 60 * 1000);
+  it('should not clip derived form points to event tile windows', () => {
+    const beforeWeekTimeMs = Date.UTC(2024, 0, 1);
+    const insideWeekTimeMs = Date.UTC(2024, 0, 8);
     const derivedPoints = [
       {
         time: beforeWeekTimeMs,
@@ -399,12 +390,6 @@ describe('dashboard-tile-view-model.helper', () => {
         size: { columns: 1, rows: 1 },
       } as any],
       events: [],
-      dashboardDateRange: {
-        dateRange: DateRanges.thisWeek,
-        startDate: null,
-        endDate: null,
-        startOfTheWeek: DaysOfTheWeek.Monday,
-      },
       derivedMetrics: {
         formPoints: derivedPoints as any,
       },
@@ -415,7 +400,7 @@ describe('dashboard-tile-view-model.helper', () => {
     expect((viewModels[0] as any).absoluteLatestFormPoint).toEqual(derivedPoints[1]);
   });
 
-  it('should not synthesize zero-load form decay points from dashboard date range clipping', () => {
+  it('should not synthesize zero-load form decay points', () => {
     const derivedPoints = [
       {
         time: Date.UTC(2024, 0, 2),
@@ -447,11 +432,6 @@ describe('dashboard-tile-view-model.helper', () => {
         size: { columns: 1, rows: 1 },
       } as any],
       events: [],
-      dashboardDateRange: {
-        dateRange: DateRanges.custom,
-        startDate: new Date('2024-01-04T00:00:00.000Z'),
-        endDate: new Date('2024-01-06T23:59:59.999Z'),
-      },
       derivedMetrics: {
         formPoints: derivedPoints as any,
       },
@@ -652,11 +632,6 @@ describe('dashboard-tile-view-model.helper', () => {
           stats: { [DataRecoveryTime.type]: 7200 },
         }),
       ],
-      dashboardDateRange: {
-        dateRange: DateRanges.custom,
-        startDate: new Date('2024-01-01T00:00:00.000Z'),
-        endDate: new Date('2024-01-31T23:59:59.999Z'),
-      },
       derivedMetrics: {
         recoveryNow: derivedRecoveryContext as any,
       },
@@ -728,11 +703,6 @@ describe('dashboard-tile-view-model.helper', () => {
     const viewModels = buildDashboardTileViewModels({
       tiles,
       events: [olderEvent, latestEvent],
-      dashboardDateRange: {
-        dateRange: DateRanges.custom,
-        startDate: new Date('2024-01-01T00:00:00.000Z'),
-        endDate: new Date('2024-01-31T23:59:59.999Z'),
-      },
     });
     const recoveryTile = viewModels[0] as DashboardChartTileViewModel;
 
@@ -740,7 +710,7 @@ describe('dashboard-tile-view-model.helper', () => {
     expect(recoveryTile.data).toEqual([]);
   });
 
-  it('should use derived recovery context for curated recovery charts regardless of dashboard date range', () => {
+  it('should use derived recovery context for curated recovery charts', () => {
     const tiles = [
       {
         type: TileTypes.Chart,
@@ -787,11 +757,6 @@ describe('dashboard-tile-view-model.helper', () => {
     const viewModels = buildDashboardTileViewModels({
       tiles,
       events: [oldEvent, recentEvent],
-      dashboardDateRange: {
-        dateRange: DateRanges.custom,
-        startDate: new Date('2024-01-01T00:00:00.000Z'),
-        endDate: new Date('2024-01-31T23:59:59.999Z'),
-      },
       derivedMetrics: {
         recoveryNow: derivedRecoveryContext as any,
       },
@@ -801,7 +766,7 @@ describe('dashboard-tile-view-model.helper', () => {
     expect(recoveryTile.recoveryNow).toEqual(derivedRecoveryContext);
   });
 
-  it('should not attach derived-style recovery context to custom charts inside dashboard date ranges', () => {
+  it('should not attach derived-style recovery context to custom charts', () => {
     const tiles = [
       {
         type: TileTypes.Chart,
@@ -832,11 +797,6 @@ describe('dashboard-tile-view-model.helper', () => {
     const viewModels = buildDashboardTileViewModels({
       tiles,
       events: [oldEvent, recentEvent],
-      dashboardDateRange: {
-        dateRange: DateRanges.custom,
-        startDate: new Date('2024-01-01T00:00:00.000Z'),
-        endDate: new Date('2024-01-31T23:59:59.999Z'),
-      },
     });
 
     expect((viewModels[0] as any).recoveryNow).toBeUndefined();

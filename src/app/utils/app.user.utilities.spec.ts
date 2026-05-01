@@ -9,13 +9,13 @@ import {
     ChartDataValueTypes,
     ChartTypes,
     DataRecoveryTime,
+    DataDistance,
     DataHeartRateAvg,
     DistanceUnits,
     TileTypes,
     TimeIntervals
 } from '@sports-alliance/sports-lib';
-import { AppUserInterface } from '../models/app-user.interface';
-import { DASHBOARD_RECOVERY_NOW_CHART_TYPE, DASHBOARD_SLEEP_TREND_CHART_TYPE } from '../helpers/dashboard-special-chart-types';
+import { DASHBOARD_FORM_CHART_TYPE, DASHBOARD_RECOVERY_NOW_CHART_TYPE, DASHBOARD_SLEEP_TREND_CHART_TYPE } from '../helpers/dashboard-special-chart-types';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
 
 describe('AppUserUtilities', () => {
@@ -201,6 +201,14 @@ describe('AppUserUtilities', () => {
             expect(settings.chartSettings?.syncChartHoverToMap).toBe(false);
             expect(settings.dashboardSettings?.dateRange).toBe(DateRanges.all);
             expect(settings.dashboardSettings?.includeMergedEvents).toBe(true);
+            expect(settings.dashboardSettings?.eventTableFilters).toEqual({
+                searchTerm: null,
+                dateRange: DateRanges.all,
+                startDate: null,
+                endDate: null,
+                activityTypes: [],
+                includeMergedEvents: true
+            });
             expect(settings.dashboardSettings?.sleepTrend?.range).toBe('14d');
             expect(settings.dashboardSettings?.tiles?.some((tile: any) => (
                 tile?.type === TileTypes.Chart
@@ -211,6 +219,120 @@ describe('AppUserUtilities', () => {
             expect((settings.myTracksSettings as any)?.showJumpHeatmap).toBe(true);
             expect(settings.serviceSyncSettings?.activitySyncRoutes?.[ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]?.enabled).toBe(false);
             expect(settings.serviceSyncSettings?.activitySyncRoutes?.[ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]?.enabled).toBe(false);
+        });
+
+        it('should normalize event table filters from legacy dashboard fields', () => {
+            const startDate = new Date('2026-01-01T00:00:00.000Z').getTime();
+            const endDate = new Date('2026-01-31T23:59:59.999Z').getTime();
+            const user = {
+                settings: {
+                    dashboardSettings: {
+                        dateRange: DateRanges.custom,
+                        startDate,
+                        endDate,
+                        activityTypes: [ActivityTypes.Running],
+                        includeMergedEvents: false
+                    }
+                }
+            } as unknown as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+
+            expect(settings.dashboardSettings?.eventTableFilters).toEqual({
+                searchTerm: null,
+                dateRange: DateRanges.custom,
+                startDate,
+                endDate,
+                activityTypes: [ActivityTypes.Running],
+                includeMergedEvents: false
+            });
+            expect(settings.dashboardSettings?.dateRange).toBe(DateRanges.custom);
+            expect(settings.dashboardSettings?.activityTypes).toEqual([ActivityTypes.Running]);
+        });
+
+        it('should default new custom chart and map tiles to 90d and all activities', () => {
+            const defaultChart = AppUserUtilities.getDefaultUserDashboardChartTile() as any;
+            const defaultMap = AppUserUtilities.getDefaultUserDashboardMapTile() as any;
+            const dashboardTiles = AppUserUtilities.getDefaultUserDashboardTiles() as any[];
+
+            expect(defaultChart.eventFilters).toEqual({ range: '90d', activityTypes: [] });
+            expect(defaultMap.eventFilters).toEqual({ range: '90d', activityTypes: [] });
+            dashboardTiles.forEach(tile => {
+                expect(tile.eventFilters).toEqual({ range: '90d', activityTypes: [] });
+            });
+        });
+
+        it('should add event filters to existing custom chart and map tiles from legacy dashboard filters', () => {
+            const user = {
+                settings: {
+                    dashboardSettings: {
+                        dateRange: DateRanges.all,
+                        activityTypes: [ActivityTypes.Cycling],
+                        tiles: [
+                            {
+                                type: TileTypes.Chart,
+                                chartType: ChartTypes.ColumnsHorizontal,
+                                dataType: DataDistance.type,
+                                dataValueType: ChartDataValueTypes.Total,
+                                dataCategoryType: ChartDataCategoryTypes.ActivityType,
+                                dataTimeInterval: TimeIntervals.Auto,
+                                name: 'Distance',
+                                order: 0,
+                                size: { columns: 1, rows: 1 }
+                            },
+                            {
+                                type: TileTypes.Map,
+                                order: 1,
+                                name: 'Map',
+                                mapStyle: 'default',
+                                mapTheme: 'normal',
+                                showHeatMap: true,
+                                clusterMarkers: true,
+                                size: { columns: 1, rows: 1 }
+                            }
+                        ]
+                    }
+                }
+            } as unknown as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+            const [customTile, mapTile] = settings.dashboardSettings?.tiles || [];
+
+            expect((customTile as any).eventFilters).toEqual({
+                range: '1y',
+                activityTypes: [ActivityTypes.Cycling]
+            });
+            expect((mapTile as any).eventFilters).toEqual({
+                range: '1y',
+                activityTypes: [ActivityTypes.Cycling]
+            });
+        });
+
+        it('should remove event filters from curated and derived chart tiles', () => {
+            const user = {
+                settings: {
+                    dashboardSettings: {
+                        tiles: [
+                            {
+                                type: TileTypes.Chart,
+                                chartType: DASHBOARD_FORM_CHART_TYPE,
+                                dataType: 'Training Stress Score',
+                                dataValueType: ChartDataValueTypes.Total,
+                                dataCategoryType: ChartDataCategoryTypes.DateType,
+                                dataTimeInterval: TimeIntervals.Daily,
+                                name: 'Form',
+                                order: 0,
+                                size: { columns: 1, rows: 1 },
+                                eventFilters: { range: 'all', activityTypes: [ActivityTypes.Running] }
+                            }
+                        ]
+                    }
+                }
+            } as unknown as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+
+            expect((settings.dashboardSettings?.tiles?.[0] as any).eventFilters).toBeUndefined();
         });
 
         it('should preserve existing settings', () => {

@@ -21,6 +21,7 @@ import { BenchmarkModule } from './benchmark.module';
 import { AppChartsModule } from './app-charts.module';
 import { DragDropModule } from '@angular/cdk/drag-drop';
 import { DashboardManagerDialogComponent } from '../components/summaries/dashboard-manager-dialog/dashboard-manager-dialog.component';
+import { DashboardTileEventFiltersComponent } from '../components/tile/event-filters/dashboard-tile-event-filters.component';
 
 @NgModule({
     imports: [
@@ -47,6 +48,7 @@ import { DashboardManagerDialogComponent } from '../components/summaries/dashboa
         EventTableActionsComponent,
         TileChartComponent,
         TileMapComponent,
+        DashboardTileEventFiltersComponent,
         DashboardManagerDialogComponent,
 
     ],

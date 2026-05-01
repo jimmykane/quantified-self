@@ -1,0 +1,37 @@
+.tile-event-filters {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 30px;
+  padding: 0;
+}
+
+.tile-event-filter-button {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  --mdc-icon-button-state-layer-size: 30px;
+  --mat-icon-button-state-layer-size: 30px;
+  --mat-icon-button-touch-target-size: 30px;
+}
+
+.tile-event-filter-button mat-icon {
+  width: 18px;
+  height: 18px;
+  line-height: 18px;
+  font-size: 18px;
+}
+
+.tile-event-range-selector {
+  --chart-range-selector-height: 30px;
+  --chart-range-selector-horizontal-padding: 8px;
+  --chart-range-selector-font-size: 0.78rem;
+  --chart-range-selector-icon-size: 18px;
+}
+
+.tile-event-activity-menu-content {
+  width: min(320px, 80vw);
+  padding: 12px;
+}
